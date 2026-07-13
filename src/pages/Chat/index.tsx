@@ -16,6 +16,7 @@ import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ChatMessage } from './ChatMessage';
 import { AssistantTurnMessage } from './AssistantTurnMessage';
 import { useChatDisplay } from './use-chat-display';
+import { isAssistantRole, resolveActiveTurnStableKey } from './chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
 import { ChatContentHeaderActions } from './ChatSearchBar';
@@ -24,7 +25,8 @@ import { PendingQueuePanel } from './PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
 import { ChatPreviewPanel } from './ChatPreviewPanel';
 import { extractText } from './message-utils';
-import { useMessageQueueStore, createAutoSendWatcher } from '@/stores/message-queue';
+import { useMessageQueueStore, createAutoSendWatcher, suspendAutoSend } from '@/stores/message-queue';
+import { markTurnInterrupted } from '@/lib/turn-interrupt-marker';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
@@ -70,6 +72,8 @@ export function Chat() {
   const refresh = useChatStore((s) => s.refresh);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const streamingMessage = useChatStore((s) => s.streamingMessage);
+  const streamingMessages = useChatStore((s) => s.streamingMessages);
+  const streamingToolResults = useChatStore((s) => s.streamingToolResults);
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
@@ -167,8 +171,9 @@ export function Chat() {
     lastChatEventAt,
     streamMsg,
     streamText,
+    streamingMessages,
+    streamingToolResults,
     streamingTools,
-    lastUserMessageAt,
   });
 
   const streamContentKey = useMemo(
@@ -178,6 +183,8 @@ export function Chat() {
         staticItems.length,
         activeTurn ? 1 : 0,
         streamText.length,
+        streamingMessages.length,
+        streamingToolResults.length,
         streamingTools.length,
         pendingFinal ? 1 : 0,
         shouldRenderStreaming ? 1 : 0,
@@ -187,6 +194,8 @@ export function Chat() {
       staticItems.length,
       activeTurn,
       streamText.length,
+      streamingMessages.length,
+      streamingToolResults.length,
       streamingTools.length,
       pendingFinal,
       shouldRenderStreaming,
@@ -326,6 +335,8 @@ export function Chat() {
     targetAgentId?: string | null,
     dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[],
     workflowId?: string | null,
+    workflowSource?: string | null,
+    workflowName?: string | null,
   ) => {
     beginSendScroll();
     const { dispatchChatSend } = await import('@/hooks/dispatch-chat-send');
@@ -335,6 +346,8 @@ export function Chat() {
       targetAgentId,
       dingTalkMentions,
       workflowId,
+      workflowSource,
+      workflowName,
       skipQuestionSplit: !!(dingTalkMentions && dingTalkMentions.length > 0),
       onSplittingChange: setSplitting,
     });
@@ -350,6 +363,20 @@ export function Chat() {
     const { currentSessionKey } = useChatStore.getState();
     useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, dingTalkMentions, workflowId);
   }, []);
+
+  // Stop: suppress the auto-send that the abort's sending→false would otherwise trigger,
+  // keeping any queued messages for the next successful run instead of firing them now.
+  const handleStop = useCallback(() => {
+    const state = useChatStore.getState();
+    suspendAutoSend(state.currentSessionKey);
+    const turnKey =
+      activeTurn?.turnStableKey
+      ?? resolveActiveTurnStableKey(state.messages);
+    if (turnKey) {
+      markTurnInterrupted(turnKey);
+    }
+    void abortRun();
+  }, [abortRun, activeTurn?.turnStableKey]);
 
   const handleEditMessage = useCallback((text: string) => {
     const trimmed = text.trim();
@@ -557,6 +584,7 @@ export function Chat() {
                     onPreviewFile={openArtifactPreview}
                     onCreateScheduledTask={openWorkflowCronTaskModal}
                     onEditMessage={handleEditMessage}
+                    isTurnDisplayReply={isAssistantRole(item.message.role)}
                   />
                 );
               })}
@@ -660,7 +688,7 @@ export function Chat() {
       {/* Input Area */}
       <ChatInput
         onSend={handleSend}
-        onStop={abortRun}
+        onStop={handleStop}
         onQueue={handleQueue}
         disabled={composerDisabled}
         sending={sending}

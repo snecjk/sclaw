@@ -24,7 +24,8 @@ import { useChatStore } from '@/stores/chat';
 import { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } from '@/lib/workflow-local-turn';
 import { buildWorkflowContextSummary, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
-import type { WorkflowSchema, WorkflowSchemaField } from '@/types/workflow';
+import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
+import type { WorkflowSchemaField } from '@/types/workflow';
 
 export interface WorkflowSendContext {
   sessionKey: string;
@@ -48,10 +49,25 @@ export async function sendWithWorkflow(
   }
 
   try {
+    console.log(
+      '[sto-workflow-tool] get_workflow_schema via client (workflow picker) templateId=%s',
+      templateId,
+    );
     const startup = await getStartupSchema(templateId);
     const { schema, schemaHash } = startup;
     // 2. Get template name from store
     const templateName = useWorkflowsStore.getState().templates.find((t) => t.id === templateId)?.label ?? templateId;
+
+    if (schema.fields.length === 0) {
+      return createAndStartWorkflowDirect(
+        templateId,
+        {},
+        _context,
+        sendMessage,
+        text,
+        startup,
+      );
+    }
 
     // 3. Build workflow context for AI model (confirm steps only — no field key dump)
     const workflowContext = buildWorkflowContextSummary(
@@ -104,6 +120,7 @@ export async function createAndStartWorkflowDirect(
   context: WorkflowSendContext,
   _sendMessage: (text: string, runId?: string | null, workflowId?: string | null) => Promise<void>,
   _originalText: string,
+  startupOverride?: Awaited<ReturnType<typeof getStartupSchema>>,
 ): Promise<boolean> {
   if (!canStartWorkflow()) {
     toast.error('当前会话已有过多执行中的工作流，请等待完成后再试');
@@ -111,8 +128,8 @@ export async function createAndStartWorkflowDirect(
   }
 
   try {
-    const startup = await getStartupSchema(templateId);
-    const { schemaHash } = startup;
+    const startup = startupOverride ?? await getStartupSchema(templateId);
+    const { schema, schemaHash } = startup;
 
     const { buildStartupPreset } = await import('@/lib/workflow-form-utils');
 
@@ -141,7 +158,6 @@ export async function createAndStartWorkflowDirect(
       idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
     });
 
-    const { schema } = cached;
     const userText = buildWorkflowStartUserText(schema, inputs);
     const startedAtIso = new Date(trackStartMs).toISOString();
     appendWorkflowStartedLocalTurn({
@@ -168,6 +184,18 @@ export async function createAndStartWorkflowDirect(
       updatedAt: trackStartMs,
       collectedInputs: inputs,
       paramsSummary: userText,
+    });
+
+    appendWorkflowSessionRecord({
+      phase: 'started',
+      sessionKey: context.sessionKey,
+      templateId,
+      templateName,
+      workflowId: created.workflowId,
+      runId: run.runId,
+      status: 'running',
+      paramsSummary: userText,
+      collectedInputs: inputs,
     });
 
     const { dismissWorkflowParameterFormsForTemplate } = await import(
@@ -367,7 +395,15 @@ export async function tryResolvePendingWorkflow(
   const chatState = useChatStore.getState();
   const pending = chatState.pendingWorkflow;
 
-  const { isReExecutionIntent, isWorkflowStartIntent } = await import('@/hooks/use-workflow-intent');
+  const {
+    isReExecutionIntent,
+    isWorkflowStartIntent,
+    isWorkflowCreationIntent,
+  } = await import('@/hooks/use-workflow-intent');
+  if (isWorkflowCreationIntent(text)) {
+    chatState.clearPendingWorkflowMemory();
+    return false;
+  }
   if (isReExecutionIntent(text) || (isWorkflowStartIntent(text) && !pending)) {
     return false;
   }

@@ -11,6 +11,8 @@ import {
 } from './helpers';
 import type { ChatSession, RawMessage } from './types';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
+import { shouldAutoDeriveSessionLabel } from '@/lib/session-label';
+import { isCorruptedSessionLabel, normalizeDerivedSessionLabel } from '@/lib/workflow-session-hint';
 import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
 
 function logDingTalkMentionClient(message: string, data: unknown): void {
@@ -160,6 +162,8 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
           messages: [],
           streamingText: '',
           streamingMessage: null,
+          streamingMessages: [],
+          streamingToolResults: [],
           streamingTools: [],
           activeRunId: null,
           error: null,
@@ -213,6 +217,8 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
         error: null,
         streamingText: '',
         streamingMessage: null,
+        streamingMessages: [],
+        streamingToolResults: [],
         streamingTools: [],
         pendingFinal: false,
         lastUserMessageAt: nowMs,
@@ -221,9 +227,13 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       // Update session label with first user message text as soon as it's sent
       const { sessionLabels, messages } = get();
       const isFirstMessage = !messages.slice(0, -1).some((m) => m.role === 'user');
-      if (!currentSessionKey.endsWith(':main') && isFirstMessage && !sessionLabels[currentSessionKey] && trimmed) {
-        const truncated = trimmed.length > 50 ? `${trimmed.slice(0, 50)}…` : trimmed;
-        set((s) => ({ sessionLabels: { ...s.sessionLabels, [currentSessionKey]: truncated } }));
+      if (!currentSessionKey.endsWith(':main') && isFirstMessage
+        && shouldAutoDeriveSessionLabel(currentSessionKey, sessionLabels, isCorruptedSessionLabel)
+        && trimmed) {
+        const normalized = normalizeDerivedSessionLabel(trimmed);
+        if (normalized) {
+          set((s) => ({ sessionLabels: { ...s.sessionLabels, [currentSessionKey]: normalized } }));
+        }
       }
 
       // Mark this session as most recently active
@@ -372,7 +382,16 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       clearHistoryPoll();
       clearErrorRecoveryTimer();
       const { currentSessionKey } = get();
-      set({ sending: false, streamingText: '', streamingMessage: null, pendingFinal: false, lastUserMessageAt: null, pendingToolImages: [] });
+      set({
+        sending: false,
+        streamingText: '',
+        streamingMessage: null,
+        streamingMessages: [],
+        streamingToolResults: [],
+        pendingFinal: false,
+        lastUserMessageAt: null,
+        pendingToolImages: [],
+      });
       set({ streamingTools: [] });
 
       try {

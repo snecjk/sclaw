@@ -17,6 +17,7 @@ import {
   saveWorkflowExecution,
   updateWorkflowRunMetadata,
 } from '@/stores/workflow-memory';
+import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
 
 export type WorkflowRunPresentation = 'local_turn' | 'patch_assistant';
 
@@ -79,17 +80,20 @@ export async function applyWorkflowRunStarted(
         assistantText
         ?? `正在启动工作流「${templateName}」（工作流 ID: ${workflowId}）…`,
     });
-  } else {
-    useChatStore.setState((s) => {
-      let next = patchLastAssistantWithWorkflowCard(
-        s.messages,
-        runId,
-        templateName,
-        getAssistantMessageText,
-      );
-      next = ensureWorkflowCardsInMessages(next, sessionKey, getAssistantMessageText);
-      return next === s.messages ? s : { messages: next };
-    });
+  } else if (presentation === 'patch_assistant') {
+    const chatState = useChatStore.getState();
+    if (chatState.currentSessionKey === sessionKey) {
+      useChatStore.setState((s) => {
+        let next = patchLastAssistantWithWorkflowCard(
+          s.messages,
+          runId,
+          templateName,
+          getAssistantMessageText,
+        );
+        next = ensureWorkflowCardsInMessages(next, sessionKey, getAssistantMessageText);
+        return next === s.messages ? s : { messages: next };
+      });
+    }
   }
 
   updateWorkflowRunMetadata(sessionKey, workflowId, {
@@ -109,6 +113,20 @@ export async function applyWorkflowRunStarted(
     collectedInputs: inputs,
     paramsSummary: resolvedUserText,
   });
+
+  if (presentation === 'local_turn' && wfRecord?.templateId) {
+    appendWorkflowSessionRecord({
+      phase: 'started',
+      sessionKey,
+      templateId: wfRecord.templateId,
+      templateName,
+      workflowId,
+      runId,
+      status: 'running',
+      paramsSummary: resolvedUserText,
+      collectedInputs: inputs,
+    });
+  }
 
   const chatStore = useChatStore.getState();
   chatStore.setWorkflowCardState(runId, {

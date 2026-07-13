@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { getOpenClawConfigDir, getOpenClawSkillsDir, getOpenClawUserSkillsDir, getOpenClawUserDisabledDir } from '../utils/paths';
 import { getCurrentActiveUserCode } from './user-skill-workspace';
-import { setSkillsEnabled } from '../utils/skill-config';
+import { setSkillsEnabled, readPreinstalledManifestSlugs } from '../utils/skill-config';
 import { getStoToken, getAuthState, isSiteUser } from '../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
@@ -19,6 +19,7 @@ import {
 } from '../utils/skill-version';
 import { PREINSTALLED_MARKER_NAME } from './sto-skill-service';
 import { parseSkillFrontmatter, readSkillMdFrontmatter } from '../utils/skill-frontmatter';
+import { pickNavCategoryFromApiSkill } from '../../shared/skill-plaza-category-resolve';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -30,6 +31,8 @@ export interface SkillSummary {
   description: string;
   category: string | null;
   categoryCode: string | null;
+  categoryCodes?: string[];
+  categoryNames?: string[];
   source: 'official' | 'mine';
   installed: boolean;
   enabled?: boolean;
@@ -210,8 +213,11 @@ function convertPlazaListResponse(raw: Record<string, unknown>): PlazaListResult
 }
 
 function convertSkillDetail(raw: Record<string, unknown>): SkillDetail {
-  const converted = convertKeysToCamelCase<SkillDetail>(raw);
-  return normalizeSkillDetail(converted);
+  const payload =
+    raw.skill && typeof raw.skill === 'object'
+      ? (convertKeysToCamelCase<Record<string, unknown>>(raw.skill))
+      : convertKeysToCamelCase<SkillDetail>(raw);
+  return normalizeSkillDetail(payload as Partial<SkillDetail>);
 }
 
 // ---------------------------------------------------------------------------
@@ -225,6 +231,8 @@ function normalizeSkillSummary(skill: Partial<SkillSummary>): SkillSummary {
     description: skill.description || '',
     category: skill.category ?? null,
     categoryCode: skill.categoryCode ?? null,
+    categoryCodes: Array.isArray(skill.categoryCodes) ? skill.categoryCodes : undefined,
+    categoryNames: Array.isArray(skill.categoryNames) ? skill.categoryNames : undefined,
     source: skill.source === 'mine' ? 'mine' : 'official',
     installed: skill.installed ?? false,
     enabled: skill.enabled,
@@ -250,6 +258,35 @@ function normalizeSkillDetail(skill: Partial<SkillDetail>): SkillDetail {
   };
 }
 
+/** Resolve category slug from categoryCode or Chinese category label. */
+function resolveSkillCategoryCode(
+  skill: SkillSummary,
+  labelToSlug: Map<string, string>,
+): string | null {
+  if (skill.categoryCode) return skill.categoryCode;
+  if (skill.category) return labelToSlug.get(skill.category) ?? null;
+  return null;
+}
+
+/** Apply local preinstalled skill deltas onto remote category_counts. */
+function applyLocalPreinstalledCountDelta(
+  counts: Record<string, number>,
+  newLocalOffice: SkillSummary[],
+  newLocalOthers: SkillSummary[],
+): Record<string, number> {
+  const officeDelta = newLocalOffice.length;
+  const othersDelta = newLocalOthers.length;
+  const totalDelta = officeDelta + othersDelta;
+  if (totalDelta === 0) return counts;
+
+  return {
+    ...counts,
+    '': (counts[''] || 0) + totalDelta,
+    [OFFICE_CATEGORY_SLUG]: (counts[OFFICE_CATEGORY_SLUG] || 0) + officeDelta,
+    qita: (counts['qita'] || 0) + othersDelta,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Local state helpers
 // ---------------------------------------------------------------------------
@@ -260,14 +297,22 @@ function readLockJsonSkillEntries(configDir: string): Map<string, {
   versionSource?: string;
 }> {
   const lockFile = path.join(configDir, '.clawhub', 'lock.json');
-  const entries = new Map<string, { version?: string; source?: string; versionSource?: string }>();
+  const entries = new Map<string, {
+    version?: string;
+    source?: string;
+    versionSource?: string;
+  }>();
   try {
     if (fs.existsSync(lockFile)) {
       const data = JSON.parse(fs.readFileSync(lockFile, 'utf8'));
       const skills = data?.skills || {};
       for (const [slug, info] of Object.entries(skills)) {
         if (info && typeof info === 'object') {
-          const record = info as { version?: string; source?: string; versionSource?: string };
+          const record = info as {
+            version?: string;
+            source?: string;
+            versionSource?: string;
+          };
           entries.set(slug, record);
         }
       }
@@ -482,6 +527,158 @@ export class SkillPlazaService {
     };
   }
 
+  private normalizeRemotePlazaSkills(
+    skills: SkillSummary[],
+    labelToSlug: Map<string, string>,
+  ): SkillSummary[] {
+    return skills.map((s) => this.overlayLocalState(s)).map((s) => {
+      if (OFFICE_SKILL_SLUGS.has(s.slug)) {
+        return { ...s, category: OFFICE_CATEGORY_LABEL, categoryCode: OFFICE_CATEGORY_SLUG };
+      }
+      const code = resolveSkillCategoryCode(s, labelToSlug);
+      if (code && code !== s.categoryCode) {
+        return { ...s, categoryCode: code };
+      }
+      return s;
+    });
+  }
+
+  private mergeLocalPreinstalledSkills(
+    skills: SkillSummary[],
+    localOfficeSkills: SkillSummary[],
+    localPreinstalledOthers: SkillSummary[],
+    hasCategoryFilter: boolean,
+    isQitaFilter: boolean,
+  ): SkillSummary[] {
+    const existingSlugs = new Set(skills.map((s) => s.slug));
+    const newLocalOffice = localOfficeSkills.filter((s) => !existingSlugs.has(s.slug));
+    const newLocalOthers = localPreinstalledOthers.filter((s) => !existingSlugs.has(s.slug));
+
+    let merged = skills;
+    if (!hasCategoryFilter) {
+      if (newLocalOffice.length > 0) {
+        merged = [...merged, ...newLocalOffice];
+      }
+      if (newLocalOthers.length > 0) {
+        merged = [...merged, ...newLocalOthers];
+      }
+    } else if (isQitaFilter && newLocalOthers.length > 0) {
+      merged = [...merged, ...newLocalOthers];
+    }
+    return merged;
+  }
+
+  /**
+   * Fetch category_counts from remote API (no category_code filter).
+   * Also returns first-page remote slugs for local preinstall dedupe.
+   */
+  private async fetchRemoteCategoryCounts(
+    params: SkillPlazaListParams,
+    categorys: string,
+  ): Promise<{ categoryCounts: Record<string, number>; remoteSlugs: Set<string> }> {
+    const result = await this.client.getPlazaSkills(
+      { ...params, category: undefined, page: 1, pageSize: 50 },
+      categorys || undefined,
+    );
+    return {
+      categoryCounts: { ...(result.categoryCounts || {}) },
+      remoteSlugs: new Set(result.skills.map((s) => s.slug)),
+    };
+  }
+
+  private resolveLocalPreinstallCountDelta(
+    localOfficeSkills: SkillSummary[],
+    localPreinstalledOthers: SkillSummary[],
+    remoteSlugs: Set<string>,
+  ): { newLocalOffice: SkillSummary[]; newLocalOthers: SkillSummary[] } {
+    return {
+      newLocalOffice: localOfficeSkills.filter((s) => !remoteSlugs.has(s.slug)),
+      newLocalOthers: localPreinstalledOthers.filter((s) => !remoteSlugs.has(s.slug)),
+    };
+  }
+
+  private filterUncategorizedPlazaSkills(skills: SkillSummary[]): SkillSummary[] {
+    return skills.filter((s) => Boolean(s.categoryCode));
+  }
+
+  private async resolvePlazaCategorysFilter(): Promise<string> {
+    try {
+      const authState = await getAuthState();
+      const categoryCode = authState.user?.categoryCode;
+      const apolloKey = isSiteUser(categoryCode)
+        ? 'claw.site.skill.category'
+        : 'claw.prov_head.skill.category';
+      const configValue = await fetchApolloConfigValue(apolloKey);
+      return configValue || '';
+    } catch (err) {
+      logger.warn('[SkillPlazaService] Failed to resolve categorys filter for enrichment:', err);
+      return '';
+    }
+  }
+
+  /** Raw remote plaza list for local skill category enrichment (no uncategorized filter). */
+  private async fetchPlazaSkillMapForLocalEnrichment(
+    labelToSlug: Map<string, string>,
+    categoryDefs: CategoryDef[],
+  ): Promise<{
+    skills: Map<string, SkillSummary>;
+    navBuckets: Map<string, { slug: string; label: string }>;
+  }> {
+    const categorys = await this.resolvePlazaCategorysFilter();
+    const map = new Map<string, SkillSummary>();
+    const navBuckets = new Map<string, { slug: string; label: string }>();
+
+    const ingest = (skills: SkillSummary[], implied?: { slug: string; label: string }) => {
+      const normalized = this.normalizeRemotePlazaSkills(skills, labelToSlug).map((s) => {
+        const overlaid = this.overlayLocalState(s);
+        if (implied) {
+          if (overlaid.slug) {
+            navBuckets.set(overlaid.slug, implied);
+          }
+          // Skills listed under a nav tab use that tab's bucket (Apollo-visible categories).
+          return {
+            ...overlaid,
+            categoryCode: implied.slug,
+            category: implied.label,
+          };
+        }
+        return overlaid;
+      });
+      for (const skill of normalized) {
+        if (!skill.slug) continue;
+        const existing = map.get(skill.slug);
+        if (!existing || (!existing.categoryCode && skill.categoryCode)) {
+          map.set(skill.slug, skill);
+        }
+      }
+    };
+
+    const fetchPages = async (
+      params: SkillPlazaListParams,
+      implied?: { slug: string; label: string },
+    ) => {
+      let page = 1;
+      while (true) {
+        const result = await this.client.getPlazaSkills(
+          { ...params, page, pageSize: 1000 },
+          categorys || undefined,
+        );
+        ingest(result.skills, implied);
+        if (!result.hasMore || result.skills.length === 0) break;
+        page++;
+        if (page > 50) break;
+      }
+    };
+
+    await fetchPages({ page: 1, pageSize: 1000 });
+    for (const cat of categoryDefs) {
+      if (!cat.slug) continue;
+      await fetchPages({ page: 1, pageSize: 1000, category: cat.slug }, cat);
+    }
+
+    return { skills: map, navBuckets };
+  }
+
   // ---- Office skills from local filesystem ----
 
   private getOfficeSkillsFromLocal(q?: string): SkillSummary[] {
@@ -636,12 +833,29 @@ export class SkillPlazaService {
     const localOfficeSkills = this.getOfficeSkillsFromLocal(params.q);
     const localPreinstalledOthers = this.getPreinstalledNonOfficeSkillsFromLocal(params.q);
 
+    let labelToSlug = new Map<string, string>();
+    try {
+      const categories = await this.getCategories();
+      labelToSlug = new Map(categories.map((c) => [c.label, c.slug]));
+    } catch (err) {
+      logger.warn('[SkillPlazaService] Failed to load categories for skill normalization:', err);
+    }
+
     if (isOfficeFilter) {
-      // API doesn't know about "办公" category; return local office skills only
-      const categoryCounts: Record<string, number> = {};
-      categoryCounts[OFFICE_CATEGORY_SLUG] = localOfficeSkills.length;
-      categoryCounts['qita'] = localPreinstalledOthers.length;
-      categoryCounts[''] = localOfficeSkills.length;
+      const { categoryCounts: remoteCounts, remoteSlugs } = await this.fetchRemoteCategoryCounts(
+        params,
+        categorys,
+      );
+      const { newLocalOffice, newLocalOthers } = this.resolveLocalPreinstallCountDelta(
+        localOfficeSkills,
+        localPreinstalledOthers,
+        remoteSlugs,
+      );
+      const categoryCounts = applyLocalPreinstalledCountDelta(
+        remoteCounts,
+        newLocalOffice,
+        newLocalOthers,
+      );
 
       return {
         skills: localOfficeSkills,
@@ -653,43 +867,52 @@ export class SkillPlazaService {
       };
     }
 
-    // Normal request: fetch from API and merge local preinstalled skills
+    // List: remote API with category_code filter so cards match backend management platform.
     const result = await this.client.getPlazaSkills(params, categorys || undefined);
-    let skills = result.skills.map((s) => this.overlayLocalState(s)).map((s) => {
-      if (OFFICE_SKILL_SLUGS.has(s.slug)) {
-        return { ...s, category: OFFICE_CATEGORY_LABEL, categoryCode: OFFICE_CATEGORY_SLUG };
-      }
-      return s;
-    });
+    let skills = this.mergeLocalPreinstalledSkills(
+      this.normalizeRemotePlazaSkills(result.skills, labelToSlug),
+      localOfficeSkills,
+      localPreinstalledOthers,
+      hasCategoryFilter,
+      isQitaFilter,
+    );
 
-    // Merge local preinstalled skills
-    const existingSlugs = new Set(skills.map((s) => s.slug));
-    const newLocalOffice = localOfficeSkills.filter((s) => !existingSlugs.has(s.slug));
-    const newLocalOthers = localPreinstalledOthers.filter((s) => !existingSlugs.has(s.slug));
-
+    // Remote category_counts[''] excludes uncategorized skills; align list on "全部" view.
     if (!hasCategoryFilter) {
-      if (newLocalOffice.length > 0) {
-        skills = [...skills, ...newLocalOffice];
-      }
-      if (newLocalOthers.length > 0) {
-        skills = [...skills, ...newLocalOthers];
-      }
-    } else if (isQitaFilter) {
-      if (newLocalOthers.length > 0) {
-        skills = [...skills, ...newLocalOthers];
-      }
+      skills = this.filterUncategorizedPlazaSkills(skills);
     }
 
-    // Update category counts: only add *new* local skills (deduped against remote)
-    const newLocalCount = newLocalOffice.length + newLocalOthers.length;
-    result.categoryCounts[''] = (result.categoryCounts[''] || 0) + newLocalCount;
-    result.categoryCounts[OFFICE_CATEGORY_SLUG] = (result.categoryCounts[OFFICE_CATEGORY_SLUG] || 0) + newLocalOffice.length;
-    result.categoryCounts['qita'] = (result.categoryCounts['qita'] || 0) + newLocalOthers.length;
+    // Nav counts always reflect full category panorama (incl. local preinstall),
+    // regardless of which category is selected for the card list.
+    const { categoryCounts: remoteCounts, remoteSlugs } = await this.fetchRemoteCategoryCounts(
+      params,
+      categorys,
+    );
+    const { newLocalOffice, newLocalOthers } = this.resolveLocalPreinstallCountDelta(
+      localOfficeSkills,
+      localPreinstalledOthers,
+      remoteSlugs,
+    );
+    const categoryCounts = applyLocalPreinstalledCountDelta(
+      remoteCounts,
+      newLocalOffice,
+      newLocalOthers,
+    );
+
+    const listNewLocalOthers = isQitaFilter ? newLocalOthers : [];
+
+    let total = result.total ?? skills.length;
+    if (!hasCategoryFilter) {
+      total = categoryCounts[''] ?? skills.length;
+    } else if (isQitaFilter) {
+      total = (result.total || 0) + listNewLocalOthers.length;
+    }
 
     return {
       ...result,
       skills,
-      total: (result.total || 0) + newLocalOffice.length + newLocalOthers.length,
+      categoryCounts,
+      total,
     };
   }
 
@@ -698,35 +921,27 @@ export class SkillPlazaService {
     const disabledSlugs = readDisabledDirSlugs(this.getDisabledDir());
     const allSlugs = new Set([...activeSlugs, ...disabledSlugs]);
     const fromLock = readLockJsonSkills(this.configDir);
+    const manifestSlugs = readPreinstalledManifestSlugs();
 
     // 获取 plaza 分类列表，建立 label → slug 映射（权威来源）
     let labelToSlug = new Map<string, string>();
+    let categoryDefs: CategoryDef[] = [];
     try {
-      const categories = await this.getCategories();
-      labelToSlug = new Map(categories.map((c) => [c.label, c.slug]));
-      logger.info(`[getLocalSkills] categories loaded: ${categories.map((c) => `${c.label}=${c.slug}`).join(', ')}`);
+      categoryDefs = await this.getCategories();
+      labelToSlug = new Map(categoryDefs.map((c) => [c.label, c.slug]));
+      logger.info(`[getLocalSkills] categories loaded: ${categoryDefs.map((c) => `${c.label}=${c.slug}`).join(', ')}`);
     } catch (err) {
       logger.warn('[SkillPlazaService] Failed to fetch categories for local skills:', err);
     }
 
-    // 先拉 plaza 列表，用于补全官方技能的分类信息（循环拉取全部）
+    // 先拉 plaza 列表，用于补全官方技能的分类信息（含按分类分页拉取）
     let plazaSkillMap = new Map<string, SkillSummary>();
+    let navBuckets = new Map<string, { slug: string; label: string }>();
     try {
-      const allPlazaSkills: SkillSummary[] = [];
-      let page = 1;
-      while (true) {
-        const result = await this.getPlazaSkills({ page, pageSize: 1000 });
-        allPlazaSkills.push(...result.skills);
-        if (!result.hasMore || result.skills.length === 0) break;
-        page++;
-        if (page > 50) break; // safety limit
-      }
-      plazaSkillMap = new Map(allPlazaSkills.map((s) => [s.slug, s]));
-      logger.info(`[getLocalSkills] loaded ${allPlazaSkills.length} plaza skills for categorization`);
-      // 打印 plaza 技能的分类信息样本（用于排查）
-      for (const [s, skill] of plazaSkillMap.entries()) {
-        logger.info(`[getLocalSkills] plaza skill sample: slug=${s}, category=${skill.category}, categoryCode=${skill.categoryCode}`);
-      }
+      const enriched = await this.fetchPlazaSkillMapForLocalEnrichment(labelToSlug, categoryDefs);
+      plazaSkillMap = enriched.skills;
+      navBuckets = enriched.navBuckets;
+      logger.info(`[getLocalSkills] loaded ${plazaSkillMap.size} plaza skills, ${navBuckets.size} nav buckets for categorization`);
     } catch (err) {
       logger.warn('[SkillPlazaService] Failed to fetch plaza skills for categorization:', err);
     }
@@ -757,12 +972,10 @@ export class SkillPlazaService {
       const summary = readLocalSkillSummary(skillDir, slug);
       if (summary) {
         const plazaSkill = plazaSkillMap.get(slug);
-        const isOfficial = fromLock.has(slug) || plazaSkill?.source === 'official';
-        const source: 'official' | 'mine' = isOfficial ? 'official' : 'mine';
-
-        // 判断是否为预安装技能（通过 .stoclaw-preinstalled.json marker 文件）
         const skillDirPath = isEnabled ? path.join(this.skillsDir, slug) : path.join(this.getDisabledDir(), slug);
         const isPreinstalled = isPreinstalledSkill(skillDirPath);
+        const isOfficial = fromLock.has(slug) || plazaSkill?.source === 'official' || manifestSlugs.has(slug);
+        const source: 'official' | 'mine' = isOfficial ? 'official' : 'mine';
         const isOfficeSkill = OFFICE_SKILL_SLUGS.has(slug);
 
         // 分类优先级：办公技能 > 预安装技能（其他）> 按 plaza 权威数据 / 本地元数据
@@ -782,28 +995,30 @@ export class SkillPlazaService {
           if (isOfficial) {
             const plazaSkill = plazaSkillMap.get(slug);
             if (plazaSkill) {
-              // 部分 plaza 接口 categoryCode 可能为空字符串，但 category（中文 label）可靠
-              resolvedCode = plazaSkill.categoryCode || null;
-              resolvedLabel = plazaSkill.category || null;
+              const picked = pickNavCategoryFromApiSkill(plazaSkill, categoryDefs);
+              resolvedCode = picked.code;
+              resolvedLabel = picked.label;
+            }
 
-              // 若 categoryCode 缺失但 label 存在，通过分类列表反查 slug
-              if (!resolvedCode && resolvedLabel) {
-                resolvedCode = labelToSlug.get(resolvedLabel) || null;
+            if (!resolvedCode) {
+              try {
+                const detail = await this.getSkillDetail(slug);
+                const picked = pickNavCategoryFromApiSkill(detail, categoryDefs);
+                resolvedCode = picked.code;
+                resolvedLabel = picked.label;
+                logger.info(
+                  `[getLocalSkills] detail category_codes pick for ${slug}: categoryCode=${resolvedCode}, category=${resolvedLabel}, codes=${JSON.stringify(detail.categoryCodes)}`,
+                );
+              } catch (detailErr) {
+                logger.warn(`[getLocalSkills] getSkillDetail failed for ${slug}:`, detailErr);
               }
+            }
 
-              // 若 plaza 列表中既无 categoryCode 也无 category，尝试调详情接口补全
-              if (!resolvedCode && !resolvedLabel) {
-                try {
-                  const detail = await this.getSkillDetail(slug);
-                  resolvedCode = detail.categoryCode || null;
-                  resolvedLabel = detail.category || null;
-                  if (!resolvedCode && resolvedLabel) {
-                    resolvedCode = labelToSlug.get(resolvedLabel) || null;
-                  }
-                  logger.info(`[getLocalSkills] detail fallback for ${slug}: categoryCode=${resolvedCode}, category=${resolvedLabel}`);
-                } catch (detailErr) {
-                  logger.warn(`[getLocalSkills] getSkillDetail failed for ${slug}:`, detailErr);
-                }
+            if (!resolvedCode) {
+              const navBucket = navBuckets.get(slug);
+              if (navBucket) {
+                resolvedCode = navBucket.slug;
+                resolvedLabel = navBucket.label;
               }
             }
           }
@@ -821,10 +1036,16 @@ export class SkillPlazaService {
           logger.info(`[getLocalSkills] resolved for ${slug}: isOfficial=${isOfficial}, finalCategoryCode=${finalCategoryCode}, finalCategory=${finalCategory}, summary.category=${summary.category}, plazaHas=${plazaSkillMap.has(slug)}`);
         }
 
+        // 技能广场目录中存在该 slug 时，展示 title/description 以 plaza 为准（与技能广场 tab 一致）
+        const displayTitle = plazaSkill?.title ? plazaSkill.title : summary.title || slug;
+        const displayDescription = plazaSkill?.description
+          ? plazaSkill.description
+          : summary.description || '';
+
         const baseSkill: SkillSummary = {
           slug: summary.slug || slug,
-          title: summary.title || slug,
-          description: summary.description || '',
+          title: displayTitle,
+          description: displayDescription,
           category: finalCategory,
           categoryCode: finalCategoryCode,
           source,
@@ -834,7 +1055,7 @@ export class SkillPlazaService {
           useCount: plazaSkill?.useCount ?? 0,
           points: summary.points ?? plazaSkill?.points ?? 8,
           icon: summary.icon ?? plazaSkill?.icon,
-          defaultPrompt: summary.defaultPrompt || summary.title || slug,
+          defaultPrompt: summary.defaultPrompt || displayTitle || slug,
           updatedAt: plazaSkill?.updatedAt,
           version: plazaSkill?.version,
         };
@@ -843,8 +1064,7 @@ export class SkillPlazaService {
     }
 
     // 基于实际返回的 skills 数组计算分类计数，确保 categoryCounts 与 skills 严格一致
-    // 规则：所有技能（官方/预安装/自建）都按实际 categoryCode 归类；
-    //       未分类技能（categoryCode 为 null）只在"全部"（''）中计数，不计入任何具体分类
+    // 未分类（categoryCode 为 null）只在「全部」中计数；「其他」兜底仅在前端 enrich 阶段处理
     const finalCategoryCounts: Record<string, number> = {};
     for (const skill of skills) {
       const code = skill.categoryCode;

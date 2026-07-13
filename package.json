@@ -1,6 +1,6 @@
 {
     "name": "stoclaw",
-    "version": "2026.6.29-GA.1",
+    "version": "2026.7.13-GA.1",
     "pnpm": {
         "onlyBuiltDependencies": [
             "@discordjs/opus",
@@ -44,6 +44,7 @@
         "bundle:preinstalled-skills": "zx scripts/bundle-preinstalled-skills.mjs",
         "lint": "eslint . --fix",
         "typecheck": "tsc --noEmit",
+        "typecheck:chat-ui": "zx scripts/typecheck-chat-ui.mjs",
         "test": "vitest run",
         "comms:replay": "node scripts/comms/replay.mjs",
         "comms:baseline": "node scripts/comms/baseline.mjs",
@@ -59,7 +60,7 @@
         "prep:win-deps": "pnpm install --config.supportedArchitectures.os[]=current --config.supportedArchitectures.os[]=win32",
         "prep:win-binaries": "pnpm run prep:win-deps && cross-env NODE_OPTIONS=\"--import ./.node-preload.mjs\" pnpm run uv:download:win && pnpm run node:download:win",
         "icons": "zx scripts/generate-icons.mjs",
-        "package": "pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && vite build && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
+        "package": "pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && vite build && pnpm run typecheck:chat-ui && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
         "package:test": "pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && cross-env VITE_APP_ENV=test vite build --mode test && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
         "package:staging": "pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && cross-env VITE_APP_ENV=staging vite build --mode staging && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
         "package:mac": "pnpm run uv:download:mac && pnpm run package && electron-builder --mac --publish never --config electron-builder.config.js",

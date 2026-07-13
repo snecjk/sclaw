@@ -14,7 +14,9 @@ import {
   parseParameterFormMarker,
 } from '@/lib/parameter-form-marker';
 import { resolveParameterFormId } from '@/components/parameter-form/form-handlers';
-import type { RawMessage, ContentBlock } from '@/stores/chat';
+import { currentUserTurnHasWorkflowSubmission } from '@/lib/workflow-card-injection';
+import type { AttachedFileMeta, RawMessage, ContentBlock } from '@/stores/chat';
+import { getExecutionByRunId } from '@/stores/workflow-memory';
 import { truncatePreviewExtractExcerpt } from '../../../shared/preview-extract-trace';
 import {
   stripDingTalkAgentSendDisclaimerForDisplay,
@@ -29,18 +31,20 @@ import {
   isWorkflowParamsSummaryText,
   isWorkflowParamsUserText,
 } from '@/lib/workflow-form-utils';
+import { isLikelyPlanningNarration } from '@/pages/Chat/thinking/classify-text';
 import {
   artifactToPreviewFile,
-  extractPreviewableHttpUrls,
   inferMimeTypeFromUrl,
   isHttpUrl,
   isPreviewableArtifactUrl,
   isPreviewableRemoteUrl,
+  isUserFacingArtifactUrl,
   resolveArtifactUrlFromWorkflowStates,
   toMarkdownPreviewPath,
   urlPathHasFileExtension,
 } from '@/lib/preview-url';
 import { normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
+import { sanitizeLocalFileRefsForCopy } from '../../../shared/dingtalk-share-text';
 import type { WorkflowExecutionState } from '@/types/workflow';
 
 /** OpenClaw injects queued system events as `System: [timestamp] ...` lines before user text. */
@@ -211,15 +215,49 @@ export function maskSensitiveToolInputForDisplay(input: unknown): string {
   }
 }
 
+/** Claude 等引擎常传 null 或空 object；UI 统一视为「无参数」 */
+export function hasDisplayableToolInput(input: unknown): boolean {
+  if (input == null) return false;
+  if (typeof input === 'string') return input.trim().length > 0;
+  if (typeof input === 'object' && !Array.isArray(input)) {
+    return Object.keys(input as Record<string, unknown>).length > 0;
+  }
+  return true;
+}
+
+function stripTrailingCommasBeforeBreaks(text: string): string {
+  return text
+    .replace(/，\s*([。！？\n]|$)/g, '$1')
+    .replace(/,\s*([.!?\n]|$)/g, '$1');
+}
+
+/** Apply display-only transforms outside fenced / inline code (SQL commas must survive). */
+function transformOutsideCodeRegions(text: string, transform: (segment: string) => string): string {
+  const codeBlocks: string[] = [];
+  let protectedText = text.replace(/```[\s\S]*?```/g, (match) => {
+    codeBlocks.push(match);
+    return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+  });
+
+  const inlineCodes: string[] = [];
+  protectedText = protectedText.replace(/`[^`]*`/g, (match) => {
+    inlineCodes.push(match);
+    return `__INLINE_CODE_${inlineCodes.length - 1}__`;
+  });
+
+  let result = transform(protectedText);
+  result = result.replace(/__INLINE_CODE_(\d+)__/g, (_, index) => inlineCodes[Number(index)]);
+  result = result.replace(/__CODE_BLOCK_(\d+)__/g, (_, index) => codeBlocks[Number(index)]);
+  return result;
+}
+
 export function stripDwsSendMetadataForDisplay(text: string): string {
   let cleaned = text
     .replace(DWS_SEND_METADATA_PATTERN, '')
     .replace(/^\s*(?:\*\*)?(?:任务\s*ID|openTaskId|processQueryKey)(?:\*\*)?\s*[：:]\s*[A-Za-z0-9+/=_-]+(?:\*\*)?\s*$/gim, '')
     .replace(/\*{4,}/g, '**');
 
-  cleaned = cleaned
-    .replace(/，\s*([。！？\n]|$)/g, '$1')
-    .replace(/,\s*([.!?\n]|$)/g, '$1');
+  cleaned = transformOutsideCodeRegions(cleaned, stripTrailingCommasBeforeBreaks);
 
   return cleaned.trim();
 }
@@ -275,15 +313,117 @@ export function messageHasWorkflowCard(msg: RawMessage): boolean {
     && (msg.content as ContentBlock[]).some((block) => block.type === 'workflow_card');
 }
 
-function messageHasParameterFormBlock(msg: RawMessage): boolean {
+export function messageHasParameterFormBlock(msg: RawMessage): boolean {
   return Array.isArray(msg.content)
     && (msg.content as ContentBlock[]).some((block) => block.type === 'parameter_form');
+}
+
+/** B4：助手侧工作流启动 boilerplate（参数已确认 + 后台执行提示） */
+export function isWorkflowStartAssistantBoilerplate(content: string): boolean {
+  return /^参数已确认[，,].*工作流已在后台启动/.test(content.trim());
+}
+
+export interface AssistantCopyShareContent {
+  text: string;
+  files: AttachedFileMeta[];
+}
+
+/**
+ * 复制/分享用正文：跳过「参数已确认」boilerplate，优先工作流结果摘要与产物。
+ * 与 WorkflowCard results 区展示口径对齐。
+ */
+export function resolveAssistantCopyShareContent(options: {
+  text: string;
+  assistantBubbleText: string;
+  workflowCard: { runId: string; templateName: string } | null;
+  workflowCardStates: Record<string, WorkflowExecutionState | undefined>;
+  sessionKey?: string;
+  previewFiles: AttachedFileMeta[];
+}): AssistantCopyShareContent {
+  const {
+    text,
+    assistantBubbleText,
+    workflowCard,
+    workflowCardStates,
+    sessionKey,
+    previewFiles,
+  } = options;
+
+  const files: AttachedFileMeta[] = [];
+  const seenFileKeys = new Set<string>();
+  const addFile = (file: AttachedFileMeta) => {
+    const key = normalizePreviewFileKey(file.filePath, file.fileName);
+    if (!key || seenFileKeys.has(key)) return;
+    seenFileKeys.add(key);
+    files.push(file);
+  };
+  for (const file of previewFiles) addFile(file);
+
+  const bubbleText = assistantBubbleText.trim();
+  const rawText = text.trim();
+
+  if (workflowCard) {
+    const state = workflowCardStates[workflowCard.runId]
+      ?? getExecutionByRunId(workflowCard.runId, sessionKey);
+    const summary = state?.result?.summary?.trim() ?? '';
+    for (const artifact of state?.result?.artifacts ?? []) {
+      if (!isUserFacingArtifactUrl(artifact.url)) continue;
+      addFile(artifactToPreviewFile(artifact));
+    }
+
+    if (bubbleText && !isWorkflowStartAssistantBoilerplate(bubbleText)) {
+      return { text: bubbleText, files };
+    }
+    if (summary && (isWorkflowStartAssistantBoilerplate(rawText) || !bubbleText)) {
+      return { text: summary, files };
+    }
+  }
+
+  if (bubbleText && !isWorkflowStartAssistantBoilerplate(bubbleText)) {
+    return { text: bubbleText, files };
+  }
+
+  return { text: rawText, files };
+}
+
+/** 剪贴板正文：清理本地 file:// 链接，不含附件列表（文件单独复制）。 */
+export function formatAssistantCopyShareTextOnly(text: string): string {
+  return sanitizeLocalFileRefsForCopy(text.trim());
+}
+
+/** 剪贴板文本：正文 + 产物名/外链；本地路径由剪贴板文件项携带，不在文本中暴露。 */
+export function formatAssistantCopyShareClipboardText(
+  text: string,
+  files: AttachedFileMeta[],
+): string {
+  const sanitizedText = sanitizeLocalFileRefsForCopy(text.trim());
+  const parts = [sanitizedText].filter(Boolean);
+  const attachmentLines: string[] = [];
+
+  for (const file of files) {
+    const fileName = file.fileName.trim() || 'file';
+    const filePath = file.filePath.trim();
+    if (!filePath) continue;
+    if (isHttpUrl(filePath)) {
+      parts.push(`[${fileName}](${filePath})`);
+      continue;
+    }
+    attachmentLines.push(`- ${fileName}`);
+  }
+
+  if (attachmentLines.length > 0) {
+    parts.push(['附件：', ...attachmentLines].join('\n'));
+  }
+
+  return parts.join('\n\n');
 }
 
 /** 工作流 intro / 分组参数摘要（与后续 workflow_card 执行卡分开展示） */
 export function isWorkflowPreambleAssistantMessage(msg: RawMessage): boolean {
   if (!isAssistantMessageRole(msg.role)) return false;
   const text = extractText(msg).trim();
+  // 思考区 phase-text 已展示的规划旁白，不再重复渲染工作流 preamble 卡
+  if (isLikelyPlanningNarration(text)) return false;
   if (isWorkflowParamsSummaryText(text)) return true;
   if (isWorkflowGuidanceAssistantText(text)) return true;
   if (isWorkflowParameterIntroText(text)) return true;
@@ -404,6 +544,10 @@ export function extractParameterForm(
         sourceId: string;
         schemaHash?: string;
       };
+      const sessionMessages = useChatStore.getState().messages;
+      if (currentUserTurnHasWorkflowSubmission(sessionMessages)) {
+        return null;
+      }
       if (
         formContext.source === 'workflow'
         && formContext.sourceId
@@ -411,7 +555,7 @@ export function extractParameterForm(
       ) {
         return null;
       }
-      
+
       return {
         formId,
         formConfig: (block as any).formConfig as import('@/types/user-form').UserFormConfig,
@@ -425,6 +569,10 @@ export function extractParameterForm(
       if (parsed) {
         const { templateId, schemaHash } = parsed;
         const sessionKey = useChatStore.getState().currentSessionKey;
+        const sessionMessages = useChatStore.getState().messages;
+        if (currentUserTurnHasWorkflowSubmission(sessionMessages)) {
+          return null;
+        }
         if (sessionHasWorkflowExecution(sessionKey, templateId)) {
           return null;
         }
@@ -575,10 +723,15 @@ export function extractThinking(message: RawMessage | unknown): string | null {
 
 export type ThinkingTimelineItem =
   | { type: 'thinking'; content: string }
+  /** 思考区内的阶段旁白（原 phase-text，按时序夹在 thinking/tool 之间） */
+  | { type: 'narration'; content: string }
   | { type: 'tool'; index: number; id: string; name: string; input: unknown };
+
+import { thinkingTimelineToolIdentityKey } from '@/lib/tool-input-merge';
 
 /**
  * Ordered thinking + tool_use segments from message content (preserves block order).
+ * Also picks up OpenAI `tool_calls` on the message when they are not in the content array.
  */
 export function extractThinkingTimeline(message: RawMessage | unknown): ThinkingTimelineItem[] {
   if (!message || typeof message !== 'object') return [];
@@ -613,17 +766,26 @@ export function extractThinkingTimeline(message: RawMessage | unknown): Thinking
     if (thinking) {
       items.push({ type: 'thinking', content: thinking });
     }
-    const tools = extractToolUse(message);
-    for (const tool of tools) {
-      toolIndex += 1;
-      items.push({
-        type: 'tool',
-        index: toolIndex,
-        id: tool.id || `tool-${toolIndex}`,
-        name: tool.name,
-        input: tool.input,
-      });
-    }
+  }
+
+  const capturedToolKeys = new Set(
+    items
+      .filter((item): item is Extract<ThinkingTimelineItem, { type: 'tool' }> => item.type === 'tool')
+      .map((item) => thinkingTimelineToolIdentityKey({ id: item.id, name: item.name })),
+  );
+
+  for (const tool of extractToolUse(message)) {
+    const key = thinkingTimelineToolIdentityKey({ id: tool.id, name: tool.name });
+    if (capturedToolKeys.has(key)) continue;
+    toolIndex += 1;
+    items.push({
+      type: 'tool',
+      index: toolIndex,
+      id: tool.id || `tool-${toolIndex}`,
+      name: tool.name,
+      input: tool.input,
+    });
+    capturedToolKeys.add(key);
   }
 
   return items;
@@ -817,6 +979,7 @@ import {
   createFileUrlInTextRegex,
   isAttachableRawLocalPath,
   localPathFromFileUrlCapture,
+  RAW_ATTACHABLE_EXT_PATTERN,
 } from '../../../shared/preview-raw-path';
 
 /** Shared extension list for previewable local file paths (used by extractPreviewableRefs and preprocessTextForPreviewLinks). */
@@ -1068,17 +1231,6 @@ export function extractPreviewableRefs(
     addIfNotImage(url, fileName, ext, 'localhost URL in assistant text', match[0]);
   }
 
-  // OSS / CDN http(s) links with previewable extensions
-  for (const ref of extractPreviewableHttpUrls(cleanText)) {
-    addIfNotImage(
-      ref.filePath,
-      ref.fileName,
-      ref.fileName.split('.').pop()?.toLowerCase() || '',
-      'http(s) URL with previewable extension',
-      ref.filePath,
-    );
-  }
-
   // File paths (relative ./, absolute /, and Windows C:\)
   const pathRegex = new RegExp(
     `(?<![\\w./:])(\\./(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|\\/(?:[^/\\n\\r]+\\/)*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS})|[A-Za-z]:[\\\\/](?:[^/\\n\\r]+[\\\\/])*[^/\\n\\r]+\\.(?:${PREVIEWABLE_FILE_EXTS}))`,
@@ -1092,6 +1244,43 @@ export function extractPreviewableRefs(
   }
 
   return results;
+}
+
+/**
+ * Extract human-readable filenames from assistant text for display-name repair.
+ * Does not require paths to exist on disk (markdown labels, bare filenames).
+ */
+export function extractDisplayFileNameHints(text: string): Array<{ fileName: string }> {
+  if (!text.trim()) return [];
+  const cleanText = stripCodeBlocks(text);
+  const hints: Array<{ fileName: string }> = [];
+  const seen = new Set<string>();
+
+  function addHint(fileName: string) {
+    const trimmed = fileName.trim();
+    if (!trimmed || seen.has(trimmed.toLowerCase())) return;
+    const ext = trimmed.split('.').pop()?.toLowerCase() || '';
+    if (!ext || extToMimeType(ext).startsWith('image/')) return;
+    if (!new RegExp(`\\.(${RAW_ATTACHABLE_EXT_PATTERN})$`, 'i').test(trimmed)) return;
+    seen.add(trimmed.toLowerCase());
+    hints.push({ fileName: trimmed });
+  }
+
+  const mdLinkRegex = /\[([^\]\n]+)\]\((?:preview:\/\/)?[^)\s]+?\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = mdLinkRegex.exec(cleanText)) !== null) {
+    addHint(match[1]);
+  }
+
+  const bareNameRegex = new RegExp(
+    `(?<![\\w./:])([^\\s/\\\\\\[\\]()<>]+\\.(?:${RAW_ATTACHABLE_EXT_PATTERN}))(?![\\w.])`,
+    'gi',
+  );
+  while ((match = bareNameRegex.exec(cleanText)) !== null) {
+    addHint(match[1]);
+  }
+
+  return hints;
 }
 
 // ── Local path existence verification ────────────────────────────

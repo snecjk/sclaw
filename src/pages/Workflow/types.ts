@@ -9,36 +9,23 @@ export type WorkflowCoverKey = 'cover-1' | 'cover-2' | 'cover-3' | 'cover-4' | '
 /** 卡片运行状态（用于列表 meta 行绿点 / 已暂停标记） */
 export type WorkflowCardStatus = 'running' | 'paused' | 'draft';
 
-/** 我的工作流列表二级筛选：已发布 / 已安装 / 草稿箱 */
-export type WorkflowMineListKind = 'published' | 'installed' | 'draft';
+/** 我的工作流列表二级筛选：已发布 / 草稿箱 */
+export type WorkflowMineListKind = 'published' | 'draft';
 
 /** 我的工作流 / 官方推荐 卡片列表项（映射自 API 或本地创建） */
 export interface WorkflowCardItem {
   id: string;
   name: string;
-  /** 列表二级筛选归属（对齐工作流列表设计稿） */
+  /** 列表二级筛选归属：published / draft，由 API lifecycleStatus 推导 */
   listKind: WorkflowMineListKind;
-  /** 模板来源：system 或 personal，前端据此区分展示区域 */
-  scope?: 'system' | 'personal';
-  category: string;
-  schedule: string;
-  scheduleIcon: 'clock' | 'zap' | 'pause';
   enabled: boolean;
   description: string;
-  flow: string[];
-  lastRun: string;
   coverKey: WorkflowCoverKey;
-  isCustom?: boolean;
-  /** 来自 API 的模板 ID，用于与官方推荐列表比对以区分「系统 / 自建」 */
+  flow: string[];
+  /** 来自 API 的模板 ID（可选，仅作数据透传，不再用于区分「系统 / 自建」） */
   templateId?: string | null;
-  /** 排期行显示「已暂停」警告 */
-  showPausedLabel?: boolean;
-  /** 排期文案弱化（已暂停态） */
-  scheduleMuted?: boolean;
   /** 从未运行过（meta 无绿点） */
   neverRun?: boolean;
-  /** meta 显示成功绿点 */
-  runSuccess?: boolean;
 }
 
 /** 官方推荐卡片（scope=system 的模板） */
@@ -46,8 +33,6 @@ export interface OfficialWorkflowCard {
   id: string;
   name: string;
   category: string;
-  schedule: string;
-  scheduleIcon: 'clock' | 'zap';
   description: string;
   flow: string[];
   coverKey: WorkflowCoverKey;

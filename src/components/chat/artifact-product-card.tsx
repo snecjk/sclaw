@@ -1,11 +1,54 @@
 /**
  * ArtifactProductCard — 对话流产物卡（MasterGo 8:22231 / 任务一 B5）
  *
- * 白底圆角横条：macOS 窗口图标 + 标题 + 类型/扩展名/大小元信息 + 橙色「查看产物」。
+ * 白底圆角横条：macOS 窗口图标 + 标题 + 类型/扩展名/大小元信息 + 灰色分裂「预览」按钮。
  * 使用位置：ChatMessage FileCard、WorkflowCard 完成态产物区。
  */
+import { ChevronDown, Copy, Download, FolderOpen, Link2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import type { ArtifactCardMenuItem } from '@/lib/artifact-card-menu';
 import { cn } from '@/lib/utils';
+
+const artifactActionSplitClass =
+  'flex shrink-0 items-stretch overflow-hidden rounded-md bg-[#F5F6F7] dark:bg-muted';
+
+const artifactActionPrimaryClass =
+  'px-3 py-1.5 text-sm leading-[18px] text-foreground transition-colors hover:bg-black/[0.04] dark:hover:bg-white/[0.06]';
+
+const artifactActionChevronClass =
+  'flex items-center border-l border-[#E5E6EB] px-2 text-muted-foreground transition-colors hover:bg-black/[0.04] dark:border-border dark:hover:bg-white/[0.06]';
+
+const artifactActionPillClass =
+  'shrink-0 rounded-md bg-[#F5F6F7] px-3 py-1.5 text-sm leading-[18px] text-foreground dark:bg-muted';
+
+const artifactMenuContentClass =
+  'min-w-[11rem] rounded-lg border border-[#E8EAEF] bg-card p-1 shadow-[0_4px_16px_rgba(15,23,42,0.08)] dark:border-border';
+
+const artifactMenuItemClass =
+  'gap-2 rounded-md px-2.5 py-2 text-sm text-foreground';
+
+function ArtifactMenuItemIcon({ id }: { id: string }) {
+  const iconClass = 'h-4 w-4 shrink-0 text-muted-foreground';
+  switch (id) {
+    case 'showInFolder':
+      return <FolderOpen className={iconClass} aria-hidden />;
+    case 'copyFile':
+      return <Copy className={iconClass} aria-hidden />;
+    case 'download':
+      return <Download className={iconClass} aria-hidden />;
+    case 'copyLink':
+      return <Link2 className={iconClass} aria-hidden />;
+    default:
+      return null;
+  }
+}
 
 /** 产物卡外框（MCP：rounded-xl + border #E8EAEF + bg-card） */
 export const artifactProductCardShellClass =
@@ -20,6 +63,10 @@ export interface ArtifactProductCardProps {
   actionLabel?: string;
   /** 点击整卡或「查看产物」 */
   onAction: () => void;
+  /** 是否显示右侧操作文案（默认显示） */
+  showActionLabel?: boolean;
+  /** 下拉菜单项（本地产物 / HTTPS 链接） */
+  menuItems?: ArtifactCardMenuItem[];
   /** 可选样式覆盖 */
   className?: string;
 }
@@ -46,22 +93,111 @@ export function ArtifactWindowIcon({ className }: { className?: string }) {
   );
 }
 
+function ArtifactActionButton({
+  actionLabel,
+  onAction,
+  menuItems,
+}: {
+  actionLabel: string;
+  onAction: () => void;
+  menuItems?: ArtifactCardMenuItem[];
+}) {
+  const { t } = useTranslation('chat');
+
+  const handleMenuSelect = async (item: ArtifactCardMenuItem) => {
+    try {
+      const result = await item.onSelect();
+      if (item.id === 'copyLink') {
+        toast.success(t('artifact.copyLinkSuccess'));
+      } else if (item.id === 'copyFile') {
+        const count = typeof result === 'number' ? result : 1;
+        toast.success(t('messageActions.copyFilesSuccess', { count }));
+      }
+    } catch (error) {
+      console.error('[ArtifactProductCard] menu action failed:', item.id, error);
+      toast.error(t('artifact.actionFailed'));
+    }
+  };
+
+  if (!menuItems?.length) {
+    return (
+      <span className={artifactActionPillClass}>
+        {actionLabel}
+      </span>
+    );
+  }
+
+  return (
+    <div
+      className={artifactActionSplitClass}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onAction();
+        }}
+        className={artifactActionPrimaryClass}
+      >
+        {actionLabel}
+      </button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={artifactActionChevronClass}
+            aria-label={t('artifact.moreActions')}
+          >
+            <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className={artifactMenuContentClass}>
+          {menuItems.map((item) => (
+            <DropdownMenuItem
+              key={item.id}
+              className={artifactMenuItemClass}
+              onSelect={() => {
+                void handleMenuSelect(item);
+              }}
+            >
+              <ArtifactMenuItemIcon id={item.id} />
+              {item.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 export function ArtifactProductCard({
   title,
   metaLine,
   actionLabel,
   onAction,
+  showActionLabel = true,
+  menuItems,
   className,
 }: ArtifactProductCardProps) {
   const { t } = useTranslation('chat');
+  const resolvedActionLabel = actionLabel ?? t('artifact.preview');
+  const hasMenu = Boolean(menuItems?.length);
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onAction}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onAction();
+        }
+      }}
       className={cn(
         artifactProductCardShellClass,
-        'text-left transition-colors duration-150 hover:bg-muted/20',
+        'cursor-pointer text-left transition-colors duration-150 hover:bg-muted/20',
         className,
       )}
     >
@@ -70,10 +206,20 @@ export function ArtifactProductCard({
         <p className="truncate text-sm font-semibold leading-5 text-foreground">{title}</p>
         <p className="truncate text-xs leading-[18px] text-muted-foreground">{metaLine}</p>
       </div>
-      <span className="shrink-0 text-sm font-medium leading-[18px] text-primary">
-        {actionLabel ?? t('workflow.viewArtifact')}
-      </span>
-    </button>
+      {showActionLabel ? (
+        hasMenu ? (
+          <ArtifactActionButton
+            actionLabel={resolvedActionLabel}
+            onAction={onAction}
+            menuItems={menuItems}
+          />
+        ) : (
+          <span className={artifactActionPillClass}>
+            {resolvedActionLabel}
+          </span>
+        )
+      ) : null}
+    </div>
   );
 }
 

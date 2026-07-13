@@ -28,6 +28,7 @@ import { warmupNetworkOptimization } from '../utils/uv-env';
 import { isQuitting, setQuitting } from './app-state';
 import { applyProxySettings } from './proxy';
 import { syncLaunchAtStartupSettingFromStore } from './launch-at-startup';
+import { releasePreventSystemSleepOnQuit, syncPreventSystemSleepSettingFromStore } from './prevent-sleep';
 import {
   clearPendingSecondInstanceFocus,
   consumeMainWindowReady,
@@ -226,6 +227,19 @@ function getAppIcon(): Electron.NativeImage | undefined {
   return icon.isEmpty() ? undefined : icon;
 }
 
+function isLikelyPreviewDownloadUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    if (/\.(xlsx?|xlsm|csv|tsv|pdf|zip|gz|tar|7z|rar|docx?|pptx?|html?|txt|json|xml|png|jpe?g|gif|webp)(?:\?|#|$)/i.test(parsed.pathname)) {
+      return true;
+    }
+    return /(?:^|&)(?:download|attachment|export)=/i.test(parsed.search.slice(1));
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Create the main application window
  */
@@ -280,8 +294,12 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
     _ts('ready-to-show (splash rendered)');
   });
 
-  // Handle external links
+  // External tabs vs in-preview file downloads from nested iframes.
   win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isLikelyPreviewDownloadUrl(url)) {
+      win.webContents.downloadURL(url);
+      return { action: 'deny' };
+    }
     shell.openExternal(url).catch((err) => {
       console.error('Failed to open external URL:', url, err);
     });
@@ -410,6 +428,7 @@ async function initialize(): Promise<void> {
 
   // Sync launch-at-startup setting (fast, uses electron-store)
   void syncLaunchAtStartupSettingFromStore();
+  void syncPreventSystemSleepSettingFromStore();
 
   // ── Lazy-load heavy modules in parallel while splash screen is displayed ──
   // These were previously static imports that blocked process startup with
@@ -433,6 +452,7 @@ async function initialize(): Promise<void> {
     { autoInstallSaiCliIfNeeded },
     { autoInstallDwsCliIfNeeded },
     { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled, watchLocalSkillsForDev },
+    { cleanupRetiredSkillsAndPlugins },
     { ensureLongOutputConstraint, ensureChineseThinkingConstraint, getAgentWorkspacePath },
     { ensureAllBundledPluginsInstalledAsync },
     { startHostApiServer },
@@ -457,6 +477,7 @@ async function initialize(): Promise<void> {
     import('../utils/sai-cli'),
     import('../utils/dws-cli'),
     import('../utils/skill-config'),
+    import('../utils/retired-skills-cleanup'),
     import('../utils/agent-config'),
     import('../utils/plugin-install'),
     import('../api/server'),
@@ -495,6 +516,10 @@ async function initialize(): Promise<void> {
 
   // Create system tray (with sprite and float icon toggle support)
   createTray(window, spriteWindowMod.toggleSprite, floatIconMod.toggleFloatIcon);
+
+  session.defaultSession.on('will-download', (_event, item) => {
+    logger.info(`[Download] ${item.getFilename()} ← ${item.getURL().slice(0, 200)}`);
+  });
 
   // Override security headers ONLY for the OpenClaw Gateway Control UI.
   // The URL filter ensures this callback only fires for gateway requests,
@@ -582,6 +607,10 @@ async function initialize(): Promise<void> {
   schedulePostFirstPaintWork(window, async () => {
     logger.info('Running deferred startup maintenance tasks');
 
+    await cleanupRetiredSkillsAndPlugins({ skipPluginDirs: true }).catch((error) => {
+      logger.warn('Failed to cleanup retired skills/plugins:', error);
+    });
+
     await ensureBuiltinSkillsInstalled().catch((error) => {
       logger.warn('Failed to install built-in skills:', error);
     });
@@ -599,6 +628,7 @@ async function initialize(): Promise<void> {
     }
 
     // Ensure Main Agent's AGENTS.md includes the long-output constraint
+    // TEMP: ensure* 函数体内已暂时停用英文注入（见 agent-config.ts）
     try {
       const mainWorkspace = await getAgentWorkspacePath('main');
       if (mainWorkspace) {
@@ -717,6 +747,9 @@ async function initialize(): Promise<void> {
 
   // Install bundled plugins before Gateway so the first agent run uses the latest mirror.
   sendStartupProgress('Installing plugins...');
+  await cleanupRetiredSkillsAndPlugins().catch((error) => {
+    logger.warn('Failed to cleanup retired skills/plugins before plugin install:', error);
+  });
   await ensureAllBundledPluginsInstalledAsync().catch((error) => {
     logger.warn('Failed to install/upgrade bundled plugins:', error);
   });
@@ -839,6 +872,7 @@ if (gotTheLock) {
 
   app.on('before-quit', (event) => {
     setQuitting();
+    releasePreventSystemSleepOnQuit();
 
     // Reset sprite and float icon visibility so they don't auto-show on next launch
     void import('./sprite-window').then(({ resetSpriteVisibilityOnQuit }) =>

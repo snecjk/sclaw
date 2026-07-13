@@ -17,7 +17,10 @@ import { getSetting } from '../../utils/store';
 import {
   dedupeRecentMentionRows,
   extractConversationRows,
+  extractListAllPagination,
+  mapListAllConversationItem,
   mapUnreadConversationItem,
+  sortConversationsByLastMsg,
   type RecentMentionRow,
 } from '../../../shared/dingtalk-recent-mentions';
 
@@ -38,6 +41,37 @@ interface MentionSearchItem {
 }
 
 const RECENT_MENTION_PAGE_SIZE = 10;
+const DWS_STATUS_CACHE_TTL_MS = 180_000;
+
+type DwsInstalledStatus = Awaited<ReturnType<typeof dwsCheckInstalled>>;
+
+let installedStatusCache: { value: DwsInstalledStatus; expiresAt: number } | null = null;
+let authStatusCache: { value: boolean; expiresAt: number } | null = null;
+
+function invalidateDwsStatusCache(): void {
+  installedStatusCache = null;
+  authStatusCache = null;
+}
+
+async function getCachedDwsInstalled(): Promise<DwsInstalledStatus> {
+  const now = Date.now();
+  if (installedStatusCache && installedStatusCache.expiresAt > now) {
+    return installedStatusCache.value;
+  }
+  const value = await dwsCheckInstalled();
+  installedStatusCache = { value, expiresAt: now + DWS_STATUS_CACHE_TTL_MS };
+  return value;
+}
+
+async function getCachedDwsAuthenticated(): Promise<boolean> {
+  const now = Date.now();
+  if (authStatusCache && authStatusCache.expiresAt > now) {
+    return authStatusCache.value;
+  }
+  const value = await isDwsAuthenticated();
+  authStatusCache = { value, expiresAt: now + DWS_STATUS_CACHE_TTL_MS };
+  return value;
+}
 
 function extractDwsRows(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
@@ -191,6 +225,34 @@ function matchesMentionQuery(title: string, query: string): boolean {
   return title.toLowerCase().includes(keyword);
 }
 
+/** 从「公司-姓名」里取短名，用于名称命中判断。 */
+function personDisplayName(title: string): string {
+  const idx = title.lastIndexOf('-');
+  if (idx >= 0 && idx < title.length - 1) {
+    const shortName = title.slice(idx + 1).trim();
+    if (shortName) return shortName;
+  }
+  return title;
+}
+
+/** 名称命中：全称或短名包含关键字（不含岗位/部门副标题）。 */
+function matchesMentionUserName(item: MentionSearchItem, query: string): boolean {
+  if (matchesMentionQuery(item.title, query)) return true;
+  return matchesMentionQuery(personDisplayName(item.title), query);
+}
+
+/** 联系人：姓名或部门/职位副标题须包含关键字（与群名过滤一致）。 */
+function matchesMentionUserQuery(item: MentionSearchItem, query: string): boolean {
+  if (matchesMentionUserName(item, query)) return true;
+  if (item.subtitle && matchesMentionQuery(item.subtitle, query)) return true;
+  return false;
+}
+
+/** 含拉丁字母时视为拼音检索，aisearch 结果不过滤。 */
+function isLatinMentionQuery(query: string): boolean {
+  return /[a-zA-Z]/.test(query);
+}
+
 async function searchUsersViaAisearch(query: string, limit: number): Promise<MentionSearchItem[]> {
   const result = await runDws(
     ['aisearch', 'person', '--keyword', query, '--dimension', 'name', '--format', 'json'],
@@ -198,10 +260,14 @@ async function searchUsersViaAisearch(query: string, limit: number): Promise<Men
   );
   if (!result.ok) return [];
   const rows = extractDwsRows(result.data);
-  return rows
+  const mapped = rows
     .map(mapAisearchPersonItem)
-    .filter((item): item is MentionSearchItem => item !== null)
-    .slice(0, limit);
+    .filter((item): item is MentionSearchItem => item !== null);
+  // 中文词（如「财务」）aisearch 也会按岗位召回；非拼音时只保留名称命中
+  const filtered = isLatinMentionQuery(query)
+    ? mapped
+    : mapped.filter((item) => matchesMentionUserName(item, query));
+  return filtered.slice(0, limit);
 }
 
 async function searchUsersViaContact(query: string, limit: number): Promise<MentionSearchItem[]> {
@@ -215,6 +281,31 @@ async function searchUsersViaContact(query: string, limit: number): Promise<Ment
     .map(mapUserItem)
     .filter((item): item is MentionSearchItem => item !== null)
     .slice(0, limit);
+}
+
+/**
+ * 三路结果统一去重排序：
+ * contact 名称命中 → 群 → aisearch（垫底，含拼音）。
+ * contact 仅岗位/副标题命中不参与，避免「财务」岗刷屏。
+ */
+function mergeMentionSearchResults(
+  contactItems: MentionSearchItem[],
+  groupItems: MentionSearchItem[],
+  aisearchItems: MentionSearchItem[],
+  query: string,
+  limit: number,
+): MentionSearchItem[] {
+  const contactNameMatched = contactItems.filter((item) => matchesMentionUserName(item, query));
+  const seen = new Set<string>();
+  const items: MentionSearchItem[] = [];
+  for (const item of [...contactNameMatched, ...groupItems, ...aisearchItems]) {
+    const key = `${item.type}:${item.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push(item);
+    if (items.length >= limit) break;
+  }
+  return items;
 }
 
 async function enrichUserDetails(items: MentionSearchItem[]): Promise<MentionSearchItem[]> {
@@ -258,14 +349,6 @@ async function enrichUserDetails(items: MentionSearchItem[]): Promise<MentionSea
   });
 }
 
-async function searchUsers(query: string, limit: number): Promise<MentionSearchItem[]> {
-  const fromAisearch = await searchUsersViaAisearch(query, limit);
-  const users = fromAisearch.length > 0
-    ? fromAisearch
-    : await searchUsersViaContact(query, limit);
-  return enrichUserDetails(users);
-}
-
 async function searchConversations(query: string, limit: number): Promise<MentionSearchItem[]> {
   const result = await runDws(
     ['chat', 'search', '--keyword', query, '--format', 'json', '--limit', String(Math.max(limit, 20))],
@@ -294,7 +377,7 @@ function toMentionSearchItem(row: RecentMentionRow): MentionSearchItem {
 async function enrichRecentSingleChatUsers(items: MentionSearchItem[]): Promise<MentionSearchItem[]> {
   const enriched = await Promise.all(items.map(async (item) => {
     if (item.type !== 'user' || item.id.trim()) return item;
-    const resolved = await searchUsersViaAisearch(item.title, 1);
+    const resolved = await searchUsersViaContact(item.title, 1);
     const match = resolved[0];
     if (!match?.id) return item;
     return {
@@ -306,6 +389,38 @@ async function enrichRecentSingleChatUsers(items: MentionSearchItem[]): Promise<
     };
   }));
   return enriched.filter((item) => item.type !== 'user' || !!item.id.trim());
+}
+
+async function listRecentMentionsFromListAll(
+  limit: number,
+  cursor?: string,
+): Promise<{ items: MentionSearchItem[]; hasMore: boolean; nextCursor: string | null } | null> {
+  const args = [
+    'chat', 'list-all-conversations',
+    '--limit', String(Math.min(Math.max(limit, 1), 100)),
+    '--format', 'json',
+  ];
+  const trimmedCursor = cursor?.trim();
+  if (trimmedCursor) {
+    args.push('--cursor', trimmedCursor);
+  }
+
+  const result = await runDws(args, 8_000);
+  if (!result.ok) return null;
+
+  const sortedRows = sortConversationsByLastMsg(extractConversationRows(result.data));
+  const mapped = dedupeRecentMentionRows(
+    sortedRows
+      .map(mapListAllConversationItem)
+      .filter((item): item is RecentMentionRow => item !== null),
+  );
+  const items = await enrichRecentSingleChatUsers(mapped.map(toMentionSearchItem));
+  const pagination = extractListAllPagination(result.data);
+  return {
+    items,
+    hasMore: pagination.hasMore,
+    nextCursor: pagination.nextCursor,
+  };
 }
 
 async function listRecentMentionsFromUnread(
@@ -338,10 +453,13 @@ async function listRecentMentionsFromUnread(
   };
 }
 
+/** 优先最近会话（list-all）；旧版 dws 无该命令时回退未读会话。 */
 async function listRecentMentions(
   limit: number,
   cursor?: string,
 ): Promise<{ items: MentionSearchItem[]; hasMore: boolean; nextCursor: string | null }> {
+  const fromListAll = await listRecentMentionsFromListAll(limit, cursor);
+  if (fromListAll) return fromListAll;
   return listRecentMentionsFromUnread(limit, cursor);
 }
 
@@ -383,7 +501,7 @@ export async function handleDingTalkRoutes(
       return true;
     }
 
-    const installed = await dwsCheckInstalled();
+    const installed = await getCachedDwsInstalled();
     if (!installed.installed) {
       sendJson(res, 503, { success: false, error: 'dws is not installed', needsInstall: true });
       return true;
@@ -396,7 +514,8 @@ export async function handleDingTalkRoutes(
         sendJson(res, 500, { success: false, error: result.error || 'DingTalk login failed' });
         return true;
       }
-      const authenticated = await isDwsAuthenticated();
+      invalidateDwsStatusCache();
+      const authenticated = await getCachedDwsAuthenticated();
       sendJson(res, 200, { success: true, authenticated });
       return true;
     } catch (error) {
@@ -419,6 +538,7 @@ export async function handleDingTalkRoutes(
         });
         return true;
       }
+      invalidateDwsStatusCache();
       await promptGatewayRestartAfterDwsInstall(_ctx.gatewayManager, _ctx.mainWindow, result);
       sendJson(res, 200, {
         success: true,
@@ -434,8 +554,8 @@ export async function handleDingTalkRoutes(
   }
 
   if (url.pathname === '/api/dingtalk/status' && req.method === 'GET') {
-    const installed = await dwsCheckInstalled();
-    const authenticated = installed.installed ? await isDwsAuthenticated() : false;
+    const installed = await getCachedDwsInstalled();
+    const authenticated = installed.installed ? await getCachedDwsAuthenticated() : false;
     sendJson(res, 200, {
       installed: installed.installed,
       version: installed.version ?? null,
@@ -454,13 +574,13 @@ export async function handleDingTalkRoutes(
       ? body.types.map((t) => (t === 'group' ? 'conversation' : t))
       : ['user', 'conversation'];
 
-    const installed = await dwsCheckInstalled();
+    const installed = await getCachedDwsInstalled();
     if (!installed.installed) {
       sendJson(res, 200, { items: [], needsInstall: true, needsAuth: false });
       return true;
     }
 
-    const authenticated = await isDwsAuthenticated();
+    const authenticated = await getCachedDwsAuthenticated();
     if (!authenticated) {
       sendJson(res, 200, { items: [], needsInstall: false, needsAuth: true });
       return true;
@@ -473,21 +593,25 @@ export async function handleDingTalkRoutes(
       return true;
     }
 
-    const users = types.includes('user') ? await searchUsers(query, limit) : [];
-    // 已命中联系人时不再混入 chat search 的无关群（该接口 keyword 匹配很宽松）
-    const groups = types.includes('conversation') && users.length === 0
-      ? await searchConversations(query, limit)
-      : [];
+    const wantUsers = types.includes('user');
+    const wantGroups = types.includes('conversation');
+    // 拼音/拉丁检索：aisearch 已覆盖人名，跳过 contact + chat 以减少 dws 进程
+    const latinQuery = isLatinMentionQuery(query);
+    const [fromContact, fromGroups, fromAisearch] = await Promise.all([
+      wantUsers && !latinQuery ? searchUsersViaContact(query, limit) : Promise.resolve([]),
+      // chat search keyword 较宽松，结果在 searchConversations 内按 title 二次过滤
+      wantGroups && !latinQuery ? searchConversations(query, limit) : Promise.resolve([]),
+      wantUsers ? searchUsersViaAisearch(query, limit) : Promise.resolve([]),
+    ]);
 
-    const seen = new Set<string>();
-    const items: MentionSearchItem[] = [];
-    for (const item of [...users, ...groups]) {
-      const key = `${item.type}:${item.id}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      items.push(item);
-      if (items.length >= limit) break;
-    }
+    const merged = mergeMentionSearchResults(
+      fromContact,
+      fromGroups,
+      fromAisearch,
+      query,
+      limit,
+    );
+    const items = await enrichUserDetails(merged);
 
     sendJson(res, 200, { items });
     return true;

@@ -33,6 +33,7 @@
 import { useMemo } from 'react';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
+import { suspendAutoSend } from '@/stores/message-queue';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 
@@ -44,7 +45,8 @@ export interface ChatInputBindingsOptions {
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
-    workflowContext?: import('@/stores/chat').WorkflowContextBlock | null,
+    workflowSource?: string | null,
+    workflowName?: string | null,
   ) => void;
   /** 排队消息回调 */
   onQueue: (
@@ -53,7 +55,8 @@ export interface ChatInputBindingsOptions {
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
-    workflowContext?: import('@/stores/chat').WorkflowContextBlock | null,
+    workflowSource?: string | null,
+    workflowName?: string | null,
   ) => void;
   /** ChatInput 变体：default（标准）或 embedded（嵌入式，如首页） */
   variant?: 'default' | 'embedded';
@@ -110,7 +113,11 @@ export function useChatInputBindings(options: ChatInputBindingsOptions): ChatInp
   return useMemo(
     () => ({
       onSend: options.onSend,
-      onStop: () => void abortRun(),
+      onStop: () => {
+        // Keep queued messages instead of firing them right after Stop.
+        suspendAutoSend();
+        void abortRun();
+      },
       onQueue: options.onQueue,
       disabled: requiresGateway && !isGatewayRunning,
       sending,

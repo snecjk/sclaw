@@ -1,6 +1,6 @@
 {
   "title": "Settings",
-  "subtitle": "Configure your StoClaw experience",
+  "subtitle": "Configure your S Claw experience",
   "appearance": {
     "title": "Preferences",
     "description": "Customize the look and feel",
@@ -10,7 +10,12 @@
     "system": "System",
     "language": "Language",
     "launchAtStartup": "Launch at system startup",
-    "launchAtStartupDesc": "Automatically launch StoClaw when you log in"
+    "launchAtStartupDesc": "Automatically launch S Claw when you log in",
+    "preventSystemSleep": "Prevent system sleep",
+    "preventSystemSleepDesc": "While enabled, S Claw prevents the computer from sleeping automatically while it is running.",
+    "preventSystemSleepTips": "Recommended for scheduled tasks. Keep the lid open and connect to power; sleep or shutdown may prevent normal operation.",
+    "preventSystemSleepToastEnabled": "Enabled: S Claw will prevent sleep while running",
+    "preventSystemSleepToastDisabled": "Disabled: the computer will sleep according to system settings"
   },
   "aiProviders": {
     "title": "AI Providers",
@@ -37,7 +42,7 @@
     "notRequired": "Not required",
     "empty": {
       "title": "No providers configured",
-      "desc": "Add an AI provider to start using StoClaw",
+      "desc": "Add an AI provider to start using S Claw",
       "cta": "Add Your First Provider"
     },
     "dialog": {
@@ -60,7 +65,7 @@
       "protocol": "Protocol",
       "advancedConfig": "Advanced configuration",
       "userAgent": "User-Agent",
-      "userAgentPlaceholder": "StoClaw/1.0",
+      "userAgentPlaceholder": "S Claw/1.0",
       "fallbackModels": "Fallback Models",
       "fallbackProviders": "Fallback Providers",
       "fallbackModelIds": "Fallback Model IDs",
@@ -146,7 +151,7 @@
     "appLogs": "Application Logs",
     "openFolder": "Open Folder",
     "autoStart": "Auto-start Gateway",
-    "autoStartDesc": "Start Gateway when StoClaw launches",
+    "autoStartDesc": "Start Gateway when S Claw launches",
     "proxyTitle": "Proxy",
     "proxyDesc": "Route Electron and Gateway traffic through your local proxy client.",
     "proxyServer": "Proxy Server",
@@ -191,14 +196,28 @@
   },
   "updates": {
     "title": "Updates",
-    "description": "Keep StoClaw up to date",
+    "subtitle": "Keep S Claw updated for a more stable and secure experience",
+    "description": "Keep S Claw up to date",
+    "loading": "Loading…",
+    "currentVersionLabel": "Current version",
+    "latestBadge": "Latest",
+    "currentVersionLine": "Current version v{{version}}",
+    "cardHint": "With auto-update enabled, updates will be downloaded and installed automatically. A prompt will appear when you're already on the latest version.",
+    "downloadingLabel": "Downloading v{{version}}...",
+    "changelogTitle": "Release notes",
+    "changelogLoading": "Loading release notes…",
+    "changelog": {
+      "loginRequired": "Sign in to view full release notes",
+      "loadFailed": "Failed to load release notes. Please try again later.",
+      "empty": "No published release notes yet"
+    },
     "autoCheck": "Auto-check for updates",
-    "autoCheckDesc": "Periodically check with the server for updates (default ~6h; configurable per release)",
-    "autoDownload": "Auto-update",
-    "autoDownloadDesc": "Automatically download and install updates",
+    "autoCheckDesc": "Periodically check if new versions are released",
+    "autoDownload": "Auto-download updates",
+    "autoDownloadDesc": "Automatically download and install new versions in the background",
     "status": {
       "checking": "Checking for updates...",
-      "downloading": "Downloading update...",
+      "downloading": "Downloading update v{{version}}...",
       "available": "Update available: v{{version}}",
       "downloaded": "Ready to install: v{{version}}",
       "autoInstalling": "Installing automatically in {{seconds}}s...",
@@ -212,8 +231,9 @@
     },
     "action": {
       "checking": "Checking...",
-      "downloading": "Downloading...",
+      "downloading": "Download...",
       "download": "Download Update",
+      "downloadNewVersion": "Download New Version",
       "install": "Install Now",
       "installing": "Installing...",
       "restart": "Restart App",
@@ -224,9 +244,21 @@
       "check": "Check for Updates"
     },
     "currentVersion": "Current Version",
-    "whatsNew": "What's New:",
     "errorDetails": "Error Details:",
-    "help": "When auto-update is enabled, updates are downloaded and installed automatically."
+    "sidebar": {
+      "newVersionTitle": "New version available",
+      "updateToVersion": "Update to v{{version}}",
+      "updateNow": "Update Now",
+      "later": "Later",
+      "updating": "Updating...",
+      "viewUpdate": "View Update"
+    },
+    "modal": {
+      "title": "v{{version}} Release Notes",
+      "close": "Close",
+      "viewChangelog": "View Changelog",
+      "noReleaseNotes": "No release notes available"
+    }
   },
   "advanced": {
     "title": "Advanced",
@@ -253,7 +285,7 @@
     "devMode": "Developer Mode",
     "devModeDesc": "Show developer tools and shortcuts",
     "telemetry": "Anonymous Usage Data",
-    "telemetryDesc": "Allow providing anonymous basic usage data to improve StoClaw"
+    "telemetryDesc": "Allow providing anonymous basic usage data to improve S Claw"
   },
   "developer": {
     "title": "Developer",
@@ -315,7 +347,7 @@
   },
   "about": {
     "title": "About",
-    "appName": "StoClaw",
+    "appName": "S Claw",
     "tagline": "Graphical AI Assistant",
     "basedOn": "Based on OpenClaw",
     "version": "Version {{version}}",

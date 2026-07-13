@@ -150,7 +150,7 @@ function maybeLoadHistory(
   void state.loadHistory(true, force);
 }
 
-function scheduleCompletedRunFinalization(runId: unknown, sessionKey: unknown): void {
+function scheduleCompletedRunHistoryReload(runId: unknown, sessionKey: unknown): void {
   const completionRunId = runId != null ? String(runId) : null;
   const completionSessionKey = sessionKey != null ? String(sessionKey) : null;
 
@@ -167,10 +167,6 @@ function scheduleCompletedRunFinalization(runId: unknown, sessionKey: unknown): 
 
           if (matchesCurrentSession || matchesActiveRun) {
             await state.loadHistory(true, true);
-            if (index === 0) {
-              const { finalizeOpenClawRunAfterAgentCompleted } = await import('./chat');
-              finalizeOpenClawRunAfterAgentCompleted(completionSessionKey);
-            }
           }
 
           if (index !== COMPLETION_HISTORY_RELOAD_DELAYS_MS.length - 1) return;
@@ -243,11 +239,37 @@ function scheduleCompletedRunFinalization(runId: unknown, sessionKey: unknown): 
               },
             },
           }));
-          markSessionUnreadAfterSuccessfulRun(completionSessionKey, latest.currentSessionKey);
+          markSessionUnreadAfterSuccessfulRun(completionSessionKey, latest.currentSessionKey, {
+            runId: completionRunId,
+          });
         })
         .catch(() => {});
     }, delayMs);
   }
+}
+
+async function completeRunAfterAgentCompleted(
+  runId: unknown,
+  sessionKey: string | null,
+): Promise<void> {
+  const completionRunId = runId != null ? String(runId) : null;
+  const { useChatStore, finalizeOpenClawRunAfterAgentCompleted } = await import('./chat');
+  const before = useChatStore.getState();
+  const matchesCurrentSession = sessionKey == null || sessionKey === before.currentSessionKey;
+  const matchesActiveRun = completionRunId != null
+    && before.activeRunId != null
+    && completionRunId === before.activeRunId;
+
+  if (matchesCurrentSession || matchesActiveRun) {
+    await before.loadHistory(true, true);
+  }
+
+  const after = useChatStore.getState();
+  if (completionRunId != null && after.activeRunId != null && completionRunId !== after.activeRunId) {
+    return;
+  }
+
+  finalizeOpenClawRunAfterAgentCompleted(sessionKey);
 }
 
 function handleGatewayNotification(notification: { method?: string; params?: Record<string, unknown> } | undefined): void {
@@ -289,8 +311,9 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
         let resolvedSessionKey = String(sessionKey);
         // Map cron run session to its daily aggregate key so the sidebar shows
         // loading on the aggregate session instead of the temporary run session.
-        import('./chat/cron-session-utils').then(({ getCronRunSessionAggregateKey, parseCronSessionKey }) => {
-          const aggregateKey = getCronRunSessionAggregateKey(resolvedSessionKey);
+        import('./chat/cron-session-utils').then(({ getCronRunSessionAggregateKey, getClaudeTaskRunSessionAggregateKey, parseCronSessionKey }) => {
+          const aggregateKey = getCronRunSessionAggregateKey(resolvedSessionKey)
+            ?? getClaudeTaskRunSessionAggregateKey(resolvedSessionKey);
           if (aggregateKey) {
             resolvedSessionKey = aggregateKey;
           } else {
@@ -325,8 +348,10 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
       .then(({ useChatStore }) => {
         const state = useChatStore.getState();
         let resolvedSessionKey = sessionKey != null ? String(sessionKey) : null;
-        import('./chat/cron-session-utils').then(({ getCronRunSessionAggregateKey, parseCronSessionKey }) => {
-          const aggregateKey = resolvedSessionKey ? getCronRunSessionAggregateKey(resolvedSessionKey) : null;
+        import('./chat/cron-session-utils').then(({ getCronRunSessionAggregateKey, getClaudeTaskRunSessionAggregateKey, parseCronSessionKey }) => {
+          const aggregateKey = resolvedSessionKey
+            ? (getCronRunSessionAggregateKey(resolvedSessionKey) ?? getClaudeTaskRunSessionAggregateKey(resolvedSessionKey))
+            : null;
           if (aggregateKey) {
             resolvedSessionKey = aggregateKey;
           } else if (resolvedSessionKey) {
@@ -356,23 +381,11 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
             maybeLoadHistory(state, true);
           }
           if ((matchesCurrentSession || matchesActiveRun) && state.sending) {
-            useChatStore.setState({
-              pendingFinal: true,
-            });
-            scheduleCompletedRunFinalization(runId, resolvedSessionKey);
+            void completeRunAfterAgentCompleted(runId, resolvedSessionKey).catch(() => {});
+            scheduleCompletedRunHistoryReload(runId, resolvedSessionKey);
           } else if (resolvedSessionKey && hasBackgroundActiveRuntime) {
-            const key = resolvedSessionKey;
-            useChatStore.setState((prev) => ({
-              runtimeBySessionKey: {
-                ...prev.runtimeBySessionKey,
-                [key]: {
-                  ...prev.runtimeBySessionKey[key],
-                  pendingFinal: true,
-                  updatedAt: Date.now(),
-                },
-              },
-            }));
-            scheduleCompletedRunFinalization(runId, resolvedSessionKey);
+            void completeRunAfterAgentCompleted(runId, resolvedSessionKey).catch(() => {});
+            scheduleCompletedRunHistoryReload(runId, resolvedSessionKey);
           }
         }).catch(() => {});
       })

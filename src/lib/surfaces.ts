@@ -10,6 +10,35 @@ export const glassSectionSurface = cn(
   'dark:shadow-[0_4px_28px_rgba(0,0,0,0.22),inset_0_1px_0_hsl(var(--glass-highlight)/0.08)]',
 );
 
+/** 设置页右侧内容区白卡片（MasterGo：8px 圆角、#E5E6EB 描边、白底） */
+export const stoSettingsSectionCardClass = cn(
+  'overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-6',
+  'dark:border-border dark:bg-card',
+);
+
+/** 设置页右侧内容卡片外槽：顶/右/底 8px 留白（MasterGo top:8px） */
+export const stoSettingsContentPanelWrapClass = cn(
+  'flex min-h-0 min-w-0 flex-1 flex-col pt-2 pr-2 pb-2',
+);
+
+/** 设置页右侧内容卡片（MasterGo：18px 圆角、#F7F8FA、0 0 16px rgba(0,0,0,0.01)） */
+export const stoSettingsContentPanelClass = cn(
+  'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[18px] bg-[#F7F8FA]',
+  'shadow-[0_0_16px_0_rgba(0,0,0,0.01)]',
+  'dark:bg-background dark:shadow-none',
+);
+
+/** 设置页右侧内容卡片内滚动区 */
+export const stoSettingsContentPanelBodyClass = cn(
+  'min-h-0 flex-1 overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
+);
+
+/** 设置页右侧内容主列（MasterGo 容器 7361：862×958、left 145px 于卡片内、top 72px、gap 36px） */
+export const stoSettingsContentInnerClass = cn(
+  'mx-auto box-border flex w-full max-w-[862px] flex-col gap-[36px] pt-[72px] pb-10',
+  'px-6 min-[974px]:px-0',
+);
+
 /** Chat assistant bubbles/cards: light = soft white; dark = neutral muted/card（与用户侧主色气泡区分） */
 export const assistantChatCardBg = cn(
   'bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(255,255,255,0.86))]',
@@ -22,11 +51,11 @@ export const assistantChatCardBgStreaming = cn(
 );
 
 /**
- * 用户消息气泡（MasterGo 8:3912）：浅色 Grey-3 #F0F2F5；暗色 muted 层级，与 assistant 白/渐变卡区分。
+ * 用户消息气泡（chat-interaction-style-spec §4.1）：#F0F2F5、圆角 12px 0 12px 12px、内距 8px。
  * 使用位置：ChatMessage MessageBubble、对话列表用户侧。
  */
 export const userChatBubbleSurfaceClass = cn(
-  'rounded-xl bg-[#F0F2F5] p-3 text-foreground shadow-none',
+  'rounded-xl rounded-tr-none bg-[#F0F2F5] p-2 text-foreground shadow-none',
   'dark:bg-muted dark:shadow-none',
 );
 
@@ -319,7 +348,7 @@ export const stoSplitChatCardClass = cn(
 /** 三栏模式：左栏卡片外层（贴满分割面板；内层对话仍用 page/home 限宽壳居中） */
 export const stoSplitChatPaneCardWrapClass = cn(
   stoSplitChatCardClass,
-  'flex min-h-0 min-w-0 flex-1 flex-col items-center',
+  'flex min-h-0 min-w-0 w-full flex-1 flex-col',
 );
 
 export type StoChatColumnVariant = 'page' | 'home';
@@ -345,23 +374,50 @@ export function stoChatColumnClass(variant: StoChatColumnVariant, isSplit = fals
 }
 
 /**
- * 三栏对话区消息列表滚动区。
+ * 对话列内居中阅读轨（消息 / 输入 / 底栏共用）：限宽 + 水平内距，不含滚动。
+ * 滚动条挂在 {@link stoChatScrollPaneClass}，贴内容列右缘而非阅读轨内。
+ */
+export function stoChatColumnContentTrackClass(
+  variant: StoChatColumnVariant,
+  isSplit = false,
+): string {
+  return cn(
+    variant === 'home' ? stoChatShellHomeColumnMaxClass : stoChatShellPageColumnMaxClass,
+    'w-full px-6',
+    isSplit && 'min-w-0',
+  );
+}
+
+/**
+ * 对话消息列表滚动区：铺满内容列宽，滚动条贴列右缘。
+ */
+export const stoChatScrollPaneClass = cn(
+  'relative z-10 min-h-0 flex-1 w-full py-4',
+  'overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
+);
+
+/**
+ * 三栏对话消息滚动区。
  * min-w-0 + overflow-x-hidden：flex 子项默认 min-width:auto 会被 WorkflowCard 等块撑破列宽，
  * 导致右侧描边贴边或被卡片壳 overflow-hidden 裁切；垂直滚动仍保留。
  */
-export const stoSplitChatScrollClass = cn(
-  'min-w-0 w-full overflow-x-hidden overflow-y-auto overscroll-y-contain',
-  '[scrollbar-gutter:stable]',
+export const stoChatScrollPaneSplitClass = cn(
+  stoChatScrollPaneClass,
+  'min-w-0 overflow-x-hidden',
 );
 
+/** @deprecated 使用 {@link stoChatScrollPaneSplitClass} */
+export const stoSplitChatScrollClass = stoChatScrollPaneSplitClass;
+
 /** 三栏对话消息列表内层：与滚动区配合 min-w-0，防止块级子项撑宽 */
-export const stoChatScrollContentClass = 'min-w-0 w-full space-y-4';
+/** 对话消息列表内层间距（规范 §2.3 消息之间 20px） */
+export const stoChatScrollContentClass = 'min-w-0 w-full space-y-5';
 
 /** 三栏左栏内容外包：split 时加卡片壳，否则仅占满 pane 并居中限宽轨 */
 export function stoSplitChatPaneContentWrapClass(isSplit: boolean): string {
   return isSplit
     ? stoSplitChatPaneCardWrapClass
-    : 'flex min-h-0 min-w-0 flex-1 flex-col items-center';
+    : 'flex min-h-0 min-w-0 w-full flex-1 flex-col';
 }
 
 /** 三栏壳层水平 inset（挂在 main，Header + split row 共用同一网格可用宽） */
@@ -776,11 +832,11 @@ export const workflowHeroQuickChipClass = cn(
  * 白底 + 12px 圆角 + 轻阴影；icon 16×16 + 文案 12/14 Medium Grey-10 #1D2129；内距 9/14/16
  */
 export const workflowHeroManualCreateClass = cn(
-  'relative z-[2] box-border inline-flex shrink-0 flex-nowrap items-center gap-1.5 whitespace-nowrap rounded-xl bg-card',
+  'relative z-[2] box-border inline-flex shrink-0 flex-nowrap items-center gap-1.5 whitespace-nowrap rounded-xl border border-border bg-card',
   'py-[9px] pl-[14px] pr-4 text-xs font-medium leading-[14px] text-foreground',
   'shadow-[0_2px_20px_rgba(0,0,0,0.06)]',
-  'transition-[background-color,box-shadow] duration-fast hover:bg-card/90',
-  'dark:shadow-[0_2px_20px_rgba(0,0,0,0.22)]',
+  'transition-[background-color,box-shadow,border-color] duration-fast hover:bg-card/90',
+  'dark:border-white/20 dark:bg-white/12 dark:shadow-[0_2px_20px_rgba(0,0,0,0.35)] dark:hover:bg-white/18',
 );
 
 /**
@@ -916,31 +972,43 @@ export const workflowListCardFlowStepClass =
 /** 工作流卡片底栏三钮共用圆角 8px（`rounded-lg` = `--radius`） */
 export const workflowListCardActionRadiusClass = 'rounded-lg';
 
-/** 工作流卡片底栏主操作钮（立即运行 / 安装） */
-export const workflowListCardPrimaryActionClass = cn(
-  workflowListCardActionRadiusClass,
-  'px-4 py-1.5 text-[13px] font-semibold',
-  invertedPrimarySurfaceClass,
-  'transition-[transform,background-color] duration-fast active:scale-[0.98]',
+/**
+ * 工作流卡片底栏操作钮共用面（··· / 编辑流程 / 立即运行）。
+ * 暗色卡片为 secondary 底，子钮须透明底 + border，避免 bg-card 与壳层融成「纯色块」。
+ */
+export const workflowListCardFooterActionSurfaceClass = cn(
+  'border border-border bg-transparent text-foreground',
+  'transition-[transform,background-color,border-color,color] duration-fast',
+  'hover:bg-black/[0.02] dark:hover:bg-white/[0.06]',
 );
 
-/** 工作流卡片底栏次操作钮（编辑流程 / 预览） */
-export const workflowListCardSecondaryActionClass = cn(
-  'inline-flex items-center gap-1 border border-border bg-transparent px-3 py-1.5 text-[13px] font-medium text-foreground',
+/** 工作流卡片底栏文字操作钮共用几何 */
+export const workflowListCardActionBaseClass = cn(
   workflowListCardActionRadiusClass,
-  'transition-colors duration-fast hover:bg-black/[0.02] dark:hover:bg-white/[0.06]',
+  workflowListCardFooterActionSurfaceClass,
+  'inline-flex h-[34px] box-border items-center justify-center px-4 text-[13px] font-medium leading-none',
+  'active:scale-[0.98]',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
+
+/** 工作流卡片底栏主操作钮（立即运行 / 安装） */
+export const workflowListCardPrimaryActionClass = workflowListCardActionBaseClass;
+
+/** 工作流卡片底栏次操作钮（编辑流程 / 预览） */
+export const workflowListCardSecondaryActionClass = workflowListCardActionBaseClass;
 
 /** 工作流卡片更多菜单钮（···） */
 export const workflowListCardMoreActionClass = cn(
   workflowListCardActionRadiusClass,
-  'border border-border px-2 py-1.5 text-muted-foreground',
-  'transition-colors duration-fast hover:bg-black/[0.02] hover:text-foreground dark:hover:bg-white/[0.06]',
+  workflowListCardFooterActionSurfaceClass,
+  'inline-flex h-[34px] w-[34px] box-border items-center justify-center text-muted-foreground',
+  'hover:text-foreground active:scale-[0.98]',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
 
-/** 工作流卡片浮动菜单容器 */
+/** 工作流卡片 DropdownMenu 内容壳 — Radix portal，层级高于侧栏 sticky */
 export const workflowListCardMenuClass = cn(
-  'fixed z-[126] w-[200px] rounded-xl border border-border bg-card p-1.5',
+  'z-[10041] w-[200px] rounded-xl border border-border bg-card p-1.5',
   'shadow-[0_8px_40px_rgba(0,0,0,0.16)] dark:shadow-modal',
 );
 
@@ -948,8 +1016,11 @@ export const workflowListCardMenuClass = cn(
 export const workflowListCardMenuItemClass =
   'flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] hover:bg-muted';
 
-/** 工作流详情弹窗遮罩 */
-export const workflowDetailModalOverlayClass = 'bg-black/20';
+/** 工作流详情 / 新建弹窗遮罩（暗色需更高不透明度，否则与页面底融在一起） */
+export const workflowDetailModalOverlayClass = cn(
+  'bg-black/20 backdrop-blur-[1px]',
+  'dark:bg-black/60 dark:backdrop-blur-sm',
+);
 
 /** 工作流详情弹窗内容壳（540px / 圆角 24 / MasterGo 阴影） */
 export const workflowDetailModalContentClass = cn(
@@ -1051,6 +1122,77 @@ export const workflowDetailModalMoreActionClass = cn(
   'transition-colors duration-fast hover:bg-black/[0.02]',
 );
 
+/** 新建工作流弹窗遮罩（复用详情弹窗语义） */
+export const createWorkflowModalOverlayClass = workflowDetailModalOverlayClass;
+
+/** 新建工作流弹窗内容壳（MasterGo 8:79172 组 7109 — 460×392 / 圆角 18） */
+export const createWorkflowModalContentClass = cn(
+  'flex w-full max-w-[460px] flex-col overflow-hidden rounded-[18px] bg-card shadow-modal',
+  'dark:border dark:border-border',
+);
+
+/** 新建工作流弹窗标题区 */
+export const createWorkflowModalHeaderClass = 'flex shrink-0 flex-col gap-2 px-4 pt-4';
+
+/** 新建工作流弹窗标题行（标题 + 关闭） */
+export const createWorkflowModalTitleRowClass =
+  'flex items-start justify-between gap-3';
+
+/** 新建工作流弹窗标题 */
+export const createWorkflowModalTitleClass =
+  'text-base font-medium leading-5 text-foreground';
+
+/** 新建工作流弹窗副标题 */
+export const createWorkflowModalSubtitleClass =
+  'text-xs font-normal leading-4 text-muted-foreground';
+
+/** 新建工作流弹窗关闭钮（标题行内 18×18） */
+export const createWorkflowModalCloseClass = cn(
+  'flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-sm',
+  'text-foreground transition-colors duration-fast hover:bg-black/[0.04]',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+);
+
+/** 新建工作流弹窗表单区 */
+export const createWorkflowModalBodyClass =
+  'flex flex-col gap-3 px-4 pb-6 pt-2';
+
+/** 新建工作流弹窗字段 label（12px medium） */
+export const createWorkflowModalFieldLabelClass =
+  'text-xs font-medium leading-[18px] text-foreground';
+
+/** 新建工作流名称输入（42px / 圆角 4px） */
+export const createWorkflowModalNameInputClass =
+  'h-[42px] rounded-sm px-3 py-2 text-xs leading-[18px]';
+
+/** 新建工作流描述区（含字数统计） */
+export const createWorkflowModalDescriptionWrapClass = 'relative';
+
+/** 新建工作流描述输入（60px / 圆角 8px） */
+export const createWorkflowModalDescriptionInputClass = cn(
+  'min-h-[60px] resize-none rounded-md px-3 py-2 text-xs leading-4',
+  'pb-5',
+);
+
+/** 新建工作流描述字数（0/50） */
+export const createWorkflowModalDescriptionCounterClass =
+  'pointer-events-none absolute bottom-2 right-3 text-[10px] leading-[14px] text-[#C9CDD4]';
+
+/** 新建工作流分类下拉（覆盖 Select 默认 h-10/py-2，避免 28px 裁切文字） */
+export const createWorkflowModalCategorySelectClass =
+  'h-9 rounded-md px-3 py-1.5 text-xs leading-[18px]';
+
+/** 新建工作流弹窗底栏 */
+export const createWorkflowModalFooterClass =
+  'flex shrink-0 items-center justify-end px-4 py-4';
+
+/** 新建工作流确认钮（#1D2129 底 / 34px / 圆角 12px） */
+export const createWorkflowModalConfirmButtonClass = cn(
+  'h-[34px] min-w-[60px] rounded-xl px-4 text-sm font-medium',
+  invertedPrimarySurfaceClass,
+  'transition-[transform,background-color] duration-fast active:scale-[0.98]',
+);
+
 /**
  * MasterGo 148:046134 — 工作流分组参数摘要外框（对话流内助手 A）
  * 圆角 12 / Grey-4 描边 / 内距 14×12；组间距 8、组内标题-内容间距 2。
@@ -1076,24 +1218,62 @@ export const workflowResultSummaryClass =
   'w-full text-left text-sm font-normal leading-6 tracking-normal text-foreground whitespace-pre-wrap break-words';
 
 /**
- * 工具调用块外层（无描边；标题行在外，入参区单独套 {@link chatToolCallContentShellClass}）
+ * 工具调用块外层（规范 §4.4：标题行 + 左竖线内容区）
  */
+/** 工具/思考块内标题↔内容间距 6px（MasterGo 4:2177 gap 6px） */
 export const chatToolCallShellClass = 'flex w-full flex-col gap-1.5';
 
-/** 工具调用标题行（与 ParamsConfirmedHeader / 参数分组标题同级，在描边容器外） */
+/** 工具调用标题行（13px #86909C，图标 16px，标题行 gap 4px） */
 export const chatToolCallHeaderBtnClass = cn(
-  'flex items-center gap-1 text-left',
-  'text-[13px] leading-5 font-normal text-muted-foreground transition-colors duration-150 hover:text-foreground',
-  'disabled:cursor-default disabled:hover:text-muted-foreground',
+  'flex w-full items-center gap-1 text-left',
+  'text-[13px] leading-5 font-normal text-[#86909C] transition-colors duration-150 hover:text-foreground',
 );
 
-/** 工具入参展开区外框（与 {@link workflowParamsSummaryCardClass} / 数据来源一致） */
-export const chatToolCallContentShellClass = workflowParamsSummaryCardClass;
+/** 工具/思考内容区：16px icon 列 + 竖线固定在 icon 中线 */
+export const chatProcessIconRailClass = 'relative w-4 shrink-0 self-stretch';
+export const chatProcessIconRailLineClass = 'absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border';
+/** 竖线列与正文间距 4px（正文起点 16+4=20px，与标题文字对齐） */
+export const chatProcessContentTextWrapClass = 'min-w-0 flex-1 pl-1';
+/** 标题行 chevron/spinner 占位：16px 控件 + gap 4px */
+export const chatProcessContentLeadOffsetClass = 'w-5 shrink-0';
 
-/** 工具入参正文（与 {@link workflowParamsSummaryGroupContentClass} 一致，保留等宽字体便于读 JSON） */
+/** @deprecated 使用 ChatProcessContentRail；保留别名避免外部引用断裂 */
+export const chatProcessContentBorderClass = cn(
+  chatProcessContentTextWrapClass,
+);
+
+/** 工具入参展开区（竖线由 ChatProcessContentRail 渲染） */
+export const chatToolCallContentShellClass = chatProcessContentTextWrapClass;
+
+/** 工具入参正文（规范 §4.4：13px 灰色 pre-wrap） */
 export const chatToolCallInputPreClass = cn(
-  workflowParamsSummaryGroupContentClass,
-  'm-0 max-h-[min(42vh,400px)] overflow-y-auto font-mono text-xs leading-5',
+  'm-0 max-h-[min(42vh,400px)] overflow-y-auto whitespace-pre-wrap break-words',
+  'text-[13px] leading-5 font-normal text-[#86909C]',
+);
+
+/** 思考/工具汇总条标题（MasterGo 4:2177：13/20 #86909C，chevron gap 4px） */
+export const chatThinkingSummaryHeaderClass = cn(
+  'flex w-full items-center gap-1 py-1 text-left',
+  'text-[13px] leading-5 font-normal text-[#86909C]',
+  'transition-colors duration-150 hover:text-foreground',
+);
+
+/** 分段思考栈内一级摘要：与 phase-text 间距由外层 gap-3（12px）控制，去掉 py-1 避免视觉超出 12px */
+export const chatThinkingSegmentSummaryHeaderClass = cn(
+  chatThinkingSummaryHeaderClass,
+  'py-0',
+);
+
+/** 思考/工具过程次要正文（规范 §4.3 / §4.4 内容区） */
+export const chatProcessSecondaryTextClass = 'text-[13px] leading-5 font-normal text-[#86909C]';
+
+/** Loading 等待文案（chat-interaction-style-spec §2.1 text-muted / §4.6） */
+export const chatProcessLoadingTextClass = 'text-[13px] leading-[18px] font-normal text-[#6B737D]';
+
+/** 过程块标题行（MasterGo 4:2177：icon 16px + 文案，gap 4px） */
+export const chatProcessTitleRowClass = cn(
+  'flex items-center gap-1',
+  chatProcessSecondaryTextClass,
 );
 
 /**
@@ -1105,8 +1285,8 @@ export const workflowBuilderShell = cn(
 );
 
 /**
- * MC iframe 工作流编辑：置于 ContentHeader「工作流」标题栏下方。
- * 仅抵消水平 main 内距，不用 -mt-5，避免编辑区顶栏与全局标题栏叠层。
+ * MC iframe 工作流编辑：顶栏由 useWorkflowEditorContentHeader 注入 ContentHeader；
+ * 仅抵消水平 main 内距，iframe 占满 ContentHeader 下方剩余高度。
  */
 export const workflowMcEditorShell = cn(
   '-mx-[var(--sto-content-pad-x)] flex min-h-0 min-w-0 flex-1 flex-col',
@@ -1139,6 +1319,9 @@ export const sidebarBrandVersionClass = cn(
   sidebarTextSectionClass,
 );
 
+/** 侧栏字 logo 尺寸 — 暗色用 sidebar-logo-dark.svg（sidebar-brand-header.tsx 按 theme 切换） */
+export const sidebarBrandLogoClass = 'sto-sidebar-brand-logo';
+
 /** 分区标题（任务 / 最近 / 工作台）默认 Grey-8 Regular；hover/focus → Grey-10 Regular（字重不变） */
 export const sidebarSectionLabelClass = cn(
   sidebarBodyTextClass,
@@ -1157,7 +1340,7 @@ export const sidebarSectionChevronClass = cn(
 
 /**
  * 侧栏滚动区内分区标题 sticky 壳层 — §5.6 吸顶 + 实底盖住下方列表（无描边）。
- * 配合 stickyTopClass：任务 top-0 / 最近 top-[var(--sto-sidebar-section-sticky-h)]。
+ * 任务 top-0；分组·最近同 top 接力（z 分组 19 > 最近 18，section 内分组压住最近，滚出后最近接管）。
  */
 export const sidebarSectionStickyShellClass = cn(
   'sticky bg-[var(--sto-sidebar-bg)]',
@@ -1166,12 +1349,22 @@ export const sidebarSectionStickyShellClass = cn(
 /** 任务分区 sticky 锚点 */
 export const sidebarSectionStickyTopTaskClass = 'top-0 z-20';
 
-/** 最近分区 sticky 锚点 — 叠在任务标题下方 */
-export const sidebarSectionStickyTopRecentClass =
+/** 自建分组 sticky 锚点 — 与「最近」同 top 接力；section 内 z 高于最近，滚出本组后释放 */
+export const sidebarSectionStickyTopGroupClass =
   'top-[var(--sto-sidebar-section-sticky-h)] z-[19]';
+
+/** 最近分区 sticky 锚点 — 叠在任务标题下方；无活跃分组 section 时显示于同 top 层 */
+export const sidebarSectionStickyTopRecentClass =
+  'top-[var(--sto-sidebar-section-sticky-h)] z-[18]';
 
 /** 侧栏滚动列表 — 层级低于 sticky 分区标题 */
 export const sidebarScrollListClass = 'relative z-0';
+
+/** 侧栏中部滚动区（classic 滚动条见 globals.css `html[data-scrollbar-layout=classic]`） */
+export const sidebarScrollContainerClass = cn(
+  'sidebar-scroll-container',
+  'flex min-h-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto overscroll-y-contain',
+);
 
 /** 展开侧栏主导航 idle — 正文 Grey-10 + 图标 Grey-9 */
 export const sidebarNavExpandedIdleClass = cn(
@@ -1181,7 +1374,7 @@ export const sidebarNavExpandedIdleClass = cn(
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
-/** 展开侧栏主导航 active — 底 #EAEAED + Regular（选中仅靠底色，字重与 idle 一致） */
+/** 展开侧栏主导航 active — 底 #DCDCDC + Regular（选中仅靠底色，字重与 idle 一致） */
 export const sidebarNavExpandedActiveClass = cn(
   'h-9 min-h-9 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
   'bg-[var(--sto-sidebar-nav-active-bg)]',
@@ -1210,7 +1403,7 @@ export const sidebarSubitemTextActiveClass = cn(
 export const sidebarMetaLinkClass = cn(
   'text-xs font-normal',
   sidebarTextSectionClass,
-  'transition-colors hover:bg-[rgba(229,230,235,0.7)] hover:text-[var(--sto-sidebar-text-default)]',
+  'transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] hover:text-[var(--sto-sidebar-text-default)]',
 );
 
 /** 侧栏底部账号名 — MCP 8:46481 / 14px Regular（视觉与列表项一致） */
@@ -1229,3 +1422,32 @@ export const sidebarRunningSpinnerClass = 'text-[var(--sto-sidebar-running-spinn
 
 /** 侧栏未读红点 — 6×6px，destructive */
 export const sidebarUnreadDotClass = 'h-1.5 w-1.5 shrink-0 rounded-full bg-destructive';
+
+/** 最近分组内会话选中底 — light #DCDCDC；dark 走 --sto-sidebar-subitem-active-bg */
+export const sidebarRecentSessionActiveClass = 'bg-[var(--sto-sidebar-subitem-active-bg)]';
+
+/** 最近会话/分组下拉 — MCP 140px 菜单容器 */
+export const sidebarRecentMenuContentClass =
+  'min-w-[140px] rounded-lg border border-border bg-card p-1 shadow-[0_4px_12px_rgba(0,0,0,0.1)]';
+
+/** 最近会话/分组下拉项 — MCP 132×34；hover 走 muted，light/dark 自适应 */
+export const sidebarRecentMenuItemClass = cn(
+  'flex h-[34px] cursor-pointer select-none items-center gap-1 rounded-md px-2 text-sm leading-[18px] text-foreground outline-none',
+  'focus:bg-muted data-[highlighted]:bg-muted data-[state=open]:bg-muted',
+);
+
+/** 最近会话下拉删除项 hover — destructive 浅底 + 字/图标 */
+export const sidebarRecentMenuDeleteItemClass = cn(
+  sidebarRecentMenuItemClass,
+  'focus:bg-destructive/10 focus:text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive',
+  '[&_svg]:text-[var(--sto-sidebar-text-icon)] focus:[&_svg]:text-destructive data-[highlighted]:[&_svg]:text-destructive',
+);
+
+/** 最近分组子菜单分隔 — 走 border token，light/dark 自适应 */
+export const sidebarRecentMenuDividerClass = '-mx-1 my-1 h-px bg-border';
+
+/** 分组/最近空态行 — MCP Grey-5 #C9CDD4 */
+export const sidebarRecentEmptyLineClass = cn(
+  sidebarBodyTextClass,
+  'px-[10px] py-2 text-[#C9CDD4]',
+);

@@ -3,8 +3,10 @@ import type { RawMessage } from '@/stores/chat/types';
 import { WORKFLOW_SESSION_HINT_MARKER } from '@/lib/workflow-session-hint';
 import {
   dedupeRedundantUserMessages,
+  ensureOpeningUserMessageFirst,
   isSameUserMessage,
   mergeOptimisticUserIntoHistory,
+  recoverInitialUserFromSessionLabel,
 } from '@/stores/chat/user-message-merge';
 
 describe('user-message-merge', () => {
@@ -184,5 +186,135 @@ describe('user-message-merge', () => {
     const deduped = dedupeRedundantUserMessages(messages, 1710000000000);
 
     expect(deduped.map((m) => m.id)).toEqual(['assistant-1', 'history-user']);
+  });
+
+  it('recovers optimistic user after run completes when history omits the opening turn', () => {
+    const optimistic = {
+      id: 'local-user-1',
+      role: 'user',
+      content: '客户成本分析 创建工作流',
+      timestamp: 1710000000,
+    } as RawMessage;
+    const enriched = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: [{ type: 'text', text: '正在配置工作流…' }],
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = mergeOptimisticUserIntoHistory(enriched, [optimistic], {
+      userMessageAt: null,
+      sending: false,
+      cachedOptimistic: optimistic,
+    });
+
+    expect(merged.map((message) => message.content)).toEqual([
+      '客户成本分析 创建工作流',
+      [{ type: 'text', text: '正在配置工作流…' }],
+    ]);
+  });
+
+  it('reconstructs opening user turn from stored session label when history and cache are empty', () => {
+    const enriched = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '参数已确认',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = recoverInitialUserFromSessionLabel(
+      enriched,
+      'agent:main:session-1',
+      { 'agent:main:session-1': '客户成本分析 创建工作流' },
+    );
+
+    expect(merged[0]?.role).toBe('user');
+    expect(merged[0]?.content).toBe('客户成本分析 创建工作流');
+    expect(merged[1]?.role).toBe('assistant');
+  });
+
+  it('still restores opening user when history only has parameter-confirm user turns', () => {
+    const enriched = [
+      {
+        id: 'user-params',
+        role: 'user',
+        content: '参数：统计月份=2025-06',
+        timestamp: 1710000002,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '参数已确认，工作流已在后台启动执行',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = recoverInitialUserFromSessionLabel(
+      enriched,
+      'agent:main:session-1',
+      { 'agent:main:session-1': '总部结算对账 创建工作流' },
+    );
+
+    expect(merged[0]?.role).toBe('user');
+    expect(merged[0]?.content).toBe('总部结算对账 创建工作流');
+    expect(merged.filter((message) => message.role === 'user')).toHaveLength(2);
+  });
+
+  it('falls back to gateway session label on cold start when memory labels are empty', () => {
+    const enriched = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '已完成',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = recoverInitialUserFromSessionLabel(
+      enriched,
+      'agent:main:session-1',
+      {},
+      '总部结算对账 创建工作流',
+    );
+
+    expect(merged[0]?.role).toBe('user');
+    expect(merged[0]?.content).toBe('总部结算对账 创建工作流');
+  });
+
+  it('moves a late-recovered opening user turn ahead of workflow results', () => {
+    const messages = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '参数已确认，工作流已在后台启动执行',
+        timestamp: 1710000003,
+      },
+      {
+        id: 'assistant-2',
+        role: 'assistant',
+        content: '已完成',
+        timestamp: 1710000063,
+      },
+      {
+        id: 'session-label-user',
+        role: 'user',
+        content: '客户异常监控 创建工作流',
+        timestamp: 1710000123,
+      },
+    ] as RawMessage[];
+
+    const merged = ensureOpeningUserMessageFirst(
+      messages,
+      'agent:main:session-1',
+      { 'agent:main:session-1': '客户异常监控 创建工作流' },
+    );
+
+    expect(merged[0]?.role).toBe('user');
+    expect(merged[0]?.content).toBe('客户异常监控 创建工作流');
+    expect(merged[1]?.role).toBe('assistant');
   });
 });

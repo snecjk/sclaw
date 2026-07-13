@@ -18,12 +18,18 @@ describe('buildFirstTriggeredCronSessionPlaceholders', () => {
   });
 
   it('skips keys already present in the session list', () => {
+    const atMs = Date.parse('2026-06-28T10:00:00+08:00');
     const existing = new Set(['agent:main:cron:job-6:2026-06-28']);
     const items = buildFirstTriggeredCronSessionPlaceholders(
-      { 'cron:job-6': Date.now() },
+      { 'cron:job-6': atMs },
       existing,
       new Map(),
     );
+    expect(items).toHaveLength(0);
+  });
+
+  it('returns no placeholders when first-trigger map was cleared after last subitem delete', () => {
+    const items = buildFirstTriggeredCronSessionPlaceholders({}, new Set(), new Map([['job-6', '测试6号']]));
     expect(items).toHaveLength(0);
   });
 });

@@ -23,6 +23,7 @@ export function defineStoTool<TParams>(
 	options: DefineStoToolOptions<TParams>,
 ) {
 	const { id, domain, resultType, label, description, parameters, execute } = options;
+	const logTag = domain === "workflow" ? "sto-workflow-tool" : "sto-builtin-tool";
 
 	api.registerTool({
 		id,
@@ -40,10 +41,20 @@ export function defineStoTool<TParams>(
 				}
 			})();
 			api.logger.warn?.(
-				`[sto-builtin-tool] ${id} invoked domain=${domain} toolCallId=${toolCallId} params=${paramsPreview}`,
+				`[${logTag}] ${id} invoked toolCallId=${toolCallId} params=${paramsPreview}`,
 			);
 			try {
 				const data = await execute(params as TParams, {});
+				if (id === "get_workflow_schema" && data && typeof data === "object") {
+					const schemaData = data as {
+						templateId?: string;
+						schemaHash?: string;
+						schema?: { fields?: unknown[]; steps?: unknown[] };
+					};
+					api.logger.warn?.(
+						`[${logTag}] ${id} ok templateId=${schemaData.templateId ?? "(none)"} schemaHash=${schemaData.schemaHash ?? "(none)"} fields=${schemaData.schema?.fields?.length ?? 0} steps=${schemaData.schema?.steps?.length ?? 0}`,
+					);
+				}
 				const envelope: StoToolEnvelope = {
 					type: resultType,
 					success: true,
@@ -53,7 +64,7 @@ export function defineStoTool<TParams>(
 				return toolResultFromEnvelope(envelope);
 			} catch (err) {
 				const message = err instanceof Error ? err.message : String(err);
-				api.logger.warn?.(`[sto-builtin-tool] ${id} failed: ${message}`);
+				api.logger.warn?.(`[${logTag}] ${id} failed: ${message}`);
 				return toolResultFromEnvelope(stoToolError(domain, message));
 			}
 		},

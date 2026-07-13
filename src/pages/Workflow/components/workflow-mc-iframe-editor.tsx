@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ChevronLeft, ExternalLink, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   buildMemoryCenterWorkflowDesignerEmbedUrl,
@@ -12,15 +12,14 @@ import { workflowMcEditorShell } from '@/lib/surfaces';
 
 interface WorkflowMcIframeEditorProps {
   workflowId: string;
-  onBack: () => void;
   /** AI 创建模式：传入后用作 header 副标题展示文本（sto-claw 侧持有，不进 MC URL） */
   prompt?: string;
   /** AI 创建模式：MC 后端缓存 prompt 换得的短 ID，拼进 iframe/外链 URL 供 MC 取回 */
   promptCacheId?: string;
 }
 
-/** 编辑/AI 创建流程：iframe 嵌入 MC /workflows-workbench/{workflowId}（带 promptCacheId 时 MC 自动发起 AI 创建） */
-export function WorkflowMcIframeEditor({ workflowId, onBack, prompt, promptCacheId }: WorkflowMcIframeEditorProps) {
+/** 编辑/AI 创建流程：iframe 嵌入 MC /workflows-workbench/{workflowId}（顶栏由 useWorkflowEditorContentHeader 注入） */
+export function WorkflowMcIframeEditor({ workflowId, prompt, promptCacheId }: WorkflowMcIframeEditorProps) {
   const ssoEnvironment = useAuthStore((s) => s.ssoEnvironment);
   const stoToken = useAuthStore((s) => s.user?.stoToken);
   const token = useMemo(() => stoToken?.trim() || getWorkflowStoToken() || '', [stoToken]);
@@ -30,36 +29,8 @@ export function WorkflowMcIframeEditor({ workflowId, onBack, prompt, promptCache
     [workflowId, token, ssoEnvironment, promptCacheId, prompt],
   );
 
-  const isAiCreateMode = Boolean(prompt || promptCacheId);
-
   return (
     <div className={workflowMcEditorShell}>
-      <header className="flex min-h-[48px] shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-2">
-        <button
-          type="button"
-          aria-label="返回列表"
-          onClick={onBack}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground/80 hover:bg-muted"
-        >
-          <ChevronLeft className="h-5 w-5" aria-hidden />
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{isAiCreateMode ? 'AI 创建工作流' : '编辑工作流'}</p>
-          <p className="truncate text-xs text-muted-foreground" title={prompt || workflowId}>
-            {isAiCreateMode && prompt ? `${prompt.slice(0, 50)}${prompt.length > 50 ? '…' : ''}` : workflowId}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => openMemoryCenterWorkflowDesigner(workflowId, token, promptCacheId, prompt)}
-        >
-          <ExternalLink className="mr-1 h-3.5 w-3.5" />
-          在浏览器打开
-        </Button>
-      </header>
-
       <div className="relative min-h-0 flex-1">
         {/* key 随 src 变化重挂载，loading 态自动重置为 true，无需 effect */}
         <McEditorIframe key={iframeSrc} src={iframeSrc} prompt={prompt} promptCacheId={promptCacheId} workflowId={workflowId} token={token} />

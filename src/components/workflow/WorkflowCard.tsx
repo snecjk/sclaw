@@ -9,15 +9,16 @@ import {
 } from '@/lib/format-workflow-duration';
 import {
   artifactToPreviewFile,
-  isPreviewableArtifactUrl,
   isUserFacingArtifactUrl,
   openExternalUrl,
 } from '@/lib/preview-url';
+import { shouldPreviewInSidePanel } from '@/lib/preview-href';
 import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
 import {
   ArtifactProductCard,
   buildArtifactMetaLine,
 } from '@/components/chat/artifact-product-card';
+import { buildArtifactCardMenuItems } from '@/lib/artifact-card-menu';
 import { getExecutionByRunId } from '@/stores/workflow-memory';
 import { hydrateWorkflowRun } from '@/lib/workflow-run-hydration';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
@@ -217,12 +218,10 @@ export function WorkflowCard({
   const userFacingArtifacts = (display.result?.artifacts ?? []).filter(
     (artifact) => isUserFacingArtifactUrl(artifact.url),
   );
-  const primaryArtifact = userFacingArtifacts[0];
-  const canPreviewArtifact = Boolean(
-    primaryArtifact
-    && onPreviewArtifact
-    && isPreviewableArtifactUrl(primaryArtifact.url, primaryArtifact.type),
-  );
+  const previewableArtifact = userFacingArtifacts.find((artifact) => shouldPreviewInSidePanel(artifact.url));
+  const primaryArtifact = previewableArtifact ?? userFacingArtifacts[0];
+  const shouldShowPreviewAction = Boolean(previewableArtifact);
+  const canOpenArtifactPreview = Boolean(previewableArtifact && onPreviewArtifact);
   const showWorkflowActions = isTerminal
     && !!display.workflowId
     && !!onCreateScheduledTask;
@@ -301,15 +300,14 @@ export function WorkflowCard({
             mimeType: primaryArtifact.type || 'application/octet-stream',
             t,
           })}
-          actionLabel={
-            canPreviewArtifact ? t('workflow.viewArtifact') : t('workflow.openArtifactLink')
-          }
+          actionLabel={shouldShowPreviewAction ? t('artifact.preview') : t('workflow.openArtifactLink')}
+          menuItems={buildArtifactCardMenuItems(artifactToPreviewFile(primaryArtifact), t)}
           onAction={() => {
-            if (canPreviewArtifact) {
-              onPreviewArtifact!(artifactToPreviewFile(primaryArtifact));
-            } else {
-              openExternalUrl(primaryArtifact.url);
+            if (canOpenArtifactPreview) {
+              onPreviewArtifact!(artifactToPreviewFile(previewableArtifact!));
+              return;
             }
+            openExternalUrl(primaryArtifact.url);
           }}
         />
       ) : null}

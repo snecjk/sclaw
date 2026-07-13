@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { access, appendFile, mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { getClaudeScheduledTasksDir } from '../utils/paths';
-import { filterDeletedSessions } from '../utils/scheduled-task-poller-store';
+import { filterDeletedSessions, listDeletedSessionKeys } from '../utils/scheduled-task-poller-store';
 import { reviveClaudeTaskDatedExecutionSession } from '../utils/revive-deleted-execution-session';
 import { buildFirstTriggeredClaudeSessionPlaceholders } from '../utils/ensure-dated-execution-session';
 import { listTaskGroupFirstTriggeredAt } from '../utils/task-group-first-trigger-store';
@@ -411,7 +411,9 @@ export async function listClaudeScheduledTaskSummarySessions(): Promise<
   }
   const firstTriggered = await listTaskGroupFirstTriggeredAt();
   const existingKeys = new Set(items.map((item) => item.key));
+  const deletedKeys = new Set(await listDeletedSessionKeys());
   for (const placeholder of buildFirstTriggeredClaudeSessionPlaceholders(firstTriggered, existingKeys, taskNamesById)) {
+    if (deletedKeys.has(placeholder.key)) continue;
     items.push({
       ...placeholder,
       sessionFile: '',

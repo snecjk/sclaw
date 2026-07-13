@@ -8,6 +8,8 @@ import {
   homeHubCardTagClass,
   homeHubCardTitleClass,
   homeHubInteractiveCardShellClass,
+  homeHubCardBodyRegionClass,
+  homeHubCardFooterRegionClass,
   homeHubTextPrimary,
   homeHubTextSecondary,
 } from './home-hub-surface-styles';
@@ -158,12 +160,12 @@ function GuideCard({
       </div>
 
       {mode === 'configure' ? (
-        <div className="mt-5 min-h-[4.5rem]">
+        <div className={homeHubCardBodyRegionClass}>
           <p className={homeHubCardDescClass}>{t(`${p}.bodyCaption`)}</p>
           <p className={cn('mt-1.5', homeHubCardDescClass)}>{t(`${p}.bodyDetail`)}</p>
         </div>
       ) : (
-        <div className="mt-5 grid min-h-[4.5rem] grid-cols-3 gap-3">
+        <div className={cn(homeHubCardBodyRegionClass, 'grid grid-cols-3 gap-3')}>
           <StatBlock
             label={t(`${p}.stat1Label`)}
             value={t(`${p}.stat1Value`)}
@@ -183,7 +185,7 @@ function GuideCard({
         </div>
       )}
 
-      <div className="mt-5 flex min-h-[40px] items-center gap-3 border-t border-[#E5E6EB] pt-4 dark:border-border">
+      <div className={homeHubCardFooterRegionClass}>
         <AvatarStack urls={avatarUrls} />
         <p className={cn('min-w-0 flex-1 truncate text-center text-[13px]', homeHubTextSecondary)} title={t(`${p}.footerTeam`)}>
           {t(`${p}.footerTeam`)}
@@ -206,7 +208,7 @@ function GuideCard({
   if (disabled) {
     return (
       <div className={shellClass} role="group" aria-disabled aria-label={t(`${p}.title`)}>
-        <div className="pointer-events-none select-none">{inner}</div>
+        <div className="pointer-events-none flex h-full min-h-0 flex-col select-none">{inner}</div>
         <div
           className={cn(
             'pointer-events-none absolute inset-0 flex items-center justify-center rounded-[18px]',

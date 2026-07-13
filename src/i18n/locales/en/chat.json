@@ -2,7 +2,7 @@
     "gatewayNotRunning": "Gateway Not Running",
     "gatewayRequired": "The OpenClaw Gateway needs to be running to use chat. It will start automatically, or you can start it from Settings.",
     "welcome": {
-        "title": "StoClaw Chat",
+        "title": "S Claw Chat",
         "subtitle": "What can I do for you?",
         "askQuestions": "Handle Tasks",
         "askQuestionsDesc": "Work on task-oriented requests",
@@ -34,6 +34,7 @@
         "searchClear": "Clear search",
         "searchClose": "Close search",
         "openPreview": "Open preview",
+        "closePreview": "Close preview",
         "closeSession": "Close current session"
     },
     "composer": {
@@ -60,7 +61,7 @@
         "dingtalkLoadMore": "Load more",
         "dingtalkNoResults": "No matches found",
         "dingtalkNeedsInstall": "Install DingTalk CLI to mention contacts",
-        "dingtalkInstall": "Authorize DingTalk",
+        "dingtalkInstall": "Install DingTalk CLI",
         "dingtalkInstalling": "Installing…",
         "dingtalkNeedsAuth": "Sign in to DingTalk to search contacts",
         "dingtalkLogin": "Sign in to DingTalk",
@@ -73,21 +74,30 @@
         "pickWorkflow": "Choose workflow",
         "dingTalkMention": "DingTalk contacts",
         "micComingSoon": "Coming soon",
-        "workflowPlaceholder": "Search workflow templates...",
+        "workflowPlaceholder": "Search workflows...",
         "workflowLoading": "Loading...",
         "workflowNoResults": "No matching templates",
-        "workflowNoTemplates": "No workflow templates",
+        "workflowNoTemplates": "No workflows",
         "workflowClear": "Clear workflow"
     },
     "streaming": {
         "connectingModel": "Connecting to model...",
         "understandingQuestion": "Understanding your question…",
-        "stillExecuting": "Still running (writing files)…",
-        "awaitingReply": "Claw will continue after you reply…",
+        "stillExecuting": "Still executing…",
+        "thinkingNow": "Thinking…",
+        "preparingToolInput": "Preparing tool parameters…",
+        "runningTool": "Running tool…",
+        "finalizingReply": "Generating reply…",
+        "queued": "Queued…",
+        "awaitingReply": "Waiting for your reply…",
+        "interrupted": "Interrupted",
         "thinkingProcessTitle": "Thinking process",
         "deepThinkingLabel": "Deep thinking",
         "collapsedSummary": "Thought {{thoughtCount}} times, used {{toolCount}} tools",
+        "collapsedSummaryThoughtsOnly": "Thought {{thoughtCount}} times",
+        "collapsedSummaryToolsOnly": "Used {{toolCount}} tools",
         "invokeToolLabel": "Invoke tool – {{toolName}}",
+        "toolNoParams": "No parameters",
         "paramsConfirmedLabel": "Parameters confirmed",
         "toolCallLabel": "Tool call {{index}}",
         "processMessageLabel": "Process messages {{count}}",
@@ -113,6 +123,13 @@
     "messageActions": {
         "copy": "Copy",
         "copyFailed": "Copy failed",
+        "copySplitHint": "Copy text or files separately",
+        "copyText": "Copy text",
+        "copyTextSuccess": "Text copied",
+        "copyFiles": "Copy files ({{count}})",
+        "copyFilesSuccess": "Files copied ({{count}})",
+        "copyFilesFailed": "Failed to copy files",
+        "share": "Share to DingTalk",
         "editAndResend": "Edit and send again",
         "editUnavailable": "Edit and resend is not available on this page"
     },
@@ -130,8 +147,8 @@
         "moveUp": "Move up",
         "moveDown": "Move down",
         "fileCount": "{{count}} file(s)",
-    "queueFull": "Queue is full (max {{max}})"
-  },
+        "queueFull": "Queue is full (max {{max}})"
+    },
     "splitting": "Analyzing question...",
     "systemNotice": {
         "label": "System notice",
@@ -167,7 +184,14 @@
         "typeImage": "Image",
         "typeArchive": "Archive",
         "typeMedia": "Media",
-        "typeFile": "File"
+        "typeFile": "File",
+        "preview": "Preview",
+        "openFileLocation": "Show in folder",
+        "copyFile": "Copy file",
+        "copyLink": "Copy link",
+        "copyLinkSuccess": "Link copied",
+        "moreActions": "More actions",
+        "actionFailed": "Action failed"
     },
     "preview": {
         "collapsePanel": "Collapse preview",
@@ -184,15 +208,24 @@
         "dismissTab": "Close this artifact",
         "shareDialog": {
             "title": "Share to DingTalk",
-            "description": "Confirm the content, then DingTalk will open the recipient picker.",
+            "description": "After you confirm, the DingTalk contact picker will open.",
+            "artifactTitle": "Share artifact",
+            "artifactDescription": "Share to a DingTalk contact or group",
+            "conversationTitle": "Share conversation",
+            "conversationDescription": "Opens the DingTalk picker with the message text and artifact links.",
             "fieldTitle": "Title",
             "fieldBody": "Body",
             "fieldLink": "Link",
-            "localUrlHint": "This link is a local preview URL. Colleagues outside your network may not be able to open it.",
+            "localUrlHint": "This link is a local preview URL. Colleagues on the same network may not be able to open it.",
             "cancel": "Cancel",
             "confirm": "Share",
-            "success": "DingTalk recipient picker opened",
-            "failed": "Share failed. Please try again."
+            "uploading": "Preparing…",
+            "success": "DingTalk contact picker opened",
+            "failed": "Share failed. Please try again later.",
+            "tooLongTitle": "Content too long to share",
+            "tooLongDescription": "The text is too long to pre-fill. After you confirm, the full conversation will be copied to the clipboard and the DingTalk picker will open. Paste (⌘V / Ctrl+V) in the message box before sending.",
+            "tooLongConfirm": "Open DingTalk",
+            "tooLongPickerHint": "Paste the copied conversation in the message box (⌘V / Ctrl+V)"
         }
     }
 }

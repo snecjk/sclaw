@@ -253,6 +253,8 @@ function collectSelectedOptionLabels(step: WizardStep | undefined, values: FormR
 }
 
 function ParameterFormCardInner({ config, context, onSubmit, variant = 'default' }: ParameterFormCardProps) {
+  console.log('mergeFormValuesWithDefaults', config, context);
+
   // If config is empty (from text marker), try to load from workflow memory
   const [schema, setSchema] = useState<import('@/types/workflow').WorkflowSchema | null>(null);
   const [loadedConfig, setLoadedConfig] = useState<UserFormConfig | null>(null);

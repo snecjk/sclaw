@@ -41,7 +41,10 @@ export interface AttachedFileMeta {
   mimeType: string;
   fileSize: number;
   preview: string | null;
+  /** Preview / external-open URL (workflow previewUrl). */
   filePath?: string;
+  /** Download URL (workflow tempUrl). Falls back to filePath when absent. */
+  downloadUrl?: string;
 }
 
 /** Raw message from OpenClaw chat.history */
@@ -115,6 +118,8 @@ export interface ToolStatus {
   toolCallId?: string;
   name: string;
   status: 'running' | 'completed' | 'error';
+  /** Anthropic tool_use / OpenAI arguments；可被后续事件补全 */
+  input?: unknown;
   durationMs?: number;
   summary?: string;
   updatedAt: number;
@@ -132,6 +137,10 @@ export interface SessionRuntimeState {
   activeRunId: string | null;
   streamingText: string;
   streamingMessage: unknown | null;
+  /** Live assistant snapshots seen during the active turn, in arrival order. */
+  streamingMessages: RawMessage[];
+  /** Live tool result messages seen during the active turn, in arrival order. */
+  streamingToolResults: RawMessage[];
   streamingTools: ToolStatus[];
   pendingFinal: boolean;
   lastUserMessageAt: number | null;
@@ -156,6 +165,10 @@ export interface ChatState {
   activeRunId: string | null;
   streamingText: string;
   streamingMessage: unknown | null;
+  /** Live assistant snapshots seen during the active turn, in arrival order. */
+  streamingMessages: RawMessage[];
+  /** Live tool result messages seen during the active turn, in arrival order. */
+  streamingToolResults: RawMessage[];
   streamingTools: ToolStatus[];
   pendingFinal: boolean;
   /** Timestamp (ms) of the last gateway chat event; used for stale-run UI hints. */
@@ -203,15 +216,20 @@ export interface ChatState {
     modelGuidanceSent?: boolean;
   } | null;
   setPendingWorkflow: (pending: ChatState['pendingWorkflow']) => void;
+  /** Drop in-memory pending only; keeps localStorage draft for session restore. */
+  clearPendingWorkflowMemory: () => void;
   clearPendingWorkflow: () => void;
 
   // Actions
-  loadSessions: () => Promise<void>;
+  loadSessions: (options?: { force?: boolean }) => Promise<void>;
   switchSession: (key: string) => void;
   /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
   switchToAgentMainSession: (agentId: string) => void;
   newSession: () => void;
-  deleteSession: (key: string) => Promise<boolean>;
+  deleteSession: (key: string, options?: {
+    skipSessionRefresh?: boolean;
+    additionalSuppressKeys?: string[];
+  }) => Promise<boolean>;
   cleanupEmptySession: () => void;
   loadHistory: (quiet?: boolean, force?: boolean) => Promise<void>;
   sendMessage: (options: SendMessageOptions) => Promise<void>;

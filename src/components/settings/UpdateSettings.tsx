@@ -1,31 +1,83 @@
 /**
- * Update Settings Component
- * Displays update status and allows manual update checking/installation
+ * Update Settings — version card, toggles, status actions, and download progress (MasterGo layout).
  */
 import { useEffect, useCallback } from 'react';
-import { CheckCircle2, Download, RefreshCw, Loader2, Rocket, XCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
+import { Loader2 } from 'lucide-react';
 import { useUpdateStore } from '@/stores/update';
+import { useSettingsStore } from '@/stores/settings';
 import { useTranslation } from 'react-i18next';
+import { cn } from '@/lib/utils';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { UpdateDownloadProgress } from './update/UpdateDownloadProgress';
+import { updateDividerInsetLineClass } from './update/updateDivider';
+import type { UpdateStatus } from '@/stores/update';
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
+/** 有待处理更新时显示橙色标签 */
+const UPDATE_PENDING_BADGE_STATUSES: UpdateStatus[] = [
+  'available',
+  'downloading',
+  'downloaded',
+  'installing',
+];
+
+const updateSettingsSwitchClass =
+  'data-[state=checked]:bg-[#00B42A] dark:data-[state=checked]:bg-[#00B42A]';
+
+const updateAvailableBadgeClass = cn(
+  'inline-flex shrink-0 items-center justify-center',
+  'h-[26px] rounded-[8px] px-2 py-1.5',
+  'bg-[#FFF1E8] text-[12px] font-normal leading-none text-[var(--sto-brand-6)]',
+  'whitespace-nowrap',
+);
+
+const updateLatestBadgeClass = cn(
+  'inline-flex shrink-0 items-center justify-center',
+  'h-[26px] min-w-[40px] rounded-[8px] px-2 py-1.5',
+  'bg-[#E7F3EB] text-[12px] font-normal leading-none text-[#00B42A]',
+  'whitespace-nowrap',
+);
+
+/** MasterGo：主操作按钮 — 深色实心、无图标、胶囊形 */
+const updatePrimaryBtnClass = cn(
+  'inline-flex h-9 shrink-0 items-center justify-center rounded-[12px] px-5',
+  'text-[14px] font-medium leading-none whitespace-nowrap',
+  'bg-[#1D2129] text-white hover:bg-[#1D2129]/90',
+  'disabled:cursor-not-allowed disabled:bg-[#F2F3F5] disabled:text-[#86909C] disabled:hover:bg-[#F2F3F5]',
+  'dark:bg-foreground dark:text-background dark:hover:bg-foreground/90',
+  'dark:disabled:bg-muted dark:disabled:text-muted-foreground',
+);
+
+/** MasterGo：禁用态（检查中）— 浅灰底 */
+const updateDisabledBtnClass = cn(
+  'inline-flex h-9 shrink-0 items-center justify-center rounded-[12px] px-5',
+  'text-[14px] font-medium leading-none whitespace-nowrap',
+  'bg-[#F2F3F5] text-[#86909C] cursor-not-allowed',
+  'dark:bg-muted dark:text-muted-foreground',
+);
+
+/** MasterGo：下载中 / 安装中 — 深灰底白字 */
+const updateInProgressBtnClass = cn(
+  'inline-flex h-9 shrink-0 items-center justify-center rounded-[12px] px-5',
+  'text-[14px] font-medium leading-none whitespace-nowrap',
+  'cursor-not-allowed bg-[#86909C] text-white',
+  'dark:bg-muted-foreground dark:text-white',
+);
 
 export function UpdateSettings() {
   const { t } = useTranslation('settings');
+  const {
+    autoCheckUpdate,
+    setAutoCheckUpdate,
+    autoDownloadUpdate,
+    setAutoDownloadUpdate,
+  } = useSettingsStore();
   const {
     status,
     currentVersion,
     updateInfo,
     progress,
     error,
-    policyBlocked,
     isInitialized,
     autoInstallCountdown,
     restartCountdown,
@@ -37,9 +89,9 @@ export function UpdateSettings() {
     cancelRestartCountdown,
     cancelAutoInstall,
     clearError,
+    setAutoDownload,
   } = useUpdateStore();
 
-  // Initialize on mount
   useEffect(() => {
     init();
   }, [init]);
@@ -49,142 +101,79 @@ export function UpdateSettings() {
     await checkForUpdates();
   }, [checkForUpdates, clearError]);
 
-  const renderStatusIcon = () => {
-    switch (status) {
-      case 'checking':
-      case 'downloading':
-      case 'installing':
-        return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
-      case 'available':
-        return <Download className="h-4 w-4 text-primary" />;
-      case 'downloaded':
-        return <Rocket className="h-4 w-4 text-primary" />;
-      case 'installed':
-        return <CheckCircle2 className="h-4 w-4 text-primary" />;
-      case 'error':
-        return <RefreshCw className="h-4 w-4 text-destructive" />;
-      default:
-        return <RefreshCw className="h-4 w-4 text-muted-foreground" />;
-    }
-  };
-
-  const renderStatusText = () => {
-    if (status === 'downloaded' && autoInstallCountdown != null && autoInstallCountdown >= 0) {
-      return t('updates.status.autoInstalling', { seconds: autoInstallCountdown });
-    }
-    if (status === 'installed' && restartCountdown != null && restartCountdown >= 0) {
-      return t('updates.status.restartingIn', { seconds: restartCountdown });
-    }
-    switch (status) {
-      case 'checking':
-        return t('updates.status.checking');
-      case 'downloading':
-        return t('updates.status.downloading');
-      case 'available':
-        return t('updates.status.available', { version: updateInfo?.version });
-      case 'downloaded':
-        return t('updates.status.downloaded', { version: updateInfo?.version });
-      case 'installing':
-        return t('updates.status.installing');
-      case 'installed':
-        return t('updates.status.installed', { version: updateInfo?.version });
-      case 'error':
-        return error || t('updates.status.failed');
-      case 'not-available':
-        return policyBlocked
-          ? t('updates.status.policyBlocked')
-          : t('updates.status.latest');
-      default:
-        return t('updates.status.check');
-    }
-  };
-
   const renderAction = () => {
     switch (status) {
       case 'checking':
         return (
-          <Button disabled variant="outline" size="sm">
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          <button type="button" disabled className={updateDisabledBtnClass}>
             {t('updates.action.checking')}
-          </Button>
+          </button>
         );
       case 'downloading':
         return (
-          <Button disabled variant="outline" size="sm">
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          <button type="button" disabled className={updateInProgressBtnClass}>
             {t('updates.action.downloading')}
-          </Button>
+          </button>
         );
       case 'available':
         return (
-          <Button onClick={downloadUpdate} size="sm">
-            <Download className="h-4 w-4 mr-2" />
-            {t('updates.action.download')}
-          </Button>
+          <button type="button" className={updatePrimaryBtnClass} onClick={() => void downloadUpdate()}>
+            {t('updates.action.downloadNewVersion')}
+          </button>
         );
       case 'downloaded':
         if (autoInstallCountdown != null && autoInstallCountdown >= 0) {
-          // 倒计时期间同时给出"取消"和"立即安装"，无人值守和急性子都满足
           return (
-            <div className="flex gap-2">
-              <Button onClick={cancelAutoInstall} size="sm" variant="outline">
-                <XCircle className="h-4 w-4 mr-2" />
+            <div className="flex shrink-0 gap-2">
+              <button type="button" className={updateDisabledBtnClass} onClick={() => void cancelAutoInstall()}>
                 {t('updates.action.cancelAutoInstall')}
-              </Button>
-              <Button onClick={installUpdate} size="sm" variant="default">
-                <Rocket className="h-4 w-4 mr-2" />
+              </button>
+              <button type="button" className={updatePrimaryBtnClass} onClick={() => void installUpdate()}>
                 {t('updates.action.install')}
-              </Button>
+              </button>
             </div>
           );
         }
         return (
-          <Button onClick={installUpdate} size="sm" variant="default">
-            <Rocket className="h-4 w-4 mr-2" />
+          <button type="button" className={updatePrimaryBtnClass} onClick={() => void installUpdate()}>
             {t('updates.action.install')}
-          </Button>
+          </button>
         );
       case 'installing':
         return (
-          <Button disabled variant="outline" size="sm">
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          <button type="button" disabled className={updateInProgressBtnClass}>
             {t('updates.action.installing')}
-          </Button>
+          </button>
         );
       case 'installed':
         if (restartCountdown != null && restartCountdown >= 0) {
           return (
-            <div className="flex gap-2">
-              <Button onClick={cancelRestartCountdown} size="sm" variant="outline">
-                <XCircle className="h-4 w-4 mr-2" />
+            <div className="flex shrink-0 gap-2">
+              <button type="button" className={updateDisabledBtnClass} onClick={() => cancelRestartCountdown()}>
                 {t('updates.action.cancelRestart')}
-              </Button>
-              <Button onClick={restartApp} size="sm" variant="default">
-                <Rocket className="h-4 w-4 mr-2" />
+              </button>
+              <button type="button" className={updatePrimaryBtnClass} onClick={() => restartApp()}>
                 {t('updates.action.restartNow')}
-              </Button>
+              </button>
             </div>
           );
         }
         return (
-          <Button onClick={restartApp} size="sm" variant="default">
-            <Rocket className="h-4 w-4 mr-2" />
+          <button type="button" className={updatePrimaryBtnClass} onClick={() => restartApp()}>
             {t('updates.action.restart')}
-          </Button>
+          </button>
         );
       case 'error':
         return (
-          <Button onClick={handleCheckForUpdates} variant="outline" size="sm">
-            <RefreshCw className="h-4 w-4 mr-2" />
+          <button type="button" className={updatePrimaryBtnClass} onClick={() => void handleCheckForUpdates()}>
             {t('updates.action.retry')}
-          </Button>
+          </button>
         );
       default:
         return (
-          <Button onClick={handleCheckForUpdates} variant="outline" size="sm">
-            <RefreshCw className="h-4 w-4 mr-2" />
+          <button type="button" className={updatePrimaryBtnClass} onClick={() => void handleCheckForUpdates()}>
             {t('updates.action.check')}
-          </Button>
+          </button>
         );
     }
   };
@@ -193,76 +182,101 @@ export function UpdateSettings() {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
         <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Loading...</span>
+        <span>{t('updates.loading')}</span>
       </div>
     );
   }
 
+  const downloadingVersion = updateInfo?.version;
+  const showProgress = status === 'downloading' && progress;
+  const showUpdateAvailableBadge = UPDATE_PENDING_BADGE_STATUSES.includes(status);
+  const showLatestBadge = status === 'not-available';
+
   return (
     <div className="space-y-4">
-      {/* Current Version */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <p className="text-sm font-medium">{t('updates.currentVersion')}</p>
-          <p className="text-2xl font-bold">v{currentVersion}</p>
-        </div>
-        {renderStatusIcon()}
-      </div>
-
-      {/* Status */}
-      <div className="flex items-center justify-between py-3 border-t border-b">
-        <p className="text-sm text-muted-foreground">{renderStatusText()}</p>
-        {renderAction()}
-      </div>
-
-      {/* Download Progress */}
-      {status === 'downloading' && progress && (
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span>
-              {formatBytes(progress.transferred)} / {formatBytes(progress.total)}
-            </span>
-            <span>{formatBytes(progress.bytesPerSecond)}/s</span>
-          </div>
-          <Progress value={progress.percent} className="h-2" />
-          <p className="text-xs text-muted-foreground text-center">
-            {Math.round(progress.percent)}% complete
-          </p>
-        </div>
-      )}
-
-      {/* Update Info */}
-      {updateInfo && (status === 'available' || status === 'downloaded') && (
-        <div className="rounded-lg bg-muted p-4 space-y-2">
-          <div className="flex items-center justify-between">
-            <p className="font-medium">Version {updateInfo.version}</p>
-            {updateInfo.releaseDate && (
-              <p className="text-sm text-muted-foreground">
-                {new Date(updateInfo.releaseDate).toLocaleDateString()}
+      <div className="overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white dark:border-border dark:bg-card">
+        <div className="flex items-center justify-between gap-4 px-5 py-5">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <p className="text-[15px] leading-snug text-[#1D2129] dark:text-foreground">
+                <span className="font-bold">{t('updates.currentVersionLabel')}</span>
+                <span className="font-normal"> v{currentVersion}</span>
               </p>
-            )}
-          </div>
-          {updateInfo.releaseNotes && (
-            <div className="text-sm text-muted-foreground prose prose-sm max-w-none">
-              <p className="font-medium text-foreground mb-1">{t('updates.whatsNew')}</p>
-              <p className="whitespace-pre-wrap">{updateInfo.releaseNotes}</p>
+              {showUpdateAvailableBadge ? (
+                <span className={updateAvailableBadgeClass}>
+                  {t('updates.sidebar.newVersionTitle')}
+                </span>
+              ) : showLatestBadge ? (
+                <span className={updateLatestBadgeClass}>
+                  {t('updates.latestBadge')}
+                </span>
+              ) : null}
             </div>
-          )}
+            <p className="text-[13px] font-normal leading-relaxed text-[#86909C] dark:text-muted-foreground">
+              {t('updates.cardHint')}
+            </p>
+            {status === 'installing' ? (
+              <p className="text-[13px] font-normal text-[#1D2129] dark:text-foreground">
+                {t('updates.status.installing')}
+              </p>
+            ) : null}
+          </div>
+          <div className="shrink-0 self-center">{renderAction()}</div>
         </div>
-      )}
 
-      {/* Error Details */}
-      {status === 'error' && error && (
-        <div className="rounded-lg bg-red-50 dark:bg-red-900/10 p-4 text-red-600 dark:text-red-400 text-sm">
-          <p className="font-medium mb-1">{t('updates.errorDetails')}</p>
-          <p>{error}</p>
+        {showProgress ? (
+          <div className="px-5 pb-5">
+            <p className="mb-3 text-[13px] font-bold text-[#1D2129] dark:text-foreground">
+              {t('updates.downloadingLabel', { version: downloadingVersion })}
+            </p>
+            <UpdateDownloadProgress progress={progress} />
+          </div>
+        ) : null}
+
+        <div className={updateDividerInsetLineClass} aria-hidden="true" />
+
+        <div className="flex items-center justify-between gap-4 px-5 py-5">
+          <div className="min-w-0">
+            <Label className="text-[15px] font-bold text-[#1D2129] dark:text-foreground">
+              {t('updates.autoCheck')}
+            </Label>
+            <p className="mt-1 text-[13px] font-normal text-[#86909C] dark:text-muted-foreground">
+              {t('updates.autoCheckDesc')}
+            </p>
+          </div>
+          <Switch
+            checked={autoCheckUpdate}
+            onCheckedChange={setAutoCheckUpdate}
+            className={updateSettingsSwitchClass}
+          />
         </div>
-      )}
 
-      {/* Help Text */}
-      <p className="text-xs text-muted-foreground">
-        {t('updates.help')}
-      </p>
+        <div className="flex items-center justify-between gap-4 px-5 py-5">
+          <div className="min-w-0">
+            <Label className="text-[15px] font-bold text-[#1D2129] dark:text-foreground">
+              {t('updates.autoDownload')}
+            </Label>
+            <p className="mt-1 text-[13px] font-normal text-[#86909C] dark:text-muted-foreground">
+              {t('updates.autoDownloadDesc')}
+            </p>
+          </div>
+          <Switch
+            checked={autoDownloadUpdate}
+            onCheckedChange={(value) => {
+              setAutoDownloadUpdate(value);
+              setAutoDownload(value);
+            }}
+            className={updateSettingsSwitchClass}
+          />
+        </div>
+      </div>
+
+      {status === 'error' && error ? (
+        <div className="rounded-lg bg-red-50 p-4 text-sm text-red-600 dark:bg-red-900/10 dark:text-red-400">
+          <p className="mb-1 font-medium">{t('updates.errorDetails')}</p>
+          <p className="whitespace-pre-wrap">{error}</p>
+        </div>
+      ) : null}
     </div>
   );
 }

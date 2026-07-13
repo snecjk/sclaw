@@ -5,8 +5,10 @@
  * 省区 Win / 完整 layout：单行（Win 在版本号后展示 DEV）。
  */
 import sidebarLogoSvg from '@/assets/sidebar-logo.svg';
+import sidebarLogoDarkSvg from '@/assets/sidebar-logo-dark.svg';
 import { cn } from '@/lib/utils';
-import { sidebarBrandVersionClass } from '@/lib/surfaces';
+import { sidebarBrandLogoClass, sidebarBrandVersionClass } from '@/lib/surfaces';
+import { useResolvedAppearance } from '@/hooks/use-resolved-appearance';
 import { formatAppDisplayVersion } from '@/lib/format-app-display-version';
 import { ChromeEnvBadge } from '@/components/layout/chrome-env-badge';
 import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
@@ -16,8 +18,8 @@ import packageJson from '../../../package.json';
 
 /** 与 Sidebar nav 容器一致（展开态 `px-2`） */
 const SIDEBAR_BRAND_OUTER_X = 'px-2';
-/** 与展开态 NavLink `px-[10px]` 一致，使标题与图标左缘对齐 */
-const SIDEBAR_BRAND_INNER_X = 'px-[10px]';
+/** 品牌标题左缘比 nav 图标左移 2px（pl-2 + pr-[10px]） */
+const SIDEBAR_BRAND_INNER_X = 'pl-2 pr-[10px]';
 
 export interface SidebarBrandHeaderProps {
   /** 侧栏 layout 变体（省区 / 完整） */
@@ -35,14 +37,16 @@ function SidebarBrandTitle({
   displayVersion: string;
   showEnvBadgeAfterVersion: boolean;
 }) {
+  const appearance = useResolvedAppearance();
+
   return (
     <div className="flex min-w-0 items-center gap-2">
       <img
-        src={sidebarLogoSvg}
+        src={appearance === 'dark' ? sidebarLogoDarkSvg : sidebarLogoSvg}
         alt="SClaw"
         width={85}
         height={28}
-        className="h-7 w-auto max-w-full shrink-0 object-contain object-left"
+        className={sidebarBrandLogoClass}
       />
       <span className={cn('shrink-0', sidebarBrandVersionClass)}>{displayVersion}</span>
       {showEnvBadgeAfterVersion ? (
@@ -89,7 +93,7 @@ export function SidebarBrandHeader({
           </div>
           {toggle}
         </div>
-        <div className={cn('mt-1.5 flex shrink-0 items-center pb-2.5', SIDEBAR_BRAND_OUTER_X)}>
+        <div className={cn('mt-1.5 flex shrink-0 items-center pb-1.5', SIDEBAR_BRAND_OUTER_X)}>
           <div className={cn('min-w-0', SIDEBAR_BRAND_INNER_X)}>
             <SidebarBrandTitle displayVersion={displayVersion} showEnvBadgeAfterVersion={false} />
           </div>
@@ -101,7 +105,7 @@ export function SidebarBrandHeader({
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center justify-between gap-2 pb-3',
+        'flex shrink-0 items-center justify-between gap-2 pb-2',
         SIDEBAR_BRAND_OUTER_X,
         isProvincial ? 'pt-[var(--sto-chrome-toggle-inset-top)]' : 'border-b border-[var(--sto-sidebar-border)] pt-3',
       )}

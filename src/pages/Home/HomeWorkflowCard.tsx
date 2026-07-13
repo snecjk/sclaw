@@ -7,6 +7,8 @@ import {
   homeHubCardTagClass,
   homeHubCardTitleClass,
   homeHubInteractiveCardShellClass,
+  homeHubCardBodyRegionClass,
+  homeHubCardFooterRegionClass,
   homeHubTextPrimary,
   homeHubTextSecondary,
 } from './home-hub-surface-styles';
@@ -133,27 +135,26 @@ export function HomeWorkflowCard({
         </div>
       </div>
 
-      <div className="mt-5 min-h-[4.5rem]">
+      <div className={cn(homeHubCardBodyRegionClass, 'flex flex-col gap-5')}>
         <p className={homeHubCardDescClass}>{description}</p>
+        <div className="grid grid-cols-3 gap-3">
+          <StatBlock
+            label={t('homeWorkflowCard.stat1Label')}
+            value={t('homeWorkflowCard.stat1Value')}
+            highlight
+          />
+          <StatBlock
+            label={t('homeWorkflowCard.stat2Label')}
+            value={t('homeWorkflowCard.stat2Value')}
+          />
+          <StatBlock
+            label={t('homeWorkflowCard.stat3Label')}
+            value={t('homeWorkflowCard.stat3Value')}
+          />
+        </div>
       </div>
 
-      <div className="mt-5 grid min-h-[4.5rem] grid-cols-3 gap-3">
-        <StatBlock
-          label={t('homeWorkflowCard.stat1Label')}
-          value={t('homeWorkflowCard.stat1Value')}
-          highlight
-        />
-        <StatBlock
-          label={t('homeWorkflowCard.stat2Label')}
-          value={t('homeWorkflowCard.stat2Value')}
-        />
-        <StatBlock
-          label={t('homeWorkflowCard.stat3Label')}
-          value={t('homeWorkflowCard.stat3Value')}
-        />
-      </div>
-
-      <div className="mt-5 flex min-h-[40px] items-center gap-3 border-t border-[#E5E6EB] pt-4 dark:border-border">
+      <div className={homeHubCardFooterRegionClass}>
         <AvatarStack urls={avatarUrls} />
         <p className="min-w-0 flex-1 truncate text-center text-[13px] text-[#86909C] dark:text-muted-foreground">
           {t('homeWorkflowCard.footerTeam')}

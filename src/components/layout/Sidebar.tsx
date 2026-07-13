@@ -3,19 +3,13 @@
  * 省区布局：展开 260px / 收起 w-0 完全隐藏；折叠钮在侧栏列顶行（无全局顶栏）。
  * 完整布局：展开 260px / 收起 72px 图标轨。
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import {
   Puzzle,
   Clock,
   Settings as SettingsIcon,
-  LogOut,
   ChevronRight,
-  Globe,
-  Check,
-  Sun,
-  Moon,
-  Monitor,
   Bookmark,
   ClipboardList,
   MessageSquarePlus,
@@ -24,30 +18,42 @@ import {
   Radio,
   ChevronDown,
   Workflow,
+  Check,
+  Database,
 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropdownMenuSub,
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { SidebarUpdateNotice } from '@/components/layout/sidebar-update-notice';
 import { useSettingsStore } from '@/stores/settings';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore, isSiteUser } from '@/stores/auth';
+import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
+import { SidebarSupportQrTooltip } from '@/components/layout/SidebarSupportQrTooltip';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
-import { SidebarRunningIcon } from '@/components/layout/sidebar-running-icon';
-import { SidebarRecentSessionRowTrailing } from '@/components/layout/sidebar-recent-session-row-trailing';
+import { SidebarRecentSessionRow } from '@/components/layout/sidebar-recent-session-row';
+import { SidebarRecentGroupRow } from '@/components/layout/sidebar-recent-group-row';
+import {
+  SidebarRecentGroupDialogs,
+  type SidebarRecentGroupDialogState,
+} from '@/components/layout/sidebar-recent-group-dialogs';
+import { buildSidebarRecentGroupSections, suggestNextSidebarRecentGroupName } from '@/lib/sidebar-recent-groups';
+import { useSidebarRecentGroupsStore } from '@/stores/sidebar-recent-groups';
+import { isSessionUnreadNow } from '@/stores/session-unread';
+import { toast } from 'sonner';
 import {
   SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
   SidebarTaskSubitemDeleteTrailing,
@@ -55,7 +61,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { resolveSessionLabel } from '@/lib/session-label';
 import { sortSessionsByRecentActivity } from '@/lib/sidebar-recent-order';
-import { taskDetailPath, type StoTaskId } from '@/lib/sto-tasks';
+import { type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { scheduleSessionLabelHydrationForStore } from '@/stores/chat/session-metadata-hydrate';
@@ -71,15 +77,24 @@ import {
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { buildScheduledTaskGroupDisplayName, deriveGroupFirstTriggeredFromSessions, getSessionActivityMs, sortScheduledTaskGroupsByFirstTriggerDesc } from '@/lib/scheduled-task-group-name';
 import {
-  clearTaskGroupFirstTriggered,
   fetchTaskGroupFirstTriggeredMap,
+  isTaskGroupFirstTriggerOptimisticallyCleared,
   rememberOptimisticTaskGroupFirstTriggered,
-  rememberOptimisticTaskGroupFirstTriggeredClear,
   seedTaskGroupFirstTriggeredIfAbsent,
 } from '@/lib/task-group-first-trigger';
+import {
+  type LastSessionDeleteFirstTriggerPrep,
+  prepareFirstTriggerClearBeforeLastSessionDelete,
+  rememberSuppressedKeysForLastGroupSessionDelete,
+  revertFirstTriggerClearAfterFailedDelete,
+} from '@/lib/task-group-first-trigger-delete';
 import { resolveTaskGroupKeyFromSessionKey, stoBuiltinTaskGroupKey } from '../../../shared/task-group-key';
 import { useScheduledTaskNameMaps } from '@/hooks/use-scheduled-task-name-maps';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
+import {
+  type SidebarSubitemDeletePayload,
+  useSidebarDeleteConfirmStore,
+} from '@/stores/sidebar-delete-confirm';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
@@ -99,9 +114,12 @@ import {
   sidebarTextSectionClass,
   sidebarUnreadDotClass,
   sidebarSectionStickyShellClass,
+  sidebarSectionStickyTopGroupClass,
   sidebarSectionStickyTopTaskClass,
   sidebarSectionStickyTopRecentClass,
   sidebarScrollListClass,
+  sidebarScrollContainerClass,
+  sidebarRecentEmptyLineClass,
 } from '@/lib/surfaces';
 import { useSidebarTaskScrollCollapse } from '@/hooks/use-sidebar-task-scroll-collapse';
 
@@ -121,11 +139,24 @@ const INITIAL_NOW_MS = Date.now();
 const SIDEBAR_COLLAPSED_TOOLTIP_SURFACE =
   '!bg-popover text-popover-foreground shadow-md backdrop-blur-none border-border';
 
-/** Footer account dropdown — panel and row hover (design spec). */
-const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS = 'w-48 rounded-[12px] border-0 shadow-lg';
-const SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS = 'rounded-[12px] border-0 shadow-lg';
+/** Footer account dropdown — MasterGo: 160×186 卡片 + 34px 行高菜单项 */
+const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS =
+  'w-[160px] min-w-[160px] max-w-[160px] rounded-[12px] border border-[#E5E6EB] bg-white p-0 py-2 shadow-lg dark:border-border dark:bg-card';
+const SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS =
+  'min-w-[160px] rounded-[12px] border border-[#E5E6EB] bg-white p-1 shadow-lg dark:border-border dark:bg-card';
+const SIDEBAR_ACCOUNT_MENU_ITEM_CLASS =
+  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[14px] leading-[18px] text-[#1D2129] dark:text-foreground';
+const SIDEBAR_ACCOUNT_MENU_LOGOUT_CLASS =
+  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[14px] font-bold leading-[18px] text-[#1D2129] dark:text-foreground';
 const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
   'hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7] dark:hover:bg-muted dark:focus:bg-muted dark:data-[highlighted]:bg-muted dark:data-[state=open]:bg-muted';
+const SIDEBAR_ACCOUNT_MENU_DIVIDER_CLASS = 'mx-6 my-0 h-px bg-[#E5E6EB] dark:bg-border';
+/** 设置齿轮：点击/展开时圆形 #E5E6EB 底 */
+const SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS = cn(
+  'flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors',
+  'hover:bg-[#E5E6EB] dark:hover:bg-muted',
+  'data-[state=open]:bg-[#E5E6EB] dark:data-[state=open]:bg-muted',
+);
 const SIDEBAR_BUCKET_INITIAL_LIMIT = 60;
 const SIDEBAR_BUCKET_LOAD_MORE_COUNT = 60;
 const SIDEBAR_COLLAPSED_SESSION_LIMIT = 40;
@@ -225,47 +256,60 @@ function SidebarTaskDateLinks({
 }: {
   taskId: StoTaskId;
   entries: readonly string[];
-  onRequestDeleteSubitem: (payload: {
-    taskId: StoTaskId;
-    entryId: string;
-    label: string;
-    sessionKey: string;
-  }) => void;
+  onRequestDeleteSubitem: (payload: SidebarSubitemDeletePayload) => void;
 }) {
-  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { t, i18n } = useTranslation(['tasks', 'common']);
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const switchSession = useChatStore((s) => s.switchSession);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const sessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
   const isSubitemUnread = useStoTaskSubitemsStore((s) => s.isSubitemUnread);
   const markSubitemReadFromActivity = useStoTaskSubitemsStore((s) => s.markSubitemReadFromActivity);
 
   useEffect(() => {
-    const activeEntry = entries.find((entryId) => pathname === taskDetailPath(taskId, entryId));
+    const activeEntry = entries.find((entryId) => {
+      const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)] ?? '';
+      return sk === currentSessionKey;
+    });
     if (!activeEntry) return;
     const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, activeEntry)] ?? '';
     if (!sk) return;
     const a = sessionLastActivity[sk] ?? 0;
     if (a > 0) markSubitemReadFromActivity(taskId, activeEntry, a);
-  }, [entries, pathname, taskId, sessionKeyBySubitem, sessionLastActivity, markSubitemReadFromActivity]);
+  }, [entries, taskId, sessionKeyBySubitem, sessionLastActivity, currentSessionKey, markSubitemReadFromActivity]);
+
+  const openSubitemSession = (entryId: string, sk: string, label: string) => {
+    const chat = useChatStore.getState();
+    if (!chat.sessions.some((session) => session.key === sk)) {
+      useChatStore.setState((state) => ({
+        sessions: [...state.sessions, { key: sk, label }],
+      }));
+    }
+    chat.renameSession(sk, label);
+    const a = chat.sessionLastActivity[sk] ?? 0;
+    if (a > 0) markSubitemReadFromActivity(taskId, entryId, a);
+    navigateToMainChatHome(navigate, location.pathname, () => switchSession(sk));
+  };
 
   return (
     <>
       {entries.map((entryId) => {
-        const to = taskDetailPath(taskId, entryId);
-        const active = pathname === to;
         const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)] ?? '';
+        const active = Boolean(sk) && currentSessionKey === sk;
         const activity = sk ? (sessionLastActivity[sk] ?? 0) : 0;
         const unread = !active && isSubitemUnread(taskId, entryId, activity);
         const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
         const label = t('tasks:sidebarMaterialTitle', { date: dateLabel });
         return (
           <div key={entryId} className="group relative flex w-full min-w-0 items-center">
-            <NavLink
-              to={to}
+            <button
+              type="button"
+              disabled={!sk}
               onClick={() => {
                 if (!sk) return;
-                const a = useChatStore.getState().sessionLastActivity[sk] ?? 0;
-                if (a > 0) markSubitemReadFromActivity(taskId, entryId, a);
+                openSubitemSession(entryId, sk, label);
               }}
               className={cn(
                 'relative z-[1] inline-flex h-7 w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
@@ -280,7 +324,7 @@ function SidebarTaskDateLinks({
                   aria-label={t('tasks:unreadBadge', { defaultValue: 'Unread' })}
                 />
               ) : null}
-            </NavLink>
+            </button>
             {sk ? (
               <SidebarTaskSubitemDeleteTrailing
                 isActive={active}
@@ -310,17 +354,12 @@ function SidebarTaskGroup({
   onToggle: () => void;
   /** 路由进入该任务时自动展开（手风琴仅保留本组） */
   onRequestExpand: () => void;
-  onRequestDeleteSubitem: (payload: {
-    taskId: StoTaskId;
-    entryId: string;
-    label: string;
-    sessionKey: string;
-  }) => void;
+  onRequestDeleteSubitem: (payload: SidebarSubitemDeletePayload) => void;
   /** 任务列表首次展开行数上限；undefined = 展示全部子项 */
   maxVisibleEntries?: number;
 }) {
-  const { pathname } = useLocation();
   const { t: tTasks } = useTranslation('tasks');
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const rawEntryIds = useStoTaskSubitemsStore((s) => s.entriesByTask[taskId]);
   const sessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
   const isSubitemUnread = useStoTaskSubitemsStore((s) => s.isSubitemUnread);
@@ -333,9 +372,12 @@ function SidebarTaskGroup({
   const visibleEntries = maxVisibleEntries === undefined ? entries : entries.slice(0, maxVisibleEntries);
 
   const activeEntryId = useMemo(() => {
-    const m = matchPath({ path: '/tasks/:taskId/:entryId', end: true }, pathname);
-    return m?.params.taskId === taskId && m.params.entryId ? m.params.entryId : null;
-  }, [pathname, taskId]);
+    for (const entryId of entries) {
+      const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)] ?? '';
+      if (sk === currentSessionKey) return entryId;
+    }
+    return null;
+  }, [entries, taskId, sessionKeyBySubitem, currentSessionKey]);
 
   const hasUnreadSubitem = useMemo(() => {
     if (entries.length === 0) return false;
@@ -356,9 +398,9 @@ function SidebarTaskGroup({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [taskId]); // Only depend on taskId, not entries
-  const underTask = pathname.startsWith(`/tasks/${taskId}`);
+  const underTask = activeEntryId !== null;
 
-  // Expand once when entering this task route; do not re-run on parent re-renders (e.g. chat streaming).
+  // 当前会话属于该任务组时自动展开（与定时任务组一致，不再依赖 /tasks 路由）。
   useEffect(() => {
     if (underTask) onRequestExpand();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -443,15 +485,18 @@ function SidebarScheduledTaskGroup({
   const navigate = useNavigate();
   const location = useLocation();
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
-  const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
-  const isSending = useChatStore((s) => s.sending);
+  const unreadKeys = useSessionUnreadStore((s) => s.unreadKeys);
 
   if (sessions.length === 0) return null;
 
   const visibleSessions = maxVisibleSessions === undefined ? sessions : sessions.slice(0, maxVisibleSessions);
+  const hasCollapsedGroupUnread = !isOpen && sessions.some(
+    (session) => session.key !== currentSessionKey
+      && readSessionUnread(unreadKeys, session.key),
+  );
 
-  // Strip common prefixes from group name for cleaner display
-  const displayName = name.replace(/^Cron:\s*/i, '').replace(/^定时任务\s*/i, '');
+  // Strip Gateway technical prefix only; keep user-defined names like「定时任务测试」intact.
+  const displayName = name.replace(/^Cron:\s*/i, '');
 
   // 按日期统计当天会话数量，用于决定用哪种日期格式
   const dayCounts = new Map<string, number>();
@@ -475,6 +520,9 @@ function SidebarScheduledTaskGroup({
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <ClipboardList className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)} aria-hidden />
           <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>{displayName}</span>
+          {hasCollapsedGroupUnread ? (
+            <span className={sidebarUnreadDotClass} aria-hidden />
+          ) : null}
         </span>
         {SIDEBAR_SHOW_TASK_GROUP_CHEVRON ? (
           <ChevronDown
@@ -529,13 +577,7 @@ function SidebarScheduledTaskGroup({
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
                     <span className="min-w-0 flex-1 truncate">{label}</span>
-                    {(() => {
-                      const isSessionSending = runtimeBySessionKey[s.key]?.sending
-                        || (s.key === currentSessionKey && isSending);
-                      return isSessionSending ? (
-                        <SidebarRunningIcon />
-                      ) : null;
-                    })()}
+                    <SidebarRecentSessionStatus sessionKey={s.key} />
                   </span>
                 </button>
                 <SidebarTaskSubitemDeleteTrailing
@@ -565,7 +607,7 @@ function SidebarCollapsibleSectionLabel({
   onToggle: () => void;
   label: string;
   toggleAriaLabel: string;
-  /** 分区标题与上方区块间距，默认 mt-4（导航→首分区）；次分区可收紧 */
+  /** 分区标题与上方区块间距；主导航→首滚动分区由 nav pb-2（8px）承担，此处默认不加 mt */
   className?: string;
   /** sticky 外壳 ref（任务区 scroll-collapse 检测用） */
   shellRef?: React.RefObject<HTMLDivElement | null>;
@@ -578,7 +620,6 @@ function SidebarCollapsibleSectionLabel({
       className={cn(
         sidebarSectionStickyShellClass,
         stickyTopClass ?? sidebarSectionStickyTopTaskClass,
-        'mt-4',
         className,
       )}
     >
@@ -622,7 +663,7 @@ function SidebarNavLink({
   icon: ReactNode;
   label: string;
   collapsed: boolean;
-  onClick?: () => void;
+  onClick?: (e: MouseEvent<HTMLAnchorElement>) => void;
   isActiveOverride?: boolean;
   badge?: ReactNode;
 }) {
@@ -697,6 +738,9 @@ export function Sidebar() {
 
   const authUser = useAuthStore((s) => s.user);
   const authLogout = useAuthStore((s) => s.logout);
+  const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
+  const isSite =
+    siteDepartmentTypes !== null && isSiteUser(authUser?.categoryCode);
 
   const language = useSettingsStore((s) => s.language);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
@@ -756,11 +800,23 @@ export function Sidebar() {
     }
   }, [workflowEditorActive, setSidebarCollapsed]);
 
-  useEffect(() => {
-    if (!taskListSectionOpen) {
-      setTaskListShowAll(false);
+  const revealTaskListAfterOpenRef = useRef(false);
+  const suppressNextTaskAutoCollapseRef = useRef(false);
+
+  const closeTaskListSection = useCallback(() => {
+    setTaskListSectionOpen(false);
+    setTaskListShowAll(false);
+  }, []);
+
+  const toggleTaskListSection = useCallback(() => {
+    if (taskListSectionOpen) {
+      closeTaskListSection();
+    } else {
+      revealTaskListAfterOpenRef.current = true;
+      suppressNextTaskAutoCollapseRef.current = true;
+      setTaskListSectionOpen(true);
     }
-  }, [taskListSectionOpen]);
+  }, [taskListSectionOpen, closeTaskListSection]);
 
   useEffect(() => {
     if (sidebarCollapsed) return;
@@ -768,8 +824,9 @@ export function Sidebar() {
   }, [sidebarCollapsed, sessions, stoEntriesByTask]);
 
   const handleCollapseTaskSectionFromScroll = useCallback(() => {
-    setTaskListSectionOpen(false);
-  }, []);
+    if (suppressNextTaskAutoCollapseRef.current) return;
+    closeTaskListSection();
+  }, [closeTaskListSection]);
 
   const {
     scrollContainerRef,
@@ -780,6 +837,35 @@ export function Sidebar() {
     taskListSectionOpen,
     onCollapseTaskSection: handleCollapseTaskSectionFromScroll,
   });
+
+  // 用户手动展开任务：吸顶态下滚回顶部露出列表，并暂缓 scroll-collapse（不改 sticky top 栈）
+  useLayoutEffect(() => {
+    if (!revealTaskListAfterOpenRef.current || !taskListSectionOpen) return;
+    revealTaskListAfterOpenRef.current = false;
+
+    const container = scrollContainerRef.current;
+    const taskHeader = taskSectionHeaderRef.current;
+    if (!container || !taskHeader) {
+      suppressNextTaskAutoCollapseRef.current = false;
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const taskHeaderRect = taskHeader.getBoundingClientRect();
+
+    const isTaskHeaderStuck = taskHeaderRect.top <= containerRect.top + 1;
+
+    // 须在 expand 后判定：sentinel 已被任务列表顶下去，不能再用 sentinel 决定是否滚动
+    if (isTaskHeaderStuck) {
+      container.scrollTo({ top: 0 });
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        suppressNextTaskAutoCollapseRef.current = false;
+      });
+    });
+  }, [taskListSectionOpen, scrollContainerRef, taskSectionHeaderRef]);
 
   useEffect(() => {
     if (!isGatewayRunning) return;
@@ -794,6 +880,7 @@ export function Sidebar() {
             sessions: state.sessions,
             sessionLabels: state.sessionLabels,
             sessionLastActivity: state.sessionLastActivity,
+            sidebarRecentOrder: state.sidebarRecentOrder,
           };
         },
         useChatStore.setState,
@@ -822,6 +909,8 @@ export function Sidebar() {
               activeRunId: state.activeRunId,
               streamingText: state.streamingText,
               streamingMessage: state.streamingMessage,
+              streamingMessages: state.streamingMessages,
+              streamingToolResults: state.streamingToolResults,
               streamingTools: state.streamingTools,
               pendingFinal: state.pendingFinal,
               lastUserMessageAt: state.lastUserMessageAt,
@@ -835,6 +924,8 @@ export function Sidebar() {
               activeRunId: null,
               streamingText: '',
               streamingMessage: null,
+              streamingMessages: [],
+              streamingToolResults: [],
               streamingTools: [],
               pendingFinal: false,
               lastUserMessageAt: null,
@@ -853,12 +944,15 @@ export function Sidebar() {
             sending: false,
             streamingText: '',
             streamingMessage: null,
+            streamingMessages: [],
+            streamingToolResults: [],
             streamingTools: [],
             activeRunId: null,
             error: null,
             pendingFinal: false,
             lastUserMessageAt: null,
             pendingToolImages: [],
+            pendingWorkflow: null,
           });
         }
         return;
@@ -885,16 +979,71 @@ export function Sidebar() {
     [sessionLabels, t],
   );
 
-  const [sessionToDelete, setSessionToDelete] = useState<{ key: string; label: string } | null>(null);
+  const requestSessionDelete = useSidebarDeleteConfirmStore((s) => s.requestSessionDelete);
+  const requestSubitemDelete = useSidebarDeleteConfirmStore((s) => s.requestSubitemDelete);
+  const registerDeleteConfirmExecutors = useSidebarDeleteConfirmStore((s) => s.registerExecutors);
+
   const [editingSessionKey, setEditingSessionKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
-  const [subitemToDelete, setSubitemToDelete] = useState<{
-    taskId: StoTaskId;
-    entryId: string;
-    label: string;
-    sessionKey: string;
-  } | null>(null);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editingGroupValue, setEditingGroupValue] = useState('');
+  const [groupDialog, setGroupDialog] = useState<SidebarRecentGroupDialogState>({ mode: null });
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [supportQrOpen, setSupportQrOpen] = useState(false);
+
+  const recentGroups = useSidebarRecentGroupsStore((s) => s.groups);
+  const sessionGroupByKey = useSidebarRecentGroupsStore((s) => s.sessionGroupByKey);
+  const expandedGroupIds = useSidebarRecentGroupsStore((s) => s.expandedGroupIds);
+  const createGroupAndAssignSession = useSidebarRecentGroupsStore((s) => s.createGroupAndAssignSession);
+  const assignSessionToGroup = useSidebarRecentGroupsStore((s) => s.assignSessionToGroup);
+  const ungroupSession = useSidebarRecentGroupsStore((s) => s.ungroupSession);
+  const renameGroup = useSidebarRecentGroupsStore((s) => s.renameGroup);
+  const dissolveGroup = useSidebarRecentGroupsStore((s) => s.dissolveGroup);
+  const toggleRecentGroup = useSidebarRecentGroupsStore((s) => s.toggleGroup);
+  const expandRecentGroup = useSidebarRecentGroupsStore((s) => s.expandGroup);
+  const pruneMissingRecentGroupSessions = useSidebarRecentGroupsStore((s) => s.pruneMissingSessions);
+
+  const openCreateRecentGroupDialog = useCallback(
+    (sessionKey: string) => {
+      setGroupDialog({
+        mode: 'create',
+        sessionKey,
+        defaultName: suggestNextSidebarRecentGroupName(
+          recentGroups.map((g) => g.name),
+          t('common:sidebar.defaultGroupName'),
+        ),
+      });
+    },
+    [recentGroups, t],
+  );
+
+  const startRenameRecentGroup = useCallback((groupId: string, name: string) => {
+    setEditingSessionKey(null);
+    setEditingGroupId(groupId);
+    setEditingGroupValue(name);
+  }, []);
+
+  const commitRenameRecentGroup = useCallback(
+    (groupId: string, originalName: string) => {
+      const trimmed = editingGroupValue.trim();
+      setEditingGroupId(null);
+      setEditingGroupValue('');
+
+      if (!trimmed || trimmed === originalName) return;
+
+      if (renameGroup(groupId, trimmed)) {
+        toast.success(t('common:sidebar.renameGroupSucceeded'));
+      }
+    },
+    [editingGroupValue, renameGroup, t],
+  );
+
+  const cancelRenameRecentGroup = useCallback(() => {
+    setEditingGroupId(null);
+    setEditingGroupValue('');
+  }, []);
+
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
 
   useEffect(() => {
@@ -960,6 +1109,25 @@ export function Sidebar() {
     () => sortSessionsByRecentActivity(normalSessions, sessionLastActivity),
     [normalSessions, sessionLastActivity],
   );
+
+  const { groupedSections, ungroupedSessions } = buildSidebarRecentGroupSections({
+    groups: recentGroups,
+    sessionsSortedByRecent: recentSessionsSorted,
+    sessionGroupByKey,
+  });
+
+  useEffect(() => {
+    if (sidebarCollapsed) return;
+    pruneMissingRecentGroupSessions(recentSessionsSorted.map((s) => s.key));
+  }, [sidebarCollapsed, recentSessionsSorted, pruneMissingRecentGroupSessions]);
+
+  useEffect(() => {
+    if (sidebarCollapsed) return;
+    if (!currentSessionKey || currentSessionKey === DEFAULT_SESSION_KEY) return;
+    const groupId = sessionGroupByKey[currentSessionKey];
+    if (!groupId) return;
+    expandRecentGroup(groupId);
+  }, [sidebarCollapsed, currentSessionKey, sessionGroupByKey, expandRecentGroup]);
 
   // Legacy 日期分桶：折叠轨与潜在回滚仍可能读取 bucket 数据
   for (const session of recentSessionsSorted) {
@@ -1086,17 +1254,41 @@ export function Sidebar() {
     t,
   ]);
 
-  const maybeClearTaskGroupFirstTriggered = useCallback(async (groupKey: string | null) => {
-    if (!groupKey) return;
-    rememberOptimisticTaskGroupFirstTriggeredClear(groupKey);
+  const applyTaskGroupFirstTriggeredReactClear = useCallback((groupKey: string) => {
     setTaskGroupFirstTriggeredAt((prev) => {
       if (!(groupKey in prev)) return prev;
       const next = { ...prev };
       delete next[groupKey];
       return next;
     });
-    await clearTaskGroupFirstTriggered(groupKey);
   }, []);
+
+  const applyTaskGroupFirstTriggeredReactRestore = useCallback((
+    prep: LastSessionDeleteFirstTriggerPrep,
+  ) => {
+    if (prep.restoreAtMs == null || !(prep.restoreAtMs > 0)) return;
+    setTaskGroupFirstTriggeredAt((prev) => ({ ...prev, [prep.groupKey]: prep.restoreAtMs! }));
+  }, []);
+
+  const clearFirstTriggerBeforeLastSessionDelete = useCallback(async (
+    groupKey: string,
+    fallbackAtMs: number,
+  ): Promise<LastSessionDeleteFirstTriggerPrep | null> => {
+    const prep = await prepareFirstTriggerClearBeforeLastSessionDelete(groupKey, {
+      fallbackAtMs,
+      notifyOnFailure: false,
+    });
+    if (!prep) return null;
+    applyTaskGroupFirstTriggeredReactClear(groupKey);
+    return prep;
+  }, [applyTaskGroupFirstTriggeredReactClear]);
+
+  const revertFirstTriggerClearAfterFailedSessionDelete = useCallback(async (
+    prep: LastSessionDeleteFirstTriggerPrep,
+  ) => {
+    await revertFirstTriggerClearAfterFailedDelete(prep);
+    applyTaskGroupFirstTriggeredReactRestore(prep);
+  }, [applyTaskGroupFirstTriggeredReactRestore]);
 
   const countScheduledSessionsInGroup = useCallback((groupKey: string, excludingKey?: string) => {
     let count = 0;
@@ -1128,6 +1320,119 @@ export function Sidebar() {
     if (seeded) applySeededFirstTriggered(groupKey, derived);
   }, [taskGroupFirstTriggeredAt, sessionLastActivity, applySeededFirstTriggered]);
 
+  const executeScheduledSessionDelete = useCallback(async ({ key }: { key: string }): Promise<boolean> => {
+    const wasCurrentSession = useChatStore.getState().currentSessionKey === key;
+    const groupKey = resolveTaskGroupKeyFromSessionKey(key);
+    const remaining = groupKey != null ? countScheduledSessionsInGroup(groupKey, key) : 0;
+    let firstTriggerPrep: LastSessionDeleteFirstTriggerPrep | null = null;
+    let additionalSuppressKeys: string[] = [];
+    const groupSessions = groupKey ? collectScheduledSessionsForGroup(groupKey) : [];
+    const fallbackAtMs = groupKey
+      ? deriveGroupFirstTriggeredFromSessions(groupSessions, sessionLastActivity)
+      : 0;
+    if (groupKey && remaining > 0) {
+      await ensureTaskGroupFirstTriggerBeforePartialDelete(groupKey, groupSessions);
+    } else if (groupKey && remaining === 0) {
+      // 清 first-trigger 占位是尽力而为：即使失败也继续删除。
+      // deleteSession 写入的删除墓碑（deletedSessions）才是刷新/重启/重装后
+      // 过滤已删记录的权威依据，绝不能因清占位失败而跳过。
+      firstTriggerPrep = await clearFirstTriggerBeforeLastSessionDelete(groupKey, fallbackAtMs);
+      additionalSuppressKeys = rememberSuppressedKeysForLastGroupSessionDelete(
+        groupKey,
+        groupSessions,
+        key,
+        firstTriggerPrep?.restoreAtMs ?? fallbackAtMs,
+      );
+    }
+    const deleted = await deleteSession(key, {
+      skipSessionRefresh: groupKey != null && remaining === 0,
+      additionalSuppressKeys,
+    });
+    if (!deleted) {
+      if (firstTriggerPrep) {
+        await revertFirstTriggerClearAfterFailedSessionDelete(firstTriggerPrep);
+      }
+      return false;
+    }
+    if (wasCurrentSession) {
+      navigateToMainChatHome(navigate, location.pathname);
+    }
+    if (groupKey === null) {
+      useSidebarRecentGroupsStore.getState().removeSessionAssignment(key);
+    }
+    return true;
+  }, [
+    sessionLastActivity,
+    countScheduledSessionsInGroup,
+    collectScheduledSessionsForGroup,
+    ensureTaskGroupFirstTriggerBeforePartialDelete,
+    clearFirstTriggerBeforeLastSessionDelete,
+    deleteSession,
+    revertFirstTriggerClearAfterFailedSessionDelete,
+    navigate,
+    location.pathname,
+  ]);
+
+  const executeStoSubitemDelete = useCallback(async (payload: SidebarSubitemDeletePayload): Promise<boolean> => {
+    const { sessionKey, taskId, entryId } = payload;
+    const wasCurrentSession = useChatStore.getState().currentSessionKey === sessionKey;
+    const entryIds = stoEntriesByTask[taskId] ?? [];
+    const remainingBefore = entryIds.filter((id) => id !== entryId).length;
+
+    const groupKey = stoBuiltinTaskGroupKey(taskId);
+    let firstTriggerPrep: LastSessionDeleteFirstTriggerPrep | null = null;
+    let additionalSuppressKeys: string[] = [];
+    const groupSessions = buildBuiltinStoGroupSortSessions(taskId, entryIds, stoSessionKeyBySubitem);
+    const fallbackAtMs = deriveGroupFirstTriggeredFromSessions(groupSessions, sessionLastActivity);
+    if (remainingBefore > 0) {
+      await ensureTaskGroupFirstTriggerBeforePartialDelete(groupKey, groupSessions);
+    } else {
+      // 清 first-trigger 占位是尽力而为：即使失败也继续删除。
+      // deleteSession 写入的删除墓碑（deletedSessions）才是刷新/重启/重装后
+      // 过滤已删记录的权威依据，绝不能因清占位失败而跳过。
+      firstTriggerPrep = await clearFirstTriggerBeforeLastSessionDelete(groupKey, fallbackAtMs);
+      additionalSuppressKeys = rememberSuppressedKeysForLastGroupSessionDelete(
+        groupKey,
+        groupSessions,
+        sessionKey,
+        firstTriggerPrep?.restoreAtMs ?? fallbackAtMs,
+      );
+    }
+    const deleted = await deleteSession(sessionKey, {
+      skipSessionRefresh: remainingBefore === 0,
+      additionalSuppressKeys,
+    });
+    if (!deleted) {
+      if (firstTriggerPrep) {
+        await revertFirstTriggerClearAfterFailedSessionDelete(firstTriggerPrep);
+      }
+      return false;
+    }
+    removeSubitem(taskId, entryId);
+    if (wasCurrentSession) {
+      navigateToMainChatHome(navigate, location.pathname);
+    }
+    return true;
+  }, [
+    stoEntriesByTask,
+    stoSessionKeyBySubitem,
+    sessionLastActivity,
+    ensureTaskGroupFirstTriggerBeforePartialDelete,
+    clearFirstTriggerBeforeLastSessionDelete,
+    deleteSession,
+    revertFirstTriggerClearAfterFailedSessionDelete,
+    removeSubitem,
+    navigate,
+    location.pathname,
+  ]);
+
+  useLayoutEffect(() => {
+    registerDeleteConfirmExecutors({
+      deleteSession: executeScheduledSessionDelete,
+      deleteSubitem: executeStoSubitemDelete,
+    });
+  }, [registerDeleteConfirmExecutors, executeScheduledSessionDelete, executeStoSubitemDelete]);
+
   useEffect(() => {
     if (sidebarCollapsed) return;
     let cancelled = false;
@@ -1138,6 +1443,7 @@ export function Sidebar() {
         if (entryIds.length === 0) continue;
         const groupKey = stoTaskSidebarGroupKey(navItem.id);
         if ((taskGroupFirstTriggeredAt[groupKey] ?? 0) > 0) continue;
+        if (isTaskGroupFirstTriggerOptimisticallyCleared(groupKey)) continue;
         const sessions = buildBuiltinStoGroupSortSessions(navItem.id, entryIds, stoSessionKeyBySubitem);
         const atMs = deriveGroupFirstTriggeredFromSessions(sessions, sessionLastActivity);
         if (atMs > 0) seeds.push({ groupKey, atMs });
@@ -1145,6 +1451,7 @@ export function Sidebar() {
       for (const group of scheduledTaskGroups) {
         if (group.sessions.length === 0) continue;
         if ((taskGroupFirstTriggeredAt[group.key] ?? 0) > 0) continue;
+        if (isTaskGroupFirstTriggerOptimisticallyCleared(group.key)) continue;
         const atMs = deriveGroupFirstTriggeredFromSessions(group.sessions, sessionLastActivity);
         if (atMs > 0) seeds.push({ groupKey: group.key, atMs });
       }
@@ -1233,6 +1540,8 @@ export function Sidebar() {
 
   useLayoutEffect(() => {
     if (sidebarCollapsed || !taskListSectionOpen) return;
+    // 手动展开任务时由 reveal effect 滚回顶部，避免 scrollIntoView 把视口又拉下去触发 auto-collapse
+    if (suppressNextTaskAutoCollapseRef.current) return;
 
     let focusSessionKey: string | null = null;
     const activatingEntries = Object.entries(activatingScheduledSessionAt);
@@ -1305,20 +1614,22 @@ export function Sidebar() {
       badge?: ReactNode;
     }> = [
       { to: '/', end: true, icon: <MessageSquarePlus className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.newChat') },
-      { to: '/scheduled-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: `${t('common:sidebar.cronTasks')}（云）` },
+      // { to: '/scheduled-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: `${t('common:sidebar.cronTasks')}（云）` },
       { to: '/my-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myTasks') },
-      { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
+      // { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
       { to: '/skills', icon: <Puzzle className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/workflow', icon: <Workflow className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.workflow') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
+      // { to: '/data-center', icon: <Database className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.dataCenter') },
     ];
     return all.filter((item) => {
       if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
-      if (item.to === '/scheduled-tasks' && getCurrentEnvConfig().isProduction) return false;
-      if (item.to === '/cron' && getCurrentEnvConfig().isProduction) return false;
+      if (item.to === '/data-center' && (siteDepartmentTypes === null || !isSite)) return false;
+      // if (item.to === '/scheduled-tasks' && getCurrentEnvConfig().isProduction) return false;
+      // if (item.to === '/cron' && getCurrentEnvConfig().isProduction) return false;
       return true;
     });
-  }, [sidebarVis.primaryMyData, t]);
+  }, [isSite, sidebarVis.primaryMyData, siteDepartmentTypes, t]);
 
   const workspaceNav = [
     { to: '/agents', icon: <Bot className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.agents') },
@@ -1366,7 +1677,7 @@ export function Sidebar() {
       <nav
         className={cn(
           'flex shrink-0 flex-col gap-0.5 overflow-x-hidden pb-2',
-          sidebarCollapsed ? 'px-0 pt-2' : 'px-2 pt-2',
+          sidebarCollapsed ? 'px-0 pt-2' : 'px-2 pt-0',
         )}
       >
         {/* 固定区：新对话、定时任务、技能广场、工作区等 */}
@@ -1388,6 +1699,8 @@ export function Sidebar() {
           activeRunId,
           streamingText,
           streamingMessage,
+          streamingMessages,
+          streamingToolResults,
           streamingTools,
           pendingFinal,
           lastUserMessageAt,
@@ -1404,6 +1717,8 @@ export function Sidebar() {
               activeRunId,
               streamingText,
               streamingMessage,
+              streamingMessages,
+              streamingToolResults,
               streamingTools,
               pendingFinal,
               lastUserMessageAt,
@@ -1417,6 +1732,8 @@ export function Sidebar() {
               activeRunId: null,
               streamingText: '',
               streamingMessage: null,
+              streamingMessages: [],
+              streamingToolResults: [],
               streamingTools: [],
               pendingFinal: false,
               lastUserMessageAt: null,
@@ -1435,13 +1752,18 @@ export function Sidebar() {
             sending: false,
             streamingText: '',
             streamingMessage: null,
+            streamingMessages: [],
+            streamingToolResults: [],
             streamingTools: [],
             activeRunId: null,
             error: null,
             pendingFinal: false,
             lastUserMessageAt: null,
             pendingToolImages: [],
+            pendingWorkflow: null,
           });
+        } else {
+          useChatStore.getState().clearPendingWorkflowMemory();
         }
       }
     : undefined;
@@ -1454,7 +1776,16 @@ export function Sidebar() {
       icon={item.icon}
       label={item.label}
       collapsed={sidebarCollapsed}
-      onClick={item.to === '/' ? handleHomeClick : undefined}
+      onClick={
+        item.to === '/'
+          ? () => handleHomeClick?.()
+          : item.to === '/data-center'
+            ? (e) => {
+                e.preventDefault();
+                navigate('/data-center');
+              }
+            : undefined
+      }
       isActiveOverride={homeIsActiveOverride}
       badge={item.badge}
     />
@@ -1465,6 +1796,7 @@ export function Sidebar() {
         {sidebarVis.workspace ? (
           !sidebarCollapsed ? (
             <SidebarCollapsibleSectionLabel
+              className="mt-4"
               open={workspaceSectionOpen}
               onToggle={() => setWorkspaceSectionOpen((o) => !o)}
               label={t('common:sidebar.workspace')}
@@ -1492,17 +1824,14 @@ export function Sidebar() {
 
       <div
         ref={scrollContainerRef}
-        className={cn(
-          'flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden',
-          sidebarCollapsed ? 'px-0' : 'px-2',
-        )}
+        className={cn(sidebarScrollContainerClass, sidebarCollapsed ? 'px-0' : 'px-2')}
       >
         {!sidebarCollapsed ? (
           <SidebarCollapsibleSectionLabel
             shellRef={taskSectionHeaderRef}
             stickyTopClass={sidebarSectionStickyTopTaskClass}
             open={taskListSectionOpen}
-            onToggle={() => setTaskListSectionOpen((o) => !o)}
+            onToggle={toggleTaskListSection}
             label={t('common:sidebar.taskList')}
             toggleAriaLabel={t('common:sidebar.toggleTaskListSection')}
           />
@@ -1518,7 +1847,7 @@ export function Sidebar() {
                   isOpen={expandedTaskGroupKey === stoTaskSidebarGroupKey(item.navItem.id)}
                   onToggle={() => handleTaskGroupToggle(stoTaskSidebarGroupKey(item.navItem.id))}
                   onRequestExpand={() => handleTaskGroupExpand(stoTaskSidebarGroupKey(item.navItem.id))}
-                  onRequestDeleteSubitem={setSubitemToDelete}
+                  onRequestDeleteSubitem={requestSubitemDelete}
                   maxVisibleEntries={item.maxVisibleEntries}
                 />
               ) : (
@@ -1528,7 +1857,7 @@ export function Sidebar() {
                   sessions={item.group.sessions}
                   isOpen={expandedTaskGroupKey === scheduledTaskSidebarGroupKey(item.group.key)}
                   onToggle={() => handleTaskGroupToggle(scheduledTaskSidebarGroupKey(item.group.key))}
-                  onRequestDelete={(payload) => setSessionToDelete(payload)}
+                  onRequestDelete={requestSessionDelete}
                   maxVisibleSessions={item.maxVisibleSessions}
                 />
               ),
@@ -1548,10 +1877,105 @@ export function Sidebar() {
         {!sidebarCollapsed ? (
           <div
             ref={recentSectionSentinelRef}
-            className="pointer-events-none h-px w-full shrink-0 opacity-0"
+            className="pointer-events-none -mb-1 h-0 w-full shrink-0 overflow-hidden opacity-0"
             aria-hidden
           />
         ) : null}
+
+        {!sidebarCollapsed && groupedSections.length > 0
+          ? groupedSections.map((section) => {
+              const isGroupOpen = expandedGroupIds[section.group.id] === true;
+              const hasGroupUnread =
+                !isGroupOpen && section.sessions.some((s) => isSessionUnreadNow(s.key));
+              return (
+                // section 边界：分组标题只在本组内容滚动期间吸顶；z 高于「最近」接力，滚出 section 后由最近接管同 top 层
+                <section key={section.group.id} className="flex flex-col gap-1">
+                  <div
+                    className={cn(
+                      sidebarSectionStickyShellClass,
+                      sidebarSectionStickyTopGroupClass,
+                    )}
+                  >
+                    <SidebarRecentGroupRow
+                      group={section.group}
+                      isOpen={isGroupOpen}
+                      hasUnread={hasGroupUnread}
+                      onToggle={() => toggleRecentGroup(section.group.id)}
+                      onRename={() => startRenameRecentGroup(section.group.id, section.group.name)}
+                      onDissolve={() =>
+                        setGroupDialog({ mode: 'dissolve', groupId: section.group.id })
+                      }
+                      isEditing={editingGroupId === section.group.id}
+                      editingValue={editingGroupValue}
+                      onEditingValueChange={setEditingGroupValue}
+                      onCommitRename={() =>
+                        commitRenameRecentGroup(section.group.id, section.group.name)
+                      }
+                      onCancelRename={cancelRenameRecentGroup}
+                    />
+                  </div>
+                  {isGroupOpen ? (
+                    <div className={cn('space-y-1', sidebarScrollListClass)}>
+                      {section.sessions.length > 0 ? (
+                        section.sessions.map((s) => {
+                          const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
+                          const isRecentSessionActive =
+                            isOnHome &&
+                            currentSessionKey === s.key &&
+                            currentSessionKey !== DEFAULT_SESSION_KEY;
+                          return (
+                            <SidebarRecentSessionRow
+                              key={s.key}
+                              session={s}
+                              label={sessionLabel}
+                              isActive={isRecentSessionActive}
+                              isEditing={editingSessionKey === s.key}
+                              editingValue={editingValue}
+                              groups={recentGroups}
+                              currentGroupId={sessionGroupByKey[s.key] ?? null}
+                              onOpen={() => {
+                                navigateToMainChatHome(navigate, location.pathname, () =>
+                                  switchSession(s.key),
+                                );
+                              }}
+                              onStartRename={() => {
+                                setEditingSessionKey(s.key);
+                                setEditingValue(sessionLabel);
+                              }}
+                              onEditingValueChange={setEditingValue}
+                              onCommitRename={() => {
+                                renameSession(s.key, editingValue);
+                                setEditingSessionKey(null);
+                              }}
+                              onCancelRename={() => setEditingSessionKey(null)}
+                              onDelete={() => {
+                                requestSessionDelete({ key: s.key, label: sessionLabel });
+                              }}
+                              onCreateGroup={() => {
+                                openCreateRecentGroupDialog(s.key);
+                              }}
+                              onAssignGroup={(groupId) => {
+                                assignSessionToGroup(s.key, groupId);
+                                toast.success(t('common:sidebar.groupMoved'));
+                              }}
+                              onUngroup={() => {
+                                ungroupSession(s.key);
+                                toast.success(t('common:sidebar.groupUngrouped'));
+                              }}
+                            />
+                          );
+                        })
+                      ) : (
+                        <p className={sidebarRecentEmptyLineClass}>
+                          {t('common:sidebar.emptyGroupSessions')}
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })
+          : null}
 
         {!sidebarCollapsed ? (
           <SidebarCollapsibleSectionLabel
@@ -1560,7 +1984,6 @@ export function Sidebar() {
             onToggle={() => setRecentOpen((o) => !o)}
             label={t('common:sidebar.recent')}
             toggleAriaLabel={t('common:sidebar.toggleRecentSection')}
-            className="mt-2"
           />
         ) : null}
 
@@ -1616,13 +2039,12 @@ export function Sidebar() {
             </div>
           ) : null}
           {!sidebarCollapsed &&
-            (recentSessionsSorted.length === 0 ? (
+            (recentSessionsSorted.length === 0 && recentGroups.length === 0 ? (
               <p className={cn('px-2 pt-2 text-center text-sm leading-5 opacity-80', sidebarTextSectionClass)}>
                 {t('common:sidebar.emptyChatHistory')}
               </p>
             ) : recentOpen ? (
               <>
-                {/* Legacy 按日期分桶 UI — 保留供回滚，默认关闭 */}
                 {USE_LEGACY_SESSION_DATE_BUCKETS
                   ? sessionBuckets.map((bucket) =>
                       bucket.sessions.length > 0 ? (
@@ -1647,78 +2069,47 @@ export function Sidebar() {
                           {bucketOpen[bucket.key] ? (
                             <>
                               {bucket.sessions.slice(0, getBucketVisibleCount(bucket.key)).map((s) => {
-                                const isEditing = editingSessionKey === s.key;
                                 const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
                                 const isRecentSessionActive =
                                   isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
                                 return (
-                                  <div key={s.key} className="group relative flex w-full min-w-0 items-center">
-                                    {isEditing ? (
-                                      <input
-                                        type="text"
-                                        autoFocus
-                                        value={editingValue}
-                                        onChange={(e) => setEditingValue(e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            renameSession(s.key, editingValue);
-                                            setEditingSessionKey(null);
-                                          } else if (e.key === 'Escape') {
-                                            setEditingSessionKey(null);
-                                          }
-                                        }}
-                                        onBlur={() => {
-                                          renameSession(s.key, editingValue);
-                                          setEditingSessionKey(null);
-                                        }}
-                                        className={cn(
-                                          'w-full rounded-[8px] px-[10px] py-[6px] pr-16 text-left text-sm leading-5 transition-colors outline-none',
-                                          'bg-white border border-[var(--sto-brand-6)] text-foreground dark:bg-card',
-                                        )}
-                                      />
-                                    ) : (
-                                      <>
-                                        <div
-                                          className={cn(
-                                            'relative flex h-9 w-full items-center rounded-lg transition-colors',
-                                            isRecentSessionActive
-                                              ? cn(
-                                                  sidebarSubitemTextActiveClass,
-                                                  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
-                                                )
-                                              : sidebarSubitemTextIdleClass,
-                                          )}
-                                        >
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
-                                            }}
-                                            title={sessionLabel}
-                                            className="flex h-9 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
-                                          >
-                                            <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>
-                                              {sessionLabel}
-                                            </span>
-                                          </button>
-                                          <SidebarRecentSessionRowTrailing
-                                            sessionKey={s.key}
-                                            isActive={isRecentSessionActive}
-                                            onEdit={() => {
-                                              setEditingSessionKey(s.key);
-                                              setEditingValue(sessionLabel);
-                                            }}
-                                            onDelete={() => {
-                                              setSessionToDelete({
-                                                key: s.key,
-                                                label: sessionLabel,
-                                              });
-                                            }}
-                                          />
-                                        </div>
-                                      </>
-                                    )}
-                                  </div>
+                                  <SidebarRecentSessionRow
+                                    key={s.key}
+                                    session={s}
+                                    label={sessionLabel}
+                                    isActive={isRecentSessionActive}
+                                    isEditing={editingSessionKey === s.key}
+                                    editingValue={editingValue}
+                                    groups={recentGroups}
+                                    currentGroupId={sessionGroupByKey[s.key] ?? null}
+                                    onOpen={() => {
+                                      navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
+                                    }}
+                                    onStartRename={() => {
+                                      setEditingSessionKey(s.key);
+                                      setEditingValue(sessionLabel);
+                                    }}
+                                    onEditingValueChange={setEditingValue}
+                                    onCommitRename={() => {
+                                      renameSession(s.key, editingValue);
+                                      setEditingSessionKey(null);
+                                    }}
+                                    onCancelRename={() => setEditingSessionKey(null)}
+                                    onDelete={() => {
+                                      requestSessionDelete({ key: s.key, label: sessionLabel });
+                                    }}
+                                    onCreateGroup={() => {
+                                      openCreateRecentGroupDialog(s.key);
+                                    }}
+                                    onAssignGroup={(groupId) => {
+                                      assignSessionToGroup(s.key, groupId);
+                                      toast.success(t('common:sidebar.groupMoved'));
+                                    }}
+                                    onUngroup={() => {
+                                      ungroupSession(s.key);
+                                      toast.success(t('common:sidebar.groupUngrouped'));
+                                    }}
+                                  />
                                 );
                               })}
                               {bucket.sessions.length > getBucketVisibleCount(bucket.key) ? (
@@ -1739,80 +2130,57 @@ export function Sidebar() {
                       ) : null,
                     )
                   : null}
-                {recentSessionsSorted.slice(0, getRecentVisibleCount()).map((s) => {
-                  const isEditing = editingSessionKey === s.key;
-                  const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
-                  const isRecentSessionActive =
-                    isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
-                  return (
-                    <div key={s.key} className="relative flex w-full min-w-0 items-center">
-                      {isEditing ? (
-                        <input
-                          type="text"
-                          autoFocus
-                          value={editingValue}
-                          onChange={(e) => setEditingValue(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              renameSession(s.key, editingValue);
-                              setEditingSessionKey(null);
-                            } else if (e.key === 'Escape') {
-                              setEditingSessionKey(null);
-                            }
-                          }}
-                          onBlur={() => {
-                            renameSession(s.key, editingValue);
-                            setEditingSessionKey(null);
-                          }}
-                          className={cn(
-                            'w-full rounded-[8px] px-[10px] py-[6px] pr-16 text-left text-sm leading-5 transition-colors outline-none',
-                            'bg-white border border-[var(--sto-brand-6)] text-foreground dark:bg-card',
-                          )}
-                        />
-                      ) : (
-                        <div
-                          className={cn(
-                            'group relative flex h-9 w-full items-center rounded-lg transition-colors',
-                            isRecentSessionActive
-                              ? cn(
-                                  sidebarSubitemTextActiveClass,
-                                  'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
-                                )
-                              : sidebarSubitemTextIdleClass,
-                          )}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
-                            }}
-                            title={sessionLabel}
-                            className="flex h-9 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
-                          >
-                            <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>
-                              {sessionLabel}
-                            </span>
-                          </button>
-                          <SidebarRecentSessionRowTrailing
-                            sessionKey={s.key}
-                            isActive={isRecentSessionActive}
-                            onEdit={() => {
-                              setEditingSessionKey(s.key);
-                              setEditingValue(sessionLabel);
-                            }}
-                            onDelete={() => {
-                              setSessionToDelete({
-                                key: s.key,
-                                label: sessionLabel,
-                              });
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {recentSessionsSorted.length > getRecentVisibleCount() ? (
+                {ungroupedSessions.length > 0 ? (
+                  ungroupedSessions.slice(0, getRecentVisibleCount()).map((s) => {
+                    const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
+                    const isRecentSessionActive =
+                      isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
+                    return (
+                      <SidebarRecentSessionRow
+                        key={s.key}
+                        session={s}
+                        label={sessionLabel}
+                        isActive={isRecentSessionActive}
+                        isEditing={editingSessionKey === s.key}
+                        editingValue={editingValue}
+                        groups={recentGroups}
+                        currentGroupId={null}
+                        onOpen={() => {
+                          navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
+                        }}
+                        onStartRename={() => {
+                          setEditingSessionKey(s.key);
+                          setEditingValue(sessionLabel);
+                        }}
+                        onEditingValueChange={setEditingValue}
+                        onCommitRename={() => {
+                          renameSession(s.key, editingValue);
+                          setEditingSessionKey(null);
+                        }}
+                        onCancelRename={() => setEditingSessionKey(null)}
+                        onDelete={() => {
+                          requestSessionDelete({ key: s.key, label: sessionLabel });
+                        }}
+                        onCreateGroup={() => {
+                          openCreateRecentGroupDialog(s.key);
+                        }}
+                        onAssignGroup={(groupId) => {
+                          assignSessionToGroup(s.key, groupId);
+                          toast.success(t('common:sidebar.groupMoved'));
+                        }}
+                        onUngroup={() => {
+                          ungroupSession(s.key);
+                          toast.success(t('common:sidebar.groupUngrouped'));
+                        }}
+                      />
+                    );
+                  })
+                ) : (
+                  <p className={sidebarRecentEmptyLineClass}>
+                    {t('common:sidebar.emptyUngroupedSessions')}
+                  </p>
+                )}
+                {ungroupedSessions.length > getRecentVisibleCount() ? (
                   <button
                     type="button"
                     onClick={showMoreRecentSessions}
@@ -1820,7 +2188,7 @@ export function Sidebar() {
                   >
                     {t('common:actions.showMore', {
                       defaultValue: '显示更多（{{count}}）',
-                      count: recentSessionsSorted.length - getRecentVisibleCount(),
+                      count: ungroupedSessions.length - getRecentVisibleCount(),
                     })}
                   </button>
                 ) : null}
@@ -1829,63 +2197,113 @@ export function Sidebar() {
         </div>
       </div>
 
+      <SidebarUpdateNotice collapsed={sidebarCollapsed} />
+
       {authUser ? (
         <div className="shrink-0 bg-[var(--sto-sidebar-bg)] p-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className={cn(
-                  'flex w-full text-left transition-colors',
-                  sidebarVis.userProfileCard
-                    ? sidebarCollapsed
-                      ? 'flex-col items-center justify-center gap-0 p-2'
-                      : 'items-center justify-between gap-3 px-2 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.04]'
-                    : 'items-center justify-center rounded-[8px] p-2 hover:bg-black/[0.02] dark:hover:bg-muted/40',
-                )}
-                title={
-                  sidebarVis.userProfileCard
-                    ? isGatewayRunning
+          <div
+            className={cn(
+              'flex items-center',
+              sidebarVis.userProfileCard && sidebarCollapsed
+                ? 'flex-col gap-1'
+                : sidebarVis.userProfileCard
+                  ? 'w-full'
+                  : 'gap-1',
+            )}
+          >
+          <DropdownMenu
+            open={accountMenuOpen}
+            onOpenChange={(open) => {
+              setAccountMenuOpen(open);
+              if (open) {
+                setSupportQrOpen(false);
+              }
+            }}
+          >
+            {sidebarVis.userProfileCard && !sidebarCollapsed ? (
+              <div className="flex w-full min-w-0 items-center rounded-[8px] transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.04]">
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 flex-col gap-0.5 px-2 py-3 text-left"
+                  title={
+                    isGatewayRunning
                       ? t('common:status.connected')
                       : t('common:status.disconnected')
-                    : `${t('common:sidebar.compactAccountMenu')} — ${isGatewayRunning ? t('common:status.connected') : t('common:status.disconnected')}`
-                }
-                aria-label={sidebarVis.userProfileCard ? undefined : t('common:sidebar.compactAccountMenu')}
-              >
-                {sidebarVis.userProfileCard ? (
-                  <>
-                    {sidebarCollapsed ? (
-                      <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-[8px] border border-[var(--sto-sidebar-border)] bg-white text-[13px] font-semibold text-[var(--sto-brand-6)] dark:bg-card">
-                        {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
-                      </span>
-                    ) : (
-                      <>
-                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                          <span className={sidebarFooterNameClass}>
-                            {authUser.realName?.trim() || authUser.userName}
-                          </span>
-                          {authUser.companyName?.trim() ? (
-                            <span className={sidebarFooterMetaClass}>
-                              {authUser.companyName.trim()}
-                            </span>
-                          ) : null}
-                        </div>
-                        <SettingsIcon
-                          className={sidebarFooterSettingsIconClass}
-                          strokeWidth={1.5}
-                          aria-hidden
-                        />
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <SettingsIcon className={sidebarFooterSettingsIconClass} strokeWidth={1.75} aria-hidden />
-                )}
-              </button>
-            </DropdownMenuTrigger>
+                  }
+                >
+                  <span className={sidebarFooterNameClass}>
+                    {authUser.realName?.trim() || authUser.userName}
+                  </span>
+                  {authUser.companyName?.trim() ? (
+                    <span className={sidebarFooterMetaClass}>
+                      {authUser.companyName.trim()}
+                    </span>
+                  ) : null}
+                </button>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className={SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS}
+                    aria-label={t('common:sidebar.settings')}
+                    onPointerEnter={() => setSupportQrOpen(false)}
+                    onPointerDown={() => setSupportQrOpen(false)}
+                  >
+                    <SettingsIcon
+                      className={sidebarFooterSettingsIconClass}
+                      strokeWidth={1.5}
+                      aria-hidden
+                    />
+                  </button>
+                </DropdownMenuTrigger>
+                <SidebarSupportQrTooltip
+                  open={supportQrOpen}
+                  onOpenChange={(open) => {
+                    setSupportQrOpen(open);
+                    if (open) {
+                      setAccountMenuOpen(false);
+                    }
+                  }}
+                />
+              </div>
+            ) : (
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    'flex min-w-0 text-left transition-colors',
+                    sidebarVis.userProfileCard
+                      ? sidebarCollapsed
+                        ? 'w-full flex-col items-center justify-center gap-0 p-2 hover:bg-black/[0.02] dark:hover:bg-white/[0.04]'
+                        : 'min-w-0 flex-1 items-center justify-between gap-3 px-2 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.04]'
+                      : cn(
+                          'w-full items-center justify-center',
+                          SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS,
+                        ),
+                  )}
+                  onPointerEnter={() => setSupportQrOpen(false)}
+                  onPointerDown={() => setSupportQrOpen(false)}
+                  title={
+                    sidebarVis.userProfileCard
+                      ? isGatewayRunning
+                        ? t('common:status.connected')
+                        : t('common:status.disconnected')
+                      : `${t('common:sidebar.compactAccountMenu')} — ${isGatewayRunning ? t('common:status.connected') : t('common:status.disconnected')}`
+                  }
+                  aria-label={sidebarVis.userProfileCard ? undefined : t('common:sidebar.compactAccountMenu')}
+                >
+                  {sidebarVis.userProfileCard ? (
+                    <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-[8px] border border-[var(--sto-sidebar-border)] bg-white text-[13px] font-semibold text-[var(--sto-brand-6)] dark:bg-card">
+                      {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
+                    </span>
+                  ) : (
+                    <SettingsIcon className={sidebarFooterSettingsIconClass} strokeWidth={1.75} aria-hidden />
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+            )}
             <DropdownMenuContent
-              side="right"
-              align="end"
+              side="top"
+              align="center"
               sideOffset={8}
               className={SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS}
             >
@@ -1920,24 +2338,31 @@ export function Sidebar() {
               <DropdownMenuSeparator /> */}
               <DropdownMenuItem
                 onClick={() => navigate('/settings')}
-                className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+                className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
               >
-                <SettingsIcon className="h-4 w-4 shrink-0" strokeWidth={2} />
                 {t('common:sidebar.settings')}
               </DropdownMenuItem>
 
+              <DropdownMenuItem
+                onClick={() => navigate('/settings/updates')}
+                className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+              >
+                {t('common:sidebar.checkUpdates')}
+              </DropdownMenuItem>
+
               <DropdownMenuSub>
-                <DropdownMenuSubTrigger className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}>
-                  <Globe className="h-4 w-4 shrink-0" strokeWidth={2} />
+                <DropdownMenuSubTrigger
+                  className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
+                >
                   <span className="flex-1">{t('settings:appearance.language')}</span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" strokeWidth={2} />
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C]" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent sideOffset={4} className={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}>
                   {SUPPORTED_LANGUAGES.map((lang) => (
                     <DropdownMenuItem
                       key={lang.code}
                       onClick={() => setLanguage(lang.code)}
-                      className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+                      className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
                     >
                       {language === lang.code ? (
                         <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
@@ -1951,23 +2376,18 @@ export function Sidebar() {
               </DropdownMenuSub>
 
               <DropdownMenuSub>
-                <DropdownMenuSubTrigger className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}>
-                  {theme === 'light' ? (
-                    <Sun className="h-4 w-4 shrink-0" strokeWidth={2} />
-                  ) : theme === 'dark' ? (
-                    <Moon className="h-4 w-4 shrink-0" strokeWidth={2} />
-                  ) : (
-                    <Monitor className="h-4 w-4 shrink-0" strokeWidth={2} />
-                  )}
+                <DropdownMenuSubTrigger
+                  className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
+                >
                   <span className="flex-1">{t('settings:appearance.theme')}</span>
-                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" strokeWidth={2} />
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C]" strokeWidth={2} />
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent sideOffset={4} className={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}>
                   {(['light', 'dark', 'system'] as const).map((t_value) => (
                     <DropdownMenuItem
                       key={t_value}
                       onClick={() => setTheme(t_value)}
-                      className={cn('gap-2', SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+                      className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER, 'gap-2')}
                     >
                       {theme === t_value ? (
                         <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
@@ -1980,81 +2400,46 @@ export function Sidebar() {
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
 
-              <DropdownMenuSeparator />
+              <div className={SIDEBAR_ACCOUNT_MENU_DIVIDER_CLASS} aria-hidden="true" />
 
               <DropdownMenuItem
                 onClick={() => setShowLogoutConfirm(true)}
-                className={cn(
-                  'gap-2 text-destructive focus:text-destructive',
-                  SIDEBAR_ACCOUNT_MENU_ITEM_HOVER,
-                )}
+                className={cn(SIDEBAR_ACCOUNT_MENU_LOGOUT_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
               >
-                <LogOut className="h-4 w-4 shrink-0" strokeWidth={2} />
                 {t('auth:logout.button')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {!(sidebarVis.userProfileCard && !sidebarCollapsed) ? (
+            <SidebarSupportQrTooltip
+              open={supportQrOpen}
+              onOpenChange={(open) => {
+                setSupportQrOpen(open);
+                if (open) {
+                  setAccountMenuOpen(false);
+                }
+              }}
+            />
+          ) : null}
+          </div>
         </div>
       ) : null}
         </>
       ) : null}
 
-      <ConfirmDialog
-        open={!!sessionToDelete}
-        title={t('common:actions.confirm')}
-        message={t('common:sidebar.deleteSessionConfirm', { label: sessionToDelete?.label })}
-        confirmLabel={t('common:actions.delete')}
-        cancelLabel={t('common:actions.cancel')}
-        variant="destructive"
-        onConfirm={async () => {
-          if (!sessionToDelete) return;
-          const { key } = sessionToDelete;
-          const groupKey = resolveTaskGroupKeyFromSessionKey(key);
-          const remaining = groupKey != null ? countScheduledSessionsInGroup(groupKey, key) : 0;
-          if (groupKey && remaining > 0) {
-            await ensureTaskGroupFirstTriggerBeforePartialDelete(
-              groupKey,
-              collectScheduledSessionsForGroup(groupKey),
-            );
+      <SidebarRecentGroupDialogs
+        dialog={groupDialog}
+        onClose={() => setGroupDialog({ mode: null })}
+        onCreateConfirm={(name, sessionKey) => {
+          const id = createGroupAndAssignSession(name, sessionKey);
+          if (id) {
+            toast.success(t('common:sidebar.groupAdded'));
           }
-          const deleted = await deleteSession(key);
-          if (!deleted) return;
-          if (groupKey != null && remaining === 0) await maybeClearTaskGroupFirstTriggered(groupKey);
-          if (currentSessionKey === key) navigateToMainChatHome(navigate, location.pathname);
-          setSessionToDelete(null);
         }}
-        onCancel={() => setSessionToDelete(null)}
-      />
-
-      <ConfirmDialog
-        open={!!subitemToDelete}
-        title={t('common:actions.confirm')}
-        message={t('tasks:deleteSubitemConfirm', { label: subitemToDelete?.label })}
-        confirmLabel={t('common:actions.delete')}
-        cancelLabel={t('common:actions.cancel')}
-        variant="destructive"
-        onConfirm={async () => {
-          if (!subitemToDelete) return;
-          const { sessionKey, taskId, entryId } = subitemToDelete;
-          const groupKey = stoBuiltinTaskGroupKey(taskId);
-          const entryIds = stoEntriesByTask[taskId] ?? [];
-          const remainingBefore = entryIds.filter((id) => id !== entryId).length;
-          if (remainingBefore > 0) {
-            await ensureTaskGroupFirstTriggerBeforePartialDelete(
-              groupKey,
-              buildBuiltinStoGroupSortSessions(taskId, entryIds, stoSessionKeyBySubitem),
-            );
-          }
-          const deleted = await deleteSession(sessionKey);
-          if (!deleted) return;
-          removeSubitem(taskId, entryId);
-          if (remainingBefore === 0) {
-            await maybeClearTaskGroupFirstTriggered(groupKey);
-          }
-          if (currentSessionKey === sessionKey) navigateToMainChatHome(navigate, location.pathname);
-          setSubitemToDelete(null);
+        onDissolveConfirm={(groupId) => {
+          dissolveGroup(groupId);
+          toast.success(t('common:sidebar.groupDissolved'));
         }}
-        onCancel={() => setSubitemToDelete(null)}
       />
 
       <ConfirmDialog

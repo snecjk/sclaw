@@ -104,8 +104,18 @@ function normalizePermissionProfile(
   return 'readonly-safe';
 }
 
+/** 含工作流任务的默认超时（秒）：工作流往往要跑数分钟，300s 会把 agent 卡死在轮询中。 */
+const WORKFLOW_DEFAULT_TIMEOUT_SEC = 1800;
+
+/** 根据提示词正文粗判是否为工作流任务（调用了 execute_workflow / get_workflow_status）。 */
+function isWorkflowPrompt(promptTemplate: string | undefined | null): boolean {
+  if (!promptTemplate) return false;
+  return /\b(execute_workflow|get_workflow_status)\b/.test(promptTemplate);
+}
+
 function buildDefinitionFromCreateInput(input: ClaudeScheduledTaskCreateInput): ClaudeScheduledTaskDefinition {
   const now = nowIso();
+  const isWorkflowTask = Boolean(input.workflowCode?.trim()) || isWorkflowPrompt(input.promptTemplate);
   return {
     id: randomUUID(),
     name: validateRequired(input.name, 'name'),
@@ -117,7 +127,7 @@ function buildDefinitionFromCreateInput(input: ClaudeScheduledTaskCreateInput): 
     providerAccountId: input.providerAccountId?.trim() || undefined,
     model: input.model?.trim() || undefined,
     permissionProfile: normalizePermissionProfile(input.permissionProfile),
-    timeoutSec: Math.max(1, input.timeoutSec ?? 300),
+    timeoutSec: Math.max(1, input.timeoutSec ?? (isWorkflowTask ? WORKFLOW_DEFAULT_TIMEOUT_SEC : 300)),
     workflowCode: input.workflowCode?.trim() || undefined,
     retryPolicy: {
       maxAttempts: Math.max(1, input.retryPolicy?.maxAttempts ?? 1),
@@ -170,7 +180,9 @@ export class ClaudeScheduledTaskService {
   constructor(private readonly scheduler = new ClaudeTaskScheduler()) {}
 
   startScheduler(): void {
-    this.scheduler.start();
+    // 先丢弃关机期间错过/崩溃中断的任务（推进 nextRunAt + 清 stale lease），
+    // 再启动 tick。finally 保证即使清扫抛异常调度器仍会启动。
+    void this.scheduler.discardMissedOnStartup().finally(() => this.scheduler.start());
   }
 
   stopScheduler(): void {

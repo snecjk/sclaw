@@ -1,7 +1,5 @@
 import type { HookCallbackMatcher, HookEvent, McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
-import {
-  buildStoDistinctiveDesignGuardClaudeRuntimeOptions,
-} from '../../sto-plugin/claude/sto-distinctive-design-guard/sdk';
+import { RETIRED_SKILLS_SYSTEM_PROMPT } from '../../shared/retired-skills';
 import {
   buildStoDingTalkSendGuardClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk';
@@ -34,6 +32,8 @@ export interface ClaudeRuntimeOptions {
 
 interface ClaudeRuntimeExtensionContext {
   sessionKey: string;
+  /** 本轮用户原文；用于口头「发给某人」等按需注入启发式。 */
+  userPrompt?: string;
 }
 
 interface ClaudeRuntimeExtension {
@@ -75,7 +75,8 @@ function mergeRuntimeOptions(target: ClaudeRuntimeOptions, source: ClaudeRuntime
 
 const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
   id: 'sto-dingtalk-send-guard',
-  build: ({ sessionKey }) => buildStoDingTalkSendGuardClaudeRuntimeOptions(sessionKey),
+  build: ({ sessionKey, userPrompt }) =>
+    buildStoDingTalkSendGuardClaudeRuntimeOptions(sessionKey, userPrompt),
 };
 
 const workflowToolExtension: ClaudeRuntimeExtension = {
@@ -131,15 +132,10 @@ const agentTelemetryExtension: ClaudeRuntimeExtension = {
   build: ({ sessionKey }) => buildStoAgentTelemetryClaudeRuntimeOptions(sessionKey),
 };
 
-const distinctiveDesignGuardExtension: ClaudeRuntimeExtension = {
-  id: 'sto-distinctive-design-guard',
-  build: ({ sessionKey }) => buildStoDistinctiveDesignGuardClaudeRuntimeOptions(sessionKey),
-};
-
 const ssoUserContextExtension: ClaudeRuntimeExtension = {
   id: 'sto-sso-user-context',
   async build() {
-    const blocks: string[] = [];
+    const blocks: string[] = [RETIRED_SKILLS_SYSTEM_PROMPT];
 
     blocks.push([
       '产物文件引用规范（重要）：',
@@ -182,7 +178,6 @@ const ssoUserContextExtension: ClaudeRuntimeExtension = {
 };
 
 const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
-  distinctiveDesignGuardExtension,
   dingTalkSendGuardExtension,
   workflowToolExtension,
   scheduledTaskToolExtension,
@@ -190,11 +185,14 @@ const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
   ssoUserContextExtension,
 ];
 
-export async function buildClaudeRuntimeOptions(sessionKey: string): Promise<ClaudeRuntimeOptions> {
+export async function buildClaudeRuntimeOptions(
+  sessionKey: string,
+  userPrompt?: string,
+): Promise<ClaudeRuntimeOptions> {
   logger.info(`[claude-runtime] building runtime options, sessionKey=${sessionKey}, extensions=${claudeRuntimeExtensions.length} [${claudeRuntimeExtensions.map(e => e.id).join(', ')}]`);
 
   const options: ClaudeRuntimeOptions = {};
-  const context: ClaudeRuntimeExtensionContext = { sessionKey };
+  const context: ClaudeRuntimeExtensionContext = { sessionKey, userPrompt };
 
   for (const extension of claudeRuntimeExtensions) {
     const start = Date.now();

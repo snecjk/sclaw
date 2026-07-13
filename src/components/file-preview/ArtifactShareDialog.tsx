@@ -1,17 +1,35 @@
 /**
- * ArtifactShareDialog — confirm title, body, and link before sharing to DingTalk.
+ * DingTalkShareDialog — confirm artifact or conversation content before sharing to DingTalk.
  */
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import type { ArtifactShareDraft } from '@/lib/dingtalk-share';
+import { ArtifactProductCard } from '@/components/chat/artifact-product-card';
+import type { DingTalkShareDialogDraft } from '@/lib/dingtalk-share';
+import {
+  openDingTalkShareAfterClipboardCopy,
+  prepareDingTalkShareFromDraft,
+  shareToDingTalk,
+} from '@/lib/dingtalk-share';
+
+type DialogStep = 'preview' | 'too_long';
+
+const SHARE_DIALOG_PANEL_CLASS =
+  'mx-4 w-full max-w-[480px] rounded-2xl bg-white p-6 shadow-2xl focus:outline-none';
+const SHARE_DIALOG_CONTENT_CLASS =
+  'box-border flex w-full flex-col gap-3 self-stretch rounded-xl border border-[#E8EAEF] bg-[#FAFBFC] px-4 py-3';
+
+type TooLongPayload = {
+  defaultMsg: string;
+  title: string;
+};
 
 export interface ArtifactShareDialogProps {
   open: boolean;
-  draft: ArtifactShareDraft | null;
-  onConfirm: (values: { title: string; text: string; url: string }) => void | Promise<void>;
+  draft: DingTalkShareDialogDraft | null;
+  onShared: () => void;
   onCancel: () => void;
   onError?: (error: unknown) => void;
 }
@@ -19,30 +37,28 @@ export interface ArtifactShareDialogProps {
 export function ArtifactShareDialog({
   open,
   draft,
-  onConfirm,
+  onShared,
   onCancel,
   onError,
 }: ArtifactShareDialogProps) {
   const { t } = useTranslation('chat');
   const cancelRef = useRef<HTMLButtonElement>(null);
-  const [title, setTitle] = useState('');
-  const [text, setText] = useState('');
-  const [url, setUrl] = useState('');
   const [confirming, setConfirming] = useState(false);
+  const [step, setStep] = useState<DialogStep>('preview');
+  const [tooLongPayload, setTooLongPayload] = useState<TooLongPayload | null>(null);
 
   useEffect(() => {
     if (!open || !draft) return;
-    setTitle(draft.title);
-    setText(draft.text);
-    setUrl(draft.url);
     setConfirming(false);
+    setStep('preview');
+    setTooLongPayload(null);
   }, [open, draft]);
 
   useEffect(() => {
     if (open && cancelRef.current) {
       cancelRef.current.focus();
     }
-  }, [open]);
+  }, [open, step]);
 
   if (!open || !draft) return null;
 
@@ -53,21 +69,97 @@ export function ArtifactShareDialog({
     }
   };
 
-  const handleConfirm = () => {
+  const handlePreviewConfirm = async () => {
     if (confirming) return;
-    const trimmedUrl = url.trim();
-    const trimmedText = text.trim();
-    if (!trimmedUrl) return;
-    const result = onConfirm({
-      title: title.trim() || draft.title,
-      text: trimmedText || draft.text,
-      url: trimmedUrl,
-    });
-    if (result instanceof Promise) {
-      setConfirming(true);
-      result.catch((error) => onError?.(error)).finally(() => setConfirming(false));
+    setConfirming(true);
+    try {
+      const prepared = await prepareDingTalkShareFromDraft(draft);
+      if (prepared.status === 'too_long') {
+        setTooLongPayload({
+          defaultMsg: prepared.defaultMsg,
+          title: prepared.title,
+        });
+        setStep('too_long');
+        return;
+      }
+      await shareToDingTalk(prepared.content);
+      onShared();
+    } catch (error) {
+      onError?.(error);
+    } finally {
+      setConfirming(false);
     }
   };
+
+  const handleTooLongConfirm = async () => {
+    if (confirming || !tooLongPayload) return;
+    setConfirming(true);
+    try {
+      await openDingTalkShareAfterClipboardCopy(
+        tooLongPayload.title,
+        tooLongPayload.defaultMsg,
+        t('preview.shareDialog.tooLongPickerHint'),
+      );
+      onShared();
+    } catch (error) {
+      onError?.(error);
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  if (step === 'too_long') {
+    return createPortal(
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="artifact-share-too-long-title"
+        onKeyDown={handleKeyDown}
+      >
+        <div
+          className={cn(SHARE_DIALOG_PANEL_CLASS)}
+          tabIndex={-1}
+        >
+          <h2 id="artifact-share-too-long-title" className="text-lg font-semibold">
+            {t('preview.shareDialog.tooLongTitle')}
+          </h2>
+          <p className="mt-3 text-sm leading-6 text-foreground">
+            {t('preview.shareDialog.tooLongDescription')}
+          </p>
+          <div className="mt-6 flex justify-end gap-2">
+            <Button
+              ref={cancelRef}
+              variant="outline"
+              onClick={onCancel}
+              disabled={confirming}
+              className="rounded-full px-5"
+            >
+              {t('preview.shareDialog.cancel')}
+            </Button>
+            <Button
+              onClick={handleTooLongConfirm}
+              disabled={confirming}
+              className="rounded-full px-5"
+            >
+              {confirming ? t('preview.shareDialog.uploading') : t('preview.shareDialog.tooLongConfirm')}
+            </Button>
+          </div>
+        </div>
+      </div>,
+      document.body,
+    );
+  }
+
+  const isArtifact = draft.kind === 'artifact';
+  const title = isArtifact
+    ? t('preview.shareDialog.artifactTitle')
+    : t('preview.shareDialog.conversationTitle');
+  const description = isArtifact
+    ? t('preview.shareDialog.artifactDescription')
+    : t('preview.shareDialog.conversationDescription');
+
+  const artifactCard = isArtifact ? draft : null;
 
   return createPortal(
     <div
@@ -78,60 +170,35 @@ export function ArtifactShareDialog({
       onKeyDown={handleKeyDown}
     >
       <div
-        className={cn(
-          'mx-4 w-full max-w-[480px] rounded-2xl border border-glass-border glass-panel p-6',
-          'shadow-2xl focus:outline-none',
-        )}
+        className={SHARE_DIALOG_PANEL_CLASS}
         tabIndex={-1}
       >
         <h2 id="artifact-share-dialog-title" className="text-lg font-semibold">
-          {t('preview.shareDialog.title')}
+          {title}
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          {t('preview.shareDialog.description')}
+          {description}
         </p>
 
-        <div className="mt-4 space-y-3">
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
-              {t('preview.shareDialog.fieldTitle')}
-            </span>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-            />
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
-              {t('preview.shareDialog.fieldBody')}
-            </span>
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={3}
-              className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-            />
-          </label>
-          <label className="block space-y-1.5">
-            <span className="text-xs font-medium text-muted-foreground">
-              {t('preview.shareDialog.fieldLink')}
-            </span>
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-            />
-          </label>
-        </div>
+        <div className="mt-4">
+          {!isArtifact && draft.textPreview ? (
+            <div className={SHARE_DIALOG_CONTENT_CLASS}>
+              <p className="line-clamp-9 whitespace-pre-line text-sm leading-6 text-foreground">
+                {draft.textPreview}
+              </p>
+            </div>
+          ) : null}
 
-        {draft.isLocalServeUrl ? (
-          <p className="mt-3 text-xs text-amber-700 dark:text-amber-400">
-            {t('preview.shareDialog.localUrlHint')}
-          </p>
-        ) : null}
+          {artifactCard ? (
+            <ArtifactProductCard
+              title={artifactCard.title}
+              metaLine={artifactCard.metaLine}
+              onAction={() => {}}
+              showActionLabel={false}
+              className="pointer-events-none"
+            />
+          ) : null}
+        </div>
 
         <div className="mt-6 flex justify-end gap-2">
           <Button
@@ -144,11 +211,11 @@ export function ArtifactShareDialog({
             {t('preview.shareDialog.cancel')}
           </Button>
           <Button
-            onClick={handleConfirm}
-            disabled={confirming || !url.trim()}
+            onClick={handlePreviewConfirm}
+            disabled={confirming || (!isArtifact && !draft.textPreview)}
             className="rounded-full px-5"
           >
-            {t('preview.shareDialog.confirm')}
+            {confirming ? t('preview.shareDialog.uploading') : t('preview.shareDialog.confirm')}
           </Button>
         </div>
       </div>

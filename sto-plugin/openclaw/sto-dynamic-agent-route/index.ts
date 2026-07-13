@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
+import { RETIRED_SKILLS_SYSTEM_PROMPT } from "./shared/retired-skills.js";
 import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
 
 const PROVIDER_ID = "sto-dynamic-agent-route";
@@ -297,7 +298,7 @@ export default definePluginEntry({
 					`[${TAG}] before_prompt_build: fired — agentId=${ctx.agentId ?? "(none)"}, sessionKey=${ctx.sessionKey ?? "(none)"}`,
 				);
 
-				const appendBlocks: string[] = [];
+				const appendBlocks: string[] = [RETIRED_SKILLS_SYSTEM_PROMPT];
 
 				// 产物文件引用规范：所有会话（含定时任务/工作流总结）统一约束，
 				// 防止模型把云端运行时路径当作可访问链接输出给用户。

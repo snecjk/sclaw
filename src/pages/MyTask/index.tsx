@@ -53,14 +53,12 @@ import { TaskEmptyState } from './components/TaskEmptyState';
 import { RecordStatusNav } from './components/RecordStatusNav';
 import { RecordItem } from './components/RecordItem';
 import { RecordDetailModal } from './components/RecordDetailModal';
+import { TaskRunGuardBar } from './components/TaskRunGuardBar';
 
 // ──── 工具函数 ────
 
 /** 将 ManagedLocalTask 转换为页面 TaskViewModel */
-function managedTaskToViewModel(
-  task: ManagedLocalTask,
-  workflowMap: Map<string, string>
-): TaskViewModel {
+function managedTaskToViewModel(task: ManagedLocalTask): TaskViewModel {
   if (task.engineType === 'claude') {
     return {
       id: task.id,
@@ -70,7 +68,6 @@ function managedTaskToViewModel(
       enabled: task.enabled,
       nextRunAt: task.nextRunAt ?? null,
       workflowCode: task.workflowCode || undefined,
-      workflowName: task.workflowCode ? workflowMap.get(task.workflowCode) : undefined,
       createdAt: task.createdAt,
       updatedAt: task.updatedAt,
       agentId: task.agentId,
@@ -94,7 +91,6 @@ function managedTaskToViewModel(
     enabled: task.enabled,
     nextRunAt: task.nextRun ?? null,
     workflowCode: task.workflowCode || undefined,
-    workflowName: task.workflowCode ? workflowMap.get(task.workflowCode) : undefined,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     agentId: task.agentId,
@@ -156,11 +152,8 @@ export default function MyTask() {
   const agents = useAgentsStore((state) => state.agents);
   const defaultAgentId = useAgentsStore((state) => state.defaultAgentId);
 
-  // ── 执行记录 + 工作流 Store ──
+  // ── 执行记录 Store ──
   const {
-    workflowOptions,
-    fetchWorkflows: fetchWorkflowOptions,
-    recordsLoading,
     recordStatus,
     recordSearch,
     setRecordStatus,
@@ -171,6 +164,10 @@ export default function MyTask() {
 
   const recordCounts = useMyTaskStore(useShallow(selectRecordCounts));
   const currentRecords = useMyTaskStore(useShallow(selectCurrentRecords));
+  // 各 Tab 独立请求后端，命中 pageSize 上限时在底部给出提示
+  const currentTab = useMyTaskStore((state) => state.recordsByStatus[state.recordStatus]);
+  const currentTabLoading = currentTab.loading;
+  const showRecordsCappedHint = !currentTabLoading && currentTab.total > 99;
 
   // ── 页面级状态 ──
   const [activeView, setActiveView] = useState<TaskView>('tasks');
@@ -188,7 +185,6 @@ export default function MyTask() {
   // ── 初始化加载 ──
   useEffect(() => {
     fetchJobs().catch(() => {});
-    fetchWorkflowOptions().catch(() => {});
     // 拉取官方推荐工作流模版（与 Workflow 页面逻辑一致）
     listWorkflowTemplates({ page: 1, pageSize: 100 })
       .then((result) => {
@@ -210,30 +206,54 @@ export default function MyTask() {
       .catch(() => {
         setOfficialCards([]);
       });
-  }, [fetchJobs, fetchWorkflowOptions]);
+  }, [fetchJobs]);
 
-  // ── 切换到执行记录 Tab / 切换状态子 Tab 时刷新 ──
+  // ── 切换到执行记录 Tab 时串行加载 3 个状态桶 ──
   useEffect(() => {
     if (activeView === 'records') {
-      fetchRecords();
+      fetchRecords('running')
+        .then(() => fetchRecords('success'))
+        .then(() => fetchRecords('failed'))
+        .catch(() => {});
     }
     // fetchRecords 是 Zustand 稳定引用，仅在视图或状态切换时触发
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeView, recordStatus]);
 
-  // ── 工作流 code → name 映射 ──
-  const workflowMap = useMemo(
-    () => new Map(workflowOptions.map((o) => [o.value, o.label])),
-    [workflowOptions]
-  );
+  // ── 任务视图轮询：到点后端会推进 nextRunAt，需及时拉取以重启倒计时。
+  //     仅在页面可见时轮询；切回可见时立即补一次，避免长时间隐藏后数据陈旧 ──
+  useEffect(() => {
+    let timer: number | null = null;
+    const POLL_INTERVAL = 60_000;
+    const poll = async () => {
+      try {
+        if (document.visibilityState === 'visible' && activeView === 'tasks') {
+          await fetchJobs();
+        }
+      } catch {
+        // 轮询失败静默忽略，下一轮重试
+      } finally {
+        timer = window.setTimeout(poll, POLL_INTERVAL);
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        if (timer) window.clearTimeout(timer);
+        timer = window.setTimeout(poll, 0);
+      }
+    };
+    timer = window.setTimeout(poll, POLL_INTERVAL);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      if (timer) window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [activeView, fetchJobs]);
 
   // ── 任务视图模型列表 ──
   const safeJobs = useMemo(() => (Array.isArray(jobs) ? jobs : []), [jobs]);
 
-  const allTasks = useMemo(
-    () => safeJobs.map((j) => managedTaskToViewModel(j, workflowMap)),
-    [safeJobs, workflowMap]
-  );
+  const allTasks = useMemo(() => safeJobs.map((j) => managedTaskToViewModel(j)), [safeJobs]);
 
   const filteredTasks = useMemo(() => {
     let result = allTasks;
@@ -322,7 +342,8 @@ export default function MyTask() {
             }
             const promptTemplate = prepareDingTalkAgentTurnMessage(
               input.message,
-              input.dingTalkMentions
+              input.dingTalkMentions,
+              { scenario: 'scheduled-task' },
             );
             await updateJob(editingJob.id, {
               engineType: 'claude',
@@ -360,7 +381,8 @@ export default function MyTask() {
             }
             const promptTemplate = prepareDingTalkAgentTurnMessage(
               input.message,
-              input.dingTalkMentions
+              input.dingTalkMentions,
+              { scenario: 'scheduled-task' },
             );
             await createJob({
               engineType: 'claude',
@@ -411,18 +433,19 @@ export default function MyTask() {
     [agents, defaultAgentId, editingJob, createJob, updateJob, fetchJobs]
   );
 
-  const handleDelete = useCallback(async () => {
+  const handleDelete = useCallback(() => {
     if (!deleteTarget) return;
-    try {
-      await deleteJob(deleteTarget.id, deleteTarget.engineType);
-      toast.success(t('myTask.toast.deleted'));
-      await fetchJobs().catch(() => {});
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      setDeleteTarget(null);
-    }
-  }, [deleteTarget, deleteJob, fetchJobs]);
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    void (async () => {
+      try {
+        await deleteJob(target.id, target.engineType);
+        toast.success(t('myTask.toast.deleted'));
+      } catch (err) {
+        toast.error(String(err));
+      }
+    })();
+  }, [deleteTarget, deleteJob, t]);
 
   const handleTemplateSelect = useCallback((card: OfficialWorkflowCard) => {
     setTemplateOpen(false);
@@ -431,6 +454,15 @@ export default function MyTask() {
     setSelectedTemplateName(card.name);
     setCreateOpen(true);
   }, []);
+	
+  // const handleTemplateInstall = useCallback(
+  //   (card: OfficialWorkflowCard) => {
+  //     navigateToNewSessionWithPrompt(navigate, location.pathname, `/${card.name}`, {
+  //       extraSearchParams: { workflowId: card.id },
+  //     });
+  //   },
+  //   [navigate, location.pathname]
+  // );
 
   // ── 渲染 ──
   const isTasksView = activeView === 'tasks';
@@ -477,13 +509,17 @@ export default function MyTask() {
             <RecordStatusNav
               activeStatus={recordStatus}
               counts={recordCounts}
-              onStatusChange={setRecordStatus}
+              onStatusChange={(status) => {
+                setRecordStatus(status);
+                fetchRecords(status).catch(() => {});
+              }}
             />
           )}
 
           {/* ── 定时任务视图 ── */}
           {isTasksView && (
             <section aria-label={t('myTask.taskView.aria')} className="flex-1 flex flex-col">
+              <TaskRunGuardBar />
               {jobsLoading && safeJobs.length === 0 ? (
                 <div className="flex items-center justify-center py-20">
                   <LoadingSpinner size="lg" />
@@ -524,7 +560,7 @@ export default function MyTask() {
           {/* ── 执行记录视图 ── */}
           {!isTasksView && (
             <section aria-label={t('myTask.recordView.aria')}>
-              {recordsLoading ? (
+              {currentTabLoading ? (
                 <div className="flex items-center justify-center py-20">
                   <LoadingSpinner size="lg" />
                 </div>
@@ -538,6 +574,12 @@ export default function MyTask() {
                     <RecordItem key={record.id} record={record} onViewDetail={setDetailRecord} />
                   ))}
                 </div>
+              )}
+
+              {showRecordsCappedHint && (
+                <p className="mt-3 text-center text-[12px] text-muted-foreground">
+                  {t('myTask.taskView.recordsCappedHint')}
+                </p>
               )}
             </section>
           )}

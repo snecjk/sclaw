@@ -197,7 +197,7 @@
                 "cardTemplateId": {
                     "label": "Interactive Card Template ID (optional)",
                     "placeholder": "Enter your DingTalk interactive card template ID",
-                    "description": "When set, StoClaw will automatically enable DingTalk card replies and streaming updates"
+                    "description": "When set, S Claw will automatically enable DingTalk card replies and streaming updates"
                 },
                 "cardTemplateKey": {
                     "label": "Card Content Variable (optional)",

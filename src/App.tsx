@@ -14,8 +14,8 @@ import { Agents } from './pages/Agents';
 import { Channels } from './pages/Channels';
 import { SkillPlazaPage } from './components/skill-plaza/SkillPlazaPage';
 import { Subscriptions } from './pages/Subscriptions';
-import { Cron } from './pages/Cron';
-import ScheduledTasks from './pages/ScheduledTasks';
+// import { Cron } from './pages/Cron';
+// import ScheduledTasks from './pages/ScheduledTasks';
 import MyTask from './pages/MyTask';
 import { Home } from './pages/Home';
 import { TaskDetail } from './pages/TaskDetail';
@@ -25,6 +25,7 @@ import { Login } from './pages/Login';
 import { Sprite } from './pages/Sprite';
 import { FloatIcon } from './pages/FloatIcon';
 import { WorkflowTestPage } from './pages/Workflow';
+import { DataCenter } from './pages/DataCenter';
 import { useSettingsStore } from './stores/settings';
 import { useAuthStore } from './stores/auth';
 import { useGatewayStore } from './stores/gateway';
@@ -336,9 +337,10 @@ function App() {
             <Route path="/channels" element={<Channels />} />
             <Route path="/skills" element={<SkillPlazaPage />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
-            <Route path="/cron" element={<Cron />} />
-            <Route path="/scheduled-tasks" element={<ScheduledTasks />} />
+            {/* <Route path="/cron" element={<Cron />} />
+            <Route path="/scheduled-tasks" element={<ScheduledTasks />} /> */}
             <Route path="/my-tasks" element={<MyTask />} />
+            <Route path="/data-center" element={<DataCenter />} />
             <Route path="/workflow/*" element={<WorkflowTestPage />} />
             <Route path="/settings/*" element={<Settings />} />
           </Route>

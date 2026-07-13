@@ -15,6 +15,12 @@ interface DingTalkRecipientFieldProps {
   className?: string;
 }
 
+function mentionsToKey(mentions: DingTalkMention[]): string {
+  return mentions
+    .map((mention) => (mention.type === 'user' ? `u:${mention.userId}` : `g:${mention.openConversationId}`))
+    .join('|');
+}
+
 export function DingTalkRecipientField({
   value = [],
   onChange,
@@ -48,10 +54,7 @@ export function DingTalkRecipientField({
     installing: dingTalkInstalling,
   } = useDingTalkMention(mentionTrigger);
 
-  const valueKey = value.map((mention) => {
-    if (mention.type === 'user') return `u:${mention.userId}`;
-    return `g:${mention.openConversationId}`;
-  }).join('|');
+  const valueKey = mentionsToKey(value);
 
   useEffect(() => {
     if (seededValueRef.current === valueKey) return;
@@ -68,6 +71,8 @@ export function DingTalkRecipientField({
   }, [closeDingTalkMention, mentionTrigger]);
 
   const handleSnapshotChange = useCallback((snapshot: { mentions: DingTalkMention[] }) => {
+    // 标记编辑器 DOM 当前已反映此 key，防止父级回灌相同 value 时重建 DOM 丢失光标。
+    seededValueRef.current = mentionsToKey(snapshot.mentions);
     onChange?.(snapshot.mentions);
   }, [onChange]);
 

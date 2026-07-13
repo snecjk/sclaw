@@ -1,4 +1,10 @@
+import { stripCronLabelPrefix } from '@/lib/cron-session-display';
 import { normalizeUserMessageForDisplay } from '@/lib/user-message-display';
+import { resolveStoredSessionLabel } from '@/lib/session-label';
+import {
+  isCorruptedSessionLabel,
+  isPlaceholderSessionLabel,
+} from '@/lib/workflow-session-hint';
 import {
   formatChatSessionTraceLine,
   traceChatSession,
@@ -218,6 +224,157 @@ export function dedupeRedundantUserMessages(
   return messages.filter((_, index) => !drop.has(index));
 }
 
+function historyHasVisibleUserMessage(messages: RawMessage[]): boolean {
+  return messages.some((message) => (
+    message.role === 'user'
+    && normalizeUserMessageForDisplay(getMessageText(message.content)).length > 0
+  ));
+}
+
+function findRecoverableUserMessage(
+  enrichedMessages: RawMessage[],
+  currentMessages: RawMessage[],
+  userMessageAt: number | null,
+  cachedOptimistic?: RawMessage | null,
+): RawMessage | undefined {
+  if (userMessageAt) {
+    const fromCurrent = [...currentMessages].reverse().find(
+      (message) => message.role === 'user'
+        && message.timestamp
+        && Math.abs(toMs(message.timestamp) - userMessageAt) < OPTIMISTIC_SEND_WINDOW_MS,
+    );
+    if (fromCurrent) return fromCurrent;
+    if (
+      cachedOptimistic
+      && cachedOptimistic.role === 'user'
+      && cachedOptimistic.timestamp
+      && Math.abs(toMs(cachedOptimistic.timestamp) - userMessageAt) < OPTIMISTIC_SEND_WINDOW_MS
+    ) {
+      return cachedOptimistic;
+    }
+  }
+
+  const candidates = [
+    ...(cachedOptimistic?.role === 'user' ? [cachedOptimistic] : []),
+    ...currentMessages.filter((message) => message.role === 'user'),
+  ];
+  for (const candidate of candidates) {
+    const display = normalizeUserMessageForDisplay(getMessageText(candidate.content));
+    if (!display) continue;
+    const refAt = userMessageAt ?? (candidate.timestamp ? toMs(candidate.timestamp) : 0);
+    if (findHistoryUserEcho(enrichedMessages, candidate, refAt)) continue;
+    if (enrichedMessages.some((message) => message.role === 'user' && displayTextMatches(message, candidate))) {
+      continue;
+    }
+    return candidate;
+  }
+  return undefined;
+}
+
+function earliestMessageTimestampMs(messages: RawMessage[]): number | undefined {
+  let min: number | undefined;
+  for (const message of messages) {
+    if (typeof message.timestamp !== 'number') continue;
+    const ms = toMs(message.timestamp);
+    if (ms <= 0) continue;
+    min = min === undefined ? ms : Math.min(min, ms);
+  }
+  return min;
+}
+
+function openingUserTimestampSeconds(messages: RawMessage[]): number {
+  const earliestMs = earliestMessageTimestampMs(messages);
+  return earliestMs !== undefined ? (earliestMs - 1) / 1000 : Date.now() / 1000;
+}
+
+function resolveOpeningSessionLabel(
+  sessionKey: string,
+  sessionLabels: Record<string, string>,
+  gatewayLabel?: string,
+): string | undefined {
+  const stored = resolveStoredSessionLabel(sessionKey, sessionLabels)?.trim();
+  if (stored && !isCorruptedSessionLabel(stored) && !isPlaceholderSessionLabel(stored)) {
+    return stripCronLabelPrefix(stored) || stored;
+  }
+  const label = gatewayLabel?.trim();
+  if (label && !isCorruptedSessionLabel(label) && !isPlaceholderSessionLabel(label)) {
+    return stripCronLabelPrefix(label) || label;
+  }
+  return undefined;
+}
+
+function historyHasOpeningUserTurn(messages: RawMessage[], openingLabel: string | undefined): boolean {
+  if (!openingLabel) return false;
+  return messages.some((message) => (
+    message.role === 'user'
+    && normalizeUserMessageForDisplay(getMessageText(message.content)) === openingLabel
+  ));
+}
+
+/** Reconstruct the opening user turn from a stored session title when history omits it. */
+export function recoverInitialUserFromSessionLabel(
+  enrichedMessages: RawMessage[],
+  sessionKey: string,
+  sessionLabels: Record<string, string>,
+  gatewayLabel?: string,
+): RawMessage[] {
+  const label = resolveOpeningSessionLabel(sessionKey, sessionLabels, gatewayLabel);
+  if (!label || historyHasOpeningUserTurn(enrichedMessages, label)) return enrichedMessages;
+  return insertOptimisticUserMessage(enrichedMessages, {
+    role: 'user',
+    content: label,
+    timestamp: openingUserTimestampSeconds(enrichedMessages),
+    id: `session-label-user-${sessionKey}`,
+  } as RawMessage);
+}
+
+/** Keep the session-opening user turn before assistant/workflow messages after history merges. */
+export function ensureOpeningUserMessageFirst(
+  messages: RawMessage[],
+  sessionKey: string,
+  sessionLabels: Record<string, string>,
+  gatewayLabel?: string,
+): RawMessage[] {
+  const label = resolveOpeningSessionLabel(sessionKey, sessionLabels, gatewayLabel);
+  let working = messages;
+  if (label && !historyHasOpeningUserTurn(working, label)) {
+    working = recoverInitialUserFromSessionLabel(working, sessionKey, sessionLabels, gatewayLabel);
+  }
+
+  const visibleUsers = working.filter((message) => (
+    message.role === 'user'
+    && normalizeUserMessageForDisplay(getMessageText(message.content)).length > 0
+  ));
+  if (visibleUsers.length === 0) return working;
+
+  let openingUser = visibleUsers.reduce((earliest, message) => (
+    toMs(message.timestamp) < toMs(earliest.timestamp) ? message : earliest
+  ));
+  if (label) {
+    const labeled = visibleUsers.find(
+      (message) => normalizeUserMessageForDisplay(getMessageText(message.content)) === label,
+    );
+    if (labeled) openingUser = labeled;
+  }
+
+  const sorted = [...working].sort((left, right) => toMs(left.timestamp) - toMs(right.timestamp));
+  const openingIndex = sorted.findIndex((message) => (
+    message.id === openingUser.id
+    || (message.role === 'user' && displayTextMatches(message, openingUser))
+  ));
+  if (openingIndex <= 0) return sorted;
+
+  const correctedTimestamp = openingUserTimestampSeconds(working);
+  const patched = working.map((message) => {
+    if (message.id !== openingUser.id && !displayTextMatches(message, openingUser)) {
+      return message;
+    }
+    if (message.role !== 'user') return message;
+    return { ...message, timestamp: correctedTimestamp };
+  });
+  return patched.sort((left, right) => toMs(left.timestamp) - toMs(right.timestamp));
+}
+
 export function mergeOptimisticUserIntoHistory(
   enrichedMessages: RawMessage[],
   currentMessages: RawMessage[],
@@ -230,24 +387,26 @@ export function mergeOptimisticUserIntoHistory(
   },
 ): RawMessage[] {
   const { userMessageAt, sending, sessionKey, cachedOptimistic } = options;
-  if (!userMessageAt) return enrichedMessages;
+  if (!userMessageAt && historyHasVisibleUserMessage(enrichedMessages)) {
+    return enrichedMessages;
+  }
 
-  const optimisticFromMessages = [...currentMessages].reverse().find(
-    (m) => m.role === 'user' && m.timestamp && Math.abs(toMs(m.timestamp) - userMessageAt) < OPTIMISTIC_SEND_WINDOW_MS,
+  const optimistic = findRecoverableUserMessage(
+    enrichedMessages,
+    currentMessages,
+    userMessageAt,
+    cachedOptimistic,
   );
-  const optimistic = optimisticFromMessages ?? (
-    cachedOptimistic
-    && cachedOptimistic.role === 'user'
-    && cachedOptimistic.timestamp
-    && Math.abs(toMs(cachedOptimistic.timestamp) - userMessageAt) < OPTIMISTIC_SEND_WINDOW_MS
-      ? cachedOptimistic
-      : undefined
-  );
+  const refAt = userMessageAt ?? (optimistic?.timestamp ? toMs(optimistic.timestamp) : 0);
   const historyEcho = optimistic
-    ? findHistoryUserEcho(enrichedMessages, optimistic, userMessageAt)
+    ? findHistoryUserEcho(enrichedMessages, optimistic, refAt)
     : undefined;
   const hasRecentUser = Boolean(historyEcho);
-  const shouldPreserveOptimistic = !!optimistic && (sending || optimistic.isError);
+  const shouldPreserveOptimistic = !!optimistic && (
+    sending
+    || optimistic.isError
+    || !historyHasVisibleUserMessage(enrichedMessages)
+  );
 
   if (hasRecentUser && historyEcho) {
     traceChatSession({

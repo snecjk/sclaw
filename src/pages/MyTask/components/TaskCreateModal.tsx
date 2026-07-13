@@ -99,7 +99,7 @@ function computeInitialValues(
         ? cronToScheduleValue(initialValues.schedule)
         : defaultScheduleValue(),
       recipients: [] as DingTalkMention[],
-      engineType: 'openclaw' as TaskEngineType,
+      engineType: 'claude' as TaskEngineType,
       selectedWorkflow: initialValues.workflowCode || '',
     };
   }
@@ -109,7 +109,7 @@ function computeInitialValues(
     instructions: '',
     schedule: defaultScheduleValue(),
     recipients: [] as DingTalkMention[],
-    engineType: 'openclaw' as TaskEngineType,
+    engineType: 'claude' as TaskEngineType,
     selectedWorkflow: '',
   };
 }
@@ -138,7 +138,12 @@ export function TaskCreateModal({
 
 function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreateModalInnerProps) {
   const { t } = useTranslation('tasks');
+  const fetchWorkflows = useMyTaskStore((s) => s.fetchWorkflows);
   const workflowOptions = useMyTaskStore((s) => s.workflowOptions);
+
+  useEffect(() => {
+    fetchWorkflows().catch(() => {});
+  }, [fetchWorkflows]);
 
   const init = computeInitialValues(job, initialValues);
 
@@ -311,14 +316,17 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
             <input
               type="text"
               value={name}
+							maxLength={40}
               onChange={(e) => {
                 setName(e.target.value);
                 if (errors.name) setErrors((p) => ({ ...p, name: undefined }));
               }}
+              disabled={isEditing}
               placeholder={t('myTask.createModal.namePlaceholder')}
               className={cn(
                 'h-[42px] w-full rounded-[10px] border bg-background px-3.5 text-sm transition-colors placeholder:text-muted-foreground',
                 formFieldFocusClass,
+                isEditing ? 'border-border text-muted-foreground cursor-not-allowed opacity-70' : '',
                 errors.name ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]' : 'border-border',
               )}
               autoComplete="off"
@@ -326,7 +334,8 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
             {errors.name && <p className="text-xs text-destructive">{errors.name}</p>}
           </div>
 
-          <div className="flex flex-col gap-2">
+          {/* 执行引擎已固定为 Claude，暂时隐藏选择器 */}
+          {/* <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.engineLabel')}</label>
             <select
               value={engineType}
@@ -348,7 +357,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                   ? t('myTask.createModal.engineClaudeHint')
                   : t('myTask.createModal.engineOpenclawHint')}
             </p>
-          </div>
+          </div> */}
 
           <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.workflowLabel')}</label>

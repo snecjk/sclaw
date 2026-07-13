@@ -7,6 +7,8 @@ import { copyFile, mkdtemp, readFile, unlink } from 'node:fs/promises';
 import { getOpenClawConfigDir } from '../../utils/paths';
 import { resolveWorkspaceFilePath } from '../../utils/artifact-path';
 import { existsSync } from 'node:fs';
+import { uploadOssFile } from '../../utils/oss-temp-upload';
+import { writeTextToSystemClipboard, writeFilesToSystemClipboard } from '../../utils/clipboard-rich-write';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 
@@ -222,6 +224,45 @@ export async function handleFileRoutes(
     return true;
   }
 
+  if (url.pathname === '/api/files/upload-temp' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{
+        filePath: string;
+        fileName?: string;
+        bizTypeEnum?: 'temp' | 'workflow' | 'LLM' | 'skill';
+        expiresSeconds?: number;
+        /** Diagnostics tag for Main log grep, e.g. `dingtalk-share`. */
+        source?: string;
+        includeDebugCurl?: boolean;
+      }>(req);
+      const rawPath = body.filePath?.trim() || '';
+      if (!rawPath) {
+        sendJson(res, 400, { success: false, error: 'Missing filePath' });
+        return true;
+      }
+      const filePath = resolveWorkspaceFilePath(rawPath);
+      const fileName = body.fileName?.trim() || filePath.split(/[\\/]/).pop() || 'file';
+      const uploaded = await uploadOssFile(filePath, fileName, {
+        bizTypeEnum: body.bizTypeEnum ?? 'temp',
+        expiresSeconds: body.expiresSeconds,
+        logTag: body.source?.trim() || undefined,
+        includeDebugCurl: body.includeDebugCurl === true,
+      });
+      sendJson(res, 200, {
+        url: uploaded.tempUrl,
+        tempUrl: uploaded.tempUrl,
+        ossKey: uploaded.ossKey,
+        resourceId: uploaded.resourceId,
+        fileType: uploaded.fileType,
+        name: uploaded.name,
+        ...(uploaded.debugCurl ? { debugCurl: uploaded.debugCurl } : {}),
+      });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/files/read' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ filePath: string; encoding?: 'utf-8' | 'base64' }>(req);
@@ -292,6 +333,32 @@ export async function handleFileRoutes(
         return true;
       }
       sendJson(res, 200, { success: true, savedPath: result.filePath });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/clipboard/write-text' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ text: string }>(req);
+      writeTextToSystemClipboard(body.text ?? '');
+      sendJson(res, 200, { success: true });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/clipboard/write-files' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{
+        files: Array<{ filePath: string; fileName: string; mimeType?: string }>;
+      }>(req);
+      const result = await writeFilesToSystemClipboard(
+        Array.isArray(body.files) ? body.files : [],
+      );
+      sendJson(res, 200, { success: true, copiedFileCount: result.copiedFileCount });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

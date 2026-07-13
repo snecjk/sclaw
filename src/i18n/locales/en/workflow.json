@@ -11,7 +11,7 @@
     "sendAria": "Generate workflow",
     "chipWeekly": "Generate HQ settlement report every Monday",
     "chipAbnormal": "Alert me and create follow-up tasks when abnormal customers are found",
-    "chipDaily": "Email me daily branch revenue summary"
+    "chipDaily": "Daily branch revenue summary"
   },
   "tabs": {
     "aria": "Workflow groups",
@@ -33,7 +33,8 @@
     "empty": "No workflows yet",
     "emptyInstalled": "No installed workflows",
     "neverUpdated": "Not updated yet",
-    "updatedAt": "Updated {{time}}"
+    "updatedAt": "Updated {{time}}",
+    "cappedHint": "So many workflows! Showing the latest 99 workflows."
   },
   "card": {
     "flow": "Workflow nodes",
@@ -43,8 +44,6 @@
     "preview": "Preview",
     "install": "Install",
     "tryRun": "Try run",
-    "customTag": "Custom",
-    "systemTag": "System",
     "pausedLabel": "· Paused",
     "statusSuccess": "Success",
     "statusPaused": "Paused",
@@ -53,18 +52,13 @@
     "rename": "Rename",
     "share": "Share workflow",
     "delete": "Delete workflow",
-    "noSchedule": "No schedule",
-    "noScheduleDraft": "Schedule not set",
     "createFromTemplate": "Create from template",
     "noDescription": "No description"
   },
   "detail": {
     "close": "Close",
-    "autoRun": "Schedule",
     "scheduleOn": "On",
     "scheduleOff": "Paused",
-    "scheduleOnHint": ", or run manually anytime",
-    "scheduleOffHint": " (paused; you can still run manually)",
     "produces": "Output",
     "producesFallback": "Reports and detail lists (exportable)",
     "runDuration": "Run duration",
@@ -86,6 +80,30 @@
     "recoverHint": "Recoverable from recycle bin within 30 days",
     "cancel": "Cancel",
     "confirm": "Delete"
+  },
+  "editor": {
+    "editTitle": "Edit workflow",
+    "aiCreateTitle": "AI create workflow",
+    "createTitle": "New workflow",
+    "openInBrowser": "Open in browser",
+    "backAria": "Back to list"
+  },
+  "createModal": {
+    "title": "Basic information",
+    "subtitle": "Name your workflow and describe the business scenario",
+    "nameLabel": "Workflow name",
+    "namePlaceholder": "e.g. Contract review workflow",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Describe scenarios, triggers, and outputs",
+    "descriptionCounter": "{{count}}/{{max}}",
+    "categoryLabel": "Category",
+    "categoryPlaceholder": "Select",
+    "confirm": "Confirm",
+    "confirming": "Creating…",
+    "close": "Close",
+    "created": "Workflow created",
+    "createFailed": "Failed to create workflow",
+    "templateLoadFailed": "Failed to load templates"
   },
   "builder": {
     "back": "Back",

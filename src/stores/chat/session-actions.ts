@@ -18,7 +18,7 @@ import {
   parseScheduledTaskAgentSessionKey,
   parseScheduledTaskSessionKey,
 } from './cron-session-utils';
-import { applyStoredSessionLabels, scrubCorruptedSessionLabels } from '@/lib/session-label';
+import { applyStoredSessionLabels, sanitizeGatewaySessionLabels, scrubCorruptedSessionLabels } from '@/lib/session-label';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
 import { appendPendingLocalVirtualTaskSessions } from './session-list-merge';
 import {
@@ -187,7 +187,12 @@ export function createSessionActions(
             isTemporaryAgentSessionKey(nextSessionKey)
             || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
             || localSessions.some((session) => session.key === nextSessionKey);
-          if (!hasLocalPendingSession) {
+          // On cold boot keep the default key (`agent:main:main`) on the
+          // new-chat home instead of jumping into the most recent session.
+          if (
+            nextSessionKey !== DEFAULT_SESSION_KEY
+            && !hasLocalPendingSession
+          ) {
             nextSessionKey = mergedSessions[0].key;
           }
         }
@@ -210,7 +215,9 @@ export function createSessionActions(
           : mergedSessions;
 
         const scrubbedSessionLabels = scrubCorruptedSessionLabels(get().sessionLabels);
-        const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels);
+        const labeledSessions = sanitizeGatewaySessionLabels(
+          applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels),
+        );
 
         const discoveredActivity = Object.fromEntries(
           labeledSessions
@@ -394,6 +401,8 @@ export function createSessionActions(
         messages: [],
         streamingText: '',
         streamingMessage: null,
+        streamingMessages: [],
+        streamingToolResults: [],
         streamingTools: [],
         activeRunId: null,
         error: null,
@@ -452,6 +461,8 @@ export function createSessionActions(
           messages: [],
           streamingText: '',
           streamingMessage: null,
+          streamingMessages: [],
+          streamingToolResults: [],
           streamingTools: [],
           activeRunId: null,
           error: null,
@@ -510,6 +521,8 @@ export function createSessionActions(
         messages: [],
         streamingText: '',
         streamingMessage: null,
+        streamingMessages: [],
+        streamingToolResults: [],
         streamingTools: [],
         activeRunId: null,
         error: null,

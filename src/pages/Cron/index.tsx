@@ -92,7 +92,7 @@ export function Cron() {
             if (!selectedAgent?.id) {
               throw new Error('所选 Claude 代理缺少工作区，无法更新本地定时任务');
             }
-            const promptTemplate = prepareDingTalkAgentTurnMessage(input.message, input.dingTalkMentions);
+            const promptTemplate = prepareDingTalkAgentTurnMessage(input.message, input.dingTalkMentions, { scenario: 'scheduled-task' });
             await updateJob(editingJob.id, {
               engineType: 'claude',
               payload: {
@@ -125,7 +125,7 @@ export function Cron() {
             if (!selectedAgent?.id) {
               throw new Error('所选 Claude 代理缺少工作区，无法创建本地定时任务');
             }
-            const promptTemplate = prepareDingTalkAgentTurnMessage(input.message, input.dingTalkMentions);
+            const promptTemplate = prepareDingTalkAgentTurnMessage(input.message, input.dingTalkMentions, { scenario: 'scheduled-task' });
             await createJob({
               engineType: 'claude',
               payload: {
@@ -233,13 +233,12 @@ export function Cron() {
     try {
       await deleteJob(deleteTarget.id, deleteTarget.engineType);
       toast.success(t('toast.deleted'));
-      await fetchJobs().catch(() => {});
     } catch {
       toast.error(t('toast.failedDelete'));
     } finally {
       setDeleteTarget(null);
     }
-  }, [deleteTarget, deleteJob, fetchJobs, t]);
+  }, [deleteTarget, deleteJob, t]);
 
   const handleRecommendAdd = useCallback((task: RecommendTask) => {
     setRecommendInitialValues({ name: task.title, message: task.desc });

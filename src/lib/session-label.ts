@@ -2,6 +2,7 @@
  * resolveSessionLabel — 会话标题解析（侧栏历史与内容区标题栏共用口径）。
  */
 import type { TFunction } from 'i18next';
+import { stripCronLabelPrefix } from '@/lib/cron-session-display';
 import { looksLikeTechnicalSessionDisplay } from '@/stores/chat/helpers';
 import type { ChatSession } from '@/stores/chat/types';
 import {
@@ -68,14 +69,14 @@ export function hasUsableSessionTitle(
   return Boolean(resolveVisibleSessionTitle(session, sessionLabels));
 }
 
-/** Drop persisted titles that were saved from subagent boilerplate or workflow hints. */
+/** Drop persisted titles that are corrupted, placeholder, or otherwise not human-readable. */
 export function scrubCorruptedSessionLabels(
   sessionLabels: Record<string, string>,
 ): Record<string, string> {
   let changed = false;
   const next: Record<string, string> = {};
   for (const [key, value] of Object.entries(sessionLabels)) {
-    if (isCorruptedSessionLabel(value)) {
+    if (isCorruptedSessionLabel(value) || isPlaceholderSessionLabel(value)) {
       changed = true;
     } else {
       next[key] = value;
@@ -84,14 +85,34 @@ export function scrubCorruptedSessionLabels(
   return changed ? next : sessionLabels;
 }
 
+/** Clear gateway `label` fields that contain injected DingTalk/workflow markers. */
+export function sanitizeGatewaySessionLabels<T extends ChatSession>(
+  sessions: T[],
+): T[] {
+  return sessions.map((session) => {
+    const label = session.label?.trim();
+    if (label && (isCorruptedSessionLabel(label) || isPlaceholderSessionLabel(label))) {
+      return { ...session, label: undefined };
+    }
+    return session;
+  });
+}
+
+function stripCronLabelForChatHeader(value: string): string {
+  const stripped = stripCronLabelPrefix(value);
+  return stripped || value;
+}
+
 /** 与 Sidebar.getSessionLabel 保持同一解析顺序与 fallback 规则 */
 export function resolveSessionLabel(input: ResolveSessionLabelInput): string {
   const { key, displayName, label, sessionLabels, t } = input;
   const preview = resolveStoredSessionLabel(key, sessionLabels);
-  if (preview && !isCorruptedSessionLabel(preview) && !isPlaceholderSessionLabel(preview)) return preview;
+  if (preview && !isCorruptedSessionLabel(preview) && !isPlaceholderSessionLabel(preview)) {
+    return stripCronLabelForChatHeader(preview);
+  }
   const gatewayLabel = label?.trim();
   if (gatewayLabel && !isCorruptedSessionLabel(gatewayLabel) && !isPlaceholderSessionLabel(gatewayLabel)) {
-    return gatewayLabel;
+    return stripCronLabelForChatHeader(gatewayLabel);
   }
   if (key.endsWith(':main')) {
     const dn = displayName?.trim();

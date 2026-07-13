@@ -6,6 +6,8 @@ export {
   isActiveWorkflowRunStatus,
   isTerminalWorkflowRunStatus,
   normalizeRunArtifacts,
+  resolveWorkflowArtifactUrl,
+  collectAllRunArtifacts,
   earliestNodeRunStartedAt,
   resolveWorkflowRunStartedAt,
   workflowRunResponseToExecutionState,

@@ -3,6 +3,7 @@ import {
   extractThinking,
   maskDwsSensitiveIdsForDisplay,
   maskSensitiveToolInputForDisplay,
+  hasDisplayableToolInput,
 } from '../../src/pages/Chat/message-utils';
 
 /** 明显虚构的钉钉 ID，仅用于脱敏规则单测，非真实业务数据。 */
@@ -122,5 +123,19 @@ describe('maskSensitiveToolInputForDisplay', () => {
   it('masks command strings in tool input', () => {
     const input = `dws chat message send --user ${FIXTURE_USER_ID} --format json`;
     expect(maskSensitiveToolInputForDisplay(input)).toContain('--user ***');
+  });
+});
+
+describe('hasDisplayableToolInput', () => {
+  it('treats null, empty object, and blank string as no params', () => {
+    expect(hasDisplayableToolInput(null)).toBe(false);
+    expect(hasDisplayableToolInput(undefined)).toBe(false);
+    expect(hasDisplayableToolInput({})).toBe(false);
+    expect(hasDisplayableToolInput('   ')).toBe(false);
+  });
+
+  it('accepts non-empty object or string', () => {
+    expect(hasDisplayableToolInput({ command: 'ls' })).toBe(true);
+    expect(hasDisplayableToolInput('pwd')).toBe(true);
   });
 });

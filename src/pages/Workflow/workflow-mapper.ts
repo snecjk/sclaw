@@ -1,5 +1,4 @@
 /** 工作流 API 响应 → 前端 UI 卡片模型的映射层 */
-import type { TFunction } from 'i18next';
 import type { WorkflowCardItem, OfficialWorkflowCard, WorkflowCoverKey, WorkflowMineListKind } from '@/pages/Workflow/types';
 import type { WorkflowSummary, WorkflowTemplateMineItem, WorkflowTemplateScope } from '../../../shared/workflow-api';
 import { asWorkflowId } from '../../../shared/workflow-api';
@@ -17,58 +16,31 @@ export function pickCoverKeyFromWorkflowId(id: string): WorkflowCoverKey {
 
 /** 从 API 状态字段推导「我的工作流」二级 Tab */
 export function deriveWorkflowListKind(summary: WorkflowSummary): WorkflowMineListKind {
-  if (summary.lifecycleStatus === 'draft' || summary.versionStatus === 'draft') {
+  if (summary.lifecycleStatus === 'draft') {
     return 'draft';
   }
-  if (summary.versionStatus === 'published' && summary.lifecycleStatus === 'active') {
+  if (summary.lifecycleStatus === 'active') {
     return 'published';
   }
   return 'draft';
 }
 
-/** 格式化 updatedAt 为可读时间文案，null 或非法日期回退为「尚未更新」 */
-function formatUpdatedAtLabel(updatedAt: string | null, t: TFunction<'workflow'>): string {
-  if (updatedAt === null) {
-    return t('list.neverUpdated');
-  }
-  const date = new Date(updatedAt);
-  if (Number.isNaN(date.getTime())) {
-    return t('list.neverUpdated');
-  }
-  return t('list.updatedAt', {
-    time: new Intl.DateTimeFormat(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(date),
-  });
-}
-
 /** 将分页 API 摘要映射为列表卡片模型（缺失字段用占位） */
 export function mapWorkflowSummaryToCardItem(
   summary: WorkflowSummary,
-  t: TFunction<'workflow'>,
+  t: (key: string) => string,
 ): WorkflowCardItem {
   const listKind = deriveWorkflowListKind(summary);
-  const isDraft = listKind === 'draft';
 
   return {
     id: asWorkflowId(summary.id),
     name: summary.name,
     listKind,
-    category: '',
-    schedule: isDraft ? t('card.noScheduleDraft') : t('card.noSchedule'),
-    scheduleIcon: 'clock',
     enabled: listKind === 'published',
     description: t('card.noDescription'),
-    flow: [],
-    lastRun: formatUpdatedAtLabel(summary.updatedAt, t),
     coverKey: pickCoverKeyFromWorkflowId(summary.id),
-    isCustom: true,
+    flow: [],
     neverRun: summary.updatedAt === null,
-    ...(isDraft ? { scheduleMuted: true, showPausedLabel: false } : {}),
-    ...(listKind === 'published' ? { runSuccess: false } : {}),
   };
 }
 
@@ -80,7 +52,6 @@ export function parseWorkflowSummary(raw: Record<string, unknown>): WorkflowSumm
     templateId: raw.templateId != null ? String(raw.templateId) : null,
     version: Number(raw.version) || 1,
     lifecycleStatus: String(raw.lifecycleStatus ?? 'draft') as WorkflowSummary['lifecycleStatus'],
-    versionStatus: String(raw.versionStatus ?? 'draft') as WorkflowSummary['versionStatus'],
     updatedAt: raw.updatedAt != null ? String(raw.updatedAt) : null,
     createdBy: raw.createdBy != null ? String(raw.createdBy) : null,
     createdByName: raw.createdByName != null ? String(raw.createdByName) : null,
@@ -114,10 +85,8 @@ export function mapTemplateMineItemToOfficialCard(
     id: item.id,
     name: item.label,
     category: item.category ?? '',
-    schedule: '',
-    scheduleIcon: 'clock',
     description: item.description ?? '',
-    flow: [],
+    flow: item.nodes.map((n: Record<string, unknown>) => String(n.label ?? n.type ?? '')),
     coverKey: pickCoverKeyFromWorkflowId(item.id),
   };
 }
@@ -125,27 +94,19 @@ export function mapTemplateMineItemToOfficialCard(
 /** @api docs/api-contracts/workflows/template-mine.md */
 export function mapTemplateMineItemToCardItem(
   item: WorkflowTemplateMineItem,
-  t: TFunction<'workflow'>,
+  t: (key: string) => string,
 ): WorkflowCardItem {
-  const scope = item.scope;
-  const isSystem = scope === 'system';
+  const isSystem = item.scope === 'system';
   const listKind: WorkflowMineListKind = isSystem ? 'published' : 'draft';
 
   return {
     id: item.id,
     name: item.label,
-    scope,
     listKind,
-    category: item.category ?? '',
-    schedule: t('card.noSchedule'),
-    scheduleIcon: 'clock',
     enabled: isSystem,
     description: item.description ?? t('card.noDescription'),
-    flow: [],
-    lastRun: formatUpdatedAtLabel(item.updatedAt, t),
     coverKey: pickCoverKeyFromWorkflowId(item.id),
-    isCustom: !isSystem,
+    flow: item.nodes.map((n: Record<string, unknown>) => String(n.label ?? n.type ?? '')),
     neverRun: item.updatedAt === null,
-    ...(isSystem ? { runSuccess: false } : { scheduleMuted: true, showPausedLabel: false }),
   };
 }

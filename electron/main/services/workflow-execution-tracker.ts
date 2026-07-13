@@ -14,6 +14,7 @@ import {
   workflowRunResponseToExecutionState,
   type WorkflowRunApiPayload,
 } from '../../../shared/workflow-run-status';
+import { appendWorkflowSessionRecord } from '../../services/workflow-session-writer';
 
 const POLL_INTERVAL_MS = 2_000;
 const MAX_TRACKED_EXECUTIONS = 50;
@@ -44,6 +45,7 @@ interface ExecutionSession {
   lastStepChangeAt: number;
   stopRequested: boolean;
   pollCount: number;
+  pollInFlight: boolean;
 }
 
 const USER_FRIENDLY_ERRORS: Array<{ pattern: RegExp; message: string }> = [
@@ -59,6 +61,10 @@ function toUserFriendlyError(error: string): string {
     if (pattern.test(error)) return message;
   }
   return `执行异常：${error.split(':')[0].trim()}`;
+}
+
+function isTransientWorkflowPollError(error: string): boolean {
+  return /请求超时|timeout|abort|fetch failed|network|ENOTFOUND|ECONNREFUSED|ECONNRESET|EPIPE|HTTP 5\d\d/i.test(error);
 }
 
 class WorkflowExecutionTracker {
@@ -108,6 +114,7 @@ class WorkflowExecutionTracker {
       lastStepChangeAt: now,
       stopRequested: false,
       pollCount: 0,
+      pollInFlight: false,
     };
 
     this.sessions.set(runId, session);
@@ -172,6 +179,11 @@ class WorkflowExecutionTracker {
   }
 
   private async poll(session: ExecutionSession) {
+    if (session.pollInFlight) {
+      logger.warn(`[workflow-trace] poll skipped runId=${session.runId} reason=in-flight`);
+      return;
+    }
+    session.pollInFlight = true;
     session.pollCount += 1;
     const pollNum = session.pollCount;
     const pollPath = `/agent/v1/runs/${session.runId}`;
@@ -244,6 +256,7 @@ class WorkflowExecutionTracker {
 
       // Client-side parse/mapping errors — retry but do not treat as backend workflow failure yet.
       const isClientParseError = /ReferenceError|TypeError|SyntaxError|Invalid JSON/i.test(errStr);
+      const isTransientPollError = isTransientWorkflowPollError(errStr);
 
       // 404 → immediate fail
       if (errStr.includes('404') || (err as { status?: number }).status === 404) {
@@ -257,7 +270,7 @@ class WorkflowExecutionTracker {
       }
 
       // Retry with exponential backoff
-      if (session.failCount <= 3) {
+      if (session.failCount <= 3 || isTransientPollError) {
         const backoff = Math.min(2000 * Math.pow(2, session.failCount - 1), 30000);
         logger.warn(`[Tracker] Poll failed #${session.failCount} for ${session.runId}, retry in ${backoff}ms`);
         // Temporarily stop interval polling, resume after backoff
@@ -282,6 +295,8 @@ class WorkflowExecutionTracker {
           : toUserFriendlyError(errStr),
       });
       this.stopTracking(session.runId);
+    } finally {
+      session.pollInFlight = false;
     }
   }
 
@@ -319,6 +334,18 @@ class WorkflowExecutionTracker {
         );
       }
       logger.info(`[Tracker] Run ${session.runId} finished with status: ${newState.status}`);
+      void appendWorkflowSessionRecord({
+        phase: newState.status === 'completed' ? 'completed' : 'failed',
+        sessionKey: session.sessionKey,
+        templateId: '',
+        templateName: newState.result?.title ?? '',
+        workflowId: session.workflowId,
+        runId: session.runId,
+        status: newState.status,
+        completedAt: new Date().toISOString(),
+      }).catch((err) => {
+        logger.warn(`[WorkflowSessionWriter] terminal append failed runId=${session.runId}: ${String(err)}`);
+      });
     }
   }
 

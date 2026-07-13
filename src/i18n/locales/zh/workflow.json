@@ -3,7 +3,7 @@
   "subtitle": "交给 Claw 自动做的一件事，比如定时对账、整理报表。用一句话说出需求让它帮你做，或直接装个现成的",
   "generate": {
     "title": "用一句话，让 Claw 帮你做一个工作流",
-    "placeholder": "你想让 Claw 帮你自动做什么？比如：每天早上把昨天各网点收支整理成表格发到邮箱...",
+    "placeholder": "你想让 Claw 帮你自动做什么？比如：每天早上把昨天各网点收支整理成表格...",
     "hint": "不知道怎么说？点上面的例子试试。生成后会先给你一份草稿，改好确认再启用。",
     "manualCreate": "手动创建",
     "quickPromptsAria": "快捷提示",
@@ -11,7 +11,7 @@
     "sendAria": "生成工作流",
     "chipWeekly": "每周一自动生成总部结算对账表",
     "chipAbnormal": "发现异常客户时提醒我并建跟进任务",
-    "chipDaily": "每天把各网点收支整理成表发我邮箱"
+    "chipDaily": "每天把各网点收支整理成表"
   },
   "tabs": {
     "aria": "工作流分组",
@@ -35,7 +35,8 @@
     "empty": "还没有工作流",
     "emptyInstalled": "暂无已安装的工作流",
     "neverUpdated": "尚未更新",
-    "updatedAt": "更新于 {{time}}"
+    "updatedAt": "更新于 {{time}}",
+    "cappedHint": "工作流太多啦，为您展示了最新的 99 条工作流数据。"
   },
   "card": {
     "flow": "工作流节点",
@@ -45,8 +46,6 @@
     "preview": "预览",
     "install": "安装",
     "tryRun": "试运行",
-    "customTag": "自建",
-    "systemTag": "系统",
     "pausedLabel": "· 已暂停",
     "statusSuccess": "成功",
     "statusPaused": "暂停",
@@ -55,18 +54,13 @@
     "rename": "重命名",
     "share": "分享工作流",
     "delete": "删除工作流",
-    "noSchedule": "暂无排期",
-    "noScheduleDraft": "还未设置排期",
     "createFromTemplate": "依此模板创建",
     "noDescription": "暂无描述"
   },
   "detail": {
     "close": "关闭",
-    "autoRun": "自动运行",
     "scheduleOn": "已开启",
     "scheduleOff": "已暂停",
-    "scheduleOnHint": "，也可随时手动运行",
-    "scheduleOffHint": "（已暂停，可随时手动运行）",
     "produces": "产出物",
     "producesFallback": "对账表、明细清单（可导出 Excel）",
     "runDuration": "运行时长",
@@ -88,6 +82,30 @@
     "recoverHint": "删除后 30 天内可在回收站恢复",
     "cancel": "取消",
     "confirm": "确认删除"
+  },
+  "editor": {
+    "editTitle": "编辑工作流",
+    "aiCreateTitle": "AI 创建工作流",
+    "createTitle": "新建工作流",
+    "openInBrowser": "在浏览器打开",
+    "backAria": "返回列表"
+  },
+  "createModal": {
+    "title": "基本信息",
+    "subtitle": "为你的新流程起个名字，描述业务场景",
+    "nameLabel": "流程名称",
+    "namePlaceholder": "例如：合同审核流程",
+    "descriptionLabel": "流程描述",
+    "descriptionPlaceholder": "描述业务场景、触发条件和产出",
+    "descriptionCounter": "{{count}}/{{max}}",
+    "categoryLabel": "流程分类",
+    "categoryPlaceholder": "请选择",
+    "confirm": "确认",
+    "confirming": "创建中…",
+    "close": "关闭",
+    "created": "工作流已创建",
+    "createFailed": "创建失败，请重试",
+    "templateLoadFailed": "模板加载失败"
   },
   "builder": {
     "back": "返回",

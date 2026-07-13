@@ -42,7 +42,9 @@ import {
 } from './supervisor';
 import {
   clearOwnedGatewayProcess,
+  prepareGatewayStartupPort,
   recordOwnedGatewayProcess,
+  terminateDuplicateGatewayChildren,
   terminateOrphanedOwnedGateway,
 } from './process-registry';
 import { GatewayConnectionMonitor } from './connection-monitor';
@@ -394,6 +396,8 @@ export class GatewayManager extends EventEmitter {
       logger.warn('Failed to terminate orphaned Gateway process:', err);
     }
 
+    const keepGatewayPid = this.process?.pid && this.ownsProcess ? this.process.pid : undefined;
+
     // Clean up stale session lock files left by previous crashes.
     // This mitigates the Windows lock-recovery defect in openclaw.
     // Must run AFTER orphan termination so locks held by the killed orphan
@@ -405,24 +409,27 @@ export class GatewayManager extends EventEmitter {
       logger.warn('Failed to clean up stale session lock files:', err);
     }
 
-    // If the default port is occupied by another process, auto-increment
-    // to avoid killing an unrelated OpenClaw / StoClaw gateway.
+    // Always prefer the default port. Duplicate children are terminated above;
+    // only increment when an unrelated process still owns the default port.
     try {
-      const currentPort = this.status.port;
-      const availablePort = await findAvailablePort(currentPort);
-      if (availablePort !== currentPort) {
-        logger.info(`Port ${currentPort} is occupied, switching to ${availablePort}`);
-        this.setStatus({ port: availablePort });
+      const startupPort = await prepareGatewayStartupPort({
+        defaultPort: PORTS.OPENCLAW_GATEWAY,
+        keepPid: keepGatewayPid,
+        findAvailablePort,
+      });
+      if (startupPort !== this.status.port) {
+        logger.info(`Gateway startup port set to ${startupPort} (was ${this.status.port})`);
+        this.setStatus({ port: startupPort });
       }
     } catch (portErr) {
-      logger.warn('Failed to find an available port for Gateway:', portErr);
+      logger.warn('Failed to prepare Gateway startup port:', portErr);
     }
 
     try {
       await runGatewayStartupSequence({
         port: this.status.port,
         ownedPid: this.process?.pid,
-        shouldWaitForPortFree: process.platform === 'win32',
+        shouldWaitForPortFree: true,
         resetStartupStderrLines: () => {
           this.recentStartupStderrLines = [];
         },
@@ -453,6 +460,16 @@ export class GatewayManager extends EventEmitter {
           await waitForPortFree(port);
         },
         startProcess: async () => {
+          // 在 spawn 自有 Gateway 之前丢弃关机期间错过的 cron 任务（推进 nextRunAtMs
+          // 到未来 + 清崩溃残留 runningAtMs），让新进程 runMissedJobs 发现没有任何
+          // nextRunAtMs 落在过去 → 不补跑。仅在 spawn 自有进程分支执行，连到外部
+          // Gateway 时不会进入此回调，自然跳过。
+          try {
+            const { advanceOpenClawCronNextRuns } = await import('../utils/advance-openclaw-cron-next-runs');
+            await advanceOpenClawCronNextRuns();
+          } catch (err) {
+            logger.warn('Failed to advance openclaw cron next runs on startup:', err);
+          }
           await this.startProcess();
         },
         waitForReady: async (port) => {
@@ -533,7 +550,24 @@ export class GatewayManager extends EventEmitter {
         this.process = null;
       }
       clearOwnedGatewayProcess();
+    } else {
+      clearOwnedGatewayProcess();
     }
+
+    try {
+      await terminateDuplicateGatewayChildren({ reason: 'post-stop' });
+    } catch (err) {
+      logger.warn('Failed to terminate duplicate Gateway child processes after stop:', err);
+    }
+
+    if (this.status.port > 0) {
+      try {
+        await waitForPortFree(this.status.port);
+      } catch (err) {
+        logger.warn(`Failed waiting for Gateway port ${this.status.port} to become free after stop:`, err);
+      }
+    }
+
     this.ownsProcess = false;
 
     clearPendingGatewayRequests(this.pendingRequests, new Error('Gateway stopped'));

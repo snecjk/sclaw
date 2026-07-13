@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HookCallback } from '@anthropic-ai/claude-agent-sdk';
 import { DINGTALK_RECIPIENTS_MARKER } from '../../shared/dingtalk-mention-context';
+import { RETIRED_SKILLS_SYSTEM_PROMPT } from '../../shared/retired-skills';
 import { buildClaudeRuntimeOptions } from '../../electron/engines/claude-runtime-extensions';
 import { resetDingTalkSendRateLimitForTests } from '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk/dingtalk-send-guard';
 
@@ -20,6 +21,17 @@ describe('buildClaudeRuntimeOptions', () => {
     resetDingTalkSendRateLimitForTests();
     readDingTalkMentionPending.mockReset();
     clearDingTalkMentionPending.mockReset();
+  });
+
+  it('injects retired skills deprecation into Claude system prompt', async () => {
+    readDingTalkMentionPending.mockResolvedValue(null);
+
+    const runtime = await buildClaudeRuntimeOptions('sess-retired');
+
+    expect(runtime.systemPromptAppend).toContain(RETIRED_SKILLS_SYSTEM_PROMPT);
+    expect(runtime.systemPromptAppend).toContain('sto-distinctive-design');
+    expect(runtime.systemPromptAppend).toContain('cli-report-generator');
+    expect(runtime.systemPromptAppend).toContain('sto-distinctive-design-guard');
   });
 
   it('injects pending DingTalk mention context into Claude system prompt', async () => {

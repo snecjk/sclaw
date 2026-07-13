@@ -11,14 +11,15 @@ import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-opt
 import { hostApiFetch } from '@/lib/host-api';
 import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
 import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
-import { markSessionUnreadAfterSuccessfulRun } from '@/lib/session-unread-notify';
-import { useSessionUnreadStore } from '@/stores/session-unread';
+import { markSessionUnreadAfterSuccessfulRun, noteObservedRun } from '@/lib/session-unread-notify';
+import { touchSessionReadAt, useSessionUnreadStore } from '@/stores/session-unread';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
 import { checkDailyTokenQuota, formatQuotaExceededMessage } from './chat/runtime-send-actions';
 import {
-  buildCronSessionHistoryPath, getCronRunSessionAggregateKey, getClaudeTaskRunSessionAggregateKey,
+  buildCronSessionHistoryPath, buildScheduledTaskSessionHistoryPath,
+  getCronRunSessionAggregateKey, getClaudeTaskRunSessionAggregateKey,
   isCronSessionKey, isCronDatedSessionKey,
   isAnyCronSessionKey, isScheduledTaskSessionKey,
   isVirtualTaskSessionKey,
@@ -33,7 +34,9 @@ import {
   mergeSessionLastActivity,
   sanitizeSessionDisplayField,
   setLastChatEventAt,
-  enrichWithToolResultFiles, enrichWithCachedImages, extractMediaRefs, makeAttachedFile, getMessageText, isToolResultRole, extractImagesAsAttachedFiles, getToolCallFilePath
+  enrichWithToolResultFiles, enrichWithCachedImages, extractMediaRefs, makeAttachedFile, getMessageText, isToolResultRole, extractImagesAsAttachedFiles, getToolCallFilePath,
+  collectToolUpdates,
+  upsertToolStatuses,
 } from './chat/helpers';
 import {
   resolveClaudeGroupNameFromSession,
@@ -58,7 +61,6 @@ import {
   type ChatState,
   type ContentBlock,
   type RawMessage,
-  type ToolStatus,
   type SessionRuntimeState,
 } from './chat/types';
 import type { WorkflowExecutionState } from '@/types/workflow';
@@ -83,9 +85,10 @@ import type { ChatSet } from './chat/store-api';
 import {
   absorbWorkflowExecutionStartedFromToolResults,
   dispatchBuiltinToolResult,
+  syncWorkflowCardsAfterToolDispatch,
 } from '@/lib/builtin-tool-dispatch';
-import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSessionLabel } from '@/lib/workflow-session-hint';
-import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
+import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, normalizeDerivedSessionLabel } from '@/lib/workflow-session-hint';
+import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, sanitizeGatewaySessionLabels, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { traceChatSession } from '../../shared/chat-session-trace';
@@ -94,8 +97,14 @@ import {
   isSameUserMessage,
   mergeOptimisticUserIntoHistory,
   normalizeUserMessageText,
+  recoverInitialUserFromSessionLabel,
+  ensureOpeningUserMessageFirst,
   traceLoadHistoryUserReconciliation,
 } from './chat/user-message-merge';
+import {
+  mergeHistoryMessageSources,
+  mergeHistoryWhenShrunk,
+} from './chat/history-merge';
 import {
   resolveAssistantFinalTerminalState,
   shouldAutoCompleteClaudeFromHistory,
@@ -465,6 +474,36 @@ async function loadClaudeScheduledTaskFallbackMessages(sessionKey: string, limit
   }
 }
 
+async function loadScheduledTaskFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
+  if (!isScheduledTaskSessionKey(sessionKey)) return [];
+  try {
+    const response = await hostApiFetch<{ messages?: RawMessage[] }>(
+      buildScheduledTaskSessionHistoryPath(sessionKey, limit),
+    );
+    return Array.isArray(response.messages) ? response.messages : [];
+  } catch (error) {
+    console.warn('Failed to load scheduled task fallback history:', error);
+    return [];
+  }
+}
+
+async function loadVirtualTaskFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
+  if (isCronSessionKey(sessionKey) || isCronDatedSessionKey(sessionKey)) {
+    return loadCronFallbackMessages(sessionKey, limit);
+  }
+  if (isScheduledTaskSessionKey(sessionKey)) {
+    return loadScheduledTaskFallbackMessages(sessionKey, limit);
+  }
+  if (
+    isClaudeScheduledTaskSessionKey(sessionKey)
+    || isClaudeScheduledTaskRunSessionKey(sessionKey)
+    || isClaudeScheduledTaskDatedSessionKey(sessionKey)
+  ) {
+    return loadClaudeScheduledTaskFallbackMessages(sessionKey, limit);
+  }
+  return [];
+}
+
 function normalizeAgentId(value: string | undefined | null): string {
   return (value ?? '').trim().toLowerCase() || 'main';
 }
@@ -507,6 +546,8 @@ function createIdleSessionRuntimeState(): SessionRuntimeState {
     activeRunId: null,
     streamingText: '',
     streamingMessage: null,
+    streamingMessages: [],
+    streamingToolResults: [],
     streamingTools: [],
     pendingFinal: false,
     lastUserMessageAt: null,
@@ -523,6 +564,8 @@ function runtimePatchFromSessionRuntime(runtime: SessionRuntimeState): Pick<
   | 'activeRunId'
   | 'streamingText'
   | 'streamingMessage'
+  | 'streamingMessages'
+  | 'streamingToolResults'
   | 'streamingTools'
   | 'pendingFinal'
   | 'lastUserMessageAt'
@@ -535,6 +578,8 @@ function runtimePatchFromSessionRuntime(runtime: SessionRuntimeState): Pick<
     activeRunId: runtime.activeRunId,
     streamingText: runtime.streamingText,
     streamingMessage: runtime.streamingMessage,
+    streamingMessages: runtime.streamingMessages,
+    streamingToolResults: runtime.streamingToolResults,
     streamingTools: runtime.streamingTools,
     pendingFinal: runtime.pendingFinal,
     lastUserMessageAt: runtime.lastUserMessageAt,
@@ -550,6 +595,8 @@ function captureTopLevelRuntime(state: Pick<
   | 'activeRunId'
   | 'streamingText'
   | 'streamingMessage'
+  | 'streamingMessages'
+  | 'streamingToolResults'
   | 'streamingTools'
   | 'pendingFinal'
   | 'lastUserMessageAt'
@@ -562,6 +609,8 @@ function captureTopLevelRuntime(state: Pick<
     activeRunId: state.activeRunId,
     streamingText: state.streamingText,
     streamingMessage: state.streamingMessage,
+    streamingMessages: state.streamingMessages,
+    streamingToolResults: state.streamingToolResults,
     streamingTools: state.streamingTools,
     pendingFinal: state.pendingFinal,
     lastUserMessageAt: state.lastUserMessageAt,
@@ -648,6 +697,8 @@ function buildSessionSwitchPatch(
     | 'activeRunId'
     | 'streamingText'
     | 'streamingMessage'
+    | 'streamingMessages'
+    | 'streamingToolResults'
     | 'streamingTools'
     | 'pendingFinal'
     | 'lastUserMessageAt'
@@ -705,6 +756,8 @@ function handleBackgroundSessionEvent(
 ): void {
   switch (resolvedState) {
     case 'started': {
+      // 记录本次运行期间真实观测到的 run，未读打标仅认这些 run（防重放误标）。
+      noteObservedRun(runId);
       set((s) => patchSessionRuntimeState(s, sessionKey, {
         sending: true,
         activeRunId: runId || getSessionRuntimeState(s.runtimeBySessionKey, sessionKey).activeRunId,
@@ -713,6 +766,7 @@ function handleBackgroundSessionEvent(
       break;
     }
     case 'delta': {
+      noteObservedRun(runId);
       const updates = collectToolUpdates(event.message, resolvedState);
       set((s) => patchSessionRuntimeState(s, sessionKey, (runtime) => ({
         sending: true,
@@ -724,6 +778,7 @@ function handleBackgroundSessionEvent(
           }
           return event.message ?? runtime.streamingMessage;
         })(),
+        streamingMessages: appendStreamingAssistantSnapshot(runtime.streamingMessages, event.message),
         streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
       })));
       break;
@@ -770,12 +825,27 @@ function handleBackgroundSessionEvent(
             pendingFinal: true,
             streamingText: '',
             streamingMessage: null,
+            streamingToolResults: appendStreamingToolResultSnapshot(runtime.streamingToolResults, finalMsg),
             pendingToolImages: toolFiles.length > 0
               ? [...runtime.pendingToolImages, ...toolFiles]
               : runtime.pendingToolImages,
             streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
           });
         });
+        void (async () => {
+          const agentId = getAgentIdFromSessionKey(sessionKey);
+          await dispatchBuiltinToolResult({
+            id: finalMsg.id,
+            toolCallId: finalMsg.toolCallId,
+            toolName: finalMsg.toolName,
+            content: finalMsg.content,
+          }, { sessionKey, agentId });
+          syncWorkflowCardsAfterToolDispatch(sessionKey);
+          const state = useChatStore.getState();
+          if (state.currentSessionKey === sessionKey) {
+            void state.loadHistory(true);
+          }
+        })();
         break;
       }
 
@@ -798,14 +868,22 @@ function handleBackgroundSessionEvent(
           activeRunId: isTerminalOutput ? null : currentRuntime.activeRunId,
           streamingText: '',
           streamingMessage: null,
+          streamingMessages: isTerminalOutput ? [] : currentRuntime.streamingMessages,
+          streamingToolResults: isTerminalOutput ? [] : currentRuntime.streamingToolResults,
           streamingTools: isTerminalOutput ? [] : (updates.length > 0 ? upsertToolStatuses(currentRuntime.streamingTools, updates) : currentRuntime.streamingTools),
           pendingFinal: isTerminalOutput ? false : true,
           pendingToolImages: isTerminalOutput ? [] : currentRuntime.pendingToolImages,
           lastUserMessageAt: isTerminalOutput ? null : currentRuntime.lastUserMessageAt,
           error: null,
         }));
-        if (isTerminalOutput && sessionKey !== s.currentSessionKey) {
-          markSessionUnreadAfterSuccessfulRun(sessionKey, s.currentSessionKey);
+        if (isTerminalOutput) {
+          if (sessionKey !== s.currentSessionKey) {
+            markSessionUnreadAfterSuccessfulRun(sessionKey, s.currentSessionKey, { runId });
+          } else {
+            // 前台会话运行完成即视为已读，刷新已读水位，
+            // 避免离开后迟到/后台事件把刚看过的会话重新标未读。
+            touchSessionReadAt(sessionKey);
+          }
         }
         return next;
       });
@@ -818,6 +896,8 @@ function handleBackgroundSessionEvent(
         activeRunId: null,
         streamingText: '',
         streamingMessage: null,
+        streamingMessages: [],
+        streamingToolResults: [],
         streamingTools: [],
         pendingFinal: false,
         lastUserMessageAt: null,
@@ -833,6 +913,8 @@ function handleBackgroundSessionEvent(
         activeRunId: null,
         streamingText: '',
         streamingMessage: null,
+        streamingMessages: [],
+        streamingToolResults: [],
         streamingTools: [],
         pendingFinal: false,
         lastUserMessageAt: null,
@@ -847,6 +929,7 @@ function handleBackgroundSessionEvent(
         const updates = collectToolUpdates(event.message, 'delta');
         set((s) => patchSessionRuntimeState(s, sessionKey, (runtime) => ({
           streamingMessage: event.message ?? runtime.streamingMessage,
+          streamingMessages: appendStreamingAssistantSnapshot(runtime.streamingMessages, event.message),
           streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
         })));
       }
@@ -909,188 +992,10 @@ function isToolOnlyMessage(message: RawMessage | undefined): boolean {
 }
 
 
-function extractTextFromContent(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (!Array.isArray(content)) return '';
-  const parts: string[] = [];
-  for (const block of content as ContentBlock[]) {
-    if (block.type === 'text' && block.text) {
-      parts.push(block.text);
-    }
-  }
-  return parts.join('\n');
-}
-
 /** Append workflow parameter_form to assistant final when schema is pending. */
 function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
   return appendWorkflowParameterFormToMessage(message, getMessageText, { allowLivePending: true })
     ?? message;
-}
-
-
-function summarizeToolOutput(text: string): string | undefined {
-  const trimmed = text.trim();
-  if (!trimmed) return undefined;
-  const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  if (lines.length === 0) return undefined;
-  const summaryLines = lines.slice(0, 2);
-  let summary = summaryLines.join(' / ');
-  if (summary.length > 160) {
-    summary = `${summary.slice(0, 157)}...`;
-  }
-  return summary;
-}
-
-function normalizeToolStatus(rawStatus: unknown, fallback: 'running' | 'completed'): ToolStatus['status'] {
-  const status = typeof rawStatus === 'string' ? rawStatus.toLowerCase() : '';
-  if (status === 'error' || status === 'failed') return 'error';
-  if (status === 'completed' || status === 'success' || status === 'done') return 'completed';
-  return fallback;
-}
-
-function parseDurationMs(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  const parsed = typeof value === 'string' ? Number(value) : NaN;
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
-function extractToolUseUpdates(message: unknown): ToolStatus[] {
-  if (!message || typeof message !== 'object') return [];
-  const msg = message as Record<string, unknown>;
-  const updates: ToolStatus[] = [];
-
-  // Path 1: Anthropic/normalized format — tool blocks inside content array
-  const content = msg.content;
-  if (Array.isArray(content)) {
-    for (const block of content as ContentBlock[]) {
-      if ((block.type !== 'tool_use' && block.type !== 'toolCall') || !block.name) continue;
-      updates.push({
-        id: block.id || block.name,
-        toolCallId: block.id,
-        name: block.name,
-        status: 'running',
-        updatedAt: Date.now(),
-      });
-    }
-  }
-
-  // Path 2: OpenAI format — tool_calls array on the message itself
-  if (updates.length === 0) {
-    const toolCalls = msg.tool_calls ?? msg.toolCalls;
-    if (Array.isArray(toolCalls)) {
-      for (const tc of toolCalls as Array<Record<string, unknown>>) {
-        const fn = (tc.function ?? tc) as Record<string, unknown>;
-        const name = typeof fn.name === 'string' ? fn.name : '';
-        if (!name) continue;
-        const id = typeof tc.id === 'string' ? tc.id : name;
-        updates.push({
-          id,
-          toolCallId: typeof tc.id === 'string' ? tc.id : undefined,
-          name,
-          status: 'running',
-          updatedAt: Date.now(),
-        });
-      }
-    }
-  }
-
-  return updates;
-}
-
-function extractToolResultBlocks(message: unknown, eventState: string): ToolStatus[] {
-  if (!message || typeof message !== 'object') return [];
-  const msg = message as Record<string, unknown>;
-  const content = msg.content;
-  if (!Array.isArray(content)) return [];
-
-  const updates: ToolStatus[] = [];
-  for (const block of content as ContentBlock[]) {
-    if (block.type !== 'tool_result' && block.type !== 'toolResult') continue;
-    const outputText = extractTextFromContent(block.content ?? block.text ?? '');
-    const summary = summarizeToolOutput(outputText);
-    updates.push({
-      id: block.id || block.name || 'tool',
-      toolCallId: block.id,
-      name: block.name || block.id || 'tool',
-      status: normalizeToolStatus(undefined, eventState === 'delta' ? 'running' : 'completed'),
-      summary,
-      updatedAt: Date.now(),
-    });
-  }
-
-  return updates;
-}
-
-function extractToolResultUpdate(message: unknown, eventState: string): ToolStatus | null {
-  if (!message || typeof message !== 'object') return null;
-  const msg = message as Record<string, unknown>;
-  const role = typeof msg.role === 'string' ? msg.role.toLowerCase() : '';
-  if (!isToolResultRole(role)) return null;
-
-  const toolName = typeof msg.toolName === 'string' ? msg.toolName : (typeof msg.name === 'string' ? msg.name : '');
-  const toolCallId = typeof msg.toolCallId === 'string' ? msg.toolCallId : undefined;
-  const details = (msg.details && typeof msg.details === 'object') ? msg.details as Record<string, unknown> : undefined;
-  const rawStatus = (msg.status ?? details?.status);
-  const fallback = eventState === 'delta' ? 'running' : 'completed';
-  const status = normalizeToolStatus(rawStatus, fallback);
-  const durationMs = parseDurationMs(details?.durationMs ?? details?.duration ?? (msg as Record<string, unknown>).durationMs);
-
-  const outputText = (details && typeof details.aggregated === 'string')
-    ? details.aggregated
-    : extractTextFromContent(msg.content);
-  const summary = summarizeToolOutput(outputText) ?? summarizeToolOutput(String(details?.error ?? msg.error ?? ''));
-
-  const name = toolName || toolCallId || 'tool';
-  const id = toolCallId || name;
-
-  return {
-    id,
-    toolCallId,
-    name,
-    status,
-    durationMs,
-    summary,
-    updatedAt: Date.now(),
-  };
-}
-
-function mergeToolStatus(existing: ToolStatus['status'], incoming: ToolStatus['status']): ToolStatus['status'] {
-  const order: Record<ToolStatus['status'], number> = { running: 0, completed: 1, error: 2 };
-  return order[incoming] >= order[existing] ? incoming : existing;
-}
-
-function upsertToolStatuses(current: ToolStatus[], updates: ToolStatus[]): ToolStatus[] {
-  if (updates.length === 0) return current;
-  const next = [...current];
-  for (const update of updates) {
-    const key = update.toolCallId || update.id || update.name;
-    if (!key) continue;
-    const index = next.findIndex((tool) => (tool.toolCallId || tool.id || tool.name) === key);
-    if (index === -1) {
-      next.push(update);
-      continue;
-    }
-    const existing = next[index];
-    next[index] = {
-      ...existing,
-      ...update,
-      name: update.name || existing.name,
-      status: mergeToolStatus(existing.status, update.status),
-      durationMs: update.durationMs ?? existing.durationMs,
-      summary: update.summary ?? existing.summary,
-      updatedAt: update.updatedAt || existing.updatedAt,
-    };
-  }
-  return next;
-}
-
-function collectToolUpdates(message: unknown, eventState: string): ToolStatus[] {
-  const updates: ToolStatus[] = [];
-  const toolResultUpdate = extractToolResultUpdate(message, eventState);
-  if (toolResultUpdate) updates.push(toolResultUpdate);
-  updates.push(...extractToolResultBlocks(message, eventState));
-  updates.push(...extractToolUseUpdates(message));
-  return updates;
 }
 
 function hasNonToolAssistantContent(message: RawMessage | undefined): boolean {
@@ -1154,6 +1059,110 @@ function touchLastChatEventAt(
   set({ lastChatEventAt: now });
 }
 
+const STREAMING_MESSAGE_BUFFER_LIMIT = 80;
+
+function isAssistantStreamMessage(message: unknown): message is RawMessage {
+  if (!message || typeof message !== 'object') return false;
+  const role = (message as RawMessage).role;
+  return role === 'assistant' || role === undefined;
+}
+
+function normalizeAssistantStreamMessage(message: RawMessage): RawMessage {
+  return {
+    ...message,
+    role: 'assistant',
+  };
+}
+
+function extractThinkingTextForStream(message: RawMessage | undefined): string {
+  if (!message || !Array.isArray(message.content)) return '';
+  return (message.content as ContentBlock[])
+    .map((block) => {
+      if (block.type === 'thinking') return block.thinking ?? block.text ?? '';
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n')
+    .trim();
+}
+
+function textLooksLikeSameStreamSnapshot(previous: string, next: string): boolean {
+  const a = previous.trim();
+  const b = next.trim();
+  if (!a || !b) return false;
+  return a === b || a.startsWith(b) || b.startsWith(a);
+}
+
+function toolUpdatesLookLikeSameStreamSnapshot(previous: RawMessage, next: RawMessage): boolean {
+  const prevTools = collectToolUpdates(previous, 'delta');
+  const nextTools = collectToolUpdates(next, 'delta');
+  if (prevTools.length === 0 || nextTools.length === 0) return false;
+  if (prevTools.length !== nextTools.length) return false;
+  return prevTools.every((tool, index) => {
+    const other = nextTools[index];
+    if (!other) return false;
+    const toolKey = tool.toolCallId || tool.id;
+    const otherKey = other.toolCallId || other.id;
+    return Boolean(toolKey && otherKey && toolKey === otherKey);
+  });
+}
+
+function shouldReplaceStreamingSnapshot(previous: RawMessage | undefined, next: RawMessage): boolean {
+  if (!previous) return false;
+  if (previous.id && next.id && previous.id === next.id) return true;
+
+  const previousText = getMessageText(previous.content);
+  const nextText = getMessageText(next.content);
+  if (textLooksLikeSameStreamSnapshot(previousText, nextText)) return true;
+
+  const previousThinking = extractThinkingTextForStream(previous);
+  const nextThinking = extractThinkingTextForStream(next);
+  if (textLooksLikeSameStreamSnapshot(previousThinking, nextThinking)) return true;
+
+  return toolUpdatesLookLikeSameStreamSnapshot(previous, next);
+}
+
+function appendStreamingAssistantSnapshot(
+  messages: RawMessage[],
+  message: unknown,
+): RawMessage[] {
+  if (!isAssistantStreamMessage(message)) return messages;
+  const next = normalizeAssistantStreamMessage(message);
+  if (next.id) {
+    const index = messages.findIndex((item) => item.id === next.id);
+    if (index >= 0) {
+      const updated = [...messages];
+      updated[index] = next;
+      return updated.slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+    }
+  }
+
+  const last = messages[messages.length - 1];
+  if (shouldReplaceStreamingSnapshot(last, next)) {
+    return [...messages.slice(0, -1), next].slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+  }
+
+  return [...messages, next].slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+}
+
+function appendStreamingToolResultSnapshot(
+  messages: RawMessage[],
+  message: RawMessage,
+): RawMessage[] {
+  const key = message.toolCallId || message.id || message.toolName;
+  if (key) {
+    const index = messages.findIndex((item) =>
+      (item.toolCallId || item.id || item.toolName) === key,
+    );
+    if (index >= 0) {
+      const updated = [...messages];
+      updated[index] = message;
+      return updated.slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+    }
+  }
+  return [...messages, message].slice(-STREAMING_MESSAGE_BUFFER_LIMIT);
+}
+
 // ── Store ────────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>()(
@@ -1168,6 +1177,8 @@ export const useChatStore = create<ChatState>()(
   activeRunId: null,
   streamingText: '',
   streamingMessage: null,
+  streamingMessages: [],
+  streamingToolResults: [],
   streamingTools: [],
   pendingFinal: false,
   lastChatEventAt: 0,
@@ -1211,6 +1222,9 @@ export const useChatStore = create<ChatState>()(
       });
     }
   },
+  clearPendingWorkflowMemory: () => {
+    set({ pendingWorkflow: null });
+  },
   clearPendingWorkflow: () => {
     const sessionKey = get().currentSessionKey;
     const templateId = get().pendingWorkflow?.templateId;
@@ -1222,14 +1236,17 @@ export const useChatStore = create<ChatState>()(
 
   // ── Load sessions via sessions.list ──
 
-  loadSessions: async () => {
+  loadSessions: async (options?: { force?: boolean }) => {
+    const force = options?.force === true;
     const now = Date.now();
     if (_loadSessionsInFlight) {
       await _loadSessionsInFlight;
-      scheduleSessionLabelHydrationFromStore(set, get);
-      return;
+      if (!force) {
+        scheduleSessionLabelHydrationFromStore(set, get);
+        return;
+      }
     }
-    if (now - _lastLoadSessionsAt < SESSION_LOAD_MIN_INTERVAL_MS) {
+    if (!force && now - _lastLoadSessionsAt < SESSION_LOAD_MIN_INTERVAL_MS) {
       scheduleSessionLabelHydrationFromStore(set, get);
       return;
     }
@@ -1288,19 +1305,38 @@ export const useChatStore = create<ChatState>()(
           const cronDated = new Set<string>();
           const scheduledTaskDated = new Set<string>();
           const claudeTaskDated = new Set<string>();
+          // Most-recent dated aggregate key per task/job. Key order is lexicographic
+          // == chronological for `...:{YYYY-MM-DD}` suffixes, so the greatest key is
+          // today's. Used to redirect an active base/run key to its dated aggregate
+          // below, so the dated-supersedes-base rule also governs the active session.
+          const claudeTaskDatedKeyByTask = new Map<string, string>();
+          const cronDatedKeyByJob = new Map<string, string>();
+          const scheduledTaskDatedKeyByTask = new Map<number, string>();
           for (const session of sessions) {
             const cronParts = parseCronSessionKey(session.key);
             if (cronParts && cronParts.date) {
               cronDated.add(`agent:main:cron:${cronParts.jobId}`);
+              const prev = cronDatedKeyByJob.get(cronParts.jobId);
+              if (!prev || session.key > prev) {
+                cronDatedKeyByJob.set(cronParts.jobId, session.key);
+              }
             }
             const stParts = parseScheduledTaskAgentSessionKey(session.key);
             if (stParts && stParts.date) {
               scheduledTaskDated.add(`agent:main:scheduled-task:${stParts.taskId}`);
+              const prev = scheduledTaskDatedKeyByTask.get(stParts.taskId);
+              if (!prev || session.key > prev) {
+                scheduledTaskDatedKeyByTask.set(stParts.taskId, session.key);
+              }
             }
             // Claude dated aggregate: claude-task:{taskId}:{YYYY-MM-DD}
             const claudeParts = parseClaudeScheduledTaskSessionKey(session.key);
             if (claudeParts && claudeParts.date) {
               claudeTaskDated.add(`claude-task:${claudeParts.taskId}`);
+              const prev = claudeTaskDatedKeyByTask.get(claudeParts.taskId);
+              if (!prev || session.key > prev) {
+                claudeTaskDatedKeyByTask.set(claudeParts.taskId, session.key);
+              }
             }
           }
 
@@ -1396,9 +1432,45 @@ export const useChatStore = create<ChatState>()(
               nextSessionKey = canonicalMatch;
             }
           }
+          // If the active session is a claude-task / cron / scheduled-task base or
+          // run key that has been superseded by a dated aggregate, redirect to that
+          // dated key. Without this, sessionsWithCurrent below re-appends the
+          // filtered-out base key and the sidebar shows two same-named entries
+          // (dated + base). The loadHistory() call at the tail of loadSessions
+          // reloads the dated aggregate's history, mirroring the canonical redirect
+          // above.
+          {
+            const claudeBase = parseClaudeScheduledTaskSessionKey(nextSessionKey);
+            const claudeRun = parseClaudeScheduledTaskRunSessionKey(nextSessionKey);
+            const claudeTaskId = claudeBase?.taskId ?? claudeRun?.taskId;
+            if ((Boolean(claudeRun) || Boolean(claudeBase && !claudeBase.date)) && claudeTaskId) {
+              const datedKey = claudeTaskDatedKeyByTask.get(claudeTaskId);
+              if (datedKey && mergedSessions.some((s) => s.key === datedKey)) {
+                nextSessionKey = datedKey;
+              }
+            }
+            const cronParts = parseCronSessionKey(nextSessionKey);
+            if (cronParts && (cronParts.runSessionId || !cronParts.date)) {
+              const datedKey = cronDatedKeyByJob.get(cronParts.jobId);
+              if (datedKey && mergedSessions.some((s) => s.key === datedKey)) {
+                nextSessionKey = datedKey;
+              }
+            }
+            if (nextSessionKey.startsWith('agent:')) {
+              const stParts = nextSessionKey.split(':');
+              if (stParts.length === 4 && stParts[2] === 'scheduled-task') {
+                const stTaskId = Number(stParts[3]);
+                if (!Number.isNaN(stTaskId)) {
+                  const datedKey = scheduledTaskDatedKeyByTask.get(stTaskId);
+                  if (datedKey && mergedSessions.some((s) => s.key === datedKey)) {
+                    nextSessionKey = datedKey;
+                  }
+                }
+              }
+            }
+          }
           if (!mergedSessions.find((s) => s.key === nextSessionKey) && mergedSessions.length > 0) {
-            // Preserve only locally-created pending sessions. On initial boot the
-            // default ghost key (`agent:main:main`) should yield to real history.
+            // Preserve only locally-created pending sessions.
             const hasLocalPendingSession =
               isTemporaryAgentSessionKey(nextSessionKey)
               || isHiddenStoTaskSubitemChatSessionKey(nextSessionKey)
@@ -1407,7 +1479,13 @@ export const useChatStore = create<ChatState>()(
             // `agent:*:cron:*` dated session) are resolved by key prefix in
             // loadHistory and may not be in the backend list yet — keep them, or
             // the composer falls back to the default agent's engine.
-            if (!hasLocalPendingSession && !isVirtualTaskSessionKey(nextSessionKey)) {
+            // On cold boot the default key (`agent:main:main`) must stay on the
+            // new-chat home instead of jumping into the most recent session.
+            if (
+              nextSessionKey !== DEFAULT_SESSION_KEY
+              && !hasLocalPendingSession
+              && !isVirtualTaskSessionKey(nextSessionKey)
+            ) {
               nextSessionKey = mergedSessions[0].key;
             }
           }
@@ -1423,7 +1501,9 @@ export const useChatStore = create<ChatState>()(
             : mergedSessions;
 
           const scrubbedSessionLabels = scrubCorruptedSessionLabels(get().sessionLabels);
-          const labeledSessions = applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels);
+          const labeledSessions = sanitizeGatewaySessionLabels(
+            applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels),
+          );
 
           // ── 定时任务会话名称富化：从任务定义 API 获取 displayName ──
           // loadSessions 定义在本 store 内（非独立 session-actions 模块）。
@@ -1612,7 +1692,10 @@ export const useChatStore = create<ChatState>()(
   // JSONL history file on disk is intentionally left intact, consistent with the
   // newSession() design that avoids sessions.reset to preserve history.
 
-  deleteSession: async (key: string) => {
+  deleteSession: async (key: string, options?: {
+    skipSessionRefresh?: boolean;
+    additionalSuppressKeys?: string[];
+  }) => {
     const session = get().sessions.find((item) => item.key === key);
     const deleteResult = await requestSessionDelete(
       key,
@@ -1629,13 +1712,36 @@ export const useChatStore = create<ChatState>()(
     }
 
     rememberOptimisticDeletedSessionKey(key);
+    const additionalSuppressKeys = (options?.additionalSuppressKeys ?? [])
+      .map((suppressKey) => suppressKey.trim())
+      .filter((suppressKey) => suppressKey && suppressKey !== key);
+    for (const suppressKey of additionalSuppressKeys) {
+      rememberOptimisticDeletedSessionKey(suppressKey);
+    }
+    if (additionalSuppressKeys.length > 0) {
+      await Promise.all(additionalSuppressKeys.map(async (suppressKey) => {
+        const suppressSession = get().sessions.find((item) => item.key === suppressKey);
+        try {
+          await requestSessionDelete(
+            suppressKey,
+            resolveSessionDeleteEngineType(
+              suppressKey,
+              suppressSession,
+              getAgentEngineType(getAgentIdFromSessionKey(suppressKey)),
+            ),
+          );
+        } catch {
+          // Best-effort tombstone for virtual placeholder keys.
+        }
+      }));
+    }
+
     useSessionUnreadStore.getState().markSessionRead(key);
 
     const { currentSessionKey, sessions } = get();
     const remaining = sessions.filter((s) => s.key !== key);
 
     if (currentSessionKey === key) {
-      // Switched away from deleted session — pick the first remaining or create new
       const next = remaining[0];
       set((s) => ({
         sessions: remaining,
@@ -1646,6 +1752,8 @@ export const useChatStore = create<ChatState>()(
         messages: [],
         streamingText: '',
         streamingMessage: null,
+        streamingMessages: [],
+        streamingToolResults: [],
         streamingTools: [],
         activeRunId: null,
         error: null,
@@ -1668,7 +1776,9 @@ export const useChatStore = create<ChatState>()(
         sidebarRecentOrder: removeSidebarRecentOrderKey(s.sidebarRecentOrder, key),
       }));
     }
-    void get().loadSessions();
+    if (!options?.skipSessionRefresh) {
+      await get().loadSessions({ force: true });
+    }
     return true;
   },
 
@@ -1741,6 +1851,8 @@ export const useChatStore = create<ChatState>()(
         sending: false,
         streamingText: '',
         streamingMessage: null,
+        streamingMessages: [],
+        streamingToolResults: [],
         streamingTools: [],
         activeRunId: null,
         error: null,
@@ -1748,8 +1860,11 @@ export const useChatStore = create<ChatState>()(
         lastUserMessageAt: null,
         optimisticUserMessage: null,
         pendingToolImages: [],
+        pendingWorkflow: null,
       };
     });
+    // 新建即视为已读，写入已读水位；后续该会话前台完成的迟到事件不会误标未读。
+    touchSessionReadAt(newKey);
     void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
   },
 
@@ -1817,7 +1932,9 @@ export const useChatStore = create<ChatState>()(
       ) => {
       if (get().currentSessionKey !== targetSessionKey) return;
 
-      absorbWorkflowSchemaFromToolResults(rawMessages);
+      rawMessages = mergeHistoryWhenShrunk(rawMessages, get().messages);
+
+      absorbWorkflowSchemaFromToolResults(rawMessages, targetSessionKey);
 
       // Before filtering: attach images/files from tool_result messages to the next assistant message
       const messagesWithToolImages = enrichWithToolResultFiles(rawMessages);
@@ -1836,26 +1953,27 @@ export const useChatStore = create<ChatState>()(
         get().runtimeBySessionKey,
         targetSessionKey,
       ).optimisticUserMessage ?? get().optimisticUserMessage;
-      if (userMsgAt) {
-        finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
-          userMessageAt: userMsgAt,
-          sending: get().sending,
-          sessionKey: targetSessionKey,
-          cachedOptimistic,
-        });
-        if (cachedOptimistic && finalMessages.some((m) => isSameUserMessage(m, cachedOptimistic, userMsgAt))) {
+      finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
+        userMessageAt: userMsgAt,
+        sending: get().sending,
+        sessionKey: targetSessionKey,
+        cachedOptimistic,
+      });
+      const optimisticRefAt = userMsgAt
+        ?? (cachedOptimistic?.timestamp ? toMs(cachedOptimistic.timestamp) : 0);
+      if (cachedOptimistic && optimisticRefAt > 0
+        && finalMessages.some((m) => isSameUserMessage(m, cachedOptimistic, optimisticRefAt))) {
+        set((s) => patchSessionRuntimeState(s, targetSessionKey, { optimisticUserMessage: null }));
+      } else if (cachedOptimistic) {
+        const cachedNorm = normalizeUserMessageText(cachedOptimistic.content);
+        if (
+          cachedNorm.length > 0
+          && finalMessages.some((m) => (
+            m.role === 'user'
+            && normalizeUserMessageText(m.content) === cachedNorm
+          ))
+        ) {
           set((s) => patchSessionRuntimeState(s, targetSessionKey, { optimisticUserMessage: null }));
-        } else if (cachedOptimistic) {
-          const cachedNorm = normalizeUserMessageText(cachedOptimistic.content);
-          if (
-            cachedNorm.length > 0
-            && finalMessages.some((m) => (
-              m.role === 'user'
-              && normalizeUserMessageText(m.content) === cachedNorm
-            ))
-          ) {
-            set((s) => patchSessionRuntimeState(s, targetSessionKey, { optimisticUserMessage: null }));
-          }
         }
       }
 
@@ -1872,6 +1990,19 @@ export const useChatStore = create<ChatState>()(
       finalMessages = mergeWorkflowCardBlocksFromCurrent(finalMessages, get().messages);
       finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
       finalMessages = ensureWorkflowCardsInMessages(finalMessages, targetSessionKey, getMessageText);
+      const gatewaySessionLabel = get().sessions.find((session) => session.key === targetSessionKey)?.label;
+      finalMessages = recoverInitialUserFromSessionLabel(
+        finalMessages,
+        targetSessionKey,
+        get().sessionLabels,
+        gatewaySessionLabel,
+      );
+      finalMessages = ensureOpeningUserMessageFirst(
+        finalMessages,
+        targetSessionKey,
+        get().sessionLabels,
+        gatewaySessionLabel,
+      );
       finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null, {
         sessionKey: targetSessionKey,
       });
@@ -2004,12 +2135,15 @@ export const useChatStore = create<ChatState>()(
             ),
           );
           if (labelText) {
-            set((s) => ({
-              sessionLabels: {
-                ...s.sessionLabels,
-                [targetSessionKey]: truncateSessionLabel(labelText),
-              },
-            }));
+            const normalized = normalizeDerivedSessionLabel(labelText);
+            if (normalized) {
+              set((s) => ({
+                sessionLabels: {
+                  ...s.sessionLabels,
+                  [targetSessionKey]: normalized,
+                },
+              }));
+            }
           }
         }
       }
@@ -2108,6 +2242,8 @@ export const useChatStore = create<ChatState>()(
           optimisticUserMessage: null,
           streamingText: '',
           streamingMessage: null,
+          streamingMessages: [],
+          streamingToolResults: [],
           streamingTools: [],
           pendingToolImages: [],
           error: null,
@@ -2145,7 +2281,12 @@ export const useChatStore = create<ChatState>()(
         }
 
         let rawMessages = allMessages;
-        if (rawMessages.length === 0 && (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey))) {
+        if (isVirtualTaskSessionKey(targetSessionKey)) {
+          const fallbackMessages = await loadVirtualTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
+          rawMessages = fallbackMessages.length > 0
+            ? mergeHistoryMessageSources([fallbackMessages, allMessages])
+            : allMessages;
+        } else if (rawMessages.length === 0 && (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey))) {
           rawMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
         } else if (rawMessages.length === 0 && (isClaudeScheduledTaskSessionKey(targetSessionKey) || isClaudeScheduledTaskRunSessionKey(targetSessionKey) || isClaudeScheduledTaskDatedSessionKey(targetSessionKey))) {
           rawMessages = await loadClaudeScheduledTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
@@ -2165,7 +2306,9 @@ export const useChatStore = create<ChatState>()(
         console.warn('Failed to load chat history:', err);
         if (get().currentSessionKey !== targetSessionKey) return;
         let fallbackMessages: RawMessage[] = [];
-        if (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey)) {
+        if (isVirtualTaskSessionKey(targetSessionKey)) {
+          fallbackMessages = await loadVirtualTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
+        } else if (isCronSessionKey(targetSessionKey) || isCronDatedSessionKey(targetSessionKey)) {
           fallbackMessages = await loadCronFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
         } else if (isClaudeScheduledTaskSessionKey(targetSessionKey) || isClaudeScheduledTaskRunSessionKey(targetSessionKey) || isClaudeScheduledTaskDatedSessionKey(targetSessionKey)) {
           fallbackMessages = await loadClaudeScheduledTaskFallbackMessages(targetSessionKey, CHAT_HISTORY_LIMIT);
@@ -2339,6 +2482,8 @@ export const useChatStore = create<ChatState>()(
       error: null,
       streamingText: '',
       streamingMessage: null,
+      streamingMessages: [],
+      streamingToolResults: [],
       streamingTools: [],
       pendingFinal: false,
       lastUserMessageAt: nowMs,
@@ -2349,6 +2494,8 @@ export const useChatStore = create<ChatState>()(
       activeRunId: null,
       streamingText: '',
       streamingMessage: null,
+      streamingMessages: [],
+      streamingToolResults: [],
       streamingTools: [],
       pendingFinal: false,
       lastUserMessageAt: nowMs,
@@ -2363,12 +2510,15 @@ export const useChatStore = create<ChatState>()(
     if (!currentSessionKey.endsWith(':main') && isFirstMessage
       && shouldAutoDeriveSessionLabel(currentSessionKey, sessionLabels, isCorruptedSessionLabel)
       && displayText) {
-      set((s) => ({
-        sessionLabels: {
-          ...s.sessionLabels,
-          [currentSessionKey]: truncateSessionLabel(displayText),
-        },
-      }));
+      const normalized = normalizeDerivedSessionLabel(displayText);
+      if (normalized) {
+        set((s) => ({
+          sessionLabels: {
+            ...s.sessionLabels,
+            [currentSessionKey]: normalized,
+          },
+        }));
+      }
     }
 
     // Mark this session as most recently active
@@ -2530,13 +2680,25 @@ export const useChatStore = create<ChatState>()(
     clearHistoryPoll();
     clearErrorRecoveryTimer();
     const { currentSessionKey } = get();
-    set({ sending: false, streamingText: '', streamingMessage: null, pendingFinal: false, lastUserMessageAt: null, optimisticUserMessage: null, pendingToolImages: [] });
+    set({
+      sending: false,
+      streamingText: '',
+      streamingMessage: null,
+      streamingMessages: [],
+      streamingToolResults: [],
+      pendingFinal: false,
+      lastUserMessageAt: null,
+      optimisticUserMessage: null,
+      pendingToolImages: [],
+    });
     set({ streamingTools: [] });
     set((s) => patchSessionRuntimeState(s, currentSessionKey, {
       sending: false,
       activeRunId: null,
       streamingText: '',
       streamingMessage: null,
+      streamingMessages: [],
+      streamingToolResults: [],
       streamingTools: [],
       pendingFinal: false,
       lastUserMessageAt: null,
@@ -2695,6 +2857,7 @@ export const useChatStore = create<ChatState>()(
             }
             return event.message ?? s.streamingMessage;
           })(),
+          streamingMessages: appendStreamingAssistantSnapshot(s.streamingMessages, event.message),
           streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
         }));
         break;
@@ -2712,7 +2875,7 @@ export const useChatStore = create<ChatState>()(
               applyWorkflowSchemaReady((schemaEnvelope.data ?? {}) as WorkflowSchemaReadyData);
             }
 
-            // Snapshot streaming assistant turn before handling tool result.
+            // Resolve file path from the active assistant tool call before clearing it.
             const currentStreamForPath = get().streamingMessage as RawMessage | null;
             const matchedPath = (currentStreamForPath && finalMsg.toolCallId)
               ? getToolCallFilePath(currentStreamForPath, finalMsg.toolCallId)
@@ -2738,45 +2901,25 @@ export const useChatStore = create<ChatState>()(
               });
               for (const ref of mediaRefs) toolFiles.push(makeAttachedFile(ref));
             }
-            set((s) => {
-              const currentStream = s.streamingMessage as RawMessage | null;
-              const snapshotMsgs: RawMessage[] = [];
-              if (currentStream) {
-                const streamRole = currentStream.role;
-                if (streamRole === 'assistant' || streamRole === undefined) {
-                  const snapId = currentStream.id
-                    || `${runId || 'run'}-turn-${s.messages.length}`;
-                  if (!s.messages.some(m => m.id === snapId)) {
-                    snapshotMsgs.push({
-                      ...(currentStream as RawMessage),
-                      role: 'assistant',
-                      id: snapId,
-                      _attachedFiles: toolFiles.length > 0
-                        ? [...((currentStream as RawMessage)._attachedFiles || []), ...toolFiles]
-                        : (currentStream as RawMessage)._attachedFiles,
-                    });
-                  }
-                }
-              }
-              return {
-                messages: snapshotMsgs.length > 0 ? [...s.messages, ...snapshotMsgs] : s.messages,
-                streamingText: '',
-                streamingMessage: null,
-                pendingFinal: true,
-                pendingToolImages: toolFiles.length > 0
-                  ? [...s.pendingToolImages, ...toolFiles]
-                  : s.pendingToolImages,
-                streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
-              };
-            });
+            set((s) => ({
+              streamingText: '',
+              streamingMessage: null,
+              streamingToolResults: appendStreamingToolResultSnapshot(s.streamingToolResults, finalMsg),
+              pendingFinal: true,
+              pendingToolImages: toolFiles.length > 0
+                ? [...s.pendingToolImages, ...toolFiles]
+                : s.pendingToolImages,
+              streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
+            }));
             void (async () => {
+              const sessionKey = get().currentSessionKey;
+              const agentId = get().currentAgentId;
               await dispatchBuiltinToolResult({
                 id: finalMsg.id,
                 toolCallId: finalMsg.toolCallId,
                 toolName: finalMsg.toolName,
                 content: finalMsg.content,
-              });
-              const sessionKey = get().currentSessionKey;
+              }, { sessionKey, agentId });
               let nextMessages = get().messages;
               const withForm = patchLastAssistantWithWorkflowForm(nextMessages, getMessageText);
               if (withForm !== nextMessages) {
@@ -2819,6 +2962,8 @@ export const useChatStore = create<ChatState>()(
             set(() => ({
               streamingText: '',
               streamingMessage: null,
+              streamingMessages: [],
+              streamingToolResults: [],
               streamingTools: [],
               pendingToolImages: [],
               sending: false,
@@ -2842,6 +2987,8 @@ export const useChatStore = create<ChatState>()(
           set((s) => {
             const nextTools = updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools;
             const streamingTools = isTerminalOutput ? [] : nextTools;
+            const streamingMessages = isTerminalOutput ? [] : s.streamingMessages;
+            const streamingToolResults = isTerminalOutput ? [] : s.streamingToolResults;
 
             // Attach any images collected from preceding tool results
             const pendingImgs = s.pendingToolImages;
@@ -2890,6 +3037,8 @@ export const useChatStore = create<ChatState>()(
                   messages: updatedMessages,
                   streamingText: '',
                   streamingMessage: null,
+                  streamingMessages,
+                  streamingToolResults,
                   pendingFinal: true,
                   streamingTools,
                   ...clearPendingImages,
@@ -2897,6 +3046,8 @@ export const useChatStore = create<ChatState>()(
                   messages: updatedMessages,
                   streamingText: '',
                   streamingMessage: null,
+                  streamingMessages,
+                  streamingToolResults,
                   sending: isTerminalOutput ? false : s.sending,
                   activeRunId: isTerminalOutput ? null : s.activeRunId,
                   pendingFinal: isTerminalOutput ? false : true,
@@ -2907,12 +3058,16 @@ export const useChatStore = create<ChatState>()(
               return toolOnly ? {
                 streamingText: '',
                 streamingMessage: null,
+                streamingMessages,
+                streamingToolResults,
                 pendingFinal: true,
                 streamingTools,
                 ...clearPendingImages,
               } : {
                 streamingText: '',
                 streamingMessage: null,
+                streamingMessages,
+                streamingToolResults,
                 sending: isTerminalOutput ? false : s.sending,
                 activeRunId: isTerminalOutput ? null : s.activeRunId,
                 pendingFinal: isTerminalOutput ? false : true,
@@ -2924,6 +3079,8 @@ export const useChatStore = create<ChatState>()(
               return {
                 streamingText: '',
                 streamingMessage: null,
+                streamingMessages: [],
+                streamingToolResults: [],
                 sending: false,
                 activeRunId: null,
                 pendingFinal: false,
@@ -2935,6 +3092,8 @@ export const useChatStore = create<ChatState>()(
               messages: [...s.messages, msgWithImages],
               streamingText: '',
               streamingMessage: null,
+              streamingMessages,
+              streamingToolResults,
               pendingFinal: true,
               streamingTools,
               ...clearPendingImages,
@@ -2942,6 +3101,8 @@ export const useChatStore = create<ChatState>()(
               messages: [...s.messages, msgWithImages],
               streamingText: '',
               streamingMessage: null,
+              streamingMessages,
+              streamingToolResults,
               sending: isTerminalOutput ? false : s.sending,
               activeRunId: isTerminalOutput ? null : s.activeRunId,
               pendingFinal: isTerminalOutput ? false : true,
@@ -2998,6 +3159,8 @@ export const useChatStore = create<ChatState>()(
           error: errorMsg,
           streamingText: '',
           streamingMessage: null,
+          streamingMessages: [],
+          streamingToolResults: [],
           streamingTools: [],
           pendingFinal: false,
           pendingToolImages: [],
@@ -3040,6 +3203,8 @@ export const useChatStore = create<ChatState>()(
           activeRunId: null,
           streamingText: '',
           streamingMessage: null,
+          streamingMessages: [],
+          streamingToolResults: [],
           streamingTools: [],
           pendingFinal: false,
           lastUserMessageAt: null,
@@ -3057,6 +3222,7 @@ export const useChatStore = create<ChatState>()(
           const updates = collectToolUpdates(event.message, 'delta');
           set((s) => ({
             streamingMessage: event.message ?? s.streamingMessage,
+            streamingMessages: appendStreamingAssistantSnapshot(s.streamingMessages, event.message),
             streamingTools: updates.length > 0 ? upsertToolStatuses(s.streamingTools, updates) : s.streamingTools,
           }));
         }
@@ -3132,6 +3298,14 @@ export const useChatStore = create<ChatState>()(
     sessionLabels: state.sessionLabels,
     sessionLastActivity: state.sessionLastActivity,
   }),
+  merge: (persisted, current) => {
+    const stored = persisted as Partial<Pick<typeof current, 'sessionLabels' | 'sessionLastActivity'>>;
+    return {
+      ...current,
+      sessionLabels: scrubCorruptedSessionLabels(stored.sessionLabels ?? {}),
+      sessionLastActivity: stored.sessionLastActivity ?? current.sessionLastActivity,
+    };
+  },
 }));
 
 /** OpenClaw has no Claude-style runtimeResult; agent.completed is the terminal signal. */
@@ -3139,7 +3313,11 @@ export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null
   const state = useChatStore.getState();
   const targetKey = sessionKey ?? state.currentSessionKey;
   const engineType = resolveEngineTypeForSession(state.sessions, targetKey, state.currentAgentId);
-  if (engineType !== 'openclaw') return;
+  // Finalize on agent.completed for both agentic engines. Claude runs whose
+  // terminal 'final' event lacks phase=completed are treated as non-terminal
+  // fragments (see resolveAssistantFinalTerminalState), so they rely on this
+  // path to clear sending. Without it the spinner stays stuck after the run.
+  if (engineType !== 'openclaw' && engineType !== 'claude') return;
 
   clearHistoryPoll();
   useChatStore.setState((prev) => patchSessionRuntimeState(prev, targetKey, {
@@ -3150,6 +3328,8 @@ export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null
     optimisticUserMessage: null,
     streamingText: '',
     streamingMessage: null,
+    streamingMessages: [],
+    streamingToolResults: [],
     streamingTools: [],
     pendingToolImages: [],
     error: null,

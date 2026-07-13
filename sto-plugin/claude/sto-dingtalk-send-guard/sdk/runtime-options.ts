@@ -2,18 +2,42 @@ import type { HookCallbackMatcher, HookEvent } from '@anthropic-ai/claude-agent-
 import { appendDingTalkAgentSendDisclaimer } from '../../../../shared/dingtalk-disclaimer';
 import { buildDingTalkMentionSystemContext } from '../../../../shared/dingtalk-mention-context';
 import {
+  DINGTALK_ORAL_SEND_PROMPT,
+  looksLikeDingTalkOralSendIntent,
+} from '../../../../shared/dingtalk-oral-send-prompt';
+import {
   buildDwsChatMessageSendAgentCommandExample,
   fixDwsChatMessageSendToolParams,
+  parseDwsChatMessageSendShellCommandArgs,
 } from '../../../../shared/dws-send-text';
 import {
   evaluateDingTalkSendGuard,
   handleDingTalkSendGuardAfter,
+  isDwsChatMessageSendDryRun,
+  isSuccessfulDwsChatMessageSendResult,
 } from './dingtalk-send-guard';
+import {
+  checkDwsSendDedup,
+  dwsSendRecipientKey,
+  recordDwsSent,
+} from '../../../../electron/utils/dws-send-dedup';
 import {
   clearDingTalkMentionPending,
   readDingTalkMentionPending,
 } from '../../../../electron/utils/dingtalk-mention-pending';
 import { logger } from '../../../../electron/utils/logger';
+
+/**
+ * 追加到每条拦截 reason 末尾的反绕路口条。
+ *
+ * 背景：模型在 `dws chat message send` 被 send-guard 拦截后，偶发把 `deny + reason`
+ * 误判成「Bash 这条路被堵、换条路绕过去」，转而用 Python / 其他语言脚本间接调 dws。
+ * 但安全策略是在执行前校验命令文本，绕路调用既不会被放行、也增加排障难度。reason
+ * 本身已写明正确重试格式，这里再显式堵住「换语言/换工具绕路」的思路，提示模型
+ * 「按 reason 直接用 Bash 重试」。
+ */
+const NO_BYPASS_HINT =
+  '若被本策略拦截，请按 reason 中给出的格式直接用 Bash 重试 `dws chat message send`；禁止改用 Python / 其他语言脚本 / `subprocess` / 其他工具间接调用 dws 绕过（安全策略在执行前校验命令文本，绕路不会被放行）。';
 
 export interface ClaudeRuntimeOptions {
   hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
@@ -23,7 +47,10 @@ export interface ClaudeRuntimeOptions {
 interface ClaudeRuntimeExtension {
   id: string;
   buildHooks?(sessionKey: string): Partial<Record<HookEvent, HookCallbackMatcher[]>> | undefined;
-  buildSystemPromptAppend?(sessionKey: string): Promise<string | undefined>;
+  buildSystemPromptAppend?(
+    sessionKey: string,
+    userPrompt?: string,
+  ): Promise<string | undefined>;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -37,6 +64,30 @@ function readCommand(params: Record<string, unknown> | undefined): string {
     if (typeof value === 'string' && value.trim()) return value;
   }
   return '';
+}
+
+/**
+ * 从 `dws chat message send` 命令解析 (收件人 key, 归一化正文)。
+ * 正文经 parseDwsChatMessageSendShellCommandArgs 的归一化（含代发说明底栏），
+ * 与兜底发送路径构造的正文一致，保证两条路径的去重指纹可比。
+ * 非 dws send 命令或缺失收件人/正文时返回 null。
+ */
+function parseDwsSendRecipientAndText(
+  command: string,
+): { recipientKey: string; text: string } | null {
+  const argv = parseDwsChatMessageSendShellCommandArgs(command);
+  if (!argv || argv.length < 4) return null;
+  let recipientKey: string | null = null;
+  let text = '';
+  for (let i = 0; i < argv.length - 1; i += 1) {
+    const flag = argv[i];
+    const next = argv[i + 1];
+    if (flag === '--user') recipientKey = dwsSendRecipientKey('user', next);
+    else if (flag === '--group') recipientKey = dwsSendRecipientKey('group', next);
+    else if (flag === '--text') text = next;
+  }
+  if (!recipientKey || !text) return null;
+  return { recipientKey, text };
 }
 
 function buildDingTalkSendFormatExample(): string {
@@ -75,25 +126,37 @@ function mergeHooks(
 const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
   id: 'sto-dingtalk-send-guard',
 
-  async buildSystemPromptAppend(sessionKey: string): Promise<string | undefined> {
+  async buildSystemPromptAppend(
+    sessionKey: string,
+    userPrompt?: string,
+  ): Promise<string | undefined> {
     const pendingMentions = await readDingTalkMentionPending(sessionKey);
-    if (!pendingMentions) {
-      logger.debug('[dingtalk-mention] claude-runtime: no pending mentions', { sessionKey });
-      return undefined;
+    if (pendingMentions) {
+      logger.info('[dingtalk-mention] claude-runtime: pending mentions found', {
+        sessionKey,
+        mentionCount: pendingMentions.mentions.length,
+        sendFileIntent: Boolean(pendingMentions.sendFileIntent),
+        attachedFileCount: pendingMentions.attachedFiles?.length ?? 0,
+      });
+
+      await clearDingTalkMentionPending(sessionKey);
+      return buildDingTalkMentionSystemContext(pendingMentions.mentions, {
+        sendFileIntent: pendingMentions.sendFileIntent,
+        attachedFiles: pendingMentions.attachedFiles,
+      });
     }
 
-    logger.info('[dingtalk-mention] claude-runtime: pending mentions found', {
-      sessionKey,
-      mentionCount: pendingMentions.mentions.length,
-      sendFileIntent: Boolean(pendingMentions.sendFileIntent),
-      attachedFileCount: pendingMentions.attachedFiles?.length ?? 0,
-    });
+    logger.debug('[dingtalk-mention] claude-runtime: no pending mentions', { sessionKey });
 
-    await clearDingTalkMentionPending(sessionKey);
-    return buildDingTalkMentionSystemContext(pendingMentions.mentions, {
-      sendFileIntent: pendingMentions.sendFileIntent,
-      attachedFiles: pendingMentions.attachedFiles,
-    });
+    // 无 @ 时：口头点名发送 → 注入 dws 规则（Claude 路径无 share_to_dingtalk）
+    if (looksLikeDingTalkOralSendIntent(userPrompt)) {
+      logger.info('[dingtalk-mention] claude-runtime: oral send intent, inject dws rules', {
+        sessionKey,
+      });
+      return DINGTALK_ORAL_SEND_PROMPT;
+    }
+
+    return undefined;
   },
 
   buildHooks(sessionKey: string) {
@@ -111,7 +174,7 @@ const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
                   hookSpecificOutput: {
                     hookEventName: 'PreToolUse',
                     permissionDecision: 'deny',
-                    permissionDecisionReason: formatProblem,
+                    permissionDecisionReason: `${formatProblem} ${NO_BYPASS_HINT}`,
                   },
                 };
               }
@@ -127,12 +190,35 @@ const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
                   hookSpecificOutput: {
                     hookEventName: 'PreToolUse',
                     permissionDecision: 'deny',
-                    permissionDecisionReason: decision.reason,
+                    permissionDecisionReason: `${decision.reason} ${NO_BYPASS_HINT}`,
                   },
                 };
               }
 
               const fixedParams = fixDwsChatMessageSendToolParams(params);
+              const effectiveParams = fixedParams ?? params;
+              const commandText = readCommand(effectiveParams);
+
+              if (commandText && !isDwsChatMessageSendDryRun(commandText)) {
+                const fp = parseDwsSendRecipientAndText(commandText);
+                if (fp) {
+                  const dedup = checkDwsSendDedup(fp.recipientKey, fp.text);
+                  if (dedup.recent) {
+                    logger.info(
+                      '[dingtalk-mention] claude-runtime: blocked duplicate dws send (same recipient+text within TTL)',
+                      { sessionKey },
+                    );
+                    return {
+                      hookSpecificOutput: {
+                        hookEventName: 'PreToolUse',
+                        permissionDecision: 'deny',
+                        permissionDecisionReason: `${dedup.reason} ${NO_BYPASS_HINT}`,
+                      },
+                    };
+                  }
+                }
+              }
+
               if (fixedParams) {
                 logger.debug('[dingtalk-mention] claude-runtime: normalized dws send --text');
                 return {
@@ -155,13 +241,27 @@ const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
             async (input) => {
               if (input.hook_event_name !== 'PostToolUse') return {};
 
+              const params = asRecord(input.tool_input);
+              const commandText = readCommand(params);
+
               handleDingTalkSendGuardAfter({
                 toolName: input.tool_name,
-                params: asRecord(input.tool_input),
+                params,
                 sessionKey,
                 toolCallId: input.tool_use_id,
                 result: input.tool_response,
               });
+
+              if (
+                commandText
+                && !isDwsChatMessageSendDryRun(commandText)
+                && isSuccessfulDwsChatMessageSendResult(undefined, input.tool_response)
+              ) {
+                const fp = parseDwsSendRecipientAndText(commandText);
+                if (fp) {
+                  recordDwsSent(fp.recipientKey, fp.text);
+                }
+              }
 
               return {};
             },
@@ -178,6 +278,7 @@ const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
 
 export async function buildStoDingTalkSendGuardClaudeRuntimeOptions(
   sessionKey: string,
+  userPrompt?: string,
 ): Promise<ClaudeRuntimeOptions> {
   const hooks: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {};
   const promptBlocks: string[] = [];
@@ -185,7 +286,7 @@ export async function buildStoDingTalkSendGuardClaudeRuntimeOptions(
   for (const extension of claudeRuntimeExtensions) {
     mergeHooks(hooks, extension.buildHooks?.(sessionKey));
 
-    const promptBlock = await extension.buildSystemPromptAppend?.(sessionKey);
+    const promptBlock = await extension.buildSystemPromptAppend?.(sessionKey, userPrompt);
     if (promptBlock?.trim()) {
       promptBlocks.push(promptBlock.trim());
     }

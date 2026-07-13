@@ -11,16 +11,20 @@ import {
   Eye,
   ExternalLink,
 } from 'lucide-react';
+import { ShareMessageIcon } from '@/components/icons/ShareMessageIcon';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { OnEditWorkflowNavigate } from '@/lib/preview-workflow-navigation';
-import { isHttpUrl, inferMimeTypeFromUrl } from '@/lib/preview-url';
+import { isHttpUrl, inferMimeTypeFromUrl, resolvePreviewMimeType } from '@/lib/preview-url';
 import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { FilePreviewViewer } from '@/components/file-preview/FilePreviewViewer';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
-import { buildArtifactShareDraft, shareToDingTalk } from '@/lib/dingtalk-share';
+import {
+  buildArtifactShareDialogDraft,
+  type DingTalkShareDialogDraft,
+} from '@/lib/dingtalk-share';
 import {
   stoPreviewActionButtonClass,
   stoPreviewActionRowClass,
@@ -50,17 +54,18 @@ export function ChatPreviewPanel({
   const { t } = useTranslation('chat');
   const [refreshKey, setRefreshKey] = useState(0);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const [shareDraft, setShareDraft] = useState<ReturnType<typeof buildArtifactShareDraft> | null>(null);
+  const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
 
   const activeFile = useMemo(() => {
     if (!activeFilePath) return null;
     const found = files.find((f) => f.filePath === activeFilePath);
     if (found) return found;
     if (isHttpUrl(activeFilePath)) {
+      const inferredMime = inferMimeTypeFromUrl(activeFilePath);
       return {
         filePath: activeFilePath,
         fileName: activeFilePath.replace(/^https?:\/\//, ''),
-        mimeType: inferMimeTypeFromUrl(activeFilePath),
+        mimeType: resolvePreviewMimeType(inferredMime, activeFilePath),
         fileSize: 0,
         preview: null,
       } satisfies AttachedFileMeta;
@@ -68,21 +73,18 @@ export function ChatPreviewPanel({
     return null;
   }, [files, activeFilePath]);
 
-  // const handleOpenShareDialog = useCallback(() => {
-  //   if (!activeFile?.filePath) return;
-  //   setShareDraft(buildArtifactShareDraft({
-  //     fileName: activeFile.fileName,
-  //     filePath: activeFile.filePath,
-  //   }));
-  //   setShareDialogOpen(true);
-  // }, [activeFile]);
+  const handleOpenShareDialog = useCallback(() => {
+    if (!activeFile?.filePath) return;
+    setShareDraft(buildArtifactShareDialogDraft({
+      fileName: activeFile.fileName,
+      filePath: activeFile.filePath,
+      mimeType: activeFile.mimeType,
+      fileSize: activeFile.fileSize,
+    }, t));
+    setShareDialogOpen(true);
+  }, [activeFile, t]);
 
-  const handleConfirmShare = useCallback(async (values: { title: string; text: string; url: string }) => {
-    await shareToDingTalk({
-      title: values.title,
-      text: values.text,
-      url: values.url,
-    });
+  const handleShareCompleted = useCallback(() => {
     toast.success(t('preview.shareDialog.success'));
     setShareDialogOpen(false);
     setShareDraft(null);
@@ -114,8 +116,9 @@ export function ChatPreviewPanel({
 
   const handleDownload = useCallback(async () => {
     if (!activeFile?.filePath) return;
-    if (activeFile.filePath.startsWith('http://') || activeFile.filePath.startsWith('https://')) {
-      window.electron.openExternal(activeFile.filePath);
+    const downloadTarget = activeFile.downloadUrl?.trim() || activeFile.filePath;
+    if (downloadTarget.startsWith('http://') || downloadTarget.startsWith('https://')) {
+      window.electron.openExternal(downloadTarget);
       return;
     }
     try {
@@ -166,12 +169,9 @@ export function ChatPreviewPanel({
                 <PreviewActionButton onClick={handleDownload} aria-label={t('preview.download')}>
                   <Download className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>
-                {/* Temporarily hide artifact share entry until the feature is re-enabled. */}
-                {/*
                 <PreviewActionButton onClick={handleOpenShareDialog} aria-label={t('preview.share')}>
-                  <Share2 className="h-4 w-4" aria-hidden />
+                  <ShareMessageIcon className="h-4 w-4" />
                 </PreviewActionButton>
-                */}
                 <PreviewActionButton onClick={handleOpenExternal} aria-label={t('preview.openExternal')}>
                   <ExternalLink className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>
@@ -211,7 +211,7 @@ export function ChatPreviewPanel({
       <ArtifactShareDialog
         open={shareDialogOpen}
         draft={shareDraft}
-        onConfirm={handleConfirmShare}
+        onShared={handleShareCompleted}
         onCancel={() => {
           setShareDialogOpen(false);
           setShareDraft(null);

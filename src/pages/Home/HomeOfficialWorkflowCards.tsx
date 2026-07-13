@@ -11,6 +11,8 @@ import {
   homeHubCardTagClass,
   homeHubCardTitleClass,
   homeHubInteractiveCardShellClass,
+  homeHubCardBodyRegionClass,
+  homeHubCardFooterRegionClass,
 } from './home-hub-surface-styles';
 import avatar01 from '@/assets/avatars/avatar-01.png.png';
 import avatar02 from '@/assets/avatars/avatar-02.png.png';
@@ -96,14 +98,14 @@ function HomeTemplateGuideCard({
         </div>
       </div>
 
-      <div className="mt-5 min-h-[4.5rem]">
+      <div className={homeHubCardBodyRegionClass}>
         <p className={homeHubCardDescClass}>{description}</p>
         <p className={cn('mt-1.5', homeHubCardDescClass)}>
           {t('homeWorkflowCard.bodyDetail')}
         </p>
       </div>
 
-      <div className="mt-5 flex min-h-[40px] items-center gap-3 border-t border-[#E5E6EB] pt-4 dark:border-border">
+      <div className={homeHubCardFooterRegionClass}>
         <AvatarStack urls={avatarUrls} />
         <p className="min-w-0 flex-1 truncate text-center text-[13px] text-[#86909C] dark:text-muted-foreground">
           {t('homeWorkflowCard.footerTeam')}

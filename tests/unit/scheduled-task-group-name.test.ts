@@ -49,6 +49,20 @@ describe('scheduled-task-group-name', () => {
     expect(name).toBe('日报生成');
   });
 
+  it('buildScheduledTaskGroupDisplayName keeps user names that start with 定时任务', () => {
+    const name = buildScheduledTaskGroupDisplayName(
+      'cron',
+      'job-uuid',
+      [],
+      {
+        cron: new Map([['job-uuid', '定时任务测试']]),
+        sto: new Map(),
+        claude: new Map(),
+      },
+    );
+    expect(name).toBe('定时任务测试');
+  });
+
   it('sortScheduledTaskGroupsByFirstTriggerDesc orders by earliest session activity', () => {
     const sessionLastActivity: Record<string, number> = {};
     const groups = [

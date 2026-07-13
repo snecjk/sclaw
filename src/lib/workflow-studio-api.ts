@@ -1,6 +1,6 @@
 /**
  * Workflow Studio API — aligned with memory-center-web `/workflow/v1/*`
- * Used by create wizard at `/workflow/new` (MC: `/workflows-workbench/new`).
+ * Used by create modal on `/workflow` (deep link: `/workflow/new`, MC: `/workflows-workbench/new`).
  */
 import { hostApiFetch } from '@/lib/host-api';
 import { getWorkflowStoToken } from '@/lib/workflow-api';

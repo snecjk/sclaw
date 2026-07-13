@@ -49,11 +49,13 @@ import { deviceOAuthManager, OAuthProviderType } from '../utils/device-oauth';
 import { browserOAuthManager, type BrowserOAuthProviderType } from '../utils/browser-oauth';
 import { applyProxySettings } from './proxy';
 import { syncLaunchAtStartupSettingFromStore } from './launch-at-startup';
+import { syncPreventSystemSleepSettingFromStore } from './prevent-sleep';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { getStoToken } from '../utils/auth-store';
 import { preprocessChatSendParams } from '../utils/dingtalk-mention-send';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
+import { uploadFileToTempOSS } from '../utils/oss-temp-upload';
 import { getRecentTokenUsageHistory } from '../utils/token-usage';
 import { getProviderService } from '../services/providers/provider-service';
 import {
@@ -68,11 +70,13 @@ import {
 import { validateApiKeyWithProvider } from '../services/providers/provider-validation';
 import { appUpdater } from './updater';
 import { registerHostApiProxyHandlers } from './ipc/host-api-proxy';
+import { registerPreviewHttpFetchHandlers } from './ipc/preview-http-fetch';
 import { registerWorkflowStreamHandlers } from './ipc/workflow-stream-proxy';
 import { getWorkflowExecutionTracker } from './services/workflow-execution-tracker';
 import { syncClaudeDefaultContext } from '../services/claude-context-sync';
 import {
   isLaunchAtStartupKey,
+  isPreventSystemSleepKey,
   isProxyKey,
   mapAppErrorCode,
   type AppRequest,
@@ -95,6 +99,7 @@ export function registerIpcHandlers(
 
   // Host API proxy handlers
   registerHostApiProxyHandlers();
+  registerPreviewHttpFetchHandlers();
   registerWorkflowStreamHandlers();
 
   // Gateway handlers
@@ -649,6 +654,9 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             if (isLaunchAtStartupKey(key)) {
               await syncLaunchAtStartupSettingFromStore();
             }
+            if (isPreventSystemSleepKey(key)) {
+              await syncPreventSystemSleepSettingFromStore();
+            }
             if (key === 'autoCheckUpdate') {
               await appUpdater.syncPeriodicCheckFromSettings(value === true);
             }
@@ -667,6 +675,9 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             if (entries.some(([key]) => isLaunchAtStartupKey(key))) {
               await syncLaunchAtStartupSettingFromStore();
             }
+            if (entries.some(([key]) => isPreventSystemSleepKey(key))) {
+              await syncPreventSystemSleepSettingFromStore();
+            }
             if (Object.prototype.hasOwnProperty.call(patch, 'autoCheckUpdate')) {
               await appUpdater.syncPeriodicCheckFromSettings(patch.autoCheckUpdate === true);
             }
@@ -678,6 +689,7 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             const settings = await getAllSettings();
             await handleProxySettingsChange();
             await syncLaunchAtStartupSettingFromStore();
+            await syncPreventSystemSleepSettingFromStore();
             await appUpdater.syncPeriodicCheckFromSettings(settings.autoCheckUpdate === true);
             data = { success: true, settings };
             break;
@@ -1442,8 +1454,6 @@ function registerGatewayHandlers(
     // Modern image formats
     'image/avif', 'image/heic', 'image/heif', 'image/tiff',
   ]);
-  const BIZ_AGENT_TEMP_UPLOAD_PATH = '/agent/v1/biz-agent/attachments/upload';
-
   function getAgentIdFromSessionKey(sessionKey: string): string {
     if (!sessionKey.startsWith('agent:')) return 'main';
     const [, agentId] = sessionKey.split(':');
@@ -1455,43 +1465,6 @@ function registerGatewayHandlers(
     const agentId = getAgentIdFromSessionKey(sessionKey);
     const agent = snapshot.agents.find((item) => item.id.trim().toLowerCase() === agentId);
     return agent?.fileTransformByOSS === true;
-  }
-
-  async function uploadMediaToTempOSS(filePath: string, fileName: string): Promise<string> {
-    const token = await getStoToken();
-    if (!token) {
-      throw new Error('stoToken is missing, cannot upload media to OSS');
-    }
-
-    const fsP = await import('fs/promises');
-    const fileBuffer = await fsP.readFile(filePath);
-    const formData = new (globalThis as { FormData: new () => any }).FormData();
-    const BlobCtor = (globalThis as { Blob: new (parts: Array<Buffer>) => any }).Blob;
-    formData.append('file', new BlobCtor([fileBuffer]), fileName);
-
-    const baseUrl = await resolveStoBaseUrl();
-    const url = `${baseUrl}${BIZ_AGENT_TEMP_UPLOAD_PATH}`;
-    const response = await proxyAwareFetch(url, {
-      method: 'POST',
-      headers: buildStoMemoryCenterAuthHeaders(token),
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const bodyText = await response.text().catch(() => '');
-      throw new Error(`temp OSS upload failed: ${response.status} ${bodyText}`);
-    }
-
-    const payload = await response.json() as {
-      success?: boolean;
-      data?: { url?: string };
-      url?: string;
-    };
-    const uploadedUrl = payload.data?.url || payload.url;
-    if (!uploadedUrl) {
-      throw new Error('temp OSS upload response missing url');
-    }
-    return uploadedUrl;
   }
 
   ipcMain.handle('chat:sendWithMedia', async (_, params: {
@@ -1537,7 +1510,7 @@ function registerGatewayHandlers(
           logger.info(`[chat:sendWithMedia] Processing file: ${m.fileName} (${m.mimeType}), path: ${m.filePath}, exists: ${exists}, isVision: ${VISION_MIME_TYPES.has(m.mimeType)}, transformByOSS: ${transformByOSS}`);
 
           if (transformByOSS) {
-            const ossTempUrl = await uploadMediaToTempOSS(m.filePath, m.fileName);
+            const ossTempUrl = await uploadFileToTempOSS(m.filePath, m.fileName, { bizTypeEnum: 'LLM' });
             fileReferences.push(
               `[media attached: ${ossTempUrl} (${m.mimeType}) | ${ossTempUrl}]`,
             );
@@ -2460,6 +2433,9 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
     if (key === 'launchAtStartup') {
       await syncLaunchAtStartupSettingFromStore();
     }
+    if (key === 'preventSystemSleep') {
+      await syncPreventSystemSleepSettingFromStore();
+    }
     if (key === 'autoCheckUpdate') {
       await appUpdater.syncPeriodicCheckFromSettings(value === true);
     }
@@ -2486,6 +2462,9 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
     if (entries.some(([key]) => key === 'launchAtStartup')) {
       await syncLaunchAtStartupSettingFromStore();
     }
+    if (entries.some(([key]) => key === 'preventSystemSleep')) {
+      await syncPreventSystemSleepSettingFromStore();
+    }
     if (Object.prototype.hasOwnProperty.call(patch, 'autoCheckUpdate')) {
       await appUpdater.syncPeriodicCheckFromSettings(patch.autoCheckUpdate === true);
     }
@@ -2498,6 +2477,7 @@ function registerSettingsHandlers(gatewayManager: GatewayManager): void {
     const settings = await getAllSettings();
     await handleProxySettingsChange();
     await syncLaunchAtStartupSettingFromStore();
+    await syncPreventSystemSleepSettingFromStore();
     await appUpdater.syncPeriodicCheckFromSettings(settings.autoCheckUpdate === true);
     return { success: true, settings };
   });
@@ -2979,5 +2959,10 @@ function registerSessionHandlers(): void {
 
   ipcMain.handle('workflow:sync-state', async (_, { runId }: { runId: string }) => {
     return getWorkflowExecutionTracker().getState(runId);
+  });
+
+  ipcMain.handle('workflow:appendSessionRecord', async (_, input) => {
+    const { appendWorkflowSessionRecord } = await import('../services/workflow-session-writer');
+    await appendWorkflowSessionRecord(input as import('../services/workflow-session-writer').AppendWorkflowSessionRecordInput);
   });
 }

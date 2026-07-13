@@ -2,6 +2,13 @@ import { MoreHorizontal, Route } from 'lucide-react';
 import { Fragment, type ReactNode, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   workflowListCardBodyClass,
   workflowListCardCoverClass,
   workflowListCardCoverWrapClass,
@@ -14,16 +21,16 @@ import {
   workflowListCardGridClass,
   workflowListCardHeadClass,
   workflowListCardMainClass,
+  workflowListCardMenuClass,
+  workflowListCardMenuItemClass,
   workflowListCardMoreActionClass,
   workflowListCardPrimaryActionClass,
-  workflowListCardScheduleRowClass,
   workflowListCardSecondaryActionClass,
   workflowListCardShellClass,
   workflowListCardTitleRowClass,
 } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
 import { WorkflowCardCover } from '@/pages/Workflow/components/workflow-card-cover';
-// import { WorkflowScheduleToggle } from '@/pages/Workflow/components/workflow-schedule-toggle';
 import type {
   OfficialWorkflowCard,
   WorkflowCardItem,
@@ -94,12 +101,13 @@ export interface WorkflowMineListCardProps {
   isRenaming: boolean;
   renameRef?: RefObject<HTMLInputElement | null>;
   onRenameCommit: (name: string) => void;
-  // TODO: 等待后端 API 对接
-  // onToggleEnabled: (enabled: boolean) => void;
   onCardClick?: () => void;
   onRun: () => void;
   onEdit: () => void;
-  onMore: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onRenameRequest: () => void;
+  onDeleteRequest: () => void;
+  isRenameDisabled?: boolean;
+  isDeleteDisabled?: boolean;
 }
 
 /** 「我的工作流」卡片：标题+开关+排期+描述+流程+操作按钮 */
@@ -108,11 +116,13 @@ export function WorkflowMineListCard({
   isRenaming,
   renameRef,
   onRenameCommit,
-  // onToggleEnabled,
   onCardClick,
   onRun,
   onEdit,
-  onMore,
+  onRenameRequest,
+  onDeleteRequest,
+  isRenameDisabled = false,
+  isDeleteDisabled = false,
 }: WorkflowMineListCardProps) {
   const { t } = useTranslation('workflow');
 
@@ -141,40 +151,10 @@ export function WorkflowMineListCard({
               ) : (
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   {card.name}
-                  {card.isCustom ? (
-                    <span className="rounded-sm bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                      {t('card.customTag')}
-                    </span>
-                  ) : (
-                    <span className="rounded-sm bg-muted px-2 py-0.5 text-xs font-medium text-foreground/70">
-                      {t('card.systemTag')}
-                    </span>
-                  )}
                 </span>
               )}
             </div>
-            {/* TODO: 等待后端 API 对接 */}
-            {/* <WorkflowScheduleToggle
-              checked={card.enabled}
-              onCheckedChange={onToggleEnabled}
-              aria-label={card.enabled ? t('card.pauseSchedule') : t('card.resumeSchedule')}
-            /> */}
           </div>
-          {card.schedule.trim() || card.showPausedLabel ? (
-            <div
-              className={cn(
-                workflowListCardScheduleRowClass,
-                'flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5'
-              )}
-            >
-              <span className={cn(card.scheduleMuted && 'text-muted-foreground/80')}>
-                {card.schedule}
-              </span>
-              {card.showPausedLabel ? (
-                <span className="text-warning">{t('card.pausedLabel')}</span>
-              ) : null}
-            </div>
-          ) : null}
         </div>
 
         <p className="m-0 text-[13px] leading-relaxed text-foreground/80">{card.description}</p>
@@ -182,17 +162,55 @@ export function WorkflowMineListCard({
       </div>
 
       <div className={cn(workflowListCardFooterClass, 'flex items-center justify-between gap-2')}>
-        <button
-          type="button"
-          className={workflowListCardMoreActionClass}
-          aria-label={t('card.more')}
-          onClick={(e) => {
-            e.stopPropagation();
-            onMore(e);
-          }}
-        >
-          <MoreHorizontal className="h-4 w-4" aria-hidden />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={workflowListCardMoreActionClass}
+              aria-label={t('card.more')}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreHorizontal className="h-4 w-4" aria-hidden />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            side="top"
+            align="start"
+            sideOffset={8}
+            collisionPadding={8}
+            className={cn(
+              workflowListCardMenuClass,
+              'z-[10041] w-[200px] data-[state=closed]:pointer-events-none'
+            )}
+            onCloseAutoFocus={(e) => e.preventDefault()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <DropdownMenuItem
+              className={workflowListCardMenuItemClass}
+              disabled={isRenameDisabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRenameRequest();
+              }}
+            >
+              {t('card.rename')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className={cn(
+                workflowListCardMenuItemClass,
+                'text-destructive focus:bg-destructive/10 focus:text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive',
+              )}
+              disabled={isDeleteDisabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteRequest();
+              }}
+            >
+              {t('card.delete')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -247,9 +265,6 @@ export function WorkflowOfficialListCard({
               {card.name}
             </div>
           </div>
-          {card.schedule.trim() ? (
-            <div className={workflowListCardScheduleRowClass}>{card.schedule}</div>
-          ) : null}
         </div>
         <p className="m-0 text-[13px] leading-relaxed text-foreground/80">{card.description}</p>
         {/* TODO: POST /agent/v1/workflow-templates 节点摘要未就绪，card.flow 暂为空；接口稳定后恢复 WorkflowFlowRow */}
@@ -258,9 +273,11 @@ export function WorkflowOfficialListCard({
       <div
         className={cn(workflowListCardFooterClass, 'flex flex-wrap items-center justify-end gap-2')}
       >
-        <span className="mr-auto rounded-lg bg-muted px-2 py-0.5 text-xs text-foreground/80">
-          {card.category}
-        </span>
+        {card.category ? (
+          <span className="mr-auto rounded-lg bg-muted px-2 py-0.5 text-xs text-foreground/80">
+            {card.category}
+          </span>
+        ) : null}
         {/* <button
           type="button"
           className={workflowListCardSecondaryActionClass}

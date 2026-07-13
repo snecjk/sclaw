@@ -8,8 +8,21 @@ import App from './App';
 import './i18n';
 import './styles/globals.css';
 import { initializeDefaultTransports } from './lib/api-client';
+import { applyScrollbarLayoutAttribute } from './lib/scrollbar-layout';
 
 initializeDefaultTransports();
+
+const resolveAppPlatform = (): string => {
+  const fromElectron = window.electron?.platform?.trim();
+  if (fromElectron) return fromElectron;
+  const nav = navigator.platform.toLowerCase();
+  if (nav.includes('mac')) return 'darwin';
+  if (nav.includes('win')) return 'win32';
+  return 'linux';
+};
+
+document.documentElement.setAttribute('data-platform', resolveAppPlatform());
+applyScrollbarLayoutAttribute();
 
 // 桌面悬浮图标窗口极小：在 React 绘制前去掉 splash / 锁定溢出，避免 WebKit 出现滚动条
 const hashPath = window.location.hash.replace(/^#/, '').split('?')[0] ?? '';

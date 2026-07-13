@@ -90,6 +90,8 @@ interface AuthState {
   impersonationOrigin: SsoUserInfo | null;
   accountSwitchOptions: AccountSwitchOption[];
   accountSwitchOptionsStatus: AccountSwitchOptionsStatus;
+  /** Renderer Apollo `claw.site.department` cache; null until first fetch completes. */
+  siteDepartmentTypes: string[] | null;
 
   // Actions
   init: () => Promise<void>;
@@ -176,6 +178,20 @@ async function commitAuthSessionToHost(payload: {
   }
 }
 
+async function fetchRendererSiteDepartmentTypes(): Promise<string[]> {
+  try {
+    const res = await hostApiFetch<{ types?: string[] }>('/api/auth/site-department-types');
+    return Array.isArray(res.types) ? res.types : [];
+  } catch {
+    return [];
+  }
+}
+
+function applyRendererSiteDepartmentTypes(types: string[]): string[] {
+  setSiteDepartmentTypes(types);
+  return types;
+}
+
 async function refreshProviderSnapshot(): Promise<void> {
   try {
     const { useProviderStore } = await import('@/stores/providers');
@@ -184,6 +200,11 @@ async function refreshProviderSnapshot(): Promise<void> {
     console.warn('[auth] Provider snapshot refresh failed:', error);
   }
 }
+function reloadAppAfterAccountSwitch(): void {
+  // HQ ↔ site impersonation changes sidebar menus and home surfaces; reload re-inits all stores.
+  window.location.reload();
+}
+
 async function syncStoModelsAndRefreshProviders(context: 'init' | 'login'): Promise<void> {
   const maxAttempts = 2;
 
@@ -254,6 +275,7 @@ export const useAuthStore = create<AuthState>()(
       impersonationOrigin: null,
       accountSwitchOptions: [],
       accountSwitchOptionsStatus: 'idle',
+      siteDepartmentTypes: null,
 
       clearAccessDenied: () => {
         set({ accessDenied: false, accessCheck: null, error: null });
@@ -323,6 +345,12 @@ export const useAuthStore = create<AuthState>()(
             });
             return;
           }
+          let siteDepartmentTypes: string[] | null = null;
+          if (data.isAuthenticated) {
+            siteDepartmentTypes = applyRendererSiteDepartmentTypes(
+              await fetchRendererSiteDepartmentTypes(),
+            );
+          }
           set({
             isAuthenticated: data.isAuthenticated,
             user: data.user,
@@ -331,6 +359,7 @@ export const useAuthStore = create<AuthState>()(
             accessDenied: false,
             accessCheck: null,
             impersonationOrigin: data.impersonationOrigin ?? null,
+            siteDepartmentTypes,
           });
           if (!data.isAuthenticated) {
             set({
@@ -345,10 +374,6 @@ export const useAuthStore = create<AuthState>()(
             // before that sync completed. This call deduplicates safely against any
             // in-progress main-process sync.
             void syncStoModelsAndRefreshProviders('init');
-            // Warm site-department-types cache in renderer
-            void hostApiFetch<{ types: string[] }>('/api/auth/site-department-types')
-              .then((res) => setSiteDepartmentTypes(res.types))
-              .catch(() => {});
             void get().loadAccountSwitchOptions();
             // Main process runs batched setup on startup; refresh UI provider list only.
             void refreshProviderSnapshot();
@@ -407,6 +432,9 @@ export const useAuthStore = create<AuthState>()(
           }
 
           if (data.success && data.user) {
+            const siteDepartmentTypes = applyRendererSiteDepartmentTypes(
+              await fetchRendererSiteDepartmentTypes(),
+            );
             set({
               isAuthenticated: true,
               user: data.user,
@@ -417,16 +445,12 @@ export const useAuthStore = create<AuthState>()(
               accountSwitchOptions: [],
               accountSwitchOptionsStatus: 'idle',
               impersonationOrigin: null,
+              siteDepartmentTypes,
             });
 
             showStoSyncErrorToasts(data.stoSync);
             void syncStoModelsAndRefreshProviders('login');
             void get().refreshCrmWeekReportPolicy();
-
-            // Warm site-department-types cache in renderer
-            void hostApiFetch<{ types: string[] }>('/api/auth/site-department-types')
-              .then((res) => setSiteDepartmentTypes(res.types))
-              .catch(() => {});
             void get().loadAccountSwitchOptions();
           } else {
             set({
@@ -461,7 +485,9 @@ export const useAuthStore = create<AuthState>()(
           impersonationOrigin: null,
           accountSwitchOptions: [],
           accountSwitchOptionsStatus: 'idle',
+          siteDepartmentTypes: null,
         });
+        setSiteDepartmentTypes(null);
 
         // Refresh provider list to reflect STO model cleanup
         void refreshProviderSnapshot();
@@ -553,14 +579,7 @@ export const useAuthStore = create<AuthState>()(
               })
             : data.stoSync;
           showStoSyncErrorToasts(stoSync);
-          void syncStoModelsAndRefreshProviders('login');
-          void get().refreshCrmWeekReportPolicy();
-          void hostApiFetch<{ types: string[] }>('/api/auth/site-department-types')
-            .then((res) => setSiteDepartmentTypes(res.types))
-            .catch(() => {});
-          toast.success('已切换网点账号', {
-            description: data.user.companyName || data.user.realName || trimmed,
-          });
+          reloadAppAfterAccountSwitch();
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           toast.error('切换网点账号失败', { description: message });
@@ -609,13 +628,7 @@ export const useAuthStore = create<AuthState>()(
               })
             : data.stoSync;
           showStoSyncErrorToasts(stoSync);
-          void syncStoModelsAndRefreshProviders('login');
-          void get().refreshCrmWeekReportPolicy();
-          void hostApiFetch<{ types: string[] }>('/api/auth/site-department-types')
-            .then((res) => setSiteDepartmentTypes(res.types))
-            .catch(() => {});
-          toast.success('已切回总部账号');
-          void get().loadAccountSwitchOptions();
+          reloadAppAfterAccountSwitch();
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           toast.error('切回总部账号失败', { description: message });

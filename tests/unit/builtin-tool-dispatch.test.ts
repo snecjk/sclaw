@@ -21,13 +21,17 @@ vi.mock('@/stores/chat', () => ({
     getState: () => ({
       currentSessionKey: 'agent:main:main',
       currentAgentId: 'main',
+      messages: [],
     }),
+    setState: vi.fn(),
   },
 }));
 
 vi.mock('@/lib/workflow-run-started', () => ({
   applyWorkflowRunStarted: vi.fn(async () => true),
 }));
+
+import { applyWorkflowRunStarted } from '@/lib/workflow-run-started';
 
 describe('dispatchBuiltinToolResult', () => {
   beforeEach(() => {
@@ -52,6 +56,34 @@ describe('dispatchBuiltinToolResult', () => {
     expect(handled).toBe(true);
     expect(applyWorkflowSchemaReady).toHaveBeenCalledWith(
       expect.objectContaining({ templateId: 'tpl-1' }),
+    );
+  });
+
+  it('passes explicit sessionKey for workflow_execution_started', async () => {
+    const handled = await dispatchBuiltinToolResult({
+      id: 'tool-wf-1',
+      content: JSON.stringify({
+        type: 'workflow_execution_started',
+        success: true,
+        domain: 'workflow',
+        data: {
+          workflowId: 'wf_1',
+          runId: 'run_1',
+          templateName: '测试',
+        },
+      }),
+    }, {
+      sessionKey: 'agent:main:cron:job-1:2026-07-01',
+      agentId: 'main',
+    });
+    expect(handled).toBe(true);
+    expect(applyWorkflowRunStarted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionKey: 'agent:main:cron:job-1:2026-07-01',
+        agentId: 'main',
+        runId: 'run_1',
+        workflowId: 'wf_1',
+      }),
     );
   });
 

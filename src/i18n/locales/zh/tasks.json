@@ -48,10 +48,19 @@
     },
     "taskView": {
       "aria": "定时任务",
-      "emptyNoRecords": "该状态下暂无执行记录"
+      "emptyNoRecords": "该状态下暂无执行记录",
+      "recordsCappedHint": "工作流执行记录太多啦，为您展示了最新的 99 条执行记录。"
     },
     "recordView": {
       "aria": "执行记录"
+    },
+    "runGuard": {
+      "aria": "运行保障",
+      "preventSleep": "阻止电脑睡眠",
+      "preventSleepDesc": "开启后，S Claw 运行期间将阻止电脑自动进入睡眠。",
+      "preventSleepTips": "定时任务运行期间建议开启。请勿合盖，并连接电源；合盖或关机后无法保证正常运行。",
+      "toastEnabled": "已开启：S Claw 运行期间将阻止电脑睡眠",
+      "toastDisabled": "已关闭：电脑将按系统设置正常睡眠"
     },
     "delete": {
       "title": "删除定时任务？",

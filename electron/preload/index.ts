@@ -23,10 +23,12 @@ const electronAPI = {
         'gateway:rpc',
         'gateway:httpProxy',
         'hostapi:fetch',
+        'preview:httpFetch',
         // Workflow
         'workflow:startTracking',
         'workflow:stopTracking',
         'workflow:sync-state',
+        'workflow:appendSessionRecord',
         'workflow:stream:subscribe',
         'workflow:stream:unsubscribe',
         'gateway:health',
@@ -74,6 +76,7 @@ const electronAPI = {
         'update:setChannel',
         'update:setAutoDownload',
         'update:cancelAutoInstall',
+        'update:changelog-list',
         // Env
         'env:getConfig',
         'env:setApiKey',
@@ -167,6 +170,7 @@ const electronAPI = {
         'workflow:startTracking',
         'workflow:stopTracking',
         'workflow:sync-state',
+        'workflow:appendSessionRecord',
         'workflow:stream:subscribe',
         'workflow:stream:unsubscribe',
       ];

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { appendDingTalkMentionContext } from '../../shared/dingtalk-mention-context';
 import {
   deriveSessionLabelFromHistory,
   deriveSessionLabelFromUserText,
   extractSubagentTaskLabel,
   isCorruptedSessionLabel,
   isSubagentContextOnlyLabel,
+  normalizeDerivedSessionLabel,
 } from '@/lib/workflow-session-hint';
 
 const SUBAGENT_KICKOFF = `[Subagent Context] You are running as a subagent (depth 1/1). Results auto-announce to your requester; do not busy-poll for status.
@@ -66,5 +68,29 @@ describe('subagent session label helpers', () => {
       { gatewayLabel: 'policy-research' },
     );
     expect(label).toBe('policy-research');
+  });
+
+  it('derives title from user text after stripping DingTalk recipient injection', () => {
+    const wrapped = appendDingTalkMentionContext('@赵志坚 今晚记得学习哦', [
+      { type: 'user', displayName: '赵志坚', userId: 'uid-1' },
+    ]);
+    expect(deriveSessionLabelFromUserText(wrapped)).toBe('@赵志坚 今晚记得学习哦');
+    expect(isCorruptedSessionLabel('[STOCLAW:DINGTALK_RECIPIENTS:v1]')).toBe(true);
+  });
+
+  it('derives DingTalk session title from history messages', () => {
+    const wrapped = appendDingTalkMentionContext('发一条上海明天的天气给文鹏', [
+      { type: 'user', displayName: '文鹏', userId: 'uid-1' },
+    ]);
+    const label = deriveSessionLabelFromHistory(
+      [{ role: 'user', content: wrapped }],
+      (content) => String(content ?? ''),
+    );
+    expect(label).toBe('发一条上海明天的天气给文鹏');
+  });
+
+  it('normalizeDerivedSessionLabel rejects DingTalk marker titles', () => {
+    expect(normalizeDerivedSessionLabel('[STOCLAW:DINGTALK_RECIPIENTS:v1]')).toBeUndefined();
+    expect(normalizeDerivedSessionLabel('@赵志坚 今晚记得学习哦')).toBe('@赵志坚 今晚记得学习哦');
   });
 });

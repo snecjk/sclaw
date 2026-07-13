@@ -3,7 +3,7 @@
  * Renders user / assistant / system / toolresult messages
  * with markdown, thinking sections, images, and tool cards.
  */
-import { useState, useCallback, useEffect, useMemo, memo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
 import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, CircleCheck } from 'lucide-react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -12,12 +12,42 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
+import { ChatProcessLoadingEllipsis } from '@/components/chat/chat-process-loading-ellipsis';
+import { useTypewriterReveal } from '@/hooks/use-typewriter-reveal';
 import { cn } from '@/lib/utils';
-import { assistantChatCardBg, userChatBubbleSurfaceClass, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
+import { assistantChatCardBg, chatProcessTitleRowClass, chatToolCallShellClass, userChatBubbleSurfaceClass, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
+import { ChatProcessContentRail } from '@/components/chat/chat-process-block';
+import {
+  isCurrentUserTurnIncomplete,
+  isLastUserMessage,
+  isMessageInCurrentUserTurn,
+  isTurnDisplayAssistantMessage,
+} from '@/pages/Chat/chat-turn-meta';
+import { canShowAssistantTurnMeta, resolveCurrentTurnLifecycleForMeta } from '@/pages/Chat/turn-lifecycle';
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
-import { extractText, extractPlainTextFromContent, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm, useLocalPathExistence, resolvePreviewCandidate, unwrapPreviewablePathMarkdown, findWorkflowParamsSummaryAfterIntro } from './message-utils';
+import {
+  extractText,
+  extractPlainTextFromContent,
+  extractImages,
+  extractToolUse,
+  extractThinkingTimeline,
+  formatTimestamp,
+  extractPreviewableRefs,
+  extractDisplayFileNameHints,
+  isPreviewableFile,
+  PREVIEWABLE_FILE_EXTS,
+  extractWorkflowCard,
+  extractParameterForm,
+  useLocalPathExistence,
+  resolvePreviewCandidate,
+  unwrapPreviewablePathMarkdown,
+  findWorkflowParamsSummaryAfterIntro,
+  isWorkflowStartAssistantBoilerplate,
+  resolveAssistantCopyShareContent,
+} from './message-utils';
+import { writeCopyShareTextToClipboard } from '@/lib/copy-share-clipboard';
 import {
   ensureWorkflowParameterFormHandler,
   ensureWorkflowParameterFormInjected,
@@ -31,7 +61,6 @@ import {
   artifactToPreviewFile,
   inferMimeTypeFromUrl,
   isHttpUrl,
-  isPreviewableRemoteUrl,
   openExternalUrl,
   previewHttpUrlLabel,
   resolvePreviewLinkTarget,
@@ -42,7 +71,7 @@ import {
   resolvePreviewHrefAction,
   resolvePreviewPathOnHost,
 } from '@/lib/preview-href';
-import { dedupeAttachedFiles, mergePreviewFileLists, normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
+import { applyDisplayNameHints, dedupeAttachedFiles, mergePreviewFileLists, normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
 import { safeDecodeURIComponent } from '@/lib/safe-decode-uri';
 import { isFilePreviewDebugEnabled, logFilePreview } from '@/lib/file-preview-debug';
 import { ParameterFormCard } from '@/components/parameter-form/ParameterFormCard';
@@ -63,16 +92,18 @@ import {
   buildArtifactMetaLine,
   formatArtifactFileSize,
 } from '@/components/chat/artifact-product-card';
+import { buildArtifactCardMenuItems } from '@/lib/artifact-card-menu';
 import { highlightAtMentionsInChildren } from '@/lib/at-mention-highlight';
 import { renderUserMessageMentionNodes } from '@/components/dingtalk/DingTalkMentionTag';
 import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessPanel';
+import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
+import { ShareMessageIcon } from '@/components/icons/ShareMessageIcon';
+import {
+  buildConversationShareDialogDraft,
+  type DingTalkShareDialogDraft,
+} from '@/lib/dingtalk-share';
 
 const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
-
-/** B4：助手侧启动 boilerplate，折叠行替代长文案 */
-function isWorkflowStartAssistantBoilerplate(content: string): boolean {
-  return /^参数已确认[，,].*工作流已在后台启动/.test(content.trim());
-}
 
 interface ChatMessageProps {
   message: RawMessage;
@@ -94,10 +125,18 @@ interface ChatMessageProps {
   /** Used when rendered inside AssistantTurnMessage */
   hideAvatar?: boolean;
   hideThinkingPanel?: boolean;
+  /** 父级已展示思考面板时，正文内不再重复渲染工具卡 */
+  suppressToolCards?: boolean;
+  /** AssistantTurnMessage 合并展示的同轮最终回复，视为该轮 meta 挂载点 */
+  isTurnDisplayReply?: boolean;
 }
 
 const HOVER_REVEAL_CLASS = 'opacity-0 transition-opacity duration-200 group-hover:opacity-100';
-const BODY_HOVER_REVEAL_CLASS = 'opacity-0 transition-opacity duration-200 group-hover/body:opacity-100';
+
+const MESSAGE_META_ICON_BUTTON_CLASS =
+  'h-auto w-auto min-h-0 min-w-0 shrink-0 rounded-none border-0 bg-transparent p-0.5 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground';
+
+const MESSAGE_META_SHARE_ICON_CLASS = 'h-3.5 w-3.5';
 
 interface ExtractedImage { url?: string; data?: string; mimeType: string; }
 
@@ -120,6 +159,8 @@ export const ChatMessage = memo(function ChatMessage({
   onEditMessage,
   hideAvatar = false,
   hideThinkingPanel = false,
+  suppressToolCards = false,
+  isTurnDisplayReply = false,
 }: ChatMessageProps) {
   const { t } = useTranslation('chat');
   const isUser = message.role === 'user';
@@ -136,7 +177,7 @@ export const ChatMessage = memo(function ChatMessage({
     !hideThinkingPanel &&
     showThinking &&
     (thinkingTimeline.length > 0 || (isStreaming && streamingTools.length > 0));
-  const visibleTools = showThinking ? [] : tools;
+  const visibleTools = showThinking || suppressToolCards ? [] : tools;
 
   const attachedFiles = useMemo(
     () => dedupeAttachedFiles(message._attachedFiles || []),
@@ -155,6 +196,8 @@ export const ChatMessage = memo(function ChatMessage({
     return findWorkflowParamsSummaryAfterIntro(sessionMessages, messageIndex);
   }, [isUser, text, messageIndex, sessionMessages]);
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
   const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
   const sessionKey = useChatStore((s) => s.currentSessionKey);
   const workflowCardStates = useChatStore((s) => s.workflowCardStates);
@@ -265,12 +308,17 @@ export const ChatMessage = memo(function ChatMessage({
     return result;
   }, [candidateRefs, refExistence, workflowCardStatesForRefs, workflowArtifactUrls]);
 
+  const displayNameHints = useMemo(() => extractDisplayFileNameHints(text), [text]);
+
   const previewFiles = useMemo(
-    () => mergePreviewFileLists(
-      attachedFiles,
-      extractedRefs.map((ref) => ({ ...ref, fileSize: 0, preview: null })),
+    () => applyDisplayNameHints(
+      mergePreviewFileLists(
+        attachedFiles,
+        extractedRefs.map((ref) => ({ ...ref, fileSize: 0, preview: null })),
+      ),
+      displayNameHints,
     ),
-    [attachedFiles, extractedRefs],
+    [attachedFiles, extractedRefs, displayNameHints],
   );
 
   useEffect(() => {
@@ -350,7 +398,113 @@ export const ChatMessage = memo(function ChatMessage({
   const assistantBubbleText =
     showAssistantParamsFold && isWorkflowStartAssistantBoilerplate(text) ? '' : text;
   const showAssistantTextBubble = assistantBubbleText.trim().length > 0;
+  const assistantCopyShareContent = useMemo(
+    () => {
+      if (isUser) {
+        return { text: text.trim(), files: previewFiles };
+      }
+      return resolveAssistantCopyShareContent({
+        text,
+        assistantBubbleText,
+        workflowCard,
+        workflowCardStates,
+        sessionKey,
+        previewFiles,
+      });
+    },
+    [isUser, text, assistantBubbleText, workflowCard, workflowCardStates, sessionKey, previewFiles],
+  );
   const showUserParamsFold = isUser && hasText && isWorkflowParamsUserText(text);
+
+  const sending = useChatStore((s) => s.sending);
+  const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
+  const pendingFinal = useChatStore((s) => s.pendingFinal);
+  const activeRunId = useChatStore((s) => s.activeRunId);
+  const isLastAssistantInTurn = !isUser && (
+    isTurnDisplayReply || isTurnDisplayAssistantMessage(message, sessionMessages)
+  );
+  const isInCurrentUserTurn = isMessageInCurrentUserTurn(message, sessionMessages);
+  const isLastUserInTurn = isUser && isLastUserMessage(message, sessionMessages);
+  /** 与 AwaitingReplyIndicator 同口径：表单待提交时轮次未结束 */
+  const isAwaitingUserToContinue =
+    parameterForm !== null && workflowCard === null && !showAssistantParamsFold;
+  const currentUserTurnIncomplete = useMemo(
+    () =>
+      isCurrentUserTurnIncomplete({
+        sessionMessages,
+        sending,
+        lastUserMessageAt,
+        pendingFinal,
+        activeRunId,
+        workflowCardStates,
+        hasPendingWorkflowSchema: pendingWorkflow?.schema != null,
+        sessionKey,
+      }),
+    [
+      sessionMessages,
+      sending,
+      lastUserMessageAt,
+      pendingFinal,
+      activeRunId,
+      workflowCardStates,
+      pendingWorkflow?.schema,
+      sessionKey,
+    ],
+  );
+  /** 工作流 / 填表阻塞（不含 sending 等 runtime 字段，供 TurnLifecycle 分层） */
+  const hasWorkflowBlockers = useMemo(
+    () =>
+      isCurrentUserTurnIncomplete({
+        sessionMessages,
+        sending: false,
+        lastUserMessageAt: null,
+        pendingFinal: false,
+        activeRunId: null,
+        workflowCardStates,
+        hasPendingWorkflowSchema: pendingWorkflow?.schema != null,
+        sessionKey,
+      }),
+    [sessionMessages, workflowCardStates, pendingWorkflow?.schema, sessionKey],
+  );
+  const turnLifecycle = useMemo(
+    () =>
+      resolveCurrentTurnLifecycleForMeta({
+        sending,
+        pendingFinal,
+        lastUserMessageAt,
+        activeRunId,
+        isStreaming,
+        isAwaitingUserToContinue,
+        hasWorkflowBlockers,
+        runId: activeRunId,
+      }),
+    [
+      sending,
+      pendingFinal,
+      lastUserMessageAt,
+      activeRunId,
+      isStreaming,
+      isAwaitingUserToContinue,
+      hasWorkflowBlockers,
+    ],
+  );
+  const hasAssistantMetaContent =
+    showAssistantTextBubble
+    || workflowCard !== null
+    || previewFiles.length > 0
+    || showAssistantParamsFold;
+  /** 每轮助手回复结束后，在产物/正文下方常态展示复制 + 时间（TurnLifecycle.canShowMeta） */
+  const showAssistantMessageMeta = canShowAssistantTurnMeta({
+    hasAssistantMetaContent,
+    isLastAssistantInTurn,
+    isInCurrentUserTurn,
+    lifecycle: turnLifecycle,
+  });
+  /** 用户参数摘要卡由同轮最后一条助手消息统一展示 meta，避免出现在「参数已确认」上方 */
+  const showUserMessageMeta =
+    hasText
+    && !showUserParamsFold
+    && !(isLastUserInTurn && currentUserTurnIncomplete);
 
   if (
     !hasText
@@ -399,12 +553,26 @@ export const ChatMessage = memo(function ChatMessage({
       debugLinks.length > 0 ? debugLinks.join('\n') : '(none)',
     ].join('\n');
     try {
-      await navigator.clipboard.writeText(snapshot);
+      await writeCopyShareTextToClipboard({ text: snapshot });
       toast.success('已复制渲染调试快照');
     } catch {
       toast.error('复制失败，请重试');
     }
   }, [debugLinks, debugMarkdownSource, text]);
+
+  const openConversationShare = useCallback(() => {
+    setShareDraft(buildConversationShareDialogDraft(
+      assistantCopyShareContent.text,
+      assistantCopyShareContent.files,
+    ));
+    setShareDialogOpen(true);
+  }, [assistantCopyShareContent]);
+
+  const handleShareCompleted = useCallback(() => {
+    toast.success(t('preview.shareDialog.success'));
+    setShareDialogOpen(false);
+    setShareDraft(null);
+  }, [t]);
 
   if (isSystem) {
     const compactText = text.replace(/\s+/g, ' ').trim();
@@ -483,9 +651,10 @@ export const ChatMessage = memo(function ChatMessage({
     >
       {thinkingOutsideAvatar ? (
         <ThinkingProcessPanel
-          timeline={thinkingTimeline}
+          message={message}
           isStreaming={isStreaming && !isUser}
           streamingTools={isStreaming ? streamingTools : []}
+          hasReplyBody={!isUser && hasText}
           connectingLabelKey={isWorkflowThinkingContext ? 'connectingModel' : 'understandingQuestion'}
         />
       ) : null}
@@ -505,9 +674,10 @@ export const ChatMessage = memo(function ChatMessage({
 
         {!thinkingOutsideAvatar && showThinkingPanel && (
           <ThinkingProcessPanel
-            timeline={thinkingTimeline}
+            message={message}
             isStreaming={isStreaming && !isUser}
             streamingTools={isStreaming ? streamingTools : []}
+            hasReplyBody={!isUser && hasText}
             connectingLabelKey={isWorkflowThinkingContext ? 'connectingModel' : 'understandingQuestion'}
           />
         )}
@@ -579,60 +749,35 @@ export const ChatMessage = memo(function ChatMessage({
           <ParamsConfirmedParamsOnlyPanel text={text} />
         ) : null}
 
-        {/* Main text bubble — assistant hover (timestamp/copy) only triggers on body, not thinking panel */}
+        {/* Main text bubble */}
         {!showUserParamsFold && !showAssistantParamsPanel && (isUser ? hasText : showAssistantTextBubble) ? (
           isUser ? (
             <MessageBubble
               text={text}
               isUser={isUser}
               isStreaming={isStreaming}
-              streamingLabel={t('streaming.respondingBadge')}
-              completedLabel={t('streaming.completedLabel')}
-              completedBadge={t('streaming.completedBadge')}
               onPreviewFile={onPreviewFile}
               workflowGuidanceShell={workflowGuidanceStreamingShell}
             />
           ) : (
-            <div className="group/body w-full">
-              <MessageBubble
-                text={assistantBubbleText}
-                isUser={isUser}
-                isStreaming={isStreaming}
-                streamingLabel={t('streaming.respondingBadge')}
-                completedLabel={t('streaming.completedLabel')}
-                completedBadge={t('streaming.completedBadge')}
-                onPreviewFile={onPreviewFile}
-                workflowGuidanceShell={workflowGuidanceStreamingShell}
-              />
-              {hasText ? (
-                <AssistantHoverBar
-                  text={text}
-                  timestamp={message.timestamp}
-                  onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
-                  bodyHover
-                />
-              ) : null}
-            </div>
+            <MessageBubble
+              text={assistantBubbleText}
+              isUser={isUser}
+              isStreaming={isStreaming}
+              replyStreamKey={message.id ?? `assistant-${message.timestamp ?? 'stream'}`}
+              onPreviewFile={onPreviewFile}
+              workflowGuidanceShell={workflowGuidanceStreamingShell}
+            />
           )
         ) : null}
 
         {/* B4：分组参数（助手 A / 旧数据 fallback，无标题无白底） */}
         {showAssistantParamsPanel ? (
           !isUser ? (
-            <div className="group/body w-full">
-              <ParamsConfirmedParamsOnlyPanel
-                text={assistantParamsPanelText}
-                isStreaming={isWorkflowIntroStreaming}
-              />
-              {hasText ? (
-                <AssistantHoverBar
-                  text={text}
-                  timestamp={message.timestamp}
-                  onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
-                  bodyHover
-                />
-              ) : null}
-            </div>
+            <ParamsConfirmedParamsOnlyPanel
+              text={assistantParamsPanelText}
+              isStreaming={isWorkflowIntroStreaming}
+            />
           ) : null
         ) : null}
 
@@ -657,8 +802,10 @@ export const ChatMessage = memo(function ChatMessage({
           />
         ) : null}
 
-        {/* B3：表单待提交等待指示（选项卡本体样式属任务二） */}
-        {parameterForm ? <AwaitingReplyIndicator className="px-0.5" /> : null}
+        {/* B3：表单待提交等待指示；工作流已提交/执行后不再展示 */}
+        {parameterForm && workflowCard === null && !showAssistantParamsFold ? (
+          <AwaitingReplyIndicator className="px-0.5" />
+        ) : null}
 
         {/* Parameter form card — 任务二：浮层开启时内联挂载隐藏（恢复：设 PARAMETER_FORM_USE_FLOAT_DOCK=false） */}
         {parameterForm && !PARAMETER_FORM_USE_FLOAT_DOCK ? (
@@ -731,14 +878,24 @@ export const ChatMessage = memo(function ChatMessage({
           </div>
         )}
 
-        {/* Hover row for user messages — timestamp + quick actions */}
-        {isUser && hasText && (
-          <UserHoverBar
+        {/* 助手消息：复制 + 分享 + 时间 — 置于正文/工作流/产物等全部内容之后 */}
+        {!isUser && showAssistantMessageMeta ? (
+          <AssistantMessageMetaRow
+            copyShareContent={assistantCopyShareContent}
+            timestamp={message.timestamp}
+            onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
+            onShare={openConversationShare}
+          />
+        ) : null}
+
+        {isUser && showUserMessageMeta ? (
+          <UserMessageMetaRow
             text={text}
             timestamp={message.timestamp}
             onEditMessage={onEditMessage}
+            onShare={openConversationShare}
           />
-        )}
+        ) : null}
       </div>
 
       {/* Image lightbox portal */}
@@ -752,6 +909,19 @@ export const ChatMessage = memo(function ChatMessage({
           onClose={() => setLightboxImg(null)}
         />
       )}
+
+      <ArtifactShareDialog
+        open={shareDialogOpen}
+        draft={shareDraft}
+        onShared={handleShareCompleted}
+        onCancel={() => {
+          setShareDialogOpen(false);
+          setShareDraft(null);
+        }}
+        onError={(error) => {
+          toast.error(error instanceof Error ? error.message : t('preview.shareDialog.failed'));
+        }}
+      />
     </div>
   );
 });
@@ -806,21 +976,23 @@ function ToolStatusBar({
   );
 }
 
-function UserHoverBar({
+function UserMessageMetaRow({
   text,
   timestamp,
   onEditMessage,
+  onShare,
 }: {
   text: string;
   timestamp?: number;
   onEditMessage?: (text: string) => void;
+  onShare?: () => void;
 }) {
   const { t } = useTranslation('chat');
   const [copied, setCopied] = useState(false);
 
   const copyContent = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      await writeCopyShareTextToClipboard({ text });
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch (error) {
@@ -838,77 +1010,127 @@ function UserHoverBar({
   }, [onEditMessage, text]);
 
   return (
-    <div className={cn('flex select-none items-center gap-1.5', HOVER_REVEAL_CLASS)}>
+    <div className={cn('flex select-none items-center gap-2', HOVER_REVEAL_CLASS)}>
       {timestamp ? (
         <span className="mr-1 text-xs text-muted-foreground">
           {formatTimestamp(timestamp)}
         </span>
       ) : null}
       <Button
+        type="button"
         variant="ghost"
         size="icon"
-        className="h-7 w-7 rounded-full border border-border bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-foreground dark:bg-background/70 dark:hover:bg-background"
+        className={MESSAGE_META_ICON_BUTTON_CLASS}
         onClick={copyContent}
+        aria-label={t('messageActions.copy')}
         title={t('messageActions.copy')}
       >
-        {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+        {copied ? <Check className="h-3 w-3 text-green-500" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
       </Button>
+      {onShare ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={MESSAGE_META_ICON_BUTTON_CLASS}
+          onClick={onShare}
+          aria-label={t('messageActions.share')}
+          title={t('messageActions.share')}
+        >
+          <ShareMessageIcon className={MESSAGE_META_SHARE_ICON_CLASS} />
+        </Button>
+      ) : null}
       <Button
+        type="button"
         variant="ghost"
         size="icon"
-        className="h-7 w-7 rounded-full border border-border bg-white/75 text-muted-foreground shadow-sm hover:bg-white hover:text-foreground dark:bg-background/70 dark:hover:bg-background"
+        className={MESSAGE_META_ICON_BUTTON_CLASS}
         onClick={editAgain}
+        aria-label={t('messageActions.editAndResend')}
         title={t('messageActions.editAndResend')}
       >
-        <Pencil className="h-3 w-3" />
+        <Pencil className="h-3 w-3" aria-hidden />
       </Button>
     </div>
   );
 }
 
-// ── Assistant hover bar (timestamp + copy, shown on group hover) ─
-
-function AssistantHoverBar({
-  text,
+/** 助手消息底栏：复制 + 分享 + 时间，常态展示于正文下方 */
+function AssistantMessageMetaRow({
+  copyShareContent,
   timestamp,
   onCopyDebugSnapshot,
-  bodyHover = false,
+  onShare,
 }: {
-  text: string;
+  copyShareContent: { text: string; files: AttachedFileMeta[] };
   timestamp?: number;
   onCopyDebugSnapshot?: () => Promise<void> | void;
-  /** When true, reveal on `group-hover/body` (正文区域), not the whole message shell. */
-  bodyHover?: boolean;
+  onShare?: () => void;
 }) {
+  const { t } = useTranslation('chat');
   const [copied, setCopied] = useState(false);
 
-  const copyContent = useCallback(() => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [text]);
+  const hasCopyableText = copyShareContent.text.trim().length > 0;
+
+  const copyText = useCallback(async () => {
+    try {
+      await writeCopyShareTextToClipboard({ text: copyShareContent.text });
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast.success(t('messageActions.copyTextSuccess'));
+    } catch (error) {
+      console.error('[ChatMessage] Failed to copy assistant text:', error);
+      toast.error(t('messageActions.copyFailed'));
+    }
+  }, [copyShareContent.text, t]);
+
+  const copyTitle = onCopyDebugSnapshot
+    ? '单击复制内容，双击复制调试快照'
+    : t('messageActions.copy');
+
+  const copyButtonIcon = copied
+    ? <Check className="h-3 w-3 text-green-500" aria-hidden />
+    : <Copy className="h-3 w-3" aria-hidden />;
 
   return (
-    <div className={cn(
-      'flex w-full select-none items-center justify-between px-1',
-      bodyHover ? BODY_HOVER_REVEAL_CLASS : HOVER_REVEAL_CLASS,
-    )}>
-      <span className="text-xs text-muted-foreground">
-        {timestamp ? formatTimestamp(timestamp) : ''}
-      </span>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]"
-        onClick={copyContent}
-        onDoubleClick={() => {
-          if (!onCopyDebugSnapshot) return;
-          void onCopyDebugSnapshot();
-        }}
-        title={onCopyDebugSnapshot ? '单击复制内容，双击复制调试快照' : undefined}
-      >
-        {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-      </Button>
+    <div className="flex select-none items-center gap-2">
+      {hasCopyableText ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={MESSAGE_META_ICON_BUTTON_CLASS}
+          onClick={() => {
+            void copyText();
+          }}
+          onDoubleClick={() => {
+            if (!onCopyDebugSnapshot) return;
+            void onCopyDebugSnapshot();
+          }}
+          aria-label={t('messageActions.copy')}
+          title={copyTitle}
+        >
+          {copyButtonIcon}
+        </Button>
+      ) : null}
+      {onShare ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={MESSAGE_META_ICON_BUTTON_CLASS}
+          onClick={onShare}
+          aria-label={t('messageActions.share')}
+          title={t('messageActions.share')}
+        >
+          <ShareMessageIcon className={MESSAGE_META_SHARE_ICON_CLASS} />
+        </Button>
+      ) : null}
+      {timestamp ? (
+        <span className="text-xs text-muted-foreground">
+          {formatTimestamp(timestamp)}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -926,9 +1148,7 @@ function MessageBubble({
   text,
   isUser,
   isStreaming,
-  streamingLabel,
-  completedLabel,
-  completedBadge,
+  replyStreamKey = 'assistant-reply',
   onPreviewFile,
   assistantVariant = 'default',
   workflowGuidanceShell = false,
@@ -936,21 +1156,46 @@ function MessageBubble({
   text: string;
   isUser: boolean;
   isStreaming: boolean;
-  streamingLabel: string;
-  completedLabel: string;
-  completedBadge: string;
+  /** 流式正文打字机 reset key（message id） */
+  replyStreamKey?: string;
   onPreviewFile?: (file: AttachedFileMeta) => void;
   /** B3 工作流就绪概述白卡 */
   assistantVariant?: 'default' | 'workflowOverview';
   /** 工作流引导流式：与数据来源同款的纯描边壳，无脉冲/投影底栏 */
   workflowGuidanceShell?: boolean;
 }) {
-  const showStreamingChrome = isStreaming && !isUser && !workflowGuidanceShell;
   const showWorkflowGuidanceStreaming = isStreaming && !isUser && workflowGuidanceShell;
+  const isReplyStream = isStreaming && !isUser && !workflowGuidanceShell;
+  const wasReplyStreamRef = useRef(false);
+  const [enableReplyTypewriter, setEnableReplyTypewriter] = useState(false);
+
+  useEffect(() => {
+    const justStarted = isReplyStream && !wasReplyStreamRef.current;
+    wasReplyStreamRef.current = isReplyStream;
+
+    if (!isReplyStream) {
+      setEnableReplyTypewriter(false);
+      return;
+    }
+    if (justStarted) {
+      // 重进会话时正文已落盘 → 不打字
+      setEnableReplyTypewriter(text.length === 0);
+    }
+  }, [isReplyStream, text.length]);
+
+  const { text: typewriterText, isAnimating: isReplyTypewriterAnimating } = useTypewriterReveal(
+    text,
+    enableReplyTypewriter,
+    { resetKey: replyStreamKey },
+  );
+  const useReplyTypewriter =
+    isReplyStream && (enableReplyTypewriter || isReplyTypewriterAnimating);
+  const bubbleText = useReplyTypewriter ? typewriterText : text;
+
   const workflowCardStates = useChatStore((s) => s.workflowCardStates);
   const markdownSource = useMemo(
-    () => (onPreviewFile ? preprocessTextForPreviewLinks(text) : text),
-    [text, onPreviewFile],
+    () => (onPreviewFile ? preprocessTextForPreviewLinks(bubbleText) : bubbleText),
+    [bubbleText, onPreviewFile],
   );
 
   useEffect(() => {
@@ -981,40 +1226,29 @@ function MessageBubble({
               showWorkflowGuidanceStreaming
                 ? cn(workflowParamsSummaryCardClass, 'text-[13px] leading-5 text-foreground')
                 : 'rounded-2xl px-4 py-3',
-              showStreamingChrome
-                ? 'rounded-2xl border border-border bg-transparent px-4 py-3 text-foreground shadow-none'
-                : showWorkflowGuidanceStreaming
-                  ? null
-                  : assistantVariant === 'workflowOverview'
-                    ? cn(
-                        'w-full border border-border bg-card px-4 py-3 text-foreground shadow-soft',
-                        'dark:border-border dark:bg-card',
-                      )
-                    : cn(
-                        'w-full text-foreground',
-                        assistantChatCardBg,
-                      ),
+              showWorkflowGuidanceStreaming
+                ? null
+                : assistantVariant === 'workflowOverview'
+                  ? cn(
+                      'w-full border border-border bg-card px-4 py-3 text-foreground shadow-soft',
+                      'dark:border-border dark:bg-card',
+                    )
+                  : cn(
+                      'w-full text-foreground',
+                      assistantChatCardBg,
+                    ),
             ),
       )}
     >
       {isUser ? (
-        <p className="whitespace-pre-wrap break-words break-all text-sm font-normal leading-6 text-foreground">
+        <p className="whitespace-pre-wrap break-words break-all text-sm font-normal leading-5 text-foreground">
           {renderUserMessageMentionNodes(text)}
         </p>
       ) : (
         <div
-          className={cn(
-            'max-w-none text-sm leading-6 text-foreground',
-            showStreamingChrome && 'flex items-start gap-2',
-          )}
+          className="prose prose-sm prose-chat-reply min-w-0 max-w-none text-sm leading-6 text-foreground dark:prose-invert"
+          aria-busy={useReplyTypewriter && enableReplyTypewriter ? true : undefined}
         >
-          {showStreamingChrome ? (
-            <Loader2
-              className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-primary"
-              aria-hidden
-            />
-          ) : null}
-          <div className="prose prose-sm prose-chat-reply min-w-0 flex-1 break-words break-all dark:prose-invert">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             urlTransform={previewUrlTransform}
@@ -1142,6 +1376,9 @@ function MessageBubble({
           >
             {markdownSource}
           </ReactMarkdown>
+          {useReplyTypewriter && enableReplyTypewriter ? (
+            <ChatProcessLoadingEllipsis />
+          ) : null}
           {showWorkflowGuidanceStreaming ? (
             <div className={cn(workflowParamsSummaryGroupClass, 'mt-2')}>
               <p className={workflowParamsSummaryGroupTitleClass}>
@@ -1152,29 +1389,6 @@ function MessageBubble({
               </p>
             </div>
           ) : null}
-        </div>
-        </div>
-      )}
-
-      {showStreamingChrome && (
-        <div className="relative mt-3 flex items-center justify-between gap-3 border-t border-border pt-2 text-[11px] text-muted-foreground">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate font-medium tracking-[0.02em] text-foreground/80">
-              {streamingLabel}
-            </span>
-          </div>
-          <span className="shrink-0 text-[10px] font-medium uppercase tracking-[0.24em] text-primary/70">
-            输出中
-          </span>
-        </div>
-      )}
-      {!isUser && !isStreaming && (
-        <div className="relative mt-3 flex items-center justify-between gap-3 border-t border-border/30 pt-2">
-          <span className="truncate text-[10px] text-muted-foreground/45">{completedLabel}</span>
-          <span className="flex shrink-0 items-center gap-1 text-[10px] font-medium text-success/70">
-            <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
-            {completedBadge}
-          </span>
         </div>
       )}
     </div>
@@ -1249,12 +1463,12 @@ function preprocessTextForPreviewLinks(text: string): string {
     },
   );
 
-  // Replace previewable http(s) URLs — keep real href (do NOT prefix preview://)
+  // Replace bare http(s) URLs with markdown links — keep real href (do NOT prefix preview://).
+  // Extraction into file cards is disabled; click routing uses classifyPreviewHref (.sto → preview, else external).
   text = text.replace(
     /(https?:\/\/[^\s)\]"',;<>]+)/gi,
     (rawUrl) => {
       const url = rawUrl.replace(/[.,;:!?)}\]]+$/, '');
-      if (!isPreviewableRemoteUrl(url)) return rawUrl;
       const label = previewHttpUrlLabel(url);
       return `[${label}](${url})`;
     },
@@ -1306,14 +1520,21 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
       isPreviewable,
       hasOnPreviewFile: !!onPreviewFile,
     });
-    if (onPreviewFile && isPreviewable) {
+    if (onPreviewFile) {
       onPreviewFile(file);
-    } else if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
+      return;
+    }
+    if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
       openExternalUrl(file.filePath);
     } else if (file.filePath) {
       invokeIpc('shell:openPath', file.filePath);
     }
   }, [file, onPreviewFile, isPreviewable]);
+
+  const menuItems = useMemo(
+    () => buildArtifactCardMenuItems(file, t),
+    [file, t],
+  );
 
   const metaLine = buildArtifactMetaLine({
     fileName: file.fileName,
@@ -1328,6 +1549,7 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
       title={file.fileName}
       metaLine={metaLine}
       onAction={handleOpen}
+      menuItems={menuItems}
     />
   );
 }
@@ -1484,6 +1706,7 @@ interface ParamsConfirmedHeaderProps {
   onToggle: () => void;
 }
 
+/** 与深度思考 ChatProcessBlock 标题行对齐：16px icon + 13px 文案 + chevron */
 function ParamsConfirmedHeader({
   label,
   expanded,
@@ -1492,17 +1715,22 @@ function ParamsConfirmedHeader({
   return (
     <button
       type="button"
-      className="flex items-center gap-1 text-[13px] leading-5 text-muted-foreground transition-colors duration-150 hover:text-foreground"
+      className={cn(
+        chatProcessTitleRowClass,
+        'w-full text-left transition-colors duration-150 hover:text-foreground',
+      )}
       onClick={onToggle}
       aria-expanded={expanded}
     >
-      <CircleCheck className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-      <span className="truncate font-normal">{label}</span>
-      {expanded ? (
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-      ) : (
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-      )}
+      <CircleCheck className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <ChevronDown
+        className={cn(
+          'h-3.5 w-3.5 shrink-0 opacity-70 transition-transform duration-200 ease-[ease]',
+          expanded ? 'rotate-180' : '-rotate-90',
+        )}
+        aria-hidden
+      />
     </button>
   );
 }
@@ -1588,25 +1816,21 @@ function ParamsConfirmedFoldRow({
   };
 
   return (
-    <div className="flex w-full flex-col gap-2 text-[13px] leading-5">
+    <div className={cn(chatToolCallShellClass, 'text-[13px] leading-5')}>
       <ParamsConfirmedHeader
         label={t('streaming.paramsConfirmedLabel')}
         expanded={expanded}
         onToggle={() => setExpanded((v) => !v)}
       />
       {expanded ? (
-        <div className="relative pl-5">
-          <div
-            className="absolute bottom-0 left-[7px] top-0 w-px rounded-[0.5px] bg-border"
-            aria-hidden
-          />
+        <ChatProcessContentRail>
           <div className="flex flex-col gap-2">
             {showStatusLine ? (
               <p className="font-normal text-muted-foreground">{statusMessage}</p>
             ) : null}
             <WorkflowCard {...workflowCardProps} section="status" />
           </div>
-        </div>
+        </ChatProcessContentRail>
       ) : null}
       <WorkflowCard {...workflowCardProps} section="results" />
     </div>

@@ -22,6 +22,20 @@ const EXTERNAL_SCHEMES = new Set([
   'slack:', 'discord:',
 ]);
 
+const PREVIEWABLE_HTTP_HOSTS = new Set([
+  'sai-agent.oss-cn-shanghai.aliyuncs.com',
+]);
+
+/** True when URL hostname is Sto domain (e.g. sto.cn / *.sto.cn). */
+export function isStoCompanyUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === 'sto.cn' || host.includes('.sto') || PREVIEWABLE_HTTP_HOSTS.has(host);
+  } catch {
+    return false;
+  }
+}
+
 function looksLikeLocalPath(href: string): boolean {
   // Absolute Unix path
   if (href.startsWith('/')) return true;
@@ -37,8 +51,8 @@ function looksLikeLocalPath(href: string): boolean {
 /**
  * Classify an href into how it should be handled.
  * - 'local': file://, preview://, or bare local path → resolve via Main → side panel preview
- * - 'http-preview': http(s) with previewable extension/MIME → side panel preview
- * - 'http-external': http(s) non-previewable → open in browser
+ * - 'http-preview': company *.sto* domain http(s) → side panel preview
+ * - 'http-external': other http(s) → open in system browser
  * - 'external': ftp://, dingtalk://, etc. → openExternal
  * - 'blocked': javascript:, data:, etc. → ignore
  */
@@ -81,9 +95,7 @@ export function classifyPreviewHref(href: string): PreviewHrefResult {
     if (/^https?:\/\/(localhost|127\.0\.0\.1)/i.test(raw)) {
       return { type: 'local', target: raw, raw };
     }
-    // Previewable extensions: html, pdf, md, txt, csv, json, png, jpg, etc.
-    const previewableExts = /\.(html?|pdf|md|txt|csv|json|png|jpe?g|gif|webp|svg|bmp|avif|mp4|webm|mov|mp3|wav|ogg|m4a|docx?|xlsx?|pptx?|zip|tar\.gz|rar|7z)([#?].*)?$/i;
-    if (previewableExts.test(raw)) {
+    if (isStoCompanyUrl(raw)) {
       return { type: 'http-preview', target: raw, raw };
     }
     return { type: 'http-external', target: raw, raw };

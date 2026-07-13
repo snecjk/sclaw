@@ -1,6 +1,6 @@
 import { toast } from 'sonner';
 import { hostApiFetch } from '@/lib/host-api';
-import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, truncateSessionLabel } from '@/lib/workflow-session-hint';
+import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, normalizeDerivedSessionLabel } from '@/lib/workflow-session-hint';
 import { buildSessionLabelDerivationOptions, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { mergeLocalWorkflowTurnsFromCurrent } from '@/lib/workflow-local-turn';
 import {
@@ -13,7 +13,6 @@ import {
   enrichWithCachedImages,
   enrichWithToolResultFiles,
   getMessageText,
-  hasNonToolAssistantContent,
   isToolResultRole,
   loadMissingPreviews,
   toMs,
@@ -26,6 +25,7 @@ import {
   isCronSessionKey,
   isCronDatedSessionKey,
   isScheduledTaskSessionKey,
+  isVirtualTaskSessionKey,
 } from './cron-session-utils';
 import type { RawMessage } from './types';
 import type { ChatGet, ChatSet, SessionHistoryActions } from './store-api';
@@ -34,6 +34,10 @@ import {
   mergeOptimisticUserIntoHistory,
   traceLoadHistoryUserReconciliation,
 } from './user-message-merge';
+import {
+  mergeHistoryMessageSources,
+  mergeHistoryWhenShrunk,
+} from './history-merge';
 
 async function loadCronFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
   if (!isCronSessionKey(sessionKey) && !isCronDatedSessionKey(sessionKey)) return [];
@@ -74,6 +78,19 @@ async function loadClaudeScheduledTaskFallbackMessages(sessionKey: string, limit
   }
 }
 
+async function loadVirtualTaskFallbackMessages(sessionKey: string, limit = CHAT_HISTORY_LIMIT): Promise<RawMessage[]> {
+  if (isCronSessionKey(sessionKey) || isCronDatedSessionKey(sessionKey)) {
+    return loadCronFallbackMessages(sessionKey, limit);
+  }
+  if (isScheduledTaskSessionKey(sessionKey)) {
+    return loadScheduledTaskFallbackMessages(sessionKey, limit);
+  }
+  if (isClaudeScheduledTaskSessionKey(sessionKey)) {
+    return loadClaudeScheduledTaskFallbackMessages(sessionKey, limit);
+  }
+  return [];
+}
+
 export function createHistoryActions(
   set: ChatSet,
   get: ChatGet,
@@ -86,6 +103,7 @@ export function createHistoryActions(
       if (!quiet) set({ loading: true, error: null });
 
       const applyLoadedMessages = (rawMessages: RawMessage[], thinkingLevel: string | null) => {
+        rawMessages = mergeHistoryWhenShrunk(rawMessages, get().messages);
         // Before filtering: attach images/files from tool_result messages to the next assistant message
         const messagesWithToolImages = enrichWithToolResultFiles(rawMessages);
         const filteredMessages = messagesWithToolImages.filter((msg) => !isToolResultRole(msg.role));
@@ -152,11 +170,12 @@ export function createHistoryActions(
                 get().sessionLabels,
               ),
             );
-            if (labelText) {
+            const normalized = normalizeDerivedSessionLabel(labelText);
+            if (normalized) {
               set((s) => ({
                 sessionLabels: {
                   ...s.sessionLabels,
-                  [currentSessionKey]: truncateSessionLabel(labelText),
+                  [currentSessionKey]: normalized,
                 },
               }));
             }
@@ -220,23 +239,8 @@ export function createHistoryActions(
           }
         }
 
-        // If pendingFinal, check whether the AI produced a final text response.
-        if (pendingFinal || get().pendingFinal) {
-          const recentAssistant = [...filteredMessages].reverse().find((msg) => {
-            if (msg.role !== 'assistant') return false;
-            if (!hasNonToolAssistantContent(msg)) return false;
-            return isAfterUserMsg(msg);
-          });
-          if (recentAssistant) {
-            clearHistoryPoll();
-            set({
-              sending: false,
-              activeRunId: null,
-              pendingFinal: false,
-              lastUserMessageAt: null,
-            });
-          }
-        }
+        // 禁止仅凭 history 中出现 assistant 非工具文本就清 sending（§2.1）。
+        // OpenClaw 终态走 agent.completed；Claude 走 shouldAutoCompleteClaudeFromHistory。
       };
 
       try {
@@ -271,7 +275,12 @@ export function createHistoryActions(
         }
 
         let rawMessages = allMessages;
-        if (rawMessages.length === 0 && (isCronSessionKey(currentSessionKey) || isCronDatedSessionKey(currentSessionKey))) {
+        if (isVirtualTaskSessionKey(currentSessionKey)) {
+          const fallbackMessages = await loadVirtualTaskFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
+          rawMessages = fallbackMessages.length > 0
+            ? mergeHistoryMessageSources([fallbackMessages, allMessages])
+            : allMessages;
+        } else if (rawMessages.length === 0 && (isCronSessionKey(currentSessionKey) || isCronDatedSessionKey(currentSessionKey))) {
           rawMessages = await loadCronFallbackMessages(currentSessionKey, CHAT_HISTORY_LIMIT);
         }
         if (rawMessages.length === 0 && isScheduledTaskSessionKey(currentSessionKey)) {

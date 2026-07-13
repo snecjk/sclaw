@@ -9,6 +9,8 @@ export interface SkillSummary {
   description: string;
   category: string | null;
   categoryCode: string | null;
+  categoryCodes?: string[];
+  categoryNames?: string[];
   source: 'official' | 'mine';
   installed: boolean;
   enabled?: boolean;
@@ -37,8 +39,11 @@ export interface CategoryDef {
 
 export interface PlazaSkillMeta {
   title: string;
+  description?: string;
   category: string | null;
   categoryCode: string | null;
+  categoryCodes?: string[];
+  categoryNames?: string[];
   installCount?: number;
   useCount?: number;
 }
