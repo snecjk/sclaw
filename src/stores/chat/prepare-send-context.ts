@@ -1,6 +1,7 @@
 import { stripAgentMemoryContextsForDisplay } from '@/lib/agent-memory-display';
 import type { WorkflowExecutionState } from '@/types/workflow';
 import type { ChatSession, RawMessage, WorkflowContextBlock } from './types';
+import type { SclawBrowserEmbedContextBlock } from '@/lib/sclaw-browser-embed-context';
 
 export interface PreparedSendContext {
   messageWithContext: string;
@@ -14,6 +15,7 @@ export async function prepareSendContext(input: {
   messages: RawMessage[];
   workflowCardStates: Record<string, WorkflowExecutionState>;
   workflowContext?: WorkflowContextBlock | null;
+  embedBrowserContext?: SclawBrowserEmbedContextBlock | null;
   engineType?: ChatSession['engineType'];
   agentId?: string | null;
   clearPendingWorkflow: () => void;
@@ -22,12 +24,19 @@ export async function prepareSendContext(input: {
     agentId,
     clearPendingWorkflow,
     engineType,
+    embedBrowserContext: embedBrowserContextInput,
     messages,
     sessionKey,
     trimmedText,
     workflowCardStates,
     workflowContext,
   } = input;
+
+  const {
+    isSclawBrowserEmbedChatSessionKey,
+    parseSclawBrowserEmbedRuntimeId,
+  } = await import('@/lib/sclaw-browser-chat-session');
+  const isEmbedChatSession = isSclawBrowserEmbedChatSessionKey(sessionKey);
 
   const {
     appendAgentMemoryContextBlock,
@@ -46,7 +55,7 @@ export async function prepareSendContext(input: {
   } = await import('@/lib/workflow-session-hint');
 
   let textForGateway = trimmedText;
-  if (!workflowContext) {
+  if (!workflowContext && !isEmbedChatSession) {
     const {
       shouldInjectWorkflowSessionHint,
       isWorkflowCreationIntent,
@@ -88,10 +97,34 @@ export async function prepareSendContext(input: {
     textForGateway = appendAgentExecutionMemoryContext(textForGateway, memoryBlocks.execution);
   }
 
-  const messageWithContext = appendWorkflowContext(textForGateway, workflowContext);
-  const displayText = stripWorkflowSessionHintForDisplay(
-    stripAgentMemoryContextsForDisplay(
-      stripWorkflowContextForDisplay(messageWithContext),
+  let embedBrowserContext = embedBrowserContextInput ?? null;
+  if (!embedBrowserContext && isEmbedChatSession) {
+    const runtimeId = parseSclawBrowserEmbedRuntimeId(sessionKey);
+    if (runtimeId) {
+      const { useSclawBrowserOverlayStore } = await import('@/stores/sclaw-browser-overlay');
+      const overlay = useSclawBrowserOverlayStore.getState();
+      if (overlay.session) {
+        const { buildSclawBrowserEmbedContextForSend } = await import('@/lib/sclaw-browser-embed-context-builder');
+        embedBrowserContext = await buildSclawBrowserEmbedContextForSend({
+          runtimeId,
+          appTitle: overlay.session.title,
+          fallbackUrl: overlay.session.url,
+        });
+      }
+    }
+  }
+
+  const {
+    appendSclawBrowserEmbedContext,
+    stripSclawBrowserEmbedContextForDisplay,
+  } = await import('@/lib/sclaw-browser-embed-context');
+  const messageWithEmbedContext = appendSclawBrowserEmbedContext(textForGateway, embedBrowserContext);
+  const messageWithContext = appendWorkflowContext(messageWithEmbedContext, workflowContext);
+  const displayText = stripSclawBrowserEmbedContextForDisplay(
+    stripWorkflowSessionHintForDisplay(
+      stripAgentMemoryContextsForDisplay(
+        stripWorkflowContextForDisplay(messageWithContext),
+      ),
     ),
   );
 

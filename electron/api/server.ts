@@ -27,6 +27,7 @@ import { handleSubscriptionRoutes } from './routes/subscriptions';
 import { handleMyTasksRoutes } from './routes/my-tasks';
 import { handleDictionaryRoutes } from './routes/dictionaries';
 import { handleWorkflowRoutes } from './routes/workflows';
+import { handleSclawBrowserRoutes } from './routes/sclaw-browser';
 
 import { sendJson } from './route-utils';
 
@@ -58,6 +59,7 @@ const routeHandlers: RouteHandler[] = [
   handleScheduledTaskRoutes,
   handleDictionaryRoutes,
   handleWorkflowRoutes,
+  handleSclawBrowserRoutes,
   handleClaudeScheduledTaskRoutes,
   handleDingTalkRoutes,
   handleMyTasksRoutes,

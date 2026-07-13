@@ -1,4 +1,5 @@
 import { matchPath } from 'react-router-dom';
+import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
 import { STO_TASK_IDS, type StoTaskId } from '@/lib/sto-tasks';
 import { parseClaudeScheduledTaskSessionKey, parseCronSessionKey } from '@/stores/chat/cron-session-utils';
 import { stoTaskSubitemKey } from '@/stores/sto-task-subitems';
@@ -50,6 +51,7 @@ export function isSidebarHiddenChatSessionKey(sessionKey: string): boolean {
   return (
     isHiddenStoTaskSubitemChatSessionKey(sessionKey) ||
     isMainAgentChatSessionKey(sessionKey) ||
+    isSclawBrowserEmbedChatSessionKey(sessionKey) ||
     isScheduledTaskSummarySessionKey(sessionKey) ||
     isClaudeScheduledTaskSummarySessionKey(sessionKey) ||
     isCronRunSessionKey(sessionKey)

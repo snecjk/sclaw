@@ -3,11 +3,12 @@
  * Aligned with the PRD demo (more-apps.css)
  */
 import { memo } from 'react';
-import { Heart } from 'lucide-react';
+import { Heart, Pencil } from 'lucide-react';
 import type { AppItem } from '@/types/more-apps';
 import { AppIcon } from './AppIcon';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { formatExternalAppDomain } from './format-external-app-domain';
 
 interface AppCardProps {
   app: AppItem;
@@ -17,6 +18,7 @@ interface AppCardProps {
   onOpen: (app: AppItem) => void;
   onInstall?: (id: string) => void;
   onDelete?: (app: AppItem) => void;
+  onEdit?: (app: AppItem) => void;
   onToggleFavorite?: (id: string) => void;
 }
 
@@ -28,6 +30,7 @@ function AppCardImpl({
   onOpen, 
   onInstall, 
   onDelete,
+  onEdit,
   onToggleFavorite,
 }: AppCardProps) {
   const { t } = useTranslation('common');
@@ -64,6 +67,11 @@ function AppCardImpl({
     onDelete?.(app);
   };
 
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onEdit?.(app);
+  };
+
   const handleOpen = () => {
     if (!installed && onInstall) {
       onInstall(app.id);
@@ -88,7 +96,15 @@ function AppCardImpl({
           {isMineTab && isExternal && (
             <div className="more-apps-card__actions">
               <button
-                className="more-apps-delete-btn"
+                className="more-apps-card__icon-btn"
+                onClick={handleEdit}
+                aria-label={t('moreApps.action.edit', { defaultValue: '编辑' })}
+                title={t('moreApps.action.edit', { defaultValue: '编辑' })}
+              >
+                <Pencil className="h-4 w-4" aria-hidden="true" />
+              </button>
+              <button
+                className="more-apps-card__icon-btn more-apps-card__icon-btn--danger"
                 onClick={handleDelete}
                 aria-label={t('moreApps.action.delete', { defaultValue: '删除' })}
                 title={t('moreApps.action.delete', { defaultValue: '删除' })}
@@ -103,7 +119,11 @@ function AppCardImpl({
       </div>
 
       {/* Description */}
-      <p className="more-apps-card__desc">{app.description || app.url}</p>
+      <p className="more-apps-card__desc">
+        {isExternal
+          ? (app.description && app.description !== '外部应用链接' ? app.description : t('moreApps.externalLinkDesc', { defaultValue: '外部应用链接' }))
+          : (app.description || app.url)}
+      </p>
 
       {/* Tags */}
       {tags.length > 0 && (
@@ -119,8 +139,8 @@ function AppCardImpl({
       {/* Footer: meta + actions */}
       <div className="more-apps-card__foot">
         <span className="more-apps-card__meta">
-          {isExternal 
-            ? app.url.replace(/^https?:\/\//i, '').replace(/\/$/, '')
+          {isExternal
+            ? formatExternalAppDomain(app.url)
             : installed && app.recent 
               ? `${t('moreApps.recent', { defaultValue: '最近使用' })}：${app.recent}`
               : app.recent

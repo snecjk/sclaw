@@ -6,3 +6,5 @@ export const SCLAW_BROWSER_TOOLBAR_H = 44;
 
 /** Slide-in duration — must match --sclaw-browser-drawer-duration */
 export const SCLAW_BROWSER_DRAWER_ANIM_MS = 320;
+
+export { SCLAW_EMBED_BROWSER_PARTITION } from '../../../shared/sclaw-embed-browser';

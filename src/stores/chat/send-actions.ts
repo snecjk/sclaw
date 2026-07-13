@@ -62,7 +62,16 @@ export function createSendActions(
 
     sendMessage: async (...args: unknown[]) => {
       const options = normalizeSendMessageOptions(args);
-      const { text, attachments, targetAgentId, dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
+      const {
+        text,
+        attachments,
+        targetAgentId,
+        dingTalkMentions,
+        workflowId: _workflowId,
+        runId: _runId,
+        workflowContext,
+        embedBrowserContext,
+      } = options;
       const trimmed = text.trim();
       if (!trimmed && (!attachments || attachments.length === 0)) return;
 
@@ -98,6 +107,7 @@ export function createSendActions(
         messages: get().messages,
         workflowCardStates: get().workflowCardStates,
         workflowContext,
+        embedBrowserContext,
         engineType: currentSessionEngineType,
         agentId: targetAgentId ?? get().currentAgentId,
         clearPendingWorkflow: get().clearPendingWorkflow,
