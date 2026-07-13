@@ -56,9 +56,11 @@
     },
     "runGuard": {
       "aria": "実行保障",
-      "preventSleep": "PC のスリープを防止",
+      "preventSleep": "定期タスクは PC がスリープしない間のみ実行されます",
       "preventSleepDesc": "有効にすると、StoClaw 実行中は PC が自動的にスリープしなくなります。",
       "preventSleepTips": "定期タスク実行中は有効化を推奨します。フタは開け、電源に接続してください。フタ閉じやシャットダウン後は正常動作を保証できません。",
+      "infoAria": "スリープ防止の説明を表示",
+      "keepAwake": "システムを起きたままにする",
       "toastEnabled": "有効：StoClaw 実行中はスリープを防止します",
       "toastDisabled": "無効：PC はシステム設定どおりスリープします"
     },

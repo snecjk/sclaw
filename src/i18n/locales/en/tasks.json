@@ -56,9 +56,11 @@
     },
     "runGuard": {
       "aria": "Run guard",
-      "preventSleep": "Prevent system sleep",
+      "preventSleep": "Scheduled tasks run only while the computer stays awake",
       "preventSleepDesc": "While enabled, StoClaw prevents the computer from sleeping automatically while it is running.",
       "preventSleepTips": "Recommended while scheduled tasks are running. Keep the lid open and connect to power; sleep or shutdown may prevent normal operation.",
+      "infoAria": "View prevent sleep details",
+      "keepAwake": "Keep system awake",
       "toastEnabled": "Enabled: StoClaw will prevent sleep while running",
       "toastDisabled": "Disabled: the computer will sleep according to system settings"
     },

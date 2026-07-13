@@ -474,6 +474,8 @@ export default function MyTask() {
             <p className="mt-1 text-sm text-muted-foreground">{t('myTask.subtitle')}</p>
           </header>
 
+          <TaskRunGuardBar />
+
           {/* Tab 行：左侧视图 Tab + 右侧搜索/排序 */}
           <div className={cn(workflowListToolbarClass, 'mb-[26px]')}>
             <ViewTabs activeView={activeView} onViewChange={setActiveView} />
@@ -505,7 +507,6 @@ export default function MyTask() {
           {/* ── 定时任务视图 ── */}
           {isTasksView && (
             <section aria-label={t('myTask.taskView.aria')} className="flex-1 flex flex-col">
-              <TaskRunGuardBar />
               {jobsLoading && safeJobs.length === 0 ? (
                 <div className="flex items-center justify-center py-20">
                   <LoadingSpinner size="lg" />

@@ -56,9 +56,11 @@
     },
     "runGuard": {
       "aria": "运行保障",
-      "preventSleep": "阻止电脑睡眠",
+      "preventSleep": "定时任务仅在电脑保持唤醒时运行",
       "preventSleepDesc": "开启后，S Claw 运行期间将阻止电脑自动进入睡眠。",
       "preventSleepTips": "定时任务运行期间建议开启。请勿合盖，并连接电源；合盖或关机后无法保证正常运行。",
+      "infoAria": "查看阻止睡眠说明",
+      "keepAwake": "保持系统唤醒",
       "toastEnabled": "已开启：S Claw 运行期间将阻止电脑睡眠",
       "toastDisabled": "已关闭：电脑将按系统设置正常睡眠"
     },
