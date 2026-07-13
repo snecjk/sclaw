@@ -5,19 +5,20 @@
 import { create } from 'zustand';
 import {
   activateSclawBrowserEmbedChat,
-  purgeSclawBrowserEmbedChat,
+  deactivateSclawBrowserEmbedChat,
 } from '@/lib/sclaw-browser-chat-lifecycle';
 import { createSclawBrowserEmbedRuntimeId } from '@/lib/sclaw-browser-chat-session';
 import { registerSclawBrowserRuntime, unregisterSclawBrowserRuntime, ensureSclawBrowserBridge } from '@/lib/sclaw-browser-host-api';
 
 export interface SclawBrowserOverlaySession {
+  appId: string;
   url: string;
   title: string;
 }
 
 interface SclawBrowserOverlayState {
   session: SclawBrowserOverlaySession | null;
-  /** Stable id for the current drawer — binds webview ↔ chat session ↔ host API. */
+  /** Ephemeral id for the current drawer — binds webview ↔ bridge ↔ host API. */
   embedRuntimeId: string | null;
   chatPanelOpen: boolean;
   chatSessionKey: string | null;
@@ -32,11 +33,7 @@ interface SclawBrowserOverlayState {
   setChatSplitPercent: (percent: number) => void;
 }
 
-const DEFAULT_CHAT_SPLIT_PERCENT = 38;
-
-async function teardownChat(state: Pick<SclawBrowserOverlayState, 'chatSessionKey' | 'savedMainSessionKey'>) {
-  await purgeSclawBrowserEmbedChat(state.chatSessionKey, state.savedMainSessionKey);
-}
+const DEFAULT_CHAT_SPLIT_PERCENT = 28;
 
 export const useSclawBrowserOverlayStore = create<SclawBrowserOverlayState>((set, get) => ({
   session: null,
@@ -68,14 +65,13 @@ export const useSclawBrowserOverlayStore = create<SclawBrowserOverlayState>((set
     if (embedRuntimeId) {
       void unregisterSclawBrowserRuntime(embedRuntimeId);
     }
-    void teardownChat(snapshot).finally(() => {
-      set({
-        session: null,
-        embedRuntimeId: null,
-        chatPanelOpen: false,
-        chatSessionKey: null,
-        savedMainSessionKey: null,
-      });
+    deactivateSclawBrowserEmbedChat(snapshot.chatSessionKey, snapshot.savedMainSessionKey);
+    set({
+      session: null,
+      embedRuntimeId: null,
+      chatPanelOpen: false,
+      chatSessionKey: null,
+      savedMainSessionKey: null,
     });
   },
 
@@ -90,10 +86,13 @@ export const useSclawBrowserOverlayStore = create<SclawBrowserOverlayState>((set
 
   openChatPanel: () => {
     if (get().chatPanelOpen) return;
-    const embedRuntimeId = get().embedRuntimeId;
-    if (!embedRuntimeId) return;
+    const { embedRuntimeId, session } = get();
+    if (!embedRuntimeId || !session?.appId) return;
     void ensureSclawBrowserBridge(embedRuntimeId);
-    const { chatSessionKey, savedMainSessionKey } = activateSclawBrowserEmbedChat(embedRuntimeId);
+    const { chatSessionKey, savedMainSessionKey } = activateSclawBrowserEmbedChat(
+      session.appId,
+      embedRuntimeId,
+    );
     set({
       chatPanelOpen: true,
       chatSessionKey,
@@ -104,12 +103,11 @@ export const useSclawBrowserOverlayStore = create<SclawBrowserOverlayState>((set
   closeChatPanel: () => {
     if (!get().chatPanelOpen) return;
     const snapshot = get();
-    void teardownChat(snapshot).finally(() => {
-      set({
-        chatPanelOpen: false,
-        chatSessionKey: null,
-        savedMainSessionKey: null,
-      });
+    deactivateSclawBrowserEmbedChat(snapshot.chatSessionKey, snapshot.savedMainSessionKey);
+    set({
+      chatPanelOpen: false,
+      chatSessionKey: null,
+      savedMainSessionKey: null,
     });
   },
 

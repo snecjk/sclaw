@@ -122,7 +122,7 @@ export function MoreAppsPage() {
     if (!isAppInstalled(app.id)) {
       installApp(app.id);
     }
-    openInSclawBrowser({ url: app.url, title: app.name });
+    openInSclawBrowser({ url: app.url, title: app.name, appId: app.id });
   }, [installApp, isAppInstalled]);
 
   const handleDelete = useCallback((app: AppItem) => {
@@ -169,7 +169,12 @@ export function MoreAppsPage() {
                     data-hero-slide={idx}
                     aria-hidden={!active}
                   >
-                    <div className={cn('app-market__hero', slide.theme ? `app-market__hero--${slide.theme}` : '')}>
+                    <button
+                      type="button"
+                      className={cn('app-market__hero', slide.theme ? `app-market__hero--${slide.theme}` : '')}
+                      onClick={() => handleOpenApp(slideApp)}
+                      aria-label={`${slideApp.name}，${slide.subtitle}`}
+                    >
                     <div className="app-market__hero-inner">
                       <div className="app-market__hero-copy">
                         <div className="app-market__hero-head">
@@ -179,12 +184,12 @@ export function MoreAppsPage() {
                               <span className="app-market__hero-title-main">{slideApp.name}</span>
                               <span className="app-market__hero-title-sub">{slide.subtitle}</span>
                             </h3>
-                            <button
+                            <span
                               className={cn('app-market__hero-cta', isAppInstalled(slideApp.id) ? 'app-market__hero-cta--view' : '')}
-                              onClick={() => handleOpenApp(slideApp)}
+                              aria-hidden="true"
                             >
                               {isAppInstalled(slideApp.id) ? t('moreApps.open', { defaultValue: '打开' }) : t('moreApps.install', { defaultValue: '打开' })}
-                            </button>
+                            </span>
                           </div>
                         </div>
                       </div>
@@ -210,7 +215,7 @@ export function MoreAppsPage() {
                         </div>
                       </div>
                     </div>
-                    </div>
+                    </button>
                   </section>
                 );
               })}

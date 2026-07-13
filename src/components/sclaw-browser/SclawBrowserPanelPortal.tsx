@@ -18,12 +18,14 @@ export function SclawBrowserPanelPortal() {
   const chatSessionKey = useSclawBrowserOverlayStore((s) => s.chatSessionKey);
   const chatSplitPercent = useSclawBrowserOverlayStore((s) => s.chatSplitPercent);
   const setChatSplitPercent = useSclawBrowserOverlayStore((s) => s.setChatSplitPercent);
+  const embedRuntimeId = useSclawBrowserOverlayStore((s) => s.embedRuntimeId);
   const bounds = useSclawBrowserHostBounds(session !== null);
   const [frameReady, setFrameReady] = useState(false);
   const { splitRef, startResize, isResizing } = useSclawBrowserSplitResize(
     chatSplitPercent,
     setChatSplitPercent,
     chatPanelOpen,
+    embedRuntimeId,
   );
 
   useEffect(() => {
@@ -75,7 +77,7 @@ export function SclawBrowserPanelPortal() {
               type="button"
               className="sclaw-browser-split__resizer"
               aria-label="Resize chat panel"
-              onMouseDown={startResize}
+              onPointerDown={startResize}
             />
             <div className="sclaw-browser-split__chat">
               <SclawBrowserEmbedChat sessionKey={chatSessionKey} appTitle={session.title} />

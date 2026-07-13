@@ -17,6 +17,10 @@ import {
   refreshSclawEmbedBridgeScript,
   updateSclawEmbedBridgePage,
 } from './sclaw-embed-bridge-driver';
+import {
+  attachSclawEmbedBrowserShortcutHandler,
+  detachSclawEmbedBrowserShortcutHandler,
+} from './sclaw-embed-browser-shortcuts';
 
 interface RuntimeEntry extends SclawEmbedBrowserRuntimeMeta {
   networkLog: SclawEmbedBrowserNetworkEvent[];
@@ -140,6 +144,7 @@ export function bindSclawEmbedBrowserWebContents(input: {
     url: entry.pageUrl,
     title: entry.pageTitle || entry.appTitle,
   });
+  attachSclawEmbedBrowserShortcutHandler(input.webContentsId);
   return { ...entry };
 }
 
@@ -162,6 +167,8 @@ export function updateSclawEmbedBrowserPageState(input: {
 export function unregisterSclawEmbedBrowserRuntime(runtimeId: string): void {
   const entry = runtimes.get(runtimeId);
   if (!entry) return;
+  setSclawEmbedBrowserPointerPassthrough(runtimeId, false);
+  detachSclawEmbedBrowserShortcutHandler(entry.webContentsId);
   disconnectSclawEmbedBridge(runtimeId);
   if (entry.chatSessionKey) {
     chatSessionIndex.delete(entry.chatSessionKey);
@@ -258,4 +265,18 @@ export function getSclawEmbedBrowserNetworkLog(
   if (!entry) return [];
   if (!since) return [...entry.networkLog];
   return entry.networkLog.filter((event) => event.timestamp >= since);
+}
+
+/** Let pointer events pass through embed webview while resizing split pane. */
+export function setSclawEmbedBrowserPointerPassthrough(runtimeId: string, passthrough: boolean): boolean {
+  const entry = runtimes.get(runtimeId);
+  if (!entry?.webContentsId) return false;
+  const wc = resolveWebContents(entry);
+  if (!wc) return false;
+  if (passthrough) {
+    wc.setIgnoreMouseEvents(true, { forward: true });
+  } else {
+    wc.setIgnoreMouseEvents(false);
+  }
+  return true;
 }

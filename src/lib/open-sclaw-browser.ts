@@ -13,11 +13,14 @@ import {
   isStoSsoWebUrl,
   parseStoSsoWebUrl,
 } from '@/lib/sto-policy-web-url';
+import { deriveSclawBrowserAppId } from '@/lib/sclaw-browser-chat-session';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 
 export interface OpenSclawBrowserOptions {
   url: string;
   title?: string;
+  /** Stable app id — chat history is persisted per appId. */
+  appId?: string;
 }
 
 /**
@@ -75,14 +78,17 @@ export function resolveSclawBrowserUrl(url: string): string {
 }
 
 /** Open a URL in the SClaw browser drawer. No-op when url is empty. */
-export function openInSclawBrowser({ url, title }: OpenSclawBrowserOptions): void {
+export function openInSclawBrowser({ url, title, appId }: OpenSclawBrowserOptions): void {
   const trimmed = url?.trim();
   if (!trimmed) return;
   const resolvedUrl = resolveSclawBrowserUrl(trimmed);
   const resolvedTitle = title?.trim() || trimmed;
 
+  const resolvedAppId = deriveSclawBrowserAppId({ appId, url: resolvedUrl });
+
   const openDrawer = () => {
     useSclawBrowserOverlayStore.getState().open({
+      appId: resolvedAppId,
       url: resolvedUrl,
       title: resolvedTitle,
     });

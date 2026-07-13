@@ -32,10 +32,7 @@ export async function prepareSendContext(input: {
     workflowContext,
   } = input;
 
-  const {
-    isSclawBrowserEmbedChatSessionKey,
-    parseSclawBrowserEmbedRuntimeId,
-  } = await import('@/lib/sclaw-browser-chat-session');
+  const { isSclawBrowserEmbedChatSessionKey } = await import('@/lib/sclaw-browser-chat-session');
   const isEmbedChatSession = isSclawBrowserEmbedChatSessionKey(sessionKey);
 
   const {
@@ -98,19 +95,20 @@ export async function prepareSendContext(input: {
   }
 
   let embedBrowserContext = embedBrowserContextInput ?? null;
+  let embedLongSessionNotice: string | null = null;
   if (!embedBrowserContext && isEmbedChatSession) {
-    const runtimeId = parseSclawBrowserEmbedRuntimeId(sessionKey);
-    if (runtimeId) {
-      const { useSclawBrowserOverlayStore } = await import('@/stores/sclaw-browser-overlay');
-      const overlay = useSclawBrowserOverlayStore.getState();
-      if (overlay.session) {
-        const { buildSclawBrowserEmbedContextForSend } = await import('@/lib/sclaw-browser-embed-context-builder');
-        embedBrowserContext = await buildSclawBrowserEmbedContextForSend({
-          runtimeId,
-          appTitle: overlay.session.title,
-          fallbackUrl: overlay.session.url,
-        });
-      }
+    const { useSclawBrowserOverlayStore } = await import('@/stores/sclaw-browser-overlay');
+    const overlay = useSclawBrowserOverlayStore.getState();
+    const runtimeId = overlay.embedRuntimeId;
+    if (runtimeId && overlay.session) {
+      const { buildSclawBrowserEmbedContextForSend } = await import('@/lib/sclaw-browser-embed-context-builder');
+      const { buildEmbedSessionLongContextNotice } = await import('@/lib/sclaw-browser-embed-context-compaction');
+      embedLongSessionNotice = buildEmbedSessionLongContextNotice(messages.length);
+      embedBrowserContext = await buildSclawBrowserEmbedContextForSend({
+        runtimeId,
+        appTitle: overlay.session.title,
+        fallbackUrl: overlay.session.url,
+      });
     }
   }
 
@@ -118,7 +116,9 @@ export async function prepareSendContext(input: {
     appendSclawBrowserEmbedContext,
     stripSclawBrowserEmbedContextForDisplay,
   } = await import('@/lib/sclaw-browser-embed-context');
-  const messageWithEmbedContext = appendSclawBrowserEmbedContext(textForGateway, embedBrowserContext);
+  const messageWithEmbedContext = appendSclawBrowserEmbedContext(textForGateway, embedBrowserContext, {
+    longSessionNotice: embedLongSessionNotice,
+  });
   const messageWithContext = appendWorkflowContext(messageWithEmbedContext, workflowContext);
   const displayText = stripSclawBrowserEmbedContextForDisplay(
     stripWorkflowSessionHintForDisplay(

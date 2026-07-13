@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  createSclawBrowserChatSessionKey,
+  createSclawBrowserChatSessionKeyForApp,
   createSclawBrowserEmbedRuntimeId,
+  deriveSclawBrowserAppId,
   isSclawBrowserEmbedChatSessionKey,
+  parseSclawBrowserEmbedAppId,
   parseSclawBrowserEmbedRuntimeId,
 } from '@/lib/sclaw-browser-chat-session';
 import {
@@ -10,14 +12,27 @@ import {
   buildSclawBrowserEmbedContextText,
   stripSclawBrowserEmbedContextForDisplay,
 } from '@/lib/sclaw-browser-embed-context';
+import { buildEmbedSessionLongContextNotice } from '@/lib/sclaw-browser-embed-context-compaction';
 
 describe('sclaw-browser-chat-session', () => {
-  it('encodes runtime id in session key', () => {
-    const runtimeId = 'br-abc123';
-    const sessionKey = createSclawBrowserChatSessionKey(runtimeId);
-    expect(sessionKey).toBe('agent:main:session-embed-br-abc123');
+  it('uses stable app id in session key', () => {
+    const sessionKey = createSclawBrowserChatSessionKeyForApp('org-relation');
+    expect(sessionKey).toBe('agent:main:session-embed-app-org-relation');
     expect(isSclawBrowserEmbedChatSessionKey(sessionKey)).toBe(true);
-    expect(parseSclawBrowserEmbedRuntimeId(sessionKey)).toBe(runtimeId);
+    expect(parseSclawBrowserEmbedAppId(sessionKey)).toBe('org-relation');
+  });
+
+  it('still hides legacy runtime session keys', () => {
+    const legacyKey = 'agent:main:session-embed-br-abc123';
+    expect(isSclawBrowserEmbedChatSessionKey(legacyKey)).toBe(true);
+    expect(parseSclawBrowserEmbedRuntimeId(legacyKey)).toBe('abc123');
+  });
+
+  it('derives app id from url when missing', () => {
+    const appId = deriveSclawBrowserAppId({
+      url: 'https://wd-vip.sto.cn/claw-businessOrganization?useStoToken=1',
+    });
+    expect(appId).toContain('wd-vip_sto_cn');
   });
 
   it('creates unique runtime ids', () => {
@@ -59,5 +74,12 @@ describe('sclaw-browser-embed-context', () => {
       capturedAt: 1,
     });
     expect(stripSclawBrowserEmbedContextForDisplay(withContext)).toBe(userText);
+  });
+});
+
+describe('sclaw-browser-embed-context-compaction', () => {
+  it('warns when session is long', () => {
+    expect(buildEmbedSessionLongContextNotice(10)).toBeNull();
+    expect(buildEmbedSessionLongContextNotice(50)).toContain('长会话');
   });
 });

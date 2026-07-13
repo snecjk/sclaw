@@ -92,3 +92,11 @@ export async function ensureSclawBrowserBridge(runtimeId: string): Promise<boole
   );
   return Boolean(result.connected);
 }
+
+export async function setSclawBrowserPointerPassthrough(
+  runtimeId: string,
+  passthrough: boolean,
+): Promise<void> {
+  if (!window.electron) return;
+  await invokeIpc('sclaw-browser:setPointerPassthrough', { runtimeId, passthrough });
+}
