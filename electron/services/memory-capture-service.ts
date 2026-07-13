@@ -1,15 +1,21 @@
-import { randomUUID } from 'node:crypto';
 import type { GatewayManager } from '../gateway/manager';
 import { getKyselyDatabase } from '../db';
 import { agentMemoryOrchestrator } from './agent-memory-orchestrator';
 import { logger } from '../utils/logger';
 import { getAdapterForSession } from '../engines/manager';
 import type { AgentEngineType } from '../engines/types';
-import { parseExecutionTurnFromHistory } from '../engines/execution-snapshot';
+import { parseExecutionTurnFromHistory, type ExecutionSnapshot } from '../engines/execution-snapshot';
 import { extractDirectExecutionCommands, formatExecutionMemoryText, type ExecutionExperienceCandidateAssessment, type ExecutionExperienceSummary } from './claude-execution-summary-service';
 
 type RefreshInput = { runId?: string | null; sessionKey?: string | null; agentId?: string | null; engineType?: string | null };
-type ConversationInput = RefreshInput & { userMessage: string; assistantMessage: string };
+type CaptureContext = RefreshInput & { sourceId: string; sessionKey: string; executionJobId: string; conversationJobId: string };
+type CapturePreparationPlan = { prepareConversation: boolean; prepareExecution: boolean };
+type CaptureJobState = { id: string; status: string; payload_json: string; retry_count: number };
+const HISTORY_READY_DELAY_MS = 500;
+const CONVERSATION_MIN_TOTAL_LENGTH = 12;
+const EXECUTION_MIN_TOOL_COUNT = 5;
+const RETRY_BASE_DELAY_MS = 30000;
+const SNAPSHOT_PREPARATION_STATUSES = new Set(['pending', 'retry_wait']);
 const now = () => new Date().toISOString();
 type LogFields = Record<string, unknown>;
 type InjectedExecutionMemory = { memoryId: string; memory: string };
@@ -30,6 +36,7 @@ function trace(level: 'info' | 'warn', event: string, fields: LogFields): void {
 
 class MemoryCaptureService {
   private running = new Set<string>();
+  private preparing = new Set<string>();
   private injectedMemoriesByRun = new Map<string, { memories: InjectedExecutionMemory[]; createdAt: number }>();
 
   bindInjectedExecutionMemories(input: { runId?: string; memories?: Array<{ memoryId?: string; memory?: string }> }): void {
@@ -43,74 +50,182 @@ class MemoryCaptureService {
     trace('info', 'execution.context.bound', { runId, memoryIds: memories.map((item) => item.memoryId), count: memories.length });
   }
 
-  async enqueueConversation(input: ConversationInput): Promise<void> {
-    const user = input.userMessage.trim(); const assistant = input.assistantMessage.trim();
-    if (!user || !assistant || `${user}${assistant}`.length < 12) {
-      trace('info', 'conversation.skip', { reason: 'empty_or_too_short', sessionKey: input.sessionKey ?? null, runId: input.runId ?? null, userLength: user.length, assistantLength: assistant.length });
-      return;
-    }
-    const sourceId = input.runId?.trim() || `${input.sessionKey || 'session'}:${randomUUID()}`;
-    await this.insert('conversation_memory', sourceId, input, { userMessage: user, assistantMessage: assistant });
-    trace('info', 'conversation.enqueued', { jobId: `conversation_memory:${sourceId}`, sourceId, sessionKey: input.sessionKey ?? null, agentId: input.agentId ?? null, userLength: user.length, assistantLength: assistant.length });
-    void this.process(`conversation_memory:${sourceId}`);
+  async capture(input: RefreshInput, gateway: GatewayManager): Promise<void> {
+    await this.captureFromHistory(input, gateway);
   }
 
-  async refreshExecutionHistory(input: RefreshInput, gateway: GatewayManager): Promise<void> {
-    const sourceId = input.runId?.trim(); const sessionKey = input.sessionKey?.trim();
-    if (!sourceId || !sessionKey) {
-      trace('warn', 'execution.refresh.skip', { reason: 'missing_run_or_session', runId: input.runId ?? null, sessionKey: input.sessionKey ?? null });
+  private async captureFromHistory(input: RefreshInput, gateway: GatewayManager): Promise<void> {
+    const context = this.createCaptureContext(input);
+    if (!context) return;
+    if (this.preparing.has(context.executionJobId)) {
+      trace('info', 'capture.prepare.skip', { jobId: context.executionJobId, reason: 'already_preparing' });
       return;
     }
-    const id = `execution_experience:${sourceId}`;
-    await this.insert('execution_experience', sourceId, input, { sessionKey });
-    // 幂等守卫：若该 run 已处终态（stored/skipped/failed）或正在 summarize，
-    // 不再重复 fetch+retry。避免并发/重复派发经 retry() 把 retry_count 推高
-    // （retry_count 为非原子读-改-写，并发会双双 +1 并各自 schedule setTimeout）。
-    // 注：retry_wait/ready/pending 不拦，以便 setTimeout 自重试与 process 继续推进。
-    const existing = await getKyselyDatabase().selectFrom('memory_capture_jobs').select(['status']).where('id', '=', id).executeTakeFirst();
-    if (existing && ['stored', 'skipped', 'failed', 'summarizing'].includes(existing.status)) {
-      trace('info', 'execution.refresh.skip', { jobId: id, reason: `status_${existing.status}` });
-      return;
-    }
-    trace('info', 'execution.refresh.requested', { jobId: id, runId: sourceId, sessionKey, agentId: input.agentId ?? null, engineType: input.engineType ?? null });
+
+    this.preparing.add(context.executionJobId);
+    let plan: CapturePreparationPlan | undefined;
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      // 两种引擎历史来源不同：OpenClaw 走 gateway rpc、Claude 走 transcript 文件。
-      // 必须经 adapter 分流并透传 engineType，否则对 Claude 会话会从 OpenClaw 来源
-      // 取到空历史，导致 parseExecutionTurn 拿不到、永远 execution_history_not_ready。
-      const preferredEngineType: AgentEngineType | undefined = input.engineType === 'claude' ? 'claude' : input.engineType === 'openclaw' ? 'openclaw' : undefined;
-      const adapter = await getAdapterForSession(sessionKey, preferredEngineType);
-      const historyResult = await adapter.getHistory({ gatewayManager: gateway }, { sessionKey, limit: 200 });
-      // 解析（Anthropic 内容块 / OpenAI tool_calls 双格式）已抽到 execution-snapshot 纯函数，
-      // 本服务不再感知引擎格式差异。
-      const snapshot = parseExecutionTurnFromHistory(historyResult.success ? historyResult.result : undefined);
-      // 区分两种 not_ready 场景：
-      //  - snapshot 为空：历史尚未就绪（transient，retry 直至 500ms 后历史成熟）。
-      //  - snapshot 有但 tools.length===0：该回合无工具调用，无执行经验可沉淀
-      //    （permanent，直接 skip，不能 retry——否则纯文本问答会永远 not_ready）。
+      await this.ensureCaptureJobs(context);
+      plan = await this.getPreparationPlan(context);
+      if (!plan.prepareConversation && !plan.prepareExecution) return;
+
+      trace('info', 'capture.prepare.requested', { jobId: context.executionJobId, runId: context.sourceId, sessionKey: context.sessionKey, agentId: input.agentId ?? null, engineType: input.engineType ?? null, ...plan });
+      const snapshot = await this.loadTurnSnapshot(context, gateway);
       if (!snapshot) throw new Error('execution_history_not_ready');
-      if (snapshot.tools.length === 0) {
-        const reason = 'no_tools_in_turn';
-        await getKyselyDatabase().updateTable('memory_capture_jobs').set({ status: 'skipped', skip_reason: reason, completed_at: now(), updated_at: now() }).where('id', '=', id).execute();
-        trace('info', 'job.skipped', { jobId: id, kind: 'execution_experience', reason, messageCount: snapshot.messageCount });
-        return;
-      }
-      // 门控 C：工具调用过少（≤3）的回合不值得触发昂贵的 summarize。阈值 >3 才沉淀。
-      if (snapshot.tools.length <= 4) {
-        const reason = 'too_few_tools';
-        await getKyselyDatabase().updateTable('memory_capture_jobs').set({ status: 'skipped', skip_reason: reason, completed_at: now(), updated_at: now() }).where('id', '=', id).execute();
-        trace('info', 'job.skipped', { jobId: id, kind: 'execution_experience', reason, toolCount: snapshot.tools.length, messageCount: snapshot.messageCount });
-        return;
-      }
-      trace('info', 'execution.history.ready', { jobId: id, runId: sourceId, messageCount: snapshot.messageCount, toolCount: snapshot.tools.length, userLength: snapshot.userMessage.length, assistantLength: snapshot.assistantMessage.length });
-      this.pruneInjectedMemoryBindings();
-      const injected = this.injectedMemoriesByRun.get(sourceId)?.memories ?? [];
-      this.injectedMemoriesByRun.delete(sourceId);
-      const payload: ExecutionMemoryPayload = { ...snapshot, _executionMemory: { injected } };
-      trace('info', 'execution.history.context_merged', { jobId: id, runId: sourceId, injectedMemoryIds: injected.map((item) => item.memoryId), count: injected.length });
-      await getKyselyDatabase().updateTable('memory_capture_jobs').set({ payload_json: JSON.stringify(payload), status: 'ready', updated_at: now() }).where('id', '=', id).execute();
-      void this.process(id);
-    } catch (error) { await this.retry(id, error, () => this.refreshExecutionHistory(input, gateway)); }
+
+      if (plan.prepareConversation) await this.prepareConversationFromSnapshot(context, snapshot);
+      if (plan.prepareExecution) await this.prepareExecutionFromSnapshot(context, snapshot);
+    } catch (error) {
+      await this.retrySnapshotPreparation(context, plan, error, input, gateway);
+    } finally {
+      this.preparing.delete(context.executionJobId);
+    }
+  }
+
+  private createCaptureContext(input: RefreshInput): CaptureContext | null {
+    const sourceId = input.runId?.trim();
+    const sessionKey = input.sessionKey?.trim();
+    if (!sourceId || !sessionKey) {
+      trace('warn', 'capture.prepare.skip', { reason: 'missing_run_or_session', runId: input.runId ?? null, sessionKey: input.sessionKey ?? null });
+      return null;
+    }
+    return {
+      ...input,
+      sourceId,
+      sessionKey,
+      executionJobId: `execution_experience:${sourceId}`,
+      conversationJobId: `conversation_memory:${sourceId}`,
+    };
+  }
+
+  /** 历史快照尚未就绪时，两类记忆 job 同步处于 pending，等待同一次快照准备。 */
+  private async ensureCaptureJobs(context: CaptureContext): Promise<void> {
+    await Promise.all([
+      this.insert('conversation_memory', context.sourceId, context, { sessionKey: context.sessionKey }, 'pending'),
+      this.insert('execution_experience', context.sourceId, context, { sessionKey: context.sessionKey }, 'pending'),
+    ]);
+  }
+
+  private async getPreparationPlan(context: CaptureContext): Promise<CapturePreparationPlan> {
+    const db = getKyselyDatabase();
+    const [executionJob, conversationJob] = await Promise.all([
+      db.selectFrom('memory_capture_jobs').select(['id', 'status', 'payload_json', 'retry_count']).where('id', '=', context.executionJobId).executeTakeFirst(),
+      db.selectFrom('memory_capture_jobs').select(['id', 'status', 'payload_json', 'retry_count']).where('id', '=', context.conversationJobId).executeTakeFirst(),
+    ]);
+    const plan = {
+      prepareConversation: this.requiresSnapshotPreparation(conversationJob, 'conversation_memory'),
+      prepareExecution: this.requiresSnapshotPreparation(executionJob, 'execution_experience'),
+    };
+    if (!plan.prepareConversation && !plan.prepareExecution) {
+      trace('info', 'capture.prepare.skip', { executionJobId: context.executionJobId, executionStatus: executionJob?.status ?? null, conversationJobId: context.conversationJobId, conversationStatus: conversationJob?.status ?? null, reason: 'both_jobs_already_prepared' });
+    }
+    return plan;
+  }
+
+  private requiresSnapshotPreparation(job: CaptureJobState | undefined, kind: 'conversation_memory' | 'execution_experience'): boolean {
+    if (!job || !SNAPSHOT_PREPARATION_STATUSES.has(job.status)) return false;
+    return kind === 'conversation_memory'
+      ? !this.hasConversationPayload(job.payload_json)
+      : !this.hasExecutionPayload(job.payload_json);
+  }
+
+  private hasConversationPayload(payloadJson: string): boolean {
+    try {
+      const payload = JSON.parse(payloadJson) as Record<string, unknown>;
+      return typeof payload.userMessage === 'string' && typeof payload.assistantMessage === 'string';
+    } catch { return false; }
+  }
+
+  private hasExecutionPayload(payloadJson: string): boolean {
+    try {
+      const payload = JSON.parse(payloadJson) as Record<string, unknown>;
+      return typeof payload.userMessage === 'string'
+        && typeof payload.assistantMessage === 'string'
+        && Array.isArray(payload.tools);
+    } catch { return false; }
+  }
+
+  private async loadTurnSnapshot(context: CaptureContext, gateway: GatewayManager): Promise<ExecutionSnapshot | null> {
+    await new Promise((resolve) => setTimeout(resolve, HISTORY_READY_DELAY_MS));
+    const preferredEngineType: AgentEngineType | undefined = context.engineType === 'claude' ? 'claude' : context.engineType === 'openclaw' ? 'openclaw' : undefined;
+    const adapter = await getAdapterForSession(context.sessionKey, preferredEngineType);
+    const historyResult = await adapter.getHistory({ gatewayManager: gateway }, { sessionKey: context.sessionKey, limit: 200 });
+    return parseExecutionTurnFromHistory(historyResult.success ? historyResult.result : undefined);
+  }
+
+  private async prepareConversationFromSnapshot(context: CaptureContext, snapshot: ExecutionSnapshot): Promise<void> {
+    const userMessage = snapshot.userMessage.trim();
+    const assistantMessage = snapshot.assistantMessage.trim();
+    if (!userMessage || !assistantMessage || `${userMessage}${assistantMessage}`.length < CONVERSATION_MIN_TOTAL_LENGTH) {
+      trace('info', 'conversation.skip', { reason: 'empty_or_too_short', sessionKey: context.sessionKey, runId: context.sourceId, userLength: userMessage.length, assistantLength: assistantMessage.length });
+      await this.skipConversationJob(context.conversationJobId, 'empty_or_too_short');
+      return;
+    }
+    await getKyselyDatabase().updateTable('memory_capture_jobs').set({ payload_json: JSON.stringify({ userMessage, assistantMessage }), status: 'ready', updated_at: now() }).where('id', '=', context.conversationJobId).execute();
+    trace('info', 'conversation.ready', { jobId: context.conversationJobId, sourceId: context.sourceId, sessionKey: context.sessionKey, agentId: context.agentId ?? null, userLength: userMessage.length, assistantLength: assistantMessage.length });
+    void this.process(context.conversationJobId);
+  }
+
+  private async prepareExecutionFromSnapshot(context: CaptureContext, snapshot: ExecutionSnapshot): Promise<void> {
+    const skipReason = snapshot.tools.length === 0
+      ? 'no_tools_in_turn'
+      : snapshot.tools.length < EXECUTION_MIN_TOOL_COUNT
+        ? 'too_few_tools'
+        : null;
+    if (skipReason) {
+      await this.skipExecutionJob(context.executionJobId, skipReason, snapshot);
+      return;
+    }
+
+    this.pruneInjectedMemoryBindings();
+    const injected = this.injectedMemoriesByRun.get(context.sourceId)?.memories ?? [];
+    this.injectedMemoriesByRun.delete(context.sourceId);
+    const payload: ExecutionMemoryPayload = { ...snapshot, _executionMemory: { injected } };
+    trace('info', 'execution.history.ready', { jobId: context.executionJobId, runId: context.sourceId, messageCount: snapshot.messageCount, toolCount: snapshot.tools.length, userLength: snapshot.userMessage.length, assistantLength: snapshot.assistantMessage.length });
+    trace('info', 'execution.history.context_merged', { jobId: context.executionJobId, runId: context.sourceId, injectedMemoryIds: injected.map((item) => item.memoryId), count: injected.length });
+    await getKyselyDatabase().updateTable('memory_capture_jobs').set({ payload_json: JSON.stringify(payload), status: 'ready', updated_at: now() }).where('id', '=', context.executionJobId).execute();
+    void this.process(context.executionJobId);
+  }
+
+  private async skipExecutionJob(jobId: string, reason: string, snapshot: ExecutionSnapshot): Promise<void> {
+    await getKyselyDatabase().updateTable('memory_capture_jobs').set({ status: 'skipped', skip_reason: reason, completed_at: now(), updated_at: now() }).where('id', '=', jobId).execute();
+    trace('info', 'job.skipped', { jobId, kind: 'execution_experience', reason, toolCount: snapshot.tools.length, messageCount: snapshot.messageCount });
+  }
+
+  private async skipConversationJob(jobId: string, reason: string): Promise<void> {
+    await getKyselyDatabase().updateTable('memory_capture_jobs').set({ status: 'skipped', skip_reason: reason, completed_at: now(), updated_at: now() }).where('id', '=', jobId).execute();
+    trace('info', 'job.skipped', { jobId, kind: 'conversation_memory', reason });
+  }
+
+  private async retrySnapshotPreparation(
+    context: CaptureContext,
+    plan: CapturePreparationPlan | undefined,
+    error: unknown,
+    input: RefreshInput,
+    gateway: GatewayManager,
+  ): Promise<void> {
+    const jobIds = [
+      ...(plan?.prepareConversation !== false ? [context.conversationJobId] : []),
+      ...(plan?.prepareExecution !== false ? [context.executionJobId] : []),
+    ];
+    const db = getKyselyDatabase();
+    const jobs = await db.selectFrom('memory_capture_jobs').select(['id', 'retry_count']).where('id', 'in', jobIds).execute();
+    const retryCount = Math.max(0, ...jobs.map((job) => job.retry_count)) + 1;
+    const shouldRetry = retryCount < 3;
+    const retryInMs = retryCount * RETRY_BASE_DELAY_MS;
+    await db.updateTable('memory_capture_jobs').set({
+      status: shouldRetry ? 'retry_wait' : 'failed',
+      retry_count: retryCount,
+      error_message: String(error).slice(0, 500),
+      next_retry_at: shouldRetry ? new Date(Date.now() + retryInMs).toISOString() : null,
+      completed_at: shouldRetry ? null : now(),
+      updated_at: now(),
+    }).where('id', 'in', jobIds).execute();
+    trace('warn', shouldRetry ? 'capture.prepare.retry_wait' : 'capture.prepare.failed', { jobIds, retryCount, retryInMs: shouldRetry ? retryInMs : null, error: String(error).slice(0, 500) });
+    if (shouldRetry) {
+      const timer = setTimeout(() => void this.captureFromHistory(input, gateway), retryInMs);
+      timer.unref?.();
+    }
   }
 
   async recover(gateway: GatewayManager): Promise<void> {
@@ -118,8 +233,12 @@ class MemoryCaptureService {
     const jobs = await db.selectFrom('memory_capture_jobs').selectAll().where('status', 'in', ['pending', 'ready', 'summarizing', 'retry_wait']).execute();
     trace('info', 'recovery.scan', { count: jobs.length });
     for (const job of jobs) {
-      if (job.memory_kind === 'execution_experience' && (job.status === 'pending' || job.status === 'retry_wait')) {
-        void this.refreshExecutionHistory({ runId: job.source_id, sessionKey: job.session_key, agentId: job.agent_id, engineType: job.engine_type }, gateway);
+      if (job.memory_kind === 'execution_experience' && this.requiresSnapshotPreparation(job, 'execution_experience')) {
+        void this.captureFromHistory({ runId: job.source_id, sessionKey: job.session_key, agentId: job.agent_id, engineType: job.engine_type }, gateway);
+      } else if (job.memory_kind === 'conversation_memory' && this.requiresSnapshotPreparation(job, 'conversation_memory')) {
+        // 若执行 job 已终态但会话快照准备曾失败，仍需由同一编排入口补齐会话 job。
+        // 同 run 的重复恢复会被 preparing 锁折叠。
+        void this.captureFromHistory({ runId: job.source_id, sessionKey: job.session_key, agentId: job.agent_id, engineType: job.engine_type }, gateway);
       } else {
         if (job.status === 'retry_wait') await db.updateTable('memory_capture_jobs').set({ status: 'ready', updated_at: now() }).where('id', '=', job.id).execute();
         void this.process(job.id);
@@ -153,11 +272,19 @@ class MemoryCaptureService {
     trace('info', 'execution.memory.cleanup_recovery_done', { jobId: job.id, cleanupPending: lifecycle.cleanupPending, deletedMemoryIds: lifecycle.deletedMemoryIds });
   }
 
-  private async insert(kind: 'conversation_memory' | 'execution_experience', sourceId: string, input: RefreshInput, payload: unknown): Promise<void> {
+  private async insert(
+    kind: 'conversation_memory' | 'execution_experience',
+    sourceId: string,
+    input: RefreshInput,
+    payload: unknown,
+    status: 'pending' | 'ready' = kind === 'conversation_memory' ? 'ready' : 'pending',
+  ): Promise<boolean> {
     const timestamp = now();
     const id = `${kind}:${sourceId}`;
-    const result = await getKyselyDatabase().insertInto('memory_capture_jobs').values({ id, source_id: sourceId, memory_kind: kind, status: kind === 'conversation_memory' ? 'ready' : 'pending', payload_json: JSON.stringify(payload), session_key: input.sessionKey || null, agent_id: input.agentId || null, engine_type: input.engineType || null, memory_id: null, skip_reason: null, error_message: null, retry_count: 0, next_retry_at: null, created_at: timestamp, updated_at: timestamp, completed_at: null }).onConflict((oc) => oc.column('id').doNothing()).executeTakeFirst();
-    trace('info', 'job.insert', { jobId: id, kind, sourceId, inserted: Number(result.numInsertedOrUpdatedRows ?? 0n) > 0 });
+    const result = await getKyselyDatabase().insertInto('memory_capture_jobs').values({ id, source_id: sourceId, memory_kind: kind, status, payload_json: JSON.stringify(payload), session_key: input.sessionKey || null, agent_id: input.agentId || null, engine_type: input.engineType || null, memory_id: null, skip_reason: null, error_message: null, retry_count: 0, next_retry_at: null, created_at: timestamp, updated_at: timestamp, completed_at: null }).onConflict((oc) => oc.column('id').doNothing()).executeTakeFirst();
+    const inserted = Number(result.numInsertedOrUpdatedRows ?? 0n) > 0;
+    trace('info', 'job.insert', { jobId: id, kind, sourceId, inserted });
+    return inserted;
   }
 
   private async process(id: string): Promise<void> {
@@ -240,9 +367,10 @@ class MemoryCaptureService {
 
   private async retry(id: string, error: unknown, retry: () => void): Promise<void> {
     const db = getKyselyDatabase(); const job = await db.selectFrom('memory_capture_jobs').select(['retry_count']).where('id', '=', id).executeTakeFirst(); const count = (job?.retry_count || 0) + 1; const again = count < 3;
-    await db.updateTable('memory_capture_jobs').set({ status: again ? 'retry_wait' : 'failed', retry_count: count, error_message: String(error).slice(0, 500), next_retry_at: again ? new Date(Date.now() + count * 30000).toISOString() : null, completed_at: again ? null : now(), updated_at: now() }).where('id', '=', id).execute();
-    trace(again ? 'warn' : 'warn', again ? 'job.retry_wait' : 'job.failed', { jobId: id, retryCount: count, retryInMs: again ? count * 30000 : null, error: String(error).slice(0, 500) });
-    if (again) { const timer = setTimeout(retry, count * 30000); timer.unref?.(); }
+    const retryInMs = count * RETRY_BASE_DELAY_MS;
+    await db.updateTable('memory_capture_jobs').set({ status: again ? 'retry_wait' : 'failed', retry_count: count, error_message: String(error).slice(0, 500), next_retry_at: again ? new Date(Date.now() + retryInMs).toISOString() : null, completed_at: again ? null : now(), updated_at: now() }).where('id', '=', id).execute();
+    trace('warn', again ? 'job.retry_wait' : 'job.failed', { jobId: id, retryCount: count, retryInMs: again ? retryInMs : null, error: String(error).slice(0, 500) });
+    if (again) { const timer = setTimeout(retry, retryInMs); timer.unref?.(); }
   }
 
   private pruneInjectedMemoryBindings(): void {
@@ -313,4 +441,4 @@ function resolveDeleteCandidates(exp: ExecutionExperienceSummary, injected: Inje
 }
 
 export const memoryCaptureService = new MemoryCaptureService();
-export type { RefreshInput as MemoryHistoryRefreshInput, ConversationInput as ConversationMemoryInput };
+export type { RefreshInput as MemoryCaptureInput };

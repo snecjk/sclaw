@@ -137,6 +137,7 @@ export class AgentMemoryRemoteService {
     model: string;
     usage?: Record<string, unknown>;
   }> {
+    logger.info('[mem0][remote] embedder start', { input, model});
     return await requestMemoryCenter<{
       embeddings: Array<{ index: number; embedding: number[] }>;
       model: string;
@@ -249,7 +250,7 @@ export class AgentMemoryRemoteService {
     });
     const response = await proxyAwareFetch(`${baseUrl}${AGENT_MEMORY_CHAT_COMPLETIONS_PATH}`, {
       method: 'POST',
-      timeoutMs: 60_000,
+      timeoutMs: 120_000,
       headers: await getAuthHeaders(),
       body: JSON.stringify(payload),
     });

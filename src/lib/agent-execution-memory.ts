@@ -27,17 +27,23 @@ export function rememberInjectedExecutionMemories(sessionKey: string | null | un
   log('info', '[memory-capture] execution.context_recorded', { sessionKey: key, memoryIds: memories.map((item) => item.memoryId), count: memories.length });
 }
 
-export function refreshAgentExecutionHistory(input: { agentId?: string | null; runId?: string | null; sessionKey?: string | null; engineType?: string | null }): void {
+/** 单一终态触发：服务端从同一份历史快照创建偏好与执行经验两类 job。 */
+export function captureAgentMemories(input: { agentId?: string | null; runId?: string | null; sessionKey?: string | null; engineType?: string | null }): void {
   const runId = input.runId?.trim();
   const sessionKey = input.sessionKey?.trim();
   if (!runId || !sessionKey) { log('warn', '[memory-capture] execution.dispatch_skipped', { reason: 'missing_run_or_session', runId: input.runId ?? null, sessionKey: input.sessionKey ?? null }); return; }
   prunePendingInjectedMemories();
   const injected = pendingInjectedMemoriesBySession.get(sessionKey)?.memories ?? [];
   pendingInjectedMemoriesBySession.delete(sessionKey);
-  log('info', '[memory-capture] execution.dispatch', { kind: 'execution_experience', runId, sessionKey, agentId: input.agentId ?? null, engineType: input.engineType ?? null, injectedMemoryIds: injected.map((item) => item.memoryId) });
+  log('info', '[memory-capture] turn.dispatch', { runId, sessionKey, agentId: input.agentId ?? null, engineType: input.engineType ?? null, injectedMemoryIds: injected.map((item) => item.memoryId) });
   void invokeIpc('execution-memory:bind-injected-memories', { runId, sessionKey, agentId: input.agentId?.trim() || undefined, memories: injected })
-    .then(() => invokeIpc('execution-memory:refresh-history', { runId, sessionKey, agentId: input.agentId?.trim() || undefined, engineType: input.engineType?.trim() || undefined }))
-    .catch((error) => log('warn', '[memory-capture] execution.dispatch_failed', { runId, sessionKey, error: String(error) }));
+    .then(() => invokeIpc('agent-memory:capture', {
+      runId,
+      sessionKey,
+      agentId: input.agentId?.trim() || undefined,
+      engineType: input.engineType?.trim() || undefined,
+    }))
+    .catch((error) => log('warn', '[memory-capture] turn.dispatch_failed', { runId, sessionKey, error: String(error) }));
 }
 
 function prunePendingInjectedMemories(): void {

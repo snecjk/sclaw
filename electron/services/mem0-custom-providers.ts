@@ -111,7 +111,7 @@ class StoMemoryCenterLlmProvider implements LLM {
     }
     const result = await agentMemoryRemoteService.listModels();
     const firstModelId = result.data?.find((item) => typeof item.id === 'string' && item.id.trim())?.id;
-    this.resolvedModel = typeof firstModelId === 'string' && firstModelId.trim() ? firstModelId : 'qwen3-plus';
+    this.resolvedModel = typeof firstModelId === 'string' && firstModelId.trim() ? firstModelId : 'qwen3.6-plus';
     return this.resolvedModel;
   }
 
@@ -181,7 +181,6 @@ class StoMemoryCenterLlmProvider implements LLM {
 
 class StoMemoryCenterEmbedderProvider {
   async embed(text: string): Promise<number[]> {
-    logger.info('[mem0][embedder] embed start', { textLength: text.length });
     const result = await agentMemoryRemoteService.createEmbeddings(text);
     const embedding = result.embeddings[0]?.embedding ?? [];
     logger.info('[mem0][embedder] embed success', { dimension: embedding.length });
@@ -192,7 +191,6 @@ class StoMemoryCenterEmbedderProvider {
     if (texts.length === 0) {
       return [];
     }
-    logger.info('[mem0][embedder] embedBatch start', { batchSize: texts.length });
     const result = await agentMemoryRemoteService.createEmbeddings(texts);
     const embeddings = result.embeddings
       .slice()

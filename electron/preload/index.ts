@@ -37,9 +37,8 @@ const electronAPI = {
         'agent-memory:mem0-history',
         'agent-memory:mem0-reset',
         'agent-memory:summarize-execution-experience',
-        'agent-memory:capture-conversation',
+        'agent-memory:capture',
         'execution-memory:bind-injected-memories',
-        'execution-memory:refresh-history',
         'preview:httpFetch',
         // Workflow
         'workflow:startTracking',

@@ -3,7 +3,7 @@ import { ipcMain } from 'electron';
 import type { GatewayManager } from '../../gateway/manager';
 
 import { agentMemoryOrchestrator } from '../../services/agent-memory-orchestrator';
-import { memoryCaptureService, type ConversationMemoryInput, type MemoryHistoryRefreshInput } from '../../services/memory-capture-service';
+import { memoryCaptureService, type MemoryCaptureInput } from '../../services/memory-capture-service';
 
 export function registerAgentMemoryHandlers(gatewayManager: GatewayManager): void {
   void memoryCaptureService.recover(gatewayManager).catch(() => undefined);
@@ -108,9 +108,9 @@ export function registerAgentMemoryHandlers(gatewayManager: GatewayManager): voi
   );
 
   ipcMain.handle(
-    'agent-memory:capture-conversation',
-    async (_event: IpcMainInvokeEvent, input: ConversationMemoryInput) => {
-      await memoryCaptureService.enqueueConversation(input);
+    'agent-memory:capture',
+    async (_event: IpcMainInvokeEvent, input: MemoryCaptureInput) => {
+      await memoryCaptureService.capture(input, gatewayManager);
       return { accepted: true };
     },
   );
@@ -128,11 +128,4 @@ export function registerAgentMemoryHandlers(gatewayManager: GatewayManager): voi
     },
   );
 
-  ipcMain.handle(
-    'execution-memory:refresh-history',
-    async (_event: IpcMainInvokeEvent, input: MemoryHistoryRefreshInput) => {
-      void memoryCaptureService.refreshExecutionHistory(input, gatewayManager).catch(() => undefined);
-      return { accepted: true };
-    },
-  );
 }

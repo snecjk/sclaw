@@ -2,7 +2,6 @@ import { invokeIpc } from '@/lib/api-client';
 import {
   AGENT_MEMORY_CONTEXT_MARKER,
   stripAgentMemoryContextByMarker,
-  stripAgentMemoryContextsForDisplay,
 } from '@/lib/agent-memory-display';
 
 type AgentMemoryBootstrap = {
@@ -25,12 +24,10 @@ type RetrievedMemoryItem = {
 };
 
 let initializePromise: Promise<AgentMemoryBootstrap | null> | null = null;
-const capturedTurnKeys = new Set<string>();
 
 function normalizeWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
-
 export function shouldRetrieveMemories(query: string): boolean {
   const normalized = normalizeWhitespace(query);
   if (!normalized) {
@@ -123,7 +120,6 @@ export function coerceMemoryMessageText(content: unknown): string {
   }
   return '';
 }
-
 export function findLatestUserMessageBeforeAssistant(
   messages: MemoryMessageLike[],
   assistantMessageId: string,
@@ -143,65 +139,5 @@ export function findLatestUserMessageBeforeAssistant(
     }
   }
   return '';
-}
-
-export async function captureAgentMemoryTurn(input: {
-  userMessage: string;
-  assistantMessage: string;
-  agentId?: string | null;
-  runId?: string | null;
-  sessionKey?: string | null;
-}): Promise<void> {
-  const userMessage = normalizeWhitespace(stripAgentMemoryContextsForDisplay(input.userMessage));
-  const assistantMessage = normalizeWhitespace(input.assistantMessage);
-  if (!userMessage || !assistantMessage) {
-    return;
-  }
-  const captureKey = [
-    input.sessionKey?.trim() || '',
-    input.runId?.trim() || '',
-    userMessage,
-    assistantMessage,
-  ].join('||');
-  if (capturedTurnKeys.has(captureKey)) {
-    return;
-  }
-  if (`${userMessage}${assistantMessage}`.length < 12) {
-    console.info('[agent-memory] capture skipped: too short', {
-      userMessageLength: userMessage.length,
-      assistantMessageLength: assistantMessage.length,
-    });
-    return;
-  }
-  console.info('[agent-memory] capture add turn', {
-    userMessageLength: userMessage.length,
-    assistantMessageLength: assistantMessage.length,
-  });
-
-  capturedTurnKeys.add(captureKey);
-
-  try {
-    console.info('[memory-capture] conversation.dispatch', {
-      kind: 'conversation_memory',
-      runId: input.runId ?? null,
-      sessionKey: input.sessionKey ?? null,
-      agentId: input.agentId ?? null,
-      userLength: userMessage.length,
-      assistantLength: assistantMessage.length,
-    });
-    await invokeIpc(
-      'agent-memory:capture-conversation',
-      {
-        userMessage,
-        assistantMessage,
-        agentId: input.agentId ?? undefined,
-        runId: input.runId ?? undefined,
-        sessionKey: input.sessionKey ?? undefined,
-      },
-    );
-  } catch (error) {
-    capturedTurnKeys.delete(captureKey);
-    console.warn('[memory-capture] conversation.dispatch_failed', { runId: input.runId ?? null, sessionKey: input.sessionKey ?? null, error: String(error) });
-  }
 }
 

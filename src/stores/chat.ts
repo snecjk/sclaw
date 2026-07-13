@@ -111,7 +111,7 @@ import {
   shouldAutoCompleteClaudeFromHistory,
 } from './chat/run-completion';
 import {
-  refreshAgentExecutionHistory,
+  captureAgentMemories,
 } from '@/lib/agent-execution-memory';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
@@ -897,8 +897,6 @@ function handleBackgroundSessionEvent(
         event.phase,
         finalMsg,
       );
-      const userTextForMemory = getMessageText(currentRuntime.optimisticUserMessage?.content).trim();
-      const assistantTextForMemory = getMessageText(finalMsg.content).trim();
       set((s) => {
         const next = patchSessionRuntimeState(s, sessionKey, (currentRuntime) => ({
           sending: isTerminalOutput ? false : currentRuntime.sending,
@@ -926,18 +924,12 @@ function handleBackgroundSessionEvent(
         return next;
       });
       if (isTerminalOutput && !toolOnly) {
-        if (userTextForMemory && assistantTextForMemory) {
-          void (async () => {
-            const { captureAgentMemoryTurn } = await import('@/lib/agent-memory');
-            await captureAgentMemoryTurn({
-              userMessage: userTextForMemory,
-              assistantMessage: assistantTextForMemory,
-              agentId: getAgentIdFromSessionKey(sessionKey),
-              runId: runId || undefined,
-              sessionKey,
-            });
-          })();
-        }
+        dispatchAgentMemoryCapture({
+          agentId: getAgentIdFromSessionKey(sessionKey),
+          runId: runId || undefined,
+          sessionKey,
+          engineType: currentEngineType,
+        });
       }
       if (toolOnly) break;
       break;
@@ -2311,7 +2303,7 @@ export const useChatStore = create<ChatState>()(
           pendingToolImages: [],
           error: null,
         }));
-        refreshAgentExecutionHistory({
+        dispatchAgentMemoryCapture({
           agentId: getAgentIdFromSessionKey(targetSessionKey),
           runId: completionRunId,
           sessionKey: targetSessionKey,
@@ -3073,7 +3065,7 @@ export const useChatStore = create<ChatState>()(
             }));
             clearHistoryPoll();
             const sessionKey = get().currentSessionKey;
-            refreshAgentExecutionHistory({
+            dispatchAgentMemoryCapture({
               agentId: get().currentAgentId,
               runId: runId || undefined,
               sessionKey,
@@ -3236,7 +3228,7 @@ export const useChatStore = create<ChatState>()(
             if (isTerminalOutput && !toolOnly) {
               clearHistoryPoll();
               const sessionKey = get().currentSessionKey;
-              refreshAgentExecutionHistory({
+              dispatchAgentMemoryCapture({
                 agentId: get().currentAgentId,
                 runId: runId || undefined,
                 sessionKey,
@@ -3253,7 +3245,7 @@ export const useChatStore = create<ChatState>()(
         } else {
           // No message in final event - reload history to get complete data
           set({ streamingText: '', streamingMessage: null, pendingFinal: true });
-          refreshAgentExecutionHistory({
+          dispatchAgentMemoryCapture({
             agentId: get().currentAgentId,
             runId: runId || undefined,
             sessionKey: get().currentSessionKey,
@@ -3439,6 +3431,15 @@ export const useChatStore = create<ChatState>()(
   },
 }));
 
+function dispatchAgentMemoryCapture(input: {
+  agentId?: string | null;
+  runId?: string | null;
+  sessionKey?: string | null;
+  engineType?: string | null;
+}): void {
+  captureAgentMemories(input);
+}
+
 /** OpenClaw has no Claude-style runtimeResult; agent.completed is the terminal signal. */
 export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null, runId?: string | null): void {
   const state = useChatStore.getState();
@@ -3451,11 +3452,12 @@ export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null
   if (engineType !== 'openclaw' && engineType !== 'claude') return;
 
   // Agentic 'final' chat events lack phase=completed, so their
-  // isTerminalOutput gate never fires refreshAgentExecutionHistory. This
+  // isTerminalOutput gate never fires the memory-capture dispatch. This
   // agent.completed path is the real terminal point — capture the run id
   // before clearing runtime state and dispatch execution-memory precipitation.
   const resolvedRunId = runId ?? state.activeRunId ?? undefined;
   const agentId = getAgentIdFromSessionKey(targetKey);
+  dispatchAgentMemoryCapture({ agentId, runId: resolvedRunId, sessionKey: targetKey, engineType });
 
   clearHistoryPoll();
   useChatStore.setState((prev) => patchSessionRuntimeState(prev, targetKey, {
@@ -3472,7 +3474,6 @@ export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null
     pendingToolImages: [],
     error: null,
   }));
-  refreshAgentExecutionHistory({ agentId, runId: resolvedRunId, sessionKey: targetKey, engineType });
   if (targetKey === state.currentSessionKey) {
     finalizeMessagesFromHistoryLoad(() => useChatStore.getState(), (partial) => {
       useChatStore.setState(partial);
