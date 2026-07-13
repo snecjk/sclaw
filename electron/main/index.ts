@@ -628,6 +628,7 @@ async function initialize(): Promise<void> {
     }
 
     // Ensure Main Agent's AGENTS.md includes the long-output constraint
+    // TEMP: ensure* 函数体内已暂时停用英文注入（见 agent-config.ts）
     try {
       const mainWorkspace = await getAgentWorkspacePath('main');
       if (mainWorkspace) {

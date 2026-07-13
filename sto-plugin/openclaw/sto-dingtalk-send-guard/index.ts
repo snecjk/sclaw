@@ -10,7 +10,15 @@ import {
 } from './dingtalk-mention-pending.js';
 import { buildDingTalkMentionSystemContext } from './shared/dingtalk-mention-context';
 import { fixDwsChatMessageSendToolParamsForOpenClawExec } from './shared/dws-send-text';
-import { DINGTALK_SHARE_TOOL_PROMPT, registerShareToDingTalkTool } from './share-to-dingtalk.js';
+import {
+  DINGTALK_ORAL_SEND_PROMPT,
+  looksLikeDingTalkOralSendIntent,
+} from './shared/dingtalk-oral-send-prompt.js';
+import {
+  DINGTALK_SHARE_TOOL_PROMPT,
+  looksLikeDingTalkShareIntent,
+  registerShareToDingTalkTool,
+} from './share-to-dingtalk.js';
 
 const TAG = 'sto-dingtalk-send-guard';
 
@@ -31,16 +39,18 @@ export default definePluginEntry({
 
     registerShareToDingTalkTool(api);
 
-    api.on('before_prompt_build', async (_event, ctx) => {
+    api.on('before_prompt_build', async (event, ctx) => {
       api.logger.debug?.(
         `[${TAG}] before_prompt_build: fired — agentId=${ctx.agentId ?? '(none)'}, sessionKey=${ctx.sessionKey ?? '(none)'}`,
       );
 
-      const appendBlocks: string[] = [DINGTALK_SHARE_TOOL_PROMPT];
+      const appendBlocks: string[] = [];
+      let hasPendingMentions = false;
 
       if (ctx.sessionKey) {
         const pendingMentions = await readDingTalkMentionPending(ctx.sessionKey);
         if (pendingMentions) {
+          hasPendingMentions = true;
           api.logger.info?.(
             `[${TAG}] before_prompt_build: pending DingTalk mentions found (${pendingMentions.mentions.length} recipients) sessionKey=${ctx.sessionKey}`,
           );
@@ -61,6 +71,17 @@ export default definePluginEntry({
         }
       }
 
+      // 优先级：@ Recipients > 口头点名发送（dws）> 分享选人窗（share）
+      const prompt = typeof event?.prompt === 'string' ? event.prompt : '';
+      if (!hasPendingMentions) {
+        if (looksLikeDingTalkOralSendIntent(prompt)) {
+          appendBlocks.push(DINGTALK_ORAL_SEND_PROMPT);
+        } else if (looksLikeDingTalkShareIntent(prompt)) {
+          appendBlocks.push(DINGTALK_SHARE_TOOL_PROMPT);
+        }
+      }
+
+      if (appendBlocks.length === 0) return undefined;
       return { appendSystemContext: appendBlocks.join('\n\n') };
     });
 
