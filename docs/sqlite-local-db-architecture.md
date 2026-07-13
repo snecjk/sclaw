@@ -1,5 +1,8 @@
 # SQLite 本地数据库方案
 
+> **开发者实操**（安装、启动、数据库路径、查表、SQL 示例）见 **[sqlite-dev-guide.md](./sqlite-dev-guide.md)**。  
+> **表结构详解**（各表字段、索引、连表）见 **[sqlite/README.md](./sqlite/README.md)**。
+
 ## 目标
 
 为 StoClaw 新增一套独立于现有 `electron-store` / JSON / JSONL 的本地 SQLite 能力，专门承接新的结构化数据需求。
@@ -103,12 +106,12 @@ some_json TEXT CHECK (some_json IS NULL OR json_valid(some_json))
 
 ## 首版 schema
 
-当前首版 migration 只保留最小集合：
+当前 migration 包含 7 张表（详见 [sqlite/README.md](./sqlite/README.md)）：
 
-- `schema_migrations`
-- `app_demo_records`
+- `schema_migrations`、`app_demo_records`（演示）
+- **v2 session catalog**：`workspaces`、`session_groups`、`catalog_sessions`、`session_engine_bindings`
 
-其中 `app_demo_records` 仅作为演示表，方便后续按你的真实业务继续扩展 migration。
+消息正文、发送队列、未读红点 **不** 进入 SQLite。
 
 ## 标准 CRUD 示例
 

@@ -1,5 +1,11 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { DemoRecordTable } from './models/tables/demo-record-table';
+import type {
+  CatalogSessionsTable,
+  SessionEngineBindingsTable,
+  SessionGroupsTable,
+  WorkspacesTable,
+} from './models/tables/session-catalog-tables';
 
 // One migration file corresponds to one schema version.
 export interface SqliteMigration {
@@ -38,4 +44,8 @@ export interface SchemaMigrationsTable {
 export interface SqliteDbSchema {
   schema_migrations: SchemaMigrationsTable;
   app_demo_records: DemoRecordTable;
+  workspaces: WorkspacesTable;
+  session_groups: SessionGroupsTable;
+  catalog_sessions: CatalogSessionsTable;
+  session_engine_bindings: SessionEngineBindingsTable;
 }

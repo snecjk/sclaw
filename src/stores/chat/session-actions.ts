@@ -448,6 +448,10 @@ export function createSessionActions(
 
       rememberOptimisticDeletedSessionKey(key);
 
+      void import('@/stores/session-catalog').then(({ useSessionCatalogStore }) => {
+        void useSessionCatalogStore.getState().softDeleteSession(key);
+      });
+
       const { currentSessionKey, sessions } = get();
       const remaining = sessions.filter((s) => s.key !== key);
 

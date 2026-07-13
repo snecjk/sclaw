@@ -404,6 +404,12 @@ async function initialize(): Promise<void> {
   console.info(
     `[sqlite] initialized file=${sqliteInfo.filePath} journal=${sqliteInfo.journalMode} foreignKeys=${sqliteInfo.foreignKeysEnabled}`,
   );
+  const { ensureSessionCatalogBootstrapped } = await import('../services/session-catalog-service');
+  await ensureSessionCatalogBootstrapped();
+  const { registerSessionCatalogHandlers } = await import('./ipc/session-catalog-handlers');
+  registerSessionCatalogHandlers();
+  const { registerDialogHandlers } = await import('./ipc/dialog-handlers');
+  registerDialogHandlers();
 
   // Create the main window as early as possible.
   // Window shows immediately with dark background (see createWindow).

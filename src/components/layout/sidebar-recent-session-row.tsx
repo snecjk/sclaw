@@ -1,7 +1,7 @@
 /**
  * SidebarRecentSessionRow — 侧边栏最近会话单行（含 inline 重命名 + 行尾菜单）。
  *
- * 使用位置：Sidebar 分组内 / 「最近」未分组列表
+ * 使用位置：Sidebar「最近」列表
  */
 import { useTranslation } from 'react-i18next';
 import { SidebarRecentSessionRowTrailing } from '@/components/layout/sidebar-recent-session-row-trailing';
@@ -10,9 +10,12 @@ import {
   sidebarListItemTextClass,
   sidebarRecentSessionActiveClass,
   sidebarSubitemTextIdleClass,
+  sidebarUnreadDotClass,
 } from '@/lib/surfaces';
 import type { ChatSession } from '@/stores/chat/types';
-import type { SidebarRecentGroup } from '@/stores/sidebar-recent-groups';
+import type { WorkspaceDto } from '@/lib/session-catalog-api';
+import { useChatStore } from '@/stores/chat';
+import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 
 export interface SidebarRecentSessionRowProps {
   /** 会话实体 */
@@ -25,10 +28,12 @@ export interface SidebarRecentSessionRowProps {
   isEditing: boolean;
   /** 重命名 draft */
   editingValue: string;
-  /** 全部分组 */
-  groups: SidebarRecentGroup[];
-  /** 当前 groupId；null = 未分组 */
-  currentGroupId: string | null;
+  /** 用户项目 */
+  projects: WorkspaceDto[];
+  /** 当前项目 id；null = 默认对话 */
+  currentProjectId: string | null;
+  /** 是否已在非默认项目中 */
+  isInProject: boolean;
   /** 打开会话 */
   onOpen: () => void;
   onStartRename: () => void;
@@ -36,9 +41,9 @@ export interface SidebarRecentSessionRowProps {
   onCommitRename: () => void;
   onCancelRename: () => void;
   onDelete: () => void;
-  onCreateGroup: () => void;
-  onAssignGroup: (groupId: string) => void;
-  onUngroup: () => void;
+  onMoveToProject: (projectId: string) => void;
+  onRemoveFromProject: () => void;
+  onCreateProject: () => void;
   className?: string;
 }
 
@@ -48,20 +53,41 @@ export function SidebarRecentSessionRow({
   isActive,
   isEditing,
   editingValue,
-  groups,
-  currentGroupId,
+  projects,
+  currentProjectId,
+  isInProject,
   onOpen,
   onStartRename,
   onEditingValueChange,
   onCommitRename,
   onCancelRename,
   onDelete,
-  onCreateGroup,
-  onAssignGroup,
-  onUngroup,
+  onMoveToProject,
+  onRemoveFromProject,
+  onCreateProject,
   className,
 }: SidebarRecentSessionRowProps) {
   const { t } = useTranslation('common');
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const runtime = useChatStore((s) => s.runtimeBySessionKey[session.key]);
+  const currentSessionSending = useChatStore((s) => s.sending);
+  const currentSessionActiveRunId = useChatStore((s) => s.activeRunId);
+  const currentSessionError = useChatStore((s) => s.error);
+  const unreadKeys = useSessionUnreadStore((s) => s.unreadKeys);
+  const isCurrentSession = currentSessionKey === session.key;
+  const isRunning = Boolean(
+    runtime?.sending
+    || runtime?.activeRunId
+    || (isCurrentSession && (currentSessionSending || currentSessionActiveRunId)),
+  );
+  const hasError = Boolean(
+    (runtime?.error != null && runtime.error !== '')
+    || (isCurrentSession && currentSessionError != null && currentSessionError !== ''),
+  );
+  const showUnreadDot = !isCurrentSession
+    && !isRunning
+    && !hasError
+    && readSessionUnread(unreadKeys, session.key);
 
   if (isEditing) {
     return (
@@ -101,6 +127,12 @@ export function SidebarRecentSessionRow({
           title={label}
           className="flex h-9 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
         >
+          {showUnreadDot ? (
+            <span
+              className={cn(sidebarUnreadDotClass, 'mr-2 shrink-0')}
+              aria-label={t('sidebar.sessionUnread')}
+            />
+          ) : null}
           <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass, isActive && 'font-medium')}>
             {label}
           </span>
@@ -108,13 +140,14 @@ export function SidebarRecentSessionRow({
         <SidebarRecentSessionRowTrailing
           sessionKey={session.key}
           isActive={isActive}
-          groups={groups}
-          currentGroupId={currentGroupId}
+          projects={projects}
+          currentProjectId={currentProjectId}
+          isInProject={isInProject}
           onRename={onStartRename}
           onDelete={onDelete}
-          onCreateGroup={onCreateGroup}
-          onAssignGroup={onAssignGroup}
-          onUngroup={onUngroup}
+          onMoveToProject={onMoveToProject}
+          onRemoveFromProject={onRemoveFromProject}
+          onCreateProject={onCreateProject}
         />
       </div>
     </div>

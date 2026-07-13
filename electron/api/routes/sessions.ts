@@ -5,7 +5,8 @@ import { deleteClaudeSessionByKey } from '../../engines/claude-adapter';
 import { applyClaudeSessionModelSwitch } from '../../engines/claude-session-model';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry } from '../../engines/session-registry';
 import { getAgentIdFromSessionKey, rememberSessionEngineType, resolveSessionEngineType } from '../../engines/session-engine';
-import { getAgentPreferredModel, getAgentWorkspacePath } from '../../utils/agent-config';
+import { getAgentPreferredModel } from '../../utils/agent-config';
+import { resolveSessionToolCwd } from '../../services/session-catalog-service';
 import {
   qualifyChatModelRef,
   setSessionModelViaGateway,
@@ -105,7 +106,7 @@ export async function handleSessionRoutes(
         const agentId = body.agentId?.trim() || getAgentIdFromSessionKey(sessionKey);
         const existing = await getEngineSessionRegistryEntry(sessionKey);
         const preferredModel = await getAgentPreferredModel(agentId);
-        const cwd = existing?.cwd || await getAgentWorkspacePath(agentId);
+        const cwd = existing?.cwd || await resolveSessionToolCwd(sessionKey, agentId);
         if (!cwd) {
           sendJson(res, 404, { success: false, error: `Agent '${agentId}' workspace not found` });
           return true;

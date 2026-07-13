@@ -1712,6 +1712,9 @@ export const useChatStore = create<ChatState>()(
     }
 
     rememberOptimisticDeletedSessionKey(key);
+    void import('@/stores/session-catalog').then(({ useSessionCatalogStore }) => {
+      void useSessionCatalogStore.getState().softDeleteSession(key);
+    });
     const additionalSuppressKeys = (options?.additionalSuppressKeys ?? [])
       .map((suppressKey) => suppressKey.trim())
       .filter((suppressKey) => suppressKey && suppressKey !== key);
@@ -1866,6 +1869,9 @@ export const useChatStore = create<ChatState>()(
     // 新建即视为已读，写入已读水位；后续该会话前台完成的迟到事件不会误标未读。
     touchSessionReadAt(newKey);
     void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
+    void import('@/stores/session-catalog').then(({ useSessionCatalogStore }) => {
+      void useSessionCatalogStore.getState().bindSession(newKey);
+    });
   },
 
   // ── Cleanup empty session on navigate away ──
@@ -3253,6 +3259,9 @@ export const useChatStore = create<ChatState>()(
         session.key === key ? { ...session, label: trimmed } : session
       )),
     }));
+    void import('@/stores/session-catalog').then(({ useSessionCatalogStore }) => {
+      void useSessionCatalogStore.getState().patchSessionCatalog({ sessionKey: key, title: trimmed });
+    });
   },
 
   markScheduledSessionActivating: (sessionKey: string) => {

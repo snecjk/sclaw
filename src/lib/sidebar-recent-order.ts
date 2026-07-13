@@ -62,6 +62,39 @@ export function sortSessionsByRecentActivity(
   });
 }
 
+export interface CatalogPinSortMeta {
+  pinRank: number | null;
+  lastActivityAt: string | null;
+}
+
+export function sortSessionsWithCatalogPin(
+  sessions: ChatSession[],
+  sessionLastActivity: Record<string, number>,
+  catalogByKey: Record<string, CatalogPinSortMeta>,
+): ChatSession[] {
+  return [...sessions].sort((left, right) => {
+    const leftCatalog = catalogByKey[left.key];
+    const rightCatalog = catalogByKey[right.key];
+    const leftPin = leftCatalog?.pinRank ?? null;
+    const rightPin = rightCatalog?.pinRank ?? null;
+    const leftPinned = leftPin != null;
+    const rightPinned = rightPin != null;
+    if (leftPinned !== rightPinned) return leftPinned ? -1 : 1;
+    if (leftPinned && rightPinned && leftPin !== rightPin) return leftPin - rightPin;
+
+    const leftCatalogActivity = leftCatalog?.lastActivityAt
+      ? Date.parse(leftCatalog.lastActivityAt)
+      : 0;
+    const rightCatalogActivity = rightCatalog?.lastActivityAt
+      ? Date.parse(rightCatalog.lastActivityAt)
+      : 0;
+    const leftActivity = Math.max(getSessionActivityForSort(left, sessionLastActivity), leftCatalogActivity);
+    const rightActivity = Math.max(getSessionActivityForSort(right, sessionLastActivity), rightCatalogActivity);
+    if (leftActivity !== rightActivity) return rightActivity - leftActivity;
+    return right.key.localeCompare(left.key);
+  });
+}
+
 /** Sidebar recency order: last activity descending (mainstream chat UX). */
 export function buildInitialSidebarRecentOrder(
   sessions: ChatSession[],
