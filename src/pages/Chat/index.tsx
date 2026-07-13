@@ -29,7 +29,6 @@ import { useMessageQueueStore, createAutoSendWatcher, suspendAutoSend } from '@/
 import { markTurnInterrupted } from '@/lib/turn-interrupt-marker';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { useTranslation } from 'react-i18next';
-import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { cn } from '@/lib/utils';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
