@@ -1,19 +1,52 @@
 /**
- * AddExternalAppModal — modal for installing external apps
- * Aligned with the PRD demo (more-apps.css)
+ * AddExternalAppModal — modal for installing / editing external apps
  */
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useEffect } from 'react';
 import { useMoreAppsStore } from '@/stores/more-apps';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 export function AddExternalAppModal() {
   const { t } = useTranslation('common');
-  const { addModalOpen, closeAddModal, addExternalApp } = useMoreAppsStore();
+  const {
+    addModalOpen,
+    editingExternalAppId,
+    externalApps,
+    closeAddModal,
+    addExternalApp,
+    updateExternalApp,
+  } = useMoreAppsStore();
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
   const [desc, setDesc] = useState('');
   const [error, setError] = useState('');
+
+  const isEditing = editingExternalAppId !== null;
+  const editingApp = isEditing
+    ? externalApps.find((a) => a.id === editingExternalAppId)
+    : undefined;
+
+  useEffect(() => {
+    if (!addModalOpen) {
+      setName('');
+      setUrl('');
+      setDesc('');
+      setError('');
+      return;
+    }
+    if (editingApp) {
+      setName(editingApp.name);
+      setUrl(editingApp.url);
+      setDesc(editingApp.description === '外部应用链接' ? '' : (editingApp.description ?? ''));
+      setError('');
+    } else if (!isEditing) {
+      setName('');
+      setUrl('');
+      setDesc('');
+      setError('');
+    }
+  }, [addModalOpen, editingApp, isEditing]);
 
   if (!addModalOpen) return null;
 
@@ -29,14 +62,19 @@ export function AddExternalAppModal() {
       return;
     }
     try {
-      // Validate URL
       new URL(trimmedUrl);
     } catch {
       setError(t('moreApps.addModal.errorUrlFormat', { defaultValue: '应用地址格式不正确，请输入完整 URL' }));
       return;
     }
     setError('');
-    addExternalApp({ name, url: trimmedUrl, description: desc });
+    const payload = { name, url: trimmedUrl, description: desc };
+    if (isEditing && editingExternalAppId) {
+      updateExternalApp(editingExternalAppId, payload);
+      toast.success(t('moreApps.toast.updated', { defaultValue: '应用已更新' }), { duration: 2000 });
+      return;
+    }
+    addExternalApp(payload);
     setName('');
     setUrl('');
     setDesc('');
@@ -44,23 +82,22 @@ export function AddExternalAppModal() {
 
   return (
     <div className="more-apps-modal" hidden={!addModalOpen}>
-      {/* Backdrop */}
       <div
         className="more-apps-modal__backdrop"
         onClick={closeAddModal}
         aria-hidden
       />
-      {/* Panel */}
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="more-apps-add-modal-title"
         className="more-apps-modal__panel"
       >
-        {/* Head */}
         <div className="more-apps-modal__head">
           <h2 id="more-apps-add-modal-title" className="more-apps-modal__title">
-            {t('moreApps.addModal.title', { defaultValue: '安装外部应用' })}
+            {isEditing
+              ? t('moreApps.editModal.title', { defaultValue: '编辑外部应用' })
+              : t('moreApps.addModal.title', { defaultValue: '安装外部应用' })}
           </h2>
           <button
             type="button"
@@ -74,7 +111,6 @@ export function AddExternalAppModal() {
             </svg>
           </button>
         </div>
-        {/* Form */}
         <form className="flex flex-col" onSubmit={handleSubmit}>
           <label className="more-apps-modal__field">
             <span className="more-apps-modal__label">
@@ -122,7 +158,6 @@ export function AddExternalAppModal() {
           <p className="more-apps-modal__hint">
             {t('moreApps.addModal.hint', { defaultValue: '外部应用将在应用内嵌打开，链接保存在本浏览器本地' })}
           </p>
-          {/* Actions */}
           <div className="more-apps-modal__actions">
             <button
               type="button"
@@ -135,7 +170,9 @@ export function AddExternalAppModal() {
               type="submit"
               className={cn('more-apps-modal__btn', 'more-apps-modal__btn--primary')}
             >
-              {t('moreApps.addModal.install', { defaultValue: '安装' })}
+              {isEditing
+                ? t('moreApps.editModal.save', { defaultValue: '保存' })
+                : t('moreApps.addModal.install', { defaultValue: '安装' })}
             </button>
           </div>
         </form>

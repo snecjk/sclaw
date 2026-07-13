@@ -173,6 +173,16 @@ const electronAPI = {
         'workflow:appendSessionRecord',
         'workflow:stream:subscribe',
         'workflow:stream:unsubscribe',
+        // SClaw embed browser runtime
+        'sclaw-browser:prepareSession',
+        'sclaw-browser:registerRuntime',
+        'sclaw-browser:linkChatSession',
+        'sclaw-browser:bindWebContents',
+        'sclaw-browser:updatePageState',
+        'sclaw-browser:unregisterRuntime',
+        'sclaw-browser:capturePage',
+        'sclaw-browser:executeScript',
+        'sclaw-browser:getNetworkLog',
       ];
 
       if (validChannels.includes(channel)) {

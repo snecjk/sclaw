@@ -9,7 +9,12 @@ interface ImportMetaEnv {
 declare namespace JSX {
   interface IntrinsicElements {
     webview: React.DetailedHTMLProps<
-      React.HTMLAttributes<HTMLElement> & { src?: string; allowpopups?: string },
+      React.HTMLAttributes<HTMLElement> & {
+        src?: string;
+        allowpopups?: string;
+        partition?: string;
+        webpreferences?: string;
+      },
       HTMLElement
     >;
   }

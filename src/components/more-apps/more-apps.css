@@ -847,6 +847,38 @@
   gap: 8px;
 }
 
+.page-more-apps .more-apps-card__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+}
+
+.page-more-apps .more-apps-card__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.page-more-apps .more-apps-card__icon-btn:hover {
+  color: #475569;
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.page-more-apps .more-apps-card__icon-btn--danger:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
 .page-more-apps .more-apps-card__title {
   margin: 0;
   font-size: 14px;

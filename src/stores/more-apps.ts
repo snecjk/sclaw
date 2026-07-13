@@ -88,6 +88,7 @@ interface MoreAppsState {
 
   // Modal
   addModalOpen: boolean;
+  editingExternalAppId: string | null;
 
   // Actions
   setActiveTab: (tab: MoreAppsTab) => void;
@@ -96,8 +97,10 @@ interface MoreAppsState {
   setMarketCategory: (cat: MarketCategory) => void;
   setHeroSlideIndex: (idx: number) => void;
   openAddModal: () => void;
+  openEditModal: (id: string) => void;
   closeAddModal: () => void;
   addExternalApp: (app: { name: string; url: string; description?: string }) => void;
+  updateExternalApp: (id: string, app: { name: string; url: string; description?: string }) => void;
   removeExternalApp: (id: string) => void;
   installApp: (id: string) => void;
   uninstallApp: (id: string) => void;
@@ -119,6 +122,7 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
   favoriteIds: loadFavorites(),
 
   addModalOpen: false,
+  editingExternalAppId: null,
 
   setActiveTab: (tab) => set({ activeTab: tab, searchQuery: '' }),
   setSearchQuery: (q) => set({ searchQuery: q }),
@@ -126,8 +130,9 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
   setMarketCategory: (cat) => set({ marketCategory: cat }),
   setHeroSlideIndex: (idx) => set({ heroSlideIndex: idx }),
 
-  openAddModal: () => set({ addModalOpen: true }),
-  closeAddModal: () => set({ addModalOpen: false }),
+  openAddModal: () => set({ addModalOpen: true, editingExternalAppId: null }),
+  openEditModal: (id) => set({ addModalOpen: true, editingExternalAppId: id }),
+  closeAddModal: () => set({ addModalOpen: false, editingExternalAppId: null }),
 
   addExternalApp: ({ name, url, description }) => {
     const id = `ext-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -153,7 +158,27 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
     set({ 
       externalApps: updated, 
       installedIds: updatedInstalled,
-      addModalOpen: false 
+      addModalOpen: false,
+      editingExternalAppId: null,
+    });
+  },
+
+  updateExternalApp: (id, { name, url, description }) => {
+    const updated = get().externalApps.map((app) =>
+      app.id === id
+        ? {
+            ...app,
+            name: name.trim(),
+            url: url.trim(),
+            description: description?.trim() || '外部应用链接',
+          }
+        : app,
+    );
+    saveExternalApps(updated);
+    set({
+      externalApps: updated,
+      addModalOpen: false,
+      editingExternalAppId: null,
     });
   },
 

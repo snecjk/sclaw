@@ -3,7 +3,16 @@
  * Use instead of window.open / shell.openExternal when embedded browsing is desired.
  */
 import { getWorkflowStoToken } from '@/lib/workflow-api';
+import { invokeIpc } from '@/lib/api-client';
 import { openExternalUrl } from '@/lib/preview-url';
+import { isStoEmbedBrowserUrl } from '../../shared/sclaw-embed-browser';
+import {
+  buildStoPolicyEmbedUrl,
+  injectStoSsoWebAutoLogin,
+  isStoPolicyHostUrl,
+  isStoSsoWebUrl,
+  parseStoSsoWebUrl,
+} from '@/lib/sto-policy-web-url';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 
 export interface OpenSclawBrowserOptions {
@@ -12,12 +21,28 @@ export interface OpenSclawBrowserOptions {
 }
 
 /**
- * Replace `useStoToken=1` with `stotoken={local SSO token}` when present in the URL query.
- * Relative URLs are supported; other query params and hash are preserved.
+ * Resolve embed URL for the in-app browser drawer.
+ * - sto-policy SSO entry → policy-domain callback (fixes iframe cross-subdomain cookie loss)
+ * - policy host + useStoToken=1 → policy-domain callback
+ * - other URLs + useStoToken=1 → append stotoken query param
  */
 export function resolveSclawBrowserUrl(url: string): string {
   const trimmed = url?.trim();
   if (!trimmed) return trimmed;
+
+  const token = getWorkflowStoToken();
+
+  const ssoMeta = parseStoSsoWebUrl(trimmed);
+  if (ssoMeta?.systemCode === 'sto-policy') {
+    if (token) {
+      return injectStoSsoWebAutoLogin(trimmed, token);
+    }
+    return trimmed;
+  }
+
+  if (token && isStoSsoWebUrl(trimmed)) {
+    return injectStoSsoWebAutoLogin(trimmed, token);
+  }
 
   try {
     const isAbsolute = /^https?:\/\//i.test(trimmed);
@@ -28,7 +53,12 @@ export function resolveSclawBrowserUrl(url: string): string {
     }
 
     parsed.searchParams.delete('useStoToken');
-    const token = getWorkflowStoToken();
+
+    if (isAbsolute && isStoPolicyHostUrl(parsed.toString())) {
+      const redirectPath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+      return buildStoPolicyEmbedUrl(redirectPath || '/', token);
+    }
+
     if (token) {
       parsed.searchParams.set('stotoken', token);
     }
@@ -44,15 +74,32 @@ export function resolveSclawBrowserUrl(url: string): string {
   }
 }
 
-/** Open a URL in the SClaw browser overlay. No-op when url is empty. */
+/** Open a URL in the SClaw browser drawer. No-op when url is empty. */
 export function openInSclawBrowser({ url, title }: OpenSclawBrowserOptions): void {
   const trimmed = url?.trim();
   if (!trimmed) return;
   const resolvedUrl = resolveSclawBrowserUrl(trimmed);
-  useSclawBrowserOverlayStore.getState().open({
-    url: resolvedUrl,
-    title: title?.trim() || trimmed,
-  });
+  const resolvedTitle = title?.trim() || trimmed;
+
+  const openDrawer = () => {
+    useSclawBrowserOverlayStore.getState().open({
+      url: resolvedUrl,
+      title: resolvedTitle,
+    });
+  };
+
+  if (window.electron && isStoEmbedBrowserUrl(resolvedUrl)) {
+    void invokeIpc('sclaw-browser:prepareSession', { url: resolvedUrl })
+      .finally(openDrawer);
+    return;
+  }
+
+  openDrawer();
+}
+
+/** Toggle ephemeral AI chat panel in the browser drawer. */
+export function toggleSclawBrowserChat(): void {
+  useSclawBrowserOverlayStore.getState().toggleChatPanel();
 }
 
 /** Close the SClaw browser drawer immediately (no exit animation). */

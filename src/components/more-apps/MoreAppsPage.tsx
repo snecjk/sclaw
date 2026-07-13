@@ -42,6 +42,7 @@ export function MoreAppsPage() {
     setMarketCategory,
     setHeroSlideIndex,
     openAddModal,
+    openEditModal,
     removeExternalApp,
     installApp,
     toggleFavorite,
@@ -127,6 +128,10 @@ export function MoreAppsPage() {
   const handleDelete = useCallback((app: AppItem) => {
     setConfirmDeleteApp(app);
   }, []);
+
+  const handleEdit = useCallback((app: AppItem) => {
+    openEditModal(app.id);
+  }, [openEditModal]);
 
   const confirmDelete = useCallback(() => {
     if (!confirmDeleteApp) return;
@@ -308,6 +313,7 @@ export function MoreAppsPage() {
                   onOpen={handleOpenApp}
                   onInstall={installApp}
                   onDelete={app.external ? handleDelete : undefined}
+                  onEdit={app.external ? handleEdit : undefined}
                   onToggleFavorite={!app.external ? handleToggleFavorite : undefined}
                 />
               ))}

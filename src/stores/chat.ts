@@ -2349,7 +2349,7 @@ export const useChatStore = create<ChatState>()(
 
   sendMessage: async (...args: unknown[]) => {
     const options = normalizeSendMessageOptions(args);
-    const { text, attachments, targetAgentId, dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext } = options;
+    const { text, attachments, targetAgentId, dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext, embedBrowserContext: embedBrowserContextInput } = options;
     const trimmed = text.trim();
     if (!trimmed && (!attachments || attachments.length === 0)) return;
 
@@ -2386,7 +2386,10 @@ export const useChatStore = create<ChatState>()(
     );
 
     let textForGateway = trimmed;
-    if (!workflowContext) {
+    const { isSclawBrowserEmbedChatSessionKey, parseSclawBrowserEmbedRuntimeId } = await import('@/lib/sclaw-browser-chat-session');
+    const isEmbedChatSession = isSclawBrowserEmbedChatSessionKey(currentSessionKey);
+
+    if (!workflowContext && !isEmbedChatSession) {
       const {
         shouldInjectWorkflowSessionHint,
         isWorkflowCreationIntent,
@@ -2415,12 +2418,32 @@ export const useChatStore = create<ChatState>()(
       }
     }
 
-    
-    const messageWithContext = appendWorkflowContext(textForGateway, workflowContext);
-    const displayText = stripWorkflowSessionHintForDisplay(
-      stripWorkflowContextForDisplay(messageWithContext),
+    let embedBrowserContext = embedBrowserContextInput ?? null;
+    if (!embedBrowserContext && isEmbedChatSession) {
+      const runtimeId = parseSclawBrowserEmbedRuntimeId(currentSessionKey);
+      if (runtimeId) {
+        const { useSclawBrowserOverlayStore } = await import('@/stores/sclaw-browser-overlay');
+        const overlay = useSclawBrowserOverlayStore.getState();
+        if (overlay.session) {
+          const { buildSclawBrowserEmbedContextForSend } = await import('@/lib/sclaw-browser-embed-context-builder');
+          embedBrowserContext = await buildSclawBrowserEmbedContextForSend({
+            runtimeId,
+            appTitle: overlay.session.title,
+            fallbackUrl: overlay.session.url,
+          });
+        }
+      }
+    }
+
+    const { appendSclawBrowserEmbedContext, stripSclawBrowserEmbedContextForDisplay } = await import('@/lib/sclaw-browser-embed-context');
+
+    let messageWithContext = appendSclawBrowserEmbedContext(textForGateway, embedBrowserContext);
+    messageWithContext = appendWorkflowContext(messageWithContext, workflowContext);
+    const displayText = stripSclawBrowserEmbedContextForDisplay(
+      stripWorkflowSessionHintForDisplay(
+        stripWorkflowContextForDisplay(messageWithContext),
+      ),
     );
-    
 
     const quotaCheck = await checkDailyTokenQuota();
     if (quotaCheck) {
