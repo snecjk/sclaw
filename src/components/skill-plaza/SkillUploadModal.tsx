@@ -119,9 +119,12 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
   // runs with nodeIntegration:false and cannot read paths itself). Works for
   // both files and directories — probe DataTransferItem first (folder drops
   // may only surface there), then fall back to the FileList.
-  const handleDragOver = (e: React.DragEvent) => {
+  const acceptDraggedItem = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    // Explicitly opt into a copy drop. On Windows, Chromium can otherwise keep
+    // showing the system "not allowed" cursor for files dragged from Explorer.
+    e.dataTransfer.dropEffect = 'copy';
     setDragOver(true);
   };
   const handleDragLeave = (e: React.DragEvent) => {
@@ -139,8 +142,13 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     // Resolve a real path from a File using the preload-exposed webUtils.
     const pathOf = (f: File | null | undefined): string | null => {
       if (!f) return null;
+      // Electron <= 35 exposed the path directly on File. Keep this fallback
+      // because an upgraded renderer can temporarily run with an older preload
+      // during development/hot reload, and older packaged clients still use it.
+      const legacyPath = (f as File & { path?: string }).path;
+      if (typeof legacyPath === 'string' && legacyPath) return legacyPath;
       try {
-        const p = window.electron.getPathForFile(f);
+        const p = window.electron?.getPathForFile?.(f);
         return typeof p === 'string' && p ? p : null;
       } catch {
         return null;
@@ -217,10 +225,10 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
   return (
     <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 dark:bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Overlay className="no-drag fixed inset-0 z-50 bg-black/40 dark:bg-black/60 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <Dialog.Content
           className={cn(
-            'fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
+            'no-drag fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
             'w-full max-w-[420px]',
             'bg-background rounded-2xl shadow-2xl',
             'flex flex-col overflow-hidden',
@@ -254,9 +262,10 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                 <div
                   role="button"
                   tabIndex={0}
-                  onDragOver={handleDragOver}
+                  onDragEnterCapture={acceptDraggedItem}
+                  onDragOverCapture={acceptDraggedItem}
                   onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
+                  onDropCapture={handleDrop}
                   onClick={pickFile}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
