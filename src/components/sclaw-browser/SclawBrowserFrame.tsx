@@ -4,7 +4,6 @@
 import { useEffect, useRef } from 'react';
 import { SCLAW_EMBED_BROWSER_PARTITION } from '../../../shared/sclaw-embed-browser';
 import { isStoPolicyHostUrl, markStoPolicyWebAuthedInSession } from '@/lib/sto-policy-web-url';
-import { openExternalUrl } from '@/lib/preview-url';
 import { registerSclawBrowserWebview } from '@/lib/sclaw-browser-page-capture';
 import {
   bindSclawBrowserWebContents,
@@ -22,6 +21,7 @@ interface SclawBrowserFrameProps {
 type EmbedWebviewElement = HTMLElement & {
   getURL?: () => string;
   getWebContentsId?: () => number;
+  loadURL?: (url: string) => void;
   addEventListener: (type: string, listener: EventListener) => void;
   removeEventListener: (type: string, listener: EventListener) => void;
 };
@@ -87,16 +87,29 @@ export function SclawBrowserFrame({ url, title }: SclawBrowserFrameProps) {
       void updateSclawBrowserPageState({ runtimeId: embedRuntimeId, pageUrl });
     };
 
+    const onFinishLoad = () => {
+      if (!domReady && safeGetWebContentsId(el)) {
+        bindAfterDomReady();
+      }
+      onNavigate();
+    };
+
     const onNewWindow = (event: Event) => {
       const detail = event as Event & { url?: string; preventDefault?: () => void };
       detail.preventDefault?.();
-      if (detail.url) openExternalUrl(detail.url);
+      if (!detail.url) return;
+      // Keep navigation inside the built-in webview instead of opening system Chrome.
+      if (typeof el.loadURL === 'function') {
+        void el.loadURL(detail.url);
+        return;
+      }
+      el.setAttribute('src', detail.url);
     };
 
     el.addEventListener('dom-ready', bindAfterDomReady);
     el.addEventListener('did-navigate', onNavigate);
     el.addEventListener('did-navigate-in-page', onNavigate);
-    el.addEventListener('did-finish-load', onNavigate);
+    el.addEventListener('did-finish-load', onFinishLoad);
     el.addEventListener('new-window', onNewWindow);
 
     // dom-ready may have fired before listeners attached (e.g. delayed frame mount).
@@ -112,7 +125,7 @@ export function SclawBrowserFrame({ url, title }: SclawBrowserFrameProps) {
       el.removeEventListener('dom-ready', bindAfterDomReady);
       el.removeEventListener('did-navigate', onNavigate);
       el.removeEventListener('did-navigate-in-page', onNavigate);
-      el.removeEventListener('did-finish-load', onNavigate);
+      el.removeEventListener('did-finish-load', onFinishLoad);
       el.removeEventListener('new-window', onNewWindow);
     };
   }, [embedRuntimeId, url]);

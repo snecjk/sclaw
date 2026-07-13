@@ -11,6 +11,12 @@ import {
   type SclawEmbedBrowserRuntimeMeta,
 } from '../../../shared/sclaw-embed-browser-runtime';
 import { SCLAW_EMBED_BROWSER_PARTITION } from '../../../shared/sclaw-embed-browser';
+import {
+  connectSclawEmbedBridge,
+  disconnectSclawEmbedBridge,
+  refreshSclawEmbedBridgeScript,
+  updateSclawEmbedBridgePage,
+} from './sclaw-embed-bridge-driver';
 
 interface RuntimeEntry extends SclawEmbedBrowserRuntimeMeta {
   networkLog: SclawEmbedBrowserNetworkEvent[];
@@ -128,6 +134,12 @@ export function bindSclawEmbedBrowserWebContents(input: {
   if (input.pageUrl) entry.pageUrl = input.pageUrl;
   if (input.pageTitle) entry.pageTitle = input.pageTitle;
   attachNetworkMonitor(input.runtimeId, input.webContentsId);
+  connectSclawEmbedBridge({
+    runtimeId: input.runtimeId,
+    webContentsId: input.webContentsId,
+    url: entry.pageUrl,
+    title: entry.pageTitle || entry.appTitle,
+  });
   return { ...entry };
 }
 
@@ -140,11 +152,17 @@ export function updateSclawEmbedBrowserPageState(input: {
   if (!entry) return;
   if (input.pageUrl) entry.pageUrl = input.pageUrl;
   if (input.pageTitle) entry.pageTitle = input.pageTitle;
+  updateSclawEmbedBridgePage({
+    runtimeId: input.runtimeId,
+    pageUrl: input.pageUrl,
+    pageTitle: input.pageTitle,
+  });
 }
 
 export function unregisterSclawEmbedBrowserRuntime(runtimeId: string): void {
   const entry = runtimes.get(runtimeId);
   if (!entry) return;
+  disconnectSclawEmbedBridge(runtimeId);
   if (entry.chatSessionKey) {
     chatSessionIndex.delete(entry.chatSessionKey);
   }
@@ -154,6 +172,19 @@ export function unregisterSclawEmbedBrowserRuntime(runtimeId: string): void {
 export function getSclawEmbedBrowserRuntime(runtimeId: string): SclawEmbedBrowserRuntimeMeta | null {
   const entry = runtimes.get(runtimeId);
   return entry ? { ...entry } : null;
+}
+
+/** Re-register embed bridge session when webview is bound but driver/session dropped. */
+export function ensureSclawEmbedBridgeForRuntime(runtimeId: string): boolean {
+  const entry = runtimes.get(runtimeId);
+  if (!entry?.webContentsId) return false;
+  connectSclawEmbedBridge({
+    runtimeId,
+    webContentsId: entry.webContentsId,
+    url: entry.pageUrl,
+    title: entry.pageTitle || entry.appTitle,
+  });
+  return true;
 }
 
 export function resolveSclawEmbedBrowserRuntimeByChatSession(

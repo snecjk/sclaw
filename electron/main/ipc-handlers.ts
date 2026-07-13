@@ -3054,4 +3054,12 @@ function registerSessionHandlers(): void {
     const events = getSclawEmbedBrowserNetworkLog(runtimeId, since);
     return { ok: true, events };
   });
+
+  ipcMain.handle('sclaw-browser:ensureBridge', async (_, payload: { runtimeId?: string }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false, connected: false };
+    const { ensureSclawEmbedBridgeForRuntime } = await import('./services/sclaw-embed-browser-runtime');
+    const connected = ensureSclawEmbedBridgeForRuntime(runtimeId);
+    return { ok: true, connected };
+  });
 }

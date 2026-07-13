@@ -8,7 +8,7 @@ import {
   purgeSclawBrowserEmbedChat,
 } from '@/lib/sclaw-browser-chat-lifecycle';
 import { createSclawBrowserEmbedRuntimeId } from '@/lib/sclaw-browser-chat-session';
-import { registerSclawBrowserRuntime, unregisterSclawBrowserRuntime } from '@/lib/sclaw-browser-host-api';
+import { registerSclawBrowserRuntime, unregisterSclawBrowserRuntime, ensureSclawBrowserBridge } from '@/lib/sclaw-browser-host-api';
 
 export interface SclawBrowserOverlaySession {
   url: string;
@@ -92,6 +92,7 @@ export const useSclawBrowserOverlayStore = create<SclawBrowserOverlayState>((set
     if (get().chatPanelOpen) return;
     const embedRuntimeId = get().embedRuntimeId;
     if (!embedRuntimeId) return;
+    void ensureSclawBrowserBridge(embedRuntimeId);
     const { chatSessionKey, savedMainSessionKey } = activateSclawBrowserEmbedChat(embedRuntimeId);
     set({
       chatPanelOpen: true,

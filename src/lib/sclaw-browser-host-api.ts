@@ -83,3 +83,12 @@ export async function getSclawBrowserNetworkLog(
   );
   return result.events ?? [];
 }
+
+export async function ensureSclawBrowserBridge(runtimeId: string): Promise<boolean> {
+  if (!window.electron) return false;
+  const result = await invokeIpc<{ ok: boolean; connected?: boolean }>(
+    'sclaw-browser:ensureBridge',
+    { runtimeId },
+  );
+  return Boolean(result.connected);
+}

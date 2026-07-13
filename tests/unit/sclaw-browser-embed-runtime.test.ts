@@ -29,9 +29,10 @@ describe('sclaw-browser-chat-session', () => {
 });
 
 describe('sclaw-browser-embed-context', () => {
-  it('includes embedRuntimeId and hostApi routes', () => {
+  it('includes bridgeSessionId and bridge tools hint', () => {
     const text = buildSclawBrowserEmbedContextText({
       embedRuntimeId: 'br-test',
+      bridgeSessionId: 'embed-br-test',
       appTitle: '政策管家',
       pageUrl: 'https://zc.sto.cn/',
       pageTitle: 'STO 政策管家',
@@ -41,7 +42,8 @@ describe('sclaw-browser-embed-context', () => {
     });
     expect(text).toContain('embedRuntimeId');
     expect(text).toContain('br-test');
-    expect(text).toContain('/api/sclaw-browser/runtime/br-test/capture');
+    expect(text).toContain('bridge_snapshot');
+    expect(text).toContain('embed-br-test');
     expect(text).toContain('业务量完成率');
   });
 
@@ -49,6 +51,7 @@ describe('sclaw-browser-embed-context', () => {
     const userText = '你能看到我左侧加载了什么吗';
     const withContext = appendSclawBrowserEmbedContext(userText, {
       embedRuntimeId: 'br-test',
+      bridgeSessionId: 'embed-br-test',
       appTitle: '政策管家',
       pageUrl: 'https://zc.sto.cn/',
       pageTitle: 'STO 政策管家',

@@ -6,6 +6,7 @@ export const SCLAW_BROWSER_EMBED_CONTEXT_MARKER = '<!-- StoClaw-Embed-Browser-Co
 
 export interface SclawBrowserEmbedContextBlock {
   embedRuntimeId: string;
+  bridgeSessionId: string;
   appTitle: string;
   pageUrl: string;
   pageTitle: string;
@@ -24,19 +25,23 @@ export function messageHasSclawBrowserEmbedContext(message: string): boolean {
 
 export function buildSclawBrowserEmbedContextText(context: SclawBrowserEmbedContextBlock): string {
   const payload = {
-    version: 2,
+    version: 3,
     source: 'stoclaw-embed-browser',
     embedRuntimeId: context.embedRuntimeId,
+    bridgeSessionId: context.bridgeSessionId,
     appTitle: context.appTitle,
     pageUrl: context.pageUrl,
     pageTitle: context.pageTitle,
     visibleTextExcerpt: context.visibleTextExcerpt,
     capturedAt: context.capturedAt,
     recentNetworkRequests: context.recentNetworkRequests ?? [],
-    hostApi: {
-      capturePage: `POST /api/sclaw-browser/runtime/${context.embedRuntimeId}/capture`,
-      executeScript: `POST /api/sclaw-browser/runtime/${context.embedRuntimeId}/execute`,
-      networkLog: `GET /api/sclaw-browser/runtime/${context.embedRuntimeId}/network-log`,
+    bridgeTools: {
+      snapshot: 'bridge_snapshot',
+      click: 'bridge_click',
+      fill: 'bridge_fill',
+      navigate: 'bridge_navigate',
+      screenshot: 'bridge_screenshot',
+      listSessions: 'bridge_list_sessions',
     },
   };
 
@@ -55,10 +60,15 @@ export function buildSclawBrowserEmbedContextText(context: SclawBrowserEmbedCont
   return [
     SCLAW_BROWSER_EMBED_CONTEXT_MARKER,
     '',
-    '【应用内嵌预览上下文】用户正在 SClaw 应用广场左侧内嵌页面中操作。'
-    + '本对话 session 已绑定 embedRuntimeId，请围绕左侧页面内容与用户问题作答；'
-    + '读取页面、执行脚本、查看接口请通过 hostApi 路由操作该 runtime，'
-    + '不要默认引用本地开发项目文件（AGENTS.md、SOUL.md、workspace 源码等），除非用户明确要求。',
+    '【应用内嵌预览上下文】用户正在 SClaw 应用广场左侧**内置浏览器（webview）**中操作，不是外部 Chrome。',
+    '左侧页面已通过 Browser Bridge 连接，bridgeSessionId 见下方 JSON。',
+    '',
+    '**必须遵守：**',
+    `- 所有页面操作只用 bridge_* 工具，且每次调用必须传 sessionId: "${context.bridgeSessionId}"`,
+    '- 典型流程：bridge_snapshot({ sessionId }) → bridge_click({ sessionId, name: "菜单文案" }) 或 bridge_click({ sessionId, ref: "@e5" })',
+    '- 禁止 browser 工具（会单独打开托管 Chrome，不是左侧预览）',
+    '- 禁止 shell:openExternal、exec open、curl 调 sclaw-browser API',
+    '- 禁止引用本地 workspace 源码，除非用户明确要求',
     '',
     '```json',
     JSON.stringify(payload, null, 2),
