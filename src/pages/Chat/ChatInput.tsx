@@ -50,6 +50,7 @@ import { useAuthStore } from '@/stores/auth';
 import type { ActiveMentionTrigger, MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention, MentionSearchItem } from '@/types/dingtalk-mention';
 import { mentionSearchItemToMention } from '@/types/dingtalk-mention';
+import { inferMimeTypeFromPath } from '@/lib/preview-url';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -458,10 +459,11 @@ export function ChatInput({
   const stageBufferFiles = useCallback(async (files: globalThis.File[]) => {
     for (const file of files) {
       const tempId = crypto.randomUUID();
+      const mimeType = file.type || inferMimeTypeFromPath(file.name);
       setAttachments(prev => [...prev, {
         id: tempId,
         fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
+        mimeType,
         fileSize: file.size,
         stagedPath: '',
         preview: null,
@@ -482,7 +484,7 @@ export function ChatInput({
           body: JSON.stringify({
             base64,
             fileName: file.name,
-            mimeType: file.type || 'application/octet-stream',
+            mimeType,
           }),
         });
         setAttachments(prev => prev.map(a =>
@@ -654,9 +656,13 @@ export function ChatInput({
           if (file) pastedFiles.push(file);
         }
       }
-      if (pastedFiles.length > 0) {
-        e.preventDefault();
-        stageBufferFiles(pastedFiles);
+      if (pastedFiles.length === 0) return;
+
+      const pastedText = e.clipboardData.getData('text/plain');
+      e.preventDefault();
+      void stageBufferFiles(pastedFiles);
+      if (pastedText.trim()) {
+        mentionEditorRef.current?.insertPlainText(pastedText);
       }
     },
     [stageBufferFiles],

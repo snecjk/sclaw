@@ -11,6 +11,12 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
 import { ChatProcessLoadingEllipsis } from '@/components/chat/chat-process-loading-ellipsis';
 import { useTypewriterReveal } from '@/hooks/use-typewriter-reveal';
@@ -27,7 +33,27 @@ import { canShowAssistantTurnMeta, resolveCurrentTurnLifecycleForMeta } from '@/
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
-import { extractText, extractPlainTextFromContent, extractImages, extractToolUse, extractThinkingTimeline, formatTimestamp, extractPreviewableRefs, extractDisplayFileNameHints, isPreviewableFile, PREVIEWABLE_FILE_EXTS, extractWorkflowCard, extractParameterForm, useLocalPathExistence, resolvePreviewCandidate, unwrapPreviewablePathMarkdown, findWorkflowParamsSummaryAfterIntro, isWorkflowStartAssistantBoilerplate, resolveAssistantCopyShareContent, formatAssistantCopyShareClipboardText } from './message-utils';
+import {
+  extractText,
+  extractPlainTextFromContent,
+  extractImages,
+  extractToolUse,
+  extractThinkingTimeline,
+  formatTimestamp,
+  extractPreviewableRefs,
+  extractDisplayFileNameHints,
+  isPreviewableFile,
+  PREVIEWABLE_FILE_EXTS,
+  extractWorkflowCard,
+  extractParameterForm,
+  useLocalPathExistence,
+  resolvePreviewCandidate,
+  unwrapPreviewablePathMarkdown,
+  findWorkflowParamsSummaryAfterIntro,
+  isWorkflowStartAssistantBoilerplate,
+  resolveAssistantCopyShareContent,
+} from './message-utils';
+import { writeCopyShareFilesToClipboard, writeCopyShareTextToClipboard } from '@/lib/copy-share-clipboard';
 import {
   ensureWorkflowParameterFormHandler,
   ensureWorkflowParameterFormInjected,
@@ -72,6 +98,7 @@ import {
   buildArtifactMetaLine,
   formatArtifactFileSize,
 } from '@/components/chat/artifact-product-card';
+import { buildArtifactCardMenuItems } from '@/lib/artifact-card-menu';
 import { highlightAtMentionsInChildren } from '@/lib/at-mention-highlight';
 import { renderUserMessageMentionNodes } from '@/components/dingtalk/DingTalkMentionTag';
 import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessPanel';
@@ -392,13 +419,6 @@ export const ChatMessage = memo(function ChatMessage({
       });
     },
     [isUser, text, assistantBubbleText, workflowCard, workflowCardStates, sessionKey, previewFiles],
-  );
-  const assistantCopyShareText = useMemo(
-    () => formatAssistantCopyShareClipboardText(
-      assistantCopyShareContent.text,
-      assistantCopyShareContent.files,
-    ),
-    [assistantCopyShareContent],
   );
   const showUserParamsFold = isUser && hasText && isWorkflowParamsUserText(text);
 
@@ -867,7 +887,7 @@ export const ChatMessage = memo(function ChatMessage({
         {/* 助手消息：复制 + 分享 + 时间 — 置于正文/工作流/产物等全部内容之后 */}
         {!isUser && showAssistantMessageMeta ? (
           <AssistantMessageMetaRow
-            text={assistantCopyShareText}
+            copyShareContent={assistantCopyShareContent}
             timestamp={message.timestamp}
             onCopyDebugSnapshot={showRenderDebugPanel ? copyDebugSnapshot : undefined}
             onShare={openConversationShare}
@@ -1043,46 +1063,141 @@ function UserMessageMetaRow({
 
 /** 助手消息底栏：复制 + 分享 + 时间，常态展示于正文下方 */
 function AssistantMessageMetaRow({
-  text,
+  copyShareContent,
   timestamp,
   onCopyDebugSnapshot,
   onShare,
 }: {
-  text: string;
+  copyShareContent: { text: string; files: AttachedFileMeta[] };
   timestamp?: number;
   onCopyDebugSnapshot?: () => Promise<void> | void;
   onShare?: () => void;
 }) {
   const { t } = useTranslation('chat');
-  const [copied, setCopied] = useState(false);
+  const [copiedMode, setCopiedMode] = useState<'text' | 'files' | null>(null);
 
-  const copyContent = useCallback(() => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [text]);
+  const hasCopyableText = copyShareContent.text.trim().length > 0;
+  const copyableFiles = copyShareContent.files.filter((file) => file.filePath?.trim());
+  const hasCopyableFiles = copyableFiles.length > 0;
+  const copyLayout = hasCopyableText && hasCopyableFiles
+    ? 'both'
+    : hasCopyableText
+      ? 'text'
+      : hasCopyableFiles
+        ? 'files'
+        : 'none';
+
+  const copyText = useCallback(async () => {
+    try {
+      await writeCopyShareTextToClipboard({ text: copyShareContent.text });
+      setCopiedMode('text');
+      setTimeout(() => setCopiedMode(null), 2000);
+      toast.success(t('messageActions.copyTextSuccess'));
+    } catch (error) {
+      console.error('[ChatMessage] Failed to copy assistant text:', error);
+      toast.error(t('messageActions.copyFailed'));
+    }
+  }, [copyShareContent.text, t]);
+
+  const copyFiles = useCallback(async () => {
+    try {
+      const count = await writeCopyShareFilesToClipboard({ files: copyableFiles });
+      setCopiedMode('files');
+      setTimeout(() => setCopiedMode(null), 2000);
+      toast.success(t('messageActions.copyFilesSuccess', { count }));
+    } catch (error) {
+      console.error('[ChatMessage] Failed to copy assistant files:', error);
+      toast.error(t('messageActions.copyFilesFailed'));
+    }
+  }, [copyableFiles, t]);
 
   const copyTitle = onCopyDebugSnapshot
     ? '单击复制内容，双击复制调试快照'
-    : t('messageActions.copy');
+    : copyLayout === 'both'
+      ? t('messageActions.copySplitHint')
+      : t('messageActions.copy');
+
+  const copyButtonIcon = copiedMode
+    ? <Check className="h-3 w-3 text-green-500" aria-hidden />
+    : <Copy className="h-3 w-3" aria-hidden />;
+
+  if (copyLayout === 'none') {
+    return (
+      <div className="flex select-none items-center gap-2">
+        {onShare ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={MESSAGE_META_ICON_BUTTON_CLASS}
+            onClick={onShare}
+            aria-label={t('messageActions.share')}
+            title={t('messageActions.share')}
+          >
+            <ShareMessageIcon className={MESSAGE_META_SHARE_ICON_CLASS} />
+          </Button>
+        ) : null}
+        {timestamp ? (
+          <span className="text-xs text-muted-foreground">
+            {formatTimestamp(timestamp)}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="flex select-none items-center gap-2">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className={MESSAGE_META_ICON_BUTTON_CLASS}
-        onClick={copyContent}
-        onDoubleClick={() => {
-          if (!onCopyDebugSnapshot) return;
-          void onCopyDebugSnapshot();
-        }}
-        aria-label={t('messageActions.copy')}
-        title={copyTitle}
-      >
-        {copied ? <Check className="h-3 w-3 text-green-500" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
-      </Button>
+      {copyLayout === 'both' ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={MESSAGE_META_ICON_BUTTON_CLASS}
+              aria-label={t('messageActions.copy')}
+              title={copyTitle}
+            >
+              {copyButtonIcon}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-44">
+            <DropdownMenuItem
+              onClick={() => {
+                void copyText();
+              }}
+            >
+              {t('messageActions.copyText')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => {
+                void copyFiles();
+              }}
+            >
+              {t('messageActions.copyFiles', { count: copyableFiles.length })}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={MESSAGE_META_ICON_BUTTON_CLASS}
+          onClick={() => {
+            void (copyLayout === 'files' ? copyFiles() : copyText());
+          }}
+          onDoubleClick={() => {
+            if (!onCopyDebugSnapshot || copyLayout === 'files') return;
+            void onCopyDebugSnapshot();
+          }}
+          aria-label={t('messageActions.copy')}
+          title={copyTitle}
+        >
+          {copyButtonIcon}
+        </Button>
+      )}
       {onShare ? (
         <Button
           type="button"
@@ -1490,14 +1605,21 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
       isPreviewable,
       hasOnPreviewFile: !!onPreviewFile,
     });
-    if (onPreviewFile && isPreviewable) {
+    if (onPreviewFile) {
       onPreviewFile(file);
-    } else if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
+      return;
+    }
+    if (file.filePath?.startsWith('http://') || file.filePath?.startsWith('https://')) {
       openExternalUrl(file.filePath);
     } else if (file.filePath) {
       invokeIpc('shell:openPath', file.filePath);
     }
   }, [file, onPreviewFile, isPreviewable]);
+
+  const menuItems = useMemo(
+    () => buildArtifactCardMenuItems(file, t),
+    [file, t],
+  );
 
   const metaLine = buildArtifactMetaLine({
     fileName: file.fileName,
@@ -1512,6 +1634,7 @@ function FileCard({ file, onPreviewFile }: { file: AttachedFileMeta; onPreviewFi
       title={file.fileName}
       metaLine={metaLine}
       onAction={handleOpen}
+      menuItems={menuItems}
     />
   );
 }
