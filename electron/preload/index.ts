@@ -184,6 +184,7 @@ const electronAPI = {
         'sclaw-browser:executeScript',
         'sclaw-browser:getNetworkLog',
         'sclaw-browser:ensureBridge',
+        'sclaw-browser:setPointerPassthrough',
       ];
 
       if (validChannels.includes(channel)) {
@@ -237,6 +238,7 @@ const electronAPI = {
         'workflow:poll-trace',
         'workflow:stream:event',
         'workflow:stream:error',
+        'sclaw-browser:toggle-chat',
       ];
 
       if (validChannels.includes(channel)) {

@@ -1,8 +1,9 @@
 /**
- * Activate / tear down ephemeral drawer chat sessions (never listed in sidebar).
+ * Activate / deactivate embed-browser chat sessions.
+ * Sessions persist per app and stay hidden from the sidebar session list.
  */
 import {
-  createSclawBrowserChatSessionKey,
+  createSclawBrowserChatSessionKeyForApp,
   isSclawBrowserEmbedChatSessionKey,
 } from '@/lib/sclaw-browser-chat-session';
 import { linkSclawBrowserChatSession } from '@/lib/sclaw-browser-host-api';
@@ -13,12 +14,13 @@ export interface EmbedChatActivation {
   chatSessionKey: string;
   savedMainSessionKey: string;
   embedRuntimeId: string;
+  appId: string;
 }
 
-export function activateSclawBrowserEmbedChat(embedRuntimeId: string): EmbedChatActivation {
+export function activateSclawBrowserEmbedChat(appId: string, embedRuntimeId: string): EmbedChatActivation {
   const chat = useChatStore.getState();
   const savedMainSessionKey = chat.currentSessionKey;
-  const chatSessionKey = createSclawBrowserChatSessionKey(embedRuntimeId);
+  const chatSessionKey = createSclawBrowserChatSessionKeyForApp(appId);
 
   const entry: ChatSession = {
     key: chatSessionKey,
@@ -35,60 +37,41 @@ export function activateSclawBrowserEmbedChat(embedRuntimeId: string): EmbedChat
   chat.switchSession(chatSessionKey);
   void linkSclawBrowserChatSession({ runtimeId: embedRuntimeId, chatSessionKey });
 
-  return { chatSessionKey, savedMainSessionKey, embedRuntimeId };
+  return { chatSessionKey, savedMainSessionKey, embedRuntimeId, appId };
 }
 
-export async function purgeSclawBrowserEmbedChat(
+/** Leave embed chat UI without deleting persisted history. */
+export function deactivateSclawBrowserEmbedChat(
   chatSessionKey: string | null,
   savedMainSessionKey: string | null,
-): Promise<void> {
+): void {
   const chat = useChatStore.getState();
   const restoreKey = savedMainSessionKey && savedMainSessionKey !== chatSessionKey
     ? savedMainSessionKey
     : chat.currentSessionKey;
 
-  if (chatSessionKey && isSclawBrowserEmbedChatSessionKey(chatSessionKey)) {
-    const state = useChatStore.getState();
-    const messagesForEmbed = state.currentSessionKey === chatSessionKey
-      ? state.messages
-      : [];
-    const hadMessages = messagesForEmbed.length > 0
-      || Boolean(state.sessionLastActivity[chatSessionKey])
-      || Boolean(state.sessionLabels[chatSessionKey]);
-
-    if (state.currentSessionKey === chatSessionKey) {
-      useChatStore.setState({
-        messages: [],
-        streamingText: '',
-        streamingMessage: null,
-        streamingMessages: [],
-        streamingToolResults: [],
-        streamingTools: [],
-        activeRunId: null,
-        error: null,
-        pendingFinal: false,
-      });
+  if (!chatSessionKey || !isSclawBrowserEmbedChatSessionKey(chatSessionKey)) {
+    if (restoreKey && restoreKey !== chat.currentSessionKey) {
+      chat.switchSession(restoreKey);
     }
-
-    if (hadMessages) {
-      await chat.deleteSession(chatSessionKey);
-    } else {
-      useChatStore.setState((state) => ({
-        sessions: state.sessions.filter((session) => session.key !== chatSessionKey),
-        sessionLabels: Object.fromEntries(
-          Object.entries(state.sessionLabels).filter(([key]) => key !== chatSessionKey),
-        ),
-        sessionLastActivity: Object.fromEntries(
-          Object.entries(state.sessionLastActivity).filter(([key]) => key !== chatSessionKey),
-        ),
-      }));
-    }
+    return;
   }
 
-  if (restoreKey && restoreKey !== chatSessionKey) {
-    const latest = useChatStore.getState();
-    if (latest.currentSessionKey === chatSessionKey || !latest.currentSessionKey) {
-      latest.switchSession(restoreKey);
-    }
+  if (chat.currentSessionKey === chatSessionKey && restoreKey && restoreKey !== chatSessionKey) {
+    chat.switchSession(restoreKey);
+    return;
+  }
+
+  if (chat.currentSessionKey === chatSessionKey && !restoreKey) {
+    useChatStore.setState({
+      streamingText: '',
+      streamingMessage: null,
+      streamingMessages: [],
+      streamingToolResults: [],
+      streamingTools: [],
+      activeRunId: null,
+      error: null,
+      pendingFinal: false,
+    });
   }
 }

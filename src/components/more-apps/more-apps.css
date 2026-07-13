@@ -277,11 +277,29 @@
 }
 
 .page-more-apps .app-market__hero {
+  display: block;
+  width: 100%;
   margin-bottom: 0;
+  padding: 0;
   border-radius: 20px;
   border: 1px solid rgba(26, 115, 232, 0.14);
   background: linear-gradient(135deg, #d6e8ff 0%, #c8ddff 42%, #e0edff 100%);
   box-shadow: 0 8px 24px rgba(26, 115, 232, 0.1);
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  appearance: none;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.page-more-apps .app-market__hero:hover {
+  box-shadow: 0 10px 28px rgba(26, 115, 232, 0.14);
+}
+
+.page-more-apps .app-market__hero:focus-visible {
+  outline: 2px solid rgba(255, 103, 0, 0.65);
+  outline-offset: 2px;
 }
 
 .page-more-apps .app-market__hero--org {
@@ -357,11 +375,11 @@
   font-size: 14px;
   font-weight: 600;
   color: #fff;
-  cursor: pointer;
-  transition: background 0.12s ease, box-shadow 0.12s ease;
+  pointer-events: none;
+  user-select: none;
 }
 
-.page-more-apps .app-market__hero-cta:hover {
+.page-more-apps .app-market__hero:hover .app-market__hero-cta:not(.app-market__hero-cta--view) {
   background: #e67a00;
 }
 
@@ -377,9 +395,10 @@
   box-shadow: 0 2px 8px rgba(26, 115, 232, 0.1);
 }
 
-.page-more-apps .app-market__hero-cta--view:hover {
+.page-more-apps .app-market__hero:hover .app-market__hero-cta--view {
   background: #f8fbff;
   color: #0b57d0;
+  box-shadow: 0 4px 12px rgba(26, 115, 232, 0.16);
 }
 
 .page-more-apps .app-market__hero-visual {

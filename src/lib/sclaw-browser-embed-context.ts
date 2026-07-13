@@ -23,7 +23,10 @@ export function messageHasSclawBrowserEmbedContext(message: string): boolean {
   return message.includes(SCLAW_BROWSER_EMBED_CONTEXT_MARKER);
 }
 
-export function buildSclawBrowserEmbedContextText(context: SclawBrowserEmbedContextBlock): string {
+export function buildSclawBrowserEmbedContextText(
+  context: SclawBrowserEmbedContextBlock,
+  options?: { longSessionNotice?: string | null },
+): string {
   const payload = {
     version: 3,
     source: 'stoclaw-embed-browser',
@@ -60,6 +63,7 @@ export function buildSclawBrowserEmbedContextText(context: SclawBrowserEmbedCont
   return [
     SCLAW_BROWSER_EMBED_CONTEXT_MARKER,
     '',
+    options?.longSessionNotice ?? null,
     '【应用内嵌预览上下文】用户正在 SClaw 应用广场左侧**内置浏览器（webview）**中操作，不是外部 Chrome。',
     '左侧页面已通过 Browser Bridge 连接，bridgeSessionId 见下方 JSON。',
     '',
@@ -84,10 +88,11 @@ export function buildSclawBrowserEmbedContextText(context: SclawBrowserEmbedCont
 export function appendSclawBrowserEmbedContext(
   text: string,
   context?: SclawBrowserEmbedContextBlock | null,
+  options?: { longSessionNotice?: string | null },
 ): string {
   if (!context) return text;
   if (messageHasSclawBrowserEmbedContext(text)) return text;
-  const ctxText = buildSclawBrowserEmbedContextText(context);
+  const ctxText = buildSclawBrowserEmbedContextText(context, options);
   return `${ctxText}\n${text}`;
 }
 

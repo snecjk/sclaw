@@ -10,13 +10,9 @@ import {
 } from '@/lib/open-sclaw-browser';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 import { useSclawBrowserHostBounds } from './use-sclaw-browser-host-bounds';
+import { sclawBrowserEmbedChatShortcutLabel } from '../../../shared/sclaw-embed-browser-shortcut';
 import { cn } from '@/lib/utils';
 import './sclaw-browser-overlay.css';
-
-function embedChatShortcutLabel(): string {
-  const isMac = window.electron?.platform === 'darwin';
-  return isMac ? '⌘L' : 'Ctrl+L';
-}
 
 export function SclawBrowserToolbarPortal() {
   const { t } = useTranslation('common');
@@ -27,7 +23,7 @@ export function SclawBrowserToolbarPortal() {
 
   if (!session || !bounds) return null;
 
-  const shortcut = embedChatShortcutLabel();
+  const shortcut = sclawBrowserEmbedChatShortcutLabel(window.electron?.platform ?? 'darwin');
 
   return createPortal(
     <header

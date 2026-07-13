@@ -3076,4 +3076,15 @@ function registerSessionHandlers(): void {
     const connected = ensureSclawEmbedBridgeForRuntime(runtimeId);
     return { ok: true, connected };
   });
+
+  ipcMain.handle('sclaw-browser:setPointerPassthrough', async (_, payload: {
+    runtimeId?: string;
+    passthrough?: boolean;
+  }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false };
+    const { setSclawEmbedBrowserPointerPassthrough } = await import('./services/sclaw-embed-browser-runtime');
+    const applied = setSclawEmbedBrowserPointerPassthrough(runtimeId, payload?.passthrough === true);
+    return { ok: applied };
+  });
 }
