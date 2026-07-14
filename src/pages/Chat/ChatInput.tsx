@@ -20,7 +20,6 @@ import {
   Loader2,
   AtSign,
   AlertCircle,
-  CirclePlus,
   Bot,
   Workflow,
   ArrowUp,
@@ -839,7 +838,7 @@ export function ChatInput({
                   disabled={disabled}
                   title={t('composer.attachFiles')}
                 >
-                  <CirclePlus className="h-4 w-4" aria-hidden />
+                  <Paperclip className="h-4 w-4" aria-hidden />
                 </Button>
 
                 <Button

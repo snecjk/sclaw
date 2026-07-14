@@ -26,6 +26,7 @@ const AGENT_RUNTIME_FILES = [
   'models.json',
 ];
 
+/* TEMP: 暂时停用英文 Long Output / Thinking Language 注入（压缩初始上下文），勿删，恢复时取消注释
 const LONG_OUTPUT_CONSTRAINT = [
   '',
   '## 📄 Long Output Rule (STO Claw)',
@@ -68,6 +69,7 @@ const CHINESE_THINKING_CONSTRAINT = [
   'Even when analyzing English content or code, your step-by-step thoughts, plans, and reflections should be expressed in Chinese.',
   '',
 ].join('\n');
+*/
 
 interface AgentModelConfig {
   primary?: string;
@@ -512,7 +514,10 @@ async function copyRuntimeFiles(sourceAgentDir: string, targetAgentDir: string):
   }
 }
 
-export async function ensureLongOutputConstraint(workspacePath: string): Promise<void> {
+export async function ensureLongOutputConstraint(_workspacePath: string): Promise<void> {
+  // TEMP: 暂时停用英文 Long Output 注入；恢复时取消上方常量注释并还原下方逻辑
+  return;
+  /*
   const agentsMdPath = join(workspacePath, 'AGENTS.md');
   const marker = '## 📄 Long Output Rule (STO Claw)';
 
@@ -531,9 +536,13 @@ export async function ensureLongOutputConstraint(workspacePath: string): Promise
   } catch {
     // Best-effort: if writing fails, OpenClaw's default AGENTS.md will still work.
   }
+  */
 }
 
-export async function ensureChineseThinkingConstraint(workspacePath: string): Promise<void> {
+export async function ensureChineseThinkingConstraint(_workspacePath: string): Promise<void> {
+  // TEMP: 暂时停用英文 Thinking Language 注入；恢复时取消上方常量注释并还原下方逻辑
+  return;
+  /*
   const agentsMdPath = join(workspacePath, 'AGENTS.md');
   const marker = '## 🧠 Thinking Language Rule (STO Claw)';
 
@@ -552,6 +561,7 @@ export async function ensureChineseThinkingConstraint(workspacePath: string): Pr
   } catch {
     // Best-effort: if writing fails, OpenClaw's default AGENTS.md will still work.
   }
+  */
 }
 
 async function provisionAgentFilesystem(
@@ -582,7 +592,7 @@ async function provisionAgentFilesystem(
     await copyRuntimeFiles(sourceAgentDir, targetAgentDir);
   }
 
-  // Inject constraints into AGENTS.md
+  // Inject constraints into AGENTS.md（ensure* 内已 TEMP 停用英文注入）
   await ensureLongOutputConstraint(targetWorkspace);
   await ensureChineseThinkingConstraint(targetWorkspace);
 }

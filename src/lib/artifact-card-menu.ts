@@ -1,6 +1,5 @@
 import { invokeIpc } from '@/lib/api-client';
-import { writeCopyShareFilesToClipboard } from '@/lib/copy-share-clipboard';
-import { hostApiFetch } from '@/lib/host-api';
+import { writeCopyShareFilesToClipboard, writePlainTextToClipboard } from '@/lib/copy-share-clipboard';
 import { isHttpUrl, openExternalUrl } from '@/lib/preview-url';
 import type { AttachedFileMeta } from '@/stores/chat';
 
@@ -29,11 +28,7 @@ export function buildArtifactCardMenuItems(
         id: 'copyLink',
         label: t('artifact.copyLink'),
         onSelect: async () => {
-          await hostApiFetch('/api/clipboard/write-text', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: filePath }),
-          });
+          await writePlainTextToClipboard(filePath);
         },
       },
     ];

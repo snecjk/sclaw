@@ -422,6 +422,25 @@ async function installDwsSkillToOpenClawSkillsDir(bundled: DwsBundledManifest): 
   logger.warn('dws skillMode=multi installed via dws skill setup; verify skills under ~/.stoclaw/openclaw/skills/');
 }
 
+/**
+ * Best-effort install the dws skill into Claude Code's ~/.claude/skills/ dir,
+ * so Claude Code CLI sessions can invoke `Skill("dws")` and follow its guidance
+ * to run `dws chat message send` via Bash. Non-fatal: failure only warns and
+ * never aborts the main dws binary/skill install.
+ */
+async function installDwsSkillToClaudeCodeDir(): Promise<void> {
+  if (!(await dwsSupportsSkillSetup())) {
+    // Older binaries lack `dws skill setup`; skip silently.
+    return;
+  }
+  const result = await runDws(['skill', 'setup', '--mode', 'mono', '--target', 'claude', '-y'], 120_000);
+  if (!result.ok) {
+    logger.warn(`dws skill setup for Claude Code failed (non-fatal): ${result.error ?? ''}`);
+    return;
+  }
+  logger.info('dws skill installed to ~/.claude/skills/ for Claude Code');
+}
+
 async function installBinaryFromManifest(
   bundled: DwsBundledManifest,
   notify?: (path: string) => void,
@@ -469,6 +488,14 @@ async function installBinaryFromManifest(
     clearMacQuarantine(target);
 
     await installDwsSkillToOpenClawSkillsDir(bundled);
+    // Best-effort: also install the dws skill into Claude Code's ~/.claude/skills/
+    // so Claude Code CLI sessions can invoke `Skill("dws")`. Non-fatal — never
+    // abort the main install if this auxiliary target is unavailable.
+    try {
+      await installDwsSkillToClaudeCodeDir();
+    } catch (error) {
+      logger.warn('dws skill setup for Claude Code skipped:', error instanceof Error ? error.message : String(error));
+    }
 
     writeLocalManifest({
       dwsVersion: bundled.dwsVersion,
@@ -597,6 +624,11 @@ export async function installOrUpdateDwsCli(
   ) {
     try {
       await installDwsSkillToOpenClawSkillsDir(bundled);
+      try {
+        await installDwsSkillToClaudeCodeDir();
+      } catch (error) {
+        logger.warn('dws skill setup for Claude Code skipped:', error instanceof Error ? error.message : String(error));
+      }
       writeLocalManifest({
         ...local,
         skillMode: bundled.skillMode,

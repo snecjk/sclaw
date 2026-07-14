@@ -7,6 +7,7 @@ import {
   normalizeScheduledTaskInstruction,
   SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT,
 } from '../../shared/scheduled-task-instruction';
+import { SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT as VENDORED_SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT } from '../../sto-plugin/openclaw/sto-scheduled-task-tool/shared/scheduled-task-instruction';
 
 describe('scheduled-task-instruction', () => {
   it('detects cron and claude task execution session keys', () => {
@@ -70,5 +71,17 @@ describe('scheduled-task-instruction', () => {
     expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('执行结果');
     expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('dws chat message send');
     expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('优先于 message 内');
+  });
+
+  it('documents the local-artifact-to-dingtalk-drive flow in the P0 instruction', () => {
+    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('【P0 本地产物上钉盘】');
+    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('dws drive upload');
+    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('不需要 `--space-id`');
+    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('docUrl');
+    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('禁止把 `file://` 路径写进钉钉正文');
+  });
+
+  it('keeps the vendored openclaw copy byte-equal to the shared source', () => {
+    expect(VENDORED_SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toBe(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT);
   });
 });
