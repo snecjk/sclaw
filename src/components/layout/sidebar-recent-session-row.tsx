@@ -24,6 +24,8 @@ export interface SidebarRecentSessionRowProps {
   label: string;
   /** 是否当前选中会话 */
   isActive: boolean;
+  /** 是否在「最近」中置顶 */
+  isPinned: boolean;
   /** 是否 inline 重命名中 */
   isEditing: boolean;
   /** 重命名 draft */
@@ -36,6 +38,7 @@ export interface SidebarRecentSessionRowProps {
   isInProject: boolean;
   /** 打开会话 */
   onOpen: () => void;
+  onPin: () => void;
   onStartRename: () => void;
   onEditingValueChange: (value: string) => void;
   onCommitRename: () => void;
@@ -51,12 +54,14 @@ export function SidebarRecentSessionRow({
   session,
   label,
   isActive,
+  isPinned,
   isEditing,
   editingValue,
   projects,
   currentProjectId,
   isInProject,
   onOpen,
+  onPin,
   onStartRename,
   onEditingValueChange,
   onCommitRename,
@@ -140,9 +145,11 @@ export function SidebarRecentSessionRow({
         <SidebarRecentSessionRowTrailing
           sessionKey={session.key}
           isActive={isActive}
+          isPinned={isPinned}
           projects={projects}
           currentProjectId={currentProjectId}
           isInProject={isInProject}
+          onPin={onPin}
           onRename={onStartRename}
           onDelete={onDelete}
           onMoveToProject={onMoveToProject}

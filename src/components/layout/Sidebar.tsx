@@ -785,6 +785,7 @@ export function Sidebar() {
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
   const userProjects = useSessionCatalogStore((s) => s.workspaces);
   const moveSessionToProject = useSessionCatalogStore((s) => s.moveSessionToProject);
+  const patchSessionCatalog = useSessionCatalogStore((s) => s.patchSessionCatalog);
   const catalogBootstrap = useSessionCatalogStore((s) => s.bootstrap);
 
   useEffect(() => {
@@ -1008,12 +1009,14 @@ export function Sidebar() {
     const workspaceId = sessionWorkspaceByKey[s.key] ?? DEFAULT_WORKSPACE_ID;
     const isInProject = workspaceId !== DEFAULT_WORKSPACE_ID;
     const currentProjectId = isInProject ? workspaceId : null;
+    const isPinned = catalogByKey[s.key]?.pinRank != null;
     return (
       <SidebarRecentSessionRow
         key={s.key}
         session={s}
         label={sessionLabel}
         isActive={isRecentSessionActive}
+        isPinned={isPinned}
         isEditing={editingSessionKey === s.key}
         editingValue={editingValue}
         projects={userProjects}
@@ -1021,6 +1024,24 @@ export function Sidebar() {
         isInProject={isInProject}
         onOpen={() => {
           navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
+        }}
+        onPin={() => {
+          void (async () => {
+            const currentPin = catalogByKey[s.key]?.pinRank ?? null;
+            if (currentPin != null) {
+              await patchSessionCatalog({ sessionKey: s.key, pinRank: null });
+              toast.success(t('common:sidebar.unpinnedInRecent'));
+              return;
+            }
+            let maxPin = 0;
+            for (const [key, meta] of Object.entries(catalogByKey)) {
+              const ws = sessionWorkspaceByKey[key] ?? DEFAULT_WORKSPACE_ID;
+              if (ws !== DEFAULT_WORKSPACE_ID) continue;
+              if (meta.pinRank != null && meta.pinRank > maxPin) maxPin = meta.pinRank;
+            }
+            await patchSessionCatalog({ sessionKey: s.key, pinRank: maxPin + 1 });
+            toast.success(t('common:sidebar.pinnedInRecent'));
+          })();
         }}
         onStartRename={() => {
           setEditingSessionKey(s.key);
@@ -1047,6 +1068,7 @@ export function Sidebar() {
       />
     );
   }, [
+    catalogByKey,
     currentSessionKey,
     editingSessionKey,
     editingValue,
@@ -1055,6 +1077,7 @@ export function Sidebar() {
     location.pathname,
     moveSessionToProject,
     navigate,
+    patchSessionCatalog,
     renameSession,
     requestSessionDelete,
     sessionWorkspaceByKey,
