@@ -8,6 +8,7 @@ import {
   fixDwsChatMessageSendShellScript,
   fixDwsChatMessageSendToolParams,
   fixDwsChatMessageSendToolParamsForOpenClawExec,
+  normalizeArtifactUrl,
   normalizeDwsChatMessageSendText,
   parseDwsChatMessageSendShellCommandArgs,
   rewriteDwsSendSpawnInvocation,
@@ -202,5 +203,60 @@ describe('dws-send-text normalization', () => {
     const fixed = fixDwsChatMessageSendShellScript(command);
     expect(fixed).toContain("$'");
     expect(fixed).not.toMatch(/--text\s+"[^"]*\\n/);
+  });
+});
+
+describe('artifact URL normalization', () => {
+  const RAW = 'https://sto.example.com/artifacts/总部结算对账分析_日_20260708_1726.html';
+  const SINGLE = 'https://sto.example.com/artifacts/%E6%80%BB%E9%83%A8%E7%BB%93%E7%AE%97%E5%AF%B9%E8%B4%A6%E5%88%86%E6%9E%90_%E6%97%A5_20260708_1726.html';
+  // 把单次编码里每个 `%` 再编码成 `%25`，模拟上游错误地 encodeURIComponent 一次
+  const DOUBLE = SINGLE.replace(/%/g, '%25');
+
+  it('encodeURI is idempotent on already-single-encoded URL (no double-encoding)', () => {
+    expect(normalizeArtifactUrl(SINGLE)).toBe(SINGLE);
+  });
+
+  it('raw CJK url is encoded exactly once', () => {
+    expect(normalizeArtifactUrl(RAW)).toBe(SINGLE);
+  });
+
+  it('double-encoded URL collapses back to single encoding', () => {
+    expect(normalizeArtifactUrl(DOUBLE)).toBe(SINGLE);
+  });
+
+  it('is idempotent across states (call twice == call once)', () => {
+    expect(normalizeArtifactUrl(normalizeArtifactUrl(RAW))).toBe(normalizeArtifactUrl(RAW));
+    expect(normalizeArtifactUrl(normalizeArtifactUrl(DOUBLE))).toBe(SINGLE);
+  });
+
+  it('non-url / non-http string is returned untouched', () => {
+    expect(normalizeArtifactUrl('')).toBe('');
+    expect(normalizeArtifactUrl('ftp://x/中')).toBe('ftp://x/中');
+    expect(normalizeArtifactUrl('plain text 没有 url')).toBe('plain text 没有 url');
+  });
+
+  it('normalizeDwsChatMessageSendText (shared) normalizes embedded url regardless of input state', () => {
+    const withRaw = `- 产物：${RAW}`;
+    const withDouble = `- 产物：${DOUBLE}`;
+    const expected = `- 产物：${SINGLE}`;
+    expect(normalizeDwsChatMessageSendText(withRaw)).toContain(expected);
+    expect(normalizeDwsChatMessageSendText(withDouble)).toContain(expected);
+    // 双重编码必须被消除
+    expect(normalizeDwsChatMessageSendText(withDouble)).not.toContain('%25');
+  });
+
+  it('plugin copy: normalizeDwsChatMessageSendText normalizes embedded url the same way', () => {
+    const withDouble = `- 产物：${DOUBLE}`;
+    expect(pluginNormalize(withDouble)).toContain(`- 产物：${SINGLE}`);
+    expect(pluginNormalize(withDouble)).not.toContain('%25');
+  });
+
+  it('watchdog-style "label：url" bullet stays single-encoded after argv normalization', () => {
+    const argv = extractNormalizedDwsSendArgv(
+      `dws chat message send --text "- 产物：${DOUBLE}"`,
+    );
+    const text = argv?.[argv.indexOf('--text') + 1] as string;
+    expect(text).toContain(`- 产物：${SINGLE}`);
+    expect(text).not.toContain('%25');
   });
 });

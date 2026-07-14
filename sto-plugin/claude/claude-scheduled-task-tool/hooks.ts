@@ -49,9 +49,20 @@ function deny(reason: string): HookJSONOutput {
   };
 }
 
-function isScheduledTaskShellCommand(command: string): boolean {
+/**
+ * `dws chat message send` 是钉钉消息发送命令，其 `--text` / `--title` 承载的是
+ * 用户消息正文（任意自然语言），不应参与"是否在用 shell 管理 Claude 定时任务"
+ * 的判定——否则正文里只要出现"定时任务/cron/scheduled task"等词就会被误杀，
+ * 导致合法的钉钉代发被拒（已在线上触发：群聊总结里提到"姚磊（定时任务）"）。
+ */
+const DWS_CHAT_MESSAGE_SEND = /dws\s+chat\s+message\s+send\b/i;
+
+export function isScheduledTaskShellCommand(command: string): boolean {
   const normalized = command.trim().toLowerCase();
   if (!normalized) return false;
+
+  // 钉钉消息发送命令一律放行：它只发钉钉，不管理 Claude 定时任务。
+  if (DWS_CHAT_MESSAGE_SEND.test(command)) return false;
 
   return /\bcron\b|\bschedule(?:d)?\s+task\b|定时任务|计划任务/.test(normalized)
     || /\bclaude-scheduled-task\b/.test(normalized);

@@ -12,15 +12,33 @@ function mapCopyShareFiles(files: AttachedFileMeta[]) {
     }));
 }
 
+async function writeTextToClipboardWithFallback(text: string): Promise<void> {
+  try {
+    await hostApiFetch('/api/clipboard/write-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    return;
+  } catch (error) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    throw error;
+  }
+}
+
+/** 写入任意纯文本到系统剪贴板（主进程优先，失败时回退 renderer clipboard API）。 */
+export async function writePlainTextToClipboard(text: string): Promise<void> {
+  await writeTextToClipboardWithFallback(text.trim() || ' ');
+}
+
 export async function writeCopyShareTextToClipboard(options: {
   text: string;
 }): Promise<void> {
   const clipboardText = formatAssistantCopyShareTextOnly(options.text);
-  await hostApiFetch('/api/clipboard/write-text', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: clipboardText }),
-  });
+  await writePlainTextToClipboard(clipboardText);
 }
 
 export async function writeCopyShareFilesToClipboard(options: {

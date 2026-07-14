@@ -47,7 +47,11 @@ export function useWorkflowCronTaskModal() {
           if (!selectedAgent?.id) {
             throw new Error('所选 Claude 代理缺少工作区，无法创建本地定时任务');
           }
-          const promptTemplate = prepareDingTalkAgentTurnMessage(input.message, input.dingTalkMentions);
+          const promptTemplate = prepareDingTalkAgentTurnMessage(
+            input.message,
+            input.dingTalkMentions,
+            { scenario: 'scheduled-task' },
+          );
           await createJob({
             engineType: 'claude',
             payload: {

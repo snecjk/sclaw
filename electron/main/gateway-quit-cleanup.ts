@@ -1,5 +1,8 @@
 import type { GatewayManager } from '../gateway/manager';
-import { clearOwnedGatewayProcess } from '../gateway/process-registry';
+import {
+  clearOwnedGatewayProcess,
+  terminateDuplicateGatewayChildren,
+} from '../gateway/process-registry';
 import { getListeningProcessIds, terminateOrphanedProcessIds } from '../gateway/supervisor';
 import { logger } from '../utils/logger';
 
@@ -50,6 +53,12 @@ export async function shutdownGatewayForQuit(gatewayManager: GatewayManager): Pr
     } catch (err) {
       logger.warn('Port-based gateway cleanup failed during quit:', err);
     }
+  }
+
+  try {
+    await terminateDuplicateGatewayChildren({ reason: 'quit' });
+  } catch (err) {
+    logger.warn('Gateway child cleanup failed during quit:', err);
   }
 
   clearOwnedGatewayProcess();
