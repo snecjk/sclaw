@@ -222,6 +222,7 @@ const electronAPI = {
         'dws:cli-install-failed',
         'startup-progress',
         'auth:token-expired',
+        'sto:models-synced',
         'workflow:status-update',
         'workflow:poll-trace',
         'workflow:stream:event',

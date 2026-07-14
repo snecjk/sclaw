@@ -917,6 +917,107 @@ export async function setAgentPreferredModel(
   });
 }
 
+function isModelRefInStoCatalog(hint: string | undefined | null, catalogIds: string[]): boolean {
+  const trimmed = hint?.trim();
+  if (!trimmed) return true;
+  if (catalogIds.length === 0) return true;
+  if (catalogIds.includes(trimmed)) return true;
+  const bare = trimmed.includes('/') ? trimmed.slice(trimmed.lastIndexOf('/') + 1) : trimmed;
+  return catalogIds.some((catalogId) => {
+    if (catalogId === trimmed) return true;
+    if (catalogId.endsWith(`/${trimmed}`) || trimmed.endsWith(`/${catalogId}`)) return true;
+    const catalogBare = catalogId.includes('/')
+      ? catalogId.slice(catalogId.lastIndexOf('/') + 1)
+      : catalogId;
+    return catalogBare === bare;
+  });
+}
+
+/**
+ * After STO catalog sync: remap Claude preferredModel + OpenClaw agents.list
+ * entries that still point at delisted STO models onto the workspace fallback.
+ */
+export async function remapDelistedAgentModels(opts: {
+  catalogIds: string[];
+  /** Prior STO customModels — used to avoid accidental remaps of non-STO OpenClaw refs. */
+  previousCatalogIds?: string[];
+  fallbackModel: string;
+  fallbackAccountId?: string;
+}): Promise<{ preferredRemapped: number; openclawRemapped: number }> {
+  const catalogIds = opts.catalogIds.map((id) => id.trim()).filter(Boolean);
+  const previousCatalogIds = (opts.previousCatalogIds ?? [])
+    .map((id) => id.trim())
+    .filter(Boolean);
+  const fallbackModel = opts.fallbackModel.trim();
+  if (!fallbackModel || catalogIds.length === 0) {
+    return { preferredRemapped: 0, openclawRemapped: 0 };
+  }
+
+  return withConfigLock(async () => {
+    const config = await readOpenClawConfig() as AgentConfigDocument;
+    const { agentsConfig, entries } = normalizeAgentsConfig(config);
+    const features = await readAgentFeatures();
+    let preferredRemapped = 0;
+    let openclawRemapped = 0;
+
+    const nextPreferred = { ...(features.preferredModel || {}) };
+    const nextPreferredAccount = { ...(features.preferredModelAccountId || {}) };
+    for (const [agentId, model] of Object.entries(nextPreferred)) {
+      if (isModelRefInStoCatalog(model, catalogIds)) continue;
+      nextPreferred[agentId] = fallbackModel;
+      if (opts.fallbackAccountId?.trim()) {
+        nextPreferredAccount[agentId] = opts.fallbackAccountId.trim();
+      }
+      preferredRemapped += 1;
+    }
+
+    if (preferredRemapped > 0) {
+      features.preferredModel = nextPreferred;
+      features.preferredModelAccountId = nextPreferredAccount;
+      await writeAgentFeatures(features);
+    }
+
+    const openclawFallback = fallbackModel.startsWith('sto/')
+      ? fallbackModel
+      : `sto/${fallbackModel}`;
+    const nextEntries = entries.map((entry) => {
+      const engineType = normalizeAgentEngineType(features.engineType?.[entry.id]);
+      if (engineType === 'claude') return entry;
+      const rawModel = typeof entry.model === 'string'
+        ? entry.model
+        : (entry.model && typeof entry.model === 'object'
+          ? (entry.model as AgentModelConfig).primary
+          : undefined);
+      if (!rawModel?.trim()) return entry;
+      const wasStoCatalogRef = rawModel.startsWith('sto/')
+        || rawModel.startsWith('custom-sto/')
+        || (previousCatalogIds.length > 0 && isModelRefInStoCatalog(rawModel, previousCatalogIds));
+      if (!wasStoCatalogRef) return entry;
+      if (isModelRefInStoCatalog(rawModel, catalogIds)) return entry;
+      openclawRemapped += 1;
+      return { ...entry, model: openclawFallback };
+    });
+
+    if (openclawRemapped > 0) {
+      config.agents = {
+        ...agentsConfig,
+        list: nextEntries,
+      };
+      await writeOpenClawConfig(config);
+    }
+
+    if (preferredRemapped > 0 || openclawRemapped > 0) {
+      logger.info('Remapped delisted agent models after STO catalog sync', {
+        preferredRemapped,
+        openclawRemapped,
+        fallbackModel,
+      });
+    }
+
+    return { preferredRemapped, openclawRemapped };
+  });
+}
+
 export async function updateAgentName(agentId: string, name: string): Promise<AgentsSnapshot> {
   return withConfigLock(async () => {
     const config = await readOpenClawConfig() as AgentConfigDocument;

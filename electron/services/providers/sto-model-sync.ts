@@ -66,6 +66,23 @@ function inferenceHeadersEqual(
   return expectedKeys.every((key) => (current ?? {})[key] === expected[key]);
 }
 
+async function broadcastStoModelsSynced(payload: {
+  fallbackModel?: string;
+  catalogChanged: boolean;
+  agentsRemapped: number;
+}): Promise<void> {
+  try {
+    const { BrowserWindow } = await import('electron');
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('sto:models-synced', payload);
+      }
+    }
+  } catch (err) {
+    logger.warn('[sto-sync] Failed to broadcast sto:models-synced:', err);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -89,6 +106,11 @@ export interface StoSyncResult {
   legacyRepaired?: boolean;
   /** When true, caller should force one gateway reload (bypass login 8s skip). */
   needsForcedGatewayRefresh?: boolean;
+  /** Latest STO workspace default model after sync (for UI toolbar remap). */
+  fallbackModel?: string;
+  /** True when customModels / default / agent bindings changed — renderer should refresh. */
+  notifyUi?: boolean;
+  agentsRemapped?: number;
 }
 
 export type StoSyncOptions = {
@@ -412,8 +434,56 @@ export class StoModelSyncService {
       }
     }
 
+    // Step 7 — Remap agent preferred / OpenClaw list models that left the catalog
+    const refreshedAccounts = await listProviderAccounts();
+    const stoAccount = refreshedAccounts.find((account) => account.id === STO_ACCOUNT_ID);
+    const fallbackModel = (stoAccount?.model?.trim() || remoteModelIds[0] || '').trim();
+    result.fallbackModel = fallbackModel || undefined;
+
+    const previousCatalog = existingAccount?.metadata?.customModels ?? [];
+    const catalogChanged =
+      previousCatalog.length !== remoteModelIds.length
+      || !remoteModelIds.every((id, i) => previousCatalog[i] === id)
+      || Boolean(
+        existingAccount?.model
+        && stoAccount?.model
+        && existingAccount.model !== stoAccount.model,
+      );
+
+    if (fallbackModel) {
+      try {
+        const { remapDelistedAgentModels } = await import('../../utils/agent-config');
+        const remapped = await remapDelistedAgentModels({
+          catalogIds: remoteModelIds,
+          previousCatalogIds: previousCatalog,
+          fallbackModel,
+          fallbackAccountId: STO_ACCOUNT_ID,
+        });
+        result.agentsRemapped = remapped.preferredRemapped + remapped.openclawRemapped;
+      } catch (err) {
+        logger.warn('[sto-sync] Failed to remap delisted agent models:', err);
+      }
+    }
+
+    result.notifyUi = Boolean(
+      result.created.length > 0
+      || result.updated.length > 0
+      || result.deleted.length > 0
+      || result.defaultSet != null
+      || catalogChanged
+      || (result.agentsRemapped ?? 0) > 0,
+    );
+
+    if (result.notifyUi) {
+      await broadcastStoModelsSynced({
+        fallbackModel: result.fallbackModel,
+        catalogChanged,
+        agentsRemapped: result.agentsRemapped ?? 0,
+      });
+    }
+
     logger.info(
-      `[sto-sync] Sync completed: created=${result.created.length}, deleted=${result.deleted.length}, updated=${result.updated.length}, models=${remoteModelIds.length}, default=${result.defaultSet ?? '(unchanged)'}, legacyRepaired=${result.legacyRepaired ?? false}`,
+      `[sto-sync] Sync completed: created=${result.created.length}, deleted=${result.deleted.length}, updated=${result.updated.length}, models=${remoteModelIds.length}, default=${result.defaultSet ?? '(unchanged)'}, agentsRemapped=${result.agentsRemapped ?? 0}, legacyRepaired=${result.legacyRepaired ?? false}`,
     );
 
     return result;

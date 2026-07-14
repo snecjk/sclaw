@@ -119,6 +119,88 @@ async function persistSessionModelToGateway(opts: {
 }
 
 /**
+ * After STO catalog sync (login / periodic / manual): refresh provider + agent
+ * snapshots and align pending/current session UI to the latest workspace default.
+ */
+export async function applyStoCatalogSyncToChatUi(payload?: {
+  fallbackModel?: string;
+}): Promise<void> {
+  try {
+    await useProviderStore.getState().refreshProviderSnapshot();
+  } catch (err) {
+    console.warn('[applyStoCatalogSyncToChatUi] provider refresh failed:', err);
+  }
+  try {
+    await useAgentsStore.getState().fetchAgents();
+  } catch (err) {
+    console.warn('[applyStoCatalogSyncToChatUi] agents refresh failed:', err);
+  }
+
+  const { accounts, defaultAccountId } = useProviderStore.getState();
+  const fallbackModel = (
+    payload?.fallbackModel?.trim()
+    || getWorkspaceDefaultRawModelId(accounts, defaultAccountId)
+  ).trim();
+  const fallbackAccountId = defaultAccountId?.trim()
+    || accounts.find((account) => account.vendorId === 'sto')?.id
+    || '';
+
+  const chat = useChatStore.getState();
+  const pending = chat.pendingNewSessionModel?.trim();
+  if (pending && fallbackAccountId) {
+    const resolved = resolveProviderRawModelId(accounts, pending, fallbackAccountId);
+    if (
+      !resolved
+      || !isModelStillAllowedForAccount(accounts, resolved.modelId, resolved.accountId)
+    ) {
+      chat.setPendingNewSessionModel(null);
+    }
+  }
+
+  const sessionKey = chat.currentSessionKey?.trim();
+  if (!sessionKey || sessionKey === DEFAULT_SESSION_KEY || !fallbackModel || !fallbackAccountId) {
+    return;
+  }
+
+  const session = chat.sessions.find((item) => item.key === sessionKey);
+  const sessionModel = session?.model?.trim();
+  if (!sessionModel) {
+    // Task sessions often omit model — still clear local display by upserting fallback
+    // when agent preferred was remapped server-side (agents store already refreshed).
+    return;
+  }
+
+  const resolved = resolveProviderRawModelId(accounts, sessionModel, fallbackAccountId);
+  if (
+    resolved
+    && isModelStillAllowedForAccount(accounts, resolved.modelId, resolved.accountId)
+  ) {
+    return;
+  }
+
+  const agent = useAgentsStore.getState().agents.find((item) => item.id === chat.currentAgentId);
+  const engineType = resolveChatSessionEngineType(session, agent?.engineType, sessionKey);
+  try {
+    const persisted = await persistSessionModelToGateway({
+      sessionKey,
+      model: fallbackModel,
+      accountId: fallbackAccountId,
+      agentId: chat.currentAgentId || agent?.id || '',
+      engineType,
+    });
+    if (persisted) {
+      useChatStore.setState((state) => ({
+        sessions: state.sessions.map((item) => (
+          item.key === sessionKey ? { ...item, model: persisted } : item
+        )),
+      }));
+    }
+  } catch (err) {
+    console.warn('[applyStoCatalogSyncToChatUi] session remap failed:', err);
+  }
+}
+
+/**
  * Before chat.send: if the session still carries a delisted STO model, await remap
  * to the workspace default so Gateway modelOverride matches the toolbar.
  * UI-only sanitize is not enough — send uses Gateway session storage.

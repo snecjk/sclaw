@@ -502,11 +502,12 @@ export function ChatModelSelector({
     [modelOptions, selectedModelId],
   );
   const claudeModelConfigured = isConcreteModelId(currentAgent?.modelDisplay);
+  // Never paint a bare delisted id that is missing from the live dropdown.
   const modelDisplayText = selectedModel?.displayName
-    || selectedModelId
+    || workspaceDefaultModelId
     || (currentEngineType === 'claude' && !claudeModelConfigured
-      ? (workspaceDefaultModelId || t('toolbar.modelNotConfigured'))
-      : (workspaceDefaultModelId || t('toolbar.currentModel')));
+      ? t('toolbar.modelNotConfigured')
+      : t('toolbar.currentModel'));
 
   const handleModelSwitch = async (rawModelId: string) => {
     if (!currentSessionKey || rawModelId === selectedModelId) return;
