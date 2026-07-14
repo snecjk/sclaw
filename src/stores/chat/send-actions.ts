@@ -111,8 +111,6 @@ export function createSendActions(
         hasWorkflowContext: Boolean(workflowContext),
       });
 
-      console.info('[chat-message]\n', messageWithContext);
-
       const quotaAllowed = await ensureDailyTokenQuota({
         set,
         sessionKey: currentSessionKey,
