@@ -171,6 +171,85 @@ describe('user-message-merge', () => {
     expect(merged[0]?.id).toBe('history-user-1');
   });
 
+  it('matches active media optimistic user even when history attachment metadata differs', () => {
+    const optimistic = {
+      id: 'local-user-image',
+      role: 'user',
+      content: '识别一下',
+      timestamp: 1710000000,
+      _attachedFiles: [{
+        fileName: 'slide.png',
+        mimeType: 'image/png',
+        fileSize: 1024,
+        preview: 'data:image/png;base64,abc',
+        filePath: 'C:/tmp/staged-slide.png',
+      }],
+    } as RawMessage;
+    const enriched = [
+      {
+        id: 'history-user-image',
+        role: 'user',
+        content: [
+          { type: 'text', text: '识别一下' },
+          { type: 'image', source: { path: '/private/runtime/slide.png' } },
+        ],
+        timestamp: 1710000002,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '图片识别结果',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    expect(isSameUserMessage(enriched[0], optimistic, 1710000000000)).toBe(true);
+
+    const merged = mergeOptimisticUserIntoHistory(enriched, [optimistic], {
+      userMessageAt: 1710000000000,
+      sending: true,
+      cachedOptimistic: optimistic,
+    });
+
+    expect(merged.filter((m) => m.role === 'user')).toHaveLength(1);
+    expect(merged[0]?.id).toBe('history-user-image');
+  });
+
+  it('keeps completed same-text media user turns distinct when there is no active send', () => {
+    const messages = [
+      {
+        id: 'user-image-1',
+        role: 'user',
+        content: '识别一下',
+        timestamp: 1710000000,
+        _attachedFiles: [{
+          fileName: 'a.png',
+          mimeType: 'image/png',
+          fileSize: 100,
+          preview: null,
+          filePath: '/tmp/a.png',
+        }],
+      },
+      {
+        id: 'user-image-2',
+        role: 'user',
+        content: '识别一下',
+        timestamp: 1710000010,
+        _attachedFiles: [{
+          fileName: 'b.png',
+          mimeType: 'image/png',
+          fileSize: 100,
+          preview: null,
+          filePath: '/tmp/b.png',
+        }],
+      },
+    ] as RawMessage[];
+
+    const deduped = dedupeRedundantUserMessages(messages, null);
+
+    expect(deduped.map((m) => m.id)).toEqual(['user-image-1', 'user-image-2']);
+  });
+
   it('dedupes non-adjacent optimistic echo during active send', () => {
     const messages = [
       { id: 'local-user', role: 'user', content: 'hello', timestamp: 1710000000 },
