@@ -230,6 +230,18 @@ export class StoModelSyncService {
       return result;
     }
 
+    // TEMP workaround: OpenClaw cron sticky payload.model can ignore current default.
+    // Fire-and-forget rewrite of jobs.json payload.model; never block or fail sto-sync.
+    // Remove once OpenClaw scheduled-task model selection is fixed properly.
+    const firstCatalogModelId = remoteModelIds[0];
+    void import('../../utils/sync-openclaw-cron-first-job-model')
+      .then(({ syncOpenClawCronFirstJobModel }) =>
+        syncOpenClawCronFirstJobModel(firstCatalogModelId),
+      )
+      .catch((err) => {
+        logger.warn('[sto-sync] TEMP cron jobs payload.model sync failed:', err);
+      });
+
     const providerService = getProviderService();
     const allAccounts = await listProviderAccounts();
 
