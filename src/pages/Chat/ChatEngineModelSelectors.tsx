@@ -151,19 +151,21 @@ export function ChatEngineSelector({
   );
 
   const agentDefaultEngineType = currentAgent?.engineType ?? 'openclaw';
-  const currentEngineType = resolveChatSessionEngineType(
-    currentSession,
-    agentDefaultEngineType,
-    currentSessionKey,
-  );
-  const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
-  const currentSessionEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
   // Home empty slot, or embed "new" conversation that has not received any messages yet.
   // History embed sessions keep a fixed engine — switching would risk dropping context.
   const isUnusedEmbedSession = isSclawBrowserEmbedChatSessionKey(currentSessionKey)
     && !loading
     && messages.length === 0;
+  const currentEngineType = resolveChatSessionEngineType(
+    currentSession,
+    agentDefaultEngineType,
+    currentSessionKey,
+    { messageCount: messages.length },
+  );
+  const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
+  const currentSessionEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
   const canSwitchEngine = currentSessionKey === DEFAULT_SESSION_KEY || isUnusedEmbedSession;
+  // Unused embed / home slot: engine resolution already follows agent default — keep labels identical.
   const displayEngineLabel = canSwitchEngine
     ? agentDefaultEngineLabel
     : currentSessionEngineLabel;
@@ -347,11 +349,13 @@ export function ChatModelSelector({
     return (sto?.metadata?.customModels as string[] | undefined) ?? [];
   }, [accounts]);
 
+  const messagesLength = useChatStore((s) => s.messages.length);
   const agentDefaultEngineType = currentAgent?.engineType ?? 'openclaw';
   const currentEngineType = resolveChatSessionEngineType(
     currentSession,
     agentDefaultEngineType,
     currentSessionKey,
+    { messageCount: messagesLength },
   );
 
   useEffect(() => {

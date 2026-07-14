@@ -10,6 +10,7 @@ import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { hostApiFetch } from '@/lib/host-api';
 import { resolveHomePageCarryoverModel } from '@/lib/chat-model-options';
+import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 
 /**
  * 首页入口（省区工作台 / Agent Hub）与聊天页保持一致：
@@ -40,15 +41,18 @@ export function useHomeChatEntrySend() {
       workflowSource?: string | null,
       workflowName?: string | null,
     ) => {
-      const { currentAgentId, currentSessionKey, sessions } = useChatStore.getState();
+      const { currentAgentId, currentSessionKey, sessions, messages } = useChatStore.getState();
       const currentSession = sessions.find((session) => session.key === currentSessionKey);
+      const agentEngineType = (agents ?? []).find((agent) => agent.id === (targetAgentId || currentAgentId))?.engineType
+        ?? 'openclaw';
       const targetEngineType = targetAgentId
-        ? (agents ?? []).find((agent) => agent.id === targetAgentId)?.engineType ?? 'openclaw'
-        : currentSessionKey === DEFAULT_SESSION_KEY
-          ? (agents ?? []).find((agent) => agent.id === currentAgentId)?.engineType ?? 'openclaw'
-          : currentSession?.engineType
-          ?? (agents ?? []).find((agent) => agent.id === currentAgentId)?.engineType
-          ?? 'openclaw';
+        ? agentEngineType
+        : resolveChatSessionEngineType(
+          currentSession,
+          agentEngineType,
+          currentSessionKey,
+          { messageCount: messages.length },
+        );
       if (targetEngineType !== 'claude' && !isGatewayRunning) {
         toast.error(t('assistant.gatewayRequired'));
         return;

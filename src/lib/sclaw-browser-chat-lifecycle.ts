@@ -17,6 +17,11 @@ import {
   isSclawBrowserEmbedChatSessionKey,
 } from '@/lib/sclaw-browser-chat-session';
 import { linkSclawBrowserChatSession } from '@/lib/sclaw-browser-host-api';
+import {
+  resolveUnusedEmbedChatEngineType,
+  type ChatEngineType,
+} from '@/lib/resolve-chat-session-engine-type';
+import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import type { ChatSession } from '@/stores/chat/types';
 
@@ -27,14 +32,25 @@ export interface EmbedChatActivation {
   appId: string;
 }
 
-function persistEmbedSessionModel(sessionKey: string, model: string, agentId?: string): void {
+function resolveCurrentAgentEngineType(agentId?: string | null): ChatEngineType {
+  const agents = useAgentsStore.getState().agents;
+  const normalized = (agentId || useChatStore.getState().currentAgentId || 'main').trim().toLowerCase();
+  const agent = agents.find((item) => item.id.trim().toLowerCase() === normalized);
+  return resolveUnusedEmbedChatEngineType(agent?.engineType);
+}
+
+function persistEmbedSessionModel(
+  sessionKey: string,
+  model: string,
+  options: { agentId?: string; engineType: ChatEngineType },
+): void {
   void hostApiFetch('/api/sessions/model', {
     method: 'POST',
     body: JSON.stringify({
       sessionKey,
       model,
-      agentId: agentId || undefined,
-      engineType: 'openclaw',
+      agentId: options.agentId || undefined,
+      engineType: options.engineType,
     }),
   }).catch(() => {
     // Non-blocking: UI still shows inherited model; next toolbar switch will re-persist.
@@ -44,6 +60,7 @@ function persistEmbedSessionModel(sessionKey: string, model: string, agentId?: s
 function upsertChatSessionEntry(chatSessionKey: string, savedMainSessionKey: string): {
   inheritedModel?: string;
   shouldPersistInheritedModel: boolean;
+  engineType: ChatEngineType;
 } {
   const chat = useChatStore.getState();
   const existing = chat.sessions.find((session) => session.key === chatSessionKey);
@@ -54,11 +71,24 @@ function upsertChatSessionEntry(chatSessionKey: string, savedMainSessionKey: str
     mainModel && mainModel !== existing?.model?.trim(),
   );
 
+  // Never inherit engineType from the previous non-embed session. Toolbar shows the
+  // agent default for unused embeds; falling back to mainSession.engineType is what
+  // caused Claude-looking UI to send via OpenClaw and hit "Gateway not connected".
+  const agentEngineType = resolveCurrentAgentEngineType(chat.currentAgentId);
+  const looksUsed = Boolean(
+    chat.sessionLabels[chatSessionKey]?.trim()
+    || chat.sessionLastActivity[chatSessionKey],
+  );
+  const engineType = looksUsed
+    && (existing?.engineType === 'claude' || existing?.engineType === 'openclaw')
+    ? existing.engineType
+    : agentEngineType;
+
   const entry: ChatSession = {
     key: chatSessionKey,
     updatedAt: Date.now(),
     model: inheritedModel,
-    engineType: existing?.engineType ?? mainSession?.engineType,
+    engineType,
   };
 
   useChatStore.setState((state) => ({
@@ -68,7 +98,29 @@ function upsertChatSessionEntry(chatSessionKey: string, savedMainSessionKey: str
     ],
   }));
 
-  return { inheritedModel, shouldPersistInheritedModel };
+  return { inheritedModel, shouldPersistInheritedModel, engineType };
+}
+
+function reconcileUnusedEmbedEngineType(chatSessionKey: string): ChatEngineType {
+  const state = useChatStore.getState();
+  if (state.currentSessionKey !== chatSessionKey) {
+    const session = state.sessions.find((item) => item.key === chatSessionKey);
+    return session?.engineType === 'claude' ? 'claude' : 'openclaw';
+  }
+  if (state.messages.length > 0) {
+    const session = state.sessions.find((item) => item.key === chatSessionKey);
+    return session?.engineType === 'claude' ? 'claude' : resolveCurrentAgentEngineType(state.currentAgentId);
+  }
+
+  const agentEngineType = resolveCurrentAgentEngineType(state.currentAgentId);
+  useChatStore.setState((current) => ({
+    sessions: current.sessions.map((session) => (
+      session.key === chatSessionKey
+        ? { ...session, engineType: agentEngineType }
+        : session
+    )),
+  }));
+  return agentEngineType;
 }
 
 function activateSessionKey(
@@ -78,7 +130,7 @@ function activateSessionKey(
   savedMainSessionKey: string,
 ): EmbedChatActivation {
   const chat = useChatStore.getState();
-  const { inheritedModel, shouldPersistInheritedModel } = upsertChatSessionEntry(
+  const { inheritedModel, shouldPersistInheritedModel, engineType } = upsertChatSessionEntry(
     chatSessionKey,
     savedMainSessionKey,
   );
@@ -89,8 +141,24 @@ function activateSessionKey(
   chat.switchSession(chatSessionKey);
   void linkSclawBrowserChatSession({ runtimeId: embedRuntimeId, chatSessionKey });
 
+  // After history settles, empty embeds are snapped to the agent default so a stale
+  // OpenClaw registry/session stamp cannot diverge from the Claude Agent toolbar.
+  void useChatStore.getState().loadHistory(true).then(() => {
+    const resolvedEngine = reconcileUnusedEmbedEngineType(chatSessionKey);
+    if (shouldPersistInheritedModel && inheritedModel) {
+      persistEmbedSessionModel(chatSessionKey, inheritedModel, {
+        agentId: useChatStore.getState().currentAgentId,
+        engineType: resolvedEngine,
+      });
+    }
+  });
+
+  // Persist immediately with the best-known engine; reconcile may re-POST if needed.
   if (shouldPersistInheritedModel && inheritedModel) {
-    persistEmbedSessionModel(chatSessionKey, inheritedModel, chat.currentAgentId);
+    persistEmbedSessionModel(chatSessionKey, inheritedModel, {
+      agentId: chat.currentAgentId,
+      engineType,
+    });
   }
 
   return { chatSessionKey, savedMainSessionKey, embedRuntimeId, appId };
