@@ -55,7 +55,7 @@ export function resolveSclawBrowserUrl(url: string): string {
     parsed.searchParams.delete('useStoToken');
 
     if (token) {
-      parsed.searchParams.set('stotoken', token);
+      parsed.searchParams.set('token', token);
     }
 
     if (isAbsolute) {

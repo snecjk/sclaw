@@ -19,6 +19,7 @@ import {
   stoChatScrollPaneClass,
 } from '@/lib/surfaces';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
+import { SclawBrowserEmbedChatSessions } from './SclawBrowserEmbedChatSessions';
 
 interface SclawBrowserEmbedChatProps {
   sessionKey: string;
@@ -90,12 +91,13 @@ export function SclawBrowserEmbedChat({ sessionKey, appTitle }: SclawBrowserEmbe
   return (
     <div className="sclaw-browser-embed-chat">
       <header className="sclaw-browser-embed-chat__header">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h2 className="sclaw-browser-embed-chat__title">
             {t('common:moreApps.embedChat.title', { defaultValue: 'AI 助手' })}
           </h2>
           <p className="sclaw-browser-embed-chat__subtitle truncate">{appTitle}</p>
         </div>
+        <SclawBrowserEmbedChatSessions />
         <button
           type="button"
           className="sclaw-browser-embed-chat__close"

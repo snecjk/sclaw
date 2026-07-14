@@ -1,10 +1,19 @@
 /**
  * Activate / deactivate embed-browser chat sessions.
- * Sessions persist per app and stay hidden from the sidebar session list.
+ * Sessions persist per app (multi-conversation) and stay hidden from the sidebar.
  */
 import { hostApiFetch } from '@/lib/host-api';
 import {
-  createSclawBrowserChatSessionKeyForApp,
+  createEmbedChatIndexItem,
+  getActiveEmbedChatSessionKey,
+  listEmbedChatIndex,
+  removeEmbedChatIndexItem,
+  setActiveEmbedChatSessionKey,
+  touchEmbedChatIndexItem,
+  type EmbedChatIndexItem,
+} from '@/lib/sclaw-browser-chat-index';
+import {
+  isSclawBrowserEmbedChatSessionForApp,
   isSclawBrowserEmbedChatSessionKey,
 } from '@/lib/sclaw-browser-chat-session';
 import { linkSclawBrowserChatSession } from '@/lib/sclaw-browser-host-api';
@@ -32,14 +41,13 @@ function persistEmbedSessionModel(sessionKey: string, model: string, agentId?: s
   });
 }
 
-export function activateSclawBrowserEmbedChat(appId: string, embedRuntimeId: string): EmbedChatActivation {
+function upsertChatSessionEntry(chatSessionKey: string, savedMainSessionKey: string): {
+  inheritedModel?: string;
+  shouldPersistInheritedModel: boolean;
+} {
   const chat = useChatStore.getState();
-  const savedMainSessionKey = chat.currentSessionKey;
-  const chatSessionKey = createSclawBrowserChatSessionKeyForApp(appId);
-
   const existing = chat.sessions.find((session) => session.key === chatSessionKey);
   const mainSession = chat.sessions.find((session) => session.key === savedMainSessionKey);
-  // Prefer the conversation model you left, so embed chat matches 对话 rather than gateway default (e.g. GLM).
   const mainModel = mainSession?.model?.trim() || undefined;
   const inheritedModel = mainModel || existing?.model?.trim() || undefined;
   const shouldPersistInheritedModel = Boolean(
@@ -60,6 +68,24 @@ export function activateSclawBrowserEmbedChat(appId: string, embedRuntimeId: str
     ],
   }));
 
+  return { inheritedModel, shouldPersistInheritedModel };
+}
+
+function activateSessionKey(
+  appId: string,
+  embedRuntimeId: string,
+  chatSessionKey: string,
+  savedMainSessionKey: string,
+): EmbedChatActivation {
+  const chat = useChatStore.getState();
+  const { inheritedModel, shouldPersistInheritedModel } = upsertChatSessionEntry(
+    chatSessionKey,
+    savedMainSessionKey,
+  );
+
+  setActiveEmbedChatSessionKey(appId, chatSessionKey);
+  touchEmbedChatIndexItem(appId, chatSessionKey);
+
   chat.switchSession(chatSessionKey);
   void linkSclawBrowserChatSession({ runtimeId: embedRuntimeId, chatSessionKey });
 
@@ -68,6 +94,77 @@ export function activateSclawBrowserEmbedChat(appId: string, embedRuntimeId: str
   }
 
   return { chatSessionKey, savedMainSessionKey, embedRuntimeId, appId };
+}
+
+/** Open last active conversation for this app (or create the first one). */
+export function activateSclawBrowserEmbedChat(appId: string, embedRuntimeId: string): EmbedChatActivation {
+  const chat = useChatStore.getState();
+  const savedMainSessionKey = chat.currentSessionKey;
+  const chatSessionKey = getActiveEmbedChatSessionKey(appId);
+  return activateSessionKey(appId, embedRuntimeId, chatSessionKey, savedMainSessionKey);
+}
+
+/** Create a fresh conversation under the same app and switch to it. */
+export function createSclawBrowserEmbedChatSession(
+  appId: string,
+  embedRuntimeId: string,
+  savedMainSessionKey: string | null,
+): EmbedChatActivation {
+  const chat = useChatStore.getState();
+  const restoreKey = savedMainSessionKey ?? chat.currentSessionKey;
+  const { item } = createEmbedChatIndexItem(appId);
+  return activateSessionKey(appId, embedRuntimeId, item.key, restoreKey);
+}
+
+/** Switch to an existing conversation for this app. */
+export function switchSclawBrowserEmbedChatSession(
+  appId: string,
+  embedRuntimeId: string,
+  sessionKey: string,
+  savedMainSessionKey: string | null,
+): EmbedChatActivation {
+  const chat = useChatStore.getState();
+  const restoreKey = savedMainSessionKey ?? chat.currentSessionKey;
+  return activateSessionKey(appId, embedRuntimeId, sessionKey, restoreKey);
+}
+
+export function listSclawBrowserEmbedChatSessions(appId: string): EmbedChatIndexItem[] {
+  const index = listEmbedChatIndex(appId);
+  const chat = useChatStore.getState();
+  return index.items.map((item) => {
+    const label = chat.sessionLabels[item.key]?.trim();
+    return label ? { ...item, title: label } : item;
+  });
+}
+
+/**
+ * Delete one embed conversation. If it was the last one, open a fresh empty session.
+ * Activates the next key before tombstoning the deleted session in chat store.
+ */
+export async function deleteSclawBrowserEmbedChatSession(
+  appId: string,
+  embedRuntimeId: string,
+  sessionKey: string,
+  savedMainSessionKey: string | null,
+): Promise<EmbedChatActivation | null> {
+  if (!isSclawBrowserEmbedChatSessionForApp(sessionKey, appId)) {
+    return null;
+  }
+
+  const chat = useChatStore.getState();
+  const restoreKey = savedMainSessionKey ?? chat.currentSessionKey;
+  const { nextActiveKey } = removeEmbedChatIndexItem(appId, sessionKey);
+
+  const activation = activateSessionKey(appId, embedRuntimeId, nextActiveKey, restoreKey);
+
+  // Best-effort: remove from sidebar list / optimistic tombstone without blocking UI.
+  if (sessionKey !== nextActiveKey) {
+    void chat.deleteSession(sessionKey, { skipSessionRefresh: true }).catch(() => {
+      // Index/UI already moved on; gateway tombstone is optional.
+    });
+  }
+
+  return activation;
 }
 
 /** Leave embed chat UI without deleting persisted history. */

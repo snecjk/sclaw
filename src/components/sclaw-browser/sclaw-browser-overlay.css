@@ -284,10 +284,53 @@ body.sclaw-browser-split-dragging * {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
   padding: 10px 12px;
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.sclaw-browser-embed-chat__sessions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.sclaw-browser-embed-chat__session-btn,
+.sclaw-browser-embed-chat__session-picker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.04);
+  color: #64748b;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.sclaw-browser-embed-chat__session-picker {
+  width: auto;
+  min-width: 28px;
+  padding: 0 6px;
+}
+
+.sclaw-browser-embed-chat__session-btn:hover,
+.sclaw-browser-embed-chat__session-picker:hover {
+  color: #0f172a;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.sclaw-browser-embed-chat__session-picker[data-state='open'] {
+  color: #ff6700;
+  background: rgba(255, 103, 0, 0.08);
 }
 
 .sclaw-browser-embed-chat__title {
