@@ -7,13 +7,17 @@
  * `payload.model` in ~/.stoclaw/openclaw/cron/jobs.json to `sto/<firstCatalogId>`.
  *
  * Only mutates that field; all other job / payload keys stay untouched.
+ * Before the first rewrite, copies jobs.json to sto_jobs.json.bak in the same
+ * directory when that backup is missing; later rewrites skip recreating it.
  * Remove this module once OpenClaw cron model selection is corrected upstream.
  */
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { getOpenClawConfigDir } from './paths';
 import { logger } from './logger';
+
+const STO_JOBS_BACKUP_NAME = 'sto_jobs.json.bak';
 
 interface CronJobPayload {
   model?: string;
@@ -85,8 +89,25 @@ export async function syncOpenClawCronFirstJobModel(modelId: string): Promise<bo
     return false;
   }
 
+  const cronDir = dirname(jobsPath);
+  const backupPath = join(cronDir, STO_JOBS_BACKUP_NAME);
+
   try {
-    await mkdir(dirname(jobsPath), { recursive: true });
+    await mkdir(cronDir, { recursive: true });
+
+    // Backup once: create sto_jobs.json.bak only when missing; if present, rewrite jobs.json only.
+    let backupExists = false;
+    try {
+      await access(backupPath);
+      backupExists = true;
+    } catch {
+      backupExists = false;
+    }
+    if (!backupExists) {
+      await writeFile(backupPath, raw, 'utf8');
+      logger.info(`[openclaw-cron] TEMP backed up jobs.json -> ${STO_JOBS_BACKUP_NAME}`);
+    }
+
     const tmpPath = `${jobsPath}.${randomUUID()}.tmp`;
     await writeFile(tmpPath, JSON.stringify(data, null, 2), 'utf8');
     await rename(tmpPath, jobsPath);
