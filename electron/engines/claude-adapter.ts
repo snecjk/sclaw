@@ -55,7 +55,7 @@ const CLAUDE_VISION_MIME_TYPES = new Set([
   'image/webp',
 ]);
 
-function getBundledClaudeExecutablePath(): string | undefined {
+export function getBundledClaudeExecutablePath(): string | undefined {
   if (!process.resourcesPath) return undefined;
 
   const binaryName = process.platform === 'win32' ? 'claude.exe' : 'claude';
@@ -72,7 +72,7 @@ function getBundledClaudeExecutablePath(): string | undefined {
   return existsSync(candidate) ? candidate : undefined;
 }
 
-async function buildClaudeEnvForAccount(accountId?: string): Promise<NodeJS.ProcessEnv> {
+export async function buildClaudeEnvForAccount(accountId?: string): Promise<NodeJS.ProcessEnv> {
   const base: NodeJS.ProcessEnv = {
     ...process.env,
     CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
