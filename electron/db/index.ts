@@ -25,4 +25,8 @@ export {
   DemoRecordRepository,
   getDemoRecordRepository,
 } from './repositories/demo-record-repository';
+export {
+  WorkflowRuntimeRepository,
+  getWorkflowRuntimeRepository,
+} from './repositories/workflow-runtime-repository';
 export type { SqliteDatabaseInfo, SqliteMigration, SqliteMigrationRecord, SqliteRecordTimestamps } from './types';
