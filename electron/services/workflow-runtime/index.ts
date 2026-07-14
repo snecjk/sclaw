@@ -18,7 +18,7 @@ export interface RuntimeHandlers {
 
 export function registerWorkflowRuntimeHandlers(deps: EngineDeps): RuntimeHandlers {
   const engine = createEngine(deps);
-  ipcMain.handle('workflow-runtime:start', async (_e, a) => { await engine.startRun(a); });
+  ipcMain.handle('workflow-runtime:start', async (_e, a) => { await engine.startWorkflow(a); });
   ipcMain.handle('workflow-runtime:resume', async (_e, runId: string) => { await engine.resumeRun(runId); });
   ipcMain.handle('workflow-runtime:cancel', async (_e, { runId, nodeId }: { runId: string; nodeId: string }) => { engine.cancel(runId, nodeId); });
   ipcMain.handle('workflow-runtime:resumeApproval', async (_e, { runId, nodeId, decision }: any) => { await engine.resumeApproval(runId, nodeId, decision); });

@@ -31,6 +31,11 @@ const electronAPI = {
         'workflow:appendSessionRecord',
         'workflow:stream:subscribe',
         'workflow:stream:unsubscribe',
+        // Workflow runtime（客户端执行下沉）
+        'workflow-runtime:start',
+        'workflow-runtime:resume',
+        'workflow-runtime:cancel',
+        'workflow-runtime:resumeApproval',
         'gateway:health',
         'gateway:getControlUiUrl',
         // OpenClaw

@@ -69,6 +69,7 @@ import {
 } from '../services/providers/provider-runtime-sync';
 import { validateApiKeyWithProvider } from '../services/providers/provider-validation';
 import { appUpdater } from './updater';
+import { installWorkflowRuntime } from '../services/workflow-runtime/bootstrap';
 import { registerHostApiProxyHandlers } from './ipc/host-api-proxy';
 import { registerPreviewHttpFetchHandlers } from './ipc/preview-http-fetch';
 import { registerWorkflowStreamHandlers } from './ipc/workflow-stream-proxy';
@@ -166,6 +167,9 @@ export function registerIpcHandlers(
 
   // Float icon handlers (desktop floating launcher)
   registerFloatIconHandlers(getFloatIconWindow);
+
+  // Workflow runtime（客户端执行下沉）：注册 workflow-runtime:* IPC + 注入生产依赖
+  installWorkflowRuntime();
 }
 
 function parseEngineType(value: unknown): AgentEngineType | undefined {

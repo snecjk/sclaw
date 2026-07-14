@@ -18,6 +18,7 @@ import { startFlushLoop, stopFlushLoop, type FlushDeps } from './outbox-flusher'
 import { uploadArtifact, type ArtifactRow } from './artifact-uploader';
 import { recoverOnLaunch, resumeRun } from './crash-recovery';
 import { cancelAgent } from './agent-runner';
+import { generatePlan } from './plan-generator';
 
 const SMART_TYPES = new Set(['agent_task', 'agent_data_fetch', 'agent_data_process', 'agent_condition', 'agent_output']);
 const nowIso = () => new Date().toISOString();
@@ -30,11 +31,18 @@ export interface EngineDeps {
   onTokenExpired?: () => void;
   uploadOssFile?: any;                     // uploadOssFile（artifact-uploader）
   onRecover?: (runs: any[]) => void;
+  dslClient: { fetchVersion(workflowId: string, versionId: string): Promise<any> };  // GET /agent/v2/workflows/{id}/versions/{vid}
 }
 
 export interface StartRunArgs {
   workflowId: string; versionId: string; runId: string; input: any;
   definition: any; startedAt: string;   // definition 已拉取（PlanGenerator 或外部注入）
+}
+
+/** 端到端发起：renderer 仅给 runId（v2 start 注册所得）+ workflowId/versionId/input，
+ * engine 内部拉 DSL → generatePlan 落本地计划 → dispatch 执行。 */
+export interface StartWorkflowArgs {
+  runId: string; workflowId: string; versionId: string; input: any; startedAt: string;
 }
 
 export function createEngine(deps: EngineDeps) {
@@ -84,8 +92,16 @@ export function createEngine(deps: EngineDeps) {
   }
 
   return {
+    async startWorkflow(args: StartWorkflowArgs): Promise<void> {
+      // 端到端：拉 DSL → generatePlan 落本地计划（wf_run + wf_node_run + outbox）→ dispatch
+      await generatePlan({ repo, dslClient: deps.dslClient, workflowId: args.workflowId,
+        versionId: args.versionId, runId: args.runId, input: args.input, startedAt: args.startedAt });
+      const run = await repo.getRun(args.runId);
+      const definition = run?.definition_json ? JSON.parse(run.definition_json) : {};
+      await dispatch(args.runId, definition);
+    },
     async startRun(args: StartRunArgs): Promise<void> {
-      // 若未传 definition，可走 generatePlan 拉取；这里 definition 已由外部拉取注入
+      // definition 已由外部拉取注入（测试/直用）
       await dispatch(args.runId, args.definition);
     },
     async resumeRun(runId: string): Promise<void> {
