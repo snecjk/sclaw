@@ -33,6 +33,11 @@ export interface AgentMemoryIndexRecordInput {
   turnId?: string;
   source?: string;
   appId?: string;
+  actorId?: string;
+  role?: string;
+  expirationDate?: string;
+  attributedTo?: string;
+  hash?: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -40,6 +45,7 @@ export interface AgentMemorySearchResultItem {
   recordId: string;
   score: number;
   content: string;
+  hash?: string | null;
   memoryType?: string;
   source?: string;
   userId?: string | null;
@@ -48,6 +54,10 @@ export interface AgentMemorySearchResultItem {
   runId?: string | null;
   sessionId?: string | null;
   turnId?: string | null;
+  actorId?: string | null;
+  role?: string | null;
+  expirationDate?: string | null;
+  attributedTo?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
   occurredAt?: string | null;

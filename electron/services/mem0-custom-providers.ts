@@ -267,6 +267,11 @@ class StoMemoryCenterVectorStoreProvider implements VectorStore {
         createdAt: this.readString(payload, 'created_at', 'createdAt'),
         updatedAt: this.readString(payload, 'updated_at', 'updatedAt'),
         source: this.readString(payload, 'source') ?? 'mem0',
+        actorId: this.readString(payload, 'actor_id', 'actorId'),
+        role: this.readString(payload, 'role'),
+        expirationDate: this.readString(payload, 'expiration_date', 'expirationDate'),
+        attributedTo: this.readString(payload, 'attributed_to', 'attributedTo'),
+        hash: this.readString(payload, 'hash'),
         metadata: this.compactMetadata(payload),
       };
     });
@@ -439,10 +444,23 @@ class StoMemoryCenterVectorStoreProvider implements VectorStore {
     };
   }
 
-  /** 仅持久化业务扩展字段，避免把 mem0 原始 payload（尤其 data）嵌入 metadata。 */
+  /**
+   * 仅持久化业务扩展字段，避免把 mem0 原始 payload（尤其 data）嵌入 metadata。
+   * 实体集合依赖 linkedMemoryIds 精确关联主记忆，不能在远端同步时丢弃。
+   */
   private compactMetadata(payload: Record<string, unknown>): Record<string, unknown> {
     const metadata: Record<string, unknown> = {};
-    for (const key of ['memoryType', 'confidence', 'status']) {
+    for (const key of [
+      'memoryType',
+      'confidence',
+      'status',
+      'textLemmatized',
+      'entityType',
+      'linkedMemoryIds',
+      // 兼容旧版或外部调用方使用的下划线命名。
+      'entity_type',
+      'linked_memory_ids',
+    ]) {
       if (payload[key] !== undefined) {
         metadata[key] = payload[key];
       }
@@ -455,6 +473,7 @@ class StoMemoryCenterVectorStoreProvider implements VectorStore {
     return this.normalizePayload({
       ...(item.metadata || {}),
       data: item.content,
+      hash: item.hash,
       memoryScope: item.memoryType,
       user_id: item.userId,
       app_id: item.appId,
@@ -462,6 +481,10 @@ class StoMemoryCenterVectorStoreProvider implements VectorStore {
       run_id: item.runId,
       sessionKey: item.sessionId,
       turn_id: item.turnId,
+      actor_id: item.actorId,
+      role: item.role,
+      expiration_date: item.expirationDate,
+      attributed_to: item.attributedTo,
       source: item.source,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
