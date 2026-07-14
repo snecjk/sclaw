@@ -226,7 +226,8 @@ export const useSessionCatalogStore = create<SessionCatalogState>((set, get) => 
   pickFolder: () => pickProjectFolder(),
 
   patchSessionCatalog: async (input) => {
-    const workspaceId = get().sessionWorkspaceByKey[input.sessionKey] ?? get().activeWorkspaceId();
+    const workspaceId = get().sessionWorkspaceByKey[input.sessionKey]
+      ?? DEFAULT_WORKSPACE_ID;
     const { patchCatalogSession } = await import('@/lib/session-catalog-api');
     await patchCatalogSession({ workspaceId, ...input });
     await get().refreshAllCatalogMeta();

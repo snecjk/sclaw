@@ -1,5 +1,5 @@
 /**
- * SidebarRecentSessionRowTrailing — 最近会话行尾：状态位 + hover「...」菜单（重命名 / 移至项目 / 删除）。
+ * SidebarRecentSessionRowTrailing — 最近会话行尾：状态位 + hover「...」菜单（置顶 / 重命名 / 移至项目 / 删除）。
  */
 import {
   ChevronRight,
@@ -7,6 +7,7 @@ import {
   FolderPlus,
   MoreHorizontal,
   Pencil,
+  Pin,
   Trash2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -34,9 +35,11 @@ import type { WorkspaceDto } from '@/lib/session-catalog-api';
 export interface SidebarRecentSessionRowTrailingProps {
   sessionKey: string;
   isActive?: boolean;
+  isPinned: boolean;
   projects: WorkspaceDto[];
   currentProjectId: string | null;
   isInProject: boolean;
+  onPin: () => void;
   onRename: () => void;
   onDelete: () => void;
   onMoveToProject: (projectId: string) => void;
@@ -50,9 +53,11 @@ const SIDEBAR_RECENT_ROW_TRAILING_W_CLASS = 'w-12';
 export function SidebarRecentSessionRowTrailing({
   sessionKey,
   isActive = false,
+  isPinned,
   projects,
   currentProjectId,
   isInProject,
+  onPin,
   onRename,
   onDelete,
   onMoveToProject,
@@ -73,10 +78,13 @@ export function SidebarRecentSessionRowTrailing({
     >
       <div
         className={cn(
-          'pointer-events-none flex h-5 w-full items-center justify-end',
+          'pointer-events-none flex h-5 w-full items-center justify-end gap-1',
           'transition-opacity group-hover:opacity-0 group-hover:invisible',
         )}
       >
+        {isPinned ? (
+          <Pin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        ) : null}
         <SidebarRecentSessionStatus sessionKey={sessionKey} />
       </div>
       <div
@@ -105,6 +113,16 @@ export function SidebarRecentSessionRowTrailing({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className={sidebarRecentMenuContentClass}>
+            <DropdownMenuItem
+              className={sidebarRecentMenuItemClass}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPin();
+              }}
+            >
+              <Pin className="h-4 w-4 shrink-0" aria-hidden />
+              {isPinned ? t('sidebar.unpinInRecent') : t('sidebar.pinInRecent')}
+            </DropdownMenuItem>
             <DropdownMenuItem
               className={sidebarRecentMenuItemClass}
               onClick={(e) => {
