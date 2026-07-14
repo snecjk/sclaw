@@ -41,14 +41,13 @@ const sendMessage = useChatStore((s) => s.sendMessage)
 | ---------------- | ----------- | ---------------------------------------------- |
 | 验证与会话解析   | 1468-1516   | 校验消息、解析目标 session、乐观插入用户消息到 UI |
 | 启动监控定时器   | 1520-1563   | 历史轮询（3s 后每 4s）、90s 安全超时检测卡死    |
-| 通过 IPC 发送    | 1565-1635   | 根据是否有附件选择不同发送路径                   |
+| 通过 Host API 发送 | 1565-1635   | 文本与附件统一走 `/api/chat/send`                  |
 
-**两条发送路径：**
+**统一发送路径：**
 
-- **有附件** → `hostApiFetch('/api/chat/send-with-media', ...)`
-- **纯文本** → `useGatewayStore().rpc('chat.send', ...)`
+- **文本 / 附件** → `hostApiFetch('/api/chat/send', ...)`
 
-两条路径均使用 120 秒超时。
+发送入口统一在 Main/Host API 层完成引擎解析、媒体处理、钉钉 extras 透传和 adapter 调用。
 
 ---
 
@@ -73,16 +72,16 @@ const sendMessage = useChatStore((s) => s.sendMessage)
 
 ---
 
-## 6. Host API Server 路由处理（有附件时）
+## 6. Host API Server 路由处理
 
 **文件**: `electron/api/routes/gateway.ts` (line 80-127)
 
-`POST /api/chat/send-with-media` 路由处理：
+`POST /api/chat/send` 路由处理：
 
 1. 读取媒体文件
 2. Base64 编码图片（PNG、JPEG、BMP、WebP）
 3. 将文件引用添加到消息文本中
-4. 最终调用 `gatewayManager.rpc('chat.send', ...)`
+4. 根据 engine adapter 调用 `sendMessage` / `sendMessageWithMedia`
 
 **文件**: `electron/api/routes/files.ts` (line 84-108)
 
@@ -127,17 +126,13 @@ Gateway 进程收到 `chat.send` 后启动 AI 对话，通过 WebSocket **流式
     |
 [Chat Page] sendMessage (from Zustand store)
     |
-[chat.ts] sendMessage()
+[chat store] sendMessage()
 |-- 乐观写入用户消息到 UI
 |-- 启动轮询 + 安全超时
-|-- 发送 --+-- 有附件 -> hostApiFetch('/api/chat/send-with-media')
-           |                  |
-           |        [Main: Host API Server]
-           |         处理媒体文件 + Base64 编码
-           |                  |
-           +-- 纯文本 -> gatewayStore.rpc('chat.send')
+|-- 发送 -> hostApiFetch('/api/chat/send')
                               |
-               [Renderer IPC] invokeIpc('gateway:rpc')
+               [Main: Host API Server]
+               统一处理文本 / 媒体 / extras / adapter
                               |
                [Main Process] ipc-handlers.ts
                               |
@@ -182,14 +177,14 @@ Gateway 进程收到 `chat.send` 后启动 AI 对话，通过 WebSocket **流式
 | ----------------------------------------- | --------------------------- |
 | `src/pages/Chat/ChatInput.tsx`            | 输入组件、发送触发          |
 | `src/pages/Chat/index.tsx`                | Chat 页面、Store 绑定       |
-| `src/stores/chat.ts`                      | sendMessage 核心逻辑        |
+| `src/stores/chat/send-actions.ts`         | sendMessage 编排            |
 | `src/stores/gateway.ts`                   | Gateway RPC 封装            |
 | `src/lib/api-client.ts`                   | IPC 调用封装                |
 | `src/lib/host-api.ts`                     | Host API 代理请求           |
 | `electron/main/ipc-handlers.ts`           | Main 进程 IPC 注册          |
 | `electron/main/ipc/host-api-proxy.ts`     | hostapi:fetch 代理          |
 | `electron/api/server.ts`                  | Host API HTTP Server        |
-| `electron/api/routes/gateway.ts`          | /api/chat/send-with-media   |
+| `electron/api/routes/gateway.ts`          | /api/chat/send              |
 | `electron/api/routes/files.ts`            | /api/files/stage-paths      |
 | `electron/gateway/manager.ts`             | WebSocket RPC 发送          |
 

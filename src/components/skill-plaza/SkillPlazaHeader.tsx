@@ -1,5 +1,6 @@
 import { FolderOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { invokeIpc } from '@/lib/api-client';
 import { stoPageTitleClass } from '@/lib/surfaces';
 
 export function SkillPlazaHeader() {
@@ -7,9 +8,7 @@ export function SkillPlazaHeader() {
 
   const handleOpenFolder = async () => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { ipcRenderer } = window.electron as any;
-      await ipcRenderer.invoke('open-skill-folder');
+      await invokeIpc('open-skill-folder');
     } catch {
       // fallback: do nothing
     }

@@ -696,7 +696,9 @@ async function initialize(): Promise<void> {
   });
 
   gm.on('chat:message', (data) => {
-    heb.emit('gateway:chat-message', data);
+    if (data && typeof data === 'object' && 'engineEvent' in data) {
+      heb.emit('gateway:engine-event', (data as { engineEvent?: unknown }).engineEvent);
+    }
   });
 
   gm.on('channel:status', (data) => {

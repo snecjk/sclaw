@@ -11,6 +11,7 @@ import { logger } from '../utils/logger';
 import { getClaudeConfigDir } from '../utils/paths';
 import { getApiKey } from '../utils/secure-storage';
 import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
+import { toLegacyChatMessagePayload, type NormalizedEngineEvent } from '../gateway/normalized-engine-event';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, upsertEngineSessionRegistryEntry, type EngineSessionRegistryEntry } from './session-registry';
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EngineSessionSummary } from './types';
@@ -766,9 +767,9 @@ export async function consumeClaudeQuery(
   // message is emitted as 'final'.
   let streamText = '';
 
-  const emitChat = (payload: Record<string, unknown>) => {
+  const emitEngineEvent = (event: NormalizedEngineEvent) => {
     if (!eventSink) return;
-    eventSink.emit('chat:message', { message: { ...payload, runId, sessionKey, seq: seq++ } });
+    eventSink.emit('chat:message', toLegacyChatMessagePayload({ ...event, runId, sessionKey, seq: seq++ }));
   };
   const emitAgentCompleted = () => {
     if (!eventSink) return;
@@ -778,7 +779,7 @@ export async function consumeClaudeQuery(
   try {
     // Mirror the OpenClaw Gateway's 'started' event so the renderer adopts the
     // runId/sending state immediately, before the first token arrives.
-    emitChat({ state: 'started' });
+    emitEngineEvent({ type: 'turn.started' });
 
     for await (const message of query) {
       const messageSessionId = typeof message.session_id === 'string' ? message.session_id : sessionId;
@@ -797,8 +798,8 @@ export async function consumeClaudeQuery(
             const delta = event.delta as { type?: string; text?: string } | undefined;
             if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
               streamText += delta.text;
-              emitChat({
-                state: 'delta',
+              emitEngineEvent({
+                type: 'message.delta',
                 message: {
                   role: 'assistant',
                   id: runId,
@@ -880,8 +881,8 @@ export async function consumeClaudeQuery(
         // until the 'result' -> agent completed notification finalizes the run.
         if (liveMessage.type === 'assistant') {
           streamText = '';
-          emitChat({
-            state: 'final',
+          emitEngineEvent({
+            type: 'message.final',
             message: {
               id: nextEntry.id,
               role: 'assistant',
@@ -911,14 +912,14 @@ export async function consumeClaudeQuery(
     }
   } catch (error) {
     errorThrown = true;
-    emitChat({ state: 'error', errorMessage: String(error) });
+    emitEngineEvent({ type: 'turn.failed', errorMessage: String(error) });
     throw error;
   } finally {
     activeClaudeQueries.delete(sessionKey);
     // If the loop ended without a result and without an error, the query was
     // closed (e.g. user abort) — emit 'aborted' so the renderer finalizes.
     if (!seenResult && !errorThrown) {
-      emitChat({ state: 'aborted' });
+      emitEngineEvent({ type: 'turn.aborted' });
     }
   }
 }

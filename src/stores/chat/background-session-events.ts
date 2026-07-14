@@ -11,12 +11,25 @@ import {
   makeAttachedFile,
   upsertToolStatuses,
 } from './helpers';
-import { resolveAssistantFinalTerminalState } from './run-completion';
 import type { ChatGet, ChatSet } from './store-api';
 import type { AttachedFileMeta, ChatSession, RawMessage } from './types';
 import { getAgentIdFromSessionKey } from './session-identity';
-import { getSessionRuntimeState, patchSessionRuntimeState } from './session-runtime';
+import { getSessionRuntimeState } from './session-runtime';
+import { applyRuntimePatch } from './runtime-controller';
 import { appendStreamingAssistantSnapshot, appendStreamingToolResultSnapshot } from './streaming-state';
+import { buildTerminalRuntimePatch, resolveAssistantFinalTurnState } from './turn-state-machine';
+import { buildTerminalTurnEffects, executeTurnEffects } from './turn-effects';
+import { logChatFlow } from './chat-flow-log';
+
+export interface BackgroundChatEvent {
+  sessionKey: string;
+  resolvedState: string;
+  runId: string;
+  message: unknown;
+  phase: unknown;
+  errorMessage: string;
+  suppressTerminalEffects?: boolean;
+}
 
 export interface BackgroundSessionEventDependencies {
   get: ChatGet;
@@ -33,11 +46,26 @@ export interface BackgroundSessionEventDependencies {
 
 export function createBackgroundSessionEventHandler(dependencies: BackgroundSessionEventDependencies) {
   const { get, resolveEngineType, isToolOnlyMessage, dispatchMemoryCapture, markUnreadAfterRun } = dependencies;
-  return (set: ChatSet, sessionKey: string, event: Record<string, unknown>, resolvedState: string, runId: string): void => {
+  return (set: ChatSet, backgroundEvent: BackgroundChatEvent): void => {
+    const {
+      resolvedState,
+      runId,
+      sessionKey,
+      message,
+      phase,
+      errorMessage,
+      suppressTerminalEffects,
+    } = backgroundEvent;
+    logChatFlow('event.background.apply', {
+      state: resolvedState,
+      runId,
+      sessionKey,
+      suppressTerminalEffects: Boolean(suppressTerminalEffects),
+    });
     switch (resolvedState) {
       case 'started': {
         noteObservedRun(runId);
-        set((state) => patchSessionRuntimeState(state, sessionKey, {
+        set((state) => applyRuntimePatch(state, sessionKey, {
           sending: true,
           activeRunId: runId || getSessionRuntimeState(state.runtimeBySessionKey, sessionKey).activeRunId,
           error: null,
@@ -46,20 +74,20 @@ export function createBackgroundSessionEventHandler(dependencies: BackgroundSess
       }
       case 'delta': {
         noteObservedRun(runId);
-        const updates = collectToolUpdates(event.message, resolvedState);
-        set((state) => patchSessionRuntimeState(state, sessionKey, (runtime) => ({
+        const updates = collectToolUpdates(message, resolvedState);
+        set((state) => applyRuntimePatch(state, sessionKey, (runtime) => ({
           sending: true,
           error: null,
-          streamingMessage: isToolResultMessage(event.message) ? runtime.streamingMessage : event.message ?? runtime.streamingMessage,
-          streamingMessages: appendStreamingAssistantSnapshot(runtime.streamingMessages, event.message),
+          streamingMessage: isToolResultMessage(message) ? runtime.streamingMessage : message ?? runtime.streamingMessage,
+          streamingMessages: appendStreamingAssistantSnapshot(runtime.streamingMessages, message),
           streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
         })));
         break;
       }
       case 'final': {
-        const finalMessage = event.message as RawMessage | undefined;
+        const finalMessage = message as RawMessage | undefined;
         if (!finalMessage) {
-          set((state) => patchSessionRuntimeState(state, sessionKey, {
+          set((state) => applyRuntimePatch(state, sessionKey, {
             pendingFinal: true, streamingText: '', streamingMessage: null,
           }));
           break;
@@ -75,11 +103,14 @@ export function createBackgroundSessionEventHandler(dependencies: BackgroundSess
         const currentState = get();
         const runtime = getSessionRuntimeState(currentState.runtimeBySessionKey, sessionKey);
         const engineType = resolveEngineType(currentState.sessions, sessionKey, getAgentIdFromSessionKey(sessionKey));
-        const { isTerminalOutput } = resolveAssistantFinalTerminalState(
-          engineType, runtime.sending, event.phase, finalMessage,
-        );
+        const { isTerminalOutput } = resolveAssistantFinalTurnState({
+          engineType,
+          sending: runtime.sending,
+          phase,
+          message: finalMessage,
+        });
         set((state) => {
-          const patch = patchSessionRuntimeState(state, sessionKey, (currentRuntime) => ({
+          const patch = applyRuntimePatch(state, sessionKey, (currentRuntime) => ({
             sending: isTerminalOutput ? false : currentRuntime.sending,
             activeRunId: isTerminalOutput ? null : currentRuntime.activeRunId,
             streamingText: '',
@@ -104,25 +135,34 @@ export function createBackgroundSessionEventHandler(dependencies: BackgroundSess
           }
           return patch;
         });
-        if (isTerminalOutput && !toolOnly) {
-          dispatchMemoryCapture({ agentId: getAgentIdFromSessionKey(sessionKey), runId: runId || undefined, sessionKey, engineType });
+        if (isTerminalOutput && !toolOnly && !suppressTerminalEffects) {
+          executeTurnEffects(buildTerminalTurnEffects({
+            agentId: getAgentIdFromSessionKey(sessionKey),
+            runId: runId || undefined,
+            sessionKey,
+            engineType,
+          }), {
+            get,
+            set,
+            dispatchMemoryCapture,
+          });
         }
         break;
       }
       case 'error':
-        set((state) => patchSessionRuntimeState(state, sessionKey, terminalRuntimePatch(
-          String(event.errorMessage || 'An error occurred'),
+        set((state) => applyRuntimePatch(state, sessionKey, buildTerminalRuntimePatch(
+          errorMessage,
         )));
         break;
       case 'aborted':
-        set((state) => patchSessionRuntimeState(state, sessionKey, terminalRuntimePatch(null)));
+        set((state) => applyRuntimePatch(state, sessionKey, buildTerminalRuntimePatch(null)));
         break;
       default:
-        if (event.message && typeof event.message === 'object') {
-          const updates = collectToolUpdates(event.message, 'delta');
-          set((state) => patchSessionRuntimeState(state, sessionKey, (runtime) => ({
-            streamingMessage: event.message ?? runtime.streamingMessage,
-            streamingMessages: appendStreamingAssistantSnapshot(runtime.streamingMessages, event.message),
+        if (message && typeof message === 'object') {
+          const updates = collectToolUpdates(message, 'delta');
+          set((state) => applyRuntimePatch(state, sessionKey, (runtime) => ({
+            streamingMessage: message ?? runtime.streamingMessage,
+            streamingMessages: appendStreamingAssistantSnapshot(runtime.streamingMessages, message),
             streamingTools: updates.length > 0 ? upsertToolStatuses(runtime.streamingTools, updates) : runtime.streamingTools,
           })));
         }
@@ -132,14 +172,6 @@ export function createBackgroundSessionEventHandler(dependencies: BackgroundSess
 
 function isToolResultMessage(message: unknown): boolean {
   return Boolean(message && typeof message === 'object' && isToolResultRole((message as RawMessage).role));
-}
-
-function terminalRuntimePatch(error: string | null) {
-  return {
-    sending: false, activeRunId: null, streamingText: '', streamingMessage: null,
-    streamingMessages: [], streamingToolResults: [], streamingTools: [], pendingFinal: false,
-    lastUserMessageAt: null, optimisticUserMessage: null, pendingToolImages: [], error,
-  };
 }
 
 function applyToolResult(
@@ -168,7 +200,7 @@ function applyToolResult(
         files.push(makeAttachedFile(ref));
       }
     }
-    return patchSessionRuntimeState(state, sessionKey, {
+    return applyRuntimePatch(state, sessionKey, {
       pendingFinal: true,
       streamingText: '',
       streamingMessage: null,

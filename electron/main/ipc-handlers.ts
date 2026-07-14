@@ -1626,7 +1626,9 @@ function registerGatewayHandlers(
   });
 
   gatewayManager.on('chat:message', (data) => {
-    broadcast('gateway:chat-message', enrichGatewayPayload(data));
+    if (data && typeof data === 'object' && 'engineEvent' in data) {
+      broadcast('gateway:engine-event', enrichGatewayPayload((data as { engineEvent?: unknown }).engineEvent));
+    }
   });
 
   gatewayManager.on('exit', (code) => {

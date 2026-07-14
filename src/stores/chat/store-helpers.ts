@@ -1,11 +1,5 @@
-import { DEFAULT_SESSION_KEY, type ChatSession, type RawMessage, type SendMessageOptions, type WorkflowContextBlock } from './types';
-import {
-  isAnyCronSessionKey,
-  isClaudeScheduledTaskDatedSessionKey,
-  isClaudeScheduledTaskRunSessionKey,
-  isClaudeScheduledTaskSessionKey,
-  isScheduledTaskSessionKey,
-} from './cron-session-utils';
+import { type ChatSession, type RawMessage, type SendMessageOptions, type WorkflowContextBlock } from './types';
+import { resolveChatEngineType } from '@/lib/chat-engine-resolution';
 import { getAgentIdFromSessionKey } from './session-identity';
 
 export function stripAgentMemoryFromHistoryMessage(
@@ -73,16 +67,14 @@ export function resolveEngineTypeForSession(
   agentId: string | undefined | null,
   getAgentEngineType: (agentId: string | undefined | null) => ChatSession['engineType'] | undefined,
 ): ChatSession['engineType'] | undefined {
-  if (sessionKey === DEFAULT_SESSION_KEY) {
-    return getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey));
-  }
-  if (isClaudeScheduledTaskSessionKey(sessionKey)
-    || isClaudeScheduledTaskRunSessionKey(sessionKey)
-    || isClaudeScheduledTaskDatedSessionKey(sessionKey)) {
-    return 'claude';
-  }
-  return getSessionEngineType(sessions, sessionKey)
-    ?? getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey));
+  return resolveChatEngineType({
+    sessionKey,
+    sessionEngineType: getSessionEngineType(sessions, sessionKey),
+    agentEngineType: getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey)),
+    defaultSessionUsesAgent: true,
+    sessionEngineFirst: false,
+    inferOpenClawTaskKeys: false,
+  });
 }
 
 export function normalizeSendMessageOptions(args: unknown[]): SendMessageOptions {
@@ -117,13 +109,11 @@ export function getFallbackSessionEngineType(
   sessionKey: string,
   getAgentEngineType: (agentId: string | undefined | null) => ChatSession['engineType'] | undefined,
 ): ChatSession['engineType'] {
-  if (isClaudeScheduledTaskSessionKey(sessionKey)
-    || isClaudeScheduledTaskRunSessionKey(sessionKey)
-    || isClaudeScheduledTaskDatedSessionKey(sessionKey)) {
-    return 'claude';
-  }
-  if (isAnyCronSessionKey(sessionKey) || isScheduledTaskSessionKey(sessionKey)) {
-    return 'openclaw';
-  }
-  return getAgentEngineType(getAgentIdFromSessionKey(sessionKey)) ?? 'openclaw';
+  return resolveChatEngineType({
+    sessionKey,
+    agentEngineType: getAgentEngineType(getAgentIdFromSessionKey(sessionKey)),
+    defaultSessionUsesAgent: true,
+    sessionEngineFirst: false,
+    inferOpenClawTaskKeys: true,
+  });
 }

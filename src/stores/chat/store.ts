@@ -26,10 +26,10 @@ import {
 } from '@/lib/agent-execution-memory';
 import {
   buildSessionSwitchPatch as buildSessionSwitchPatchFromRuntime,
-  patchSessionRuntimeState,
 } from './session-runtime';
+import { applyRuntimePatch } from './runtime-controller';
 import { createBackgroundSessionEventHandler } from './background-session-events';
-import { finalizeMessagesFromHistoryLoad } from './history-finalization';
+import type { BackgroundChatEvent } from './background-session-events';
 import { initialChatDataState } from './initial-state';
 import { createRuntimeUiActions } from './runtime-ui-actions';
 import { createSessionUiActions } from './session-ui-actions';
@@ -39,6 +39,8 @@ import { createSessionLifecycleActions } from './session-lifecycle-actions';
 import { createHistoryLoadActions } from './history-load-actions';
 import { createSendActions } from './send-actions';
 import { createForegroundEventActions } from './foreground-event-actions';
+import { buildTerminalRuntimePatch } from './turn-state-machine';
+import { buildTerminalTurnEffects, executeTurnEffects } from './turn-effects';
 import {
   clearErrorRecoveryTimer,
   clearHistoryPoll,
@@ -124,10 +126,7 @@ function buildSessionSwitchPatch(
 }
 function handleBackgroundSessionEvent(
   set: ChatSet,
-  sessionKey: string,
-  event: Record<string, unknown>,
-  resolvedState: string,
-  runId: string,
+  event: BackgroundChatEvent,
 ): void {
   createBackgroundSessionEventHandler({
     get: () => useChatStore.getState(),
@@ -135,7 +134,7 @@ function handleBackgroundSessionEvent(
     isToolOnlyMessage,
     dispatchMemoryCapture: dispatchAgentMemoryCapture,
     markUnreadAfterRun: markSessionUnreadAfterSuccessfulRun,
-  })(set, sessionKey, event, resolvedState, runId);
+  })(set, event);
 }
 function getCanonicalPrefixFromSessionKey(sessionKey: string): string | null {
   if (!sessionKey.startsWith('agent:')) return null;
@@ -238,29 +237,20 @@ export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null
   // before clearing runtime state and dispatch execution-memory precipitation.
   const resolvedRunId = runId ?? state.activeRunId ?? undefined;
   const agentId = getAgentIdFromSessionKey(targetKey);
-  dispatchAgentMemoryCapture({ agentId, runId: resolvedRunId, sessionKey: targetKey, engineType });
 
   clearHistoryPoll();
-  useChatStore.setState((prev) => patchSessionRuntimeState(prev, targetKey, {
-    sending: false,
-    activeRunId: null,
-    pendingFinal: false,
-    lastUserMessageAt: null,
-    optimisticUserMessage: null,
-    streamingText: '',
-    streamingMessage: null,
-    streamingMessages: [],
-    streamingToolResults: [],
-    streamingTools: [],
-    pendingToolImages: [],
-    error: null,
-  }));
-  if (targetKey === state.currentSessionKey) {
-    finalizeMessagesFromHistoryLoad(() => useChatStore.getState(), (partial) => {
+  useChatStore.setState((prev) => applyRuntimePatch(prev, targetKey, buildTerminalRuntimePatch(null)));
+  executeTurnEffects(buildTerminalTurnEffects({
+    agentId,
+    runId: resolvedRunId,
+    sessionKey: targetKey,
+    engineType,
+    finalizeVisibleMessages: targetKey === state.currentSessionKey,
+  }), {
+    get: () => useChatStore.getState(),
+    set: (partial) => {
       useChatStore.setState(partial);
-    }, {
-      agentId,
-      sessionKey: targetKey,
-    });
-  }
+    },
+    dispatchMemoryCapture: dispatchAgentMemoryCapture,
+  });
 }

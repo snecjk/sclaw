@@ -82,8 +82,8 @@ describe('chat target routing', () => {
       if (path === '/api/token-quota/check') {
         return { success: true, data: { allowed: true, used_today: 0, limit: 100 } };
       }
-      if (path === '/api/chat/send-with-media') {
-        return { success: true, result: { runId: 'run-media' } };
+      if (path === '/api/chat/send') {
+        return { success: true, result: { runId: 'run-send' } };
       }
       throw new Error(`Unexpected hostApiFetch call: ${path}`);
     });
@@ -132,17 +132,21 @@ describe('chat target routing', () => {
     const historyCall = invokeIpcMock.mock.calls.find(
       ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.history',
     );
-    expect(historyCall?.[2]).toEqual({ sessionKey: 'agent:research:desk', limit: 1000 });
+    expect(historyCall?.[2]).toEqual({ sessionKey: 'agent:research:desk', limit: 1000, engineType: 'openclaw' });
 
-    const sendCall = invokeIpcMock.mock.calls.find(
-      ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.send',
-    );
-    expect(sendCall?.[2]).toMatchObject({
+    const sendCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send');
+    expect(sendCall?.[1]).toMatchObject({
+      method: 'POST',
+      body: expect.any(String),
+    });
+    const payload = JSON.parse((sendCall?.[1] as { body: string }).body) as Record<string, unknown>;
+    expect(payload).toMatchObject({
       sessionKey: 'agent:research:desk',
       message: 'Hello direct agent',
       deliver: false,
+      engineType: 'openclaw',
     });
-    expect(typeof (sendCall?.[2] as { idempotencyKey?: unknown })?.idempotencyKey).toBe('string');
+    expect(typeof payload.idempotencyKey).toBe('string');
   });
 
   it('uses the selected agent main session for attachment sends', async () => {
@@ -186,7 +190,7 @@ describe('chat target routing', () => {
     expect(useChatStore.getState().currentSessionKey).toBe('agent:research:desk');
     expect(hostApiFetchMock).toHaveBeenCalledWith('/api/token-quota/check');
 
-    const mediaCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send-with-media');
+    const mediaCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send');
     expect(mediaCall?.[1]).toMatchObject({
       method: 'POST',
       body: expect.any(String),
@@ -198,12 +202,12 @@ describe('chat target routing', () => {
       media: Array<{ filePath: string }>;
     };
     expect(payload.sessionKey).toBe('agent:research:desk');
-    expect(payload.message).toBe('Process the attached file(s).');
+    expect(payload.message).toBe('');
     expect(payload.media[0]?.filePath).toBe('/tmp/design.png');
   });
 
   it('blocks send when the daily token quota is exhausted', async () => {
-    hostApiFetchMock.mockImplementationOnce(async (path: string) => {
+    hostApiFetchMock.mockImplementation(async (path: string) => {
       if (path === '/api/token-quota/check') {
         return { success: true, data: { allowed: false, used_today: 1200, limit: 1200 } };
       }
@@ -242,7 +246,7 @@ describe('chat target routing', () => {
     expect(state.dailyTokenQuotaStatus?.limit).toBe(1200);
     expect(invokeIpcMock.mock.calls.some(([channel, method]) => channel === 'gateway:rpc' && method === 'chat.send')).toBe(false);
     expect(invokeIpcMock.mock.calls.some(([channel]) => channel === 'chat:sendWithMedia')).toBe(false);
-    expect(hostApiFetchMock.mock.calls.some(([path]) => path === '/api/chat/send-with-media')).toBe(false);
+    expect(hostApiFetchMock.mock.calls.some(([path]) => path === '/api/chat/send')).toBe(false);
   });
 
   it('fails open when the quota check errors', async () => {
@@ -286,7 +290,7 @@ describe('chat target routing', () => {
 
     expect(hostApiFetchMock).toHaveBeenCalledWith('/api/token-quota/check');
 
-    const mediaCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send-with-media');
+    const mediaCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send');
     expect(mediaCall?.[1]).toMatchObject({
       method: 'POST',
       body: expect.any(String),
@@ -298,7 +302,7 @@ describe('chat target routing', () => {
       media: Array<{ filePath: string }>;
     };
     expect(payload.sessionKey).toBe('agent:main:main');
-    expect(payload.message).toBe('Process the attached file(s).');
+    expect(payload.message).toBe('');
     expect(payload.media[0]?.filePath).toBe('/tmp/design.png');
   });
 });

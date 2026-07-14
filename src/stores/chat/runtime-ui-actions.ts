@@ -1,5 +1,5 @@
 import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
-import { patchSessionRuntimeState } from './session-runtime';
+import { applyRuntimePatch } from './runtime-controller';
 
 /** Local UI actions that do not perform transport or history work. */
 export function createRuntimeUiActions(
@@ -13,7 +13,7 @@ export function createRuntimeUiActions(
       await Promise.all([loadHistory(), loadSessions()]);
     },
     clearError: () => set((state) => (
-      patchSessionRuntimeState(state, state.currentSessionKey, { error: null })
+      applyRuntimePatch(state, state.currentSessionKey, { error: null })
     )),
   };
 }
