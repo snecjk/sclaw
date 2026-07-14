@@ -78,30 +78,42 @@ export function ConfirmDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)]"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"
       onKeyDown={handleKeyDown}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !confirming) {
+          onCancel();
+        }
+      }}
     >
       <div
         className={cn(
-          'mx-4 w-full max-w-[400px] rounded-2xl border border-glass-border glass-panel p-6',
-          'shadow-2xl focus:outline-none'
+          'w-full max-w-[400px] overflow-hidden rounded-[12px] border border-[#E5E6EB] bg-white p-5',
+          'shadow-[0_12px_40px_rgba(15,23,42,0.12)] focus:outline-none',
+          'dark:border-border dark:bg-card',
         )}
         tabIndex={-1}
+        onMouseDown={(event) => event.stopPropagation()}
       >
-        <h2 id="confirm-dialog-title" className="text-lg font-semibold">
+        <h2
+          id="confirm-dialog-title"
+          className="text-[16px] font-semibold leading-tight text-[#1D2129] dark:text-foreground"
+        >
           {title}
         </h2>
-        <p className="mt-2 text-sm text-muted-foreground">{message}</p>
-        <div className="mt-6 flex justify-end gap-2">
+        <p className="mt-2 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground">
+          {message}
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
           <Button
             ref={cancelRef}
             variant="outline"
             onClick={onCancel}
             disabled={confirming}
-            className="rounded-full px-5"
+            className="h-8 rounded-md border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]"
           >
             {cancelLabel}
           </Button>
@@ -110,13 +122,13 @@ export function ConfirmDialog({
             onClick={handleConfirm}
             disabled={confirming}
             className={cn(
-              'rounded-full px-5',
-              variant === 'destructive' && 'bg-[#e53935] hover:bg-[#c62828]',
+              'h-8 rounded-md px-3 text-[13px] font-medium shadow-none',
+              variant === 'destructive' && 'bg-[#F53F3F] hover:bg-[#E23B3B]',
             )}
           >
             {confirming ? (
-              <span className="inline-flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              <span className="inline-flex items-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
                 {confirmingLabel ?? confirmLabel}
               </span>
             ) : (

@@ -155,68 +155,16 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
     name: 'DingTalk',
     icon: '💬',
     description: 'channels:meta.dingtalk.description',
-    connectionType: 'token',
+    connectionType: 'qr',
     docsUrl: 'channels:meta.dingtalk.docsUrl',
-    configFields: [
-      {
-        key: 'clientId',
-        label: 'channels:meta.dingtalk.fields.clientId.label',
-        type: 'text',
-        placeholder: 'channels:meta.dingtalk.fields.clientId.placeholder',
-        required: true,
-      },
-      {
-        key: 'clientSecret',
-        label: 'channels:meta.dingtalk.fields.clientSecret.label',
-        type: 'password',
-        placeholder: 'channels:meta.dingtalk.fields.clientSecret.placeholder',
-        required: true,
-      },
-      {
-        key: 'robotCode',
-        label: 'channels:meta.dingtalk.fields.robotCode.label',
-        type: 'text',
-        placeholder: 'channels:meta.dingtalk.fields.robotCode.placeholder',
-        required: false,
-      },
-      {
-        key: 'corpId',
-        label: 'channels:meta.dingtalk.fields.corpId.label',
-        type: 'text',
-        placeholder: 'channels:meta.dingtalk.fields.corpId.placeholder',
-        required: false,
-      },
-      {
-        key: 'agentId',
-        label: 'channels:meta.dingtalk.fields.agentId.label',
-        type: 'text',
-        placeholder: 'channels:meta.dingtalk.fields.agentId.placeholder',
-        required: false,
-      },
-      {
-        key: 'cardTemplateId',
-        label: 'channels:meta.dingtalk.fields.cardTemplateId.label',
-        type: 'text',
-        placeholder: 'channels:meta.dingtalk.fields.cardTemplateId.placeholder',
-        required: false,
-        description: 'channels:meta.dingtalk.fields.cardTemplateId.description',
-      },
-      {
-        key: 'cardTemplateKey',
-        label: 'channels:meta.dingtalk.fields.cardTemplateKey.label',
-        type: 'text',
-        placeholder: 'channels:meta.dingtalk.fields.cardTemplateKey.placeholder',
-        required: false,
-        description: 'channels:meta.dingtalk.fields.cardTemplateKey.description',
-      },
-    ],
+    configFields: [],
     instructions: [
       'channels:meta.dingtalk.instructions.0',
       'channels:meta.dingtalk.instructions.1',
       'channels:meta.dingtalk.instructions.2',
       'channels:meta.dingtalk.instructions.3',
     ],
-    isPlugin: true,
+    isPlugin: false,
   },
   wecom: {
     id: 'wecom',
@@ -560,7 +508,7 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
  * Get primary supported channels (non-plugin, commonly used)
  */
 export function getPrimaryChannels(): ChannelType[] {
-  return ['telegram', 'discord', 'whatsapp', 'wechat', 'dingtalk', 'wecom', 'qqbot'];
+  return ['wechat', 'dingtalk', 'wecom', 'qqbot'];
 }
 
 /**

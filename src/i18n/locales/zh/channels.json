@@ -52,6 +52,7 @@
         "invalidId": "账号 ID 不能为空",
         "idLabel": "ID: {{id}}",
         "boundTo": "绑定对象：{{agent}}",
+        "accountCount": "{{count}} 个账号",
         "handledBy": "由 {{agent}} 处理",
         "bindingStatusLabel": "绑定状态：{{status}}",
         "connectionStatusLabel": "连接状态：{{status}}",
@@ -171,7 +172,7 @@
             ]
         },
         "dingtalk": {
-            "description": "通过 OpenClaw 渠道插件连接钉钉（Stream 模式）",
+            "description": "扫码绑定组织统一钉钉机器人，消息经 Hub 路由到本机 StoClaw",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/Y5eNwiSiZidkLskrwtJc1rUln0b#doxcnr8KfaA2mNPeQUeHO83eDPh",
             "fields": {
                 "clientId": {
@@ -206,10 +207,10 @@
                 }
             },
             "instructions": [
-                "先在 OpenClaw 安装并启用 dingtalk 插件",
-                "在钉钉开发者后台创建企业内部应用并开启 Stream 模式",
-                "填写 Client ID 和 Client Secret（必填）",
-                "根据你的应用配置按需填写 Robot Code / Corp ID / Agent ID"
+                "打开 StoClaw 频道页，点击钉钉进入扫码绑定",
+                "使用钉钉扫一扫打开确认页并完成免登确认",
+                "绑定成功后本机自动连接 Hub，可选 Claude / OpenClaw Agent",
+                "无需在本机填写钉钉 AK/SK"
             ]
         },
         "signal": {
@@ -376,6 +377,40 @@
                 "获取 App ID 和 Client Secret",
                 "在下方填写凭证信息"
             ]
+        }
+    },
+    "hub": {
+        "dingtalk": {
+            "title": "钉钉 Channel Hub",
+            "subtitle": "个人专属机器人 · 扫码绑定到本机",
+            "scanHint": "使用钉钉扫一扫下方二维码，在手机上确认绑定。",
+            "startBind": "生成绑定二维码",
+            "refreshQr": "刷新二维码",
+            "waitingScan": "钉钉扫码确认",
+            "claiming": "正在领取凭证并连接…",
+            "expired": "二维码已过期，请重新生成",
+            "bound": "已绑定",
+            "dingUserId": "钉钉用户",
+            "wsStatus": "Hub 连接",
+            "wsOnline": "在线",
+            "wsOffline": "离线",
+            "engineLabel": "执行引擎",
+            "agentLabel": "绑定 Agent",
+            "saveBinding": "保存",
+            "unbind": "解除绑定",
+            "linkCopied": "绑定链接已复制",
+            "bindSuccess": "钉钉绑定成功",
+            "unbindSuccess": "已解除钉钉绑定",
+            "boundHint": "引擎：{{engine}} · {{agent}}",
+            "agentRequired": "请选择要绑定的 Agent",
+            "noAgentsForEngine": "该引擎下暂无 Agent，请先创建后再切换",
+            "rebindTitle": "重新绑定钉钉",
+            "rebindSubtitle": "扫码后将替换当前钉钉绑定账号",
+            "rebindHint": "使用钉钉扫描下方二维码完成重新绑定",
+            "statusFailed": "获取绑定状态失败: {{error}}",
+            "createFailed": "生成二维码失败: {{error}}",
+            "bindFailed": "绑定失败: {{error}}",
+            "unbindFailed": "解绑失败: {{error}}"
         }
     },
     "viewDocs": "查看文档"

@@ -171,7 +171,7 @@
             ]
         },
         "dingtalk": {
-            "description": "OpenClaw のチャンネルプラグイン経由で DingTalk に接続します（Stream モード）",
+            "description": "組織共通 DingTalk ボットを QR で紐づけ、Hub 経由で本機 StoClaw に配信",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/Y5eNwiSiZidkLskrwtJc1rUln0b#doxcnDgA78n43DbkiQjI1OqUA7b",
             "fields": {
                 "clientId": {
@@ -206,10 +206,10 @@
                 }
             },
             "instructions": [
-                "まず OpenClaw に dingtalk プラグインをインストールして有効化します",
-                "DingTalk 開発者コンソールで社内アプリを作成し Stream モードを有効にします",
-                "Client ID と Client Secret を入力します（必須）",
-                "必要に応じて Robot Code / Corp ID / Agent ID を入力します"
+                "Channels で DingTalk を開き QR バインドを開始",
+                "DingTalk でスキャンし、モバイル H5 で確認",
+                "紐づけ後に Hub へ接続し、Claude / OpenClaw Agent を選択",
+                "本機に DingTalk AK/SK は不要"
             ]
         },
         "signal": {
@@ -376,6 +376,35 @@
                 "認証情報を入力します"
             ],
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/KPIJwlyiGiupMrkiS9ice39Zn2c"
+        }
+    },
+    "hub": {
+        "dingtalk": {
+            "title": "DingTalk Channel Hub",
+            "subtitle": "個人専用ボット · QR で本機に紐づけ",
+            "scanHint": "DingTalk で QR をスキャンし、スマホで確認してください。",
+            "startBind": "バインド QR を生成",
+            "refreshQr": "QR を更新",
+            "waitingScan": "DingTalk でスキャンして確認",
+            "claiming": "資格情報を取得して接続中…",
+            "expired": "QR の期限切れです。再生成してください。",
+            "bound": "紐づけ済み",
+            "dingUserId": "DingTalk ユーザー",
+            "wsStatus": "Hub 接続",
+            "wsOnline": "オンライン",
+            "wsOffline": "オフライン",
+            "engineLabel": "エンジン",
+            "agentLabel": "Agent",
+            "saveBinding": "保存",
+            "unbind": "紐づけ解除",
+            "linkCopied": "リンクをコピーしました",
+            "bindSuccess": "DingTalk の紐づけに成功",
+            "unbindSuccess": "DingTalk の紐づけを解除しました",
+            "agentRequired": "Agent を選択してください",
+            "statusFailed": "状態の取得に失敗: {{error}}",
+            "createFailed": "QR の生成に失敗: {{error}}",
+            "bindFailed": "紐づけに失敗: {{error}}",
+            "unbindFailed": "解除に失敗: {{error}}"
         }
     },
     "viewDocs": "ドキュメントを表示"

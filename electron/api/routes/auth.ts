@@ -28,8 +28,25 @@ import {
   fetchAccountSwitchOptions,
   switchAccountViaMemoryCenter,
 } from '../../services/account-switch-service';
+import { getSclawHubClient } from '../../channels/hub-client';
+import { ensureSclawHubConnected } from '../../channels/startup';
 
 const ssoLoginManager = new SsoLoginManager();
+
+/** 登录/切号后恢复钉钉 Hub WS（失败不阻塞主流程） */
+function scheduleSclawHubReconnect(ctx: HostApiContext): void {
+  void ensureSclawHubConnected(ctx.gatewayManager).catch((err) => {
+    logger.warn('[auth] Sclaw Hub reconnect after login failed:', err);
+  });
+}
+
+function disconnectSclawHubOnLogout(): void {
+  try {
+    getSclawHubClient().disconnect();
+  } catch (err) {
+    logger.warn('[auth] Sclaw Hub disconnect on logout failed:', err);
+  }
+}
 
 const CLIENT_SITE_ACCESS_DENIED_MESSAGE = '您的所属组织无权使用 StoClaw';
 
@@ -204,6 +221,7 @@ export async function handleAuthRoutes(
 
       stoSyncService.startPeriodicSync();
       schedulePostLoginBackgroundWork(user, ctx);
+      scheduleSclawHubReconnect(ctx);
 
       sendJson(res, 200, {
         success: true,
@@ -235,6 +253,7 @@ export async function handleAuthRoutes(
       }
 
       await clearAuthUser();
+      disconnectSclawHubOnLogout();
       void removeSsoAuthFromOpenClaw();
       void removeStoDynamicRoutePluginFromOpenClaw().catch((err) =>
         logger.warn('STO dynamic route plugin cleanup on logout failed:', err),
@@ -250,6 +269,7 @@ export async function handleAuthRoutes(
     } catch {
       // Always clear local auth even if SSO signOut fails
       await clearAuthUser().catch(() => {});
+      disconnectSclawHubOnLogout();
       void removeSsoAuthFromOpenClaw();
       void removeStoDynamicRoutePluginFromOpenClaw().catch(() => {});
 
@@ -373,6 +393,7 @@ export async function handleAuthRoutes(
       }
 
       schedulePostLoginBackgroundWork(body.user, ctx);
+      scheduleSclawHubReconnect(ctx);
 
       sendJson(res, 200, {
         success: true,
@@ -462,6 +483,7 @@ export async function handleAuthRoutes(
       }
 
       schedulePostLoginBackgroundWork(newUser, ctx);
+      scheduleSclawHubReconnect(ctx);
 
       sendJson(res, 200, {
         success: true,
@@ -506,6 +528,7 @@ export async function handleAuthRoutes(
       }
 
       schedulePostLoginBackgroundWork(origin, ctx);
+      scheduleSclawHubReconnect(ctx);
 
       sendJson(res, 200, {
         success: true,

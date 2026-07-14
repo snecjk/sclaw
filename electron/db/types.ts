@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { DemoRecordTable } from './models/tables/demo-record-table';
+import type { ChannelConnectionTable } from './models/tables/channel-connection-table';
 
 // One migration file corresponds to one schema version.
 export interface SqliteMigration {
@@ -38,4 +39,5 @@ export interface SchemaMigrationsTable {
 export interface SqliteDbSchema {
   schema_migrations: SchemaMigrationsTable;
   app_demo_records: DemoRecordTable;
+  channel_connections: ChannelConnectionTable;
 }

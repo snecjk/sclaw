@@ -765,6 +765,8 @@ export async function consumeClaudeQuery(
   // appending output. Reset on message_start and when the complete assistant
   // message is emitted as 'final'.
   let streamText = '';
+  let streamThinking = '';
+  let streamToolName = '';
 
   const emitChat = (payload: Record<string, unknown>) => {
     if (!eventSink) return;
@@ -773,6 +775,27 @@ export async function consumeClaudeQuery(
   const emitAgentCompleted = () => {
     if (!eventSink) return;
     eventSink.emit('notification', { method: 'agent', params: { phase: 'completed', runId, sessionKey } });
+  };
+  const emitStreamingDelta = () => {
+    const content: Array<Record<string, unknown>> = [];
+    if (streamThinking) {
+      content.push({ type: 'thinking', thinking: streamThinking });
+    }
+    if (streamToolName) {
+      content.push({ type: 'tool_use', name: streamToolName, id: `stream-tool-${runId}` });
+    }
+    if (streamText) {
+      content.push({ type: 'text', text: streamText });
+    }
+    if (content.length === 0) return;
+    emitChat({
+      state: 'delta',
+      message: {
+        role: 'assistant',
+        id: runId,
+        content,
+      },
+    });
   };
 
   try {
@@ -784,27 +807,43 @@ export async function consumeClaudeQuery(
       const messageSessionId = typeof message.session_id === 'string' ? message.session_id : sessionId;
 
       // Partial streaming events (only yielded when includePartialMessages is on).
-      // Forward text deltas as live 'delta' chat events for token-by-token rendering.
-      // thinking_delta / input_json_delta are intentionally not streamed here; the
-      // complete assistant message (emitted as 'final' below) carries them.
+      // Forward text + thinking deltas as live 'delta' chat events (钉钉 progress/content).
       if (message.type === 'stream_event') {
         const event = (message as { event?: Record<string, unknown> }).event;
         if (event) {
           if (event.type === 'message_start') {
             // A new assistant message begins — reset the accumulator.
             streamText = '';
-          } else if (event.type === 'content_block_delta') {
-            const delta = event.delta as { type?: string; text?: string } | undefined;
-            if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
-              streamText += delta.text;
-              emitChat({
-                state: 'delta',
-                message: {
-                  role: 'assistant',
-                  id: runId,
-                  content: [{ type: 'text', text: streamText }],
+            streamThinking = '';
+            streamToolName = '';
+          } else if (event.type === 'content_block_start') {
+            const block = event.content_block as { type?: string; name?: string } | undefined;
+            if (block?.type === 'tool_use' && typeof block.name === 'string' && block.name) {
+              streamToolName = block.name;
+              emitStreamingDelta();
+              eventSink?.emit('notification', {
+                method: 'agent',
+                params: {
+                  phase: 'tool_start',
+                  runId,
+                  sessionKey,
+                  name: block.name,
+                  data: { name: block.name },
                 },
               });
+            }
+          } else if (event.type === 'content_block_delta') {
+            const delta = event.delta as {
+              type?: string;
+              text?: string;
+              thinking?: string;
+            } | undefined;
+            if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
+              streamText += delta.text;
+              emitStreamingDelta();
+            } else if (delta?.type === 'thinking_delta' && typeof delta.thinking === 'string') {
+              streamThinking += delta.thinking;
+              emitStreamingDelta();
             }
           }
         }
@@ -880,6 +919,7 @@ export async function consumeClaudeQuery(
         // until the 'result' -> agent completed notification finalizes the run.
         if (liveMessage.type === 'assistant') {
           streamText = '';
+          streamThinking = '';
           emitChat({
             state: 'final',
             message: {
