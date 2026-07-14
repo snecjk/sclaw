@@ -39,7 +39,7 @@
   },
   "myTask": {
     "pageTitle": "我的任务",
-    "subtitle": "按计划自动执行任务，也可随时手动触发。在任意对话中描述你想定期做的事，即可快速创建。",
+    "subtitle": "通过定时任务自动化AI工作流",
     "newTask": "+ 新建定时任务",
     "viewTabs": {
       "tasks": "定时任务",
@@ -56,12 +56,11 @@
     },
     "runGuard": {
       "aria": "运行保障",
-      "preventSleep": "定时任务仅在电脑保持唤醒时运行",
-      "preventSleepDesc": "开启后，S Claw 运行期间将阻止电脑自动进入睡眠。",
-      "preventSleepTips": "定时任务运行期间建议开启。请勿合盖，并连接电源；合盖或关机后无法保证正常运行。",
-      "infoAria": "查看阻止睡眠说明",
-      "keepAwake": "保持系统唤醒",
-      "toastEnabled": "已开启：S Claw 运行期间将阻止电脑睡眠",
+      "preventSleep": "休眠时保持运行",
+      "preventSleepDesc": "开启后，电脑休眠期间 Claw 仍会正常执行定时任务，合盖或关机后任务暂停。",
+      "preventSleepTips": "开启后，电脑休眠期间 Claw 仍会正常执行定时任务，合盖或关机后任务暂停。",
+      "infoAria": "查看休眠时保持运行说明",
+      "toastEnabled": "已开启：休眠期间将保持定时任务运行",
       "toastDisabled": "已关闭：电脑将按系统设置正常睡眠"
     },
     "delete": {

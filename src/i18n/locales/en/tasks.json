@@ -39,7 +39,7 @@
   },
   "myTask": {
     "pageTitle": "My Tasks",
-    "subtitle": "Run tasks automatically on schedule or trigger them manually anytime. Describe what you want done regularly in any chat to quickly create one.",
+    "subtitle": "Automate AI workflows with scheduled tasks",
     "newTask": "+ New Scheduled Task",
     "viewTabs": {
       "tasks": "Scheduled Tasks",
@@ -56,12 +56,11 @@
     },
     "runGuard": {
       "aria": "Run guard",
-      "preventSleep": "Scheduled tasks run only while the computer stays awake",
-      "preventSleepDesc": "While enabled, StoClaw prevents the computer from sleeping automatically while it is running.",
-      "preventSleepTips": "Recommended while scheduled tasks are running. Keep the lid open and connect to power; sleep or shutdown may prevent normal operation.",
-      "infoAria": "View prevent sleep details",
-      "keepAwake": "Keep system awake",
-      "toastEnabled": "Enabled: StoClaw will prevent sleep while running",
+      "preventSleep": "Keep running during sleep",
+      "preventSleepDesc": "When enabled, Claw continues scheduled tasks while the computer sleeps; tasks pause if the lid is closed or the computer is shut down.",
+      "preventSleepTips": "When enabled, Claw continues scheduled tasks while the computer sleeps; tasks pause if the lid is closed or the computer is shut down.",
+      "infoAria": "View keep-running-during-sleep details",
+      "toastEnabled": "Enabled: scheduled tasks keep running during sleep",
       "toastDisabled": "Disabled: the computer will sleep according to system settings"
     },
     "delete": {
