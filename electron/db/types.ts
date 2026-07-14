@@ -1,5 +1,14 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { DemoRecordTable } from './models/tables/demo-record-table';
+import type {
+  WfApprovalTaskTable,
+  WfArtifactTable,
+  WfEventTable,
+  WfNodeRunTable,
+  WfOutboxTable,
+  WfRunTable,
+  WfUserInputTaskTable,
+} from './models/tables/workflow-runtime-tables';
 
 // One migration file corresponds to one schema version.
 export interface SqliteMigration {
@@ -38,4 +47,11 @@ export interface SchemaMigrationsTable {
 export interface SqliteDbSchema {
   schema_migrations: SchemaMigrationsTable;
   app_demo_records: DemoRecordTable;
+  wf_run: WfRunTable;
+  wf_node_run: WfNodeRunTable;
+  wf_event: WfEventTable;
+  wf_artifact: WfArtifactTable;
+  wf_approval_task: WfApprovalTaskTable;
+  wf_user_input_task: WfUserInputTaskTable;
+  wf_outbox: WfOutboxTable;
 }

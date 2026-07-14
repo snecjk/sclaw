@@ -12,6 +12,15 @@ export type {
 export type {
   DemoRecordTable,
 } from './models/tables/demo-record-table';
+export type {
+  WfRunTable,
+  WfNodeRunTable,
+  WfEventTable,
+  WfArtifactTable,
+  WfApprovalTaskTable,
+  WfUserInputTaskTable,
+  WfOutboxTable,
+} from './models/tables/workflow-runtime-tables';
 export {
   DemoRecordRepository,
   getDemoRecordRepository,
