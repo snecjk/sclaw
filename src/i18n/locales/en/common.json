@@ -74,6 +74,7 @@
         "groupRowMenu": "Group actions",
         "projects": "Projects",
         "newProject": "New project",
+        "newChatInProject": "New chat in project",
         "projectName": "Project name",
         "projectNameLabel": "Name",
         "projectFolder": "Project folder",
@@ -96,7 +97,12 @@
         "pinInProject": "Pin",
         "unpinInProject": "Unpin",
         "pinnedInProject": "Pinned in project",
-        "unpinnedInProject": "Unpinned in project"
+        "unpinnedInProject": "Unpinned in project",
+        "deleteProjectTitle": "Delete project?",
+        "deleteProjectMessage": "Delete project \"{{name}}\"? This cannot be undone.",
+        "deleteProjectMessageWithSessions": "Delete project \"{{name}}\"? Its {{count}} conversation(s) will be moved to Recent.",
+        "projectDeleted": "Project deleted",
+        "projectDeletedWithSessions": "Project deleted. {{count}} conversation(s) moved to Recent"
     },
     "settings": {
         "backToHome": "Back to Home",

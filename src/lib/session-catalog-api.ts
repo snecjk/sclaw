@@ -142,6 +142,13 @@ export async function deleteCatalogSession(workspaceId: string, sessionKey: stri
   await invokeCatalog('deleteSession', { workspaceId, sessionKey });
 }
 
+function toOptionalIso(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  const date = value instanceof Date ? value : new Date(typeof value === 'number' || typeof value === 'string' ? value : NaN);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toISOString();
+}
+
 export async function migrateLegacyCatalogFromLocalStorage(): Promise<void> {
   if (typeof localStorage === 'undefined') return;
   let sidebarGroups: unknown;
@@ -170,5 +177,14 @@ export async function migrateLegacyCatalogFromLocalStorage(): Promise<void> {
     return;
   }
   if (!sidebarGroups && !sessionLabels) return;
+  // Strip invalid timestamps so main-process Date#toISOString never throws.
+  if (sessionLabels && typeof sessionLabels === 'object') {
+    for (const entry of Object.values(sessionLabels as Record<string, { updatedAt?: unknown }>)) {
+      if (entry && typeof entry === 'object' && 'updatedAt' in entry) {
+        const iso = toOptionalIso(entry.updatedAt);
+        entry.updatedAt = iso != null ? Date.parse(iso) : undefined;
+      }
+    }
+  }
   await invokeCatalog('migrateLocalStorage', { sidebarGroups, sessionLabels });
 }

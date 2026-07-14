@@ -75,6 +75,7 @@
         "groupRowMenu": "分组操作菜单",
         "projects": "项目",
         "newProject": "新建项目",
+        "newChatInProject": "在项目中新建对话",
         "projectName": "项目名称",
         "projectNameLabel": "名称",
         "projectFolder": "项目文件夹",
@@ -97,7 +98,12 @@
         "pinInProject": "置顶",
         "unpinInProject": "取消置顶",
         "pinnedInProject": "已在项目中置顶",
-        "unpinnedInProject": "已取消置顶"
+        "unpinnedInProject": "已取消置顶",
+        "deleteProjectTitle": "删除项目？",
+        "deleteProjectMessage": "确定删除项目「{{name}}」吗？删除后不可恢复。",
+        "deleteProjectMessageWithSessions": "确定删除项目「{{name}}」吗？项目下的 {{count}} 个会话将全部移出项目，回到「最近」。",
+        "projectDeleted": "项目已删除",
+        "projectDeletedWithSessions": "项目已删除，{{count}} 个会话已移至最近"
     },
     "settings": {
         "backToHome": "返回首页",
