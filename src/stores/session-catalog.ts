@@ -24,7 +24,10 @@ export type CatalogSessionMeta = {
   lastActivityAt: string | null;
 };
 
+/** Persist across Electron restarts — sessionStorage clears every app launch. */
 const MIGRATION_FLAG = 'stoclaw:session-catalog-migrated';
+
+let bootstrapInFlight: Promise<void> | null = null;
 
 interface SessionCatalogState {
   ready: boolean;
@@ -53,6 +56,24 @@ interface SessionCatalogState {
   }) => Promise<void>;
   softDeleteSession: (sessionKey: string) => Promise<void>;
   activeWorkspaceId: () => string;
+}
+
+function readMigrationFlag(): boolean {
+  try {
+    return typeof localStorage !== 'undefined' && localStorage.getItem(MIGRATION_FLAG) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeMigrationFlag(): void {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(MIGRATION_FLAG, '1');
+    }
+  } catch {
+    // ignore quota / private mode
+  }
 }
 
 export const useSessionCatalogStore = create<SessionCatalogState>((set, get) => ({
@@ -85,15 +106,49 @@ export const useSessionCatalogStore = create<SessionCatalogState>((set, get) => 
   },
 
   bootstrap: async () => {
-    await bootstrapSessionCatalog();
-    if (typeof sessionStorage !== 'undefined' && !sessionStorage.getItem(MIGRATION_FLAG)) {
-      await migrateLegacyCatalogFromLocalStorage();
-      sessionStorage.setItem(MIGRATION_FLAG, '1');
+    if (get().ready) return;
+    if (bootstrapInFlight) {
+      await bootstrapInFlight;
+      return;
     }
-    await get().refreshWorkspaces();
-    await get().refreshAllBindings();
-    await get().refreshAllCatalogMeta();
-    set({ ready: true });
+
+    bootstrapInFlight = (async () => {
+      try {
+        await bootstrapSessionCatalog();
+      } catch (error) {
+        console.error('[session-catalog] main bootstrap failed', error);
+      }
+
+      // Legacy migrate must never block loading existing SQLite projects.
+      if (!readMigrationFlag()) {
+        try {
+          await migrateLegacyCatalogFromLocalStorage();
+        } catch (error) {
+          console.warn('[session-catalog] legacy localStorage migrate failed (continuing)', error);
+        } finally {
+          writeMigrationFlag();
+        }
+      }
+
+      try {
+        await get().refreshWorkspaces();
+        await get().refreshAllBindings();
+        await get().refreshAllCatalogMeta();
+        set({ ready: true });
+        console.info(
+          `[session-catalog] renderer ready workspaces=${get().workspaces.length}`,
+        );
+      } catch (error) {
+        console.error('[session-catalog] failed to load projects from sqlite', error);
+        throw error;
+      }
+    })();
+
+    try {
+      await bootstrapInFlight;
+    } finally {
+      bootstrapInFlight = null;
+    }
   },
 
   refreshWorkspaces: async () => {

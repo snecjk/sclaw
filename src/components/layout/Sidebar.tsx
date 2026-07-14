@@ -788,7 +788,9 @@ export function Sidebar() {
   const catalogBootstrap = useSessionCatalogStore((s) => s.bootstrap);
 
   useEffect(() => {
-    void catalogBootstrap();
+    void catalogBootstrap().catch((error) => {
+      console.error('[session-catalog] sidebar bootstrap failed', error);
+    });
   }, [catalogBootstrap]);
 
   useEffect(() => {

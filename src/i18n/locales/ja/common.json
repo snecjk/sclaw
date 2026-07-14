@@ -74,6 +74,7 @@
         "groupRowMenu": "グループ操作",
         "projects": "プロジェクト",
         "newProject": "新規プロジェクト",
+        "newChatInProject": "プロジェクト内で新しい会話",
         "projectName": "プロジェクト名",
         "projectNameLabel": "名称",
         "projectFolder": "プロジェクトフォルダ",
@@ -96,7 +97,12 @@
         "pinInProject": "ピン留め",
         "unpinInProject": "ピン留めを解除",
         "pinnedInProject": "プロジェクト内でピン留めしました",
-        "unpinnedInProject": "ピン留めを解除しました"
+        "unpinnedInProject": "ピン留めを解除しました",
+        "deleteProjectTitle": "プロジェクトを削除しますか？",
+        "deleteProjectMessage": "プロジェクト「{{name}}」を削除しますか？この操作は取り消せません。",
+        "deleteProjectMessageWithSessions": "プロジェクト「{{name}}」を削除しますか？配下の {{count}} 件の会話は「最近」に移動されます。",
+        "projectDeleted": "プロジェクトを削除しました",
+        "projectDeletedWithSessions": "プロジェクトを削除し、{{count}} 件の会話を最近へ移動しました"
     },
     "settings": {
         "backToHome": "ホームに戻る",

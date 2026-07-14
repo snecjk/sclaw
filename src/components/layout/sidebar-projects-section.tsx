@@ -23,6 +23,7 @@ import { ProjectFormDialog } from '@/components/layout/sidebar-project-form-dial
 import { SidebarProjectRowTrailing } from '@/components/layout/sidebar-project-row-trailing';
 import { SidebarProjectSessionRow } from '@/components/layout/sidebar-project-session-row';
 import { useSidebarDeleteConfirmStore } from '@/stores/sidebar-delete-confirm';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { invokeIpc } from '@/lib/api-client';
 import type { WorkspaceDto } from '@/lib/session-catalog-api';
 
@@ -44,6 +45,7 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
   const moveSessionToProject = useSessionCatalogStore((s) => s.moveSessionToProject);
   const patchSessionCatalog = useSessionCatalogStore((s) => s.patchSessionCatalog);
+  const deleteProject = useSessionCatalogStore((s) => s.deleteProject);
 
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
@@ -51,11 +53,13 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const switchSession = useChatStore((s) => s.switchSession);
   const renameSession = useChatStore((s) => s.renameSession);
+  const newSession = useChatStore((s) => s.newSession);
 
   const requestSessionDelete = useSidebarDeleteConfirmStore((s) => s.requestSessionDelete);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editWorkspace, setEditWorkspace] = useState<WorkspaceDto | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<WorkspaceDto | null>(null);
   const [expandedProjectIds, setExpandedProjectIds] = useState<Record<string, boolean>>({});
   const [editingSessionKey, setEditingSessionKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
@@ -111,6 +115,44 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
     }
   }, []);
 
+  /** 在指定项目下新建对话：先选中项目再 newSession，bind 会写入该 workspace_id。 */
+  const handleNewChatInProject = useCallback(async (projectId: string) => {
+    try {
+      await selectProject(projectId);
+      setExpandedProjectIds((prev) => ({ ...prev, [projectId]: true }));
+      newSession();
+      navigateToMainChatHome(navigate, location.pathname);
+    } catch (error) {
+      toast.error(String(error));
+    }
+  }, [location.pathname, navigate, newSession, selectProject]);
+
+  const linkedSessionCount = useCallback((projectId: string) => {
+    let count = 0;
+    for (const workspaceId of Object.values(sessionWorkspaceByKey)) {
+      if (workspaceId === projectId) count += 1;
+    }
+    // 侧栏可见会话也算关联（与 catalog 绑定取并集思路：至少覆盖 UI 上看到的）
+    const visible = sessionsByProjectId.get(projectId)?.length ?? 0;
+    return Math.max(count, visible);
+  }, [sessionWorkspaceByKey, sessionsByProjectId]);
+
+  const handleConfirmDeleteProject = useCallback(async () => {
+    if (!deleteTarget) return;
+    try {
+      const moved = await deleteProject(deleteTarget.id);
+      toast.success(
+        moved > 0
+          ? t('sidebar.projectDeletedWithSessions', { count: moved })
+          : t('sidebar.projectDeleted'),
+      );
+      setDeleteTarget(null);
+    } catch (error) {
+      toast.error(String(error));
+      throw error;
+    }
+  }, [deleteProject, deleteTarget, t]);
+
   if (collapsed) {
     return <div className="mx-auto mt-2 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />;
   }
@@ -161,7 +203,7 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                       setEditWorkspace(workspace);
                     }}
                     className={cn(
-                      'flex h-9 min-w-0 w-full flex-1 items-center gap-2 rounded-lg px-[10px] py-2 pr-12 text-left transition-colors',
+                      'flex h-9 min-w-0 w-full flex-1 items-center gap-2 rounded-lg px-[10px] py-2 pr-16 text-left transition-colors',
                       sidebarSubitemTextIdleClass,
                     )}
                   >
@@ -171,11 +213,15 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                     </span>
                   </button>
                   <SidebarProjectRowTrailing
+                    onNewChat={() => {
+                      void handleNewChatInProject(workspace.id);
+                    }}
                     onRename={() => setEditWorkspace(workspace)}
                     onChangeLocation={() => setEditWorkspace(workspace)}
                     onOpenFolder={() => {
                       void handleOpenProjectFolder(workspace.rootPath);
                     }}
+                    onDelete={() => setDeleteTarget(workspace)}
                   />
                 </div>
 
@@ -249,6 +295,23 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
           onClose={() => setEditWorkspace(null)}
         />
       ) : null}
+      <ConfirmDialog
+        open={!!deleteTarget}
+        title={t('sidebar.deleteProjectTitle')}
+        message={
+          deleteTarget && linkedSessionCount(deleteTarget.id) > 0
+            ? t('sidebar.deleteProjectMessageWithSessions', {
+                name: deleteTarget.name,
+                count: linkedSessionCount(deleteTarget.id),
+              })
+            : t('sidebar.deleteProjectMessage', { name: deleteTarget?.name ?? '' })
+        }
+        confirmLabel={t('actions.delete')}
+        cancelLabel={t('actions.cancel')}
+        variant="destructive"
+        onConfirm={handleConfirmDeleteProject}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </>
   );
 }

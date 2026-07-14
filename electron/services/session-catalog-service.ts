@@ -339,6 +339,13 @@ export async function deleteEngineBinding(sessionKey: string) {
   return removed ? bindingToRegistryEntry(removed) : null;
 }
 
+function toIsoOrUndefined(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  const date = new Date(typeof value === 'number' || typeof value === 'string' ? value : NaN);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toISOString();
+}
+
 export async function importLegacySidebarGroups(raw: LegacySidebarGroupsState): Promise<void> {
   await ensureSessionCatalogBootstrapped();
   const groups = Array.isArray(raw.groups) ? raw.groups : [];
@@ -349,13 +356,24 @@ export async function importLegacySidebarGroups(raw: LegacySidebarGroupsState): 
 
   for (const [index, group] of groups.entries()) {
     if (!group?.id || !group.name) continue;
-    const created = await groupRepo.create({
-      id: group.id,
-      workspaceId: DEFAULT_WORKSPACE_ID,
-      name: group.name,
-      sortOrder: index,
-    });
-    idMap.set(group.id, created.id);
+    // Re-runs must be idempotent: group id may already exist from a prior migrate.
+    const existing = await groupRepo.getById(group.id);
+    if (existing) {
+      idMap.set(group.id, existing.id);
+      continue;
+    }
+    try {
+      const created = await groupRepo.create({
+        id: group.id,
+        workspaceId: DEFAULT_WORKSPACE_ID,
+        name: group.name,
+        sortOrder: index,
+      });
+      idMap.set(group.id, created.id);
+    } catch (error) {
+      logger.warn(`[session-catalog] skip legacy group ${group.id}:`, error);
+      idMap.set(group.id, group.id);
+    }
   }
 
   for (const [sessionKey, legacyGroupId] of Object.entries(assignments)) {
@@ -379,9 +397,7 @@ export async function importLegacySessionLabels(
       workspaceId: DEFAULT_WORKSPACE_ID,
       sessionKey,
       title: entry?.label ?? null,
-      lastActivityAt: entry?.updatedAt != null
-        ? new Date(entry.updatedAt).toISOString()
-        : undefined,
+      lastActivityAt: toIsoOrUndefined(entry?.updatedAt),
     });
   }
 }

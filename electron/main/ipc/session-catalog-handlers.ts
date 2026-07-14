@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { DEFAULT_WORKSPACE_ID } from '../../db/models/domain/session-catalog';
+import { logger } from '../../utils/logger';
 import {
   bindSessionToWorkspace,
   createWorkspace,
@@ -24,13 +25,45 @@ type SessionCatalogInvokeRequest = {
   payload?: Record<string, unknown>;
 };
 
+let handlersRegistered = false;
+
 export function registerSessionCatalogHandlers(): void {
+  if (handlersRegistered) {
+    logger.info('[session-catalog] IPC handler already registered, skip');
+    return;
+  }
+  handlersRegistered = true;
+  logger.info('[session-catalog] registering IPC handler session-catalog:invoke');
   console.info('[session-catalog] registering IPC handler session-catalog:invoke');
   ipcMain.handle('session-catalog:invoke', async (_event, request: SessionCatalogInvokeRequest) => {
     const action = request?.action ?? '';
     const payload = request?.payload ?? {};
+    const startedAt = Date.now();
 
-    switch (action) {
+    try {
+      const result = await dispatchSessionCatalogAction(action, payload);
+      if (action === 'bootstrap' || action === 'listWorkspaces' || action === 'createWorkspace') {
+        const workspaceCount = Array.isArray((result as { workspaces?: unknown[] })?.workspaces)
+          ? (result as { workspaces: unknown[] }).workspaces.length
+          : undefined;
+        logger.info(
+          `[session-catalog] action=${action} ok durationMs=${Date.now() - startedAt}`
+          + (workspaceCount != null ? ` workspaces=${workspaceCount}` : ''),
+        );
+      }
+      return result;
+    } catch (error) {
+      logger.error(`[session-catalog] action=${action} failed:`, error);
+      throw error;
+    }
+  });
+}
+
+async function dispatchSessionCatalogAction(
+  action: string,
+  payload: Record<string, unknown>,
+): Promise<unknown> {
+  switch (action) {
       case 'bootstrap':
         await ensureSessionCatalogBootstrapped();
         return { success: true };
@@ -137,6 +170,5 @@ export function registerSessionCatalogHandlers(): void {
 
       default:
         throw new Error(`Unknown session-catalog action: ${action}`);
-    }
-  });
+  }
 }
