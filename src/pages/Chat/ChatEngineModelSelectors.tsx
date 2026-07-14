@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Bot, Check, ChevronDown, Cpu } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -16,11 +16,13 @@ import { buildProviderListItems } from '@/lib/provider-accounts';
 import {
   buildChatModelOptions,
   getWorkspaceDefaultModelId,
+  getWorkspaceDefaultRawModelId,
   isConcreteModelId,
   normalizeModelIdForChat,
   resolveChatSelectedModelId,
   resolveChatToolbarModelId,
   resolveProviderRawModelId,
+  sanitizeChatModelHint,
   upsertSessionModel,
   type ChatModelOption,
 } from '@/lib/chat-model-options';
@@ -30,6 +32,8 @@ import { cn } from '@/lib/utils';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { toast } from 'sonner';
 
+/** Avoid remapping the same session repeatedly when catalog sanitizes its model. */
+const remappedDelistedSessionKeys = new Set<string>();
 const pillBase = cn(
   'flex min-w-0 max-w-[min(100vw-11rem,260px)] items-stretch rounded-xl border border-border/70',
   'bg-[linear-gradient(180deg,rgba(255,255,255,0.10),transparent),rgba(255,255,255,0.30)]',
@@ -118,16 +122,34 @@ async function applyOpenClawSessionModel(params: {
   return (result.modelOverride || result.model || modelToSend).trim();
 }
 
-async function repairStoCatalogAndRetrySessionModel(params: {
+/** Sync catalog then remap session to workspace default (delisted STO models). */
+async function repairStoCatalogAndRemapToWorkspaceDefault(params: {
   currentSessionKey: string;
-  modelId: string;
-  option?: ChatModelOption;
   currentAgentId: string;
 }): Promise<string> {
   await hostApiFetch('/api/sto-model-sync', { method: 'POST' });
   await useProviderStore.getState().refreshProviderSnapshot();
   await new Promise((resolve) => setTimeout(resolve, 2500));
-  return applyOpenClawSessionModel(params);
+  const { accounts, defaultAccountId } = useProviderStore.getState();
+  const fallbackModelId = getWorkspaceDefaultRawModelId(accounts, defaultAccountId);
+  if (!fallbackModelId) {
+    throw new Error('No workspace default model available after STO catalog sync');
+  }
+  const providerItems = buildProviderListItems(
+    accounts,
+    useProviderStore.getState().statuses,
+    useProviderStore.getState().vendors,
+    defaultAccountId,
+  );
+  const options = buildChatModelOptions(providerItems);
+  const option = options.find((item) => item.modelId === fallbackModelId)
+    ?? options.find((item) => item.normalizedId === normalizeModelIdForChat(fallbackModelId));
+  return applyOpenClawSessionModel({
+    currentSessionKey: params.currentSessionKey,
+    modelId: option?.modelId ?? fallbackModelId,
+    option,
+    currentAgentId: params.currentAgentId,
+  });
 }
 
 function resolveClaudeToolbarModelId(input: {
@@ -135,18 +157,19 @@ function resolveClaudeToolbarModelId(input: {
   sessionModel?: string;
   agentModelDisplay?: string;
   workspaceDefaultModelId: string;
+  chatModelOptions?: ChatModelOption[];
 }): string {
+  const options = input.chatModelOptions ?? [];
+  const session = sanitizeChatModelHint(input.sessionModel, options);
+  const agent = isConcreteModelId(input.agentModelDisplay)
+    ? (sanitizeChatModelHint(input.agentModelDisplay, options) || '')
+    : '';
+  const workspace = input.workspaceDefaultModelId || '';
+
   if (input.currentSessionKey !== DEFAULT_SESSION_KEY) {
-    return (
-      normalizeModelIdForChat(input.sessionModel)
-      || (isConcreteModelId(input.agentModelDisplay)
-        ? normalizeModelIdForChat(input.agentModelDisplay)
-        : (input.workspaceDefaultModelId || ''))
-    );
+    return session || agent || workspace;
   }
-  return isConcreteModelId(input.agentModelDisplay)
-    ? normalizeModelIdForChat(input.agentModelDisplay)
-    : (input.workspaceDefaultModelId || '');
+  return agent || workspace;
 }
 
 /* ── Engine Selector ─────────────────────────────────────────── */
@@ -335,6 +358,7 @@ export function ChatModelSelector({
   const pendingNewSessionModel = useChatStore((s) => s.pendingNewSessionModel);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [modelSaving, setModelSaving] = useState(false);
+  const delistRemapInFlight = useRef(false);
 
   useEffect(() => { void init(); }, [init]);
 
@@ -370,9 +394,14 @@ export function ChatModelSelector({
 
   useEffect(() => {
     if (modelSaving) return;
+    const safePending = sanitizeChatModelHint(pendingNewSessionModel, modelOptions);
+    if (pendingNewSessionModel?.trim() && !safePending && modelOptions.length > 0) {
+      useChatStore.getState().setPendingNewSessionModel(null);
+    }
+
     if (currentSessionKey === DEFAULT_SESSION_KEY) {
       if (currentEngineType !== 'claude') {
-        const hint = pendingNewSessionModel?.trim() || workspaceDefaultModelId || '';
+        const hint = safePending || workspaceDefaultModelId || '';
         setSelectedModelId(resolveChatSelectedModelId(modelOptions, hint) || hint || '');
         return;
       }
@@ -381,8 +410,9 @@ export function ChatModelSelector({
         sessionModel: currentSession?.model,
         agentModelDisplay: currentAgent?.modelDisplay,
         workspaceDefaultModelId,
+        chatModelOptions: modelOptions,
       });
-      const hint = pendingNewSessionModel?.trim() || toolbarHint;
+      const hint = safePending || toolbarHint;
       setSelectedModelId(resolveChatSelectedModelId(modelOptions, hint) || hint || '');
       return;
     }
@@ -392,6 +422,7 @@ export function ChatModelSelector({
         sessionModel: currentSession?.model,
         agentModelDisplay: currentAgent?.modelDisplay,
         workspaceDefaultModelId,
+        chatModelOptions: modelOptions,
       })
       : resolveChatToolbarModelId({
         sessionModel: currentSession?.model,
@@ -399,9 +430,56 @@ export function ChatModelSelector({
         agentInheritedModel: currentAgent?.inheritedModel,
         workspaceDefaultModel: workspaceDefaultModelId,
         stoCatalogModelIds,
+        chatModelOptions: modelOptions,
       });
-    const hint = currentSession?.model?.trim() || toolbarHint;
+    const sessionHint = sanitizeChatModelHint(currentSession?.model, modelOptions);
+    const hint = sessionHint || toolbarHint;
     setSelectedModelId(resolveChatSelectedModelId(modelOptions, hint) || toolbarHint || '');
+
+    // Persist remap for historical sessions whose override no longer exists in catalog.
+    const rawSessionModel = currentSession?.model?.trim();
+    if (
+      rawSessionModel
+      && modelOptions.length > 0
+      && !sessionHint
+      && !delistRemapInFlight.current
+      && !remappedDelistedSessionKeys.has(currentSessionKey)
+      && (currentEngineType === 'claude' ? Boolean(currentAgentId) : isGatewayRunning)
+    ) {
+      const fallbackRaw = getWorkspaceDefaultRawModelId(accounts, defaultAccountId);
+      if (!fallbackRaw) return;
+      remappedDelistedSessionKeys.add(currentSessionKey);
+      delistRemapInFlight.current = true;
+      const option = modelOptions.find((item) => item.modelId === fallbackRaw)
+        ?? modelOptions.find((item) => item.normalizedId === normalizeModelIdForChat(fallbackRaw));
+      const persist = currentEngineType === 'claude'
+        ? applyClaudeSessionModel({
+          currentSessionKey,
+          modelId: option?.modelId ?? fallbackRaw,
+          option,
+          currentAgentId,
+        })
+        : applyOpenClawSessionModel({
+          currentSessionKey,
+          modelId: option?.modelId ?? fallbackRaw,
+          option,
+          currentAgentId,
+        });
+      void persist
+        .then((persisted) => {
+          useChatStore.setState((state) => ({
+            sessions: upsertSessionModel(state.sessions, currentSessionKey, persisted),
+          }));
+          setSelectedModelId(resolveChatSelectedModelId(modelOptions, persisted) || persisted);
+        })
+        .catch((err) => {
+          remappedDelistedSessionKeys.delete(currentSessionKey);
+          console.warn('[ChatModelSelector] failed to remap delisted session model:', err);
+        })
+        .finally(() => {
+          delistRemapInFlight.current = false;
+        });
+    }
   }, [
     currentSessionKey,
     currentEngineType,
@@ -410,9 +488,13 @@ export function ChatModelSelector({
     currentSession?.model,
     currentAgent?.modelDisplay,
     currentAgent?.inheritedModel,
+    currentAgentId,
     workspaceDefaultModelId,
     stoCatalogModelIds,
     modelOptions,
+    accounts,
+    defaultAccountId,
+    isGatewayRunning,
   ]);
 
   const selectedModel = useMemo(
@@ -480,6 +562,7 @@ export function ChatModelSelector({
             agentInheritedModel: currentAgent?.inheritedModel,
             workspaceDefaultModel: workspaceDefaultModelId,
             stoCatalogModelIds,
+            chatModelOptions: modelOptions,
           });
         setSelectedModelId(resolveChatSelectedModelId(modelOptions, resolved) || resolved || '');
       } finally {
@@ -505,15 +588,33 @@ export function ChatModelSelector({
           option,
           currentAgentId,
         };
+        let appliedModelId = rawModelId;
         try {
           await applyOpenClawSessionModel(sessionParams);
         } catch (err) {
           if (isModelNotAllowedError(err) && isStoBuiltinModelOption(option)) {
-            await repairStoCatalogAndRetrySessionModel(sessionParams);
+            appliedModelId = await repairStoCatalogAndRemapToWorkspaceDefault({
+              currentSessionKey,
+              currentAgentId,
+            });
+            toast.message(t('toolbar.modelRemappedToDefault', {
+              model: normalizeModelIdForChat(appliedModelId) || appliedModelId,
+              defaultValue: '模型已下架，已切换为默认模型 {{model}}',
+            }));
           } else {
             throw err;
           }
         }
+        useChatStore.setState((state) => ({
+          sessions: upsertSessionModel(
+            state.sessions,
+            currentSessionKey,
+            appliedModelId,
+            { engineType: currentEngineType, label: '新对话' },
+          ),
+        }));
+        setSelectedModelId(resolveChatSelectedModelId(modelOptions, appliedModelId) || appliedModelId);
+        return;
       }
       useChatStore.setState((state) => ({
         sessions: upsertSessionModel(
@@ -532,6 +633,7 @@ export function ChatModelSelector({
           sessionModel: currentSession?.model,
           agentModelDisplay: currentAgent?.modelDisplay,
           workspaceDefaultModelId,
+          chatModelOptions: modelOptions,
         })
         : resolveChatToolbarModelId({
           sessionModel: currentSession?.model,
@@ -539,6 +641,7 @@ export function ChatModelSelector({
           agentInheritedModel: currentAgent?.inheritedModel,
           workspaceDefaultModel: workspaceDefaultModelId,
           stoCatalogModelIds,
+          chatModelOptions: modelOptions,
         });
       setSelectedModelId(resolveChatSelectedModelId(modelOptions, resolved) || resolved || '');
     } finally {

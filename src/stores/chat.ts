@@ -6,7 +6,10 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
-import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-to-chat';
+import {
+  applyWorkspaceDefaultToNewSession,
+  ensureSessionModelAvailableBeforeSend,
+} from '@/lib/sync-workspace-default-to-chat';
 import {
   isConcreteModelId,
   normalizeModelIdForChat,
@@ -2402,6 +2405,15 @@ export const useChatStore = create<ChatState>()(
       currentSessionKey,
       targetAgentId ?? get().currentAgentId,
     );
+
+    // Toolbar may already show workspace default (sanitized), but Gateway still has
+    // the delisted modelOverride — remap synchronously before chat.send.
+    await ensureSessionModelAvailableBeforeSend({
+      sessionKey: currentSessionKey,
+      agentId: targetAgentId ?? get().currentAgentId ?? getAgentIdFromSessionKey(currentSessionKey),
+      engineType: currentSessionEngineType === 'claude' ? 'claude' : 'openclaw',
+    });
+
     const dingTalkRpcExtras = buildDingTalkMentionRpcExtras(
       dingTalkMentions,
       attachments?.map((file) => ({

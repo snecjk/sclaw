@@ -336,6 +336,23 @@ export class StoModelSyncService {
             runtimeGateway,
           );
           result.updated.push(STO_ACCOUNT_ID);
+
+          // Default model was delisted: refresh OpenClaw agents.defaults.model even when
+          // the default account is already `sto` (setDefaultAccount below is a no-op then).
+          if (currentModelRemoved) {
+            const defaultId = await getDefaultProviderAccountId();
+            if (!defaultId || defaultId === STO_ACCOUNT_ID) {
+              try {
+                await syncDefaultProviderToRuntime(STO_ACCOUNT_ID, runtimeGateway);
+                result.defaultSet = STO_ACCOUNT_ID;
+                logger.info(
+                  `[sto-sync] Remapped workspace default model to ${remoteModelIds[0]} after catalog delist`,
+                );
+              } catch (err) {
+                logger.warn('[sto-sync] Failed to refresh OpenClaw default after model delist:', err);
+              }
+            }
+          }
         } catch (err) {
           logger.warn(`[sto-sync] Failed to update STO account:`, err);
         }

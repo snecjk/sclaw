@@ -161,7 +161,7 @@ export function getWorkspaceDefaultRawModelId(
 
 /**
  * Resolve toolbar selected model.
- * - Session override (toolbar switch) wins.
+ * - Session override (toolbar switch) wins when still in the live catalog.
  * - Workspace default (Settings) wins over inherited agent default.
  * - Explicit per-agent model (Agent 详情页单独配置) wins when not inherited.
  */
@@ -172,12 +172,20 @@ export function resolveChatToolbarModelId(input: {
   workspaceDefaultModel?: string;
   /** STO 内置模型列表：用于识别 main 上残留的旧显式模型，Settings 默认优先 */
   stoCatalogModelIds?: string[];
+  /** Live dropdown options — delisted session/agent models are ignored when provided */
+  chatModelOptions?: ChatModelOption[];
 }): string {
-  const session = normalizeModelIdForChat(input.sessionModel);
+  const options = input.chatModelOptions ?? [];
+  const session = options.length > 0
+    ? sanitizeChatModelHint(input.sessionModel, options)
+    : normalizeModelIdForChat(input.sessionModel);
   if (session) return session;
 
   const workspace = normalizeModelIdForChat(input.workspaceDefaultModel);
-  const agent = normalizeModelIdForChat(input.agentModelDisplay);
+  const agentRaw = normalizeModelIdForChat(input.agentModelDisplay);
+  const agent = options.length > 0 && agentRaw
+    ? (sanitizeChatModelHint(input.agentModelDisplay, options) || '')
+    : agentRaw;
   const catalog = (input.stoCatalogModelIds ?? []).map((id) => normalizeModelIdForChat(id));
 
   // Agent 绑定的模型已不在 STO 目录（如 qwen3.7-plus → qwen3.7-max 更名后）→ 回退工作区默认
@@ -296,4 +304,29 @@ export function resolveChatSelectedModelId(
   }
 
   return trimmed;
+}
+
+/** True when hint resolves to an entry still present in the chat model dropdown. */
+export function isModelAvailableInChatOptions(
+  options: ChatModelOption[],
+  hint: string | undefined | null,
+): boolean {
+  if (!hint?.trim() || options.length === 0) return false;
+  const resolved = resolveChatSelectedModelId(options, hint);
+  return options.some((option) => option.modelId === resolved);
+}
+
+/**
+ * Drop session/pending hints that no longer exist in the live catalog
+ * (e.g. STO model delisted). Empty options → keep hint (catalog not loaded yet).
+ */
+export function sanitizeChatModelHint(
+  hint: string | undefined | null,
+  options: ChatModelOption[],
+): string {
+  const normalized = normalizeModelIdForChat(hint);
+  if (!normalized) return '';
+  if (options.length === 0) return normalized;
+  if (!isModelAvailableInChatOptions(options, hint)) return '';
+  return normalizeModelIdForChat(resolveChatSelectedModelId(options, hint)) || normalized;
 }

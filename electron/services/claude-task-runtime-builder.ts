@@ -202,12 +202,17 @@ function resolveModelFromStoCatalog(
   model: string | undefined,
   stoAccount: ProviderAccount | null,
 ): string | undefined {
+  const catalog = (stoAccount?.metadata?.customModels as string[] | undefined) ?? [];
+  const fallback = stoAccount?.model?.trim() || catalog[0];
+
   const trimmed = model?.trim();
-  if (!trimmed || !stoAccount) {
+  if (!trimmed) {
+    return fallback;
+  }
+  if (!stoAccount) {
     return trimmed;
   }
 
-  const catalog = (stoAccount.metadata?.customModels as string[] | undefined) ?? [];
   if (catalog.includes(trimmed)) {
     return trimmed;
   }
@@ -217,7 +222,8 @@ function resolveModelFromStoCatalog(
       || catalogId.endsWith(`/${trimmed}`)
       || trimmed.endsWith(`/${catalogId}`),
   );
-  return suffixHit ?? trimmed;
+  // Delisted / renamed models must not keep running; fall back to workspace default.
+  return suffixHit ?? fallback ?? trimmed;
 }
 
 async function buildClaudeEnvForAccount(accountId?: string): Promise<NodeJS.ProcessEnv> {
