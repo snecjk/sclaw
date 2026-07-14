@@ -109,6 +109,11 @@ export interface ChatSession {
   model?: string;
   updatedAt?: number;
   engineType?: 'openclaw' | 'claude';
+  /**
+   * Owning agent for this session. Required for `claude-task:*` keys which do not
+   * embed agentId in the session key (key-derived fallback would wrongly be `main`).
+   */
+  agentId?: string;
   /** Parent session key when this session was spawned as an OpenClaw subagent. */
   spawnedBy?: string;
 }

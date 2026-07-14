@@ -21,12 +21,16 @@ import {
   normalizeModelIdForChat,
   resolveChatSelectedModelId,
   resolveChatToolbarModelId,
-  resolveProviderRawModelId,
   sanitizeChatModelHint,
   upsertSessionModel,
   type ChatModelOption,
 } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
+import {
+  applyClaudeSessionModel,
+  applyOpenClawSessionModel,
+} from '@/lib/sync-workspace-default-to-chat';
+import { isTaskExecutionSessionKey } from '../../../shared/session-agent-id';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { cn } from '@/lib/utils';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
@@ -69,59 +73,6 @@ function isStoBuiltinModelOption(option: ChatModelOption | undefined): boolean {
   return option?.isBuiltin === true && option.accountId === 'sto';
 }
 
-async function applyClaudeSessionModel(params: {
-  currentSessionKey: string;
-  modelId: string;
-  option?: ChatModelOption;
-  currentAgentId: string;
-}): Promise<string> {
-  const result = await hostApiFetch<{
-    model?: string;
-    modelOverride?: string | null;
-  }>('/api/sessions/model', {
-    method: 'POST',
-    body: JSON.stringify({
-      sessionKey: params.currentSessionKey,
-      model: params.modelId,
-      accountId: params.option?.accountId,
-      agentId: params.currentAgentId || undefined,
-      engineType: 'claude',
-    }),
-  });
-  return (result.modelOverride || result.model || params.modelId).trim();
-}
-
-async function applyOpenClawSessionModel(params: {
-  currentSessionKey: string;
-  modelId: string;
-  option?: ChatModelOption;
-  currentAgentId: string;
-}): Promise<string> {
-  const { accounts } = useProviderStore.getState();
-  const resolved = resolveProviderRawModelId(
-    accounts,
-    params.modelId,
-    params.option?.accountId,
-  );
-  const modelToSend = resolved?.modelId ?? params.modelId;
-  const accountId = resolved?.accountId ?? params.option?.accountId;
-
-  const result = await hostApiFetch<{
-    model?: string;
-    modelOverride?: string | null;
-  }>('/api/sessions/model', {
-    method: 'POST',
-    body: JSON.stringify({
-      sessionKey: params.currentSessionKey,
-      model: modelToSend,
-      accountId,
-      agentId: params.currentAgentId || undefined,
-      engineType: 'openclaw',
-    }),
-  });
-  return (result.modelOverride || result.model || modelToSend).trim();
-}
-
 /** Sync catalog then remap session to workspace default (delisted STO models). */
 async function repairStoCatalogAndRemapToWorkspaceDefault(params: {
   currentSessionKey: string;
@@ -147,7 +98,7 @@ async function repairStoCatalogAndRemapToWorkspaceDefault(params: {
   return applyOpenClawSessionModel({
     currentSessionKey: params.currentSessionKey,
     modelId: option?.modelId ?? fallbackModelId,
-    option,
+    accountId: option?.accountId,
     currentAgentId: params.currentAgentId,
   });
 }
@@ -416,6 +367,14 @@ export function ChatModelSelector({
       setSelectedModelId(resolveChatSelectedModelId(modelOptions, hint) || hint || '');
       return;
     }
+
+    // Task execution sessions: prefer persisted session.model only (written after trigger).
+    const sessionHint = sanitizeChatModelHint(currentSession?.model, modelOptions);
+    if (isTaskExecutionSessionKey(currentSessionKey) && sessionHint) {
+      setSelectedModelId(resolveChatSelectedModelId(modelOptions, sessionHint) || sessionHint);
+      return;
+    }
+
     const toolbarHint = currentEngineType === 'claude'
       ? resolveClaudeToolbarModelId({
         currentSessionKey,
@@ -432,16 +391,17 @@ export function ChatModelSelector({
         stoCatalogModelIds,
         chatModelOptions: modelOptions,
       });
-    const sessionHint = sanitizeChatModelHint(currentSession?.model, modelOptions);
     const hint = sessionHint || toolbarHint;
     setSelectedModelId(resolveChatSelectedModelId(modelOptions, hint) || toolbarHint || '');
 
     // Persist remap for historical sessions whose override no longer exists in catalog.
+    // Skip auto-remap for task sessions — their model comes from the last trigger writeback.
     const rawSessionModel = currentSession?.model?.trim();
     if (
       rawSessionModel
       && modelOptions.length > 0
       && !sessionHint
+      && !isTaskExecutionSessionKey(currentSessionKey)
       && !delistRemapInFlight.current
       && !remappedDelistedSessionKeys.has(currentSessionKey)
       && (currentEngineType === 'claude' ? Boolean(currentAgentId) : isGatewayRunning)
@@ -456,13 +416,13 @@ export function ChatModelSelector({
         ? applyClaudeSessionModel({
           currentSessionKey,
           modelId: option?.modelId ?? fallbackRaw,
-          option,
+          accountId: option?.accountId,
           currentAgentId,
         })
         : applyOpenClawSessionModel({
           currentSessionKey,
           modelId: option?.modelId ?? fallbackRaw,
-          option,
+          accountId: option?.accountId,
           currentAgentId,
         });
       void persist
@@ -538,6 +498,7 @@ export function ChatModelSelector({
               { engineType: currentEngineType, label: '新对话' },
             ),
           }));
+          setSelectedModelId(resolveChatSelectedModelId(modelOptions, persistedModel) || persistedModel);
         } else {
           useChatStore.setState((state) => ({
             sessions: upsertSessionModel(
@@ -547,8 +508,8 @@ export function ChatModelSelector({
               { engineType: currentEngineType, label: '新对话' },
             ),
           }));
+          setSelectedModelId(rawModelId);
         }
-        setSelectedModelId(rawModelId);
       } catch (err) {
         toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));
         const resolved = currentEngineType === 'claude'
@@ -575,57 +536,56 @@ export function ChatModelSelector({
     setModelSaving(true);
     try {
       if (currentEngineType === 'claude' && currentAgentId) {
-        await applyClaudeSessionModel({
+        const persisted = await applyClaudeSessionModel({
           currentSessionKey,
           modelId: rawModelId,
-          option,
+          accountId: option?.accountId,
           currentAgentId,
         });
         await fetchAgents();
-      } else {
-        const sessionParams = {
-          currentSessionKey,
-          modelId: rawModelId,
-          option,
-          currentAgentId,
-        };
-        let appliedModelId = rawModelId;
-        try {
-          await applyOpenClawSessionModel(sessionParams);
-        } catch (err) {
-          if (isModelNotAllowedError(err) && isStoBuiltinModelOption(option)) {
-            appliedModelId = await repairStoCatalogAndRemapToWorkspaceDefault({
-              currentSessionKey,
-              currentAgentId,
-            });
-            toast.message(t('toolbar.modelRemappedToDefault', {
-              model: normalizeModelIdForChat(appliedModelId) || appliedModelId,
-              defaultValue: '模型已下架，已切换为默认模型 {{model}}',
-            }));
-          } else {
-            throw err;
-          }
-        }
         useChatStore.setState((state) => ({
           sessions: upsertSessionModel(
             state.sessions,
             currentSessionKey,
-            appliedModelId,
+            persisted,
             { engineType: currentEngineType, label: '新对话' },
           ),
         }));
-        setSelectedModelId(resolveChatSelectedModelId(modelOptions, appliedModelId) || appliedModelId);
+        setSelectedModelId(resolveChatSelectedModelId(modelOptions, persisted) || persisted);
         return;
+      }
+
+      let appliedModelId = rawModelId;
+      try {
+        appliedModelId = await applyOpenClawSessionModel({
+          currentSessionKey,
+          modelId: rawModelId,
+          accountId: option?.accountId,
+          currentAgentId,
+        });
+      } catch (err) {
+        if (isModelNotAllowedError(err) && isStoBuiltinModelOption(option)) {
+          appliedModelId = await repairStoCatalogAndRemapToWorkspaceDefault({
+            currentSessionKey,
+            currentAgentId,
+          });
+          toast.message(t('toolbar.modelRemappedToDefault', {
+            model: normalizeModelIdForChat(appliedModelId) || appliedModelId,
+            defaultValue: '模型已下架，已切换为默认模型 {{model}}',
+          }));
+        } else {
+          throw err;
+        }
       }
       useChatStore.setState((state) => ({
         sessions: upsertSessionModel(
           state.sessions,
           currentSessionKey,
-          rawModelId,
+          appliedModelId,
           { engineType: currentEngineType, label: '新对话' },
         ),
       }));
-      setSelectedModelId(rawModelId);
+      setSelectedModelId(resolveChatSelectedModelId(modelOptions, appliedModelId) || appliedModelId);
     } catch (err) {
       toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));
       const resolved = currentEngineType === 'claude'

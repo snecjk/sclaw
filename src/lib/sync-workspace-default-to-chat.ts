@@ -1,6 +1,9 @@
 /**
  * After workspace default model changes in Settings, sync agents list and
  * the active chat session when it was using the previous workspace default.
+ *
+ * Session model persistence (`/api/sessions/model`) is the execution source of truth
+ * for OpenClaw Gateway modelOverride / Claude session registry.
  */
 import { hostApiFetch } from '@/lib/host-api';
 import {
@@ -10,6 +13,7 @@ import {
   normalizeModelIdForChat,
   resolveProviderRawModelId,
   shouldSyncSessionToWorkspaceDefault,
+  upsertSessionModel,
 } from '@/lib/chat-model-options';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import type { ChatEngineType } from '@/lib/resolve-chat-session-engine-type';
@@ -20,7 +24,7 @@ import type { ProviderAccount } from '@/lib/providers';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 
 /** STO account: reject models that disappeared from customModels (delisted). */
-function isModelStillAllowedForAccount(
+export function isModelStillAllowedForAccount(
   accounts: ProviderAccount[],
   modelId: string,
   accountId: string,
@@ -35,6 +39,12 @@ function isModelStillAllowedForAccount(
       || normalizeModelIdForChat(catalogId) === normalizeModelIdForChat(modelId)
     ),
   );
+}
+
+function patchSessionModelInStore(sessionKey: string, persisted: string): void {
+  useChatStore.setState((state) => ({
+    sessions: upsertSessionModel(state.sessions, sessionKey, persisted),
+  }));
 }
 
 export async function syncWorkspaceDefaultModelToChat(opts: {
@@ -74,36 +84,42 @@ export async function syncWorkspaceDefaultModelToChat(opts: {
       suspendAutoSend(currentSessionKey);
       await chat.abortRun();
     }
-    await hostApiFetch('/api/sessions/model', {
-      method: 'POST',
-      body: JSON.stringify({
-        sessionKey: currentSessionKey,
-        model: modelId,
-        accountId,
-        agentId: currentAgentId || undefined,
-        engineType,
-      }),
+    const persisted = await persistSessionModelToGateway({
+      sessionKey: currentSessionKey,
+      model: modelId,
+      accountId,
+      agentId: currentAgentId || '',
+      engineType,
     });
+    patchSessionModelInStore(currentSessionKey, persisted);
     void loadSessions();
   } catch (err) {
     console.warn('[syncWorkspaceDefaultModelToChat] failed:', err);
   }
 }
 
-async function persistSessionModelToGateway(opts: {
+/**
+ * Persist session-scoped model via Host API. Returns Gateway/Claude written id.
+ * Throws when resolve or HTTP write fails (callers must not swallow for send barrier).
+ */
+export async function persistSessionModelToGateway(opts: {
   sessionKey: string;
   model: string;
   accountId: string;
   agentId: string;
   engineType: ChatEngineType;
-}): Promise<string | null> {
+}): Promise<string> {
   const { accounts } = useProviderStore.getState();
   const resolved = resolveProviderRawModelId(accounts, opts.model, opts.accountId);
-  if (!resolved) return null;
+  if (!resolved) {
+    throw new Error(`Unable to resolve model "${opts.model}" for session model persist`);
+  }
 
   const result = await hostApiFetch<{
     model?: string;
     modelOverride?: string | null;
+    success?: boolean;
+    error?: string;
   }>('/api/sessions/model', {
     method: 'POST',
     body: JSON.stringify({
@@ -115,7 +131,151 @@ async function persistSessionModelToGateway(opts: {
     }),
   });
 
-  return (result.modelOverride || result.model || resolved.modelId).trim() || null;
+  if (result && typeof result === 'object' && result.success === false) {
+    throw new Error(result.error || 'Failed to set session model');
+  }
+
+  const persisted = (result.modelOverride || result.model || resolved.modelId).trim();
+  if (!persisted) {
+    throw new Error('Session model persist returned empty model');
+  }
+  return persisted;
+}
+
+/** Shared helpers for toolbar model switch (OpenClaw / Claude). */
+export async function applyClaudeSessionModel(params: {
+  currentSessionKey: string;
+  modelId: string;
+  accountId?: string;
+  currentAgentId: string;
+}): Promise<string> {
+  return persistSessionModelToGateway({
+    sessionKey: params.currentSessionKey,
+    model: params.modelId,
+    accountId: params.accountId?.trim() || '',
+    agentId: params.currentAgentId,
+    engineType: 'claude',
+  });
+}
+
+export async function applyOpenClawSessionModel(params: {
+  currentSessionKey: string;
+  modelId: string;
+  accountId?: string;
+  currentAgentId: string;
+}): Promise<string> {
+  return persistSessionModelToGateway({
+    sessionKey: params.currentSessionKey,
+    model: params.modelId,
+    accountId: params.accountId?.trim() || '',
+    agentId: params.currentAgentId,
+    engineType: 'openclaw',
+  });
+}
+
+/**
+ * Decide which model to persist for a session (decision rule, not a display source).
+ * Priority: session.model → pending → Claude agent model → workspace default.
+ */
+export function resolveModelToPersistForSession(opts: {
+  sessionKey: string;
+  agentId: string;
+  engineType: ChatEngineType;
+}): { modelId: string; accountId: string } | null {
+  const sessionKey = opts.sessionKey.trim();
+  if (!sessionKey) return null;
+
+  const { accounts, defaultAccountId } = useProviderStore.getState();
+  const fallbackAccountId = defaultAccountId?.trim()
+    || accounts.find((account) => account.vendorId === 'sto')?.id
+    || accounts[0]?.id
+    || '';
+  if (!fallbackAccountId) return null;
+
+  const chat = useChatStore.getState();
+  const session = chat.sessions.find((item) => item.key === sessionKey);
+  const agent = useAgentsStore.getState().agents.find((item) => item.id === opts.agentId);
+
+  const tryResolve = (
+    raw: string | undefined | null,
+    preferredAccountId: string,
+  ): { modelId: string; accountId: string } | null => {
+    const trimmed = raw?.trim();
+    if (!trimmed || !isConcreteModelId(trimmed)) return null;
+    const resolved = resolveProviderRawModelId(accounts, trimmed, preferredAccountId);
+    if (!resolved) return null;
+    if (!isModelStillAllowedForAccount(accounts, resolved.modelId, resolved.accountId)) {
+      return null;
+    }
+    return resolved;
+  };
+
+  const sessionPreferredAccount = opts.engineType === 'claude'
+    ? (agent?.modelAccountId?.trim() || fallbackAccountId)
+    : fallbackAccountId;
+
+  const fromSession = tryResolve(session?.model, sessionPreferredAccount);
+  if (fromSession) return fromSession;
+
+  const fromPending = tryResolve(chat.pendingNewSessionModel, sessionPreferredAccount);
+  if (fromPending) return fromPending;
+
+  if (opts.engineType === 'claude') {
+    const fromAgent = tryResolve(
+      agent?.modelDisplay,
+      agent?.modelAccountId?.trim() || fallbackAccountId,
+    );
+    if (fromAgent) return fromAgent;
+  }
+
+  const workspaceRaw = getWorkspaceDefaultRawModelId(accounts, defaultAccountId);
+  return tryResolve(workspaceRaw, fallbackAccountId);
+}
+
+/**
+ * Before chat.send: force-persist the selected/resolved model to Gateway/Claude storage.
+ * Returns the persisted model id. Throws on failure (caller must block send).
+ */
+export async function ensureSelectedModelPersistedBeforeSend(opts: {
+  sessionKey: string;
+  agentId: string;
+  engineType: ChatEngineType;
+}): Promise<string> {
+  const sessionKey = opts.sessionKey.trim();
+  if (!sessionKey) {
+    throw new Error('Cannot persist session model: missing sessionKey');
+  }
+  if (sessionKey === DEFAULT_SESSION_KEY) {
+    throw new Error('Cannot persist model on placeholder session; create a real session first');
+  }
+
+  const target = resolveModelToPersistForSession(opts);
+  if (!target) {
+    throw new Error('Cannot determine model to persist before send');
+  }
+
+  const persisted = await persistSessionModelToGateway({
+    sessionKey,
+    model: target.modelId,
+    accountId: target.accountId,
+    agentId: opts.agentId,
+    engineType: opts.engineType,
+  });
+  patchSessionModelInStore(sessionKey, persisted);
+  useChatStore.getState().setPendingNewSessionModel(null);
+  return persisted;
+}
+
+/**
+ * @deprecated Prefer ensureSelectedModelPersistedBeforeSend (throws on failure).
+ * Thin wrapper kept for any leftover call sites during migration.
+ */
+export async function ensureSessionModelAvailableBeforeSend(opts: {
+  sessionKey: string;
+  agentId: string;
+  engineType: ChatEngineType;
+}): Promise<void> {
+  await ensureSelectedModelPersistedBeforeSend(opts);
 }
 
 /**
@@ -188,75 +348,16 @@ export async function applyStoCatalogSyncToChatUi(payload?: {
       agentId: chat.currentAgentId || agent?.id || '',
       engineType,
     });
-    if (persisted) {
-      useChatStore.setState((state) => ({
-        sessions: state.sessions.map((item) => (
-          item.key === sessionKey ? { ...item, model: persisted } : item
-        )),
-      }));
-    }
+    patchSessionModelInStore(sessionKey, persisted);
   } catch (err) {
     console.warn('[applyStoCatalogSyncToChatUi] session remap failed:', err);
   }
 }
 
-/**
- * Before chat.send: if the session still carries a delisted STO model, await remap
- * to the workspace default so Gateway modelOverride matches the toolbar.
- * UI-only sanitize is not enough — send uses Gateway session storage.
- */
-export async function ensureSessionModelAvailableBeforeSend(opts: {
-  sessionKey: string;
-  agentId: string;
-  engineType: ChatEngineType;
-}): Promise<void> {
-  const sessionKey = opts.sessionKey.trim();
-  if (!sessionKey || sessionKey === DEFAULT_SESSION_KEY) return;
-
-  const session = useChatStore.getState().sessions.find((item) => item.key === sessionKey);
-  const sessionModel = session?.model?.trim();
-  if (!sessionModel) return;
-
-  const { accounts, defaultAccountId } = useProviderStore.getState();
-  const preferredAccountId = defaultAccountId?.trim() || '';
-  const resolved = resolveProviderRawModelId(accounts, sessionModel, preferredAccountId || undefined);
-  if (
-    resolved
-    && isModelStillAllowedForAccount(accounts, resolved.modelId, resolved.accountId)
-  ) {
-    return;
-  }
-
-  const fallbackModel = getWorkspaceDefaultRawModelId(accounts, defaultAccountId);
-  const fallbackAccountId = preferredAccountId
-    || resolved?.accountId
-    || accounts.find((account) => account.vendorId === 'sto')?.id
-    || '';
-  if (!fallbackModel || !fallbackAccountId) return;
-
-  try {
-    const persisted = await persistSessionModelToGateway({
-      sessionKey,
-      model: fallbackModel,
-      accountId: fallbackAccountId,
-      agentId: opts.agentId,
-      engineType: opts.engineType,
-    });
-    if (persisted) {
-      useChatStore.setState((state) => ({
-        sessions: state.sessions.map((item) => (
-          item.key === sessionKey ? { ...item, model: persisted } : item
-        )),
-      }));
-    }
-  } catch (err) {
-    console.warn('[ensureSessionModelAvailableBeforeSend] failed:', err);
-  }
-}
-
 /** Apply workspace default model to a newly created session (toolbar + gateway).
  *  If the session already carries a model (e.g. from pendingNewSessionModel),
- *  that user-chosen model wins over the global workspace default. */
+ *  that user-chosen model wins over the global workspace default.
+ *  Persist failures throw so send/newSession callers can block. */
 export async function applyWorkspaceDefaultToNewSession(
   sessionKey: string,
   agentId: string,
@@ -269,44 +370,32 @@ export async function applyWorkspaceDefaultToNewSession(
   const engineType = resolveChatSessionEngineType(existingSession, agent?.engineType, trimmedKey);
   const { accounts, defaultAccountId } = useProviderStore.getState();
   const fallbackAccountId = defaultAccountId?.trim() ?? '';
-  if (!fallbackAccountId) return;
+  if (!fallbackAccountId) {
+    throw new Error('No default provider account available to persist session model');
+  }
 
   const userChosenModel = existingSession?.model?.trim();
   if (userChosenModel) {
-    try {
-      const preferredAccountId = engineType === 'claude'
-        ? (agent?.modelAccountId?.trim() || fallbackAccountId)
-        : fallbackAccountId;
-      const resolved = resolveProviderRawModelId(accounts, userChosenModel, preferredAccountId);
-      if (
-        resolved
-        && isModelStillAllowedForAccount(accounts, resolved.modelId, resolved.accountId)
-      ) {
-        const persisted = await persistSessionModelToGateway({
-          sessionKey: trimmedKey,
-          model: resolved.modelId,
-          accountId: resolved.accountId,
-          agentId,
-          engineType,
-        });
-        if (persisted) {
-          useChatStore.setState((state) => ({
-            sessions: state.sessions.map((session) => (
-              session.key === trimmedKey
-                ? { ...session, model: persisted }
-                : session
-            )),
-          }));
-        }
-        useChatStore.getState().setPendingNewSessionModel(null);
-        return;
-      }
-      // Delisted user pick → fall through to workspace / Claude agent default.
-    } catch (err) {
-      console.warn('[applyWorkspaceDefaultToNewSession] failed to persist user-chosen model:', err);
+    const preferredAccountId = engineType === 'claude'
+      ? (agent?.modelAccountId?.trim() || fallbackAccountId)
+      : fallbackAccountId;
+    const resolved = resolveProviderRawModelId(accounts, userChosenModel, preferredAccountId);
+    if (
+      resolved
+      && isModelStillAllowedForAccount(accounts, resolved.modelId, resolved.accountId)
+    ) {
+      const persisted = await persistSessionModelToGateway({
+        sessionKey: trimmedKey,
+        model: resolved.modelId,
+        accountId: resolved.accountId,
+        agentId,
+        engineType,
+      });
+      patchSessionModelInStore(trimmedKey, persisted);
       useChatStore.getState().setPendingNewSessionModel(null);
       return;
     }
+    // Delisted user pick → fall through to workspace / Claude agent default.
     useChatStore.getState().setPendingNewSessionModel(null);
   }
 
@@ -317,54 +406,32 @@ export async function applyWorkspaceDefaultToNewSession(
       resolved
       && isModelStillAllowedForAccount(accounts, resolved.modelId, resolved.accountId)
     ) {
-      try {
-        const persisted = await persistSessionModelToGateway({
-          sessionKey: trimmedKey,
-          model: resolved.modelId,
-          accountId: resolved.accountId,
-          agentId,
-          engineType,
-        });
-        if (persisted) {
-          useChatStore.setState((state) => ({
-            sessions: state.sessions.map((session) => (
-              session.key === trimmedKey
-                ? { ...session, model: persisted }
-                : session
-            )),
-          }));
-        }
-      } catch (err) {
-        console.warn('[applyWorkspaceDefaultToNewSession] failed to persist Claude agent model:', err);
-      }
+      const persisted = await persistSessionModelToGateway({
+        sessionKey: trimmedKey,
+        model: resolved.modelId,
+        accountId: resolved.accountId,
+        agentId,
+        engineType,
+      });
+      patchSessionModelInStore(trimmedKey, persisted);
       return;
     }
     // Delisted agent preferred → fall through to workspace default.
   }
 
   const rawModelId = getWorkspaceDefaultRawModelId(accounts, defaultAccountId);
-  if (!rawModelId) return;
-
-  try {
-    const persisted = await persistSessionModelToGateway({
-      sessionKey: trimmedKey,
-      model: rawModelId,
-      accountId: fallbackAccountId,
-      agentId,
-      engineType,
-    });
-    if (persisted) {
-      useChatStore.setState((state) => ({
-        sessions: state.sessions.map((session) => (
-          session.key === trimmedKey
-            ? { ...session, model: persisted }
-            : session
-        )),
-      }));
-    }
-    void useChatStore.getState().loadSessions();
-    void useAgentsStore.getState().fetchAgents();
-  } catch (err) {
-    console.warn('[applyWorkspaceDefaultToNewSession] failed:', err);
+  if (!rawModelId) {
+    throw new Error('No workspace default model available to persist for new session');
   }
+
+  const persisted = await persistSessionModelToGateway({
+    sessionKey: trimmedKey,
+    model: rawModelId,
+    accountId: fallbackAccountId,
+    agentId,
+    engineType,
+  });
+  patchSessionModelInStore(trimmedKey, persisted);
+  void useChatStore.getState().loadSessions();
+  void useAgentsStore.getState().fetchAgents();
 }

@@ -229,17 +229,45 @@ export async function handleScheduledTaskRoutes(
 
       // Append result to local session if returned synchronously
       let hasSession = false;
+      let executionSessionKey: string | undefined;
+      let executionModel: string | undefined;
       if (result.run) {
         try {
           const task = await service.getTaskDetails(id);
           await appendTriggerResultToSession(id, task.name, result.run);
           hasSession = true;
+          const today = new Date();
+          const y = today.getFullYear();
+          const m = String(today.getMonth() + 1).padStart(2, '0');
+          const d = String(today.getDate()).padStart(2, '0');
+          executionSessionKey = `agent:main:scheduled-task:${id}:${y}-${m}-${d}`;
+          const runModel = typeof (result.run as { model?: unknown }).model === 'string'
+            ? String((result.run as { model?: string }).model).trim()
+            : '';
+          if (runModel) {
+            const { syncTaskExecutionModelToDatedSession } = await import(
+              '../../utils/task-execution-session-model'
+            );
+            const synced = await syncTaskExecutionModelToDatedSession({
+              sessionKey: executionSessionKey,
+              model: runModel,
+              engineType: 'openclaw',
+              agentId: 'main',
+            });
+            executionModel = synced?.model || runModel;
+          }
         } catch (sessionErr) {
           console.error(`[ScheduledTasks] Failed to append session for task ${id}:`, sessionErr);
         }
       }
 
-      sendJson(res, 200, { ...result, hasSession });
+      sendJson(res, 200, {
+        ...result,
+        hasSession,
+        executionSessionKey,
+        executionModel,
+        executionAgentId: 'main',
+      });
     } catch (error) {
       const message = String(error);
       if (message.includes('404')) {

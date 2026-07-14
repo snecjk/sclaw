@@ -52,13 +52,21 @@ export function upsertSessionModel(
   sessions: ChatSession[],
   sessionKey: string,
   model: string,
-  partial?: Pick<ChatSession, 'label' | 'engineType'>,
+  partial?: Pick<ChatSession, 'label' | 'engineType' | 'agentId'>,
 ): ChatSession[] {
   const normalized = model.trim();
   if (!normalized) return sessions;
   if (sessions.some((session) => session.key === sessionKey)) {
     return sessions.map((session) => (
-      session.key === sessionKey ? { ...session, model: normalized } : session
+      session.key === sessionKey
+        ? {
+          ...session,
+          model: normalized,
+          ...(partial?.label ? { label: partial.label } : {}),
+          ...(partial?.engineType ? { engineType: partial.engineType } : {}),
+          ...(partial?.agentId ? { agentId: partial.agentId } : {}),
+        }
+        : session
     ));
   }
   return [
@@ -67,6 +75,7 @@ export function upsertSessionModel(
       key: sessionKey,
       label: partial?.label ?? '新对话',
       engineType: partial?.engineType,
+      agentId: partial?.agentId,
       model: normalized,
     },
   ];

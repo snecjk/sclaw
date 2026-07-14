@@ -7,8 +7,13 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
 import {
+  extractAgentIdFromSessionKey,
+  parseClaudeTaskIdFromSessionKey,
+} from '../../shared/session-agent-id';
+import { useCronStore } from './cron';
+import {
   applyWorkspaceDefaultToNewSession,
-  ensureSessionModelAvailableBeforeSend,
+  ensureSelectedModelPersistedBeforeSend,
 } from '@/lib/sync-workspace-default-to-chat';
 import {
   isConcreteModelId,
@@ -431,9 +436,30 @@ function getCanonicalPrefixFromSessions(sessions: ChatSession[]): string | null 
 }
 
 function getAgentIdFromSessionKey(sessionKey: string): string {
-  if (!sessionKey.startsWith('agent:')) return 'main';
-  const parts = sessionKey.split(':');
-  return parts[1] || 'main';
+  const fromKey = extractAgentIdFromSessionKey(sessionKey);
+  if (fromKey) return fromKey;
+
+  // Prefer session metadata (lists / trigger writeback attach agentId for claude-task:*).
+  try {
+    const fromSession = useChatStore.getState().sessions.find((session) => session.key === sessionKey)?.agentId?.trim();
+    if (fromSession) return fromSession;
+  } catch {
+    // Store may not be ready during module init; fall through.
+  }
+
+  const claudeTaskId = parseClaudeTaskIdFromSessionKey(sessionKey);
+  if (claudeTaskId) {
+    try {
+      const task = useCronStore.getState().jobs.find(
+        (job) => job.id === claudeTaskId && job.engineType === 'claude',
+      ) as { agentId?: string } | undefined;
+      if (task?.agentId?.trim()) return task.agentId.trim();
+    } catch {
+      // ignore
+    }
+  }
+
+  return 'main';
 }
 
 function parseSessionUpdatedAtMs(value: unknown): number | undefined {
@@ -1308,6 +1334,7 @@ export const useChatStore = create<ChatState>()(
               ),
               thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
               model: s.model ? String(s.model) : undefined,
+              agentId: typeof s.agentId === 'string' && s.agentId.trim() ? s.agentId.trim() : undefined,
               updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
               spawnedBy: typeof s.spawnedBy === 'string' ? s.spawnedBy : undefined,
               engineType,
@@ -1431,6 +1458,7 @@ export const useChatStore = create<ChatState>()(
               ...remote,
               engineType: remote.engineType ?? local.engineType,
               model: remote.model ?? local.model,
+              agentId: remote.agentId ?? local.agentId,
             };
           });
           const mergedSessions = appendPendingLocalVirtualTaskSessions(
@@ -2379,8 +2407,14 @@ export const useChatStore = create<ChatState>()(
 
     // Placeholder home session cannot carry a model override — create a real session first
     // so toolbar/agent model choice is persisted before chat.send hits the gateway default.
-    if (get().currentSessionKey === DEFAULT_SESSION_KEY) {
-      await get().newSession();
+    try {
+      if (get().currentSessionKey === DEFAULT_SESSION_KEY) {
+        await get().newSession();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ error: message || 'Failed to prepare session model', sending: false });
+      return;
     }
 
     // Inject hidden workflow context / session hint for AI guidance
@@ -2406,13 +2440,25 @@ export const useChatStore = create<ChatState>()(
       targetAgentId ?? get().currentAgentId,
     );
 
-    // Toolbar may already show workspace default (sanitized), but Gateway still has
-    // the delisted modelOverride — remap synchronously before chat.send.
-    await ensureSessionModelAvailableBeforeSend({
-      sessionKey: currentSessionKey,
-      agentId: targetAgentId ?? get().currentAgentId ?? getAgentIdFromSessionKey(currentSessionKey),
-      engineType: currentSessionEngineType === 'claude' ? 'claude' : 'openclaw',
-    });
+    // Force-persist selected/resolved model before chat.send (Gateway/Claude storage is execution truth).
+    try {
+      await ensureSelectedModelPersistedBeforeSend({
+        sessionKey: currentSessionKey,
+        agentId: targetAgentId ?? get().currentAgentId ?? getAgentIdFromSessionKey(currentSessionKey),
+        engineType: currentSessionEngineType === 'claude' ? 'claude' : 'openclaw',
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({
+        error: message || 'Failed to sync session model before send',
+        sending: false,
+      });
+      set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+        sending: false,
+        error: message || 'Failed to sync session model before send',
+      }));
+      return;
+    }
 
     const dingTalkRpcExtras = buildDingTalkMentionRpcExtras(
       dingTalkMentions,
