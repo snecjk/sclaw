@@ -4,7 +4,7 @@ StoClaw session organization (titles, groups, pin/sort, engine bindings, project
 
 ## What Changes
 
-- Add SQLite session catalog (migration `0002`) for workspaces, groups, session rows, pin/sort, titles, activity, soft-delete, and engine bindings
+- Add SQLite session catalog (migration `0003`) for workspaces, groups, session rows, pin/sort, titles, activity, soft-delete, and engine bindings
 - Introduce user workspaces (「项目」): each workspace binds to a **user-selected** local folder (`root_path`); sessions bind to `workspace_id` in catalog
 - Keep implicit default workspace (`id=default`) for non-project chats; invisible in「项目」UI
 - Expose catalog CRUD via host-api (`/api/session-catalog/*`); renderer uses `host-api` / `api-client` only

@@ -7,6 +7,7 @@
  */
 import { create } from 'zustand';
 import { useChatStore } from './chat';
+import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 
@@ -240,7 +241,6 @@ async function abortSessionRun(sessionKey: string): Promise<void> {
     return;
   }
 
-  const { resolveEngineTypeForSession } = await import('@/stores/chat/helpers');
   const { useGatewayStore } = await import('@/stores/gateway');
   useChatStore.setState((state) => ({
     runtimeBySessionKey: {
@@ -263,10 +263,10 @@ async function abortSessionRun(sessionKey: string): Promise<void> {
   try {
     await useGatewayStore.getState().rpc('chat.abort', {
       sessionKey,
-      engineType: resolveEngineTypeForSession(
-        chatState.sessions,
+      engineType: resolveChatSessionEngineType(
+        chatState.sessions.find((session) => session.key === sessionKey),
+        undefined,
         sessionKey,
-        chatState.currentAgentId,
       ),
     });
   } catch (err) {

@@ -74,7 +74,8 @@ SELECT * FROM schema_migrations ORDER BY version;
 ## 相关源码
 
 - `electron/db/migrations/0001-initial-schema.ts`
-- `electron/db/migrations/0002-session-catalog-schema.ts`
-- `electron/db/migrations/0003-session-types-and-channels.ts`
+- `electron/db/migrations/0002-memory-capture-jobs.ts`
+- `electron/db/migrations/0003-session-catalog-schema.ts`
+- `electron/db/migrations/0004-session-types-and-channels.ts`
 - `electron/db/migrations/index.ts`
 - `electron/db/migrator.ts`

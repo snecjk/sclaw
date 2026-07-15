@@ -19,7 +19,6 @@ import {
   ChevronDown,
   Workflow,
   Check,
-  Database,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -94,7 +93,6 @@ import {
   type SidebarSubitemDeletePayload,
   useSidebarDeleteConfirmStore,
 } from '@/stores/sidebar-delete-confirm';
-import { getCurrentEnvConfig } from '../../../shared/env-config';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
 import {

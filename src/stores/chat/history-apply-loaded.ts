@@ -151,7 +151,6 @@ export function applyLoadedHistorySnapshot(input: {
   const filteredMessages = preparedHistory.filteredMessages;
   const enrichedMessages = preparedHistory.enrichedMessages;
 
-  let finalMessages = enrichedMessages;
   const userMsgAt = get().lastUserMessageAt;
   const historyUserCountBefore = enrichedMessages.filter((m) => m.role === 'user').length;
   const historyMessageCountBefore = enrichedMessages.length;
@@ -159,7 +158,7 @@ export function applyLoadedHistorySnapshot(input: {
     get().runtimeBySessionKey,
     targetSessionKey,
   ).optimisticUserMessage ?? get().optimisticUserMessage;
-  finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
+  let finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
     userMessageAt: userMsgAt,
     sending: get().sending,
     sessionKey: targetSessionKey,
