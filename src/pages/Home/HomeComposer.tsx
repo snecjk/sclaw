@@ -79,6 +79,7 @@ export function HomeComposer({
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessions = useChatStore((s) => s.sessions);
+  const messagesLength = useChatStore((s) => s.messages.length);
   const error = useChatStore((s) => s.error);
   const { handleHubSend, handleHubQueue } = useHomeChatEntrySend();
 
@@ -99,6 +100,7 @@ export function HomeComposer({
     currentSession,
     currentAgent?.engineType,
     currentSessionKey,
+    { messageCount: messagesLength },
   );
 
   const inlineToolbarSelectors = (

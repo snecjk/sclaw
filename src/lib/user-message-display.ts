@@ -6,6 +6,7 @@ import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
 import { stripDingTalkMentionContextForDisplay } from '@/lib/dingtalk-mention-context';
 import { stripSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
 import { stripWorkflowCompleteForDisplay, stripWorkflowContextForDisplay } from '@/lib/workflow-context';
+import { stripSclawBrowserEmbedContextForDisplay } from '@/lib/sclaw-browser-embed-context';
 import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
 
 const GATEWAY_SYSTEM_EVENT_LINE =
@@ -30,9 +31,11 @@ export function normalizeUserMessageForDisplay(text: string): string {
   const stripped = stripDingTalkMentionContextForDisplay(
     stripWorkflowCompleteForDisplay(
       stripWorkflowSessionHintForDisplay(
-        stripWorkflowContextForDisplay(
-          stripCronTriggerTextForDisplay(
-            stripSkillTranscriptMarker(stripGatewayUserMetadata(text)),
+        stripSclawBrowserEmbedContextForDisplay(
+          stripWorkflowContextForDisplay(
+            stripCronTriggerTextForDisplay(
+              stripSkillTranscriptMarker(stripGatewayUserMetadata(text)),
+            ),
           ),
         ),
       ),

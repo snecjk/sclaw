@@ -15,6 +15,7 @@
         "myTasks": "我的任务",
         "dataCenter": "数据中心",
         "skills": "技能广场",
+        "moreApps": "应用广场",
         "workflow": "工作流",
         "agents": "智能体",
         "channels": "频道",
@@ -47,7 +48,7 @@
         "sessionUnread": "未读",
         "compactAccountMenu": "账户与设置",
         "supportGroup": {
-            "title": "STO Claw产品咨询群",
+            "title": "S Claw产品咨询群",
             "hint": "钉钉扫一扫进群咨询问题",
             "helpAria": "查看产品咨询群二维码",
             "loadError": "二维码加载失败，请稍后重试"

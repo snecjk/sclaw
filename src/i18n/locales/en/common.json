@@ -15,6 +15,7 @@
         "myTasks": "My Tasks",
         "dataCenter": "Data Center",
         "skills": "Skills",
+        "moreApps": "More Apps",
         "workflow": "Workflows",
         "agents": "Agents",
         "channels": "Channels",
@@ -46,7 +47,7 @@
         "sessionUnread": "Unread",
         "compactAccountMenu": "Account and settings",
         "supportGroup": {
-            "title": "STO Claw Product Support Group",
+            "title": "S Claw Product Support Group",
             "hint": "Scan with DingTalk to join and ask questions",
             "helpAria": "View product support group QR code",
             "loadError": "Failed to load QR code. Please try again later."

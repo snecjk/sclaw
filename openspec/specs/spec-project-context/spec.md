@@ -28,6 +28,20 @@ The openspec/config.yaml SHALL include rules for changes that touch communicatio
 - **THEN** the per-artifact rules SHALL require running `pnpm run comms:replay` and `pnpm run comms:compare` before marking the change complete
 - **AND** the rules SHALL state that transport policy is Main-owned and fixed as `WS -> HTTP -> IPC fallback`
 
+### Requirement: New OpenClaw local plugins require dual packaging-script registration
+When a change introduces or modifies an OpenClaw local plugin under `sto-plugin/openclaw/`, the corresponding tasks SHALL require registration in both `scripts/bundle-openclaw-plugins.mjs` (`PLUGINS` array) and `scripts/after-pack.cjs` (`BUNDLED_PLUGINS` array).
+
+#### Scenario: Adding a new local OpenClaw plugin
+- **WHEN** a spec change adds a new local plugin under `sto-plugin/openclaw/`
+- **THEN** the tasks.md SHALL include a task to add the plugin to `scripts/bundle-openclaw-plugins.mjs`
+- **AND** the tasks.md SHALL include a task to add the plugin to `scripts/after-pack.cjs`
+- **AND** both tasks SHALL note that these files are engineering-owned build scripts and MUST NOT be modified by AI automatically
+
+#### Scenario: Reviewing plugin packaging completeness
+- **WHEN** a reviewer inspects a change that adds or modifies a local plugin
+- **THEN** the reviewer SHALL verify that the plugin appears in both the `PLUGINS` and `BUNDLED_PLUGINS` arrays
+- **AND** if either registration is missing, the change SHALL be blocked until the engineering owner updates it
+
 ### Requirement: config.yaml includes doc sync rules
 The openspec/config.yaml SHALL include rules requiring documentation updates after functional changes.
 

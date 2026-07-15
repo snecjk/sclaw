@@ -608,6 +608,24 @@ export function setMentionEditorPlainText(root: HTMLElement, text: string): void
   root.textContent = text;
 }
 
+export function insertPlainTextAtCaret(root: HTMLElement, text: string): void {
+  if (!text) return;
+  root.focus();
+  const selection = window.getSelection();
+  if (!selection) {
+    setMentionEditorPlainText(root, text);
+    return;
+  }
+  if (selection.rangeCount === 0) {
+    const range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+  document.execCommand('insertText', false, text);
+}
+
 export function setMentionEditorMentions(
   root: HTMLElement,
   mentions: DingTalkMention[],

@@ -14,6 +14,7 @@ import {
   insertAtTriggerCharacter,
   insertMentionAtTrigger,
   insertSkillSpan,
+  insertPlainTextAtCaret,
   insertWorkflowSpan,
   consumeSkillTriggerText,
   MENTION_SPAN_SELECTOR,
@@ -29,12 +30,32 @@ import {
 } from '@/lib/dingtalk-mention-composer';
 import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
 
+function focusEditorAtEnd(root: HTMLElement): void {
+  root.focus();
+
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  const range = document.createRange();
+  const lastChild = root.lastChild;
+  if (lastChild?.nodeType === Node.TEXT_NODE) {
+    range.setStart(lastChild, lastChild.textContent?.length ?? 0);
+  } else {
+    range.selectNodeContents(root);
+    range.collapse(false);
+  }
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
 export interface DingTalkMentionEditorHandle {
   focus: () => void;
   clear: () => void;
   getSnapshot: () => MentionComposerSnapshot;
   readSkillMeta: () => SkillMeta | undefined;
   setPlainText: (text: string) => void;
+  insertPlainText: (text: string) => void;
   setMentions: (mentions: DingTalkMention[]) => void;
   insertMention: (mention: DingTalkMention, trigger: ActiveMentionTrigger) => void;
   insertWorkflow: (workflowId: string, name: string, source?: string) => void;
@@ -83,8 +104,8 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
     ref,
   ) {
     const editorRef = useRef<HTMLDivElement>(null);
-    const seedAppliedRef = useRef(false);
     const skillSeedAppliedRef = useRef(false);
+    const lastAppliedSeedRef = useRef<string | undefined>(undefined);
     const isComposingRef = useRef(false);
 
     const syncTriggerRafRef = useRef<number | null>(null);
@@ -136,10 +157,17 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       setPlainText: (text) => {
         const root = editorRef.current;
         if (!root) return;
-        seedAppliedRef.current = false;
+        lastAppliedSeedRef.current = undefined;
         setMentionEditorPlainText(root, text);
         resizeEditor();
         syncFromDom();
+      },
+      insertPlainText: (text) => {
+        const root = editorRef.current;
+        if (!root) return;
+        insertPlainTextAtCaret(root, text);
+        resizeEditor();
+        syncFromDom(false);
       },
       setMentions: (mentions) => {
         const root = editorRef.current;
@@ -207,20 +235,16 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       if (!root) return;
 
       if (trimmed) {
-        if (seedAppliedRef.current) return;
-        seedAppliedRef.current = true;
-        setMentionEditorPlainText(root, trimmed);
+        if (lastAppliedSeedRef.current === trimmed) return;
+        lastAppliedSeedRef.current = trimmed;
+        setMentionEditorPlainText(root, `${trimmed} `);
+        focusEditorAtEnd(root);
         resizeEditor();
         syncFromDom();
         return;
       }
 
-      if (seedAppliedRef.current) {
-        seedAppliedRef.current = false;
-        clearMentionEditor(root);
-        resizeEditor();
-        syncFromDom();
-      }
+      lastAppliedSeedRef.current = undefined;
     }, [resizeEditor, seedText, syncFromDom]);
 
     useEffect(() => {

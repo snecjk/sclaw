@@ -3074,4 +3074,126 @@ function registerSessionHandlers(): void {
     const { appendWorkflowSessionRecord } = await import('../services/workflow-session-writer');
     await appendWorkflowSessionRecord(input as import('../services/workflow-session-writer').AppendWorkflowSessionRecordInput);
   });
+
+  ipcMain.handle('sclaw-browser:prepareSession', async (_, payload: { url?: string }) => {
+    const url = typeof payload?.url === 'string' ? payload.url.trim() : '';
+    if (!url) return { ok: true };
+    const { prepareSclawEmbedBrowserSession } = await import('./services/sclaw-embed-browser-session');
+    await prepareSclawEmbedBrowserSession(url);
+    return { ok: true };
+  });
+
+  ipcMain.handle('sclaw-browser:registerRuntime', async (_, payload: {
+    runtimeId?: string;
+    appTitle?: string;
+    initialUrl?: string;
+  }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    const appTitle = typeof payload?.appTitle === 'string' ? payload.appTitle.trim() : '';
+    const initialUrl = typeof payload?.initialUrl === 'string' ? payload.initialUrl.trim() : '';
+    if (!runtimeId || !initialUrl) return { ok: false };
+    const { registerSclawEmbedBrowserRuntime } = await import('./services/sclaw-embed-browser-runtime');
+    registerSclawEmbedBrowserRuntime({ runtimeId, appTitle, initialUrl });
+    return { ok: true };
+  });
+
+  ipcMain.handle('sclaw-browser:linkChatSession', async (_, payload: {
+    runtimeId?: string;
+    chatSessionKey?: string;
+  }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    const chatSessionKey = typeof payload?.chatSessionKey === 'string' ? payload.chatSessionKey.trim() : '';
+    if (!runtimeId || !chatSessionKey) return { ok: false };
+    const { linkSclawEmbedBrowserChatSession } = await import('./services/sclaw-embed-browser-runtime');
+    linkSclawEmbedBrowserChatSession(runtimeId, chatSessionKey);
+    return { ok: true };
+  });
+
+  ipcMain.handle('sclaw-browser:bindWebContents', async (_, payload: {
+    runtimeId?: string;
+    webContentsId?: number;
+    pageUrl?: string;
+    pageTitle?: string;
+  }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    const webContentsId = typeof payload?.webContentsId === 'number' ? payload.webContentsId : 0;
+    if (!runtimeId || !webContentsId) return { ok: false };
+    const { bindSclawEmbedBrowserWebContents } = await import('./services/sclaw-embed-browser-runtime');
+    const meta = bindSclawEmbedBrowserWebContents({
+      runtimeId,
+      webContentsId,
+      pageUrl: typeof payload?.pageUrl === 'string' ? payload.pageUrl : undefined,
+      pageTitle: typeof payload?.pageTitle === 'string' ? payload.pageTitle : undefined,
+    });
+    return { ok: true, meta };
+  });
+
+  ipcMain.handle('sclaw-browser:updatePageState', async (_, payload: {
+    runtimeId?: string;
+    pageUrl?: string;
+    pageTitle?: string;
+  }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false };
+    const { updateSclawEmbedBrowserPageState } = await import('./services/sclaw-embed-browser-runtime');
+    updateSclawEmbedBrowserPageState({
+      runtimeId,
+      pageUrl: typeof payload?.pageUrl === 'string' ? payload.pageUrl : undefined,
+      pageTitle: typeof payload?.pageTitle === 'string' ? payload.pageTitle : undefined,
+    });
+    return { ok: true };
+  });
+
+  ipcMain.handle('sclaw-browser:unregisterRuntime', async (_, payload: { runtimeId?: string }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false };
+    const { unregisterSclawEmbedBrowserRuntime } = await import('./services/sclaw-embed-browser-runtime');
+    unregisterSclawEmbedBrowserRuntime(runtimeId);
+    return { ok: true };
+  });
+
+  ipcMain.handle('sclaw-browser:capturePage', async (_, payload: { runtimeId?: string }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false };
+    const { captureSclawEmbedBrowserPage } = await import('./services/sclaw-embed-browser-runtime');
+    const snapshot = await captureSclawEmbedBrowserPage(runtimeId);
+    return { ok: true, snapshot };
+  });
+
+  ipcMain.handle('sclaw-browser:executeScript', async (_, payload: { runtimeId?: string; script?: string }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    const script = typeof payload?.script === 'string' ? payload.script : '';
+    if (!runtimeId || !script) return { ok: false };
+    const { executeSclawEmbedBrowserScript } = await import('./services/sclaw-embed-browser-runtime');
+    const value = await executeSclawEmbedBrowserScript(runtimeId, script);
+    return { ok: true, value };
+  });
+
+  ipcMain.handle('sclaw-browser:getNetworkLog', async (_, payload: { runtimeId?: string; since?: number }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false, events: [] };
+    const { getSclawEmbedBrowserNetworkLog } = await import('./services/sclaw-embed-browser-runtime');
+    const since = typeof payload?.since === 'number' ? payload.since : undefined;
+    const events = getSclawEmbedBrowserNetworkLog(runtimeId, since);
+    return { ok: true, events };
+  });
+
+  ipcMain.handle('sclaw-browser:ensureBridge', async (_, payload: { runtimeId?: string }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false, connected: false };
+    const { ensureSclawEmbedBridgeForRuntime } = await import('./services/sclaw-embed-browser-runtime');
+    const connected = ensureSclawEmbedBridgeForRuntime(runtimeId);
+    return { ok: true, connected };
+  });
+
+  ipcMain.handle('sclaw-browser:setPointerPassthrough', async (_, payload: {
+    runtimeId?: string;
+    passthrough?: boolean;
+  }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false };
+    const { setSclawEmbedBrowserPointerPassthrough } = await import('./services/sclaw-embed-browser-runtime');
+    const applied = setSclawEmbedBrowserPointerPassthrough(runtimeId, payload?.passthrough === true);
+    return { ok: applied };
+  });
 }

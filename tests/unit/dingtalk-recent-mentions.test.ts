@@ -6,6 +6,7 @@ import {
   mapListAllConversationItem,
   mapUnreadConversationItem,
   pickUnreadCount,
+  sortConversationsByLastMsg,
 } from '../../shared/dingtalk-recent-mentions';
 
 describe('dingtalk recent mentions', () => {
@@ -34,7 +35,25 @@ describe('dingtalk recent mentions', () => {
       type: 'group',
       id: 'cid-group',
       title: '申声不息群',
-      subtitle: '32人',
+      subtitle: '群聊',
+    });
+  });
+
+  it('sorts conversations by lastMsgCreateAt descending', () => {
+    const sorted = sortConversationsByLastMsg([
+      { title: 'old', lastMsgCreateAt: '2026-04-07T19:59:43.497+08:00' },
+      { title: 'new', lastMsgCreateAt: '2026-07-10T09:29:59.981+08:00' },
+      { title: 'mid', lastMsgCreateAt: '2026-06-23T12:07:20.55+08:00' },
+    ]) as Array<{ title: string }>;
+    expect(sorted.map((row) => row.title)).toEqual(['new', 'mid', 'old']);
+  });
+
+  it('accepts numeric nextCursor from list-all pagination', () => {
+    expect(extractListAllPagination({
+      result: { hasMore: true, nextCursor: 20 },
+    })).toEqual({
+      hasMore: true,
+      nextCursor: '20',
     });
   });
 

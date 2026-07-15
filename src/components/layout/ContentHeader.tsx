@@ -25,6 +25,7 @@ import { useContentHeaderDisplay } from '@/components/layout/content-header-cont
 import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
 import { useSettingsStore } from '@/stores/settings';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
+import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 
 export function ContentHeader() {
   const { t } = useTranslation('common');
@@ -32,6 +33,13 @@ export function ContentHeader() {
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
   const workflowEditorActive = useWorkflowUiStore((s) => s.editorActive);
+  const browserOverlayOpen = useSclawBrowserOverlayStore((s) => s.session !== null);
+
+  // Drawer toolbar occupies the header band; drag-region steals clicks regardless of z-index.
+  if (browserOverlayOpen) {
+    return null;
+  }
+
   const platform = window.electron?.platform;
   const isWin = platform === 'win32';
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatAssistantCopyShareClipboardText,
+  formatAssistantCopyShareTextOnly,
   isWorkflowStartAssistantBoilerplate,
   resolveAssistantCopyShareContent,
 } from '../../src/pages/Chat/message-utils';
@@ -69,6 +70,22 @@ describe('resolveAssistantCopyShareContent', () => {
   });
 });
 
+describe('formatAssistantCopyShareTextOnly', () => {
+  it('strips inline file:// markdown links without attachment footer', () => {
+    const body = [
+      '报告已生成。',
+      '',
+      '**报告文件**：[申通快递分析 -20260629.html](file:///Users/sto/.stoclaw/openclaw/workspace/.claw-output/shentong-analysis-20260629.html)',
+    ].join('\n');
+
+    const text = formatAssistantCopyShareTextOnly(body);
+
+    expect(text).toContain('**报告文件**：申通快递分析 -20260629.html');
+    expect(text).not.toContain('file:///');
+    expect(text).not.toContain('附件：');
+  });
+});
+
 describe('formatAssistantCopyShareClipboardText', () => {
   it('appends artifact markdown links after summary', () => {
     const text = formatAssistantCopyShareClipboardText(
@@ -84,5 +101,48 @@ describe('formatAssistantCopyShareClipboardText', () => {
 
     expect(text).toContain('客户异常监控报告已生成。');
     expect(text).toContain('[客户异常监控报告_20260707](https://oss.example.com/report.html)');
+  });
+
+  it('lists local artifact names without exposing filesystem paths', () => {
+    const text = formatAssistantCopyShareClipboardText(
+      '客户异常监控报告已生成。',
+      [{
+        fileName: '客户异常监控报告_20260707.html',
+        filePath: '/Users/sto/.openclaw/workspace/.claw-output/report.html',
+        mimeType: 'text/html',
+        fileSize: 0,
+        preview: null,
+      }],
+    );
+
+    expect(text).toContain('客户异常监控报告已生成。');
+    expect(text).toContain('附件：');
+    expect(text).toContain('- 客户异常监控报告_20260707.html');
+    expect(text).not.toContain('/Users/sto/.openclaw');
+  });
+
+  it('strips inline file:// markdown links from assistant body text', () => {
+    const body = [
+      '报告已生成并通过质量检查。',
+      '',
+      '**报告文件**：[申通快递分析 -20260629.html](file:///Users/sto/.stoclaw/openclaw/workspace/.claw-output/shentong-analysis-20260629.html)',
+    ].join('\n');
+
+    const text = formatAssistantCopyShareClipboardText(
+      body,
+      [{
+        fileName: 'shentong-analysis-20260629.html',
+        filePath: '/Users/sto/.stoclaw/openclaw/workspace/.claw-output/shentong-analysis-20260629.html',
+        mimeType: 'text/html',
+        fileSize: 0,
+        preview: null,
+      }],
+    );
+
+    expect(text).toContain('**报告文件**：申通快递分析 -20260629.html');
+    expect(text).not.toContain('file:///');
+    expect(text).not.toContain('/Users/sto/.stoclaw');
+    expect(text).toContain('附件：');
+    expect(text).toContain('- shentong-analysis-20260629.html');
   });
 });

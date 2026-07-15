@@ -89,7 +89,8 @@ export function buildTaskMessageWithRecipients(
   instruction: string,
   mentions?: DingTalkMention[],
 ): string {
-  return prepareDingTalkAgentTurnMessage(instruction, mentions);
+  // 本函数仅用于定时任务 description 烘焙，固定必发语义。
+  return prepareDingTalkAgentTurnMessage(instruction, mentions, { scenario: 'scheduled-task' });
 }
 
 export { prepareDingTalkAgentTurnMessage } from '../../shared/dingtalk-recipient-message';

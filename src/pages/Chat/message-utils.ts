@@ -24,6 +24,7 @@ import {
 } from '@/lib/dingtalk-mention-context';
 import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
 import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay, WORKFLOW_COMPLETE_TAG } from '@/lib/workflow-context';
+import { stripSclawBrowserEmbedContextForDisplay } from '@/lib/sclaw-browser-embed-context';
 import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
 import {
   isWorkflowGuidanceAssistantText,
@@ -44,6 +45,7 @@ import {
   urlPathHasFileExtension,
 } from '@/lib/preview-url';
 import { normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
+import { sanitizeLocalFileRefsForCopy } from '../../../shared/dingtalk-share-text';
 import type { WorkflowExecutionState } from '@/types/workflow';
 
 /** OpenClaw injects queued system events as `System: [timestamp] ...` lines before user text. */
@@ -80,8 +82,10 @@ function cleanUserText(text: string): string {
   return stripDingTalkMentionContextForDisplay(
     stripWorkflowCompleteForDisplay(
       stripWorkflowSessionHintForDisplay(
-        stripWorkflowContextForDisplay(
-          stripCronTriggerTextForDisplay(cleaned),
+        stripSclawBrowserEmbedContextForDisplay(
+          stripWorkflowContextForDisplay(
+            stripCronTriggerTextForDisplay(cleaned),
+          ),
         ),
       ),
     ),
@@ -387,18 +391,35 @@ export function resolveAssistantCopyShareContent(options: {
   return { text: rawText, files };
 }
 
-/** 剪贴板文本：正文 + 产物 markdown 链接（与分享替换逻辑兼容）。 */
+/** 剪贴板正文：清理本地 file:// 链接，不含附件列表（文件单独复制）。 */
+export function formatAssistantCopyShareTextOnly(text: string): string {
+  return sanitizeLocalFileRefsForCopy(text.trim());
+}
+
+/** 剪贴板文本：正文 + 产物名/外链；本地路径由剪贴板文件项携带，不在文本中暴露。 */
 export function formatAssistantCopyShareClipboardText(
   text: string,
   files: AttachedFileMeta[],
 ): string {
-  const parts = [text.trim()].filter(Boolean);
+  const sanitizedText = sanitizeLocalFileRefsForCopy(text.trim());
+  const parts = [sanitizedText].filter(Boolean);
+  const attachmentLines: string[] = [];
+
   for (const file of files) {
     const fileName = file.fileName.trim() || 'file';
     const filePath = file.filePath.trim();
     if (!filePath) continue;
-    parts.push(isHttpUrl(filePath) ? `[${fileName}](${filePath})` : `${fileName}: ${filePath}`);
+    if (isHttpUrl(filePath)) {
+      parts.push(`[${fileName}](${filePath})`);
+      continue;
+    }
+    attachmentLines.push(`- ${fileName}`);
   }
+
+  if (attachmentLines.length > 0) {
+    parts.push(['附件：', ...attachmentLines].join('\n'));
+  }
+
   return parts.join('\n\n');
 }
 

@@ -19,6 +19,8 @@ export interface SendMessageOptions {
   workflowContext?: WorkflowContextBlock | null;
   /** Skill plaza context — UI tag + Gateway defaultPrompt injection */
   skillMeta?: SkillMeta;
+  /** Hidden embed-browser page snapshot for in-app preview chat */
+  embedBrowserContext?: import('@/lib/sclaw-browser-embed-context').SclawBrowserEmbedContextBlock | null;
 }
 
 /** Hidden context block describing a workflow for AI parameter guidance */

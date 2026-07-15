@@ -140,16 +140,38 @@ async function executeClaudeTask(params: {
   const pendingDwsSendToolUseIds = new Set<string>();
   let dingtalkAlreadySent = false;
 
+  // 任务级 promptTemplate 与收件人标记——启动诊断日志与结束兜底门共用。
+  const tpl = params.definition.promptTemplate ?? '';
+  const hasRecipientMarker = /STOCLAW:DINGTALK_RECIPIENTS/i.test(tpl);
+
   // —— 诊断日志：任务启动画像，便于排查"工作流跑完却没发钉钉"——
   // 5 分钟级工作流不会被超时掐断（默认 1800s），此类问题多源于 agent 自身未发 /
   // 发送失败 / 工作流未真完成，故在此打印关键启动信号。
   {
-    const tpl = params.definition.promptTemplate ?? '';
-    const hasRecipient = /STOCLAW:DINGTALK_RECIPIENTS/i.test(tpl);
+    const hasRecipient = hasRecipientMarker;
     const hasWorkflow = /execute_workflow|get_workflow_status|workflowId/i.test(tpl);
+    // 区分 promptTemplate 烘焙的是定时任务版（必发）还是旧对话版（@ 不等于要求发送）。
+    // 后者多见于"改代码前创建的任务"或 scenario 未透传，需靠 P0 覆盖；若 P0 也没注入则不发。
+    const hasScheduledTaskRule = tpl.includes('指定即必发');
+    const hasChatRule = tpl.includes('不等于要求发送');
+    // P0 必发系统提示是否真的被追加（取决于 sessionKey 是否被识别为 scheduled-task 执行态）。
+    const systemPromptAppendLen = runtime.runtimeOptions.systemPromptAppend?.length ?? 0;
+    // 收件人是否已解析出可用 target id（缺 id 时 hasResolvedDingTalkMentions 为 false，
+    // promptTemplate 不会有 JSON 块，agent 无从知道发给谁 → P0 条件不成立 → 不发）。
+    let recipientSummary = '(no block)';
+    if (hasRecipient) {
+      const ids = Array.from(tpl.matchAll(/"(?:userId|openConversationId)"\s*:\s*"([^"]+)"/g))
+        .map((m) => m[1]);
+      recipientSummary = ids.length > 0 ? ids.join('|') : '(block present but no ids!)';
+    }
     logger.info(
-      `[ClaudeTaskWorker] task start name=${params.definition.name} timeoutSec=${params.definition.timeoutSec} hasRecipientMarker=${hasRecipient} hasWorkflowMarker=${hasWorkflow}`,
+      `[ClaudeTaskWorker] task start name=${params.definition.name} sessionKey=${sessionKey} timeoutSec=${params.definition.timeoutSec} hasRecipientMarker=${hasRecipient} recipients=${recipientSummary} hasWorkflowMarker=${hasWorkflow} hasScheduledTaskRule=${hasScheduledTaskRule} hasChatRule=${hasChatRule} systemPromptAppendLen=${systemPromptAppendLen}`,
     );
+    if (hasRecipient && hasChatRule && !hasScheduledTaskRule) {
+      logger.warn(
+        `[ClaudeTaskWorker] promptTemplate baked with CHAT rule (不等于要求发送) — scenario:'scheduled-task' was NOT applied at bake time. P0 ${systemPromptAppendLen > 0 ? 'is present and should override' : 'is MISSING — send will likely be skipped'}.`,
+      );
+    }
   }
 
   function readBlockText(content: unknown): string {
@@ -327,6 +349,7 @@ async function executeClaudeTask(params: {
         promptTemplate: params.definition.promptTemplate,
         workflowRunIds: [...workflowRunIds],
         dingtalkAlreadySent,
+        lastAssistantText,
       }).catch((err) => {
         logger.warn(
           `[ClaudeTaskWorker] workflow fallback threw: ${err instanceof Error ? err.message : String(err)}`,
@@ -353,16 +376,20 @@ async function executeClaudeTask(params: {
     `[ClaudeTaskWorker] task end status=${finalStatus} workflowRunIds=${workflowRunIds.size} dingtalkAlreadySent=${dingtalkAlreadySent} dwsSendAttempts=${pendingDwsSendToolUseIds.size} stopReason=${runtimeResult?.stopReason ?? '(none)'}`,
   );
 
-  // —— 非超时兜底：agent 正常结束但有工作流 runId 且未发钉钉 ——
-  // 场景：prompt 仅要求"执行工作流"，agent 执行后 end_turn，没有主动发钉钉。
-  // 本兜底异步轮询 runId 到终态并把结果补发给已配置收件人。
-  if (workflowRunIds.size > 0 && !dingtalkAlreadySent) {
-    logger.info(`[ClaudeTaskWorker] firing workflow fallback (normal-completion) runs=${workflowRunIds.size}`);
+  // —— 非超时兜底：agent 正常结束但未发钉钉 ——
+  // 场景：工作流任务 agent 执行后 end_turn 没发（轮询 runId 补发结果）；
+  // 或非工作流任务 agent 不遵从"指定即必发"、回答后反问而不发（用
+  // lastAssistantText 作正文补发）。任一场景只要含收件人块且未发即兜底。
+  if (!dingtalkAlreadySent && (workflowRunIds.size > 0 || hasRecipientMarker)) {
+    logger.info(
+      `[ClaudeTaskWorker] firing fallback (normal-completion) runs=${workflowRunIds.size} hasRecipientMarker=${hasRecipientMarker}`,
+    );
     void sendWorkflowResultFallback({
       taskName: params.definition.name,
       promptTemplate: params.definition.promptTemplate,
       workflowRunIds: [...workflowRunIds],
       dingtalkAlreadySent,
+      lastAssistantText,
     }).catch((err) => {
       logger.warn(
         `[ClaudeTaskWorker] workflow fallback threw: ${err instanceof Error ? err.message : String(err)}`,
