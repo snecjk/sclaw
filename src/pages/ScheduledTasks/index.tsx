@@ -14,6 +14,7 @@ import {
   rememberOptimisticTaskGroupFirstTriggered,
 } from '@/lib/task-group-first-trigger';
 import { stoCloudTaskGroupKey } from '../../../shared/task-group-key';
+import { applyTaskExecutionModelToChatSession } from '@/lib/apply-task-execution-model';
 import { useChatStore } from '@/stores/chat';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { useScheduledTaskUnreadStore } from '@/stores/scheduled-task-unread';
@@ -140,9 +141,17 @@ export default function ScheduledTasks() {
         if (result.outcome === 'async_started') {
           toast.success('测试运行已在云端开始执行，结果将通过轮询同步');
         } else if (result.hasSession) {
+          const targetSessionKey = result.executionSessionKey || agentSessionKey;
+          applyTaskExecutionModelToChatSession({
+            sessionKey: targetSessionKey,
+            model: result.executionModel,
+            agentId: result.executionAgentId || 'main',
+            engineType: 'openclaw',
+          });
           forgetOptimisticDeletedSessionKey(agentSessionKey);
+          forgetOptimisticDeletedSessionKey(targetSessionKey);
           navigateToMainChatHome(navigate, location.pathname, () => {
-            useChatStore.getState().switchSession(agentSessionKey);
+            useChatStore.getState().switchSession(targetSessionKey);
           });
           toast.success('测试运行已完成，结果已添加到会话');
           await useChatStore.getState().loadSessions();

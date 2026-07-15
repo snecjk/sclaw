@@ -194,12 +194,14 @@ export const openClawAdapter: EngineAdapter = {
 
   async sendMessage(ctx: EngineAdapterContext, params) {
     try {
-      const result = await ctx.gatewayManager.rpc<{ runId?: string }>('chat.send', {
+      // Defensive: ensure no non-schema properties leak into chat.send params
+      const rpcParams: Record<string, unknown> = {
         sessionKey: params.sessionKey,
         message: params.message,
         deliver: params.deliver,
         idempotencyKey: params.idempotencyKey,
-      }, 120000);
+      };
+      const result = await ctx.gatewayManager.rpc<{ runId?: string }>('chat.send', rpcParams, 120000);
       return { success: true, result };
     } catch (error) {
       return { success: false, error: String(error) };

@@ -12,3 +12,10 @@ export function isOpenClawHostedTaskExecutionSessionKey(sessionKey: string): boo
 export function isClaudeTaskExecutionSessionKey(sessionKey: string): boolean {
   return sessionKey.startsWith('claude-task:') || sessionKey.startsWith('claude-task-run:');
 }
+
+/** Session keys eligible for POST /api/sessions/model (in-session model override). */
+export function isSessionModelSwitchKey(sessionKey: string): boolean {
+  const trimmed = sessionKey.trim();
+  if (!trimmed) return false;
+  return trimmed.startsWith('agent:') || isClaudeTaskExecutionSessionKey(trimmed);
+}

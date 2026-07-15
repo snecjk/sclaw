@@ -18,6 +18,7 @@ import {
   rememberOptimisticTaskGroupFirstTriggered,
 } from '@/lib/task-group-first-trigger';
 import { resolveTaskGroupKeyFromSessionKey } from '../../../shared/task-group-key';
+import { applyTaskExecutionModelToChatSession } from '@/lib/apply-task-execution-model';
 import { useChatStore } from '@/stores/chat';
 import { useAgentsStore } from '@/stores/agents';
 import { navigateToMainChatHome, navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
@@ -295,11 +296,26 @@ export default function MyTask() {
         }
       });
       try {
-        await triggerJob(task.id, task.engineType);
+        const result = await triggerJob(task.id, task.engineType);
         if (groupKey) {
           void ensureTaskGroupFirstTriggeredOnRun(groupKey, triggeredAt);
         }
+        const executionMeta = result && typeof result === 'object'
+          ? result as {
+            executionSessionKey?: string;
+            executionModel?: string;
+            executionAgentId?: string;
+          }
+          : null;
+        const targetSessionKey = executionMeta?.executionSessionKey || sessionKey;
+        applyTaskExecutionModelToChatSession({
+          sessionKey: targetSessionKey,
+          model: executionMeta?.executionModel,
+          agentId: executionMeta?.executionAgentId || task.agentId,
+          engineType: task.engineType,
+        });
         forgetOptimisticDeletedSessionKey(sessionKey);
+        forgetOptimisticDeletedSessionKey(targetSessionKey);
         if (task.engineType !== 'claude' && task.agentId && task.agentId !== 'main') {
           const today = new Date();
           const y = today.getFullYear();
@@ -308,7 +324,7 @@ export default function MyTask() {
           forgetOptimisticDeletedSessionKey(`agent:main:cron:${task.id}:${y}-${m}-${d}`);
         }
         navigateToMainChatHome(navigate, location.pathname, () => {
-          useChatStore.getState().switchSession(sessionKey);
+          useChatStore.getState().switchSession(targetSessionKey);
         });
         await useChatStore.getState().loadSessions();
         toast.success(t('myTask.toast.triggered'));

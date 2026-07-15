@@ -237,7 +237,7 @@ export const PROVIDER_DEFINITIONS: ProviderDefinition[] = [
     defaultAuthMode: 'api_key',
     supportsMultipleAccounts: false,
     providerConfig: {
-      baseUrl: 'https://baseinfo-aimemory.sto.cn/agent/v1',
+      baseUrl: 'https://devops-llmgateway.sto.cn',
       api: 'openai-completions',
       apiKeyEnv: 'STO_API_KEY',
     },

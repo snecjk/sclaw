@@ -6,8 +6,21 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
-import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-to-chat';
-import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
+import {
+  extractAgentIdFromSessionKey,
+  parseClaudeTaskIdFromSessionKey,
+} from '../../shared/session-agent-id';
+import { useCronStore } from './cron';
+import {
+  applyWorkspaceDefaultToNewSession,
+  ensureSelectedModelPersistedBeforeSend,
+} from '@/lib/sync-workspace-default-to-chat';
+import {
+  isConcreteModelId,
+  normalizeModelIdForChat,
+  resolveProviderRawModelId,
+} from '@/lib/chat-model-options';
+import { useProviderStore } from '@/stores/providers';
 import { hostApiFetch } from '@/lib/host-api';
 import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
 import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
@@ -432,9 +445,30 @@ function getCanonicalPrefixFromSessions(sessions: ChatSession[]): string | null 
 }
 
 function getAgentIdFromSessionKey(sessionKey: string): string {
-  if (!sessionKey.startsWith('agent:')) return 'main';
-  const parts = sessionKey.split(':');
-  return parts[1] || 'main';
+  const fromKey = extractAgentIdFromSessionKey(sessionKey);
+  if (fromKey) return fromKey;
+
+  // Prefer session metadata (lists / trigger writeback attach agentId for claude-task:*).
+  try {
+    const fromSession = useChatStore.getState().sessions.find((session) => session.key === sessionKey)?.agentId?.trim();
+    if (fromSession) return fromSession;
+  } catch {
+    // Store may not be ready during module init; fall through.
+  }
+
+  const claudeTaskId = parseClaudeTaskIdFromSessionKey(sessionKey);
+  if (claudeTaskId) {
+    try {
+      const task = useCronStore.getState().jobs.find(
+        (job) => job.id === claudeTaskId && job.engineType === 'claude',
+      ) as { agentId?: string } | undefined;
+      if (task?.agentId?.trim()) return task.agentId.trim();
+    } catch {
+      // ignore
+    }
+  }
+
+  return 'main';
 }
 
 function parseSessionUpdatedAtMs(value: unknown): number | undefined {
@@ -1215,6 +1249,11 @@ export const useChatStore = create<ChatState>()(
     }));
   },
 
+  pendingNewSessionModel: null,
+  setPendingNewSessionModel: (model) => {
+    set({ pendingNewSessionModel: model });
+  },
+
   pendingWorkflow: null,
   setPendingWorkflow: (pending) => {
     set({ pendingWorkflow: pending });
@@ -1304,6 +1343,7 @@ export const useChatStore = create<ChatState>()(
               ),
               thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
               model: s.model ? String(s.model) : undefined,
+              agentId: typeof s.agentId === 'string' && s.agentId.trim() ? s.agentId.trim() : undefined,
               updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
               spawnedBy: typeof s.spawnedBy === 'string' ? s.spawnedBy : undefined,
               engineType,
@@ -1427,6 +1467,7 @@ export const useChatStore = create<ChatState>()(
               ...remote,
               engineType: remote.engineType ?? local.engineType,
               model: remote.model ?? local.model,
+              agentId: remote.agentId ?? local.agentId,
             };
           });
           const mergedSessions = appendPendingLocalVirtualTaskSessions(
@@ -1794,7 +1835,7 @@ export const useChatStore = create<ChatState>()(
 
   // ── New session ──
 
-  newSession: () => {
+  newSession: async () => {
     // Generate a new unique session key and switch to it.
     // NOTE: We intentionally do NOT call sessions.reset on the old session.
     // sessions.reset archives (renames) the session JSONL file, making old
@@ -1810,21 +1851,33 @@ export const useChatStore = create<ChatState>()(
       ?? DEFAULT_CANONICAL_PREFIX;
     const newKey = `${prefix}:session-${Date.now()}`;
     const newAgentId = getAgentIdFromSessionKey(newKey);
-    // Carry over model from home/default session or Claude agent toolbar selection
-    let currentSessionModel = sessions.find((s) => s.key === currentSessionKey)?.model;
-    if (!currentSessionModel?.trim()) {
-      const carryAgent = useAgentsStore.getState().agents.find(
-        (agent) => agent.id === (getAgentIdFromSessionKey(currentSessionKey) ?? get().currentAgentId),
-      );
-      if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
-        currentSessionModel = normalizeModelIdForChat(carryAgent.modelDisplay);
+    const pendingModel = get().pendingNewSessionModel?.trim();
+    let chosenModel = pendingModel;
+    if (!chosenModel) {
+      if (currentSessionKey !== DEFAULT_SESSION_KEY) {
+        chosenModel = sessions.find((s) => s.key === currentSessionKey)?.model?.trim();
+      } else {
+        // Placeholder main may carry gateway agent default (e.g. qwen3.5) — not user choice.
+        // Explicit toolbar picks use pendingNewSessionModel; Claude uses agent-scoped model.
+        const carryAgent = useAgentsStore.getState().agents.find(
+          (agent) => agent.id === get().currentAgentId,
+        );
+        if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
+          const { accounts, defaultAccountId } = useProviderStore.getState();
+          const resolved = resolveProviderRawModelId(
+            accounts,
+            carryAgent.modelDisplay,
+            carryAgent.modelAccountId ?? defaultAccountId,
+          );
+          chosenModel = resolved?.modelId ?? normalizeModelIdForChat(carryAgent.modelDisplay);
+        }
       }
     }
     const newSessionEntry: ChatSession = {
       key: newKey,
       label: NEW_SESSION_TEMP_LABEL,
       engineType: getAgentEngineType(newAgentId),
-      ...(currentSessionModel ? { model: currentSessionModel } : {}),
+      ...(chosenModel ? { model: chosenModel } : {}),
     };
     const createdAtMs = Date.now();
     set((s) => {
@@ -1873,9 +1926,8 @@ export const useChatStore = create<ChatState>()(
         pendingWorkflow: null,
       };
     });
-    // 新建即视为已读，写入已读水位；后续该会话前台完成的迟到事件不会误标未读。
     touchSessionReadAt(newKey);
-    void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
+    await applyWorkspaceDefaultToNewSession(newKey, newAgentId);
   },
 
   // ── Cleanup empty session on navigate away ──
@@ -2268,12 +2320,12 @@ export const useChatStore = create<ChatState>()(
       try {
         // Gateway chat.history does not support offset; load up to the hard max in one call.
         let thinkingLevel: string | null = null;
+        // engineType is not accepted by Gateway chat.history schema
         const data = await useGatewayStore.getState().rpc<Record<string, unknown>>(
           'chat.history',
           {
             sessionKey: targetSessionKey,
             limit: CHAT_HISTORY_LENGTH_MAX_LIMIT,
-            engineType: resolveEngineTypeForSession(get().sessions, targetSessionKey, get().currentAgentId),
           },
         );
         if (get().currentSessionKey !== targetSessionKey) return;
@@ -2378,6 +2430,18 @@ export const useChatStore = create<ChatState>()(
       : null;
     if (!skillGatewayText && !userDisplayText && (!attachments || attachments.length === 0) && !skillMeta) return;
 
+    // Placeholder home session cannot carry a model override — create a real session first
+    // so toolbar/agent model choice is persisted before chat.send hits the gateway default.
+    try {
+      if (get().currentSessionKey === DEFAULT_SESSION_KEY) {
+        await get().newSession();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ error: message || 'Failed to prepare session model', sending: false });
+      return;
+    }
+
     // Inject hidden workflow context / session hint for AI guidance
     const { appendWorkflowContext, stripWorkflowContextForDisplay } = await import('@/lib/workflow-context');
     const {
@@ -2405,6 +2469,27 @@ export const useChatStore = create<ChatState>()(
           : undefined,
       },
     );
+
+    // Force-persist selected/resolved model before chat.send (Gateway/Claude storage is execution truth).
+    try {
+      await ensureSelectedModelPersistedBeforeSend({
+        sessionKey: currentSessionKey,
+        agentId: targetAgentId ?? get().currentAgentId ?? getAgentIdFromSessionKey(currentSessionKey),
+        engineType: currentSessionEngineType === 'claude' ? 'claude' : 'openclaw',
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({
+        error: message || 'Failed to sync session model before send',
+        sending: false,
+      });
+      set((s) => patchSessionRuntimeState(s, currentSessionKey, {
+        sending: false,
+        error: message || 'Failed to sync session model before send',
+      }));
+      return;
+    }
+
     // Keep local session stamp aligned with unused-embed → agent default resolution
     // so UI / subsequent sends do not snap back to a stale OpenClaw engineType.
     if (
@@ -2708,6 +2793,8 @@ export const useChatStore = create<ChatState>()(
           },
         );
       } else {
+        // engineType is used only by Main-process routes to select the adapter;
+        // Gateway chat.send schema does not accept it, so we must NOT forward it.
         const rpcResult = await useGatewayStore.getState().rpc<{ runId?: string }>(
           'chat.send',
           {
@@ -2715,7 +2802,6 @@ export const useChatStore = create<ChatState>()(
             message: gatewayMessage,
             deliver: false,
             idempotencyKey,
-            engineType: currentSessionEngineType,
             ...dingTalkRpcExtras,
             // NOTE: workflowId/runId are not forwarded to Gateway chat.send yet
             // because the Gateway schema does not accept them. Workflow state
@@ -2787,11 +2873,11 @@ export const useChatStore = create<ChatState>()(
     }));
 
     try {
+      // engineType is not accepted by Gateway chat.abort schema
       await useGatewayStore.getState().rpc(
         'chat.abort',
         {
           sessionKey: currentSessionKey,
-          engineType: resolveEngineTypeForSession(get().sessions, currentSessionKey, get().currentAgentId),
         },
       );
     } catch (err) {
