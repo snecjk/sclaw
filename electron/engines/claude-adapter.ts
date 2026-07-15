@@ -972,6 +972,7 @@ async function startClaudeQuery(
     await ensureClaudeConfigDir();
     const sdk = await import('@anthropic-ai/claude-agent-sdk');
     const existing = await ensureClaudeRegistryEntry(sessionKey);
+    logger.info('[claude-adapter] ensureClaudeRegistryEntry', existing);
     const cwd = existing?.cwd;
     if (!cwd) {
       return { success: false, error: `Claude session ${sessionKey} is missing workspace cwd` };
@@ -999,7 +1000,10 @@ async function startClaudeQuery(
     claudeRuntimeResults.delete(sessionKey);
     await sanitizeClaudeSettingsEnv();
     const historyBridgeAppend = await consumePendingHistoryBridgeAppend(sessionKey);
-    const systemPromptAppend = [runtimeOptions.systemPromptAppend, options?.systemPromptAppend, historyBridgeAppend]
+    // 默认将 cwd 工作区/工作空间写入提示词：用户未指定特殊路径时，模型以该路径作为默认工作目录。
+    // 走 systemPromptAppend（与 historyBridge 一致），避免污染用户消息与侧栏标题。
+    const cwdPromptNote = `# 工作区/项目空间限制\n 当前工作目录/空间根目录为：**${cwd}**。若用户未指定特殊路径，请默认使用该路径作为工作目录进行文件读写等操作。**如果记忆中也出现了，必须以此处路径为准**。`;
+    const systemPromptAppend = [cwdPromptNote, runtimeOptions.systemPromptAppend, options?.systemPromptAppend, historyBridgeAppend]
       .filter(Boolean)
       .join('\n\n');
     logger.info(`[claude-adapter][prompt] final systemPromptAppend: sessionKey=${sessionKey}, systemPromptAppend=\n${systemPromptAppend || '(none)'}`);
