@@ -123,4 +123,41 @@ describe('Home skill seed', () => {
       );
     });
   });
+
+  it('auto-sends workflow run-now pure ?q= on a fresh Home mount', async () => {
+    const prompt = '帮我执行 id 为：wf-1 的工作流 【客户异常监控】';
+    render(
+      <MemoryRouter initialEntries={[`/?q=${encodeURIComponent(prompt)}`]}>
+        <Home />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(handleHubSend).toHaveBeenCalledWith(
+        prompt,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      );
+    });
+  });
+
+  it('auto-sends ?q= with workflowId for official install deep links', async () => {
+    render(
+      <MemoryRouter initialEntries={['/?q=%2Fdemo&workflowId=tpl_1']}>
+        <Home />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(handleHubSend).toHaveBeenCalledWith(
+        '/demo',
+        undefined,
+        undefined,
+        undefined,
+        'tpl_1',
+      );
+    });
+  });
 });

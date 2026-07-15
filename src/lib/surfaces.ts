@@ -162,6 +162,11 @@ export const myTaskCardShellClass = cn(
   'transition-[box-shadow] duration-base hover:shadow-soft',
 );
 
+/** 我的任务运行保障控件：标题行右侧紧凑排布（文案 + 问号 + 开关） */
+export const myTaskRunGuardBarShellClass = cn(
+  'inline-flex shrink-0 items-center gap-2',
+);
+
 /** 我的任务卡片顶栏：开关左、更多右（与开关同高，保证开关→标题 18px） */
 export const myTaskCardTopRowClass = 'flex shrink-0 items-start justify-between gap-3';
 
