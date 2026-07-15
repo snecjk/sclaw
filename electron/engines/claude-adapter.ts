@@ -10,7 +10,6 @@ import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import { getClaudeConfigDir } from '../utils/paths';
 import { getApiKey } from '../utils/secure-storage';
-import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, upsertEngineSessionRegistryEntry, type EngineSessionRegistryEntry } from './session-registry';
@@ -78,7 +77,6 @@ async function buildClaudeEnvForAccount(accountId?: string): Promise<NodeJS.Proc
     ...process.env,
     CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
   };
-  applySaiClientIdEnv(base as Record<string, string | undefined>);
 
   if (!accountId) {
     logger.debug('[claude-env] No accountId, returning base env');
