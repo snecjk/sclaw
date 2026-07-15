@@ -88,8 +88,10 @@ export function Home() {
     [cleanupEmptySession]
   );
 
-  // Handle skill-plaza "Use" navigation with ?q= prompt and ?workflowId= template pick
+  // Handle skill-plaza "Use" (?skill=) and legacy ?q= / ?workflowId= deep links
   const [searchParams, setSearchParams] = useSearchParams();
+  const seedSkillSlug = searchParams.get('skill')?.trim() || undefined;
+  const [initialSkillSlug] = useState(() => seedSkillSlug);
   // searchParams.get() is already percent-decoded; decodeURIComponent again throws
   // URIError when the prompt contains a literal '%' (e.g. "完成率50%").
   const querySeedText = searchParams.get('q')?.trim() || undefined;
@@ -100,21 +102,25 @@ export function Home() {
   const [draftSeedText, setDraftSeedText] = useState<string | undefined>();
 
   useEffect(() => {
-    if (!querySeedText || seedWorkflowId) return;
-
-    setDraftSeedText(querySeedText);
-    setSearchParams({}, { replace: true });
-  }, [querySeedText, seedWorkflowId, setSearchParams]);
+    if (!seedSkillSlug) return;
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('skill');
+      return next;
+    }, { replace: true });
+  }, [seedSkillSlug, setSearchParams]);
 
   useEffect(() => {
-    if (!querySeedText || !seedWorkflowId || hasAutoSentRef.current) return;
+    if (!querySeedText || seedWorkflowId || !initialSkillSlug || hasAutoSentRef.current) return;
+    setDraftSeedText(querySeedText);
+    setSearchParams({}, { replace: true });
     if (gatewayStatus.state !== 'running') return;
 
     hasAutoSentRef.current = true;
     // Clear q and workflowId from URL so refresh doesn't re-trigger
     setSearchParams({}, { replace: true });
     handleHubSend(querySeedText, undefined, undefined, undefined, seedWorkflowId);
-  }, [querySeedText, seedWorkflowId, gatewayStatus.state, handleHubSend, setSearchParams]);
+  }, [querySeedText, seedWorkflowId, initialSkillSlug, gatewayStatus.state, handleHubSend, setSearchParams]);
 
   // Wait for site-department-types before choosing HQ vs site homepage.
   if (isAuthenticated && siteDepartmentTypes === null) {
@@ -125,7 +131,7 @@ export function Home() {
   if (isSite) {
     return (
       <>
-        <HomeSiteSurface seedText={draftSeedText} />
+        <HomeSiteSurface seedText={draftSeedText} seedSkillSlug={seedSkillSlug} />
         <TaskCreateModal
           open={nlModalOpen}
           onClose={closeNlModal}
@@ -146,7 +152,7 @@ export function Home() {
               : 'mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-2 sm:px-2',
           )}
         >
-          <HomeAgentHubSurface seedText={draftSeedText} />
+          <HomeAgentHubSurface seedText={draftSeedText} seedSkillSlug={seedSkillSlug} />
         </div>
         <TaskCreateModal
           open={nlModalOpen}
@@ -179,6 +185,7 @@ export function Home() {
             <HomeMainConversation
               className="min-h-0 flex-1"
               seedText={draftSeedText}
+              seedSkillSlug={seedSkillSlug}
               onSend={handleHubSend}
             />
           ) : (
@@ -192,7 +199,7 @@ export function Home() {
         </div>
         {!showConversation ? (
           <div className={homeHubFooterShellClass}>
-            <HomeComposer seedText={draftSeedText} onSend={handleHubSend} />
+            <HomeComposer seedText={draftSeedText} seedSkillSlug={seedSkillSlug} onSend={handleHubSend} />
           </div>
         ) : null}
       </div>

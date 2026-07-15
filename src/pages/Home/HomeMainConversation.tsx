@@ -37,6 +37,7 @@ import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
 
@@ -48,6 +49,8 @@ export interface HomeMainConversationProps {
   className?: string;
   /** 一次性填入输入框的种子文案 */
   seedText?: string;
+  /** 技能广场「使用」：预填技能标签 */
+  seedSkillSlug?: string;
   onSend?: (
     text: string,
     attachments?: FileAttachment[],
@@ -56,10 +59,11 @@ export interface HomeMainConversationProps {
     workflowId?: string | null,
     workflowSource?: string | null,
     workflowName?: string | null,
+    skillMeta?: SkillMeta,
   ) => void;
 }
 
-export function HomeMainConversation({ className, seedText, onSend }: HomeMainConversationProps) {
+export function HomeMainConversation({ className, seedText, seedSkillSlug, onSend }: HomeMainConversationProps) {
   const navigate = useNavigate();
   const { t } = useTranslation(['chat', 'common']);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
@@ -525,6 +529,7 @@ export function HomeMainConversation({ className, seedText, onSend }: HomeMainCo
 
       <HomeComposer
         seedText={effectiveComposerSeed}
+        seedSkillSlug={subitemComposeSeed ? undefined : seedSkillSlug}
         onSend={onSend}
       />
         </div>

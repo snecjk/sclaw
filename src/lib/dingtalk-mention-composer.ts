@@ -1,10 +1,15 @@
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
+import { skillComposerTagClass } from '@/lib/surfaces';
 
 export const MENTION_SPAN_CLASS = 'dingtalk-mention-token';
 export const MENTION_SPAN_SELECTOR = `span.${MENTION_SPAN_CLASS}`;
 
 export const WORKFLOW_SPAN_CLASS = 'workflow-token';
 export const WORKFLOW_SPAN_SELECTOR = `span.${WORKFLOW_SPAN_CLASS}`;
+
+export const SKILL_SPAN_CLASS = 'skill-token';
+export const SKILL_SPAN_SELECTOR = `span.${SKILL_SPAN_CLASS}`;
 
 export interface MentionComposerSnapshot {
   plainText: string;
@@ -14,6 +19,7 @@ export interface MentionComposerSnapshot {
   workflowName?: string;
   /** 工作流来源：'mine' = 我的工作流-已发布（直接以工作流上下文发送）；缺省 = 模版（走参数表单）。 */
   workflowSource?: string;
+  skill?: SkillMeta;
   isEmpty: boolean;
 }
 
@@ -31,6 +37,25 @@ function isMentionSpan(node: Node | null): boolean {
 
 function isWorkflowSpan(node: Node | null): boolean {
   return node instanceof HTMLSpanElement && node.classList.contains(WORKFLOW_SPAN_CLASS);
+}
+
+function isSkillSpan(node: Node | null): boolean {
+  return node instanceof HTMLSpanElement
+    && (node.classList.contains(SKILL_SPAN_CLASS) || Boolean(node.dataset.skillSlug));
+}
+
+function readSkillFromSpan(span: HTMLSpanElement): SkillMeta | null {
+  const slug = span.dataset.skillSlug;
+  const title = span.dataset.skillTitle ?? span.querySelector('.skill-token-label')?.textContent?.trim() ?? '';
+  if (!slug || !title) return null;
+  return { slug, title };
+}
+
+export function readSkillMetaFromEditorRoot(root: HTMLElement): SkillMeta | undefined {
+  const skillSpan = root.querySelector(SKILL_SPAN_SELECTOR)
+    ?? root.querySelector('span[data-skill-slug]');
+  if (!(skillSpan instanceof HTMLSpanElement)) return undefined;
+  return readSkillFromSpan(skillSpan) ?? undefined;
 }
 
 function readMentionFromSpan(span: HTMLSpanElement): DingTalkMention | null {
@@ -63,6 +88,7 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
   let workflowId: string | undefined;
   let workflowName: string | undefined;
   let workflowSource: string | undefined;
+  let skill: SkillMeta | undefined;
 
   const walk = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -77,6 +103,12 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
         mentions.push(mention);
         plainText += `@${mention.displayName}`;
       }
+      return;
+    }
+
+    if (isSkillSpan(node)) {
+      const parsed = readSkillFromSpan(node);
+      if (parsed) skill = parsed;
       return;
     }
 
@@ -102,15 +134,61 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
   };
 
   root.childNodes.forEach(walk);
-  const normalized = plainText.replace(/\u00A0/g, ' ');
+
+  if (!skill) {
+    const skillSpan = root.querySelector(SKILL_SPAN_SELECTOR)
+      ?? root.querySelector('span[data-skill-slug]');
+    if (skillSpan instanceof HTMLSpanElement) {
+      const parsed = readSkillFromSpan(skillSpan);
+      if (parsed) skill = parsed;
+    }
+  }
+
+  let normalized = plainText.replace(/\u00A0/g, ' ');
+  if (skill) {
+    normalized = normalized.replace(/^\s+/, '');
+  }
   return {
     plainText: normalized,
     mentions,
     workflowId,
     workflowName,
     workflowSource,
-    isEmpty: normalized.trim().length === 0 && mentions.length === 0,
+    skill,
+    isEmpty: normalized.trim().length === 0 && mentions.length === 0 && !skill,
   };
+}
+
+/** 从 plainText 提取 `*` 之后的内联筛选关键词（composer 技能 Picker inline 模式）。 */
+export function extractSkillInlineQuery(plainText: string): string {
+  const idx = plainText.lastIndexOf('*');
+  if (idx === -1) return '';
+  return plainText.slice(idx + 1);
+}
+
+/** plainText 中是否包含技能 inline 触发符 `*`。 */
+export function hasSkillInlineTrigger(plainText: string): boolean {
+  return plainText.includes('*');
+}
+
+/**
+ * 移除 editor 中 `*` 及其后的内联筛选文本（选中技能或取消 inline Picker 时调用）。
+ * @param explicitQuery 选中技能时传入当前 filter，避免误删 `*` 之后用户已输入的正文
+ * @returns 是否成功移除
+ */
+export function consumeSkillTriggerText(root: HTMLElement, explicitQuery?: string): boolean {
+  const plainText = serializeMentionEditor(root).plainText;
+  const startIdx = plainText.lastIndexOf('*');
+  if (startIdx === -1) return false;
+
+  const query = explicitQuery ?? extractSkillInlineQuery(plainText);
+  const endIdx = startIdx + 1 + query.length;
+
+  const range = buildRangeFromPlainTextOffsets(root, startIdx, endIdx);
+  if (!range) return false;
+
+  range.deleteContents();
+  return true;
 }
 
 function collectTextBeforeCaret(root: HTMLElement, range: Range): string {
@@ -147,7 +225,10 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
       return null;
     }
 
-    if (node instanceof HTMLElement && (isMentionSpan(node) || isWorkflowSpan(node))) {
+    if (node instanceof HTMLElement && (isMentionSpan(node) || isWorkflowSpan(node) || isSkillSpan(node))) {
+      if (isSkillSpan(node)) {
+        return null;
+      }
       // 与 serializeMentionEditor 保持一致：mention span 用 `@displayName`
       // （不含 removable 模式下 × 删除按钮的字符），否则偏移量会与序列化错位。
       const text = isMentionSpan(node)
@@ -328,6 +409,80 @@ export function createWorkflowSpan(
   return span;
 }
 
+const SKILL_WRENCH_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
+
+export function createSkillSpan(slug: string, title: string): HTMLSpanElement {
+  const span = document.createElement('span');
+  span.className = skillComposerTagClass;
+  span.contentEditable = 'false';
+  span.dataset.skillSlug = slug;
+  span.dataset.skillTitle = title;
+
+  const icon = document.createElement('span');
+  icon.className = 'skill-token-icon inline-flex shrink-0';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.innerHTML = SKILL_WRENCH_SVG;
+
+  const label = document.createElement('span');
+  label.className = 'skill-token-label';
+  label.textContent = title;
+
+  span.append(icon, label);
+  return span;
+}
+
+function removeWorkflowSpanFromRoot(root: HTMLElement): void {
+  const existing = root.querySelector(WORKFLOW_SPAN_SELECTOR);
+  if (!(existing instanceof HTMLSpanElement)) return;
+  const next = existing.nextSibling;
+  existing.remove();
+  if (next?.nodeType === Node.TEXT_NODE) {
+    const text = next.textContent ?? '';
+    if (text === '\u00A0' || text === ' ') {
+      next.remove();
+    }
+  }
+}
+
+export function removeSkillSpan(root: HTMLElement): void {
+  const existing = root.querySelector(SKILL_SPAN_SELECTOR);
+  if (!(existing instanceof HTMLSpanElement)) return;
+  const next = existing.nextSibling;
+  existing.remove();
+  if (next?.nodeType === Node.TEXT_NODE) {
+    const text = next.textContent ?? '';
+    if (text === '\u00A0' || text === ' ') {
+      next.remove();
+    }
+  }
+}
+
+export function insertSkillSpan(root: HTMLElement, slug: string, title: string): void {
+  const selection = window.getSelection();
+  removeWorkflowSpanFromRoot(root);
+  removeSkillSpan(root);
+
+  const span = createSkillSpan(slug, title);
+  const space = document.createTextNode('\u00A0');
+  const fragment = document.createDocumentFragment();
+  fragment.append(span, space);
+
+  const first = root.firstChild;
+  if (first) {
+    root.insertBefore(fragment, first);
+  } else {
+    root.appendChild(fragment);
+  }
+
+  const caretRange = document.createRange();
+  caretRange.setStart(space, 1);
+  caretRange.collapse(true);
+  selection?.removeAllRanges();
+  selection?.addRange(caretRange);
+  root.focus();
+}
+
 export function removeMentionSpan(root: HTMLElement, span: HTMLSpanElement): void {
   if (!root.contains(span)) return;
 
@@ -373,6 +528,7 @@ export function insertWorkflowSpan(
   source?: string,
 ): void {
   const selection = window.getSelection();
+  removeSkillSpan(root);
   const snapshot = serializeMentionEditor(root);
   const text = snapshot.plainText;
   const lastSlashIndex = text.lastIndexOf('/');
@@ -411,7 +567,7 @@ export function removeMentionBeforeCaret(root: HTMLElement): boolean {
   if (startContainer.nodeType === Node.TEXT_NODE) {
     const textNode = startContainer as Text;
     const prev = textNode.previousSibling;
-    if (prev && (isMentionSpan(prev) || isWorkflowSpan(prev))) {
+    if (prev && (isMentionSpan(prev) || isWorkflowSpan(prev) || isSkillSpan(prev))) {
       const text = textNode.data ?? '';
       const trailingSeparator = text === '\u00A0' || text === ' ';
       if (startOffset === 0 || (trailingSeparator && startOffset <= text.length)) {
@@ -431,7 +587,7 @@ export function removeMentionBeforeCaret(root: HTMLElement): boolean {
   if (startContainer instanceof HTMLElement) {
     const index = startOffset - 1;
     const prev = startContainer.childNodes[index] ?? null;
-    if (isMentionSpan(prev) || isWorkflowSpan(prev)) {
+    if (isMentionSpan(prev) || isWorkflowSpan(prev) || isSkillSpan(prev)) {
       prev.remove();
       const next = startContainer.childNodes[index] ?? null;
       if (next?.nodeType === Node.TEXT_NODE && (next.textContent === '\u00A0' || next.textContent === '')) {

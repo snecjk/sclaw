@@ -8,6 +8,7 @@ import { useMessageQueueStore } from '@/stores/message-queue';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
 import { hostApiFetch } from '@/lib/host-api';
 import { resolveHomePageCarryoverModel } from '@/lib/chat-model-options';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
@@ -24,9 +25,9 @@ export function useHomeChatEntrySend() {
   const newSession = useChatStore((s) => s.newSession);
 
   const handleHubQueue = useCallback(
-    (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, _dingTalkMentions?: DingTalkMention[], workflowId?: string | null) => {
+    (text: string, attachments?: FileAttachment[], targetAgentId?: string | null, _dingTalkMentions?: DingTalkMention[], workflowId?: string | null, skillMeta?: SkillMeta) => {
       const { currentSessionKey } = useChatStore.getState();
-      useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, _dingTalkMentions, workflowId);
+      useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, _dingTalkMentions, workflowId, skillMeta);
     },
     [],
   );
@@ -40,6 +41,7 @@ export function useHomeChatEntrySend() {
       workflowId?: string | null,
       workflowSource?: string | null,
       workflowName?: string | null,
+      skillMeta?: SkillMeta,
     ) => {
       const { currentAgentId, currentSessionKey, sessions, messages } = useChatStore.getState();
       const currentSession = sessions.find((session) => session.key === currentSessionKey);
@@ -105,7 +107,7 @@ export function useHomeChatEntrySend() {
       }
 
       const { dispatchChatSend } = await import('@/hooks/dispatch-chat-send');
-      await dispatchChatSend({ text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId, workflowSource, workflowName });
+      await dispatchChatSend({ text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId, workflowSource, workflowName, skillMeta });
       if (useChatStore.getState().error) {
         toast.error(t('assistant.sendFailed'));
       }

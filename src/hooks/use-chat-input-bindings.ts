@@ -36,6 +36,7 @@ import { useGatewayStore } from '@/stores/gateway';
 import { suspendAutoSend } from '@/stores/message-queue';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
 
 export interface ChatInputBindingsOptions {
   /** 发送消息回调 */
@@ -47,6 +48,8 @@ export interface ChatInputBindingsOptions {
     workflowId?: string | null,
     workflowSource?: string | null,
     workflowName?: string | null,
+    skillMeta?: SkillMeta,
+    workflowContext?: import('@/stores/chat').WorkflowContextBlock | null,
   ) => void;
   /** 排队消息回调 */
   onQueue: (
@@ -57,6 +60,8 @@ export interface ChatInputBindingsOptions {
     workflowId?: string | null,
     workflowSource?: string | null,
     workflowName?: string | null,
+    skillMeta?: SkillMeta,
+    workflowContext?: import('@/stores/chat').WorkflowContextBlock | null,
   ) => void;
   /** ChatInput 变体：default（标准）或 embedded（嵌入式，如首页） */
   variant?: 'default' | 'embedded';
@@ -64,6 +69,8 @@ export interface ChatInputBindingsOptions {
   isEmpty?: boolean;
   /** 种子文本（用于预填充输入框，如任务子项默认提示） */
   seedText?: string;
+  /** 技能广场「使用」：预填技能标签 */
+  seedSkillSlug?: string;
   /** 覆盖默认 composer 占位文案 */
   placeholder?: string;
   /** 外层 className */
@@ -89,6 +96,8 @@ export interface ChatInputBindingsResult {
   variant: 'default' | 'embedded';
   /** 种子文本 */
   seedText?: string;
+  /** 技能广场「使用」：预填技能标签 */
+  seedSkillSlug?: string;
   /** 覆盖默认 composer 占位文案 */
   placeholder?: string;
   /** 外层 className */
@@ -124,6 +133,7 @@ export function useChatInputBindings(options: ChatInputBindingsOptions): ChatInp
       isEmpty: options.isEmpty,
       variant: options.variant ?? 'default',
       seedText: options.seedText,
+      seedSkillSlug: options.seedSkillSlug,
       placeholder: options.placeholder,
       className: options.className,
     }),
@@ -133,6 +143,7 @@ export function useChatInputBindings(options: ChatInputBindingsOptions): ChatInp
       options.isEmpty,
       options.variant,
       options.seedText,
+      options.seedSkillSlug,
       options.placeholder,
       options.className,
       options.engineType,
