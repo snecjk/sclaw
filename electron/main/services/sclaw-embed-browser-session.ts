@@ -10,6 +10,25 @@ import {
 } from '../../../shared/sclaw-embed-browser';
 import { logger } from '../../utils/logger';
 
+/** Prefer Chinese for DingTalk / STO SSO widgets that key off Accept-Language. */
+const EMBED_ACCEPT_LANGUAGE = 'zh-CN,zh;q=0.9';
+
+let localeHeadersInstalled = false;
+
+function ensureEmbedLocaleHeaders(embedSession: Electron.Session): void {
+  if (localeHeadersInstalled) return;
+  localeHeadersInstalled = true;
+
+  embedSession.webRequest.onBeforeSendHeaders({ urls: ['<all_urls>'] }, (details, callback) => {
+    callback({
+      requestHeaders: {
+        ...details.requestHeaders,
+        'Accept-Language': EMBED_ACCEPT_LANGUAGE,
+      },
+    });
+  });
+}
+
 function cookieTargetUrl(cookie: Cookie): string {
   const domain = (cookie.domain ?? '').replace(/^\./, '');
   const path = cookie.path ?? '/';
@@ -47,9 +66,11 @@ async function syncDomainCookies(
 
 /** Copy STO-related cookies from defaultSession into the embed partition. */
 export async function prepareSclawEmbedBrowserSession(url: string): Promise<void> {
+  const embedSession = session.fromPartition(SCLAW_EMBED_BROWSER_PARTITION);
+  ensureEmbedLocaleHeaders(embedSession);
+
   if (!isStoEmbedBrowserUrl(url)) return;
 
-  const embedSession = session.fromPartition(SCLAW_EMBED_BROWSER_PARTITION);
   let copied = 0;
 
   for (const domain of SCLAW_EMBED_COOKIE_DOMAIN_SUFFIXES) {

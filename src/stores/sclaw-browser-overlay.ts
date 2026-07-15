@@ -5,10 +5,19 @@
 import { create } from 'zustand';
 import {
   activateSclawBrowserEmbedChat,
+  createSclawBrowserEmbedChatSession,
   deactivateSclawBrowserEmbedChat,
+  deleteSclawBrowserEmbedChatSession,
+  listSclawBrowserEmbedChatSessions,
+  switchSclawBrowserEmbedChatSession,
 } from '@/lib/sclaw-browser-chat-lifecycle';
+import type { EmbedChatIndexItem } from '@/lib/sclaw-browser-chat-index';
 import { createSclawBrowserEmbedRuntimeId } from '@/lib/sclaw-browser-chat-session';
-import { registerSclawBrowserRuntime, unregisterSclawBrowserRuntime, ensureSclawBrowserBridge } from '@/lib/sclaw-browser-host-api';
+import {
+  ensureSclawBrowserBridge,
+  registerSclawBrowserRuntime,
+  unregisterSclawBrowserRuntime,
+} from '@/lib/sclaw-browser-host-api';
 
 export interface SclawBrowserOverlaySession {
   appId: string;
@@ -24,6 +33,7 @@ interface SclawBrowserOverlayState {
   chatSessionKey: string | null;
   savedMainSessionKey: string | null;
   chatSplitPercent: number;
+  chatSessions: EmbedChatIndexItem[];
 
   open: (session: SclawBrowserOverlaySession) => void;
   close: () => void;
@@ -31,6 +41,10 @@ interface SclawBrowserOverlayState {
   openChatPanel: () => void;
   closeChatPanel: () => void;
   setChatSplitPercent: (percent: number) => void;
+  refreshChatSessions: () => void;
+  createChatSession: () => void;
+  switchChatSession: (sessionKey: string) => void;
+  deleteChatSession: (sessionKey: string) => Promise<void>;
 }
 
 const DEFAULT_CHAT_SPLIT_PERCENT = 28;
@@ -42,6 +56,7 @@ export const useSclawBrowserOverlayStore = create<SclawBrowserOverlayState>((set
   chatSessionKey: null,
   savedMainSessionKey: null,
   chatSplitPercent: DEFAULT_CHAT_SPLIT_PERCENT,
+  chatSessions: [],
 
   open: (session) => {
     const embedRuntimeId = createSclawBrowserEmbedRuntimeId();
@@ -56,6 +71,7 @@ export const useSclawBrowserOverlayStore = create<SclawBrowserOverlayState>((set
       chatPanelOpen: false,
       chatSessionKey: null,
       savedMainSessionKey: null,
+      chatSessions: listSclawBrowserEmbedChatSessions(session.appId),
     });
   },
 
@@ -72,6 +88,7 @@ export const useSclawBrowserOverlayStore = create<SclawBrowserOverlayState>((set
       chatPanelOpen: false,
       chatSessionKey: null,
       savedMainSessionKey: null,
+      chatSessions: [],
     });
   },
 
@@ -97,6 +114,7 @@ export const useSclawBrowserOverlayStore = create<SclawBrowserOverlayState>((set
       chatPanelOpen: true,
       chatSessionKey,
       savedMainSessionKey,
+      chatSessions: listSclawBrowserEmbedChatSessions(session.appId),
     });
   },
 
@@ -112,4 +130,56 @@ export const useSclawBrowserOverlayStore = create<SclawBrowserOverlayState>((set
   },
 
   setChatSplitPercent: (percent) => set({ chatSplitPercent: percent }),
+
+  refreshChatSessions: () => {
+    const appId = get().session?.appId;
+    if (!appId) return;
+    set({ chatSessions: listSclawBrowserEmbedChatSessions(appId) });
+  },
+
+  createChatSession: () => {
+    const { embedRuntimeId, session, savedMainSessionKey, chatPanelOpen } = get();
+    if (!embedRuntimeId || !session?.appId || !chatPanelOpen) return;
+    const activation = createSclawBrowserEmbedChatSession(
+      session.appId,
+      embedRuntimeId,
+      savedMainSessionKey,
+    );
+    set({
+      chatSessionKey: activation.chatSessionKey,
+      chatSessions: listSclawBrowserEmbedChatSessions(session.appId),
+    });
+  },
+
+  switchChatSession: (sessionKey) => {
+    const { embedRuntimeId, session, savedMainSessionKey, chatPanelOpen, chatSessionKey } = get();
+    if (!embedRuntimeId || !session?.appId || !chatPanelOpen) return;
+    if (sessionKey === chatSessionKey) return;
+    const activation = switchSclawBrowserEmbedChatSession(
+      session.appId,
+      embedRuntimeId,
+      sessionKey,
+      savedMainSessionKey,
+    );
+    set({
+      chatSessionKey: activation.chatSessionKey,
+      chatSessions: listSclawBrowserEmbedChatSessions(session.appId),
+    });
+  },
+
+  deleteChatSession: async (sessionKey) => {
+    const { embedRuntimeId, session, savedMainSessionKey, chatPanelOpen } = get();
+    if (!embedRuntimeId || !session?.appId || !chatPanelOpen) return;
+    const activation = await deleteSclawBrowserEmbedChatSession(
+      session.appId,
+      embedRuntimeId,
+      sessionKey,
+      savedMainSessionKey,
+    );
+    if (!activation) return;
+    set({
+      chatSessionKey: activation.chatSessionKey,
+      chatSessions: listSclawBrowserEmbedChatSessions(session.appId),
+    });
+  },
 }));

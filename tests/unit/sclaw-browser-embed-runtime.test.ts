@@ -3,8 +3,10 @@ import {
   createSclawBrowserChatSessionKeyForApp,
   createSclawBrowserEmbedRuntimeId,
   deriveSclawBrowserAppId,
+  isSclawBrowserEmbedChatSessionForApp,
   isSclawBrowserEmbedChatSessionKey,
   parseSclawBrowserEmbedAppId,
+  parseSclawBrowserEmbedConversationId,
   parseSclawBrowserEmbedRuntimeId,
 } from '@/lib/sclaw-browser-chat-session';
 import {
@@ -15,11 +17,21 @@ import {
 import { buildEmbedSessionLongContextNotice } from '@/lib/sclaw-browser-embed-context-compaction';
 
 describe('sclaw-browser-chat-session', () => {
-  it('uses stable app id in session key', () => {
+  it('uses stable app id in legacy single-session key', () => {
     const sessionKey = createSclawBrowserChatSessionKeyForApp('org-relation');
     expect(sessionKey).toBe('agent:main:session-embed-app-org-relation');
     expect(isSclawBrowserEmbedChatSessionKey(sessionKey)).toBe(true);
     expect(parseSclawBrowserEmbedAppId(sessionKey)).toBe('org-relation');
+    expect(parseSclawBrowserEmbedConversationId(sessionKey)).toBe('default');
+  });
+
+  it('supports multi-conversation keys per app', () => {
+    const sessionKey = createSclawBrowserChatSessionKeyForApp('org-relation', 'cabc123');
+    expect(sessionKey).toBe('agent:main:session-embed-app-org-relation--cabc123');
+    expect(parseSclawBrowserEmbedAppId(sessionKey)).toBe('org-relation');
+    expect(parseSclawBrowserEmbedConversationId(sessionKey)).toBe('cabc123');
+    expect(isSclawBrowserEmbedChatSessionForApp(sessionKey, 'org-relation')).toBe(true);
+    expect(isSclawBrowserEmbedChatSessionForApp(sessionKey, 'other')).toBe(false);
   });
 
   it('still hides legacy runtime session keys', () => {
