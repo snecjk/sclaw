@@ -104,7 +104,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
     ref,
   ) {
     const editorRef = useRef<HTMLDivElement>(null);
-    const skillSeedAppliedRef = useRef(false);
+    const appliedSkillSeedRef = useRef<string | undefined>(undefined);
     const lastAppliedSeedRef = useRef<string | undefined>(undefined);
     const isComposingRef = useRef(false);
 
@@ -252,22 +252,17 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       const root = editorRef.current;
       if (!root) return;
 
-      if (slug) {
-        if (skillSeedAppliedRef.current) return;
-        skillSeedAppliedRef.current = true;
-        const { title } = resolveSkillFromPlaza(slug);
-        insertSkillSpan(root, slug, title);
-        resizeEditor();
-        syncFromDom();
+      if (!slug) {
+        appliedSkillSeedRef.current = undefined;
         return;
       }
 
-      if (skillSeedAppliedRef.current) {
-        skillSeedAppliedRef.current = false;
-        removeSkillSpan(root);
-        resizeEditor();
-        syncFromDom();
-      }
+      if (appliedSkillSeedRef.current === slug) return;
+      appliedSkillSeedRef.current = slug;
+      const { title } = resolveSkillFromPlaza(slug);
+      insertSkillSpan(root, slug, title);
+      resizeEditor();
+      syncFromDom();
     }, [resizeEditor, seedSkillSlug, syncFromDom]);
 
     const handleInput = useCallback(() => {

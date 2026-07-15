@@ -90,7 +90,8 @@ export function Home() {
 
   // Handle skill-plaza "Use" (?skill=) and legacy ?q= / ?workflowId= deep links
   const [searchParams, setSearchParams] = useSearchParams();
-  const [seedSkillSlug] = useState(() => searchParams.get('skill')?.trim() || undefined);
+  const seedSkillSlug = searchParams.get('skill')?.trim() || undefined;
+  const [initialSkillSlug] = useState(() => seedSkillSlug);
   // searchParams.get() is already percent-decoded; decodeURIComponent again throws
   // URIError when the prompt contains a literal '%' (e.g. "完成率50%").
   const querySeedText = searchParams.get('q')?.trim() || undefined;
@@ -110,7 +111,7 @@ export function Home() {
   }, [seedSkillSlug, setSearchParams]);
 
   useEffect(() => {
-    if (!querySeedText || seedWorkflowId || !seedSkillSlug || hasAutoSentRef.current) return;
+    if (!querySeedText || seedWorkflowId || !initialSkillSlug || hasAutoSentRef.current) return;
     setDraftSeedText(querySeedText);
     setSearchParams({}, { replace: true });
     if (gatewayStatus.state !== 'running') return;
@@ -119,7 +120,7 @@ export function Home() {
     // Clear q and workflowId from URL so refresh doesn't re-trigger
     setSearchParams({}, { replace: true });
     handleHubSend(querySeedText, undefined, undefined, undefined, seedWorkflowId);
-  }, [querySeedText, seedWorkflowId, gatewayStatus.state, handleHubSend, setSearchParams]);
+  }, [querySeedText, seedWorkflowId, initialSkillSlug, gatewayStatus.state, handleHubSend, setSearchParams]);
 
   // Wait for site-department-types before choosing HQ vs site homepage.
   if (isAuthenticated && siteDepartmentTypes === null) {
