@@ -96,7 +96,7 @@ export function HomeComposer({
   const inlineToolbarSelectors = (
     <div className="flex min-w-0 flex-1 items-center gap-2">
       <ChatEngineSelector variant="inline" className="min-w-0 flex-1" />
-      <ChatModelSelector variant="inline" className="min-w-0 flex-1" />
+      <ChatModelSelector variant="inline" className="min-w-max shrink-0" />
     </div>
   );
 
