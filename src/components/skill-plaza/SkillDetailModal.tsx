@@ -69,7 +69,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
     ? { label: t('plaza.tag.installed', { defaultValue: '已安装' }), bg: '#DCF5E2', text: '#00B54B' }
     : liveSkill.source === 'mine'
       ? { label: t('plaza.tag.mine', { defaultValue: '自建' }), bg: '#FFF5E6', text: '#D95700' }
-      : { label: t('plaza.tag.official', { defaultValue: '官方' }), bg: '#F0F4FF', text: '#4760FE' };
+      : null;
 
   const renderIcon = () => {
     if (liveSkill.icon) {
@@ -126,12 +126,14 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h2 className="text-base font-semibold text-foreground">{liveSkill.title}</h2>
-                    <span
-                      className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium"
-                      style={{ backgroundColor: tag.bg, color: tag.text }}
-                    >
-                      {tag.label}
-                    </span>
+                    {tag && (
+                      <span
+                        className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium"
+                        style={{ backgroundColor: tag.bg, color: tag.text }}
+                      >
+                        {tag.label}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2.5 text-xs text-muted-foreground mt-1">
                     {typeof liveSkill.useCount === 'number' && liveSkill.useCount >= 0 && (

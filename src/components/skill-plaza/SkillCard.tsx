@@ -98,6 +98,14 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
     ? (skill.installed || skill.source === 'mine')
     : skill.installed;
 
+  const tag = !isMineTab
+    ? (skill.installed
+      ? { label: t('plaza.tag.installed', { defaultValue: '已安装' }), bg: 'rgba(34,197,94,0.12)', text: '#15803d' }
+      : null)
+    : skill.source === 'mine'
+      ? { label: t('plaza.tag.mine', { defaultValue: '自建' }), bg: 'rgba(249,115,22,0.12)', text: '#ff6700' }
+      : null;
+
   const renderPlazaAction = () => {
     if (skill.updateAvailable) {
       return (
@@ -182,12 +190,22 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
             <h2 className="m-0 w-full max-w-full text-sm font-bold tracking-tight text-[#1D2129] whitespace-nowrap overflow-hidden text-ellipsis dark:text-foreground">
               {skill.title}
             </h2>
-            {typeof skill.installCount === 'number' && skill.installCount >= 0 && (
-              <span className="inline-flex items-center gap-1 text-xs text-[#86909C] font-medium">
-                <ArrowDownToLine className="h-3.5 w-3.5 opacity-55 flex-shrink-0" />
-                {skill.installCount >= 1000 ? `${(skill.installCount / 1000).toFixed(1)}k` : skill.installCount}
-              </span>
-            )}
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+              {typeof skill.installCount === 'number' && skill.installCount >= 0 && (
+                <span className="inline-flex items-center gap-1 text-xs text-[#86909C] font-medium">
+                  <ArrowDownToLine className="h-3.5 w-3.5 opacity-55 flex-shrink-0" />
+                  {skill.installCount >= 1000 ? `${(skill.installCount / 1000).toFixed(1)}k` : skill.installCount}
+                </span>
+              )}
+              {tag && (
+                <span
+                  className="text-[11px] font-semibold px-1.5 py-[2px] rounded flex-shrink-0 leading-[1.4]"
+                  style={{ backgroundColor: tag.bg, color: tag.text }}
+                >
+                  {tag.label}
+                </span>
+              )}
+            </div>
             {/* 暂时隐藏使用人数 */}
           </div>
 
