@@ -68,9 +68,9 @@
     --sto-chrome-toggle-inset-top: 12px;
     --sto-chrome-h: calc(var(--sto-chrome-toggle-inset-top) + 32px);
     --sto-shell-card-gap: 8px;
-    /* MasterGo 2:23107 主内容卡片：18px 圆角 + 无描边 + 轻阴影（#F7F8FA 与壳层 #EDEDED 区分 gutter） */
+    /* MasterGo 2:23107 主内容卡片：18px 圆角 + 无描边 + 轻阴影（#FAFAFA 与壳层 #EDEDED 区分 gutter） */
     --sto-main-card-radius: 18px;
-    --sto-main-card-bg: #f7f8fa;
+    --sto-main-card-bg: #FAFAFA;
     --sto-main-card-shadow: 0 0 16px rgba(0, 0, 0, 0.01);
     --sto-sidebar-w-expanded: 260px;
     --sto-sidebar-w-collapsed: 72px;
