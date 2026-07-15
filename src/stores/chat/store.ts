@@ -65,6 +65,7 @@ import {
   toMs,
   toNumberIfFinite,
 } from './store-helpers';
+import type { ResolveChatSessionEngineTypeOptions } from '@/lib/resolve-chat-session-engine-type';
 
 export type {
   AttachedFileMeta,
@@ -88,8 +89,9 @@ function resolveEngineTypeForSession(
   sessions: ChatSession[],
   sessionKey: string,
   agentId?: string | null,
+  options?: ResolveChatSessionEngineTypeOptions,
 ): ChatSession['engineType'] | undefined {
-  return resolveEngineTypeForSessionWithAgent(sessions, sessionKey, agentId, getAgentEngineType);
+  return resolveEngineTypeForSessionWithAgent(sessions, sessionKey, agentId, getAgentEngineType, options);
 }
 
 function scheduleSessionLabelHydrationFromStore(

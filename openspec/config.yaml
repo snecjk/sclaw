@@ -68,6 +68,10 @@ rules:
     - DO NOT call Gateway HTTP endpoints directly from renderer; use Main-process proxy channels (`hostapi:fetch`, `gateway:httpProxy`)
     - Transport policy is Main-owned and fixed as `WS -> HTTP -> IPC fallback`; renderer MUST NOT implement protocol switching logic
 
+  plugins:
+    - "New or modified OpenClaw local plugins under `sto-plugin/openclaw/` MUST be registered in BOTH packaging scripts - `scripts/bundle-openclaw-plugins.mjs` (`PLUGINS` array) AND `scripts/after-pack.cjs` (`BUNDLED_PLUGINS` array). Missing either causes the plugin to exist in `build/openclaw-plugins/` but be absent from packaged installs."
+    - "The above packaging scripts are engineering-owned build scripts; AI SHALL NOT modify them automatically. Tasks MUST instruct users to update them manually or request review from the engineering owner."
+
   tasks:
     - Each task MUST reference the corresponding `### Requirement:` name from spec.md for traceability
     - For communication-related changes (gateway events, runtime send/receive, delivery, fallback), run `pnpm run comms:replay` and `pnpm run comms:compare`

@@ -34,6 +34,7 @@ export interface SendActionsDeps {
     sessions: ChatSession[],
     sessionKey: string,
     currentAgentId?: string | null,
+    options?: { messageCount?: number },
   ) => ChatSession['engineType'] | undefined;
   toNumberIfFinite: (value: unknown) => number | undefined;
   clearErrorRecoveryTimer: () => void;

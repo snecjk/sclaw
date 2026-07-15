@@ -1661,6 +1661,7 @@ export function Sidebar() {
     return all.filter((item) => {
       if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
       if (item.to === '/data-center' && (siteDepartmentTypes === null || !isSite)) return false;
+      if (item.to === '/more-apps' && (siteDepartmentTypes === null || !isSite)) return false;
       // if (item.to === '/scheduled-tasks' && getCurrentEnvConfig().isProduction) return false;
       // if (item.to === '/cron' && getCurrentEnvConfig().isProduction) return false;
       return true;

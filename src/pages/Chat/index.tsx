@@ -118,6 +118,7 @@ export function Chat() {
     currentSession,
     currentAgent?.engineType,
     currentSessionKey,
+    { messageCount: messages.length },
   );
   const composerRequiresGateway = currentEngineType === 'openclaw';
   const composerDisabled = composerRequiresGateway && !isGatewayRunning;

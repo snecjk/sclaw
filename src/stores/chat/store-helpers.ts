@@ -1,5 +1,9 @@
 import { type ChatSession, type RawMessage, type SendMessageOptions, type WorkflowContextBlock } from './types';
 import { resolveChatEngineType } from '@/lib/chat-engine-resolution';
+import {
+  resolveChatSessionEngineType,
+  type ResolveChatSessionEngineTypeOptions,
+} from '@/lib/resolve-chat-session-engine-type';
 import { getAgentIdFromSessionKey } from './session-identity';
 
 export function stripAgentMemoryFromHistoryMessage(
@@ -66,15 +70,14 @@ export function resolveEngineTypeForSession(
   sessionKey: string,
   agentId: string | undefined | null,
   getAgentEngineType: (agentId: string | undefined | null) => ChatSession['engineType'] | undefined,
+  options?: ResolveChatSessionEngineTypeOptions,
 ): ChatSession['engineType'] | undefined {
-  return resolveChatEngineType({
+  return resolveChatSessionEngineType(
+    sessions.find((session) => session.key === sessionKey),
+    getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey)),
     sessionKey,
-    sessionEngineType: getSessionEngineType(sessions, sessionKey),
-    agentEngineType: getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey)),
-    defaultSessionUsesAgent: true,
-    sessionEngineFirst: false,
-    inferOpenClawTaskKeys: false,
-  });
+    options,
+  );
 }
 
 export function normalizeSendMessageOptions(args: unknown[]): SendMessageOptions {

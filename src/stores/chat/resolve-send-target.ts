@@ -14,6 +14,7 @@ export async function resolveSendTarget(input: {
     sessions: ChatSession[],
     sessionKey: string,
     currentAgentId?: string | null,
+    options?: { messageCount?: number },
   ) => ChatSession['engineType'] | undefined;
 }): Promise<{
   sessionKey: string;
@@ -42,7 +43,18 @@ export async function resolveSendTarget(input: {
     get().sessions,
     sessionKey,
     targetAgentId ?? get().currentAgentId,
+    {
+      messageCount: get().currentSessionKey === sessionKey ? get().messages.length : undefined,
+    },
   );
+  const session = get().sessions.find((item) => item.key === sessionKey);
+  if (engineType && session?.engineType !== engineType) {
+    set((state) => ({
+      sessions: state.sessions.map((item) => (
+        item.key === sessionKey ? { ...item, engineType } : item
+      )),
+    }));
+  }
   const dingTalkRpcExtras = buildDingTalkMentionRpcExtras(
     dingTalkMentions,
     attachments?.map((file) => ({
