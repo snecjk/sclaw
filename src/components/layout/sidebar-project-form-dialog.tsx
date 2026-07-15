@@ -38,6 +38,7 @@ export function ProjectFormDialog({
   useEffect(() => {
     if (!open) return;
     if (mode === 'edit' && workspace) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- opening/edit identity initializes the modal draft.
       setName(workspace.name);
       setRootPath(workspace.rootPath);
       return;

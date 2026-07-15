@@ -25,7 +25,6 @@ import {
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { buildOpenClawControlUiUrl } from '../utils/openclaw-control-ui';
 import { logger } from '../utils/logger';
-import { registerDialogHandlers } from './ipc/dialog-handlers';
 import { safeWebContentsSend } from './safe-web-contents-send';
 import {
   saveChannelConfig,

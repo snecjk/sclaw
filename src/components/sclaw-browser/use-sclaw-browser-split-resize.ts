@@ -34,10 +34,12 @@ export function useSclawBrowserSplitResize(
   const splitRef = useRef<HTMLDivElement>(null);
   const [isResizing, setIsResizing] = useState(false);
   const embedRuntimeIdRef = useRef(embedRuntimeId);
-  embedRuntimeIdRef.current = embedRuntimeId;
   const percentRef = useRef(chatSplitPercent);
 
-  percentRef.current = chatSplitPercent;
+  useLayoutEffect(() => {
+    embedRuntimeIdRef.current = embedRuntimeId;
+    percentRef.current = chatSplitPercent;
+  }, [chatSplitPercent, embedRuntimeId]);
 
   useLayoutEffect(() => {
     const root = splitRef.current;
