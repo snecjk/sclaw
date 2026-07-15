@@ -1,7 +1,7 @@
 /**
  * TaskEmptyState 组件
  * 定时任务空状态：无任务时显示提示 + 下拉创建按钮，搜索无结果时显示提示
- * 模版卡片已移至 TemplateSelectModal，不再在此组件中展示
+ * 工作流卡片已移至 TemplateSelectModal，不再在此组件中展示
  */
 
 import { useTranslation } from 'react-i18next';
@@ -14,7 +14,7 @@ interface TaskEmptyStateProps {
   searchQuery: string;
   /** 自己创建回调：打开 TaskCreateModal */
   onSelfCreate: () => void;
-  /** 模版创建回调：打开 TemplateSelectModal */
+  /** 工作流创建回调：打开 TemplateSelectModal */
   onTemplateCreate: () => void;
 }
 

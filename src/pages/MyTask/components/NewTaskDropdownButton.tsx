@@ -1,6 +1,6 @@
 /**
  * NewTaskDropdownButton 组件
- * 「新建定时任务」下拉按钮：自己创建 → 打开创建弹窗，模版创建 → 打开模版选择弹窗
+ * 「新建定时任务」下拉按钮：自己创建 → 打开创建弹窗，工作流创建 → 打开工作流选择弹窗
  * 页面头部与空状态共用，行为完全一致
  */
 
@@ -17,7 +17,7 @@ import { myTaskCreateButtonClass } from '@/lib/surfaces';
 interface NewTaskDropdownButtonProps {
   /** 自己创建回调：打开 TaskCreateModal */
   onSelfCreate: () => void;
-  /** 模版创建回调：打开 TemplateSelectModal */
+  /** 工作流创建回调：打开 TemplateSelectModal */
   onTemplateCreate: () => void;
 }
 

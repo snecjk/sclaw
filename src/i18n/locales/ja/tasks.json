@@ -93,6 +93,15 @@
     "recordStatusNav": {
       "aria": "実行状態で絞り込む"
     },
+    "newTaskDropdown": {
+      "selfCreate": "自分で作成",
+      "templateCreate": "ワークフローから作成"
+    },
+    "templateModal": {
+      "title": "ワークフローを選択",
+      "subtitle": "ワークフローを選んで定期タスクをすばやく作成",
+      "empty": "利用可能なワークフローがありません"
+    },
     "empty": {
       "searchNoMatch": "一致するタスクが見つかりません",
       "noTasks": "定期タスクなし",

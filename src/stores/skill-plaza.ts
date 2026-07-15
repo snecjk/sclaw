@@ -266,6 +266,9 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
           } else if (meta?.useCount != null) {
             merged.useCount = meta.useCount;
           }
+          if (plazaSkill?.updateAvailable != null) {
+            merged.updateAvailable = plazaSkill.updateAvailable;
+          }
         }
 
         return applyMineCategoryFallback(merged, categories, plazaSkillMetaMap, plazaSkill);

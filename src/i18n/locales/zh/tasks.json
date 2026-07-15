@@ -95,12 +95,12 @@
     },
     "newTaskDropdown": {
       "selfCreate": "自己创建",
-      "templateCreate": "模版创建"
+      "templateCreate": "工作流创建"
     },
     "templateModal": {
-      "title": "选择工作流模版",
-      "subtitle": "选择一个模版快速创建定时任务",
-      "empty": "暂无可用模版"
+      "title": "选择工作流",
+      "subtitle": "选择一个工作流快速创建定时任务",
+      "empty": "暂无可用工作流"
     },
     "empty": {
       "searchNoMatch": "未找到匹配的任务",

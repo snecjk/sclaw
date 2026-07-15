@@ -42,9 +42,10 @@ import { TemplateSelectModal } from './components/TemplateSelectModal';
 
 import { useMyTaskStore, selectRecordCounts, selectCurrentRecords } from './store';
 import type { TaskView, TaskViewModel, ExecutionRecord } from './types';
-import { listWorkflowTemplates } from '@/lib/workflow-api';
-import { mapTemplateMineItemToOfficialCard } from '@/pages/Workflow/workflow-mapper';
+import { pickCoverKeyFromWorkflowId } from '@/pages/Workflow/workflow-mapper';
 import type { OfficialWorkflowCard } from '@/pages/Workflow/types';
+import { useRecommendItems } from '@/hooks/use-recommend-items';
+import { RECOMMEND_POSITION_KEYS } from '@/lib/recommend-api';
 import { ViewTabs } from './components/ViewTabs';
 import { TaskToolbar } from './components/TaskToolbar';
 import { RecordToolbar } from './components/RecordToolbar';
@@ -177,35 +178,30 @@ export default function MyTask() {
   const [editingJob, setEditingJob] = useState<ManagedLocalTask | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ManagedLocalTask | null>(null);
   const [detailRecord, setDetailRecord] = useState<ExecutionRecord | null>(null);
-  const [officialCards, setOfficialCards] = useState<OfficialWorkflowCard[]>([]);
   const [templateOpen, setTemplateOpen] = useState(false);
+  const { items: recommendItems } = useRecommendItems(
+    RECOMMEND_POSITION_KEYS.MY_TASK,
+  );
+  const officialCards: OfficialWorkflowCard[] = useMemo(
+    () =>
+      recommendItems
+        .filter((item) => item.item_type === 'workflow_instance')
+        .map((item) => ({
+          id: item.item_ref_id,
+          name: item.title,
+          category: item.item_type,
+          description: item.description ?? '',
+          flow: [],
+          coverKey: pickCoverKeyFromWorkflowId(item.item_ref_id),
+        })),
+    [recommendItems],
+  );
   const [selectedWorkflowCode, setSelectedWorkflowCode] = useState<string | null>(null);
   const [selectedTemplateName, setSelectedTemplateName] = useState<string | null>(null);
 
   // ── 初始化加载 ──
   useEffect(() => {
     fetchJobs().catch(() => {});
-    // 拉取官方推荐工作流模版（与 Workflow 页面逻辑一致）
-    listWorkflowTemplates({ page: 1, pageSize: 100 })
-      .then((result) => {
-        const officialItems = (result.items ?? []).map((item) => ({
-          id: String(item.id ?? ''),
-          label: String(item.label ?? ''),
-          description: item.description != null ? String(item.description) : null,
-          category: item.category != null ? String(item.category) : null,
-          scope: 'system' as const,
-          ownerUserId: null,
-          createdAt: null,
-          updatedAt: null,
-          nodeCount: Number(item.nodeCount) || 0,
-          nodes: Array.isArray(item.nodes) ? (item.nodes as Record<string, unknown>[]) : [],
-          edges: Array.isArray(item.edges) ? (item.edges as Record<string, unknown>[]) : [],
-        }));
-        setOfficialCards(officialItems.map(mapTemplateMineItemToOfficialCard));
-      })
-      .catch(() => {
-        setOfficialCards([]);
-      });
   }, [fetchJobs]);
 
   // ── 切换到执行记录 Tab 时串行加载 3 个状态桶 ──
@@ -333,7 +329,6 @@ export default function MyTask() {
   const handleSave = useCallback(
     async (input: TaskCreateInputWithRun) => {
       const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, input.engineType);
-      console.log('创建input -->', input, '所选 agent -->', selectedAgent, 'edit--> ', editingJob);
       try {
         if (editingJob) {
           if (editingJob.engineType === 'claude') {

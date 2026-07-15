@@ -504,16 +504,19 @@ export class SkillPlazaService {
     const lockInfo = lockEntries.get(skill.slug);
     const isStoMarketplaceInstall = lockInfo?.source === 'sto-marketplace';
 
-    if (installed && skill.version) {
+    if (installed) {
       const skillDir = resolveSkillDirForSlug(this.skillsDir, this.getDisabledDir(), skill.slug);
       const lockVersion = isStoMarketplaceInstall ? lockInfo?.version : undefined;
       const skillMdVersion = skillDir && !isPreinstalledSkill(skillDir)
         ? readSkillMdVersion(skillDir)
         : null;
 
-      if (skillDir && !isPreinstalledSkill(skillDir)) {
-        installedVersion = resolveInstalledVersionForCompare(lockVersion, skillMdVersion);
-        updateAvailable = isRemoteVersionNewer(skill.version, installedVersion);
+      const cmpInstalledVersion = resolveInstalledVersionForCompare(lockVersion, skillMdVersion);
+      if (cmpInstalledVersion) {
+        installedVersion = cmpInstalledVersion;
+        if (skill.version) {
+          updateAvailable = isRemoteVersionNewer(skill.version, installedVersion);
+        }
       }
     }
 

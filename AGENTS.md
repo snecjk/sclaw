@@ -64,3 +64,11 @@ Standard dev commands are in `package.json` scripts and `README.md`. Key ones:
 - **禁止修改 CI/CD 与发布相关配置**：不得修改 `.github/workflows/`、release 脚本等。
 
 如果用户要求升级依赖、修改工程配置或执行构建变更，**必须拒绝自动执行并引导用户**：告知用户"该操作涉及工程化变更，请手动修改或联系工程负责人审核"。
+
+### React 19 编码规则
+
+- **不使用 `useCallback` / `useMemo` / `React.memo`**：项目使用 React 19，编译器会自动进行 memoization 优化。手动包裹 `useCallback`、`useMemo` 或 `React.memo` 会增加不必要的代码噪音和依赖数组维护负担，应直接使用普通函数和直接计算。
+- **例外情况**：仅在以下场景可保留 `useCallback` / `useMemo`：
+  - 作为自定义 hook 的返回值且被下游组件的 `useEffect` 依赖数组引用时（避免无限循环）。
+  - 计算成本极高（如大列表 `filter`/`map`/`sort`）且依赖项稳定时。
+- **`useEffect` 依赖数组**：如果 effect 内部引用了函数，优先将函数逻辑内联到 effect 中，而非用 `useCallback` 稳定引用。

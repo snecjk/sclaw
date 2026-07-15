@@ -1,10 +1,9 @@
 /**
  * TemplateSelectModal 组件
- * 模版选择弹窗：展示官方推荐工作流模版卡片，点击后打开 TaskCreateModal 并预填工作流
+ * 工作流选择弹窗：展示官方推荐工作流卡片，点击后打开 TaskCreateModal 并预填工作流
  */
 
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { myTaskEmptyTemplateCardClass, myTaskEmptyTemplateAddButtonClass } from '@/lib/surfaces';
@@ -15,9 +14,9 @@ interface TemplateSelectModalProps {
   open: boolean;
   /** 关闭弹窗回调 */
   onClose: () => void;
-  /** 官方推荐工作流模版列表 */
+  /** 官方推荐工作流列表 */
   officialCards: OfficialWorkflowCard[];
-  /** 选择模版回调：关闭弹窗并打开 TaskCreateModal 预填工作流 */
+  /** 选择工作流回调：关闭弹窗并打开 TaskCreateModal 预填工作流 */
   onSelect?: (card: OfficialWorkflowCard) => void;
 }
 
@@ -25,9 +24,8 @@ export function TemplateSelectModal({
   open,
   onClose,
   officialCards,
-  // onSelect
+  onSelect,
 }: TemplateSelectModalProps) {
-  const navigate = useNavigate();
   const { t } = useTranslation('tasks');
 
   return (
@@ -104,20 +102,12 @@ export function TemplateSelectModal({
                       <p className="m-0 mb-3 line-clamp-2 flex-1 text-[13px] leading-[1.5] text-muted-foreground">
                         {card.description}
                       </p>
-                      <div className="mt-auto flex items-center justify-between gap-3 border-t border-border pt-2.5 text-xs">
-                        <span className="inline-flex min-w-0 items-center font-normal leading-[1.4] text-muted-foreground">
-                          {card.category || t('myTask.empty.templateFallbackCategory')}
-                        </span>
+                      <div className="mt-auto flex items-center justify-end gap-3 border-t border-border pt-2.5 text-xs">
                         <button
                           type="button"
-                          // onClick={() => onSelect(card)}
-                          onClick={() => {
-                            const q = encodeURIComponent(`/${card.name}`);
-                            const wid = encodeURIComponent(card.id);
-                            navigate(`/?q=${q}&workflowId=${wid}`);
-                          }}
+                          onClick={() => onSelect?.(card)}
                           className={myTaskEmptyTemplateAddButtonClass}
-                        >
+                       >
                           {t('myTask.empty.addTemplate')}
                         </button>
                       </div>

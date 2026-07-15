@@ -95,12 +95,12 @@
     },
     "newTaskDropdown": {
       "selfCreate": "Create yourself",
-      "templateCreate": "Create from template"
+      "templateCreate": "Create from workflow"
     },
     "templateModal": {
-      "title": "Select Workflow Template",
-      "subtitle": "Select a template to quickly create a scheduled task",
-      "empty": "No templates available"
+      "title": "Select Workflow",
+      "subtitle": "Select a workflow to quickly create a scheduled task",
+      "empty": "No workflows available"
     },
     "empty": {
       "searchNoMatch": "No matching tasks found",
