@@ -6,6 +6,7 @@ import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import fileIcon from '@/assets/icons/file.svg';
 
 interface SkillCardListProps {
   skill: SkillSummary;
@@ -43,7 +44,7 @@ export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListPr
         isDisabled && 'opacity-50',
       )}
         style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}>
-        <span className="text-base">📦</span>
+        <img src={fileIcon} alt="" aria-hidden className="h-4 w-4 object-contain" />
       </span>
     );
   };

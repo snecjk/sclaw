@@ -79,7 +79,7 @@ export function SkillPlazaToolbar() {
       {/* Filters on the right */}
       <div className="flex flex-wrap items-center gap-2 ml-auto">
         {/* Search */}
-        <label className="flex items-center gap-2 h-8 px-3 py-0 rounded-[10px] border border-border bg-background min-w-[280px] max-w-[360px] flex-1">
+        <label className="flex items-center gap-2 h-8 px-3 py-0 rounded-[12px] border border-border bg-white min-w-[280px] max-w-[360px] flex-1">
           <Search className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           <input
             type="search"
@@ -94,7 +94,7 @@ export function SkillPlazaToolbar() {
         {!isMine && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="group flex items-center gap-1.5 h-8 px-2.5 rounded-[10px] border border-border bg-background text-[13px] font-medium text-foreground cursor-pointer hover:border-border hover:bg-muted/50 transition-colors">
+              <button className="group flex items-center gap-1.5 h-8 px-2.5 rounded-[12px] border border-border bg-white text-[13px] font-medium text-foreground cursor-pointer hover:border-border hover:bg-muted/50 transition-colors">
                 <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="whitespace-nowrap">{t('plaza.sort.prefix', { defaultValue: '排序' })}：{currentSortLabel}</span>
                 <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />

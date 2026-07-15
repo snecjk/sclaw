@@ -7,6 +7,7 @@ import { useChatStore } from '@/stores/chat';
 import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import fileIcon from '@/assets/icons/file.svg';
 
 interface SkillDetailModalProps {
   skill: SkillSummary | null;
@@ -78,7 +79,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
         />
       );
     }
-    return <span className="text-lg">📦</span>;
+    return <img src={fileIcon} alt="" aria-hidden className="h-5 w-5 object-contain" />;
   };
 
   // Optional workflow steps from skill data (future backend support)

@@ -6,6 +6,7 @@ import { invokeIpc } from '@/lib/api-client';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import type { SkillSummary } from '@/types/skill-plaza';
+import fileIcon from '@/assets/icons/file.svg';
 
 function formatFileSize(bytes: number): string {
   if (!bytes || bytes <= 0) return '-';
@@ -219,7 +220,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
         />
       );
     }
-    return <span className="text-lg">📦</span>;
+    return <img src={fileIcon} alt="" aria-hidden className="h-5 w-5 object-contain" />;
   };
 
   return (
