@@ -198,6 +198,11 @@ export async function handleSessionCatalogRoutes(
         workspaceId: string;
         sessionKey: string;
         groupId?: string | null;
+        sessionType?: import('../../db/models/domain/session-catalog').CatalogSession['sessionType'] | null;
+        taskId?: string | null;
+        appId?: string | null;
+        channelType?: string | null;
+        channelId?: string | null;
         title?: string | null;
         pinRank?: number | null;
         lastActivityAt?: string | null;
@@ -206,6 +211,11 @@ export async function handleSessionCatalogRoutes(
         workspaceId: body.workspaceId ?? DEFAULT_WORKSPACE_ID,
         sessionKey: body.sessionKey ?? '',
         groupId: body.groupId,
+        sessionType: body.sessionType,
+        taskId: body.taskId,
+        appId: body.appId,
+        channelType: body.channelType,
+        channelId: body.channelId,
         title: body.title,
         pinRank: body.pinRank,
         lastActivityAt: body.lastActivityAt,

@@ -43,6 +43,7 @@ export async function rememberSessionEngineType(
     updatedAt: Date.now(),
     title: existing?.title,
     model: existing?.model,
+    provider: existing?.provider,
     accountId: existing?.accountId,
     ...(engineChanged && engineType === 'openclaw'
       ? { archivedClaudeSessionIds: undefined, pendingHistoryBridge: undefined }

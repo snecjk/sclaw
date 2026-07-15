@@ -1,4 +1,5 @@
 import type { AgentEngineType } from '../../../engines/types';
+import type { CatalogSessionType } from '../../../../shared/session-type';
 
 export interface CreateWorkspaceInput {
   id?: string;
@@ -36,6 +37,11 @@ export interface UpsertCatalogSessionInput {
   workspaceId: string;
   sessionKey: string;
   groupId?: string | null;
+  sessionType?: CatalogSessionType | null;
+  taskId?: string | null;
+  appId?: string | null;
+  channelType?: string | null;
+  channelId?: string | null;
   title?: string | null;
   pinRank?: number | null;
   sortKey?: string | null;
@@ -60,6 +66,7 @@ export interface UpsertEngineBindingInput {
   updatedAt?: number;
   title?: string;
   model?: string;
+  provider?: string;
   accountId?: string;
   archivedClaudeSessionIds?: string[];
   pendingHistoryBridge?: boolean;

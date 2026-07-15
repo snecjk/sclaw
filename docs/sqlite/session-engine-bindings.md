@@ -29,6 +29,7 @@
 | `engine_session_id` | 引擎会话 ID | `TEXT` | 是 | `NULL` | 引擎/runtime 内部的 session 标识 |
 | `cwd` | 工作目录 | `TEXT` | 是 | `NULL` | 工具执行时的当前工作目录 |
 | `model` | 模型 | `TEXT` | 是 | `NULL` | 当前使用的模型 ID |
+| `provider` | 模型提供方 | `TEXT` | 是 | `NULL` | 如 `anthropic`、`openai`、`sto` |
 | `account_id` | 账号 ID | `TEXT` | 是 | `NULL` | AI 提供方账号标识 |
 | `extra_json` | 扩展 JSON | `TEXT` | 是 | `NULL` | 引擎特定扩展字段（见下文） |
 | `created_at` | 创建时间 | `TEXT` | 否 | — | 绑定首次创建时间 |
@@ -87,6 +88,12 @@
 - **可空**：未显式选择时由 Agent 默认配置决定。
 - **示例**：`claude-sonnet-4-20250514`、`gpt-4o`
 - **写入时机**：用户切换模型、引擎 bind 时传入。
+
+### `provider` — 模型提供方
+
+- **含义**：当前 `model` 所属的提供方（vendor），与 `model` 组合成完整的「引擎+模型」信息。
+- **常见值**：`anthropic`、`openai`、`sto` 以及自定义 provider 的 `vendorId`。
+- **写入时机**：Claude 引擎启动/切模型时从账号配置读取；OpenClaw 路径暂时依赖外部传入。
 
 ### `account_id` — 账号 ID
 
@@ -155,7 +162,7 @@
 
 ```sql
 -- 所有活跃绑定
-SELECT session_key, engine_type, agent_id, cwd, model, updated_at
+SELECT session_key, engine_type, agent_id, cwd, model, provider, updated_at
 FROM session_engine_bindings
 WHERE deleted_at IS NULL
 ORDER BY updated_at DESC;
@@ -165,11 +172,24 @@ SELECT session_key, cwd, engine_session_id
 FROM session_engine_bindings
 WHERE agent_id = 'main' AND deleted_at IS NULL;
 
+-- 按模型提供方筛选
+SELECT session_key, model, provider
+FROM session_engine_bindings
+WHERE deleted_at IS NULL
+  AND provider = 'anthropic';
+
 -- 绑定 + catalog + 项目（完整会话视图）
 SELECT
   seb.session_key,
   seb.engine_type,
   seb.cwd,
+  seb.model,
+  seb.provider,
+  cs.session_type,
+  cs.task_id,
+  cs.app_id,
+  cs.channel_type,
+  cs.channel_id,
   cs.title,
   cs.workspace_id,
   cs.pin_rank,
@@ -184,9 +204,13 @@ WHERE seb.session_key = 'agent:main:...'
 
 ---
 
+## 已知缺口
+
+- `provider` 当前只在 Claude 引擎路径自动写入；OpenClaw 路径需要后续在模型切换/启动处补充传入。
+
 ## 相关源码
 
-- Migration: `electron/db/migrations/0002-session-catalog-schema.ts`
+- Migration: `electron/db/migrations/0003-session-types-and-channels.ts`
 - 表类型: `electron/db/models/tables/session-catalog-tables.ts` → `SessionEngineBindingsTable`
 - 领域模型: `electron/db/models/domain/session-catalog.ts` → `SessionEngineBinding`
 - Repository: `electron/db/repositories/session-engine-binding-repository.ts`

@@ -12,7 +12,7 @@
 | 项 | 值 |
 |----|-----|
 | 文件 | `{userData}/sqlite/stoclaw.sqlite` |
-| 当前 schema 版本 | **2**（migration `0001` + `0002`） |
+| 当前 schema 版本 | **3**（migration `0001` + `0002` + `0003`） |
 | 访问层 | Main Process → Kysely → `node:sqlite` |
 | 外键 | DDL 中声明，`PRAGMA foreign_keys = OFF`（未强制） |
 
@@ -58,6 +58,11 @@ erDiagram
     TEXT workspace_id PK
     TEXT session_key PK
     TEXT group_id FK
+    TEXT session_type
+    TEXT task_id
+    TEXT app_id
+    TEXT channel_type
+    TEXT channel_id
     TEXT title
     INTEGER pin_rank
     TEXT last_activity_at
@@ -68,6 +73,9 @@ erDiagram
     TEXT engine_type
     TEXT agent_id
     TEXT cwd
+    TEXT model
+    TEXT provider
+    TEXT account_id
     TEXT extra_json
   }
 

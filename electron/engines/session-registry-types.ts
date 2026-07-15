@@ -9,6 +9,7 @@ export interface EngineSessionRegistryEntry {
   updatedAt?: number;
   title?: string;
   model?: string;
+  provider?: string;
   accountId?: string;
   /** Prior Claude SDK session IDs kept for UI history after in-session model switches. */
   archivedClaudeSessionIds?: string[];

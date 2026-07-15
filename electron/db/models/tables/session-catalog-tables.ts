@@ -1,5 +1,6 @@
 import type { ColumnType, Generated } from 'kysely';
 import type { AgentEngineType } from '../../../engines/types';
+import type { CatalogSessionType } from '../../../../shared/session-type';
 
 export type TimestampColumn = ColumnType<string, string | undefined, string | undefined>;
 export type NullableTimestampColumn = ColumnType<string | null, string | null | undefined, string | null | undefined>;
@@ -34,6 +35,11 @@ export interface CatalogSessionsTable {
   workspace_id: string;
   session_key: string;
   group_id: string | null;
+  session_type: CatalogSessionType;
+  task_id: string | null;
+  app_id: string | null;
+  channel_type: string | null;
+  channel_id: string | null;
   title: string | null;
   pin_rank: number | null;
   sort_key: string | null;
@@ -53,6 +59,7 @@ export interface SessionEngineBindingsTable {
   engine_session_id: string | null;
   cwd: string | null;
   model: string | null;
+  provider: string | null;
   account_id: string | null;
   extra_json: string | null;
   created_at: TimestampColumn;

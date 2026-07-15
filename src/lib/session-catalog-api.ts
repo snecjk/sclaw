@@ -1,5 +1,6 @@
 import { invokeIpc } from '@/lib/api-client';
 import { SESSION_LABELS_STORAGE_KEY } from '@/lib/session-label';
+import type { CatalogSessionType } from '../../shared/session-type';
 
 export interface WorkspaceDto {
   id: string;
@@ -23,6 +24,11 @@ export interface CatalogSessionDto {
   workspaceId: string;
   sessionKey: string;
   groupId: string | null;
+  sessionType: CatalogSessionType;
+  taskId: string | null;
+  appId: string | null;
+  channelType: string | null;
+  channelId: string | null;
   title: string | null;
   pinRank: number | null;
   sortKey: string | null;
@@ -113,6 +119,11 @@ export async function patchCatalogSession(input: {
   workspaceId: string;
   sessionKey: string;
   groupId?: string | null;
+  sessionType?: CatalogSessionType | null;
+  taskId?: string | null;
+  appId?: string | null;
+  channelType?: string | null;
+  channelId?: string | null;
   title?: string | null;
   pinRank?: number | null;
   lastActivityAt?: string | null;

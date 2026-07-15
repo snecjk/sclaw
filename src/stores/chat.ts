@@ -43,7 +43,11 @@ import {
   resolveCronGroupNameFromSession,
   resolveStoScheduledGroupNameFromSession,
 } from '@/lib/scheduled-task-group-name';
-import { appendPendingLocalVirtualTaskSessions } from '@/stores/chat/session-list-merge';
+import {
+  appendPendingLocalVirtualTaskSessions,
+  findCronDatedTwinKey,
+  omitSupersededCronDatedAgentTwins,
+} from '@/stores/chat/session-list-merge';
 import {
   buildInitialSidebarRecentOrder,
   isSidebarRecentChatSessionKey,
@@ -1315,7 +1319,7 @@ export const useChatStore = create<ChatState>()(
           for (const session of sessions) {
             const cronParts = parseCronSessionKey(session.key);
             if (cronParts && cronParts.date) {
-              cronDated.add(`agent:main:cron:${cronParts.jobId}`);
+              cronDated.add(`agent:${cronParts.agentId}:cron:${cronParts.jobId}`);
               const prev = cronDatedKeyByJob.get(cronParts.jobId);
               if (!prev || session.key > prev) {
                 cronDatedKeyByJob.set(cronParts.jobId, session.key);
@@ -1348,7 +1352,10 @@ export const useChatStore = create<ChatState>()(
             // Filter out claude-task base sessions when dated replacement exists
             if (claudeTaskDated.has(s.key)) return false;
             const cronParts = parseCronSessionKey(s.key);
-            if (cronParts?.runSessionId && cronDated.has(`agent:main:cron:${cronParts.jobId}`)) {
+            if (
+              cronParts?.runSessionId
+              && cronDated.has(`agent:${cronParts.agentId}:cron:${cronParts.jobId}`)
+            ) {
               return false;
             }
             // Filter out claude-task-run sessions when their task has a dated aggregate
@@ -1374,25 +1381,15 @@ export const useChatStore = create<ChatState>()(
           // Also deduplicate cron dated sessions by jobId+date to prevent duplicates
           // Also deduplicate claude task dated sessions by taskId+date
           const seen = new Set<string>();
-          const seenCronDated = new Set<string>();
           const seenClaudeTaskDated = new Set<string>();
-          const dedupedSessions = filteredSessions.filter((s) => {
+          const twinDeduped = omitSupersededCronDatedAgentTwins(filteredSessions);
+          const dedupedSessions = twinDeduped.filter((s) => {
             if (!s.key.startsWith('agent:') && canonicalBySuffix.has(s.key)) return false;
             if (seen.has(s.key)) {
               console.warn('[loadSessions] Duplicate session key filtered:', s.key);
               return false;
             }
             seen.add(s.key);
-            // Extra dedup for cron dated sessions: same job+date should only appear once
-            const cronParts = parseCronSessionKey(s.key);
-            if (cronParts?.date) {
-              const dedupKey = `${cronParts.jobId}:${cronParts.date}`;
-              if (seenCronDated.has(dedupKey)) {
-                console.warn('[loadSessions] Duplicate cron dated session filtered:', s.key, 'dedupKey:', dedupKey);
-                return false;
-              }
-              seenCronDated.add(dedupKey);
-            }
             // Dedup for claude task dated sessions: same taskId+date should only appear once
             const claudeParts = parseClaudeScheduledTaskSessionKey(s.key);
             if (claudeParts?.date) {
@@ -1490,6 +1487,23 @@ export const useChatStore = create<ChatState>()(
             }
           }
 
+          // Trigger path builds `agent:{task.agentId}:cron:…:date` while host may still
+          // materialize `agent:main:…:date` (or the reverse). Prefer the active key, and
+          // never append a same-day twin that would show two rows under the task group.
+          const activatingKeys = Object.keys(get().activatingScheduledSessionAt ?? {});
+          const preferCronKey = activatingKeys.find((key) => parseCronSessionKey(key)?.date)
+            ?? nextSessionKey;
+          const cronTwinAlreadyListed = findCronDatedTwinKey(mergedSessions, nextSessionKey);
+          if (
+            cronTwinAlreadyListed
+            && nextSessionKey
+            && !mergedSessions.some((session) => session.key === nextSessionKey)
+            && preferCronKey !== nextSessionKey
+          ) {
+            // Active session is not the preferred trigger key — follow the listed twin.
+            nextSessionKey = cronTwinAlreadyListed;
+          }
+
           const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
           const sessionsWithCurrent = !mergedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
             ? [...mergedSessions, {
@@ -1500,9 +1514,44 @@ export const useChatStore = create<ChatState>()(
             }]
             : mergedSessions;
 
+          const twinCollapsedSessions = omitSupersededCronDatedAgentTwins(
+            sessionsWithCurrent,
+            preferCronKey,
+          );
+          const sessionKeyBeforeTwinCollapse = nextSessionKey;
+          if (
+            nextSessionKey
+            && !twinCollapsedSessions.some((session) => session.key === nextSessionKey)
+          ) {
+            const keptTwin = twinCollapsedSessions.find((session) => {
+              const left = parseCronSessionKey(nextSessionKey);
+              const right = parseCronSessionKey(session.key);
+              return Boolean(left?.date && right?.date
+                && left.jobId === right.jobId
+                && left.date === right.date);
+            })?.key;
+            if (keptTwin) nextSessionKey = keptTwin;
+          }
+          if (
+            sessionKeyBeforeTwinCollapse
+            && nextSessionKey
+            && sessionKeyBeforeTwinCollapse !== nextSessionKey
+          ) {
+            // Move activating spinner onto the surviving twin key.
+            const activatingAt = get().activatingScheduledSessionAt[sessionKeyBeforeTwinCollapse];
+            if (activatingAt) {
+              set((s) => {
+                const nextActivating = { ...s.activatingScheduledSessionAt };
+                delete nextActivating[sessionKeyBeforeTwinCollapse];
+                nextActivating[nextSessionKey] = activatingAt;
+                return { activatingScheduledSessionAt: nextActivating };
+              });
+            }
+          }
+
           const scrubbedSessionLabels = scrubCorruptedSessionLabels(get().sessionLabels);
           const labeledSessions = sanitizeGatewaySessionLabels(
-            applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels),
+            applyStoredSessionLabels(twinCollapsedSessions, scrubbedSessionLabels),
           );
 
           // ── 定时任务会话名称富化：从任务定义 API 获取 displayName ──
@@ -1997,17 +2046,20 @@ export const useChatStore = create<ChatState>()(
       finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
       finalMessages = ensureWorkflowCardsInMessages(finalMessages, targetSessionKey, getMessageText);
       const gatewaySessionLabel = get().sessions.find((session) => session.key === targetSessionKey)?.label;
+      const isSending = get().sending;
       finalMessages = recoverInitialUserFromSessionLabel(
         finalMessages,
         targetSessionKey,
         get().sessionLabels,
         gatewaySessionLabel,
+        { sending: isSending },
       );
       finalMessages = ensureOpeningUserMessageFirst(
         finalMessages,
         targetSessionKey,
         get().sessionLabels,
         gatewaySessionLabel,
+        { sending: isSending },
       );
       finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null, {
         sessionKey: targetSessionKey,

@@ -28,7 +28,7 @@ Migration 执行记录表，由 `electron/db/migrator.ts` 自动维护。
 
 - **含义**：Schema 的单调递增版本号，每个 migration 文件对应一个整数。
 - **主键**：不可重复；已存在的版本不会再次执行。
-- **当前值**：`1`（demo schema）、`2`（session catalog schema）。
+- **当前值**：`1`（demo schema）、`2`（session catalog schema）、`3`（session types & channels）。
 - **对应文件**：`electron/db/migrations/000N-*.ts` 中的 `version` 字段。
 
 ### `name` — 迁移名称
@@ -59,6 +59,7 @@ Migration 执行记录表，由 `electron/db/migrator.ts` 自动维护。
 |---------|------|----------|
 | 1 | `initial-local-sqlite-demo-schema` | `schema_migrations`, `app_demo_records` |
 | 2 | `session-catalog-schema` | `workspaces`, `session_groups`, `catalog_sessions`, `session_engine_bindings` |
+| 3 | `session-types-and-channels` | `catalog_sessions.session_type/task_id/app_id/channel_type/channel_id`, `session_engine_bindings.provider` |
 
 ---
 
@@ -74,5 +75,6 @@ SELECT * FROM schema_migrations ORDER BY version;
 
 - `electron/db/migrations/0001-initial-schema.ts`
 - `electron/db/migrations/0002-session-catalog-schema.ts`
+- `electron/db/migrations/0003-session-types-and-channels.ts`
 - `electron/db/migrations/index.ts`
 - `electron/db/migrator.ts`

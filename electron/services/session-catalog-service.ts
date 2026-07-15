@@ -99,6 +99,7 @@ async function importEngineSessionsJsonIfNeeded(): Promise<void> {
       updatedAt: entry.updatedAt,
       title: entry.title,
       model: entry.model,
+      provider: entry.provider,
       accountId: entry.accountId,
       archivedClaudeSessionIds: entry.archivedClaudeSessionIds,
       pendingHistoryBridge: entry.pendingHistoryBridge,
@@ -202,6 +203,7 @@ export async function syncSessionEngineBindingCwd(sessionKey: string): Promise<v
     sessionId: binding.engineSessionId ?? undefined,
     cwd: resolvedCwd,
     model: binding.model ?? undefined,
+    provider: binding.provider ?? undefined,
     accountId: binding.accountId ?? undefined,
     title: typeof extra.title === 'string' ? extra.title : undefined,
     archivedClaudeSessionIds: Array.isArray(extra.archivedClaudeSessionIds)
@@ -231,8 +233,14 @@ export async function upsertCatalogSession(input: {
   workspaceId: string;
   sessionKey: string;
   groupId?: string | null;
+  sessionType?: import('../db/models/domain/session-catalog').CatalogSession['sessionType'] | null;
+  taskId?: string | null;
+  appId?: string | null;
+  channelType?: string | null;
+  channelId?: string | null;
   title?: string | null;
   pinRank?: number | null;
+  sortKey?: string | null;
   lastActivityAt?: string | null;
 }) {
   await ensureSessionCatalogBootstrapped();
@@ -312,6 +320,7 @@ export async function upsertEngineBinding(entry: EngineSessionRegistryEntry) {
     updatedAt: entry.updatedAt,
     title: entry.title,
     model: entry.model,
+    provider: entry.provider,
     accountId: entry.accountId,
     archivedClaudeSessionIds: entry.archivedClaudeSessionIds,
     pendingHistoryBridge: entry.pendingHistoryBridge,
