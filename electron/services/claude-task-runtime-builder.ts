@@ -15,6 +15,7 @@ import { getAgentPreferredModel, getAgentWorkspacePath } from '../utils/agent-co
 import { logger } from '../utils/logger';
 import { expandPath, getClaudeConfigDir } from '../utils/paths';
 import { getApiKey } from '../utils/secure-storage';
+import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { buildClaudeRuntimeOptions } from '../engines/claude-runtime-extensions';
 import type {
   ClaudeScheduledTaskDefinition,
@@ -231,6 +232,7 @@ async function buildClaudeEnvForAccount(accountId?: string): Promise<NodeJS.Proc
     ...process.env,
     CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
   };
+  applySaiClientIdEnv(base as Record<string, string | undefined>);
 
   let resolvedAccountId = accountId?.trim();
   let account = resolvedAccountId ? await getProviderAccount(resolvedAccountId) : null;
