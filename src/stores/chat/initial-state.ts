@@ -10,6 +10,7 @@ export const initialChatDataState: Pick<
   | 'sending'
   | 'modelSwitching'
   | 'activeRunId'
+  | 'sendAcceptance'
   | 'streamingText'
   | 'streamingMessage'
   | 'streamingMessages'
@@ -40,6 +41,7 @@ export const initialChatDataState: Pick<
   sending: false,
   modelSwitching: false,
   activeRunId: null,
+  sendAcceptance: null,
   streamingText: '',
   streamingMessage: null,
   streamingMessages: [],

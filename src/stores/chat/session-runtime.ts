@@ -9,6 +9,7 @@ type RuntimeFields = Pick<
   ChatState,
   | 'sending'
   | 'activeRunId'
+  | 'sendAcceptance'
   | 'streamingText'
   | 'streamingMessage'
   | 'streamingMessages'
@@ -25,6 +26,7 @@ export function createIdleSessionRuntimeState(): SessionRuntimeState {
   return {
     sending: false,
     activeRunId: null,
+    sendAcceptance: null,
     streamingText: '',
     streamingMessage: null,
     streamingMessages: [],
@@ -43,6 +45,7 @@ export function runtimePatchFromSessionRuntime(runtime: SessionRuntimeState): Ru
   return {
     sending: runtime.sending,
     activeRunId: runtime.activeRunId,
+    sendAcceptance: runtime.sendAcceptance,
     streamingText: runtime.streamingText,
     streamingMessage: runtime.streamingMessage,
     streamingMessages: runtime.streamingMessages,
@@ -60,6 +63,7 @@ export function captureTopLevelRuntime(state: RuntimeFields): SessionRuntimeStat
   return {
     sending: state.sending,
     activeRunId: state.activeRunId,
+    sendAcceptance: state.sendAcceptance,
     streamingText: state.streamingText,
     streamingMessage: state.streamingMessage,
     streamingMessages: state.streamingMessages,
@@ -142,6 +146,7 @@ type SessionSwitchState = Pick<
   | 'runtimeBySessionKey'
   | 'sending'
   | 'activeRunId'
+  | 'sendAcceptance'
   | 'streamingText'
   | 'streamingMessage'
   | 'streamingMessages'

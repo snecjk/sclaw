@@ -59,6 +59,7 @@ export function insertOptimisticUserTurn(input: {
     ...applyRuntimePatch(s, sessionKey, {
       sending: true,
       activeRunId: null,
+      sendAcceptance: null,
       streamingText: '',
       streamingMessage: null,
       streamingMessages: [],

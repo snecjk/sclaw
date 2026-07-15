@@ -39,6 +39,7 @@ describe('active terminal events', () => {
         [sessionKey]: {
           sending: true,
           activeRunId: 'run-1',
+          sendAcceptance: null,
           streamingText: '',
           streamingMessage: null,
           streamingMessages: [],

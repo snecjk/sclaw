@@ -16,6 +16,34 @@ const PREF_MAX_ITEMS = 5;
 const PREF_MAX_TEXT = 240;
 const EXEC_MAX_ITEMS = 3;
 const EXEC_MAX_TEXT = 1000;
+export const AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS = 1000;
+
+class AgentMemoryRetrievalTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Agent memory retrieval timed out after ${timeoutMs}ms`);
+    this.name = 'AgentMemoryRetrievalTimeoutError';
+  }
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout?: () => void,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutId = setTimeout(() => {
+      onTimeout?.();
+      reject(new AgentMemoryRetrievalTimeoutError(timeoutMs));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
+  }
+}
 
 function truncate(text: string, limit: number): string {
   const t = text.replace(/\s+/g, ' ').trim();
@@ -42,13 +70,20 @@ export async function buildAgentMemoryContextBlocks(
   const query = text.replace(/\s+/g, ' ').trim();
   if (!shouldRetrieveMemories(query)) return { injectedExecutionMemories: [] };
   try {
-    const userId = await resolveAgentMemoryUserId();
-    if (!userId) return { injectedExecutionMemories: [] };
-    const payload = await invokeIpc<unknown>(
-      'agent-memory:mem0-search',
-      query,
-      { userId, agentId: options?.agentId ?? undefined, topK: Math.max(options?.topK ?? 12, 12) },
-    );
+    let retrievalTimedOut = false;
+    const retrieval = (async () => {
+      const userId = await resolveAgentMemoryUserId();
+      if (!userId || retrievalTimedOut) return undefined;
+      return await invokeIpc<unknown>(
+        'agent-memory:mem0-search',
+        query,
+        { userId, agentId: options?.agentId ?? undefined, topK: Math.max(options?.topK ?? 12, 12) },
+      );
+    })();
+    const payload = await withTimeout(retrieval, AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS, () => {
+      retrievalTimedOut = true;
+    });
+    if (payload === undefined) return { injectedExecutionMemories: [] };
     const execItems = extractActiveExecutionMemories(payload)
       .slice(0, EXEC_MAX_ITEMS)
       .map((it) => ({ ...it, memory: truncate(it.memory, EXEC_MAX_TEXT) }));

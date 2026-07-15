@@ -9,18 +9,40 @@ import { scheduleSendWatchdogs } from './send-watchdogs';
 import { logChatFlow } from './chat-flow-log';
 import { useGatewayStore } from '../gateway';
 import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
-import type { ChatSession, SendMessageOptions } from './types';
+import type { ChatSession, SendMessageOptions, SessionRuntimeState } from './types';
+import { getSessionRuntimeState } from './session-runtime';
+import { normalizeAppError } from '@/lib/error-model';
+
+export function isUncertainDispatchError(error: unknown): boolean {
+  const code = normalizeAppError(error).code;
+  return code === 'TIMEOUT' || code === 'NETWORK';
+}
+
+export function buildUncertainAcceptancePatch(
+  runtime: SessionRuntimeState,
+  idempotencyKey: string,
+): Partial<SessionRuntimeState> {
+  if (!runtime.sendAcceptance || runtime.sendAcceptance.idempotencyKey !== idempotencyKey) return {};
+  return {
+    sending: true,
+    error: null,
+    sendAcceptance: { ...runtime.sendAcceptance, status: 'uncertain' },
+  };
+}
 
 function failSendTurn(input: {
   set: ChatSet;
-  clearHistoryPoll: () => void;
+  clearHistoryPoll: (sessionKey: string) => void;
+  clearStuckCheckTimer?: (sessionKey: string) => void;
   sessionKey: string;
   error: string;
 }): void {
-  input.clearHistoryPoll();
+  input.clearHistoryPoll(input.sessionKey);
+  input.clearStuckCheckTimer?.(input.sessionKey);
   setRuntimePatch(input.set, input.sessionKey, {
     sending: false,
     activeRunId: null,
+    sendAcceptance: null,
     pendingFinal: false,
     error: input.error,
   });
@@ -37,9 +59,11 @@ export interface SendActionsDeps {
     options?: { messageCount?: number },
   ) => ChatSession['engineType'] | undefined;
   toNumberIfFinite: (value: unknown) => number | undefined;
-  clearErrorRecoveryTimer: () => void;
-  clearHistoryPoll: () => void;
-  setHistoryPollTimer: (timer: ReturnType<typeof setTimeout> | null) => void;
+  clearErrorRecoveryTimer: (sessionKey: string) => void;
+  clearHistoryPoll: (sessionKey: string) => void;
+  setHistoryPollTimer: (sessionKey: string, timer: ReturnType<typeof setTimeout> | null) => void;
+  clearStuckCheckTimer: (sessionKey: string) => void;
+  setStuckCheckTimer: (sessionKey: string, timer: ReturnType<typeof setTimeout> | null) => void;
 }
 
 export function createSendActions(
@@ -56,6 +80,8 @@ export function createSendActions(
     clearErrorRecoveryTimer,
     clearHistoryPoll,
     setHistoryPollTimer,
+    clearStuckCheckTimer,
+    setStuckCheckTimer,
   } = deps;
 
   return {
@@ -97,6 +123,10 @@ export function createSendActions(
         attachmentCount: attachments?.length ?? 0,
         hasDingTalkMentions: Boolean(dingTalkMentions?.length),
       });
+      if (getSessionRuntimeState(get().runtimeBySessionKey, currentSessionKey).sending) {
+        logChatFlow('send.blocked.active-runtime', { sessionKey: currentSessionKey });
+        return;
+      }
 
       const {
         claudeMemorySystemPrompt,
@@ -145,6 +175,17 @@ export function createSendActions(
         gatewayMessage: messageWithContext,
         attachments,
       });
+      const idempotencyKey = userMsg.id || crypto.randomUUID();
+      setRuntimePatch(set, currentSessionKey, {
+        sending: true,
+        activeRunId: null,
+        error: null,
+        sendAcceptance: {
+          idempotencyKey,
+          status: 'pending',
+          startedAt: Date.now(),
+        },
+      });
       logChatFlow('send.optimistic.inserted', {
         sessionKey: currentSessionKey,
         optimisticId: userMsg.id,
@@ -159,6 +200,8 @@ export function createSendActions(
         clearErrorRecoveryTimer,
         clearHistoryPoll,
         setHistoryPollTimer,
+        clearStuckCheckTimer,
+        setStuckCheckTimer,
       });
 
       try {
@@ -167,7 +210,6 @@ export function createSendActions(
         // That lets isSameUserMessage pair the optimistic copy with its server echo
         // by id instead of falling back to text matching. Inert until the Gateway
         // echoes this id; harmless before then (still a unique UUID per send).
-        const idempotencyKey = userMsg.id || crypto.randomUUID();
         const hasMedia = attachments && attachments.length > 0;
 
         // Cache image attachments BEFORE the IPC call to avoid race condition:
@@ -209,35 +251,50 @@ export function createSendActions(
             idempotencyKey,
             runId: result.result.runId,
           });
-          setRuntimePatch(set, currentSessionKey, {
-            sending: true,
-            activeRunId: result.result?.runId ?? null,
-            error: null,
-          });
+          setRuntimePatch(set, currentSessionKey, (runtime) => (
+            runtime.sendAcceptance?.idempotencyKey === idempotencyKey
+              ? {
+                  sending: true,
+                  activeRunId: result.result?.runId ?? null,
+                  error: null,
+                  sendAcceptance: { ...runtime.sendAcceptance, status: 'accepted' },
+                }
+              : {}
+          ));
         }
       } catch (err) {
+        const normalized = normalizeAppError(err);
         logChatFlow('send.dispatch.error', {
           sessionKey: currentSessionKey,
-          error: String(err),
+          error: normalized.message,
+          code: normalized.code,
         });
-        failSendTurn({
-          set,
-          clearHistoryPoll,
-          sessionKey: currentSessionKey,
-          error: String(err),
-        });
+        if (isUncertainDispatchError(normalized)) {
+          setRuntimePatch(set, currentSessionKey, (runtime) => (
+            buildUncertainAcceptancePatch(runtime, idempotencyKey)
+          ));
+        } else {
+          failSendTurn({
+            set,
+            clearHistoryPoll,
+            sessionKey: currentSessionKey,
+            error: normalized.message,
+          });
+        }
       }
     },
 
     // ── Abort active run ──
 
     abortRun: async () => {
-      clearHistoryPoll();
-      clearErrorRecoveryTimer();
       const { currentSessionKey } = get();
+      clearHistoryPoll(currentSessionKey);
+      clearErrorRecoveryTimer(currentSessionKey);
+      clearStuckCheckTimer(currentSessionKey);
       setRuntimePatch(set, currentSessionKey, {
         sending: false,
         activeRunId: null,
+        sendAcceptance: null,
         streamingText: '',
         streamingMessage: null,
         streamingMessages: [],

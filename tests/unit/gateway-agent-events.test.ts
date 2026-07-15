@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { shouldRefreshSessionList } from '@/stores/chat/gateway-agent-events';
+import { shouldFinalizeCompletedRun, shouldRefreshSessionList } from '@/stores/chat/gateway-agent-events';
+import { createIdleSessionRuntimeState } from '@/stores/chat/session-runtime';
 
 describe('gateway agent event side effects', () => {
   it('refreshes sessions when the resolved session is missing or not current', () => {
@@ -27,6 +28,24 @@ describe('gateway agent event side effects', () => {
       resolvedSessionKey: null,
       currentSessionKey: 'agent:main',
       sessions: [{ key: 'agent:main' }],
+    })).toBe(false);
+  });
+
+  it('does not finalize a new active run from an old completion event', () => {
+    const runtime = {
+      ...createIdleSessionRuntimeState(),
+      sending: true,
+      activeRunId: 'run-new',
+    };
+    expect(shouldFinalizeCompletedRun({
+      runId: 'run-old',
+      resolvedSessionKey: 'agent:main',
+      state: {
+        activeRunId: 'run-new',
+        currentSessionKey: 'agent:main',
+        runtimeBySessionKey: { 'agent:main': runtime },
+        sending: true,
+      },
     })).toBe(false);
   });
 });

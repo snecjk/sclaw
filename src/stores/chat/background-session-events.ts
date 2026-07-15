@@ -20,6 +20,7 @@ import { appendStreamingAssistantSnapshot, appendStreamingToolResultSnapshot } f
 import { buildTerminalRuntimePatch, resolveAssistantFinalTurnState } from './turn-state-machine';
 import { buildTerminalTurnEffects, executeTurnEffects } from './turn-effects';
 import { logChatFlow } from './chat-flow-log';
+import { decideRunEvent, recordTerminalRun } from './run-lifecycle';
 
 export interface BackgroundChatEvent {
   sessionKey: string;
@@ -62,6 +63,28 @@ export function createBackgroundSessionEventHandler(dependencies: BackgroundSess
       sessionKey,
       suppressTerminalEffects: Boolean(suppressTerminalEffects),
     });
+    const runtimeBefore = getSessionRuntimeState(get().runtimeBySessionKey, sessionKey);
+    const decision = decideRunEvent({ sessionKey, runtime: runtimeBefore, resolvedState, runId });
+    if (!decision.accept) {
+      logChatFlow('event.background.rejected', {
+        state: resolvedState,
+        runId,
+        sessionKey,
+        activeRunId: runtimeBefore.activeRunId,
+        reason: decision.reason,
+      });
+      return;
+    }
+    if (decision.bindRun) {
+      set((state) => applyRuntimePatch(state, sessionKey, {
+        sending: true,
+        activeRunId: runId,
+        error: null,
+        sendAcceptance: runtimeBefore.sendAcceptance
+          ? { ...runtimeBefore.sendAcceptance, status: 'accepted' }
+          : null,
+      }));
+    }
     switch (resolvedState) {
       case 'started': {
         noteObservedRun(runId);
@@ -113,6 +136,7 @@ export function createBackgroundSessionEventHandler(dependencies: BackgroundSess
           const patch = applyRuntimePatch(state, sessionKey, (currentRuntime) => ({
             sending: isTerminalOutput ? false : currentRuntime.sending,
             activeRunId: isTerminalOutput ? null : currentRuntime.activeRunId,
+            sendAcceptance: isTerminalOutput ? null : currentRuntime.sendAcceptance,
             streamingText: '',
             streamingMessage: null,
             streamingMessages: isTerminalOutput ? [] : currentRuntime.streamingMessages,
@@ -147,15 +171,18 @@ export function createBackgroundSessionEventHandler(dependencies: BackgroundSess
             dispatchMemoryCapture,
           });
         }
+        if (isTerminalOutput) recordTerminalRun(sessionKey, runId);
         break;
       }
       case 'error':
         set((state) => applyRuntimePatch(state, sessionKey, buildTerminalRuntimePatch(
           errorMessage,
         )));
+        recordTerminalRun(sessionKey, runId);
         break;
       case 'aborted':
         set((state) => applyRuntimePatch(state, sessionKey, buildTerminalRuntimePatch(null)));
+        recordTerminalRun(sessionKey, runId);
         break;
       default:
         if (message && typeof message === 'object') {

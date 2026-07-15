@@ -34,6 +34,7 @@ export function buildTerminalRuntimePatch(error: string | null = null): Partial<
   return {
     sending: false,
     activeRunId: null,
+    sendAcceptance: null,
     streamingText: '',
     streamingMessage: null,
     streamingMessages: [],

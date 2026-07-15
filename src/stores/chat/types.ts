@@ -150,7 +150,15 @@ export interface SessionRuntimeState {
   optimisticUserMessage: RawMessage | null;
   pendingToolImages: AttachedFileMeta[];
   error: string | null;
+  /** Tracks whether the Gateway has acknowledged the current optimistic send. */
+  sendAcceptance: SendAcceptanceState | null;
   updatedAt: number;
+}
+
+export interface SendAcceptanceState {
+  idempotencyKey: string;
+  status: 'pending' | 'accepted' | 'uncertain';
+  startedAt: number;
 }
 
 export interface ChatState {
@@ -165,6 +173,7 @@ export interface ChatState {
    *  sending before backend has applied the new model. */
   modelSwitching: boolean;
   activeRunId: string | null;
+  sendAcceptance: SendAcceptanceState | null;
   streamingText: string;
   streamingMessage: unknown | null;
   /** Live assistant snapshots seen during the active turn, in arrival order. */
@@ -233,7 +242,7 @@ export interface ChatState {
     additionalSuppressKeys?: string[];
   }) => Promise<boolean>;
   cleanupEmptySession: () => void;
-  loadHistory: (quiet?: boolean, force?: boolean) => Promise<void>;
+  loadHistory: (quiet?: boolean, force?: boolean, sessionKey?: string) => Promise<void>;
   sendMessage: (options: SendMessageOptions) => Promise<void>;
   abortRun: () => Promise<void>;
   handleChatEvent: (event: Record<string, unknown>) => void;

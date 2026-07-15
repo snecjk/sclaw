@@ -2,6 +2,8 @@ import { setRuntimePatch } from './runtime-controller';
 import { executeTurnEffects } from './turn-effects';
 import type { ChatGet, ChatSet } from './store-api';
 import type { ChatSession, RawMessage } from './types';
+import { getSessionRuntimeState } from './session-runtime';
+import { recordTerminalRun } from './run-lifecycle';
 
 export function handleForegroundFinalWithoutMessage(input: {
   get: ChatGet;
@@ -51,6 +53,7 @@ export function handleForegroundErrorEvent(input: {
   get: ChatGet;
   set: ChatSet;
   sessionKey: string;
+  runId: string;
   errorMessage: string;
   clearHistoryPoll: () => void;
   clearErrorRecoveryTimer: () => void;
@@ -61,11 +64,12 @@ export function handleForegroundErrorEvent(input: {
     clearHistoryPoll,
     errorMessage,
     get,
+    runId,
     sessionKey,
     set,
     setErrorRecoveryTimer,
   } = input;
-  const wasSending = get().sending;
+  const wasSending = getSessionRuntimeState(get().runtimeBySessionKey, sessionKey).sending;
 
   const currentStream = get().streamingMessage as RawMessage | null;
   if (currentStream && (currentStream.role === 'assistant' || currentStream.role === undefined)) {
@@ -95,14 +99,17 @@ export function handleForegroundErrorEvent(input: {
     setErrorRecoveryTimer(setTimeout(() => {
       setErrorRecoveryTimer(null);
       const state = get();
-      if (state.sending && !state.streamingMessage) {
+      const runtime = getSessionRuntimeState(state.runtimeBySessionKey, sessionKey);
+      if (runtime.sending && !runtime.streamingMessage && (!runId || runtime.activeRunId === runId)) {
         clearHistoryPoll();
-        setRuntimePatch(set, state.currentSessionKey, {
+        setRuntimePatch(set, sessionKey, {
           sending: false,
           activeRunId: null,
+          sendAcceptance: null,
           lastUserMessageAt: null,
         });
-        state.loadHistory(true);
+        recordTerminalRun(sessionKey, runId);
+        state.loadHistory(true, true, sessionKey);
       }
     }, ERROR_RECOVERY_GRACE_MS));
     return;
@@ -112,9 +119,11 @@ export function handleForegroundErrorEvent(input: {
   setRuntimePatch(set, sessionKey, {
     sending: false,
     activeRunId: null,
+    sendAcceptance: null,
     lastUserMessageAt: null,
     optimisticUserMessage: null,
   });
+  recordTerminalRun(sessionKey, runId);
 }
 
 export function handleForegroundAbortedEvent(input: {
@@ -135,6 +144,7 @@ export function handleForegroundAbortedEvent(input: {
   setRuntimePatch(set, sessionKey, {
     sending: false,
     activeRunId: null,
+    sendAcceptance: null,
     streamingText: '',
     streamingMessage: null,
     streamingMessages: [],

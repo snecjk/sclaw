@@ -17,7 +17,7 @@ export function reconcileHistoryRuntimeCompletion(input: {
   runtimeState?: { isRunning?: boolean; runtimeResult?: unknown };
   activeEngineType?: ChatSession['engineType'];
   toMs: (ts: unknown) => number;
-  clearHistoryPoll: () => void;
+  clearHistoryPoll: (sessionKey: string) => void;
   dispatchAgentMemoryCapture: (input: {
     agentId?: string | null;
     runId?: string | null;
@@ -56,7 +56,7 @@ export function reconcileHistoryRuntimeCompletion(input: {
   });
 
   if (shouldAutoCompleteFromHistory) {
-    clearHistoryPoll();
+    clearHistoryPoll(sessionKey);
     useSessionUnreadStore.getState().markSessionRead(sessionKey);
     const completionRunId = getSessionRuntimeState(get().runtimeBySessionKey, sessionKey).activeRunId ?? undefined;
     set((state) => applyRuntimePatch(state, sessionKey, buildTerminalRuntimePatch(null)));

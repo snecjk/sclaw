@@ -923,6 +923,7 @@ export function Sidebar() {
             [state.currentSessionKey]: {
               sending: state.sending,
               activeRunId: state.activeRunId,
+              sendAcceptance: state.sendAcceptance,
               streamingText: state.streamingText,
               streamingMessage: state.streamingMessage,
               streamingMessages: state.streamingMessages,
@@ -938,6 +939,7 @@ export function Sidebar() {
             [DEFAULT_SESSION_KEY]: {
               sending: false,
               activeRunId: null,
+              sendAcceptance: null,
               streamingText: '',
               streamingMessage: null,
               streamingMessages: [],
@@ -964,6 +966,7 @@ export function Sidebar() {
             streamingToolResults: [],
             streamingTools: [],
             activeRunId: null,
+            sendAcceptance: null,
             error: null,
             pendingFinal: false,
             lastUserMessageAt: null,
@@ -1753,6 +1756,7 @@ export function Sidebar() {
             [currKey]: {
               sending,
               activeRunId,
+              sendAcceptance: useChatStore.getState().sendAcceptance,
               streamingText,
               streamingMessage,
               streamingMessages,
@@ -1768,6 +1772,7 @@ export function Sidebar() {
             [DEFAULT_SESSION_KEY]: {
               sending: false,
               activeRunId: null,
+              sendAcceptance: null,
               streamingText: '',
               streamingMessage: null,
               streamingMessages: [],
@@ -1794,6 +1799,7 @@ export function Sidebar() {
             streamingToolResults: [],
             streamingTools: [],
             activeRunId: null,
+            sendAcceptance: null,
             error: null,
             pendingFinal: false,
             lastUserMessageAt: null,

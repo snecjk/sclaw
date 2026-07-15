@@ -47,6 +47,8 @@ import {
   hasErrorRecoveryTimer,
   setErrorRecoveryTimer,
   setHistoryPollTimer,
+  clearStuckCheckTimer,
+  setStuckCheckTimer,
 } from './runtime-timers';
 import {
   isToolOnlyMessage,
@@ -66,6 +68,7 @@ import {
   toNumberIfFinite,
 } from './store-helpers';
 import type { ResolveChatSessionEngineTypeOptions } from '@/lib/resolve-chat-session-engine-type';
+import { recordTerminalRun } from './run-lifecycle';
 
 export type {
   AttachedFileMeta,
@@ -175,6 +178,8 @@ export const useChatStore = create<ChatState>()(
     clearErrorRecoveryTimer,
     clearHistoryPoll,
     setHistoryPollTimer,
+    clearStuckCheckTimer,
+    setStuckCheckTimer,
   }),
 
   ...createForegroundEventActions(set, get, {
@@ -240,8 +245,17 @@ export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null
   const resolvedRunId = runId ?? state.activeRunId ?? undefined;
   const agentId = getAgentIdFromSessionKey(targetKey);
 
-  clearHistoryPoll();
-  useChatStore.setState((prev) => applyRuntimePatch(prev, targetKey, buildTerminalRuntimePatch(null)));
+  const targetRuntime = state.runtimeBySessionKey[targetKey];
+  if (runId && targetRuntime?.activeRunId && targetRuntime.activeRunId !== runId) return;
+  clearHistoryPoll(targetKey);
+  clearErrorRecoveryTimer(targetKey);
+  clearStuckCheckTimer(targetKey);
+  useChatStore.setState((prev) => {
+    const latestRuntime = prev.runtimeBySessionKey[targetKey];
+    if (runId && latestRuntime?.activeRunId && latestRuntime.activeRunId !== runId) return {};
+    return applyRuntimePatch(prev, targetKey, buildTerminalRuntimePatch(null));
+  });
+  recordTerminalRun(targetKey, resolvedRunId);
   executeTurnEffects(buildTerminalTurnEffects({
     agentId,
     runId: resolvedRunId,

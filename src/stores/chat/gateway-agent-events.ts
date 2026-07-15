@@ -4,6 +4,8 @@ import { applyRuntimePatch } from './runtime-controller';
 import { mapEventSessionKey } from './session-event-routing';
 import { buildTerminalRuntimePatch } from './turn-state-machine';
 import type { ChatState } from './types';
+import { getSessionRuntimeState } from './session-runtime';
+import { isTerminalRun } from './run-lifecycle';
 
 const LOAD_SESSIONS_MIN_INTERVAL_MS = 1_200;
 const LOAD_HISTORY_MIN_INTERVAL_MS = 800;
@@ -48,19 +50,22 @@ export function shouldRefreshSessionList(input: {
   );
 }
 
-function shouldFinalizeCompletedRun(input: {
+export function shouldFinalizeCompletedRun(input: {
   runId: unknown;
   resolvedSessionKey: string | null;
   state: Pick<ChatState, 'activeRunId' | 'currentSessionKey' | 'runtimeBySessionKey' | 'sending'>;
 }): boolean {
   const { resolvedSessionKey, runId, state } = input;
-  const matchesCurrentSession = resolvedSessionKey == null || resolvedSessionKey === state.currentSessionKey;
-  const matchesActiveRun = runId != null && state.activeRunId != null && String(runId) === state.activeRunId;
-  const backgroundRuntime = resolvedSessionKey ? state.runtimeBySessionKey[resolvedSessionKey] : null;
-  const hasBackgroundActiveRuntime = Boolean(backgroundRuntime?.sending);
-
-  return ((matchesCurrentSession || matchesActiveRun) && state.sending)
-    || Boolean(resolvedSessionKey && hasBackgroundActiveRuntime);
+  const sessionKey = resolvedSessionKey ?? state.currentSessionKey;
+  const completionRunId = eventString(runId);
+  if (completionRunId && isTerminalRun(sessionKey, completionRunId)) return false;
+  const runtime = getSessionRuntimeState(state.runtimeBySessionKey, sessionKey);
+  if (!runtime.sending) return false;
+  if (runtime.activeRunId) return completionRunId === runtime.activeRunId;
+  return Boolean(completionRunId && (
+    runtime.sendAcceptance?.status === 'pending'
+    || runtime.sendAcceptance?.status === 'uncertain'
+  ));
 }
 
 function scheduleCompletedRunHistoryReload(runId: unknown, sessionKey: unknown): void {
@@ -72,11 +77,10 @@ function scheduleCompletedRunHistoryReload(runId: unknown, sessionKey: unknown):
       import('./store')
         .then(async ({ useChatStore }) => {
           const state = useChatStore.getState();
-          const matchesCurrentSession = completionSessionKey == null || completionSessionKey === state.currentSessionKey;
+          const targetSessionKey = completionSessionKey ?? state.currentSessionKey;
+          if (!shouldFinalizeCompletedRun({ runId: completionRunId, resolvedSessionKey: targetSessionKey, state })) return;
+          const matchesCurrentSession = targetSessionKey === state.currentSessionKey;
           const matchesActiveRun = completionRunId != null && state.activeRunId != null && completionRunId === state.activeRunId;
-          const backgroundRuntime = completionSessionKey ? state.runtimeBySessionKey[completionSessionKey] : null;
-          const hasBackgroundActiveRuntime = Boolean(backgroundRuntime?.sending);
-          if (!matchesCurrentSession && !matchesActiveRun && !hasBackgroundActiveRuntime) return;
 
           if (matchesCurrentSession || matchesActiveRun) {
             await state.loadHistory(true, true);
@@ -85,6 +89,11 @@ function scheduleCompletedRunHistoryReload(runId: unknown, sessionKey: unknown):
           if (index !== COMPLETION_HISTORY_RELOAD_DELAYS_MS.length - 1) return;
 
           const latest = useChatStore.getState();
+          if (!shouldFinalizeCompletedRun({
+            runId: completionRunId,
+            resolvedSessionKey: targetSessionKey,
+            state: latest,
+          })) return;
           const stillMatchesCurrentSession = completionSessionKey == null || completionSessionKey === latest.currentSessionKey;
           const stillMatchesActiveRun = completionRunId != null && latest.activeRunId != null && completionRunId === latest.activeRunId;
           if (stillMatchesCurrentSession || stillMatchesActiveRun) {
@@ -93,19 +102,18 @@ function scheduleCompletedRunHistoryReload(runId: unknown, sessionKey: unknown):
 
             useChatStore.setState((prev) => applyRuntimePatch(
               prev,
-              completionSessionKey ?? latest.currentSessionKey,
+              targetSessionKey,
               buildTerminalRuntimePatch(null),
             ));
             return;
           }
 
-          if (!completionSessionKey) return;
-          const sessionRuntime = latest.runtimeBySessionKey[completionSessionKey];
+          const sessionRuntime = latest.runtimeBySessionKey[targetSessionKey];
           if (!sessionRuntime?.sending) return;
           if (sessionRuntime.streamingMessage || sessionRuntime.streamingText) return;
 
-          useChatStore.setState((prev) => applyRuntimePatch(prev, completionSessionKey, buildTerminalRuntimePatch(null)));
-          markSessionUnreadAfterSuccessfulRun(completionSessionKey, latest.currentSessionKey, {
+          useChatStore.setState((prev) => applyRuntimePatch(prev, targetSessionKey, buildTerminalRuntimePatch(null)));
+          markSessionUnreadAfterSuccessfulRun(targetSessionKey, latest.currentSessionKey, {
             runId: completionRunId,
           });
         })
@@ -121,21 +129,19 @@ async function completeRunAfterAgentCompleted(
   const completionRunId = eventString(runId);
   const { useChatStore, finalizeOpenClawRunAfterAgentCompleted } = await import('./store');
   const before = useChatStore.getState();
-  const matchesCurrentSession = sessionKey == null || sessionKey === before.currentSessionKey;
-  const matchesActiveRun = completionRunId != null
-    && before.activeRunId != null
-    && completionRunId === before.activeRunId;
+  const targetSessionKey = sessionKey ?? before.currentSessionKey;
+  if (!shouldFinalizeCompletedRun({ runId: completionRunId, resolvedSessionKey: targetSessionKey, state: before })) return;
+  const matchesCurrentSession = targetSessionKey === before.currentSessionKey;
+  const matchesActiveRun = completionRunId != null && before.activeRunId != null && completionRunId === before.activeRunId;
 
   if (matchesCurrentSession || matchesActiveRun) {
     await before.loadHistory(true, true);
   }
 
   const after = useChatStore.getState();
-  if (completionRunId != null && after.activeRunId != null && completionRunId !== after.activeRunId) {
-    return;
-  }
+  if (!shouldFinalizeCompletedRun({ runId: completionRunId, resolvedSessionKey: targetSessionKey, state: after })) return;
 
-  finalizeOpenClawRunAfterAgentCompleted(sessionKey, completionRunId);
+  finalizeOpenClawRunAfterAgentCompleted(targetSessionKey, completionRunId);
 }
 
 export function handleStartedEngineEvent(

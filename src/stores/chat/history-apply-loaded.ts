@@ -33,7 +33,7 @@ import type { ChatSession, RawMessage } from './types';
 
 export interface ApplyLoadedHistoryDeps {
   toMs: (ts: unknown) => number;
-  clearHistoryPoll: () => void;
+  clearHistoryPoll: (sessionKey: string) => void;
   resolveEngineTypeForSession: (
     sessions: ChatSession[],
     sessionKey: string,

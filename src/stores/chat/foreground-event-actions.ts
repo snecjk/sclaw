@@ -24,6 +24,8 @@ import { logChatFlow } from './chat-flow-log';
 import type { BackgroundChatEvent } from './background-session-events';
 import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
 import type { ChatSession, RawMessage } from './types';
+import { decideRunEvent, recordTerminalRun } from './run-lifecycle';
+import { getSessionRuntimeState } from './session-runtime';
 
 export interface ForegroundEventDeps {
   resolveEngineTypeForSession: (
@@ -41,10 +43,10 @@ export interface ForegroundEventDeps {
     sessionKey?: string | null;
     engineType?: ChatSession['engineType'];
   }) => void;
-  clearHistoryPoll: () => void;
-  clearErrorRecoveryTimer: () => void;
-  setErrorRecoveryTimer: (timer: ReturnType<typeof setTimeout> | null) => void;
-  hasErrorRecoveryTimer: () => boolean;
+  clearHistoryPoll: (sessionKey: string) => void;
+  clearErrorRecoveryTimer: (sessionKey: string) => void;
+  setErrorRecoveryTimer: (sessionKey: string, timer: ReturnType<typeof setTimeout> | null) => void;
+  hasErrorRecoveryTimer: (sessionKey: string) => boolean;
 }
 
 export function createForegroundEventActions(
@@ -73,7 +75,12 @@ export function createForegroundEventActions(
       sessionKey,
       engineType,
       reloadHistory: true,
-    }), { get, set, clearHistoryPoll, dispatchMemoryCapture: dispatchAgentMemoryCapture });
+    }), {
+      get,
+      set,
+      clearHistoryPoll: () => clearHistoryPoll(sessionKey),
+      dispatchMemoryCapture: dispatchAgentMemoryCapture,
+    });
   };
 
   const syncWorkflowCardsForCurrentSession = () => {
@@ -92,7 +99,7 @@ export function createForegroundEventActions(
     // ── Handle incoming chat events from Gateway ──
 
     handleChatEvent: (event: Record<string, unknown>) => {
-      const { activeRunId, currentSessionKey } = get();
+      const { currentSessionKey } = get();
       const {
         eventState,
         errorMessage,
@@ -111,6 +118,35 @@ export function createForegroundEventActions(
         currentSessionKey,
         hasMessage: message != null,
       });
+
+      const targetSessionKey = resolvedSessionKey ?? currentSessionKey;
+      const runtime = getSessionRuntimeState(get().runtimeBySessionKey, targetSessionKey);
+      const decision = decideRunEvent({
+        sessionKey: targetSessionKey,
+        runtime,
+        resolvedState,
+        runId,
+      });
+      if (!decision.accept) {
+        logChatFlow('event.run.rejected', {
+          sessionKey: targetSessionKey,
+          runId,
+          activeRunId: runtime.activeRunId,
+          state: resolvedState,
+          reason: decision.reason,
+        });
+        return;
+      }
+      if (decision.bindRun) {
+        setRuntimePatch(set, targetSessionKey, {
+          sending: true,
+          activeRunId: runId,
+          error: null,
+          sendAcceptance: runtime.sendAcceptance
+            ? { ...runtime.sendAcceptance, status: 'accepted' }
+            : null,
+        });
+      }
 
       if (resolvedSessionKey != null && resolvedSessionKey !== currentSessionKey) {
         logChatFlow('event.background.route', {
@@ -149,9 +185,6 @@ export function createForegroundEventActions(
         });
       }
 
-      // Only process events for the active run (or if no active run set)
-      if (activeRunId && runId && runId !== activeRunId) return;
-
       if (isDuplicateChatEvent(eventState, event)) return;
 
       touchLastChatEventAt(set);
@@ -164,13 +197,7 @@ export function createForegroundEventActions(
         || resolvedState === 'error' || resolvedState === 'aborted';
       if (hasUsefulData) {
         if (resolvedState !== 'final') {
-          clearHistoryPoll();
-        }
-        // Adopt run started from another client (e.g. console at 127.0.0.1:18789):
-        // show loading/streaming in the app when this session has an active run.
-        const { sending } = get();
-        if (!sending && runId) {
-          setRuntimePatch(set, currentSessionKey, { sending: true, activeRunId: runId, error: null });
+          clearHistoryPoll(currentSessionKey);
         }
       }
 
@@ -191,8 +218,8 @@ export function createForegroundEventActions(
           // If we're receiving new deltas, the Gateway has recovered from any
           // prior error — cancel the error finalization timer and clear the
           // stale error banner so the user sees the live stream again.
-          if (hasErrorRecoveryTimer()) {
-            clearErrorRecoveryTimer();
+          if (hasErrorRecoveryTimer(currentSessionKey)) {
+            clearErrorRecoveryTimer(currentSessionKey);
             setRuntimePatch(set, currentSessionKey, { error: null });
           }
           const updates = collectToolUpdates(message, resolvedState);
@@ -215,7 +242,7 @@ export function createForegroundEventActions(
             sessionKey: currentSessionKey,
             hasMessage: message != null,
           });
-          clearErrorRecoveryTimer();
+          clearErrorRecoveryTimer(currentSessionKey);
           if (get().error) setRuntimePatch(set, currentSessionKey, { error: null });
           // Message complete - add to history and clear streaming
           const finalMsg = message as RawMessage | undefined;
@@ -263,10 +290,11 @@ export function createForegroundEventActions(
             get,
             set,
             sessionKey: currentSessionKey,
+            runId,
             errorMessage,
-            clearHistoryPoll,
-            clearErrorRecoveryTimer,
-            setErrorRecoveryTimer,
+            clearHistoryPoll: () => clearHistoryPoll(currentSessionKey),
+            clearErrorRecoveryTimer: () => clearErrorRecoveryTimer(currentSessionKey),
+            setErrorRecoveryTimer: (timer) => setErrorRecoveryTimer(currentSessionKey, timer),
           });
           break;
         }
@@ -274,8 +302,8 @@ export function createForegroundEventActions(
           handleForegroundAbortedEvent({
             set,
             sessionKey: currentSessionKey,
-            clearHistoryPoll,
-            clearErrorRecoveryTimer,
+            clearHistoryPoll: () => clearHistoryPoll(currentSessionKey),
+            clearErrorRecoveryTimer: () => clearErrorRecoveryTimer(currentSessionKey),
           });
           break;
         }
@@ -294,6 +322,16 @@ export function createForegroundEventActions(
             }));
           }
           break;
+        }
+      }
+
+      if (
+        runId
+        && (resolvedState === 'final' || resolvedState === 'aborted')
+      ) {
+        const latest = getSessionRuntimeState(get().runtimeBySessionKey, currentSessionKey);
+        if (!latest.sending && latest.activeRunId !== runId) {
+          recordTerminalRun(currentSessionKey, runId);
         }
       }
     },

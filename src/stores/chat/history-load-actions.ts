@@ -22,6 +22,10 @@ import { mergeHistoryMessageSources } from './history-merge';
 import { logChatFlow } from './chat-flow-log';
 import type { ChatGet, ChatSet, HistoryActions } from './store-api';
 import type { ChatSession, RawMessage } from './types';
+import { applyRuntimePatch } from './runtime-controller';
+import { getSessionRuntimeState } from './session-runtime';
+import { buildTerminalRuntimePatch } from './turn-state-machine';
+import { clearSessionRuntimeTimers } from './runtime-timers';
 
 const HISTORY_LOAD_MIN_INTERVAL_MS = 800;
 const _historyLoadInFlight = new Map<string, Promise<void>>();
@@ -29,7 +33,7 @@ const _lastHistoryLoadAtBySession = new Map<string, number>();
 
 export interface HistoryLoadDeps {
   toMs: (ts: unknown) => number;
-  clearHistoryPoll: () => void;
+  clearHistoryPoll: (sessionKey: string) => void;
   resolveEngineTypeForSession: (
     sessions: ChatSession[],
     sessionKey: string,
@@ -88,12 +92,12 @@ export function createHistoryLoadActions(
   return {
     // ── Load chat history ──
 
-    loadHistory: async (quiet = false, force = false) => {
-      const targetSessionKey = get().currentSessionKey;
+    loadHistory: async (quiet = false, force = false, requestedSessionKey?: string) => {
+      const targetSessionKey = requestedSessionKey ?? get().currentSessionKey;
       const existingLoad = _historyLoadInFlight.get(targetSessionKey);
       if (existingLoad) {
         await existingLoad;
-        if (get().currentSessionKey !== targetSessionKey) {
+        if (!requestedSessionKey && get().currentSessionKey !== targetSessionKey) {
           return get().loadHistory(quiet, force);
         }
         return;
@@ -147,11 +151,30 @@ export function createHistoryLoadActions(
               engineType: resolveEngineTypeForSession(get().sessions, targetSessionKey, get().currentAgentId),
             },
           );
-          if (get().currentSessionKey !== targetSessionKey) return;
 
           const allMessages: RawMessage[] = Array.isArray(data.messages)
             ? data.messages as RawMessage[]
             : [];
+          const runtime = getSessionRuntimeState(get().runtimeBySessionKey, targetSessionKey);
+          const idempotencyKey = runtime.sendAcceptance?.idempotencyKey;
+          const hasServerEcho = Boolean(idempotencyKey && allMessages.some((message) => message.id === idempotencyKey));
+          if (hasServerEcho) {
+            const isBackgroundSession = get().currentSessionKey !== targetSessionKey;
+            if (isBackgroundSession && data.isRunning === false) {
+              clearSessionRuntimeTimers(targetSessionKey);
+              set((state) => applyRuntimePatch(state, targetSessionKey, buildTerminalRuntimePatch(null)));
+            } else {
+              set((state) => applyRuntimePatch(state, targetSessionKey, (currentRuntime) => {
+                if (!currentRuntime.sendAcceptance || currentRuntime.sendAcceptance.idempotencyKey !== idempotencyKey) {
+                  return {};
+                }
+                return {
+                  sendAcceptance: { ...currentRuntime.sendAcceptance, status: 'accepted' },
+                };
+              }));
+            }
+          }
+          if (get().currentSessionKey !== targetSessionKey) return;
           if (data.thinkingLevel) {
             thinkingLevel = String(data.thinkingLevel);
           }

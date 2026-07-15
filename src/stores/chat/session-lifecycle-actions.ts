@@ -43,6 +43,8 @@ import {
   type ChatSession,
 } from './types';
 import type { ChatGet, ChatSet, SessionActions } from './store-api';
+import { clearSessionRuntimeTimers } from './runtime-timers';
+import { clearSessionRunLifecycle } from './run-lifecycle';
 import {
   captureTopLevelRuntime,
   clearActivatingSessionIfHandedOff,
@@ -609,6 +611,8 @@ export function createSessionLifecycleActions(
       }
 
       useSessionUnreadStore.getState().markSessionRead(key);
+      clearSessionRuntimeTimers(key);
+      clearSessionRunLifecycle(key);
 
       const { currentSessionKey, sessions } = get();
       const remaining = sessions.filter((s) => s.key !== key);
@@ -628,6 +632,7 @@ export function createSessionLifecycleActions(
           streamingToolResults: [],
           streamingTools: [],
           activeRunId: null,
+          sendAcceptance: null,
           error: null,
           pendingFinal: false,
           lastUserMessageAt: null,
@@ -727,6 +732,7 @@ export function createSessionLifecycleActions(
           streamingToolResults: [],
           streamingTools: [],
           activeRunId: null,
+          sendAcceptance: null,
           error: null,
           pendingFinal: false,
           lastUserMessageAt: null,
