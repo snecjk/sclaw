@@ -1,11 +1,11 @@
 /**
- * Agent V1 通用透传代理
+ * FastAPI Agent V1 通用透传代理
  *
- * 前端直接写完整路径 /agent/v1/xxx，
+ * 前端直接写完整路径 /fastapi/agent/v1/xxx，
  * Electron 将请求透传至 Python 后端（memory-center）。
- * 后续新增 /agent/v1 下的接口无需再改 Node 层。
+ * 后续新增 /fastapi/agent/v1 下的接口无需再改 Node 层。
  *
- * 路径映射：/agent/v1/{rest} → {sto_base_url}/agent/v1/{rest}
+ * 路径映射：/fastapi/agent/v1/{rest} → {sto_base_url}/agent/v1/{rest}
  */
 
 import type { IncomingMessage, ServerResponse } from 'http';
@@ -25,15 +25,16 @@ function readRawBody(req: IncomingMessage): Promise<Buffer> {
   });
 }
 
-export async function handleAgentV1Routes(
+export async function handleFastApiAgentV1Routes(
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
   _ctx: HostApiContext,
 ): Promise<boolean> {
-  if (!url.pathname.startsWith('/agent/v1')) return false;
+	console.log(`[FastApiAgentV1Proxy] ${req.method} ${url.pathname}${url.search}`);
+  if (!url.pathname.startsWith('/fastapi/agent/v1')) return false;
 
-  const backendPath = url.pathname;
+  const backendPath = url.pathname.replace('/fastapi/agent/v1', '/agent/v1');
 
   try {
     const token = await getStoToken();
@@ -47,7 +48,7 @@ export async function handleAgentV1Routes(
     };
 
     const rawBody = await readRawBody(req);
-    logger.info(`[AgentV1Proxy] >>> ${req.method} ${targetUrl}`);
+    logger.info(`[FastApiAgentV1Proxy] >>> ${req.method} ${targetUrl}`);
 
     const backendRes = await fetch(targetUrl, {
       method: req.method || 'GET',
@@ -56,7 +57,7 @@ export async function handleAgentV1Routes(
     });
 
     const text = await backendRes.text();
-    logger.info(`[AgentV1Proxy] <<< ${req.method} ${targetUrl} status=${backendRes.status}`);
+    logger.info(`[FastApiAgentV1Proxy] <<< ${req.method} ${targetUrl} status=${backendRes.status}`);
 
     let json: unknown;
     try {
@@ -64,7 +65,6 @@ export async function handleAgentV1Routes(
     } catch {
       json = { error: text };
     }
-		console.log('json', json);
     sendJson(res, backendRes.status, json);
   } catch (error) {
     const message = String(error);

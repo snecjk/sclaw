@@ -26,7 +26,7 @@ import { handleSubscriptionRoutes } from './routes/subscriptions';
 import { handleMyTasksRoutes } from './routes/my-tasks';
 import { handleDictionaryRoutes } from './routes/dictionaries';
 import { handleWorkflowRoutes } from './routes/workflows';
-import { handleAgentV1Routes } from './routes/agent-v1';
+import { handleFastApiAgentV1Routes } from './routes/fastapi-agent-v1';
 import { handleSclawBrowserRoutes } from './routes/sclaw-browser';
 import { handleBrowserBridgeRoutes } from './routes/browser-bridge';
 
@@ -40,6 +40,7 @@ type RouteHandler = (
 ) => Promise<boolean>;
 
 const routeHandlers: RouteHandler[] = [
+	handleFastApiAgentV1Routes,
   handleAuthRoutes,
   handleAppRoutes,
   handleGatewayRoutes,
@@ -64,10 +65,8 @@ const routeHandlers: RouteHandler[] = [
   handleClaudeScheduledTaskRoutes,
   handleDingTalkRoutes,
   handleMyTasksRoutes,
-  handleAgentV1Routes,
   handleLogRoutes,
   handleUsageRoutes,
-  handleWorkflowRoutes,
 ];
 
 export function startHostApiServer(ctx: HostApiContext, port = PORTS.CLAWX_HOST_API): Server {

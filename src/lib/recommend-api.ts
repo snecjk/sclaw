@@ -1,11 +1,10 @@
 /**
  * 推荐位配置 API Client
  *
- * 对接 FastAPI: GET /agent/v1/recommend/positions/{position_key}/items
+ * 对接 FastAPI: GET /fastapi/agent/v1/recommend/positions/{position_key}/items
  * 返回当前用户在指定推荐位下可见的条目（enrich + 失效过滤）。
  */
 import { hostApiFetch } from '@/lib/host-api';
-import { useAuthStore } from '@/stores/auth';
 
 /** 推荐位条目类型 */
 export type RecommendItemType = 'workflow_template' | 'workflow_instance' | 'skill';
@@ -49,26 +48,13 @@ export const RECOMMEND_POSITION_KEYS = {
 export type RecommendPositionKey =
   (typeof RECOMMEND_POSITION_KEYS)[keyof typeof RECOMMEND_POSITION_KEYS];
 
-function getStoToken(): string | undefined {
-  return useAuthStore.getState().user?.stoToken?.trim() || undefined;
-}
-
-function authHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  const token = getStoToken();
-  if (token) headers.stoToken = token;
-  return headers;
-}
-
 /** 获取指定推荐位的可见条目 */
 export async function fetchRecommendItems(
   positionKey: RecommendPositionKey,
 ): Promise<RecommendItem[]> {
   const res = await hostApiFetch<RecommendItemsResponse>(
-    `/agent/v1/recommend/positions/${positionKey}/items`,
-    { method: 'GET', headers: authHeaders() },
+    `/fastapi/agent/v1/recommend/positions/${positionKey}/items`,
+    { method: 'GET' },
   );
   if (!res.success || !res.data) {
     return [];
