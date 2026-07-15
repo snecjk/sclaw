@@ -1,5 +1,6 @@
 /**
- * 最近 @ 提及列表：从 dws list-unread-conversations 响应映射为 MentionSearchItem 形状。
+ * 最近 @ 提及列表：从 dws chat list-all-conversations（最近会话）映射为 MentionSearchItem 形状。
+ * 未读会话映射保留作旧版 dws 兜底。
  */
 
 export interface RecentMentionRow {
@@ -81,10 +82,34 @@ export function extractListAllPagination(value: unknown): {
   }
   const nested = result as Record<string, unknown>;
   const hasMore = nested.hasMore === true;
-  const nextCursor = typeof nested.nextCursor === 'string' && nested.nextCursor.trim()
-    ? nested.nextCursor.trim()
-    : null;
+  const rawCursor = nested.nextCursor;
+  let nextCursor: string | null = null;
+  if (typeof rawCursor === 'string' && rawCursor.trim()) {
+    nextCursor = rawCursor.trim();
+  } else if (typeof rawCursor === 'number' && Number.isFinite(rawCursor)) {
+    nextCursor = String(Math.trunc(rawCursor));
+  }
   return { hasMore, nextCursor };
+}
+
+/** 按最近消息时间倒序（无时间戳的排后面）。 */
+export function sortConversationsByLastMsg(rows: unknown[]): unknown[] {
+  return [...rows].sort((a, b) => {
+    const ta = conversationLastMsgTime(a);
+    const tb = conversationLastMsgTime(b);
+    return tb - ta;
+  });
+}
+
+function conversationLastMsgTime(raw: unknown): number {
+  if (!raw || typeof raw !== 'object') return 0;
+  const value = (raw as Record<string, unknown>).lastMsgCreateAt;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
 }
 
 export function mapListAllConversationItem(raw: unknown): RecentMentionRow | null {
@@ -104,7 +129,7 @@ export function mapListAllConversationItem(raw: unknown): RecentMentionRow | nul
     };
   }
 
-  const memberCount = record.memberCount ?? record.userCount ?? record.unreadPoint;
+  const memberCount = record.memberCount ?? record.userCount;
   const subtitle = typeof memberCount === 'number' && memberCount > 0
     ? `${memberCount}人`
     : '群聊';

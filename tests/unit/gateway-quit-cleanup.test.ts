@@ -6,6 +6,8 @@ const getListeningProcessIds = vi.fn();
 const terminateOrphanedProcessIds = vi.fn();
 const clearOwnedGatewayProcess = vi.fn();
 
+const terminateDuplicateGatewayChildren = vi.fn();
+
 vi.mock('../../electron/gateway/supervisor', () => ({
   getListeningProcessIds,
   terminateOrphanedProcessIds,
@@ -13,6 +15,7 @@ vi.mock('../../electron/gateway/supervisor', () => ({
 
 vi.mock('../../electron/gateway/process-registry', () => ({
   clearOwnedGatewayProcess,
+  terminateDuplicateGatewayChildren,
 }));
 
 vi.mock('../../electron/utils/logger', () => ({
@@ -27,9 +30,11 @@ describe('shutdownGatewayForQuit', () => {
     getListeningProcessIds.mockReset();
     terminateOrphanedProcessIds.mockReset();
     clearOwnedGatewayProcess.mockReset();
+    terminateDuplicateGatewayChildren.mockReset();
     stop.mockResolvedValue(undefined);
     forceTerminateOwnedProcessForQuit.mockResolvedValue(false);
     getListeningProcessIds.mockResolvedValue([]);
+    terminateDuplicateGatewayChildren.mockResolvedValue([]);
   });
 
   it('skips force-terminate when stop finishes within the fast quit budget', async () => {
@@ -44,6 +49,7 @@ describe('shutdownGatewayForQuit', () => {
 
     expect(stop).toHaveBeenCalledTimes(1);
     expect(forceTerminateOwnedProcessForQuit).not.toHaveBeenCalled();
+    expect(terminateDuplicateGatewayChildren).toHaveBeenCalledWith({ reason: 'quit' });
     expect(clearOwnedGatewayProcess).toHaveBeenCalledTimes(1);
   });
 

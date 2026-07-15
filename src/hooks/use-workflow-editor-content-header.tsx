@@ -23,6 +23,8 @@ export interface UseWorkflowEditorContentHeaderOptions {
   promptCacheId?: string;
   /** 为 false 时不占用 ContentHeader（如创建中 loading） */
   enabled?: boolean;
+  /** 手动新建空画布页：标题用「新建工作流」，无次级 id、无外链按钮 */
+  create?: boolean;
 }
 
 function truncatePrompt(prompt: string, maxLen = 50): string {
@@ -39,6 +41,7 @@ export function useWorkflowEditorContentHeader({
   prompt,
   promptCacheId,
   enabled = true,
+  create = false,
 }: UseWorkflowEditorContentHeaderOptions): void {
   const { t } = useTranslation('workflow');
   const stoToken = useAuthStore((s) => s.user?.stoToken);
@@ -49,13 +52,17 @@ export function useWorkflowEditorContentHeader({
   }, [onBack]);
 
   const isAiCreateMode = Boolean(prompt || promptCacheId);
-  const secondaryLabel = isAiCreateMode && prompt ? truncatePrompt(prompt) : workflowId;
-  const secondaryTitle = isAiCreateMode && prompt ? prompt : workflowId;
+  const secondaryLabel = create ? '' : isAiCreateMode && prompt ? truncatePrompt(prompt) : workflowId;
+  const secondaryTitle = create ? '' : isAiCreateMode && prompt ? prompt : workflowId;
 
   const title = useMemo((): ReactNode => {
     if (!enabled) return null;
 
-    const mainTitle = isAiCreateMode ? t('editor.aiCreateTitle') : t('editor.editTitle');
+    const mainTitle = create
+      ? t('editor.createTitle')
+      : isAiCreateMode
+        ? t('editor.aiCreateTitle')
+        : t('editor.editTitle');
 
     return (
       <div className="no-drag flex min-w-0 max-w-full items-center gap-1 overflow-hidden">
@@ -83,7 +90,7 @@ export function useWorkflowEditorContentHeader({
         </p>
       </div>
     );
-  }, [enabled, isAiCreateMode, secondaryLabel, secondaryTitle, t]);
+  }, [enabled, create, isAiCreateMode, secondaryLabel, secondaryTitle, t]);
 
   const actions = useMemo((): ReactNode => {
     if (!enabled || !workflowId) return null;

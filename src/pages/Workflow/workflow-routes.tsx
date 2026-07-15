@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { WorkflowDashboard } from '@/pages/Workflow/components/workflow-dashboard';
 import { WorkflowPageShading } from '@/pages/Workflow/components/workflow-page-shading';
-import {
-  CreateWorkflowModal,
-  type CreateWorkflowModalInitialValues,
-} from '@/pages/Workflow/components/create-workflow-modal';
+import { CreateWorkflowModal } from '@/pages/Workflow/components/create-workflow-modal';
 import { WorkflowMcIframeEditor } from '@/pages/Workflow/components/workflow-mc-iframe-editor';
 import { useWorkflowEditorContentHeader } from '@/hooks/use-workflow-editor-content-header';
 import { cacheAiWorkflowPrompt, createWorkflowStudio } from '@/lib/workflow-studio-api';
@@ -26,40 +24,9 @@ function useEditorActive(active: boolean) {
   }, [active, setEditorActive]);
 }
 
-type WorkflowListLocationState = {
-  openCreateModal?: boolean;
-  createModalInitial?: CreateWorkflowModalInitialValues;
-};
-
 function WorkflowListRoute({ viewState }: { viewState: WorkflowListViewState }) {
   useEditorActive(false);
   const navigate = useNavigate();
-  const location = useLocation();
-  const locationState = location.state as WorkflowListLocationState | null;
-
-  const [createModalOpen, setCreateModalOpen] = useState(
-    () => Boolean(locationState?.openCreateModal),
-  );
-  const [createModalInitial, setCreateModalInitial] = useState<CreateWorkflowModalInitialValues>(
-    () => ({
-      templateId: locationState?.createModalInitial?.templateId ?? 'blank',
-      name: locationState?.createModalInitial?.name ?? '',
-    }),
-  );
-
-  // 深链打开后清掉 location state，避免刷新重复弹窗
-  useEffect(() => {
-    if (!locationState?.openCreateModal) return;
-    navigate('.', { replace: true, state: null });
-  }, [locationState?.openCreateModal, navigate]);
-
-  const openCreateModal = (initial?: CreateWorkflowModalInitialValues) => {
-    setCreateModalInitial({
-      templateId: initial?.templateId ?? 'blank',
-      name: initial?.name ?? '',
-    });
-    setCreateModalOpen(true);
-  };
 
   return (
     <div className={workflowPageRootClass}>
@@ -67,37 +34,46 @@ function WorkflowListRoute({ viewState }: { viewState: WorkflowListViewState }) 
       <div className={workflowPageContentClass}>
         <WorkflowDashboard
           viewState={viewState}
-          onManualCreate={() => openCreateModal()}
+          onManualCreate={() => navigate('/workflow/new')}
           onGenerate={(prompt) => {
             navigate('/workflow/generate', { state: { prompt } });
           }}
           onEditCard={(workflowId) => navigate(`/workflow/${encodeURIComponent(workflowId)}`)}
         />
       </div>
-      <CreateWorkflowModal
-        open={createModalOpen}
-        initialValues={createModalInitial}
-        onClose={() => setCreateModalOpen(false)}
-      />
     </div>
   );
 }
 
-/** 深链兼容：`/workflow/new?templateId=&name=` → 列表页并自动打开新建弹窗 */
+/** 手动新建：先打开空画布页（不创建工作流、不加载模板），弹窗在画布页上弹出，用户填完信息确认后才创建并加载真实 MC 画布。 */
 function WorkflowNewRoute() {
+  useEditorActive(true);
+  const { t } = useTranslation('workflow');
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const templateId = searchParams.get('templateId') ?? 'blank';
   const name = searchParams.get('name') ?? '';
+  const handleBack = useCallback(() => navigate('/workflow'), [navigate]);
+
+  useWorkflowEditorContentHeader({
+    workflowId: '',
+    onBack: handleBack,
+    enabled: true,
+    create: true,
+  });
 
   return (
-    <Navigate
-      to="/workflow"
-      replace
-      state={{
-        openCreateModal: true,
-        createModalInitial: { templateId, name },
-      }}
-    />
+    <>
+      <div className="flex h-full min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
+        <p className="text-sm text-muted-foreground">{t('editor.createTitle')}</p>
+        <p className="text-xs text-muted-foreground">{t('createModal.subtitle')}</p>
+      </div>
+      <CreateWorkflowModal
+        open
+        initialValues={{ templateId, name }}
+        onClose={() => navigate('/workflow')}
+      />
+    </>
   );
 }
 

@@ -203,7 +203,9 @@ export function inferMimeTypeFromPath(pathOrUrl: string): string {
 /** Infer MIME type from artifact type hint and/or URL/path extension. */
 export function inferMimeTypeFromUrl(url: string, typeHint?: string | null): string {
   const hint = typeHint?.toLowerCase().trim();
-  if (hint === 'html' || hint === 'text/html') return 'text/html';
+  if (hint === 'html' || hint === 'text/html' || hint === 'html_report' || hint === 'html-report') {
+    return 'text/html';
+  }
   if (hint === 'pdf' || hint === 'application/pdf') return 'application/pdf';
   if (hint === 'json' || hint === 'application/json') return 'application/json';
   if (hint === 'markdown' || hint === 'text/markdown') return 'text/markdown';
@@ -278,7 +280,7 @@ function resolveArtifactPreviewFileName(
 ): string {
   const name = artifactName?.trim() ?? '';
   if (name && name !== 'preview' && !name.startsWith('http')) {
-    return name;
+    return appendExtensionIfMissing(name, mimeType);
   }
   return previewFileNameFromUrl(previewUrl, mimeType);
 }

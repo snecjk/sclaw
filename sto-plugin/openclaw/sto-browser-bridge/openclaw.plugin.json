@@ -1,0 +1,63 @@
+{
+  "id": "sto-browser-bridge",
+  "name": "StoClaw Browser Bridge",
+  "description": "通过 Chrome 扩展操作用户真实浏览器页面（bridge_* 工具）",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "hostApiHost": {
+        "type": "string",
+        "default": "127.0.0.1",
+        "description": "StoClaw Host API 地址"
+      },
+      "hostApiPort": {
+        "type": "number",
+        "default": 3210,
+        "description": "StoClaw Host API 端口"
+      },
+      "commandTimeoutMs": {
+        "type": "number",
+        "default": 30000,
+        "description": "浏览器命令超时毫秒"
+      }
+    }
+  },
+  "tools": [
+    "bridge_snapshot",
+    "bridge_click",
+    "bridge_fill",
+    "bridge_navigate",
+    "bridge_screenshot",
+    "bridge_list_sessions"
+  ],
+  "toolConfig": {
+    "bridge_snapshot": {
+      "label": "获取浏览器页面快照",
+      "help": "获取用户 Chrome 当前页面的可交互元素树"
+    },
+    "bridge_click": {
+      "label": "点击页面元素",
+      "help": "点击 snapshot 中 @e ref 对应的元素"
+    },
+    "bridge_fill": {
+      "label": "填写表单",
+      "help": "在输入框中填写内容"
+    },
+    "bridge_navigate": {
+      "label": "导航到 URL",
+      "help": "在当前标签页打开指定 URL"
+    },
+    "bridge_screenshot": {
+      "label": "截取页面截图",
+      "help": "截取当前标签页可见区域"
+    },
+    "bridge_list_sessions": {
+      "label": "检查扩展连接",
+      "help": "查看 Chrome 扩展是否已连接"
+    }
+  }
+}

@@ -165,11 +165,64 @@ function shellQuoteDwsSendTextForShell(text: string, execShell: DwsSendExecShell
     : shellQuoteDwsSendTextForBash(text);
 }
 
-/** Parse shell/$' wrappers, unescape literals, then ensure `---` + 唯一代发说明底栏。 */
+/**
+ * 把单个产物 URL 规范化到「恰好一次 percent-encoding」的稳定态。
+ *
+ * 背景：工作流产物的 `previewUrl`/`tempUrl` 由 OSS 后端返回，到模型手上时可能
+ * **已是 percent-encoded**（`%E4%B8%AD`）。而 `encodeURI` 对已编码串**并非幂等**：
+ * 它会把已存在的 `%` 再编成 `%25`（`%E4` → `%25E4`），即双重编码、链接失效。
+ * 模型偶发地再 `encodeURIComponent` 一次也会造成同样后果。
+ *
+ * 本函数无论输入处于哪种状态——「原始中文 / 已编码 / 双重（多重）编码」——都收敛到
+ * 单次编码稳定态，且对任意合法输入幂等、重复调用安全：
+ *  1. 反复 `decodeURI` 到稳定：把多层冗余编码逐层剥掉——双重编码 `%25E4` 先塌成
+ *     `%E4`（`%25`→`%`），再塌成原始中文；非法 `%XX` 串 `decodeURI` 抛错时即停止
+ *     （保留已剥到的中间态，不再继续）；
+ *  2. 最终 `encodeURI` 一次：把残留的原始非 ASCII 统一编码成 `%XX`，此时串里已无
+ *     残余 `%`（全被上一步剥成原始字符），故不会再产生 `%25`。
+ * 对不含 http(s) 的串是 no-op（仅作 URL 的探测后整体处理）。
+ */
+export function normalizeArtifactUrl(url: string): string {
+  if (!url || !/https?:\/\//i.test(url)) return url;
+  // 迭代 decodeURI 到稳定：逐层剥掉冗余 percent-encoding。decodeURI 对不含 `%` 的
+  // 串是 no-op，故原始中文串一次即稳定；双重/多重编码串需多次才能剥净。
+  let prev = url;
+  let cur = url;
+  let guard = 0;
+  do {
+    prev = cur;
+    try {
+      cur = decodeURI(prev);
+    } catch {
+      // 非法 `%XX` 序列（如不完整 UTF-8 `%E6`）：保留已剥到的 `prev`，停止继续解码。
+      cur = prev;
+      break;
+    }
+  } while (cur !== prev && ++guard < 8);
+  try {
+    return encodeURI(cur);
+  } catch {
+    return cur;
+  }
+}
+
+const DWS_TEXT_URL_RE = /https?:\/\/[^\s"'<>`)\]]+/gi;
+
+/**
+ * 把正文里所有 http(s) URL 规范化到「恰好一次编码」。覆盖模型自发路径：在
+ * `dws chat message send --text` 归一化时调用，确保无论模型是否多编码，发出
+ * 去的链接都是单次编码的稳定态。
+ */
+export function normalizeUrlsInText(text: string): string {
+  if (!text || !/https?:\/\//i.test(text)) return text;
+  return text.replace(DWS_TEXT_URL_RE, (u) => normalizeArtifactUrl(u));
+}
+
+/** Parse shell/$' wrappers, unescape literals, normalize embedded URLs, then ensure `---` + 唯一代发说明底栏。 */
 export function normalizeDwsChatMessageSendText(text: string): string {
   const parsed = parseDwsSendTextFlagSegment(text);
   if (!parsed) return ensureDingTalkAgentSendDisclaimerFormat('');
-  return ensureDingTalkAgentSendDisclaimerFormat(parsed);
+  return ensureDingTalkAgentSendDisclaimerFormat(normalizeUrlsInText(parsed));
 }
 
 const DWS_CHAT_MSG_SEND = /dws\s+chat\s+message\s+send\b/i;
