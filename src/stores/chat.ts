@@ -113,6 +113,7 @@ import {
   resolveAssistantFinalTerminalState,
   shouldAutoCompleteClaudeFromHistory,
 } from './chat/run-completion';
+import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 
@@ -146,13 +147,6 @@ function toNumberIfFinite(value: unknown): number | undefined {
   return value;
 }
 
-function getSessionEngineType(
-  sessions: ChatSession[],
-  sessionKey: string,
-): ChatSession['engineType'] | undefined {
-  return sessions.find((session) => session.key === sessionKey)?.engineType;
-}
-
 function getAgentEngineType(agentId: string | undefined | null): ChatSession['engineType'] | undefined {
   const normalizedAgentId = normalizeAgentId(agentId);
   return useAgentsStore.getState().agents.find((agent) => normalizeAgentId(agent.id) === normalizedAgentId)?.engineType;
@@ -162,6 +156,7 @@ function resolveEngineTypeForSession(
   sessions: ChatSession[],
   sessionKey: string,
   agentId?: string | null,
+  options?: { messageCount?: number },
 ): ChatSession['engineType'] | undefined {
   if (sessionKey === DEFAULT_SESSION_KEY) {
     return getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey));
@@ -170,8 +165,13 @@ function resolveEngineTypeForSession(
   if (isClaudeScheduledTaskSessionKey(sessionKey) || isClaudeScheduledTaskRunSessionKey(sessionKey) || isClaudeScheduledTaskDatedSessionKey(sessionKey)) {
     return 'claude';
   }
-  return getSessionEngineType(sessions, sessionKey)
-    ?? getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey));
+  const session = sessions.find((item) => item.key === sessionKey);
+  return resolveChatSessionEngineType(
+    session,
+    getAgentEngineType(agentId ?? getAgentIdFromSessionKey(sessionKey)),
+    sessionKey,
+    options,
+  );
 }
 
 function normalizeSendMessageOptions(args: unknown[]): import('./chat/types').SendMessageOptions {
@@ -2432,7 +2432,27 @@ export const useChatStore = create<ChatState>()(
       get().sessions,
       currentSessionKey,
       targetAgentId ?? get().currentAgentId,
+      {
+        messageCount: get().currentSessionKey === currentSessionKey
+          ? get().messages.length
+          : undefined,
+      },
     );
+    // Keep local session stamp aligned with unused-embed → agent default resolution
+    // so UI / subsequent sends do not snap back to a stale OpenClaw engineType.
+    if (
+      currentSessionEngineType
+      && get().sessions.find((session) => session.key === currentSessionKey)?.engineType
+        !== currentSessionEngineType
+    ) {
+      set((state) => ({
+        sessions: state.sessions.map((session) => (
+          session.key === currentSessionKey
+            ? { ...session, engineType: currentSessionEngineType }
+            : session
+        )),
+      }));
+    }
     const dingTalkRpcExtras = buildDingTalkMentionRpcExtras(
       dingTalkMentions,
       attachments?.map((file) => ({
