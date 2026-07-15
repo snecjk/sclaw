@@ -2,6 +2,7 @@
  * Activate / deactivate embed-browser chat sessions.
  * Sessions persist per app and stay hidden from the sidebar session list.
  */
+import { hostApiFetch } from '@/lib/host-api';
 import {
   createSclawBrowserChatSessionKeyForApp,
   isSclawBrowserEmbedChatSessionKey,
@@ -17,14 +18,39 @@ export interface EmbedChatActivation {
   appId: string;
 }
 
+function persistEmbedSessionModel(sessionKey: string, model: string, agentId?: string): void {
+  void hostApiFetch('/api/sessions/model', {
+    method: 'POST',
+    body: JSON.stringify({
+      sessionKey,
+      model,
+      agentId: agentId || undefined,
+      engineType: 'openclaw',
+    }),
+  }).catch(() => {
+    // Non-blocking: UI still shows inherited model; next toolbar switch will re-persist.
+  });
+}
+
 export function activateSclawBrowserEmbedChat(appId: string, embedRuntimeId: string): EmbedChatActivation {
   const chat = useChatStore.getState();
   const savedMainSessionKey = chat.currentSessionKey;
   const chatSessionKey = createSclawBrowserChatSessionKeyForApp(appId);
 
+  const existing = chat.sessions.find((session) => session.key === chatSessionKey);
+  const mainSession = chat.sessions.find((session) => session.key === savedMainSessionKey);
+  // Prefer the conversation model you left, so embed chat matches 对话 rather than gateway default (e.g. GLM).
+  const mainModel = mainSession?.model?.trim() || undefined;
+  const inheritedModel = mainModel || existing?.model?.trim() || undefined;
+  const shouldPersistInheritedModel = Boolean(
+    mainModel && mainModel !== existing?.model?.trim(),
+  );
+
   const entry: ChatSession = {
     key: chatSessionKey,
     updatedAt: Date.now(),
+    model: inheritedModel,
+    engineType: existing?.engineType ?? mainSession?.engineType,
   };
 
   useChatStore.setState((state) => ({
@@ -36,6 +62,10 @@ export function activateSclawBrowserEmbedChat(appId: string, embedRuntimeId: str
 
   chat.switchSession(chatSessionKey);
   void linkSclawBrowserChatSession({ runtimeId: embedRuntimeId, chatSessionKey });
+
+  if (shouldPersistInheritedModel && inheritedModel) {
+    persistEmbedSessionModel(chatSessionKey, inheritedModel, chat.currentAgentId);
+  }
 
   return { chatSessionKey, savedMainSessionKey, embedRuntimeId, appId };
 }

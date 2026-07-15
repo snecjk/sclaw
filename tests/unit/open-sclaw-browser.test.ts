@@ -9,16 +9,14 @@ vi.mock('@/lib/sto-policy-web-url', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/sto-policy-web-url')>();
   return {
     ...actual,
-    buildStoPolicyEmbedUrl: vi.fn(actual.buildStoPolicyEmbedUrl),
     injectStoSsoWebAutoLogin: vi.fn(actual.injectStoSsoWebAutoLogin),
   };
 });
 
 import { getWorkflowStoToken } from '@/lib/workflow-api';
-import { buildStoPolicyEmbedUrl, injectStoSsoWebAutoLogin } from '@/lib/sto-policy-web-url';
+import { injectStoSsoWebAutoLogin } from '@/lib/sto-policy-web-url';
 
 const mockedGetWorkflowStoToken = vi.mocked(getWorkflowStoToken);
-const mockedBuildStoPolicyEmbedUrl = vi.mocked(buildStoPolicyEmbedUrl);
 const mockedInjectStoSsoWebAutoLogin = vi.mocked(injectStoSsoWebAutoLogin);
 
 describe('resolveSclawBrowserUrl', () => {
@@ -59,12 +57,12 @@ describe('resolveSclawBrowserUrl', () => {
       'https://page.sto.cn/sto-base-service/sto-sso-web/#/main?autoLogin=false&systemCode=sto-policy&returnUrl=/';
     resolveSclawBrowserUrl(ssoUrl);
     expect(mockedInjectStoSsoWebAutoLogin).toHaveBeenCalledWith(ssoUrl, 'tok-policy');
-    expect(mockedBuildStoPolicyEmbedUrl).not.toHaveBeenCalled();
   });
 
-  it('rewrites policy host useStoToken=1 to callback embed', () => {
+  it('replaces useStoToken=1 on policy host the same as any other host', () => {
     mockedGetWorkflowStoToken.mockReturnValue('tok-policy');
-    resolveSclawBrowserUrl('https://zc.sto.cn/?useStoToken=1');
-    expect(mockedBuildStoPolicyEmbedUrl).toHaveBeenCalledWith('/', 'tok-policy');
+    expect(resolveSclawBrowserUrl('https://zc.sto.cn/?useStoToken=1')).toBe(
+      'https://zc.sto.cn/?stotoken=tok-policy',
+    );
   });
 });

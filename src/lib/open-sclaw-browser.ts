@@ -7,9 +7,7 @@ import { invokeIpc } from '@/lib/api-client';
 import { openExternalUrl } from '@/lib/preview-url';
 import { isStoEmbedBrowserUrl } from '../../shared/sclaw-embed-browser';
 import {
-  buildStoPolicyEmbedUrl,
   injectStoSsoWebAutoLogin,
-  isStoPolicyHostUrl,
   isStoSsoWebUrl,
   parseStoSsoWebUrl,
 } from '@/lib/sto-policy-web-url';
@@ -25,9 +23,8 @@ export interface OpenSclawBrowserOptions {
 
 /**
  * Resolve embed URL for the in-app browser drawer.
- * - sto-policy SSO entry → policy-domain callback (fixes iframe cross-subdomain cookie loss)
- * - policy host + useStoToken=1 → policy-domain callback
- * - other URLs + useStoToken=1 → append stotoken query param
+ * - sto-sso-web entry → inject autoLogin + token when available
+ * - useStoToken=1 → strip flag and append stotoken (any host; config URL as-is otherwise)
  */
 export function resolveSclawBrowserUrl(url: string): string {
   const trimmed = url?.trim();
@@ -56,11 +53,6 @@ export function resolveSclawBrowserUrl(url: string): string {
     }
 
     parsed.searchParams.delete('useStoToken');
-
-    if (isAbsolute && isStoPolicyHostUrl(parsed.toString())) {
-      const redirectPath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
-      return buildStoPolicyEmbedUrl(redirectPath || '/', token);
-    }
 
     if (token) {
       parsed.searchParams.set('stotoken', token);
