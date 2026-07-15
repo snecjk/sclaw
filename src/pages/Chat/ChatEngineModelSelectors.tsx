@@ -60,13 +60,15 @@ const pillStatic = cn(
   'flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg py-0 pl-2.5 pr-2',
 );
 
-/** 首页 HomeComposer 内联引擎/模型：灰底 pill；flex-1 + truncate 与对侧 pill 同步截断文字 */
+/** 首页 HomeComposer 内联引擎/模型：灰底 pill；模型选中态按内容宽度完整展示。 */
 const inlinePillTrigger = cn(
   'flex h-[30px] min-w-0 items-center gap-1 rounded-[20px] bg-[#F5F6F7] px-3 outline-none',
   'text-sm font-normal text-foreground transition-colors hover:bg-black/[0.04]',
   'focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
   'disabled:pointer-events-none disabled:opacity-60 dark:bg-muted dark:hover:bg-white/[0.06]',
 );
+
+const inlineModelPillTrigger = cn(inlinePillTrigger, 'w-max max-w-none shrink-0');
 
 function isModelNotAllowedError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
@@ -673,13 +675,12 @@ export function ChatModelSelector({
             type="button"
             title={t('toolbar.switchModelTitle')}
             className={cn(
-              inlinePillTrigger,
-              'min-w-0 max-w-none flex-1',
+              inlineModelPillTrigger,
               modelSaving && 'pointer-events-none opacity-60',
               className,
             )}
           >
-            <span className="min-w-0 flex-1 truncate">{modelDisplayText}</span>
+            <span className="shrink-0 whitespace-nowrap">{modelDisplayText}</span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
           </button>
         </DropdownMenuTrigger>
