@@ -10,6 +10,7 @@ describe('isSidebarPrimaryNavRoute', () => {
     expect(isSidebarPrimaryNavRoute('/skills')).toBe(true);
     expect(isSidebarPrimaryNavRoute('/workflow')).toBe(true);
     expect(isSidebarPrimaryNavRoute('/workflow/edit/wf_abc')).toBe(true);
+    expect(isSidebarPrimaryNavRoute('/more-apps')).toBe(true);
     expect(isSidebarPrimaryNavRoute('/models')).toBe(true);
   });
 

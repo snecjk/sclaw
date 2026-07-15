@@ -32,12 +32,16 @@ import {
 } from '@/lib/sync-workspace-default-to-chat';
 import { isTaskExecutionSessionKey } from '../../../shared/session-agent-id';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
+import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
 import { cn } from '@/lib/utils';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { toast } from 'sonner';
 
 /** Avoid remapping the same session repeatedly when catalog sanitizes its model. */
 const remappedDelistedSessionKeys = new Set<string>();
+/** Above SClaw embed browser drawer/toolbar portals (z-index 99999 / 100000). */
+const SELECTOR_MENU_Z = 'z-[100001]';
+
 const pillBase = cn(
   'flex min-w-0 max-w-[min(100vw-11rem,260px)] items-stretch rounded-xl border border-border/70',
   'bg-[linear-gradient(180deg,rgba(255,255,255,0.10),transparent),rgba(255,255,255,0.30)]',
@@ -133,6 +137,8 @@ export function ChatEngineSelector({
   variant?: 'toolbar' | 'inline';
 }) {
   const sending = useChatStore((s) => s.sending);
+  const loading = useChatStore((s) => s.loading);
+  const messages = useChatStore((s) => s.messages);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessions = useChatStore((s) => s.sessions);
@@ -149,17 +155,24 @@ export function ChatEngineSelector({
   );
 
   const agentDefaultEngineType = currentAgent?.engineType ?? 'openclaw';
+  // Home empty slot, or embed "new" conversation that has not received any messages yet.
+  // History embed sessions keep a fixed engine — switching would risk dropping context.
+  const isUnusedEmbedSession = isSclawBrowserEmbedChatSessionKey(currentSessionKey)
+    && !loading
+    && messages.length === 0;
   const currentEngineType = resolveChatSessionEngineType(
     currentSession,
     agentDefaultEngineType,
     currentSessionKey,
+    { messageCount: messages.length },
   );
   const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
   const currentSessionEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
-  const displayEngineLabel = currentSessionKey === DEFAULT_SESSION_KEY
+  const canSwitchEngine = currentSessionKey === DEFAULT_SESSION_KEY || isUnusedEmbedSession;
+  // Unused embed / home slot: engine resolution already follows agent default — keep labels identical.
+  const displayEngineLabel = canSwitchEngine
     ? agentDefaultEngineLabel
     : currentSessionEngineLabel;
-  const canSwitchEngine = currentSessionKey === DEFAULT_SESSION_KEY;
   const showSessionEngineHint = !canSwitchEngine
     && currentSession?.engineType != null
     && currentSession.engineType !== agentDefaultEngineType;
@@ -189,7 +202,7 @@ export function ChatEngineSelector({
     <DropdownMenuContent
       align="end"
       side="bottom"
-      className="min-w-[12rem] max-w-[min(100vw-2rem,300px)]"
+      className={cn(SELECTOR_MENU_Z, 'min-w-[12rem] max-w-[min(100vw-2rem,300px)]')}
     >
       {(['openclaw', 'claude'] as const).map((engineType) => {
         const label = engineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
@@ -208,13 +221,19 @@ export function ChatEngineSelector({
     </DropdownMenuContent>
   );
 
+  const engineTriggerTitle = canSwitchEngine
+    ? '切换新会话执行引擎'
+    : isSclawBrowserEmbedChatSessionKey(currentSessionKey)
+      ? '历史会话不可切换引擎（可切换模型）'
+      : '当前会话不可切换引擎';
+
   if (variant === 'inline') {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild disabled={engineSelectDisabled || engineSaving || !canSwitchEngine}>
           <button
             type="button"
-            title="切换新会话执行引擎"
+            title={engineTriggerTitle}
             className={cn(
               inlinePillTrigger,
               'min-w-0 max-w-none flex-1',
@@ -336,11 +355,13 @@ export function ChatModelSelector({
     return (sto?.metadata?.customModels as string[] | undefined) ?? [];
   }, [accounts]);
 
+  const messagesLength = useChatStore((s) => s.messages.length);
   const agentDefaultEngineType = currentAgent?.engineType ?? 'openclaw';
   const currentEngineType = resolveChatSessionEngineType(
     currentSession,
     agentDefaultEngineType,
     currentSessionKey,
+    { messageCount: messagesLength },
   );
 
   useEffect(() => {
@@ -616,7 +637,7 @@ export function ChatModelSelector({
     <DropdownMenuContent
       align="end"
       side="bottom"
-      className="min-w-[14rem] max-w-[min(100vw-2rem,360px)]"
+      className={cn(SELECTOR_MENU_Z, 'min-w-[14rem] max-w-[min(100vw-2rem,360px)]')}
     >
       {modelOptions.length === 0 ? (
         <DropdownMenuItem disabled>

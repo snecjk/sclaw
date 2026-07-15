@@ -16,6 +16,8 @@ export interface SendMessageOptions {
   runId?: string | null;
   /** Hidden workflow schema context injected into the user message for AI guidance */
   workflowContext?: WorkflowContextBlock | null;
+  /** Hidden embed-browser page snapshot for in-app preview chat */
+  embedBrowserContext?: import('@/lib/sclaw-browser-embed-context').SclawBrowserEmbedContextBlock | null;
 }
 
 /** Hidden context block describing a workflow for AI parameter guidance */
