@@ -1,6 +1,7 @@
 import { constants } from 'node:fs';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { expandContextIncludes } from '../utils/context-fragment';
 import { getClaudeConfigDir, getResourcesDir } from '../utils/paths';
 import { logger } from '../utils/logger';
 
@@ -61,7 +62,9 @@ export async function syncClaudeDefaultContext(): Promise<{ updated: boolean; ta
     return { updated: false, targetPath };
   }
 
-  const defaultContent = await readFile(sourcePath, 'utf-8');
+  const contextDir = join(getResourcesDir(), 'context');
+  const rawDefaultContent = await readFile(sourcePath, 'utf-8');
+  const defaultContent = await expandContextIncludes(rawDefaultContent, contextDir);
   const existing = await fileExists(targetPath)
     ? await readFile(targetPath, 'utf-8')
     : null;

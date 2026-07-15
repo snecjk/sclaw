@@ -19,6 +19,7 @@ const REQUIRED_PLUGIN_FILES = [
   'sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dws-send-text.ts',
   'sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-file-send.ts',
   'sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-mention-context.ts',
+  'sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-oral-send-prompt.ts',
   'sto-plugin/openclaw/sto-dynamic-agent-route/shared/retired-skills.ts',
 ];
 

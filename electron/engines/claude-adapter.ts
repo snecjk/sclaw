@@ -10,6 +10,7 @@ import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import { getClaudeConfigDir } from '../utils/paths';
 import { getApiKey } from '../utils/secure-storage';
+import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, upsertEngineSessionRegistryEntry, type EngineSessionRegistryEntry } from './session-registry';
@@ -77,6 +78,7 @@ async function buildClaudeEnvForAccount(accountId?: string): Promise<NodeJS.Proc
     ...process.env,
     CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
   };
+  applySaiClientIdEnv(base as Record<string, string | undefined>);
 
   if (!accountId) {
     logger.debug('[claude-env] No accountId, returning base env');
@@ -953,6 +955,8 @@ async function startClaudeQuery(
   options?: {
     additionalDirectories?: string[];
     eventSink?: ClaudeEventSink | null;
+    /** 本轮用户原文，用于口头钉钉发送等按需注入。 */
+    userPrompt?: string;
   },
 ): Promise<{ success: boolean; result?: { runId: string }; error?: string }> {
   try {
@@ -981,7 +985,7 @@ async function startClaudeQuery(
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();
     const pathToClaudeCodeExecutable = getBundledClaudeExecutablePath();
-    const runtimeOptions = await buildClaudeRuntimeOptions(sessionKey);
+    const runtimeOptions = await buildClaudeRuntimeOptions(sessionKey, options?.userPrompt);
     const pluginPaths = await listClaudeBridgePluginPaths();
     claudeRuntimeResults.delete(sessionKey);
     await sanitizeClaudeSettingsEnv();
@@ -1139,7 +1143,10 @@ export const claudeAdapter: EngineAdapter = {
   },
 
   async sendMessage(ctx: EngineAdapterContext, params) {
-    return startClaudeQuery(params.sessionKey, params.message, { eventSink: ctx.gatewayManager });
+    return startClaudeQuery(params.sessionKey, params.message, {
+      eventSink: ctx.gatewayManager,
+      userPrompt: params.message,
+    });
   },
 
   async sendMessageWithMedia(ctx, params) {
@@ -1150,7 +1157,11 @@ export const claudeAdapter: EngineAdapter = {
     }
     const additionalDirectories = getAdditionalDirectories(cwd, params.media ?? []);
     const prompt = await buildClaudeUserMessage(params.message, params.media ?? []);
-    return startClaudeQuery(params.sessionKey, toClaudePromptStream(prompt), { additionalDirectories, eventSink: ctx.gatewayManager });
+    return startClaudeQuery(params.sessionKey, toClaudePromptStream(prompt), {
+      additionalDirectories,
+      eventSink: ctx.gatewayManager,
+      userPrompt: params.message,
+    });
   },
 
   async abortRun(_ctx, params) {

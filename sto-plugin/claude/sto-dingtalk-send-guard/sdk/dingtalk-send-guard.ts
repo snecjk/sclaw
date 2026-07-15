@@ -101,7 +101,27 @@ export function isBatchDwsChatMessageSend(commandText: string): boolean {
   return false;
 }
 
+const DWS_SEND_FILE_PROTOCOL = /\bfile:\/\//i;
+
+/**
+ * 钉钉正文禁止含 `file://` 本地路径（钉钉打不开）。
+ * 不豁免 `--dry-run`：file:// 是内容问题，dry-run 预览也应被挡，提示 agent 先上钉盘。
+ * 详见 `shared/scheduled-task-instruction.ts` 的【P0 本地产物上钉盘】流程。
+ */
+export function resolveDwsChatMessageSendFileProtocolInText(commandText: string): string | null {
+  if (!containsDwsChatMessageSend(commandText)) return null;
+  if (!DWS_SEND_FILE_PROTOCOL.test(commandText)) return null;
+
+  return [
+    '[StoClaw 安全策略] 钉钉正文禁止含 `file://` 本地路径（钉钉打不开，定时任务【P0 本地产物上钉盘】已要求先上钉盘）。',
+    '请先用 `dws drive upload --file <本地路径（去掉 file:// 前缀）> -y --format json` 上传钉盘（不需要 `--space-id`，直接使用发送人默认钉盘空间），',
+    '从返回 JSON 取 `docUrl`，用「文件名：docUrl」裸 URL 替换正文中的 `file://` 链接（**直接使用 docUrl 原始值，禁止对 URL 做任何编码**）后再 `dws chat message send`；',
+    '若上传失败则移除该产物链接，只发纯文字总结。',
+  ].join('');
+}
+
 const lastSuccessAtByScope = new Map<string, number>();
+const lastInitiatedAtByScope = new Map<string, number>();
 const pendingSendByToolCallId = new Map<
   string,
   { sessionKey: string; category: DingTalkSendRateLimitCategory }
@@ -109,6 +129,7 @@ const pendingSendByToolCallId = new Map<
 
 export function resetDingTalkSendRateLimitForTests(): void {
   lastSuccessAtByScope.clear();
+  lastInitiatedAtByScope.clear();
   pendingSendByToolCallId.clear();
 }
 
@@ -120,6 +141,23 @@ function resolveRateLimitScope(
   return `${key}:${category}`;
 }
 
+/**
+ * 定时任务执行 session key 识别（与 `shared/scheduled-task-instruction.ts`
+ * 的 `isScheduledTaskExecutionSessionKey` 保持一致）。定时任务为一次性有意执行，
+ * 合法地可能向多名收件人发送，豁免 20s/条限流，避免并集发送被挡。
+ */
+function isScheduledTaskSessionKey(key: string | undefined): boolean {
+  const k = key?.trim();
+  if (!k) return false;
+  if (k.startsWith('claude-task-run:')) return true;
+  if (k.startsWith('scheduled-task:')) return true;
+  if (k.startsWith('agent:')) {
+    const parts = k.split(':');
+    if (parts.length >= 4 && parts[2] === 'cron') return true;
+  }
+  return /^\[?cron:[^\]]+\]?$/.test(k);
+}
+
 function categoryLabel(category: DingTalkSendRateLimitCategory): string {
   return category === 'text' ? '文字' : '图片';
 }
@@ -129,8 +167,15 @@ export function checkDingTalkSendRateLimit(
   category: DingTalkSendRateLimitCategory,
   now = Date.now(),
 ): { allowed: true } | { allowed: false; retryAfterMs: number } {
+  // 定时任务一次性执行，豁免 20s/条限流（支持向多名收件人并集发送）。
+  if (isScheduledTaskSessionKey(sessionKey)) return { allowed: true };
   const scope = resolveRateLimitScope(sessionKey, category);
-  const last = lastSuccessAtByScope.get(scope);
+  const lastInitiated = lastInitiatedAtByScope.get(scope);
+  const lastSuccess = lastSuccessAtByScope.get(scope);
+  const last =
+    lastInitiated != null && lastSuccess != null
+      ? Math.max(lastInitiated, lastSuccess)
+      : lastInitiated ?? lastSuccess;
   if (last != null && now - last < DINGTALK_SEND_MIN_INTERVAL_MS) {
     return {
       allowed: false,
@@ -146,6 +191,15 @@ export function recordDingTalkSendSuccess(
   now = Date.now(),
 ): void {
   lastSuccessAtByScope.set(resolveRateLimitScope(sessionKey, category), now);
+}
+
+/** 发起即计：放行时立即记录时间戳，失败重试 / 示例+总结双发都会被 20s 窗口挡住。 */
+export function recordDingTalkSendInitiate(
+  sessionKey: string | undefined,
+  category: DingTalkSendRateLimitCategory,
+  now = Date.now(),
+): void {
+  lastInitiatedAtByScope.set(resolveRateLimitScope(sessionKey, category), now);
 }
 
 export function rememberPendingDingTalkSend(
@@ -215,6 +269,15 @@ export function evaluateDingTalkSendGuard(input: {
     };
   }
 
+  // file:// 本地路径钉钉打不开，必须先上钉盘；不豁免 --dry-run（内容问题，预览也挡）。
+  const fileProtocolProblem = resolveDwsChatMessageSendFileProtocolInText(commandText);
+  if (fileProtocolProblem) {
+    return {
+      allowed: false,
+      reason: fileProtocolProblem,
+    };
+  }
+
   if (isDwsChatMessageSendDryRun(commandText)) {
     return { allowed: true };
   }
@@ -229,10 +292,11 @@ export function evaluateDingTalkSendGuard(input: {
     const seconds = Math.max(1, Math.ceil(rate.retryAfterMs / 1000));
     return {
       allowed: false,
-      reason: `[StoClaw 安全策略] 钉钉${categoryLabel(category)}消息发送过于频繁，请 ${seconds} 秒后再试（每 20 秒最多 1 条${categoryLabel(category)}消息）。`,
+      reason: `[StoClaw 安全策略] 钉钉${categoryLabel(category)}消息发送过于频繁，请 ${seconds} 秒后再试（每 20 秒最多 1 条${categoryLabel(category)}消息）。这是频控、不是权限拒绝——你被允许发送。请等待约 ${seconds} 秒后用原命令重试，不要放弃、不要让用户手动发送。`,
     };
   }
 
+  recordDingTalkSendInitiate(input.sessionKey, category, input.now);
   return { allowed: true, category };
 }
 

@@ -5,6 +5,7 @@ import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import type { AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
 import { ArtifactProductCard, buildArtifactMetaLine } from '@/components/chat/artifact-product-card';
+import { buildArtifactCardMenuItems } from '@/lib/artifact-card-menu';
 
 interface WorkflowCompletionActionsProps {
   runId: string;
@@ -24,6 +25,8 @@ export function WorkflowCompletionActions({
 
   if (!primaryArtifact || !onPreviewArtifact) return null;
 
+  const previewFile = artifactToPreviewFile(primaryArtifact);
+
   return (
     <div className="mt-3 w-full">
       <ArtifactProductCard
@@ -33,7 +36,8 @@ export function WorkflowCompletionActions({
           mimeType: primaryArtifact.type || 'application/octet-stream',
           t,
         })}
-        onAction={() => onPreviewArtifact!(artifactToPreviewFile(primaryArtifact))}
+        menuItems={buildArtifactCardMenuItems(previewFile, t)}
+        onAction={() => onPreviewArtifact!(previewFile)}
       />
     </div>
   );

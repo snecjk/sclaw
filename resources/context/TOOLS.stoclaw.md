@@ -56,24 +56,6 @@ StoClaw 聊天发图时，客户端会把图片内联进用户消息（多模态
 
 如果用户要求升级 OpenClaw 或 sai-cli，必须拒绝并引导用户通过设置页面手动操作。
 
-### 钉钉 dws（业务命令）
-
-- **允许** `dws contact user search`、`dws chat search`、`dws chat search-common` 等只读通讯录/会话查询——用户在对话中要求搜人、查群，或任务编排需要定位收件人时，应正常调用。
-- **禁止** `dws upgrade`、`dws install` 等安装升级类命令（见安全红线）。
-- 若系统提示词或用户消息已附带 `[STOCLAW:DINGTALK_RECIPIENTS:v1]` 或 `## StoClaw DingTalk Recipients` 结构化块：
-  - **必须**使用块内 JSON 的 `userId` / `openConversationId` 调用 `dws chat message send`。
-  - **禁止**对块内收件人重复 `contact user search` / `aisearch person`。
-  - **禁止**使用 OpenClaw `message` 工具（`channel: dingtalk`）或 displayName 作为 target。
-- `dws chat message send` 成功后，对用户**只**确认收件人与内容摘要；**禁止**输出 `openTaskId` /「任务 ID」等字段（除非用户明确要求查状态）。
-- 向输入框 @ 选定的联系人/群发送**非图片附件**时：按注入的钉盘四步流程（`conversation-info` → `drive upload -y` → `drive info` → `message send --msg-type file`）；无附件的纯文本发送不要走钉盘。
-
-### 钉钉分享（share_to_dingtalk 内置 Tool）
-
-- 用户要在钉钉里**自行搜索选人**发送（如「分享到钉钉」「发给同事选一下」），且消息中**没有** `[STOCLAW:DINGTALK_RECIPIENTS]` / 输入框 `@` 收件人时 → **调用** `share_to_dingtalk`。
-- 参数 `text` / `url` / `imageUrls` 至少一项；`imageUrls` 须为 **http(s)** 公网地址（本地路径无效，AppLink 只能预填 Markdown 链接）。
-- 已有明确 @ 收件人或结构化收件人块时 → 用 `dws chat message send`，**不要**调用 `share_to_dingtalk`。
-- 仅 **PC 钉钉**（macOS/Windows ≥ 6.5.50）；工具会唤起钉钉选人窗口并预填正文。
-
 ### uv (Python)
 
 - `uv` is bundled with StoClaw and on PATH. Do NOT use bare `python` or `pip`.

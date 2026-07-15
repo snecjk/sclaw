@@ -25,6 +25,7 @@ import { createMenu } from './menu';
 import { getWindowState, trackWindowState } from './window';
 import { logger } from '../utils/logger';
 import { warmupNetworkOptimization } from '../utils/uv-env';
+import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { isQuitting, setQuitting } from './app-state';
 import { applyProxySettings } from './proxy';
 import { syncLaunchAtStartupSettingFromStore } from './launch-at-startup';
@@ -35,6 +36,8 @@ import {
   createMainWindowFocusState,
   requestSecondInstanceFocus,
 } from './main-window-focus';
+
+applySaiClientIdEnv(process.env as Record<string, string | undefined>);
 import {
   createQuitLifecycleState,
   markQuitCleanupCompleted,
@@ -44,7 +47,7 @@ import { createSignalQuitHandler } from './signal-quit';
 import { acquireProcessInstanceFileLock } from './process-instance-lock';
 import { getSetting } from '../utils/store';
 import { getCurrentEnvConfig } from '../../shared/env-config';
-import { log } from 'node:console';
+import { getSqliteDatabaseInfo, initializeSqliteDatabase } from '../db';
 
 _ts('static imports loaded');
 
@@ -399,6 +402,12 @@ async function createMainWindow(): Promise<BrowserWindow> {
 async function initialize(): Promise<void> {
   _ts('initialize() start');
 
+  initializeSqliteDatabase();
+  const sqliteInfo = getSqliteDatabaseInfo();
+  console.info(
+    `[sqlite] initialized file=${sqliteInfo.filePath} journal=${sqliteInfo.journalMode} foreignKeys=${sqliteInfo.foreignKeysEnabled}`,
+  );
+
   // Create the main window as early as possible.
   // Window shows immediately with dark background (see createWindow).
   const window = await createMainWindow();
@@ -628,6 +637,7 @@ async function initialize(): Promise<void> {
     }
 
     // Ensure Main Agent's AGENTS.md includes the long-output constraint
+    // TEMP: ensure* 函数体内已暂时停用英文注入（见 agent-config.ts）
     try {
       const mainWorkspace = await getAgentWorkspacePath('main');
       if (mainWorkspace) {
@@ -752,6 +762,15 @@ async function initialize(): Promise<void> {
   await ensureAllBundledPluginsInstalledAsync().catch((error) => {
     logger.warn('Failed to install/upgrade bundled plugins:', error);
   });
+  try {
+    const { ensureStoBrowserBridgePluginInOpenClaw } = await import('../utils/openclaw-auth');
+    const modified = await ensureStoBrowserBridgePluginInOpenClaw();
+    if (modified) {
+      logger.info('[plugin] Enabled sto-browser-bridge in openclaw.json');
+    }
+  } catch (error) {
+    logger.warn('Failed to enable sto-browser-bridge plugin in openclaw.json:', error);
+  }
 
   // Start Gateway automatically (this seeds missing bootstrap files with full templates)
   const gatewayAutoStart = await getSetting('gatewayAutoStart');
