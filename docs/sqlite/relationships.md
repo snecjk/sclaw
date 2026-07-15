@@ -25,14 +25,19 @@ session_engine_bindings (1) ── session_key ── catalog_sessions.session_k
 
 | 信息 | 来源表 |
 |------|--------|
-| 显示标题、置顶、所属项目 | `catalog_sessions` |
-| 引擎、cwd、模型 | `session_engine_bindings` |
+| 显示标题、置顶、所属项目、会话类型 | `catalog_sessions` |
+| 引擎、cwd、模型、模型提供方 | `session_engine_bindings` |
 | 项目名称、文件夹路径 | `workspaces` |
 
 ```sql
 SELECT
   cs.session_key,
   COALESCE(cs.title, json_extract(seb.extra_json, '$.title')) AS display_title,
+  cs.session_type,
+  cs.task_id,
+  cs.app_id,
+  cs.channel_type,
+  cs.channel_id,
   cs.pin_rank,
   cs.last_activity_at,
   cs.workspace_id,
@@ -41,7 +46,8 @@ SELECT
   seb.engine_type,
   seb.agent_id,
   seb.cwd,
-  seb.model
+  seb.model,
+  seb.provider
 FROM catalog_sessions cs
 INNER JOIN session_engine_bindings seb
   ON seb.session_key = cs.session_key AND seb.deleted_at IS NULL

@@ -125,9 +125,10 @@ async function resolveClaudeLaunchSelection(
   agentId: string,
   existing?: {
     model?: string;
+    provider?: string;
     accountId?: string;
   } | null,
-): Promise<{ model?: string; accountId?: string }> {
+): Promise<{ model?: string; provider?: string; accountId?: string }> {
   const preferredModel = await getAgentPreferredModel(agentId);
   // Session-level override wins when the user switched models inside an active dialog.
   let model = existing?.model ?? preferredModel.model;
@@ -137,12 +138,16 @@ async function resolveClaudeLaunchSelection(
     accountId = await getDefaultProviderAccountId();
   }
 
-  if (!model && accountId) {
+  let provider: string | undefined;
+  if (accountId) {
     const account = await getProviderAccount(accountId);
-    model = account?.model;
+    provider = existing?.provider ?? account?.vendorId ?? undefined;
+    if (!model && account?.model) {
+      model = account.model;
+    }
   }
 
-  return { model, accountId };
+  return { model, provider, accountId };
 }
 
 /**
@@ -722,6 +727,7 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
     // Never bump activity on read — sidebar order must reflect last message time only.
     ...(transcriptActivityAt > 0 ? { updatedAt: transcriptActivityAt } : {}),
     model: entry?.model,
+    provider: entry?.provider,
     accountId: entry?.accountId,
     archivedClaudeSessionIds: entry?.archivedClaudeSessionIds,
     pendingHistoryBridge: entry?.pendingHistoryBridge,
@@ -903,6 +909,7 @@ export async function consumeClaudeQuery(
         updatedAt: toEpochMs(message.timestamp) ?? Date.now(),
         title,
         model: (await getEngineSessionRegistryEntry(sessionKey))?.model,
+        provider: (await getEngineSessionRegistryEntry(sessionKey))?.provider,
         accountId: (await getEngineSessionRegistryEntry(sessionKey))?.accountId,
       });
       // Allow callers (e.g. the scheduled-task worker) to capture per-message
@@ -943,6 +950,7 @@ async function ensureClaudeRegistryEntry(sessionKey: string) {
     updatedAt: Date.now(),
     title: existing?.title,
     model: launchSelection.model,
+    provider: launchSelection.provider,
     accountId: launchSelection.accountId,
   };
   await upsertEngineSessionRegistryEntry(nextEntry);

@@ -159,7 +159,7 @@ export function buildFirstTriggeredCronSessionPlaceholders(
   firstTriggered: Record<string, number>,
   existingKeys: ReadonlySet<string>,
   jobNamesById: Map<string, string>,
-  agentId = 'main',
+  agentIdOrByJob: string | Map<string, string> = 'main',
 ): FirstTriggeredSessionPlaceholder[] {
   const items: FirstTriggeredSessionPlaceholder[] = [];
   for (const [groupKey, atMs] of Object.entries(firstTriggered)) {
@@ -167,8 +167,27 @@ export function buildFirstTriggeredCronSessionPlaceholders(
     const jobId = groupKey.slice('cron:'.length).trim();
     if (!jobId) continue;
     const date = formatLocalYmdFromMs(atMs);
+    const agentId = typeof agentIdOrByJob === 'string'
+      ? agentIdOrByJob
+      : (agentIdOrByJob.get(jobId) ?? 'main');
     const sessionKey = `agent:${agentId}:cron:${jobId}:${date}`;
     if (existingKeys.has(sessionKey)) continue;
+    // Skip when a twin under another agent already materialised for this job+date.
+    let hasTwin = false;
+    for (const key of existingKeys) {
+      const parts = key.split(':');
+      if (
+        parts.length === 5
+        && parts[0] === 'agent'
+        && parts[2] === 'cron'
+        && parts[3] === jobId
+        && parts[4] === date
+      ) {
+        hasTwin = true;
+        break;
+      }
+    }
+    if (hasTwin) continue;
     const name = jobNamesById.get(jobId);
     items.push({
       key: sessionKey,

@@ -10,6 +10,7 @@ export function bindingToRegistryEntry(binding: SessionEngineBinding): EngineSes
     sessionId: binding.engineSessionId ?? undefined,
     cwd: binding.cwd ?? undefined,
     model: binding.model ?? undefined,
+    provider: binding.provider ?? undefined,
     accountId: binding.accountId ?? undefined,
     updatedAt: Date.parse(binding.updatedAt),
     title: typeof extra.title === 'string' ? extra.title : undefined,

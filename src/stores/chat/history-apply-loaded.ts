@@ -186,6 +186,7 @@ export function applyLoadedHistorySnapshot(input: {
     sessionLabels: get().sessionLabels,
     gatewaySessionLabel,
     userMessageAt: userMsgAt ?? null,
+    sending: get().sending,
     getMessageText,
   });
   traceLoadHistoryUserReconciliation({

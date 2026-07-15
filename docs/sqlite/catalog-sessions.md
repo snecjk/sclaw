@@ -27,6 +27,11 @@
 | `workspace_id` | 所属项目 ID | `TEXT` | 否 | — | 复合主键之一；`default` = 侧栏「最近」 |
 | `session_key` | 会话键 | `TEXT` | 否 | — | 复合主键之一；全局会话唯一标识 |
 | `group_id` | 分组 ID | `TEXT` | 是 | `NULL` | 遗留分组，指向 `session_groups.id` |
+| `session_type` | 会话类型 | `TEXT` | 否 | `'chat'` | `chat` / `cron` / `scheduled_task` / `claude_task` / `app` / `channel` / `workflow` |
+| `task_id` | 任务 ID | `TEXT` | 是 | `NULL` | cron / scheduled / claude 定时任务 ID |
+| `app_id` | 应用 ID | `TEXT` | 是 | `NULL` | 应用广场应用 ID |
+| `channel_type` | 频道类型 | `TEXT` | 是 | `NULL` | 微信、钉钉、Telegram 等频道类型 |
+| `channel_id` | 频道 ID | `TEXT` | 是 | `NULL` | 频道账号/群 ID |
 | `title` | 会话标题 | `TEXT` | 是 | `NULL` | 侧栏显示名；空则回退引擎侧标题 |
 | `pin_rank` | 置顶序号 | `INTEGER` | 是 | `NULL` | 项目内置顶排序，越小越靠前 |
 | `sort_key` | 排序键 | `TEXT` | 是 | `NULL` | 稳定字典序排序辅助字段 |
@@ -56,9 +61,15 @@
 ### `session_key` — 会话键
 
 - **含义**：贯穿 catalog 与引擎绑定的全局会话标识，格式由引擎生成，catalog 视为不透明字符串。
-- **格式示例**：`agent:main:550e8400-e29b-41d4-a716-446655440000`
+- **格式示例**：
+  - 常规聊天：`agent:main:550e8400-e29b-41d4-a716-446655440000`
+  - Cron 任务：`agent:main:cron:job-123:2026-07-14`
+  - STO 定时任务：`scheduled-task:42` 或 `agent:main:scheduled-task:42:2026-07-14`
+  - Claude 定时任务：`claude-task:task-abc:2026-07-14`
+  - 应用广场：`agent:main:session-embed-app-crm--conv-1`
 - **结构**：通常为 `agent:{agentId}:{uuid}`，与 `session_engine_bindings.session_key` 一一对应。
 - **写入时机**：引擎注册会话、bootstrap 导入、用户将会话加入项目时 upsert。
+- **类型推断**：Repository 在创建 catalog 行时会根据 key 前缀自动推断 `session_type` / `task_id` / `app_id`。
 
 ### `group_id` — 分组 ID
 
@@ -66,6 +77,55 @@
 - **可空**：`NULL` 表示未分组；列表查询 `groupId: null` 时只返回未分组会话。
 - **外键**：引用 `session_groups(id)`。
 - **现状**：新功能不依赖此字段，保留兼容历史数据。
+
+### `session_type` — 会话类型
+
+- **含义**：标识这条会话在业务上的分类，用于侧栏分组、筛选和后续统计。
+- **枚举值**：
+  - `chat` — 常规聊天会话（默认）
+  - `cron` — OpenClaw Cron 定时任务会话
+  - `scheduled_task` — STO 定时任务会话
+  - `claude_task` — Claude 定时任务会话
+  - `app` — 应用广场（内置浏览器抽屉）会话
+  - `channel` — 频道消息驱动的会话（如微信、钉钉）
+  - `workflow` — 工作流会话（预留）
+- **默认值**：`'chat'`；Migration 对历史行自动回填。
+- **写入时机**：
+  - 创建 catalog 行时若未显式传入，Repository 会根据 `session_key` 自动推断。
+  - 频道类会话需要在创建入口显式传入 `sessionType: 'channel'`。
+- **相关源码**：`shared/session-type.ts` → `inferSessionCatalogMeta`
+
+### `task_id` — 任务 ID
+
+- **含义**：Cron / STO / Claude 定时任务会话所关联的任务标识。
+- **可空**：非任务会话为 `NULL`。
+- **写入时机**：
+  - 随 `session_type` 一起从 `session_key` 自动推断，例如：
+    - `agent:main:cron:job-123` → `task_id = 'job-123'`
+    - `scheduled-task:42` → `task_id = '42'`
+    - `claude-task:task-abc` → `task_id = 'task-abc'`
+  - 也可以由业务代码在创建时显式传入。
+
+### `app_id` — 应用 ID
+
+- **含义**：应用广场会话所属的应用标识。
+- **可空**：非应用会话为 `NULL`。
+- **写入时机**：从 `agent:*:session-embed-app-{appId}[--{conversationId}]` 格式的 key 自动推断。
+- **示例**：`agent:main:session-embed-app-crm` → `app_id = 'crm'`。
+
+### `channel_type` — 频道类型
+
+- **含义**：标识会话来自或发往哪个消息频道类型。
+- **常见值**：`wechat`、`dingtalk`、`telegram`、`discord`、`whatsapp`、`qqbot`、`wecom`、`signal`、`imessage`、`matrix`、`line`、`msteams`、`googlechat`、`mattermost` 等。
+- **可空**：非频道会话为 `NULL`。
+- **写入时机**：**不会**从 `session_key` 推断，必须由频道消息创建会话的入口显式写入。
+
+### `channel_id` — 频道 ID
+
+- **含义**：频道内的具体账号、群 ID 或机器人 ID。
+- **可空**：非频道会话为 `NULL`。
+- **写入时机**：与 `channel_type` 一起由业务代码显式传入。
+- **示例**：钉钉群 ID、微信账号 ID、Telegram Chat ID。
 
 ### `title` — 会话标题
 
@@ -124,6 +184,10 @@
 |--------|-----|------|------|
 | `idx_catalog_sessions_workspace_activity` | `workspace_id`, `last_activity_at DESC` | `deleted_at IS NULL` | 按项目查最近活跃 |
 | `idx_catalog_sessions_workspace_pin` | `workspace_id`, `pin_rank ASC`, `last_activity_at DESC` | `deleted_at IS NULL` | 置顶 + 活跃排序 |
+| `idx_catalog_sessions_session_type` | `workspace_id`, `session_type` | `deleted_at IS NULL` | 按类型过滤 |
+| `idx_catalog_sessions_task_id` | `task_id` | `deleted_at IS NULL AND task_id IS NOT NULL` | 按任务 ID 查询 |
+| `idx_catalog_sessions_app_id` | `app_id` | `deleted_at IS NULL AND app_id IS NOT NULL` | 按应用 ID 查询 |
+| `idx_catalog_sessions_channel` | `channel_type`, `channel_id` | `deleted_at IS NULL AND channel_type IS NOT NULL` | 按频道查询 |
 
 默认列表排序逻辑（Repository）：
 
@@ -148,7 +212,7 @@
 | 维度 | `catalog_sessions` | `session_engine_bindings` |
 |------|-------------------|---------------------------|
 | 主键 | `(workspace_id, session_key)` | `session_key` |
-| 职责 | UI 组织、项目归属 | 引擎类型、agent、cwd、模型 |
+| 职责 | UI 组织、项目归属、会话类型、频道关联 | 引擎类型、agent、cwd、模型、provider |
 | 可单独存在 | 是（仅组织元数据） | 是（bootstrap 前可能只有 binding） |
 
 ---
@@ -176,6 +240,20 @@ SELECT cs.*, w.name AS project_name, w.root_path
 FROM catalog_sessions cs
 LEFT JOIN workspaces w ON w.id = cs.workspace_id
 WHERE cs.session_key = 'agent:main:...' AND cs.deleted_at IS NULL;
+
+-- 按会话类型筛选
+SELECT session_key, session_type, task_id, app_id
+FROM catalog_sessions
+WHERE workspace_id = '<project-id>'
+  AND deleted_at IS NULL
+  AND session_type = 'cron';
+
+-- 按频道查询
+SELECT session_key, channel_type, channel_id
+FROM catalog_sessions
+WHERE deleted_at IS NULL
+  AND channel_type = 'dingtalk'
+  AND channel_id = '<chat-id>';
 ```
 
 ---
@@ -184,13 +262,15 @@ WHERE cs.session_key = 'agent:main:...' AND cs.deleted_at IS NULL;
 
 - `CatalogSessionDto` 暂未向渲染层暴露 `createdAt` / `updatedAt`
 - `last_activity_at` 未在每条聊天消息后自动同步（部分路径仍依赖渲染层内存排序）
+- `channel_type` / `channel_id` 不会从 `session_key` 自动推断，需要频道会话创建入口显式写入
 
 ---
 
 ## 相关源码
 
-- Migration: `electron/db/migrations/0002-session-catalog-schema.ts`
+- Migration: `electron/db/migrations/0003-session-types-and-channels.ts`
 - 表类型: `electron/db/models/tables/session-catalog-tables.ts` → `CatalogSessionsTable`
 - 领域模型: `electron/db/models/domain/session-catalog.ts` → `CatalogSession`
+- 会话类型推断: `shared/session-type.ts` → `inferSessionCatalogMeta`
 - Repository: `electron/db/repositories/catalog-session-repository.ts`
 - 服务: `electron/services/session-catalog-service.ts`

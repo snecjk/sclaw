@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { appendPendingLocalVirtualTaskSessions } from '@/stores/chat/session-list-merge';
+import {
+  appendPendingLocalVirtualTaskSessions,
+  omitSupersededCronDatedAgentTwins,
+} from '@/stores/chat/session-list-merge';
 
 describe('appendPendingLocalVirtualTaskSessions', () => {
   it('keeps local virtual cron sessions missing from remote after switching away', () => {
@@ -28,5 +31,46 @@ describe('appendPendingLocalVirtualTaskSessions', () => {
     const merged = appendPendingLocalVirtualTaskSessions(remote, local, new Set());
     expect(merged).toHaveLength(1);
     expect(merged[0]?.displayName).toBe('远程');
+  });
+});
+
+describe('omitSupersededCronDatedAgentTwins', () => {
+  it('keeps non-main dated key when main twin also exists', () => {
+    const sessions = [
+      { key: 'agent:main:cron:job-1:2026-06-28' },
+      { key: 'agent:ops:cron:job-1:2026-06-28' },
+      { key: 'agent:main:cron:other:2026-06-28' },
+    ];
+    const filtered = omitSupersededCronDatedAgentTwins(sessions);
+    expect(filtered.map((s) => s.key)).toEqual([
+      'agent:ops:cron:job-1:2026-06-28',
+      'agent:main:cron:other:2026-06-28',
+    ]);
+  });
+
+  it('prefers the activating/current key when both agent twins exist', () => {
+    const sessions = [
+      { key: 'agent:main:cron:job-1:2026-06-28' },
+      { key: 'agent:ops:cron:job-1:2026-06-28' },
+    ];
+    const filtered = omitSupersededCronDatedAgentTwins(
+      sessions,
+      'agent:main:cron:job-1:2026-06-28',
+    );
+    expect(filtered.map((s) => s.key)).toEqual([
+      'agent:main:cron:job-1:2026-06-28',
+    ]);
+  });
+});
+
+describe('appendPendingLocalVirtualTaskSessions cron agent twins', () => {
+  it('does not append local dated cron when remote already has same job+date under another agent', () => {
+    const remote = [{ key: 'agent:main:cron:job-1:2026-06-28' }];
+    const local = [
+      { key: 'agent:main:cron:job-1:2026-06-28' },
+      { key: 'agent:ops:cron:job-1:2026-06-28', displayName: '下班提醒' },
+    ];
+    const merged = appendPendingLocalVirtualTaskSessions(remote, local, new Set());
+    expect(merged.map((s) => s.key)).toEqual(['agent:main:cron:job-1:2026-06-28']);
   });
 });

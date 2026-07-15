@@ -5,6 +5,7 @@ import type {
   ListCatalogSessionsOptions,
   UpsertCatalogSessionInput,
 } from '../models/dto/session-catalog.dto';
+import { inferSessionCatalogMeta } from '../../../shared/session-type';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -15,6 +16,11 @@ function mapRow(row: Record<string, unknown>): CatalogSession {
     workspaceId: String(row.workspace_id),
     sessionKey: String(row.session_key),
     groupId: row.group_id == null ? null : String(row.group_id),
+    sessionType: String(row.session_type || 'chat') as CatalogSession['sessionType'],
+    taskId: row.task_id == null ? null : String(row.task_id),
+    appId: row.app_id == null ? null : String(row.app_id),
+    channelType: row.channel_type == null ? null : String(row.channel_type),
+    channelId: row.channel_id == null ? null : String(row.channel_id),
     title: row.title == null ? null : String(row.title),
     pinRank: row.pin_rank == null ? null : Number(row.pin_rank),
     sortKey: row.sort_key == null ? null : String(row.sort_key),
@@ -143,6 +149,11 @@ export class CatalogSessionRepository {
     const timestamp = nowIso();
     const actor = input.actor ?? null;
 
+    const inferred = inferSessionCatalogMeta(input.sessionKey);
+    const sessionType = input.sessionType ?? inferred.sessionType ?? 'chat';
+    const taskId = input.taskId ?? inferred.taskId ?? null;
+    const appId = input.appId ?? inferred.appId ?? null;
+
     if (!existing) {
       await db
         .insertInto('catalog_sessions')
@@ -150,6 +161,11 @@ export class CatalogSessionRepository {
           workspace_id: input.workspaceId,
           session_key: input.sessionKey,
           group_id: input.groupId ?? null,
+          session_type: sessionType,
+          task_id: taskId,
+          app_id: appId,
+          channel_type: input.channelType ?? null,
+          channel_id: input.channelId ?? null,
           title: input.title ?? null,
           pin_rank: input.pinRank ?? null,
           sort_key: input.sortKey ?? null,
@@ -166,6 +182,11 @@ export class CatalogSessionRepository {
         .updateTable('catalog_sessions')
         .set({
           group_id: input.groupId !== undefined ? input.groupId : existing.groupId,
+          session_type: input.sessionType != null ? input.sessionType : existing.sessionType,
+          task_id: input.taskId !== undefined ? input.taskId : existing.taskId,
+          app_id: input.appId !== undefined ? input.appId : existing.appId,
+          channel_type: input.channelType !== undefined ? input.channelType : existing.channelType,
+          channel_id: input.channelId !== undefined ? input.channelId : existing.channelId,
           title: input.title !== undefined ? input.title : existing.title,
           pin_rank: input.pinRank !== undefined ? input.pinRank : existing.pinRank,
           sort_key: input.sortKey !== undefined ? input.sortKey : existing.sortKey,

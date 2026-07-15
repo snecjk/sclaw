@@ -30,6 +30,7 @@ function mapRow(row: Record<string, unknown>): SessionEngineBinding {
     engineSessionId: row.engine_session_id == null ? null : String(row.engine_session_id),
     cwd: row.cwd == null ? null : String(row.cwd),
     model: row.model == null ? null : String(row.model),
+    provider: row.provider == null ? null : String(row.provider),
     accountId: row.account_id == null ? null : String(row.account_id),
     extra: row.extra_json == null
       ? null
@@ -104,6 +105,7 @@ export class SessionEngineBindingRepository {
           engine_session_id: input.sessionId ?? null,
           cwd: input.cwd ?? null,
           model: input.model ?? null,
+          provider: input.provider ?? null,
           account_id: input.accountId ?? null,
           extra_json: extraJson,
           created_at: timestamp,
@@ -122,6 +124,7 @@ export class SessionEngineBindingRepository {
           engine_session_id: input.sessionId !== undefined ? (input.sessionId ?? null) : existing.engineSessionId,
           cwd: input.cwd !== undefined ? (input.cwd ?? null) : existing.cwd,
           model: input.model !== undefined ? (input.model ?? null) : existing.model,
+          provider: input.provider !== undefined ? (input.provider ?? null) : existing.provider,
           account_id: input.accountId !== undefined ? (input.accountId ?? null) : existing.accountId,
           extra_json: extraJson ?? (existing.extra == null ? null : JSON.stringify(existing.extra)),
           updated_at: timestamp,

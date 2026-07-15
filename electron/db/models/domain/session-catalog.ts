@@ -1,4 +1,5 @@
-import type { AgentEngineType } from '../../engines/types';
+import type { AgentEngineType } from '../../../engines/types';
+import type { CatalogSessionType } from '../../../../shared/session-type';
 
 export const DEFAULT_WORKSPACE_ID = 'default';
 
@@ -32,6 +33,11 @@ export interface CatalogSession {
   workspaceId: string;
   sessionKey: string;
   groupId: string | null;
+  sessionType: CatalogSessionType;
+  taskId: string | null;
+  appId: string | null;
+  channelType: string | null;
+  channelId: string | null;
   title: string | null;
   pinRank: number | null;
   sortKey: string | null;
@@ -51,6 +57,7 @@ export interface SessionEngineBinding {
   engineSessionId: string | null;
   cwd: string | null;
   model: string | null;
+  provider: string | null;
   accountId: string | null;
   extra: Record<string, unknown> | null;
   createdAt: string;
