@@ -271,6 +271,7 @@ const LOCAL_PLUGIN_DIRS: Record<string, string> = {
   'sto-agent-telemetry': 'sto-agent-telemetry',
   'sto-scheduled-task-tool': 'sto-scheduled-task-tool',
   'sto-workflow-tool': 'sto-workflow-tool',
+  'sto-browser-bridge': 'sto-browser-bridge',
   'sto-skill-call-monitor': 'sto-skill-call-monitor',
   'sto-media-understanding': 'sto-media-understanding',
   'sto-dingtalk-send-guard': 'sto-dingtalk-send-guard',
@@ -304,6 +305,7 @@ function pickStoToolkitSourceDir(): string | undefined {
 const PLUGIN_RUNTIME_DEPS: Record<string, readonly string[]> = {
   'sto-workflow-tool': ['@sinclair/typebox'],
   'sto-scheduled-task-tool': ['@sinclair/typebox'],
+  'sto-browser-bridge': ['@sinclair/typebox'],
 };
 
 function pluginRuntimeDepNodeModuleRoots(): string[] {
@@ -788,6 +790,27 @@ function ensureStoToolkitLibraryInstalled(): void {
   }
 }
 
+function ensureStoBrowserBridgeToolkitInstalled(): void {
+  const pluginDir = join(getOpenClawConfigDir(), 'extensions', 'sto-browser-bridge');
+  const manifest = join(pluginDir, 'openclaw.plugin.json');
+  if (!existsSync(fsPath(manifest))) return;
+
+  const targetDir = join(pluginDir, STO_TOOLKIT_DIR);
+  const sourceDir = pickStoToolkitSourceDir();
+  if (!sourceDir) {
+    logger.warn(`[plugin] ${STO_TOOLKIT_DIR} source not found; sto-browser-bridge may fail to load`);
+    return;
+  }
+  try {
+    rmSync(fsPath(targetDir), { recursive: true, force: true });
+    copyPluginDir(sourceDir, targetDir);
+    logger.info(`[plugin] Installed ${STO_TOOLKIT_DIR} into sto-browser-bridge from ${sourceDir}`);
+    copyPluginRuntimeDeps('sto-browser-bridge', pluginDir);
+  } catch (error) {
+    logger.warn(`[plugin] Failed to install ${STO_TOOLKIT_DIR} for sto-browser-bridge:`, error);
+  }
+}
+
 function resolveRetiredSkillsSourcePaths(pluginDirName: string): string[] {
   const candidates = [
     join(process.cwd(), 'shared', 'retired-skills.ts'),
@@ -824,6 +847,9 @@ function ensureStoDynamicRouteSharedFiles(targetDir: string): void {
 function afterStoPluginInstall(pluginDirName: string, sourceDir?: string): void {
   if (pluginDirName === 'sto-workflow-tool') {
     ensureStoToolkitLibraryInstalled();
+  }
+  if (pluginDirName === 'sto-browser-bridge') {
+    ensureStoBrowserBridgeToolkitInstalled();
   }
   if (pluginDirName === 'sto-dynamic-agent-route') {
     ensureStoDynamicRouteSharedFiles(join(getOpenClawConfigDir(), 'extensions', pluginDirName));
@@ -1236,6 +1262,18 @@ export function ensureStoWorkflowToolPluginInstalled(): { installed: boolean; wa
   return result;
 }
 
+export function ensureStoBrowserBridgePluginInstalled(): { installed: boolean; warning?: string } {
+  const result = ensurePluginInstalled(
+    'sto-browser-bridge',
+    buildCandidateSources('sto-browser-bridge'),
+    'STO Browser Bridge',
+  );
+  if (result.installed) {
+    ensureStoBrowserBridgeToolkitInstalled();
+  }
+  return result;
+}
+
 export function ensureStoSkillCallMonitorPluginInstalled(): { installed: boolean; warning?: string } {
   return ensurePluginInstalled(
     'sto-skill-call-monitor',
@@ -1279,6 +1317,7 @@ const ALL_BUNDLED_PLUGINS = [
   { fn: ensureStoAgentTelemetryPluginInstalled, label: 'STO Agent Telemetry' },
   { fn: ensureStoScheduledTaskToolPluginInstalled, label: 'STO Scheduled Task Tool' },
   { fn: ensureStoWorkflowToolPluginInstalled, label: 'STO Workflow Tool' },
+  { fn: ensureStoBrowserBridgePluginInstalled, label: 'STO Browser Bridge' },
   { fn: ensureStoSkillCallMonitorPluginInstalled, label: 'STO Skill Call Monitor' },
   { fn: ensureStoMediaUnderstandingPluginInstalled, label: 'STO Media Understanding' },
   { fn: ensureStoDingTalkSendGuardPluginInstalled, label: 'STO DingTalk Send Guard' },
@@ -1412,6 +1451,7 @@ export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
     { dirName: 'sto-agent-telemetry', label: 'STO Agent Telemetry' },
     { dirName: 'sto-scheduled-task-tool', label: 'STO Scheduled Task Tool' },
     { dirName: 'sto-workflow-tool', label: 'STO Workflow Tool' },
+    { dirName: 'sto-browser-bridge', label: 'STO Browser Bridge' },
     { dirName: 'sto-skill-call-monitor', label: 'STO Skill Call Monitor' },
     { dirName: 'sto-media-understanding', label: 'STO Media Understanding' },
     { dirName: 'sto-dingtalk-send-guard', label: 'STO DingTalk Send Guard' },

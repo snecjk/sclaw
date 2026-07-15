@@ -13,6 +13,7 @@ import { Models } from './pages/Models';
 import { Agents } from './pages/Agents';
 import { Channels } from './pages/Channels';
 import { SkillPlazaPage } from './components/skill-plaza/SkillPlazaPage';
+import { MoreAppsPage } from './components/more-apps/MoreAppsPage';
 import { Subscriptions } from './pages/Subscriptions';
 // import { Cron } from './pages/Cron';
 // import ScheduledTasks from './pages/ScheduledTasks';
@@ -336,6 +337,7 @@ function App() {
             <Route path="/agents" element={<Agents />} />
             <Route path="/channels" element={<Channels />} />
             <Route path="/skills" element={<SkillPlazaPage />} />
+            <Route path="/more-apps" element={<MoreAppsPage />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
             {/* <Route path="/cron" element={<Cron />} />
             <Route path="/scheduled-tasks" element={<ScheduledTasks />} /> */}

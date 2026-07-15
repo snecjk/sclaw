@@ -24,6 +24,7 @@ import {
 } from '@/lib/dingtalk-mention-context';
 import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
 import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay, WORKFLOW_COMPLETE_TAG } from '@/lib/workflow-context';
+import { stripSclawBrowserEmbedContextForDisplay } from '@/lib/sclaw-browser-embed-context';
 import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
 import {
   isWorkflowGuidanceAssistantText,
@@ -79,8 +80,10 @@ function cleanUserText(text: string): string {
   return stripDingTalkMentionContextForDisplay(
     stripWorkflowCompleteForDisplay(
       stripWorkflowSessionHintForDisplay(
-        stripWorkflowContextForDisplay(
-          stripCronTriggerTextForDisplay(cleaned),
+        stripSclawBrowserEmbedContextForDisplay(
+          stripWorkflowContextForDisplay(
+            stripCronTriggerTextForDisplay(cleaned),
+          ),
         ),
       ),
     ),

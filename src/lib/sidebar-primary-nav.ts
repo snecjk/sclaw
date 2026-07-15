@@ -13,6 +13,7 @@ const SIDEBAR_PRIMARY_NAV_ROUTE_MATCHERS: ReadonlyArray<{ path: string; end?: bo
   { path: '/cron' },
   { path: '/skills' },
   { path: '/workflow' },
+  { path: '/more-apps' },
   { path: '/models' },
   { path: '/data-center' },
 ];
