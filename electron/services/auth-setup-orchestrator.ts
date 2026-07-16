@@ -214,7 +214,12 @@ async function runSetup(
 
   try {
     await cleanupRetiredSkillsAndPlugins();
-    await syncStoPluginsToOpenClaw();
+    const wrotePlugins = await syncStoPluginsToOpenClaw();
+    if (wrotePlugins) {
+      logger.info(`${logPrefix} Wrote STO plugins config to openclaw.json`);
+    } else {
+      logger.debug(`${logPrefix} STO plugins config unchanged; skip openclaw.json write`);
+    }
   } catch (err) {
     logger.warn(`${logPrefix} STO plugins config failed:`, err);
   }

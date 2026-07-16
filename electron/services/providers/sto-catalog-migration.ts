@@ -44,6 +44,10 @@ export async function markStoCatalogMigrationComplete(): Promise<void> {
 }
 
 function isLegacyOpenClawProviderKey(key: string): boolean {
+  // Plugin-owned provider written by syncStoPluginsToOpenClaw. It is "internal"
+  // for UI/import (hidden) but must NOT be scrubbed — otherwise every login
+  // re-adds it, migration deletes it, and OpenClaw hard-restarts twice.
+  if (key === 'sto-dynamic-agent-route') return false;
   if (isStoInternalOpenClawKey(key)) return true;
   if (key.startsWith(STO_LEGACY_OPENCLAW_KEY_PREFIX)) return true;
   return false;
@@ -138,6 +142,7 @@ export async function preMigrateStoCatalogPlaceholders(
   }
 
   for (const key of keysToScrub) {
+    if (!(key in providers)) continue;
     try {
       await removeProviderFromOpenClaw(key);
       scrubbedOpenClawKeys.push(key);
