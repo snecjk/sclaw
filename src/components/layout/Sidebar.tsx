@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import {
-  Puzzle,
+  Wrench,
   Clock,
   Settings as SettingsIcon,
   ChevronRight,
@@ -885,9 +885,10 @@ export function Sidebar() {
   }, [taskListSectionOpen, scrollContainerRef, taskSectionHeaderRef]);
 
   useEffect(() => {
-    if (!isGatewayRunning) return;
     let cancelled = false;
     (async () => {
+      // Session list (sidebar recent) must not wait for Gateway — OpenClaw can
+      // fall back to sessions.json and Claude/catalog paths are Main-local.
       await loadSessions();
       if (cancelled) return;
       scheduleSessionLabelHydrationForStore(
@@ -916,6 +917,12 @@ export function Sidebar() {
         if (isVirtualTaskSessionKey(state.currentSessionKey)) {
           const hasExistingMessages = state.messages.length > 0;
           await loadHistory(hasExistingMessages);
+          return;
+        }
+        // Home reset to :main is Gateway-era UX (avoid binding OpenClaw startup to
+        // a leftover session). Skip while Gateway is down so offline sidebar browse
+        // does not wipe the user's current session selection.
+        if (!isGatewayRunning) {
           return;
         }
         if (state.currentSessionKey !== DEFAULT_SESSION_KEY || state.messages.length > 0 || state.loading) {
@@ -1656,7 +1663,7 @@ export function Sidebar() {
       // { to: '/scheduled-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: `${t('common:sidebar.cronTasks')}（云）` },
       { to: '/my-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myTasks') },
       // { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
-      { to: '/skills', icon: <Puzzle className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
+      { to: '/skills', icon: <Wrench className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/workflow', icon: <Workflow className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.workflow') },
       { to: '/more-apps', icon: <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.moreApps') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },

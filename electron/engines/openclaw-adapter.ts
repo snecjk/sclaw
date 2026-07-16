@@ -137,13 +137,27 @@ async function loadOpenClawSessionStoreMetadata(): Promise<Map<string, OpenClawS
   return metadataByKey;
 }
 
+function sessionsFromOpenClawStoreMetadata(
+  metadataByKey: Map<string, OpenClawSessionStoreMetadata>,
+): EngineSessionSummary[] {
+  return [...metadataByKey.entries()]
+    .map(([key, storeMeta]): EngineSessionSummary => ({
+      key,
+      label: storeMeta.label,
+      updatedAt: storeMeta.updatedAt,
+      spawnedBy: storeMeta.spawnedBy,
+      engineType: 'openclaw',
+    }))
+    .filter((entry) => Boolean(entry.key));
+}
+
 export const openClawAdapter: EngineAdapter = {
   type: 'openclaw',
 
   async listSessions(ctx: EngineAdapterContext) {
+    const metadataByKey = await loadOpenClawSessionStoreMetadata();
     try {
       const result = await ctx.gatewayManager.rpc<Record<string, unknown>>('sessions.list', {});
-      const metadataByKey = await loadOpenClawSessionStoreMetadata();
       const sessions: EngineSessionSummary[] = Array.isArray(result.sessions)
         ? result.sessions
           .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
@@ -170,8 +184,13 @@ export const openClawAdapter: EngineAdapter = {
           .filter((entry) => Boolean(entry.key))
         : [];
       return { success: true, result: { sessions } };
-    } catch (error) {
-      return { success: false, error: String(error) };
+    } catch {
+      // Gateway down / not connected: still list from agents/*/sessions/sessions.json
+      // so the sidebar can show recent OpenClaw history offline.
+      return {
+        success: true,
+        result: { sessions: sessionsFromOpenClawStoreMetadata(metadataByKey) },
+      };
     }
   },
 

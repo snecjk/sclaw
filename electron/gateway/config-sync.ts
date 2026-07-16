@@ -20,7 +20,13 @@ import { getProviderEnvVar, getKeyableProviderTypes } from '../utils/provider-re
 import { getOpenClawDir, getOpenClawEntryPath, getOpenClawConfigDir, getOpenClawProcessCwd, getOpenClawNodeModulesPath, getOpenClawPackageRootEnv, getBundledPluginSourceCandidates, isOpenClawPresent } from '../utils/paths';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { cleanupDanglingWeChatPluginState, listConfiguredChannels } from '../utils/channel-config';
-import { syncGatewayTokenToConfig, syncBrowserConfigToOpenClaw, syncSessionIdleMinutesToOpenClaw, sanitizeOpenClawConfig } from '../utils/openclaw-auth';
+import {
+  syncGatewayTokenToConfig,
+  syncBrowserConfigToOpenClaw,
+  syncSessionIdleMinutesToOpenClaw,
+  sanitizeOpenClawConfig,
+  syncStoPluginsToOpenClaw,
+} from '../utils/openclaw-auth';
 import { buildProxyEnv, resolveProxySettings } from '../utils/proxy';
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { logger } from '../utils/logger';
@@ -174,7 +180,19 @@ export async function syncGatewayConfigBeforeLaunch(
     }),
   ]);
 
-  // Group 4: authenticated setup
+  // Group 4: STO plugin stubs before Gateway spawn — including on the login page —
+  // so post-login syncStoPluginsToOpenClaw is typically a no-op and does not
+  // trigger an OpenClaw hard restart (WS 1012) after the user signs in.
+  try {
+    const wrote = await syncStoPluginsToOpenClaw();
+    if (wrote) {
+      logger.info('Pre-launch STO plugins config written to openclaw.json');
+    }
+  } catch (err) {
+    logger.warn('Failed to sync STO plugins before launch:', err);
+  }
+
+  // Group 5: authenticated setup (SSO / models / biz-agents)
   try {
     const { getAuthState, getStoToken } = await import('../utils/auth-store');
     const { runAuthenticatedSetup } = await import('../services/auth-setup-orchestrator');
