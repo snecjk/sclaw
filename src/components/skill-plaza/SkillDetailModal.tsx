@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { X, Play, Download, Users, ArrowDownToLine } from 'lucide-react';
+import { X, Play, Download, ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
@@ -75,11 +75,12 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
     if (liveSkill.icon) {
       return (
         <span
+          className="inline-flex dark:invert"
           dangerouslySetInnerHTML={{ __html: liveSkill.icon.replace(/width="[^"]*"/, 'width="20"').replace(/height="[^"]*"/, 'height="20"') }}
         />
       );
     }
-    return <img src={fileIcon} alt="" aria-hidden className="h-5 w-5 object-contain" />;
+    return <img src={fileIcon} alt="" aria-hidden className="h-5 w-5 object-contain dark:invert" />;
   };
 
   // Optional workflow steps from skill data (future backend support)
@@ -136,12 +137,6 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
                     )}
                   </div>
                   <div className="flex items-center gap-2.5 text-xs text-muted-foreground mt-1">
-                    {typeof liveSkill.useCount === 'number' && liveSkill.useCount >= 0 && (
-                      <span className="inline-flex items-center gap-1">
-                        <Users className="h-3 w-3 opacity-55" />
-                        {liveSkill.useCount >= 1000 ? `${(liveSkill.useCount / 1000).toFixed(1)}k` : liveSkill.useCount}
-                      </span>
-                    )}
                     {typeof liveSkill.installCount === 'number' && liveSkill.installCount >= 0 && (
                       <span className="inline-flex items-center gap-1">
                         <ArrowDownToLine className="h-3 w-3 opacity-55" />
