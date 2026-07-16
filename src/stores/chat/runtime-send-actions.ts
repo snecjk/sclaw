@@ -11,6 +11,8 @@ import {
 } from './helpers';
 import type { ChatSession, RawMessage } from './types';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
+import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
+import { resolveSkillGatewayText } from '@/lib/skill-gateway-text';
 import { shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { isCorruptedSessionLabel, normalizeDerivedSessionLabel } from '@/lib/workflow-session-hint';
 import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
@@ -101,9 +103,20 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
     sendMessage: async (
       options: import('@/stores/chat/types').SendMessageOptions,
     ) => {
-      const { text, attachments, targetAgentId, dingTalkMentions, workflowId: _workflowId, runId: _runId } = options;
-      const trimmed = text.trim();
-      if (!trimmed && (!attachments || attachments.length === 0)) return;
+      const {
+        text,
+        attachments,
+        targetAgentId,
+        dingTalkMentions,
+        workflowId: _workflowId,
+        runId: _runId,
+        skillMeta,
+      } = options;
+      const userDisplayText = text.trim();
+      const gatewayText = skillMeta
+        ? resolveSkillGatewayText(resolveSkillFromPlaza(skillMeta.slug).defaultPrompt, userDisplayText)
+        : userDisplayText;
+      if (!gatewayText && (!attachments || attachments.length === 0) && !skillMeta) return;
 
       const dingTalkRpcExtras = buildDingTalkMentionRpcExtras(
         dingTalkMentions,
@@ -200,9 +213,10 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       const nowMs = Date.now();
       const userMsg: RawMessage = {
         role: 'user',
-        content: trimmed || (attachments?.length ? '(file attached)' : ''),
+        content: userDisplayText || (attachments?.length ? '(file attached)' : ''),
         timestamp: nowMs / 1000,
         id: crypto.randomUUID(),
+        _skillMeta: skillMeta,
         _attachedFiles: attachments?.map(a => ({
           fileName: a.fileName,
           mimeType: a.mimeType,
@@ -229,8 +243,8 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
       const isFirstMessage = !messages.slice(0, -1).some((m) => m.role === 'user');
       if (!currentSessionKey.endsWith(':main') && isFirstMessage
         && shouldAutoDeriveSessionLabel(currentSessionKey, sessionLabels, isCorruptedSessionLabel)
-        && trimmed) {
-        const normalized = normalizeDerivedSessionLabel(trimmed);
+        && (userDisplayText || skillMeta?.title)) {
+        const normalized = normalizeDerivedSessionLabel(userDisplayText || skillMeta?.title || '');
         if (normalized) {
           set((s) => ({ sessionLabels: { ...s.sessionLabels, [currentSessionKey]: normalized } }));
         }
@@ -313,7 +327,7 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
               method: 'POST',
               body: JSON.stringify({
                 sessionKey: currentSessionKey,
-                message: trimmed || '',
+                message: gatewayText || '',
                 deliver: false,
                 idempotencyKey,
                 engineType: currentSessionEngineType,
@@ -333,7 +347,7 @@ export function createRuntimeSendActions(set: ChatSet, get: ChatGet): Pick<Runti
               method: 'POST',
               body: JSON.stringify({
                 sessionKey: currentSessionKey,
-                message: trimmed,
+                message: gatewayText,
                 deliver: false,
                 idempotencyKey,
                 engineType: currentSessionEngineType,

@@ -8,6 +8,9 @@ import { useMessageQueueStore } from '@/stores/message-queue';
 import { invokeApi } from '@/lib/api-client';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
+import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
+import { resolveSkillGatewayText } from '@/lib/skill-gateway-text';
 
 export interface DispatchChatSendOptions {
   text: string;
@@ -19,6 +22,7 @@ export interface DispatchChatSendOptions {
   workflowSource?: string | null;
   /** 工作流名称（mine 来源时用于上下文块）。 */
   workflowName?: string | null;
+  skillMeta?: SkillMeta;
   /** Skip question:split (e.g. when @mentions are present). */
   skipQuestionSplit?: boolean;
   onSplittingChange?: (splitting: boolean) => void;
@@ -33,9 +37,14 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     workflowId,
     workflowSource,
     workflowName,
+    skillMeta,
     skipQuestionSplit = false,
     onSplittingChange,
   } = options;
+
+  const gatewayPrompt = skillMeta
+    ? resolveSkillGatewayText(resolveSkillFromPlaza(skillMeta.slug).defaultPrompt, text)
+    : text;
 
   const sendMessage = useChatStore.getState().sendMessage;
 
@@ -53,6 +62,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
       workflowId: wfId || undefined,
       runId: _runId || undefined,
       workflowContext: ctx as import('@/stores/chat').WorkflowContextBlock | undefined,
+      skillMeta,
     });
   };
 
@@ -96,6 +106,16 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
   const { tryStartRememberedWorkflowSend, tryResolvePendingWorkflow } = await import(
     '@/hooks/use-workflow-send'
   );
+
+  // Skill sends: skip question:split so the optimistic user bubble appears immediately.
+  if (skillMeta) {
+    await sendMessage({ text, attachments, targetAgentId, dingTalkMentions, skillMeta });
+    if (failed()) {
+      toast.error('发送失败，请重试');
+    }
+    return;
+  }
+
   const startedRemembered = await tryStartRememberedWorkflowSend({
     text,
     context: {
@@ -110,6 +130,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
         dingTalkMentions,
         workflowId: wfId ?? undefined,
         runId: runId ?? undefined,
+        skillMeta,
       });
     },
   });
@@ -117,7 +138,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
 
   // In-flight parameter_form confirm / cancel only — creation & search go through model tools.
   const resolved = await tryResolvePendingWorkflow(text, async (msg, runId, wfId) => {
-    await sendMessage({ text: msg, attachments, targetAgentId, dingTalkMentions, workflowId: wfId, runId });
+    await sendMessage({ text: msg, attachments, targetAgentId, dingTalkMentions, workflowId: wfId, runId, skillMeta });
   });
   if (resolved) return;
 
@@ -127,7 +148,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     try {
       const { currentAgentId, currentSessionKey } = useChatStore.getState();
       parts = await invokeApi<Array<{ type: string; context: string }>>('question:split', {
-        prompt: text,
+        prompt: gatewayPrompt,
         agentId: currentAgentId,
         sessionId: currentSessionKey,
       });
@@ -139,7 +160,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
   }
 
   if (parts && parts.length > 1) {
-    await sendMessage({ text: parts[0].context, attachments, targetAgentId, dingTalkMentions });
+    await sendMessage({ text: parts[0].context, attachments, targetAgentId, dingTalkMentions, skillMeta });
     if (failed()) {
       toast.error('发送失败，请重试');
       return;
@@ -149,7 +170,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
       useMessageQueueStore.getState().enqueue(currentSessionKey, parts[i].context, undefined, targetAgentId);
     }
   } else {
-    await sendMessage({ text, attachments, targetAgentId, dingTalkMentions });
+    await sendMessage({ text, attachments, targetAgentId, dingTalkMentions, skillMeta });
     if (failed()) {
       toast.error('发送失败，请重试');
     }

@@ -4,10 +4,14 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { syncClaudeSkillsForAgent } from './claude-skill-bridge';
 import { listClaudeBridgePluginPaths } from './claude-plugin-bridge';
+import type { ProviderAccount } from '../shared/providers/types';
 import { getDefaultProviderAccountId, getProviderAccount } from './providers/provider-store';
-import { StoModelSyncService } from './providers/sto-model-sync';
+import {
+  isLegacyStoProviderAccountId,
+  STO_CANONICAL_ACCOUNT_ID,
+} from './providers/sto-placeholder-utils';
+import { applyStoClaudeInferenceEnv } from './sto-claude-inference-env';
 import { getAgentPreferredModel, getAgentWorkspacePath } from '../utils/agent-config';
-import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import { expandPath, getClaudeConfigDir } from '../utils/paths';
 import { getApiKey } from '../utils/secure-storage';
@@ -150,35 +154,105 @@ async function sanitizeClaudeSettingsEnv(): Promise<void> {
   }
 }
 
+async function resolveStoCatalogAccountId(): Promise<string | undefined> {
+  const account = await getProviderAccount(STO_CANONICAL_ACCOUNT_ID);
+  return account?.vendorId === 'sto' ? STO_CANONICAL_ACCOUNT_ID : undefined;
+}
+
+async function normalizeClaudeTaskAccountId(
+  accountId: string | undefined,
+  model: string | undefined,
+  agentId: string,
+): Promise<string | undefined> {
+  const stoId = await resolveStoCatalogAccountId();
+  if (!stoId) {
+    return accountId?.trim() || undefined;
+  }
+
+  const trimmed = accountId?.trim();
+  const hasModel = Boolean(model?.trim());
+
+  if (!trimmed && hasModel) {
+    logger.info('[claude-task] defaulting accountId to sto (model set, account missing)', { agentId });
+    return stoId;
+  }
+
+  if (isLegacyStoProviderAccountId(trimmed)) {
+    logger.info('[claude-task] normalized legacy accountId to sto', { agentId, from: trimmed });
+    return stoId;
+  }
+
+  if (trimmed) {
+    const account = await getProviderAccount(trimmed);
+    if (!account) {
+      logger.info('[claude-task] accountId not found, falling back to sto', { agentId, from: trimmed });
+      return stoId;
+    }
+    return trimmed;
+  }
+
+  if (!hasModel) {
+    return stoId;
+  }
+
+  return undefined;
+}
+
+function resolveModelFromStoCatalog(
+  model: string | undefined,
+  stoAccount: ProviderAccount | null,
+): string | undefined {
+  const catalog = (stoAccount?.metadata?.customModels as string[] | undefined) ?? [];
+  const fallback = stoAccount?.model?.trim() || catalog[0];
+
+  const trimmed = model?.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+  if (!stoAccount) {
+    return trimmed;
+  }
+
+  if (catalog.includes(trimmed)) {
+    return trimmed;
+  }
+
+  const suffixHit = catalog.find(
+    (catalogId) => catalogId === trimmed
+      || catalogId.endsWith(`/${trimmed}`)
+      || trimmed.endsWith(`/${catalogId}`),
+  );
+  // Delisted / renamed models must not keep running; fall back to workspace default.
+  return suffixHit ?? fallback ?? trimmed;
+}
+
 async function buildClaudeEnvForAccount(accountId?: string): Promise<NodeJS.ProcessEnv> {
   const base: NodeJS.ProcessEnv = {
     ...process.env,
     CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
   };
 
-  if (!accountId) {
-    return base;
+  let resolvedAccountId = accountId?.trim();
+  let account = resolvedAccountId ? await getProviderAccount(resolvedAccountId) : null;
+
+  if (!account) {
+    const stoId = await resolveStoCatalogAccountId();
+    if (stoId) {
+      account = await getProviderAccount(stoId);
+      resolvedAccountId = stoId;
+    }
   }
 
-  const account = await getProviderAccount(accountId);
-  if (!account) {
+  if (!account || !resolvedAccountId) {
     return base;
   }
 
   if (account.vendorId === 'sto') {
-    const token = await getStoToken();
-    const ssoEnv = await getSsoEnvironment();
-    const domain = StoModelSyncService.resolveDomain(ssoEnv);
-    if (token) {
-      const baseUrl = `${domain}/v1/anthropic`;
-      base.ANTHROPIC_BASE_URL = baseUrl;
-      base.ANTHROPIC_API_KEY = token;
-      base.ANTHROPIC_AUTH_TOKEN = token;
-    }
+    await applyStoClaudeInferenceEnv(base, account);
     return base;
   }
 
-  const apiKey = await getApiKey(accountId);
+  const apiKey = await getApiKey(resolvedAccountId);
   if (account.baseUrl) {
     base.ANTHROPIC_BASE_URL = account.baseUrl;
   }
@@ -201,9 +275,16 @@ async function resolveLaunchSelection(definition: ClaudeScheduledTaskDefinition)
   accountId = accountId ?? preferred.accountId ?? await getDefaultProviderAccountId();
   model = model ?? preferred.model;
 
-  if (!model && accountId) {
-    const account = await getProviderAccount(accountId);
-    model = account?.model;
+  accountId = await normalizeClaudeTaskAccountId(accountId, model, definition.agentId);
+
+  const account = accountId ? await getProviderAccount(accountId) : null;
+
+  if (!model && account) {
+    model = account.model;
+  }
+
+  if (account?.vendorId === 'sto') {
+    model = resolveModelFromStoCatalog(model, account);
   }
 
   return { accountId, model };

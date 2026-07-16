@@ -1,5 +1,6 @@
 import type { WorkflowExecutionState } from '@/types/workflow';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
 
 export interface SendMessageOptions {
   text: string;
@@ -16,6 +17,8 @@ export interface SendMessageOptions {
   runId?: string | null;
   /** Hidden workflow schema context injected into the user message for AI guidance */
   workflowContext?: WorkflowContextBlock | null;
+  /** Skill plaza context — UI tag + Gateway defaultPrompt injection */
+  skillMeta?: SkillMeta;
   /** Hidden embed-browser page snapshot for in-app preview chat */
   embedBrowserContext?: import('@/lib/sclaw-browser-embed-context').SclawBrowserEmbedContextBlock | null;
 }
@@ -61,6 +64,8 @@ export interface RawMessage {
   isError?: boolean;
   /** Local-only: file metadata for user-uploaded attachments (not sent to/from Gateway) */
   _attachedFiles?: AttachedFileMeta[];
+  /** Local-only: skill plaza tag metadata for user message bubble rendering */
+  _skillMeta?: SkillMeta;
 }
 
 /** Content block inside a message */
@@ -111,6 +116,11 @@ export interface ChatSession {
   model?: string;
   updatedAt?: number;
   engineType?: 'openclaw' | 'claude';
+  /**
+   * Owning agent for this session. Required for `claude-task:*` keys which do not
+   * embed agentId in the session key (key-derived fallback would wrongly be `main`).
+   */
+  agentId?: string;
   /** Parent session key when this session was spawned as an OpenClaw subagent. */
   spawnedBy?: string;
 }
@@ -201,6 +211,12 @@ export interface ChatState {
   showThinking: boolean;
   thinkingLevel: string | null;
 
+  /** Model selected on the new-conversation page (DEFAULT_SESSION_KEY) before sending.
+   *  Carried into the real session created by newSession() so the user's choice
+   *  is preserved instead of reverting to the global default. */
+  pendingNewSessionModel: string | null;
+  setPendingNewSessionModel: (model: string | null) => void;
+
   // Workflow
   workflowCardStates: Record<string, WorkflowExecutionState>;
   setWorkflowCardState: (runId: string, state: WorkflowExecutionState) => void;
@@ -227,7 +243,7 @@ export interface ChatState {
   switchSession: (key: string) => void;
   /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
   switchToAgentMainSession: (agentId: string) => void;
-  newSession: () => void;
+  newSession: () => Promise<void>;
   deleteSession: (key: string, options?: {
     skipSessionRefresh?: boolean;
     additionalSuppressKeys?: string[];

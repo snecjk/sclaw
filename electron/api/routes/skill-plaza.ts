@@ -150,6 +150,27 @@ export async function handleSkillPlazaRoutes(
     return true;
   }
 
+  // POST /api/skill-plaza/upload
+  if (url.pathname === '/api/skill-plaza/upload' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ filePath?: string }>(req);
+      const filePath = body.filePath;
+      if (!filePath) {
+        sendJson(res, 400, { success: false, error: 'Missing filePath' });
+        return true;
+      }
+      const result = await ctx.stoSkillService.uploadSkill(filePath);
+      sendJson(res, 200, { success: true, slug: result.slug });
+    } catch (error) {
+      const message = String(error);
+      if (message.includes('Path not found')) {
+        sendJson(res, 400, { success: false, error: message, code: 'PATH_NOT_FOUND' });
+        return true;
+      }
+      sendJson(res, 500, { success: false, error: message, code: 'UPLOAD_FAILED' });
+    }
+    return true;
+  }
   // POST /api/skill-plaza/use
   if (url.pathname === '/api/skill-plaza/use' && req.method === 'POST') {
     try {

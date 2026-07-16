@@ -13,6 +13,7 @@ const SKILL_INSTALL_PATHS = new Set([
   '/api/skill-plaza/install',
   '/api/sto-skills/install',
   '/api/clawhub/install',
+  '/api/skill-plaza/upload',
 ]);
 
 function resolveHostApiTimeoutMs(path: string): number {

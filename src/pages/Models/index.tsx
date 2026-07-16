@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import {
   ChevronLeft,
   ChevronRight,
@@ -10,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { glassNestedCard, glassSectionSurface, glassSegmentTrack, stoMainInnerShell } from '@/lib/surfaces';
 import { useGatewayStore } from '@/stores/gateway';
+import { useAuthStore, resolveAiResourceIsSite } from '@/stores/auth';
 import { useSettingsStore } from '@/stores/settings';
 import { hostApiFetch } from '@/lib/host-api';
 import { trackUiEvent } from '@/lib/telemetry';
@@ -24,12 +26,16 @@ import {
   type UsageHistoryEntry,
   type UsageWindow,
 } from './usage-history';
+
 const DEFAULT_USAGE_FETCH_MAX_ATTEMPTS = 2;
 const WINDOWS_USAGE_FETCH_MAX_ATTEMPTS = 3;
 const USAGE_FETCH_RETRY_DELAY_MS = 1500;
 
 export function Models() {
   const { t } = useTranslation(['dashboard', 'settings']);
+  const user = useAuthStore((s) => s.user);
+  const impersonationOrigin = useAuthStore((s) => s.impersonationOrigin);
+  const isSiteForAi = resolveAiResourceIsSite(user?.categoryCode, impersonationOrigin);
   const gatewayStatus = useGatewayStore((state) => state.status);
   const devModeUnlocked = useSettingsStore((state) => state.devModeUnlocked);
   const isGatewayRunning = gatewayStatus.state === 'running';
@@ -41,6 +47,18 @@ export function Models() {
   const [usageWindow, setUsageWindow] = useState<UsageWindow>('7d');
   const [usagePage, setUsagePage] = useState(1);
   const [selectedUsageEntry, setSelectedUsageEntry] = useState<UsageHistoryEntry | null>(null);
+
+  type TokenBalanceState = {
+    status: 'idle' | 'loading' | 'done' | 'error';
+    spend: number;
+    maxBudget: number;
+  };
+  const [tokenBalance, setTokenBalance] = useState<TokenBalanceState>({
+    status: 'idle',
+    spend: 0,
+    maxBudget: 0,
+  });
+  const [balanceApplyLoading, setBalanceApplyLoading] = useState(false);
 
   type FetchState = {
     status: 'idle' | 'loading' | 'done';
@@ -72,6 +90,29 @@ export function Models() {
 
   useEffect(() => {
     trackUiEvent('models.page_viewed');
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchTokenBalance() {
+      setTokenBalance((prev) => ({ ...prev, status: 'loading' }));
+      try {
+        const res = await hostApiFetch<{ tokenId: string; spend: number; maxBudget: number }>('/api/token-balance');
+        if (cancelled) return;
+        setTokenBalance({
+          status: 'done',
+          spend: res.spend ?? 0,
+          maxBudget: res.maxBudget ?? 0,
+        });
+      } catch {
+        if (cancelled) return;
+        setTokenBalance((prev) => ({ ...prev, status: 'error' }));
+      }
+    }
+    void fetchTokenBalance();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -207,6 +248,29 @@ export function Models() {
         : 'text-muted-foreground hover:bg-primary/[0.06] hover:text-foreground',
     );
 
+  const handleBalanceApplyClick = async () => {
+    if (balanceApplyLoading) return;
+    trackUiEvent('models.token_balance_apply_clicked');
+    setBalanceApplyLoading(true);
+    try {
+      const result = await hostApiFetch<{ url?: string; source?: string }>(
+        '/api/auth/hq-balance-apply-url',
+      );
+      const url = result.url?.trim();
+      if (!url) {
+        throw new Error('未获取到申请链接');
+      }
+      trackUiEvent('models.token_balance_apply_opened', { source: result.source ?? 'unknown' });
+      await window.electron.openExternal(url);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      trackUiEvent('models.token_balance_apply_failed', { error: message });
+      toast.error(t('dashboard:tokenBalance.applyFailed', '获取申请链接失败，请稍后重试'));
+    } finally {
+      setBalanceApplyLoading(false);
+    }
+  };
+
   return (
     <div className={cn(stoMainInnerShell, 'flex flex-col gap-8 pb-10')}>
       <header className="shrink-0 border-b border-border pb-6">
@@ -228,6 +292,82 @@ export function Models() {
       <div className="flex flex-col gap-10">
         <section className={glassSectionSurface}>
           <ProvidersSettings />
+        </section>
+
+        <section className={glassSectionSurface}>
+          <div className="mb-5 flex items-center justify-between">
+            <h2 className="text-lg font-semibold tracking-tight text-foreground">
+              {t('dashboard:tokenBalance.title', 'Token 余额')}
+            </h2>
+            {!isSiteForAi ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-md border-border bg-transparent px-3 text-[13px] hover:bg-primary/[0.06]"
+                onClick={() => {
+                  void handleBalanceApplyClick();
+                }}
+                disabled={balanceApplyLoading}
+              >
+                {balanceApplyLoading
+                  ? t('dashboard:tokenBalance.applying', '加载中...')
+                  : t('dashboard:tokenBalance.apply', '余额申请')}
+              </Button>
+            ) : null}
+          </div>
+          {tokenBalance.status === 'loading' ? (
+            <div className="flex items-center justify-center rounded-md border border-dashed border-border bg-white/50 py-12 text-muted-foreground backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.35)]">
+              <FeedbackState state="loading" title={t('dashboard:tokenBalance.loading', '正在加载 Token 余额...')} />
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-md border border-border bg-white/60 p-4 backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.25)]">
+                  <p className="text-[13px] text-muted-foreground">{t('dashboard:tokenBalance.available', '可用额度')}</p>
+                  <p className="mt-1 text-2xl font-bold text-foreground">
+                    {tokenBalance.maxBudget > 0
+                      ? Math.max(0, tokenBalance.maxBudget - tokenBalance.spend).toFixed(2)
+                      : '--'}
+                    <span className="ml-1 text-sm font-normal text-muted-foreground">元</span>
+                  </p>
+                </div>
+                <div className="rounded-md border border-border bg-white/60 p-4 backdrop-blur-sm dark:bg-[hsl(var(--glass-bg)/0.25)]">
+                  <p className="text-[13px] text-muted-foreground">{t('dashboard:tokenBalance.total', '总额度')}</p>
+                  <p className="mt-1 text-2xl font-bold text-foreground">
+                    {tokenBalance.maxBudget > 0 ? tokenBalance.maxBudget.toFixed(2) : '--'}
+                    <span className="ml-1 text-sm font-normal text-muted-foreground">元</span>
+                  </p>
+                </div>
+              </div>
+              {tokenBalance.maxBudget > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[13px]">
+                    <span className="text-muted-foreground">{t('dashboard:tokenBalance.usage', '额度使用')}</span>
+                    <span className="text-muted-foreground">
+                      {(() => {
+                        const pct = tokenBalance.maxBudget > 0
+                          ? Math.round((tokenBalance.spend / tokenBalance.maxBudget) * 100)
+                          : 0;
+                        const remaining = Math.max(0, 100 - pct);
+                        return t('dashboard:tokenBalance.usagePercent', '已用 {{pct}}% · 剩余 {{remaining}}%', { pct, remaining });
+                      })()}
+                    </span>
+                  </div>
+                  <div className="h-2.5 overflow-hidden rounded-full bg-primary/[0.08]">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-orange-400 to-orange-500"
+                      style={{
+                        width: `${Math.min(100, tokenBalance.maxBudget > 0 ? (tokenBalance.spend / tokenBalance.maxBudget) * 100 : 0)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+              <p className="text-[12px] text-muted-foreground">
+                {t('dashboard:tokenBalance.hint', '当前可用余额，消耗后自动扣减')}
+              </p>
+            </div>
+          )}
         </section>
 
         <section className={glassSectionSurface}>

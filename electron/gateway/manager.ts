@@ -872,6 +872,13 @@ export class GatewayManager extends EventEmitter {
       if (shouldTraceGatewayMethod(method)) {
         const payloadSummary = summarizeRpcPayload(params);
         logger.info(`[gateway-rpc] -> ${method} id=${id}${payloadSummary ? ` ${payloadSummary}` : ''}`);
+        if (method === 'chat.send' && params && typeof params === 'object') {
+          const paramKeys = Object.keys(params as Record<string, unknown>);
+          logger.info(`[gateway-rpc] chat.send param keys: ${paramKeys.join(',')}`);
+          if ('engineType' in (params as Record<string, unknown>)) {
+            logger.warn(`[gateway-rpc] chat.send contains unexpected 'engineType' property — this will be rejected by Gateway schema!`);
+          }
+        }
       } else {
         logger.debug('WS send request:', request);
       }

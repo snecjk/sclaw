@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import {
   dropdownOptionClass,
   dropdownPanelRoundedClass,
+  myTaskCreateButtonClass,
   myTaskSortTriggerClass,
   workflowListSearchIconWrapClass,
   workflowListSearchInputClass,
@@ -26,6 +27,7 @@ interface TaskToolbarProps {
   sortValue: string;
   /** 排序变化回调 */
   onSortChange: (value: string) => void;
+  children?: React.ReactNode;
 }
 
 export function TaskToolbar({
@@ -33,6 +35,7 @@ export function TaskToolbar({
   onSearchChange,
   sortValue,
   onSortChange,
+	children,
 }: TaskToolbarProps) {
   const { t } = useTranslation('tasks');
   const [sortOpen, setSortOpen] = useState(false);
@@ -124,6 +127,7 @@ export function TaskToolbar({
           </div>
         )}
       </div>
+			{ children }
     </div>
   );
 }

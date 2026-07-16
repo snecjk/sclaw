@@ -9,6 +9,7 @@ import { create } from 'zustand';
 import { useChatStore } from './chat';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
 
 const QUEUE_MAX_PER_SESSION = 10;
 
@@ -22,6 +23,7 @@ export interface QueuedMessage {
   targetAgentId?: string | null;
   dingTalkMentions?: DingTalkMention[];
   workflowId?: string | null;
+  skillMeta?: SkillMeta;
   queuedAt: number;
 }
 
@@ -31,7 +33,7 @@ interface SessionQueue {
 
 interface MessageQueueState {
   queues: Map<string, SessionQueue>; // keyed by sessionKey
-  enqueue: (sessionKey: string, text: string, attachments?: FileAttachment[], targetAgentId?: string | null, dingTalkMentions?: DingTalkMention[], workflowId?: string | null) => void;
+  enqueue: (sessionKey: string, text: string, attachments?: FileAttachment[], targetAgentId?: string | null, dingTalkMentions?: DingTalkMention[], workflowId?: string | null, skillMeta?: SkillMeta) => void;
   remove: (sessionKey: string, id: string) => void;
   moveUp: (sessionKey: string, id: string) => void;
   moveDown: (sessionKey: string, id: string) => void;
@@ -52,7 +54,7 @@ function getOrCreateSessionQueue(queues: Map<string, SessionQueue>, sessionKey: 
 export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   queues: new Map(),
 
-  enqueue: (sessionKey, text, attachments, targetAgentId, dingTalkMentions, workflowId) => {
+  enqueue: (sessionKey, text, attachments, targetAgentId, dingTalkMentions, workflowId, skillMeta) => {
     const { queues } = get();
     const session = getOrCreateSessionQueue(queues, sessionKey);
     if (session.queue.length >= QUEUE_MAX_PER_SESSION) return;
@@ -63,6 +65,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       targetAgentId,
       dingTalkMentions,
       workflowId,
+      skillMeta,
       queuedAt: Date.now(),
     };
     // Immutable update: new array + new session object so `getQueue` selectors
@@ -194,6 +197,7 @@ function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
           attachments: mapQueuedAttachments(msg.attachments),
           targetAgentId: msg.targetAgentId,
           dingTalkMentions: msg.dingTalkMentions,
+          skillMeta: msg.skillMeta,
         });
       });
     return;
@@ -205,6 +209,7 @@ function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
     targetAgentId: msg.targetAgentId,
     dingTalkMentions: msg.dingTalkMentions,
     workflowId: msg.workflowId,
+    skillMeta: msg.skillMeta,
   });
 }
 

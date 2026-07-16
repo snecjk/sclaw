@@ -17,7 +17,7 @@ import {
   isRemoteVersionNewer,
   resolveInstalledVersionForCompare,
 } from '../utils/skill-version';
-import { PREINSTALLED_MARKER_NAME } from './sto-skill-service';
+import { PREINSTALLED_MARKER_NAME, USER_UPLOAD_MARKER_NAME } from './sto-skill-service';
 import { parseSkillFrontmatter, readSkillMdFrontmatter } from '../utils/skill-frontmatter';
 import { pickNavCategoryFromApiSkill } from '../../shared/skill-plaza-category-resolve';
 
@@ -349,6 +349,15 @@ function readSkillsDirSlugs(skillsDir: string): Set<string> {
 
 function isPreinstalledSkill(skillDir: string): boolean {
   const markerPath = path.join(skillDir, PREINSTALLED_MARKER_NAME);
+  try {
+    return fs.existsSync(markerPath);
+  } catch {
+    return false;
+  }
+}
+
+function isUserUploadedSkill(skillDir: string): boolean {
+  const markerPath = path.join(skillDir, USER_UPLOAD_MARKER_NAME);
   try {
     return fs.existsSync(markerPath);
   } catch {
@@ -979,6 +988,7 @@ export class SkillPlazaService {
         const isPreinstalled = isPreinstalledSkill(skillDirPath);
         const isOfficial = fromLock.has(slug) || plazaSkill?.source === 'official' || manifestSlugs.has(slug);
         const source: 'official' | 'mine' = isOfficial ? 'official' : 'mine';
+        const isUserUploaded = isUserUploadedSkill(skillDirPath);
         const isOfficeSkill = OFFICE_SKILL_SLUGS.has(slug);
 
         // 分类优先级：办公技能 > 预安装技能（其他）> 按 plaza 权威数据 / 本地元数据
@@ -988,6 +998,9 @@ export class SkillPlazaService {
           finalCategory = OFFICE_CATEGORY_LABEL;
           finalCategoryCode = OFFICE_CATEGORY_SLUG;
         } else if (isPreinstalled) {
+          finalCategory = '其他';
+          finalCategoryCode = 'qita';
+        } else if (isUserUploaded) {
           finalCategory = '其他';
           finalCategoryCode = 'qita';
         } else {
