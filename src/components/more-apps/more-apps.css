@@ -783,6 +783,111 @@
   color: var(--ma-text-secondary);
 }
 
+/* ── Market APP list states — loading skeleton / error+retry / load-more ── */
+
+.page-more-apps .app-market__list-skeleton {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 40px;
+  row-gap: 2px;
+}
+
+.page-more-apps .app-market__row--skeleton {
+  min-height: 76px;
+  padding: 12px 6px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #f4f5f7 25%, #e9ecf2 50%, #f4f5f7 75%);
+  background-size: 200% 100%;
+  animation: ma-list-skeleton 1.4s ease-in-out infinite;
+  cursor: default;
+  pointer-events: none;
+}
+
+@keyframes ma-list-skeleton {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.page-more-apps .app-market__list-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 48px 16px;
+  border: 1px dashed var(--ma-border);
+  border-radius: 14px;
+  background: var(--ma-white);
+}
+
+.page-more-apps .app-market__list-error-text {
+  font-size: 14px;
+  color: var(--ma-text-secondary);
+}
+
+.page-more-apps .app-market__list-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 111, 0, 0.35);
+  border-radius: 999px;
+  background: var(--ma-white);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ma-orange);
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.page-more-apps .app-market__list-retry:hover {
+  background: var(--ma-orange-soft);
+  box-shadow: 0 2px 8px rgba(255, 111, 0, 0.12);
+}
+
+.page-more-apps .app-market__load-more-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 20px 0 8px;
+}
+
+.page-more-apps .app-market__load-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 24px;
+  border: 1px solid var(--ma-border);
+  border-radius: 999px;
+  background: var(--ma-white);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ma-text);
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.page-more-apps .app-market__load-more:hover:not(:disabled) {
+  background: #f7f7f8;
+  border-color: #d8dce4;
+}
+
+.page-more-apps .app-market__load-more:disabled {
+  cursor: default;
+  color: var(--ma-text-secondary);
+}
+
+.page-more-apps .app-market__load-more--loading {
+  color: var(--ma-text-secondary);
+}
+
 /* ── Installed tab ── */
 
 .page-more-apps .more-apps-section {

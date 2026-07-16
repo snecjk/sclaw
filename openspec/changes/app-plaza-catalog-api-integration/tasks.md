@@ -17,10 +17,10 @@
 
 ## 4. 分类与 APP 列表接入
 
-- [ ] 4.1 用 `/categories` 返回的 `id`/`name` 替换静态分类，前端固定补充“精选”，保持服务端顺序（Requirement: 分类导航使用服务端分类）
-- [ ] 4.2 分类点击时将非精选分类 `id` 作为 `categoryCode` 重置查询 `/apps`，点击精选时不传 `categoryCode`（Requirement: 分类导航使用服务端分类）
-- [ ] 4.3 用 `/apps` 返回的 `id`、`name`、`description`、`iconKey`/`iconUrl`、`tone`、`url` 渲染现有双列 APP 行，并使用服务端 `total` 更新市场数量（Requirement: APP 列表使用服务端目录）
-- [ ] 4.4 将搜索框接入 `keyword` 防抖查询并实现分页加载更多；请求失败显示重试且不回退静态 APP（Requirement: APP 列表使用服务端目录；Requirement: 三块内容经 Main 代理且独立降级）
+- [x] 4.1 用 `/categories` 返回的 `id`/`name` 替换静态分类，前端固定补充“精选”，保持服务端顺序（Requirement: 分类导航使用服务端分类）
+- [x] 4.2 分类点击时将非精选分类 `id` 作为 `categoryCode` 重置查询 `/apps`，点击精选时不传 `categoryCode`（Requirement: 分类导航使用服务端分类）
+- [x] 4.3 用 `/apps` 返回的 `id`、`name`、`description`、`iconKey`/`iconUrl`、`tone`、`url` 渲染现有双列 APP 行，并使用服务端 `total` 更新市场数量（Requirement: APP 列表使用服务端目录）
+- [x] 4.4 将搜索框接入 `keyword` 防抖查询并实现分页加载更多；请求失败显示重试且不回退静态 APP（Requirement: APP 列表使用服务端目录；Requirement: 三块内容经 Main 代理且独立降级）
 
 ## 5. 测试与文档检查
 

@@ -21,8 +21,7 @@ import { AppCard } from './AppCard';
 import { AddExternalAppModal } from './AddExternalAppModal';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AppIcon } from './AppIcon';
-import type { AppItem, AppPlazaBanner } from '@/types/more-apps';
-import { MARKET_CATEGORIES } from './builtin-apps';
+import type { AppItem, AppPlazaBanner, MarketCategory } from '@/types/more-apps';
 import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
 
 const HERO_CAROUSEL_INTERVAL = 5000;
@@ -40,11 +39,22 @@ export function MoreAppsPage() {
     banners,
     bannersLoading,
     bannersError,
+    categories,
+    categoriesLoading,
+    categoriesError,
+    apps,
+    total,
+    loading,
+    loadingMore,
+    error,
     setActiveTab,
     setSearchQuery,
     setMarketCategory,
     setHeroSlideIndex,
     fetchBanners,
+    fetchCategories,
+    fetchApps,
+    loadMoreApps,
     openAddModal,
     openEditModal,
     removeExternalApp,
@@ -57,28 +67,32 @@ export function MoreAppsPage() {
   const [confirmDeleteApp, setConfirmDeleteApp] = useState<AppItem | null>(null);
   const [failedBannerImages, setFailedBannerImages] = useState<string[]>([]);
   const heroTimerRef = useRef<NodeJS.Timeout | null>(null);
+  // Skip the search-debounce effect's first run on mount — the mount effect
+  // already fetches the first APP page, so we don't double-fire on initial render.
+  const searchMountedRef = useRef(false);
 
-  // Merge builtin + external for display
+  // Merge builtin + external for the "我的应用" tab (favorites/external behavior unchanged).
   const allApps = useMemo(() => {
     return [...builtinApps, ...externalApps].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }, [builtinApps, externalApps]);
 
-  // Filter apps for market tab based on category and search
-  const marketApps = useMemo(() => {
-    let apps = allApps.filter((a) => !a.external);
-    if (marketCategory !== 'featured') {
-      apps = apps.filter((a) => a.category === marketCategory);
-    }
-    const q = searchQuery.trim().toLowerCase();
-    if (q) {
-      apps = apps.filter(
-        (a) =>
-          a.name.toLowerCase().includes(q) ||
-          a.description?.toLowerCase().includes(q),
-      );
-    }
-    return apps;
-  }, [allApps, marketCategory, searchQuery]);
+  // Server categories with a fixed "精选" entry first; while loading or on error
+  // only "精选" is shown (分类失败时保留精选 — independent degradation).
+  const marketCategoryItems = useMemo(() => {
+    const featured = {
+      id: 'featured' as MarketCategory,
+      label: t('moreApps.categoryFeatured', { defaultValue: '精选' }),
+    };
+    const serverItems =
+      categoriesLoading || categoriesError
+        ? []
+        : categories.map((c) => ({ id: c.id as MarketCategory, label: c.name }));
+    return [featured, ...serverItems];
+  }, [categories, categoriesLoading, categoriesError, t]);
+
+  // APP set used to resolve APP-type banner targets — includes the server catalog,
+  // the authoritative "已加载 APP" set now that the market list is server-driven.
+  const bannerAppLookup = useMemo(() => [...allApps, ...apps], [allApps, apps]);
 
   // My apps: external apps + favorited builtin apps only
   const installedApps = useMemo(() => {
@@ -96,17 +110,33 @@ export function MoreAppsPage() {
     );
   }, [installedApps, searchQuery]);
 
-  const marketAppCount = useMemo(
-    () => allApps.filter((a) => !a.external).length,
-    [allApps],
-  );
+  // Market count is the authoritative server total (per current keyword/category query).
+  const marketAppCount = total;
 
   const installedAppCount = installedApps.length;
 
-  // Load server banners on mount (Banner block is independent of 分类/APP).
+  // Load the three server blocks on mount — each keeps independent loading/error
+  // so one failure never blanks the others (Banner / 分类 / APP 经 Main 代理且独立降级).
   useEffect(() => {
-    fetchBanners();
-  }, [fetchBanners]);
+    void fetchBanners();
+    void fetchCategories();
+    void fetchApps({ reset: true });
+  }, [fetchBanners, fetchCategories, fetchApps]);
+
+  // Debounced keyword search — resets to page 1 with the new keyword after input
+  // settles. Skips the initial mount run (the mount effect already fetched page 1)
+  // and only fires while the market tab is active (installed tab filters locally).
+  useEffect(() => {
+    if (activeTab !== 'market') return;
+    if (!searchMountedRef.current) {
+      searchMountedRef.current = true;
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void fetchApps({ reset: true });
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [searchQuery, activeTab, fetchApps]);
 
   // Keep heroSlideIndex in range when the banner set changes (refetch / shrink).
   useEffect(() => {
@@ -149,11 +179,11 @@ export function MoreAppsPage() {
     (banner: AppPlazaBanner) => {
       if (banner.targetType === 'URL' && banner.targetUrl) return true;
       if (banner.targetType === 'APP' && banner.targetAppId) {
-        return allApps.some((a) => a.id === banner.targetAppId && !!a.url?.trim());
+        return bannerAppLookup.some((a) => a.id === banner.targetAppId && !!a.url?.trim());
       }
       return false;
     },
-    [allApps],
+    [bannerAppLookup],
   );
 
   const handleBannerClick = useCallback(
@@ -166,7 +196,7 @@ export function MoreAppsPage() {
         return;
       }
       if (banner.targetType === 'APP' && banner.targetAppId) {
-        const app = allApps.find((a) => a.id === banner.targetAppId);
+        const app = bannerAppLookup.find((a) => a.id === banner.targetAppId);
         if (app?.url?.trim()) {
           handleOpenApp(app);
         }
@@ -174,7 +204,7 @@ export function MoreAppsPage() {
       }
       // NONE-type: no target, not clickable.
     },
-    [allApps, handleOpenApp],
+    [bannerAppLookup, handleOpenApp],
   );
 
   const handleBannerImageError = useCallback((bannerId: string) => {
@@ -199,6 +229,17 @@ export function MoreAppsPage() {
   const handleToggleFavorite = useCallback((id: string) => {
     toggleFavorite(id);
   }, [toggleFavorite]);
+
+  // Selecting a category resets the APP query to page 1. "精选" leaves
+  // marketCategory='featured' so the store sends no categoryCode; any server
+  // category sends its id as categoryCode (分类导航使用服务端分类).
+  const handleSelectCategory = useCallback(
+    (id: MarketCategory) => {
+      setMarketCategory(id);
+      void fetchApps({ reset: true });
+    },
+    [setMarketCategory, fetchApps],
+  );
 
   // ── Banner carousel (server 整图) ─────────────────────────────
   // Renders server-configured banner images with independent loading / error /
@@ -310,6 +351,103 @@ export function MoreAppsPage() {
     );
   };
 
+  // ── Market APP list (server catalog) ──────────────────────────
+  // Renders server apps with independent loading / error / empty / load-more.
+  // No static mock fallback on failure (APP 列表使用服务端目录).
+  const renderMarketApps = () => {
+    if (loading) {
+      return (
+        <div
+          className="app-market__list-skeleton"
+          aria-busy="true"
+          aria-label={t('moreApps.appsLoading', { defaultValue: '应用加载中' })}
+        >
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="app-market__row app-market__row--skeleton" />
+          ))}
+        </div>
+      );
+    }
+    if (error) {
+      return (
+        <div className="app-market__list-error" role="alert">
+          <span className="app-market__list-error-text">
+            {t('moreApps.appsError', { defaultValue: '应用列表加载失败' })}
+          </span>
+          <button
+            type="button"
+            className="app-market__list-retry"
+            onClick={() => fetchApps({ reset: true })}
+          >
+            {t('moreApps.retry', { defaultValue: '重试' })}
+          </button>
+        </div>
+      );
+    }
+    if (apps.length === 0) {
+      return (
+        <div className="app-market__empty">
+          {t('moreApps.emptyMarket', { defaultValue: '未找到匹配的应用，试试其他分类或关键词' })}
+        </div>
+      );
+    }
+    const hasMore = apps.length < total;
+    return (
+      <>
+        <div className="app-market__grid">
+          {apps.map((app) => {
+            const installed = isAppInstalled(app.id);
+            const favorite = isAppFavorite(app.id);
+            return (
+              <article
+                key={app.id}
+                className={cn('app-market__row', installed && 'app-market__row--installed')}
+                data-app-id={app.id}
+                onClick={() => handleOpenApp(app)}
+              >
+                <div className="app-market__row-main">
+                  <AppIcon iconKey={app.iconKey} iconUrl={app.iconUrl} tone={app.tone} size="lg" />
+                  <div className="app-market__row-body">
+                    <h4 className="app-market__row-title">{app.name}</h4>
+                    <p className="app-market__row-desc">{app.description}</p>
+                  </div>
+                </div>
+                <div className="app-market__row-aside">
+                  {!app.external && (
+                    <button
+                      className={cn('app-market__row-favorite', favorite && 'app-market__row-favorite--active')}
+                      onClick={(e) => { e.stopPropagation(); handleToggleFavorite(app.id); }}
+                      aria-label={favorite ? t('moreApps.unfavorite', { defaultValue: '取消收藏' }) : t('moreApps.favorite', { defaultValue: '收藏' })}
+                    >
+                      <Heart className="h-4 w-4" fill={favorite ? 'currentColor' : 'none'} />
+                    </button>
+                  )}
+                  <svg className="app-market__row-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+        {hasMore && (
+          <div className="app-market__load-more-wrap">
+            <button
+              type="button"
+              className={cn('app-market__load-more', loadingMore && 'app-market__load-more--loading')}
+              onClick={() => loadMoreApps()}
+              disabled={loadingMore}
+            >
+              {loadingMore
+                ? t('moreApps.loadingMore', { defaultValue: '加载中…' })
+                : t('moreApps.loadMore', { defaultValue: '加载更多' })}
+            </button>
+          </div>
+        )}
+      </>
+    );
+  };
+
   // ── Market Tab View ──────────────────────────────────────────
   const renderMarketView = () => {
     return (
@@ -317,65 +455,24 @@ export function MoreAppsPage() {
         {/* Banner carousel (server 整图) */}
         {renderBannerCarousel()}
 
-        {/* Category Filters */}
-        <nav className="app-market__cats" aria-label="应用分类">
-          {MARKET_CATEGORIES.map((cat) => (
+        {/* Category Filters — server categories with fixed "精选" first */}
+        <nav className="app-market__cats" aria-label={t('moreApps.categoriesAria', { defaultValue: '应用分类' })}>
+          {marketCategoryItems.map((cat) => (
             <button
               key={cat.id}
               type="button"
               className={cn('app-market__cat', marketCategory === cat.id && 'app-market__cat--active')}
               data-market-cat={cat.id}
               aria-pressed={marketCategory === cat.id ? 'true' : 'false'}
-              onClick={() => setMarketCategory(cat.id)}
+              onClick={() => handleSelectCategory(cat.id)}
             >
               {cat.label}
             </button>
           ))}
         </nav>
 
-        {/* App List */}
-        {marketApps.length > 0 ? (
-          <div className="app-market__grid">
-            {marketApps.map((app) => {
-              const installed = isAppInstalled(app.id);
-              const favorite = isAppFavorite(app.id);
-              return (
-                <article
-                  key={app.id}
-                  className={cn('app-market__row', installed && 'app-market__row--installed')}
-                  data-app-id={app.id}
-                  onClick={() => handleOpenApp(app)}
-                >
-                  <div className="app-market__row-main">
-                    <AppIcon iconKey={app.iconKey} iconUrl={app.iconUrl} tone={app.tone} size="lg" />
-                    <div className="app-market__row-body">
-                      <h4 className="app-market__row-title">{app.name}</h4>
-                      <p className="app-market__row-desc">{app.description}</p>
-                    </div>
-                  </div>
-                  <div className="app-market__row-aside">
-                    {!app.external && (
-                      <button
-                        className={cn('app-market__row-favorite', favorite && 'app-market__row-favorite--active')}
-                        onClick={(e) => { e.stopPropagation(); handleToggleFavorite(app.id); }}
-                        aria-label={favorite ? t('moreApps.unfavorite', { defaultValue: '取消收藏' }) : t('moreApps.favorite', { defaultValue: '收藏' })}
-                      >
-                        <Heart className="h-4 w-4" fill={favorite ? 'currentColor' : 'none'} />
-                      </button>
-                    )}
-                    <svg className="app-market__row-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                      <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="app-market__empty">
-            {t('moreApps.emptyMarket', { defaultValue: '未找到匹配的应用，试试其他分类或关键词' })}
-          </div>
-        )}
+        {/* App List — server-driven */}
+        {renderMarketApps()}
       </>
     );
   };
