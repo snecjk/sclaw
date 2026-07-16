@@ -41,6 +41,7 @@ import {
   scrubCorruptedSessionLabels,
 } from '@/lib/session-label';
 import {
+  DEFAULT_CANONICAL_PREFIX,
   DEFAULT_SESSION_KEY,
   type ChatSession,
 } from './types';
@@ -55,6 +56,7 @@ import {
 import {
   clearSessionEntryFromMap,
   getAgentIdFromSessionKey,
+  getCanonicalPrefixFromSessions,
   isTemporaryAgentSessionKey,
 } from './session-identity';
 import {
@@ -72,6 +74,7 @@ export interface SessionLifecycleDeps {
   parseSessionUpdatedAtMs: (value: unknown) => number | undefined;
   scheduleSessionLabelHydrationFromStore: (set: ChatSet, get: ChatGet) => void;
   getAgentEngineType: (agentId: string | undefined | null) => ChatSession['engineType'] | undefined;
+  getCanonicalPrefixFromSessionKey: (sessionKey: string) => string | null;
 }
 
 export function createSessionLifecycleActions(
@@ -83,6 +86,7 @@ export function createSessionLifecycleActions(
     parseSessionUpdatedAtMs,
     scheduleSessionLabelHydrationFromStore,
     getAgentEngineType,
+    getCanonicalPrefixFromSessionKey,
   } = deps;
 
   return {
@@ -675,18 +679,22 @@ export function createSessionLifecycleActions(
         && messages.length === 0
         && !sessionLastActivity[currentSessionKey]
         && !sessionLabels[currentSessionKey];
-      const baseAgentId = getBaseAgentIdFromProjectAgentId(get().currentAgentId)
-        ?? get().currentAgentId
-        ?? 'main';
-      const projectId = options?.projectId;
-      const effectiveAgentId = projectId && projectId !== 'default'
+      const projectId = options?.projectId?.trim();
+      const currentAgentId = get().currentAgentId || getAgentIdFromSessionKey(currentSessionKey);
+      const baseAgentId = getBaseAgentIdFromProjectAgentId(currentAgentId) ?? currentAgentId ?? 'main';
+      const newAgentId = projectId
         ? resolveProjectAgentId(projectId, baseAgentId)
-        : baseAgentId;
-      const prefix = `agent:${effectiveAgentId}`;
-      const newKey = `${prefix}:session-${Date.now()}`;
-      const newAgentId = effectiveAgentId;
+        : getAgentIdFromSessionKey(`${
+          getCanonicalPrefixFromSessionKey(currentSessionKey)
+            ?? getCanonicalPrefixFromSessions(sessions)
+            ?? DEFAULT_CANONICAL_PREFIX
+        }:session-${Date.now()}`);
+      const newKey = `agent:${newAgentId}:session-${Date.now()}`;
       // Carry over model from home/default session or Claude agent toolbar selection
-      let currentSessionModel = sessions.find((s) => s.key === currentSessionKey)?.model;
+      let currentSessionModel = get().pendingNewSessionModel
+        ?? (currentSessionKey !== DEFAULT_SESSION_KEY
+          ? sessions.find((s) => s.key === currentSessionKey)?.model
+          : undefined);
       if (!currentSessionModel?.trim()) {
         const carryAgent = useAgentsStore.getState().agents.find(
           (agent) => agent.id === (getAgentIdFromSessionKey(currentSessionKey) ?? get().currentAgentId),
@@ -751,16 +759,17 @@ export function createSessionLifecycleActions(
       });
       // 新建即视为已读，写入已读水位；后续该会话前台完成的迟到事件不会误标未读。
       touchSessionReadAt(newKey);
-      if (currentSessionModel?.trim()) {
-        void syncSessionModelToGateway(newKey, currentSessionModel, newAgentId);
+      const syncModel = () => currentSessionModel?.trim()
+        ? syncSessionModelToGateway(newKey, currentSessionModel, newAgentId)
+        : applyWorkspaceDefaultToNewSession(newKey, newAgentId);
+      if (projectId) {
+        void import('@/stores/session-catalog').then(async ({ useSessionCatalogStore }) => {
+          await useSessionCatalogStore.getState().bindSession(newKey, projectId);
+          await syncModel();
+        });
       } else {
-        void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
+        void syncModel();
       }
-      void import('@/stores/session-catalog').then(({ useSessionCatalogStore }) => {
-        if (options?.projectId) {
-          void useSessionCatalogStore.getState().bindSession(newKey, options.projectId);
-        }
-      });
     },
 
   };

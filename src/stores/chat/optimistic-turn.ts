@@ -13,11 +13,13 @@ export function insertOptimisticUserTurn(input: {
   displayText: string;
   gatewayMessage: string;
   attachments?: SendMessageOptions['attachments'];
+  skillMeta?: SendMessageOptions['skillMeta'];
 }): RawMessage {
   const {
     attachments,
     displayText,
     gatewayMessage,
+    skillMeta,
     get,
     sessionKey,
     set,
@@ -28,6 +30,7 @@ export function insertOptimisticUserTurn(input: {
     content: displayText || (attachments?.length ? '(file attached)' : ''),
     timestamp: nowMs / 1000,
     id: crypto.randomUUID(),
+    _skillMeta: skillMeta,
     _attachedFiles: attachments?.map(a => ({
       fileName: a.fileName,
       mimeType: a.mimeType,
@@ -79,9 +82,9 @@ export function insertOptimisticUserTurn(input: {
     !sessionKey.endsWith(':main')
     && isFirstMessage
     && shouldAutoDeriveSessionLabel(sessionKey, sessionLabels, isCorruptedSessionLabel)
-    && displayText
+    && (displayText || skillMeta?.title)
   ) {
-    const normalized = normalizeDerivedSessionLabel(displayText);
+    const normalized = normalizeDerivedSessionLabel(displayText || skillMeta?.title || '');
     if (normalized) {
       set((s) => ({
         sessionLabels: {

@@ -4,7 +4,7 @@ import { getProviderAccount } from '../services/providers/provider-store';
 import type { HostApiContext } from '../api/context';
 import { listAgentsSnapshot, updateAgentModel } from './agent-config';
 
-/** Normalize raw model id to OpenClaw qualified ref (e.g. sto/qwen3.5-plus). */
+/** Normalize raw model id to OpenClaw qualified ref (e.g. sto/dashscope/qwen3.6-plus). */
 export async function qualifyChatModelRef(
   rawModel: string,
   accountId?: string,
@@ -16,6 +16,37 @@ export async function qualifyChatModelRef(
   if (!account) return trimmed;
   const providerKey = getOpenClawProviderKey(account.vendorId, account.id);
   if (trimmed.startsWith(`${providerKey}/`)) return trimmed;
+
+  const customModels = (account.metadata?.customModels as string[] | undefined) ?? [];
+  if (customModels.length > 0) {
+    const exactMatch = customModels.find((catalogId) => catalogId === trimmed);
+    if (exactMatch) {
+      return `${providerKey}/${exactMatch}`;
+    }
+
+    const qualifiedMatch = customModels.find((catalogId) => trimmed.endsWith(`/${catalogId}`));
+    if (qualifiedMatch) {
+      return `${providerKey}/${qualifiedMatch}`;
+    }
+
+    const bare = trimmed.includes('/')
+      ? trimmed.slice(trimmed.lastIndexOf('/') + 1)
+      : trimmed;
+    const bareMatch = customModels.find((catalogId) => {
+      const catalogBare = catalogId.includes('/')
+        ? catalogId.slice(catalogId.lastIndexOf('/') + 1)
+        : catalogId;
+      return catalogBare === bare;
+    });
+    if (bareMatch) {
+      return `${providerKey}/${bareMatch}`;
+    }
+  }
+
+  if (trimmed.includes('/') && account.vendorId === 'sto') {
+    return `${providerKey}/${trimmed}`;
+  }
+
   return `${providerKey}/${trimmed}`;
 }
 

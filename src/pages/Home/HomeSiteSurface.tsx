@@ -12,7 +12,7 @@ import { HomeWorkflowGuideCards } from './HomeWorkflowGuideCards';
 import { cn } from '@/lib/utils';
 import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
 
-export function HomeSiteSurface({ seedText }: { seedText?: string }) {
+export function HomeSiteSurface({ seedText, seedSkillSlug }: { seedText?: string; seedSkillSlug?: string }) {
   const showConversation = useHomeConversationActive();
   const { isSplitGridPassthrough, splitGridPassthroughClass } =
     useSplitGridPassthroughClass(showConversation);
@@ -37,6 +37,7 @@ export function HomeSiteSurface({ seedText }: { seedText?: string }) {
           <HomeMainConversation
             className="min-h-0 flex-1"
             seedText={seedText}
+            seedSkillSlug={seedSkillSlug}
             onSend={handleHubSend}
           />
         ) : (
@@ -53,6 +54,7 @@ export function HomeSiteSurface({ seedText }: { seedText?: string }) {
         <div className={homeHubFooterShellClass}>
           <HomeComposer
             seedText={seedText}
+            seedSkillSlug={seedSkillSlug}
             onSend={handleHubSend}
             placeholderKey="site.assistant.placeholder"
           />

@@ -81,9 +81,10 @@ export type {
 } from './types';
 
 function getAgentEngineType(agentId: string | undefined | null): ChatSession['engineType'] | undefined {
-  const normalizedAgentId = normalizeAgentId(agentId);
-  const lookupAgentId = getBaseAgentIdFromProjectAgentId(normalizedAgentId) ?? normalizedAgentId;
-  return useAgentsStore.getState().agents.find((agent) => normalizeAgentId(agent.id) === lookupAgentId)?.engineType;
+  const normalizedAgentId = normalizeAgentId(
+    getBaseAgentIdFromProjectAgentId(agentId ?? '') ?? agentId,
+  );
+  return useAgentsStore.getState().agents.find((agent) => normalizeAgentId(agent.id) === normalizedAgentId)?.engineType;
 }
 
 function stripAgentMemoryFromHistoryMessage(message: Parameters<typeof stripAgentMemoryMessage>[0]) {
@@ -143,16 +144,25 @@ function handleBackgroundSessionEvent(
     markUnreadAfterRun: markSessionUnreadAfterSuccessfulRun,
   })(set, event);
 }
+function getCanonicalPrefixFromSessionKey(sessionKey: string): string | null {
+  if (!sessionKey.startsWith('agent:')) return null;
+  const parts = sessionKey.split(':');
+  if (parts.length < 2) return null;
+  return `${parts[0]}:${parts[1]}`;
+}
+
 // ── Store ────────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>()(
   persist(
     (set, get) => ({
   ...initialChatDataState,
+  setPendingNewSessionModel: (model) => set({ pendingNewSessionModel: model }),
   ...createSessionLifecycleActions(set, get, {
     parseSessionUpdatedAtMs,
     scheduleSessionLabelHydrationFromStore,
     getAgentEngineType,
+    getCanonicalPrefixFromSessionKey,
   }),
 
   ...createHistoryLoadActions(set, get, {

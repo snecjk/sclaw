@@ -12,6 +12,8 @@ import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
 import type { ChatSession, SendMessageOptions, SessionRuntimeState } from './types';
 import { getSessionRuntimeState } from './session-runtime';
 import { normalizeAppError } from '@/lib/error-model';
+import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
+import { resolveSkillGatewayText } from '@/lib/skill-gateway-text';
 
 export function isUncertainDispatchError(error: unknown): boolean {
   const code = normalizeAppError(error).code;
@@ -98,9 +100,13 @@ export function createSendActions(
         runId: _runId,
         workflowContext,
         embedBrowserContext,
+        skillMeta,
       } = options;
-      const trimmed = text.trim();
-      if (!trimmed && (!attachments || attachments.length === 0)) return;
+      const userDisplayText = text.trim();
+      const gatewayText = skillMeta
+        ? resolveSkillGatewayText(resolveSkillFromPlaza(skillMeta.slug).defaultPrompt, userDisplayText)
+        : userDisplayText;
+      if (!gatewayText && (!attachments || attachments.length === 0) && !skillMeta) return;
 
       const {
         dingTalkRpcExtras,
@@ -128,12 +134,8 @@ export function createSendActions(
         return;
       }
 
-      const {
-        claudeMemorySystemPrompt,
-        displayText,
-        messageWithContext,
-      } = await prepareSendContext({
-        trimmedText: trimmed,
+      const preparedContext = await prepareSendContext({
+        trimmedText: gatewayText,
         sessionKey: currentSessionKey,
         messages: get().messages,
         workflowCardStates: get().workflowCardStates,
@@ -143,6 +145,11 @@ export function createSendActions(
         agentId: targetAgentId ?? get().currentAgentId,
         clearPendingWorkflow: get().clearPendingWorkflow,
       });
+      const {
+        claudeMemorySystemPrompt,
+        messageWithContext,
+      } = preparedContext;
+      const displayText = skillMeta ? userDisplayText : preparedContext.displayText;
       logChatFlow('send.context.prepared', {
         sessionKey: currentSessionKey,
         engineType: currentSessionEngineType,
@@ -174,6 +181,7 @@ export function createSendActions(
         displayText,
         gatewayMessage: messageWithContext,
         attachments,
+        skillMeta,
       });
       const idempotencyKey = userMsg.id || crypto.randomUUID();
       setRuntimePatch(set, currentSessionKey, {
@@ -311,7 +319,6 @@ export function createSendActions(
           'chat.abort',
           {
             sessionKey: currentSessionKey,
-            engineType: resolveEngineTypeForSession(get().sessions, currentSessionKey, get().currentAgentId),
           },
         );
       } catch (err) {

@@ -21,6 +21,14 @@ export function isStoInternalOpenClawKey(key: string): boolean {
   return false;
 }
 
+/** Legacy provider account ids superseded by the canonical `sto` account. */
+export function isLegacyStoProviderAccountId(accountId: string | undefined | null): boolean {
+  const trimmed = accountId?.trim();
+  if (!trimmed) return false;
+  if (trimmed === STO_CANONICAL_ACCOUNT_ID) return false;
+  return isStoInternalOpenClawKey(trimmed);
+}
+
 // Legacy agents.defaults.model.primary refs like custom-sto/... or sto-model-.../...
 export function isLegacyStoOpenClawModelRef(modelRef: string): boolean {
   const trimmed = modelRef.trim();

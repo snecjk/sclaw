@@ -16,6 +16,8 @@ export interface ElectronAPI {
   platform: NodeJS.Platform;
   isDev: boolean;
   appEnv: string;
+  /** Resolve the filesystem path for a dropped File (replaces removed `File.path`). */
+  getPathForFile: (file: File) => string;
 }
 
 declare global {

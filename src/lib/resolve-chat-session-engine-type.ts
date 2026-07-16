@@ -1,4 +1,11 @@
-import { resolveChatEngineType, type ChatEngineType } from '@/lib/chat-engine-resolution';
+import type { ChatEngineType } from '@/lib/chat-engine-resolution';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
+import {
+  isClaudeScheduledTaskRunSessionKey,
+  isClaudeScheduledTaskSessionKey,
+  isAnyCronSessionKey,
+  isScheduledTaskSessionKey,
+} from '@/stores/chat/cron-session-utils';
 import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
 
 export interface ResolveChatSessionEngineTypeOptions {
@@ -21,6 +28,30 @@ export function resolveChatSessionEngineType(
   sessionKey?: string,
   options?: ResolveChatSessionEngineTypeOptions,
 ): ChatEngineType {
+  // Infer from the session key prefix so task/cron sessions resolve correctly
+  // even before the run's transcript is materialized on disk — e.g. the race
+  // window right after "立即运行", where the dated aggregate session is not
+  // yet in the list and the agent fallback would otherwise mislabel a
+  // `claude-task:*` key as OpenClaw (it resolves to the `main` agent).
+  // Mirrors the key-prefix detection used by loadHistory.
+  if (sessionKey && (isClaudeScheduledTaskSessionKey(sessionKey) || isClaudeScheduledTaskRunSessionKey(sessionKey))) {
+    return 'claude';
+  }
+  // OpenClaw cron/scheduled-task session keys are inherently openclaw — claude
+  // tasks use the separate `claude-task:*` format. Inferring from the key prefix
+  // avoids mirroring the main agent's persisted (home-composer) engine for a
+  // freshly triggered `agent:*:cron:*` dated session whose entry may not yet
+  // carry an engineType.
+  if (sessionKey && (isAnyCronSessionKey(sessionKey) || isScheduledTaskSessionKey(sessionKey))) {
+    return 'openclaw';
+  }
+  if (sessionKey === DEFAULT_SESSION_KEY) {
+    return normalizeAgentEngineType(agentEngineType);
+  }
+
+  // Unused embed chat mirrors the home empty slot: toolbar shows agent default
+  // and can switch engine; send/model must use that same engine — not a leftover
+  // OpenClaw stamp from the previous non-embed session or a hard-coded persist.
   if (
     sessionKey
     && isSclawBrowserEmbedChatSessionKey(sessionKey)
@@ -29,14 +60,10 @@ export function resolveChatSessionEngineType(
     return normalizeAgentEngineType(agentEngineType);
   }
 
-  return resolveChatEngineType({
-    sessionKey,
-    sessionEngineType: session?.engineType,
-    agentEngineType,
-    defaultSessionUsesAgent: true,
-    sessionEngineFirst: true,
-    inferOpenClawTaskKeys: true,
-  });
+  if (session?.engineType === 'claude' || session?.engineType === 'openclaw') {
+    return session.engineType;
+  }
+  return normalizeAgentEngineType(agentEngineType);
 }
 
 /** Engine for a newly activated / still-empty embed conversation. */

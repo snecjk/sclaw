@@ -113,6 +113,7 @@ const PLUGINS = [
   { type: 'local', localDir: 'sto-media-understanding', pluginId: 'sto-media-understanding' },
   { type: 'local', localDir: 'sto-dingtalk-send-guard', pluginId: 'sto-dingtalk-send-guard' },
   { type: 'local', localDir: 'sto-workflow-tool', pluginId: 'sto-workflow-tool' },
+  { type: 'local', localDir: 'sto-browser-bridge', pluginId: 'sto-browser-bridge' },
 ];
 
 // Filter for excluding test files and unnecessary dirs when copying local plugins.

@@ -8,7 +8,7 @@
 
 export const PROJECT_AGENT_PREFIX = 'proj';
 const PROJECT_AGENT_SEPARATOR = '--';
-const LEGACY_UUID_PROJECT_AGENT_PATTERN = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(.+)$/i;
+const LEGACY_UUID_PROJECT_AGENT_PATTERN = /^([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})-(.+)$/i;
 
 function normalizeAgentId(value: string | undefined | null): string {
   return (value ?? '').trim().toLowerCase() || 'main';
@@ -45,10 +45,10 @@ export function parseProjectAgentId(agentId: string): { projectId: string; baseA
     projectId = inner.slice(0, separatorIndex);
     baseAgentId = inner.slice(separatorIndex + PROJECT_AGENT_SEPARATOR.length);
   } else {
-    // Backward compatibility for project agents created by the original UUID-based format.
-    const legacyMatch = inner.match(LEGACY_UUID_PROJECT_AGENT_PATTERN);
+    const legacyMatch = LEGACY_UUID_PROJECT_AGENT_PATTERN.exec(inner);
     if (!legacyMatch) return null;
-    [, projectId, baseAgentId] = legacyMatch;
+    projectId = legacyMatch[1];
+    baseAgentId = legacyMatch[2];
   }
   if (!projectId || !baseAgentId) return null;
 

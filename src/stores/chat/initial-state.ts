@@ -32,6 +32,7 @@ export const initialChatDataState: Pick<
   | 'activatingScheduledSessionAt'
   | 'showThinking'
   | 'thinkingLevel'
+  | 'pendingNewSessionModel'
   | 'workflowCardStates'
   | 'pendingWorkflow'
 > = {
@@ -63,6 +64,7 @@ export const initialChatDataState: Pick<
   activatingScheduledSessionAt: {},
   showThinking: true,
   thinkingLevel: null,
+  pendingNewSessionModel: null,
   workflowCardStates: {},
   pendingWorkflow: null,
 };

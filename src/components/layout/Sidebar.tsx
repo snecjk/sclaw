@@ -35,6 +35,7 @@ import { SidebarUpdateNotice } from '@/components/layout/sidebar-update-notice';
 import { useSettingsStore } from '@/stores/settings';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { getCurrentEnvConfig } from '../../../shared/env-config';
 import { closeSclawBrowser, isSclawBrowserOpen } from '@/lib/open-sclaw-browser';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
@@ -1665,8 +1666,8 @@ export function Sidebar() {
       if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
       if (item.to === '/data-center' && (siteDepartmentTypes === null || !isSite)) return false;
       if (item.to === '/more-apps' && (siteDepartmentTypes === null || !isSite)) return false;
-      // if (item.to === '/scheduled-tasks' && getCurrentEnvConfig().isProduction) return false;
-      // if (item.to === '/cron' && getCurrentEnvConfig().isProduction) return false;
+      if (item.to === '/scheduled-tasks' && getCurrentEnvConfig().isProduction) return false;
+      if (item.to === '/cron' && getCurrentEnvConfig().isProduction) return false;
       return true;
     });
   }, [isSite, sidebarVis.primaryMyData, siteDepartmentTypes, t]);
