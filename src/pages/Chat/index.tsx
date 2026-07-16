@@ -5,6 +5,7 @@
  * are in the toolbar; messages render with markdown + streaming.
  */
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowDown, Bot, Cpu, Orbit, Sparkles, Workflow } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useChatStore, type RawMessage } from '@/stores/chat';
@@ -48,12 +49,12 @@ import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { useBuiltinToolListener } from '@/hooks/use-builtin-tool-listener';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
-import { openMemoryCenterWorkflowDesigner } from '@/lib/memory-center-web-url';
 import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
 export function Chat() {
   useBuiltinToolListener();
+  const navigate = useNavigate();
   const { t } = useTranslation('chat');
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
@@ -411,8 +412,8 @@ export function Chat() {
   } = useChatPreviewPanel(allMessagesForPreview, currentSessionKey);
 
   const openWorkflowPreview = useCallback((workflowId: string) => {
-    openMemoryCenterWorkflowDesigner(workflowId);
-  }, []);
+    navigate(`/workflow/${encodeURIComponent(workflowId)}`);
+  }, [navigate]);
 
   const {
     open: workflowCronModalOpen,

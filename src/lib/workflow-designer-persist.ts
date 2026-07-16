@@ -5,7 +5,7 @@
 import { definitionToSavePayload } from '@/lib/workflow-designer-adapter';
 import { createWorkflow, getStartupSchema, listWorkflowTemplates, saveWorkflowDefinition } from '@/lib/workflow-api';
 import { buildStartupPreset } from '@/lib/workflow-form-utils';
-import type { WorkflowDefinition } from '@/types/workflow-definition';
+import type { WorkflowDefinition } from '@/pages/WorkflowDesigner/types';
 import type { WorkflowSchema, WorkflowTemplateSearchItem } from '@/types/workflow';
 
 const DESIGNER_TEMPLATE_ID_HINTS = ['blank', 'designer', 'empty', 'custom'];

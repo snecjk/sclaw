@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { syncClaudeSkillsForAgent } from '../services/claude-skill-bridge';
-import { getDefaultProviderAccountId, getProviderAccount } from '../services/providers/provider-store';
+import { getProviderAccount } from '../services/providers/provider-store';
 import { applyStoClaudeInferenceEnv } from '../services/sto-claude-inference-env';
 import { getAgentPreferredModel, getAgentWorkspacePath } from '../utils/agent-config';
 import { logger } from '../utils/logger';
@@ -17,6 +17,7 @@ import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEn
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EngineSessionSummary } from './types';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ImageBlockParam, MessageParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
+import { resolveAvailableClaudeModel } from './claude-model-selection';
 
 /**
  * Minimal event sink used to forward Claude streaming events to the renderer.
@@ -119,23 +120,24 @@ async function resolveClaudeLaunchSelection(
 ): Promise<{ model?: string; provider?: string; accountId?: string }> {
   const preferredModel = await getAgentPreferredModel(agentId);
   // Session-level override wins when the user switched models inside an active dialog.
-  let model = existing?.model ?? preferredModel.model;
-  let accountId = existing?.accountId ?? preferredModel.accountId;
-
-  if (!accountId) {
-    accountId = await getDefaultProviderAccountId();
+  const requestedModel = existing?.model ?? preferredModel.model;
+  const requestedAccountId = existing?.accountId ?? preferredModel.accountId;
+  const selection = await resolveAvailableClaudeModel({ requestedModel, requestedAccountId });
+  const account = await getProviderAccount(selection.accountId);
+  if (selection.fallbackApplied) {
+    logger.warn('[claude-adapter] Stored/preferred model is unavailable; using fallback', {
+      agentId,
+      requestedModel,
+      requestedAccountId,
+      fallbackModel: selection.model,
+      fallbackAccountId: selection.accountId,
+    });
   }
-
-  let provider: string | undefined;
-  if (accountId) {
-    const account = await getProviderAccount(accountId);
-    provider = existing?.provider ?? account?.vendorId ?? undefined;
-    if (!model && account?.model) {
-      model = account.model;
-    }
-  }
-
-  return { model, provider, accountId };
+  return {
+    model: selection.model,
+    provider: account?.vendorId ?? existing?.provider,
+    accountId: selection.accountId,
+  };
 }
 
 /**

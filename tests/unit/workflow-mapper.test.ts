@@ -3,7 +3,7 @@ import {
   deriveWorkflowListKind,
   mapWorkflowSummaryToCardItem,
   pickCoverKeyFromWorkflowId,
-} from '@/lib/workflow-list-mapper';
+} from '@/pages/Workflow/workflow-mapper';
 import type { WorkflowSummary } from '../../shared/workflow-api';
 import { asWorkflowId } from '../../shared/workflow-api';
 

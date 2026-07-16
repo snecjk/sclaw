@@ -1,4 +1,4 @@
-import type { WorkflowDefinition } from '@/types/workflow-definition';
+import type { WorkflowDefinition } from '@/pages/WorkflowDesigner/types';
 import type { WorkflowDetailResponse } from '@/types/workflow';
 
 export function definitionToSavePayload(workflow: WorkflowDefinition): WorkflowDefinition {

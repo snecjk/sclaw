@@ -4,7 +4,7 @@
  */
 import { hostApiFetch } from '@/lib/host-api';
 import { getWorkflowStoToken } from '@/lib/workflow-api';
-import type { WorkflowDefinition } from '@/types/workflow-definition';
+import type { WorkflowDefinition } from '@/pages/WorkflowDesigner/types';
 
 export interface WorkflowStudioTemplate {
   id: string;

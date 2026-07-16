@@ -1306,6 +1306,22 @@ export const chatProcessTitleRowClass = cn(
 );
 
 /**
+ * 工作流编辑器：抵消 main 内距，占满主区可视高度（TitleBar + main py 合计）。
+ */
+export const workflowBuilderShell = cn(
+  '-mx-[var(--sto-content-pad-x)] -mt-5 flex min-h-0 min-w-0 flex-col',
+  stoPageFillBelowTitleClass,
+);
+
+/**
+ * MC iframe 工作流编辑：顶栏由 useWorkflowEditorContentHeader 注入 ContentHeader；
+ * 仅抵消水平 main 内距，iframe 占满 ContentHeader 下方剩余高度。
+ */
+export const workflowMcEditorShell = cn(
+  '-mx-[var(--sto-content-pad-x)] flex min-h-0 min-w-0 flex-1 flex-col',
+);
+
+/**
  * 侧栏文字色 — MasterGo 8:46454「调整标题颜色+任务icon」（MCP goto/U0JBJlCx）。
  * 规范见 `.cursor/rules/02-styles.mdc` §侧栏文字色。
  */

@@ -1,0 +1,309 @@
+import { MoreHorizontal, Route } from 'lucide-react';
+import { Fragment, type ReactNode, type RefObject } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  workflowListCardBodyClass,
+  workflowListCardCoverClass,
+  workflowListCardCoverWrapClass,
+  workflowListCardFooterClass,
+  workflowListCardFlowBlockClass,
+  workflowListCardFlowSepClass,
+  workflowListCardFlowStepClass,
+  workflowListCardFlowStepsClass,
+  workflowListCardFlowTitleClass,
+  workflowListCardGridClass,
+  workflowListCardHeadClass,
+  workflowListCardMainClass,
+  workflowListCardMenuClass,
+  workflowListCardMenuItemClass,
+  workflowListCardMoreActionClass,
+  workflowListCardPrimaryActionClass,
+  workflowListCardSecondaryActionClass,
+  workflowListCardShellClass,
+  workflowListCardTitleRowClass,
+} from '@/lib/surfaces';
+import { cn } from '@/lib/utils';
+import { WorkflowCardCover } from '@/pages/Workflow/components/workflow-card-cover';
+import type {
+  OfficialWorkflowCard,
+  WorkflowCardItem,
+  WorkflowCoverKey,
+} from '@/pages/Workflow/types';
+
+interface WorkflowCardShellProps {
+  id: string;
+  coverKey: WorkflowCoverKey;
+  dimmed?: boolean;
+  onCardClick?: () => void;
+  children: ReactNode;
+}
+
+/** 流程节点路径行（卡片底部的 flow[] 渲染） */
+function WorkflowFlowRow({ flow }: { flow: string[] }) {
+  const { t } = useTranslation('workflow');
+  return (
+    <div className={workflowListCardFlowBlockClass}>
+      <div className={workflowListCardFlowTitleClass}>
+        <Route className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        {t('card.flow')}
+      </div>
+      <div className={workflowListCardFlowStepsClass}>
+        {flow.map((step, i) => (
+          <Fragment key={step}>
+            {i > 0 ? (
+              <span className={workflowListCardFlowSepClass} aria-hidden>
+                ›
+              </span>
+            ) : null}
+            <span className={workflowListCardFlowStepClass}>{step}</span>
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 卡片通用外壳：头图 + body 区域，点击整体触发 onCardClick */
+function WorkflowCardShell({
+  id,
+  coverKey,
+  dimmed,
+  onCardClick,
+  children,
+}: WorkflowCardShellProps) {
+  return (
+    <article
+      data-workflow-id={id}
+      className={cn(workflowListCardShellClass, dimmed && 'opacity-[0.82]')}
+      onClick={(e) => {
+        // if ((e.target as HTMLElement).closest('button, [role="switch"]')) return;
+        if ((e.target as HTMLElement).closest('button')) return;
+        onCardClick?.();
+      }}
+    >
+      <div className={workflowListCardCoverWrapClass}>
+        <WorkflowCardCover coverKey={coverKey} className={workflowListCardCoverClass} />
+      </div>
+      <div className={workflowListCardBodyClass}>{children}</div>
+    </article>
+  );
+}
+
+export interface WorkflowMineListCardProps {
+  card: WorkflowCardItem;
+  isRenaming: boolean;
+  renameRef?: RefObject<HTMLInputElement | null>;
+  onRenameCommit: (name: string) => void;
+  onCardClick?: () => void;
+  onRun: () => void;
+  onEdit: () => void;
+  onRenameRequest: () => void;
+  onDeleteRequest: () => void;
+  isRenameDisabled?: boolean;
+  isDeleteDisabled?: boolean;
+}
+
+/** 「我的工作流」卡片：标题+开关+排期+描述+流程+操作按钮 */
+export function WorkflowMineListCard({
+  card,
+  isRenaming,
+  renameRef,
+  onRenameCommit,
+  onCardClick,
+  onRun,
+  onEdit,
+  onRenameRequest,
+  onDeleteRequest,
+  isRenameDisabled = false,
+  isDeleteDisabled = false,
+}: WorkflowMineListCardProps) {
+  const { t } = useTranslation('workflow');
+
+  return (
+    <WorkflowCardShell
+      id={card.id}
+      coverKey={card.coverKey}
+      dimmed={!card.enabled}
+      onCardClick={onCardClick}
+    >
+      <div className={workflowListCardMainClass}>
+        <div className={workflowListCardHeadClass}>
+          <div className={workflowListCardTitleRowClass}>
+            <div className="min-w-0 flex-1 text-[15px] font-semibold text-foreground">
+              {isRenaming ? (
+                <input
+                  ref={renameRef}
+                  defaultValue={card.name}
+                  className="w-full rounded-md border border-primary/30 px-2 py-0.5 text-[15px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={(e) => e.stopPropagation()}
+                  onBlur={(e) => onRenameCommit(e.target.value.trim() || card.name)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                  }}
+                />
+              ) : (
+                <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  {card.name}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <p className="m-0 text-[13px] leading-relaxed text-foreground/80">{card.description}</p>
+        {card.flow.length > 0 ? <WorkflowFlowRow flow={card.flow} /> : null}
+      </div>
+
+      <div className={cn(workflowListCardFooterClass, 'flex items-center justify-between gap-2')}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className={workflowListCardMoreActionClass}
+              aria-label={t('card.more')}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreHorizontal className="h-4 w-4" aria-hidden />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            side="top"
+            align="start"
+            sideOffset={8}
+            collisionPadding={8}
+            className={cn(
+              workflowListCardMenuClass,
+              'z-[10041] w-[200px] data-[state=closed]:pointer-events-none'
+            )}
+            onCloseAutoFocus={(e) => e.preventDefault()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <DropdownMenuItem
+              className={workflowListCardMenuItemClass}
+              disabled={isRenameDisabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRenameRequest();
+              }}
+            >
+              {t('card.rename')}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className={cn(
+                workflowListCardMenuItemClass,
+                'text-destructive focus:bg-destructive/10 focus:text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive',
+              )}
+              disabled={isDeleteDisabled}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteRequest();
+              }}
+            >
+              {t('card.delete')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className={workflowListCardSecondaryActionClass}
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+          >
+            {t('card.edit')}
+          </button>
+          <button
+            type="button"
+            className={workflowListCardPrimaryActionClass}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRun();
+            }}
+          >
+            {t('card.run')}
+          </button>
+        </div>
+      </div>
+    </WorkflowCardShell>
+  );
+}
+
+export interface WorkflowOfficialListCardProps {
+  card: OfficialWorkflowCard;
+  onCardClick?: () => void;
+  // TODO: 预览/详情弹窗暂不启用
+  // onPreview: () => void;
+  onInstall: () => void;
+}
+
+/** 「官方推荐」卡片：标题+排期+描述+分类标签+预览/安装（流程节点待接口就绪后接入） */
+export function WorkflowOfficialListCard({
+  card,
+  onCardClick,
+  // TODO: 预览/详情弹窗暂不启用
+  // onPreview,
+  onInstall,
+}: WorkflowOfficialListCardProps) {
+  const { t } = useTranslation('workflow');
+
+  return (
+    <WorkflowCardShell id={card.id} coverKey={card.coverKey} onCardClick={onCardClick}>
+      <div className={workflowListCardMainClass}>
+        <div className={workflowListCardHeadClass}>
+          <div className={workflowListCardTitleRowClass}>
+            <div className="min-w-0 flex-1 text-[15px] font-semibold text-foreground">
+              {card.name}
+            </div>
+          </div>
+        </div>
+        <p className="m-0 text-[13px] leading-relaxed text-foreground/80">{card.description}</p>
+        {/* TODO: POST /agent/v1/workflow-templates 节点摘要未就绪，card.flow 暂为空；接口稳定后恢复 WorkflowFlowRow */}
+        {/* {card.flow.length > 0 ? <WorkflowFlowRow flow={card.flow} /> : null} */}
+      </div>
+      <div
+        className={cn(workflowListCardFooterClass, 'flex flex-wrap items-center justify-end gap-2')}
+      >
+        {card.category ? (
+          <span className="mr-auto rounded-lg bg-muted px-2 py-0.5 text-xs text-foreground/80">
+            {card.category}
+          </span>
+        ) : null}
+        {/* <button
+          type="button"
+          className={workflowListCardSecondaryActionClass}
+          onClick={(e) => {
+            e.stopPropagation();
+            onPreview();
+          }}
+        >
+          {t('card.preview')}
+        </button> */}
+        <button
+          type="button"
+          className={workflowListCardPrimaryActionClass}
+          onClick={(e) => {
+            e.stopPropagation();
+            onInstall();
+          }}
+        >
+          {t('card.install')}
+        </button>
+      </div>
+    </WorkflowCardShell>
+  );
+}
+
+/** 我的工作流 / 官方推荐共用的卡片网格容器 */
+export function WorkflowListCardGrid({ children }: { children: ReactNode }) {
+  return <div className={workflowListCardGridClass}>{children}</div>;
+}

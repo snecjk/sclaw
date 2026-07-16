@@ -1,9 +1,11 @@
-import type { WorkflowCardItem, OfficialWorkflowCard, WorkflowCoverKey, WorkflowMineListKind } from '@/types/workflow-list';
-import type { WorkflowSummary, WorkflowTemplateMineItem, WorkflowTemplateScope } from '../../shared/workflow-api';
-import { asWorkflowId } from '../../shared/workflow-api';
+/** 工作流 API 响应 → 前端 UI 卡片模型的映射层 */
+import type { WorkflowCardItem, OfficialWorkflowCard, WorkflowCoverKey, WorkflowMineListKind } from '@/pages/Workflow/types';
+import type { WorkflowSummary, WorkflowTemplateMineItem, WorkflowTemplateScope } from '../../../shared/workflow-api';
+import { asWorkflowId } from '../../../shared/workflow-api';
 
 const COVER_KEYS: WorkflowCoverKey[] = ['cover-1', 'cover-2', 'cover-3', 'cover-4', 'cover-5'];
 
+/** 按 workflow id 稳定映射头图，避免列表刷新闪烁 */
 export function pickCoverKeyFromWorkflowId(id: string): WorkflowCoverKey {
   let hash = 0;
   for (let i = 0; i < id.length; i += 1) {
@@ -12,15 +14,24 @@ export function pickCoverKeyFromWorkflowId(id: string): WorkflowCoverKey {
   return COVER_KEYS[hash % COVER_KEYS.length];
 }
 
+/** 从 API 状态字段推导「我的工作流」二级 Tab */
 export function deriveWorkflowListKind(summary: WorkflowSummary): WorkflowMineListKind {
-  return summary.lifecycleStatus === 'active' ? 'published' : 'draft';
+  if (summary.lifecycleStatus === 'draft') {
+    return 'draft';
+  }
+  if (summary.lifecycleStatus === 'active') {
+    return 'published';
+  }
+  return 'draft';
 }
 
+/** 将分页 API 摘要映射为列表卡片模型（缺失字段用占位） */
 export function mapWorkflowSummaryToCardItem(
   summary: WorkflowSummary,
   t: (key: string) => string,
 ): WorkflowCardItem {
   const listKind = deriveWorkflowListKind(summary);
+
   return {
     id: asWorkflowId(summary.id),
     name: summary.name,
@@ -33,6 +44,7 @@ export function mapWorkflowSummaryToCardItem(
   };
 }
 
+/** 将原始 JSON 对象安全解析为 WorkflowSummary（字段缺失时用默认值兜底） */
 export function parseWorkflowSummary(raw: Record<string, unknown>): WorkflowSummary {
   return {
     id: asWorkflowId(String(raw.id ?? '')),
@@ -48,6 +60,7 @@ export function parseWorkflowSummary(raw: Record<string, unknown>): WorkflowSumm
   };
 }
 
+/** @api docs/api-contracts/workflows/template-mine.md */
 export function parseTemplateMineItem(raw: Record<string, unknown>): WorkflowTemplateMineItem {
   return {
     id: String(raw.id ?? ''),
@@ -64,6 +77,7 @@ export function parseTemplateMineItem(raw: Record<string, unknown>): WorkflowTem
   };
 }
 
+/** @api docs/api-contracts/workflows/template-mine.md — scope=system 映射为官方推荐卡片 */
 export function mapTemplateMineItemToOfficialCard(
   item: WorkflowTemplateMineItem,
 ): OfficialWorkflowCard {
@@ -72,24 +86,27 @@ export function mapTemplateMineItemToOfficialCard(
     name: item.label,
     category: item.category ?? '',
     description: item.description ?? '',
-    flow: item.nodes.map((node) => String(node.label ?? node.type ?? '')),
+    flow: item.nodes.map((n: Record<string, unknown>) => String(n.label ?? n.type ?? '')),
     coverKey: pickCoverKeyFromWorkflowId(item.id),
   };
 }
 
+/** @api docs/api-contracts/workflows/template-mine.md */
 export function mapTemplateMineItemToCardItem(
   item: WorkflowTemplateMineItem,
   t: (key: string) => string,
 ): WorkflowCardItem {
   const isSystem = item.scope === 'system';
+  const listKind: WorkflowMineListKind = isSystem ? 'published' : 'draft';
+
   return {
     id: item.id,
     name: item.label,
-    listKind: isSystem ? 'published' : 'draft',
+    listKind,
     enabled: isSystem,
     description: item.description ?? t('card.noDescription'),
     coverKey: pickCoverKeyFromWorkflowId(item.id),
-    flow: item.nodes.map((node) => String(node.label ?? node.type ?? '')),
+    flow: item.nodes.map((n: Record<string, unknown>) => String(n.label ?? n.type ?? '')),
     neverRun: item.updatedAt === null,
   };
 }

@@ -1,4 +1,5 @@
-/** Agent workflow definition aligned with the memory-center API. */
+/** Agent workflow definition — aligned with memory-center-web */
+
 export type WorkflowNode = {
   id: string;
   type: string;
@@ -24,4 +25,22 @@ export type WorkflowDefinition = {
   description?: string;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
+};
+
+export type CanvasNodeData = {
+  id: string;
+  name: string;
+  kind: string;
+  subtitle: string;
+  summary?: string;
+  status: string;
+};
+
+export type CanvasNodeView = {
+  id: string;
+  type: string;
+  name: string;
+  subtitle: string;
+  x: number;
+  y: number;
 };
