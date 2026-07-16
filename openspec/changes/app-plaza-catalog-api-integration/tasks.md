@@ -11,9 +11,9 @@
 
 ## 3. Banner 整图接入
 
-- [ ] 3.1 将当前 `MARKET_HERO_SLIDES` 的 theme/stats/结构化预览渲染替换为 `/banners` 返回的 `imageUrl` 整图轮播，保留现有容器、圆角、阴影和轮播圆点（Requirement: Banner 使用服务端整图内容）
-- [ ] 3.2 实现 Banner 目标行为：URL 打开 `targetUrl`、NONE 不跳转、APP 仅在已加载 APP 可解析时打开，无法解析时不得猜测 URL（Requirement: Banner 使用服务端整图内容）
-- [ ] 3.3 增加无 Banner、单 Banner、多 Banner、图片加载失败及请求失败的展示处理，不使用静态模拟 Banner 兜底（Requirement: Banner 使用服务端整图内容；Requirement: 三块内容经 Main 代理且独立降级）
+- [x] 3.1 将当前 `MARKET_HERO_SLIDES` 的 theme/stats/结构化预览渲染替换为 `/banners` 返回的 `imageUrl` 整图轮播，保留现有容器、圆角、阴影和轮播圆点（Requirement: Banner 使用服务端整图内容）
+- [x] 3.2 实现 Banner 目标行为：URL 打开 `targetUrl`、NONE 不跳转、APP 仅在已加载 APP 可解析时打开，无法解析时不得猜测 URL（Requirement: Banner 使用服务端整图内容）
+- [x] 3.3 增加无 Banner、单 Banner、多 Banner、图片加载失败及请求失败的展示处理，不使用静态模拟 Banner 兜底（Requirement: Banner 使用服务端整图内容；Requirement: 三块内容经 Main 代理且独立降级）
 
 ## 4. 分类与 APP 列表接入
 

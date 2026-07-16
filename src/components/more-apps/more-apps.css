@@ -515,6 +515,130 @@
   background: #1a73e8;
 }
 
+/* ── Banner 整图 carousel (server-driven images) ── */
+
+.page-more-apps .app-market__hero-banner {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 5;
+  min-height: 120px;
+  margin-bottom: 0;
+  padding: 0;
+  border-radius: 20px;
+  border: 1px solid rgba(26, 115, 232, 0.14);
+  background: linear-gradient(135deg, #d6e8ff 0%, #c8ddff 42%, #e0edff 100%);
+  box-shadow: 0 8px 24px rgba(26, 115, 232, 0.1);
+  overflow: hidden;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: default;
+  appearance: none;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.page-more-apps .app-market__hero-banner--clickable {
+  cursor: pointer;
+}
+
+.page-more-apps .app-market__hero-banner--clickable:hover {
+  box-shadow: 0 10px 28px rgba(26, 115, 232, 0.14);
+}
+
+.page-more-apps .app-market__hero-banner--clickable:focus-visible {
+  outline: 2px solid rgba(255, 103, 0, 0.65);
+  outline-offset: 2px;
+}
+
+.page-more-apps .app-market__hero-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.page-more-apps .app-market__hero-image-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 16px;
+  text-align: center;
+}
+
+.page-more-apps .app-market__hero-image-fallback-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(26, 26, 26, 0.55);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Banner loading skeleton */
+.page-more-apps .app-market__hero-carousel--loading .app-market__hero-skeleton {
+  width: 100%;
+  aspect-ratio: 16 / 5;
+  min-height: 120px;
+  border-radius: 20px;
+  border: 1px solid rgba(26, 115, 232, 0.1);
+  background: linear-gradient(90deg, #eef2f7 25%, #e2e8f0 50%, #eef2f7 75%);
+  background-size: 200% 100%;
+  animation: ma-hero-skeleton 1.4s ease-in-out infinite;
+}
+
+@keyframes ma-hero-skeleton {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Banner request failure — retry row (no mock image fallback) */
+.page-more-apps .app-market__hero-carousel--error .app-market__hero-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  aspect-ratio: 16 / 5;
+  min-height: 120px;
+  padding: 16px;
+  border-radius: 20px;
+  border: 1px solid rgba(26, 115, 232, 0.14);
+  background: #f8fbff;
+}
+
+.page-more-apps .app-market__hero-error-text {
+  font-size: 14px;
+  color: rgba(26, 26, 26, 0.6);
+}
+
+.page-more-apps .app-market__hero-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 0 16px;
+  border: 1px solid rgba(26, 115, 232, 0.2);
+  border-radius: 999px;
+  background: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a73e8;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.page-more-apps .app-market__hero-retry:hover {
+  background: #f3f8ff;
+  box-shadow: 0 2px 8px rgba(26, 115, 232, 0.12);
+}
+
 /* ── Category filters ── */
 
 .page-more-apps .app-market__cats {
