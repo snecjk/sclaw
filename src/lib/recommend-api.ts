@@ -1,7 +1,7 @@
 /**
  * 推荐位配置 API Client
  *
- * 对接 FastAPI: GET /fastapi/agent/v1/recommend/positions/{position_key}/items
+ * 对接 aiMemory: GET /ai-memory/agent/v1/recommend/positions/{position_key}/items
  * 返回当前用户在指定推荐位下可见的条目（enrich + 失效过滤）。
  */
 import { hostApiFetch } from '@/lib/host-api';
@@ -53,7 +53,7 @@ export async function fetchRecommendItems(
   positionKey: RecommendPositionKey,
 ): Promise<RecommendItem[]> {
   const res = await hostApiFetch<RecommendItemsResponse>(
-    `/fastapi/agent/v1/recommend/positions/${positionKey}/items`,
+    `/ai-memory/agent/v1/recommend/positions/${positionKey}/items`,
     { method: 'GET' },
   );
   if (!res.success || !res.data) {

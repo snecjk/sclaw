@@ -2,6 +2,7 @@
  * 首页 Agent Hub Surface：Hero + 能力卡片 + 底部输入。
  * 有推荐位数据时展示推荐卡片，无数据时降级展示静态 AGENT_HUB_CARDS。
  */
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
@@ -17,6 +18,7 @@ import { StaticFallbackCards } from './agent-hub-static-cards';
 import { useRecommendItems } from '@/hooks/use-recommend-items';
 import { RECOMMEND_POSITION_KEYS, type RecommendItem } from '@/lib/recommend-api';
 import { navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
+import { useLatestWorkflowsByTemplates } from '@/hooks/use-latest-workflows-by-templates';
 import {
   homeHubCardGridClass,
   homeHubFooterShellClass,
@@ -37,6 +39,31 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
   );
 
   const { skillStatusMap, loading: skillStatusLoading, refreshingSlugs, handleRefresh: handleSkillStatusRefresh } = useHomeRecommendSkillStatus(recommendItems);
+
+  // 批量查询各模版当前用户最近实例：有实例的模版项替换为实例项（保留推荐位策划的标题/描述/图标，
+  // 仅将 item_type/item_ref_id 指向实例），点击分发逻辑保持不变。
+  const templateIds = useMemo(
+    () => recommendItems.filter((i) => i.item_type === 'workflow_template').map((i) => i.item_ref_id),
+    [recommendItems],
+  );
+  const { data: latestByTemplate, loading: latestLoading } = useLatestWorkflowsByTemplates(templateIds);
+
+  // displayItems：模版项存在实例时替换为实例项；key 始终用原始模版 id 以保证 refetch 后稳定 reconcile。
+  const displayItems = useMemo(() => {
+    return recommendItems.map((item) => {
+      if (item.item_type !== 'workflow_template') return { key: item.item_ref_id, item };
+      const latest = latestByTemplate.get(item.item_ref_id) ?? null;
+      if (!latest) return { key: item.item_ref_id, item };
+      const replaced: RecommendItem = {
+        ...item,
+        item_type: 'workflow_instance',
+        item_ref_id: latest.id,
+        title: latest.name || item.title,
+        description: latest.description ?? item.description,
+      };
+      return { key: item.item_ref_id, item: replaced };
+    });
+  }, [recommendItems, latestByTemplate]);
 
   /** 推荐卡片点击：按 item_type 分发 */
   const handleRecommendClick = (item: RecommendItem) => {
@@ -89,14 +116,14 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
               <HomeHero />
 
               <div className={homeHubCardGridClass}>
-                {recommendLoading ? (
+                {recommendLoading || latestLoading ? (
                   <RecommendCardSkeletonGrid />
                 ) : recommendItems.length > 0 ? (
-                  recommendItems.map((item) => {
+                  displayItems.map(({ key, item }) => {
                     const skillSlug = item.skill_slug || item.item_ref_id;
                     return (
                       <RecommendCard
-                        key={item.item_ref_id}
+                        key={key}
                         item={item}
                         onClick={() => handleRecommendClick(item)}
                         onSkillInstalled={() => {

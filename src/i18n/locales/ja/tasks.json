@@ -100,7 +100,11 @@
     "templateModal": {
       "title": "ワークフローを選択",
       "subtitle": "ワークフローを選んで定期タスクをすばやく作成",
-      "empty": "利用可能なワークフローがありません"
+      "empty": "利用可能なワークフローがありません",
+      "instantiating": "作成中…",
+      "openExisting": "編集を続ける",
+      "createNew": "新規",
+      "existingBadge": "既存あり"
     },
     "empty": {
       "searchNoMatch": "一致するタスクが見つかりません",

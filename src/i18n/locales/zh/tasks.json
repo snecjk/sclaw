@@ -100,7 +100,11 @@
     "templateModal": {
       "title": "选择工作流",
       "subtitle": "选择一个工作流快速创建定时任务",
-      "empty": "暂无可用工作流"
+      "empty": "暂无可用工作流",
+      "instantiating": "实例化中…",
+      "openExisting": "继续编排",
+      "createNew": "新建",
+      "existingBadge": "已有实例"
     },
     "empty": {
       "searchNoMatch": "未找到匹配的任务",

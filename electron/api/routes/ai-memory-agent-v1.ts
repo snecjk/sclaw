@@ -1,11 +1,11 @@
 /**
- * FastAPI Agent V1 通用透传代理
+ * AI Memory Agent V1 通用透传代理
  *
- * 前端直接写完整路径 /fastapi/agent/v1/xxx，
+ * 前端直接写完整路径 /ai-memory/agent/v1/xxx，
  * Electron 将请求透传至 Python 后端（memory-center）。
- * 后续新增 /fastapi/agent/v1 下的接口无需再改 Node 层。
+ * 后续新增 /ai-memory/agent/v1 下的接口无需再改 Node 层。
  *
- * 路径映射：/fastapi/agent/v1/{rest} → {sto_base_url}/agent/v1/{rest}
+ * 路径映射：/ai-memory/agent/v1/{rest} → {sto_base_url}/agent/v1/{rest}
  */
 
 import type { IncomingMessage, ServerResponse } from 'http';
@@ -25,16 +25,16 @@ function readRawBody(req: IncomingMessage): Promise<Buffer> {
   });
 }
 
-export async function handleFastApiAgentV1Routes(
+export async function handleAiMemoryAgentV1Routes(
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
   _ctx: HostApiContext,
 ): Promise<boolean> {
-	console.log(`[FastApiAgentV1Proxy] ${req.method} ${url.pathname}${url.search}`);
-  if (!url.pathname.startsWith('/fastapi/agent/v1')) return false;
+	console.log(`[AiMemoryAgentV1Proxy] ${req.method} ${url.pathname}${url.search}`);
+  if (!url.pathname.startsWith('/ai-memory/agent/v1')) return false;
 
-  const backendPath = url.pathname.replace('/fastapi/agent/v1', '/agent/v1');
+  const backendPath = url.pathname.replace('/ai-memory/agent/v1', '/agent/v1');
 
   try {
     const token = await getStoToken();
@@ -44,11 +44,14 @@ export async function handleFastApiAgentV1Routes(
     const targetUrl = `${baseUrl}${backendPath}${url.search}`;
     const headers: Record<string, string> = {
       ...buildStoMemoryCenterAuthHeaders(token),
-      'Content-Type': req.headers['content-type'] || 'application/json',
+      // 写死 application/json：该代理仅转发 /ai-memory/agent/v1 下的 JSON 接口，
+      // 不信任上游（net.fetch 对字符串 body 会默认塞 text/plain）传入的 content-type，
+      // 否则后端 FastAPI 不按 JSON 解析 body → Pydantic 422。
+      'Content-Type': 'application/json',
     };
 
     const rawBody = await readRawBody(req);
-    logger.info(`[FastApiAgentV1Proxy] >>> ${req.method} ${targetUrl}`);
+    logger.info(`[AiMemoryAgentV1Proxy] >>> ${req.method} ${targetUrl}`);
 
     const backendRes = await fetch(targetUrl, {
       method: req.method || 'GET',
@@ -57,7 +60,7 @@ export async function handleFastApiAgentV1Routes(
     });
 
     const text = await backendRes.text();
-    logger.info(`[FastApiAgentV1Proxy] <<< ${req.method} ${targetUrl} status=${backendRes.status}`);
+    logger.info(`[AiMemoryAgentV1Proxy] <<< ${req.method} ${targetUrl} status=${backendRes.status}`);
 
     let json: unknown;
     try {
@@ -65,9 +68,11 @@ export async function handleFastApiAgentV1Routes(
     } catch {
       json = { error: text };
     }
+		logger.info(`[AiMemoryAgentV1Proxy] <<< ${req.method} ${url} json=${JSON.stringify(json)}`);
     sendJson(res, backendRes.status, json);
   } catch (error) {
     const message = String(error);
+		logger.info(`[AiMemoryAgentV1Proxy] <<< ${req.method} ${url} error=${message}`);
     if (message.includes('401') || message.includes('未登录')) {
       sendJson(res, 401, { success: false, error: message });
     } else {

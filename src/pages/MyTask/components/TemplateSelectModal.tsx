@@ -1,12 +1,16 @@
 /**
  * TemplateSelectModal 组件
- * 工作流选择弹窗：展示官方推荐工作流卡片，点击后打开 TaskCreateModal 并预填工作流
+ * 工作流选择弹窗：展示官方推荐工作流卡片。
+ * - 点击「添加」：先将模版实例化为工作流实例，再回调父级用实例 id 打开 TaskCreateModal 创建定时任务。
  */
 
+import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { toast } from 'sonner';
 import { myTaskEmptyTemplateCardClass, myTaskEmptyTemplateAddButtonClass } from '@/lib/surfaces';
+import { instantiateWorkflowFromTemplate } from '../lib/instantiate-workflow';
 import type { OfficialWorkflowCard } from '@/pages/Workflow/types';
 
 interface TemplateSelectModalProps {
@@ -16,17 +20,34 @@ interface TemplateSelectModalProps {
   onClose: () => void;
   /** 官方推荐工作流列表 */
   officialCards: OfficialWorkflowCard[];
-  /** 选择工作流回调：关闭弹窗并打开 TaskCreateModal 预填工作流 */
-  onSelect?: (card: OfficialWorkflowCard) => void;
+  /** 实例化成功回调：父级用实例 id + 模版名打开 TaskCreateModal 创建定时任务 */
+  onInstantiated?: (instanceId: string, templateName: string) => void;
 }
 
 export function TemplateSelectModal({
   open,
   onClose,
   officialCards,
-  onSelect,
+  onInstantiated,
 }: TemplateSelectModalProps) {
   const { t } = useTranslation('tasks');
+  const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
+
+  const handleSelect = useCallback(
+    async (card: OfficialWorkflowCard) => {
+      setLoadingCardId(card.id);
+      try {
+        const instanceId = await instantiateWorkflowFromTemplate(card.id);
+        onInstantiated?.(instanceId, card.name);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        toast.error(`工作流实例化失败: ${message}`);
+      } finally {
+        setLoadingCardId(null);
+      }
+    },
+    [onInstantiated],
+  );
 
   return (
     <AnimatePresence>
@@ -79,7 +100,9 @@ export function TemplateSelectModal({
                   aria-label={t('myTask.empty.officialAria')}
                   className="grid grid-cols-1 gap-[clamp(12px,1.4vw,16px)] sm:grid-cols-2 lg:grid-cols-3"
                 >
-                  {officialCards.map((card) => (
+                  {officialCards.map((card) => {
+                    const isLoading = loadingCardId === card.id;
+                    return (
                     <article key={card.id} role="listitem" className={myTaskEmptyTemplateCardClass}>
                       <div className="mb-2 flex items-start gap-2">
                         <svg
@@ -105,14 +128,20 @@ export function TemplateSelectModal({
                       <div className="mt-auto flex items-center justify-end gap-3 border-t border-border pt-2.5 text-xs">
                         <button
                           type="button"
-                          onClick={() => onSelect?.(card)}
+                          onClick={() => handleSelect(card)}
+                          disabled={isLoading}
                           className={myTaskEmptyTemplateAddButtonClass}
-                       >
-                          {t('myTask.empty.addTemplate')}
+                        >
+                          {isLoading ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                          ) : (
+                            t('myTask.empty.addTemplate')
+                          )}
                         </button>
                       </div>
                     </article>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

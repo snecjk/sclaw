@@ -185,7 +185,7 @@ export default function MyTask() {
   const officialCards: OfficialWorkflowCard[] = useMemo(
     () =>
       recommendItems
-        .filter((item) => item.item_type === 'workflow_instance')
+        .filter((item) => item.item_type === 'workflow_template')
         .map((item) => ({
           id: item.item_ref_id,
           name: item.title,
@@ -442,13 +442,16 @@ export default function MyTask() {
     })();
   }, [deleteTarget, deleteJob, t]);
 
-  const handleTemplateSelect = useCallback((card: OfficialWorkflowCard) => {
-    setTemplateOpen(false);
-    setEditingJob(null);
-    setSelectedWorkflowCode(card.id);
-    setSelectedTemplateName(card.name);
-    setCreateOpen(true);
-  }, []);
+  const handleTemplateSelect = useCallback(
+    (instanceId: string, templateName: string) => {
+      setTemplateOpen(false);
+      setEditingJob(null);
+      setSelectedWorkflowCode(instanceId);
+      setSelectedTemplateName(templateName);
+      setCreateOpen(true);
+    },
+    []
+  );
 	
   // const handleTemplateInstall = useCallback(
   //   (card: OfficialWorkflowCard) => {
@@ -605,7 +608,7 @@ export default function MyTask() {
         open={templateOpen}
         onClose={() => setTemplateOpen(false)}
         officialCards={officialCards}
-        onSelect={handleTemplateSelect}
+        onInstantiated={handleTemplateSelect}
       />
 
       {/* 删除确认弹窗 */}
