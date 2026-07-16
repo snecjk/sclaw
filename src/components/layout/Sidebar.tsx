@@ -19,7 +19,6 @@ import {
   ChevronDown,
   Workflow,
   Check,
-  Database,
   LayoutGrid,
 } from 'lucide-react';
 import {
@@ -99,6 +98,7 @@ import {
 } from '@/stores/sidebar-delete-confirm';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
+import { isSidebarPrimaryNavItemVisible } from '@/lib/sidebar-primary-nav';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
 import {
   sidebarFooterMetaClass,
@@ -1631,16 +1631,12 @@ export function Sidebar() {
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
       // { to: '/data-center', icon: <Database className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.dataCenter') },
     ];
-    return all.filter((item) => {
-      if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
-      if (item.to === '/data-center' && (siteDepartmentTypes === null || !isSite)) return false;
-      if (item.to === '/more-apps' && (siteDepartmentTypes === null || !isSite)) return false;
-      if (item.to === '/scheduled-tasks' && getCurrentEnvConfig().isProduction) return false;
-      if (item.to === '/cron' && getCurrentEnvConfig().isProduction) return false;
-      // if (item.to === '/scheduled-tasks' && getCurrentEnvConfig().isProduction) return false;
-      // if (item.to === '/cron' && getCurrentEnvConfig().isProduction) return false;
-      return true;
-    });
+    return all.filter((item) => isSidebarPrimaryNavItemVisible(item.to, {
+      primaryMyData: sidebarVis.primaryMyData,
+      siteDepartmentTypesLoaded: siteDepartmentTypes !== null,
+      isSite,
+      isProduction: getCurrentEnvConfig().isProduction,
+    }));
   }, [isSite, sidebarVis.primaryMyData, siteDepartmentTypes, t]);
 
   const workspaceNav = [

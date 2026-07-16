@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { isSidebarPrimaryNavRoute } from '@/lib/sidebar-primary-nav';
+import {
+  isSidebarPrimaryNavItemVisible,
+  isSidebarPrimaryNavRoute,
+} from '@/lib/sidebar-primary-nav';
 
 describe('isSidebarPrimaryNavRoute', () => {
   it('matches primary nav routes', () => {
@@ -20,5 +23,22 @@ describe('isSidebarPrimaryNavRoute', () => {
     expect(isSidebarPrimaryNavRoute('/subscriptions')).toBe(false);
     expect(isSidebarPrimaryNavRoute('/tasks/task_abc')).toBe(false);
     expect(isSidebarPrimaryNavRoute('/settings')).toBe(false);
+  });
+});
+
+describe('isSidebarPrimaryNavItemVisible', () => {
+  const nonSiteOptions = {
+    primaryMyData: true,
+    siteDepartmentTypesLoaded: false,
+    isSite: false,
+    isProduction: false,
+  };
+
+  it('keeps More Apps visible without site identity or site configuration', () => {
+    expect(isSidebarPrimaryNavItemVisible('/more-apps', nonSiteOptions)).toBe(true);
+  });
+
+  it('keeps site-only navigation restricted', () => {
+    expect(isSidebarPrimaryNavItemVisible('/data-center', nonSiteOptions)).toBe(false);
   });
 });
