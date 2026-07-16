@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { memo, useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, Plus, ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner';
@@ -32,15 +32,16 @@ const actionIconBtnClass =
 const actionTooltipClass =
   'overflow-visible border-none bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white shadow-none';
 
-export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardProps) {
+function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardProps) {
   const { t } = useTranslation('skills');
   const navigate = useNavigate();
-  const { installing } = useSkillPlazaStore();
+  // Subscribe only to this card's install flag so another card installing does
+  // not re-render every card in the grid.
+  const isInstalling = useSkillPlazaStore((s) => Boolean(s.installing[skill.slug]));
   const [pendingEnabled, setPendingEnabled] = useState<boolean | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const localEnabled = pendingEnabled ?? skill.enabled ?? false;
-  const isInstalling = installing[skill.slug];
   const isDisabled = skill.enabled === false;
 
   const openMoreMenu = () => {
@@ -97,14 +98,22 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
       });
   };
 
+  // Normalize the inline SVG size once per icon change instead of on each render.
+  const iconHtml = useMemo(
+    () => (skill.icon
+      ? skill.icon.replace(/width="[^"]*"/, 'width="16"').replace(/height="[^"]*"/, 'height="16"')
+      : null),
+    [skill.icon],
+  );
+
   const renderIcon = () => {
-    if (skill.icon) {
+    if (iconHtml) {
       return (
         <span
           className="relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-foreground flex-shrink-0 border border-border"
           style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}
         >
-          <span dangerouslySetInnerHTML={{ __html: skill.icon.replace(/width="[^"]*"/, 'width="16"').replace(/height="[^"]*"/, 'height="16"') }} />
+          <span dangerouslySetInnerHTML={{ __html: iconHtml }} />
         </span>
       );
     }
@@ -330,3 +339,6 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
     </article>
   );
 }
+
+// Memoized so cards only re-render when their own props change (grid of ~50).
+export const SkillCard = memo(SkillCardImpl);

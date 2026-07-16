@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
@@ -14,15 +14,22 @@ interface SkillCardListProps {
   onDelete?: (skill: SkillSummary) => void;
 }
 
-export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListProps) {
+function SkillCardListImpl({ skill, onOpenDetail, onDelete }: SkillCardListProps) {
   const { t } = useTranslation('skills');
   const [pendingEnabled, setPendingEnabled] = useState<boolean | null>(null);
-  const [isHovered, setIsHovered] = useState(false);
   const localEnabled = pendingEnabled ?? skill.enabled ?? false;
   const isDisabled = skill.enabled === false;
 
+  // Normalize the inline SVG size once per icon change instead of on each render.
+  const iconHtml = useMemo(
+    () => (skill.icon
+      ? skill.icon.replace(/width="[^"]*"/, 'width="16"').replace(/height="[^"]*"/, 'height="16"')
+      : null),
+    [skill.icon],
+  );
+
   const renderIcon = () => {
-    if (skill.icon) {
+    if (iconHtml) {
       return (
         <span
           className={cn(
@@ -31,7 +38,7 @@ export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListPr
           )}
           style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}
         >
-          <span dangerouslySetInnerHTML={{ __html: skill.icon.replace(/width="[^"]*"/, 'width="16"').replace(/height="[^"]*"/, 'height="16"') }} />
+          <span dangerouslySetInnerHTML={{ __html: iconHtml }} />
         </span>
       );
     }
@@ -48,9 +55,7 @@ export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListPr
 
   return (
     <div
-      className="flex items-center gap-3 px-5 py-4 border-b border-border last:border-b-0 transition-colors cursor-pointer"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      className="group flex items-center gap-3 px-5 py-4 border-b border-border last:border-b-0 transition-colors cursor-pointer"
       onClick={() => onOpenDetail?.(skill)}
     >
       {renderIcon()}
@@ -70,7 +75,7 @@ export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListPr
             onClick={(e) => { e.stopPropagation(); onDelete(skill); }}
             className={cn(
               'inline-flex items-center justify-center w-8 h-8 p-0 border-none rounded-lg bg-transparent text-muted-foreground cursor-pointer hover:text-red-600 transition-all',
-              isHovered ? 'opacity-100 visible' : 'opacity-0 invisible',
+              'opacity-0 invisible group-hover:opacity-100 group-hover:visible',
             )}
             title={t('plaza.action.delete', { defaultValue: '删除' })}
           >
@@ -115,3 +120,6 @@ export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListPr
     </div>
   );
 }
+
+// Memoized so list rows only re-render when their own props change.
+export const SkillCardList = memo(SkillCardListImpl);

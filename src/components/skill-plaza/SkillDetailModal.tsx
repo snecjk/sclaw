@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { X, Play, Download, ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
+import { useShallow } from 'zustand/react/shallow';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { useChatStore } from '@/stores/chat';
 import type { SkillSummary } from '@/types/skill-plaza';
@@ -18,7 +19,13 @@ interface SkillDetailModalProps {
 export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps) {
   const { t } = useTranslation('skills');
   const navigate = useNavigate();
-  const { installing, plazaSkills, mySkills } = useSkillPlazaStore();
+  const { installing, plazaSkills, mySkills } = useSkillPlazaStore(
+    useShallow((s) => ({
+      installing: s.installing,
+      plazaSkills: s.plazaSkills,
+      mySkills: s.mySkills,
+    })),
+  );
 
   // Use live skill data from store so the modal reflects install/uninstall changes immediately
   const liveSkill = skill
