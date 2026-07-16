@@ -1,15 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, SquareArrowOutUpRight, Plus, ArrowDownToLine, Trash2 } from 'lucide-react';
+import { RefreshCw, Plus, ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { useChatStore } from '@/stores/chat';
-import { Switch } from '@/components/ui/switch';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import fileIcon from '@/assets/icons/file.svg';
+import messageIcon from '@/assets/icons/message.svg';
+import loadingIcon from '@/assets/icons/loading.svg';
+import moreIcon from '@/assets/icons/more.svg';
 
 interface SkillCardProps {
   skill: SkillSummary;
@@ -28,13 +36,31 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
   const { t } = useTranslation('skills');
   const navigate = useNavigate();
   const { installing } = useSkillPlazaStore();
-  const [isHovered, setIsHovered] = useState(false);
   const [localEnabled, setLocalEnabled] = useState(skill.enabled ?? false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     setLocalEnabled(skill.enabled ?? false);
   }, [skill.enabled]);
   const isInstalling = installing[skill.slug];
   const isDisabled = skill.enabled === false;
+
+  const openMoreMenu = () => {
+    if (moreCloseTimer.current) {
+      clearTimeout(moreCloseTimer.current);
+      moreCloseTimer.current = null;
+    }
+    setMoreOpen(true);
+  };
+
+  const scheduleCloseMoreMenu = () => {
+    if (moreCloseTimer.current) clearTimeout(moreCloseTimer.current);
+    moreCloseTimer.current = setTimeout(() => setMoreOpen(false), 150);
+  };
+
+  useEffect(() => () => {
+    if (moreCloseTimer.current) clearTimeout(moreCloseTimer.current);
+  }, []);
 
   const handleUse = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -118,7 +144,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
               className={actionIconBtnClass}
             >
               {isInstalling ? (
-                <RefreshCw className="h-3.5 w-3.5 animate-spin text-[#00B42A]" />
+                <img src={loadingIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain animate-spin" />
               ) : (
                 <RefreshCw className="h-3.5 w-3.5" />
               )}
@@ -140,7 +166,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
               onClick={handleUse}
               className={actionIconBtnClass}
             >
-              <SquareArrowOutUpRight className="h-3.5 w-3.5" />
+              <img src={messageIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain" />
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom" sideOffset={6} className={actionTooltipClass}>
@@ -160,7 +186,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
             className={actionIconBtnClass}
           >
             {isInstalling ? (
-              <RefreshCw className="h-3.5 w-3.5 animate-spin text-[#00B42A]" />
+              <img src={loadingIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain animate-spin" />
             ) : (
               <Plus className="h-3.5 w-3.5" strokeWidth={2.25} />
             )}
@@ -174,11 +200,90 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
     );
   };
 
+  const handleToggle = (checked: boolean) => {
+    setLocalEnabled(checked);
+    useSkillPlazaStore.getState().toggleSkill(skill.slug, checked).then(() => {
+      if (!checked) {
+        toast.custom(() => (
+          <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">
+            技能已关闭，仍可在「我的技能」中查看
+          </div>
+        ), { duration: 3000 });
+      } else {
+        toast.custom(() => (
+          <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">
+            技能已开启
+          </div>
+        ), { duration: 3000 });
+      }
+    }).catch((err) => {
+      setLocalEnabled(!checked);
+      console.error('[SkillCard] toggle failed:', err);
+      toast.custom(() => (
+        <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">
+          操作失败，请重试
+        </div>
+      ), { duration: 3000 });
+    });
+  };
+
+  const renderMineActions = () => (
+    <div className="flex items-center gap-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+      <Tooltip delayDuration={200}>
+        <TooltipTrigger asChild>
+          <button type="button" onClick={handleUse} className={actionIconBtnClass}>
+            <img src={messageIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" sideOffset={6} className={actionTooltipClass}>
+          {t('plaza.action.use', { defaultValue: '使用' })}
+          <TooltipArrow className="fill-[#1D2129]" width={10} height={5} />
+        </TooltipContent>
+      </Tooltip>
+
+      <DropdownMenu modal={false} open={moreOpen} onOpenChange={setMoreOpen}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={actionIconBtnClass}
+            onMouseEnter={openMoreMenu}
+            onMouseLeave={scheduleCloseMoreMenu}
+            aria-label={t('plaza.action.more', { defaultValue: '更多' })}
+          >
+            <img src={moreIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          sideOffset={6}
+          className="min-w-[120px]"
+          onMouseEnter={openMoreMenu}
+          onMouseLeave={scheduleCloseMoreMenu}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <DropdownMenuItem
+            onClick={() => handleToggle(!localEnabled)}
+          >
+            {localEnabled
+              ? t('plaza.action.disable', { defaultValue: '禁用技能' })
+              : t('plaza.action.enable', { defaultValue: '启用技能' })}
+          </DropdownMenuItem>
+          {onDelete && (
+            <DropdownMenuItem
+              className="text-red-600 focus:text-red-600"
+              onClick={() => onDelete(skill)}
+            >
+              {t('plaza.action.deleteSkill', { defaultValue: '删除技能' })}
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+
   return (
     <article
       className="relative flex flex-col min-w-0 p-4 border border-border rounded-2xl bg-white cursor-pointer overflow-visible transition-[border-color,box-shadow] duration-150 hover:border-border hover:shadow-sm dark:bg-background"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       onClick={() => onOpenDetail?.(skill)}
       data-skill-installed={canUse}
     >
@@ -210,51 +315,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
           </div>
 
           {isMineTab ? (
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              {onDelete && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); onDelete(skill); }}
-                  className={cn(
-                    'inline-flex items-center justify-center w-7 h-7 p-0 border-none rounded-lg bg-transparent text-muted-foreground cursor-pointer hover:text-red-600 transition-all',
-                    isHovered ? 'opacity-100 visible' : 'opacity-0 invisible',
-                  )}
-                  title={t('plaza.action.delete', { defaultValue: '删除' })}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              )}
-              <Switch
-                checked={localEnabled}
-                onCheckedChange={(checked) => {
-                  setLocalEnabled(checked);
-                  useSkillPlazaStore.getState().toggleSkill(skill.slug, checked).then(() => {
-                    if (!checked) {
-                      toast.custom(() => (
-                        <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">
-                          技能已关闭，仍可在「我的技能」中查看
-                        </div>
-                      ), { duration: 3000 });
-                    } else {
-                      toast.custom(() => (
-                        <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">
-                          技能已开启
-                        </div>
-                      ), { duration: 3000 });
-                    }
-                  }).catch((err) => {
-                    setLocalEnabled(!checked);
-                    console.error('[SkillCard] toggle failed:', err);
-                    toast.custom(() => (
-                      <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">
-                        操作失败，请重试
-                      </div>
-                    ), { duration: 3000 });
-                  });
-                }}
-                onClick={(e) => e.stopPropagation()}
-                aria-label={t('plaza.action.toggle', { defaultValue: '启用/禁用' })}
-              />
-            </div>
+            renderMineActions()
           ) : (
             <div className="flex items-center flex-shrink-0" onClick={(e) => e.stopPropagation()}>
               {renderPlazaAction()}
