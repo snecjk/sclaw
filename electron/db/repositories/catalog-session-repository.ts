@@ -91,7 +91,6 @@ export class CatalogSessionRepository {
     }
     const rows = await query
       .orderBy(sql`CASE WHEN pin_rank IS NULL THEN 1 ELSE 0 END`, 'asc')
-      .orderBy('pin_rank', 'asc')
       .orderBy('last_activity_at', 'desc')
       .orderBy('session_key', 'asc')
       .limit(limit)

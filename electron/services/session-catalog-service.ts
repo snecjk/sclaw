@@ -202,13 +202,14 @@ export async function updateWorkspace(
 export async function deleteWorkspace(
   workspaceId: string,
   gatewayManager?: GatewayManager | null,
-): Promise<{ movedSessionCount: number }> {
+): Promise<{ deletedSessionCount: number }> {
   await ensureSessionCatalogBootstrapped();
   const catalogRepo = getCatalogSessionRepository();
+  const bindingRepo = getSessionEngineBindingRepository();
   const sessions = await catalogRepo.list({ workspaceId });
   for (const session of sessions) {
-    await catalogRepo.moveToWorkspace(session.sessionKey, DEFAULT_WORKSPACE_ID);
-    await syncSessionEngineBindingCwd(session.sessionKey);
+    await catalogRepo.softDelete(workspaceId, session.sessionKey);
+    await bindingRepo.softDelete(session.sessionKey);
   }
   await getWorkspaceRepository().softDelete(workspaceId);
   try {
@@ -219,7 +220,7 @@ export async function deleteWorkspace(
   } catch (error) {
     logger.warn('[session-catalog] failed to delete project agents for workspace', { workspaceId, error });
   }
-  return { movedSessionCount: sessions.length };
+  return { deletedSessionCount: sessions.length };
 }
 
 export async function syncSessionEngineBindingCwd(sessionKey: string): Promise<void> {
@@ -323,8 +324,10 @@ export async function bindSessionToWorkspace(
         ? (getBaseAgentIdFromProjectAgentId(rawAgentId) ?? 'main')
         : rawAgentId;
       try {
-        await ensureProjectAgent(workspaceId, baseAgentId, workspace.rootPath);
-        gatewayManager?.debouncedReload();
+        const result = await ensureProjectAgent(workspaceId, baseAgentId, workspace.rootPath);
+        if (result.created || result.workspaceUpdated) {
+          gatewayManager?.debouncedReload();
+        }
       } catch (error) {
         logger.warn('[session-catalog] failed to ensure project agent on bind', { workspaceId, sessionKey, error });
       }
@@ -338,6 +341,9 @@ export async function moveSessionToWorkspace(
   gatewayManager?: GatewayManager | null,
 ): Promise<CatalogSession> {
   await ensureSessionCatalogBootstrapped();
+  if (workspaceId === DEFAULT_WORKSPACE_ID) {
+    throw new Error('Moving sessions out of a project is not supported');
+  }
   const session = await getCatalogSessionRepository().moveToWorkspace(sessionKey, workspaceId);
   await syncSessionEngineBindingCwd(sessionKey);
   if (workspaceId !== DEFAULT_WORKSPACE_ID) {
@@ -348,8 +354,10 @@ export async function moveSessionToWorkspace(
         ? (getBaseAgentIdFromProjectAgentId(rawAgentId) ?? 'main')
         : rawAgentId;
       try {
-        await ensureProjectAgent(workspaceId, baseAgentId, workspace.rootPath);
-        gatewayManager?.debouncedReload();
+        const result = await ensureProjectAgent(workspaceId, baseAgentId, workspace.rootPath);
+        if (result.created || result.workspaceUpdated) {
+          gatewayManager?.debouncedReload();
+        }
       } catch (error) {
         logger.warn('[session-catalog] failed to ensure project agent on move', { workspaceId, sessionKey, error });
       }

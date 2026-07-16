@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { resolveBaseAgentId, resolveEffectiveAgent, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
+import { getProjectIdFromProjectAgentId } from '../../../shared/project-agent';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { buildProviderListItems } from '@/lib/provider-accounts';
@@ -130,6 +131,25 @@ function resolveClaudeToolbarModelId(input: {
   return agent || workspace;
 }
 
+function useProjectAgentContext(currentAgentId: string, currentSessionKey: string) {
+  const selectedProjectId = useSessionCatalogStore((s) => s.selectedProjectId);
+  const workspaces = useSessionCatalogStore((s) => s.workspaces);
+  const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
+
+  const projectId = useMemo(
+    () => getProjectIdFromProjectAgentId(currentAgentId)
+      ?? sessionWorkspaceByKey[currentSessionKey]
+      ?? selectedProjectId,
+    [currentAgentId, currentSessionKey, selectedProjectId, sessionWorkspaceByKey],
+  );
+  const projectName = useMemo(
+    () => (projectId ? workspaces.find((workspace) => workspace.id === projectId)?.name ?? null : null),
+    [projectId, workspaces],
+  );
+
+  return { projectId, projectName };
+}
+
 /* ── Engine Selector ─────────────────────────────────────────── */
 
 export function ChatEngineSelector({
@@ -148,10 +168,10 @@ export function ChatEngineSelector({
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
-  const projectId = useSessionCatalogStore((s) => s.selectedProjectId);
+  const { projectId: effectiveProjectId, projectName } = useProjectAgentContext(currentAgentId, currentSessionKey);
   const currentAgent = useMemo(
-    () => resolveEffectiveAgent(agents ?? [], currentAgentId, projectId),
-    [agents, currentAgentId, projectId],
+    () => resolveEffectiveAgent(agents ?? [], currentAgentId, effectiveProjectId, projectName),
+    [agents, currentAgentId, effectiveProjectId, projectName],
   );
   const currentSession = useMemo(
     () => sessions.find((session) => session.key === currentSessionKey),
@@ -337,10 +357,10 @@ export function ChatModelSelector({
 
   useEffect(() => { void init(); }, [init]);
 
-  const projectId = useSessionCatalogStore((s) => s.selectedProjectId);
+  const { projectId: effectiveProjectId, projectName } = useProjectAgentContext(currentAgentId, currentSessionKey);
   const currentAgent = useMemo(
-    () => resolveEffectiveAgent(agents ?? [], currentAgentId, projectId),
-    [agents, currentAgentId, projectId],
+    () => resolveEffectiveAgent(agents ?? [], currentAgentId, effectiveProjectId, projectName),
+    [agents, currentAgentId, effectiveProjectId, projectName],
   );
   const currentSession = useMemo(
     () => sessions.find((session) => session.key === currentSessionKey),

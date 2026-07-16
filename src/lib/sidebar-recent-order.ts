@@ -69,6 +69,17 @@ export interface CatalogPinSortMeta {
   lastActivityAt: string | null;
 }
 
+export function getCatalogSessionSortActivityMs(
+  session: Pick<ChatSession, 'key' | 'updatedAt' | 'engineType'>,
+  sessionLastActivity: Record<string, number>,
+  catalogMeta?: CatalogPinSortMeta | null,
+): number {
+  const catalogActivity = catalogMeta?.lastActivityAt
+    ? Date.parse(catalogMeta.lastActivityAt)
+    : 0;
+  return Math.max(getSessionActivityForSort(session, sessionLastActivity), catalogActivity);
+}
+
 export function sortSessionsWithCatalogPin(
   sessions: ChatSession[],
   sessionLastActivity: Record<string, number>,
@@ -77,21 +88,12 @@ export function sortSessionsWithCatalogPin(
   return [...sessions].sort((left, right) => {
     const leftCatalog = catalogByKey[left.key];
     const rightCatalog = catalogByKey[right.key];
-    const leftPin = leftCatalog?.pinRank ?? null;
-    const rightPin = rightCatalog?.pinRank ?? null;
-    const leftPinned = leftPin != null;
-    const rightPinned = rightPin != null;
+    const leftPinned = leftCatalog?.pinRank != null;
+    const rightPinned = rightCatalog?.pinRank != null;
     if (leftPinned !== rightPinned) return leftPinned ? -1 : 1;
-    if (leftPinned && rightPinned && leftPin !== rightPin) return leftPin - rightPin;
 
-    const leftCatalogActivity = leftCatalog?.lastActivityAt
-      ? Date.parse(leftCatalog.lastActivityAt)
-      : 0;
-    const rightCatalogActivity = rightCatalog?.lastActivityAt
-      ? Date.parse(rightCatalog.lastActivityAt)
-      : 0;
-    const leftActivity = Math.max(getSessionActivityForSort(left, sessionLastActivity), leftCatalogActivity);
-    const rightActivity = Math.max(getSessionActivityForSort(right, sessionLastActivity), rightCatalogActivity);
+    const leftActivity = getCatalogSessionSortActivityMs(left, sessionLastActivity, leftCatalog);
+    const rightActivity = getCatalogSessionSortActivityMs(right, sessionLastActivity, rightCatalog);
     if (leftActivity !== rightActivity) return rightActivity - leftActivity;
     return right.key.localeCompare(left.key);
   });

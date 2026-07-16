@@ -1,5 +1,5 @@
 /**
- * SidebarProjectSessionRowTrailing — 项目内会话行尾：hover「...」菜单（置顶 / 重命名 / 移出项目 / 删除）。
+ * SidebarProjectSessionRowTrailing — 项目内会话行尾：hover「...」菜单（置顶 / 重命名 / 删除）。
  */
 import { MoreHorizontal, Pin, Pencil, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -24,7 +24,6 @@ export interface SidebarProjectSessionRowTrailingProps {
   isPinned: boolean;
   onPin: () => void;
   onRename: () => void;
-  onRemoveFromProject: () => void;
   onDelete: () => void;
   className?: string;
 }
@@ -37,7 +36,6 @@ export function SidebarProjectSessionRowTrailing({
   isPinned,
   onPin,
   onRename,
-  onRemoveFromProject,
   onDelete,
   className,
 }: SidebarProjectSessionRowTrailingProps) {
@@ -104,15 +102,6 @@ export function SidebarProjectSessionRowTrailing({
             >
               <Pencil className="h-4 w-4 shrink-0" aria-hidden />
               {t('actions.rename')}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className={sidebarRecentMenuItemClass}
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemoveFromProject();
-              }}
-            >
-              {t('sidebar.removeFromProject')}
             </DropdownMenuItem>
             <DropdownMenuItem
               className={sidebarRecentMenuDeleteItemClass}

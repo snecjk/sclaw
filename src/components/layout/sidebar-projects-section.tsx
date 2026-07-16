@@ -43,7 +43,6 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
   const allCatalogByKey = useSessionCatalogStore((s) => s.allCatalogByKey);
   const selectProject = useSessionCatalogStore((s) => s.selectProject);
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
-  const moveSessionToProject = useSessionCatalogStore((s) => s.moveSessionToProject);
   const patchSessionCatalog = useSessionCatalogStore((s) => s.patchSessionCatalog);
   const deleteProject = useSessionCatalogStore((s) => s.deleteProject);
 
@@ -90,22 +89,16 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
     setExpandedProjectIds((prev) => ({ ...prev, [projectId]: !(prev[projectId] ?? false) }));
   }, []);
 
-  const handlePinInProject = useCallback(async (sessionKey: string, workspaceId: string) => {
+  const handlePinInProject = useCallback(async (sessionKey: string) => {
     const currentPin = allCatalogByKey[sessionKey]?.pinRank ?? null;
     if (currentPin != null) {
       await patchSessionCatalog({ sessionKey, pinRank: null });
       toast.success(t('sidebar.unpinnedInProject'));
       return;
     }
-    const projectSessions = sessionsByProjectId.get(workspaceId) ?? [];
-    let maxPin = 0;
-    for (const session of projectSessions) {
-      const pin = allCatalogByKey[session.key]?.pinRank;
-      if (pin != null && pin > maxPin) maxPin = pin;
-    }
-    await patchSessionCatalog({ sessionKey, pinRank: maxPin + 1 });
+    await patchSessionCatalog({ sessionKey, pinRank: 1 });
     toast.success(t('sidebar.pinnedInProject'));
-  }, [allCatalogByKey, patchSessionCatalog, sessionsByProjectId, t]);
+  }, [allCatalogByKey, patchSessionCatalog, t]);
 
   const handleOpenProjectFolder = useCallback(async (rootPath: string) => {
     try {
@@ -140,10 +133,10 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
   const handleConfirmDeleteProject = useCallback(async () => {
     if (!deleteTarget) return;
     try {
-      const moved = await deleteProject(deleteTarget.id);
+      const deleted = await deleteProject(deleteTarget.id);
       toast.success(
-        moved > 0
-          ? t('sidebar.projectDeletedWithSessions', { count: moved })
+        deleted > 0
+          ? t('sidebar.projectDeletedWithSessions', { count: deleted })
           : t('sidebar.projectDeleted'),
       );
       setDeleteTarget(null);
@@ -247,7 +240,7 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                             navigateToMainChatHome(navigate, location.pathname, () => switchSession(session.key));
                           }}
                           onPin={() => {
-                            void handlePinInProject(session.key, workspace.id);
+                            void handlePinInProject(session.key);
                           }}
                           onStartRename={() => {
                             setEditingSessionKey(session.key);
@@ -259,10 +252,6 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                             setEditingSessionKey(null);
                           }}
                           onCancelRename={() => setEditingSessionKey(null)}
-                          onRemoveFromProject={() => {
-                            void moveSessionToProject(session.key, null);
-                            toast.success(t('sidebar.removedFromProject'));
-                          }}
                           onDelete={() => {
                             requestSessionDelete({ key: session.key, label });
                           }}

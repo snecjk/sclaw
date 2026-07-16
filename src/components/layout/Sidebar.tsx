@@ -1022,8 +1022,7 @@ export function Sidebar() {
     const isRecentSessionActive =
       isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
     const workspaceId = sessionWorkspaceByKey[s.key] ?? DEFAULT_WORKSPACE_ID;
-    const isInProject = workspaceId !== DEFAULT_WORKSPACE_ID;
-    const currentProjectId = isInProject ? workspaceId : null;
+    const currentProjectId = workspaceId !== DEFAULT_WORKSPACE_ID ? workspaceId : null;
     const isPinned = catalogByKey[s.key]?.pinRank != null;
     return (
       <SidebarRecentSessionRow
@@ -1036,7 +1035,6 @@ export function Sidebar() {
         editingValue={editingValue}
         projects={userProjects}
         currentProjectId={currentProjectId}
-        isInProject={isInProject}
         onOpen={() => {
           navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
         }}
@@ -1048,13 +1046,7 @@ export function Sidebar() {
               toast.success(t('common:sidebar.unpinnedInRecent'));
               return;
             }
-            let maxPin = 0;
-            for (const [key, meta] of Object.entries(catalogByKey)) {
-              const ws = sessionWorkspaceByKey[key] ?? DEFAULT_WORKSPACE_ID;
-              if (ws !== DEFAULT_WORKSPACE_ID) continue;
-              if (meta.pinRank != null && meta.pinRank > maxPin) maxPin = meta.pinRank;
-            }
-            await patchSessionCatalog({ sessionKey: s.key, pinRank: maxPin + 1 });
+            await patchSessionCatalog({ sessionKey: s.key, pinRank: 1 });
             toast.success(t('common:sidebar.pinnedInRecent'));
           })();
         }}
@@ -1074,10 +1066,6 @@ export function Sidebar() {
         onMoveToProject={(projectId) => {
           void moveSessionToProject(s.key, projectId);
           toast.success(t('common:sidebar.movedToProject'));
-        }}
-        onRemoveFromProject={() => {
-          void moveSessionToProject(s.key, null);
-          toast.success(t('common:sidebar.removedFromProject'));
         }}
         onCreateProject={() => setCreateProjectSessionKey(s.key)}
       />

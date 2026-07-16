@@ -34,8 +34,6 @@ export interface SidebarRecentSessionRowProps {
   projects: WorkspaceDto[];
   /** 当前项目 id；null = 默认对话 */
   currentProjectId: string | null;
-  /** 是否已在非默认项目中 */
-  isInProject: boolean;
   /** 打开会话 */
   onOpen: () => void;
   onPin: () => void;
@@ -45,7 +43,6 @@ export interface SidebarRecentSessionRowProps {
   onCancelRename: () => void;
   onDelete: () => void;
   onMoveToProject: (projectId: string) => void;
-  onRemoveFromProject: () => void;
   onCreateProject: () => void;
   className?: string;
 }
@@ -59,7 +56,6 @@ export function SidebarRecentSessionRow({
   editingValue,
   projects,
   currentProjectId,
-  isInProject,
   onOpen,
   onPin,
   onStartRename,
@@ -68,7 +64,6 @@ export function SidebarRecentSessionRow({
   onCancelRename,
   onDelete,
   onMoveToProject,
-  onRemoveFromProject,
   onCreateProject,
   className,
 }: SidebarRecentSessionRowProps) {
@@ -148,12 +143,10 @@ export function SidebarRecentSessionRow({
           isPinned={isPinned}
           projects={projects}
           currentProjectId={currentProjectId}
-          isInProject={isInProject}
           onPin={onPin}
           onRename={onStartRename}
           onDelete={onDelete}
           onMoveToProject={onMoveToProject}
-          onRemoveFromProject={onRemoveFromProject}
           onCreateProject={onCreateProject}
         />
       </div>

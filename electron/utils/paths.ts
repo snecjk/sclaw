@@ -57,6 +57,30 @@ export function getLegacyOpenClawWorkspaceRoot(): string {
   return join(homedir(), '.openclaw', 'workspace');
 }
 
+/** Shared default agent workspace (~/.stoclaw/workspace). */
+export function getDefaultAgentWorkspacePath(): string {
+  return join(getStoClawHomeDir(), 'workspace');
+}
+
+/** Legacy default workspace before lift-out (~/.stoclaw/openclaw/workspace). */
+export function getLegacyDefaultAgentWorkspacePath(): string {
+  return join(getOpenClawConfigDir(), 'workspace');
+}
+
+/** Managed per-agent workspace under ~/.stoclaw/workspace-{agentId}. */
+export function getManagedAgentWorkspacePath(agentId: string): string {
+  const id = (agentId ?? '').trim().toLowerCase();
+  if (!id || id === 'main') return getDefaultAgentWorkspacePath();
+  return join(getStoClawHomeDir(), `workspace-${id}`);
+}
+
+/** Legacy managed workspace (~/.stoclaw/openclaw/workspace-{agentId}). */
+export function getLegacyManagedAgentWorkspacePath(agentId: string): string {
+  const id = (agentId ?? '').trim().toLowerCase();
+  if (!id || id === 'main') return getLegacyDefaultAgentWorkspacePath();
+  return join(getOpenClawConfigDir(), `workspace-${id}`);
+}
+
 /**
  * Get OpenClaw skills directory
  */
