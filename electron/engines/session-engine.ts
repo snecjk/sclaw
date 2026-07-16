@@ -1,11 +1,43 @@
 import { getEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry } from './session-registry';
 import type { AgentEngineType } from './types';
 import { listAgentsSnapshot } from '../utils/agent-config';
+import {
+  extractAgentIdFromSessionKey,
+  parseClaudeTaskIdFromSessionKey,
+} from '../../shared/session-agent-id';
 
 export function getAgentIdFromSessionKey(sessionKey: string): string {
-  if (!sessionKey.startsWith('agent:')) return 'main';
-  const [, agentId] = sessionKey.split(':');
-  return (agentId || 'main').trim().toLowerCase();
+  const fromKey = extractAgentIdFromSessionKey(sessionKey);
+  if (fromKey) return fromKey.trim().toLowerCase();
+  return 'main';
+}
+
+/**
+ * Resolve owning agentId for a session. Claude task keys require definition / registry lookup.
+ */
+export async function resolveAgentIdForSessionKey(sessionKey: string): Promise<string> {
+  const fromKey = extractAgentIdFromSessionKey(sessionKey);
+  if (fromKey) return fromKey.trim().toLowerCase();
+
+  try {
+    const registry = await getEngineSessionRegistryEntry(sessionKey);
+    if (registry?.agentId?.trim()) return registry.agentId.trim().toLowerCase();
+  } catch {
+    // ignore
+  }
+
+  const taskId = parseClaudeTaskIdFromSessionKey(sessionKey);
+  if (taskId) {
+    try {
+      const { getClaudeScheduledTaskService } = await import('../services/claude-scheduled-task-service');
+      const task = await getClaudeScheduledTaskService().getTask(taskId);
+      if (task?.agentId?.trim()) return task.agentId.trim().toLowerCase();
+    } catch {
+      // ignore
+    }
+  }
+
+  return 'main';
 }
 
 export async function resolveSessionEngineType(
@@ -22,7 +54,11 @@ export async function resolveSessionEngineType(
     return existing.engineType;
   }
 
-  return resolveAgentEngineType(getAgentIdFromSessionKey(sessionKey));
+  if (parseClaudeTaskIdFromSessionKey(sessionKey)) {
+    return 'claude';
+  }
+
+  return resolveAgentEngineType(await resolveAgentIdForSessionKey(sessionKey));
 }
 
 export async function rememberSessionEngineType(
@@ -34,10 +70,11 @@ export async function rememberSessionEngineType(
     return;
   }
   const engineChanged = existing?.engineType != null && existing.engineType !== engineType;
+  const agentId = existing?.agentId || await resolveAgentIdForSessionKey(sessionKey);
   await upsertEngineSessionRegistryEntry({
     sessionKey,
     engineType,
-    agentId: existing?.agentId || getAgentIdFromSessionKey(sessionKey),
+    agentId,
     sessionId: engineChanged ? undefined : existing?.sessionId,
     cwd: engineChanged ? undefined : existing?.cwd,
     updatedAt: Date.now(),

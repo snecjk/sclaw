@@ -91,7 +91,6 @@ export function Home() {
   // Handle skill-plaza "Use" (?skill=) and legacy ?q= / ?workflowId= deep links
   const [searchParams, setSearchParams] = useSearchParams();
   const seedSkillSlug = searchParams.get('skill')?.trim() || undefined;
-  const [initialSkillSlug] = useState(() => seedSkillSlug);
   // searchParams.get() is already percent-decoded; decodeURIComponent again throws
   // URIError when the prompt contains a literal '%' (e.g. "完成率50%").
   const querySeedText = searchParams.get('q')?.trim() || undefined;
@@ -99,7 +98,6 @@ export function Home() {
   const { handleHubSend } = useHomeChatEntrySend();
   const gatewayStatus = useGatewayStore((s) => s.status);
   const hasAutoSentRef = useRef(false);
-  const [draftSeedText, setDraftSeedText] = useState<string | undefined>();
 
   useEffect(() => {
     if (!seedSkillSlug) return;
@@ -110,17 +108,18 @@ export function Home() {
     }, { replace: true });
   }, [seedSkillSlug, setSearchParams]);
 
+  // Deep-link handoff for `?q=` (workflow「立即运行」/官方安装等).
+  // Skills use `?skill=` only and must not block this path — a prior merge
+  // incorrectly required sticky initialSkillSlug, which dropped pure-q run-now.
   useEffect(() => {
-    if (!querySeedText || seedWorkflowId || !initialSkillSlug || hasAutoSentRef.current) return;
-    setDraftSeedText(querySeedText);
-    setSearchParams({}, { replace: true });
+    if (!querySeedText || hasAutoSentRef.current) return;
     if (gatewayStatus.state !== 'running') return;
 
     hasAutoSentRef.current = true;
     // Clear q and workflowId from URL so refresh doesn't re-trigger
     setSearchParams({}, { replace: true });
     handleHubSend(querySeedText, undefined, undefined, undefined, seedWorkflowId);
-  }, [querySeedText, seedWorkflowId, initialSkillSlug, gatewayStatus.state, handleHubSend, setSearchParams]);
+  }, [querySeedText, seedWorkflowId, gatewayStatus.state, handleHubSend, setSearchParams]);
 
   // Wait for site-department-types before choosing HQ vs site homepage.
   if (isAuthenticated && siteDepartmentTypes === null) {
@@ -131,7 +130,7 @@ export function Home() {
   if (isSite) {
     return (
       <>
-        <HomeSiteSurface seedText={draftSeedText} seedSkillSlug={seedSkillSlug} />
+        <HomeSiteSurface seedSkillSlug={seedSkillSlug} />
         <TaskCreateModal
           open={nlModalOpen}
           onClose={closeNlModal}
@@ -152,7 +151,7 @@ export function Home() {
               : 'mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-2 sm:px-2',
           )}
         >
-          <HomeAgentHubSurface seedText={draftSeedText} seedSkillSlug={seedSkillSlug} />
+          <HomeAgentHubSurface seedSkillSlug={seedSkillSlug} />
         </div>
         <TaskCreateModal
           open={nlModalOpen}
@@ -184,7 +183,6 @@ export function Home() {
           {showConversation ? (
             <HomeMainConversation
               className="min-h-0 flex-1"
-              seedText={draftSeedText}
               seedSkillSlug={seedSkillSlug}
               onSend={handleHubSend}
             />
@@ -199,7 +197,7 @@ export function Home() {
         </div>
         {!showConversation ? (
           <div className={homeHubFooterShellClass}>
-            <HomeComposer seedText={draftSeedText} seedSkillSlug={seedSkillSlug} onSend={handleHubSend} />
+            <HomeComposer seedSkillSlug={seedSkillSlug} onSend={handleHubSend} />
           </div>
         ) : null}
       </div>

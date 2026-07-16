@@ -48,7 +48,7 @@ import { SkillPicker } from '@/components/skill-plaza/SkillPicker';
 import { useDingTalkMention } from '@/hooks/useDingTalkMention';
 
 import type { ActiveMentionTrigger, MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
-import { extractSkillInlineQuery, hasSkillInlineTrigger } from '@/lib/dingtalk-mention-composer';
+import { extractSkillInlineQuery /*, hasSkillInlineTrigger */ } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention, MentionSearchItem } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import { mentionSearchItemToMention } from '@/types/dingtalk-mention';
@@ -388,27 +388,28 @@ export function ChatInput({
     };
   }, [skillPickerMode, skillPickerOpen]);
 
-  useEffect(() => {
-    if (composerSnapshot.skill) return;
-
-    const hasTrigger = hasSkillInlineTrigger(composerSnapshot.plainText);
-
-    // toolbar 模式由按钮控制，不受 editor 内 `*` 影响
-    if (skillPickerOpen && skillPickerMode === 'toolbar') return;
-
-    if (hasTrigger) {
-      if (!skillPickerOpen || skillPickerMode !== 'inline') {
-        setWorkflowPickerOpen(false);
-        setSkillPickerMode('inline');
-        setSkillPickerOpen(true);
-      }
-      return;
-    }
-
-    if (skillPickerOpen && skillPickerMode === 'inline') {
-      setSkillPickerOpen(false);
-    }
-  }, [composerSnapshot.plainText, composerSnapshot.skill, skillPickerMode, skillPickerOpen]);
+  // 暂时关闭 `*` 触发技能列表；恢复时取消下方注释
+  // useEffect(() => {
+  //   if (composerSnapshot.skill) return;
+  //
+  //   const hasTrigger = hasSkillInlineTrigger(composerSnapshot.plainText);
+  //
+  //   // toolbar 模式由按钮控制，不受 editor 内 `*` 影响
+  //   if (skillPickerOpen && skillPickerMode === 'toolbar') return;
+  //
+  //   if (hasTrigger) {
+  //     if (!skillPickerOpen || skillPickerMode !== 'inline') {
+  //       setWorkflowPickerOpen(false);
+  //       setSkillPickerMode('inline');
+  //       setSkillPickerOpen(true);
+  //     }
+  //     return;
+  //   }
+  //
+  //   if (skillPickerOpen && skillPickerMode === 'inline') {
+  //     setSkillPickerOpen(false);
+  //   }
+  // }, [composerSnapshot.plainText, composerSnapshot.skill, skillPickerMode, skillPickerOpen]);
 
   const skillPickerInlineQuery = useMemo(
     () => (skillPickerMode === 'inline' ? extractSkillInlineQuery(composerSnapshot.plainText) : ''),
@@ -719,18 +720,19 @@ export function ChatInput({
         }
       }
 
-      const hasSkillInEditor = !!composerSnapshot.skill;
-      if (e.key === '*' && !hasSkillInEditor) {
-        const nativeEvent = e.nativeEvent as KeyboardEvent;
-        if (!isComposingRef.current && !nativeEvent.isComposing && nativeEvent.keyCode !== 229) {
-          if (dingTalkMentionOpen) {
-            closeDingTalkMention();
-            setMentionTrigger(null);
-          }
-          setWorkflowPickerOpen(false);
-          // 打开浮层由 plainText 同步 effect 在 `*` 写入 editor 后处理
-        }
-      }
+      // 暂时关闭 `*` 触发技能列表；恢复时取消下方注释
+      // const hasSkillInEditor = !!composerSnapshot.skill;
+      // if (e.key === '*' && !hasSkillInEditor) {
+      //   const nativeEvent = e.nativeEvent as KeyboardEvent;
+      //   if (!isComposingRef.current && !nativeEvent.isComposing && nativeEvent.keyCode !== 229) {
+      //     if (dingTalkMentionOpen) {
+      //       closeDingTalkMention();
+      //       setMentionTrigger(null);
+      //     }
+      //     setWorkflowPickerOpen(false);
+      //     // 打开浮层由 plainText 同步 effect 在 `*` 写入 editor 后处理
+      //   }
+      // }
 
       if (e.key === 'Enter' && !e.shiftKey && skillPickerOpen) {
         return;

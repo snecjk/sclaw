@@ -20,6 +20,8 @@ export interface ClaudeScheduledTaskSessionListItem {
   updatedAt?: number;
   engineType: 'claude';
   displayName?: string;
+  model?: string;
+  agentId?: string;
 }
 
 export interface ClaudeScheduledTaskSessionMessage {
@@ -421,6 +423,44 @@ export async function listClaudeScheduledTaskSummarySessions(): Promise<
     });
   }
   items.sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0));
+
+  // Enrich with task definition agentId + engine-registry model (trigger writeback).
+  try {
+    const { listClaudeScheduledTaskDefinitions } = await import('./claude-scheduled-task-store');
+    const { listEngineSessionRegistryEntries } = await import('../engines/session-registry');
+    const definitions = await listClaudeScheduledTaskDefinitions();
+    const agentByTaskId = new Map(
+      definitions.map((definition) => [definition.id, definition.agentId] as const),
+    );
+    const modelByTaskId = new Map(
+      definitions
+        .filter((definition) => typeof definition.model === 'string' && definition.model.trim())
+        .map((definition) => [definition.id, definition.model!.trim()] as const),
+    );
+    const registry = await listEngineSessionRegistryEntries('claude');
+    const registryByKey = new Map(registry.map((entry) => [entry.sessionKey, entry] as const));
+
+    for (const item of items) {
+      const taskId = item.key.startsWith('claude-task-run:')
+        ? item.key.split(':')[1]
+        : item.key.startsWith('claude-task:')
+          ? item.key.slice('claude-task:'.length).split(':')[0]
+          : '';
+      const registryEntry = registryByKey.get(item.key);
+      if (registryEntry?.agentId?.trim()) {
+        item.agentId = registryEntry.agentId.trim();
+      } else if (taskId && agentByTaskId.get(taskId)?.trim()) {
+        item.agentId = agentByTaskId.get(taskId)!.trim();
+      }
+      if (registryEntry?.model?.trim()) {
+        item.model = registryEntry.model.trim();
+      } else if (taskId && modelByTaskId.get(taskId)) {
+        item.model = modelByTaskId.get(taskId);
+      }
+    }
+  } catch {
+    // Enrichment is best-effort; listing sessions must not fail.
+  }
 
   return filterDeletedSessions(items);
 }

@@ -334,6 +334,8 @@ interface CronSessionListItem {
   label: string;
   displayName?: string;
   updatedAt?: number;
+  model?: string;
+  agentId?: string;
 }
 
 async function listAllCronSessions(): Promise<CronSessionListItem[]> {
@@ -490,6 +492,20 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
       .filter((placeholder) => !deletedKeys.has(placeholder.key)),
   );
   sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+
+  try {
+    const { listEngineSessionRegistryEntries } = await import('../../engines/session-registry');
+    const registry = await listEngineSessionRegistryEntries('openclaw');
+    const byKey = new Map(registry.map((entry) => [entry.sessionKey, entry] as const));
+    for (const session of sessions) {
+      const entry = byKey.get(session.key);
+      if (!entry) continue;
+      if (entry.model?.trim()) session.model = entry.model.trim();
+      if (entry.agentId?.trim()) session.agentId = entry.agentId.trim();
+    }
+  } catch {
+    // best-effort enrichment
+  }
 
   return filterDeletedSessions(sessions);
 }
@@ -895,7 +911,13 @@ export async function handleCronRoutes(
     try {
       const body = await parseJsonBody<{ id: string }>(req);
       const result = await ctx.gatewayManager.rpc('cron.run', { id: body.id, mode: 'force' });
-      await reviveCronDatedExecutionSession(body.id, 'main');
+      const {
+        resolveOpenClawCronJobExecutionModel,
+        syncTaskExecutionModelToDatedSession,
+      } = await import('../../utils/task-execution-session-model');
+      const resolved = await resolveOpenClawCronJobExecutionModel(body.id);
+      const agentId = resolved?.agentId?.trim() || 'main';
+      await reviveCronDatedExecutionSession(body.id, agentId);
       let jobLabel: string | undefined;
       try {
         const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
@@ -906,9 +928,39 @@ export async function handleCronRoutes(
       } catch {
         // ignore
       }
-      await ensureCronDatedExecutionSessionPlaceholder(body.id, 'main', { label: jobLabel });
+      await ensureCronDatedExecutionSessionPlaceholder(body.id, agentId, { label: jobLabel });
       await ensureTaskGroupFirstTriggeredOnRun(cronTaskGroupKey(body.id));
-      sendJson(res, 200, result);
+
+      const date = (() => {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      })();
+      const executionSessionKey = `agent:${agentId}:cron:${body.id}:${date}`;
+      let executionModel = resolved?.model?.trim() || '';
+      if (executionModel) {
+        try {
+          const synced = await syncTaskExecutionModelToDatedSession({
+            sessionKey: executionSessionKey,
+            model: executionModel,
+            engineType: 'openclaw',
+            agentId,
+            gatewayManager: ctx.gatewayManager,
+          });
+          if (synced?.model) executionModel = synced.model;
+        } catch {
+          // best-effort
+        }
+      }
+
+      sendJson(res, 200, {
+        ...(result && typeof result === 'object' ? result : { result }),
+        executionSessionKey,
+        executionModel: executionModel || undefined,
+        executionAgentId: agentId,
+      });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

@@ -20,6 +20,9 @@ interface StoSyncResponse {
   error?: string;
   legacyRepaired?: boolean;
   needsForcedGatewayRefresh?: boolean;
+  fallbackModel?: string;
+  notifyUi?: boolean;
+  agentsRemapped?: number;
 }
 
 export type SsoEnvironment =
@@ -58,8 +61,14 @@ export interface AccountSwitchOption {
 
 export type AccountSwitchOptionsStatus = 'idle' | 'loading' | 'loaded' | 'error';
 
-// Re-export shared site-user utilities.
+// Re-export shared site-user and auth-mode utilities.
 export { isSiteUser, setSiteDepartmentTypes, getSiteDepartmentTypes } from '../../shared/site-user-utils';
+export {
+  resolveAiResourceIsSite,
+  resolveSessionIsSite,
+  isHqDemoAsSite,
+  type AuthMode,
+} from '../../shared/auth-mode-utils';
 
 export type CrmWeekReportPolicyStatus = 'idle' | 'loading' | 'ok' | 'error';
 
@@ -207,11 +216,13 @@ function reloadAppAfterAccountSwitch(): void {
 
 async function syncStoModelsAndRefreshProviders(context: 'init' | 'login'): Promise<void> {
   const maxAttempts = 2;
+  let lastResult: StoSyncResponse | undefined;
 
   try {
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
         const result = await hostApiFetch<StoSyncResponse>('/api/sto-model-sync', { method: 'POST' });
+        lastResult = result;
         if (result?.error) {
           const isRetryable = result.error.startsWith('fetch-failed');
           if (isRetryable && attempt < maxAttempts) {
@@ -248,13 +259,22 @@ async function syncStoModelsAndRefreshProviders(context: 'init' | 'login'): Prom
     }
   } finally {
     try {
-      const { useProviderStore } = await import('@/stores/providers');
-      await useProviderStore.getState().refreshProviderSnapshot();
+      const { applyStoCatalogSyncToChatUi } = await import('@/lib/sync-workspace-default-to-chat');
+      await applyStoCatalogSyncToChatUi({ fallbackModel: lastResult?.fallbackModel });
     } catch (error) {
       console.warn(
-        `[auth] Provider snapshot refresh failed after ${context} STO sync attempt`,
+        `[auth] Chat UI catalog sync failed after ${context} STO sync attempt`,
         error,
       );
+      try {
+        const { useProviderStore } = await import('@/stores/providers');
+        await useProviderStore.getState().refreshProviderSnapshot();
+      } catch (refreshError) {
+        console.warn(
+          `[auth] Provider snapshot refresh failed after ${context} STO sync attempt`,
+          refreshError,
+        );
+      }
     }
   }
 }
