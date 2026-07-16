@@ -3,6 +3,33 @@ import { resolveSendTarget } from '@/stores/chat/resolve-send-target';
 import type { ChatState } from '@/stores/chat/types';
 
 describe('resolveSendTarget', () => {
+  it('keeps a new dialog when the selected agent already owns it', async () => {
+    const loadHistory = vi.fn();
+    const state = {
+      currentSessionKey: 'agent:writer:session-123-abc',
+      currentAgentId: 'writer',
+      sessions: [{ key: 'agent:writer:session-123-abc', engineType: 'claude' }],
+      messages: [],
+      loadHistory,
+    } as unknown as ChatState;
+    const set = vi.fn();
+    const resolveMainSessionKeyForAgent = vi.fn(() => 'agent:writer:main');
+
+    const target = await resolveSendTarget({
+      get: () => state,
+      set,
+      targetAgentId: 'writer',
+      resolveMainSessionKeyForAgent,
+      buildSessionSwitchPatch: () => ({ currentSessionKey: 'agent:writer:main' }),
+      resolveEngineTypeForSession: () => 'claude',
+    });
+
+    expect(target.sessionKey).toBe('agent:writer:session-123-abc');
+    expect(resolveMainSessionKeyForAgent).not.toHaveBeenCalled();
+    expect(set).not.toHaveBeenCalled();
+    expect(loadHistory).not.toHaveBeenCalled();
+  });
+
   it('switches to the target agent main session and loads history', async () => {
     const loadHistory = vi.fn().mockResolvedValue(undefined);
     let state = {

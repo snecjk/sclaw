@@ -141,6 +141,46 @@ describe('chat target routing', () => {
     expect(typeof payload.idempotencyKey).toBe('string');
   });
 
+  it('keeps a newly-created dialog when sending with its owning agent selected', async () => {
+    const { useChatStore } = await import('@/stores/chat');
+    const newSessionKey = 'agent:research:session-1770000000000-unique';
+
+    useChatStore.setState({
+      currentSessionKey: newSessionKey,
+      currentAgentId: 'research',
+      sessions: [{ key: newSessionKey, engineType: 'claude' }],
+      messages: [],
+      sessionLabels: {},
+      sessionLastActivity: {},
+      sending: false,
+      activeRunId: null,
+      streamingText: '',
+      streamingMessage: null,
+      streamingTools: [],
+      pendingFinal: false,
+      lastUserMessageAt: null,
+      pendingToolImages: [],
+      error: null,
+      loading: false,
+      thinkingLevel: null,
+      showThinking: true,
+    });
+
+    await useChatStore.getState().sendMessage('First message', undefined, 'research');
+
+    expect(useChatStore.getState().currentSessionKey).toBe(newSessionKey);
+    const sendCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send');
+    const payload = JSON.parse((sendCall?.[1] as { body: string }).body) as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      sessionKey: newSessionKey,
+      message: 'First message',
+      engineType: 'claude',
+    });
+    expect(invokeIpcMock.mock.calls.some(
+      ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.history',
+    )).toBe(false);
+  });
+
   it('uses the selected agent main session for attachment sends', async () => {
     const { useChatStore } = await import('@/stores/chat');
 

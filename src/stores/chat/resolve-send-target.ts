@@ -1,6 +1,11 @@
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import type { ChatGet, ChatSet } from './store-api';
 import type { ChatSession, SendMessageOptions } from './types';
+import { getAgentIdFromSessionKey } from './session-identity';
+
+function normalizeAgentId(value: string | undefined | null): string {
+  return (value ?? '').trim().toLowerCase();
+}
 
 export async function resolveSendTarget(input: {
   get: ChatGet;
@@ -32,7 +37,19 @@ export async function resolveSendTarget(input: {
     targetAgentId,
   } = input;
 
-  const targetSessionKey = resolveMainSessionKeyForAgent(targetAgentId) ?? get().currentSessionKey;
+  const initialState = get();
+  const currentSessionKey = initialState.currentSessionKey;
+  const selectedAgentId = normalizeAgentId(targetAgentId);
+  const currentSessionAgentId = normalizeAgentId(
+    getAgentIdFromSessionKey(currentSessionKey) ?? initialState.currentAgentId,
+  );
+  // The composer always supplies its selected agent. When it is already the owner
+  // of a newly-created dialog, keep that dialog's unique key; otherwise every first
+  // send is silently redirected to agent:<id>:main and resumes unrelated history.
+  const shouldKeepCurrentSession = !selectedAgentId || selectedAgentId === currentSessionAgentId;
+  const targetSessionKey = shouldKeepCurrentSession
+    ? currentSessionKey
+    : (resolveMainSessionKeyForAgent(targetAgentId) ?? currentSessionKey);
   if (targetSessionKey !== get().currentSessionKey) {
     set((state) => buildSessionSwitchPatch(state, targetSessionKey));
     await get().loadHistory(true);
