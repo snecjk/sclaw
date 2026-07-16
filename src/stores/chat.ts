@@ -90,10 +90,19 @@ import {
 import { deriveSessionLabelFromHistory, isCorruptedSessionLabel, normalizeDerivedSessionLabel } from '@/lib/workflow-session-hint';
 import { buildSessionLabelDerivationOptions, applyStoredSessionLabels, sanitizeGatewaySessionLabels, scrubCorruptedSessionLabels, shouldAutoDeriveSessionLabel } from '@/lib/session-label';
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
+import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
+import { resolveSkillGatewayText } from '@/lib/skill-gateway-text';
+import {
+  forgetSkillMessageMetaForSession,
+  rememberSkillMessageMeta,
+  restoreSkillMetaOnMessages,
+} from '@/lib/skill-message-meta-cache';
+import { appendSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { traceChatSession } from '../../shared/chat-session-trace';
 import {
   dedupeRedundantUserMessages,
+  dropSyntheticSkillSessionLabelUsers,
   isSameUserMessage,
   mergeOptimisticUserIntoHistory,
   normalizeUserMessageText,
@@ -1712,6 +1721,7 @@ export const useChatStore = create<ChatState>()(
     }
 
     rememberOptimisticDeletedSessionKey(key);
+    forgetSkillMessageMetaForSession(key);
     const additionalSuppressKeys = (options?.additionalSuppressKeys ?? [])
       .map((suppressKey) => suppressKey.trim())
       .filter((suppressKey) => suppressKey && suppressKey !== key);
@@ -1991,6 +2001,7 @@ export const useChatStore = create<ChatState>()(
       finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
       finalMessages = ensureWorkflowCardsInMessages(finalMessages, targetSessionKey, getMessageText);
       const gatewaySessionLabel = get().sessions.find((session) => session.key === targetSessionKey)?.label;
+      finalMessages = restoreSkillMetaOnMessages(finalMessages, targetSessionKey, gatewaySessionLabel);
       finalMessages = recoverInitialUserFromSessionLabel(
         finalMessages,
         targetSessionKey,
@@ -2006,6 +2017,7 @@ export const useChatStore = create<ChatState>()(
       finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null, {
         sessionKey: targetSessionKey,
       });
+      finalMessages = dropSyntheticSkillSessionLabelUsers(finalMessages);
       traceLoadHistoryUserReconciliation({
         sessionKey: targetSessionKey,
         userMessageAt: userMsgAt,
@@ -2349,9 +2361,22 @@ export const useChatStore = create<ChatState>()(
 
   sendMessage: async (...args: unknown[]) => {
     const options = normalizeSendMessageOptions(args);
-    const { text, attachments, targetAgentId, dingTalkMentions, workflowId: _workflowId, runId: _runId, workflowContext, embedBrowserContext: embedBrowserContextInput } = options;
-    const trimmed = text.trim();
-    if (!trimmed && (!attachments || attachments.length === 0)) return;
+    const {
+      text,
+      attachments,
+      targetAgentId,
+      dingTalkMentions,
+      workflowId: _workflowId,
+      runId: _runId,
+      workflowContext,
+      skillMeta,
+      embedBrowserContext: embedBrowserContextInput,
+    } = options;
+    const userDisplayText = text.trim();
+    const skillGatewayText = skillMeta
+      ? resolveSkillGatewayText(resolveSkillFromPlaza(skillMeta.slug).defaultPrompt, userDisplayText)
+      : null;
+    if (!skillGatewayText && !userDisplayText && (!attachments || attachments.length === 0) && !skillMeta) return;
 
     // Inject hidden workflow context / session hint for AI guidance
     const { appendWorkflowContext, stripWorkflowContextForDisplay } = await import('@/lib/workflow-context');
@@ -2405,36 +2430,37 @@ export const useChatStore = create<ChatState>()(
       })),
     );
 
-    let textForGateway = trimmed;
+    let textForGateway = skillGatewayText ?? userDisplayText;
     const { isSclawBrowserEmbedChatSessionKey } = await import('@/lib/sclaw-browser-chat-session');
     const isEmbedChatSession = isSclawBrowserEmbedChatSessionKey(currentSessionKey);
 
-    if (!workflowContext && !isEmbedChatSession) {
+    if (!skillMeta && !workflowContext && !isEmbedChatSession) {
       const {
         shouldInjectWorkflowSessionHint,
         isWorkflowCreationIntent,
       } = await import('@/hooks/use-workflow-intent');
-      if (shouldInjectWorkflowSessionHint(trimmed)) {
+      textForGateway = userDisplayText;
+      if (shouldInjectWorkflowSessionHint(userDisplayText)) {
         const hint = buildWorkflowSessionHint(
           currentSessionKey,
           get().messages,
           get().workflowCardStates,
         );
-        textForGateway = appendWorkflowSessionHint(trimmed, hint);
-      } else if (isWorkflowCreationIntent(trimmed)) {
+        textForGateway = appendWorkflowSessionHint(userDisplayText, hint);
+      } else if (isWorkflowCreationIntent(userDisplayText)) {
         get().clearPendingWorkflow();
-        let creationHint = buildWorkflowCreationHint(trimmed);
+        let creationHint = buildWorkflowCreationHint(userDisplayText);
         try {
           const { searchWorkflowTemplates } = await import('@/lib/workflow-api');
           const { extractWorkflowSearchQuery } = await import('@/lib/workflow-session-hint');
-          const searchResult = await searchWorkflowTemplates(extractWorkflowSearchQuery(trimmed), 5);
+          const searchResult = await searchWorkflowTemplates(extractWorkflowSearchQuery(userDisplayText), 5);
           if (searchResult.matchedItems.length > 0) {
-            creationHint = buildWorkflowCreationHint(trimmed, searchResult.matchedItems);
+            creationHint = buildWorkflowCreationHint(userDisplayText, searchResult.matchedItems);
           }
         } catch (err) {
           console.warn('[workflow-trace] creation hint pre-search failed:', err);
         }
-        textForGateway = appendWorkflowSessionHint(trimmed, creationHint);
+        textForGateway = appendWorkflowSessionHint(userDisplayText, creationHint);
       }
     }
 
@@ -2462,11 +2488,16 @@ export const useChatStore = create<ChatState>()(
       longSessionNotice: embedLongSessionNotice,
     });
     messageWithContext = appendWorkflowContext(messageWithContext, workflowContext);
-    const displayText = stripSclawBrowserEmbedContextForDisplay(
-      stripWorkflowSessionHintForDisplay(
-        stripWorkflowContextForDisplay(messageWithContext),
-      ),
-    );
+    const gatewayMessage = skillMeta
+      ? appendSkillTranscriptMarker(messageWithContext, skillMeta)
+      : messageWithContext;
+    const displayText = skillMeta
+      ? userDisplayText
+      : stripSclawBrowserEmbedContextForDisplay(
+        stripWorkflowSessionHintForDisplay(
+          stripWorkflowContextForDisplay(messageWithContext),
+        ),
+      );
 
     const quotaCheck = await checkDailyTokenQuota();
     if (quotaCheck) {
@@ -2498,6 +2529,7 @@ export const useChatStore = create<ChatState>()(
       content: displayText || (attachments?.length ? '(file attached)' : ''),
       timestamp: nowMs / 1000,
       id: crypto.randomUUID(),
+      _skillMeta: skillMeta,
       _attachedFiles: attachments?.map(a => ({
         fileName: a.fileName,
         mimeType: a.mimeType,
@@ -2506,6 +2538,9 @@ export const useChatStore = create<ChatState>()(
         filePath: a.stagedPath,
       })),
     };
+    if (skillMeta && userMsg.id) {
+      rememberSkillMessageMeta(currentSessionKey, userMsg.id, displayText, skillMeta, nowMs);
+    }
     traceChatSession({
       phase: 'merge-optimistic',
       action: 'optimistic-insert',
@@ -2516,7 +2551,7 @@ export const useChatStore = create<ChatState>()(
       reason: 'sendMessage',
       detail: {
         displayLen: displayText.length,
-        gatewayLen: messageWithContext.length,
+        gatewayLen: gatewayMessage.length,
         idempotencyKey: userMsg.id,
       },
     });
@@ -2555,8 +2590,8 @@ export const useChatStore = create<ChatState>()(
     const isFirstMessage = !messages.slice(0, -1).some((m) => m.role === 'user');
     if (!currentSessionKey.endsWith(':main') && isFirstMessage
       && shouldAutoDeriveSessionLabel(currentSessionKey, sessionLabels, isCorruptedSessionLabel)
-      && displayText) {
-      const normalized = normalizeDerivedSessionLabel(displayText);
+      && (displayText || skillMeta?.title)) {
+      const normalized = normalizeDerivedSessionLabel(displayText || skillMeta?.title || '');
       if (normalized) {
         set((s) => ({
           sessionLabels: {
@@ -2659,7 +2694,7 @@ export const useChatStore = create<ChatState>()(
             body: JSON.stringify({
               sessionKey: currentSessionKey,
               // message: messageWithContext || 'Process the attached file(s).',
-              message: messageWithContext || '',
+              message: gatewayMessage || '',
               deliver: false,
               idempotencyKey,
               engineType: currentSessionEngineType,
@@ -2677,7 +2712,7 @@ export const useChatStore = create<ChatState>()(
           'chat.send',
           {
             sessionKey: currentSessionKey,
-            message: messageWithContext,
+            message: gatewayMessage,
             deliver: false,
             idempotencyKey,
             engineType: currentSessionEngineType,

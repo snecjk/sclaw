@@ -1,6 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { createRef } from 'react';
+import { act, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { DingTalkMentionEditor } from '@/components/dingtalk/DingTalkMentionEditor';
+import {
+  DingTalkMentionEditor,
+  type DingTalkMentionEditorHandle,
+} from '@/components/dingtalk/DingTalkMentionEditor';
 
 describe('DingTalkMentionEditor seedText', () => {
   it('keeps the seeded draft when parent clears seedText after URL cleanup', () => {
@@ -22,6 +26,58 @@ describe('DingTalkMentionEditor seedText', () => {
     );
 
     expect(screen.getByRole('textbox')).toHaveTextContent('技能命令');
+  });
+
+  it('does not restore a deleted consumed skill in a fresh editor', () => {
+    const editorRef = createRef<DingTalkMentionEditorHandle>();
+    const { container, rerender, unmount } = render(
+      <DingTalkMentionEditor
+        ref={editorRef}
+        seedSkillSlug="skill-a"
+        onSnapshotChange={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector('.skill-token')).not.toBeNull();
+
+    rerender(
+      <DingTalkMentionEditor
+        ref={editorRef}
+        seedSkillSlug={undefined}
+        onSnapshotChange={vi.fn()}
+      />,
+    );
+    expect(container.querySelector('.skill-token')).not.toBeNull();
+
+    act(() => editorRef.current?.removeSkill());
+    expect(container.querySelector('.skill-token')).toBeNull();
+
+    unmount();
+    const fresh = render(
+      <DingTalkMentionEditor
+        seedSkillSlug={undefined}
+        onSnapshotChange={vi.fn()}
+      />,
+    );
+    expect(fresh.container.querySelector('.skill-token')).toBeNull();
+  });
+
+  it('replaces a consumed skill when a different seed arrives', () => {
+    const { container, rerender } = render(
+      <DingTalkMentionEditor
+        seedSkillSlug="skill-a"
+        onSnapshotChange={vi.fn()}
+      />,
+    );
+
+    rerender(
+      <DingTalkMentionEditor
+        seedSkillSlug="skill-b"
+        onSnapshotChange={vi.fn()}
+      />,
+    );
+
+    expect(container.querySelector('.skill-token')?.getAttribute('data-skill-slug')).toBe('skill-b');
   });
 
   it('focuses the seeded draft at the end after a separator space', () => {

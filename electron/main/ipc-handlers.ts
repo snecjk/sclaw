@@ -2661,6 +2661,64 @@ function mimeToExt(mimeType: string): string {
 
 const OUTBOUND_DIR = join(getOpenClawConfigDir(), 'media', 'outbound');
 
+async function getDirectorySize(dirPath: string): Promise<number> {
+  const fsP = await import('fs/promises');
+  let total = 0;
+  const entries = await fsP.readdir(dirPath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    try {
+      const entryPath = join(dirPath, entry.name);
+      if (entry.isSymbolicLink()) continue;
+
+      if (entry.isDirectory()) {
+        total += await getDirectorySize(entryPath);
+        continue;
+      }
+
+      if (entry.isFile()) {
+        const stat = await fsP.stat(entryPath);
+        total += stat.size;
+      }
+    } catch {
+      // Ignore entries that disappear or cannot be read while measuring.
+    }
+  }
+
+  return total;
+}
+
+async function skillUploadHasSkillMd(candidatePath: string): Promise<boolean> {
+  const fsP = await import('fs/promises');
+  const stat = await fsP.stat(candidatePath);
+
+  if (stat.isFile()) {
+    return basename(candidatePath).toLowerCase() === 'skill.md';
+  }
+
+  if (!stat.isDirectory()) return false;
+
+  try {
+    await fsP.access(join(candidatePath, 'SKILL.md'));
+    return true;
+  } catch {
+    // Continue with one-level nested folder check below.
+  }
+
+  const entries = await fsP.readdir(candidatePath, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    try {
+      await fsP.access(join(candidatePath, entry.name, 'SKILL.md'));
+      return true;
+    } catch {
+      // Continue searching.
+    }
+  }
+
+  return false;
+}
+
 /**
  * Generate a preview data URL for image files.
  * Resizes large images while preserving aspect ratio (only constrain the
@@ -2694,6 +2752,57 @@ async function generateImagePreview(filePath: string, mimeType: string): Promise
  * Stage files to ~/.stoclaw/openclaw/media/outbound/ for gateway access
  */
 function registerFileHandlers(): void {
+  // Lightweight stat: returns file size, or recursive content size for directories.
+  ipcMain.handle('file:stat', async (_, filePath: string) => {
+    try {
+      const fsP = await import('fs/promises');
+      const s = await fsP.stat(filePath);
+      const isDirectory = s.isDirectory();
+      return {
+        size: isDirectory ? await getDirectorySize(filePath) : s.size,
+        isDirectory,
+        isFile: s.isFile(),
+      };
+    } catch {
+      return { size: 0, isDirectory: false, isFile: false };
+    }
+  });
+
+  ipcMain.handle('file:validateSkillUpload', async (_, filePath: string) => {
+    const fsP = await import('fs/promises');
+    try {
+      const stat = await fsP.stat(filePath);
+      const isDirectory = stat.isDirectory();
+      const isFile = stat.isFile();
+      const ext = extname(filePath).toLowerCase();
+
+      if (isFile && basename(filePath).toLowerCase() === 'skill.md') {
+        return { valid: true, isDirectory, isFile };
+      }
+
+      if (isDirectory) {
+        return { valid: await skillUploadHasSkillMd(filePath), isDirectory, isFile };
+      }
+
+      if (isFile && ext === '.zip') {
+        const os = await import('os');
+        const { extractZip } = await import('../utils/zip-extract');
+        const stagingDir = join(os.tmpdir(), `stoclaw-skill-upload-validate-${Date.now()}-${crypto.randomUUID()}`);
+        try {
+          await fsP.mkdir(stagingDir, { recursive: true });
+          await extractZip(filePath, stagingDir);
+          return { valid: await skillUploadHasSkillMd(stagingDir), isDirectory, isFile };
+        } finally {
+          await fsP.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+        }
+      }
+
+      return { valid: false, isDirectory, isFile };
+    } catch {
+      return { valid: false, isDirectory: false, isFile: false };
+    }
+  });
+
   // Stage files from real disk paths (used with dialog:open)
   ipcMain.handle('file:stage', async (_, filePaths: string[]) => {
     const fsP = await import('fs/promises');

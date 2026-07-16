@@ -117,3 +117,18 @@ export async function toggleSkillEnabled(slug: string, enabled: boolean): Promis
   });
   if (!res.success) throw new Error(res.error || 'Toggle failed');
 }
+
+// POST /api/skill-plaza/upload
+export async function uploadSkillZip(filePath: string): Promise<string> {
+  const res = await hostApiFetch<{ success: boolean; slug?: string; error?: string }>(
+    '/api/skill-plaza/upload',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filePath }),
+    },
+  );
+  if (!res.success) throw new Error(res.error || 'Upload failed');
+  if (!res.slug) throw new Error('Upload succeeded but no slug returned');
+  return res.slug;
+}

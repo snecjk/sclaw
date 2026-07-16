@@ -83,7 +83,7 @@ const AGENT_HUB_CARDS: ReadonlyArray<{
   },
 ];
 
-export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
+export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: string; seedSkillSlug?: string }) {
   const { t } = useTranslation('home');
   const showConversation = useHomeConversationActive();
   const { isSplitGridPassthrough, splitGridPassthroughClass } =
@@ -126,6 +126,7 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
           <HomeMainConversation
             className="min-h-0 flex-1"
             seedText={seedText}
+            seedSkillSlug={seedSkillSlug}
             onSend={handleHubSend}
           />
         ) : (
@@ -193,6 +194,7 @@ export function HomeAgentHubSurface({ seedText }: { seedText?: string }) {
         <div className={homeHubFooterShellClass}>
           <HomeComposer
             seedText={seedText}
+            seedSkillSlug={seedSkillSlug}
             onSend={handleHubSend}
             onQueue={handleHubQueue}
             engineType={currentEngineType}

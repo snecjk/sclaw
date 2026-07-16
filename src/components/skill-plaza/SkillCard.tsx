@@ -40,8 +40,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
     e.stopPropagation();
     // Start a new session so the Gateway picks up any newly installed skills
     useChatStore.getState().newSession();
-    const prompt = encodeURIComponent(skill.defaultPrompt || skill.title);
-    navigate(`/?q=${prompt}`);
+    navigate(`/?skill=${encodeURIComponent(skill.slug)}`);
     useSkillPlazaStore.getState().useSkill(skill.slug).catch(() => {});
   };
 

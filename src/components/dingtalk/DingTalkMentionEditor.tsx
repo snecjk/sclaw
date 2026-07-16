@@ -7,22 +7,28 @@ import {
 } from 'react';
 import { cn } from '@/lib/utils';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
 import {
   clearMentionEditor,
   detectActiveMentionTrigger,
   insertAtTriggerCharacter,
   insertMentionAtTrigger,
+  insertSkillSpan,
   insertPlainTextAtCaret,
   insertWorkflowSpan,
+  consumeSkillTriggerText,
   MENTION_SPAN_SELECTOR,
   removeMentionBeforeCaret,
   removeMentionSpan,
+  removeSkillSpan,
+  readSkillMetaFromEditorRoot,
   serializeMentionEditor,
   setMentionEditorMentions,
   setMentionEditorPlainText,
   type ActiveMentionTrigger,
   type MentionComposerSnapshot,
 } from '@/lib/dingtalk-mention-composer';
+import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
 
 function focusEditorAtEnd(root: HTMLElement): void {
   root.focus();
@@ -47,11 +53,15 @@ export interface DingTalkMentionEditorHandle {
   focus: () => void;
   clear: () => void;
   getSnapshot: () => MentionComposerSnapshot;
+  readSkillMeta: () => SkillMeta | undefined;
   setPlainText: (text: string) => void;
   insertPlainText: (text: string) => void;
   setMentions: (mentions: DingTalkMention[]) => void;
   insertMention: (mention: DingTalkMention, trigger: ActiveMentionTrigger) => void;
   insertWorkflow: (workflowId: string, name: string, source?: string) => void;
+  insertSkill: (slug: string, title: string) => void;
+  consumeSkillInlineTrigger: (query?: string) => boolean;
+  removeSkill: () => void;
   /** 插入 `@` 并打开钉钉 mention 选择（与手动输入 `@` 等价） */
   openMentionPicker: () => void;
 }
@@ -68,6 +78,8 @@ interface DingTalkMentionEditorProps {
   onCompositionStart?: () => void;
   onCompositionEnd?: () => void;
   seedText?: string;
+  /** 技能广场「使用」：预填技能标签（仅 title 可见） */
+  seedSkillSlug?: string;
   /** 为 @ 标签显示删除按钮（用于定时任务发送对象等场景） */
   removableMentions?: boolean;
 }
@@ -86,11 +98,13 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       onCompositionStart,
       onCompositionEnd,
       seedText,
+      seedSkillSlug,
       removableMentions = false,
     },
     ref,
   ) {
     const editorRef = useRef<HTMLDivElement>(null);
+    const appliedSkillSeedRef = useRef<string | undefined>(undefined);
     const lastAppliedSeedRef = useRef<string | undefined>(undefined);
     const isComposingRef = useRef(false);
 
@@ -135,6 +149,11 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         if (!root) return { plainText: '', mentions: [], isEmpty: true };
         return serializeMentionEditor(root);
       },
+      readSkillMeta: () => {
+        const root = editorRef.current;
+        if (!root) return undefined;
+        return readSkillMetaFromEditorRoot(root);
+      },
       setPlainText: (text) => {
         const root = editorRef.current;
         if (!root) return;
@@ -172,6 +191,30 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         resizeEditor();
         syncFromDom();
       },
+      insertSkill: (slug, title) => {
+        const root = editorRef.current;
+        if (!root) return;
+        insertSkillSpan(root, slug, title);
+        resizeEditor();
+        syncFromDom();
+      },
+      consumeSkillInlineTrigger: (query) => {
+        const root = editorRef.current;
+        if (!root) return false;
+        const consumed = consumeSkillTriggerText(root, query);
+        if (consumed) {
+          resizeEditor();
+          syncFromDom();
+        }
+        return consumed;
+      },
+      removeSkill: () => {
+        const root = editorRef.current;
+        if (!root) return;
+        removeSkillSpan(root);
+        resizeEditor();
+        syncFromDom();
+      },
       openMentionPicker: () => {
         const root = editorRef.current;
         if (!root) return;
@@ -203,6 +246,24 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
 
       lastAppliedSeedRef.current = undefined;
     }, [resizeEditor, seedText, syncFromDom]);
+
+    useEffect(() => {
+      const slug = seedSkillSlug?.trim();
+      const root = editorRef.current;
+      if (!root) return;
+
+      if (!slug) {
+        appliedSkillSeedRef.current = undefined;
+        return;
+      }
+
+      if (appliedSkillSeedRef.current === slug) return;
+      appliedSkillSeedRef.current = slug;
+      const { title } = resolveSkillFromPlaza(slug);
+      insertSkillSpan(root, slug, title);
+      resizeEditor();
+      syncFromDom();
+    }, [resizeEditor, seedSkillSlug, syncFromDom]);
 
     const handleInput = useCallback(() => {
       resizeEditor();
