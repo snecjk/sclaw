@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { CheckCircle2, Package, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { useShallow } from 'zustand/react/shallow';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { useAuthStore } from '@/stores/auth';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +22,8 @@ import {
 
 export function SkillPlazaPage() {
   const { t } = useTranslation('skills');
+  // Subscribe (shallow) only to the render-relevant slice so churny state like
+  // installing/uninstalling flags does not re-render the whole page.
   const {
     activeTab,
     activeCategory,
@@ -31,69 +34,96 @@ export function SkillPlazaPage() {
     plazaSkillMetaMap,
     loading,
     syncingUserSkills,
+    awaitingAuth,
     viewMode,
+  } = useSkillPlazaStore(
+    useShallow((s) => ({
+      activeTab: s.activeTab,
+      activeCategory: s.activeCategory,
+      searchQuery: s.searchQuery,
+      plazaSkills: s.plazaSkills,
+      mySkills: s.mySkills,
+      categories: s.categories,
+      plazaSkillMetaMap: s.plazaSkillMetaMap,
+      loading: s.loading,
+      syncingUserSkills: s.syncingUserSkills,
+      awaitingAuth: s.awaitingAuth,
+      viewMode: s.viewMode,
+    })),
+  );
 
-    fetchCategories,
-    fetchPlazaSkills,
-    fetchLocalSkills,
-    syncUserSkills,
-    uninstallSkill,
-  } = useSkillPlazaStore();
+  // Actions are stable references in the store; select them individually.
+  const fetchLocalSkills = useSkillPlazaStore((s) => s.fetchLocalSkills);
+  const syncUserSkills = useSkillPlazaStore((s) => s.syncUserSkills);
+  const uninstallSkill = useSkillPlazaStore((s) => s.uninstallSkill);
 
   const user = useAuthStore((s) => s.user);
+  const isAuthInitialized = useAuthStore((s) => s.isInitialized);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  // Auth (STO token) must be ready before any plaza read; otherwise the backend
+  // would return an unfiltered category set. Until then we show a loading state.
+  const authReady = isAuthInitialized && isAuthenticated;
 
   const [selectedSkill, setSelectedSkill] = useState<SkillSummary | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SkillSummary | null>(null);
   const [showUploadSuccess, setShowUploadSuccess] = useState(false);
 
-  // Initial load: reset category to 'all' when page mounts
+  // Initial + user-change load. We wait until auth (STO token) is ready before
+  // any plaza read; a read before the token exists would return an unfiltered
+  // category set. While not ready the page stays in a loading state, and the
+  // store's own retry loop recovers if the token arrives slightly late.
   useEffect(() => {
+    if (!authReady) return;
     useSkillPlazaStore.setState({ activeCategory: '' });
-    fetchCategories();
-    fetchPlazaSkills({ reset: true });
-  }, [fetchCategories, fetchPlazaSkills]);
-
-  // Refresh when authenticated user changes (login / switch account)
-  useEffect(() => {
-    if (user?.code) {
-      void syncUserSkills();
-    }
+    void syncUserSkills();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.code]);
+  }, [authReady, user?.code]);
 
-  // Tab switch data loading
+  // Lazily load "我的技能" the first time its tab is viewed (or after an
+  // account switch marked it stale). setActiveTab also triggers this; the
+  // store dedups concurrent calls.
   useEffect(() => {
-    if (activeTab === 'mine') {
+    if (authReady && activeTab === 'mine' && mySkills.length === 0) {
       fetchLocalSkills();
     }
-  }, [activeTab, fetchLocalSkills]);
+  }, [authReady, activeTab, mySkills.length, fetchLocalSkills]);
+
+  // Index plaza skills by slug so mine-tab category resolution is O(1) per skill
+  // instead of a linear scan inside a filter (O(n*m)).
+  const plazaBySlug = useMemo(() => {
+    const map = new Map<string, SkillSummary>();
+    for (const p of plazaSkills) map.set(p.slug, p);
+    return map;
+  }, [plazaSkills]);
 
   const resolveMineCategoryCode = useCallback(
     (skill: SkillSummary) => {
-      const plazaSkill = plazaSkills.find((p) => p.slug === skill.slug);
+      const plazaSkill = plazaBySlug.get(skill.slug);
       return normalizeMineCategoryBucket(
         resolveMineSkillCategoryCode(skill, categories, plazaSkillMetaMap, plazaSkill),
         categories,
       );
     },
-    [plazaSkills, categories, plazaSkillMetaMap],
+    [plazaBySlug, categories, plazaSkillMetaMap],
   );
 
-  const rawSkills = activeTab === 'all'
-    ? plazaSkills
-    : activeCategory
-      ? mySkills.filter((s) => resolveMineCategoryCode(s) === activeCategory)
-      : mySkills;
+  const skills = useMemo(() => {
+    const rawSkills = activeTab === 'all'
+      ? plazaSkills
+      : activeCategory
+        ? mySkills.filter((s) => resolveMineCategoryCode(s) === activeCategory)
+        : mySkills;
 
-  const normalizedQuery = searchQuery.trim().toLowerCase();
-  const skills = activeTab === 'all'
-    ? rawSkills
-    : normalizedQuery
-      ? rawSkills.filter((s) =>
-          s.title.toLowerCase().includes(normalizedQuery) ||
-          s.description?.toLowerCase().includes(normalizedQuery)
-        )
-      : rawSkills;
+    if (activeTab === 'all') return rawSkills;
+
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    if (!normalizedQuery) return rawSkills;
+    return rawSkills.filter((s) =>
+      s.title.toLowerCase().includes(normalizedQuery) ||
+      s.description?.toLowerCase().includes(normalizedQuery),
+    );
+  }, [activeTab, activeCategory, plazaSkills, mySkills, searchQuery, resolveMineCategoryCode]);
+
   const isMine = activeTab === 'mine';
   const isGrid = viewMode === 'grid';
 
@@ -131,12 +161,12 @@ export function SkillPlazaPage() {
 
       {/* Skill list */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        {syncingUserSkills ? (
+        {syncingUserSkills && skills.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <RefreshCw className="h-8 w-8 mb-4 animate-spin opacity-50" />
             <p>{t('plaza.syncingUserSkills', { defaultValue: '正在同步您的技能…' })}</p>
           </div>
-        ) : loading && skills.length === 0 ? (
+        ) : (!authReady || awaitingAuth || loading) && skills.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <RefreshCw className="h-8 w-8 mb-4 animate-spin opacity-50" />
             <p>{t('plaza.loading', { defaultValue: '加载中...' })}</p>

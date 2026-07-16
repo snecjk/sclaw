@@ -2,6 +2,25 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { logger } from '../../utils/logger';
+import {
+  isSkillPlazaAuthNotReadyError,
+  SKILL_PLAZA_AUTH_NOT_READY_CODE,
+} from '../../services/skill-plaza-service';
+
+/**
+ * If the error is an auth-not-ready sentinel, reply with a 200 + structured
+ * code so the renderer can distinguish a transient "token loading" state from a
+ * real failure and show loading + retry. Returns true if handled.
+ */
+function handleAuthNotReady(res: ServerResponse, error: unknown): boolean {
+  if (!isSkillPlazaAuthNotReadyError(error)) return false;
+  sendJson(res, 200, {
+    success: false,
+    code: SKILL_PLAZA_AUTH_NOT_READY_CODE,
+    error: 'STO token not ready',
+  });
+  return true;
+}
 
 export async function handleSkillPlazaRoutes(
   req: IncomingMessage,
@@ -15,6 +34,7 @@ export async function handleSkillPlazaRoutes(
       const categories = await ctx.skillPlazaService.getCategories();
       sendJson(res, 200, { success: true, data: { categories } });
     } catch (error) {
+      if (handleAuthNotReady(res, error)) return true;
       sendJson(res, 500, {
         success: false,
         error: String(error),
@@ -38,6 +58,7 @@ export async function handleSkillPlazaRoutes(
       const data = await ctx.skillPlazaService.getPlazaSkills(params);
       sendJson(res, 200, { success: true, data });
     } catch (error) {
+      if (handleAuthNotReady(res, error)) return true;
       sendJson(res, 500, {
         success: false,
         error: String(error),
@@ -53,6 +74,7 @@ export async function handleSkillPlazaRoutes(
       const data = await ctx.skillPlazaService.getLocalSkills();
       sendJson(res, 200, { success: true, data });
     } catch (error) {
+      if (handleAuthNotReady(res, error)) return true;
       sendJson(res, 500, {
         success: false,
         error: String(error),
