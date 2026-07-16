@@ -66,8 +66,8 @@ export function adaptAppPlazaApp(value: unknown): AppItem | null {
   const raw = record(value);
   const id = text(raw.id);
   const name = text(raw.name);
-  const url = safeWebUrl(raw.url);
-  if (!id || !name || !url) return null;
+  const url = text(raw.url);
+  if (!id || !name) return null;
   const tone = text(raw.tone) as AppTone;
   return {
     id,

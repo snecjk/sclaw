@@ -19,8 +19,15 @@ import {
 describe('app plaza renderer API adapter', () => {
   beforeEach(() => hostApiFetchMock.mockReset());
 
-  it('normalizes backend apps and rejects unsafe URLs', () => {
-    expect(adaptAppPlazaApp({ id: 'bad', name: 'Bad', url: 'javascript:alert(1)' })).toBeNull();
+  it('normalizes backend apps and preserves server-provided URLs', () => {
+    expect(adaptAppPlazaApp({ id: 'relative', name: 'Relative', url: 'customer-quote.html' })).toMatchObject({
+      id: 'relative',
+      url: 'customer-quote.html',
+    });
+    expect(adaptAppPlazaApp({ id: 'scheme', name: 'Scheme', url: 'custom-app://open' })).toMatchObject({
+      id: 'scheme',
+      url: 'custom-app://open',
+    });
     expect(safeWebUrl('file:///tmp/a')).toBe('');
     expect(adaptAppPlazaApp({
       id: 'app-a',
@@ -34,6 +41,14 @@ describe('app plaza renderer API adapter', () => {
       tone: 'gray',
       kind: 'builtin',
       categoryCode: 'ops',
+    });
+  });
+
+  it('keeps renderable apps even when the server URL is empty', () => {
+    expect(adaptAppPlazaApp({ id: 'display-only', name: 'Display Only', url: '' })).toMatchObject({
+      id: 'display-only',
+      name: 'Display Only',
+      url: '',
     });
   });
 

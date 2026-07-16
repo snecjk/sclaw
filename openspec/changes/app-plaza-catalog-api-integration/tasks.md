@@ -5,7 +5,7 @@
 
 ## 2. Renderer 数据模型与状态
 
-- [x] 2.1 定义 Banner、分类和 APP 客户端类型及响应适配器，校验图片/跳转/APP URL 仅允许 HTTP/HTTPS，并为未知图标色调提供安全默认值（Requirement: Banner 使用服务端整图内容；Requirement: APP 列表使用服务端目录）
+- [x] 2.1 定义 Banner、分类和 APP 客户端类型及响应适配器，校验 Banner 图片/跳转 URL 仅允许 HTTP/HTTPS，APP URL 原样保留，并为未知图标色调提供安全默认值（Requirement: Banner 使用服务端整图内容；Requirement: APP 列表使用服务端目录）
 - [x] 2.2 将市场 Tab 的 Banner、分类和 APP 状态改为异步服务端状态，分别维护 loading/error，APP 支持重置查询、分页追加和请求竞态保护（Requirement: 三块内容经 Main 代理且独立降级；Requirement: APP 列表使用服务端目录）
 - [x] 2.3 保持“我的应用”、收藏和外部应用现有行为不变，避免本次 Store 调整扩大到非目标区域（Requirement: 三块内容经 Main 代理且独立降级）
 
@@ -28,3 +28,4 @@
 - [x] 5.2 增加 Renderer 适配、状态和页面测试，覆盖整图 Banner 目标行为、分类映射、APP 搜索/分页及三块独立失败（Requirement: Banner 使用服务端整图内容；Requirement: 分类导航使用服务端分类；Requirement: APP 列表使用服务端目录）
 - [x] 5.3 运行相关 Vitest、定向 ESLint、TypeScript 类型检查、`git diff --check` 和 OpenSpec 严格校验（Requirement: 三块内容经 Main 代理且独立降级）
 - [x] 5.4 检查 `README.md`、`README.zh-CN.md`、`README.ja-JP.md` 是否需要同步应用广场数据源说明（Requirement: 三块内容经 Main 代理且独立降级）
+- [x] 5.5 解除 APP URL 的前端协议限制并增加相对地址、非 HTTP/HTTPS 协议及空地址适配测试（Requirement: APP 列表使用服务端目录）

@@ -47,9 +47,9 @@ Banner 组件仅使用 `id`、`imageUrl`、`targetType`、`targetUrl`、`targetA
 
 ### 4. APP 列表服务端驱动
 
-APP 行使用 `id`、`name`、`description`、`url`、`iconKey`、`iconUrl`、`tone`；`categoryCode` 用于契约一致性，`recent` 可作为现有/后续辅助展示。关键词或分类变化时重置到第一页，继续加载时请求下一页并按 `id` 去重合并。
+APP 行使用 `id`、`name`、`description`、`url`、`iconKey`、`iconUrl`、`tone`；`categoryCode` 用于契约一致性，`recent` 可作为现有/后续辅助展示。APP 的 `url` 按服务端返回值原样保留，前端不限制协议、不因相对地址或空地址过滤条目；空地址仅在点击时不执行打开。关键词或分类变化时重置到第一页，继续加载时请求下一页并按 `id` 去重合并。
 
-**Rationale:** 后端在分页前完成状态与人员可见性过滤，服务端 `total` 是市场数量的权威来源。
+**Rationale:** 后端在分页前完成状态与人员可见性过滤，服务端 `total` 是市场数量的权威来源；URL 契约同样由服务端管理，前端只负责目录渲染和调用现有打开逻辑，避免适配阶段过滤条目后导致展示数量与 `total` 不一致。
 
 **Alternative considered:** 拉取最多 100 条后继续在前端搜索和分类。该方案无法覆盖更大目录，也会重复服务端能力，因此不采用。
 
