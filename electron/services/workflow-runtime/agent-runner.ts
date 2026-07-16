@@ -1,6 +1,9 @@
 import path from 'node:path';
+import { mkdir } from 'node:fs/promises';
 import { getDataDir } from '../../utils/paths';
 import { buildClaudeEnvForAccount, getBundledClaudeExecutablePath } from '../../engines/claude-adapter';
+import { getDefaultProviderAccountId } from '../../services/providers/provider-store';
+import { workflowExecLog } from './logging';
 
 /**
  * agent-runner — a slim workflow-node runner that calls the Claude Agent SDK's
@@ -28,12 +31,31 @@ export interface InvokeResult {
   error?: string;
 }
 
+export interface AgentStreamEvent {
+  type: 'agent.answer_delta' | 'agent.tool_start' | 'agent.tool_end' | 'agent.progress';
+  message?: string;
+  rawText?: string;
+  toolId?: string;
+  toolName?: string;
+  callId?: string;
+  isError?: boolean;
+}
+
 interface ActiveHandle {
   close?: () => void;
   finish?: (result: InvokeResult) => void;
 }
 
 const activeQueries = new Map<string, ActiveHandle>();
+const CLAUDE_AUTH_REQUIRED_RE = /not\s+logged\s+in\s*[·:.-]?\s*please\s+run\s+\/login/i;
+const CLAUDE_API_ERROR_RE = /(?:^|\n)API Error:\s*(\d{3})\b/i;
+
+async function ensureDirectory(directory: string): Promise<void> {
+  if (!directory || path.parse(directory).root === directory) {
+    return;
+  }
+  await mkdir(directory, { recursive: true });
+}
 
 /**
  * Cancel an in-flight agent invocation. Calls the active query's `close()` and
@@ -41,14 +63,18 @@ const activeQueries = new Map<string, ActiveHandle>();
  * wait for the watchdog/deadline to fire after a cancel.
  */
 export function cancelAgent(runId: string, nodeId: string): void {
-  const handle = activeQueries.get(`${runId}:${nodeId}`);
-  if (!handle) return;
-  try {
-    handle.close?.();
-  } catch {
-    /* ignore close errors — best-effort */
+  const entries = nodeId
+    ? [[`${runId}:${nodeId}`, activeQueries.get(`${runId}:${nodeId}`)] as const]
+    : [...activeQueries.entries()].filter(([key]) => key.startsWith(`${runId}:`));
+  for (const [, handle] of entries) {
+    if (!handle) continue;
+    try {
+      handle.close?.();
+    } catch {
+      /* ignore close errors — best-effort */
+    }
+    handle.finish?.({ status: 'failed', rawText: '', error: '节点执行已取消' });
   }
-  handle.finish?.({ status: 'failed', rawText: '', error: '节点执行已取消' });
 }
 
 export interface InvokeArgs {
@@ -71,8 +97,15 @@ export interface InvokeArgs {
   deadlineMs?: number;
   /** Account id forwarded to `buildClaudeEnvForAccount` when `env` is not injected. */
   accountId?: string;
+  /** Explicit model id selected from the locally configured runtime catalog. */
+  model?: string;
   /** Reserved for retry metadata; not consumed by the runner. */
   retryReason?: string;
+  /** Streams Claude SDK partial events into the workflow runtime event log. */
+  onStreamEvent?: (event: AgentStreamEvent) => void | Promise<void>;
+  allowedTools?: string[];
+  allowedSkills?: string[];
+  permissionMode?: string;
 }
 
 export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
@@ -89,28 +122,50 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
   // from cwd so no second getDataDir() call is needed (keeps tests electron-free).
   const additionalDirectories = args.additionalDirectories ?? [path.dirname(cwd)];
 
-  const env = args.env ?? (await buildClaudeEnvForAccount(args.accountId));
+  const accountId = args.accountId ?? await resolveDefaultAccountId();
+  const env = args.env ?? (await buildClaudeEnvForAccount(accountId));
   const noProgressMs = args.noProgressMs ?? 300_000;
   const deadlineMs = args.deadlineMs ?? 960_000;
 
+  await ensureDirectory(cwd);
+  await Promise.all(additionalDirectories.map(ensureDirectory));
+
+  const permissionMode = args.permissionMode === 'readonly' ? 'plan'
+    : args.permissionMode === 'approval_required' ? 'default' : 'bypassPermissions';
   const options: Record<string, unknown> = {
     cwd,
     additionalDirectories,
     env,
-    permissionMode: 'bypassPermissions',
-    allowDangerouslySkipPermissions: true,
+    permissionMode,
+    allowDangerouslySkipPermissions: permissionMode === 'bypassPermissions',
     pathToClaudeCodeExecutable: args.pathToClaudeCodeExecutable ?? getBundledClaudeExecutablePath(),
     settingSources: [],
-    skills: 'none',
+    // Workflow definitions can carry cloud-only model aliases such as "sonnet".
+    // The local executor must instead use the model selected in the local
+    // provider catalog, otherwise the SDK falls back to an unavailable Claude
+    // model before the node prompt is even sent.
+    settings: args.model ? { model: args.model } : undefined,
     includePartialMessages: true,
+    allowedTools: args.allowedTools?.length ? args.allowedTools : undefined,
+    skills: args.allowedSkills?.length ? args.allowedSkills : undefined,
     // Deliberately exclude all 5 chat runtime extensions for the workflow agent:
-    // no mcpServers, hooks, plugins, systemPrompt, or skills.
+    // no mcpServers, hooks, plugins, or systemPrompt. Do not pass `skills` here:
+    // the SDK supports values like `all`, but `none` is not a valid sentinel in
+    // current builds and causes an internal `*.map is not a function` failure.
   };
 
+  workflowExecLog('debug', 'agent-input', prompt, {
+    runId: ctx.runId,
+    nodeId: ctx.nodeId,
+    model: args.model,
+    cwd,
+    additionalDirectories,
+  });
   const query = await sdk.query({ prompt, options });
   const key = `${ctx.runId}:${ctx.nodeId}`;
 
   let rawText = '';
+  let streamedText = '';
   let usage: any;
   let lastMsgAt = Date.now();
   let settled = false;
@@ -124,7 +179,16 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
       if (watchdog) clearInterval(watchdog);
       if (deadlineTimer) clearTimeout(deadlineTimer);
       activeQueries.delete(key);
-      resolve(r);
+      const finalText = r.rawText || streamedText;
+      workflowExecLog('debug', 'agent-final-output', finalText, {
+        runId: ctx.runId,
+        nodeId: ctx.nodeId,
+        status: r.status,
+        // outputLength: finalText.length,
+        // usage: r.usage,
+        error: r.error,
+      });
+      resolve({ ...r, rawText: finalText });
     };
 
     activeQueries.set(key, {
@@ -162,19 +226,58 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
       try {
         for await (const msg of query) {
           lastMsgAt = Date.now();
+          const streamDeltaText = extractStreamDeltaText(msg);
+          if (streamDeltaText) {
+            streamedText += streamDeltaText;
+            workflowExecLog('debug', 'agent-stream_event', streamDeltaText, {
+              runId: ctx.runId,
+              nodeId: ctx.nodeId,
+            });
+            await emitStreamEvent(args.onStreamEvent, {
+              type: 'agent.answer_delta',
+              message: streamDeltaText,
+              rawText: streamedText,
+            });
+          }
+
+          let deltaText = '';
           if (msg?.type === 'assistant' && msg.message?.content) {
             for (const block of msg.message.content) {
               if (block?.type === 'text' && typeof block.text === 'string') {
                 rawText += block.text;
+                deltaText += block.text;
+                continue;
+              }
+              const toolEvent = toToolStreamEvent(block);
+              if (toolEvent) {
+                await emitStreamEvent(args.onStreamEvent, toolEvent);
               }
             }
           }
+          if (deltaText && !streamedText) {
+            workflowExecLog('debug', 'agent-stream-text', deltaText, {
+              runId: ctx.runId,
+              nodeId: ctx.nodeId,
+              source: 'assistant_message',
+            });
+            await emitStreamEvent(args.onStreamEvent, {
+              type: 'agent.answer_delta',
+              message: deltaText,
+              rawText,
+            });
+          }
           if (msg?.type === 'result') {
             usage = msg.usage;
-            finish({ status: 'succeeded', rawText, usage });
+            const agentError = detectAgentExecutionError(rawText);
+            finish(agentError
+              ? { status: 'failed', rawText, usage, error: agentError }
+              : { status: 'succeeded', rawText, usage });
           }
         }
-        finish({ status: 'succeeded', rawText, usage });
+        const agentError = detectAgentExecutionError(rawText);
+        finish(agentError
+          ? { status: 'failed', rawText, usage, error: agentError }
+          : { status: 'succeeded', rawText, usage });
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e);
         finish({ status: 'failed', rawText, error: message });
@@ -183,4 +286,68 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
   });
 
   return result;
+}
+
+async function resolveDefaultAccountId(): Promise<string | undefined> {
+  try {
+    return await getDefaultProviderAccountId();
+  } catch {
+    return undefined;
+  }
+}
+
+function detectAgentExecutionError(rawText: string): string | undefined {
+  if (CLAUDE_AUTH_REQUIRED_RE.test(rawText)) {
+    return 'Claude 账号未登录或鉴权环境缺失，请检查默认模型账号登录状态';
+  }
+  const apiError = rawText.match(CLAUDE_API_ERROR_RE);
+  return apiError ? `模型调用失败（HTTP ${apiError[1]}）: ${rawText.slice(0, 500)}` : undefined;
+}
+
+async function emitStreamEvent(
+  onStreamEvent: InvokeArgs['onStreamEvent'],
+  event: AgentStreamEvent,
+): Promise<void> {
+  if (!onStreamEvent) return;
+  await onStreamEvent(event);
+}
+
+function extractStreamDeltaText(msg: any): string {
+  if (msg?.type !== 'stream_event') return '';
+  const event = msg.event;
+  if (event?.type !== 'content_block_delta') return '';
+  const delta = event.delta;
+  return delta?.type === 'text_delta' && typeof delta.text === 'string' ? delta.text : '';
+}
+
+function toToolStreamEvent(block: any): AgentStreamEvent | undefined {
+  if (block?.type === 'tool_use') {
+    const toolName = typeof block.name === 'string' ? block.name : undefined;
+    return {
+      type: 'agent.tool_start',
+      toolId: toolName,
+      toolName,
+      callId: typeof block.id === 'string' ? block.id : undefined,
+      message: stringifyToolPayload(block.input),
+    };
+  }
+  if (block?.type === 'tool_result') {
+    return {
+      type: 'agent.tool_end',
+      callId: typeof block.tool_use_id === 'string' ? block.tool_use_id : undefined,
+      isError: Boolean(block.is_error),
+      message: stringifyToolPayload(block.content),
+    };
+  }
+  return undefined;
+}
+
+function stringifyToolPayload(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }

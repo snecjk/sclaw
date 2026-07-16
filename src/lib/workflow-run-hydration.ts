@@ -1,10 +1,12 @@
 /**
- * Hydrate workflow card state from GET /agent/v1/runs/{runId}.
- * Active runs resume Main-process polling; terminal runs render once without SSE/polling.
+ * Hydrate workflow card state from the client-local runtime DB (workflow-runtime:getRun).
+ * This is a one-shot initial fetch on session switch / app init / card mount. Active runs
+ * do NOT need an explicit subscribe here — the runtime emits a 'workflow:status-update'
+ * broadcast on every engine status transition, which the app-wide useWorkflowCompletion
+ * listener merges into card state and finalizes on terminal. Terminal runs render once.
  */
-import { invokeIpc } from '@/lib/api-client';
-import { fetchWorkflowStatus, beginWorkflowRunSseTrace } from '@/lib/workflow-api';
-import { isActiveWorkflowRunStatus, isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
+import { getRunViaIpc, runToExecutionState } from '@/lib/workflow-api';
+import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import { mergeWorkflowCardState } from '@/lib/workflow-card-state-merge';
 import { deliverWorkflowCompletionIfNeeded } from '@/lib/workflow-completion-delivery';
 import { useChatStore, type RawMessage } from '@/stores/chat';
@@ -47,10 +49,11 @@ export async function hydrateWorkflowRun(
 
   hydrateInFlight.add(runId);
   try {
-    
-    const state = await fetchWorkflowStatus(runId);
-    if (!state) {
-      console.warn('[workflow-trace] hydrateWorkflowRun failed runId=%s (GET run returned null)', runId);
+    // gap3 hydration: client-local runs live in the renderer-side DB. Fetch the full
+    // WorkflowRunResponse via the runtime IPC and map to UI execution state.
+    const run = await getRunViaIpc(runId);
+    if (!run) {
+      console.warn('[workflow-trace] hydrateWorkflowRun failed runId=%s (getRun returned null)', runId);
       return;
     }
 
@@ -58,36 +61,18 @@ export async function hydrateWorkflowRun(
 
     const previous = useChatStore.getState().workflowCardStates[runId];
     const exec = getExecutionByRunId(runId, ctx.sessionKey);
+    const state = runToExecutionState(run);
     const merged = mergeWorkflowCardState(previous, state, { localStartedAtMs: exec?.createdAt });
     useChatStore.getState().setWorkflowCardState(runId, merged);
     updateExecutionStatus(runId, state.status, ctx.sessionKey);
 
-    if (isActiveWorkflowRunStatus(state.status)) {
-      const exec = getExecutionByRunId(runId, ctx.sessionKey);
-      const workflowId = state.workflowId || exec?.workflowId;
-      if (!workflowId) {
-        console.warn(
-          '[workflow-trace] hydrateWorkflowRun skip startTracking runId=%s reason=missing workflowId apiStatus=%s',
-          runId,
-          state.status,
-        );
-        return;
-      }
-
-      
-      await invokeIpc('workflow:startTracking', {
-        runId,
-        workflowId,
-        sessionKey: ctx.sessionKey,
-        agentId: ctx.agentId,
-      });
-      beginWorkflowRunSseTrace(runId);
-      return;
-    }
-
-    hydratedTerminal.add(runId);
-    await invokeIpc('workflow:stopTracking', { runId }).catch(() => {});
+    // Active runs: no explicit subscribe needed. The client-local runtime emits a
+    // 'workflow:status-update' broadcast on every engine status transition; the
+    // useWorkflowCompletion listener (mounted app-wide) merges those into card state
+    // and finalizes terminal runs. Hydration's job is the one-shot initial fetch only.
     if (isTerminalWorkflowRunStatus(state.status)) {
+      hydratedTerminal.add(runId);
+      // Pass prefetched terminal state so delivery skips its own HTTP fetch fallback.
       void deliverWorkflowCompletionIfNeeded(runId, ctx.sessionKey, merged);
     }
   } finally {

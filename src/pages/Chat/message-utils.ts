@@ -365,7 +365,9 @@ export function resolveAssistantCopyShareContent(options: {
   if (workflowCard) {
     const state = workflowCardStates[workflowCard.runId]
       ?? getExecutionByRunId(workflowCard.runId, sessionKey);
-    const summary = state?.result?.summary?.trim() ?? '';
+    const summary = typeof state?.result?.summary === 'string'
+      ? state.result.summary.trim()
+      : '';
     for (const artifact of state?.result?.artifacts ?? []) {
       if (!isUserFacingArtifactUrl(artifact.url)) continue;
       addFile(artifactToPreviewFile(artifact));

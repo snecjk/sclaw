@@ -25,17 +25,15 @@ const electronAPI = {
         'hostapi:fetch',
         'preview:httpFetch',
         // Workflow
-        'workflow:startTracking',
-        'workflow:stopTracking',
-        'workflow:sync-state',
         'workflow:appendSessionRecord',
-        'workflow:stream:subscribe',
-        'workflow:stream:unsubscribe',
         // Workflow runtime（客户端执行下沉）
         'workflow-runtime:start',
         'workflow-runtime:resume',
         'workflow-runtime:cancel',
         'workflow-runtime:resumeApproval',
+        'workflow-runtime:resumeInput',
+        'workflow-runtime:retrySync',
+        'workflow-runtime:getRun',
         'gateway:health',
         'gateway:getControlUiUrl',
         // OpenClaw
@@ -172,12 +170,7 @@ const electronAPI = {
         'form:isShowing',
         'form:hide',
         // Workflow
-        'workflow:startTracking',
-        'workflow:stopTracking',
-        'workflow:sync-state',
         'workflow:appendSessionRecord',
-        'workflow:stream:subscribe',
-        'workflow:stream:unsubscribe',
       ];
 
       if (validChannels.includes(channel)) {
@@ -228,9 +221,6 @@ const electronAPI = {
         'startup-progress',
         'auth:token-expired',
         'workflow:status-update',
-        'workflow:poll-trace',
-        'workflow:stream:event',
-        'workflow:stream:error',
       ];
 
       if (validChannels.includes(channel)) {

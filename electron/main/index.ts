@@ -561,7 +561,7 @@ async function initialize(): Promise<void> {
   );
 
   // Workflow runtime（客户端执行下沉）：收口在途 run + 起 outbox flushLoop
-  const { startWorkflowRuntimeOnLaunch } = await import('./services/workflow-runtime/bootstrap');
+  const { startWorkflowRuntimeOnLaunch } = await import('../services/workflow-runtime/bootstrap');
   startWorkflowRuntimeOnLaunch();
 
   // Register form IPC handlers

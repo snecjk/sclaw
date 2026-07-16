@@ -4,6 +4,11 @@
  * - validateOutputAgainstSchema: 移植自 schema_validator.py:7 (_validate_value 递归)
  * - normalizeAgentResultOutput: 移植自 output_templates.py:414（>2KB 落盘用注入的 processFileWriter）
  */
+import fs from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { getDataDir } from '../../utils/paths';
+
 const TAG_RE = /<[^>]+>/g;
 const JSON_FENCE_RE = /```json\s*([\s\S]*?)```/i;
 
@@ -29,6 +34,20 @@ export function extractJsonFromText(text: string): any | null {
     try { return JSON.parse(target.slice(first, last + 1)); } catch { /* fallthrough */ }
   }
   return null;
+}
+
+export function createProcessFileWriter(runId: string, nodeId: string): (value: any, serialized: string) => any {
+  return (_value, serialized) => {
+    const directory = path.join(getDataDir(), 'workflow-runtime', 'workspaces', runId, nodeId, 'processFiles');
+    fs.mkdirSync(directory, { recursive: true });
+    const filePath = path.join(directory, `result-${Date.now()}.json`);
+    fs.writeFileSync(filePath, serialized, 'utf8');
+    return {
+      kind: 'generic_data_result', version: '1', status: 'succeeded',
+      data: { filePath, uri: pathToFileURL(filePath).href },
+      processFiles: [{ filePath, uri: pathToFileURL(filePath).href, name: path.basename(filePath), size: Buffer.byteLength(serialized), fileType: 'application/json' }],
+    };
+  };
 }
 
 export function validateOutputAgainstSchema(schema: any, output: any): { ok: boolean; reason?: string } {
@@ -114,11 +133,50 @@ export function normalizeAgentResultOutput(
     result = extractJsonFromText(ctx.rawText);
   }
   if (result === null || result === undefined) return result;
-  const str = typeof result === 'string' ? result : JSON.stringify(result);
+
+  const resultKind = contract?.resultKind || 'generic_data_result';
+
+  // The workflow contract always consumes the canonical result envelope.  Agent
+  // models, however, commonly return the business payload directly (for
+  // example `{ summary: '...' }`).  The server runtime normalizes that shape
+  // before validation; keep the local runtime compatible so a valid task is not
+  // retried and then marked failed just because the envelope was omitted.
+  let normalized = result;
+  if (typeof result === 'string') {
+    const contentMode = contract?.contentMode || 'structured_json';
+    if (contentMode === 'structured_json') {
+      normalized = {
+        kind: resultKind,
+        version: '1',
+        status: 'succeeded',
+        data: { text: result },
+        summary: { text: result },
+      };
+    } else {
+      normalized = result;
+    }
+  } else if (typeof result === 'object' && !Array.isArray(result)) {
+    if ('kind' in result && 'data' in result) {
+      normalized = {
+        ...result,
+        version: result.version ?? '1',
+        status: result.status ?? 'succeeded',
+      };
+    } else {
+      normalized = {
+        kind: resultKind,
+        version: '1',
+        status: 'succeeded',
+        data: result,
+      };
+    }
+  }
+
+  const str = typeof normalized === 'string' ? normalized : JSON.stringify(normalized);
   const preferFile = contract?.preferFileOutput !== false;
   if (preferFile && str.length > 2048 && typeof ctx?.processFileWriter === 'function') {
     // >2KB 落盘（客户端 cwd 下的 processFiles/）
-    return ctx.processFileWriter(result, str);
+    return ctx.processFileWriter(normalized, str);
   }
-  return result;
+  return normalized;
 }

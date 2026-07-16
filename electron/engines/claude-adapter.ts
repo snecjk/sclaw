@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { syncClaudeSkillsForAgent } from '../services/claude-skill-bridge';
@@ -10,6 +9,7 @@ import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import { getClaudeConfigDir } from '../utils/paths';
 import { getApiKey } from '../utils/secure-storage';
+import { getClaudeExecutablePath } from '../utils/claude-executable';
 import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, upsertEngineSessionRegistryEntry, type EngineSessionRegistryEntry } from './session-registry';
@@ -56,20 +56,7 @@ const CLAUDE_VISION_MIME_TYPES = new Set([
 ]);
 
 export function getBundledClaudeExecutablePath(): string | undefined {
-  if (!process.resourcesPath) return undefined;
-
-  const binaryName = process.platform === 'win32' ? 'claude.exe' : 'claude';
-  const packageName = `claude-agent-sdk-${process.platform}-${process.arch}`;
-  const candidate = join(
-    process.resourcesPath,
-    'app.asar.unpacked',
-    'node_modules',
-    '@anthropic-ai',
-    packageName,
-    binaryName,
-  );
-
-  return existsSync(candidate) ? candidate : undefined;
+  return getClaudeExecutablePath();
 }
 
 export async function buildClaudeEnvForAccount(accountId?: string): Promise<NodeJS.ProcessEnv> {

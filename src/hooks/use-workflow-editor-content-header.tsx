@@ -3,7 +3,7 @@
  */
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ExternalLink } from 'lucide-react';
+import { ChevronLeft, ExternalLink, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { openMemoryCenterWorkflowDesigner } from '@/lib/memory-center-web-url';
@@ -25,6 +25,9 @@ export interface UseWorkflowEditorContentHeaderOptions {
   enabled?: boolean;
   /** 手动新建空画布页：标题用「新建工作流」，无次级 id、无外链按钮 */
   create?: boolean;
+  /** 客户端本地试运行入口，由编辑路由提供，和 iframe 内画布交互解耦。 */
+  onTryRun?: () => void;
+  tryRunDisabled?: boolean;
 }
 
 function truncatePrompt(prompt: string, maxLen = 50): string {
@@ -42,6 +45,8 @@ export function useWorkflowEditorContentHeader({
   promptCacheId,
   enabled = true,
   create = false,
+  onTryRun,
+  tryRunDisabled = false,
 }: UseWorkflowEditorContentHeaderOptions): void {
   const { t } = useTranslation('workflow');
   const stoToken = useAuthStore((s) => s.user?.stoToken);
@@ -96,17 +101,25 @@ export function useWorkflowEditorContentHeader({
     if (!enabled || !workflowId) return null;
 
     return (
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => openMemoryCenterWorkflowDesigner(workflowId, token, promptCacheId, prompt)}
-      >
-        <ExternalLink className="mr-1 h-3.5 w-3.5" aria-hidden />
-        {t('editor.openInBrowser')}
-      </Button>
+      <>
+        {onTryRun ? (
+          <Button type="button" variant="outline" size="sm" disabled={tryRunDisabled} onClick={onTryRun}>
+            <Play className="mr-1 h-3.5 w-3.5" aria-hidden />
+            {t('builder.tryRun')}
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => openMemoryCenterWorkflowDesigner(workflowId, token, promptCacheId, prompt)}
+        >
+          <ExternalLink className="mr-1 h-3.5 w-3.5" aria-hidden />
+          {t('editor.openInBrowser')}
+        </Button>
+      </>
     );
-  }, [enabled, prompt, promptCacheId, t, token, workflowId]);
+  }, [enabled, onTryRun, prompt, promptCacheId, t, token, tryRunDisabled, workflowId]);
 
   useContentHeader({
     title,

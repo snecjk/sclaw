@@ -41,6 +41,8 @@ export async function uploadArtifact(
   const upload = deps.uploadOssFile ?? defaultUpload;
   const max = deps.maxAttempts ?? 5;
   const baseMs = deps.backoffBaseMs ?? 2000;
+  await deps.repo.upsertArtifact({ ...art, resource_id: undefined, uri: art.file_path });
+  await deps.repo.enqueueOutbox(art.run_id, 'artifact', art.artifact_id, { ...art, uri: art.file_path }, 'progress');
   let resourceId: string | undefined;
   for (let a = 1; a <= max; a++) {
     try {
@@ -53,7 +55,7 @@ export async function uploadArtifact(
     }
   }
   // 失败时 resource_id 留空、file_path 保持本地路径
-  const row = { ...art, resource_id: resourceId };
+  const row = { ...art, resource_id: resourceId, uri: resourceId ?? art.file_path };
   await deps.repo.upsertArtifact(row);
   // outbox 同步（payload 无字节，含 resource_id 或 file_path）
   await deps.repo.enqueueOutbox(art.run_id, 'artifact', art.artifact_id, row, 'progress');

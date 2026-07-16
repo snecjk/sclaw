@@ -11,6 +11,7 @@ import { getStoToken, getSsoEnvironment } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import { expandPath, getClaudeConfigDir } from '../utils/paths';
 import { getApiKey } from '../utils/secure-storage';
+import { getClaudeExecutablePath } from '../utils/claude-executable';
 import { buildClaudeRuntimeOptions } from '../engines/claude-runtime-extensions';
 import type {
   ClaudeScheduledTaskDefinition,
@@ -76,20 +77,7 @@ let claudeConfigEnvQueue: Promise<void> = Promise.resolve();
 let ensureClaudeConfigDirPromise: Promise<void> | null = null;
 
 function getBundledClaudeExecutablePath(): string | undefined {
-  if (!process.resourcesPath) return undefined;
-
-  const binaryName = process.platform === 'win32' ? 'claude.exe' : 'claude';
-  const packageName = `claude-agent-sdk-${process.platform}-${process.arch}`;
-  const candidate = join(
-    process.resourcesPath,
-    'app.asar.unpacked',
-    'node_modules',
-    '@anthropic-ai',
-    packageName,
-    binaryName,
-  );
-
-  return existsSync(candidate) ? candidate : undefined;
+  return getClaudeExecutablePath();
 }
 
 async function ensureClaudeConfigDir(): Promise<void> {

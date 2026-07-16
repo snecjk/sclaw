@@ -100,6 +100,7 @@ async function handleWorkflowExecutionStarted(
     runId: data.runId,
     templateName: data.templateName ?? '工作流',
     presentation: 'patch_assistant',
+    versionId: data.versionId ?? data.workflowVersionId,
   });
 }
 
@@ -232,6 +233,7 @@ export async function absorbWorkflowExecutionStartedFromToolResults(
         runId: data.runId,
         templateName: data.templateName ?? '工作流',
         presentation: 'patch_assistant',
+        versionId: data.versionId ?? data.workflowVersionId,
       });
       return;
     }

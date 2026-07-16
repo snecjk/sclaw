@@ -72,8 +72,6 @@ import { appUpdater } from './updater';
 import { installWorkflowRuntime } from '../services/workflow-runtime/bootstrap';
 import { registerHostApiProxyHandlers } from './ipc/host-api-proxy';
 import { registerPreviewHttpFetchHandlers } from './ipc/preview-http-fetch';
-import { registerWorkflowStreamHandlers } from './ipc/workflow-stream-proxy';
-import { getWorkflowExecutionTracker } from './services/workflow-execution-tracker';
 import { syncClaudeDefaultContext } from '../services/claude-context-sync';
 import {
   isLaunchAtStartupKey,
@@ -101,7 +99,6 @@ export function registerIpcHandlers(
   // Host API proxy handlers
   registerHostApiProxyHandlers();
   registerPreviewHttpFetchHandlers();
-  registerWorkflowStreamHandlers();
 
   // Gateway handlers
   registerGatewayHandlers(
@@ -2951,20 +2948,7 @@ function registerSessionHandlers(): void {
     }
   });
 
-  // ── Workflow Execution Tracker ──
-  ipcMain.handle('workflow:startTracking', async (_, { runId, sessionKey, agentId, workflowId }: { runId: string; sessionKey: string; agentId: string; workflowId: string }) => {
-    logger.info(`[workflow-trace] IPC workflow:startTracking runId=${runId} workflowId=${workflowId} sessionKey=${sessionKey}`);
-    getWorkflowExecutionTracker().startTracking(runId, sessionKey, agentId, workflowId);
-  });
-
-  ipcMain.handle('workflow:stopTracking', async (_, { runId }: { runId: string }) => {
-    getWorkflowExecutionTracker().stopTracking(runId);
-  });
-
-  ipcMain.handle('workflow:sync-state', async (_, { runId }: { runId: string }) => {
-    return getWorkflowExecutionTracker().getState(runId);
-  });
-
+  // ── Workflow session record (persist wf run turns; client-execution path) ──
   ipcMain.handle('workflow:appendSessionRecord', async (_, input) => {
     const { appendWorkflowSessionRecord } = await import('../services/workflow-session-writer');
     await appendWorkflowSessionRecord(input as import('../services/workflow-session-writer').AppendWorkflowSessionRecordInput);

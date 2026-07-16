@@ -3,7 +3,10 @@ export type WorkflowRunStatus =
   | 'running'
   | 'completed'
   | 'failed'
+  | 'cancelled'
   | 'timeout'
+  | 'waiting_approval'
+  | 'waiting_input'
   | 'unknown';
 
 export interface WorkflowRunNodeRun {
@@ -62,6 +65,9 @@ export interface WorkflowExecutionState {
   }>;
   result?: WorkflowExecutionResult;
   error?: string;
+  waitingNodeId?: string | null;
+  approvalTasks?: unknown[];
+  userInputTasks?: unknown[];
 }
 import { normalizeWorkflowTimestamp, parseWorkflowTimestampMs } from './workflow-timestamp';
 
@@ -91,9 +97,16 @@ export interface WorkflowRunApiPayload {
     artifacts?: WorkflowRunApiPayload['artifacts'];
   } | null;
   error?: string | null;
+  waitingNodeId?: string | null;
+  approvalTasks?: unknown[] | null;
+  userInputTasks?: unknown[] | null;
 }
 
-/** Map Agent Workflow API status values to UI status. */
+/** Map Agent Workflow API status values to UI status.
+ *
+ * 客户端本地执行体（engine.ts）以大写 DB 枚举落库（RUNNING/WAITING_APPROVAL/…），
+ * renderer 端统一为小写 UI 枚举；两者都须归一化。
+ * INTERRUPTED（崩溃收口）映射到 failed，保留 failed 语义。 */
 export function normalizeWorkflowRunStatus(status: string | undefined | null): WorkflowRunStatus {
   switch (status?.toLowerCase()) {
     case 'succeed':
@@ -103,14 +116,21 @@ export function normalizeWorkflowRunStatus(status: string | undefined | null): W
       return 'completed';
     case 'failed':
     case 'error':
+    case 'interrupted':
       return 'failed';
     case 'cancelled':
     case 'canceled':
-      return 'failed';
+      return 'cancelled';
     case 'running':
       return 'running';
     case 'pending':
       return 'pending';
+    case 'waiting_approval':
+    case 'waiting approval':
+      return 'waiting_approval';
+    case 'waiting_input':
+    case 'waiting input':
+      return 'waiting_input';
     case 'timeout':
       return 'timeout';
     default:
@@ -156,11 +176,18 @@ export function normalizeWorkflowStepStatus(status: string): 'pending' | 'runnin
 }
 
 export function isActiveWorkflowRunStatus(status: WorkflowRunStatus): boolean {
-  return status === 'pending' || status === 'running';
+  // active = 未结束且仍可流转（pending/running + 两种 waiting）。
+  return (
+    status === 'pending'
+    || status === 'running'
+    || status === 'waiting_approval'
+    || status === 'waiting_input'
+  );
 }
 
 export function isTerminalWorkflowRunStatus(status: WorkflowRunStatus): boolean {
-  return status === 'completed' || status === 'failed' || status === 'timeout';
+  // terminal = 终态，不再变化（completed/failed/timeout）。
+  return status === 'completed' || status === 'failed' || status === 'cancelled' || status === 'timeout';
 }
 
 function isHttpArtifactUrl(url: string): boolean {
@@ -375,6 +402,9 @@ export function workflowRunResponseToExecutionState(run: WorkflowRunApiPayload):
     })),
     result: extractRunResultFromPayload(run, status, artifacts),
     error: run.error ?? undefined,
+    waitingNodeId: run.waitingNodeId ?? null,
+    approvalTasks: run.approvalTasks ?? [],
+    userInputTasks: run.userInputTasks ?? [],
   };
 }
 
@@ -385,10 +415,14 @@ function extractRunResultFromPayload(
 ): WorkflowExecutionResult | undefined {
   const mapped = mapArtifacts(artifacts);
   const outputSummary = extractOutputSummary(run.output);
+  const resultSummary = extractOutputSummary(run.result)
+    ?? (typeof run.result?.title === 'string' && run.result.title.trim()
+      ? run.result.title.trim()
+      : undefined);
 
-  if (run.result?.summary || run.result?.title) {
+  if (resultSummary) {
     return {
-      summary: run.result.summary ?? run.result.title ?? outputSummary ?? undefined,
+      summary: resultSummary,
       artifacts: mapped.length > 0 ? mapped : undefined,
     };
   }

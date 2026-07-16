@@ -59,6 +59,15 @@ describe('logic nodes', () => {
     expect(r.output.matched).toBe(true);
   });
 
+  it('condition node resolves legacy template paths and in expressions', async () => {
+    const r = await executeLogicNode(
+      { id: 'n1', type: 'condition', config: { condition: "{{nodes.source.output.status}} in ['ok', 'done']", trueBranch: 'go', falseBranch: 'stop' } } as any,
+      { nodes: { source: { output: { status: 'done' } } } },
+      {} as any,
+    );
+    expect(r.output.branch).toBe('go');
+  });
+
   it('transform node normalizes (pass-through) with empty config', async () => {
     const r = await executeLogicNode(
       { id: 'n1', type: 'transform', config: {} } as any,
@@ -106,6 +115,14 @@ describe('logic nodes', () => {
     expect(r.output.fields).toEqual(['id', 'name']);
   });
 
+  it('transform node supports aggregate mode', async () => {
+    const r = await executeLogicNode(
+      { id: 'n1', type: 'transform', config: { transformMode: 'aggregate', summarySampleSize: 1 } } as any,
+      [{ id: 1 }, { id: 2 }], {} as any,
+    );
+    expect(r.output).toMatchObject({ mode: 'aggregate', total: 2, sample: [{ id: 1 }] });
+  });
+
   it('trigger passes through input (manual triggerType)', async () => {
     const r = await executeLogicNode(
       { id: 'n1', type: 'trigger', config: {} } as any,
@@ -125,7 +142,7 @@ describe('logic nodes', () => {
     expect(r.output).toEqual({ trig: 1, _triggerType: 'webhook' });
   });
 
-  it('startup_config emits config.values when present', async () => {
+  it('startup_config remains transparent and preserves resolved runtime inputs', async () => {
     const r = await executeLogicNode(
       {
         id: 'n1',
@@ -136,7 +153,7 @@ describe('logic nodes', () => {
       {} as any,
     );
     expect(r.action).toBe('continue');
-    expect(r.output).toEqual({ a: 1 });
+    expect(r.output).toEqual({ b: 2 });
   });
 
   it('startup_config passes through input when no config.values', async () => {

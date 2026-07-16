@@ -1,5 +1,5 @@
 /**
- * agent-retry — attempt 循环（镜像云端 cloud_executor + spec §11.1）。
+ * agent-retry — attempt 循环（spec §11.1）。
  *
  * 每次 attempt：配额门（/api/token-quota/check）→ invokeAgent（agent-runner）→
  * 输出规整 + JSON Schema 校验 → 失败（引擎失败 / 校验失败 / 卡死超时）退避重试；
@@ -8,14 +8,35 @@
  * retry-context prompt：第 2+ 次 attempt 把 lastError 喂回 prompt，提示"重做前先检查副作用"。
  */
 import type { RunCtx, AgentRunSpec, AgentNodeResult } from './types';
-import { normalizeAgentResultOutput, validateOutputAgainstSchema, extractJsonFromText } from './agent-output';
+import { createProcessFileWriter, normalizeAgentResultOutput, validateOutputAgainstSchema, extractJsonFromText } from './agent-output';
 import { buildPrompt } from './prompt-builder';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const backoff = (a: number) => Math.min(30_000, 1000 * 2 ** (a - 1));
 
+export interface AgentStreamEvent {
+  type: string;
+  message?: string;
+  rawText?: string;
+  toolId?: string;
+  toolName?: string;
+  callId?: string;
+  isError?: boolean;
+}
+
 /** invokeAgent 由引擎注入（绑好 sdk + env + 卡死保护）；agent-retry 不直接依赖 agent-runner 的 InvokeArgs。 */
-export type InvokeAgentFn = (args: { ctx: RunCtx; prompt: string; nodeId: string }) =>
+export type InvokeAgentFn = (args: {
+  ctx: RunCtx;
+  prompt: string;
+  nodeId: string;
+  noProgressMs?: number;
+  deadlineMs?: number;
+  onStreamEvent?: (event: AgentStreamEvent) => void | Promise<void>;
+  allowedTools?: string[];
+  allowedSkills?: string[];
+  permissionMode?: string;
+  model?: string;
+}) =>
   Promise<{ status: 'succeeded' | 'failed'; rawText: string; output?: any; usage?: any; error?: string }>;
 
 export interface RetryDeps {
@@ -23,6 +44,15 @@ export interface RetryDeps {
   quota?: () => Promise<boolean>;  // 生产注入：调 /api/token-quota/check，超额度返 false
 }
 
+/**
+ * 尝试循环调用Agent：配额门 + invokeAgent + 输出规整 + JSON Schema 校验。
+ * @param ctx  运行时上下文
+ * @param node  节点
+ * @param spec  节点规格
+ * @param deps  依赖
+ * @returns {status: 'succeeded' | 'failed', output?: any, error?: string, rawText?: string, usage?: any}
+ *
+ */
 export async function runAgentNodeWithRetry(
   ctx: RunCtx,
   node: any,
@@ -32,6 +62,7 @@ export async function runAgentNodeWithRetry(
   const invokeAgent = deps.invokeAgent;
   const quota = deps.quota ?? (async () => true);
   const contract = spec.completionContract ?? { outputJsonSchema: { type: 'object' }, maxAttempts: 2, onIncomplete: 'retry' as const };
+  // 最大重试次数
   const maxAttempts = Math.max(contract.maxAttempts ?? 2, 1);
   let lastError = '';
   let lastOutput: any = null;
@@ -41,7 +72,6 @@ export async function runAgentNodeWithRetry(
     // G1: 配额门（复用聊天日额度门），超额度 → run FAILED
     if (!(await quota())) {
       await ctx.emit('run.quota_exceeded', { attempt }, node.id);
-      await ctx.repo.enqueueOutbox(ctx.runId, 'run', ctx.runId, { run_id: ctx.runId, status: 'FAILED', error: 'daily token quota exceeded' }, 'terminal');
       return { status: 'failed', error: 'daily token quota exceeded' };
     }
 
@@ -49,14 +79,58 @@ export async function runAgentNodeWithRetry(
     await ctx.emit('agent.attempt.start', { attempt }, node.id);
 
     // retry-context prompt：第 2+ 次把 lastError 喂回
-    const prompt = buildPrompt(spec, { runId: ctx.runId, nodeId: node.id, retryReason: attempt > 1 ? lastError : undefined });
+    const prompt = buildPrompt(spec, { runId: ctx.runId, nodeId: node.id,
+      upstreamSummary: safeStringify(spec.inputs), startupInputs: ctx.startupInputs,
+      retryReason: attempt > 1 ? lastError : undefined });
+    // 与服务端智能节点执行口径一致：在实际调用 Agent 前固化本次 prompt。
+    // 重试会覆盖为最新一次尝试的 prompt，便于排查最终生效的上下文。
+    await ctx.repo.upsertNodeRun({
+      run_id: ctx.runId,
+      node_id: node.id,
+      node_type: node.type,
+      status: 'RUNNING',
+      prompt_text: prompt,
+    });
+    const promptNode = await ctx.repo.getNodeRun(ctx.runId, node.id);
+    await ctx.repo.enqueueOutbox(ctx.runId, 'node_run', `${ctx.runId}:${node.id}`, {
+      run_id: ctx.runId,
+      node_id: node.id,
+      node_type: node.type,
+      status: 'RUNNING',
+      input_json: promptNode?.input_json,
+      output_json: promptNode?.output_json,
+      attempt_count: promptNode?.attempt_count ?? attempt,
+      prompt_text: prompt,
+      last_completion_issue: promptNode?.last_completion_issue,
+      started_at: promptNode?.started_at,
+      completed_at: promptNode?.completed_at,
+    }, 'progress');
 
     let result: { status: 'succeeded' | 'failed'; rawText: string; output?: any; usage?: any; error?: string };
     try {
-      result = await invokeAgent({ ctx, prompt, nodeId: node.id });
+      // 调用Agent
+      let toolCalls = 0;
+      result = await invokeAgent({
+        ctx,
+        prompt,
+        nodeId: node.id,
+        noProgressMs: spec.guardrails?.timeoutMs,
+        deadlineMs: spec.guardrails?.timeoutMs ? Math.max(spec.guardrails.timeoutMs * 2, spec.guardrails.timeoutMs + 60_000) : undefined,
+        allowedTools: spec.allowedTools,
+        allowedSkills: spec.allowedSkills,
+        permissionMode: spec.permissionPolicy?.mode,
+        model: spec.target.model,
+        onStreamEvent: async (event) => {
+          if (event.type === 'agent.tool_start') toolCalls += 1;
+          await ctx.emit(event.type, event, node.id);
+        },
+      });
+      if (toolCalls > (spec.limits?.maxToolCalls ?? 20)) {
+        result = { status: 'failed', rawText: result.rawText, usage: result.usage, error: `工具调用次数超过限制 ${spec.limits?.maxToolCalls ?? 20}` };
+      }
     } catch (e: any) {
-      // invokeAgent 内部已有双层卡死保护，此处兜底
-      result = { status: 'failed', error: '节点执行超时(疑似卡死)', rawText: '' };
+      // invokeAgent 内部已有双层卡死保护；这里保留真实异常，避免把 SDK/环境错误误报成超时。
+      result = { status: 'failed', error: e instanceof Error ? e.message : String(e), rawText: '' };
     }
 
     // G1: 记 token 用量（从 SDK ResultMessage.usage 取）
@@ -67,7 +141,7 @@ export async function runAgentNodeWithRetry(
     // 输出规整：output 为空时从 rawText 抽 JSON
     const normalized = normalizeAgentResultOutput(
       result.output ?? extractJsonFromText(result.rawText),
-      contract, node.type, { rawText: result.rawText });
+      contract, node.type, { rawText: result.rawText, processFileWriter: createProcessFileWriter(ctx.runId, node.id) });
 
     if (result.status === 'failed') {
       lastError = result.error ?? 'Agent execution failed.';
@@ -78,6 +152,10 @@ export async function runAgentNodeWithRetry(
 
     const v = validateOutputAgainstSchema(contract.outputJsonSchema, normalized);
     if (v.ok) {
+      await ctx.repo.upsertNodeRun({
+        run_id: ctx.runId, node_id: node.id, node_type: node.type,
+        status: 'RUNNING', prompt_text: prompt, last_completion_issue: null,
+      });
       await ctx.emit('agent.attempt.succeeded', { attempt }, node.id);
       return { status: 'succeeded', output: normalized, rawText: result.rawText, usage: result.usage };
     }
@@ -86,12 +164,26 @@ export async function runAgentNodeWithRetry(
     lastError = v.reason ?? 'Agent output validation failed.';
     lastOutput = normalized;
     lastRaw = result.rawText ?? '';
-    await ctx.repo.upsertNodeRun({ run_id: ctx.runId, node_id: node.id, last_completion_issue: lastError, prompt_text: prompt });
+    await ctx.repo.upsertNodeRun({
+      run_id: ctx.runId,
+      node_id: node.id,
+      node_type: node.type,
+      status: 'RUNNING',
+      last_completion_issue: lastError,
+      prompt_text: prompt,
+    });
     await ctx.emit('completion.retry_scheduled', { attempt, reason: lastError }, node.id);
-    if ((contract.onIncomplete ?? 'retry') === 'manual_review') break;
+    if ((contract.onIncomplete ?? 'retry') === 'manual_review') {
+      await ctx.emit('completion.manual_review', { attempt, reason: lastError }, node.id);
+      return { status: 'manual_review', output: lastOutput, error: lastError, rawText: lastRaw };
+    }
     await sleep(backoff(attempt));
   }
 
   await ctx.emit('completion.failed', { reason: lastError }, node.id);
   return { status: 'failed', output: lastOutput, error: lastError, rawText: lastRaw };
+}
+
+function safeStringify(value: unknown): string | undefined {
+  try { return JSON.stringify(value); } catch { return undefined; }
 }

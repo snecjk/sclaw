@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react';
-import ReactFlow, {
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react';
+import {
+  ReactFlow,
   Background,
   Controls,
   MiniMap,
@@ -7,23 +8,34 @@ import ReactFlow, {
   addEdge,
   applyEdgeChanges,
   applyNodeChanges,
-  updateEdge,
+  reconnectEdge,
+  useReactFlow,
   useEdgesState,
   useNodesState,
+  MarkerType,
   type Connection,
   type Edge,
   type EdgeChange,
   type Node,
   type NodeChange,
-  type NodeDragHandler,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+  type OnNodeDrag,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import '@/pages/WorkflowDesigner/workflow-designer-canvas.css';
 import { WorkflowCanvasNode } from '@/pages/WorkflowDesigner/components/workflow-canvas-node';
-import type { CanvasNodeData, WorkflowDefinition } from '@/pages/WorkflowDesigner/types';
-import { buildCanvasEdges, buildCanvasNodes, createEdge } from '@/pages/WorkflowDesigner/utils';
+import { DesignerEdge } from '@/pages/WorkflowDesigner/components/designer-edge';
+import type { CanvasNodeData, WorkflowDefinition, WorkflowNode } from '@/pages/WorkflowDesigner/types';
+import {
+  buildCanvasEdges,
+  buildCanvasNodes,
+  centerDroppedNodePosition,
+  createEdge,
+  insertNodeOnEdge,
+} from '@/pages/WorkflowDesigner/utils';
 
 const nodeTypes = { workflowNode: WorkflowCanvasNode };
+const edgeTypes = { designer: DesignerEdge };
+const defaultEdgeOptions = { type: 'designer' as const };
 
 interface DesignerCanvasProps {
   workflow: WorkflowDefinition;
@@ -32,6 +44,7 @@ interface DesignerCanvasProps {
   onSelectNode: (id: string | null) => void;
   onSelectEdge: (id: string | null) => void;
   onWorkflowChange: (workflow: WorkflowDefinition) => void;
+  onAddNodeAt: (type: string, position: { x: number; y: number }) => void;
   onDirty: () => void;
   canvasWrapRef: React.RefObject<HTMLDivElement | null>;
 }
@@ -43,11 +56,14 @@ function DesignerCanvasInner({
   onSelectNode,
   onSelectEdge,
   onWorkflowChange,
+  onAddNodeAt,
   onDirty,
   canvasWrapRef,
 }: DesignerCanvasProps) {
-  const [nodes, setNodes] = useNodesState<CanvasNodeData>([]);
-  const [edges, setEdges] = useEdgesState([]);
+  const [nodes, setNodes] = useNodesState<Node<CanvasNodeData>>([]);
+  const [edges, setEdges] = useEdgesState<Edge>([]);
+  const [insertMenuEdgeId, setInsertMenuEdgeId] = useState<string | null>(null);
+  const { screenToFlowPosition } = useReactFlow();
 
   const canvasRevision = useMemo(() => {
     const nodeSignature = workflow.nodes
@@ -63,26 +79,83 @@ function DesignerCanvasInner({
     return `${workflow.id}::${nodeSignature}::${edgeSignature}`;
   }, [workflow]);
 
+  const handleInsertNodeOnEdge = useCallback(
+    (edgeId: string, nodeType: string) => {
+      const result = insertNodeOnEdge(workflow, edgeId, nodeType);
+      if (!result) return;
+      onWorkflowChange(result.workflow);
+      onSelectNode(result.newNodeId);
+      onSelectEdge(null);
+      setInsertMenuEdgeId(null);
+      onDirty();
+    },
+    [workflow, onWorkflowChange, onSelectNode, onSelectEdge, onDirty],
+  );
+
+  const handleNodeChange = useCallback(
+    (nextNode: WorkflowNode) => {
+      onWorkflowChange({
+        ...workflow,
+        nodes: workflow.nodes.map((node) => (node.id === nextNode.id ? nextNode : node)),
+      });
+      onDirty();
+    },
+    [workflow, onWorkflowChange, onDirty],
+  );
+
+  const handleDeleteNodeById = useCallback(
+    (nodeId: string) => {
+      const node = workflow.nodes.find((item) => item.id === nodeId);
+      if (!node || node.type === 'trigger') return;
+      onWorkflowChange({
+        ...workflow,
+        nodes: workflow.nodes.filter((item) => item.id !== nodeId),
+        edges: workflow.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
+      });
+      if (selectedNodeId === nodeId) onSelectNode(null);
+      onDirty();
+    },
+    [workflow, selectedNodeId, onWorkflowChange, onSelectNode, onDirty],
+  );
+
+  const buildEdgesForCanvas = useCallback(
+    () =>
+      buildCanvasEdges(workflow, selectedEdgeId).map((edge) => ({
+        ...edge,
+        data: {
+          ...(edge.data ?? {}),
+          insertMenuOpen: edge.id === insertMenuEdgeId,
+          onOpenInsertMenu: (edgeId: string) => setInsertMenuEdgeId(edgeId),
+          onCloseInsertMenu: () => setInsertMenuEdgeId(null),
+          onInsertNode: handleInsertNodeOnEdge,
+        },
+      })),
+    [workflow, selectedEdgeId, insertMenuEdgeId, handleInsertNodeOnEdge],
+  );
+
   useEffect(() => {
-    setNodes(buildCanvasNodes(workflow));
-    setEdges(buildCanvasEdges(workflow, selectedEdgeId));
-  }, [canvasRevision, selectedEdgeId, setEdges, setNodes, workflow]);
+    setNodes(buildCanvasNodes(workflow, {
+      onNodeChange: handleNodeChange,
+      onDeleteNode: handleDeleteNodeById,
+    }));
+    setEdges(buildEdgesForCanvas());
+  }, [canvasRevision, buildEdgesForCanvas, handleDeleteNodeById, handleNodeChange, setEdges, setNodes, workflow]);
 
   useEffect(() => {
     setNodes((current) =>
       current.map((node) => ({
         ...node,
         selected: node.id === selectedNodeId,
-      })),
+      })) as Node<CanvasNodeData>[],
     );
   }, [selectedNodeId, setNodes]);
 
-  const onNodesChange = (changes: NodeChange[]) => {
+  const onNodesChange = (changes: NodeChange<Node<CanvasNodeData>>[]) => {
     setNodes((currentNodes) => applyNodeChanges(changes, currentNodes));
 
     const positionChanges = changes
       .filter(
-        (change): change is NodeChange & { id: string; position?: { x: number; y: number } } =>
+        (change): change is NodeChange<Node<CanvasNodeData>> & { id: string; position?: { x: number; y: number } } =>
           change.type === 'position' &&
           'position' in change &&
           (change as { dragging?: boolean }).dragging === false,
@@ -139,7 +212,7 @@ function DesignerCanvasInner({
     }
   };
 
-  const onNodeDragStop: NodeDragHandler = (_, draggedNode) => {
+  const onNodeDragStop: OnNodeDrag<Node<CanvasNodeData>> = (_, draggedNode) => {
     onWorkflowChange({
       ...workflow,
       nodes: workflow.nodes.map((node) =>
@@ -182,13 +255,18 @@ function DesignerCanvasInner({
       return;
     }
     const nextEdge = createEdge(connection.source, connection.target);
-    setEdges((currentEdges) => addEdge({ ...nextEdge, updatable: true }, currentEdges));
+    setEdges((currentEdges) =>
+      addEdge(
+        { ...nextEdge, markerEnd: { type: MarkerType.ArrowClosed }, interactionWidth: 20 },
+        currentEdges,
+      ),
+    );
     onWorkflowChange({ ...workflow, edges: [...workflow.edges, nextEdge] });
     onDirty();
   };
 
   const onEdgeUpdate = (oldEdge: Edge, newConnection: Connection) => {
-    setEdges((currentEdges) => updateEdge(oldEdge, newConnection, currentEdges));
+    setEdges((currentEdges) => reconnectEdge(oldEdge, newConnection, currentEdges));
     if (!newConnection.source || !newConnection.target) return;
     onWorkflowChange({
       ...workflow,
@@ -201,11 +279,26 @@ function DesignerCanvasInner({
     onDirty();
   };
 
+  const onDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  };
+
+  const onDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const nodeType = event.dataTransfer.getData('application/reactflow');
+    if (!nodeType) return;
+    const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    onAddNodeAt(nodeType, centerDroppedNodePosition(position));
+  };
+
   return (
     <div ref={canvasWrapRef} className="relative min-h-0 min-w-0 flex-1">
       <ReactFlow
         className="workflow-designer-flow"
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        defaultEdgeOptions={defaultEdgeOptions}
         nodes={nodes}
         edges={edges}
         fitView
@@ -215,7 +308,9 @@ function DesignerCanvasInner({
         onNodeDragStop={onNodeDragStop}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        onEdgeUpdate={onEdgeUpdate}
+        onReconnect={onEdgeUpdate}
+        onDragOver={onDragOver}
+        onDrop={onDrop}
         deleteKeyCode={['Backspace', 'Delete']}
         onNodeClick={(_, node) => {
           onSelectNode(node.id);
@@ -228,6 +323,7 @@ function DesignerCanvasInner({
         onPaneClick={() => {
           onSelectNode(null);
           onSelectEdge(null);
+          setInsertMenuEdgeId(null);
         }}
       >
         <Background color="hsl(var(--muted-foreground) / 0.25)" gap={24} />
@@ -239,9 +335,9 @@ function DesignerCanvasInner({
 }
 
 export function DesignerCanvas(props: DesignerCanvasProps) {
-  const providerKey = useRef(props.workflow.id || 'new-workflow');
+  const providerKey = props.workflow.id || 'new-workflow';
   return (
-    <ReactFlowProvider key={providerKey.current}>
+    <ReactFlowProvider key={providerKey}>
       <DesignerCanvasInner {...props} />
     </ReactFlowProvider>
   );

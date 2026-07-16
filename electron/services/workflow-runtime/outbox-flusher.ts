@@ -10,10 +10,12 @@
  * 防止旧快照（如 node RUNNING）覆盖新快照（node SUCCEEDED）。
  */
 import type { WorkflowRuntimeRepository } from '../../db/repositories/workflow-runtime-repository';
+import { workflowExecLog } from './logging';
+import { formatShanghaiIso } from '../../../shared/workflow-timestamp';
 
 const MAX_ATTEMPTS = 8;
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
-const nextRetry = (a: number) => new Date(Date.now() + Math.min(3_600_000, 2000 * 2 ** a)).toISOString();
+const nextRetry = (a: number) => formatShanghaiIso(Date.now() + Math.min(3_600_000, 2000 * 2 ** a));
 
 export interface FlushDeps {
   repo: WorkflowRuntimeRepository;
@@ -25,10 +27,12 @@ let running = false;
 export function startFlushLoop(deps: FlushDeps): void {
   if (running) return;
   running = true;
+  workflowExecLog('info', 'sync-loop-start', 'workflow outbox flush loop started');
   void loop(deps);
 }
 export function stopFlushLoop(): void {
   running = false;
+  workflowExecLog('info', 'sync-loop-stop', 'workflow outbox flush loop stopped');
 }
 async function loop(deps: FlushDeps): Promise<void> {
   while (running) {
@@ -36,6 +40,7 @@ async function loop(deps: FlushDeps): Promise<void> {
       await flushOnce(deps);
     } catch (e) {
       // 单轮异常不应退出循环
+      workflowExecLog('warn', 'sync-loop-error', 'workflow outbox flush loop iteration failed', { error: e instanceof Error ? e.message : String(e) });
     }
     await sleep(2_000);
   }
@@ -44,6 +49,7 @@ async function loop(deps: FlushDeps): Promise<void> {
 export async function flushOnce(deps: FlushDeps): Promise<void> {
   const pending = await deps.repo.listPendingOutbox(200); // id asc = FIFO
   if (!pending.length) return;
+  workflowExecLog('debug', 'sync-pending', 'workflow outbox pending entries loaded', { pendingCount: pending.length });
 
   // 按 run 分组，保证同一 run 的 entries 一批推送（减少往返 + 终态锁判定一致）
   const byRun = new Map<string, any[]>();
@@ -62,20 +68,37 @@ export async function flushOnce(deps: FlushDeps): Promise<void> {
     }));
     const ids = entries.map((e: any) => e.id);
     try {
+      workflowExecLog('info', 'sync-batch-start', 'syncing workflow outbox batch', { runId, entryCount: batch.length, outboxIds: ids.join(',') });
       await deps.postSync(runId, batch);
       await deps.repo.markOutboxSynced(ids);
+      workflowExecLog('info', 'sync-batch-succeeded', 'workflow outbox batch synced', { runId, entryCount: batch.length, outboxIds: ids.join(',') });
     } catch (e: any) {
       if (e?.status === 401 || e?.statusCode === 401) {
         // stoToken 过期：退避重试无效，暂停整个 flush + 广播 token-expired（G9）
+        workflowExecLog('warn', 'sync-token-expired', 'workflow outbox sync paused by token expiry', { runId, entryCount: batch.length });
         deps.onTokenExpired?.();
         return;
       }
       // 指数退避；超 max_attempts → 标 failed（不再重试）
       const maxAttempt = Math.max(...entries.map((x: any) => x.attempts ?? 0));
       if (maxAttempt + 1 >= MAX_ATTEMPTS) {
-        await deps.repo.markOutboxSynced(ids).catch(() => {}); // 简化：超限视为同步终态（实际可加 markOutboxFailed）
+        await deps.repo.markOutboxFailed(ids).catch(() => {});
+        workflowExecLog('error', 'sync-batch-failed-final', 'workflow outbox batch exceeded retry limit', {
+          runId,
+          entryCount: batch.length,
+          outboxIds: ids.join(','),
+          attempts: maxAttempt + 1,
+          error: e instanceof Error ? e.message : String(e),
+        });
       } else {
         await deps.repo.bumpOutboxAttempts(ids, nextRetry(maxAttempt));
+        workflowExecLog('warn', 'sync-batch-failed-retry', 'workflow outbox batch sync failed; retry scheduled', {
+          runId,
+          entryCount: batch.length,
+          outboxIds: ids.join(','),
+          attempts: maxAttempt + 1,
+          error: e instanceof Error ? e.message : String(e),
+        });
       }
     }
   }

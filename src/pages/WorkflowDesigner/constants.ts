@@ -14,8 +14,8 @@ import {
   Upload,
 } from 'lucide-react';
 
-export const NODE_W = 220;
-export const NODE_H = 88;
+export const NODE_W = 300;
+export const NODE_H = 260;
 
 export type NodeTemplateAccent =
   | 'trigger'

@@ -2,12 +2,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { WorkflowDashboard } from '@/pages/Workflow/components/workflow-dashboard';
 import { WorkflowPageShading } from '@/pages/Workflow/components/workflow-page-shading';
 import { CreateWorkflowModal } from '@/pages/Workflow/components/create-workflow-modal';
 import { WorkflowMcIframeEditor } from '@/pages/Workflow/components/workflow-mc-iframe-editor';
 import { useWorkflowEditorContentHeader } from '@/hooks/use-workflow-editor-content-header';
+import { StartupRunDialog } from '@/pages/WorkflowDesigner/components/startup-run-dialog';
+import { TestRunDrawer } from '@/pages/WorkflowDesigner/components/test-run-drawer';
+import { useDesignerTryRun } from '@/pages/WorkflowDesigner/hooks/use-designer-try-run';
+import { definitionFromDetail } from '@/lib/workflow-designer-adapter';
+import { getWorkflowDetail } from '@/lib/workflow-api';
 import { cacheAiWorkflowPrompt, createWorkflowStudio } from '@/lib/workflow-studio-api';
 import { workflowPageContentClass, workflowPageRootClass } from '@/lib/surfaces';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
@@ -165,11 +171,42 @@ function WorkflowEditRoute() {
   const navigate = useNavigate();
   const { workflowId } = useParams<{ workflowId: string }>();
   const handleBack = useCallback(() => navigate('/workflow'), [navigate]);
+  const canStartTryRun = useCallback(() => true, []);
+  const tryRun = useDesignerTryRun({
+    workflowId,
+    startupSchema: null,
+    canStart: canStartTryRun,
+  });
+  const beginTryRun = tryRun.begin;
+  const handleTryRun = useCallback(async () => {
+    if (!workflowId) return;
+    const confirmed = window.confirm('试运行只使用最近一次已保存的草稿或已发布版本。请先在画布内保存当前修改，再继续。');
+    if (!confirmed) return;
+    try {
+      const detail = await getWorkflowDetail(workflowId);
+      if (detail.workflowVersionId == null) {
+        throw new Error('请先保存草稿或发布工作流，再进行试运行');
+      }
+      beginTryRun({
+        workflowId,
+        workflowVersionId: detail.workflowVersionId,
+        definition: definitionFromDetail(detail),
+        startup: {
+          schema: detail.startup?.schema ?? null,
+          defaultValues: detail.startup?.defaultPreset?.values ?? {},
+        },
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '无法加载已保存的工作流版本');
+    }
+  }, [beginTryRun, workflowId]);
 
   useWorkflowEditorContentHeader({
     workflowId: workflowId ?? '',
     onBack: handleBack,
     enabled: Boolean(workflowId),
+    onTryRun: handleTryRun,
+    tryRunDisabled: tryRun.isStarting || tryRun.isRunActive,
   });
 
   if (!workflowId) {
@@ -179,6 +216,31 @@ function WorkflowEditRoute() {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
       <WorkflowMcIframeEditor workflowId={workflowId} />
+      <StartupRunDialog
+        open={tryRun.isStartupDialogOpen}
+        schema={tryRun.startupSchema}
+        defaultValues={tryRun.startupDefaultValues}
+        isStarting={tryRun.isStarting}
+        onConfirm={(inputs) => void tryRun.confirmStartup(inputs)}
+        onClose={tryRun.cancelStartupDialog}
+      />
+      <TestRunDrawer
+        open={tryRun.isDrawerOpen}
+        runId={tryRun.runId}
+        run={tryRun.run}
+        executionState={tryRun.executionState}
+        workflowVersionId={tryRun.runWorkflowVersionId}
+        isStarting={tryRun.isStarting}
+        isCancelling={tryRun.isCancelling}
+        isRunActive={tryRun.isRunActive}
+        isDraftSnapshot={tryRun.isDraftSnapshot}
+        launchError={tryRun.launchError}
+        onClose={tryRun.closeDrawer}
+        onCancel={() => void tryRun.cancel()}
+        onRerun={tryRun.rerun}
+        onDecideApproval={(approved, note) => void tryRun.decideApproval(approved, note)}
+        onSubmitInput={(values) => void tryRun.submitInput(values)}
+      />
     </div>
   );
 }

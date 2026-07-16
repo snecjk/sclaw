@@ -11,17 +11,26 @@
  */
 import type { WorkflowRuntimeRepository } from '../../db/repositories/workflow-runtime-repository';
 import type { RunCtx } from './types';
-import { executeLogicNode } from './logic-nodes';
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { evaluateCondition as evaluateWorkflowCondition, executeLogicNode } from './logic-nodes';
 import { runAgentNodeWithRetry, type InvokeAgentFn } from './agent-retry';
 import { compileAgentRunSpec } from './agent-spec';
 import { startFlushLoop, stopFlushLoop, type FlushDeps } from './outbox-flusher';
 import { uploadArtifact, type ArtifactRow } from './artifact-uploader';
 import { recoverOnLaunch, resumeRun } from './crash-recovery';
 import { cancelAgent } from './agent-runner';
-import { generatePlan } from './plan-generator';
+import { findStartNode, generatePlan, validateWorkflowDefinition } from './plan-generator';
+import { buildConditionContext, resolveNodeInput } from './input-resolver';
+import { workspacePath } from './prompt-builder';
+import { workflowExecLog } from './logging';
+import { formatShanghaiIso } from '../../../shared/workflow-timestamp';
 
 const SMART_TYPES = new Set(['agent_task', 'agent_data_fetch', 'agent_data_process', 'agent_condition', 'agent_output']);
-const nowIso = () => new Date().toISOString();
+const nowIso = () => formatShanghaiIso();
+const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED']);
 
 export interface EngineDeps {
   repo: WorkflowRuntimeRepository;
@@ -31,7 +40,10 @@ export interface EngineDeps {
   onTokenExpired?: () => void;
   uploadOssFile?: any;                     // uploadOssFile（artifact-uploader）
   onRecover?: (runs: any[]) => void;
-  dslClient: { fetchVersion(workflowId: string, versionId: string): Promise<any> };  // GET /agent/v2/workflows/{id}/versions/{vid}
+  /** 状态转换桥（gap2）：dispatch 热路径 4 个转换点 + crash-recovery 调用，
+   * bootstrap 读 run 行拿 session_key 组装 WorkflowStatusPayload 广播到所有 renderer。 */
+  onStatusChange?: (runId: string, status: import('../../../shared/workflow-run-status').WorkflowRunStatus, extra?: { waitingNodeId?: string; error?: string }) => void;
+  dslClient: { fetchVersion(workflowId: string, versionId: string): Promise<any> };  // GET /agent/v2/workflows/getVersion/{version_pk}
 }
 
 export interface StartRunArgs {
@@ -39,85 +51,451 @@ export interface StartRunArgs {
   definition: any; startedAt: string;   // definition 已拉取（PlanGenerator 或外部注入）
 }
 
-/** 端到端发起：renderer 仅给 runId（v2 start 注册所得）+ workflowId/versionId/input，
+/** 端到端发起：renderer 仅给 runId（v2 createRunLog 注册所得）+ workflowId/versionId/input，
  * engine 内部拉 DSL → generatePlan 落本地计划 → dispatch 执行。 */
 export interface StartWorkflowArgs {
   runId: string; workflowId: string; versionId: string; input: any; startedAt: string;
+  /** 会话键——透传给 generatePlan 落 wf_run.session_key（emit 桥 + getRun hydration 用）。Phase 2b 由 start 注册传入。 */
+  sessionKey?: string;
+  /** 未保存画布草稿，仅用于当前客户端试运行。 */
+  definition?: unknown;
 }
 
 export function createEngine(deps: EngineDeps) {
   const repo = deps.repo;
 
   // 给 agent-retry 用的 ctx.emit：写事件流水
-  const makeCtx = (runId: string, def: any, seqRef: { n: number }): RunCtx => ({
+  const makeCtx = (runId: string, def: any, seqRef: { n: number }, runtime?: Record<string, any>): RunCtx => ({
     runId, workflowId: '', versionId: '', definition: def, repo,
+    ...(runtime ?? {}),
     emit: async (type: string, payload: any, nodeId?: string) => {
-      await repo.insertEvent({ run_id: runId, sequence: ++seqRef.n, type, node_id: nodeId, message: JSON.stringify(payload) });
+      const event = { run_id: runId, sequence: ++seqRef.n, type, node_id: nodeId,
+        tool_id: payload?.toolId ?? payload?.toolName, call_id: payload?.callId,
+        skill_id: payload?.skillId, approval_id: payload?.approvalId,
+        output_uri: payload?.outputUri, file_path: payload?.filePath,
+        reason: payload?.reason, message: JSON.stringify(payload) };
+      await repo.insertEvent(event);
+      await repo.enqueueOutbox(runId, 'event', `${runId}:${event.sequence}`, event, 'progress');
     },
   });
 
-  async function dispatch(runId: string, def: any, startNodeId?: string): Promise<void> {
+  /**
+   * 节点调度执行核心。
+   *
+   * 调用来源：
+   * - startWorkflow/startRun：从首节点开始执行。
+   * - resumeRun/resumeApproval/resumeInput：从恢复点或等待节点的下一个节点继续执行。
+   *
+   * 关键副作用：
+   * - 将每个节点写入 wf_node_run，并在节点进入 RUNNING 时固化 input_json。
+   * - 根据节点类型分派到智能节点、逻辑节点、人工审批/输入节点。
+   * - 每次状态变化写入 wf_outbox，供同步服务上报 memory-center。
+   * - 遇到等待节点会暂停 run；全部节点结束后标记 run 为 SUCCEEDED。
+   */
+  async function dispatchUnsafe(
+    runId: string,
+    def: any,
+    startNodeId?: string,
+    meta?: { workflowId?: string; versionId?: string },
+    initialInput?: any,
+  ): Promise<void> {
     const nodes: any[] = def?.nodes ?? [];
     const edges: any[] = def?.edges ?? [];
-    const seqRef = { n: 0 };
-    let cur = startNodeId ? nodes.find((n) => n.id === startNodeId) : nodes[0];
+    const existingNodeRuns = await repo.listNodeRuns(runId).catch(() => []);
+    const seqRef = { n: (await repo.nextEventSequence(runId)) - 1 };
+    const upstream = buildUpstreamMap(existingNodeRuns);
+    const runRow = await Promise.resolve(repo.getRun(runId)).catch(() => undefined);
+    const runInput = initialInput ?? parseJson(runRow?.input_json) ?? {};
+    const runSnapshotBase = {
+      run_id: runId,
+      workflow_id: meta?.workflowId ?? runRow?.workflow_id,
+      version_id: meta?.versionId ?? runRow?.version_id,
+      mode: 'CLIENT_LOCAL',
+      source: 'client',
+      started_at: runRow?.started_at ?? nowIso(),
+    };
+    // 与 memory-center 保持同一语义：仅 output 节点的输出是流程最终输出；
+    // last_agent_* 只记录最近一次智能节点执行结果。
+    let finalOutputJson = runRow?.output_json ?? undefined;
+    workflowExecLog('info', 'dispatch-start', 'dispatching workflow run', {
+      runId,
+      workflowId: runSnapshotBase.workflow_id,
+      versionId: runSnapshotBase.version_id,
+      startNodeId,
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+    });
+    validateWorkflowDefinition(def);
+    let cur = startNodeId ? nodes.find((n) => n.id === startNodeId) : findStartNode(nodes, edges);
+    if (!cur) throw new Error(`找不到工作流恢复节点: ${startNodeId ?? 'start'}`);
+    await makeCtx(runId, def, seqRef).emit('workflow.started', { workflowId: runSnapshotBase.workflow_id });
+
     while (cur) {
-      await repo.upsertNodeRun({ run_id: runId, node_id: cur.id, node_type: cur.type, status: 'RUNNING', started_at: nowIso() });
-      await repo.enqueueOutbox(runId, 'node_run', `${runId}:${cur.id}`, { run_id: runId, node_id: cur.id, status: 'RUNNING' }, 'progress');
+      if (!(await isRunActive(runId))) return;
+      const runtimeInputs = { runInput, upstream, workflowOutput: parseJson(finalOutputJson) };
+      const nodeInput = cur.type === 'condition' || cur.type === 'human_approval'
+        ? buildConditionContext(runtimeInputs)
+        : resolveNodeInput(cur, runtimeInputs);
+      const nodeInputJson = stringifyJson(nodeInput);
+      workflowExecLog('info', 'node-start', 'workflow node started', {
+        runId,
+        workflowId: runSnapshotBase.workflow_id,
+        versionId: runSnapshotBase.version_id,
+        nodeId: cur.id,
+        nodeType: cur.type,
+      });
+      await repo.upsertNodeRun({ run_id: runId, node_id: cur.id, node_type: cur.type, status: 'RUNNING', input_json: nodeInputJson, started_at: nowIso() });
+      await repo.enqueueOutbox(runId, 'node_run', `${runId}:${cur.id}`, { run_id: runId, node_id: cur.id, node_type: cur.type, status: 'RUNNING', input_json: nodeInputJson }, 'progress');
+      await makeCtx(runId, def, seqRef).emit('node.started', {
+        nodeName: cur.name ?? cur.title ?? cur.id,
+        nodeType: cur.type,
+      }, cur.id);
       let result: { action: 'continue' | 'pause'; output?: any };
-      let upstream: any = {}; // 简化：上游输出 map（生产从 wf_node_run.output_json 取）
+      // 智能节点：编译为 agent run spec 后交给 agent-retry，内部处理配额、重试和卡死保护。
       if (SMART_TYPES.has(cur.type)) {
-        const spec = compileAgentRunSpec(cur, makeCtx(runId, def, seqRef));
-        const agentResult = await runAgentNodeWithRetry(makeCtx(runId, def, seqRef), cur, spec, { invokeAgent: deps.invokeAgent, quota: deps.quota });
+        if (cur.type === 'agent_data_fetch'
+          && ['runtime_upload', 'mixed'].includes(cur.config?.businessConfig?.inputProvisionMode)
+          && !containsArtifact(nodeInput)) {
+          throw new Error(`智能取数节点 ${cur.name ?? cur.id} 缺少运行时上传文件`);
+        }
+        const agentCtx = makeCtx(runId, def, seqRef, { resolvedInputs: nodeInput, startupInputs: runInput });
+        const spec = compileAgentRunSpec(cur, agentCtx);
+        const agentResult = await runAgentNodeWithRetry(agentCtx, cur, spec, { invokeAgent: deps.invokeAgent, quota: deps.quota });
         result = { action: agentResult.status === 'succeeded' ? 'continue' : 'pause', output: agentResult.output };
-        if (agentResult.status === 'failed') {
-          await repo.upsertRun({ run_id: runId, status: 'FAILED', error: agentResult.error, completed_at: nowIso(), updated_at: nowIso() });
-          await repo.enqueueOutbox(runId, 'run', runId, { run_id: runId, status: 'FAILED', error: agentResult.error }, 'terminal');
+        if (agentResult.status === 'manual_review') {
+          const taskId = `${runId}:${cur.id}`;
+          const task = { task_id: taskId, run_id: runId, node_id: cur.id, status: 'PENDING',
+            reason: agentResult.error ?? '智能节点输出需要人工复核', requested_at: nowIso() };
+          await repo.upsertApprovalTask(task);
+          await repo.enqueueOutbox(runId, 'approval', taskId, task, 'progress');
+          await repo.upsertNodeRun({ run_id: runId, node_id: cur.id, node_type: cur.type,
+            status: 'WAITING_APPROVAL', input_json: nodeInputJson, output_json: stringifyJson(agentResult.output),
+            last_completion_issue: agentResult.error, started_at: nowIso() });
+          await repo.upsertRun({ run_id: runId, status: 'WAITING_APPROVAL', waiting_node_id: cur.id });
+          await repo.enqueueOutbox(runId, 'run', runId, { ...runSnapshotBase, status: 'WAITING_APPROVAL', waiting_node_id: cur.id }, 'progress');
+          deps.onStatusChange?.(runId, 'waiting_approval', { waitingNodeId: cur.id });
           return;
         }
+        if (agentResult.status === 'failed') {
+          const changed = await repo.updateRunIfActive(runId, { status: 'FAILED', error: agentResult.error, completed_at: nowIso() });
+          if (!changed) return;
+          await repo.upsertNodeRun({ run_id: runId, node_id: cur.id, node_type: cur.type, status: 'FAILED', input_json: nodeInputJson, output_json: stringifyJson(agentResult.output), completed_at: nowIso() });
+          await repo.enqueueOutbox(runId, 'node_run', `${runId}:${cur.id}`, {
+            run_id: runId,
+            node_id: cur.id,
+            node_type: cur.type,
+            status: 'FAILED',
+            input_json: nodeInputJson,
+            output_json: stringifyJson(agentResult.output),
+          }, 'progress');
+          await repo.enqueueOutbox(runId, 'run', runId, { ...runSnapshotBase, status: 'FAILED', error: agentResult.error, completed_at: nowIso() }, 'terminal');
+          workflowExecLog('error', 'run-failed', 'agent node failed workflow run', {
+            runId,
+            workflowId: runSnapshotBase.workflow_id,
+            versionId: runSnapshotBase.version_id,
+            nodeId: cur.id,
+            nodeType: cur.type,
+            error: agentResult.error,
+          });
+          deps.onStatusChange?.(runId, 'failed', { error: agentResult.error });
+          return;
+        }
+        const normalizedAgentOutput = cur.type === 'agent_condition'
+          ? normalizeAgentConditionOutput(agentResult.output, cur.config?.branches)
+          : agentResult.output;
+        result.output = normalizedAgentOutput;
+        const lastAgentOutputJson = stringifyJson(normalizedAgentOutput ?? {});
+        await repo.upsertRun({
+          run_id: runId,
+          last_agent_output_json: lastAgentOutputJson,
+          last_agent_raw_text: agentResult.rawText ?? '',
+          error: '',
+        });
+        await repo.enqueueOutbox(runId, 'run', runId, {
+          ...runSnapshotBase,
+          status: 'RUNNING',
+          last_agent_output_json: lastAgentOutputJson,
+          last_agent_raw_text: agentResult.rawText ?? '',
+          error: '',
+        }, 'progress');
+      // 人工节点：创建待办任务并暂停流程，等待 resumeApproval/resumeInput 再继续。
       } else if (cur.type === 'human_approval' || cur.type === 'user_input') {
+        if (cur.type === 'human_approval' && cur.config?.condition
+          && !evaluateWorkflowCondition(cur.config.condition, buildConditionContext(runtimeInputs))) {
+          result = { action: 'continue', output: { skipped: true, reason: 'condition_not_matched' } };
+          await repo.upsertNodeRun({ run_id: runId, node_id: cur.id, node_type: cur.type, status: 'SKIPPED', input_json: nodeInputJson, output_json: stringifyJson(result.output), completed_at: nowIso() });
+          await repo.enqueueOutbox(runId, 'node_run', `${runId}:${cur.id}`, { run_id: runId, node_id: cur.id, node_type: cur.type, status: 'SKIPPED', input_json: nodeInputJson, output_json: stringifyJson(result.output) }, 'progress');
+          upstream[cur.id] = result.output;
+          cur = nextNode(cur, edges, nodes, result.output);
+          continue;
+        }
         const st = cur.type === 'human_approval' ? 'WAITING_APPROVAL' : 'WAITING_INPUT';
+        const taskId = `${runId}:${cur.id}`;
+        if (cur.type === 'human_approval') {
+          const task = {
+            task_id: taskId,
+            run_id: runId,
+            node_id: cur.id,
+            status: 'PENDING',
+            assignee_role: cur.config?.assigneeRole,
+            reason: cur.config?.reason,
+            requested_at: nowIso(),
+          };
+          await repo.upsertApprovalTask?.(task);
+          await repo.enqueueOutbox(runId, 'approval', taskId, task, 'progress');
+        } else {
+          const task = {
+            task_id: taskId,
+            run_id: runId,
+            node_id: cur.id,
+            status: 'PENDING',
+            assignee_role: cur.config?.assigneeRole,
+            title: cur.config?.title,
+            instruction: cur.config?.instruction,
+            form_schema_json: JSON.stringify(cur.config?.fields ?? cur.config?.formSchema ?? cur.config?.schema ?? []),
+            requested_at: nowIso(),
+          };
+          await repo.upsertUserInputTask?.(task);
+          await repo.enqueueOutbox(runId, 'user_input', taskId, task, 'progress');
+        }
+        await repo.upsertNodeRun({ run_id: runId, node_id: cur.id, node_type: cur.type, status: st, input_json: nodeInputJson, started_at: nowIso() });
+        await repo.enqueueOutbox(runId, 'node_run', `${runId}:${cur.id}`, { run_id: runId, node_id: cur.id, node_type: cur.type, status: st, input_json: nodeInputJson }, 'progress');
         await repo.upsertRun({ run_id: runId, status: st, waiting_node_id: cur.id, updated_at: nowIso() });
-        await repo.enqueueOutbox(runId, 'run', runId, { run_id: runId, status: st, waiting_node_id: cur.id }, 'progress');
+        await repo.enqueueOutbox(runId, 'run', runId, { ...runSnapshotBase, status: st, waiting_node_id: cur.id }, 'progress');
+        workflowExecLog('info', 'run-waiting', 'workflow run waiting for user action', {
+          runId,
+          workflowId: runSnapshotBase.workflow_id,
+          versionId: runSnapshotBase.version_id,
+          nodeId: cur.id,
+          nodeType: cur.type,
+          status: st,
+        });
+        deps.onStatusChange?.(runId, cur.type === 'human_approval' ? 'waiting_approval' : 'waiting_input', { waitingNodeId: cur.id });
         return; // 暂停，Electron 弹窗决策后 resumeApproval/resumeInput 继续
       } else {
-        result = await executeLogicNode(cur, upstream, makeCtx(runId, def, seqRef));
+        // 逻辑节点：trigger 使用整次运行输入，其它节点使用已成功上游节点的 output map。
+        result = await executeLogicNode(cur, nodeInput, makeCtx(runId, def, seqRef));
       }
-      await repo.upsertNodeRun({ run_id: runId, node_id: cur.id, status: 'SUCCEEDED', output_json: JSON.stringify(result.output ?? {}), completed_at: nowIso() });
-      await repo.enqueueOutbox(runId, 'node_run', `${runId}:${cur.id}`, { run_id: runId, node_id: cur.id, status: 'SUCCEEDED', output_json: JSON.stringify(result.output ?? {}) }, 'progress');
+      if (!(await isRunActive(runId))) return;
+      if (cur.type === 'output') result.output = await materializeOutput(runId, cur, result.output);
+      upstream[cur.id] = result.output ?? {};
+      await enqueueArtifactsFromOutput(runId, cur.id, result.output);
+      await repo.upsertNodeRun({ run_id: runId, node_id: cur.id, node_type: cur.type, status: 'SUCCEEDED', input_json: nodeInputJson, output_json: stringifyJson(result.output ?? {}), completed_at: nowIso() });
+      const completedNode = await repo.getNodeRun(runId, cur.id);
+      await repo.enqueueOutbox(runId, 'node_run', `${runId}:${cur.id}`, {
+        run_id: runId, node_id: cur.id, node_type: cur.type, status: 'SUCCEEDED',
+        input_json: nodeInputJson, output_json: stringifyJson(result.output ?? {}),
+        attempt_count: completedNode?.attempt_count ?? 0, prompt_text: completedNode?.prompt_text,
+        last_completion_issue: completedNode?.last_completion_issue, started_at: completedNode?.started_at,
+        completed_at: completedNode?.completed_at,
+      }, 'progress');
+      await makeCtx(runId, def, seqRef).emit('node.completed', {
+        nodeName: cur.name ?? cur.title ?? cur.id,
+        nodeType: cur.type,
+      }, cur.id);
+      if (cur.type === 'output') {
+        finalOutputJson = stringifyJson(result.output ?? {});
+        await repo.upsertRun({ run_id: runId, output_json: finalOutputJson });
+        await repo.enqueueOutbox(runId, 'run', runId, {
+          ...runSnapshotBase,
+          status: 'RUNNING',
+          output_json: finalOutputJson,
+        }, 'progress');
+      }
+      workflowExecLog('info', 'node-succeeded', 'workflow node succeeded', {
+        runId,
+        workflowId: runSnapshotBase.workflow_id,
+        versionId: runSnapshotBase.version_id,
+        nodeId: cur.id,
+        nodeType: cur.type,
+      });
       cur = nextNode(cur, edges, nodes, result.output);
     }
-    await repo.upsertRun({ run_id: runId, status: 'SUCCEEDED', completed_at: nowIso(), updated_at: nowIso() });
-    await repo.enqueueOutbox(runId, 'run', runId, { run_id: runId, status: 'SUCCEEDED', completed_at: nowIso() }, 'terminal');
+    const completedAt = nowIso();
+    const terminalRun = {
+      ...runSnapshotBase,
+      status: 'SUCCEEDED',
+      completed_at: completedAt,
+      ...(finalOutputJson === undefined ? {} : { output_json: finalOutputJson }),
+    };
+    const completed = await repo.updateRunIfActive(runId, terminalRun);
+    if (!completed) return;
+    await repo.enqueueOutbox(runId, 'run', runId, terminalRun, 'terminal');
+    await makeCtx(runId, def, seqRef).emit('workflow.completed', { workflowId: runSnapshotBase.workflow_id });
+    workflowExecLog('info', 'run-succeeded', 'workflow run completed', {
+      runId,
+      workflowId: runSnapshotBase.workflow_id,
+      versionId: runSnapshotBase.version_id,
+    });
+    deps.onStatusChange?.(runId, 'completed');
+  }
+
+  async function dispatch(
+    runId: string,
+    def: any,
+    startNodeId?: string,
+    meta?: { workflowId?: string; versionId?: string },
+    initialInput?: any,
+  ): Promise<void> {
+    try {
+      await dispatchUnsafe(runId, def, startNodeId, meta, initialInput);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const run = await repo.getRun(runId).catch(() => undefined);
+      const changed = await repo.updateRunIfActive(runId, { status: 'FAILED', error: message, completed_at: nowIso() }).catch(() => false);
+      if (changed) {
+        await repo.markInflightNodeRunsInterrupted(runId).catch(() => undefined);
+        await repo.enqueueOutbox(runId, 'run', runId, {
+          run_id: runId, workflow_id: meta?.workflowId ?? run?.workflow_id,
+          version_id: meta?.versionId ?? run?.version_id, status: 'FAILED', error: message,
+          mode: 'CLIENT_LOCAL', source: 'client', started_at: run?.started_at ?? nowIso(), completed_at: nowIso(),
+        }, 'terminal').catch(() => undefined);
+        deps.onStatusChange?.(runId, 'failed', { error: message });
+      }
+      workflowExecLog('error', 'dispatch-failed', 'workflow dispatch failed', { runId, error: message });
+    }
+  }
+
+  async function isRunActive(runId: string): Promise<boolean> {
+    const row = await repo.getRun(runId);
+    return Boolean(row && row.status === 'RUNNING');
+  }
+
+  async function materializeOutput(runId: string, node: any, output: any): Promise<any> {
+    const format = node.config?.format ?? 'structured_json';
+    const ext = format === 'html' ? 'html' : format === 'markdown' ? 'md' : format === 'text' ? 'txt' : 'json';
+    const contentType = ext === 'html' ? 'text/html' : ext === 'md' ? 'text/markdown' : ext === 'txt' ? 'text/plain' : 'application/json';
+    const content = ext === 'json'
+      ? JSON.stringify(output ?? {}, null, 2)
+      : typeof output === 'string' ? output : JSON.stringify(output ?? {}, null, 2);
+    const directory = workspacePath(runId, node.id);
+    const filePath = path.join(directory, `result.${ext}`);
+    await mkdir(directory, { recursive: true });
+    await writeFile(filePath, content, 'utf8');
+    const idHash = createHash('sha1').update(`${runId}:${node.id}:${filePath}`).digest('hex').slice(0, 16);
+    await uploadArtifact({ repo, uploadOssFile: deps.uploadOssFile }, {
+      artifact_id: `${runId}:${node.id}:${idHash}`, run_id: runId, node_id: node.id,
+      kind: 'OUTPUT', file_path: filePath, content_type: contentType, summary: node.name ?? `result.${ext}`, created_at: nowIso(),
+    });
+    return output;
   }
 
   return {
+    /**
+     * 客户端流程启动入口。
+     *
+     * renderer 先调用后端 v2 createRunLog 注册 runId/versionId，再通过 IPC 进入这里。
+     * 这里负责拉取版本 DSL、落本地执行计划（wf_run/wf_node_run/outbox），最后交给 dispatch
+     * 正式启动节点调度。
+     */
     async startWorkflow(args: StartWorkflowArgs): Promise<void> {
       // 端到端：拉 DSL → generatePlan 落本地计划（wf_run + wf_node_run + outbox）→ dispatch
-      await generatePlan({ repo, dslClient: deps.dslClient, workflowId: args.workflowId,
-        versionId: args.versionId, runId: args.runId, input: args.input, startedAt: args.startedAt });
-      const run = await repo.getRun(args.runId);
-      const definition = run?.definition_json ? JSON.parse(run.definition_json) : {};
-      await dispatch(args.runId, definition);
+      workflowExecLog('info', 'run-start', 'starting client-local workflow run', {
+        runId: args.runId,
+        workflowId: args.workflowId,
+        versionId: args.versionId,
+        sessionKey: args.sessionKey,
+      });
+      try {
+        await generatePlan({ repo, dslClient: deps.dslClient, workflowId: args.workflowId,
+          versionId: args.versionId, runId: args.runId, input: args.input, startedAt: args.startedAt,
+          sessionKey: args.sessionKey, definition: args.definition });
+        const run = await repo.getRun(args.runId);
+        const definition = run?.definition_json ? JSON.parse(run.definition_json) : {};
+        await dispatch(args.runId, definition, undefined, { workflowId: args.workflowId, versionId: args.versionId }, parseJson(run?.input_json) ?? {});
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await repo.upsertRun({ run_id: args.runId, workflow_id: args.workflowId, version_id: args.versionId,
+          status: 'FAILED', mode: 'CLIENT_LOCAL', source: 'client', input_json: stringifyJson(args.input ?? {}),
+          definition_json: '{}', error: message, started_at: args.startedAt, completed_at: nowIso(), session_key: args.sessionKey });
+        await repo.enqueueOutbox(args.runId, 'run', args.runId, { run_id: args.runId, workflow_id: args.workflowId,
+          version_id: args.versionId, status: 'FAILED', mode: 'CLIENT_LOCAL', source: 'client',
+          error: message, started_at: args.startedAt, completed_at: nowIso() }, 'terminal');
+        deps.onStatusChange?.(args.runId, 'failed', { error: message });
+        throw error;
+      }
     },
     async startRun(args: StartRunArgs): Promise<void> {
       // definition 已由外部拉取注入（测试/直用）
-      await dispatch(args.runId, args.definition);
+      await dispatch(args.runId, args.definition, undefined, { workflowId: args.workflowId, versionId: args.versionId }, args.input ?? {});
     },
+    /** 恢复异常中断的运行：crash-recovery 找到恢复节点后重新进入 dispatch。 */
     async resumeRun(runId: string): Promise<void> {
+      workflowExecLog('info', 'run-resume', 'resuming interrupted workflow run', { runId });
       const r = await resumeRun(repo, runId);
-      if (r) await dispatch(r.runId, r.definition);
+      if (r) await dispatch(r.runId, r.definition, r.startNodeId);
     },
-    async resumeApproval(runId: string, _nodeId: string, _decision: any): Promise<void> {
-      await repo.upsertRun({ run_id: runId, status: 'RUNNING', waiting_node_id: undefined, updated_at: nowIso() });
+    /** 审批通过/拒绝后的继续执行入口：根据审批结果选下一条边。 */
+    async resumeApproval(runId: string, nodeId: string, decision: any): Promise<void> {
+      workflowExecLog('info', 'approval-resume', 'resuming workflow approval node', { runId, nodeId });
       const run = await repo.getRun(runId);
-      if (run) await dispatch(runId, run.definition_json ? JSON.parse(run.definition_json) : {});
+      if (run?.status === 'WAITING_APPROVAL' && run.waiting_node_id === nodeId) {
+        const def = run.definition_json ? JSON.parse(run.definition_json) : {};
+        const approved = typeof decision === 'object' ? decision.approved !== false && decision.decision !== 'rejected' : decision !== false && decision !== 'rejected';
+        const output = { approved, decision: approved ? 'approved' : 'rejected', note: decision?.note ?? '' };
+        const task = { task_id: `${runId}:${nodeId}`, run_id: runId, node_id: nodeId,
+          status: approved ? 'APPROVED' : 'REJECTED', decision_note: output.note, requested_at: nowIso(), decided_at: nowIso() };
+        await repo.upsertApprovalTask(task);
+        await repo.enqueueOutbox(runId, 'approval', task.task_id, task, 'progress');
+        const waitingNode = (def.nodes ?? []).find((node: any) => node.id === nodeId);
+        await completeWaitingNode(runId, nodeId, waitingNode?.type ?? 'human_approval', output);
+        await repo.updateRunIfActive(runId, { status: 'RUNNING', waiting_node_id: null });
+        deps.onStatusChange?.(runId, 'running');
+        const next = nextNode({ id: nodeId }, def.edges ?? [], def.nodes ?? [], output);
+        await dispatch(runId, def, next?.id, { workflowId: run.workflow_id, versionId: run.version_id });
+      }
     },
-    cancel(runId: string, nodeId: string): void {
+    /** 用户输入提交后的继续执行入口：保存提交值后根据输入结果选下一条边。 */
+    async resumeInput(runId: string, nodeId: string, submittedData: any): Promise<void> {
+      workflowExecLog('info', 'input-resume', 'resuming workflow input node', { runId, nodeId, submittedKeys: Object.keys(submittedData ?? {}).join(',') });
+      const run = await repo.getRun(runId);
+      if (run?.status === 'WAITING_INPUT' && run.waiting_node_id === nodeId) {
+        const def = run.definition_json ? JSON.parse(run.definition_json) : {};
+        const task = {
+          task_id: `${runId}:${nodeId}`,
+          run_id: runId,
+          node_id: nodeId,
+          status: 'SUBMITTED',
+          submitted_data_json: JSON.stringify(submittedData ?? {}),
+          requested_at: nowIso(),
+          submitted_at: nowIso(),
+        };
+        await repo.upsertUserInputTask(task);
+        await repo.enqueueOutbox(runId, 'user_input', task.task_id, task, 'progress');
+        await completeWaitingNode(runId, nodeId, 'user_input', { submitted: true, values: submittedData ?? {} });
+        await repo.updateRunIfActive(runId, { status: 'RUNNING', waiting_node_id: null });
+        deps.onStatusChange?.(runId, 'running');
+        const next = nextNode({ id: nodeId }, def.edges ?? [], def.nodes ?? [], submittedData);
+        await dispatch(runId, def, next?.id, { workflowId: run.workflow_id, versionId: run.version_id });
+      }
+    },
+    async cancel(runId: string, nodeId: string): Promise<void> {
+      workflowExecLog('warn', 'run-cancel', 'cancelling workflow run', { runId, nodeId });
       cancelAgent(runId, nodeId);
+      const run = await repo.getRun(runId).catch(() => undefined);
+      if (run && TERMINAL_STATUSES.has(run.status)) return;
+      if (nodeId) {
+        await repo.upsertNodeRun({ run_id: runId, node_id: nodeId, status: 'INTERRUPTED', completed_at: nowIso() });
+      } else {
+        await repo.markInflightNodeRunsInterrupted(runId);
+      }
+      const changed = await repo.updateRunIfActive(runId, { status: 'CANCELLED', completed_at: nowIso() });
+      if (!changed) return;
+      await repo.enqueueOutbox(runId, 'run', runId, {
+        run_id: runId,
+        workflow_id: run?.workflow_id,
+        version_id: run?.version_id,
+        mode: run?.mode ?? 'CLIENT_LOCAL',
+        source: run?.source ?? 'client',
+        status: 'CANCELLED',
+        started_at: run?.started_at ?? nowIso(),
+        completed_at: nowIso(),
+      }, 'terminal');
+      workflowExecLog('warn', 'run-cancelled', 'workflow run marked cancelled', { runId, nodeId });
+      deps.onStatusChange?.(runId, 'cancelled', { error: 'cancelled' });
     },
     async recover(): Promise<void> {
-      await recoverOnLaunch({ repo, onRecover: deps.onRecover });
+      await recoverOnLaunch({ repo, onRecover: deps.onRecover, onStatusChange: deps.onStatusChange });
     },
     startSync(): void {
       startFlushLoop({ repo, postSync: deps.postSync, onTokenExpired: deps.onTokenExpired });
@@ -129,20 +507,140 @@ export function createEngine(deps: EngineDeps) {
     async uploadArtifact(art: ArtifactRow): Promise<void> {
       await uploadArtifact({ repo, uploadOssFile: deps.uploadOssFile }, art);
     },
+    async retrySync(runId?: string): Promise<void> {
+      await repo.retryFailedOutbox(runId);
+    },
   };
+
+  async function completeWaitingNode(runId: string, nodeId: string, nodeType: string, output: any): Promise<void> {
+    const payload = { run_id: runId, node_id: nodeId, node_type: nodeType, status: 'SUCCEEDED', output_json: stringifyJson(output), completed_at: nowIso() };
+    await repo.upsertNodeRun(payload);
+    await repo.enqueueOutbox(runId, 'node_run', `${runId}:${nodeId}`, payload, 'progress');
+    const seq = await repo.nextEventSequence(runId);
+    const event = { run_id: runId, sequence: seq, type: nodeType === 'human_approval' ? 'approval.decided' : 'user_input.submitted', node_id: nodeId, message: stringifyJson(output) };
+    await repo.insertEvent(event);
+    await repo.enqueueOutbox(runId, 'event', `${runId}:${seq}`, event, 'progress');
+  }
+
+  async function enqueueArtifactsFromOutput(runId: string, nodeId: string, output: unknown): Promise<void> {
+    const paths = collectFilePaths(output);
+    await Promise.all(paths.map(async (filePath) => {
+      const idHash = createHash('sha1').update(`${runId}:${nodeId}:${filePath}`).digest('hex').slice(0, 16);
+      await uploadArtifact({ repo, uploadOssFile: deps.uploadOssFile }, {
+        artifact_id: `${runId}:${nodeId}:${idHash}`,
+        run_id: runId,
+        node_id: nodeId,
+        kind: 'OUTPUT',
+        file_path: filePath,
+        created_at: nowIso(),
+      }).catch(() => undefined);
+    }));
+  }
 }
 
-/** 选下一节点（移植 _resolve_next_node 的简化版）。 */
+/** 选下一节点：优先按分支端口匹配，未命中时走无条件默认边。 */
 function nextNode(cur: any, edges: any[], nodes: any[], output: any): any {
-  // condition 节点：按 output.branch 选带 branch 标签的边
-  const branch = output?.branch ?? output?.branchKey;
-  let edge: any;
+  const outgoing = edges.filter((e: any) => e.source === cur.id);
+  const branch = output?.branch ?? output?.branchKey ?? output?.branch_key;
+  let edge: any = null;
   if (branch) {
-    edge = edges.find((e: any) => e.source === cur.id && (e.branch === branch || e.branchKey === branch || e.label === branch))
-      ?? edges.find((e: any) => e.source === cur.id);
-  } else {
-    edge = edges.find((e: any) => e.source === cur.id);
+    const key = String(branch);
+    edge = outgoing.find((e: any) => (
+      e.sourcePort === key
+      || e.condition === key
+      || e.branch === key
+      || e.branchKey === key
+      || e.label === key
+    ));
   }
+  edge ??= outgoing.find((e: any) => !e.sourcePort && !e.condition && !e.branch && !e.branchKey);
+  edge ??= outgoing[0];
   if (!edge) return null;
   return nodes.find((n: any) => n.id === edge.target) ?? null;
+}
+
+function normalizeAgentConditionOutput(output: any, branches: any[]): any {
+  const base = output && typeof output === 'object' ? output : { data: output };
+  const candidate = base.branch ?? base.branchKey ?? base.branch_key
+    ?? base.data?.branch ?? base.data?.branchKey ?? base.data?.branch_key;
+  const allowed = Array.isArray(branches) ? branches.map((branch) => branch?.branchKey ?? branch?.key).filter(Boolean) : [];
+  const fallback = Array.isArray(branches)
+    ? branches.find((branch) => branch?.isFallback)?.branchKey ?? branches.find((branch) => branch?.isFallback)?.key
+    : undefined;
+  const branch = allowed.includes(candidate) ? candidate : fallback ?? candidate;
+  return { ...base, branch, branchKey: branch, branch_key: branch };
+}
+
+function buildUpstreamMap(nodeRuns: any[]): Record<string, any> {
+  const upstream: Record<string, any> = {};
+  for (const n of nodeRuns) {
+    if (n.status !== 'SUCCEEDED' || !n.output_json) continue;
+    upstream[n.node_id] = parseJson(n.output_json);
+  }
+  return upstream;
+}
+
+function parseJson(value: unknown): any {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function stringifyJson(value: unknown): string {
+  if (typeof value === 'string') return value;
+  const seen = new WeakSet<object>();
+  return JSON.stringify(value ?? {}, (_key, current) => {
+    if (current && typeof current === 'object') {
+      if (seen.has(current)) return undefined;
+      seen.add(current);
+    }
+    return current;
+  });
+}
+
+function collectFilePaths(value: unknown): string[] {
+  const out = new Set<string>();
+  const seen = new WeakSet<object>();
+  const visit = (current: unknown): void => {
+    if (typeof current === 'string') {
+      const path = parseFilePath(current);
+      if (path) out.add(path);
+      return;
+    }
+    if (!current || typeof current !== 'object') return;
+    if (seen.has(current)) return;
+    seen.add(current);
+    if (Array.isArray(current)) {
+      for (const item of current) visit(item);
+      return;
+    }
+    for (const [key, item] of Object.entries(current as Record<string, unknown>)) {
+      if (['filePath', 'file_path', 'path', 'uri', 'url'].includes(key)) {
+        const path = typeof item === 'string' ? parseFilePath(item) : undefined;
+        if (path) out.add(path);
+      }
+      visit(item);
+    }
+  };
+  visit(value);
+  return [...out];
+}
+
+function containsArtifact(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  if ((value as any).kind === 'artifact' || (value as any).filePath || String((value as any).uri ?? '').startsWith('file:')) return true;
+  return Object.values(value as Record<string, unknown>).some(containsArtifact);
+}
+
+function parseFilePath(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('file://')) return undefined;
+  try {
+    return fileURLToPath(trimmed);
+  } catch {
+    return trimmed.replace(/^file:\/\//, '');
+  }
 }

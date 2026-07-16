@@ -10,20 +10,34 @@
  * 不自动续跑——由用户选（避免副作用幂等未覆盖的节点自动重跑）。
  */
 import type { WorkflowRuntimeRepository } from '../../db/repositories/workflow-runtime-repository';
+import type { WorkflowRunStatus } from '../../../shared/workflow-run-status';
+import { workflowExecLog } from './logging';
+import { formatShanghaiIso } from '../../../shared/workflow-timestamp';
+import { topoSort } from './plan-generator';
 
-const nowIso = () => new Date().toISOString();
+const nowIso = () => formatShanghaiIso();
 
 export interface RecoverDeps {
   repo: WorkflowRuntimeRepository;
   onRecover?: (runs: any[]) => void;  // 把在途 run 列表交给 renderer 弹窗
+  /** 状态转换桥（gap2）：INTERRUPTED 收口时同步广播，使 UI 卡片落 failed 状态。 */
+  onStatusChange?: (runId: string, status: WorkflowRunStatus, extra?: { waitingNodeId?: string; error?: string }) => void;
 }
 
 export async function recoverOnLaunch(deps: RecoverDeps): Promise<void> {
   const stuck = await deps.repo.listRunsByStatus(['RUNNING', 'WAITING_APPROVAL', 'WAITING_INPUT']);
+  workflowExecLog('info', 'recover-scan', 'workflow runtime recovery scan completed', { stuckCount: stuck.length });
   for (const r of stuck) {
+    workflowExecLog('warn', 'recover-interrupt', 'interrupting unfinished workflow run on launch', {
+      runId: r.run_id,
+      workflowId: r.workflow_id,
+      versionId: r.version_id,
+      status: r.status,
+    });
     await deps.repo.upsertRun({ ...r, status: 'INTERRUPTED', completed_at: nowIso(), updated_at: nowIso() });
-    await (deps.repo as any).markInflightNodeRunsInterrupted?.(r.run_id);
+    await deps.repo.markInflightNodeRunsInterrupted(r.run_id);
     await deps.repo.enqueueOutbox(r.run_id, 'run', r.run_id, { ...r, status: 'INTERRUPTED' }, 'terminal');
+    deps.onStatusChange?.(r.run_id, 'failed', { error: 'interrupted' });
   }
   deps.onRecover?.(stuck);
 }
@@ -35,9 +49,12 @@ export async function recoverOnLaunch(deps: RecoverDeps): Promise<void> {
 export async function resumeRun(
   repo: WorkflowRuntimeRepository,
   runId: string,
-): Promise<{ runId: string; definition: any } | null> {
+): Promise<{ runId: string; definition: any; startNodeId?: string } | null> {
   const run = await repo.getRun(runId);
-  if (!run || run.status !== 'INTERRUPTED') return null;
+  if (!run || run.status !== 'INTERRUPTED') {
+    workflowExecLog('warn', 'recover-resume-skip', 'workflow run is not resumable', { runId, status: run?.status });
+    return null;
+  }
   await repo.upsertRun({ ...run, status: 'RUNNING', updated_at: nowIso() });
   let definition: any = {};
   try {
@@ -45,5 +62,15 @@ export async function resumeRun(
   } catch {
     definition = {};
   }
-  return { runId, definition };
+  const nodeRuns = await repo.listNodeRuns(runId);
+  const statusByNode = new Map(nodeRuns.map((nodeRun) => [nodeRun.node_id, nodeRun.status]));
+  const ordered = topoSort(definition.nodes ?? [], definition.edges ?? []);
+  const firstUnfinished = ordered.find((node) => statusByNode.get(node.id) !== 'SUCCEEDED');
+  workflowExecLog('info', 'recover-resume-ready', 'workflow run prepared for resume', {
+    runId,
+    workflowId: run.workflow_id,
+    versionId: run.version_id,
+    startNodeId: firstUnfinished?.id,
+  });
+  return { runId, definition, startNodeId: firstUnfinished?.id };
 }

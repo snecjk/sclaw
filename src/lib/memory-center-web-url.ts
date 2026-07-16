@@ -92,14 +92,18 @@ function buildDesignerPath(
   workflowId: string,
   promptCacheId?: string,
   prompt?: string,
+  bridgeNonce?: string,
 ): string {
   const path = `${base}/workflows-workbench/${encodeURIComponent(workflowId)}`;
   const cacheId = promptCacheId?.trim();
-  if (cacheId) {
-    return `${path}?promptCacheId=${encodeURIComponent(cacheId)}`;
-  }
   const trimmedPrompt = prompt?.trim();
-  return trimmedPrompt ? `${path}?prompt=${encodeURIComponent(trimmedPrompt)}` : path;
+  const nonce = bridgeNonce?.trim();
+  const query = new URLSearchParams();
+  if (cacheId) query.set('promptCacheId', cacheId);
+  else if (trimmedPrompt) query.set('prompt', trimmedPrompt);
+  if (nonce) query.set('bridgeNonce', nonce);
+  const search = query.toString();
+  return search ? `${path}?${search}` : path;
 }
 
 export function buildMemoryCenterDesignerRedirectPath(
@@ -107,9 +111,10 @@ export function buildMemoryCenterDesignerRedirectPath(
   ssoEnvironment?: SsoEnvironment,
   promptCacheId?: string,
   prompt?: string,
+  bridgeNonce?: string,
 ): string {
   const pathname = getMcWebPathname(getMemoryCenterWebBase(ssoEnvironment));
-  return appendMcEmbedQuery(buildDesignerPath(pathname, workflowId, promptCacheId, prompt));
+  return appendMcEmbedQuery(buildDesignerPath(pathname, workflowId, promptCacheId, prompt, bridgeNonce));
 }
 
 /** /sso/login/callback?stoToken=&redirect= — 写入 token 后一次跳转到目标页 */
@@ -132,9 +137,10 @@ export function buildMemoryCenterWorkflowDesignerUrl(
   ssoEnvironment?: SsoEnvironment,
   promptCacheId?: string,
   prompt?: string,
+  bridgeNonce?: string,
 ): string {
   const base = getMemoryCenterWebBase(ssoEnvironment);
-  return appendMcEmbedQuery(buildDesignerPath(base, workflowId, promptCacheId, prompt));
+  return appendMcEmbedQuery(buildDesignerPath(base, workflowId, promptCacheId, prompt, bridgeNonce));
 }
 
 /**
@@ -149,15 +155,16 @@ export function buildMemoryCenterWorkflowDesignerEmbedUrl(
   ssoEnvironment?: SsoEnvironment,
   promptCacheId?: string,
   prompt?: string,
+  bridgeNonce?: string,
 ): string {
-  const designerUrl = buildMemoryCenterWorkflowDesignerUrl(workflowId, ssoEnvironment, promptCacheId, prompt);
+  const designerUrl = buildMemoryCenterWorkflowDesignerUrl(workflowId, ssoEnvironment, promptCacheId, prompt, bridgeNonce);
   const token = stoToken?.trim();
   if (!token || isMcWebAuthedInSession()) {
     return designerUrl;
   }
 
   return buildMemoryCenterSsoCallbackUrl(token, {
-    redirectPath: buildMemoryCenterDesignerRedirectPath(workflowId, ssoEnvironment, promptCacheId, prompt),
+    redirectPath: buildMemoryCenterDesignerRedirectPath(workflowId, ssoEnvironment, promptCacheId, prompt, bridgeNonce),
     ssoEnvironment,
   });
 }
