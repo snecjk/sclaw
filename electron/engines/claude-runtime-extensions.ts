@@ -135,12 +135,22 @@ const agentTelemetryExtension: ClaudeRuntimeExtension = {
 
 const ssoUserContextExtension: ClaudeRuntimeExtension = {
   id: 'sto-sso-user-context',
-  async build() {
+  async build({ sessionKey }) {
     const blocks: string[] = [RETIRED_SKILLS_SYSTEM_PROMPT];
+
+    let workspaceAbsolutePath: string | null = null;
+    try {
+      const { resolveSessionToolCwd } = await import('../services/session-catalog-service');
+      const { extractAgentIdFromSessionKey } = await import('../../shared/session-agent-id');
+      const agentId = extractAgentIdFromSessionKey(sessionKey) ?? undefined;
+      workspaceAbsolutePath = await resolveSessionToolCwd(sessionKey, agentId);
+    } catch (err) {
+      logger.warn(`[claude-sso-context] failed to resolve workspace cwd (${String(err)})`);
+    }
 
     blocks.push([
       '产物文件引用规范（重要）：',
-      buildWorkspaceArtifactOutputRule(),
+      buildWorkspaceArtifactOutputRule(undefined, { workspaceAbsolutePath }),
     ].join('\n'));
 
     try {

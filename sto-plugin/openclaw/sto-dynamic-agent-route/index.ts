@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { RETIRED_SKILLS_SYSTEM_PROMPT } from "./shared/retired-skills.js";
 import { buildWorkspaceArtifactOutputRule } from "../../../shared/workspace-paths.js";
 import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
@@ -66,6 +66,33 @@ async function readSsoAuth(ssoAuthPath: string): Promise<SsoAuthInfo> {
 		departmentCode: typeof parsed.departmentCode === "string" ? parsed.departmentCode : undefined,
 		departmentName: typeof parsed.departmentName === "string" ? parsed.departmentName : undefined,
 	};
+}
+
+/** Resolve absolute workspace path for an agent from openclaw.json (project agents included). */
+async function resolveAgentWorkspaceAbsolutePath(agentId: string | undefined): Promise<string | null> {
+	const id = (agentId ?? "").trim().toLowerCase() || "main";
+	try {
+		const configPath = join(homedir(), ".stoclaw", "openclaw", "openclaw.json");
+		const raw = await readFile(configPath, "utf-8");
+		const config = JSON.parse(raw) as {
+			agents?: {
+				defaults?: { workspace?: string };
+				list?: Array<{ id?: string; workspace?: string }>;
+			};
+		};
+		const entry = config.agents?.list?.find(
+			(item) => (item?.id ?? "").trim().toLowerCase() === id,
+		);
+		const workspace =
+			(typeof entry?.workspace === "string" && entry.workspace.trim())
+			|| (typeof config.agents?.defaults?.workspace === "string"
+				? config.agents.defaults.workspace.trim()
+				: "");
+		if (!workspace) return null;
+		return resolveTildePath(workspace);
+	} catch {
+		return null;
+	}
 }
 
 export default definePluginEntry({
@@ -301,11 +328,12 @@ export default definePluginEntry({
 
 				const appendBlocks: string[] = [RETIRED_SKILLS_SYSTEM_PROMPT];
 
-				// 产物文件引用规范：所有会话（含定时任务/工作流总结）统一约束，
-				// 防止模型把云端运行时路径当作可访问链接输出给用户。
+				// 产物文件引用规范：注入本会话 workspace 的绝对 .claw-output，
+				// 防止模型写到项目根目录而不是子目录。
+				const workspaceAbsolutePath = await resolveAgentWorkspaceAbsolutePath(ctx.agentId);
 				appendBlocks.push([
 					"产物文件引用规范（重要）：",
-					buildWorkspaceArtifactOutputRule(),
+					buildWorkspaceArtifactOutputRule(undefined, { workspaceAbsolutePath }),
 				].join("\n"));
 
 				try {
