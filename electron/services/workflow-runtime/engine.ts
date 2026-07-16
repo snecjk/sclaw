@@ -43,6 +43,8 @@ export interface EngineDeps {
   /** 状态转换桥（gap2）：dispatch 热路径 4 个转换点 + crash-recovery 调用，
    * bootstrap 读 run 行拿 session_key 组装 WorkflowStatusPayload 广播到所有 renderer。 */
   onStatusChange?: (runId: string, status: import('../../../shared/workflow-run-status').WorkflowRunStatus, extra?: { waitingNodeId?: string; error?: string }) => void;
+  /** Event bridge for renderer timelines. The event is already durable before this callback fires. */
+  onEvent?: (runId: string, event: { sequence: number; type: string; nodeId?: string }) => void;
   dslClient: { fetchVersion(workflowId: string, versionId: string): Promise<any> };  // GET /agent/v2/workflows/getVersion/{version_pk}
 }
 
@@ -66,7 +68,7 @@ export function createEngine(deps: EngineDeps) {
 
   // 给 agent-retry 用的 ctx.emit：写事件流水
   const makeCtx = (runId: string, def: any, seqRef: { n: number }, runtime?: Record<string, any>): RunCtx => ({
-    runId, workflowId: '', versionId: '', definition: def, repo,
+    runId, workflowId: String(runtime?.workflowId ?? def?.id ?? ''), versionId: String(runtime?.versionId ?? def?.version ?? ''), definition: def, repo,
     ...(runtime ?? {}),
     emit: async (type: string, payload: any, nodeId?: string) => {
       const event = { run_id: runId, sequence: ++seqRef.n, type, node_id: nodeId,
@@ -76,6 +78,7 @@ export function createEngine(deps: EngineDeps) {
         reason: payload?.reason, message: JSON.stringify(payload) };
       await repo.insertEvent(event);
       await repo.enqueueOutbox(runId, 'event', `${runId}:${event.sequence}`, event, 'progress');
+      deps.onEvent?.(runId, { sequence: event.sequence, type, nodeId });
     },
   });
 
@@ -104,6 +107,8 @@ export function createEngine(deps: EngineDeps) {
     const existingNodeRuns = await repo.listNodeRuns(runId).catch(() => []);
     const seqRef = { n: (await repo.nextEventSequence(runId)) - 1 };
     const upstream = buildUpstreamMap(existingNodeRuns);
+    const startupSchema = resolveStartupSchema(def);
+    let hasExecutedSmartNode = existingNodeRuns.some((nodeRun) => SMART_TYPES.has(nodeRun.node_type) && nodeRun.status === 'SUCCEEDED');
     const runRow = await Promise.resolve(repo.getRun(runId)).catch(() => undefined);
     const runInput = initialInput ?? parseJson(runRow?.input_json) ?? {};
     const runSnapshotBase = {
@@ -158,9 +163,17 @@ export function createEngine(deps: EngineDeps) {
           && !containsArtifact(nodeInput)) {
           throw new Error(`智能取数节点 ${cur.name ?? cur.id} 缺少运行时上传文件`);
         }
-        const agentCtx = makeCtx(runId, def, seqRef, { resolvedInputs: nodeInput, startupInputs: runInput });
+        const agentCtx = makeCtx(runId, def, seqRef, {
+          resolvedInputs: nodeInput,
+          startupInputs: runInput,
+          startupSchema,
+          isFirstAgentNode: !hasExecutedSmartNode,
+          workflowId: runSnapshotBase.workflow_id,
+          versionId: runSnapshotBase.version_id,
+        });
         const spec = compileAgentRunSpec(cur, agentCtx);
         const agentResult = await runAgentNodeWithRetry(agentCtx, cur, spec, { invokeAgent: deps.invokeAgent, quota: deps.quota });
+        if (agentResult.status === 'succeeded') hasExecutedSmartNode = true;
         result = { action: agentResult.status === 'succeeded' ? 'continue' : 'pause', output: agentResult.output };
         if (agentResult.status === 'manual_review') {
           const taskId = `${runId}:${cur.id}`;
@@ -578,6 +591,20 @@ function buildUpstreamMap(nodeRuns: any[]): Record<string, any> {
     upstream[n.node_id] = parseJson(n.output_json);
   }
   return upstream;
+}
+
+function resolveStartupSchema(definition: any): Record<string, unknown> {
+  if (definition?.startupSchema && typeof definition.startupSchema === 'object') return definition.startupSchema;
+  const startupNode = Array.isArray(definition?.nodes)
+    ? definition.nodes.find((node: any) => node?.type === 'startup_config')
+    : undefined;
+  const config = startupNode?.config ?? {};
+  return {
+    nodeId: startupNode?.id ?? '',
+    enabled: Array.isArray(config.fields) && config.fields.length > 0,
+    steps: Array.isArray(config.steps) ? config.steps : [],
+    fields: Array.isArray(config.fields) ? config.fields : [],
+  };
 }
 
 function parseJson(value: unknown): any {

@@ -107,6 +107,11 @@ export function createWorkflowRuntimeEngineDeps(): EngineDeps {
         w.webContents.send('workflow-runtime:recover', runs);
       }
     },
+    onEvent: (runId, event) => {
+      for (const window of BrowserWindow.getAllWindows()) {
+        window.webContents.send('workflow:event', { runId, ...event });
+      }
+    },
     /** gap2 状态转换桥：engine dispatch 4 个转换点 + crash-recovery 调用此回调。
      * bootstrap 读 run 行拿 session_key（透传 payload 给 renderer 按 sessionKey 过滤），
      * 状态按 shared/normalizeWorkflowRunStatus 归一化（DB 大写枚举 → UI 小写），

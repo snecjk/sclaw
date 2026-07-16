@@ -24,15 +24,25 @@ interface WorkflowStatusPayload {
   waitingNodeId?: string | null;
 }
 
+export function shouldAcceptWorkflowStatusUpdate(
+  payloadSessionKey: string,
+  currentSessionKey: string,
+  sessionOwnsRun: boolean,
+): boolean {
+  return payloadSessionKey === currentSessionKey || (payloadSessionKey === '' && sessionOwnsRun);
+}
+
 export function useWorkflowCompletion(sessionKey: string) {
   useEffect(() => {
     const handler = async (payload: unknown) => {
       const data = payload as WorkflowStatusPayload;
-      if (data.sessionKey !== sessionKey) return;
-
       const chatState = useChatStore.getState();
       const currentState = chatState.workflowCardStates[data.runId];
       const exec = getExecutionByRunId(data.runId, sessionKey);
+      // Legacy tool starts go through the local host route without a renderer
+      // sessionKey. Accept an empty-key broadcast only when this session already
+      // owns the runId; never let it update unrelated conversation cards.
+      if (!shouldAcceptWorkflowStatusUpdate(data.sessionKey, sessionKey, Boolean(exec))) return;
       const incoming: WorkflowExecutionState = {
         runId: data.runId,
         workflowId: data.workflowId ?? currentState?.workflowId ?? '',

@@ -12,8 +12,9 @@ import { workflowExecLog } from './logging';
  *
  * Excludes ALL 5 chat runtime extensions (no mcpServers / hooks / plugins /
  * systemPrompt / skills) so workflow nodes run with only the SDK's built-in
- * tools under `bypassPermissions`. `additionalDirectories` is constrained to
- * the run workspace root (NOT $HOME) so the agent can't escape the run sandbox.
+ * tools under `bypassPermissions`. Reads and writes are limited by the SDK to
+ * the current workflow run workspace (NOT $HOME), so nodes can share artifacts
+ * without gaining access to arbitrary user directories.
  *
  * Double-layer stuck protection:
  *   - no-progress watchdog (default 300s): kills if no message arrives.
@@ -85,7 +86,7 @@ export interface InvokeArgs {
   prompt: string;
   /** Env override (skips `buildClaudeEnvForAccount`). Tests inject `{}`. */
   env?: Record<string, string>;
-  /** cwd override (skips the per-node workspace default). Tests inject it. */
+  /** cwd override (skips the per-run workspace default). Tests inject it. */
   cwd?: string;
   /** Override the run-sandbox additionalDirectories (defaults to cwd's parent). */
   additionalDirectories?: string[];
@@ -111,16 +112,15 @@ export interface InvokeArgs {
 export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
   const { sdk, ctx, prompt } = args;
 
-  // Default cwd is the per-node workspace dir under the run workspace root.
+  // Default cwd is the run workspace directory. Nodes may share files within a
+  // single run, but never receive a user-home or arbitrary-directory workspace.
   // Only computed when the caller (tests included) doesn't inject a cwd, so the
   // electron-backed getDataDir() is never called in tests.
   const cwd =
-    args.cwd ?? path.join(getDataDir(), 'workflow-runtime', 'workspaces', ctx.runId, ctx.nodeId);
+    args.cwd ?? path.join(getDataDir(), 'workflow-runtime', 'workspaces', ctx.runId);
 
-  // additionalDirectories limited to the run workspace root (parent of the node
-  // cwd) — NOT $HOME — so the agent can't wander outside the run sandbox. Derived
-  // from cwd so no second getDataDir() call is needed (keeps tests electron-free).
-  const additionalDirectories = args.additionalDirectories ?? [path.dirname(cwd)];
+  // Both cwd and additional directories are the run workspace, not $HOME.
+  const additionalDirectories = args.additionalDirectories ?? [cwd];
 
   const accountId = args.accountId ?? await resolveDefaultAccountId();
   const env = args.env ?? (await buildClaudeEnvForAccount(accountId));
@@ -130,8 +130,10 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
   await ensureDirectory(cwd);
   await Promise.all(additionalDirectories.map(ensureDirectory));
 
-  const permissionMode = args.permissionMode === 'readonly' ? 'plan'
-    : args.permissionMode === 'approval_required' ? 'default' : 'bypassPermissions';
+  // Desktop workflow runs do not have an interactive SDK approval bridge.
+  // workspace_write therefore skips SDK confirmation only inside the already
+  // sandboxed run workspace; it never grants an arbitrary user directory.
+  const permissionMode = args.permissionMode === 'readonly' ? 'plan' : 'bypassPermissions';
   const options: Record<string, unknown> = {
     cwd,
     additionalDirectories,
@@ -252,6 +254,14 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
               if (toolEvent) {
                 await emitStreamEvent(args.onStreamEvent, toolEvent);
               }
+            }
+          } else if (msg?.message?.content) {
+            // The SDK returns tool_result blocks in a user message. Capture them
+            // as well so the workflow timeline distinguishes a requested write
+            // from a write that actually completed (or failed).
+            for (const block of msg.message.content) {
+              const toolEvent = toToolStreamEvent(block);
+              if (toolEvent) await emitStreamEvent(args.onStreamEvent, toolEvent);
             }
           }
           if (deltaText && !streamedText) {

@@ -8,8 +8,8 @@
  * retry-context prompt：第 2+ 次 attempt 把 lastError 喂回 prompt，提示"重做前先检查副作用"。
  */
 import type { RunCtx, AgentRunSpec, AgentNodeResult } from './types';
-import { createProcessFileWriter, normalizeAgentResultOutput, validateOutputAgainstSchema, extractJsonFromText } from './agent-output';
-import { buildPrompt } from './prompt-builder';
+import { createProcessFileWriter, normalizeAgentResultOutput, validateDeclaredArtifactFiles, validateOutputAgainstSchema, extractJsonFromText } from './agent-output';
+import { buildPrompt, runWorkspacePath } from './prompt-builder';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const backoff = (a: number) => Math.min(30_000, 1000 * 2 ** (a - 1));
@@ -79,9 +79,11 @@ export async function runAgentNodeWithRetry(
     await ctx.emit('agent.attempt.start', { attempt }, node.id);
 
     // retry-context prompt：第 2+ 次把 lastError 喂回
-    const prompt = buildPrompt(spec, { runId: ctx.runId, nodeId: node.id,
-      upstreamSummary: safeStringify(spec.inputs), startupInputs: ctx.startupInputs,
-      retryReason: attempt > 1 ? lastError : undefined });
+    const prompt = buildPrompt(spec, {
+      runId: ctx.runId,
+      nodeId: node.id,
+      retryReason: attempt > 1 ? lastError : undefined,
+    });
     // 与服务端智能节点执行口径一致：在实际调用 Agent 前固化本次 prompt。
     // 重试会覆盖为最新一次尝试的 prompt，便于排查最终生效的上下文。
     await ctx.repo.upsertNodeRun({
@@ -150,7 +152,8 @@ export async function runAgentNodeWithRetry(
       continue;
     }
 
-    const v = validateOutputAgainstSchema(contract.outputJsonSchema, normalized);
+    const artifactValidation = await validateDeclaredArtifactFiles(normalized, runWorkspacePath(ctx.runId));
+    const v = artifactValidation.ok ? validateOutputAgainstSchema(contract.outputJsonSchema, normalized) : artifactValidation;
     if (v.ok) {
       await ctx.repo.upsertNodeRun({
         run_id: ctx.runId, node_id: node.id, node_type: node.type,
@@ -182,8 +185,4 @@ export async function runAgentNodeWithRetry(
 
   await ctx.emit('completion.failed', { reason: lastError }, node.id);
   return { status: 'failed', output: lastOutput, error: lastError, rawText: lastRaw };
-}
-
-function safeStringify(value: unknown): string | undefined {
-  try { return JSON.stringify(value); } catch { return undefined; }
 }

@@ -35,6 +35,13 @@ interface StatusUpdatePayload {
   status: string;
 }
 
+interface RuntimeEventPayload {
+  runId: string;
+  sequence: number;
+  type: string;
+  nodeId?: string;
+}
+
 export interface UseDesignerTryRunArgs {
   workflowId: string | undefined;
   startupSchema: WorkflowSchema | null | undefined;
@@ -90,6 +97,7 @@ export function useDesignerTryRun({
   const snapshotRef = useRef<WorkflowDraftSnapshot | null>(null);
 
   const runIdRef = useRef<string | null>(null);
+  const eventHydrateTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   useEffect(() => {
     runIdRef.current = runId;
   }, [runId]);
@@ -110,7 +118,16 @@ export function useDesignerTryRun({
     }
   }, []);
 
-  // Subscribe to runtime status broadcasts, filtered by the designer session key.
+  const scheduleEventHydration = useCallback((id: string) => {
+    if (eventHydrateTimerRef.current != null) return;
+    eventHydrateTimerRef.current = window.setTimeout(() => {
+      eventHydrateTimerRef.current = null;
+      void hydrateRun(id);
+    }, 100);
+  }, [hydrateRun]);
+
+  // Status transitions update immediately; stream events are coalesced so an
+  // Agent text delta cannot cause a local DB read for every token.
   useEffect(() => {
     const ipc = window.electron?.ipcRenderer;
     if (!ipc?.on) return;
@@ -124,8 +141,20 @@ export function useDesignerTryRun({
         setIsCancelling(false);
       }
     });
-    return unsubscribe;
-  }, [hydrateRun]);
+    const unsubscribeEvent = ipc.on('workflow:event', (payload: unknown) => {
+      const data = payload as RuntimeEventPayload | null;
+      if (!data || !data.runId || data.runId !== runIdRef.current) return;
+      scheduleEventHydration(data.runId);
+    });
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+      if (typeof unsubscribeEvent === 'function') unsubscribeEvent();
+    };
+  }, [hydrateRun, scheduleEventHydration]);
+
+  useEffect(() => () => {
+    if (eventHydrateTimerRef.current != null) window.clearTimeout(eventHydrateTimerRef.current);
+  }, []);
 
   const isRunActive = Boolean(
     runId && executionState && isActiveWorkflowRunStatus(executionState.status),

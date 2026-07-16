@@ -221,6 +221,7 @@ const electronAPI = {
         'startup-progress',
         'auth:token-expired',
         'workflow:status-update',
+        'workflow:event',
       ];
 
       if (validChannels.includes(channel)) {

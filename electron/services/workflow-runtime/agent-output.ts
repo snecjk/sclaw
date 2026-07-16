@@ -5,8 +5,9 @@
  * - normalizeAgentResultOutput: 移植自 output_templates.py:414（>2KB 落盘用注入的 processFileWriter）
  */
 import fs from 'node:fs';
+import { stat } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { getDataDir } from '../../utils/paths';
 
 const TAG_RE = /<[^>]+>/g;
@@ -179,4 +180,60 @@ export function normalizeAgentResultOutput(
     return ctx.processFileWriter(normalized, str);
   }
   return normalized;
+}
+
+/**
+ * Agent 的 JSON 只是声明，不能把其中的 filePath 当成已经落盘的事实。
+ * 本地执行仅接受当前运行 workspace 内实际存在的文件，避免虚构产物被展示、上传或传给下游。
+ */
+export async function validateDeclaredArtifactFiles(output: unknown, workspaceDirectory: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (!output || typeof output !== 'object') return { ok: true };
+  const references = collectDeclaredFileReferences(output as Record<string, unknown>);
+  for (const reference of references) {
+    const filePath = toLocalFilePath(reference);
+    if (!filePath) return { ok: false, reason: `${reference.label} 缺少本地 filePath` };
+    const resolved = path.resolve(filePath);
+    const relative = path.relative(path.resolve(workspaceDirectory), resolved);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      return { ok: false, reason: `${reference.label} 必须位于当前运行工作区` };
+    }
+    try {
+      if (!(await stat(resolved)).isFile()) {
+        return { ok: false, reason: `${reference.label} 指向的文件不存在: ${resolved}` };
+      }
+    } catch {
+      return { ok: false, reason: `${reference.label} 指向的文件不存在: ${resolved}` };
+    }
+  }
+  return { ok: true };
+}
+
+function collectDeclaredFileReferences(output: Record<string, unknown>): Array<{ label: string; filePath?: string; uri?: string }> {
+  const references: Array<{ label: string; filePath?: string; uri?: string }> = [];
+  for (const field of ['artifacts', 'processFiles']) {
+    const entries = output[field];
+    if (!Array.isArray(entries)) continue;
+    entries.forEach((entry, index) => {
+      if (!entry || typeof entry !== 'object') return;
+      const value = entry as Record<string, unknown>;
+      references.push({
+        label: `${field}[${index}]`,
+        filePath: typeof value.filePath === 'string' ? value.filePath : typeof value.file_path === 'string' ? value.file_path : undefined,
+        uri: typeof value.uri === 'string' ? value.uri : undefined,
+      });
+    });
+  }
+  return references;
+}
+
+function toLocalFilePath(reference: { filePath?: string; uri?: string }): string | undefined {
+  if (reference.filePath?.trim()) return reference.filePath.trim();
+  const uri = reference.uri?.trim();
+  if (!uri?.startsWith('file:')) return undefined;
+  try {
+    return fileURLToPath(uri);
+  } catch {
+    // Claude occasionally returns file://C:/... instead of the canonical file:///C:/... form.
+    return uri.replace(/^file:\/\/+/, '');
+  }
 }
