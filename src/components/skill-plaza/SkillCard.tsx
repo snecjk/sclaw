@@ -249,7 +249,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
             onMouseLeave={scheduleCloseMoreMenu}
             aria-label={t('plaza.action.more', { defaultValue: '更多' })}
           >
-            <img src={moreIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain" />
+            <img src={moreIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain dark:invert" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
