@@ -8,6 +8,9 @@
 
 export const PROJECT_AGENT_PREFIX = 'proj';
 
+/** Workspace IDs are UUIDs; project agent IDs embed them after the `proj-` prefix. */
+const PROJECT_ID_UUID_PATTERN = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(.+)$/i;
+
 function normalizeAgentId(value: string | undefined | null): string {
   return (value ?? '').trim().toLowerCase() || 'main';
 }
@@ -30,17 +33,53 @@ export function resolveProjectAgentId(projectId: string, baseAgentId: string): s
   return `${prefix}${truncatedBase}`;
 }
 
-export function parseProjectAgentId(agentId: string): { projectId: string; baseAgentId: string } | null {
+function parseWithKnownBaseAgentIds(
+  inner: string,
+  knownBaseAgentIds: readonly string[],
+): { projectId: string; baseAgentId: string } | null {
+  const sorted = [...knownBaseAgentIds]
+    .map((id) => id.trim().toLowerCase())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+
+  for (const baseAgentId of sorted) {
+    const suffix = `-${baseAgentId}`;
+    if (!inner.endsWith(suffix)) continue;
+    const projectId = inner.slice(0, -suffix.length);
+    if (projectId) {
+      return { projectId, baseAgentId };
+    }
+  }
+
+  return null;
+}
+
+export function parseProjectAgentId(
+  agentId: string,
+  knownBaseAgentIds?: readonly string[],
+): { projectId: string; baseAgentId: string } | null {
   const trimmed = (agentId ?? '').trim().toLowerCase();
   const prefix = `${PROJECT_AGENT_PREFIX}-`;
   if (!trimmed.startsWith(prefix)) return null;
 
   const inner = trimmed.slice(prefix.length);
-  const firstDash = inner.indexOf('-');
-  if (firstDash <= 0) return null;
+  if (!inner) return null;
 
-  const projectId = inner.slice(0, firstDash);
-  const baseAgentId = inner.slice(firstDash + 1);
+  const uuidMatch = inner.match(PROJECT_ID_UUID_PATTERN);
+  if (uuidMatch) {
+    return { projectId: uuidMatch[1], baseAgentId: uuidMatch[2] };
+  }
+
+  if (knownBaseAgentIds?.length) {
+    const knownMatch = parseWithKnownBaseAgentIds(inner, knownBaseAgentIds);
+    if (knownMatch) return knownMatch;
+  }
+
+  const lastDash = inner.lastIndexOf('-');
+  if (lastDash <= 0) return null;
+
+  const projectId = inner.slice(0, lastDash);
+  const baseAgentId = inner.slice(lastDash + 1);
   if (!projectId || !baseAgentId) return null;
 
   return { projectId, baseAgentId };

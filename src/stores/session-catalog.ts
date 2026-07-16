@@ -43,7 +43,7 @@ interface SessionCatalogState {
   refreshAllCatalogMeta: () => Promise<void>;
   selectProject: (workspaceId: string | null) => Promise<void>;
   bindSession: (sessionKey: string, workspaceId?: string) => Promise<void>;
-  moveSessionToProject: (sessionKey: string, projectId: string | null) => Promise<void>;
+  moveSessionToProject: (sessionKey: string, projectId: string) => Promise<void>;
   createProject: (name: string, rootPath: string) => Promise<WorkspaceDto | null>;
   updateProject: (id: string, name: string, rootPath: string) => Promise<void>;
   deleteProject: (id: string) => Promise<number>;
@@ -181,16 +181,15 @@ export const useSessionCatalogStore = create<SessionCatalogState>((set, get) => 
   },
 
   moveSessionToProject: async (sessionKey, projectId) => {
-    const workspaceId = projectId ?? DEFAULT_WORKSPACE_ID;
-    await moveSessionInCatalog(sessionKey, workspaceId);
+    await moveSessionInCatalog(sessionKey, projectId);
     const { useChatStore } = await import('@/stores/chat');
     const title = useChatStore.getState().sessionLabels[sessionKey]?.trim();
     if (title) {
       const { patchCatalogSession } = await import('@/lib/session-catalog-api');
-      await patchCatalogSession({ workspaceId, sessionKey, title }).catch(() => undefined);
+      await patchCatalogSession({ workspaceId: projectId, sessionKey, title }).catch(() => undefined);
     }
     set((state) => ({
-      sessionWorkspaceByKey: { ...state.sessionWorkspaceByKey, [sessionKey]: workspaceId },
+      sessionWorkspaceByKey: { ...state.sessionWorkspaceByKey, [sessionKey]: projectId },
     }));
     await get().refreshAllCatalogMeta();
   },
@@ -213,14 +212,30 @@ export const useSessionCatalogStore = create<SessionCatalogState>((set, get) => 
   },
 
   deleteProject: async (id) => {
-    const { movedSessionCount } = await deleteProjectWorkspace(id);
+    const catalogSessions = await listCatalogSessions(id);
+    const boundSessionKeys = Object.entries(get().sessionWorkspaceByKey)
+      .filter(([, workspaceId]) => workspaceId === id)
+      .map(([sessionKey]) => sessionKey);
+    const projectSessionKeys = [...new Set([
+      ...catalogSessions.map((session) => session.sessionKey),
+      ...boundSessionKeys,
+    ])];
+    const deletedSessionCount = projectSessionKeys.length;
+    const { useChatStore } = await import('@/stores/chat');
+    for (const sessionKey of projectSessionKeys) {
+      await useChatStore.getState().deleteSession(sessionKey, { skipSessionRefresh: true });
+    }
+    await deleteProjectWorkspace(id);
     if (get().selectedProjectId === id) {
       set({ selectedProjectId: null });
     }
     await get().refreshWorkspaces();
     await get().refreshAllBindings();
     await get().refreshAllCatalogMeta();
-    return movedSessionCount;
+    if (projectSessionKeys.length > 0) {
+      await useChatStore.getState().loadSessions({ force: true });
+    }
+    return deletedSessionCount;
   },
 
   pickFolder: () => pickProjectFolder(),
@@ -228,8 +243,30 @@ export const useSessionCatalogStore = create<SessionCatalogState>((set, get) => 
   patchSessionCatalog: async (input) => {
     const workspaceId = get().sessionWorkspaceByKey[input.sessionKey]
       ?? DEFAULT_WORKSPACE_ID;
+    const nowMs = Date.now();
+    const nowIso = new Date(nowMs).toISOString();
+    const shouldBumpActivity = input.pinRank != null;
+    const patch = {
+      ...input,
+      ...(shouldBumpActivity && input.lastActivityAt === undefined
+        ? { lastActivityAt: nowIso }
+        : {}),
+    };
     const { patchCatalogSession } = await import('@/lib/session-catalog-api');
-    await patchCatalogSession({ workspaceId, ...input });
+    await patchCatalogSession({ workspaceId, ...patch });
+    if (shouldBumpActivity) {
+      const { useChatStore } = await import('@/stores/chat');
+      useChatStore.setState((state) => {
+        const currentAt = state.sessionLastActivity[input.sessionKey] ?? 0;
+        if (nowMs <= currentAt) return {};
+        return {
+          sessionLastActivity: {
+            ...state.sessionLastActivity,
+            [input.sessionKey]: nowMs,
+          },
+        };
+      });
+    }
     await get().refreshAllCatalogMeta();
   },
 

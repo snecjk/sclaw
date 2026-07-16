@@ -217,6 +217,11 @@ export interface ChatState {
   pendingNewSessionModel: string | null;
   setPendingNewSessionModel: (model: string | null) => void;
 
+  /** Project id for an empty home draft that has not materialized a session yet.
+   *  First send creates the real session and binds it to this project. */
+  pendingProjectId: string | null;
+  setPendingProjectId: (projectId: string | null) => void;
+
   // Workflow
   workflowCardStates: Record<string, WorkflowExecutionState>;
   setWorkflowCardState: (runId: string, state: WorkflowExecutionState) => void;
@@ -243,7 +248,7 @@ export interface ChatState {
   switchSession: (key: string) => void;
   /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
   switchToAgentMainSession: (agentId: string) => void;
-  newSession: (options?: { projectId?: string }) => Promise<void>;
+  newSession: (options?: { projectId?: string; materialize?: boolean }) => Promise<void>;
   deleteSession: (key: string, options?: {
     skipSessionRefresh?: boolean;
     additionalSuppressKeys?: string[];
@@ -265,3 +270,10 @@ export interface ChatState {
 
 export const DEFAULT_CANONICAL_PREFIX = 'agent:main';
 export const DEFAULT_SESSION_KEY = `${DEFAULT_CANONICAL_PREFIX}:main`;
+
+/** Sidebar-only placeholder for a project "新对话" draft (not persisted until first send). */
+export const PROJECT_NEW_CHAT_DRAFT_KEY = 'project-draft:pending';
+
+export function isProjectNewChatDraftKey(sessionKey: string | null | undefined): boolean {
+  return (sessionKey ?? '').trim() === PROJECT_NEW_CHAT_DRAFT_KEY;
+}

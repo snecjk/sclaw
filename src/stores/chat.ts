@@ -776,6 +776,7 @@ function buildSessionSwitchPatch(
   return {
     currentSessionKey: nextSessionKey,
     currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
+    pendingProjectId: null,
     sessions: ensureSessionEntry(nextSessions, nextSessionKey),
     runtimeBySessionKey: nextRuntimeBySessionKey,
     sessionLabels: leavingEmpty
@@ -1246,6 +1247,11 @@ export const useChatStore = create<ChatState>()(
   pendingNewSessionModel: null,
   setPendingNewSessionModel: (model) => {
     set({ pendingNewSessionModel: model });
+  },
+
+  pendingProjectId: null,
+  setPendingProjectId: (projectId) => {
+    set({ pendingProjectId: projectId });
   },
 
   pendingWorkflow: null,
@@ -1877,7 +1883,7 @@ export const useChatStore = create<ChatState>()(
 
   // ── New session ──
 
-  newSession: async (options?: { projectId?: string }) => {
+  newSession: async (options?: { projectId?: string; materialize?: boolean }) => {
     // Generate a new unique session key and switch to it.
     // NOTE: We intentionally do NOT call sessions.reset on the old session.
     // sessions.reset archives (renames) the session JSONL file, making old
@@ -1891,7 +1897,71 @@ export const useChatStore = create<ChatState>()(
     const baseAgentId = getBaseAgentIdFromProjectAgentId(get().currentAgentId)
       ?? get().currentAgentId
       ?? 'main';
-    const projectId = options?.projectId;
+    const projectId = options?.projectId ?? get().pendingProjectId ?? undefined;
+    const shouldMaterialize = options?.materialize === true || !projectId;
+
+    // Project "新对话": stay on the empty home draft until the first message is sent.
+    // Create/associate the project agent immediately so OpenClaw cwd is ready before send.
+    if (projectId && projectId !== 'default' && !shouldMaterialize) {
+      const draftAgentId = resolveProjectAgentId(projectId, baseAgentId);
+      set((s) => {
+        const nextRuntimeBySessionKey = {
+          ...s.runtimeBySessionKey,
+          [currentSessionKey]: captureTopLevelRuntime(s),
+          [DEFAULT_SESSION_KEY]: createIdleSessionRuntimeState(),
+        };
+        if (leavingEmpty) {
+          delete nextRuntimeBySessionKey[currentSessionKey];
+        }
+        return {
+          currentSessionKey: DEFAULT_SESSION_KEY,
+          currentAgentId: draftAgentId,
+          pendingProjectId: projectId,
+          sessions: leavingEmpty
+            ? s.sessions.filter((sess) => sess.key !== currentSessionKey)
+            : s.sessions,
+          runtimeBySessionKey: nextRuntimeBySessionKey,
+          sessionLabels: leavingEmpty
+            ? Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey))
+            : s.sessionLabels,
+          sessionLastActivity: leavingEmpty
+            ? Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey))
+            : s.sessionLastActivity,
+          sidebarRecentOrder: leavingEmpty
+            ? removeSidebarRecentOrderKey(s.sidebarRecentOrder, currentSessionKey)
+            : s.sidebarRecentOrder,
+          messages: [],
+          sending: false,
+          streamingText: '',
+          streamingMessage: null,
+          streamingMessages: [],
+          streamingToolResults: [],
+          streamingTools: [],
+          activeRunId: null,
+          error: null,
+          pendingFinal: false,
+          lastUserMessageAt: null,
+          optimisticUserMessage: null,
+          pendingToolImages: [],
+          pendingWorkflow: null,
+        };
+      });
+      touchSessionReadAt(DEFAULT_SESSION_KEY);
+      void import('@/lib/session-catalog-api').then(async ({ ensureProjectAgentForWorkspace }) => {
+        try {
+          await ensureProjectAgentForWorkspace({
+            workspaceId: projectId,
+            baseAgentId,
+          });
+          const { useAgentsStore } = await import('@/stores/agents');
+          await useAgentsStore.getState().fetchAgents().catch(() => undefined);
+        } catch (error) {
+          console.warn('[newSession] failed to ensure project agent on project new-chat', error);
+        }
+      });
+      return;
+    }
+
     const effectiveAgentId = projectId && projectId !== 'default'
       ? resolveProjectAgentId(projectId, baseAgentId)
       : baseAgentId;
@@ -1950,6 +2020,7 @@ export const useChatStore = create<ChatState>()(
       return {
         currentSessionKey: newKey,
         currentAgentId: newAgentId,
+        pendingProjectId: null,
         sessions: nextSessions,
         runtimeBySessionKey: nextRuntimeBySessionKey,
         sessionLabels: leavingEmpty
@@ -1979,10 +2050,10 @@ export const useChatStore = create<ChatState>()(
     } else {
       await applyWorkspaceDefaultToNewSession(newKey, newAgentId);
     }
-    if (options?.projectId) {
+    if (projectId && projectId !== 'default') {
       void import('@/stores/session-catalog').then(({ useSessionCatalogStore }) => {
         // 只有明确指定项目时才绑定到项目；普通新对话不自动归属当前选中项目。
-        void useSessionCatalogStore.getState().bindSession(newKey, options.projectId!);
+        void useSessionCatalogStore.getState().bindSession(newKey, projectId);
       });
     }
   },
@@ -2494,7 +2565,12 @@ export const useChatStore = create<ChatState>()(
     // so toolbar/agent model choice is persisted before chat.send hits the gateway default.
     try {
       if (get().currentSessionKey === DEFAULT_SESSION_KEY) {
-        await get().newSession();
+        const pendingProjectId = get().pendingProjectId;
+        await get().newSession(
+          pendingProjectId
+            ? { projectId: pendingProjectId, materialize: true }
+            : undefined,
+        );
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

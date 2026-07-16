@@ -8,6 +8,7 @@ import {
   createWorkspaceGroup,
   deleteWorkspace,
   ensureSessionCatalogBootstrapped,
+  ensureWorkspaceProjectAgent,
   importLegacySessionLabels,
   importLegacySidebarGroups,
   listAllSessionWorkspaceBindings,
@@ -78,6 +79,21 @@ export async function handleSessionCatalogRoutes(
         rootPath: body.rootPath ?? '',
       }, _ctx.gatewayManager);
       sendJson(res, 200, { workspace });
+    } catch (error) {
+      sendJson(res, 400, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  if (url.pathname === '/api/session-catalog/project-agent/ensure' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ workspaceId: string; baseAgentId?: string }>(req);
+      const result = await ensureWorkspaceProjectAgent(
+        body.workspaceId ?? '',
+        body.baseAgentId ?? 'main',
+        _ctx.gatewayManager,
+      );
+      sendJson(res, 200, { success: true, ...result });
     } catch (error) {
       sendJson(res, 400, { success: false, error: String(error) });
     }

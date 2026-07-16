@@ -17,7 +17,7 @@ function fsPath(filePath: string): string {
 import { getAllSettings } from '../utils/store';
 import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-storage';
 import { getProviderEnvVar, getKeyableProviderTypes } from '../utils/provider-registry';
-import { getOpenClawDir, getOpenClawEntryPath, getOpenClawConfigDir, getOpenClawProcessCwd, getOpenClawNodeModulesPath, getOpenClawPackageRootEnv, getBundledPluginSourceCandidates, isOpenClawPresent } from '../utils/paths';
+import { getOpenClawDir, getOpenClawEntryPath, getOpenClawConfigDir, getOpenClawProcessCwd, getOpenClawNodeModulesPath, getOpenClawPackageRootEnv, getBundledPluginSourceCandidates, isOpenClawPresent, getDefaultAgentWorkspacePath } from '../utils/paths';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { cleanupDanglingWeChatPluginState, listConfiguredChannels } from '../utils/channel-config';
 import {
@@ -319,7 +319,7 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
   baseEnvPatched = prependPathEntry(baseEnvPatched, getDwsBinDir()).env;
 
   const mainWorkspace = await getAgentWorkspacePath('main')
-    ?? join(getOpenClawConfigDir(), 'workspace');
+    ?? getDefaultAgentWorkspacePath();
   const mainOutputDir = join(mainWorkspace, '.claw-output');
 
   const forkEnv: Record<string, string | undefined> = prependNodePathEntry({

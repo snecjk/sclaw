@@ -38,6 +38,8 @@ import {
 import { useGatewayStore } from '@/stores/gateway';
 import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { getProjectIdFromProjectAgentId } from '../../../shared/project-agent';
+import { useSessionCatalogStore } from '@/stores/session-catalog';
 import type { AgentSummary } from '@/types/agent';
 import { useTranslation } from 'react-i18next';
 import { DingTalkMentionEditor, type DingTalkMentionEditorHandle } from '@/components/dingtalk/DingTalkMentionEditor';
@@ -233,11 +235,21 @@ export function ChatInput({
   const gatewayStatus = useGatewayStore((s) => s.status);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const pendingProjectId = useChatStore((s) => s.pendingProjectId);
+  const workspaces = useSessionCatalogStore((s) => s.workspaces);
+  const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
   const dailyTokenQuotaStatus = useChatStore((s) => s.dailyTokenQuotaStatus);
-  const currentAgentName = useMemo(
-    () => resolveAgentById(agents ?? [], currentAgentId)?.name ?? currentAgentId,
-    [agents, currentAgentId],
-  );
+  const currentAgentName = useMemo(() => {
+    const projectId = getProjectIdFromProjectAgentId(currentAgentId ?? '')
+      ?? sessionWorkspaceByKey[currentSessionKey]
+      ?? pendingProjectId
+      ?? null;
+    const projectName = projectId
+      ? workspaces.find((workspace) => workspace.id === projectId)?.name
+      : null;
+    return resolveAgentById(agents ?? [], currentAgentId, projectName)?.name ?? currentAgentId;
+  }, [agents, currentAgentId, currentSessionKey, pendingProjectId, sessionWorkspaceByKey, workspaces]);
   const mentionableAgents = useMemo(
     () => (agents ?? []).filter((agent) => agent.id !== currentAgentId),
     [agents, currentAgentId],

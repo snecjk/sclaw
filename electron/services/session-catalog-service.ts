@@ -29,9 +29,11 @@ import type { GatewayManager } from '../gateway/manager';
 import {
   deleteAllProjectAgentsForProject,
   ensureProjectAgent,
+  listProjectAgentIds,
 } from './project-agent-service';
 import {
   getBaseAgentIdFromProjectAgentId,
+  getProjectIdFromProjectAgentId,
   isProjectAgentId,
 } from '../../shared/project-agent';
 
@@ -163,20 +165,41 @@ export async function listUserWorkspaces() {
 
 export async function createWorkspace(
   input: { name: string; rootPath: string },
-  gatewayManager?: GatewayManager | null,
+  _gatewayManager?: GatewayManager | null,
 ) {
   await ensureSessionCatalogBootstrapped();
-  const workspace = await getWorkspaceRepository().create({
+  // Do not create a project agent here — defer until the user starts a chat in
+  // this project (sidebar「新建对话」), so creating a project does not reload the gateway.
+  return getWorkspaceRepository().create({
     name: input.name,
     rootPath: input.rootPath,
   });
-  try {
-    await ensureProjectAgent(workspace.id, 'main', workspace.rootPath);
-    gatewayManager?.debouncedReload();
-  } catch (error) {
-    logger.warn('[session-catalog] failed to ensure project agent for new workspace', { workspaceId: workspace.id, error });
+}
+
+/**
+ * Ensure the OpenClaw project agent for a workspace exists and points at its rootPath.
+ * Called when the user starts a new chat in the project (before first message).
+ */
+export async function ensureWorkspaceProjectAgent(
+  workspaceId: string,
+  baseAgentId: string = 'main',
+  gatewayManager?: GatewayManager | null,
+): Promise<{ agentId: string; created: boolean; workspaceUpdated: boolean }> {
+  await ensureSessionCatalogBootstrapped();
+  const trimmedId = workspaceId.trim();
+  if (!trimmedId || trimmedId === DEFAULT_WORKSPACE_ID) {
+    throw new Error('A project workspace id is required');
   }
-  return workspace;
+  const workspace = await getWorkspaceRepository().getById(trimmedId);
+  if (!workspace) {
+    throw new Error(`Workspace not found: ${trimmedId}`);
+  }
+  const resolvedBase = getBaseAgentIdFromProjectAgentId(baseAgentId) || baseAgentId.trim() || 'main';
+  const result = await ensureProjectAgent(trimmedId, resolvedBase, workspace.rootPath);
+  if (result.created || result.workspaceUpdated) {
+    gatewayManager?.debouncedReload();
+  }
+  return result;
 }
 
 export async function updateWorkspace(
@@ -190,10 +213,23 @@ export async function updateWorkspace(
     const sessions = await getCatalogSessionRepository().list({ workspaceId });
     await Promise.all(sessions.map((session) => syncSessionEngineBindingCwd(session.sessionKey)));
     try {
-      await ensureProjectAgent(workspaceId, 'main', input.rootPath);
-      gatewayManager?.debouncedReload();
+      // Only sync agents that already exist for this project. Empty projects stay agent-less.
+      const existingProjectAgents = (await listProjectAgentIds()).filter((agentId) => {
+        return getProjectIdFromProjectAgentId(agentId) === workspaceId.trim().toLowerCase();
+      });
+      let needsReload = false;
+      for (const agentId of existingProjectAgents) {
+        const baseAgentId = getBaseAgentIdFromProjectAgentId(agentId) || 'main';
+        const result = await ensureProjectAgent(workspaceId, baseAgentId, input.rootPath);
+        if (result.created || result.workspaceUpdated) {
+          needsReload = true;
+        }
+      }
+      if (needsReload) {
+        gatewayManager?.debouncedReload();
+      }
     } catch (error) {
-      logger.warn('[session-catalog] failed to ensure project agent on workspace path change', { workspaceId, error });
+      logger.warn('[session-catalog] failed to sync project agents on workspace path change', { workspaceId, error });
     }
   }
   return workspace;
@@ -202,13 +238,14 @@ export async function updateWorkspace(
 export async function deleteWorkspace(
   workspaceId: string,
   gatewayManager?: GatewayManager | null,
-): Promise<{ movedSessionCount: number }> {
+): Promise<{ deletedSessionCount: number }> {
   await ensureSessionCatalogBootstrapped();
   const catalogRepo = getCatalogSessionRepository();
+  const bindingRepo = getSessionEngineBindingRepository();
   const sessions = await catalogRepo.list({ workspaceId });
   for (const session of sessions) {
-    await catalogRepo.moveToWorkspace(session.sessionKey, DEFAULT_WORKSPACE_ID);
-    await syncSessionEngineBindingCwd(session.sessionKey);
+    await catalogRepo.softDelete(workspaceId, session.sessionKey);
+    await bindingRepo.softDelete(session.sessionKey);
   }
   await getWorkspaceRepository().softDelete(workspaceId);
   try {
@@ -219,7 +256,7 @@ export async function deleteWorkspace(
   } catch (error) {
     logger.warn('[session-catalog] failed to delete project agents for workspace', { workspaceId, error });
   }
-  return { movedSessionCount: sessions.length };
+  return { deletedSessionCount: sessions.length };
 }
 
 export async function syncSessionEngineBindingCwd(sessionKey: string): Promise<void> {
@@ -323,10 +360,16 @@ export async function bindSessionToWorkspace(
         ? (getBaseAgentIdFromProjectAgentId(rawAgentId) ?? 'main')
         : rawAgentId;
       try {
-        await ensureProjectAgent(workspaceId, baseAgentId, workspace.rootPath);
-        gatewayManager?.debouncedReload();
+        const result = await ensureProjectAgent(workspaceId, baseAgentId, workspace.rootPath);
+        if (result.created || result.workspaceUpdated) {
+          gatewayManager?.debouncedReload();
+        }
       } catch (error) {
-        logger.warn('[session-catalog] failed to ensure project agent on bind', { workspaceId, sessionKey, error });
+        logger.warn('[session-catalog] failed to ensure project agent on bind', {
+          workspaceId,
+          sessionKey,
+          error: String(error),
+        });
       }
     }
   }
@@ -338,6 +381,9 @@ export async function moveSessionToWorkspace(
   gatewayManager?: GatewayManager | null,
 ): Promise<CatalogSession> {
   await ensureSessionCatalogBootstrapped();
+  if (workspaceId === DEFAULT_WORKSPACE_ID) {
+    throw new Error('Moving sessions out of a project is not supported');
+  }
   const session = await getCatalogSessionRepository().moveToWorkspace(sessionKey, workspaceId);
   await syncSessionEngineBindingCwd(sessionKey);
   if (workspaceId !== DEFAULT_WORKSPACE_ID) {
@@ -348,10 +394,16 @@ export async function moveSessionToWorkspace(
         ? (getBaseAgentIdFromProjectAgentId(rawAgentId) ?? 'main')
         : rawAgentId;
       try {
-        await ensureProjectAgent(workspaceId, baseAgentId, workspace.rootPath);
-        gatewayManager?.debouncedReload();
+        const result = await ensureProjectAgent(workspaceId, baseAgentId, workspace.rootPath);
+        if (result.created || result.workspaceUpdated) {
+          gatewayManager?.debouncedReload();
+        }
       } catch (error) {
-        logger.warn('[session-catalog] failed to ensure project agent on move', { workspaceId, sessionKey, error });
+        logger.warn('[session-catalog] failed to ensure project agent on move', {
+          workspaceId,
+          sessionKey,
+          error: String(error),
+        });
       }
     }
   }

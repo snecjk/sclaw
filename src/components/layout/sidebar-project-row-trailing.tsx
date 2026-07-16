@@ -1,7 +1,7 @@
 /**
  * SidebarProjectRowTrailing — 项目行尾：新建对话 (+) +「...」菜单。
  */
-import { Folder, FolderOpen, MessageSquarePlus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Folder, MessageSquarePlus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   DropdownMenu,
@@ -21,7 +21,6 @@ import {
 export interface SidebarProjectRowTrailingProps {
   onNewChat: () => void;
   onRename: () => void;
-  onChangeLocation: () => void;
   onOpenFolder: () => void;
   onDelete: () => void;
   className?: string;
@@ -33,12 +32,18 @@ const SIDEBAR_ROW_TRAILING_W_CLASS = 'w-[56px]';
 export function SidebarProjectRowTrailing({
   onNewChat,
   onRename,
-  onChangeLocation,
   onOpenFolder,
   onDelete,
   className,
 }: SidebarProjectRowTrailingProps) {
   const { t } = useTranslation('common');
+  const platform = window.electron?.platform;
+  const openFolderLabel =
+    platform === 'win32'
+      ? t('sidebar.openProjectFolderWin')
+      : platform === 'linux'
+        ? t('sidebar.openProjectFolderLinux')
+        : t('sidebar.openProjectFolder');
 
   return (
     <div
@@ -111,21 +116,11 @@ export function SidebarProjectRowTrailing({
               className={sidebarRecentMenuItemClass}
               onClick={(e) => {
                 e.stopPropagation();
-                onChangeLocation();
-              }}
-            >
-              <FolderOpen className="h-4 w-4 shrink-0" aria-hidden />
-              {t('sidebar.changeProjectLocation')}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className={sidebarRecentMenuItemClass}
-              onClick={(e) => {
-                e.stopPropagation();
                 onOpenFolder();
               }}
             >
               <Folder className="h-4 w-4 shrink-0" aria-hidden />
-              {t('sidebar.openProjectFolder')}
+              {openFolderLabel}
             </DropdownMenuItem>
             <div className={sidebarRecentMenuDividerClass} role="separator" />
             <DropdownMenuItem

@@ -1,5 +1,5 @@
 /**
- * SidebarProjectSessionRowTrailing — 项目内会话行尾：hover「...」菜单（置顶 / 重命名 / 移出项目 / 删除）。
+ * SidebarProjectSessionRowTrailing — 项目内会话行尾：置顶 / 未读 / 状态 + hover「...」菜单。
  */
 import { MoreHorizontal, Pin, Pencil, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -16,7 +16,10 @@ import {
   sidebarRecentMenuDeleteItemClass,
   sidebarRecentMenuItemClass,
   sidebarTextIconClass,
+  sidebarUnreadDotClass,
 } from '@/lib/surfaces';
+import { useChatStore } from '@/stores/chat';
+import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 
 export interface SidebarProjectSessionRowTrailingProps {
   sessionKey: string;
@@ -24,7 +27,6 @@ export interface SidebarProjectSessionRowTrailingProps {
   isPinned: boolean;
   onPin: () => void;
   onRename: () => void;
-  onRemoveFromProject: () => void;
   onDelete: () => void;
   className?: string;
 }
@@ -37,11 +39,30 @@ export function SidebarProjectSessionRowTrailing({
   isPinned,
   onPin,
   onRename,
-  onRemoveFromProject,
   onDelete,
   className,
 }: SidebarProjectSessionRowTrailingProps) {
   const { t } = useTranslation('common');
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const runtime = useChatStore((s) => s.runtimeBySessionKey[sessionKey]);
+  const currentSessionSending = useChatStore((s) => s.sending);
+  const currentSessionActiveRunId = useChatStore((s) => s.activeRunId);
+  const currentSessionError = useChatStore((s) => s.error);
+  const unreadKeys = useSessionUnreadStore((s) => s.unreadKeys);
+  const isCurrentSession = currentSessionKey === sessionKey;
+  const isRunning = Boolean(
+    runtime?.sending
+    || runtime?.activeRunId
+    || (isCurrentSession && (currentSessionSending || currentSessionActiveRunId)),
+  );
+  const hasError = Boolean(
+    (runtime?.error != null && runtime.error !== '')
+    || (isCurrentSession && currentSessionError != null && currentSessionError !== ''),
+  );
+  const showUnreadDot = !isCurrentSession
+    && !isRunning
+    && !hasError
+    && readSessionUnread(unreadKeys, sessionKey);
 
   return (
     <div
@@ -53,10 +74,19 @@ export function SidebarProjectSessionRowTrailing({
     >
       <div
         className={cn(
-          'pointer-events-none flex h-5 w-full items-center justify-end',
+          'pointer-events-none flex h-5 w-full items-center justify-end gap-1',
           'transition-opacity group-hover:opacity-0 group-hover:invisible',
         )}
       >
+        {isPinned ? (
+          <Pin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        ) : null}
+        {showUnreadDot ? (
+          <span
+            className={sidebarUnreadDotClass}
+            aria-label={t('sidebar.sessionUnread')}
+          />
+        ) : null}
         <SidebarRecentSessionStatus sessionKey={sessionKey} />
       </div>
       <div
@@ -104,15 +134,6 @@ export function SidebarProjectSessionRowTrailing({
             >
               <Pencil className="h-4 w-4 shrink-0" aria-hidden />
               {t('actions.rename')}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className={sidebarRecentMenuItemClass}
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemoveFromProject();
-              }}
-            >
-              {t('sidebar.removeFromProject')}
             </DropdownMenuItem>
             <DropdownMenuItem
               className={sidebarRecentMenuDeleteItemClass}

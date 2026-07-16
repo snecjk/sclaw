@@ -760,6 +760,14 @@ async function initialize(): Promise<void> {
   });
 
   // Install bundled plugins before Gateway so the first agent run uses the latest mirror.
+  sendStartupProgress('Preparing workspace...');
+  try {
+    const { ensureWorkspaceLayoutMigrated } = await import('../utils/workspace-migration');
+    await ensureWorkspaceLayoutMigrated();
+  } catch (error) {
+    logger.warn('Workspace layout migration failed:', error);
+  }
+
   sendStartupProgress('Installing plugins...');
   await cleanupRetiredSkillsAndPlugins().catch((error) => {
     logger.warn('Failed to cleanup retired skills/plugins before plugin install:', error);

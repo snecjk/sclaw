@@ -67,9 +67,9 @@ export async function updateProjectWorkspace(input: {
   return res.workspace;
 }
 
-export async function deleteProjectWorkspace(id: string): Promise<{ movedSessionCount: number }> {
-  const res = await invokeCatalog<{ success: boolean; movedSessionCount: number }>('deleteWorkspace', { id });
-  return { movedSessionCount: res.movedSessionCount ?? 0 };
+export async function deleteProjectWorkspace(id: string): Promise<{ deletedSessionCount: number }> {
+  const res = await invokeCatalog<{ success: boolean; deletedSessionCount: number }>('deleteWorkspace', { id });
+  return { deletedSessionCount: res.deletedSessionCount ?? 0 };
 }
 
 export async function createProjectWorkspace(input: {
@@ -78,6 +78,13 @@ export async function createProjectWorkspace(input: {
 }): Promise<WorkspaceDto> {
   const res = await invokeCatalog<{ workspace: WorkspaceDto }>('createWorkspace', input);
   return res.workspace;
+}
+
+export async function ensureProjectAgentForWorkspace(input: {
+  workspaceId: string;
+  baseAgentId?: string;
+}): Promise<{ agentId: string; created: boolean; workspaceUpdated: boolean }> {
+  return invokeCatalog('ensureProjectAgent', input);
 }
 
 export async function listSessionGroups(workspaceId: string): Promise<SessionGroupDto[]> {

@@ -16,7 +16,12 @@ import { DEFAULT_WORKSPACE_ID, useSessionCatalogStore } from '@/stores/session-c
 import { useChatStore } from '@/stores/chat';
 import { resolveSessionLabel } from '@/lib/session-label';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
-import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
+import {
+  DEFAULT_SESSION_KEY,
+  PROJECT_NEW_CHAT_DRAFT_KEY,
+  isProjectNewChatDraftKey,
+  type ChatSession,
+} from '@/stores/chat/types';
 import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
 import { sortSessionsWithCatalogPin } from '@/lib/sidebar-recent-order';
 import { ProjectFormDialog } from '@/components/layout/sidebar-project-form-dialog';
@@ -43,17 +48,18 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
   const allCatalogByKey = useSessionCatalogStore((s) => s.allCatalogByKey);
   const selectProject = useSessionCatalogStore((s) => s.selectProject);
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
-  const moveSessionToProject = useSessionCatalogStore((s) => s.moveSessionToProject);
   const patchSessionCatalog = useSessionCatalogStore((s) => s.patchSessionCatalog);
   const deleteProject = useSessionCatalogStore((s) => s.deleteProject);
 
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const pendingProjectId = useChatStore((s) => s.pendingProjectId);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const switchSession = useChatStore((s) => s.switchSession);
   const renameSession = useChatStore((s) => s.renameSession);
   const newSession = useChatStore((s) => s.newSession);
+  const setPendingProjectId = useChatStore((s) => s.setPendingProjectId);
 
   const requestSessionDelete = useSidebarDeleteConfirmStore((s) => s.requestSessionDelete);
 
@@ -65,20 +71,27 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
   const [editingValue, setEditingValue] = useState('');
 
   const sessionsByProjectId = useMemo(() => {
-    const map = new Map<string, typeof sessions>();
+    const map = new Map<string, ChatSession[]>();
     for (const workspace of workspaces) {
       const scoped = sessions.filter((session) => {
         if (isSidebarHiddenChatSessionKey(session.key)) return false;
         const workspaceId = sessionWorkspaceByKey[session.key] ?? DEFAULT_WORKSPACE_ID;
         return workspaceId === workspace.id;
       });
-      map.set(
-        workspace.id,
-        sortSessionsWithCatalogPin(scoped, sessionLastActivity, allCatalogByKey),
-      );
+      const sorted = sortSessionsWithCatalogPin(scoped, sessionLastActivity, allCatalogByKey);
+      // UI-only draft row: show under the pending project, never persisted to catalog/session.
+      if (pendingProjectId === workspace.id) {
+        const draftSession: ChatSession = {
+          key: PROJECT_NEW_CHAT_DRAFT_KEY,
+          label: t('sidebar.newChat'),
+        };
+        map.set(workspace.id, [draftSession, ...sorted]);
+      } else {
+        map.set(workspace.id, sorted);
+      }
     }
     return map;
-  }, [workspaces, sessions, sessionWorkspaceByKey, sessionLastActivity, allCatalogByKey]);
+  }, [workspaces, sessions, sessionWorkspaceByKey, sessionLastActivity, allCatalogByKey, pendingProjectId, t]);
 
   const getSessionLabel = useCallback(
     (key: string, displayName?: string, label?: string) =>
@@ -90,22 +103,16 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
     setExpandedProjectIds((prev) => ({ ...prev, [projectId]: !(prev[projectId] ?? false) }));
   }, []);
 
-  const handlePinInProject = useCallback(async (sessionKey: string, workspaceId: string) => {
+  const handlePinInProject = useCallback(async (sessionKey: string) => {
     const currentPin = allCatalogByKey[sessionKey]?.pinRank ?? null;
     if (currentPin != null) {
       await patchSessionCatalog({ sessionKey, pinRank: null });
       toast.success(t('sidebar.unpinnedInProject'));
       return;
     }
-    const projectSessions = sessionsByProjectId.get(workspaceId) ?? [];
-    let maxPin = 0;
-    for (const session of projectSessions) {
-      const pin = allCatalogByKey[session.key]?.pinRank;
-      if (pin != null && pin > maxPin) maxPin = pin;
-    }
-    await patchSessionCatalog({ sessionKey, pinRank: maxPin + 1 });
+    await patchSessionCatalog({ sessionKey, pinRank: 1 });
     toast.success(t('sidebar.pinnedInProject'));
-  }, [allCatalogByKey, patchSessionCatalog, sessionsByProjectId, t]);
+  }, [allCatalogByKey, patchSessionCatalog, t]);
 
   const handleOpenProjectFolder = useCallback(async (rootPath: string) => {
     try {
@@ -115,12 +122,12 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
     }
   }, []);
 
-  /** 在指定项目下新建对话：先选中项目再 newSession 并传入 projectId，会话才会绑定到该项目。 */
+  /** 在指定项目下新建对话：进入项目草稿并创建/关联 project agent；首条消息发出时才真正创建 session。 */
   const handleNewChatInProject = useCallback(async (projectId: string) => {
     try {
       await selectProject(projectId);
       setExpandedProjectIds((prev) => ({ ...prev, [projectId]: true }));
-      newSession({ projectId });
+      await newSession({ projectId });
       navigateToMainChatHome(navigate, location.pathname);
     } catch (error) {
       toast.error(String(error));
@@ -132,18 +139,20 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
     for (const workspaceId of Object.values(sessionWorkspaceByKey)) {
       if (workspaceId === projectId) count += 1;
     }
-    // 侧栏可见会话也算关联（与 catalog 绑定取并集思路：至少覆盖 UI 上看到的）
-    const visible = sessionsByProjectId.get(projectId)?.length ?? 0;
+    // 侧栏可见真实会话也算关联；临时草稿不计入删除确认数量
+    const visible = (sessionsByProjectId.get(projectId) ?? [])
+      .filter((session) => !isProjectNewChatDraftKey(session.key))
+      .length;
     return Math.max(count, visible);
   }, [sessionWorkspaceByKey, sessionsByProjectId]);
 
   const handleConfirmDeleteProject = useCallback(async () => {
     if (!deleteTarget) return;
     try {
-      const moved = await deleteProject(deleteTarget.id);
+      const deleted = await deleteProject(deleteTarget.id);
       toast.success(
-        moved > 0
-          ? t('sidebar.projectDeletedWithSessions', { count: moved })
+        deleted > 0
+          ? t('sidebar.projectDeletedWithSessions', { count: deleted })
           : t('sidebar.projectDeleted'),
       );
       setDeleteTarget(null);
@@ -228,11 +237,18 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                 {isExpanded && projectSessions.length > 0 ? (
                   <div className="mb-0.5 flex flex-col gap-0.5">
                     {projectSessions.map((session) => {
-                      const label = getSessionLabel(session.key, session.displayName, session.label);
-                      const isActive = isOnHome
-                        && currentSessionKey === session.key
-                        && currentSessionKey !== DEFAULT_SESSION_KEY;
-                      const isPinned = allCatalogByKey[session.key]?.pinRank != null;
+                      const isDraft = isProjectNewChatDraftKey(session.key);
+                      const label = isDraft
+                        ? (session.label || '新对话')
+                        : getSessionLabel(session.key, session.displayName, session.label);
+                      const isActive = isDraft
+                        ? isOnHome
+                          && pendingProjectId === workspace.id
+                          && currentSessionKey === DEFAULT_SESSION_KEY
+                        : isOnHome
+                          && currentSessionKey === session.key
+                          && currentSessionKey !== DEFAULT_SESSION_KEY;
+                      const isPinned = !isDraft && allCatalogByKey[session.key]?.pinRank != null;
                       return (
                         <SidebarProjectSessionRow
                           key={session.key}
@@ -240,30 +256,42 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                           label={label}
                           isActive={isActive}
                           isPinned={isPinned}
-                          isEditing={editingSessionKey === session.key}
+                          isEditing={!isDraft && editingSessionKey === session.key}
                           editingValue={editingValue}
                           onOpen={() => {
+                            if (isDraft) {
+                              void handleNewChatInProject(workspace.id);
+                              return;
+                            }
                             void selectProject(workspace.id);
                             navigateToMainChatHome(navigate, location.pathname, () => switchSession(session.key));
                           }}
                           onPin={() => {
-                            void handlePinInProject(session.key, workspace.id);
+                            if (isDraft) return;
+                            void handlePinInProject(session.key);
                           }}
                           onStartRename={() => {
+                            if (isDraft) return;
                             setEditingSessionKey(session.key);
                             setEditingValue(label);
                           }}
                           onEditingValueChange={setEditingValue}
                           onCommitRename={() => {
+                            if (isDraft) return;
                             renameSession(session.key, editingValue);
                             setEditingSessionKey(null);
                           }}
                           onCancelRename={() => setEditingSessionKey(null)}
-                          onRemoveFromProject={() => {
-                            void moveSessionToProject(session.key, null);
-                            toast.success(t('sidebar.removedFromProject'));
-                          }}
                           onDelete={() => {
+                            if (isDraft) {
+                              setPendingProjectId(null);
+                              useChatStore.setState({
+                                currentSessionKey: DEFAULT_SESSION_KEY,
+                                currentAgentId: 'main',
+                                messages: [],
+                              });
+                              return;
+                            }
                             requestSessionDelete({ key: session.key, label });
                           }}
                         />
