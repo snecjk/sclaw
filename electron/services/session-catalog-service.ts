@@ -25,6 +25,7 @@ import { getAgentIdFromSessionKey } from '../engines/session-engine';
 import type { EngineSessionRegistryEntry } from '../engines/session-registry-types';
 import type { AgentEngineType } from '../engines/types';
 import { getAgentWorkspacePath } from '../utils/agent-config';
+import { ensureWorkspaceArtifactOutputDir } from '../utils/paths';
 import type { GatewayManager } from '../gateway/manager';
 import {
   deleteAllProjectAgentsForProject,
@@ -170,6 +171,7 @@ export async function createWorkspace(
   await ensureSessionCatalogBootstrapped();
   // Do not create a project agent here — defer until the user starts a chat in
   // this project (sidebar「新建对话」), so creating a project does not reload the gateway.
+  ensureWorkspaceArtifactOutputDir(input.rootPath);
   return getWorkspaceRepository().create({
     name: input.name,
     rootPath: input.rootPath,
@@ -425,10 +427,15 @@ export async function resolveSessionToolCwd(sessionKey: string, agentId?: string
   const row = await getCatalogSessionRepository().findBySessionKey(sessionKey);
   if (row && row.workspaceId !== DEFAULT_WORKSPACE_ID) {
     const root = await getWorkspaceRootPath(row.workspaceId);
-    if (root) return root;
+    if (root) {
+      ensureWorkspaceArtifactOutputDir(root);
+      return root;
+    }
   }
   const resolvedAgentId = agentId?.trim() || getAgentIdFromSessionKey(sessionKey);
-  return getAgentWorkspacePath(resolvedAgentId);
+  const workspace = await getAgentWorkspacePath(resolvedAgentId);
+  ensureWorkspaceArtifactOutputDir(workspace);
+  return workspace;
 }
 
 export async function softDeleteCatalogSessionByKey(sessionKey: string): Promise<boolean> {

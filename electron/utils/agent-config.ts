@@ -3,7 +3,7 @@ import { constants } from 'fs';
 import { join, normalize } from 'path';
 import { deleteAgentChannelAccounts, listConfiguredChannels, readOpenClawConfig, writeOpenClawConfig } from './channel-config';
 import { withConfigLock } from './config-mutex';
-import { expandPath, getClawXConfigDir, getManagedAgentWorkspacePath, getOpenClawConfigDir } from './paths';
+import { expandPath, getClawXConfigDir, getManagedAgentWorkspacePath, getOpenClawConfigDir, ensureWorkspaceArtifactOutputDir } from './paths';
 import {
   DEFAULT_WORKSPACE_TILDE,
   getAgentWorkspaceTildePath,
@@ -585,6 +585,7 @@ async function provisionAgentFilesystem(
   await ensureDir(targetWorkspace);
   await ensureDir(targetAgentDir);
   await ensureDir(targetSessionsDir);
+  ensureWorkspaceArtifactOutputDir(targetWorkspace);
 
   // When inheritWorkspace is true, copy the main agent's workspace bootstrap
   // files (SOUL.md, AGENTS.md, etc.) so the new agent inherits the same
@@ -1089,6 +1090,7 @@ export async function updateAgentWorkspace(agentId: string, workspacePath: strin
     };
 
     await writeOpenClawConfig(config);
+    ensureWorkspaceArtifactOutputDir(workspacePath.trim());
     logger.info('Updated agent workspace', { agentId, workspace: workspacePath.trim() });
     return await buildSnapshotFromConfig(config);
   });

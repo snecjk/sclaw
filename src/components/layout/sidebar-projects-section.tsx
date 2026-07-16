@@ -246,7 +246,7 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                     <>
                       <button
                         type="button"
-                        title={workspace.rootPath}
+                        title={`${workspace.name}\n${workspace.rootPath}`}
                         onClick={() => toggleProjectExpand(workspace.id)}
                         onDoubleClick={(e) => {
                           e.preventDefault();
