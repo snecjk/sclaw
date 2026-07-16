@@ -3,11 +3,14 @@ import type { RawMessage } from '@/stores/chat/types';
 import { WORKFLOW_SESSION_HINT_MARKER } from '@/lib/workflow-session-hint';
 import {
   dedupeRedundantUserMessages,
+  dropSyntheticSkillSessionLabelUsers,
   ensureOpeningUserMessageFirst,
   isSameUserMessage,
   mergeOptimisticUserIntoHistory,
   recoverInitialUserFromSessionLabel,
 } from '@/stores/chat/user-message-merge';
+import { restoreSkillMetaOnMessages } from '@/lib/skill-message-meta-cache';
+import { appendSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
 
 describe('user-message-merge', () => {
   it('does not append optimistic user when history already has matching text', () => {
@@ -318,6 +321,196 @@ describe('user-message-merge', () => {
     expect(merged[1]?.role).toBe('assistant');
   });
 
+  it('inserts skill-only optimistic user when history has not caught up', () => {
+    const optimistic = {
+      id: 'local-skill-user',
+      role: 'user',
+      content: '',
+      timestamp: 1710000000,
+      _skillMeta: { slug: 'outlet-quote', title: '网点一客一议报价' },
+    } as RawMessage;
+    const enriched = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '连接模型中...',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = mergeOptimisticUserIntoHistory(enriched, [optimistic], {
+      userMessageAt: 1710000000000,
+      sending: true,
+    });
+
+    expect(merged).toHaveLength(2);
+    expect(merged[0]?._skillMeta).toEqual({ slug: 'outlet-quote', title: '网点一客一议报价' });
+    expect(merged[0]?.content).toBe('');
+  });
+
+  it('preserves skill tag and hides defaultPrompt when history echoes the user turn', () => {
+    const optimistic = {
+      id: 'local-skill-user',
+      role: 'user',
+      content: '',
+      timestamp: 1710000000,
+      _skillMeta: { slug: 'outlet-quote', title: '网点一客一议报价' },
+    } as RawMessage;
+    const enriched = [
+      {
+        id: 'local-skill-user',
+        role: 'user',
+        content: '请帮我完成网点一客一议报价流程',
+        timestamp: 1710000001,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '连接模型中...',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = mergeOptimisticUserIntoHistory(enriched, [optimistic], {
+      userMessageAt: 1710000000000,
+      sending: true,
+    });
+
+    expect(merged[0]?._skillMeta).toEqual({ slug: 'outlet-quote', title: '网点一客一议报价' });
+    expect(merged[0]?.content).toBe('');
+    expect(merged[1]?.role).toBe('assistant');
+  });
+
+  it('preserves skill tag when deduping adjacent optimistic and gateway user messages', () => {
+    const messages = [
+      {
+        id: 'history-user',
+        role: 'user',
+        content: '请帮我完成网点出库运费流程',
+        timestamp: 1710000001,
+      },
+      {
+        id: 'local-skill-user',
+        role: 'user',
+        content: '查网点432100的',
+        timestamp: 1710000000,
+        _skillMeta: { slug: 'outlet-freight', title: '网点出库运费' },
+      },
+    ] as RawMessage[];
+
+    const deduped = dedupeRedundantUserMessages(messages, 1710000000000);
+
+    expect(deduped).toHaveLength(1);
+    expect(deduped[0]?._skillMeta).toEqual({ slug: 'outlet-freight', title: '网点出库运费' });
+    expect(deduped[0]?.content).toBe('查网点432100的');
+  });
+
+  it('patches skill display after send completes when lastUserMessageAt was cleared', () => {
+    const optimistic = {
+      id: 'local-skill-user',
+      role: 'user',
+      content: '查网点432100的',
+      timestamp: 1710000000,
+      _skillMeta: { slug: 'outlet-freight', title: '网点出库运费' },
+    } as RawMessage;
+    const enriched = [
+      {
+        id: 'history-user',
+        role: 'user',
+        content: '请帮我完成网点出库运费流程\n\n查网点432100的',
+        timestamp: 1710000001,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '好的',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = mergeOptimisticUserIntoHistory(enriched, [optimistic], {
+      userMessageAt: null,
+      sending: false,
+    });
+
+    expect(merged[0]?._skillMeta).toEqual({ slug: 'outlet-freight', title: '网点出库运费' });
+    expect(merged[0]?.content).toBe('查网点432100的');
+  });
+
+  it('does not recover session-label user when a skill-tagged opening turn already exists', () => {
+    const enriched = [
+      {
+        id: 'history-user',
+        role: 'user',
+        content: '查网点432100的',
+        timestamp: 1710000001,
+        _skillMeta: { slug: 'waybill-quote', title: '网点面单报价' },
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '好的',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = recoverInitialUserFromSessionLabel(
+      enriched,
+      'agent:main:session-1',
+      { 'agent:main:session-1': '网点面单报价' },
+    );
+
+    expect(merged.filter((message) => message.role === 'user')).toHaveLength(1);
+  });
+
+  it('dedupes synthetic session-label user rows after skill history restore', () => {
+    const messages = [
+      {
+        id: 'session-label-user-agent:main:session-1',
+        role: 'user',
+        content: '查网点432100的',
+        timestamp: 1710000000,
+      },
+      {
+        id: 'history-user',
+        role: 'user',
+        content: '查网点432100的',
+        timestamp: 1710000001,
+        _skillMeta: { slug: 'waybill-quote', title: '网点面单报价' },
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '好的',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const deduped = dedupeRedundantUserMessages(messages, null);
+    const cleaned = dropSyntheticSkillSessionLabelUsers(deduped);
+
+    expect(cleaned.filter((message) => message.role === 'user')).toHaveLength(1);
+    expect(cleaned[0]?._skillMeta).toEqual({ slug: 'waybill-quote', title: '网点面单报价' });
+    expect(cleaned[0]?.content).toBe('查网点432100的');
+  });
+
+  it('keeps only the skill tag for skill-only refresh when gateway stored the title', () => {
+    const skill = { slug: 'outlet-fee', title: '网点出港派费' };
+    const history = restoreSkillMetaOnMessages(
+      [{
+        id: 'history-user',
+        role: 'user',
+        content: appendSkillTranscriptMarker(skill.title, skill),
+        timestamp: 1710000001,
+      }],
+      'agent:main:session-1',
+      skill.title,
+    );
+
+    expect(history[0]?._skillMeta).toEqual(skill);
+    expect(history[0]?.content).toBe('');
+  });
+
   it('does not recover opening user from label while sending', () => {
     const enriched = [
       {
@@ -396,4 +589,5 @@ describe('user-message-merge', () => {
     expect(deduped.filter((m) => m.role === 'user')).toHaveLength(1);
     expect(deduped.find((m) => m.role === 'user')?.id).toBe('history-user-1');
   });
+
 });

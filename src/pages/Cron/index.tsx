@@ -16,6 +16,7 @@ import {
   rememberOptimisticTaskGroupFirstTriggered,
 } from '@/lib/task-group-first-trigger';
 import { resolveTaskGroupKeyFromSessionKey } from '../../../shared/task-group-key';
+import { applyTaskExecutionModelToChatSession } from '@/lib/apply-task-execution-model';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -201,8 +202,33 @@ export function Cron() {
         if (groupKey) {
           void ensureTaskGroupFirstTriggeredOnRun(groupKey, triggeredAt);
         }
-        if (job.engineType === 'claude' && result && 'sessionKey' in result) {
-          activeSessionKey = result.sessionKey;
+        const executionMeta = result && typeof result === 'object'
+          ? result as {
+            sessionKey?: string;
+            executionSessionKey?: string;
+            executionModel?: string;
+            executionAgentId?: string;
+          }
+          : null;
+        if (job.engineType === 'claude') {
+          activeSessionKey = executionMeta?.executionSessionKey || openClawSessionKey;
+          applyTaskExecutionModelToChatSession({
+            sessionKey: activeSessionKey,
+            model: executionMeta?.executionModel,
+            agentId: executionMeta?.executionAgentId || job.agentId,
+            engineType: 'claude',
+          });
+          if (
+            executionMeta?.sessionKey
+            && executionMeta.sessionKey !== activeSessionKey
+          ) {
+            applyTaskExecutionModelToChatSession({
+              sessionKey: executionMeta.sessionKey,
+              model: executionMeta.executionModel,
+              agentId: executionMeta.executionAgentId || job.agentId,
+              engineType: 'claude',
+            });
+          }
           chat.clearScheduledSessionActivating(openClawSessionKey);
           flushSync(() => {
             chat.markScheduledSessionActivating(activeSessionKey);
@@ -211,8 +237,16 @@ export function Cron() {
             useChatStore.getState().switchSession(activeSessionKey);
           });
         } else {
+          applyTaskExecutionModelToChatSession({
+            sessionKey: openClawSessionKey,
+            model: executionMeta?.executionModel,
+            agentId: executionMeta?.executionAgentId || job.agentId || 'main',
+            engineType: 'openclaw',
+          });
           navigateToMainChatHome(navigate, location.pathname, () => {
-            useChatStore.getState().switchSession(openClawSessionKey);
+            useChatStore.getState().switchSession(
+              executionMeta?.executionSessionKey || openClawSessionKey,
+            );
           });
         }
         await useChatStore.getState().loadSessions();

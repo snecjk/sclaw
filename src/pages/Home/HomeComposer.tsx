@@ -21,18 +21,24 @@ import { useChatInputBindings } from '@/hooks/use-chat-input-bindings';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
 import type { AgentSummary } from '@/types/agent';
 import { homeHubFooterDisclaimerClass } from './home-hub-surface-styles';
 
 export interface HomeComposerProps {
   /** 一次性填入输入框的种子文案 */
   seedText?: string;
+  /** 技能广场「使用」：预填技能标签 */
+  seedSkillSlug?: string;
   onSend?: (
     text: string,
     attachments?: FileAttachment[],
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
+    workflowSource?: string | null,
+    workflowName?: string | null,
+    skillMeta?: SkillMeta,
   ) => void;
   onQueue?: (
     text: string,
@@ -40,6 +46,9 @@ export interface HomeComposerProps {
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
+    workflowSource?: string | null,
+    workflowName?: string | null,
+    skillMeta?: SkillMeta,
   ) => void;
   /** 直接覆盖占位文案 */
   placeholder?: string;
@@ -55,6 +64,7 @@ export interface HomeComposerProps {
 
 export function HomeComposer({
   seedText,
+  seedSkillSlug,
   onSend,
   onQueue,
   placeholder,
@@ -96,7 +106,7 @@ export function HomeComposer({
   const inlineToolbarSelectors = (
     <div className="flex min-w-0 flex-1 items-center gap-2">
       <ChatEngineSelector variant="inline" className="min-w-0 flex-1" />
-      <ChatModelSelector variant="inline" className="min-w-0 flex-1" />
+      <ChatModelSelector variant="inline" className="min-w-max shrink-0" />
     </div>
   );
 
@@ -105,6 +115,7 @@ export function HomeComposer({
     onQueue: onQueue ?? handleHubQueue,
     variant: 'embedded',
     seedText,
+    seedSkillSlug,
     placeholder: placeholder ?? (placeholderKey ? t(placeholderKey) : undefined),
     engineType: resolvedEngineType,
   });

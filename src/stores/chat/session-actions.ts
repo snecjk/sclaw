@@ -1,3 +1,5 @@
+import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-to-chat';
+import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import { hostApiFetch } from '@/lib/host-api';
 import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
@@ -492,28 +494,48 @@ export function createSessionActions(
     },
 
     // ── New session ──
+    // NOTE: Runtime store is src/stores/chat.ts (monolithic). Keep logic in sync when refactoring.
 
-    newSession: (_options?: { projectId?: string }) => {
+    newSession: async (_options?: { projectId?: string }) => {
       // Generate a new unique session key and switch to it.
       // NOTE: We intentionally do NOT call sessions.reset on the old session.
       // sessions.reset archives (renames) the session JSONL file, making old
       // conversation history inaccessible when the user switches back to it.
-      const { currentSessionKey, messages, sessionLastActivity, sessionLabels } = get();
+      const { currentSessionKey, messages, sessions, sessionLastActivity, sessionLabels } = get();
       // 仅将没有任何历史记录且无活动时间的会话视为空会话
       const leavingEmpty = isTemporaryAgentSessionKey(currentSessionKey)
         && messages.length === 0
         && !sessionLastActivity[currentSessionKey]
         && !sessionLabels[currentSessionKey];
-      const prefix = getCanonicalPrefixFromSessions(get().sessions) ?? DEFAULT_CANONICAL_PREFIX;
+      const prefix = getCanonicalPrefixFromSessions(sessions) ?? DEFAULT_CANONICAL_PREFIX;
       const newKey = `${prefix}:session-${Date.now()}`;
-      const agentId = getAgentIdFromSessionKey(newKey);
-      const lookupAgentId = getBaseAgentIdFromProjectAgentId(agentId.trim().toLowerCase()) ?? agentId.trim().toLowerCase();
+      const newAgentId = getAgentIdFromSessionKey(newKey);
+      const lookupAgentId = getBaseAgentIdFromProjectAgentId(newAgentId.trim().toLowerCase()) ?? newAgentId.trim().toLowerCase();
+      const pendingModel = get().pendingNewSessionModel?.trim();
+      let chosenModel = pendingModel;
+      if (!chosenModel) {
+        if (currentSessionKey !== DEFAULT_SESSION_KEY) {
+          chosenModel = sessions.find((s) => s.key === currentSessionKey)?.model?.trim();
+        } else {
+          const carryAgent = useAgentsStore.getState().agents.find(
+            (agent) => agent.id === get().currentAgentId,
+          );
+          if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
+            chosenModel = normalizeModelIdForChat(carryAgent.modelDisplay);
+          }
+        }
+      }
       const agentEngineType = useAgentsStore.getState().agents
         .find((agent) => agent.id.trim().toLowerCase() === lookupAgentId)?.engineType;
-      const newSessionEntry: ChatSession = { key: newKey, label: NEW_SESSION_TEMP_LABEL, engineType: agentEngineType };
+      const newSessionEntry: ChatSession = {
+        key: newKey,
+        label: NEW_SESSION_TEMP_LABEL,
+        engineType: agentEngineType,
+        ...(chosenModel ? { model: chosenModel } : {}),
+      };
       set((s) => ({
         currentSessionKey: newKey,
-        currentAgentId: getAgentIdFromSessionKey(newKey),
+        currentAgentId: newAgentId,
         sessions: [
           ...(leavingEmpty ? s.sessions.filter((sess) => sess.key !== currentSessionKey) : s.sessions),
           newSessionEntry,
@@ -536,6 +558,7 @@ export function createSessionActions(
         lastUserMessageAt: null,
         pendingToolImages: [],
       }));
+      await applyWorkspaceDefaultToNewSession(newKey, newAgentId);
     },
 
     // ── Cleanup empty session on navigate away ──

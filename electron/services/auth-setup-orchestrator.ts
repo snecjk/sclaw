@@ -10,7 +10,8 @@
 
 import type { GatewayManager } from '../gateway/manager';
 import type { SsoUserInfo } from '../utils/auth-store';
-import { getAuthState, syncSsoAuthToOpenClaw } from '../utils/auth-store';
+import { getAuthState, getImpersonationOrigin, syncSsoAuthToOpenClaw } from '../utils/auth-store';
+import { resolveAuthMode } from './sto-auth-mode';
 import { syncStoPluginsToOpenClaw } from '../utils/openclaw-auth';
 import { cleanupRetiredSkillsAndPlugins } from '../utils/retired-skills-cleanup';
 import { logger } from '../utils/logger';
@@ -217,6 +218,36 @@ async function runSetup(
   } catch (err) {
     logger.warn(`${logPrefix} STO plugins config failed:`, err);
   }
+
+  try {
+    const { loadClawInferenceRuntimeConfig } = await import('./sto-apollo-config-service');
+    await loadClawInferenceRuntimeConfig();
+  } catch (err) {
+    logger.warn(`${logPrefix} Inference runtime Apollo config load failed:`, err);
+  }
+
+  // ===== 登录后静默获取用户 SK（强制走主租户全链路，不读旧 tenant 缓存） =====
+  try {
+    const { getUserSk, clearUserSk } = await import('./user-sk-service');
+    if (source === 'login' && userToSync) {
+      const mode = await resolveAuthMode();
+      if (mode === 'hq-demo-as-site') {
+        const origin = await getImpersonationOrigin();
+        if (origin) {
+          await clearUserSk(origin);
+        }
+        await getUserSk(true);
+      } else {
+        await clearUserSk(userToSync);
+        await getUserSk(true);
+      }
+    } else {
+      await getUserSk();
+    }
+  } catch {
+    // 静默失败，sto-model-sync 会处理无 SK 的情况
+  }
+  // ========================================
 
   const stoSync = getStoModelSyncService();
   if (gatewayManager) {

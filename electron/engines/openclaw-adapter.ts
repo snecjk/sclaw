@@ -200,13 +200,13 @@ export const openClawAdapter: EngineAdapter = {
       if (projectAgentResult.created || projectAgentResult.workspaceUpdated) {
         await ctx.gatewayManager.debouncedReload();
       }
-
-      const result = await ctx.gatewayManager.rpc<{ runId?: string }>('chat.send', {
+      const rpcParams: Record<string, unknown> = {
         sessionKey,
         message: params.message,
         deliver: params.deliver,
         idempotencyKey: params.idempotencyKey,
-      }, 120000);
+      };
+      const result = await ctx.gatewayManager.rpc<{ runId?: string }>('chat.send', rpcParams, 120000);
       return { success: true, result };
     } catch (error) {
       return { success: false, error: String(error) };

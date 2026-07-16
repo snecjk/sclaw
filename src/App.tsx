@@ -245,6 +245,23 @@ function App() {
     };
   }, [location.pathname]);
 
+  // STO catalog sync (login / periodic / manual) → refresh toolbar default model
+  useEffect(() => {
+    const handleStoModelsSynced = (...args: unknown[]) => {
+      const payload = args[0] as { fallbackModel?: string } | undefined;
+      void import('@/lib/sync-workspace-default-to-chat').then(({ applyStoCatalogSyncToChatUi }) => (
+        applyStoCatalogSyncToChatUi({ fallbackModel: payload?.fallbackModel })
+      ));
+    };
+
+    const unsubscribe = window.electron.ipcRenderer.on('sto:models-synced', handleStoModelsSynced);
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, []);
+
   // Listen for SAI CLI install failure and prompt user to retry
   useEffect(() => {
     const handleSaiCliInstallFailed = (...args: unknown[]) => {
