@@ -95,6 +95,22 @@ export function createWorkflowRuntimeEngineDeps(): EngineDeps {
         return version;
       },
     } as any,
+    agentSpecClient: {
+      compileNode: async (args) => workflowV2BackendFetch(
+        `/agent/v2/workflows/getVersion/${encodeURIComponent(args.versionId)}/nodes/${encodeURIComponent(args.nodeId)}/compile`,
+        {
+          method: 'POST',
+          body: {
+            runId: args.runId,
+            inputs: args.inputs,
+            startupInputs: args.startupInputs,
+            startupSchema: args.startupSchema,
+            isFirstAgentNode: args.isFirstAgentNode,
+            runtimeContext: args.runtimeContext,
+          },
+        },
+      ),
+    },
     quota: async () => {
       const result = await getStoTokenQuotaService().checkTokenQuota();
       const data = result.data as Record<string, unknown>;

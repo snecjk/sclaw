@@ -9,7 +9,7 @@
  */
 import type { RunCtx, AgentRunSpec, AgentNodeResult } from './types';
 import { createProcessFileWriter, normalizeAgentResultOutput, validateDeclaredArtifactFiles, validateOutputAgainstSchema, extractJsonFromText } from './agent-output';
-import { buildPrompt, runWorkspacePath } from './prompt-builder';
+import { runWorkspacePath } from './workspace-paths';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const backoff = (a: number) => Math.min(30_000, 1000 * 2 ** (a - 1));
@@ -78,12 +78,9 @@ export async function runAgentNodeWithRetry(
     await ctx.repo.incrementNodeAttempt(ctx.runId, node.id);
     await ctx.emit('agent.attempt.start', { attempt }, node.id);
 
-    // retry-context prompt：第 2+ 次把 lastError 喂回
-    const prompt = buildPrompt(spec, {
-      runId: ctx.runId,
-      nodeId: node.id,
-      retryReason: attempt > 1 ? lastError : undefined,
-    });
+    // 智能节点 prompt 由云端 compiler 完整生成；客户端不得解释配置或追加业务提示。
+    const prompt = spec.prompt;
+    if (!prompt?.trim()) return { status: 'failed', error: 'cloud compiled agent prompt is empty' };
     // 与服务端智能节点执行口径一致：在实际调用 Agent 前固化本次 prompt。
     // 重试会覆盖为最新一次尝试的 prompt，便于排查最终生效的上下文。
     await ctx.repo.upsertNodeRun({

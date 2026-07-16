@@ -370,12 +370,14 @@ export function WorkflowDesigner({
         workflowVersionId={workflowVersionId}
         isStarting={tryRun.isStarting}
         isCancelling={tryRun.isCancelling}
+        isSyncing={tryRun.isSyncing}
         isRunActive={tryRun.isRunActive}
         isDraftSnapshot={tryRun.isDraftSnapshot}
         launchError={tryRun.launchError}
         onClose={tryRun.closeDrawer}
         onCancel={() => void tryRun.cancel()}
         onRerun={tryRun.rerun}
+        onRetrySync={() => void tryRun.retrySync()}
         onDecideApproval={(approved, note) => void tryRun.decideApproval(approved, note)}
         onSubmitInput={(values) => void tryRun.submitInput(values)}
       />

@@ -291,8 +291,6 @@ export interface StartWorkflowLocalParams {
   sessionKey: string;
   runMode?: 'trial' | 'production';
   workflowVersionId?: string | number;
-  /** 画布定义快照：只在客户端本地持久化与执行，不调用 v2 建运行记录接口。 */
-  definition?: Record<string, unknown>;
 }
 
 export interface StartWorkflowLocalResult {
@@ -306,28 +304,12 @@ export interface StartWorkflowLocalResult {
 /**
  * v2 本地执行下沉入口：
  * 常规会话工作流：POST /agent/v2/workflows/{id}/createRunLog 注册后启动。
- * 画布试运行（传入 definition）：直接创建本地 run ID 并通过 IPC 启动，不依赖后端运行记录接口。
- *    renderer 不阻塞——状态经 'workflow:status-update' 广播桥回流。
+ * 画布试运行同样先保存到云端版本；客户端只按版本 ID 拉取执行 DSL。
  */
 export async function startWorkflowLocal(
   params: StartWorkflowLocalParams
 ): Promise<StartWorkflowLocalResult> {
   const startedAt = formatShanghaiIso();
-
-  if (params.definition != null) {
-    const runId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    const versionId = params.workflowVersionId ?? 'local';
-    await invokeIpc('workflow-runtime:start', {
-      runId,
-      workflowId: params.workflowId,
-      versionId: String(versionId),
-      input: params.inputs ?? {},
-      startedAt,
-      sessionKey: params.sessionKey,
-      definition: params.definition,
-    });
-    return { runId, workflowId: params.workflowId, versionId, startedAt };
-  }
 
   // 常规会话工作流仍需在服务端注册，以保持既有运行记录关联行为。
   const data = await unwrap(
@@ -359,7 +341,6 @@ export async function startWorkflowLocal(
     input: data.resolvedInputs ?? params.inputs ?? {},
     startedAt,
     sessionKey: params.sessionKey,
-    definition: params.definition,
   });
 
   return {

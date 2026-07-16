@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   cancelRun,
   getRunViaIpc,
+  retryWorkflowSync,
   resumeWorkflowApproval,
   runToExecutionState,
   startWorkflowLocal,
@@ -58,6 +59,7 @@ export interface UseDesignerTryRunResult {
   executionState: WorkflowExecutionState | null;
   isStarting: boolean;
   isCancelling: boolean;
+  isSyncing: boolean;
   isStartupDialogOpen: boolean;
   isDrawerOpen: boolean;
   isRunActive: boolean;
@@ -73,6 +75,7 @@ export interface UseDesignerTryRunResult {
   closeDrawer: () => void;
   decideApproval: (approved: boolean, note?: string) => Promise<void>;
   submitInput: (values: Record<string, unknown>) => Promise<void>;
+  retrySync: () => Promise<void>;
 }
 
 export function useDesignerTryRun({
@@ -88,6 +91,7 @@ export function useDesignerTryRun({
   const [executionState, setExecutionState] = useState<WorkflowExecutionState | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isStartupDialogOpen, setIsStartupDialogOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [activeStartupSchema, setActiveStartupSchema] = useState<WorkflowSchema | null>(startupSchema ?? null);
@@ -97,7 +101,7 @@ export function useDesignerTryRun({
   const snapshotRef = useRef<WorkflowDraftSnapshot | null>(null);
 
   const runIdRef = useRef<string | null>(null);
-  const eventHydrateTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const eventHydrateTimerRef = useRef<number | null>(null);
   useEffect(() => {
     runIdRef.current = runId;
   }, [runId]);
@@ -178,7 +182,6 @@ export function useDesignerTryRun({
           sessionKey: DESIGNER_TRY_RUN_SESSION_KEY,
           runMode: 'trial',
           workflowVersionId: snapshot?.workflowVersionId ?? workflowVersionId,
-          definition: snapshot?.definition,
         });
         setRunId(result.runId);
         runIdRef.current = result.runId;
@@ -260,6 +263,16 @@ export function useDesignerTryRun({
     await submitWorkflowInput(id, nodeId, values);
     await hydrateRun(id);
   }, [executionState?.waitingNodeId, hydrateRun]);
+  const retrySync = useCallback(async () => {
+    const id = runIdRef.current;
+    if (!id) return;
+    setIsSyncing(true);
+    try {
+      await retryWorkflowSync(id);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, []);
 
   return {
     runId,
@@ -268,6 +281,7 @@ export function useDesignerTryRun({
     executionState,
     isStarting,
     isCancelling,
+    isSyncing,
     isStartupDialogOpen,
     isDrawerOpen,
     isRunActive,
@@ -283,5 +297,6 @@ export function useDesignerTryRun({
     closeDrawer,
     decideApproval,
     submitInput,
+    retrySync,
   };
 }

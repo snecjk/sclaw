@@ -279,9 +279,10 @@ export function collectAllRunArtifacts(run: WorkflowRunApiPayload): WorkflowRunA
     }
   }
 
-  const merged = [...byName.values()];
-  const httpArtifacts = merged.filter((a) => isHttpArtifactUrl(a.url));
-  return httpArtifacts.length > 0 ? httpArtifacts : merged;
+  // Keep local artifacts alongside remote ones. De-duplication above already
+  // prefers HTTP for the same artifact; globally dropping local entries would
+  // hide a local HTML result whenever an unrelated OSS/JSON artifact exists.
+  return [...byName.values()];
 }
 
 function mapArtifacts(artifacts: WorkflowRunArtifact[]) {

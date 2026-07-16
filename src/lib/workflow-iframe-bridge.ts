@@ -7,8 +7,11 @@ export const WORKFLOW_DRAFT_ERROR = 'workflow-draft-error';
 
 export interface WorkflowDraftSnapshot {
   workflowId: string;
-  definition: Record<string, unknown>;
+  /** Legacy bridge payload; retained only for compatibility and never executed by the client. */
+  definition?: Record<string, unknown>;
   workflowVersionId: string | number;
+  schemaVersion?: string;
+  versionStatus?: 'draft' | 'published';
   startup: {
     schema: WorkflowSchema | null;
     defaultValues: Record<string, unknown>;
@@ -48,9 +51,8 @@ export function createWorkflowBridgeNonce(): string {
 export function isWorkflowDraftResponse(value: unknown): value is WorkflowDraftResponseMessage {
   if (!value || typeof value !== 'object') return false;
   const data = value as Record<string, unknown>;
-  const definition = data.definition as Record<string, unknown> | undefined;
   const startup = data.startup as Record<string, unknown> | undefined;
-  if (!definition || !startup) return false;
+  if (!startup) return false;
   return (
     data.protocol === WORKFLOW_IFRAME_BRIDGE_PROTOCOL &&
     data.type === WORKFLOW_DRAFT_RESPONSE &&
@@ -58,8 +60,8 @@ export function isWorkflowDraftResponse(value: unknown): value is WorkflowDraftR
     typeof data.nonce === 'string' &&
     typeof data.workflowId === 'string' &&
     (typeof data.workflowVersionId === 'string' || typeof data.workflowVersionId === 'number') &&
-    Array.isArray(definition.nodes) &&
-    Array.isArray(definition.edges) &&
+    data.schemaVersion === 'workflow/v2' &&
+    data.versionStatus === 'draft' &&
     typeof startup.defaultValues === 'object'
   );
 }

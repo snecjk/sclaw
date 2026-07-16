@@ -33,12 +33,14 @@ interface TestRunDrawerProps {
   workflowVersionId?: string | number;
   isStarting: boolean;
   isCancelling: boolean;
+  isSyncing: boolean;
   isRunActive: boolean;
   isDraftSnapshot: boolean;
   launchError: string | null;
   onClose: () => void;
   onCancel: () => void;
   onRerun: () => void;
+  onRetrySync: () => void;
   onDecideApproval: (approved: boolean, note?: string) => void;
   onSubmitInput: (values: Record<string, unknown>) => void;
 }
@@ -214,10 +216,11 @@ export function TestRunDrawer(props: TestRunDrawerProps) {
             <span className="h-3 w-3 rounded-full bg-orange-400 shadow-[0_0_0_6px_rgba(251,146,60,0.14)]" />
             <h2 className="text-xl font-semibold">{view === 'completed' ? '试运行结果' : '试运行'}</h2>
             {props.workflowVersionId != null ? <span className="text-sm text-muted-foreground">当前运行版本 v{props.workflowVersionId}</span> : null}
-            {props.isDraftSnapshot ? <span className="rounded-full bg-orange-50 px-2 py-1 text-xs text-orange-700">草稿快照试运行</span> : null}
+            {props.isDraftSnapshot ? <span className="rounded-full bg-orange-50 px-2 py-1 text-xs text-orange-700">当前 V2 草稿试运行</span> : null}
           </div>
           <div className="flex items-center gap-2">
             {view === 'running' ? <Button variant="outline" className="border-orange-200 text-orange-700 hover:bg-orange-50" onClick={props.onCancel} disabled={props.isCancelling}>{props.isCancelling ? '取消中' : '取消运行'}</Button> : null}
+            {view === 'failed' || view === 'cancelled' ? <Button variant="outline" onClick={props.onRetrySync} disabled={props.isSyncing}><RefreshCw className={`mr-2 h-4 w-4 ${props.isSyncing ? 'animate-spin' : ''}`} />{props.isSyncing ? '同步中' : '补齐云端记录'}</Button> : null}
             {view === 'completed' || view === 'failed' || view === 'cancelled' ? <Button variant="outline" onClick={props.onRerun}><RefreshCw className="mr-2 h-4 w-4" />重新运行</Button> : null}
             <button type="button" aria-label="关闭" onClick={props.onClose} className="ml-1 inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button>
           </div>

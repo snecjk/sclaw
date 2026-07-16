@@ -5,15 +5,14 @@ import { formatShanghaiIso } from '../../../shared/workflow-timestamp';
 import { copyFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { workspacePath } from './prompt-builder';
+import { workspacePath } from './workspace-paths';
 const nowIso = () => formatShanghaiIso();
 
 export interface GeneratePlanArgs { repo: RunCtx['repo']; dslClient: { fetchVersion(workflowId: string, versionId: string): Promise<any> };
   workflowId: string; versionId: string; runId?: string; input: any; startedAt: string;
   /** 会话键——emit 桥按它过滤 status-update 广播（use-workflow-completion.ts）。Phase 2b 由 start 注册传入。 */
   sessionKey?: string;
-  /** iframe 传来的未保存草稿，只在客户端本地持久化与执行，不上传服务端。 */
-  definition?: unknown; }
+}
 
 /**
  * 本地执行计划生成入口。
@@ -33,10 +32,8 @@ export async function generatePlan(args: GeneratePlanArgs): Promise<string> {
     sessionKey,
     inputKeys: Object.keys(input ?? {}).join(','),
   });
-  const versionDefinition = args.definition == null
-    ? await dslClient.fetchVersion(workflowId, versionId)
-    : undefined;
-  const definition = args.definition ?? versionDefinition?.definition ?? versionDefinition?.workflow ?? versionDefinition;
+  const versionDefinition = await dslClient.fetchVersion(workflowId, versionId);
+  const definition = versionDefinition?.definition ?? versionDefinition?.workflow ?? versionDefinition;
   const nodes: any[] = definition.nodes ?? [];
   validateWorkflowDefinition(definition);
   const ordered = topoSort(nodes, definition.edges ?? []);
@@ -53,7 +50,11 @@ export async function generatePlan(args: GeneratePlanArgs): Promise<string> {
     started_at: startedAt, updated_at: nowIso(),
     session_key: sessionKey });
   for (const n of ordered) {
-    await repo.upsertNodeRun({ run_id: runId, node_id: n.id, node_type: n.type, status: 'PENDING', attempt_count: 0 });
+    const nodeRun = { run_id: runId, node_id: n.id, node_type: n.type, status: 'PENDING', attempt_count: 0 };
+    await repo.upsertNodeRun(nodeRun);
+    // 云端从运行开始就应拥有完整节点清单，不能等节点真正执行时才创建镜像。
+    // 这样即使第一个节点失败，管理端仍能展示所有后续 PENDING 节点。
+    await repo.enqueueOutbox(runId, 'node_run', `${runId}:${n.id}`, nodeRun, 'progress');
   }
   for (const [key, artifact] of collectInputArtifacts(stagedInput)) {
     const artifactId = `${runId}:input:${key}`;

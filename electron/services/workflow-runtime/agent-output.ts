@@ -136,6 +136,9 @@ export function normalizeAgentResultOutput(
   if (result === null || result === undefined) return result;
 
   const resultKind = contract?.resultKind || 'generic_data_result';
+  const expectedKind = firstEnumValue(contract?.outputJsonSchema, 'kind') ?? resultKind;
+  const expectedStatus = firstEnumValue(contract?.outputJsonSchema, 'status') ?? 'succeeded';
+  const expectedVersion = firstEnumValue(contract?.outputJsonSchema, 'version') ?? '1';
 
   // The workflow contract always consumes the canonical result envelope.  Agent
   // models, however, commonly return the business payload directly (for
@@ -157,17 +160,23 @@ export function normalizeAgentResultOutput(
       normalized = result;
     }
   } else if (typeof result === 'object' && !Array.isArray(result)) {
-    if ('kind' in result && 'data' in result) {
+    if ('data' in result) {
       normalized = {
         ...result,
-        version: result.version ?? '1',
-        status: result.status ?? 'succeeded',
+        // Historical workflows often use business envelope values such as
+        // kind="science-popularization", status="completed", version="1.0.0".
+        // They describe the same successful payload but do not satisfy the
+        // current cloud completion contract. Canonicalize wrapper metadata
+        // while preserving data/summary/artifacts/processFiles verbatim.
+        kind: normalizeEnvelopeValue(result.kind, expectedKind, contract?.outputJsonSchema, 'kind'),
+        version: normalizeEnvelopeValue(result.version, expectedVersion, contract?.outputJsonSchema, 'version'),
+        status: normalizeEnvelopeValue(result.status, expectedStatus, contract?.outputJsonSchema, 'status'),
       };
     } else {
       normalized = {
-        kind: resultKind,
-        version: '1',
-        status: 'succeeded',
+        kind: expectedKind,
+        version: expectedVersion,
+        status: expectedStatus,
         data: result,
       };
     }
@@ -180,6 +189,22 @@ export function normalizeAgentResultOutput(
     return ctx.processFileWriter(normalized, str);
   }
   return normalized;
+}
+
+function firstEnumValue(schema: any, field: string): unknown {
+  const values = schema?.properties?.[field]?.enum;
+  return Array.isArray(values) && values.length > 0 ? values[0] : undefined;
+}
+
+function normalizeEnvelopeValue(
+  actual: unknown,
+  fallback: unknown,
+  schema: any,
+  field: string,
+): unknown {
+  const allowed = schema?.properties?.[field]?.enum;
+  if (!Array.isArray(allowed) || allowed.length === 0) return actual ?? fallback;
+  return allowed.includes(actual) ? actual : fallback;
 }
 
 /**

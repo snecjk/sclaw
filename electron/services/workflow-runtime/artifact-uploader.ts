@@ -44,10 +44,12 @@ export async function uploadArtifact(
   await deps.repo.upsertArtifact({ ...art, resource_id: undefined, uri: art.file_path });
   await deps.repo.enqueueOutbox(art.run_id, 'artifact', art.artifact_id, { ...art, uri: art.file_path }, 'progress');
   let resourceId: string | undefined;
+  let tempUrl: string | undefined;
   for (let a = 1; a <= max; a++) {
     try {
       const r = await upload(art.file_path, path.basename(art.file_path), { bizTypeEnum: 'workflow' as any });
       resourceId = r.resourceId;
+      tempUrl = r.tempUrl;
       break;
     } catch {
       if (a === max) break; // 耗尽：resource_id 留空，file_path 保持本地
@@ -55,7 +57,7 @@ export async function uploadArtifact(
     }
   }
   // 失败时 resource_id 留空、file_path 保持本地路径
-  const row = { ...art, resource_id: resourceId, uri: resourceId ?? art.file_path };
+  const row = { ...art, resource_id: resourceId, uri: resourceId ?? tempUrl ?? art.file_path };
   await deps.repo.upsertArtifact(row);
   // outbox 同步（payload 无字节，含 resource_id 或 file_path）
   await deps.repo.enqueueOutbox(art.run_id, 'artifact', art.artifact_id, row, 'progress');

@@ -36,6 +36,10 @@ export async function recoverOnLaunch(deps: RecoverDeps): Promise<void> {
     });
     await deps.repo.upsertRun({ ...r, status: 'INTERRUPTED', completed_at: nowIso(), updated_at: nowIso() });
     await deps.repo.markInflightNodeRunsInterrupted(r.run_id);
+    const nodeRuns = await deps.repo.listNodeRuns(r.run_id);
+    for (const nodeRun of nodeRuns) {
+      await deps.repo.enqueueOutbox(r.run_id, 'node_run', `${r.run_id}:${nodeRun.node_id}`, nodeRun, 'progress');
+    }
     await deps.repo.enqueueOutbox(r.run_id, 'run', r.run_id, { ...r, status: 'INTERRUPTED' }, 'terminal');
     deps.onStatusChange?.(r.run_id, 'failed', { error: 'interrupted' });
   }

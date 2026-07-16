@@ -20,8 +20,7 @@ function hasTerminalCardDetails(runId: string): boolean {
   const state = useChatStore.getState().workflowCardStates[runId];
   if (!state || !isTerminalWorkflowRunStatus(state.status)) return false;
   return Boolean(
-    state.result?.summary
-    || (state.result?.artifacts && state.result.artifacts.length > 0),
+    state.result?.artifacts && state.result.artifacts.length > 0,
   );
 }
 

@@ -10,21 +10,20 @@
  * 审批/输入节点暂停（Electron 弹窗决策后 resumeApproval/resumeInput 继续）。
  */
 import type { WorkflowRuntimeRepository } from '../../db/repositories/workflow-runtime-repository';
-import type { RunCtx } from './types';
+import type { AgentRunSpec, RunCtx } from './types';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { evaluateCondition as evaluateWorkflowCondition, executeLogicNode } from './logic-nodes';
 import { runAgentNodeWithRetry, type InvokeAgentFn } from './agent-retry';
-import { compileAgentRunSpec } from './agent-spec';
 import { startFlushLoop, stopFlushLoop, type FlushDeps } from './outbox-flusher';
 import { uploadArtifact, type ArtifactRow } from './artifact-uploader';
 import { recoverOnLaunch, resumeRun } from './crash-recovery';
 import { cancelAgent } from './agent-runner';
 import { findStartNode, generatePlan, validateWorkflowDefinition } from './plan-generator';
 import { buildConditionContext, resolveNodeInput } from './input-resolver';
-import { workspacePath } from './prompt-builder';
+import { runWorkspacePath, workspacePath } from './workspace-paths';
 import { workflowExecLog } from './logging';
 import { formatShanghaiIso } from '../../../shared/workflow-timestamp';
 
@@ -46,6 +45,11 @@ export interface EngineDeps {
   /** Event bridge for renderer timelines. The event is already durable before this callback fires. */
   onEvent?: (runId: string, event: { sequence: number; type: string; nodeId?: string }) => void;
   dslClient: { fetchVersion(workflowId: string, versionId: string): Promise<any> };  // GET /agent/v2/workflows/getVersion/{version_pk}
+  agentSpecClient: { compileNode(args: {
+    workflowId: string; versionId: string; runId: string; nodeId: string; inputs: any;
+    startupInputs: Record<string, unknown>; startupSchema: Record<string, unknown>;
+    isFirstAgentNode: boolean; runtimeContext: Record<string, unknown>;
+  }): Promise<AgentRunSpec> };
 }
 
 export interface StartRunArgs {
@@ -59,8 +63,6 @@ export interface StartWorkflowArgs {
   runId: string; workflowId: string; versionId: string; input: any; startedAt: string;
   /** 会话键——透传给 generatePlan 落 wf_run.session_key（emit 桥 + getRun hydration 用）。Phase 2b 由 start 注册传入。 */
   sessionKey?: string;
-  /** 未保存画布草稿，仅用于当前客户端试运行。 */
-  definition?: unknown;
 }
 
 export function createEngine(deps: EngineDeps) {
@@ -171,7 +173,20 @@ export function createEngine(deps: EngineDeps) {
           workflowId: runSnapshotBase.workflow_id,
           versionId: runSnapshotBase.version_id,
         });
-        const spec = compileAgentRunSpec(cur, agentCtx);
+        const spec = await deps.agentSpecClient.compileNode({
+          workflowId: String(runSnapshotBase.workflow_id ?? ''),
+          versionId: String(runSnapshotBase.version_id ?? ''),
+          runId,
+          nodeId: cur.id,
+          inputs: nodeInput,
+          startupInputs: runInput,
+          startupSchema,
+          isFirstAgentNode: !hasExecutedSmartNode,
+          runtimeContext: {
+            workspacePath: workspacePath(runId, cur.id),
+            runWorkspacePath: runWorkspacePath(runId),
+          },
+        });
         const agentResult = await runAgentNodeWithRetry(agentCtx, cur, spec, { invokeAgent: deps.invokeAgent, quota: deps.quota });
         if (agentResult.status === 'succeeded') hasExecutedSmartNode = true;
         result = { action: agentResult.status === 'succeeded' ? 'continue' : 'pause', output: agentResult.output };
@@ -201,6 +216,7 @@ export function createEngine(deps: EngineDeps) {
             input_json: nodeInputJson,
             output_json: stringifyJson(agentResult.output),
           }, 'progress');
+          await finalizeUnfinishedNodeRuns(runId, 'failed', cur.id);
           await repo.enqueueOutbox(runId, 'run', runId, { ...runSnapshotBase, status: 'FAILED', error: agentResult.error, completed_at: nowIso() }, 'terminal');
           workflowExecLog('error', 'run-failed', 'agent node failed workflow run', {
             runId,
@@ -333,8 +349,11 @@ export function createEngine(deps: EngineDeps) {
     };
     const completed = await repo.updateRunIfActive(runId, terminalRun);
     if (!completed) return;
-    await repo.enqueueOutbox(runId, 'run', runId, terminalRun, 'terminal');
+    // 条件分支中未被选择的节点也必须在云端收口，不能永久显示 PENDING。
+    await finalizeUnfinishedNodeRuns(runId, 'succeeded');
     await makeCtx(runId, def, seqRef).emit('workflow.completed', { workflowId: runSnapshotBase.workflow_id });
+    // 终态 run 必须是本次运行最后一条 outbox；否则云端终态锁会挡住完成事件。
+    await repo.enqueueOutbox(runId, 'run', runId, terminalRun, 'terminal');
     workflowExecLog('info', 'run-succeeded', 'workflow run completed', {
       runId,
       workflowId: runSnapshotBase.workflow_id,
@@ -357,7 +376,7 @@ export function createEngine(deps: EngineDeps) {
       const run = await repo.getRun(runId).catch(() => undefined);
       const changed = await repo.updateRunIfActive(runId, { status: 'FAILED', error: message, completed_at: nowIso() }).catch(() => false);
       if (changed) {
-        await repo.markInflightNodeRunsInterrupted(runId).catch(() => undefined);
+        await finalizeUnfinishedNodeRuns(runId, 'failed').catch(() => undefined);
         await repo.enqueueOutbox(runId, 'run', runId, {
           run_id: runId, workflow_id: meta?.workflowId ?? run?.workflow_id,
           version_id: meta?.versionId ?? run?.version_id, status: 'FAILED', error: message,
@@ -412,7 +431,7 @@ export function createEngine(deps: EngineDeps) {
       try {
         await generatePlan({ repo, dslClient: deps.dslClient, workflowId: args.workflowId,
           versionId: args.versionId, runId: args.runId, input: args.input, startedAt: args.startedAt,
-          sessionKey: args.sessionKey, definition: args.definition });
+          sessionKey: args.sessionKey });
         const run = await repo.getRun(args.runId);
         const definition = run?.definition_json ? JSON.parse(run.definition_json) : {};
         await dispatch(args.runId, definition, undefined, { workflowId: args.workflowId, versionId: args.versionId }, parseJson(run?.input_json) ?? {});
@@ -421,6 +440,7 @@ export function createEngine(deps: EngineDeps) {
         await repo.upsertRun({ run_id: args.runId, workflow_id: args.workflowId, version_id: args.versionId,
           status: 'FAILED', mode: 'CLIENT_LOCAL', source: 'client', input_json: stringifyJson(args.input ?? {}),
           definition_json: '{}', error: message, started_at: args.startedAt, completed_at: nowIso(), session_key: args.sessionKey });
+        await finalizeUnfinishedNodeRuns(args.runId, 'failed').catch(() => undefined);
         await repo.enqueueOutbox(args.runId, 'run', args.runId, { run_id: args.runId, workflow_id: args.workflowId,
           version_id: args.versionId, status: 'FAILED', mode: 'CLIENT_LOCAL', source: 'client',
           error: message, started_at: args.startedAt, completed_at: nowIso() }, 'terminal');
@@ -487,13 +507,9 @@ export function createEngine(deps: EngineDeps) {
       cancelAgent(runId, nodeId);
       const run = await repo.getRun(runId).catch(() => undefined);
       if (run && TERMINAL_STATUSES.has(run.status)) return;
-      if (nodeId) {
-        await repo.upsertNodeRun({ run_id: runId, node_id: nodeId, status: 'INTERRUPTED', completed_at: nowIso() });
-      } else {
-        await repo.markInflightNodeRunsInterrupted(runId);
-      }
       const changed = await repo.updateRunIfActive(runId, { status: 'CANCELLED', completed_at: nowIso() });
       if (!changed) return;
+      await finalizeUnfinishedNodeRuns(runId, 'cancelled');
       await repo.enqueueOutbox(runId, 'run', runId, {
         run_id: runId,
         workflow_id: run?.workflow_id,
@@ -522,6 +538,23 @@ export function createEngine(deps: EngineDeps) {
     },
     async retrySync(runId?: string): Promise<void> {
       await repo.retryFailedOutbox(runId);
+      if (!runId) return;
+      const run = await repo.getRun(runId);
+      if (!run || !TERMINAL_STATUSES.has(run.status)) return;
+      if (run.status === 'FAILED') await finalizeUnfinishedNodeRuns(runId, 'failed');
+      else if (run.status === 'CANCELLED' || run.status === 'INTERRUPTED') await finalizeUnfinishedNodeRuns(runId, 'cancelled');
+      else await finalizeUnfinishedNodeRuns(runId, 'succeeded');
+      // Rebuild the complete child snapshot for historical runs whose original
+      // terminal entry reached the cloud before later node/artifact batches.
+      const [nodeRuns, events, artifacts, approvalTasks, userInputTasks] = await Promise.all([
+        repo.listNodeRuns(runId), repo.listEvents(runId), repo.listArtifacts(runId),
+        repo.listApprovalTasks(runId), repo.listUserInputTasks(runId),
+      ]);
+      for (const nodeRun of nodeRuns) await repo.enqueueOutbox(runId, 'node_run', `${runId}:${nodeRun.node_id}`, nodeRun, 'progress');
+      for (const event of events) await repo.enqueueOutbox(runId, 'event', `${runId}:${event.sequence}`, event, 'progress');
+      for (const artifact of artifacts) await repo.enqueueOutbox(runId, 'artifact', artifact.artifact_id, artifact, 'progress');
+      for (const task of approvalTasks) await repo.enqueueOutbox(runId, 'approval', task.task_id, task, 'progress');
+      for (const task of userInputTasks) await repo.enqueueOutbox(runId, 'user_input', task.task_id, task, 'progress');
     },
   };
 
@@ -535,8 +568,40 @@ export function createEngine(deps: EngineDeps) {
     await repo.enqueueOutbox(runId, 'event', `${runId}:${seq}`, event, 'progress');
   }
 
+  async function finalizeUnfinishedNodeRuns(
+    runId: string,
+    outcome: 'failed' | 'cancelled' | 'succeeded',
+    failedNodeId?: string,
+  ): Promise<void> {
+    const nodeRuns = await repo.listNodeRuns(runId);
+    for (const nodeRun of nodeRuns) {
+      if (['SUCCEEDED', 'FAILED', 'SKIPPED', 'INTERRUPTED'].includes(nodeRun.status)) continue;
+      let status: 'FAILED' | 'SKIPPED' | 'INTERRUPTED';
+      if (outcome === 'cancelled') status = 'INTERRUPTED';
+      else if (outcome === 'succeeded' || nodeRun.status === 'PENDING') status = 'SKIPPED';
+      else status = nodeRun.node_id === failedNodeId || !failedNodeId ? 'FAILED' : 'SKIPPED';
+      const completed = {
+        run_id: runId,
+        node_id: nodeRun.node_id,
+        node_type: nodeRun.node_type,
+        status,
+        attempt_count: nodeRun.attempt_count ?? 0,
+        input_json: nodeRun.input_json,
+        output_json: nodeRun.output_json,
+        prompt_text: nodeRun.prompt_text,
+        last_completion_issue: nodeRun.last_completion_issue,
+        started_at: nodeRun.started_at,
+        completed_at: nowIso(),
+      };
+      await repo.upsertNodeRun(completed);
+      await repo.enqueueOutbox(runId, 'node_run', `${runId}:${nodeRun.node_id}`, completed, 'progress');
+    }
+  }
+
   async function enqueueArtifactsFromOutput(runId: string, nodeId: string, output: unknown): Promise<void> {
-    const paths = collectFilePaths(output);
+    const declaredPaths = collectFilePaths(output);
+    const discoveredPaths = await listWorkspaceFiles(workspacePath(runId, nodeId));
+    const paths = [...new Set([...declaredPaths, ...discoveredPaths])];
     await Promise.all(paths.map(async (filePath) => {
       const idHash = createHash('sha1').update(`${runId}:${nodeId}:${filePath}`).digest('hex').slice(0, 16);
       await uploadArtifact({ repo, uploadOssFile: deps.uploadOssFile }, {
@@ -545,10 +610,36 @@ export function createEngine(deps: EngineDeps) {
         node_id: nodeId,
         kind: 'OUTPUT',
         file_path: filePath,
+        content_type: contentTypeForPath(filePath),
+        summary: path.basename(filePath),
         created_at: nowIso(),
-      }).catch(() => undefined);
+      });
     }));
   }
+}
+
+async function listWorkspaceFiles(directory: string): Promise<string[]> {
+  try {
+    const entries = await readdir(directory, { withFileTypes: true });
+    const nested = await Promise.all(entries.map(async (entry) => {
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) return listWorkspaceFiles(target);
+      if (!entry.isFile()) return [];
+      const info = await stat(target);
+      return info.size > 0 ? [target] : [];
+    }));
+    return nested.flat();
+  } catch {
+    return [];
+  }
+}
+
+function contentTypeForPath(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  return ({ '.html': 'text/html', '.htm': 'text/html', '.md': 'text/markdown', '.txt': 'text/plain',
+    '.json': 'application/json', '.csv': 'text/csv', '.pdf': 'application/pdf', '.png': 'image/png',
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } as Record<string, string>)[ext]
+    ?? 'application/octet-stream';
 }
 
 /** 选下一节点：优先按分支端口匹配，未命中时走无条件默认边。 */
