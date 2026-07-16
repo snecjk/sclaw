@@ -1,5 +1,6 @@
 /**
- * SidebarProjectSessionRowTrailing — 项目内会话行尾：置顶 / 未读 / 状态 + hover「...」菜单。
+ * SidebarProjectSessionRowTrailing — 项目内会话行尾：置顶钉 + hover「...」菜单。
+ * 三种状态在标题左侧，见 SidebarProjectSessionRow。
  */
 import { MoreHorizontal, Pin, Pencil, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -9,22 +10,19 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { cn } from '@/lib/utils';
 import {
   sidebarRecentMenuContentClass,
   sidebarRecentMenuDeleteItemClass,
   sidebarRecentMenuItemClass,
   sidebarTextIconClass,
-  sidebarUnreadDotClass,
 } from '@/lib/surfaces';
-import { useChatStore } from '@/stores/chat';
-import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 
 export interface SidebarProjectSessionRowTrailingProps {
-  sessionKey: string;
   isActive?: boolean;
   isPinned: boolean;
+  /** 项目草稿「新对话」不可重命名/置顶 */
+  isDraft?: boolean;
   onPin: () => void;
   onRename: () => void;
   onDelete: () => void;
@@ -34,35 +32,15 @@ export interface SidebarProjectSessionRowTrailingProps {
 const SIDEBAR_ROW_TRAILING_W_CLASS = 'w-12';
 
 export function SidebarProjectSessionRowTrailing({
-  sessionKey,
   isActive = false,
   isPinned,
+  isDraft = false,
   onPin,
   onRename,
   onDelete,
   className,
 }: SidebarProjectSessionRowTrailingProps) {
   const { t } = useTranslation('common');
-  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
-  const runtime = useChatStore((s) => s.runtimeBySessionKey[sessionKey]);
-  const currentSessionSending = useChatStore((s) => s.sending);
-  const currentSessionActiveRunId = useChatStore((s) => s.activeRunId);
-  const currentSessionError = useChatStore((s) => s.error);
-  const unreadKeys = useSessionUnreadStore((s) => s.unreadKeys);
-  const isCurrentSession = currentSessionKey === sessionKey;
-  const isRunning = Boolean(
-    runtime?.sending
-    || runtime?.activeRunId
-    || (isCurrentSession && (currentSessionSending || currentSessionActiveRunId)),
-  );
-  const hasError = Boolean(
-    (runtime?.error != null && runtime.error !== '')
-    || (isCurrentSession && currentSessionError != null && currentSessionError !== ''),
-  );
-  const showUnreadDot = !isCurrentSession
-    && !isRunning
-    && !hasError
-    && readSessionUnread(unreadKeys, sessionKey);
 
   return (
     <div
@@ -81,13 +59,6 @@ export function SidebarProjectSessionRowTrailing({
         {isPinned ? (
           <Pin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
         ) : null}
-        {showUnreadDot ? (
-          <span
-            className={sidebarUnreadDotClass}
-            aria-label={t('sidebar.sessionUnread')}
-          />
-        ) : null}
-        <SidebarRecentSessionStatus sessionKey={sessionKey} />
       </div>
       <div
         className={cn(
@@ -115,26 +86,30 @@ export function SidebarProjectSessionRowTrailing({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className={sidebarRecentMenuContentClass}>
-            <DropdownMenuItem
-              className={sidebarRecentMenuItemClass}
-              onClick={(e) => {
-                e.stopPropagation();
-                onPin();
-              }}
-            >
-              <Pin className="h-4 w-4 shrink-0" aria-hidden />
-              {isPinned ? t('sidebar.unpinInProject') : t('sidebar.pinInProject')}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className={sidebarRecentMenuItemClass}
-              onClick={(e) => {
-                e.stopPropagation();
-                onRename();
-              }}
-            >
-              <Pencil className="h-4 w-4 shrink-0" aria-hidden />
-              {t('actions.rename')}
-            </DropdownMenuItem>
+            {!isDraft ? (
+              <DropdownMenuItem
+                className={sidebarRecentMenuItemClass}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPin();
+                }}
+              >
+                <Pin className="h-4 w-4 shrink-0" aria-hidden />
+                {isPinned ? t('sidebar.unpinInProject') : t('sidebar.pinInProject')}
+              </DropdownMenuItem>
+            ) : null}
+            {!isDraft ? (
+              <DropdownMenuItem
+                className={sidebarRecentMenuItemClass}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRename();
+                }}
+              >
+                <Pencil className="h-4 w-4 shrink-0" aria-hidden />
+                {t('actions.rename')}
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem
               className={sidebarRecentMenuDeleteItemClass}
               onClick={(e) => {

@@ -1,5 +1,6 @@
 /**
- * SidebarRecentSessionRowTrailing — 最近会话行尾：置顶 / 未读 / 运行失败状态 + hover「...」菜单。
+ * SidebarRecentSessionRowTrailing — 最近会话行尾：置顶钉 + hover「...」菜单。
+ * 三种状态（未读 / 运行 / 失败）在标题左侧，见 SidebarRecentSessionRow。
  */
 import {
   MoreHorizontal,
@@ -14,20 +15,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { cn } from '@/lib/utils';
 import {
   sidebarRecentMenuContentClass,
   sidebarRecentMenuDeleteItemClass,
   sidebarRecentMenuItemClass,
   sidebarTextIconClass,
-  sidebarUnreadDotClass,
 } from '@/lib/surfaces';
-import { useChatStore } from '@/stores/chat';
-import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 
 export interface SidebarRecentSessionRowTrailingProps {
-  sessionKey: string;
   isActive?: boolean;
   isPinned: boolean;
   onPin: () => void;
@@ -39,7 +35,6 @@ export interface SidebarRecentSessionRowTrailingProps {
 const SIDEBAR_RECENT_ROW_TRAILING_W_CLASS = 'w-12';
 
 export function SidebarRecentSessionRowTrailing({
-  sessionKey,
   isActive = false,
   isPinned,
   onPin,
@@ -48,26 +43,6 @@ export function SidebarRecentSessionRowTrailing({
   className,
 }: SidebarRecentSessionRowTrailingProps) {
   const { t } = useTranslation('common');
-  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
-  const runtime = useChatStore((s) => s.runtimeBySessionKey[sessionKey]);
-  const currentSessionSending = useChatStore((s) => s.sending);
-  const currentSessionActiveRunId = useChatStore((s) => s.activeRunId);
-  const currentSessionError = useChatStore((s) => s.error);
-  const unreadKeys = useSessionUnreadStore((s) => s.unreadKeys);
-  const isCurrentSession = currentSessionKey === sessionKey;
-  const isRunning = Boolean(
-    runtime?.sending
-    || runtime?.activeRunId
-    || (isCurrentSession && (currentSessionSending || currentSessionActiveRunId)),
-  );
-  const hasError = Boolean(
-    (runtime?.error != null && runtime.error !== '')
-    || (isCurrentSession && currentSessionError != null && currentSessionError !== ''),
-  );
-  const showUnreadDot = !isCurrentSession
-    && !isRunning
-    && !hasError
-    && readSessionUnread(unreadKeys, sessionKey);
 
   return (
     <div
@@ -86,13 +61,6 @@ export function SidebarRecentSessionRowTrailing({
         {isPinned ? (
           <Pin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
         ) : null}
-        {showUnreadDot ? (
-          <span
-            className={sidebarUnreadDotClass}
-            aria-label={t('sidebar.sessionUnread')}
-          />
-        ) : null}
-        <SidebarRecentSessionStatus sessionKey={sessionKey} />
       </div>
       <div
         className={cn(
