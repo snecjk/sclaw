@@ -36,12 +36,10 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
   const { t } = useTranslation('skills');
   const navigate = useNavigate();
   const { installing } = useSkillPlazaStore();
-  const [localEnabled, setLocalEnabled] = useState(skill.enabled ?? false);
+  const [pendingEnabled, setPendingEnabled] = useState<boolean | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    setLocalEnabled(skill.enabled ?? false);
-  }, [skill.enabled]);
+  const localEnabled = pendingEnabled ?? skill.enabled ?? false;
   const isInstalling = installing[skill.slug];
   const isDisabled = skill.enabled === false;
 
@@ -146,7 +144,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
               {isInstalling ? (
                 <img src={loadingIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain animate-spin" />
               ) : (
-                <RefreshCw className="h-3.5 w-3.5" />
+                <RefreshCw className="h-3.5 w-3.5 dark:text-[#F2F3F5]" />
               )}
             </button>
           </TooltipTrigger>
@@ -166,7 +164,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
               onClick={handleUse}
               className={actionIconBtnClass}
             >
-              <img src={messageIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain" />
+              <img src={messageIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain dark:invert" />
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom" sideOffset={6} className={actionTooltipClass}>
@@ -201,8 +199,9 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
   };
 
   const handleToggle = (checked: boolean) => {
-    setLocalEnabled(checked);
+    setPendingEnabled(checked);
     useSkillPlazaStore.getState().toggleSkill(skill.slug, checked).then(() => {
+      setPendingEnabled(null);
       if (!checked) {
         toast.custom(() => (
           <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">
@@ -217,7 +216,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
         ), { duration: 3000 });
       }
     }).catch((err) => {
-      setLocalEnabled(!checked);
+      setPendingEnabled(null);
       console.error('[SkillCard] toggle failed:', err);
       toast.custom(() => (
         <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">
@@ -232,7 +231,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
       <Tooltip delayDuration={200}>
         <TooltipTrigger asChild>
           <button type="button" onClick={handleUse} className={actionIconBtnClass}>
-            <img src={messageIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain" />
+            <img src={messageIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain dark:invert" />
           </button>
         </TooltipTrigger>
         <TooltipContent side="bottom" sideOffset={6} className={actionTooltipClass}>

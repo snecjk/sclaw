@@ -29,7 +29,7 @@ export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListPr
       return (
         <span
           className={cn(
-            'relative w-9 h-9 rounded-lg flex items-center justify-center bg-background text-foreground flex-shrink-0 border border-border',
+            'relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-foreground flex-shrink-0 border border-border',
             isDisabled && 'opacity-50',
           )}
           style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}
@@ -40,7 +40,7 @@ export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListPr
     }
     return (
       <span className={cn(
-        'relative w-9 h-9 rounded-lg flex items-center justify-center bg-background text-foreground flex-shrink-0 border border-border',
+        'relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-foreground flex-shrink-0 border border-border',
         isDisabled && 'opacity-50',
       )}
         style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}>
