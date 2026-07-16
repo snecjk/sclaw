@@ -793,7 +793,7 @@ export async function createAgent(
 export async function createAgentWithId(
   id: string,
   name: string,
-  options?: { inheritWorkspace?: boolean; fileTransformByOSS?: boolean },
+  options?: { inheritWorkspace?: boolean; fileTransformByOSS?: boolean; workspace?: string },
 ): Promise<AgentsSnapshot> {
   if (!id || !id.trim()) throw new Error('Agent ID must not be empty');
   if (id === MAIN_AGENT_ID) throw new Error('Cannot create agent with reserved ID "main"');
@@ -813,7 +813,7 @@ export async function createAgentWithId(
     const newAgent: AgentListEntry = {
       id,
       name: normalizedName,
-      workspace: `~/.stoclaw/openclaw/workspace-${id}`,
+      workspace: options?.workspace?.trim() || `~/.stoclaw/openclaw/workspace-${id}`,
       agentDir: getDefaultAgentDirPath(id),
     };
 
@@ -889,6 +889,11 @@ export async function getAgentPreferredModel(agentId: string): Promise<AgentPref
   };
 }
 
+export async function getAgentEngineType(agentId: string): Promise<AgentEngineType> {
+  const features = await readAgentFeatures();
+  return normalizeAgentEngineType(features.engineType?.[agentId]);
+}
+
 export async function setAgentPreferredModel(
   agentId: string,
   selection: { model: string; accountId?: string },
@@ -939,6 +944,31 @@ export async function updateAgentName(agentId: string, name: string): Promise<Ag
 
     await writeOpenClawConfig(config);
     logger.info('Updated agent name', { agentId, name: normalizedName });
+    return await buildSnapshotFromConfig(config);
+  });
+}
+
+export async function updateAgentWorkspace(agentId: string, workspacePath: string): Promise<AgentsSnapshot> {
+  return withConfigLock(async () => {
+    const config = await readOpenClawConfig() as AgentConfigDocument;
+    const { agentsConfig, entries } = normalizeAgentsConfig(config);
+    const index = entries.findIndex((entry) => entry.id === agentId);
+    if (index === -1) {
+      throw new Error(`Agent "${agentId}" not found`);
+    }
+
+    entries[index] = {
+      ...entries[index],
+      workspace: workspacePath.trim(),
+    };
+
+    config.agents = {
+      ...agentsConfig,
+      list: entries,
+    };
+
+    await writeOpenClawConfig(config);
+    logger.info('Updated agent workspace', { agentId, workspace: workspacePath.trim() });
     return await buildSnapshotFromConfig(config);
   });
 }

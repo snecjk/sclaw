@@ -17,7 +17,6 @@ import { join } from 'path';
 // The actual classes are loaded dynamically in initialize() to avoid
 // blocking process startup with heavy dependency chains.
 import type { GatewayManager } from '../gateway/manager';
-import type { ClawHubService } from '../gateway/clawhub';
 import type { HostEventBus } from '../api/event-bus';
 
 // Lightweight modules needed before window creation
@@ -190,7 +189,6 @@ const gotTheLock = gotElectronLock && gotFileLock;
 // Global references
 let mainWindow: BrowserWindow | null = null;
 let gatewayManager: GatewayManager | null = null;
-let clawHubService: ClawHubService | null = null;
 let hostEventBus: HostEventBus | null = null;
 let hostApiServer: Server | null = null;
 const mainWindowFocusState = createMainWindowFocusState();
@@ -406,6 +404,10 @@ async function initialize(): Promise<void> {
   );
   const { ensureSessionCatalogBootstrapped } = await import('../services/session-catalog-service');
   await ensureSessionCatalogBootstrapped();
+  console.info('[main] Session catalog bootstrapped; running OpenClaw session store migration...');
+  const { importOpenClawSessionStoreIfNeeded } = await import('../services/openclaw-session-store-migration');
+  await importOpenClawSessionStoreIfNeeded();
+  console.info('[main] OpenClaw session store migration complete');
   const { registerSessionCatalogHandlers } = await import('./ipc/session-catalog-handlers');
   registerSessionCatalogHandlers();
   const { registerDialogHandlers } = await import('./ipc/dialog-handlers');
@@ -508,7 +510,7 @@ async function initialize(): Promise<void> {
   const sps = new skillPlazaMod.SkillPlazaService();
   const heb = new eventBusMod.HostEventBus();
   gatewayManager = gm;
-  clawHubService = chs;
+  // clawHubService instance is passed directly to startHostApiServer below.
   hostEventBus = heb;
 
   // Initialize Telemetry (non-blocking)

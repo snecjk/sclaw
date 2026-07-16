@@ -2,6 +2,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getOpenClawConfigDir } from '../utils/paths';
 import type { EngineAdapter, EngineAdapterContext, EngineSendWithMediaParams, EngineSessionSummary } from './types';
+import { ensureProjectAgentForSessionKey } from '../services/project-agent-service';
 
 const VISION_MIME_TYPES = new Set([
   'image/png',
@@ -194,8 +195,14 @@ export const openClawAdapter: EngineAdapter = {
 
   async sendMessage(ctx: EngineAdapterContext, params) {
     try {
+      const sessionKey = params.sessionKey;
+      const projectAgentResult = await ensureProjectAgentForSessionKey(sessionKey);
+      if (projectAgentResult.created || projectAgentResult.workspaceUpdated) {
+        await ctx.gatewayManager.debouncedReload();
+      }
+
       const result = await ctx.gatewayManager.rpc<{ runId?: string }>('chat.send', {
-        sessionKey: params.sessionKey,
+        sessionKey,
         message: params.message,
         deliver: params.deliver,
         idempotencyKey: params.idempotencyKey,
@@ -208,6 +215,12 @@ export const openClawAdapter: EngineAdapter = {
 
   async sendMessageWithMedia(ctx: EngineAdapterContext, params: EngineSendWithMediaParams) {
     try {
+      const sessionKey = params.sessionKey;
+      const projectAgentResult = await ensureProjectAgentForSessionKey(sessionKey);
+      if (projectAgentResult.created || projectAgentResult.workspaceUpdated) {
+        await ctx.gatewayManager.debouncedReload();
+      }
+
       let message = params.message;
       const imageAttachments: Array<Record<string, unknown>> = [];
       const fileReferences: string[] = [];

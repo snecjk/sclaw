@@ -42,7 +42,7 @@ interface SessionCatalogState {
   refreshAllBindings: () => Promise<void>;
   refreshAllCatalogMeta: () => Promise<void>;
   selectProject: (workspaceId: string | null) => Promise<void>;
-  bindSession: (sessionKey: string) => Promise<void>;
+  bindSession: (sessionKey: string, workspaceId?: string) => Promise<void>;
   moveSessionToProject: (sessionKey: string, projectId: string | null) => Promise<void>;
   createProject: (name: string, rootPath: string) => Promise<WorkspaceDto | null>;
   updateProject: (id: string, name: string, rootPath: string) => Promise<void>;
@@ -171,11 +171,11 @@ export const useSessionCatalogStore = create<SessionCatalogState>((set, get) => 
     });
   },
 
-  bindSession: async (sessionKey) => {
-    const workspaceId = get().activeWorkspaceId();
-    await bindSessionToCatalog(sessionKey, workspaceId);
+  bindSession: async (sessionKey: string, workspaceId?: string) => {
+    const targetWorkspaceId = workspaceId ?? get().activeWorkspaceId();
+    await bindSessionToCatalog(sessionKey, targetWorkspaceId);
     set((state) => ({
-      sessionWorkspaceByKey: { ...state.sessionWorkspaceByKey, [sessionKey]: workspaceId },
+      sessionWorkspaceByKey: { ...state.sessionWorkspaceByKey, [sessionKey]: targetWorkspaceId },
     }));
     await get().refreshAllCatalogMeta();
   },

@@ -35,7 +35,7 @@ import {
   stoChatShellHomeClass,
 } from '@/lib/surfaces';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAgentsStore } from '@/stores/agents';
+import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import type { AgentSummary } from '@/types/agent';
 import { useTranslation } from 'react-i18next';
@@ -222,7 +222,7 @@ export function ChatInput({
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const dailyTokenQuotaStatus = useChatStore((s) => s.dailyTokenQuotaStatus);
   const currentAgentName = useMemo(
-    () => (agents ?? []).find((agent) => agent.id === currentAgentId)?.name ?? currentAgentId,
+    () => resolveAgentById(agents ?? [], currentAgentId)?.name ?? currentAgentId,
     [agents, currentAgentId],
   );
   const mentionableAgents = useMemo(

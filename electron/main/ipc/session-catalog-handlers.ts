@@ -19,6 +19,20 @@ import {
   upsertCatalogSession,
 } from '../../services/session-catalog-service';
 import { getSessionGroupRepository } from '../../db/repositories/session-group-repository';
+import type { GatewayManager } from '../../gateway/manager';
+
+let gatewayManagerRef: GatewayManager | null = null;
+async function getGatewayManager(): Promise<GatewayManager | null> {
+  if (gatewayManagerRef) return gatewayManagerRef;
+  try {
+    const mainModule = await import('../index');
+    gatewayManagerRef = mainModule.gatewayManager ?? null;
+    return gatewayManagerRef;
+  } catch (error) {
+    logger.warn('[session-catalog] failed to resolve gatewayManager from main module', error);
+    return null;
+  }
+}
 
 type SessionCatalogInvokeRequest = {
   action: string;
@@ -76,7 +90,7 @@ async function dispatchSessionCatalogAction(
           workspace: await createWorkspace({
             name: String(payload.name ?? ''),
             rootPath: String(payload.rootPath ?? ''),
-          }),
+          }, await getGatewayManager()),
         };
 
       case 'updateWorkspace':
@@ -84,11 +98,11 @@ async function dispatchSessionCatalogAction(
           workspace: await updateWorkspace(String(payload.id ?? ''), {
             name: payload.name != null ? String(payload.name) : undefined,
             rootPath: payload.rootPath != null ? String(payload.rootPath) : undefined,
-          }),
+          }, await getGatewayManager()),
         };
 
       case 'deleteWorkspace': {
-        const result = await deleteWorkspace(String(payload.id ?? ''));
+        const result = await deleteWorkspace(String(payload.id ?? ''), await getGatewayManager());
         return { success: true, ...result };
       }
 
@@ -104,6 +118,7 @@ async function dispatchSessionCatalogAction(
         await bindSessionToWorkspace(
           String(payload.sessionKey ?? ''),
           String(payload.workspaceId ?? DEFAULT_WORKSPACE_ID),
+          await getGatewayManager(),
         );
         return { success: true };
 
@@ -112,6 +127,7 @@ async function dispatchSessionCatalogAction(
           session: await moveSessionToWorkspace(
             String(payload.sessionKey ?? ''),
             String(payload.workspaceId ?? DEFAULT_WORKSPACE_ID),
+            await getGatewayManager(),
           ),
         };
 

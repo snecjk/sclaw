@@ -8,8 +8,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { useAgentsStore } from '@/stores/agents';
+import { resolveBaseAgentId, resolveEffectiveAgent, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { buildProviderListItems } from '@/lib/provider-accounts';
@@ -141,9 +142,10 @@ export function ChatEngineSelector({
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
+  const projectId = useSessionCatalogStore((s) => s.selectedProjectId);
   const currentAgent = useMemo(
-    () => (agents ?? []).find((agent) => agent.id === currentAgentId),
-    [agents, currentAgentId],
+    () => resolveEffectiveAgent(agents ?? [], currentAgentId, projectId),
+    [agents, currentAgentId, projectId],
   );
   const currentSession = useMemo(
     () => sessions.find((session) => session.key === currentSessionKey),
@@ -179,7 +181,8 @@ export function ChatEngineSelector({
     if (!canSwitchEngine || engineType === agentDefaultEngineType) return;
     setEngineSaving(true);
     try {
-      await hostApiFetch(`/api/agents/${encodeURIComponent(currentAgentId)}/engine`, {
+      const baseAgentId = resolveBaseAgentId(currentAgentId);
+      await hostApiFetch(`/api/agents/${encodeURIComponent(baseAgentId)}/engine`, {
         method: 'PUT',
         body: JSON.stringify({ engineType }),
       });
@@ -326,9 +329,10 @@ export function ChatModelSelector({
 
   useEffect(() => { void init(); }, [init]);
 
+  const projectId = useSessionCatalogStore((s) => s.selectedProjectId);
   const currentAgent = useMemo(
-    () => (agents ?? []).find((agent) => agent.id === currentAgentId),
-    [agents, currentAgentId],
+    () => resolveEffectiveAgent(agents ?? [], currentAgentId, projectId),
+    [agents, currentAgentId, projectId],
   );
   const currentSession = useMemo(
     () => sessions.find((session) => session.key === currentSessionKey),
@@ -421,8 +425,9 @@ export function ChatModelSelector({
             currentAgentId,
           });
         } else {
+          const baseAgentId = resolveBaseAgentId(currentAgentId);
           const result = await hostApiFetch<{ snapshot?: { agents?: Array<{ id: string; modelDisplay?: string }> } }>(
-            `/api/agents/${encodeURIComponent(currentAgentId)}/model`,
+            `/api/agents/${encodeURIComponent(baseAgentId)}/model`,
             {
               method: 'PUT',
               body: JSON.stringify({
@@ -431,7 +436,7 @@ export function ChatModelSelector({
               }),
             },
           );
-          persistedModel = result.snapshot?.agents?.find((agent) => agent.id === currentAgentId)?.modelDisplay?.trim() || modelId;
+          persistedModel = result.snapshot?.agents?.find((agent) => agent.id === baseAgentId)?.modelDisplay?.trim() || modelId;
           await fetchAgents();
         }
       } else {

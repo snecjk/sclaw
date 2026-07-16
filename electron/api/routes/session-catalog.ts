@@ -76,7 +76,7 @@ export async function handleSessionCatalogRoutes(
       const workspace = await createWorkspace({
         name: body.name ?? '',
         rootPath: body.rootPath ?? '',
-      });
+      }, _ctx.gatewayManager);
       sendJson(res, 200, { workspace });
     } catch (error) {
       sendJson(res, 400, { success: false, error: String(error) });
@@ -90,7 +90,7 @@ export async function handleSessionCatalogRoutes(
       const workspace = await updateWorkspace(body.id ?? '', {
         name: body.name,
         rootPath: body.rootPath,
-      });
+      }, _ctx.gatewayManager);
       sendJson(res, 200, { workspace });
     } catch (error) {
       sendJson(res, 400, { success: false, error: String(error) });
@@ -101,7 +101,7 @@ export async function handleSessionCatalogRoutes(
   if (url.pathname === '/api/session-catalog/workspaces/delete' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ id: string }>(req);
-      const result = await deleteWorkspace(body.id ?? '');
+      const result = await deleteWorkspace(body.id ?? '', _ctx.gatewayManager);
       sendJson(res, 200, { success: true, ...result });
     } catch (error) {
       sendJson(res, 400, { success: false, error: String(error) });
@@ -123,7 +123,7 @@ export async function handleSessionCatalogRoutes(
   if (url.pathname === '/api/session-catalog/sessions/bind' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ sessionKey: string; workspaceId: string }>(req);
-      await bindSessionToWorkspace(body.sessionKey ?? '', body.workspaceId ?? DEFAULT_WORKSPACE_ID);
+      await bindSessionToWorkspace(body.sessionKey ?? '', body.workspaceId ?? DEFAULT_WORKSPACE_ID, _ctx.gatewayManager);
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 400, { success: false, error: String(error) });
@@ -137,6 +137,7 @@ export async function handleSessionCatalogRoutes(
       const session = await moveSessionToWorkspace(
         body.sessionKey ?? '',
         body.workspaceId ?? DEFAULT_WORKSPACE_ID,
+        _ctx.gatewayManager,
       );
       sendJson(res, 200, { session });
     } catch (error) {

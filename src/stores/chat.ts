@@ -6,13 +6,20 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
-import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-to-chat';
+import {
+  applyWorkspaceDefaultToNewSession,
+  syncSessionModelToGateway,
+} from '@/lib/sync-workspace-default-to-chat';
 import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
 import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
 import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
 import { markSessionUnreadAfterSuccessfulRun, noteObservedRun } from '@/lib/session-unread-notify';
 import { touchSessionReadAt, useSessionUnreadStore } from '@/stores/session-unread';
+import {
+  getBaseAgentIdFromProjectAgentId,
+  resolveProjectAgentId,
+} from '../../shared/project-agent';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
@@ -58,7 +65,6 @@ import {
   scheduleSessionLabelHydrationForStore,
 } from '@/stores/chat/session-metadata-hydrate';
 import {
-  DEFAULT_CANONICAL_PREFIX,
   DEFAULT_SESSION_KEY,
   type AttachedFileMeta,
   type ChatSession,
@@ -149,7 +155,8 @@ function toNumberIfFinite(value: unknown): number | undefined {
 
 function getAgentEngineType(agentId: string | undefined | null): ChatSession['engineType'] | undefined {
   const normalizedAgentId = normalizeAgentId(agentId);
-  return useAgentsStore.getState().agents.find((agent) => normalizeAgentId(agent.id) === normalizedAgentId)?.engineType;
+  const lookupId = getBaseAgentIdFromProjectAgentId(normalizedAgentId) ?? normalizedAgentId;
+  return useAgentsStore.getState().agents.find((agent) => normalizeAgentId(agent.id) === lookupId)?.engineType;
 }
 
 function resolveEngineTypeForSession(
@@ -416,14 +423,6 @@ async function loadMissingPreviews(messages: RawMessage[]): Promise<boolean> {
     console.warn('[loadMissingPreviews] Failed:', err);
     return false;
   }
-}
-
-function getCanonicalPrefixFromSessions(sessions: ChatSession[]): string | null {
-  const canonical = sessions.find((s) => s.key.startsWith('agent:'))?.key;
-  if (!canonical) return null;
-  const parts = canonical.split(':');
-  if (parts.length < 2) return null;
-  return `${parts[0]}:${parts[1]}`;
 }
 
 function getAgentIdFromSessionKey(sessionKey: string): string {
@@ -940,13 +939,6 @@ function handleBackgroundSessionEvent(
       break;
     }
   }
-}
-
-function getCanonicalPrefixFromSessionKey(sessionKey: string): string | null {
-  if (!sessionKey.startsWith('agent:')) return null;
-  const parts = sessionKey.split(':');
-  if (parts.length < 2) return null;
-  return `${parts[0]}:${parts[1]}`;
 }
 
 function isToolOnlyMessage(message: RawMessage | undefined): boolean {
@@ -1836,7 +1828,7 @@ export const useChatStore = create<ChatState>()(
 
   // ── New session ──
 
-  newSession: () => {
+  newSession: (options?: { projectId?: string }) => {
     // Generate a new unique session key and switch to it.
     // NOTE: We intentionally do NOT call sessions.reset on the old session.
     // sessions.reset archives (renames) the session JSONL file, making old
@@ -1847,11 +1839,16 @@ export const useChatStore = create<ChatState>()(
       && messages.length === 0
       && !sessionLastActivity[currentSessionKey]
       && !sessionLabels[currentSessionKey];
-    const prefix = getCanonicalPrefixFromSessionKey(currentSessionKey)
-      ?? getCanonicalPrefixFromSessions(sessions)
-      ?? DEFAULT_CANONICAL_PREFIX;
+    const baseAgentId = getBaseAgentIdFromProjectAgentId(get().currentAgentId)
+      ?? get().currentAgentId
+      ?? 'main';
+    const projectId = options?.projectId;
+    const effectiveAgentId = projectId && projectId !== 'default'
+      ? resolveProjectAgentId(projectId, baseAgentId)
+      : baseAgentId;
+    const prefix = `agent:${effectiveAgentId}`;
     const newKey = `${prefix}:session-${Date.now()}`;
-    const newAgentId = getAgentIdFromSessionKey(newKey);
+    const newAgentId = effectiveAgentId;
     // Carry over model from home/default session or Claude agent toolbar selection
     let currentSessionModel = sessions.find((s) => s.key === currentSessionKey)?.model;
     if (!currentSessionModel?.trim()) {
@@ -1917,9 +1914,16 @@ export const useChatStore = create<ChatState>()(
     });
     // 新建即视为已读，写入已读水位；后续该会话前台完成的迟到事件不会误标未读。
     touchSessionReadAt(newKey);
-    void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
+    if (currentSessionModel?.trim()) {
+      void syncSessionModelToGateway(newKey, currentSessionModel, newAgentId);
+    } else {
+      void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
+    }
     void import('@/stores/session-catalog').then(({ useSessionCatalogStore }) => {
-      void useSessionCatalogStore.getState().bindSession(newKey);
+      // 只有明确指定项目时才绑定到项目；普通新对话不自动归属当前选中项目。
+      if (options?.projectId) {
+        void useSessionCatalogStore.getState().bindSession(newKey, options.projectId);
+      }
     });
   },
 

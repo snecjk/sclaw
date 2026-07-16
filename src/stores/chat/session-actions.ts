@@ -24,6 +24,7 @@ import { appendPendingLocalVirtualTaskSessions } from './session-list-merge';
 import {
   scheduleSessionLabelHydrationForStore,
 } from './session-metadata-hydrate';
+import { getBaseAgentIdFromProjectAgentId } from '../../../shared/project-agent';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 
@@ -492,7 +493,7 @@ export function createSessionActions(
 
     // ── New session ──
 
-    newSession: () => {
+    newSession: (_options?: { projectId?: string }) => {
       // Generate a new unique session key and switch to it.
       // NOTE: We intentionally do NOT call sessions.reset on the old session.
       // sessions.reset archives (renames) the session JSONL file, making old
@@ -506,8 +507,9 @@ export function createSessionActions(
       const prefix = getCanonicalPrefixFromSessions(get().sessions) ?? DEFAULT_CANONICAL_PREFIX;
       const newKey = `${prefix}:session-${Date.now()}`;
       const agentId = getAgentIdFromSessionKey(newKey);
+      const lookupAgentId = getBaseAgentIdFromProjectAgentId(agentId.trim().toLowerCase()) ?? agentId.trim().toLowerCase();
       const agentEngineType = useAgentsStore.getState().agents
-        .find((agent) => agent.id.trim().toLowerCase() === agentId.trim().toLowerCase())?.engineType;
+        .find((agent) => agent.id.trim().toLowerCase() === lookupAgentId)?.engineType;
       const newSessionEntry: ChatSession = { key: newKey, label: NEW_SESSION_TEMP_LABEL, engineType: agentEngineType };
       set((s) => ({
         currentSessionKey: newKey,
