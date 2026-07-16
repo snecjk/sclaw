@@ -702,6 +702,25 @@ export function extractText(message: RawMessage | unknown): string {
 }
 
 /**
+ * Resolve the text used for copy / share / edit on a user bubble.
+ *
+ * Skill bubbles keep the visible title in `_skillMeta.title` rather than in
+ * `content` (which is often empty after skill normalization), so copy/share/edit
+ * must combine the skill title with any user-typed body to mirror the visible
+ * bubble. Without this, skill-only messages would copy/share/edit an empty
+ * string and the actions appear broken.
+ */
+export function resolveUserBubbleActionText(
+  bodyText: string,
+  skillMeta?: { title?: string } | null,
+): string {
+  const body = (bodyText ?? '').trim();
+  const title = (skillMeta?.title ?? '').trim();
+  if (title && body) return `${title} ${body}`;
+  return title || body;
+}
+
+/**
  * Extract thinking/reasoning content from a message.
  * Returns null if no thinking content found.
  */

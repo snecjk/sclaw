@@ -15,5 +15,5 @@ export const RETIRED_SKILLS_SYSTEM_PROMPT = [
   `- 技能：${RETIRED_SKILL_SLUGS.join('、')}`,
   `- 插件：${RETIRED_PLUGIN_IDS.join('、')}`,
   '即使用户目录或技能列表中仍存在上述文件，也视为过期残留，一律忽略。',
-  '生成 HTML 报告/看板/页面时：直接按用户需求 write 到 ./.claw-output/<文件名>.html，无需先读任何 HTML 设计技能。',
+  `生成 HTML 报告/看板/页面时：直接按用户需求 write 到 ./.claw-output/<文件名>.html，无需读取上述已废弃的 HTML 设计技能（${RETIRED_SKILL_SLUGS.join('、')}）。`,
 ].join('\n');

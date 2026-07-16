@@ -5,6 +5,25 @@
 import { hostApiFetch } from './host-api';
 import type { PlazaListResult, SkillDetail, CategoryDef } from '@/types/skill-plaza';
 
+/** Structured code returned by the host when the STO token is not yet ready. */
+const AUTH_NOT_READY_CODE = 'AUTH_NOT_READY';
+
+/**
+ * Raised when a plaza read is attempted before the STO token is available.
+ * The store treats this as a transient loading state and retries, rather than
+ * surfacing an error toast.
+ */
+export class SkillPlazaAuthNotReadyError extends Error {
+  constructor(message = 'Skill plaza auth not ready') {
+    super(message);
+    this.name = 'SkillPlazaAuthNotReadyError';
+  }
+}
+
+export function isSkillPlazaAuthNotReadyError(err: unknown): err is SkillPlazaAuthNotReadyError {
+  return err instanceof SkillPlazaAuthNotReadyError;
+}
+
 export interface FetchPlazaListParams {
   q?: string;
   category?: string;
@@ -16,10 +35,13 @@ export interface FetchPlazaListParams {
 
 // GET /api/skill-plaza/categories
 export async function fetchSkillPlazaCategories(): Promise<CategoryDef[]> {
-  const res = await hostApiFetch<{ success: boolean; data?: { categories: CategoryDef[] }; error?: string }>(
+  const res = await hostApiFetch<{ success: boolean; data?: { categories: CategoryDef[] }; error?: string; code?: string }>(
     '/api/skill-plaza/categories',
   );
-  if (!res.success) throw new Error(res.error || 'Failed to fetch categories');
+  if (!res.success) {
+    if (res.code === AUTH_NOT_READY_CODE) throw new SkillPlazaAuthNotReadyError();
+    throw new Error(res.error || 'Failed to fetch categories');
+  }
   return res.data?.categories || [];
 }
 
@@ -33,19 +55,25 @@ export async function fetchSkillPlazaList(params: FetchPlazaListParams = {}): Pr
   if (params.page !== undefined) qs.set('page', String(params.page));
   if (params.pageSize !== undefined) qs.set('pageSize', String(params.pageSize));
 
-  const res = await hostApiFetch<{ success: boolean; data?: PlazaListResult; error?: string }>(
+  const res = await hostApiFetch<{ success: boolean; data?: PlazaListResult; error?: string; code?: string }>(
     `/api/skill-plaza/list?${qs.toString()}`,
   );
-  if (!res.success) throw new Error(res.error || 'Failed to fetch plaza list');
+  if (!res.success) {
+    if (res.code === AUTH_NOT_READY_CODE) throw new SkillPlazaAuthNotReadyError();
+    throw new Error(res.error || 'Failed to fetch plaza list');
+  }
   return res.data || { skills: [], categoryCounts: {}, hasMore: false, page: 1, pageSize: 20 };
 }
 
 // GET /api/skill-plaza/local-skills (scan local skills dir, no remote request)
 export async function fetchLocalSkills(): Promise<PlazaListResult> {
-  const res = await hostApiFetch<{ success: boolean; data?: PlazaListResult; error?: string }>(
+  const res = await hostApiFetch<{ success: boolean; data?: PlazaListResult; error?: string; code?: string }>(
     '/api/skill-plaza/local-skills',
   );
-  if (!res.success) throw new Error(res.error || 'Failed to fetch local skills');
+  if (!res.success) {
+    if (res.code === AUTH_NOT_READY_CODE) throw new SkillPlazaAuthNotReadyError();
+    throw new Error(res.error || 'Failed to fetch local skills');
+  }
   return res.data || { skills: [], categoryCounts: {}, hasMore: false, page: 1, pageSize: 20 };
 }
 

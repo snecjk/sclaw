@@ -115,6 +115,7 @@ interface ChatInputProps {
   /** User-message text selected for editing and sending again. */
   editDraft?: {
     text: string;
+    skill?: SkillMeta;
     version: number;
   } | null;
   onEditDraftApplied?: () => void;
@@ -293,10 +294,13 @@ export function ChatInput({
     }
   }, [disabled]);
 
-  const applyEditDraftText = useCallback((rawText: string) => {
+  const applyEditDraftText = useCallback((rawText: string, skill?: SkillMeta) => {
     const text = rawText.trim();
-    if (!text) return;
+    if (!text && !skill) return;
     mentionEditorRef.current?.setPlainText(text);
+    if (skill) {
+      mentionEditorRef.current?.insertSkill(skill.slug, skill.title);
+    }
     mentionEditorRef.current?.focus();
     setAttachments([]);
     setTargetAgentId(null);
@@ -309,15 +313,23 @@ export function ChatInput({
 
   useEffect(() => {
     if (!editDraft) return;
-    applyEditDraftText(editDraft.text);
+    applyEditDraftText(editDraft.text, editDraft.skill);
     onEditDraftApplied?.();
   }, [applyEditDraftText, editDraft, onEditDraftApplied]);
 
   useEffect(() => {
     const handleEditDraftEvent = (event: Event) => {
-      const detail = (event as CustomEvent<{ text?: unknown }>).detail;
+      const detail = (event as CustomEvent<{ text?: unknown; skill?: unknown }>).detail;
       if (typeof detail?.text !== 'string') return;
-      applyEditDraftText(detail.text);
+      const skill = detail.skill;
+      const skillMeta =
+        skill
+        && typeof skill === 'object'
+        && typeof (skill as SkillMeta).slug === 'string'
+        && typeof (skill as SkillMeta).title === 'string'
+          ? (skill as SkillMeta)
+          : undefined;
+      applyEditDraftText(detail.text, skillMeta);
     };
 
     window.addEventListener(CHAT_EDIT_DRAFT_EVENT, handleEditDraftEvent);
