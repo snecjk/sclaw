@@ -720,6 +720,7 @@ function SidebarNavLink({
 export function Sidebar() {
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const pendingProjectId = useChatStore((s) => s.pendingProjectId);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
@@ -963,6 +964,7 @@ export function Sidebar() {
           useChatStore.setState({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: 'main',
+            pendingProjectId: null,
             runtimeBySessionKey: nextRuntimeBySessionKey,
             messages: [],
             loading: false,
@@ -1721,8 +1723,11 @@ export function Sidebar() {
         <div className="flex shrink-0 flex-col gap-0.5">
         <div className={cn('flex flex-col gap-0.5', sidebarCollapsed && 'mt-2')}>
 {primaryNav.map((item) => {
-  // 当有选中非默认会话时，新对话入口不高亮，避免与会话列表项同时高亮
-  const shouldDimHome = currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY;
+  // 当有选中非默认会话，或处于项目新对话草稿时，顶部「新对话」不高亮
+  const shouldDimHome = Boolean(
+    (currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY)
+    || pendingProjectId,
+  );
   const homeIsActiveOverride = item.to === '/' && shouldDimHome ? false : undefined;
   
   // 点击新对话时，切换到默认会话并清空消息，让页面显示初始内容
@@ -1783,6 +1788,7 @@ export function Sidebar() {
           useChatStore.setState({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: 'main',
+            pendingProjectId: null,
             runtimeBySessionKey: nextRuntimeBySessionKey,
             messages: [],
             loading: false,
@@ -1801,6 +1807,7 @@ export function Sidebar() {
           });
         } else {
           useChatStore.getState().clearPendingWorkflowMemory();
+          useChatStore.setState({ pendingProjectId: null, currentAgentId: 'main' });
         }
       }
     : undefined;
