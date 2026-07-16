@@ -794,6 +794,10 @@ export async function createAgent(
  * Create an agent with an explicit ID (instead of auto-generating from name).
  * Used by the biz-agent sync service to create agents whose ID matches the
  * remote `code` field, enabling dedup-by-code on subsequent syncs.
+ *
+ * Idempotent for project-agent ensure: if the ID is already in config, returns
+ * the current snapshot. If only the on-disk agent dir exists (orphan after a
+ * crashed/racy create), re-registers it into config instead of throwing.
  */
 export async function createAgentWithId(
   id: string,
@@ -808,9 +812,16 @@ export async function createAgentWithId(
     const { agentsConfig, entries, syntheticMain } = normalizeAgentsConfig(config);
     const existingIds = new Set(entries.map((entry) => entry.id));
     const diskIds = await listExistingAgentIdsOnDisk();
+    const existsInConfig = existingIds.has(id);
+    const existsOnDisk = diskIds.has(id);
 
-    if (existingIds.has(id) || diskIds.has(id)) {
-      throw new Error(`Agent with ID "${id}" already exists`);
+    if (existsInConfig) {
+      logger.info('createAgentWithId: agent already in config (idempotent)', { agentId: id });
+      return await buildSnapshotFromConfig(config);
+    }
+
+    if (existsOnDisk) {
+      logger.warn('createAgentWithId: healing disk orphan into config', { agentId: id });
     }
 
     const normalizedName = normalizeAgentName(name);
@@ -845,7 +856,11 @@ export async function createAgentWithId(
     }
     await writeAgentFeatures(features);
 
-    logger.info('Created agent config entry (explicit ID)', { agentId: id, inheritWorkspace: !!options?.inheritWorkspace });
+    logger.info('Created agent config entry (explicit ID)', {
+      agentId: id,
+      inheritWorkspace: !!options?.inheritWorkspace,
+      healedFromDisk: existsOnDisk,
+    });
     return await buildSnapshotFromConfig(config);
   });
 }

@@ -1068,6 +1068,17 @@ async function startClaudeQuery(
   }
 }
 
+function isClaudeSessionAlreadyGoneError(error: unknown): boolean {
+  const message = String(error);
+  return (
+    message.includes('not found in project directory')
+    || message.includes('not found in any project directory')
+    || message.includes('not found (no projects directory)')
+    || /\bENOENT\b/.test(message)
+    || /\bENOTDIR\b/.test(message)
+  );
+}
+
 export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void> {
   await ensureClaudeConfigDir();
   const entry = await getEngineSessionRegistryEntry(sessionKey);
@@ -1078,11 +1089,22 @@ export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void
     return;
   }
 
-  const sdk = await import('@anthropic-ai/claude-agent-sdk');
-  const configDir = await resolveClaudeSessionConfigDir(entry.cwd!, entry.sessionId!) ?? getClaudeConfigDir();
-  await withClaudeConfigDirEnv(configDir, async () => {
-    await sdk.deleteSession(entry.sessionId!, { dir: entry.cwd! });
-  });
+  const cwd = typeof entry.cwd === 'string' ? entry.cwd.trim() : '';
+  if (cwd) {
+    try {
+      const sdk = await import('@anthropic-ai/claude-agent-sdk');
+      const configDir = await resolveClaudeSessionConfigDir(cwd, entry.sessionId) ?? getClaudeConfigDir();
+      await withClaudeConfigDirEnv(configDir, async () => {
+        await sdk.deleteSession(entry.sessionId!, { dir: cwd });
+      });
+    } catch (error) {
+      // Workspace may have been deleted on disk (dirty catalog rows). Still purge our registry.
+      if (!isClaudeSessionAlreadyGoneError(error)) throw error;
+      logger.warn(`[claude] deleteSession skipped for missing session/workspace ${sessionKey}:`, error);
+    }
+  } else {
+    logger.warn(`[claude] deleteSession skipped: missing cwd for ${sessionKey}`);
+  }
   await deleteEngineSessionRegistryEntry(sessionKey);
 }
 

@@ -72,4 +72,23 @@ describe('ensureProjectAgent workspace comparison', () => {
     });
     expect(updateAgentWorkspaceMock).toHaveBeenCalledWith('proj-project-a-main', '/tmp/project-b');
   });
+
+  it('dedupes concurrent ensure calls for the same project agent', async () => {
+    listConfiguredAgentIdsMock.mockResolvedValue([]);
+    createAgentWithIdMock.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return {};
+    });
+    getAgentEngineTypeMock.mockResolvedValue('openclaw');
+    setAgentEngineTypeMock.mockResolvedValue({});
+
+    const { ensureProjectAgent } = await import('../../electron/services/project-agent-service');
+    const [first, second] = await Promise.all([
+      ensureProjectAgent('project-b', 'main', '/tmp/project-b'),
+      ensureProjectAgent('project-b', 'main', '/tmp/project-b'),
+    ]);
+
+    expect(first).toEqual(second);
+    expect(createAgentWithIdMock).toHaveBeenCalledTimes(1);
+  });
 });

@@ -1,7 +1,7 @@
 /**
- * SidebarRecentSessionStatus — 最近会话行右侧状态位（运行 / 失败；未读在标题左侧）。
+ * SidebarRecentSessionStatus — 会话行右侧状态位（运行 / 失败；未读同在行尾）。
  *
- * 使用位置：Sidebar 最近列表（展开 + 折叠图标列）。
+ * 使用位置：Sidebar「最近」与「项目」会话行尾。
  */
 import { AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';

@@ -48,7 +48,6 @@ import { SidebarSupportQrTooltip } from '@/components/layout/SidebarSupportQrToo
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { SidebarRecentSessionRow } from '@/components/layout/sidebar-recent-session-row';
 import { SidebarProjectsSection } from '@/components/layout/sidebar-projects-section';
-import { ProjectFormDialog } from '@/components/layout/sidebar-project-form-dialog';
 import {
   DEFAULT_WORKSPACE_ID,
   isSessionInActiveWorkspace,
@@ -792,8 +791,6 @@ export function Sidebar() {
   const sidebarVis = useMemo(() => getSidebarVisibility(sidebarLayoutVariant), [sidebarLayoutVariant]);
   const allCatalogByKey = useSessionCatalogStore((s) => s.allCatalogByKey);
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
-  const userProjects = useSessionCatalogStore((s) => s.workspaces);
-  const moveSessionToProject = useSessionCatalogStore((s) => s.moveSessionToProject);
   const patchSessionCatalog = useSessionCatalogStore((s) => s.patchSessionCatalog);
   const catalogBootstrap = useSessionCatalogStore((s) => s.bootstrap);
 
@@ -1015,7 +1012,6 @@ export function Sidebar() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [supportQrOpen, setSupportQrOpen] = useState(false);
-  const [createProjectSessionKey, setCreateProjectSessionKey] = useState<string | null>(null);
 
   const catalogByKey = allCatalogByKey;
 
@@ -1023,8 +1019,6 @@ export function Sidebar() {
     const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
     const isRecentSessionActive =
       isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
-    const workspaceId = sessionWorkspaceByKey[s.key] ?? DEFAULT_WORKSPACE_ID;
-    const currentProjectId = workspaceId !== DEFAULT_WORKSPACE_ID ? workspaceId : null;
     const isPinned = catalogByKey[s.key]?.pinRank != null;
     return (
       <SidebarRecentSessionRow
@@ -1035,8 +1029,6 @@ export function Sidebar() {
         isPinned={isPinned}
         isEditing={editingSessionKey === s.key}
         editingValue={editingValue}
-        projects={userProjects}
-        currentProjectId={currentProjectId}
         onOpen={() => {
           navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
         }}
@@ -1065,11 +1057,6 @@ export function Sidebar() {
         onDelete={() => {
           requestSessionDelete({ key: s.key, label: sessionLabel });
         }}
-        onMoveToProject={(projectId) => {
-          void moveSessionToProject(s.key, projectId);
-          toast.success(t('common:sidebar.movedToProject'));
-        }}
-        onCreateProject={() => setCreateProjectSessionKey(s.key)}
       />
     );
   }, [
@@ -1080,15 +1067,12 @@ export function Sidebar() {
     getSessionLabel,
     isOnHome,
     location.pathname,
-    moveSessionToProject,
     navigate,
     patchSessionCatalog,
     renameSession,
     requestSessionDelete,
-    sessionWorkspaceByKey,
     switchSession,
     t,
-    userProjects,
   ]);
 
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
@@ -2294,18 +2278,6 @@ export function Sidebar() {
       ) : null}
         </>
       ) : null}
-
-      <ProjectFormDialog
-        open={createProjectSessionKey != null}
-        mode="create"
-        onClose={() => setCreateProjectSessionKey(null)}
-        onCreated={(workspace) => {
-          if (!createProjectSessionKey) return;
-          void moveSessionToProject(createProjectSessionKey, workspace.id);
-          toast.success(t('common:sidebar.movedToProject'));
-          setCreateProjectSessionKey(null);
-        }}
-      />
 
       <ConfirmDialog
         open={showLogoutConfirm}

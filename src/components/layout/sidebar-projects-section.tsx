@@ -122,12 +122,12 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
     }
   }, []);
 
-  /** 在指定项目下新建对话：进入项目草稿，首条消息发出时才真正创建 session。 */
+  /** 在指定项目下新建对话：进入项目草稿并创建/关联 project agent；首条消息发出时才真正创建 session。 */
   const handleNewChatInProject = useCallback(async (projectId: string) => {
     try {
       await selectProject(projectId);
       setExpandedProjectIds((prev) => ({ ...prev, [projectId]: true }));
-      newSession({ projectId });
+      await newSession({ projectId });
       navigateToMainChatHome(navigate, location.pathname);
     } catch (error) {
       toast.error(String(error));

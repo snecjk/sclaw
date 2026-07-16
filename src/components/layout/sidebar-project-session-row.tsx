@@ -1,7 +1,8 @@
 /**
  * SidebarProjectSessionRow — 项目树内嵌套会话行（高亮 + 行尾菜单）。
+ *
+ * 布局与「最近」会话行对齐：标题左侧无装饰点，置顶 / 运行 / 失败状态在行尾。
  */
-import { Circle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SidebarProjectSessionRowTrailing } from '@/components/layout/sidebar-project-session-row-trailing';
 import { cn } from '@/lib/utils';
@@ -79,9 +80,8 @@ export function SidebarProjectSessionRow({
           type="button"
           onClick={onOpen}
           title={label}
-          className="flex h-9 min-w-0 w-full flex-1 items-center gap-2 overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
+          className="flex h-9 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
         >
-          <Circle className="h-2 w-2 shrink-0 stroke-[1.5] text-muted-foreground" aria-hidden />
           <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass, isActive && 'font-medium')}>
             {label}
           </span>

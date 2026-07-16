@@ -78,6 +78,9 @@ interface EnsureProjectAgentResult {
   workspaceUpdated: boolean;
 }
 
+/** Serialize concurrent ensure calls for the same project agent (bind + send race). */
+const ensureProjectAgentInflight = new Map<string, Promise<EnsureProjectAgentResult>>();
+
 /**
  * Ensure a project agent exists for the given project + base agent.
  * If it already exists but its workspace differs from rootPath, update it.
@@ -88,6 +91,25 @@ export async function ensureProjectAgent(
   rootPath: string,
 ): Promise<EnsureProjectAgentResult> {
   const agentId = resolveProjectAgentId(projectId, baseAgentId);
+  const inflight = ensureProjectAgentInflight.get(agentId);
+  if (inflight) return inflight;
+
+  const promise = ensureProjectAgentUnlocked(projectId, baseAgentId, rootPath, agentId)
+    .finally(() => {
+      if (ensureProjectAgentInflight.get(agentId) === promise) {
+        ensureProjectAgentInflight.delete(agentId);
+      }
+    });
+  ensureProjectAgentInflight.set(agentId, promise);
+  return promise;
+}
+
+async function ensureProjectAgentUnlocked(
+  projectId: string,
+  baseAgentId: string,
+  rootPath: string,
+  agentId: string,
+): Promise<EnsureProjectAgentResult> {
   const allIds = await listConfiguredAgentIds();
   const exists = allIds.some((id) => id.toLowerCase() === agentId.toLowerCase());
 
@@ -103,6 +125,7 @@ export async function ensureProjectAgent(
   }
 
   // Create new project agent inheriting bootstrap files from the main agent.
+  // createAgentWithId is idempotent for config/disk races (heal orphans).
   await createAgentWithId(agentId, `Project ${projectId}`, {
     workspace: rootPath,
     inheritWorkspace: true,
@@ -113,7 +136,7 @@ export async function ensureProjectAgent(
     const baseEngineType = await getAgentEngineType(baseAgentId);
     await setAgentEngineType(agentId, baseEngineType);
   } catch (error) {
-    logger.warn('[project-agent] failed to inherit engineType', { agentId, baseAgentId, error });
+    logger.warn('[project-agent] failed to inherit engineType', { agentId, baseAgentId, error: String(error) });
   }
 
   // Inherit agent-scoped skills from the base agent so the project agent has the
@@ -121,7 +144,7 @@ export async function ensureProjectAgent(
   try {
     await syncProjectAgentSkillsFromBaseAgent(projectId, baseAgentId);
   } catch (error) {
-    logger.warn('[project-agent] failed to inherit agent-scoped skills', { agentId, baseAgentId, error });
+    logger.warn('[project-agent] failed to inherit agent-scoped skills', { agentId, baseAgentId, error: String(error) });
   }
 
   logger.info('[project-agent] created', { agentId, projectId, baseAgentId, rootPath });

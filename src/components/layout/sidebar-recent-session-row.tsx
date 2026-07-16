@@ -10,12 +10,8 @@ import {
   sidebarListItemTextClass,
   sidebarRecentSessionActiveClass,
   sidebarSubitemTextIdleClass,
-  sidebarUnreadDotClass,
 } from '@/lib/surfaces';
 import type { ChatSession } from '@/stores/chat/types';
-import type { WorkspaceDto } from '@/lib/session-catalog-api';
-import { useChatStore } from '@/stores/chat';
-import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 
 export interface SidebarRecentSessionRowProps {
   /** 会话实体 */
@@ -30,10 +26,6 @@ export interface SidebarRecentSessionRowProps {
   isEditing: boolean;
   /** 重命名 draft */
   editingValue: string;
-  /** 用户项目 */
-  projects: WorkspaceDto[];
-  /** 当前项目 id；null = 默认对话 */
-  currentProjectId: string | null;
   /** 打开会话 */
   onOpen: () => void;
   onPin: () => void;
@@ -42,8 +34,6 @@ export interface SidebarRecentSessionRowProps {
   onCommitRename: () => void;
   onCancelRename: () => void;
   onDelete: () => void;
-  onMoveToProject: (projectId: string) => void;
-  onCreateProject: () => void;
   className?: string;
 }
 
@@ -54,8 +44,6 @@ export function SidebarRecentSessionRow({
   isPinned,
   isEditing,
   editingValue,
-  projects,
-  currentProjectId,
   onOpen,
   onPin,
   onStartRename,
@@ -63,31 +51,9 @@ export function SidebarRecentSessionRow({
   onCommitRename,
   onCancelRename,
   onDelete,
-  onMoveToProject,
-  onCreateProject,
   className,
 }: SidebarRecentSessionRowProps) {
   const { t } = useTranslation('common');
-  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
-  const runtime = useChatStore((s) => s.runtimeBySessionKey[session.key]);
-  const currentSessionSending = useChatStore((s) => s.sending);
-  const currentSessionActiveRunId = useChatStore((s) => s.activeRunId);
-  const currentSessionError = useChatStore((s) => s.error);
-  const unreadKeys = useSessionUnreadStore((s) => s.unreadKeys);
-  const isCurrentSession = currentSessionKey === session.key;
-  const isRunning = Boolean(
-    runtime?.sending
-    || runtime?.activeRunId
-    || (isCurrentSession && (currentSessionSending || currentSessionActiveRunId)),
-  );
-  const hasError = Boolean(
-    (runtime?.error != null && runtime.error !== '')
-    || (isCurrentSession && currentSessionError != null && currentSessionError !== ''),
-  );
-  const showUnreadDot = !isCurrentSession
-    && !isRunning
-    && !hasError
-    && readSessionUnread(unreadKeys, session.key);
 
   if (isEditing) {
     return (
@@ -127,12 +93,6 @@ export function SidebarRecentSessionRow({
           title={label}
           className="flex h-9 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
         >
-          {showUnreadDot ? (
-            <span
-              className={cn(sidebarUnreadDotClass, 'mr-2 shrink-0')}
-              aria-label={t('sidebar.sessionUnread')}
-            />
-          ) : null}
           <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass, isActive && 'font-medium')}>
             {label}
           </span>
@@ -141,13 +101,9 @@ export function SidebarRecentSessionRow({
           sessionKey={session.key}
           isActive={isActive}
           isPinned={isPinned}
-          projects={projects}
-          currentProjectId={currentProjectId}
           onPin={onPin}
           onRename={onStartRename}
           onDelete={onDelete}
-          onMoveToProject={onMoveToProject}
-          onCreateProject={onCreateProject}
         />
       </div>
     </div>

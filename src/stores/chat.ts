@@ -1901,7 +1901,7 @@ export const useChatStore = create<ChatState>()(
     const shouldMaterialize = options?.materialize === true || !projectId;
 
     // Project "新对话": stay on the empty home draft until the first message is sent.
-    // This keeps engine switching available and avoids ghost sessions in the sidebar.
+    // Create/associate the project agent immediately so OpenClaw cwd is ready before send.
     if (projectId && projectId !== 'default' && !shouldMaterialize) {
       const draftAgentId = resolveProjectAgentId(projectId, baseAgentId);
       set((s) => {
@@ -1947,6 +1947,18 @@ export const useChatStore = create<ChatState>()(
         };
       });
       touchSessionReadAt(DEFAULT_SESSION_KEY);
+      void import('@/lib/session-catalog-api').then(async ({ ensureProjectAgentForWorkspace }) => {
+        try {
+          await ensureProjectAgentForWorkspace({
+            workspaceId: projectId,
+            baseAgentId,
+          });
+          const { useAgentsStore } = await import('@/stores/agents');
+          await useAgentsStore.getState().fetchAgents().catch(() => undefined);
+        } catch (error) {
+          console.warn('[newSession] failed to ensure project agent on project new-chat', error);
+        }
+      });
       return;
     }
 
