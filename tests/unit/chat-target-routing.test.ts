@@ -79,9 +79,6 @@ describe('chat target routing', () => {
 
     hostApiFetchMock.mockReset();
     hostApiFetchMock.mockImplementation(async (path: string) => {
-      if (path === '/api/token-quota/check') {
-        return { success: true, data: { allowed: true, used_today: 0, limit: 100 } };
-      }
       if (path === '/api/chat/send') {
         return { success: true, result: { runId: 'run-send' } };
       }
@@ -124,11 +121,6 @@ describe('chat target routing', () => {
     expect(state.currentAgentId).toBe('research');
     expect(state.sessions.some((session) => session.key === 'agent:research:desk')).toBe(true);
     expect(state.messages.at(-1)?.content).toBe('Hello direct agent');
-    expect(state.dailyTokenQuotaStatus?.usedToday).toBe(0);
-    expect(state.dailyTokenQuotaStatus?.limit).toBe(100);
-
-    expect(hostApiFetchMock).toHaveBeenCalledWith('/api/token-quota/check');
-
     const historyCall = invokeIpcMock.mock.calls.find(
       ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.history',
     );
@@ -188,8 +180,6 @@ describe('chat target routing', () => {
     );
 
     expect(useChatStore.getState().currentSessionKey).toBe('agent:research:desk');
-    expect(hostApiFetchMock).toHaveBeenCalledWith('/api/token-quota/check');
-
     const mediaCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send');
     expect(mediaCall?.[1]).toMatchObject({
       method: 'POST',
@@ -206,103 +196,4 @@ describe('chat target routing', () => {
     expect(payload.media[0]?.filePath).toBe('/tmp/design.png');
   });
 
-  it('blocks send when the daily token quota is exhausted', async () => {
-    hostApiFetchMock.mockImplementation(async (path: string) => {
-      if (path === '/api/token-quota/check') {
-        return { success: true, data: { allowed: false, used_today: 1200, limit: 1200 } };
-      }
-      throw new Error(`Unexpected hostApiFetch call: ${path}`);
-    });
-
-    const { useChatStore } = await import('@/stores/chat');
-
-    useChatStore.setState({
-      currentSessionKey: 'agent:main:main',
-      currentAgentId: 'main',
-      sessions: [{ key: 'agent:main:main' }],
-      messages: [],
-      sessionLabels: {},
-      sessionLastActivity: {},
-      sending: false,
-      activeRunId: null,
-      streamingText: '',
-      streamingMessage: null,
-      streamingTools: [],
-      pendingFinal: false,
-      lastUserMessageAt: null,
-      pendingToolImages: [],
-      error: null,
-      loading: false,
-      thinkingLevel: null,
-      showThinking: true,
-    });
-
-    await useChatStore.getState().sendMessage('Blocked by quota');
-
-    const state = useChatStore.getState();
-    expect(state.messages).toHaveLength(0);
-    expect(state.error).toContain('1200/1200');
-    expect(state.dailyTokenQuotaStatus?.usedToday).toBe(1200);
-    expect(state.dailyTokenQuotaStatus?.limit).toBe(1200);
-    expect(invokeIpcMock.mock.calls.some(([channel, method]) => channel === 'gateway:rpc' && method === 'chat.send')).toBe(false);
-    expect(invokeIpcMock.mock.calls.some(([channel]) => channel === 'chat:sendWithMedia')).toBe(false);
-    expect(hostApiFetchMock.mock.calls.some(([path]) => path === '/api/chat/send')).toBe(false);
-  });
-
-  it('fails open when the quota check errors', async () => {
-    hostApiFetchMock.mockRejectedValueOnce(new Error('quota check unavailable'));
-
-    const { useChatStore } = await import('@/stores/chat');
-
-    useChatStore.setState({
-      currentSessionKey: 'agent:main:main',
-      currentAgentId: 'main',
-      sessions: [{ key: 'agent:main:main' }],
-      messages: [],
-      sessionLabels: {},
-      sessionLastActivity: {},
-      sending: false,
-      activeRunId: null,
-      streamingText: '',
-      streamingMessage: null,
-      streamingTools: [],
-      pendingFinal: false,
-      lastUserMessageAt: null,
-      pendingToolImages: [],
-      error: null,
-      loading: false,
-      thinkingLevel: null,
-      showThinking: true,
-    });
-
-    await useChatStore.getState().sendMessage(
-      '',
-      [
-        {
-          fileName: 'design.png',
-          mimeType: 'image/png',
-          fileSize: 128,
-          stagedPath: '/tmp/design.png',
-          preview: 'data:image/png;base64,abc',
-        },
-      ],
-    );
-
-    expect(hostApiFetchMock).toHaveBeenCalledWith('/api/token-quota/check');
-
-    const mediaCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send');
-    expect(mediaCall?.[1]).toMatchObject({
-      method: 'POST',
-      body: expect.any(String),
-    });
-
-    const payload = JSON.parse((mediaCall?.[1] as { body: string }).body) as {
-      sessionKey: string;
-      message: string;
-      media: Array<{ filePath: string }>;
-    };
-    expect(payload.sessionKey).toBe('agent:main:main');
-    expect(payload.message).toBe('');
-    expect(payload.media[0]?.filePath).toBe('/tmp/design.png');
-  });
 });

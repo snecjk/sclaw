@@ -39,7 +39,7 @@ describe('buildAgentMemoryContextBlocks', () => {
     invokeIpcMock.mockImplementation(() => new Promise(() => undefined));
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
-    const resultPromise = buildAgentMemoryContextBlocks('请查询最近一周的订单情况', { agentId: 'main' });
+    const resultPromise = buildAgentMemoryContextBlocks('请查询最近一周的订单情况');
     await vi.advanceTimersByTimeAsync(AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS);
 
     await expect(resultPromise).resolves.toEqual({ injectedExecutionMemories: [] });
@@ -68,12 +68,12 @@ describe('buildAgentMemoryContextBlocks', () => {
   it('uses memory results that arrive within the send budget', async () => {
     invokeIpcMock.mockResolvedValue([]);
 
-    await expect(buildAgentMemoryContextBlocks('请查询最近一周的订单情况', { agentId: 'main' }))
+    await expect(buildAgentMemoryContextBlocks('请查询最近一周的订单情况'))
       .resolves.toEqual({ injectedExecutionMemories: [] });
     expect(invokeIpcMock).toHaveBeenCalledWith(
       'agent-memory:mem0-search',
       '请查询最近一周的订单情况',
-      { userId: 'user-1', agentId: 'main', topK: 12 },
+      { userId: 'user-1', topK: 12 },
     );
   });
 });

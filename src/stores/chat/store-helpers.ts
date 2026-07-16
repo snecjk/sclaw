@@ -52,12 +52,6 @@ export function toMs(ts: unknown): number {
   return ts < 1e12 ? ts * 1000 : ts;
 }
 
-export function toNumberIfFinite(value: unknown): number | undefined {
-  if (typeof value !== 'number') return undefined;
-  if (!Number.isFinite(value)) return undefined;
-  return value;
-}
-
 export function getSessionEngineType(
   sessions: ChatSession[],
   sessionKey: string,

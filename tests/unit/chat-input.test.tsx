@@ -8,12 +8,6 @@ const { agentsState, chatState, gatewayState } = vi.hoisted(() => ({
   },
   chatState: {
     currentAgentId: 'main',
-    dailyTokenQuotaStatus: null as null | {
-      allowed?: boolean;
-      usedToday?: number;
-      limit?: number;
-      checkedAt: string;
-    },
   },
   gatewayState: {
     status: { state: 'running', port: 18789 },
@@ -22,6 +16,9 @@ const { agentsState, chatState, gatewayState } = vi.hoisted(() => ({
 
 vi.mock('@/stores/agents', () => ({
   useAgentsStore: (selector: (state: typeof agentsState) => unknown) => selector(agentsState),
+  resolveAgentById: (agents: Array<Record<string, unknown>>, agentId: string) => (
+    agents.find((agent) => agent.id === agentId)
+  ),
 }));
 
 vi.mock('@/stores/chat', () => ({
@@ -79,7 +76,6 @@ describe('ChatInput agent targeting', () => {
   beforeEach(() => {
     agentsState.agents = [];
     chatState.currentAgentId = 'main';
-    chatState.dailyTokenQuotaStatus = null;
     gatewayState.status = { state: 'running', port: 18789 };
   });
 

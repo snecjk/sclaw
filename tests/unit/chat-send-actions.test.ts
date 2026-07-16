@@ -18,7 +18,6 @@ vi.mock('@/stores/chat/prepare-send-context', () => ({
     messageWithContext: trimmedText,
   })),
 }));
-vi.mock('@/stores/chat/send-quota', () => ({ ensureDailyTokenQuota: vi.fn(async () => true) }));
 vi.mock('@/stores/chat/optimistic-turn', () => ({
   insertOptimisticUserTurn: vi.fn(() => ({ id: 'message-1', role: 'user', content: 'hello' })),
 }));
@@ -45,7 +44,6 @@ function createHarness() {
     resolveMainSessionKeyForAgent: () => null,
     buildSessionSwitchPatch: () => ({}),
     resolveEngineTypeForSession: () => 'openclaw',
-    toNumberIfFinite: () => undefined,
     clearErrorRecoveryTimer: vi.fn(),
     clearHistoryPoll: vi.fn(),
     setHistoryPollTimer: vi.fn(),

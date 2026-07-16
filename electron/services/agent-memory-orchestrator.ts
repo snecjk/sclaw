@@ -21,6 +21,39 @@ export interface AgentMemoryIndexDraft {
   metadata?: Record<string, unknown>;
 }
 
+/** mem0 visibility is user-scoped; agent/run remain source metadata only. */
+export function buildSharedMemoryFilters(userId?: string): Record<string, string> {
+  const normalized = userId?.trim();
+  return normalized ? { user_id: normalized } : {};
+}
+
+export function buildSharedMemoryDeleteOptions(userId?: string): Record<string, string> {
+  const normalized = userId?.trim();
+  return normalized ? { userId: normalized } : {};
+}
+
+export function buildSharedMemoryAddOptions(options?: {
+  userId?: string;
+  agentId?: string;
+  runId?: string;
+  metadata?: Record<string, unknown>;
+  infer?: boolean;
+}): Record<string, unknown> {
+  const { agentId, runId, metadata, ...sharedOptions } = options ?? {};
+  return {
+    ...sharedOptions,
+    ...(metadata || agentId || runId
+      ? {
+          metadata: {
+            ...metadata,
+            ...(agentId ? { sourceAgentId: agentId } : {}),
+            ...(runId ? { sourceRunId: runId } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
 export class AgentMemoryOrchestrator {
   async initialize() {
     return await mem0Service.initialize();
@@ -57,7 +90,7 @@ export class AgentMemoryOrchestrator {
     metadata?: Record<string, unknown>;
     infer?: boolean;
   }) {
-    return await mem0Service.add(messages, options);
+    return await mem0Service.add(messages, buildSharedMemoryAddOptions(options));
   }
 
   async search(query: string, options?: {
@@ -95,13 +128,7 @@ export class AgentMemoryOrchestrator {
     runId?: string;
     topK?: number;
   }) {
-    const filters = Object.fromEntries(
-      Object.entries({
-        user_id: options.userId,
-        agent_id: options.agentId,
-        run_id: options.runId,
-      }).filter(([, value]) => typeof value === 'string' && value.length > 0),
-    );
+    const filters = buildSharedMemoryFilters(options.userId);
     return await mem0Service.search(query, {
       filters,
       topK: options.topK,
@@ -114,13 +141,7 @@ export class AgentMemoryOrchestrator {
     runId?: string;
     topK?: number;
   }) {
-    const filters = Object.fromEntries(
-      Object.entries({
-        user_id: options.userId,
-        agent_id: options.agentId,
-        run_id: options.runId,
-      }).filter(([, value]) => typeof value === 'string' && value.length > 0),
-    );
+    const filters = buildSharedMemoryFilters(options.userId);
     return await mem0Service.getAll({
       filters,
       topK: options.topK,
@@ -136,13 +157,7 @@ export class AgentMemoryOrchestrator {
     agentId?: string;
     runId?: string;
   }) {
-    const payload = Object.fromEntries(
-      Object.entries({
-        userId: options.userId,
-        agentId: options.agentId,
-        runId: options.runId,
-      }).filter(([, value]) => typeof value === 'string' && value.length > 0),
-    );
+    const payload = buildSharedMemoryDeleteOptions(options.userId);
     return await mem0Service.deleteAll(payload);
   }
 

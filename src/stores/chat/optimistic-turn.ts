@@ -5,6 +5,7 @@ import { applyRuntimePatch } from './runtime-controller';
 import { dedupeRedundantUserMessages } from './user-message-merge';
 import type { ChatGet, ChatSet } from './store-api';
 import type { RawMessage, SendMessageOptions } from './types';
+import { rememberSkillMessageMeta } from '@/lib/skill-message-meta-cache';
 
 export function insertOptimisticUserTurn(input: {
   get: ChatGet;
@@ -39,6 +40,10 @@ export function insertOptimisticUserTurn(input: {
       filePath: a.stagedPath,
     })),
   };
+
+  if (skillMeta && userMsg.id) {
+    rememberSkillMessageMeta(sessionKey, userMsg.id, displayText, skillMeta, nowMs);
+  }
 
   traceChatSession({
     phase: 'merge-optimistic',

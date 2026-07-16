@@ -6,6 +6,7 @@ import { getAdapterForSession } from '../engines/manager';
 import type { AgentEngineType } from '../engines/types';
 import { parseExecutionTurnFromHistory, type ExecutionSnapshot } from '../engines/execution-snapshot';
 import { extractDirectExecutionCommands, formatExecutionMemoryText, type ExecutionExperienceCandidateAssessment, type ExecutionExperienceSummary } from './claude-execution-summary-service';
+import { sanitizeMemoryCaptureUserMessage } from '../../shared/memory-capture-text';
 
 type RefreshInput = { runId?: string | null; sessionKey?: string | null; agentId?: string | null; engineType?: string | null };
 type CaptureContext = RefreshInput & { sourceId: string; sessionKey: string; executionJobId: string; conversationJobId: string };
@@ -150,7 +151,12 @@ class MemoryCaptureService {
     const preferredEngineType: AgentEngineType | undefined = context.engineType === 'claude' ? 'claude' : context.engineType === 'openclaw' ? 'openclaw' : undefined;
     const adapter = await getAdapterForSession(context.sessionKey, preferredEngineType);
     const historyResult = await adapter.getHistory({ gatewayManager: gateway }, { sessionKey: context.sessionKey, limit: 200 });
-    return parseExecutionTurnFromHistory(historyResult.success ? historyResult.result : undefined);
+    const snapshot = parseExecutionTurnFromHistory(historyResult.success ? historyResult.result : undefined);
+    if (!snapshot) return null;
+    return {
+      ...snapshot,
+      userMessage: sanitizeMemoryCaptureUserMessage(snapshot.userMessage),
+    };
   }
 
   private async prepareConversationFromSnapshot(context: CaptureContext, snapshot: ExecutionSnapshot): Promise<void> {
@@ -307,10 +313,9 @@ class MemoryCaptureService {
           [{ role: 'user', content: String(payload.userMessage) }, { role: 'assistant', content: String(payload.assistantMessage) }],
           {
             userId: bootstrap.userId,
-            agentId: job.agent_id || undefined,
             runId: job.source_id,
             infer: true,
-            metadata: { source: 'sto-claw-chat', memoryScope: 'preference', sessionKey: job.session_key || undefined }
+            metadata: { source: 'sto-claw-chat', sourceAgentId: job.agent_id || undefined, memoryScope: 'preference', sessionKey: job.session_key || undefined }
           });
       } else {
         const injected = payload._executionMemory?.injected ?? [];
@@ -334,10 +339,9 @@ class MemoryCaptureService {
           [{ role: 'user', content: text }],
           {
             userId: bootstrap.userId,
-            agentId: job.agent_id || undefined,
             runId: job.source_id,
             infer: false,
-            metadata: { source: 'sto-claw-execution', memoryScope: 'execution', memoryType: 'tool_routing_experience', confidence: exp.confidence, status: 'active', sessionKey: job.session_key || undefined }
+            metadata: { source: 'sto-claw-execution', sourceAgentId: job.agent_id || undefined, memoryScope: 'execution', memoryType: 'tool_routing_experience', confidence: exp.confidence, status: 'active', sessionKey: job.session_key || undefined }
           });
         const newMemoryId = extractMemoryId(addResult);
         const deleteCandidates = resolveDeleteCandidates(exp, injected, Array.isArray(payload.tools) ? payload.tools : []);

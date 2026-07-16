@@ -21,7 +21,6 @@ export const initialChatDataState: Pick<
   | 'lastUserMessageAt'
   | 'optimisticUserMessage'
   | 'pendingToolImages'
-  | 'dailyTokenQuotaStatus'
   | 'sessions'
   | 'currentSessionKey'
   | 'currentAgentId'
@@ -53,7 +52,6 @@ export const initialChatDataState: Pick<
   lastUserMessageAt: null,
   optimisticUserMessage: null,
   pendingToolImages: [],
-  dailyTokenQuotaStatus: null,
   sessions: [],
   currentSessionKey: DEFAULT_SESSION_KEY,
   currentAgentId: 'main',

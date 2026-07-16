@@ -60,12 +60,12 @@ function truncate(text: string, limit: number): string {
  *  - memoryScope==='execution'（且 active、confidence>=0.5）→ 执行经验 block（rich directCommand 格式）。
  *  - memoryScope!=='execution' → 偏好 block。
  *
- * 注：统一用跨 run 检索（仅 agentId，不传 runId）——执行经验需跨 run 复用；
- * 偏好随之也跨 run，由相关性排序取 top，比原先 runId 限当前 run 更符合"长期记忆"语义。
+ * 注：统一按 userId 检索，不传 agentId/runId。偏好与执行经验在同一用户的
+ * 所有项目、Agent 和会话之间共享，再由相关性排序取 top。
  */
 export async function buildAgentMemoryContextBlocks(
   text: string,
-  options?: { agentId?: string | null; topK?: number },
+  options?: { topK?: number },
 ): Promise<AgentMemoryContextBlocks> {
   const query = text.replace(/\s+/g, ' ').trim();
   if (!shouldRetrieveMemories(query)) return { injectedExecutionMemories: [] };
@@ -77,7 +77,7 @@ export async function buildAgentMemoryContextBlocks(
       return await invokeIpc<unknown>(
         'agent-memory:mem0-search',
         query,
-        { userId, agentId: options?.agentId ?? undefined, topK: Math.max(options?.topK ?? 12, 12) },
+        { userId, topK: Math.max(options?.topK ?? 12, 12) },
       );
     })();
     const payload = await withTimeout(retrieval, AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS, () => {

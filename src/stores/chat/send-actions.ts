@@ -4,7 +4,6 @@ import { dispatchChatRequest } from './dispatch-chat-request';
 import { insertOptimisticUserTurn } from './optimistic-turn';
 import { prepareSendContext } from './prepare-send-context';
 import { resolveSendTarget } from './resolve-send-target';
-import { ensureDailyTokenQuota } from './send-quota';
 import { scheduleSendWatchdogs } from './send-watchdogs';
 import { logChatFlow } from './chat-flow-log';
 import { useGatewayStore } from '../gateway';
@@ -14,6 +13,8 @@ import { getSessionRuntimeState } from './session-runtime';
 import { normalizeAppError } from '@/lib/error-model';
 import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
 import { resolveSkillGatewayText } from '@/lib/skill-gateway-text';
+import { appendSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
+import { awaitSessionSendReadiness } from '@/lib/session-send-readiness';
 
 export function isUncertainDispatchError(error: unknown): boolean {
   const code = normalizeAppError(error).code;
@@ -60,7 +61,6 @@ export interface SendActionsDeps {
     currentAgentId?: string | null,
     options?: { messageCount?: number },
   ) => ChatSession['engineType'] | undefined;
-  toNumberIfFinite: (value: unknown) => number | undefined;
   clearErrorRecoveryTimer: (sessionKey: string) => void;
   clearHistoryPoll: (sessionKey: string) => void;
   setHistoryPollTimer: (sessionKey: string, timer: ReturnType<typeof setTimeout> | null) => void;
@@ -78,7 +78,6 @@ export function createSendActions(
     resolveMainSessionKeyForAgent,
     buildSessionSwitchPatch,
     resolveEngineTypeForSession,
-    toNumberIfFinite,
     clearErrorRecoveryTimer,
     clearHistoryPoll,
     setHistoryPollTimer,
@@ -103,9 +102,12 @@ export function createSendActions(
         skillMeta,
       } = options;
       const userDisplayText = text.trim();
-      const gatewayText = skillMeta
+      const skillGatewayText = skillMeta
         ? resolveSkillGatewayText(resolveSkillFromPlaza(skillMeta.slug).defaultPrompt, userDisplayText)
         : userDisplayText;
+      const gatewayText = skillMeta
+        ? appendSkillTranscriptMarker(skillGatewayText, skillMeta, userDisplayText)
+        : skillGatewayText;
       if (!gatewayText && (!attachments || attachments.length === 0) && !skillMeta) return;
 
       const {
@@ -134,15 +136,27 @@ export function createSendActions(
         return;
       }
 
+      try {
+        await awaitSessionSendReadiness(currentSessionKey);
+      } catch (error) {
+        const normalized = normalizeAppError(error);
+        logChatFlow('send.blocked.session-not-ready', {
+          sessionKey: currentSessionKey,
+          error: normalized.message,
+        });
+        setRuntimePatch(set, currentSessionKey, { error: normalized.message });
+        return;
+      }
+
       const preparedContext = await prepareSendContext({
         trimmedText: gatewayText,
+        memoryQueryText: userDisplayText || skillMeta?.title,
         sessionKey: currentSessionKey,
         messages: get().messages,
         workflowCardStates: get().workflowCardStates,
         workflowContext,
         embedBrowserContext,
         engineType: currentSessionEngineType,
-        agentId: targetAgentId ?? get().currentAgentId,
         clearPendingWorkflow: get().clearPendingWorkflow,
       });
       const {
@@ -157,21 +171,6 @@ export function createSendActions(
         gatewayMessageLength: messageWithContext.length,
         hasSystemPromptAppend: Boolean(claudeMemorySystemPrompt),
         hasWorkflowContext: Boolean(workflowContext),
-      });
-
-      const quotaAllowed = await ensureDailyTokenQuota({
-        set,
-        sessionKey: currentSessionKey,
-        toNumberIfFinite,
-      });
-      if (!quotaAllowed) {
-        logChatFlow('send.quota.blocked', {
-          sessionKey: currentSessionKey,
-        });
-        return;
-      }
-      logChatFlow('send.quota.allowed', {
-        sessionKey: currentSessionKey,
       });
 
       const userMsg = insertOptimisticUserTurn({

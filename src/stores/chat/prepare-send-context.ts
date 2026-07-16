@@ -11,21 +11,21 @@ export interface PreparedSendContext {
 
 export async function prepareSendContext(input: {
   trimmedText: string;
+  memoryQueryText?: string;
   sessionKey: string;
   messages: RawMessage[];
   workflowCardStates: Record<string, WorkflowExecutionState>;
   workflowContext?: WorkflowContextBlock | null;
   embedBrowserContext?: SclawBrowserEmbedContextBlock | null;
   engineType?: ChatSession['engineType'];
-  agentId?: string | null;
   clearPendingWorkflow: () => void;
 }): Promise<PreparedSendContext> {
   const {
-    agentId,
     clearPendingWorkflow,
     engineType,
     embedBrowserContext: embedBrowserContextInput,
     messages,
+    memoryQueryText,
     sessionKey,
     trimmedText,
     workflowCardStates,
@@ -81,7 +81,7 @@ export async function prepareSendContext(input: {
     }
   }
 
-  const memoryBlocks = await buildAgentMemoryContextBlocks(trimmedText, { agentId });
+  const memoryBlocks = await buildAgentMemoryContextBlocks(memoryQueryText?.trim() || trimmedText);
   rememberInjectedExecutionMemories(sessionKey, memoryBlocks.injectedExecutionMemories);
   const claudeMemorySystemPrompt = engineType === 'claude'
     ? [memoryBlocks.preference, memoryBlocks.execution]

@@ -27,8 +27,8 @@ import type { AgentEngineType } from '../engines/types';
 import { getAgentWorkspacePath } from '../utils/agent-config';
 import type { GatewayManager } from '../gateway/manager';
 import {
-  deleteAllProjectAgentsForProject,
   ensureProjectAgent,
+  rehomeProjectAgentsForProject,
 } from './project-agent-service';
 import {
   getBaseAgentIdFromProjectAgentId,
@@ -188,12 +188,26 @@ export async function updateWorkspace(
   const workspace = await getWorkspaceRepository().update(workspaceId, input);
   if (input.rootPath != null) {
     const sessions = await getCatalogSessionRepository().list({ workspaceId });
-    await Promise.all(sessions.map((session) => syncSessionEngineBindingCwd(session.sessionKey)));
     try {
-      await ensureProjectAgent(workspaceId, 'main', input.rootPath);
-      gatewayManager?.debouncedReload();
+      const baseAgentIds = new Set<string>(['main']);
+      for (const session of sessions) {
+        const rawAgentId = getAgentIdFromSessionKey(session.sessionKey);
+        baseAgentIds.add(
+          isProjectAgentId(rawAgentId)
+            ? (getBaseAgentIdFromProjectAgentId(rawAgentId) ?? 'main')
+            : rawAgentId,
+        );
+      }
+      await Promise.all(
+        [...baseAgentIds].map((baseAgentId) => (
+          ensureProjectAgent(workspaceId, baseAgentId, input.rootPath!)
+        )),
+      );
+      await Promise.all(sessions.map((session) => syncSessionEngineBindingCwd(session.sessionKey)));
+      await gatewayManager?.reload({ force: true });
     } catch (error) {
       logger.warn('[session-catalog] failed to ensure project agent on workspace path change', { workspaceId, error });
+      throw error;
     }
   }
   return workspace;
@@ -208,17 +222,20 @@ export async function deleteWorkspace(
   const sessions = await catalogRepo.list({ workspaceId });
   for (const session of sessions) {
     await catalogRepo.moveToWorkspace(session.sessionKey, DEFAULT_WORKSPACE_ID);
-    await syncSessionEngineBindingCwd(session.sessionKey);
   }
-  await getWorkspaceRepository().softDelete(workspaceId);
   try {
-    const removed = await deleteAllProjectAgentsForProject(workspaceId);
-    if (removed.length > 0) {
-      gatewayManager?.debouncedReload();
+    const rehomed = await rehomeProjectAgentsForProject(workspaceId);
+    for (const session of sessions) {
+      await syncSessionEngineBindingCwd(session.sessionKey);
+    }
+    if (rehomed.length > 0) {
+      await gatewayManager?.reload({ force: true });
     }
   } catch (error) {
-    logger.warn('[session-catalog] failed to delete project agents for workspace', { workspaceId, error });
+    logger.warn('[session-catalog] failed to rehome project agents for deleted workspace', { workspaceId, error });
+    throw error;
   }
+  await getWorkspaceRepository().softDelete(workspaceId);
   return { movedSessionCount: sessions.length };
 }
 
@@ -324,9 +341,10 @@ export async function bindSessionToWorkspace(
         : rawAgentId;
       try {
         await ensureProjectAgent(workspaceId, baseAgentId, workspace.rootPath);
-        gatewayManager?.debouncedReload();
+        await gatewayManager?.reload({ force: true });
       } catch (error) {
         logger.warn('[session-catalog] failed to ensure project agent on bind', { workspaceId, sessionKey, error });
+        throw error;
       }
     }
   }

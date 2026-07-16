@@ -151,6 +151,30 @@ export async function deleteAllProjectAgentsForProject(projectId: string): Promi
   return removed;
 }
 
+/**
+ * Keep project-agent IDs alive for historical session keys after a project is
+ * deleted, but move their workspace back to the corresponding base agent.
+ */
+export async function rehomeProjectAgentsForProject(projectId: string): Promise<string[]> {
+  const updated: string[] = [];
+  const allIds = await listConfiguredAgentIds();
+  for (const agentId of allIds) {
+    const parsed = parseProjectAgentId(agentId);
+    if (parsed?.projectId !== projectId.toLowerCase()) continue;
+    const baseWorkspace = await getAgentWorkspacePath(parsed.baseAgentId);
+    if (!baseWorkspace) {
+      logger.warn('[project-agent] cannot rehome project agent: base workspace missing', {
+        agentId,
+        baseAgentId: parsed.baseAgentId,
+      });
+      continue;
+    }
+    await updateAgentWorkspace(agentId, baseWorkspace);
+    updated.push(agentId);
+  }
+  return updated;
+}
+
 // ── Agent-scoped skill synchronization ──────────────────────────────────────
 
 function resolveBaseAgentIdForSkillSync(agentId: string): string | null {

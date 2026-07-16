@@ -10,10 +10,15 @@ import type { SkillMeta } from '@/types/skill-meta';
 
 const SKILL_MARKER_RE = /<!--\s*SClaw-Skill\s+(\{[\s\S]*?\})\s*-->/;
 
-export function appendSkillTranscriptMarker(gatewayText: string, skillMeta: SkillMeta): string {
+export function appendSkillTranscriptMarker(
+  gatewayText: string,
+  skillMeta: SkillMeta,
+  userText?: string,
+): string {
   const payload = JSON.stringify({
     slug: skillMeta.slug,
     title: skillMeta.title,
+    userText: userText?.trim() || undefined,
   });
   const trimmed = gatewayText.trimEnd();
   return trimmed ? `${trimmed}\n<!-- SClaw-Skill ${payload} -->` : `<!-- SClaw-Skill ${payload} -->`;

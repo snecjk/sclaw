@@ -65,7 +65,6 @@ import {
   resolveEngineTypeForSession as resolveEngineTypeForSessionWithAgent,
   stripAgentMemoryFromHistoryMessage as stripAgentMemoryMessage,
   toMs,
-  toNumberIfFinite,
 } from './store-helpers';
 import type { ResolveChatSessionEngineTypeOptions } from '@/lib/resolve-chat-session-engine-type';
 import { recordTerminalRun } from './run-lifecycle';
@@ -178,7 +177,6 @@ export const useChatStore = create<ChatState>()(
     resolveMainSessionKeyForAgent,
     buildSessionSwitchPatch,
     resolveEngineTypeForSession,
-    toNumberIfFinite,
     clearErrorRecoveryTimer,
     clearHistoryPoll,
     setHistoryPollTimer,

@@ -63,6 +63,7 @@ import {
   getBaseAgentIdFromProjectAgentId,
   resolveProjectAgentId,
 } from '../../../shared/project-agent';
+import { registerSessionSendReadiness } from '@/lib/session-send-readiness';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 const SESSION_LOAD_MIN_INTERVAL_MS = 1_200;
@@ -762,14 +763,13 @@ export function createSessionLifecycleActions(
       const syncModel = () => currentSessionModel?.trim()
         ? syncSessionModelToGateway(newKey, currentSessionModel, newAgentId)
         : applyWorkspaceDefaultToNewSession(newKey, newAgentId);
-      if (projectId) {
-        void import('@/stores/session-catalog').then(async ({ useSessionCatalogStore }) => {
+      const setupPromise = projectId
+        ? import('@/stores/session-catalog').then(async ({ useSessionCatalogStore }) => {
           await useSessionCatalogStore.getState().bindSession(newKey, projectId);
           await syncModel();
-        });
-      } else {
-        void syncModel();
-      }
+        })
+        : syncModel();
+      registerSessionSendReadiness(newKey, setupPromise);
     },
 
   };

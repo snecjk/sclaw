@@ -30,6 +30,7 @@ import { reconcileHistoryRuntimeCompletion } from './history-runtime-completion'
 import { logChatFlow } from './chat-flow-log';
 import type { ChatGet, ChatSet } from './store-api';
 import type { ChatSession, RawMessage } from './types';
+import { restoreSkillMetaOnMessages } from '@/lib/skill-message-meta-cache';
 
 export interface ApplyLoadedHistoryDeps {
   toMs: (ts: unknown) => number;
@@ -188,6 +189,11 @@ export function applyLoadedHistorySnapshot(input: {
     sending: get().sending,
     getMessageText,
   });
+  finalMessages = restoreSkillMetaOnMessages(
+    finalMessages,
+    targetSessionKey,
+    gatewaySessionLabel,
+  );
   traceLoadHistoryUserReconciliation({
     sessionKey: targetSessionKey,
     userMessageAt: userMsgAt,
