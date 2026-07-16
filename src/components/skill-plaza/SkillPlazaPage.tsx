@@ -148,7 +148,7 @@ export function SkillPlazaPage() {
           </div>
         ) : isMine && !isGrid ? (
           /* List view for mine tab */
-          <div className="flex flex-col border border-border rounded-[14px] bg-background overflow-hidden">
+          <div className="flex flex-col border border-border rounded-[14px] bg-white dark:bg-background overflow-hidden">
             {skills.map((skill) => (
               <SkillCardList
                 key={skill.slug}

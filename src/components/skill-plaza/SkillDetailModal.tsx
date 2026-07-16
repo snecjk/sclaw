@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { X, Play, Download, Users, ArrowDownToLine } from 'lucide-react';
+import { X, Play, Download, ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
@@ -7,6 +7,7 @@ import { useChatStore } from '@/stores/chat';
 import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import fileIcon from '@/assets/icons/file.svg';
 
 interface SkillDetailModalProps {
   skill: SkillSummary | null;
@@ -68,17 +69,18 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
     ? { label: t('plaza.tag.installed', { defaultValue: '已安装' }), bg: '#DCF5E2', text: '#00B54B' }
     : liveSkill.source === 'mine'
       ? { label: t('plaza.tag.mine', { defaultValue: '自建' }), bg: '#FFF5E6', text: '#D95700' }
-      : { label: t('plaza.tag.official', { defaultValue: '官方' }), bg: '#F0F4FF', text: '#4760FE' };
+      : null;
 
   const renderIcon = () => {
     if (liveSkill.icon) {
       return (
         <span
+          className="inline-flex dark:invert"
           dangerouslySetInnerHTML={{ __html: liveSkill.icon.replace(/width="[^"]*"/, 'width="20"').replace(/height="[^"]*"/, 'height="20"') }}
         />
       );
     }
-    return <span className="text-lg">📦</span>;
+    return <img src={fileIcon} alt="" aria-hidden className="h-5 w-5 object-contain dark:invert" />;
   };
 
   // Optional workflow steps from skill data (future backend support)
@@ -125,20 +127,16 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h2 className="text-base font-semibold text-foreground">{liveSkill.title}</h2>
-                    <span
-                      className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium"
-                      style={{ backgroundColor: tag.bg, color: tag.text }}
-                    >
-                      {tag.label}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2.5 text-xs text-muted-foreground mt-1">
-                    {typeof liveSkill.useCount === 'number' && liveSkill.useCount >= 0 && (
-                      <span className="inline-flex items-center gap-1">
-                        <Users className="h-3 w-3 opacity-55" />
-                        {liveSkill.useCount >= 1000 ? `${(liveSkill.useCount / 1000).toFixed(1)}k` : liveSkill.useCount}
+                    {tag && (
+                      <span
+                        className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium"
+                        style={{ backgroundColor: tag.bg, color: tag.text }}
+                      >
+                        {tag.label}
                       </span>
                     )}
+                  </div>
+                  <div className="flex items-center gap-2.5 text-xs text-muted-foreground mt-1">
                     {typeof liveSkill.installCount === 'number' && liveSkill.installCount >= 0 && (
                       <span className="inline-flex items-center gap-1">
                         <ArrowDownToLine className="h-3 w-3 opacity-55" />

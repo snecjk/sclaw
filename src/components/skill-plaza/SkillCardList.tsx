@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
@@ -6,6 +6,7 @@ import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import fileIcon from '@/assets/icons/file.svg';
 
 interface SkillCardListProps {
   skill: SkillSummary;
@@ -15,20 +16,17 @@ interface SkillCardListProps {
 
 export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListProps) {
   const { t } = useTranslation('skills');
-  const [localEnabled, setLocalEnabled] = useState(skill.enabled ?? false);
+  const [pendingEnabled, setPendingEnabled] = useState<boolean | null>(null);
   const [isHovered, setIsHovered] = useState(false);
+  const localEnabled = pendingEnabled ?? skill.enabled ?? false;
   const isDisabled = skill.enabled === false;
-
-  useEffect(() => {
-    setLocalEnabled(skill.enabled ?? false);
-  }, [skill.enabled]);
 
   const renderIcon = () => {
     if (skill.icon) {
       return (
         <span
           className={cn(
-            'relative w-9 h-9 rounded-lg flex items-center justify-center bg-background text-foreground flex-shrink-0 border border-border',
+            'relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-foreground flex-shrink-0 border border-border',
             isDisabled && 'opacity-50',
           )}
           style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}
@@ -39,11 +37,11 @@ export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListPr
     }
     return (
       <span className={cn(
-        'relative w-9 h-9 rounded-lg flex items-center justify-center bg-background text-foreground flex-shrink-0 border border-border',
+        'relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-foreground flex-shrink-0 border border-border',
         isDisabled && 'opacity-50',
       )}
         style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}>
-        <span className="text-base">📦</span>
+        <img src={fileIcon} alt="" aria-hidden className="h-4 w-4 object-contain" />
       </span>
     );
   };
@@ -80,10 +78,13 @@ export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListPr
           </button>
         )}
         <Switch
+          size="compact"
+          className="data-[state=checked]:bg-[#00B54B] dark:data-[state=checked]:bg-[#00B54B]"
           checked={localEnabled}
           onCheckedChange={(checked) => {
-            setLocalEnabled(checked);
+            setPendingEnabled(checked);
             useSkillPlazaStore.getState().toggleSkill(skill.slug, checked).then(() => {
+              setPendingEnabled(null);
               if (!checked) {
                 toast.custom(() => (
                   <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">
@@ -98,7 +99,7 @@ export function SkillCardList({ skill, onOpenDetail, onDelete }: SkillCardListPr
                 ), { duration: 3000 });
               }
             }).catch((err) => {
-              setLocalEnabled(!checked);
+              setPendingEnabled(null);
               console.error('[SkillCardList] toggle failed:', err);
               toast.custom(() => (
                 <div className="bg-[#1a1a1a] text-white px-6 py-2.5 rounded-full text-sm font-medium shadow-lg">

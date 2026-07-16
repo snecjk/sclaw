@@ -1,11 +1,20 @@
 import { useState } from 'react';
-import { X, CheckCircle2, AlertCircle, FileArchive, FileText } from 'lucide-react';
+import {
+  X,
+  CheckCircle2,
+  AlertCircle,
+  FileArchive,
+  FileText,
+  FolderOpen,
+  ChevronRight,
+} from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { invokeIpc } from '@/lib/api-client';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import type { SkillSummary } from '@/types/skill-plaza';
+import fileIcon from '@/assets/icons/file.svg';
 
 function formatFileSize(bytes: number): string {
   if (!bytes || bytes <= 0) return '-';
@@ -31,7 +40,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
   const [filePath, setFilePath] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [fileSize, setFileSize] = useState<number>(0);
-  const [slug, setSlug] = useState<string | null>(null);
+  const [slug] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -72,7 +81,11 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
      setFileName(null);
      setFileSize(0);
      setErrorMsg(null);
-     setUploadWarning('请选择 .zip 文件或 SKILL.md 文件');
+     setUploadWarning(
+       t('plaza.upload.invalidSource', {
+         defaultValue: '请选择有效的 .zip、SKILL.md 或包含 SKILL.md 的技能文件夹',
+       }),
+     );
      return;
    }
    setFilePath(selectedPath);
@@ -113,7 +126,26 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     }
   };
 
-  // Step 1 (option B): drag & drop. Electron removed the non-standard
+  // Step 1 (option B): pick a local skill directory. Keep this separate from
+  // the file picker because Windows native dialogs cannot mix both modes.
+  const pickFolder = async () => {
+    try {
+      const result = await invokeIpc<{ canceled: boolean; filePaths: string[] }>(
+        'dialog:open',
+        {
+          title: t('plaza.upload.selectFolder', { defaultValue: '选择技能文件夹' }),
+          properties: ['openDirectory'],
+        },
+      );
+      if (result.canceled || !result.filePaths?.length) return;
+      await enterPreview(result.filePaths[0]);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : String(err));
+      setStatus('error');
+    }
+  };
+
+  // Step 1 (option C): drag & drop. Electron removed the non-standard
   // `File.path` field in v36+; paths must be resolved via `webUtils.getPathForFile`,
   // which the preload exposes as `window.electron.getPathForFile` (the renderer
   // runs with nodeIntegration:false and cannot read paths itself). Works for
@@ -198,6 +230,11 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     }
   };
 
+  const handleViewSkill = () => {
+    useSkillPlazaStore.getState().setActiveTab('mine');
+    onClose();
+  };
+
   // "查看技能": jump to the "我的技能" tab where the uploaded skill appears.
   // The store refreshes mySkills after upload, so look up the skill by slug
   // to enrich the success card (icon / title / category tag).
@@ -219,7 +256,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
         />
       );
     }
-    return <span className="text-lg">📦</span>;
+    return <img src={fileIcon} alt="" aria-hidden className="h-5 w-5 object-contain" />;
   };
 
   return (
@@ -229,7 +266,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
         <Dialog.Content
           className={cn(
             'no-drag fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
-            'w-full max-w-[420px]',
+            'w-full max-w-[420px] max-h-[calc(100vh-2rem)]',
             'bg-background rounded-2xl shadow-2xl',
             'flex flex-col overflow-hidden',
             'data-[state=open]:animate-in data-[state=closed]:animate-out',
@@ -247,7 +284,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
             </button>
           </Dialog.Close>
 
-          <div className="p-6">
+          <div className="overflow-y-auto p-6">
             <h2 className="text-base font-semibold text-foreground pr-8">
               {t('plaza.upload.title', { defaultValue: '上传技能' })}
             </h2>
@@ -284,7 +321,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     <FileArchive className="h-6 w-6 text-muted-foreground" />
                   </div>
                   <p className="text-sm font-medium text-foreground">
-                    {t('plaza.upload.dragHint', { defaultValue: '点击或拖拽文件、文件夹到此处' })}
+                    {t('plaza.upload.dragHint', { defaultValue: '拖拽文件、.zip文件、文件夹到此处' })}
                   </p>
                   <ul className="text-xs text-muted-foreground mt-4 space-y-1 text-left">
                     {/*<li>{t('plaza.upload.requirementSkillMd', { defaultValue: '文件夹或 .zip 需包含 SKILL.md 文件' })}</li>*/}
@@ -296,6 +333,64 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                 <div className="mt-4 rounded-lg bg-[#E89F0C] px-4 py-3 text-sm font-semibold text-white shadow-sm flex items-center justify-center gap-2">
                   <AlertCircle className="h-4 w-4 fill-white/20 text-white" />
                   <span>{uploadWarning}</span>
+                </div>
+              )}
+              {status === 'idle' && (
+                <div className="mt-5" aria-label={t('plaza.upload.sourceOptions', { defaultValue: '选择上传方式' })}>
+                  <div className="flex items-center gap-4" aria-hidden="true">
+                    <span className="h-px flex-1 bg-border" />
+                    <span className="text-sm text-muted-foreground">
+                      {t('plaza.upload.orChoose', { defaultValue: '或选择' })}
+                    </span>
+                    <span className="h-px flex-1 bg-border" />
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    <button
+                      type="button"
+                      onClick={pickFile}
+                      className="group flex w-full items-center gap-3 rounded-xl border border-border bg-background px-3 py-3 text-left transition-colors hover:bg-muted/60 active:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      aria-label={t('plaza.upload.selectFile', { defaultValue: '选择技能文件' })}
+                    >
+                      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:text-foreground">
+                        <FileText className="h-5 w-5" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-foreground">
+                            {t('plaza.upload.selectFile', { defaultValue: '选择技能文件' })}
+                          </span>
+                          <span className="rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium leading-none text-primary">
+                            {t('plaza.upload.recommended', { defaultValue: '推荐' })}
+                          </span>
+                        </span>
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          {t('plaza.upload.selectFileHint', { defaultValue: '选择 .zip 文件或 SKILL.md 文件' })}
+                        </span>
+                      </span>
+                      <ChevronRight className="h-5 w-5 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden="true" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={pickFolder}
+                      className="group flex w-full items-center gap-3 rounded-xl border border-border bg-background px-3 py-3 text-left transition-colors hover:bg-muted/60 active:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      aria-label={t('plaza.upload.selectFolder', { defaultValue: '选择技能文件夹' })}
+                    >
+                      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors group-hover:text-foreground">
+                        <FolderOpen className="h-5 w-5" aria-hidden="true" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="text-sm font-semibold text-foreground">
+                          {t('plaza.upload.selectFolder', { defaultValue: '选择技能文件夹' })}
+                        </span>
+                        <span className="mt-1 block text-xs text-muted-foreground">
+                          {t('plaza.upload.selectFolderHint', { defaultValue: '包含 SKILL.md 的技能文件夹' })}
+                        </span>
+                      </span>
+                      <ChevronRight className="h-5 w-5 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -401,7 +496,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                   <div className="flex gap-2 mt-5">
                     <button
                       type="button"
-                      onClick={pickFile}
+                      onClick={resetToIdle}
                       className="inline-flex items-center h-9 px-4 rounded-lg border border-border bg-background text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
                     >
                       {t('plaza.upload.retry', { defaultValue: '重新选择' })}

@@ -1,0 +1,217 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { SkillUploadModal } from '@/components/skill-plaza/SkillUploadModal';
+
+const mocks = vi.hoisted(() => ({
+  invokeIpc: vi.fn(),
+  uploadSkill: vi.fn(),
+  setActiveTab: vi.fn(),
+}));
+
+vi.mock('@/lib/api-client', () => ({
+  invokeIpc: (...args: unknown[]) => mocks.invokeIpc(...args),
+}));
+
+vi.mock('@/stores/skill-plaza', () => {
+  const state = {
+    uploadSkill: mocks.uploadSkill,
+    mySkills: [],
+    setActiveTab: mocks.setActiveTab,
+  };
+  const useSkillPlazaStore = Object.assign(
+    (selector: (value: typeof state) => unknown) => selector(state),
+    { getState: () => state },
+  );
+  return { useSkillPlazaStore };
+});
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
+  }),
+}));
+
+function renderModal() {
+  return render(<SkillUploadModal open onClose={vi.fn()} />);
+}
+
+function createDataTransfer(file: File, useItems = true) {
+  return {
+    dropEffect: 'none',
+    items: useItems
+      ? [{ kind: 'file', getAsFile: () => file }]
+      : [],
+    files: useItems ? [] : [file],
+  };
+}
+
+describe('SkillUploadModal source selection', () => {
+  beforeEach(() => {
+    mocks.invokeIpc.mockReset();
+    mocks.uploadSkill.mockReset();
+    mocks.setActiveTab.mockReset();
+  });
+
+  it('opens separate file and directory dialogs and stays idle when canceled', async () => {
+    mocks.invokeIpc.mockResolvedValue({ canceled: true, filePaths: [] });
+    renderModal();
+
+    fireEvent.click(screen.getByRole('button', { name: '选择技能文件' }));
+    await waitFor(() => {
+      expect(mocks.invokeIpc).toHaveBeenCalledWith(
+        'dialog:open',
+        expect.objectContaining({
+          properties: ['openFile'],
+          filters: [{ name: 'Skill Package', extensions: ['zip', 'md'] }],
+        }),
+      );
+    });
+
+    mocks.invokeIpc.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: '选择技能文件夹' }));
+    await waitFor(() => {
+      expect(mocks.invokeIpc).toHaveBeenCalledWith(
+        'dialog:open',
+        expect.objectContaining({ properties: ['openDirectory'] }),
+      );
+    });
+
+    expect(screen.getByRole('button', { name: '选择技能文件' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '选择技能文件夹' })).toBeInTheDocument();
+    expect(mocks.invokeIpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes file and folder selections through the existing preview validation', async () => {
+    mocks.invokeIpc
+      .mockResolvedValueOnce({ canceled: false, filePaths: ['C:\\skills\\demo.zip'] })
+      .mockResolvedValueOnce({ valid: true })
+      .mockResolvedValueOnce({ size: 1024, isDirectory: false, isFile: true });
+    const { unmount } = renderModal();
+
+    fireEvent.click(screen.getByRole('button', { name: '选择技能文件' }));
+    await waitFor(() => {
+      expect(mocks.invokeIpc).toHaveBeenCalledWith(
+        'file:validateSkillUpload',
+        'C:\\skills\\demo.zip',
+      );
+    });
+    unmount();
+
+    mocks.invokeIpc.mockReset();
+    mocks.invokeIpc
+      .mockResolvedValueOnce({ canceled: false, filePaths: ['C:\\skills\\demo'] })
+      .mockResolvedValueOnce({ valid: true })
+      .mockResolvedValueOnce({ size: 0, isDirectory: true, isFile: false });
+    renderModal();
+
+    fireEvent.click(screen.getByRole('button', { name: '选择技能文件夹' }));
+    await waitFor(() => {
+      expect(mocks.invokeIpc).toHaveBeenCalledWith(
+        'file:validateSkillUpload',
+        'C:\\skills\\demo',
+      );
+    });
+  });
+
+  it('preserves copy drag feedback and clears it when the item leaves', () => {
+    renderModal();
+    const dropZone = screen.getByRole('button', { name: '点击或拖拽文件、文件夹到此处' });
+    const dataTransfer = createDataTransfer(new File(['skill'], 'SKILL.md'));
+
+    fireEvent.dragOver(dropZone, { dataTransfer });
+    expect(dataTransfer.dropEffect).toBe('copy');
+    expect(dropZone.className).toContain('bg-[#00B54B]/10');
+
+    fireEvent.dragLeave(dropZone, { dataTransfer });
+    expect(dropZone.className).not.toContain('bg-[#00B54B]/10');
+  });
+
+  it('keeps the legacy File.path drag fallback and prevents the default drop', async () => {
+    mocks.invokeIpc.mockImplementation((channel: string) => {
+      if (channel === 'file:validateSkillUpload') return Promise.resolve({ valid: true });
+      if (channel === 'file:stat') {
+        return Promise.resolve({ size: 12, isDirectory: false, isFile: true });
+      }
+      return Promise.resolve(undefined);
+    });
+    renderModal();
+    const dropZone = screen.getByRole('button', { name: '点击或拖拽文件、文件夹到此处' });
+    const file = new File(['skill'], 'SKILL.md');
+    Object.defineProperty(file, 'path', { value: 'C:\\skills\\SKILL.md' });
+    const dropEvent = createEvent.drop(dropZone);
+    Object.defineProperty(dropEvent, 'dataTransfer', {
+      value: createDataTransfer(file),
+    });
+
+    fireEvent(dropZone, dropEvent);
+
+    expect(dropEvent.defaultPrevented).toBe(true);
+    await waitFor(() => {
+      expect(mocks.invokeIpc).toHaveBeenCalledWith(
+        'file:validateSkillUpload',
+        'C:\\skills\\SKILL.md',
+      );
+    });
+  });
+
+  it('keeps the preload getPathForFile drag path fallback', async () => {
+    mocks.invokeIpc.mockImplementation((channel: string) => {
+      if (channel === 'file:validateSkillUpload') return Promise.resolve({ valid: true });
+      if (channel === 'file:stat') {
+        return Promise.resolve({ size: 0, isDirectory: true, isFile: false });
+      }
+      return Promise.resolve(undefined);
+    });
+    const getPathForFile = vi.fn(() => 'C:\\skills\\folder-skill');
+    Object.assign(window.electron, { getPathForFile });
+    renderModal();
+    const dropZone = screen.getByRole('button', { name: '点击或拖拽文件、文件夹到此处' });
+    const file = new File([], 'folder-skill');
+
+    fireEvent.drop(dropZone, {
+      dataTransfer: createDataTransfer(file, false),
+    });
+
+    await waitFor(() => {
+      expect(getPathForFile).toHaveBeenCalledWith(file);
+      expect(mocks.invokeIpc).toHaveBeenCalledWith(
+        'file:validateSkillUpload',
+        'C:\\skills\\folder-skill',
+      );
+    });
+  });
+
+  it('uses semantic theme classes for both source buttons', () => {
+    renderModal();
+
+    for (const name of ['选择技能文件', '选择技能文件夹']) {
+      const button = screen.getByRole('button', { name });
+      expect(button.className).toContain('border-border');
+      expect(button.className).toContain('bg-background');
+      expect(button.className).toContain('hover:bg-muted/60');
+      expect(button.className).toContain('focus-visible:ring-ring');
+      expect(button.className).not.toMatch(/#[0-9a-f]{3,8}/i);
+    }
+
+    expect(screen.getByText('推荐')).toHaveClass('text-primary', 'bg-primary/10');
+  });
+
+  it.each([
+    ['C:\\skills\\broken.zip', '选择技能文件'],
+    ['C:\\skills\\notes.md', '选择技能文件'],
+    ['C:\\skills\\missing-skill-md', '选择技能文件夹'],
+  ])('keeps the existing validation feedback for invalid source %s', async (path, buttonName) => {
+    mocks.invokeIpc
+      .mockResolvedValueOnce({ canceled: false, filePaths: [path] })
+      .mockResolvedValueOnce({ valid: false });
+    renderModal();
+
+    fireEvent.click(screen.getByRole('button', { name: buttonName }));
+
+    await waitFor(() => {
+      expect(screen.getByText('请选择有效的 .zip、SKILL.md 或包含 SKILL.md 的技能文件夹')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('button', { name: '选择技能文件' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '选择技能文件夹' })).toBeInTheDocument();
+  });
+});
