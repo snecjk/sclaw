@@ -10,7 +10,7 @@ import {
   shouldSyncSessionToWorkspaceDefault,
 } from '@/lib/chat-model-options';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
-import { useAgentsStore } from '@/stores/agents';
+import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useProviderStore } from '@/stores/providers';
 
@@ -34,7 +34,7 @@ export async function syncWorkspaceDefaultModelToChat(opts: {
     return;
   }
 
-  const agent = useAgentsStore.getState().agents.find((item) => item.id === currentAgentId);
+  const agent = resolveAgentById(useAgentsStore.getState().agents, currentAgentId);
   const engineType = resolveChatSessionEngineType(session, agent?.engineType, currentSessionKey);
 
   const target = normalizeModelIdForChat(modelId);
@@ -73,7 +73,7 @@ export async function applyWorkspaceDefaultToNewSession(
   if (!trimmedKey) return;
 
   const existingSession = useChatStore.getState().sessions.find((s) => s.key === trimmedKey);
-  const agent = useAgentsStore.getState().agents.find((item) => item.id === agentId);
+  const agent = resolveAgentById(useAgentsStore.getState().agents, agentId);
   // Session override or Claude agent model from home toolbar — skip workspace default.
   if (existingSession?.model) return;
   if (agent?.engineType === 'claude' && isConcreteModelId(agent.modelDisplay)) return;
@@ -107,5 +107,51 @@ export async function applyWorkspaceDefaultToNewSession(
     void useAgentsStore.getState().fetchAgents();
   } catch (err) {
     console.warn('[applyWorkspaceDefaultToNewSession] failed:', err);
+  }
+}
+
+/** Sync an explicit model selection for a session to the Gateway session store. */
+export async function syncSessionModelToGateway(
+  sessionKey: string,
+  modelId: string,
+  agentId: string,
+): Promise<void> {
+  const trimmedKey = sessionKey.trim();
+  const trimmedModel = modelId.trim();
+  if (!trimmedKey || !trimmedModel) return;
+
+  const existingSession = useChatStore.getState().sessions.find((s) => s.key === trimmedKey);
+  const agent = useAgentsStore.getState().agents.find((item) => item.id === agentId);
+  // Claude models are managed by the engine registry, not the Gateway session store.
+  if (agent?.engineType === 'claude' && isConcreteModelId(agent.modelDisplay)) return;
+
+  const engineType = resolveChatSessionEngineType(existingSession, agent?.engineType, trimmedKey);
+
+  const { defaultAccountId } = useProviderStore.getState();
+  const accountId = defaultAccountId?.trim() ?? '';
+  if (!accountId) return;
+
+  try {
+    await hostApiFetch('/api/sessions/model', {
+      method: 'POST',
+      body: JSON.stringify({
+        sessionKey: trimmedKey,
+        model: trimmedModel,
+        accountId,
+        agentId: agentId.trim() || undefined,
+        engineType,
+      }),
+    });
+    useChatStore.setState((state) => ({
+      sessions: state.sessions.map((session) => (
+        session.key === trimmedKey
+          ? { ...session, model: trimmedModel }
+          : session
+      )),
+    }));
+    void useChatStore.getState().loadSessions();
+    void useAgentsStore.getState().fetchAgents();
+  } catch (err) {
+    console.warn('[syncSessionModelToGateway] failed:', err);
   }
 }

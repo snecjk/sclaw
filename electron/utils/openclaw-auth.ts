@@ -194,8 +194,10 @@ async function writeOpenClawJson(config: Record<string, unknown>): Promise<void>
       ? { ...(config.commands as Record<string, unknown>) }
       : {}
   ) as Record<string, unknown>;
-  commands.restart = true;
-  config.commands = commands;
+  if (commands.restart !== true) {
+    commands.restart = true;
+    config.commands = commands;
+  }
 
   await writeJsonFile(OPENCLAW_CONFIG_PATH, config);
 }
@@ -871,12 +873,6 @@ export async function syncGatewayTokenToConfig(token: string): Promise<void> {
         : {}
     ) as Record<string, unknown>;
 
-    auth.mode = 'token';
-    auth.token = token;
-    gateway.auth = auth;
-
-    // Packaged StoClaw loads the renderer from file://, so the gateway must allow
-    // that origin for the chat WebSocket handshake.
     const controlUi = (
       gateway.controlUi && typeof gateway.controlUi === 'object'
         ? { ...(gateway.controlUi as Record<string, unknown>) }
@@ -885,16 +881,35 @@ export async function syncGatewayTokenToConfig(token: string): Promise<void> {
     const allowedOrigins = Array.isArray(controlUi.allowedOrigins)
       ? (controlUi.allowedOrigins as unknown[]).filter((value): value is string => typeof value === 'string')
       : [];
+
+    let changed = false;
+
+    if (auth.mode !== 'token') {
+      auth.mode = 'token';
+      changed = true;
+    }
+    if (auth.token !== token) {
+      auth.token = token;
+      changed = true;
+    }
     if (!allowedOrigins.includes('file://')) {
       controlUi.allowedOrigins = [...allowedOrigins, 'file://'];
+      changed = true;
     }
-    gateway.controlUi = controlUi;
+    if (!gateway.mode) {
+      gateway.mode = 'local';
+      changed = true;
+    }
 
-    if (!gateway.mode) gateway.mode = 'local';
+    if (!changed) {
+      return;
+    }
+
+    gateway.auth = auth;
+    gateway.controlUi = controlUi;
     config.gateway = gateway;
 
     await writeOpenClawJson(config);
-    
   });
 }
 

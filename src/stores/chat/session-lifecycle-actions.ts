@@ -1,4 +1,7 @@
-import { applyWorkspaceDefaultToNewSession } from '@/lib/sync-workspace-default-to-chat';
+import {
+  applyWorkspaceDefaultToNewSession,
+  syncSessionModelToGateway,
+} from '@/lib/sync-workspace-default-to-chat';
 import { isConcreteModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
 import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
@@ -38,7 +41,6 @@ import {
   scrubCorruptedSessionLabels,
 } from '@/lib/session-label';
 import {
-  DEFAULT_CANONICAL_PREFIX,
   DEFAULT_SESSION_KEY,
   type ChatSession,
 } from './types';
@@ -53,9 +55,12 @@ import {
 import {
   clearSessionEntryFromMap,
   getAgentIdFromSessionKey,
-  getCanonicalPrefixFromSessions,
   isTemporaryAgentSessionKey,
 } from './session-identity';
+import {
+  getBaseAgentIdFromProjectAgentId,
+  resolveProjectAgentId,
+} from '../../../shared/project-agent';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 const SESSION_LOAD_MIN_INTERVAL_MS = 1_200;
@@ -67,7 +72,6 @@ export interface SessionLifecycleDeps {
   parseSessionUpdatedAtMs: (value: unknown) => number | undefined;
   scheduleSessionLabelHydrationFromStore: (set: ChatSet, get: ChatGet) => void;
   getAgentEngineType: (agentId: string | undefined | null) => ChatSession['engineType'] | undefined;
-  getCanonicalPrefixFromSessionKey: (sessionKey: string) => string | null;
 }
 
 export function createSessionLifecycleActions(
@@ -79,7 +83,6 @@ export function createSessionLifecycleActions(
     parseSessionUpdatedAtMs,
     scheduleSessionLabelHydrationFromStore,
     getAgentEngineType,
-    getCanonicalPrefixFromSessionKey,
   } = deps;
 
   return {
@@ -661,7 +664,7 @@ export function createSessionLifecycleActions(
 
     // ── New session ──
 
-    newSession: () => {
+    newSession: (options?: { projectId?: string }) => {
       // Generate a new unique session key and switch to it.
       // NOTE: We intentionally do NOT call sessions.reset on the old session.
       // sessions.reset archives (renames) the session JSONL file, making old
@@ -672,11 +675,16 @@ export function createSessionLifecycleActions(
         && messages.length === 0
         && !sessionLastActivity[currentSessionKey]
         && !sessionLabels[currentSessionKey];
-      const prefix = getCanonicalPrefixFromSessionKey(currentSessionKey)
-        ?? getCanonicalPrefixFromSessions(sessions)
-        ?? DEFAULT_CANONICAL_PREFIX;
+      const baseAgentId = getBaseAgentIdFromProjectAgentId(get().currentAgentId)
+        ?? get().currentAgentId
+        ?? 'main';
+      const projectId = options?.projectId;
+      const effectiveAgentId = projectId && projectId !== 'default'
+        ? resolveProjectAgentId(projectId, baseAgentId)
+        : baseAgentId;
+      const prefix = `agent:${effectiveAgentId}`;
       const newKey = `${prefix}:session-${Date.now()}`;
-      const newAgentId = getAgentIdFromSessionKey(newKey);
+      const newAgentId = effectiveAgentId;
       // Carry over model from home/default session or Claude agent toolbar selection
       let currentSessionModel = sessions.find((s) => s.key === currentSessionKey)?.model;
       if (!currentSessionModel?.trim()) {
@@ -743,9 +751,15 @@ export function createSessionLifecycleActions(
       });
       // 新建即视为已读，写入已读水位；后续该会话前台完成的迟到事件不会误标未读。
       touchSessionReadAt(newKey);
-      void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
+      if (currentSessionModel?.trim()) {
+        void syncSessionModelToGateway(newKey, currentSessionModel, newAgentId);
+      } else {
+        void applyWorkspaceDefaultToNewSession(newKey, newAgentId);
+      }
       void import('@/stores/session-catalog').then(({ useSessionCatalogStore }) => {
-        void useSessionCatalogStore.getState().bindSession(newKey);
+        if (options?.projectId) {
+          void useSessionCatalogStore.getState().bindSession(newKey, options.projectId);
+        }
       });
     },
 

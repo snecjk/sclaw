@@ -236,7 +236,7 @@ export interface ChatState {
   switchSession: (key: string) => void;
   /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
   switchToAgentMainSession: (agentId: string) => void;
-  newSession: () => void;
+  newSession: (options?: { projectId?: string }) => void;
   deleteSession: (key: string, options?: {
     skipSessionRefresh?: boolean;
     additionalSuppressKeys?: string[];

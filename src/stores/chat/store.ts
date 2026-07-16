@@ -69,6 +69,7 @@ import {
 } from './store-helpers';
 import type { ResolveChatSessionEngineTypeOptions } from '@/lib/resolve-chat-session-engine-type';
 import { recordTerminalRun } from './run-lifecycle';
+import { getBaseAgentIdFromProjectAgentId } from '../../../shared/project-agent';
 
 export type {
   AttachedFileMeta,
@@ -81,7 +82,8 @@ export type {
 
 function getAgentEngineType(agentId: string | undefined | null): ChatSession['engineType'] | undefined {
   const normalizedAgentId = normalizeAgentId(agentId);
-  return useAgentsStore.getState().agents.find((agent) => normalizeAgentId(agent.id) === normalizedAgentId)?.engineType;
+  const lookupAgentId = getBaseAgentIdFromProjectAgentId(normalizedAgentId) ?? normalizedAgentId;
+  return useAgentsStore.getState().agents.find((agent) => normalizeAgentId(agent.id) === lookupAgentId)?.engineType;
 }
 
 function stripAgentMemoryFromHistoryMessage(message: Parameters<typeof stripAgentMemoryMessage>[0]) {
@@ -141,13 +143,6 @@ function handleBackgroundSessionEvent(
     markUnreadAfterRun: markSessionUnreadAfterSuccessfulRun,
   })(set, event);
 }
-function getCanonicalPrefixFromSessionKey(sessionKey: string): string | null {
-  if (!sessionKey.startsWith('agent:')) return null;
-  const parts = sessionKey.split(':');
-  if (parts.length < 2) return null;
-  return `${parts[0]}:${parts[1]}`;
-}
-
 // ── Store ────────────────────────────────────────────────────────
 
 export const useChatStore = create<ChatState>()(
@@ -158,7 +153,6 @@ export const useChatStore = create<ChatState>()(
     parseSessionUpdatedAtMs,
     scheduleSessionLabelHydrationFromStore,
     getAgentEngineType,
-    getCanonicalPrefixFromSessionKey,
   }),
 
   ...createHistoryLoadActions(set, get, {

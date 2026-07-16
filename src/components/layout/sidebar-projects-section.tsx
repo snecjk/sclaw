@@ -115,12 +115,12 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
     }
   }, []);
 
-  /** 在指定项目下新建对话：先选中项目再 newSession，bind 会写入该 workspace_id。 */
+  /** 在指定项目下新建对话：先选中项目再 newSession 并传入 projectId，会话才会绑定到该项目。 */
   const handleNewChatInProject = useCallback(async (projectId: string) => {
     try {
       await selectProject(projectId);
       setExpandedProjectIds((prev) => ({ ...prev, [projectId]: true }));
-      newSession();
+      newSession({ projectId });
       navigateToMainChatHome(navigate, location.pathname);
     } catch (error) {
       toast.error(String(error));

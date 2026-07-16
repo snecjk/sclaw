@@ -11,7 +11,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAgentsStore } from '@/stores/agents';
+import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ChatMessage } from './ChatMessage';
 import { AssistantTurnMessage } from './AssistantTurnMessage';
@@ -111,7 +111,7 @@ export function Chat() {
     [sessions, currentSessionKey],
   );
   const currentAgent = useMemo(
-    () => agents.find((agent) => agent.id === currentAgentId),
+    () => resolveAgentById(agents, currentAgentId),
     [agents, currentAgentId],
   );
   const currentEngineType = resolveChatSessionEngineType(
