@@ -205,10 +205,14 @@ export async function handleAuthRoutes(
 
       let setupResult: AuthenticatedSetupResult | undefined;
       try {
+        // awaitGatewayRefresh: if the setup needs a Gateway reload/restart (e.g.
+        // STO models rebuilt after a logout), run it now and wait for the Gateway
+        // to settle, so the renderer only enters the home page once ready.
         setupResult = await runAuthenticatedSetup({
           user,
           gatewayManager: ctx.gatewayManager,
           source: 'login',
+          awaitGatewayRefresh: true,
         });
       } catch (err) {
         logger.warn('[auth] Synchronous post-login authenticated setup failed:', err);
@@ -400,6 +404,7 @@ export async function handleAuthRoutes(
           user: body.user,
           gatewayManager: ctx.gatewayManager,
           source: 'login',
+          awaitGatewayRefresh: true,
         });
       } catch (err) {
         logger.warn('[auth] Post session commit authenticated setup failed:', err);
@@ -491,6 +496,7 @@ export async function handleAuthRoutes(
           user: newUser,
           gatewayManager: ctx.gatewayManager,
           source: 'login',
+          awaitGatewayRefresh: true,
         });
       } catch (err) {
         logger.warn('[auth] Post account-switch authenticated setup failed:', err);
@@ -537,6 +543,7 @@ export async function handleAuthRoutes(
           user: origin,
           gatewayManager: ctx.gatewayManager,
           source: 'login',
+          awaitGatewayRefresh: true,
         });
       } catch (err) {
         logger.warn('[auth] Post account-switch-back authenticated setup failed:', err);
