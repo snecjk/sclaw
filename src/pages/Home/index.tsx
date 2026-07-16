@@ -66,6 +66,10 @@ export function Home() {
   //   // gateway not ready yet; will be sent once it's running (handled by effect below)
   // }
 
+  // `?q=` 是「立即运行/安装工作流」的自动发送深链：由下面的 effect 直接发送，
+  // 不再把 querySeedText 作为 seedText 预填输入框 —— 否则 DingTalkMentionEditor
+  // 写入 DOM 后不会被清空，发送完输入框里仍残留一份文本。
+  // `?skill=` 走 seedSkillSlug，与此无关。
   return (
     <>
       <div
@@ -75,7 +79,7 @@ export function Home() {
             : 'mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-2 sm:px-2',
         )}
       >
-        <HomeAgentHubSurface seedText={querySeedText} seedSkillSlug={seedSkillSlug} />
+        <HomeAgentHubSurface seedSkillSlug={seedSkillSlug} />
       </div>
 
     </>

@@ -89,14 +89,15 @@ export function RecommendCard({
       });
   }, [skillSlug, isInstalling, isSkillUpdateAvailable, skillStatus?.cloudVersion, item.skill_version, item.title, item.description, t, onSkillInstalled]);
 
-  /** 技能使用处理（已安装技能） */
+  /** 技能使用处理（已安装技能）：与 Skills 页面「使用技能」一致，预填黄色技能 chip */
   const handleSkillUse = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     // Start a new session so the Gateway picks up any newly installed skills
     useChatStore.getState().newSession();
-    const prompt = encodeURIComponent(item.skill_default_prompt || item.title);
-    navigate(`/?q=${prompt}`);
-  }, [navigate, item.skill_default_prompt, item.title]);
+    // 走 ?skill= 深链在输入框预填黄色技能 chip，由用户确认后发送；
+    // 不用 ?q= 直接发送纯文本（那样不会出现技能标签）。
+    navigate(`/?skill=${encodeURIComponent(skillSlug)}`);
+  }, [navigate, skillSlug]);
 
   return (
     <div className={cn(homeHubInteractiveCardShellClass, 'text-left')}>
