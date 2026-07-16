@@ -1,13 +1,13 @@
 ## 1. Main 进程查询代理
 
-- [ ] 1.1 新增/整理应用广场查询服务，使用当前登录会话 Token 以 POST 调用 memory-center 的 `/agent/v1/app-plaza/banners`、`categories`、`apps`（Requirement: 三块内容经 Main 代理且独立降级）
-- [ ] 1.2 注册 `/api/app-plaza/banners`、`/api/app-plaza/categories`、`/api/app-plaza/apps` Host API 路由，并将 apps 的 `pageNum`、`pageSize`、`keyword`、`categoryCode` query 参数原样映射（Requirement: 三块内容经 Main 代理且独立降级；Requirement: APP 列表使用服务端目录）
+- [x] 1.1 新增/整理应用广场查询服务，使用当前登录会话 Token 以 POST 调用 memory-center 的 `/agent/v1/app-plaza/banners`、`categories`、`apps`（Requirement: 三块内容经 Main 代理且独立降级）
+- [x] 1.2 注册 `/api/app-plaza/banners`、`/api/app-plaza/categories`、`/api/app-plaza/apps` Host API 路由，并将 apps 的 `pageNum`、`pageSize`、`keyword`、`categoryCode` query 参数原样映射（Requirement: 三块内容经 Main 代理且独立降级；Requirement: APP 列表使用服务端目录）
 
 ## 2. Renderer 数据模型与状态
 
-- [ ] 2.1 定义 Banner、分类和 APP 客户端类型及响应适配器，校验图片/跳转/APP URL 仅允许 HTTP/HTTPS，并为未知图标色调提供安全默认值（Requirement: Banner 使用服务端整图内容；Requirement: APP 列表使用服务端目录）
-- [ ] 2.2 将市场 Tab 的 Banner、分类和 APP 状态改为异步服务端状态，分别维护 loading/error，APP 支持重置查询、分页追加和请求竞态保护（Requirement: 三块内容经 Main 代理且独立降级；Requirement: APP 列表使用服务端目录）
-- [ ] 2.3 保持“我的应用”、收藏和外部应用现有行为不变，避免本次 Store 调整扩大到非目标区域（Requirement: 三块内容经 Main 代理且独立降级）
+- [x] 2.1 定义 Banner、分类和 APP 客户端类型及响应适配器，校验图片/跳转/APP URL 仅允许 HTTP/HTTPS，并为未知图标色调提供安全默认值（Requirement: Banner 使用服务端整图内容；Requirement: APP 列表使用服务端目录）
+- [x] 2.2 将市场 Tab 的 Banner、分类和 APP 状态改为异步服务端状态，分别维护 loading/error，APP 支持重置查询、分页追加和请求竞态保护（Requirement: 三块内容经 Main 代理且独立降级；Requirement: APP 列表使用服务端目录）
+- [x] 2.3 保持“我的应用”、收藏和外部应用现有行为不变，避免本次 Store 调整扩大到非目标区域（Requirement: 三块内容经 Main 代理且独立降级）
 
 ## 3. Banner 整图接入
 
