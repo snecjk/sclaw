@@ -24,7 +24,7 @@
 
 ## 5. 测试与文档检查
 
-- [ ] 5.1 增加 Main 服务/路由测试，验证三个后端 POST 路径、当前会话鉴权和 apps query 参数（Requirement: 三块内容经 Main 代理且独立降级）
-- [ ] 5.2 增加 Renderer 适配、状态和页面测试，覆盖整图 Banner 目标行为、分类映射、APP 搜索/分页及三块独立失败（Requirement: Banner 使用服务端整图内容；Requirement: 分类导航使用服务端分类；Requirement: APP 列表使用服务端目录）
-- [ ] 5.3 运行相关 Vitest、定向 ESLint、TypeScript 类型检查、`git diff --check` 和 OpenSpec 严格校验（Requirement: 三块内容经 Main 代理且独立降级）
-- [ ] 5.4 检查 `README.md`、`README.zh-CN.md`、`README.ja-JP.md` 是否需要同步应用广场数据源说明（Requirement: 三块内容经 Main 代理且独立降级）
+- [x] 5.1 增加 Main 服务/路由测试，验证三个后端 POST 路径、当前会话鉴权和 apps query 参数（Requirement: 三块内容经 Main 代理且独立降级）
+- [x] 5.2 增加 Renderer 适配、状态和页面测试，覆盖整图 Banner 目标行为、分类映射、APP 搜索/分页及三块独立失败（Requirement: Banner 使用服务端整图内容；Requirement: 分类导航使用服务端分类；Requirement: APP 列表使用服务端目录）
+- [x] 5.3 运行相关 Vitest、定向 ESLint、TypeScript 类型检查、`git diff --check` 和 OpenSpec 严格校验（Requirement: 三块内容经 Main 代理且独立降级）
+- [x] 5.4 检查 `README.md`、`README.zh-CN.md`、`README.ja-JP.md` 是否需要同步应用广场数据源说明（Requirement: 三块内容经 Main 代理且独立降级）

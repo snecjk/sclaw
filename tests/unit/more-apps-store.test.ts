@@ -49,6 +49,49 @@ describe('more apps store', () => {
     });
   });
 
+  it('appends pages by id without duplicating apps', async () => {
+    fetchAppsMock
+      .mockResolvedValueOnce({
+        items: [{ id: 'a', name: 'A', url: 'https://a.example', kind: 'builtin' }],
+        total: 2,
+        pageNum: 1,
+        pageSize: 20,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          { id: 'a', name: 'A', url: 'https://a.example', kind: 'builtin' },
+          { id: 'b', name: 'B', url: 'https://b.example', kind: 'builtin' },
+        ],
+        total: 2,
+        pageNum: 2,
+        pageSize: 20,
+      });
+    await useMoreAppsStore.getState().fetchApps({ reset: true });
+    await useMoreAppsStore.getState().loadMoreApps();
+    expect(useMoreAppsStore.getState().apps.map((app) => app.id)).toEqual(['a', 'b']);
+    expect(fetchAppsMock).toHaveBeenLastCalledWith(expect.objectContaining({ pageNum: 2 }));
+  });
+
+  it('keeps banner/category/app failures independent', async () => {
+    fetchBannersMock.mockRejectedValueOnce(new Error('banner unavailable'));
+    fetchCategoriesMock.mockResolvedValueOnce([{ id: 'org', name: '组织管理', order: 1 }]);
+    fetchAppsMock.mockResolvedValueOnce({
+      items: [{ id: 'a', name: 'A', url: 'https://a.example', kind: 'builtin' }],
+      total: 1,
+      pageNum: 1,
+      pageSize: 20,
+    });
+    await useMoreAppsStore.getState().initialize('u-1');
+    expect(useMoreAppsStore.getState().bannersError).toContain('banner unavailable');
+    expect(useMoreAppsStore.getState().categories).toEqual([
+      expect.objectContaining({ id: 'org' }),
+    ]);
+    expect(useMoreAppsStore.getState().apps).toEqual([
+      expect.objectContaining({ id: 'a' }),
+    ]);
+    expect(useMoreAppsStore.getState().error).toBeNull();
+  });
+
   it('isolates external apps and favorites by user code', async () => {
     await useMoreAppsStore.getState().initialize('alice');
     useMoreAppsStore.getState().addExternalApp({ name: 'Alice App', url: 'https://example.com' });

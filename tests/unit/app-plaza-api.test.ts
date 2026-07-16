@@ -9,7 +9,10 @@ vi.mock('@/lib/host-api', () => ({
 import {
   adaptAppPlazaApp,
   adaptAppPlazaBanner,
+  adaptAppPlazaCategory,
   fetchAppPlazaApps,
+  fetchAppPlazaBanners,
+  fetchAppPlazaCategories,
   safeWebUrl,
 } from '@/lib/app-plaza-api';
 
@@ -40,6 +43,48 @@ describe('app plaza renderer API adapter', () => {
       targetType: 'URL',
       targetUrl: 'data:text/html,bad',
     })).toMatchObject({ targetType: 'URL', targetUrl: '' });
+  });
+
+  it('maps category id/name and preserves server ordering', async () => {
+    expect(adaptAppPlazaCategory({ id: 'org', name: '组织管理', order: 2 })).toMatchObject({
+      id: 'org',
+      name: '组织管理',
+      order: 2,
+    });
+    hostApiFetchMock.mockResolvedValue({
+      success: true,
+      data: [
+        { id: 'ops', name: '经营管理', order: 20 },
+        { id: 'org', name: '组织管理', order: 10 },
+      ],
+    });
+    await expect(fetchAppPlazaCategories()).resolves.toEqual([
+      expect.objectContaining({ id: 'org', name: '组织管理' }),
+      expect.objectContaining({ id: 'ops', name: '经营管理' }),
+    ]);
+    expect(hostApiFetchMock).toHaveBeenCalledWith('/api/app-plaza/categories');
+  });
+
+  it('loads whole-image banners and sanitizes click targets', async () => {
+    hostApiFetchMock.mockResolvedValue({
+      success: true,
+      data: [{
+        id: 'banner-a',
+        title: '活动',
+        imageUrl: 'https://cdn.example.com/banner.png',
+        targetType: 'URL',
+        targetUrl: 'https://example.com/activity',
+        order: 1,
+      }],
+    });
+    await expect(fetchAppPlazaBanners()).resolves.toEqual([
+      expect.objectContaining({
+        id: 'banner-a',
+        imageUrl: 'https://cdn.example.com/banner.png',
+        targetUrl: 'https://example.com/activity',
+      }),
+    ]);
+    expect(hostApiFetchMock).toHaveBeenCalledWith('/api/app-plaza/banners');
   });
 
   it('passes server-side paging and filters through Host API', async () => {
