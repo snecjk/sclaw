@@ -21,7 +21,7 @@ import {
 import { getAgentEngineType } from '../utils/agent-config';
 import { logger } from '../utils/logger';
 import { getWorkspaceRepository } from '../db/repositories/workspace-repository';
-import { getOpenClawAgentSkillsDir } from '../utils/paths';
+import { getOpenClawAgentSkillsDir, ensureWorkspaceArtifactOutputDir } from '../utils/paths';
 import { safeRemoveDir } from '../utils/fs-retry';
 import {
   getBaseAgentIdFromProjectAgentId,
@@ -119,8 +119,10 @@ async function ensureProjectAgentUnlocked(
     const normalizedTarget = normalizeWorkspacePathForCompare(rootPath);
     if (normalizedCurrent && normalizedCurrent !== normalizedTarget) {
       await updateAgentWorkspace(agentId, rootPath);
+      ensureWorkspaceArtifactOutputDir(rootPath);
       return { agentId, created: false, workspaceUpdated: true };
     }
+    ensureWorkspaceArtifactOutputDir(rootPath);
     return { agentId, created: false, workspaceUpdated: false };
   }
 
@@ -130,7 +132,7 @@ async function ensureProjectAgentUnlocked(
     workspace: rootPath,
     inheritWorkspace: true,
   });
-
+  ensureWorkspaceArtifactOutputDir(rootPath);
   // Inherit engine type from base agent so OpenClaw/Claude choice is preserved.
   try {
     const baseEngineType = await getAgentEngineType(baseAgentId);

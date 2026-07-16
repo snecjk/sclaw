@@ -315,13 +315,15 @@ function SidebarTaskDateLinks({
                 active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
               )}
             >
-              <span className="min-w-0 flex-1 truncate">{label}</span>
-              {unread ? (
-                <span
-                  className={sidebarUnreadDotClass}
-                  aria-label={t('tasks:unreadBadge', { defaultValue: 'Unread' })}
-                />
-              ) : null}
+              <span className="flex min-w-0 items-center gap-1.5">
+                {unread ? (
+                  <span
+                    className={cn(sidebarUnreadDotClass, 'shrink-0')}
+                    aria-label={t('tasks:unreadBadge', { defaultValue: 'Unread' })}
+                  />
+                ) : null}
+                <span className="min-w-0 flex-1 truncate">{label}</span>
+              </span>
             </button>
             {sk ? (
               <SidebarTaskSubitemDeleteTrailing
@@ -558,6 +560,7 @@ function SidebarScheduledTaskGroup({
               label = s.label || s.displayName || s.key;
             }
             const active = currentSessionKey === s.key;
+            const showUnreadDot = !active && readSessionUnread(unreadKeys, s.key);
             return (
               <div key={s.key} className="group relative flex w-full min-w-0 items-center">
                 <button
@@ -574,8 +577,15 @@ function SidebarScheduledTaskGroup({
                   )}
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
+                    {showUnreadDot ? (
+                      <span
+                        className={cn(sidebarUnreadDotClass, 'shrink-0')}
+                        aria-label="Unread"
+                      />
+                    ) : (
+                      <SidebarRecentSessionStatus sessionKey={s.key} />
+                    )}
                     <span className="min-w-0 flex-1 truncate">{label}</span>
-                    <SidebarRecentSessionStatus sessionKey={s.key} />
                   </span>
                 </button>
                 <SidebarTaskSubitemDeleteTrailing
@@ -1791,7 +1801,10 @@ export function Sidebar() {
           });
         } else {
           useChatStore.getState().clearPendingWorkflowMemory();
-          useChatStore.setState({ pendingProjectId: null, currentAgentId: 'main' });
+          useChatStore.setState({
+            pendingProjectId: null,
+            currentAgentId: 'main',
+          });
         }
       }
     : undefined;

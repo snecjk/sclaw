@@ -1,5 +1,6 @@
 /**
  * SidebarProjectsSection — 项目树：标题行 + 项目文件夹 + 嵌套会话。
+ * 项目仅支持行内重命名（不支持改路径）；项目草稿「新对话」也可行内改名。
  */
 import { useCallback, useMemo, useState } from 'react';
 import { ChevronDown, Folder, FolderPlus } from 'lucide-react';
@@ -49,6 +50,7 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
   const selectProject = useSessionCatalogStore((s) => s.selectProject);
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
   const patchSessionCatalog = useSessionCatalogStore((s) => s.patchSessionCatalog);
+  const updateProject = useSessionCatalogStore((s) => s.updateProject);
   const deleteProject = useSessionCatalogStore((s) => s.deleteProject);
 
   const sessions = useChatStore((s) => s.sessions);
@@ -64,11 +66,12 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
   const requestSessionDelete = useSidebarDeleteConfirmStore((s) => s.requestSessionDelete);
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [editWorkspace, setEditWorkspace] = useState<WorkspaceDto | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<WorkspaceDto | null>(null);
   const [expandedProjectIds, setExpandedProjectIds] = useState<Record<string, boolean>>({});
   const [editingSessionKey, setEditingSessionKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [editingProjectValue, setEditingProjectValue] = useState('');
 
   const sessionsByProjectId = useMemo(() => {
     const map = new Map<string, ChatSession[]>();
@@ -102,6 +105,25 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
   const toggleProjectExpand = useCallback((projectId: string) => {
     setExpandedProjectIds((prev) => ({ ...prev, [projectId]: !(prev[projectId] ?? false) }));
   }, []);
+
+  const startProjectRename = useCallback((workspace: WorkspaceDto) => {
+    setEditingSessionKey(null);
+    setEditingProjectId(workspace.id);
+    setEditingProjectValue(workspace.name);
+  }, []);
+
+  const commitProjectRename = useCallback(async () => {
+    if (!editingProjectId) return;
+    const workspace = workspaces.find((item) => item.id === editingProjectId);
+    const trimmed = editingProjectValue.trim();
+    setEditingProjectId(null);
+    if (!workspace || !trimmed || trimmed === workspace.name) return;
+    try {
+      await updateProject(workspace.id, trimmed, workspace.rootPath);
+    } catch (error) {
+      toast.error(String(error));
+    }
+  }, [editingProjectId, editingProjectValue, updateProject, workspaces]);
 
   const handlePinInProject = useCallback(async (sessionKey: string) => {
     const currentPin = allCatalogByKey[sessionKey]?.pinRank ?? null;
@@ -199,39 +221,59 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
           {workspaces.map((workspace) => {
             const isExpanded = expandedProjectIds[workspace.id] ?? false;
             const projectSessions = sessionsByProjectId.get(workspace.id) ?? [];
+            const isEditingProject = editingProjectId === workspace.id;
 
             return (
               <div key={workspace.id} className="flex flex-col">
                 <div className="group relative flex w-full min-w-0 items-center">
-                  <button
-                    type="button"
-                    title={workspace.rootPath}
-                    onClick={() => toggleProjectExpand(workspace.id)}
-                    onDoubleClick={(e) => {
-                      e.preventDefault();
-                      setEditWorkspace(workspace);
-                    }}
-                    className={cn(
-                      'flex h-9 min-w-0 w-full flex-1 items-center gap-2 rounded-lg px-[10px] py-2 pr-16 text-left transition-colors',
-                      sidebarSubitemTextIdleClass,
-                    )}
-                  >
-                    <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>
-                      {workspace.name}
-                    </span>
-                  </button>
-                  <SidebarProjectRowTrailing
-                    onNewChat={() => {
-                      void handleNewChatInProject(workspace.id);
-                    }}
-                    onRename={() => setEditWorkspace(workspace)}
-                    onChangeLocation={() => setEditWorkspace(workspace)}
-                    onOpenFolder={() => {
-                      void handleOpenProjectFolder(workspace.rootPath);
-                    }}
-                    onDelete={() => setDeleteTarget(workspace)}
-                  />
+                  {isEditingProject ? (
+                    <input
+                      type="text"
+                      autoFocus
+                      value={editingProjectValue}
+                      aria-label={t('actions.rename')}
+                      onChange={(e) => setEditingProjectValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') void commitProjectRename();
+                        else if (e.key === 'Escape') setEditingProjectId(null);
+                      }}
+                      onBlur={() => {
+                        void commitProjectRename();
+                      }}
+                      className="w-full rounded-[8px] border border-[var(--sto-brand-6)] bg-white px-[10px] py-[6px] pr-16 text-left text-sm leading-5 text-foreground outline-none"
+                    />
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        title={`${workspace.name}\n${workspace.rootPath}`}
+                        onClick={() => toggleProjectExpand(workspace.id)}
+                        onDoubleClick={(e) => {
+                          e.preventDefault();
+                          startProjectRename(workspace);
+                        }}
+                        className={cn(
+                          'flex h-9 min-w-0 w-full flex-1 items-center gap-2 rounded-lg px-[10px] py-2 pr-16 text-left transition-colors',
+                          sidebarSubitemTextIdleClass,
+                        )}
+                      >
+                        <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>
+                          {workspace.name}
+                        </span>
+                      </button>
+                      <SidebarProjectRowTrailing
+                        onNewChat={() => {
+                          void handleNewChatInProject(workspace.id);
+                        }}
+                        onRename={() => startProjectRename(workspace)}
+                        onOpenFolder={() => {
+                          void handleOpenProjectFolder(workspace.rootPath);
+                        }}
+                        onDelete={() => setDeleteTarget(workspace)}
+                      />
+                    </>
+                  )}
                 </div>
 
                 {isExpanded && projectSessions.length > 0 ? (
@@ -239,7 +281,7 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                     {projectSessions.map((session) => {
                       const isDraft = isProjectNewChatDraftKey(session.key);
                       const label = isDraft
-                        ? (session.label || '新对话')
+                        ? t('sidebar.newChat')
                         : getSessionLabel(session.key, session.displayName, session.label);
                       const isActive = isDraft
                         ? isOnHome
@@ -272,6 +314,7 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                           }}
                           onStartRename={() => {
                             if (isDraft) return;
+                            setEditingProjectId(null);
                             setEditingSessionKey(session.key);
                             setEditingValue(label);
                           }}
@@ -308,19 +351,10 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
       {createOpen ? (
         <ProjectFormDialog
           open
-          mode="create"
           onClose={() => setCreateOpen(false)}
           onCreated={(workspace) => {
             setExpandedProjectIds((prev) => ({ ...prev, [workspace.id]: true }));
           }}
-        />
-      ) : null}
-      {editWorkspace ? (
-        <ProjectFormDialog
-          open
-          mode="edit"
-          workspace={editWorkspace}
-          onClose={() => setEditWorkspace(null)}
         />
       ) : null}
       <ConfirmDialog

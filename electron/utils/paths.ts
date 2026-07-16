@@ -7,6 +7,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { existsSync, mkdirSync, readFileSync, realpathSync } from 'fs';
 import { logger } from './logger';
+import { WORKSPACE_ARTIFACT_OUTPUT_DIRNAME } from '../../shared/workspace-paths';
 
 export {
   quoteForCmd,
@@ -198,6 +199,29 @@ export function ensureDir(dir: string): void {
     mkdirSync(dir, { recursive: true });
   }
 }
+
+/**
+ * Ensure `<workspace>/.claw-output` exists so write tools / models have a real target.
+ * Best-effort: never throws (callers should not fail agent bootstrap on mkdir).
+ */
+export function ensureWorkspaceArtifactOutputDir(workspacePath: string | null | undefined): string | null {
+  const trimmed = workspacePath?.trim();
+  if (!trimmed) return null;
+  const root = expandPath(trimmed);
+  const outputDir = join(root, WORKSPACE_ARTIFACT_OUTPUT_DIRNAME);
+  try {
+    ensureDir(outputDir);
+    return outputDir;
+  } catch (error) {
+    logger.warn('Failed to ensure workspace artifact output dir', {
+      workspace: root,
+      outputDir,
+      error: String(error),
+    });
+    return null;
+  }
+}
+
 
 /**
  * Get resources directory (for bundled assets)

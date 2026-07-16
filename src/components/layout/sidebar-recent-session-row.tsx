@@ -1,32 +1,29 @@
 /**
  * SidebarRecentSessionRow — 侧边栏最近会话单行（含 inline 重命名 + 行尾菜单）。
  *
- * 使用位置：Sidebar「最近」列表
+ * 布局：三种状态（未读 / 运行中 / 失败）都在标题左侧；置顶钉在行尾。
  */
 import { useTranslation } from 'react-i18next';
 import { SidebarRecentSessionRowTrailing } from '@/components/layout/sidebar-recent-session-row-trailing';
+import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { cn } from '@/lib/utils';
 import {
   sidebarListItemTextClass,
   sidebarRecentSessionActiveClass,
   sidebarSubitemTextIdleClass,
+  sidebarUnreadDotClass,
 } from '@/lib/surfaces';
 import type { ChatSession } from '@/stores/chat/types';
+import { useChatStore } from '@/stores/chat';
+import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 
 export interface SidebarRecentSessionRowProps {
-  /** 会话实体 */
   session: ChatSession;
-  /** 展示标题（已走 getSessionLabel） */
   label: string;
-  /** 是否当前选中会话 */
   isActive: boolean;
-  /** 是否在「最近」中置顶 */
   isPinned: boolean;
-  /** 是否 inline 重命名中 */
   isEditing: boolean;
-  /** 重命名 draft */
   editingValue: string;
-  /** 打开会话 */
   onOpen: () => void;
   onPin: () => void;
   onStartRename: () => void;
@@ -54,6 +51,26 @@ export function SidebarRecentSessionRow({
   className,
 }: SidebarRecentSessionRowProps) {
   const { t } = useTranslation('common');
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const runtime = useChatStore((s) => s.runtimeBySessionKey[session.key]);
+  const currentSessionSending = useChatStore((s) => s.sending);
+  const currentSessionActiveRunId = useChatStore((s) => s.activeRunId);
+  const currentSessionError = useChatStore((s) => s.error);
+  const unreadKeys = useSessionUnreadStore((s) => s.unreadKeys);
+  const isCurrentSession = currentSessionKey === session.key;
+  const isRunning = Boolean(
+    runtime?.sending
+    || runtime?.activeRunId
+    || (isCurrentSession && (currentSessionSending || currentSessionActiveRunId)),
+  );
+  const hasError = Boolean(
+    (runtime?.error != null && runtime.error !== '')
+    || (isCurrentSession && currentSessionError != null && currentSessionError !== ''),
+  );
+  const showUnreadDot = !isCurrentSession
+    && !isRunning
+    && !hasError
+    && readSessionUnread(unreadKeys, session.key);
 
   if (isEditing) {
     return (
@@ -91,14 +108,21 @@ export function SidebarRecentSessionRow({
           type="button"
           onClick={onOpen}
           title={label}
-          className="flex h-9 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
+          className="flex h-9 min-w-0 w-full flex-1 items-center gap-2 overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
         >
+          {showUnreadDot ? (
+            <span
+              className={cn(sidebarUnreadDotClass, 'shrink-0')}
+              aria-label={t('sidebar.sessionUnread')}
+            />
+          ) : (
+            <SidebarRecentSessionStatus sessionKey={session.key} />
+          )}
           <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass, isActive && 'font-medium')}>
             {label}
           </span>
         </button>
         <SidebarRecentSessionRowTrailing
-          sessionKey={session.key}
           isActive={isActive}
           isPinned={isPinned}
           onPin={onPin}

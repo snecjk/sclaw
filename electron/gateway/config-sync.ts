@@ -17,7 +17,19 @@ function fsPath(filePath: string): string {
 import { getAllSettings } from '../utils/store';
 import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-storage';
 import { getProviderEnvVar, getKeyableProviderTypes } from '../utils/provider-registry';
-import { getOpenClawDir, getOpenClawEntryPath, getOpenClawConfigDir, getOpenClawProcessCwd, getOpenClawNodeModulesPath, getOpenClawPackageRootEnv, getBundledPluginSourceCandidates, isOpenClawPresent, getDefaultAgentWorkspacePath } from '../utils/paths';
+import {
+  getOpenClawDir,
+  getOpenClawEntryPath,
+  getOpenClawConfigDir,
+  getOpenClawProcessCwd,
+  getOpenClawNodeModulesPath,
+  getOpenClawPackageRootEnv,
+  getBundledPluginSourceCandidates,
+  isOpenClawPresent,
+  getDefaultAgentWorkspacePath,
+  ensureWorkspaceArtifactOutputDir,
+} from '../utils/paths';
+import { WORKSPACE_ARTIFACT_OUTPUT_DIRNAME } from '../../shared/workspace-paths';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { cleanupDanglingWeChatPluginState, listConfiguredChannels } from '../utils/channel-config';
 import {
@@ -320,7 +332,8 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
 
   const mainWorkspace = await getAgentWorkspacePath('main')
     ?? getDefaultAgentWorkspacePath();
-  const mainOutputDir = join(mainWorkspace, '.claw-output');
+  const mainOutputDir = ensureWorkspaceArtifactOutputDir(mainWorkspace)
+    ?? join(mainWorkspace, WORKSPACE_ARTIFACT_OUTPUT_DIRNAME);
 
   const forkEnv: Record<string, string | undefined> = prependNodePathEntry({
     ...baseEnvPatched,
