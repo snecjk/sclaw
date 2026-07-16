@@ -40,10 +40,24 @@ export function resolveBaseAgentId(agentId: string | undefined | null): string {
   return getBaseAgentIdFromProjectAgentId(agentId ?? '') ?? (agentId?.trim().toLowerCase() || 'main');
 }
 
+export function formatProjectAgentDisplayName(
+  baseAgentName: string,
+  projectId: string | null | undefined,
+  projectName?: string | null,
+): string {
+  const label = projectName?.trim() || null;
+  if (label) return `${baseAgentName} · ${label}`;
+  if (projectId && projectId !== 'default') {
+    return `${baseAgentName} · ${projectId.slice(0, 8)}`;
+  }
+  return baseAgentName;
+}
+
 export function resolveEffectiveAgent(
   agents: AgentSummary[],
   agentId: string | undefined | null,
   projectId: string | undefined | null,
+  projectName?: string | null,
 ): AgentSummary | undefined {
   const baseAgentId = resolveBaseAgentId(agentId);
   const baseAgent = agents.find((agent) => agent.id.trim().toLowerCase() === baseAgentId.trim().toLowerCase());
@@ -54,7 +68,7 @@ export function resolveEffectiveAgent(
   return {
     ...baseAgent,
     id: effectiveId,
-    name: `${baseAgent.name} (${projectId.slice(0, 8)})`,
+    name: formatProjectAgentDisplayName(baseAgent.name, projectId, projectName),
     isDefault: false,
     mainSessionKey: `agent:${effectiveId}:main`,
   };
@@ -68,6 +82,7 @@ export function resolveEffectiveAgent(
 export function resolveAgentById(
   agents: AgentSummary[],
   agentId: string | undefined | null,
+  projectName?: string | null,
 ): AgentSummary | undefined {
   if (!agentId) return undefined;
   const normalized = agentId.trim().toLowerCase();
@@ -80,7 +95,7 @@ export function resolveAgentById(
   return {
     ...baseAgent,
     id: normalized,
-    name: `${baseAgent.name} (${projectId?.slice(0, 8) ?? 'project'})`,
+    name: formatProjectAgentDisplayName(baseAgent.name, projectId, projectName),
     isDefault: false,
     mainSessionKey: `agent:${normalized}:main`,
   };

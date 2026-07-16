@@ -39,6 +39,12 @@ export async function listProjectAgentIds(): Promise<string[]> {
   return allIds.filter(isProjectAgentId);
 }
 
+function normalizeWorkspacePathForCompare(workspacePath: string | null | undefined): string {
+  const trimmed = workspacePath?.trim();
+  if (!trimmed) return '';
+  return path.normalize(path.resolve(trimmed));
+}
+
 /**
  * Ensure the project agent for a session key exists and points at the right workspace.
  * Returns the project agent ID and whether the config changed.
@@ -87,7 +93,9 @@ export async function ensureProjectAgent(
 
   if (exists) {
     const currentWorkspace = await getAgentWorkspacePath(agentId);
-    if (currentWorkspace && currentWorkspace !== rootPath) {
+    const normalizedCurrent = normalizeWorkspacePathForCompare(currentWorkspace);
+    const normalizedTarget = normalizeWorkspacePathForCompare(rootPath);
+    if (normalizedCurrent && normalizedCurrent !== normalizedTarget) {
       await updateAgentWorkspace(agentId, rootPath);
       return { agentId, created: false, workspaceUpdated: true };
     }
@@ -141,9 +149,11 @@ export async function deleteProjectAgent(projectId: string, baseAgentId: string)
 export async function deleteAllProjectAgentsForProject(projectId: string): Promise<string[]> {
   const removed: string[] = [];
   const allIds = await listConfiguredAgentIds();
+  const knownBaseAgentIds = allIds.filter((id) => !isProjectAgentId(id));
+  const normalizedProjectId = projectId.trim().toLowerCase();
   for (const agentId of allIds) {
-    const parsed = parseProjectAgentId(agentId);
-    if (parsed?.projectId === projectId.toLowerCase()) {
+    const parsed = parseProjectAgentId(agentId, knownBaseAgentIds);
+    if (parsed?.projectId === normalizedProjectId) {
       await deleteAgentConfig(agentId);
       removed.push(agentId);
     }

@@ -157,6 +157,7 @@ export const useChatStore = create<ChatState>()(
     (set, get) => ({
   ...initialChatDataState,
   setPendingNewSessionModel: (model) => set({ pendingNewSessionModel: model }),
+  setPendingProjectId: (projectId) => set({ pendingProjectId: projectId }),
   ...createSessionLifecycleActions(set, get, {
     parseSessionUpdatedAtMs,
     scheduleSessionLabelHydrationFromStore,

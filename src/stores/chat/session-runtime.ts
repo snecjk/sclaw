@@ -196,6 +196,7 @@ export function buildSessionSwitchPatch(
   return {
     currentSessionKey: nextSessionKey,
     currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
+    pendingProjectId: null,
     sessions: ensureSessionEntry(nextSessions, nextSessionKey, resolveEngineType),
     runtimeBySessionKey: nextRuntimeBySessionKey,
     sessionLabels: leavingEmpty

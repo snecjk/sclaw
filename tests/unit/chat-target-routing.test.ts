@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { invokeIpcMock, hostApiFetchMock, agentsState } = vi.hoisted(() => ({
+const { invokeIpcMock, hostApiFetchMock, agentsState, bindSessionMock } = vi.hoisted(() => ({
   invokeIpcMock: vi.fn(),
   hostApiFetchMock: vi.fn(),
+  bindSessionMock: vi.fn(),
   agentsState: {
     agents: [] as Array<Record<string, unknown>>,
   },
@@ -19,6 +20,12 @@ vi.mock('@/lib/host-api', () => ({
 vi.mock('@/stores/agents', () => ({
   useAgentsStore: {
     getState: () => agentsState,
+  },
+}));
+
+vi.mock('@/stores/session-catalog', () => ({
+  useSessionCatalogStore: {
+    getState: () => ({ bindSession: bindSessionMock }),
   },
 }));
 
@@ -82,8 +89,13 @@ describe('chat target routing', () => {
       if (path === '/api/chat/send') {
         return { success: true, result: { runId: 'run-send' } };
       }
+      if (path === '/api/sessions/model') {
+        return { success: true };
+      }
       throw new Error(`Unexpected hostApiFetch call: ${path}`);
     });
+    bindSessionMock.mockReset();
+    bindSessionMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -179,6 +191,53 @@ describe('chat target routing', () => {
     expect(invokeIpcMock.mock.calls.some(
       ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.history',
     )).toBe(false);
+  });
+
+  it('materializes and binds a project draft before its first dispatch', async () => {
+    const { useChatStore } = await import('@/stores/chat');
+    let bindingCompleted = false;
+    bindSessionMock.mockImplementation(async () => {
+      bindingCompleted = true;
+    });
+
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      currentAgentId: 'main',
+      pendingProjectId: null,
+      pendingNewSessionModel: 'dashscope/test-model',
+      sessions: [],
+      messages: [],
+      sessionLabels: {},
+      sessionLastActivity: {},
+      runtimeBySessionKey: {},
+      sending: false,
+      activeRunId: null,
+      error: null,
+      loading: false,
+    });
+
+    useChatStore.getState().newSession({ projectId: 'project-a' });
+    expect(useChatStore.getState()).toMatchObject({
+      currentSessionKey: 'agent:main:main',
+      currentAgentId: 'proj-project-a--main',
+      pendingProjectId: 'project-a',
+    });
+    expect(useChatStore.getState().sessions).toEqual([]);
+
+    await useChatStore.getState().sendMessage({ text: 'Project first message' });
+
+    const materializedKey = useChatStore.getState().currentSessionKey;
+    expect(materializedKey).toMatch(/^agent:proj-project-a--main:session-/);
+    expect(useChatStore.getState().pendingProjectId).toBeNull();
+    expect(bindSessionMock).toHaveBeenCalledWith(materializedKey, 'project-a');
+    expect(bindingCompleted).toBe(true);
+
+    const sendCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send');
+    const payload = JSON.parse((sendCall?.[1] as { body: string }).body) as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      sessionKey: materializedKey,
+      message: 'Project first message',
+    });
   });
 
   it('uses the selected agent main session for attachment sends', async () => {

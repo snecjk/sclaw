@@ -32,6 +32,7 @@ export const initialChatDataState: Pick<
   | 'showThinking'
   | 'thinkingLevel'
   | 'pendingNewSessionModel'
+  | 'pendingProjectId'
   | 'workflowCardStates'
   | 'pendingWorkflow'
 > = {
@@ -63,6 +64,7 @@ export const initialChatDataState: Pick<
   showThinking: true,
   thinkingLevel: null,
   pendingNewSessionModel: null,
+  pendingProjectId: null,
   workflowCardStates: {},
   pendingWorkflow: null,
 };

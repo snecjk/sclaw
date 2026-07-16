@@ -719,6 +719,7 @@ function SidebarNavLink({
 export function Sidebar() {
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const pendingProjectId = useChatStore((s) => s.pendingProjectId);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
@@ -964,6 +965,7 @@ export function Sidebar() {
           useChatStore.setState({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: 'main',
+            pendingProjectId: null,
             runtimeBySessionKey: nextRuntimeBySessionKey,
             messages: [],
             loading: false,
@@ -1024,8 +1026,7 @@ export function Sidebar() {
     const isRecentSessionActive =
       isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
     const workspaceId = sessionWorkspaceByKey[s.key] ?? DEFAULT_WORKSPACE_ID;
-    const isInProject = workspaceId !== DEFAULT_WORKSPACE_ID;
-    const currentProjectId = isInProject ? workspaceId : null;
+    const currentProjectId = workspaceId !== DEFAULT_WORKSPACE_ID ? workspaceId : null;
     const isPinned = catalogByKey[s.key]?.pinRank != null;
     return (
       <SidebarRecentSessionRow
@@ -1038,7 +1039,6 @@ export function Sidebar() {
         editingValue={editingValue}
         projects={userProjects}
         currentProjectId={currentProjectId}
-        isInProject={isInProject}
         onOpen={() => {
           navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
         }}
@@ -1050,13 +1050,7 @@ export function Sidebar() {
               toast.success(t('common:sidebar.unpinnedInRecent'));
               return;
             }
-            let maxPin = 0;
-            for (const [key, meta] of Object.entries(catalogByKey)) {
-              const ws = sessionWorkspaceByKey[key] ?? DEFAULT_WORKSPACE_ID;
-              if (ws !== DEFAULT_WORKSPACE_ID) continue;
-              if (meta.pinRank != null && meta.pinRank > maxPin) maxPin = meta.pinRank;
-            }
-            await patchSessionCatalog({ sessionKey: s.key, pinRank: maxPin + 1 });
+            await patchSessionCatalog({ sessionKey: s.key, pinRank: 1 });
             toast.success(t('common:sidebar.pinnedInRecent'));
           })();
         }}
@@ -1076,10 +1070,6 @@ export function Sidebar() {
         onMoveToProject={(projectId) => {
           void moveSessionToProject(s.key, projectId);
           toast.success(t('common:sidebar.movedToProject'));
-        }}
-        onRemoveFromProject={() => {
-          void moveSessionToProject(s.key, null);
-          toast.success(t('common:sidebar.removedFromProject'));
         }}
         onCreateProject={() => setCreateProjectSessionKey(s.key)}
       />
@@ -1733,8 +1723,11 @@ export function Sidebar() {
         <div className="flex shrink-0 flex-col gap-0.5">
         <div className={cn('flex flex-col gap-0.5', sidebarCollapsed && 'mt-2')}>
 {primaryNav.map((item) => {
-  // 当有选中非默认会话时，新对话入口不高亮，避免与会话列表项同时高亮
-  const shouldDimHome = currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY;
+  // 当有选中非默认会话，或处于项目新对话草稿时，顶部「新对话」不高亮
+  const shouldDimHome = Boolean(
+    (currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY)
+    || pendingProjectId,
+  );
   const homeIsActiveOverride = item.to === '/' && shouldDimHome ? false : undefined;
   
   // 点击新对话时，切换到默认会话并清空消息，让页面显示初始内容
@@ -1797,6 +1790,7 @@ export function Sidebar() {
           useChatStore.setState({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: 'main',
+            pendingProjectId: null,
             runtimeBySessionKey: nextRuntimeBySessionKey,
             messages: [],
             loading: false,
@@ -1816,6 +1810,7 @@ export function Sidebar() {
           });
         } else {
           useChatStore.getState().clearPendingWorkflowMemory();
+          useChatStore.setState({ pendingProjectId: null, currentAgentId: 'main' });
         }
       }
     : undefined;

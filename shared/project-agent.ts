@@ -8,7 +8,7 @@
 
 export const PROJECT_AGENT_PREFIX = 'proj';
 const PROJECT_AGENT_SEPARATOR = '--';
-const LEGACY_UUID_PROJECT_AGENT_PATTERN = /^([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})-(.+)$/i;
+const LEGACY_UUID_PROJECT_AGENT_PATTERN = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(.+)$/i;
 
 function normalizeAgentId(value: string | undefined | null): string {
   return (value ?? '').trim().toLowerCase() || 'main';
@@ -32,27 +32,59 @@ export function resolveProjectAgentId(projectId: string, baseAgentId: string): s
   return `${prefix}${truncatedBase}`;
 }
 
-export function parseProjectAgentId(agentId: string): { projectId: string; baseAgentId: string } | null {
+function parseLegacyWithKnownBaseAgentIds(
+  inner: string,
+  knownBaseAgentIds: readonly string[],
+): { projectId: string; baseAgentId: string } | null {
+  const sorted = [...knownBaseAgentIds]
+    .map((id) => id.trim().toLowerCase())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+
+  for (const baseAgentId of sorted) {
+    const suffix = `-${baseAgentId}`;
+    if (!inner.endsWith(suffix)) continue;
+    const projectId = inner.slice(0, -suffix.length);
+    if (projectId) return { projectId, baseAgentId };
+  }
+  return null;
+}
+
+export function parseProjectAgentId(
+  agentId: string,
+  knownBaseAgentIds?: readonly string[],
+): { projectId: string; baseAgentId: string } | null {
   const trimmed = (agentId ?? '').trim().toLowerCase();
   const prefix = `${PROJECT_AGENT_PREFIX}-`;
   if (!trimmed.startsWith(prefix)) return null;
 
   const inner = trimmed.slice(prefix.length);
-  const separatorIndex = inner.lastIndexOf(PROJECT_AGENT_SEPARATOR);
-  let projectId: string;
-  let baseAgentId: string;
-  if (separatorIndex > 0) {
-    projectId = inner.slice(0, separatorIndex);
-    baseAgentId = inner.slice(separatorIndex + PROJECT_AGENT_SEPARATOR.length);
-  } else {
-    const legacyMatch = LEGACY_UUID_PROJECT_AGENT_PATTERN.exec(inner);
-    if (!legacyMatch) return null;
-    projectId = legacyMatch[1];
-    baseAgentId = legacyMatch[2];
-  }
-  if (!projectId || !baseAgentId) return null;
+  if (!inner) return null;
 
-  return { projectId, baseAgentId };
+  // New IDs use an explicit double-dash separator so dashed project IDs and
+  // dashed base-agent IDs can both be recovered without external context.
+  const separatorIndex = inner.lastIndexOf(PROJECT_AGENT_SEPARATOR);
+  if (separatorIndex > 0) {
+    const projectId = inner.slice(0, separatorIndex);
+    const baseAgentId = inner.slice(separatorIndex + PROJECT_AGENT_SEPARATOR.length);
+    return projectId && baseAgentId ? { projectId, baseAgentId } : null;
+  }
+
+  // Keep reading IDs produced before the separator migration. UUID projects
+  // are unambiguous; arbitrary dashed IDs can be disambiguated with known base IDs.
+  const uuidMatch = LEGACY_UUID_PROJECT_AGENT_PATTERN.exec(inner);
+  if (uuidMatch) return { projectId: uuidMatch[1], baseAgentId: uuidMatch[2] };
+
+  if (knownBaseAgentIds?.length) {
+    const knownMatch = parseLegacyWithKnownBaseAgentIds(inner, knownBaseAgentIds);
+    if (knownMatch) return knownMatch;
+  }
+
+  const lastDash = inner.lastIndexOf('-');
+  if (lastDash <= 0) return null;
+  const projectId = inner.slice(0, lastDash);
+  const baseAgentId = inner.slice(lastDash + 1);
+  return projectId && baseAgentId ? { projectId, baseAgentId } : null;
 }
 
 export function isProjectAgentId(agentId: string): boolean {

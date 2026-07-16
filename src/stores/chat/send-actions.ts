@@ -8,7 +8,7 @@ import { scheduleSendWatchdogs } from './send-watchdogs';
 import { logChatFlow } from './chat-flow-log';
 import { useGatewayStore } from '../gateway';
 import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
-import type { ChatSession, SendMessageOptions, SessionRuntimeState } from './types';
+import { DEFAULT_SESSION_KEY, type ChatSession, type SendMessageOptions, type SessionRuntimeState } from './types';
 import { getSessionRuntimeState } from './session-runtime';
 import { normalizeAppError } from '@/lib/error-model';
 import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
@@ -109,6 +109,19 @@ export function createSendActions(
         ? appendSkillTranscriptMarker(skillGatewayText, skillMeta, userDisplayText)
         : skillGatewayText;
       if (!gatewayText && (!attachments || attachments.length === 0) && !skillMeta) return;
+
+      // DEFAULT_SESSION_KEY is a UI placeholder. Materialize it before target
+      // resolution so a fresh home/project conversation always gets a unique
+      // local key and, for projects, completes catalog binding + gateway reload
+      // through the registered session-readiness promise before dispatch.
+      if (get().currentSessionKey === DEFAULT_SESSION_KEY) {
+        const pendingProjectId = get().pendingProjectId;
+        get().newSession(
+          pendingProjectId
+            ? { projectId: pendingProjectId, materialize: true }
+            : undefined,
+        );
+      }
 
       const {
         dingTalkRpcExtras,

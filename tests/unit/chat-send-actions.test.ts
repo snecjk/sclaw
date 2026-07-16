@@ -31,6 +31,7 @@ import { createSendActions } from '@/stores/chat/send-actions';
 function createHarness() {
   let state = {
     ...initialChatDataState,
+    newSession: vi.fn(),
     runtimeBySessionKey: {
       'agent:main:main': createIdleSessionRuntimeState(),
     },

@@ -671,7 +671,7 @@ export function createSessionLifecycleActions(
 
     // ── New session ──
 
-    newSession: (options?: { projectId?: string }) => {
+    newSession: (options?: { projectId?: string; materialize?: boolean }) => {
       // Generate a new unique session key and switch to it.
       // NOTE: We intentionally do NOT call sessions.reset on the old session.
       // sessions.reset archives (renames) the session JSONL file, making old
@@ -682,10 +682,63 @@ export function createSessionLifecycleActions(
         && messages.length === 0
         && !sessionLastActivity[currentSessionKey]
         && !sessionLabels[currentSessionKey];
-      const projectId = options?.projectId?.trim();
+      const projectId = (options?.projectId ?? get().pendingProjectId ?? undefined)?.trim();
+      const shouldMaterialize = options?.materialize === true || !projectId;
       const currentAgentId = get().currentAgentId || getAgentIdFromSessionKey(currentSessionKey);
       const baseAgentId = getBaseAgentIdFromProjectAgentId(currentAgentId) ?? currentAgentId ?? 'main';
+
+      // A project-level "new chat" is only a renderer draft until the first send.
+      // This avoids empty catalog rows while still carrying project/agent/model context.
+      if (projectId && projectId !== 'default' && !shouldMaterialize) {
+        const draftAgentId = resolveProjectAgentId(projectId, baseAgentId);
+        set((s) => {
+          const nextRuntimeBySessionKey = {
+            ...s.runtimeBySessionKey,
+            [currentSessionKey]: captureTopLevelRuntime(s),
+            [DEFAULT_SESSION_KEY]: createIdleSessionRuntimeState(),
+          };
+          if (leavingEmpty) delete nextRuntimeBySessionKey[currentSessionKey];
+          return {
+            currentSessionKey: DEFAULT_SESSION_KEY,
+            currentAgentId: draftAgentId,
+            pendingProjectId: projectId,
+            sessions: leavingEmpty
+              ? s.sessions.filter((session) => session.key !== currentSessionKey)
+              : s.sessions,
+            runtimeBySessionKey: nextRuntimeBySessionKey,
+            sessionLabels: leavingEmpty
+              ? clearSessionEntryFromMap(s.sessionLabels, currentSessionKey)
+              : s.sessionLabels,
+            sessionLastActivity: leavingEmpty
+              ? clearSessionEntryFromMap(s.sessionLastActivity, currentSessionKey)
+              : s.sessionLastActivity,
+            sidebarRecentOrder: leavingEmpty
+              ? removeSidebarRecentOrderKey(s.sidebarRecentOrder, currentSessionKey)
+              : s.sidebarRecentOrder,
+            messages: [],
+            sending: false,
+            streamingText: '',
+            streamingMessage: null,
+            streamingMessages: [],
+            streamingToolResults: [],
+            streamingTools: [],
+            activeRunId: null,
+            sendAcceptance: null,
+            error: null,
+            pendingFinal: false,
+            lastUserMessageAt: null,
+            optimisticUserMessage: null,
+            pendingToolImages: [],
+            pendingWorkflow: null,
+          };
+        });
+        touchSessionReadAt(DEFAULT_SESSION_KEY);
+        if (leavingEmpty) clearSessionSendReadiness(currentSessionKey);
+        return;
+      }
+
       const newAgentId = projectId
+        && projectId !== 'default'
         ? resolveProjectAgentId(projectId, baseAgentId)
         : getAgentIdFromSessionKey(`${
           getCanonicalPrefixFromSessionKey(currentSessionKey)
@@ -736,6 +789,7 @@ export function createSessionLifecycleActions(
         return {
           currentSessionKey: newKey,
           currentAgentId: newAgentId,
+          pendingProjectId: null,
           sessions: nextSessions,
           runtimeBySessionKey: nextRuntimeBySessionKey,
           sessionLabels: leavingEmpty
@@ -765,7 +819,7 @@ export function createSessionLifecycleActions(
       const syncModel = () => currentSessionModel?.trim()
         ? syncSessionModelToGateway(newKey, currentSessionModel, newAgentId)
         : applyWorkspaceDefaultToNewSession(newKey, newAgentId);
-      const setupPromise = projectId
+      const setupPromise = projectId && projectId !== 'default'
         ? import('@/stores/session-catalog').then(async ({ useSessionCatalogStore }) => {
           await useSessionCatalogStore.getState().bindSession(newKey, projectId);
           await syncModel();

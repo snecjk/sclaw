@@ -116,9 +116,10 @@ export function ProjectFormDialog({
           disabled={picking}
           onClick={() => void handlePick()}
           className={cn(
-            'mb-6 flex w-full items-center gap-2 rounded-xl border border-[var(--sto-sidebar-border)]',
+            'flex w-full items-center gap-2 rounded-xl border border-[var(--sto-sidebar-border)]',
             'bg-[var(--sto-neutral-2)] px-3 py-3 text-left transition-colors',
             'hover:bg-[var(--sto-sidebar-row-hover-bg)] disabled:opacity-60',
+            mode === 'create' ? 'mb-2' : 'mb-6',
           )}
         >
           <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -132,6 +133,12 @@ export function ProjectFormDialog({
               : (rootPath || t('sidebar.projectLocationPlaceholder'))}
           </span>
         </button>
+
+        {mode === 'create' ? (
+          <p className="mb-6 text-xs leading-relaxed text-muted-foreground">
+            {t('sidebar.projectArtifactHint')}
+          </p>
+        ) : null}
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>

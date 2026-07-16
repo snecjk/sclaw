@@ -34,9 +34,51 @@ export function getOpenClawConfigDir(): string {
   return join(homedir(), '.stoclaw', 'openclaw');
 }
 
+/**
+ * StoClaw user home config root (~/.stoclaw).
+ * Survives app reinstall when Application Support / userData is wiped.
+ */
+export function getStoClawHomeDir(): string {
+  return join(homedir(), '.stoclaw');
+}
+
+/** More Apps (应用广场) registry directory under user home. */
+export function getMoreAppsDir(): string {
+  return join(getStoClawHomeDir(), 'more-apps');
+}
+
+/** More Apps registry JSON path (~/.stoclaw/more-apps/apps.json). */
+export function getMoreAppsRegistryPath(): string {
+  return join(getMoreAppsDir(), 'apps.json');
+}
+
 /** Legacy standalone OpenClaw workspace (~/.openclaw/workspace), if present on disk. */
 export function getLegacyOpenClawWorkspaceRoot(): string {
   return join(homedir(), '.openclaw', 'workspace');
+}
+
+/** Shared default agent workspace (~/.stoclaw/workspace). */
+export function getDefaultAgentWorkspacePath(): string {
+  return join(getStoClawHomeDir(), 'workspace');
+}
+
+/** Legacy default workspace before lift-out (~/.stoclaw/openclaw/workspace). */
+export function getLegacyDefaultAgentWorkspacePath(): string {
+  return join(getOpenClawConfigDir(), 'workspace');
+}
+
+/** Managed per-agent workspace under ~/.stoclaw/workspace-{agentId}. */
+export function getManagedAgentWorkspacePath(agentId: string): string {
+  const id = (agentId ?? '').trim().toLowerCase();
+  if (!id || id === 'main') return getDefaultAgentWorkspacePath();
+  return join(getStoClawHomeDir(), `workspace-${id}`);
+}
+
+/** Legacy managed workspace (~/.stoclaw/openclaw/workspace-{agentId}). */
+export function getLegacyManagedAgentWorkspacePath(agentId: string): string {
+  const id = (agentId ?? '').trim().toLowerCase();
+  if (!id || id === 'main') return getLegacyDefaultAgentWorkspacePath();
+  return join(getOpenClawConfigDir(), `workspace-${id}`);
 }
 
 /**

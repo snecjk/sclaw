@@ -25,7 +25,6 @@ export interface SidebarProjectSessionRowProps {
   onEditingValueChange: (value: string) => void;
   onCommitRename: () => void;
   onCancelRename: () => void;
-  onRemoveFromProject: () => void;
   onDelete: () => void;
 }
 
@@ -42,7 +41,6 @@ export function SidebarProjectSessionRow({
   onEditingValueChange,
   onCommitRename,
   onCancelRename,
-  onRemoveFromProject,
   onDelete,
 }: SidebarProjectSessionRowProps) {
   const { t } = useTranslation('common');
@@ -94,7 +92,6 @@ export function SidebarProjectSessionRow({
           isPinned={isPinned}
           onPin={onPin}
           onRename={onStartRename}
-          onRemoveFromProject={onRemoveFromProject}
           onDelete={onDelete}
         />
       </div>

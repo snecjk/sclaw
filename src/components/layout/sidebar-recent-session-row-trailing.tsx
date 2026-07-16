@@ -38,12 +38,10 @@ export interface SidebarRecentSessionRowTrailingProps {
   isPinned: boolean;
   projects: WorkspaceDto[];
   currentProjectId: string | null;
-  isInProject: boolean;
   onPin: () => void;
   onRename: () => void;
   onDelete: () => void;
   onMoveToProject: (projectId: string) => void;
-  onRemoveFromProject: () => void;
   onCreateProject: () => void;
   className?: string;
 }
@@ -56,12 +54,10 @@ export function SidebarRecentSessionRowTrailing({
   isPinned,
   projects,
   currentProjectId,
-  isInProject,
   onPin,
   onRename,
   onDelete,
   onMoveToProject,
-  onRemoveFromProject,
   onCreateProject,
   className,
 }: SidebarRecentSessionRowTrailingProps) {
@@ -150,19 +146,8 @@ export function SidebarRecentSessionRowTrailing({
                   <FolderPlus className="h-4 w-4 shrink-0" aria-hidden />
                   {t('sidebar.newProject')}
                 </DropdownMenuItem>
-                {isInProject || assignableProjects.length > 0 ? (
+                {assignableProjects.length > 0 ? (
                   <DropdownMenuSeparator className={sidebarRecentMenuDividerClass} />
-                ) : null}
-                {isInProject ? (
-                  <DropdownMenuItem
-                    className={cn(sidebarRecentMenuItemClass, 'justify-start')}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onRemoveFromProject();
-                    }}
-                  >
-                    {t('sidebar.removeFromProject')}
-                  </DropdownMenuItem>
                 ) : null}
                 {assignableProjects.map((project) => (
                   <DropdownMenuItem

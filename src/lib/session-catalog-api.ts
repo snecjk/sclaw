@@ -67,9 +67,9 @@ export async function updateProjectWorkspace(input: {
   return res.workspace;
 }
 
-export async function deleteProjectWorkspace(id: string): Promise<{ movedSessionCount: number }> {
-  const res = await invokeCatalog<{ success: boolean; movedSessionCount: number }>('deleteWorkspace', { id });
-  return { movedSessionCount: res.movedSessionCount ?? 0 };
+export async function deleteProjectWorkspace(id: string): Promise<{ deletedSessionCount: number }> {
+  const res = await invokeCatalog<{ success: boolean; deletedSessionCount: number }>('deleteWorkspace', { id });
+  return { deletedSessionCount: res.deletedSessionCount ?? 0 };
 }
 
 export async function createProjectWorkspace(input: {

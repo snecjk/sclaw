@@ -27,8 +27,8 @@ import type { AgentEngineType } from '../engines/types';
 import { getAgentWorkspacePath } from '../utils/agent-config';
 import type { GatewayManager } from '../gateway/manager';
 import {
+  deleteAllProjectAgentsForProject,
   ensureProjectAgent,
-  rehomeProjectAgentsForProject,
 } from './project-agent-service';
 import {
   getBaseAgentIdFromProjectAgentId,
@@ -216,27 +216,25 @@ export async function updateWorkspace(
 export async function deleteWorkspace(
   workspaceId: string,
   gatewayManager?: GatewayManager | null,
-): Promise<{ movedSessionCount: number }> {
+): Promise<{ deletedSessionCount: number }> {
   await ensureSessionCatalogBootstrapped();
   const catalogRepo = getCatalogSessionRepository();
+  const bindingRepo = getSessionEngineBindingRepository();
   const sessions = await catalogRepo.list({ workspaceId });
   for (const session of sessions) {
-    await catalogRepo.moveToWorkspace(session.sessionKey, DEFAULT_WORKSPACE_ID);
-  }
-  try {
-    const rehomed = await rehomeProjectAgentsForProject(workspaceId);
-    for (const session of sessions) {
-      await syncSessionEngineBindingCwd(session.sessionKey);
-    }
-    if (rehomed.length > 0) {
-      await gatewayManager?.reload({ force: true });
-    }
-  } catch (error) {
-    logger.warn('[session-catalog] failed to rehome project agents for deleted workspace', { workspaceId, error });
-    throw error;
+    await catalogRepo.softDelete(workspaceId, session.sessionKey);
+    await bindingRepo.softDelete(session.sessionKey);
   }
   await getWorkspaceRepository().softDelete(workspaceId);
-  return { movedSessionCount: sessions.length };
+  try {
+    const removed = await deleteAllProjectAgentsForProject(workspaceId);
+    if (removed.length > 0) {
+      gatewayManager?.debouncedReload();
+    }
+  } catch (error) {
+    logger.warn('[session-catalog] failed to delete project agents for workspace', { workspaceId, error });
+  }
+  return { deletedSessionCount: sessions.length };
 }
 
 export async function syncSessionEngineBindingCwd(sessionKey: string): Promise<void> {
@@ -340,8 +338,12 @@ export async function bindSessionToWorkspace(
         ? (getBaseAgentIdFromProjectAgentId(rawAgentId) ?? 'main')
         : rawAgentId;
       try {
-        await ensureProjectAgent(workspaceId, baseAgentId, workspace.rootPath);
-        await gatewayManager?.reload({ force: true });
+        const result = await ensureProjectAgent(workspaceId, baseAgentId, workspace.rootPath);
+        if (result.created || result.workspaceUpdated) {
+          // Session readiness waits for this API call. Awaiting reload here ensures
+          // the newly-created project agent is routable before the first send.
+          await gatewayManager?.reload({ force: true });
+        }
       } catch (error) {
         logger.warn('[session-catalog] failed to ensure project agent on bind', { workspaceId, sessionKey, error });
         throw error;
@@ -356,6 +358,9 @@ export async function moveSessionToWorkspace(
   gatewayManager?: GatewayManager | null,
 ): Promise<CatalogSession> {
   await ensureSessionCatalogBootstrapped();
+  if (workspaceId === DEFAULT_WORKSPACE_ID) {
+    throw new Error('Moving sessions out of a project is not supported');
+  }
   const session = await getCatalogSessionRepository().moveToWorkspace(sessionKey, workspaceId);
   await syncSessionEngineBindingCwd(sessionKey);
   if (workspaceId !== DEFAULT_WORKSPACE_ID) {
@@ -366,8 +371,10 @@ export async function moveSessionToWorkspace(
         ? (getBaseAgentIdFromProjectAgentId(rawAgentId) ?? 'main')
         : rawAgentId;
       try {
-        await ensureProjectAgent(workspaceId, baseAgentId, workspace.rootPath);
-        gatewayManager?.debouncedReload();
+        const result = await ensureProjectAgent(workspaceId, baseAgentId, workspace.rootPath);
+        if (result.created || result.workspaceUpdated) {
+          gatewayManager?.debouncedReload();
+        }
       } catch (error) {
         logger.warn('[session-catalog] failed to ensure project agent on move', { workspaceId, sessionKey, error });
       }
