@@ -34,6 +34,24 @@ export function getOpenClawConfigDir(): string {
   return join(homedir(), '.stoclaw', 'openclaw');
 }
 
+/**
+ * StoClaw user home config root (~/.stoclaw).
+ * Survives app reinstall when Application Support / userData is wiped.
+ */
+export function getStoClawHomeDir(): string {
+  return join(homedir(), '.stoclaw');
+}
+
+/** More Apps (应用广场) registry directory under user home. */
+export function getMoreAppsDir(): string {
+  return join(getStoClawHomeDir(), 'more-apps');
+}
+
+/** More Apps registry JSON path (~/.stoclaw/more-apps/apps.json). */
+export function getMoreAppsRegistryPath(): string {
+  return join(getMoreAppsDir(), 'apps.json');
+}
+
 /** Legacy standalone OpenClaw workspace (~/.openclaw/workspace), if present on disk. */
 export function getLegacyOpenClawWorkspaceRoot(): string {
   return join(homedir(), '.openclaw', 'workspace');
