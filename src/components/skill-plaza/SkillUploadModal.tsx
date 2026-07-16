@@ -321,7 +321,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     <FileArchive className="h-6 w-6 text-muted-foreground" />
                   </div>
                   <p className="text-sm font-medium text-foreground">
-                    {t('plaza.upload.dragHint', { defaultValue: '点击或拖拽文件、文件夹到此处' })}
+                    {t('plaza.upload.dragHint', { defaultValue: '拖拽文件、.zip文件、文件夹到此处' })}
                   </p>
                   <ul className="text-xs text-muted-foreground mt-4 space-y-1 text-left">
                     {/*<li>{t('plaza.upload.requirementSkillMd', { defaultValue: '文件夹或 .zip 需包含 SKILL.md 文件' })}</li>*/}
