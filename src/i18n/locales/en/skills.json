@@ -208,9 +208,12 @@
             "selectFile": "Choose skill file",
             "selectFileHint": "Choose a .zip file or SKILL.md file",
             "selectFolder": "Choose skill folder",
-            "selectFolderHint": "A skill folder containing SKILL.md",
+            "selectFolderHint": "Select one or more skill folders containing SKILL.md",
             "recommended": "Recommended",
-            "invalidSource": "Choose a valid .zip, SKILL.md, or skill folder containing SKILL.md"
+            "invalidSource": "Choose a valid .zip, SKILL.md, or skill folder containing SKILL.md",
+            "selectedFolderCount": "{{count}} skill folders selected",
+            "batchUploading": "Installing {{current}}/{{total}}...",
+            "batchFailed": "Completed {{completed}}/{{total}}. Remaining uploads stopped: {{error}}"
         },
         "loading": "Loading...",
         "syncingUserSkills": "Syncing your skills...",

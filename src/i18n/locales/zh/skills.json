@@ -208,9 +208,12 @@
             "selectFile": "选择技能文件",
             "selectFileHint": "选择 .zip 文件或 SKILL.md 文件",
             "selectFolder": "选择技能文件夹",
-            "selectFolderHint": "包含 SKILL.md 的技能文件夹",
+            "selectFolderHint": "支持多选包含 SKILL.md 的技能文件夹",
             "recommended": "推荐",
-            "invalidSource": "请选择有效的 .zip、SKILL.md 或包含 SKILL.md 的技能文件夹"
+            "invalidSource": "请选择有效的 .zip、SKILL.md 或包含 SKILL.md 的技能文件夹",
+            "selectedFolderCount": "已选择 {{count}} 个技能文件夹",
+            "batchUploading": "正在安装 {{current}}/{{total}}...",
+            "batchFailed": "已完成 {{completed}}/{{total}}，后续上传已停止：{{error}}"
         },
         "loading": "加载中...",
         "syncingUserSkills": "正在同步您的技能…",

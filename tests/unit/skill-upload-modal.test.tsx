@@ -72,7 +72,7 @@ describe('SkillUploadModal source selection', () => {
     await waitFor(() => {
       expect(mocks.invokeIpc).toHaveBeenCalledWith(
         'dialog:open',
-        expect.objectContaining({ properties: ['openDirectory'] }),
+        expect.objectContaining({ properties: ['openDirectory', 'multiSelections'] }),
       );
     });
 
@@ -115,7 +115,7 @@ describe('SkillUploadModal source selection', () => {
 
   it('preserves copy drag feedback and clears it when the item leaves', () => {
     renderModal();
-    const dropZone = screen.getByRole('button', { name: '点击或拖拽文件、文件夹到此处' });
+    const dropZone = screen.getByRole('button', { name: /拖拽.*到此处/ });
     const dataTransfer = createDataTransfer(new File(['skill'], 'SKILL.md'));
 
     fireEvent.dragOver(dropZone, { dataTransfer });
@@ -135,7 +135,7 @@ describe('SkillUploadModal source selection', () => {
       return Promise.resolve(undefined);
     });
     renderModal();
-    const dropZone = screen.getByRole('button', { name: '点击或拖拽文件、文件夹到此处' });
+    const dropZone = screen.getByRole('button', { name: /拖拽.*到此处/ });
     const file = new File(['skill'], 'SKILL.md');
     Object.defineProperty(file, 'path', { value: 'C:\\skills\\SKILL.md' });
     const dropEvent = createEvent.drop(dropZone);
@@ -165,7 +165,7 @@ describe('SkillUploadModal source selection', () => {
     const getPathForFile = vi.fn(() => 'C:\\skills\\folder-skill');
     Object.assign(window.electron, { getPathForFile });
     renderModal();
-    const dropZone = screen.getByRole('button', { name: '点击或拖拽文件、文件夹到此处' });
+    const dropZone = screen.getByRole('button', { name: /拖拽.*到此处/ });
     const file = new File([], 'folder-skill');
 
     fireEvent.drop(dropZone, {
@@ -194,6 +194,88 @@ describe('SkillUploadModal source selection', () => {
     }
 
     expect(screen.getByText('推荐')).toHaveClass('text-primary', 'bg-primary/10');
+  });
+
+  it('validates every selected folder and uploads them sequentially', async () => {
+    const folders = [
+      'C:\\skills\\first',
+      'C:\\skills\\second',
+      'C:\\skills\\third',
+    ];
+    mocks.invokeIpc.mockImplementation((channel: string) => {
+      if (channel === 'dialog:open') {
+        return Promise.resolve({ canceled: false, filePaths: folders });
+      }
+      if (channel === 'file:validateSkillUpload') return Promise.resolve({ valid: true });
+      return Promise.resolve(undefined);
+    });
+    const resolveUploads: Array<(value: string) => void> = [];
+    mocks.uploadSkill.mockImplementation(
+      () => new Promise<string>((resolve) => resolveUploads.push(resolve)),
+    );
+    const onClose = vi.fn();
+    const onUploadSuccess = vi.fn();
+    render(<SkillUploadModal open onClose={onClose} onUploadSuccess={onUploadSuccess} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '选择技能文件夹' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('已选择 3 个技能文件夹')).toBeInTheDocument();
+    });
+    expect(mocks.invokeIpc.mock.calls.filter(([channel]) => channel === 'file:validateSkillUpload'))
+      .toEqual(folders.map((folder) => ['file:validateSkillUpload', folder]));
+
+    fireEvent.click(screen.getByRole('button', { name: '安装' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('正在安装 1/3...')).toBeInTheDocument();
+      expect(mocks.uploadSkill).toHaveBeenCalledTimes(1);
+    });
+    resolveUploads[0]('first');
+    await waitFor(() => {
+      expect(screen.getByText('正在安装 2/3...')).toBeInTheDocument();
+      expect(mocks.uploadSkill).toHaveBeenCalledTimes(2);
+    });
+    resolveUploads[1]('second');
+    await waitFor(() => {
+      expect(screen.getByText('正在安装 3/3...')).toBeInTheDocument();
+      expect(mocks.uploadSkill).toHaveBeenCalledTimes(3);
+    });
+    resolveUploads[2]('third');
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(onUploadSuccess).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.uploadSkill.mock.calls.map(([path]) => path)).toEqual(folders);
+  });
+
+  it('stops a multi-folder upload after a failure and reports completed count', async () => {
+    const folders = [
+      'C:\\skills\\first',
+      'C:\\skills\\second',
+      'C:\\skills\\third',
+    ];
+    mocks.invokeIpc.mockImplementation((channel: string) => {
+      if (channel === 'dialog:open') {
+        return Promise.resolve({ canceled: false, filePaths: folders });
+      }
+      if (channel === 'file:validateSkillUpload') return Promise.resolve({ valid: true });
+      return Promise.resolve(undefined);
+    });
+    mocks.uploadSkill
+      .mockResolvedValueOnce('first')
+      .mockRejectedValueOnce(new Error('second failed'));
+    renderModal();
+
+    fireEvent.click(screen.getByRole('button', { name: '选择技能文件夹' }));
+    await screen.findByText('已选择 3 个技能文件夹');
+    fireEvent.click(screen.getByRole('button', { name: '安装' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('已完成 1/3，后续上传已停止：second failed')).toBeInTheDocument();
+    });
+    expect(mocks.uploadSkill).toHaveBeenCalledTimes(2);
+    expect(mocks.uploadSkill.mock.calls.map(([path]) => path)).toEqual(folders.slice(0, 2));
   });
 
   it.each([
