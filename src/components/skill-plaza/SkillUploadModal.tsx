@@ -31,6 +31,7 @@ interface SkillUploadModalProps {
 }
 
 type UploadStatus = 'idle' | 'preview' | 'uploading' | 'success' | 'error';
+type SelectionKind = 'file' | 'folder' | 'drag';
 
 export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUploadModalProps) {
   const { t } = useTranslation('skills');
@@ -38,12 +39,15 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
   const mySkills = useSkillPlazaStore((s) => s.mySkills);
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [filePath, setFilePath] = useState<string | null>(null);
+  const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
+  const [selectionKind, setSelectionKind] = useState<SelectionKind>('drag');
   const [fileName, setFileName] = useState<string | null>(null);
   const [fileSize, setFileSize] = useState<number>(0);
   const [slug] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
 
   // Reset to a fresh state every time the modal opens. Uses React's
   // "adjust state when a prop changes" pattern (setState during render is
@@ -54,57 +58,88 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     if (open) {
       setStatus('idle');
       setFilePath(null);
+      setSelectedPaths([]);
+      setSelectionKind('drag');
       setFileName(null);
       setFileSize(0);
       setErrorMsg(null);
       setUploadWarning(null);
       setDragOver(false);
+      setUploadProgress({ current: 0, total: 0 });
     }
   }
 
   const resetToIdle = () => {
     setStatus('idle');
     setFilePath(null);
+    setSelectedPaths([]);
+    setSelectionKind('drag');
     setFileName(null);
     setFileSize(0);
     setErrorMsg(null);
     setUploadWarning(null);
+    setUploadProgress({ current: 0, total: 0 });
   };
 
   // Enter the preview/confirm step with the given local path. Does NOT start
   // uploading until the user confirms — required by the preview-confirm step.
- const enterPreview = async (selectedPath: string) => {
-   const validation = await invokeIpc<{ valid: boolean }>('file:validateSkillUpload', selectedPath);
-   if (!validation?.valid) {
-     setStatus('idle');
-     setFilePath(null);
-     setFileName(null);
-     setFileSize(0);
-     setErrorMsg(null);
-     setUploadWarning(
-       t('plaza.upload.invalidSource', {
-         defaultValue: '请选择有效的 .zip、SKILL.md 或包含 SKILL.md 的技能文件夹',
-       }),
-     );
-     return;
-   }
-   setFilePath(selectedPath);
-   setFileName(selectedPath.split(/[\\/]/).pop() || selectedPath);
-   setFileSize(0);
-   setErrorMsg(null);
-   setUploadWarning(null);
-   setStatus('preview');
+  const enterPreviewPaths = async (paths: string[], kind: SelectionKind) => {
+    const nextPaths = paths.filter(Boolean);
+    if (!nextPaths.length) return;
+
+    for (const selectedPath of nextPaths) {
+      const validation = await invokeIpc<{ valid: boolean }>('file:validateSkillUpload', selectedPath);
+      if (!validation?.valid) {
+        setStatus('idle');
+        setFilePath(null);
+        setSelectedPaths([]);
+        setSelectionKind('drag');
+        setFileName(null);
+        setFileSize(0);
+        setErrorMsg(null);
+        setUploadWarning(
+          t('plaza.upload.invalidSource', {
+            defaultValue: '请选择有效的 .zip、SKILL.md 或包含 SKILL.md 的技能文件夹',
+          }),
+        );
+        return;
+      }
+    }
+
+    const firstPath = nextPaths[0];
+    setFilePath(firstPath);
+    setSelectedPaths(nextPaths);
+    setSelectionKind(kind);
+    setFileName(
+      nextPaths.length > 1
+        ? kind === 'folder'
+          ? t('plaza.upload.selectedFolderCount', {
+              count: nextPaths.length,
+              defaultValue: `已选择 ${nextPaths.length} 个技能文件夹`,
+            })
+          : t('plaza.upload.selectedFileCount', {
+              count: nextPaths.length,
+              defaultValue: `已选择 ${nextPaths.length} 个技能文件`,
+            })
+        : firstPath.split(/[\\/]/).pop() || firstPath,
+    );
+    setFileSize(0);
+    setErrorMsg(null);
+    setUploadWarning(null);
+    setStatus('preview');
     // Fetch file size via file:stat IPC (returns size from fs.stat directly).
     // Best-effort: the preview card shows '-' if the size cannot be read.
-    void (async () => {
+    if (nextPaths.length === 1) void (async () => {
       try {
-        const stat = await invokeIpc<{ size: number; isDirectory: boolean; isFile: boolean }>('file:stat', selectedPath);
+        const stat = await invokeIpc<{ size: number; isDirectory: boolean; isFile: boolean }>('file:stat', firstPath);
         if (typeof stat?.size === 'number') setFileSize(stat.size);
       } catch {
         // ignore
       }
     })();
- };
+  };
+
+  const enterPreview = async (selectedPath: string) => enterPreviewPaths([selectedPath], 'drag');
 
   // Step 1 (option A): pick a local .zip file or SKILL.md file.
   // Windows/Linux native dialogs cannot combine openFile and openDirectory.
@@ -114,12 +149,12 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
         'dialog:open',
         {
           title: t('plaza.upload.title', { defaultValue: 'Upload Skill' }),
-          properties: ['openFile'],
+          properties: ['openFile', 'multiSelections'],
           filters: [{ name: 'Skill Package', extensions: ['zip', 'md'] }],
         },
       );
       if (result.canceled || !result.filePaths?.length) return;
-      await enterPreview(result.filePaths[0]);
+      await enterPreviewPaths(result.filePaths, 'file');
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
       setStatus('error');
@@ -134,11 +169,11 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
         'dialog:open',
         {
           title: t('plaza.upload.selectFolder', { defaultValue: '选择技能文件夹' }),
-          properties: ['openDirectory'],
+          properties: ['openDirectory', 'multiSelections'],
         },
       );
       if (result.canceled || !result.filePaths?.length) return;
-      await enterPreview(result.filePaths[0]);
+      await enterPreviewPaths(result.filePaths, 'folder');
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
       setStatus('error');
@@ -217,15 +252,32 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
 
   // Step 2: confirm and upload.
   const confirmUpload = async () => {
-    if (!filePath) return;
+    const paths = selectedPaths.length ? selectedPaths : filePath ? [filePath] : [];
+    if (!paths.length) return;
     setStatus('uploading');
     setErrorMsg(null);
+    setUploadProgress({ current: 1, total: paths.length });
+    let completed = 0;
     try {
-      await uploadSkill(filePath);
+      for (const path of paths) {
+        setUploadProgress({ current: completed + 1, total: paths.length });
+        await uploadSkill(path);
+        completed += 1;
+      }
       onClose();
       onUploadSuccess?.();
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setErrorMsg(
+        paths.length > 1
+          ? t('plaza.upload.batchFailed', {
+              completed,
+              total: paths.length,
+              error: message,
+              defaultValue: `已完成 ${completed}/${paths.length}，后续上传已停止：${message}`,
+            })
+          : message,
+      );
       setStatus('error');
     }
   };
@@ -243,6 +295,27 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     : undefined;
   const skillTitle = uploadedSkill?.title || slug || '';
   const skillCategoryCode = uploadedSkill?.categoryCode;
+  const selectedItemNames = selectedPaths.map(
+    (selectedPath) => selectedPath.split(/[\\/]/).pop() || selectedPath,
+  );
+  const selectedItemSummary = selectedPaths.length > 1
+    ? selectedPaths.length > 2
+      ? selectionKind === 'folder'
+        ? t('plaza.upload.selectedFolderNamesMore', {
+            names: selectedItemNames.slice(0, 2).join('、'),
+            count: selectedPaths.length,
+            defaultValue: `${selectedItemNames.slice(0, 2).join('、')} 等 ${selectedPaths.length} 个文件夹`,
+          })
+        : t('plaza.upload.selectedFileNamesMore', {
+            names: selectedItemNames.slice(0, 2).join('、'),
+            count: selectedPaths.length,
+            defaultValue: `${selectedItemNames.slice(0, 2).join('、')} 等 ${selectedPaths.length} 个技能文件`,
+          })
+      : t('plaza.upload.selectedItemNames', {
+          names: selectedItemNames.join('、'),
+          defaultValue: selectedItemNames.join('、'),
+        })
+    : null;
 
   const renderSkillIcon = () => {
     if (uploadedSkill?.icon) {
@@ -365,7 +438,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                           </span>
                         </span>
                         <span className="mt-1 block text-xs text-muted-foreground">
-                          {t('plaza.upload.selectFileHint', { defaultValue: '选择 .zip 文件或 SKILL.md 文件' })}
+                          {t('plaza.upload.selectFileHint', { defaultValue: '支持多选 .zip 文件或 SKILL.md 文件' })}
                         </span>
                       </span>
                       <ChevronRight className="h-5 w-5 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden="true" />
@@ -385,7 +458,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                           {t('plaza.upload.selectFolder', { defaultValue: '选择技能文件夹' })}
                         </span>
                         <span className="mt-1 block text-xs text-muted-foreground">
-                          {t('plaza.upload.selectFolderHint', { defaultValue: '包含 SKILL.md 的技能文件夹' })}
+                          {t('plaza.upload.selectFolderHint', { defaultValue: '支持多选包含 SKILL.md 的技能文件夹' })}
                         </span>
                       </span>
                       <ChevronRight className="h-5 w-5 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden="true" />
@@ -398,17 +471,30 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                 <div className="flex flex-col">
                   <button
                     type="button"
-                    onClick={pickFile}
+                    onClick={selectedPaths.length > 1 ? resetToIdle : pickFile}
                     className="w-full text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E] rounded-xl"
                   >
                     <div className="min-h-[176px] rounded-2xl border-2 border-dashed border-[#22C55E] bg-[#E9FFEC] px-5 py-6 flex flex-col items-center justify-center transition-colors dark:border-[#343A40] dark:bg-[#1f2325] dark:hover:border-[#46515A]">
-                      <FileText className="h-10 w-10 text-[#8B96A3]" strokeWidth={1.8} />
+                      {selectedPaths.length > 1 && selectionKind === 'folder' ? (
+                        <FolderOpen className="h-10 w-10 text-[#8B96A3]" strokeWidth={1.8} />
+                      ) : (
+                        <FileText className="h-10 w-10 text-[#8B96A3]" strokeWidth={1.8} />
+                      )}
                       <p className="mt-6 max-w-full text-xl leading-7 font-normal text-foreground break-all line-clamp-2 tracking-normal">
                         {fileName}
                       </p>
-                      <p className="mt-3 text-2xl leading-8 font-normal text-[#8B96A3] tracking-normal">
-                        {formatFileSize(fileSize)}
-                      </p>
+                      {selectedItemSummary ? (
+                        <p
+                          className="mt-3 max-w-full text-sm leading-5 font-normal text-muted-foreground break-all line-clamp-2"
+                          title={selectedItemNames.join('\n')}
+                        >
+                          {selectedItemSummary}
+                        </p>
+                      ) : (
+                        <p className="mt-3 text-2xl leading-8 font-normal text-[#8B96A3] tracking-normal">
+                          {formatFileSize(fileSize)}
+                        </p>
+                      )}
                     </div>
                   </button>
                   <div className="mt-5">
@@ -427,7 +513,13 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                 <div className="flex flex-col items-center text-center py-6">
                   <span className="animate-spin h-6 w-6 border-2 border-primary/30 border-t-primary rounded-full mb-3" />
                   <p className="text-sm text-foreground">
-                    {t('plaza.upload.uploading', { defaultValue: '安装...' })}
+                    {uploadProgress.total > 1
+                      ? t('plaza.upload.batchUploading', {
+                          current: uploadProgress.current,
+                          total: uploadProgress.total,
+                          defaultValue: `正在安装 ${uploadProgress.current}/${uploadProgress.total}...`,
+                        })
+                      : t('plaza.upload.uploading', { defaultValue: '安装...' })}
                   </p>
                 </div>
               )}
