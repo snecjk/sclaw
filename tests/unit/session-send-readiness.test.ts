@@ -3,6 +3,7 @@ import {
   awaitSessionSendReadiness,
   clearSessionSendReadinessForTests,
   registerSessionSendReadiness,
+  transferSessionSendReadiness,
 } from '@/lib/session-send-readiness';
 
 describe('session send readiness', () => {
@@ -45,5 +46,13 @@ describe('session send readiness', () => {
     releaseFirst();
     await waiting;
     expect(completed).toEqual(['model', 'bind']);
+  });
+
+  it('transfers draft readiness to the materialized session and preserves failures', async () => {
+    registerSessionSendReadiness('agent:main:main', Promise.reject(new Error('project agent failed')));
+    transferSessionSendReadiness('agent:main:main', 'agent:proj-a:session-1');
+
+    await expect(awaitSessionSendReadiness('agent:main:main')).resolves.toBeUndefined();
+    await expect(awaitSessionSendReadiness('agent:proj-a:session-1')).rejects.toThrow('project agent failed');
   });
 });

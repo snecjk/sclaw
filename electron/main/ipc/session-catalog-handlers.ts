@@ -7,6 +7,7 @@ import {
   createWorkspaceGroup,
   deleteWorkspace,
   ensureSessionCatalogBootstrapped,
+  ensureWorkspaceProjectAgent,
   importLegacySessionLabels,
   importLegacySidebarGroups,
   listAllSessionWorkspaceBindings,
@@ -91,6 +92,15 @@ async function dispatchSessionCatalogAction(
             name: String(payload.name ?? ''),
             rootPath: String(payload.rootPath ?? ''),
           }, await getGatewayManager()),
+        };
+
+      case 'ensureProjectAgent':
+        return {
+          ...(await ensureWorkspaceProjectAgent(
+            String(payload.workspaceId ?? ''),
+            payload.baseAgentId != null ? String(payload.baseAgentId) : 'main',
+            await getGatewayManager(),
+          )),
         };
 
       case 'updateWorkspace':

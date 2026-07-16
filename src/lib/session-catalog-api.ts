@@ -80,6 +80,13 @@ export async function createProjectWorkspace(input: {
   return res.workspace;
 }
 
+export async function ensureProjectAgentForWorkspace(input: {
+  workspaceId: string;
+  baseAgentId?: string;
+}): Promise<{ agentId: string; created: boolean; workspaceUpdated: boolean }> {
+  return invokeCatalog('ensureProjectAgent', input);
+}
+
 export async function listSessionGroups(workspaceId: string): Promise<SessionGroupDto[]> {
   const res = await invokeCatalog<{ groups: SessionGroupDto[] }>('listGroups', { workspaceId });
   return res.groups ?? [];

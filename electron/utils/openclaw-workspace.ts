@@ -10,7 +10,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { expandContextIncludes } from './context-fragment';
 import { logger } from './logger';
-import { getResourcesDir, getOpenClawConfigDir } from './paths';
+import { getResourcesDir, getOpenClawConfigDir, ensureWorkspaceArtifactOutputDir } from './paths';
 
 const CLAWX_BEGIN = '<!-- stoclaw:begin -->';
 const CLAWX_END = '<!-- stoclaw:end -->';
@@ -162,6 +162,7 @@ async function mergeClawXContextOnce(): Promise<number> {
 
   for (const workspaceDir of workspaceDirs) {
     await ensureDir(workspaceDir);
+    ensureWorkspaceArtifactOutputDir(workspaceDir);
 
     for (const file of files) {
       const targetName = file.replace('.stoclaw.md', '.md');

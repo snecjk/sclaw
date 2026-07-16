@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { invokeIpcMock, hostApiFetchMock, agentsState, bindSessionMock } = vi.hoisted(() => ({
+const { invokeIpcMock, hostApiFetchMock, agentsState, bindSessionMock, fetchAgentsMock } = vi.hoisted(() => ({
   invokeIpcMock: vi.fn(),
   hostApiFetchMock: vi.fn(),
   bindSessionMock: vi.fn(),
+  fetchAgentsMock: vi.fn(),
   agentsState: {
     agents: [] as Array<Record<string, unknown>>,
+    fetchAgents: null as unknown as () => Promise<void>,
   },
 }));
 
@@ -60,6 +62,9 @@ describe('chat target routing', () => {
         channelTypes: [],
       },
     ];
+    agentsState.fetchAgents = fetchAgentsMock;
+    fetchAgentsMock.mockReset();
+    fetchAgentsMock.mockResolvedValue(undefined);
 
     invokeIpcMock.mockReset();
     invokeIpcMock.mockImplementation(async (channel: string, ...args: unknown[]) => {
@@ -80,6 +85,16 @@ describe('chat target routing', () => {
       }
       if (channel === 'chat:sendWithMedia') {
         return { success: true, result: { runId: 'run-media' } };
+      }
+      if (channel === 'session-catalog:invoke') {
+        const [request] = args as [{ action?: string }];
+        if (request?.action === 'ensureProjectAgent') {
+          return {
+            agentId: 'proj-project-a--main',
+            created: true,
+            workspaceUpdated: false,
+          };
+        }
       }
       throw new Error(`Unexpected invokeIpc call: ${channel}`);
     });

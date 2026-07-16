@@ -64,7 +64,11 @@ import {
   getBaseAgentIdFromProjectAgentId,
   resolveProjectAgentId,
 } from '../../../shared/project-agent';
-import { clearSessionSendReadiness, registerSessionSendReadiness } from '@/lib/session-send-readiness';
+import {
+  clearSessionSendReadiness,
+  registerSessionSendReadiness,
+  transferSessionSendReadiness,
+} from '@/lib/session-send-readiness';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 const SESSION_LOAD_MIN_INTERVAL_MS = 1_200;
@@ -733,6 +737,17 @@ export function createSessionLifecycleActions(
           };
         });
         touchSessionReadAt(DEFAULT_SESSION_KEY);
+        clearSessionSendReadiness(DEFAULT_SESSION_KEY);
+        const projectAgentReadiness = import('@/lib/session-catalog-api').then(async ({
+          ensureProjectAgentForWorkspace,
+        }) => {
+          await ensureProjectAgentForWorkspace({
+            workspaceId: projectId,
+            baseAgentId,
+          });
+          await useAgentsStore.getState().fetchAgents().catch(() => undefined);
+        });
+        registerSessionSendReadiness(DEFAULT_SESSION_KEY, projectAgentReadiness);
         if (leavingEmpty) clearSessionSendReadiness(currentSessionKey);
         return;
       }
@@ -825,6 +840,9 @@ export function createSessionLifecycleActions(
           await syncModel();
         })
         : syncModel();
+      if (projectId && projectId !== 'default') {
+        transferSessionSendReadiness(DEFAULT_SESSION_KEY, newKey);
+      }
       registerSessionSendReadiness(newKey, setupPromise);
       if (leavingEmpty) clearSessionSendReadiness(currentSessionKey);
     },

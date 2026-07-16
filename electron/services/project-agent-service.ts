@@ -21,7 +21,7 @@ import {
 import { getAgentEngineType } from '../utils/agent-config';
 import { logger } from '../utils/logger';
 import { getWorkspaceRepository } from '../db/repositories/workspace-repository';
-import { getOpenClawAgentSkillsDir } from '../utils/paths';
+import { getOpenClawAgentSkillsDir, ensureWorkspaceArtifactOutputDir } from '../utils/paths';
 import { safeRemoveDir } from '../utils/fs-retry';
 import {
   getBaseAgentIdFromProjectAgentId,
@@ -78,6 +78,12 @@ interface EnsureProjectAgentResult {
   workspaceUpdated: boolean;
 }
 
+/** Serialize concurrent ensure calls for the same project agent (bind + send race). */
+const ensureProjectAgentInflight = new Map<string, {
+  normalizedRootPath: string;
+  promise: Promise<EnsureProjectAgentResult>;
+}>();
+
 /**
  * Ensure a project agent exists for the given project + base agent.
  * If it already exists but its workspace differs from rootPath, update it.
@@ -88,6 +94,32 @@ export async function ensureProjectAgent(
   rootPath: string,
 ): Promise<EnsureProjectAgentResult> {
   const agentId = resolveProjectAgentId(projectId, baseAgentId);
+  const inflight = ensureProjectAgentInflight.get(agentId);
+  const normalizedRootPath = normalizeWorkspacePathForCompare(rootPath);
+  if (inflight) {
+    if (inflight.normalizedRootPath === normalizedRootPath) return inflight.promise;
+    // A concurrent path edit must not inherit the result for the previous path.
+    // Wait for that write to settle, then re-check/update the agent for this path.
+    await inflight.promise.catch(() => undefined);
+    return ensureProjectAgent(projectId, baseAgentId, rootPath);
+  }
+
+  const promise = ensureProjectAgentUnlocked(projectId, baseAgentId, rootPath, agentId)
+    .finally(() => {
+      if (ensureProjectAgentInflight.get(agentId)?.promise === promise) {
+        ensureProjectAgentInflight.delete(agentId);
+      }
+    });
+  ensureProjectAgentInflight.set(agentId, { normalizedRootPath, promise });
+  return promise;
+}
+
+async function ensureProjectAgentUnlocked(
+  projectId: string,
+  baseAgentId: string,
+  rootPath: string,
+  agentId: string,
+): Promise<EnsureProjectAgentResult> {
   const allIds = await listConfiguredAgentIds();
   const exists = allIds.some((id) => id.toLowerCase() === agentId.toLowerCase());
 
@@ -97,23 +129,26 @@ export async function ensureProjectAgent(
     const normalizedTarget = normalizeWorkspacePathForCompare(rootPath);
     if (normalizedCurrent && normalizedCurrent !== normalizedTarget) {
       await updateAgentWorkspace(agentId, rootPath);
+      ensureWorkspaceArtifactOutputDir(rootPath);
       return { agentId, created: false, workspaceUpdated: true };
     }
+    ensureWorkspaceArtifactOutputDir(rootPath);
     return { agentId, created: false, workspaceUpdated: false };
   }
 
   // Create new project agent inheriting bootstrap files from the main agent.
+  // createAgentWithId is idempotent for config/disk races (heal orphans).
   await createAgentWithId(agentId, `Project ${projectId}`, {
     workspace: rootPath,
     inheritWorkspace: true,
   });
-
+  ensureWorkspaceArtifactOutputDir(rootPath);
   // Inherit engine type from base agent so OpenClaw/Claude choice is preserved.
   try {
     const baseEngineType = await getAgentEngineType(baseAgentId);
     await setAgentEngineType(agentId, baseEngineType);
   } catch (error) {
-    logger.warn('[project-agent] failed to inherit engineType', { agentId, baseAgentId, error });
+    logger.warn('[project-agent] failed to inherit engineType', { agentId, baseAgentId, error: String(error) });
   }
 
   // Inherit agent-scoped skills from the base agent so the project agent has the
@@ -121,7 +156,7 @@ export async function ensureProjectAgent(
   try {
     await syncProjectAgentSkillsFromBaseAgent(projectId, baseAgentId);
   } catch (error) {
-    logger.warn('[project-agent] failed to inherit agent-scoped skills', { agentId, baseAgentId, error });
+    logger.warn('[project-agent] failed to inherit agent-scoped skills', { agentId, baseAgentId, error: String(error) });
   }
 
   logger.info('[project-agent] created', { agentId, projectId, baseAgentId, rootPath });

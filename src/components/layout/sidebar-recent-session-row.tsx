@@ -1,10 +1,11 @@
 /**
  * SidebarRecentSessionRow — 侧边栏最近会话单行（含 inline 重命名 + 行尾菜单）。
  *
- * 使用位置：Sidebar「最近」列表
+ * 布局：三种状态（未读 / 运行中 / 失败）都在标题左侧；置顶钉在行尾。
  */
 import { useTranslation } from 'react-i18next';
 import { SidebarRecentSessionRowTrailing } from '@/components/layout/sidebar-recent-session-row-trailing';
+import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { cn } from '@/lib/utils';
 import {
   sidebarListItemTextClass,
@@ -13,28 +14,16 @@ import {
   sidebarUnreadDotClass,
 } from '@/lib/surfaces';
 import type { ChatSession } from '@/stores/chat/types';
-import type { WorkspaceDto } from '@/lib/session-catalog-api';
 import { useChatStore } from '@/stores/chat';
 import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 
 export interface SidebarRecentSessionRowProps {
-  /** 会话实体 */
   session: ChatSession;
-  /** 展示标题（已走 getSessionLabel） */
   label: string;
-  /** 是否当前选中会话 */
   isActive: boolean;
-  /** 是否在「最近」中置顶 */
   isPinned: boolean;
-  /** 是否 inline 重命名中 */
   isEditing: boolean;
-  /** 重命名 draft */
   editingValue: string;
-  /** 用户项目 */
-  projects: WorkspaceDto[];
-  /** 当前项目 id；null = 默认对话 */
-  currentProjectId: string | null;
-  /** 打开会话 */
   onOpen: () => void;
   onPin: () => void;
   onStartRename: () => void;
@@ -42,8 +31,6 @@ export interface SidebarRecentSessionRowProps {
   onCommitRename: () => void;
   onCancelRename: () => void;
   onDelete: () => void;
-  onMoveToProject: (projectId: string) => void;
-  onCreateProject: () => void;
   className?: string;
 }
 
@@ -54,8 +41,6 @@ export function SidebarRecentSessionRow({
   isPinned,
   isEditing,
   editingValue,
-  projects,
-  currentProjectId,
   onOpen,
   onPin,
   onStartRename,
@@ -63,8 +48,6 @@ export function SidebarRecentSessionRow({
   onCommitRename,
   onCancelRename,
   onDelete,
-  onMoveToProject,
-  onCreateProject,
   className,
 }: SidebarRecentSessionRowProps) {
   const { t } = useTranslation('common');
@@ -125,29 +108,26 @@ export function SidebarRecentSessionRow({
           type="button"
           onClick={onOpen}
           title={label}
-          className="flex h-9 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
+          className="flex h-9 min-w-0 w-full flex-1 items-center gap-2 overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
         >
           {showUnreadDot ? (
             <span
-              className={cn(sidebarUnreadDotClass, 'mr-2 shrink-0')}
+              className={cn(sidebarUnreadDotClass, 'shrink-0')}
               aria-label={t('sidebar.sessionUnread')}
             />
-          ) : null}
+          ) : (
+            <SidebarRecentSessionStatus sessionKey={session.key} />
+          )}
           <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass, isActive && 'font-medium')}>
             {label}
           </span>
         </button>
         <SidebarRecentSessionRowTrailing
-          sessionKey={session.key}
           isActive={isActive}
           isPinned={isPinned}
-          projects={projects}
-          currentProjectId={currentProjectId}
           onPin={onPin}
           onRename={onStartRename}
           onDelete={onDelete}
-          onMoveToProject={onMoveToProject}
-          onCreateProject={onCreateProject}
         />
       </div>
     </div>

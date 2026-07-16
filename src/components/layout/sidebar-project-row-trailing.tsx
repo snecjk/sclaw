@@ -37,6 +37,13 @@ export function SidebarProjectRowTrailing({
   className,
 }: SidebarProjectRowTrailingProps) {
   const { t } = useTranslation('common');
+  const platform = window.electron?.platform;
+  const openFolderLabel =
+    platform === 'win32'
+      ? t('sidebar.openProjectFolderWin')
+      : platform === 'linux'
+        ? t('sidebar.openProjectFolderLinux')
+        : t('sidebar.openProjectFolder');
 
   return (
     <div
@@ -113,7 +120,7 @@ export function SidebarProjectRowTrailing({
               }}
             >
               <Folder className="h-4 w-4 shrink-0" aria-hidden />
-              {t('sidebar.openProjectFolder')}
+              {openFolderLabel}
             </DropdownMenuItem>
             <div className={sidebarRecentMenuDividerClass} role="separator" />
             <DropdownMenuItem

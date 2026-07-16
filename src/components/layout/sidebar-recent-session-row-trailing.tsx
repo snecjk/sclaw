@@ -1,10 +1,8 @@
 /**
- * SidebarRecentSessionRowTrailing — 最近会话行尾：状态位 + hover「...」菜单（置顶 / 重命名 / 移至项目 / 删除）。
+ * SidebarRecentSessionRowTrailing — 最近会话行尾：置顶钉 + hover「...」菜单。
+ * 三种状态（未读 / 运行 / 失败）在标题左侧，见 SidebarRecentSessionRow。
  */
 import {
-  ChevronRight,
-  FolderOpen,
-  FolderPlus,
   MoreHorizontal,
   Pencil,
   Pin,
@@ -15,54 +13,36 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { cn } from '@/lib/utils';
 import {
   sidebarRecentMenuContentClass,
   sidebarRecentMenuDeleteItemClass,
-  sidebarRecentMenuDividerClass,
   sidebarRecentMenuItemClass,
   sidebarTextIconClass,
 } from '@/lib/surfaces';
-import type { WorkspaceDto } from '@/lib/session-catalog-api';
 
 export interface SidebarRecentSessionRowTrailingProps {
-  sessionKey: string;
   isActive?: boolean;
   isPinned: boolean;
-  projects: WorkspaceDto[];
-  currentProjectId: string | null;
   onPin: () => void;
   onRename: () => void;
   onDelete: () => void;
-  onMoveToProject: (projectId: string) => void;
-  onCreateProject: () => void;
   className?: string;
 }
 
 const SIDEBAR_RECENT_ROW_TRAILING_W_CLASS = 'w-12';
 
 export function SidebarRecentSessionRowTrailing({
-  sessionKey,
   isActive = false,
   isPinned,
-  projects,
-  currentProjectId,
   onPin,
   onRename,
   onDelete,
-  onMoveToProject,
-  onCreateProject,
   className,
 }: SidebarRecentSessionRowTrailingProps) {
   const { t } = useTranslation('common');
-  const assignableProjects = projects.filter((project) => project.id !== currentProjectId);
 
   return (
     <div
@@ -81,7 +61,6 @@ export function SidebarRecentSessionRowTrailing({
         {isPinned ? (
           <Pin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
         ) : null}
-        <SidebarRecentSessionStatus sessionKey={sessionKey} />
       </div>
       <div
         className={cn(
@@ -129,45 +108,6 @@ export function SidebarRecentSessionRowTrailing({
               <Pencil className="h-4 w-4 shrink-0" aria-hidden />
               {t('actions.rename')}
             </DropdownMenuItem>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger className={sidebarRecentMenuItemClass}>
-                <FolderOpen className="h-4 w-4 shrink-0" aria-hidden />
-                <span className="flex-1 truncate">{t('sidebar.moveToProject')}</span>
-                <ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className={sidebarRecentMenuContentClass}>
-                <DropdownMenuItem
-                  className={cn(sidebarRecentMenuItemClass, 'justify-start')}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCreateProject();
-                  }}
-                >
-                  <FolderPlus className="h-4 w-4 shrink-0" aria-hidden />
-                  {t('sidebar.newProject')}
-                </DropdownMenuItem>
-                {assignableProjects.length > 0 ? (
-                  <DropdownMenuSeparator className={sidebarRecentMenuDividerClass} />
-                ) : null}
-                {assignableProjects.map((project) => (
-                  <DropdownMenuItem
-                    key={project.id}
-                    className={cn(sidebarRecentMenuItemClass, 'justify-start')}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onMoveToProject(project.id);
-                    }}
-                  >
-                    <span
-                      className="min-w-0 max-w-[10em] truncate text-left"
-                      title={project.name}
-                    >
-                      {project.name}
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
             <DropdownMenuItem
               className={sidebarRecentMenuDeleteItemClass}
               onClick={(e) => {

@@ -5,7 +5,7 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { syncClaudeSkillsForAgent } from '../services/claude-skill-bridge';
 import { getProviderAccount } from '../services/providers/provider-store';
 import { applyStoClaudeInferenceEnv } from '../services/sto-claude-inference-env';
-import { getAgentPreferredModel, getAgentWorkspacePath } from '../utils/agent-config';
+import { getAgentPreferredModel } from '../utils/agent-config';
 import { logger } from '../utils/logger';
 import { getClaudeConfigDir } from '../utils/paths';
 import { getApiKey } from '../utils/secure-storage';
@@ -900,6 +900,7 @@ export async function consumeClaudeQuery(
         }
       }
 
+      const currentRegistryEntry = await getEngineSessionRegistryEntry(sessionKey);
       await upsertEngineSessionRegistryEntry({
         sessionKey,
         sessionId: messageSessionId,
@@ -908,9 +909,11 @@ export async function consumeClaudeQuery(
         engineType: 'claude',
         updatedAt: toEpochMs(message.timestamp) ?? Date.now(),
         title,
-        model: (await getEngineSessionRegistryEntry(sessionKey))?.model,
-        provider: (await getEngineSessionRegistryEntry(sessionKey))?.provider,
-        accountId: (await getEngineSessionRegistryEntry(sessionKey))?.accountId,
+        model: currentRegistryEntry?.model,
+        provider: currentRegistryEntry?.provider,
+        accountId: currentRegistryEntry?.accountId,
+        archivedClaudeSessionIds: currentRegistryEntry?.archivedClaudeSessionIds,
+        pendingHistoryBridge: currentRegistryEntry?.pendingHistoryBridge,
       });
       // Allow callers (e.g. the scheduled-task worker) to capture per-message
       // data they need (run-record summary/runtimeResult) while reusing this
@@ -937,7 +940,9 @@ export async function consumeClaudeQuery(
   }
 }
 
-async function ensureClaudeRegistryEntry(sessionKey: string) {
+async function ensureClaudeRegistryEntry(
+  sessionKey: string,
+): Promise<EngineSessionRegistryEntry | null> {
   const existing = await getEngineSessionRegistryEntry(sessionKey);
   const agentId = extractAgentId(sessionKey);
   const cwd = await resolveSessionToolCwd(sessionKey, agentId);
@@ -946,7 +951,7 @@ async function ensureClaudeRegistryEntry(sessionKey: string) {
 
   const launchSelection = await resolveClaudeLaunchSelection(agentId, existing);
 
-  const nextEntry = {
+  const nextEntry: EngineSessionRegistryEntry = {
     sessionKey,
     sessionId: existing?.sessionId,
     cwd,
@@ -957,6 +962,8 @@ async function ensureClaudeRegistryEntry(sessionKey: string) {
     model: launchSelection.model,
     provider: launchSelection.provider,
     accountId: launchSelection.accountId,
+    archivedClaudeSessionIds: existing?.archivedClaudeSessionIds,
+    pendingHistoryBridge: existing?.pendingHistoryBridge,
   };
   await upsertEngineSessionRegistryEntry(nextEntry);
   return nextEntry;
@@ -1180,6 +1187,17 @@ async function startClaudeQuery(
   }
 }
 
+function isClaudeSessionAlreadyGoneError(error: unknown): boolean {
+  const message = String(error);
+  return (
+    message.includes('not found in project directory')
+    || message.includes('not found in any project directory')
+    || message.includes('not found (no projects directory)')
+    || /\bENOENT\b/.test(message)
+    || /\bENOTDIR\b/.test(message)
+  );
+}
+
 export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void> {
   await ensureClaudeConfigDir();
   const entry = await getEngineSessionRegistryEntry(sessionKey);
@@ -1190,11 +1208,22 @@ export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void
     return;
   }
 
-  const sdk = await import('@anthropic-ai/claude-agent-sdk');
-  const configDir = await resolveClaudeSessionConfigDir(entry.cwd!, entry.sessionId!) ?? getClaudeConfigDir();
-  await withClaudeConfigDirEnv(configDir, async () => {
-    await sdk.deleteSession(entry.sessionId!, { dir: entry.cwd! });
-  });
+  const cwd = typeof entry.cwd === 'string' ? entry.cwd.trim() : '';
+  if (cwd) {
+    try {
+      const sdk = await import('@anthropic-ai/claude-agent-sdk');
+      const configDir = await resolveClaudeSessionConfigDir(cwd, entry.sessionId) ?? getClaudeConfigDir();
+      await withClaudeConfigDirEnv(configDir, async () => {
+        await sdk.deleteSession(entry.sessionId!, { dir: cwd });
+      });
+    } catch (error) {
+      // Workspace may have been deleted on disk (dirty catalog rows). Still purge our registry.
+      if (!isClaudeSessionAlreadyGoneError(error)) throw error;
+      logger.warn(`[claude] deleteSession skipped for missing session/workspace ${sessionKey}:`, error);
+    }
+  } else {
+    logger.warn(`[claude] deleteSession skipped: missing cwd for ${sessionKey}`);
+  }
   await deleteEngineSessionRegistryEntry(sessionKey);
 }
 

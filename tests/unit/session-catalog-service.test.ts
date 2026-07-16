@@ -4,13 +4,17 @@ const moveToWorkspaceMock = vi.fn();
 const listCatalogSessionsMock = vi.fn();
 const softDeleteCatalogSessionMock = vi.fn();
 const ensureProjectAgentMock = vi.fn();
+const listProjectAgentIdsMock = vi.fn();
 const deleteAllProjectAgentsForProjectMock = vi.fn();
 const getByIdMock = vi.fn();
+const createWorkspaceMock = vi.fn();
+const updateWorkspaceMock = vi.fn();
 const softDeleteWorkspaceMock = vi.fn();
 const getDefaultWorkspaceMock = vi.fn();
 const countActiveMock = vi.fn();
 const getBySessionKeyMock = vi.fn();
 const softDeleteBindingMock = vi.fn();
+const ensureWorkspaceArtifactOutputDirMock = vi.fn();
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
@@ -28,6 +32,7 @@ vi.mock('electron', () => ({
 
 vi.mock('../../electron/utils/paths', () => ({
   getClawXConfigDir: vi.fn(() => '/tmp'),
+  ensureWorkspaceArtifactOutputDir: ensureWorkspaceArtifactOutputDirMock,
 }));
 
 vi.mock('../../electron/utils/logger', () => ({
@@ -66,6 +71,8 @@ vi.mock('../../electron/db/repositories/workspace-repository', () => ({
   getWorkspaceRepository: vi.fn(() => ({
     getDefaultWorkspace: getDefaultWorkspaceMock,
     getById: getByIdMock,
+    create: createWorkspaceMock,
+    update: updateWorkspaceMock,
     softDelete: softDeleteWorkspaceMock,
   })),
 }));
@@ -85,6 +92,7 @@ vi.mock('../../electron/utils/agent-config', () => ({
 vi.mock('../../electron/services/project-agent-service', () => ({
   deleteAllProjectAgentsForProject: deleteAllProjectAgentsForProjectMock,
   ensureProjectAgent: ensureProjectAgentMock,
+  listProjectAgentIds: listProjectAgentIdsMock,
 }));
 
 describe('session catalog gateway reload', () => {
@@ -99,7 +107,72 @@ describe('session catalog gateway reload', () => {
     softDeleteBindingMock.mockResolvedValue({});
     softDeleteWorkspaceMock.mockResolvedValue({});
     deleteAllProjectAgentsForProjectMock.mockResolvedValue([]);
+    listProjectAgentIdsMock.mockResolvedValue([]);
+    createWorkspaceMock.mockResolvedValue({ id: 'project-a', rootPath: '/tmp/project-a', name: 'A' });
+    updateWorkspaceMock.mockResolvedValue({ id: 'project-a', rootPath: '/tmp/project-b', name: 'A' });
     getByIdMock.mockResolvedValue({ id: 'project-a', rootPath: '/tmp/project-a' });
+  });
+
+  it('creates a workspace without creating a project agent or reloading gateway', async () => {
+    const gatewayManager = { debouncedReload: vi.fn(), reload: vi.fn() };
+    const { createWorkspace } = await import('../../electron/services/session-catalog-service');
+
+    const workspace = await createWorkspace(
+      { name: 'A', rootPath: '/tmp/project-a' },
+      gatewayManager as never,
+    );
+
+    expect(workspace).toEqual({ id: 'project-a', rootPath: '/tmp/project-a', name: 'A' });
+    expect(ensureWorkspaceArtifactOutputDirMock).toHaveBeenCalledWith('/tmp/project-a');
+    expect(ensureProjectAgentMock).not.toHaveBeenCalled();
+    expect(gatewayManager.debouncedReload).not.toHaveBeenCalled();
+    expect(gatewayManager.reload).not.toHaveBeenCalled();
+  });
+
+  it('ensures project agent when starting a chat in the project', async () => {
+    ensureProjectAgentMock.mockResolvedValue({
+      agentId: 'proj-project-a-main',
+      created: true,
+      workspaceUpdated: false,
+    });
+    const gatewayManager = { reload: vi.fn().mockResolvedValue(undefined) };
+    const { ensureWorkspaceProjectAgent } = await import('../../electron/services/session-catalog-service');
+
+    const result = await ensureWorkspaceProjectAgent('project-a', 'main', gatewayManager as never);
+
+    expect(result).toEqual({
+      agentId: 'proj-project-a-main',
+      created: true,
+      workspaceUpdated: false,
+    });
+    expect(ensureProjectAgentMock).toHaveBeenCalledWith('project-a', 'main', '/tmp/project-a');
+    expect(gatewayManager.reload).toHaveBeenCalledWith({ force: true });
+  });
+
+  it('skips agent sync on path change when the project has no agents yet', async () => {
+    const gatewayManager = { reload: vi.fn() };
+    const { updateWorkspace } = await import('../../electron/services/session-catalog-service');
+
+    await updateWorkspace('project-a', { rootPath: '/tmp/project-b' }, gatewayManager as never);
+
+    expect(ensureProjectAgentMock).not.toHaveBeenCalled();
+    expect(gatewayManager.reload).not.toHaveBeenCalled();
+  });
+
+  it('updates existing project agents when workspace path changes', async () => {
+    listProjectAgentIdsMock.mockResolvedValue(['proj-project-a-main']);
+    ensureProjectAgentMock.mockResolvedValue({
+      agentId: 'proj-project-a-main',
+      created: false,
+      workspaceUpdated: true,
+    });
+    const gatewayManager = { reload: vi.fn().mockResolvedValue(undefined) };
+    const { updateWorkspace } = await import('../../electron/services/session-catalog-service');
+
+    await updateWorkspace('project-a', { rootPath: '/tmp/project-b' }, gatewayManager as never);
+
+    expect(ensureProjectAgentMock).toHaveBeenCalledWith('project-a', 'main', '/tmp/project-b');
+    expect(gatewayManager.reload).toHaveBeenCalledWith({ force: true });
   });
 
   it('skips reload when project agent already matches workspace', async () => {

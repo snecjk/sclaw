@@ -41,6 +41,23 @@ export function clearSessionSendReadiness(sessionKey: string): void {
   readinessBySessionKey.delete(sessionKey.trim());
 }
 
+/** Move draft readiness to the materialized session without losing failures. */
+export function transferSessionSendReadiness(fromSessionKey: string, toSessionKey: string): void {
+  const fromKey = fromSessionKey.trim();
+  const toKey = toSessionKey.trim();
+  if (!fromKey || !toKey || fromKey === toKey) return;
+  const tracked = readinessBySessionKey.get(fromKey);
+  if (!tracked) return;
+  readinessBySessionKey.delete(fromKey);
+  const previous = readinessBySessionKey.get(toKey);
+  readinessBySessionKey.set(
+    toKey,
+    previous
+      ? Promise.all([previous, tracked]).then(([previousOutcome, outcome]) => previousOutcome ?? outcome)
+      : tracked,
+  );
+}
+
 export function clearSessionSendReadinessForTests(): void {
   readinessBySessionKey.clear();
 }

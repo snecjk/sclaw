@@ -48,9 +48,7 @@ import { SidebarSupportQrTooltip } from '@/components/layout/SidebarSupportQrToo
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { SidebarRecentSessionRow } from '@/components/layout/sidebar-recent-session-row';
 import { SidebarProjectsSection } from '@/components/layout/sidebar-projects-section';
-import { ProjectFormDialog } from '@/components/layout/sidebar-project-form-dialog';
 import {
-  DEFAULT_WORKSPACE_ID,
   isSessionInActiveWorkspace,
   useSessionCatalogStore,
 } from '@/stores/session-catalog';
@@ -315,13 +313,15 @@ function SidebarTaskDateLinks({
                 active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
               )}
             >
-              <span className="min-w-0 flex-1 truncate">{label}</span>
-              {unread ? (
-                <span
-                  className={sidebarUnreadDotClass}
-                  aria-label={t('tasks:unreadBadge', { defaultValue: 'Unread' })}
-                />
-              ) : null}
+              <span className="flex min-w-0 items-center gap-1.5">
+                {unread ? (
+                  <span
+                    className={cn(sidebarUnreadDotClass, 'shrink-0')}
+                    aria-label={t('tasks:unreadBadge', { defaultValue: 'Unread' })}
+                  />
+                ) : null}
+                <span className="min-w-0 flex-1 truncate">{label}</span>
+              </span>
             </button>
             {sk ? (
               <SidebarTaskSubitemDeleteTrailing
@@ -558,6 +558,7 @@ function SidebarScheduledTaskGroup({
               label = s.label || s.displayName || s.key;
             }
             const active = currentSessionKey === s.key;
+            const showUnreadDot = !active && readSessionUnread(unreadKeys, s.key);
             return (
               <div key={s.key} className="group relative flex w-full min-w-0 items-center">
                 <button
@@ -574,8 +575,15 @@ function SidebarScheduledTaskGroup({
                   )}
                 >
                   <span className="flex min-w-0 items-center gap-1.5">
+                    {showUnreadDot ? (
+                      <span
+                        className={cn(sidebarUnreadDotClass, 'shrink-0')}
+                        aria-label="Unread"
+                      />
+                    ) : (
+                      <SidebarRecentSessionStatus sessionKey={s.key} />
+                    )}
                     <span className="min-w-0 flex-1 truncate">{label}</span>
-                    <SidebarRecentSessionStatus sessionKey={s.key} />
                   </span>
                 </button>
                 <SidebarTaskSubitemDeleteTrailing
@@ -791,8 +799,6 @@ export function Sidebar() {
   const sidebarVis = useMemo(() => getSidebarVisibility(sidebarLayoutVariant), [sidebarLayoutVariant]);
   const allCatalogByKey = useSessionCatalogStore((s) => s.allCatalogByKey);
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
-  const userProjects = useSessionCatalogStore((s) => s.workspaces);
-  const moveSessionToProject = useSessionCatalogStore((s) => s.moveSessionToProject);
   const patchSessionCatalog = useSessionCatalogStore((s) => s.patchSessionCatalog);
   const catalogBootstrap = useSessionCatalogStore((s) => s.bootstrap);
 
@@ -1017,7 +1023,6 @@ export function Sidebar() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [supportQrOpen, setSupportQrOpen] = useState(false);
-  const [createProjectSessionKey, setCreateProjectSessionKey] = useState<string | null>(null);
 
   const catalogByKey = allCatalogByKey;
 
@@ -1025,8 +1030,6 @@ export function Sidebar() {
     const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
     const isRecentSessionActive =
       isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
-    const workspaceId = sessionWorkspaceByKey[s.key] ?? DEFAULT_WORKSPACE_ID;
-    const currentProjectId = workspaceId !== DEFAULT_WORKSPACE_ID ? workspaceId : null;
     const isPinned = catalogByKey[s.key]?.pinRank != null;
     return (
       <SidebarRecentSessionRow
@@ -1037,8 +1040,6 @@ export function Sidebar() {
         isPinned={isPinned}
         isEditing={editingSessionKey === s.key}
         editingValue={editingValue}
-        projects={userProjects}
-        currentProjectId={currentProjectId}
         onOpen={() => {
           navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
         }}
@@ -1067,11 +1068,6 @@ export function Sidebar() {
         onDelete={() => {
           requestSessionDelete({ key: s.key, label: sessionLabel });
         }}
-        onMoveToProject={(projectId) => {
-          void moveSessionToProject(s.key, projectId);
-          toast.success(t('common:sidebar.movedToProject'));
-        }}
-        onCreateProject={() => setCreateProjectSessionKey(s.key)}
       />
     );
   }, [
@@ -1082,15 +1078,12 @@ export function Sidebar() {
     getSessionLabel,
     isOnHome,
     location.pathname,
-    moveSessionToProject,
     navigate,
     patchSessionCatalog,
     renameSession,
     requestSessionDelete,
-    sessionWorkspaceByKey,
     switchSession,
     t,
-    userProjects,
   ]);
 
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
@@ -1810,7 +1803,10 @@ export function Sidebar() {
           });
         } else {
           useChatStore.getState().clearPendingWorkflowMemory();
-          useChatStore.setState({ pendingProjectId: null, currentAgentId: 'main' });
+          useChatStore.setState({
+            pendingProjectId: null,
+            currentAgentId: 'main',
+          });
         }
       }
     : undefined;
@@ -2297,18 +2293,6 @@ export function Sidebar() {
       ) : null}
         </>
       ) : null}
-
-      <ProjectFormDialog
-        open={createProjectSessionKey != null}
-        mode="create"
-        onClose={() => setCreateProjectSessionKey(null)}
-        onCreated={(workspace) => {
-          if (!createProjectSessionKey) return;
-          void moveSessionToProject(createProjectSessionKey, workspace.id);
-          toast.success(t('common:sidebar.movedToProject'));
-          setCreateProjectSessionKey(null);
-        }}
-      />
 
       <ConfirmDialog
         open={showLogoutConfirm}
