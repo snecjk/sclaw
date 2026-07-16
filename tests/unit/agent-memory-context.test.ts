@@ -18,6 +18,7 @@ vi.mock('@/lib/agent-memory', async (importOriginal) => {
 });
 
 import {
+  AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS,
   AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS,
   buildAgentMemoryContextBlocks,
 } from '@/lib/agent-memory-context';
@@ -49,7 +50,7 @@ describe('buildAgentMemoryContextBlocks', () => {
     );
   });
 
-  it('does not start mem0 search when initialization consumes the send budget', async () => {
+  it('does not start mem0 search when initialization exceeds its own budget', async () => {
     let finishInitialization: ((userId: string) => void) | undefined;
     resolveAgentMemoryUserIdMock.mockImplementation(() => new Promise<string>((resolve) => {
       finishInitialization = resolve;
@@ -57,12 +58,29 @@ describe('buildAgentMemoryContextBlocks', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 
     const resultPromise = buildAgentMemoryContextBlocks('请查询最近一周的订单情况');
-    await vi.advanceTimersByTimeAsync(AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS);
 
     await expect(resultPromise).resolves.toEqual({ injectedExecutionMemories: [] });
     finishInitialization?.('user-1');
     await Promise.resolve();
     expect(invokeIpcMock).not.toHaveBeenCalled();
+  });
+
+  it('gives search a fresh budget after slow initialization', async () => {
+    resolveAgentMemoryUserIdMock.mockImplementation(() => new Promise<string>((resolve) => {
+      setTimeout(() => resolve('user-1'), AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS - 100);
+    }));
+    invokeIpcMock.mockImplementation(() => new Promise<unknown>((resolve) => {
+      setTimeout(() => resolve([]), AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS - 100);
+    }));
+
+    const resultPromise = buildAgentMemoryContextBlocks('请查询最近一周的订单情况');
+    await vi.advanceTimersByTimeAsync(
+      AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS + AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS - 200,
+    );
+
+    await expect(resultPromise).resolves.toEqual({ injectedExecutionMemories: [] });
+    expect(invokeIpcMock).toHaveBeenCalledTimes(1);
   });
 
   it('uses memory results that arrive within the send budget', async () => {

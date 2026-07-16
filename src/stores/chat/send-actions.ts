@@ -15,6 +15,7 @@ import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
 import { resolveSkillGatewayText } from '@/lib/skill-gateway-text';
 import { appendSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
 import { awaitSessionSendReadiness } from '@/lib/session-send-readiness';
+import { discardAgentMemoriesForAbnormalTurn } from '@/lib/agent-execution-memory';
 
 export function isUncertainDispatchError(error: unknown): boolean {
   const code = normalizeAppError(error).code;
@@ -40,6 +41,10 @@ function failSendTurn(input: {
   sessionKey: string;
   error: string;
 }): void {
+  discardAgentMemoriesForAbnormalTurn({
+    sessionKey: input.sessionKey,
+    reason: 'failed',
+  });
   input.clearHistoryPoll(input.sessionKey);
   input.clearStuckCheckTimer?.(input.sessionKey);
   setRuntimePatch(input.set, input.sessionKey, {
@@ -308,6 +313,15 @@ export function createSendActions(
 
     abortRun: async () => {
       const { currentSessionKey } = get();
+      const activeRunId = getSessionRuntimeState(
+        get().runtimeBySessionKey,
+        currentSessionKey,
+      ).activeRunId;
+      discardAgentMemoriesForAbnormalTurn({
+        sessionKey: currentSessionKey,
+        runId: activeRunId,
+        reason: 'aborted',
+      });
       clearHistoryPoll(currentSessionKey);
       clearErrorRecoveryTimer(currentSessionKey);
       clearStuckCheckTimer(currentSessionKey);

@@ -8,7 +8,13 @@ import { parseExecutionTurnFromHistory, type ExecutionSnapshot } from '../engine
 import { extractDirectExecutionCommands, formatExecutionMemoryText, type ExecutionExperienceCandidateAssessment, type ExecutionExperienceSummary } from './claude-execution-summary-service';
 import { sanitizeMemoryCaptureUserMessage } from '../../shared/memory-capture-text';
 
-type RefreshInput = { runId?: string | null; sessionKey?: string | null; agentId?: string | null; engineType?: string | null };
+type RefreshInput = {
+  runId?: string | null;
+  sessionKey?: string | null;
+  agentId?: string | null;
+  engineType?: string | null;
+  terminalStatus?: 'completed' | 'failed' | 'aborted' | null;
+};
 type CaptureContext = RefreshInput & { sourceId: string; sessionKey: string; executionJobId: string; conversationJobId: string };
 type CapturePreparationPlan = { prepareConversation: boolean; prepareExecution: boolean };
 type CaptureJobState = { id: string; status: string; payload_json: string; retry_count: number };

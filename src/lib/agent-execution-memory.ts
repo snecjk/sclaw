@@ -13,6 +13,11 @@ export type InjectedExecutionMemory = { memoryId: string; memory: string };
 const PENDING_MEMORY_TTL_MS = 20 * 60 * 1000;
 const PENDING_MEMORY_MAX_ENTRIES = 100;
 const pendingInjectedMemoriesBySession = new Map<string, { memories: InjectedExecutionMemory[]; createdAt: number }>();
+const blockedMemoryCaptures = new Map<string, number>();
+
+function captureBlockKey(sessionKey: string, runId?: string | null): string {
+  return `${sessionKey}\u0000${runId?.trim() || '*'}`;
+}
 function log(level: 'info' | 'warn', message: string, data?: Record<string, unknown>): void {
   console[level](message, data);
   void hostApiFetch('/api/logs/client', { method: 'POST', body: JSON.stringify({ level, message, data }) }).catch(() => undefined);
@@ -23,6 +28,9 @@ export function rememberInjectedExecutionMemories(sessionKey: string | null | un
   const key = sessionKey?.trim();
   if (!key) return;
   prunePendingInjectedMemories();
+  // A no-run-id failure blocks only the previous send. Preparing a new turn
+  // explicitly opens a fresh capture window for this session.
+  blockedMemoryCaptures.delete(captureBlockKey(key));
   pendingInjectedMemoriesBySession.set(key, { memories, createdAt: Date.now() });
   log('info', '[memory-capture] execution.context_recorded', { sessionKey: key, memoryIds: memories.map((item) => item.memoryId), count: memories.length });
 }
@@ -33,6 +41,18 @@ export function captureAgentMemories(input: { agentId?: string | null; runId?: s
   const sessionKey = input.sessionKey?.trim();
   if (!runId || !sessionKey) { log('warn', '[memory-capture] execution.dispatch_skipped', { reason: 'missing_run_or_session', runId: input.runId ?? null, sessionKey: input.sessionKey ?? null }); return; }
   prunePendingInjectedMemories();
+  const exactBlockKey = captureBlockKey(sessionKey, runId);
+  const wildcardBlockKey = captureBlockKey(sessionKey);
+  if (blockedMemoryCaptures.has(exactBlockKey) || blockedMemoryCaptures.has(wildcardBlockKey)) {
+    pendingInjectedMemoriesBySession.delete(sessionKey);
+    blockedMemoryCaptures.delete(exactBlockKey);
+    log('info', '[memory-capture] turn.dispatch_skipped', {
+      reason: 'abnormal_terminal',
+      runId,
+      sessionKey,
+    });
+    return;
+  }
   const injected = pendingInjectedMemoriesBySession.get(sessionKey)?.memories ?? [];
   pendingInjectedMemoriesBySession.delete(sessionKey);
   log('info', '[memory-capture] turn.dispatch', { runId, sessionKey, agentId: input.agentId ?? null, engineType: input.engineType ?? null, injectedMemoryIds: injected.map((item) => item.memoryId) });
@@ -42,8 +62,27 @@ export function captureAgentMemories(input: { agentId?: string | null; runId?: s
       sessionKey,
       agentId: input.agentId?.trim() || undefined,
       engineType: input.engineType?.trim() || undefined,
+      terminalStatus: 'completed',
     }))
     .catch((error) => log('warn', '[memory-capture] turn.dispatch_failed', { runId, sessionKey, error: String(error) }));
+}
+
+/** Mark a failed/aborted send so a late final/agent.completed cannot write normal memory. */
+export function discardAgentMemoriesForAbnormalTurn(input: {
+  sessionKey?: string | null;
+  runId?: string | null;
+  reason: 'failed' | 'aborted';
+}): void {
+  const sessionKey = input.sessionKey?.trim();
+  if (!sessionKey) return;
+  prunePendingInjectedMemories();
+  pendingInjectedMemoriesBySession.delete(sessionKey);
+  blockedMemoryCaptures.set(captureBlockKey(sessionKey, input.runId), Date.now());
+  log('info', '[memory-capture] turn.discarded', {
+    sessionKey,
+    runId: input.runId?.trim() || null,
+    reason: input.reason,
+  });
 }
 
 function prunePendingInjectedMemories(): void {
@@ -51,10 +90,18 @@ function prunePendingInjectedMemories(): void {
   for (const [sessionKey, binding] of pendingInjectedMemoriesBySession) {
     if (binding.createdAt < cutoff) pendingInjectedMemoriesBySession.delete(sessionKey);
   }
+  for (const [key, createdAt] of blockedMemoryCaptures) {
+    if (createdAt < cutoff) blockedMemoryCaptures.delete(key);
+  }
   while (pendingInjectedMemoriesBySession.size >= PENDING_MEMORY_MAX_ENTRIES) {
     const oldest = pendingInjectedMemoriesBySession.keys().next().value;
     if (!oldest) break;
     pendingInjectedMemoriesBySession.delete(oldest);
+  }
+  while (blockedMemoryCaptures.size >= PENDING_MEMORY_MAX_ENTRIES) {
+    const oldest = blockedMemoryCaptures.keys().next().value;
+    if (!oldest) break;
+    blockedMemoryCaptures.delete(oldest);
   }
 }
 

@@ -278,9 +278,6 @@ export function createForegroundEventActions(
             handleForegroundFinalWithoutMessage({
               get,
               set,
-              runId,
-              resolveEngineTypeForSession,
-              dispatchAgentMemoryCapture,
             });
           }
           break;
@@ -302,6 +299,7 @@ export function createForegroundEventActions(
           handleForegroundAbortedEvent({
             set,
             sessionKey: currentSessionKey,
+            runId,
             clearHistoryPoll: () => clearHistoryPoll(currentSessionKey),
             clearErrorRecoveryTimer: () => clearErrorRecoveryTimer(currentSessionKey),
           });

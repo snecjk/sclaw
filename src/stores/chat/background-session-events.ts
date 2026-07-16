@@ -21,6 +21,7 @@ import { buildTerminalRuntimePatch, resolveAssistantFinalTurnState } from './tur
 import { buildTerminalTurnEffects, executeTurnEffects } from './turn-effects';
 import { logChatFlow } from './chat-flow-log';
 import { decideRunEvent, recordTerminalRun } from './run-lifecycle';
+import { discardAgentMemoriesForAbnormalTurn } from '@/lib/agent-execution-memory';
 
 export interface BackgroundChatEvent {
   sessionKey: string;
@@ -175,12 +176,14 @@ export function createBackgroundSessionEventHandler(dependencies: BackgroundSess
         break;
       }
       case 'error':
+        discardAgentMemoriesForAbnormalTurn({ sessionKey, runId, reason: 'failed' });
         set((state) => applyRuntimePatch(state, sessionKey, buildTerminalRuntimePatch(
           errorMessage,
         )));
         recordTerminalRun(sessionKey, runId);
         break;
       case 'aborted':
+        discardAgentMemoriesForAbnormalTurn({ sessionKey, runId, reason: 'aborted' });
         set((state) => applyRuntimePatch(state, sessionKey, buildTerminalRuntimePatch(null)));
         recordTerminalRun(sessionKey, runId);
         break;

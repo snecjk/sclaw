@@ -110,6 +110,9 @@ export function registerAgentMemoryHandlers(gatewayManager: GatewayManager): voi
   ipcMain.handle(
     'agent-memory:capture',
     async (_event: IpcMainInvokeEvent, input: MemoryCaptureInput) => {
+      if (input?.terminalStatus !== 'completed') {
+        return { accepted: false, reason: 'non_completed_turn' };
+      }
       await memoryCaptureService.capture(input, gatewayManager);
       return { accepted: true };
     },

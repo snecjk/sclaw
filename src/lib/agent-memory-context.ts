@@ -16,6 +16,9 @@ const PREF_MAX_ITEMS = 5;
 const PREF_MAX_TEXT = 240;
 const EXEC_MAX_ITEMS = 3;
 const EXEC_MAX_TEXT = 1000;
+/** Cold-start/bootstrap gets its own budget and must not consume search time. */
+export const AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS = 1000;
+/** Actual mem0 search budget, counted only after initialization succeeds. */
 export const AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS = 1000;
 
 class AgentMemoryRetrievalTimeoutError extends Error {
@@ -70,20 +73,20 @@ export async function buildAgentMemoryContextBlocks(
   const query = text.replace(/\s+/g, ' ').trim();
   if (!shouldRetrieveMemories(query)) return { injectedExecutionMemories: [] };
   try {
-    let retrievalTimedOut = false;
-    const retrieval = (async () => {
-      const userId = await resolveAgentMemoryUserId();
-      if (!userId || retrievalTimedOut) return undefined;
-      return await invokeIpc<unknown>(
+    const userId = await withTimeout(
+      resolveAgentMemoryUserId(),
+      AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS,
+    );
+    if (!userId) return { injectedExecutionMemories: [] };
+
+    const payload = await withTimeout(
+      invokeIpc<unknown>(
         'agent-memory:mem0-search',
         query,
         { userId, topK: Math.max(options?.topK ?? 12, 12) },
-      );
-    })();
-    const payload = await withTimeout(retrieval, AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS, () => {
-      retrievalTimedOut = true;
-    });
-    if (payload === undefined) return { injectedExecutionMemories: [] };
+      ),
+      AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS,
+    );
     const execItems = extractActiveExecutionMemories(payload)
       .slice(0, EXEC_MAX_ITEMS)
       .map((it) => ({ ...it, memory: truncate(it.memory, EXEC_MAX_TEXT) }));

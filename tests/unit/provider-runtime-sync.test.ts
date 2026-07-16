@@ -62,6 +62,8 @@ vi.mock('@electron/utils/logger', () => ({
 }));
 
 import {
+  STO_MODEL_DEFAULT_CONTEXT_WINDOW,
+  STO_MODEL_DEFAULT_MAX_TOKENS,
   syncDefaultProviderToRuntime,
   syncDeletedProviderToRuntime,
   syncSavedProviderToRuntime,
@@ -141,5 +143,43 @@ describe('provider-runtime-sync refresh strategy', () => {
 
     expect(gateway.debouncedReload).not.toHaveBeenCalled();
     expect(gateway.debouncedRestart).not.toHaveBeenCalled();
+  });
+
+  it('applies STO token limit fallbacks when the catalog only returns model ids', async () => {
+    mocks.getProviderAccount.mockResolvedValue({
+      id: 'sto',
+      vendorId: 'sto',
+      metadata: { customModels: ['qwen3.6-plus'] },
+    });
+    const provider = createProvider({
+      id: 'sto',
+      name: 'STO AI',
+      type: 'sto',
+      model: 'qwen3.6-plus',
+      baseUrl: 'https://example.test/v1',
+      apiProtocol: 'openai-completions',
+    });
+
+    await syncSavedProviderToRuntime(provider, 'sk-sto');
+
+    expect(mocks.syncProviderConfigToOpenClaw).toHaveBeenCalledWith(
+      'sto',
+      'qwen3.6-plus',
+      expect.objectContaining({
+        providerModelIds: ['qwen3.6-plus'],
+        defaultModelContextWindow: STO_MODEL_DEFAULT_CONTEXT_WINDOW,
+        defaultModelMaxTokens: STO_MODEL_DEFAULT_MAX_TOKENS,
+      }),
+    );
+    expect(mocks.updateAgentModelProvider).toHaveBeenCalledWith(
+      'sto',
+      expect.objectContaining({
+        models: [expect.objectContaining({
+          id: 'qwen3.6-plus',
+          contextWindow: 256000,
+          maxTokens: 32000,
+        })],
+      }),
+    );
   });
 });

@@ -1,31 +1,16 @@
 import { setRuntimePatch } from './runtime-controller';
-import { executeTurnEffects } from './turn-effects';
 import type { ChatGet, ChatSet } from './store-api';
-import type { ChatSession, RawMessage } from './types';
+import type { RawMessage } from './types';
 import { getSessionRuntimeState } from './session-runtime';
 import { recordTerminalRun } from './run-lifecycle';
+import { discardAgentMemoriesForAbnormalTurn } from '@/lib/agent-execution-memory';
 
 export function handleForegroundFinalWithoutMessage(input: {
   get: ChatGet;
   set: ChatSet;
-  runId: string;
-  resolveEngineTypeForSession: (
-    sessions: ChatSession[],
-    sessionKey: string,
-    currentAgentId?: string | null,
-  ) => ChatSession['engineType'] | undefined;
-  dispatchAgentMemoryCapture: (input: {
-    agentId?: string | null;
-    runId?: string | null;
-    sessionKey?: string | null;
-    engineType?: ChatSession['engineType'];
-  }) => void;
 }): void {
   const {
-    dispatchAgentMemoryCapture,
     get,
-    resolveEngineTypeForSession,
-    runId,
     set,
   } = input;
   const sessionKey = get().currentSessionKey;
@@ -35,17 +20,9 @@ export function handleForegroundFinalWithoutMessage(input: {
     streamingMessage: null,
     pendingFinal: true,
   });
-  executeTurnEffects([{
-    type: 'captureMemory',
-    agentId: get().currentAgentId,
-    runId: runId || undefined,
-    sessionKey,
-    engineType: resolveEngineTypeForSession(
-      get().sessions,
-      sessionKey,
-      get().currentAgentId,
-    ),
-  }], { get, set, dispatchMemoryCapture: dispatchAgentMemoryCapture });
+  // A message-less final is only a transport fragment, not proof that the
+  // run completed normally. Memory capture waits for agent.completed or a
+  // successful history reconciliation.
   get().loadHistory();
 }
 
@@ -101,6 +78,11 @@ export function handleForegroundErrorEvent(input: {
       const state = get();
       const runtime = getSessionRuntimeState(state.runtimeBySessionKey, sessionKey);
       if (runtime.sending && !runtime.streamingMessage && (!runId || runtime.activeRunId === runId)) {
+        discardAgentMemoriesForAbnormalTurn({
+          sessionKey,
+          runId: runId || runtime.activeRunId,
+          reason: 'failed',
+        });
         clearHistoryPoll();
         setRuntimePatch(set, sessionKey, {
           sending: false,
@@ -116,6 +98,11 @@ export function handleForegroundErrorEvent(input: {
   }
 
   clearHistoryPoll();
+  discardAgentMemoriesForAbnormalTurn({
+    sessionKey,
+    runId,
+    reason: 'failed',
+  });
   setRuntimePatch(set, sessionKey, {
     sending: false,
     activeRunId: null,
@@ -129,18 +116,25 @@ export function handleForegroundErrorEvent(input: {
 export function handleForegroundAbortedEvent(input: {
   set: ChatSet;
   sessionKey: string;
+  runId?: string | null;
   clearHistoryPoll: () => void;
   clearErrorRecoveryTimer: () => void;
 }): void {
   const {
     clearErrorRecoveryTimer,
     clearHistoryPoll,
+    runId,
     sessionKey,
     set,
   } = input;
 
   clearHistoryPoll();
   clearErrorRecoveryTimer();
+  discardAgentMemoriesForAbnormalTurn({
+    sessionKey,
+    runId,
+    reason: 'aborted',
+  });
   setRuntimePatch(set, sessionKey, {
     sending: false,
     activeRunId: null,

@@ -1,4 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+const { invokeIpcMock } = vi.hoisted(() => ({ invokeIpcMock: vi.fn() }));
+
+vi.mock('@/lib/api-client', () => ({
+  invokeIpc: (...args: unknown[]) => invokeIpcMock(...args),
+}));
+
+vi.mock('@/lib/host-api', () => ({
+  hostApiFetch: vi.fn().mockResolvedValue(undefined),
+}));
 
 import {
   appendAgentMemoryContextBlock,
@@ -9,6 +19,9 @@ import {
 } from '@/lib/agent-memory';
 import {
   buildAgentExecutionMemoryContextText,
+  captureAgentMemories,
+  discardAgentMemoriesForAbnormalTurn,
+  rememberInjectedExecutionMemories,
   stripAgentExecutionMemoryContextForDisplay,
 } from '@/lib/agent-execution-memory';
 import { stripAgentMemoryContextsForDisplay } from '@/lib/agent-memory-display';
@@ -62,5 +75,26 @@ describe('agent-memory helpers', () => {
     ], 'a2');
 
     expect(text).toBe('最终问题');
+  });
+
+  it('does not dispatch normal memory capture after an abnormal terminal event', () => {
+    invokeIpcMock.mockReset();
+    rememberInjectedExecutionMemories('agent:main:failed-run', [
+      { memoryId: 'memory-1', memory: '历史执行经验' },
+    ]);
+    discardAgentMemoriesForAbnormalTurn({
+      sessionKey: 'agent:main:failed-run',
+      runId: 'run-failed',
+      reason: 'failed',
+    });
+
+    captureAgentMemories({
+      sessionKey: 'agent:main:failed-run',
+      runId: 'run-failed',
+      agentId: 'main',
+      engineType: 'claude',
+    });
+
+    expect(invokeIpcMock).not.toHaveBeenCalled();
   });
 });
