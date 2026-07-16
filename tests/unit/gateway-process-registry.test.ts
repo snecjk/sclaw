@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
+  getListeningProcessIds,
   listGatewayChildProcessIds,
   terminateProcessIds,
   waitForPortFree,
 } = vi.hoisted(() => ({
+  getListeningProcessIds: vi.fn(),
   listGatewayChildProcessIds: vi.fn(),
   terminateProcessIds: vi.fn(),
   waitForPortFree: vi.fn(),
@@ -17,7 +19,7 @@ vi.mock('electron', () => ({
 }));
 
 vi.mock('../../electron/gateway/supervisor', () => ({
-  getListeningProcessIds: vi.fn(),
+  getListeningProcessIds,
   listGatewayChildProcessIds,
   terminateOrphanedProcessIds: vi.fn(),
   terminateProcessIds,
@@ -37,6 +39,7 @@ describe('gateway process registry duplicate cleanup', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    getListeningProcessIds.mockResolvedValue([]);
     listGatewayChildProcessIds.mockResolvedValue([]);
     terminateProcessIds.mockResolvedValue(undefined);
     waitForPortFree.mockResolvedValue(undefined);
@@ -82,6 +85,23 @@ describe('gateway process registry duplicate cleanup', () => {
     expect(terminateProcessIds).toHaveBeenCalledWith(['72927', '83681']);
     expect(waitForPortFree).toHaveBeenCalledWith(18789);
     expect(findAvailablePort).toHaveBeenCalledWith(18789);
+  });
+
+  it('reuses the owned Gateway port without waiting when keepPid still listens', async () => {
+    getListeningProcessIds.mockResolvedValue(['91087']);
+    const findAvailablePort = vi.fn().mockResolvedValue(18790);
+
+    const { prepareGatewayStartupPort } = await import('../../electron/gateway/process-registry');
+    const port = await prepareGatewayStartupPort({
+      defaultPort: 18789,
+      keepPid: 91087,
+      preferredPort: 18789,
+      findAvailablePort,
+    });
+
+    expect(port).toBe(18789);
+    expect(waitForPortFree).not.toHaveBeenCalled();
+    expect(findAvailablePort).not.toHaveBeenCalled();
   });
 
   it('falls back to an alternate port when the default is externally occupied', async () => {
