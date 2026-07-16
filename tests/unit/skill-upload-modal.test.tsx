@@ -61,7 +61,7 @@ describe('SkillUploadModal source selection', () => {
       expect(mocks.invokeIpc).toHaveBeenCalledWith(
         'dialog:open',
         expect.objectContaining({
-          properties: ['openFile'],
+          properties: ['openFile', 'multiSelections'],
           filters: [{ name: 'Skill Package', extensions: ['zip', 'md'] }],
         }),
       );
@@ -221,6 +221,7 @@ describe('SkillUploadModal source selection', () => {
 
     await waitFor(() => {
       expect(screen.getByText('已选择 3 个技能文件夹')).toBeInTheDocument();
+      expect(screen.getByText('first、second 等 3 个文件夹')).toBeInTheDocument();
     });
     expect(mocks.invokeIpc.mock.calls.filter(([channel]) => channel === 'file:validateSkillUpload'))
       .toEqual(folders.map((folder) => ['file:validateSkillUpload', folder]));
@@ -247,6 +248,51 @@ describe('SkillUploadModal source selection', () => {
       expect(onUploadSuccess).toHaveBeenCalledTimes(1);
     });
     expect(mocks.uploadSkill.mock.calls.map(([path]) => path)).toEqual(folders);
+  });
+
+  it('shows two selected folder names instead of the file-size placeholder', async () => {
+    const folders = ['C:\\skills\\weather', 'C:\\skills\\headphone'];
+    mocks.invokeIpc.mockImplementation((channel: string) => {
+      if (channel === 'dialog:open') {
+        return Promise.resolve({ canceled: false, filePaths: folders });
+      }
+      if (channel === 'file:validateSkillUpload') return Promise.resolve({ valid: true });
+      return Promise.resolve(undefined);
+    });
+    renderModal();
+
+    fireEvent.click(screen.getByRole('button', { name: '选择技能文件夹' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('已选择 2 个技能文件夹')).toBeInTheDocument();
+      expect(screen.getByText('weather、headphone')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('-')).not.toBeInTheDocument();
+  });
+
+  it('selects, previews, and uploads multiple skill files', async () => {
+    const files = ['C:\\skills\\weather.zip', 'C:\\skills\\SKILL.md'];
+    mocks.invokeIpc.mockImplementation((channel: string) => {
+      if (channel === 'dialog:open') {
+        return Promise.resolve({ canceled: false, filePaths: files });
+      }
+      if (channel === 'file:validateSkillUpload') return Promise.resolve({ valid: true });
+      return Promise.resolve(undefined);
+    });
+    mocks.uploadSkill.mockResolvedValue('installed');
+    renderModal();
+
+    fireEvent.click(screen.getByRole('button', { name: '选择技能文件' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('已选择 2 个技能文件')).toBeInTheDocument();
+      expect(screen.getByText('weather.zip、SKILL.md')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('-')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '安装' }));
+    await waitFor(() => expect(mocks.uploadSkill).toHaveBeenCalledTimes(2));
+    expect(mocks.uploadSkill.mock.calls.map(([path]) => path)).toEqual(files);
   });
 
   it('stops a multi-folder upload after a failure and reports completed count', async () => {

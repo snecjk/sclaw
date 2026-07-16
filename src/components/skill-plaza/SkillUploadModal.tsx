@@ -31,6 +31,7 @@ interface SkillUploadModalProps {
 }
 
 type UploadStatus = 'idle' | 'preview' | 'uploading' | 'success' | 'error';
+type SelectionKind = 'file' | 'folder' | 'drag';
 
 export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUploadModalProps) {
   const { t } = useTranslation('skills');
@@ -39,6 +40,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [filePath, setFilePath] = useState<string | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
+  const [selectionKind, setSelectionKind] = useState<SelectionKind>('drag');
   const [fileName, setFileName] = useState<string | null>(null);
   const [fileSize, setFileSize] = useState<number>(0);
   const [slug] = useState<string | null>(null);
@@ -57,6 +59,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
       setStatus('idle');
       setFilePath(null);
       setSelectedPaths([]);
+      setSelectionKind('drag');
       setFileName(null);
       setFileSize(0);
       setErrorMsg(null);
@@ -70,6 +73,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     setStatus('idle');
     setFilePath(null);
     setSelectedPaths([]);
+    setSelectionKind('drag');
     setFileName(null);
     setFileSize(0);
     setErrorMsg(null);
@@ -79,7 +83,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
 
   // Enter the preview/confirm step with the given local path. Does NOT start
   // uploading until the user confirms — required by the preview-confirm step.
-  const enterPreviewPaths = async (paths: string[]) => {
+  const enterPreviewPaths = async (paths: string[], kind: SelectionKind) => {
     const nextPaths = paths.filter(Boolean);
     if (!nextPaths.length) return;
 
@@ -89,6 +93,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
         setStatus('idle');
         setFilePath(null);
         setSelectedPaths([]);
+        setSelectionKind('drag');
         setFileName(null);
         setFileSize(0);
         setErrorMsg(null);
@@ -104,12 +109,18 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     const firstPath = nextPaths[0];
     setFilePath(firstPath);
     setSelectedPaths(nextPaths);
+    setSelectionKind(kind);
     setFileName(
       nextPaths.length > 1
-        ? t('plaza.upload.selectedFolderCount', {
-            count: nextPaths.length,
-            defaultValue: `已选择 ${nextPaths.length} 个技能文件夹`,
-          })
+        ? kind === 'folder'
+          ? t('plaza.upload.selectedFolderCount', {
+              count: nextPaths.length,
+              defaultValue: `已选择 ${nextPaths.length} 个技能文件夹`,
+            })
+          : t('plaza.upload.selectedFileCount', {
+              count: nextPaths.length,
+              defaultValue: `已选择 ${nextPaths.length} 个技能文件`,
+            })
         : firstPath.split(/[\\/]/).pop() || firstPath,
     );
     setFileSize(0);
@@ -128,7 +139,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     })();
   };
 
-  const enterPreview = async (selectedPath: string) => enterPreviewPaths([selectedPath]);
+  const enterPreview = async (selectedPath: string) => enterPreviewPaths([selectedPath], 'drag');
 
   // Step 1 (option A): pick a local .zip file or SKILL.md file.
   // Windows/Linux native dialogs cannot combine openFile and openDirectory.
@@ -138,12 +149,12 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
         'dialog:open',
         {
           title: t('plaza.upload.title', { defaultValue: 'Upload Skill' }),
-          properties: ['openFile'],
+          properties: ['openFile', 'multiSelections'],
           filters: [{ name: 'Skill Package', extensions: ['zip', 'md'] }],
         },
       );
       if (result.canceled || !result.filePaths?.length) return;
-      await enterPreview(result.filePaths[0]);
+      await enterPreviewPaths(result.filePaths, 'file');
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
       setStatus('error');
@@ -162,7 +173,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
         },
       );
       if (result.canceled || !result.filePaths?.length) return;
-      await enterPreviewPaths(result.filePaths);
+      await enterPreviewPaths(result.filePaths, 'folder');
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : String(err));
       setStatus('error');
@@ -284,6 +295,27 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     : undefined;
   const skillTitle = uploadedSkill?.title || slug || '';
   const skillCategoryCode = uploadedSkill?.categoryCode;
+  const selectedItemNames = selectedPaths.map(
+    (selectedPath) => selectedPath.split(/[\\/]/).pop() || selectedPath,
+  );
+  const selectedItemSummary = selectedPaths.length > 1
+    ? selectedPaths.length > 2
+      ? selectionKind === 'folder'
+        ? t('plaza.upload.selectedFolderNamesMore', {
+            names: selectedItemNames.slice(0, 2).join('、'),
+            count: selectedPaths.length,
+            defaultValue: `${selectedItemNames.slice(0, 2).join('、')} 等 ${selectedPaths.length} 个文件夹`,
+          })
+        : t('plaza.upload.selectedFileNamesMore', {
+            names: selectedItemNames.slice(0, 2).join('、'),
+            count: selectedPaths.length,
+            defaultValue: `${selectedItemNames.slice(0, 2).join('、')} 等 ${selectedPaths.length} 个技能文件`,
+          })
+      : t('plaza.upload.selectedItemNames', {
+          names: selectedItemNames.join('、'),
+          defaultValue: selectedItemNames.join('、'),
+        })
+    : null;
 
   const renderSkillIcon = () => {
     if (uploadedSkill?.icon) {
@@ -406,7 +438,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                           </span>
                         </span>
                         <span className="mt-1 block text-xs text-muted-foreground">
-                          {t('plaza.upload.selectFileHint', { defaultValue: '选择 .zip 文件或 SKILL.md 文件' })}
+                          {t('plaza.upload.selectFileHint', { defaultValue: '支持多选 .zip 文件或 SKILL.md 文件' })}
                         </span>
                       </span>
                       <ChevronRight className="h-5 w-5 flex-shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden="true" />
@@ -443,7 +475,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                     className="w-full text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22C55E] rounded-xl"
                   >
                     <div className="min-h-[176px] rounded-2xl border-2 border-dashed border-[#22C55E] bg-[#E9FFEC] px-5 py-6 flex flex-col items-center justify-center transition-colors dark:border-[#343A40] dark:bg-[#1f2325] dark:hover:border-[#46515A]">
-                      {selectedPaths.length > 1 ? (
+                      {selectedPaths.length > 1 && selectionKind === 'folder' ? (
                         <FolderOpen className="h-10 w-10 text-[#8B96A3]" strokeWidth={1.8} />
                       ) : (
                         <FileText className="h-10 w-10 text-[#8B96A3]" strokeWidth={1.8} />
@@ -451,9 +483,18 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                       <p className="mt-6 max-w-full text-xl leading-7 font-normal text-foreground break-all line-clamp-2 tracking-normal">
                         {fileName}
                       </p>
-                      <p className="mt-3 text-2xl leading-8 font-normal text-[#8B96A3] tracking-normal">
-                        {formatFileSize(fileSize)}
-                      </p>
+                      {selectedItemSummary ? (
+                        <p
+                          className="mt-3 max-w-full text-sm leading-5 font-normal text-muted-foreground break-all line-clamp-2"
+                          title={selectedItemNames.join('\n')}
+                        >
+                          {selectedItemSummary}
+                        </p>
+                      ) : (
+                        <p className="mt-3 text-2xl leading-8 font-normal text-[#8B96A3] tracking-normal">
+                          {formatFileSize(fileSize)}
+                        </p>
+                      )}
                     </div>
                   </button>
                   <div className="mt-5">
