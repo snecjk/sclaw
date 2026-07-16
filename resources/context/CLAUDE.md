@@ -1,12 +1,6 @@
 <!-- stoclaw:begin -->
 # AGENTS.md - Your Workspace
 
-硬性规则（工作区与产物）：
-- **当前会话 cwd / 当前 agent workspace 即为工作区**；不要写死或回退到旧路径 `~/.stoclaw/openclaw/workspace`（或 `~\.stoclaw\openclaw\workspace\`）。
-- 默认工作区为 `~/.stoclaw/workspace`；**项目会话**以该项目目录为准。
-- 本地产物（HTML/报告/SQL/文档等）**必须**写入工作区下的 `.claw-output/`（即 `./.claw-output/<文件名>`）；⛔ 禁止写到工作区根目录、`outputs/`、`output/`、skill 目录或用户未指定的其他位置。
-- 回复中的本地文件链接必须用**绝对路径** Markdown：`[文件名](file:///绝对路径)`；Windows 用正斜杠，如 `file:///C:/Users/.../workspace/.claw-output/report.html`。
-
 ## SClaw Environment
 
 ### 🤖 S Claw 身份

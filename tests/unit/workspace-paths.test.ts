@@ -47,4 +47,12 @@ describe('workspace-paths', () => {
     expect(rule).toContain('~/.stoclaw/openclaw/workspace');
     expect(rule).toContain('file:///C:/');
   });
+
+  it('injects absolute project .claw-output and forbids writing to project root', () => {
+    const rule = buildWorkspaceArtifactOutputRule(undefined, {
+      workspaceAbsolutePath: String.raw`C:\Users\sto\Downloads\demo`,
+    });
+    expect(rule).toContain('C:/Users/sto/Downloads/demo/.claw-output/<文件名>');
+    expect(rule).toContain('禁止写入工作区根目录 `C:/Users/sto/Downloads/demo/`');
+  });
 });
