@@ -44,7 +44,7 @@ export async function resolveSendTarget(input: {
     sessionKey,
     targetAgentId ?? get().currentAgentId,
     {
-      messageCount: get().currentSessionKey === sessionKey ? get().messages.length : undefined,
+      messageCount: get().currentSessionKey === sessionKey ? (get().messages?.length ?? 0) : undefined,
     },
   );
   const session = get().sessions.find((item) => item.key === sessionKey);

@@ -24,7 +24,6 @@ import { ContentHeaderSessionChip } from '@/components/layout/content-header-ses
 import { useContentHeaderDisplay } from '@/components/layout/content-header-context';
 import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
 import { useSettingsStore } from '@/stores/settings';
-import { useWorkflowUiStore } from '@/stores/workflow-ui';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 
 export function ContentHeader() {
@@ -32,7 +31,6 @@ export function ContentHeader() {
   const { title, previewTabs, actions, isSplitLayout, onCloseSession } = useContentHeaderDisplay();
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
-  const workflowEditorActive = useWorkflowUiStore((s) => s.editorActive);
   const browserOverlayOpen = useSclawBrowserOverlayStore((s) => s.session !== null);
 
   // Drawer toolbar occupies the header band; drag-region steals clicks regardless of z-index.
@@ -51,11 +49,10 @@ export function ContentHeader() {
       className={cn(
         contentHeaderTitleGroupClass,
         isSplitLayout && 'max-w-none min-w-0 shrink',
-        workflowEditorActive && showTitle && 'max-w-none min-w-0 flex-1',
         !showTitle && !sidebarCollapsed && 'min-w-0',
       )}
     >
-      {sidebarCollapsed && !workflowEditorActive ? (
+      {sidebarCollapsed ? (
         <SidebarHeaderToggle
           isCollapsed
           onToggle={() => setSidebarCollapsed(false)}

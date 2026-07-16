@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useSettingsStore } from '@/stores/settings';
 import { cn } from '@/lib/utils';
 import { myTaskRunGuardBarShellClass } from '@/lib/surfaces';
-import { WorkflowScheduleToggle } from '@/pages/Workflow/components/workflow-schedule-toggle';
+import { ScheduleToggle } from '@/components/ui/schedule-toggle';
 
 export function TaskRunGuardBar() {
   const { t } = useTranslation('tasks');
@@ -46,7 +46,7 @@ export function TaskRunGuardBar() {
           {t('myTask.runGuard.preventSleepTips')}
         </TooltipContent>
       </Tooltip>
-      <WorkflowScheduleToggle
+      <ScheduleToggle
         checked={preventSystemSleep}
         aria-label={t('myTask.runGuard.preventSleep')}
         onCheckedChange={(value) => {

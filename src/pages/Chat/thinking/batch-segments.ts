@@ -112,7 +112,13 @@ export function replaceOpeningPhaseTextSegment(
 
 /** 流式：判定当前仍 active 的 tool-group 下标（无则 -1） */
 function findActiveToolGroupIndex(segments: ThinkingTurnSegment[]): number {
-  const lastGroupIndex = segments.findLastIndex((segment) => segment.kind === 'tool-group');
+  let lastGroupIndex = -1;
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    if (segments[index]?.kind === 'tool-group') {
+      lastGroupIndex = index;
+      break;
+    }
+  }
   if (lastGroupIndex < 0) return -1;
 
   const trailing = segments.slice(lastGroupIndex + 1);

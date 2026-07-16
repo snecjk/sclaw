@@ -32,7 +32,7 @@ export interface TurnEffectExecutor {
     runId?: string | null;
     sessionKey?: string | null;
     engineType?: ChatSession['engineType'];
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 export function executeTurnEffects(
@@ -41,7 +41,7 @@ export function executeTurnEffects(
 ): void {
   for (const effect of effects) {
     if (effect.type === 'captureMemory') {
-      executor.dispatchMemoryCapture({
+      void executor.dispatchMemoryCapture({
         agentId: effect.agentId,
         runId: effect.runId,
         sessionKey: effect.sessionKey,
@@ -52,7 +52,8 @@ export function executeTurnEffects(
 
     if (effect.type === 'reloadHistoryAndFinalize') {
       executor.clearHistoryPoll?.();
-      void executor.get().loadHistory(true, true).then(() => {
+      void executor.get().loadHistory(true, true, effect.sessionKey).then(() => {
+        if (executor.get().currentSessionKey !== effect.sessionKey) return;
         finalizeMessagesFromHistoryLoad(executor.get, executor.set, {
           agentId: effect.agentId,
           runId: effect.runId,

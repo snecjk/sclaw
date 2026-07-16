@@ -55,6 +55,7 @@ import {
 } from './session-runtime';
 import {
   clearSessionEntryFromMap,
+  createTemporaryAgentSessionKey,
   getAgentIdFromSessionKey,
   getCanonicalPrefixFromSessions,
   isTemporaryAgentSessionKey,
@@ -63,7 +64,7 @@ import {
   getBaseAgentIdFromProjectAgentId,
   resolveProjectAgentId,
 } from '../../../shared/project-agent';
-import { registerSessionSendReadiness } from '@/lib/session-send-readiness';
+import { clearSessionSendReadiness, registerSessionSendReadiness } from '@/lib/session-send-readiness';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 const SESSION_LOAD_MIN_INTERVAL_MS = 1_200;
@@ -621,6 +622,7 @@ export function createSessionLifecycleActions(
       useSessionUnreadStore.getState().markSessionRead(key);
       clearSessionRuntimeTimers(key);
       clearSessionRunLifecycle(key);
+      clearSessionSendReadiness(key);
 
       const { currentSessionKey, sessions } = get();
       const remaining = sessions.filter((s) => s.key !== key);
@@ -690,7 +692,7 @@ export function createSessionLifecycleActions(
             ?? getCanonicalPrefixFromSessions(sessions)
             ?? DEFAULT_CANONICAL_PREFIX
         }:session-${Date.now()}`);
-      const newKey = `agent:${newAgentId}:session-${Date.now()}`;
+      const newKey = createTemporaryAgentSessionKey(newAgentId);
       // Carry over model from home/default session or Claude agent toolbar selection
       let currentSessionModel = get().pendingNewSessionModel
         ?? (currentSessionKey !== DEFAULT_SESSION_KEY
@@ -770,6 +772,7 @@ export function createSessionLifecycleActions(
         })
         : syncModel();
       registerSessionSendReadiness(newKey, setupPromise);
+      if (leavingEmpty) clearSessionSendReadiness(currentSessionKey);
     },
 
   };

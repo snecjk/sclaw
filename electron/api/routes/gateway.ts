@@ -2,17 +2,14 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { PORTS } from '../../utils/config';
 import { buildOpenClawControlUiUrl } from '../../utils/openclaw-control-ui';
 import { getSetting } from '../../utils/store';
-import { getStoToken } from '../../utils/auth-store';
-import { buildStoMemoryCenterAuthHeaders } from '../../utils/sto-memory-api-auth';
-import { resolveStoBaseUrl } from '../../utils/sto-domain';
 import { listAgentsSnapshot } from '../../utils/agent-config';
-import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { getAdapterForSession, listEngineSessions } from '../../engines/manager';
 import type { AgentEngineType } from '../../engines/types';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { preprocessChatSendParams } from '../../utils/dingtalk-mention-send';
 import { uploadFileToTempOSS } from '../../utils/oss-temp-upload';
+import { runIdempotentChatSend } from './chat-send-idempotency';
 
 type ChatSendRouteBody = {
   sessionKey: string;
@@ -266,7 +263,11 @@ export async function handleGatewayRoutes(
         messageLength: body.message?.length ?? 0,
         idempotencyKey: body.idempotencyKey,
       });
-      const result = await dispatchChatSendRequest(body);
+      const result = await runIdempotentChatSend(
+        body.sessionKey,
+        body.idempotencyKey,
+        () => dispatchChatSendRequest(body),
+      );
       console.info('[chat-flow]', 'main.send.result', {
         sessionKey: body.sessionKey,
         success: result.success,

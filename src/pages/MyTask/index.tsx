@@ -42,8 +42,8 @@ import { TaskCreateModal, type TaskCreateInputWithRun } from './components/TaskC
 import { useMyTaskStore, selectRecordCounts, selectCurrentRecords } from './store';
 import type { TaskView, TaskViewModel, ExecutionRecord } from './types';
 import { listWorkflowTemplates } from '@/lib/workflow-api';
-import { mapTemplateMineItemToOfficialCard } from '@/pages/Workflow/workflow-mapper';
-import type { OfficialWorkflowCard } from '@/pages/Workflow/types';
+import { mapTemplateMineItemToOfficialCard } from '@/lib/workflow-list-mapper';
+import type { OfficialWorkflowCard } from '@/types/workflow-list';
 import { ViewTabs } from './components/ViewTabs';
 import { TaskToolbar } from './components/TaskToolbar';
 import { RecordToolbar } from './components/RecordToolbar';

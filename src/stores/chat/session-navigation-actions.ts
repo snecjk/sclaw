@@ -3,6 +3,7 @@ import { DEFAULT_SESSION_KEY } from './types';
 import type { ChatGet, ChatSet, SessionActions } from './store-api';
 import { clearSessionEntryFromMap, getAgentIdFromSessionKey, isTemporaryAgentSessionKey } from './session-identity';
 import { buildSessionSwitchPatch } from './session-runtime';
+import { clearSessionSendReadiness } from '@/lib/session-send-readiness';
 
 export interface SessionNavigationDependencies {
   markSessionRead: (sessionKey: string) => void;
@@ -50,6 +51,7 @@ export function createSessionNavigationActions(
           currentSessionKey,
         ),
       }));
+      clearSessionSendReadiness(currentSessionKey);
     },
   };
 }

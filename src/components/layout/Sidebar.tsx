@@ -17,7 +17,6 @@ import {
   Bot,
   Radio,
   ChevronDown,
-  Workflow,
   Check,
   LayoutGrid,
 } from 'lucide-react';
@@ -97,7 +96,6 @@ import {
   useSidebarDeleteConfirmStore,
 } from '@/stores/sidebar-delete-confirm';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
-import { useWorkflowUiStore } from '@/stores/workflow-ui';
 import {
   sidebarFooterMetaClass,
   sidebarFooterNameClass,
@@ -757,8 +755,6 @@ export function Sidebar() {
 
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
-  const workflowEditorActive = useWorkflowUiStore((s) => s.editorActive);
-  const sidebarExpandedBeforeWorkflowRef = useRef<boolean | null>(null);
   const [taskListSectionOpen, setTaskListSectionOpen] = useState(true);
   const [taskListShowAll, setTaskListShowAll] = useState(false);
   const [taskGroupFirstTriggeredAt, setTaskGroupFirstTriggeredAt] = useState<Record<string, number>>({});
@@ -800,22 +796,6 @@ export function Sidebar() {
       console.error('[session-catalog] sidebar bootstrap failed', error);
     });
   }, [catalogBootstrap]);
-
-  useEffect(() => {
-    if (workflowEditorActive) {
-      const prev = useSettingsStore.getState().sidebarCollapsed;
-      if (sidebarExpandedBeforeWorkflowRef.current === null) {
-        sidebarExpandedBeforeWorkflowRef.current = !prev;
-      }
-      if (!prev) setSidebarCollapsed(true);
-      return;
-    }
-    if (sidebarExpandedBeforeWorkflowRef.current !== null) {
-      const restoreExpanded = sidebarExpandedBeforeWorkflowRef.current;
-      sidebarExpandedBeforeWorkflowRef.current = null;
-      setSidebarCollapsed(!restoreExpanded);
-    }
-  }, [workflowEditorActive, setSidebarCollapsed]);
 
   const revealTaskListAfterOpenRef = useRef(false);
   const suppressNextTaskAutoCollapseRef = useRef(false);
@@ -1664,7 +1644,6 @@ export function Sidebar() {
       { to: '/my-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myTasks') },
       // { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
       { to: '/skills', icon: <Wrench className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
-      { to: '/workflow', icon: <Workflow className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.workflow') },
       { to: '/more-apps', icon: <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.moreApps') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
       // { to: '/data-center', icon: <Database className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.dataCenter') },

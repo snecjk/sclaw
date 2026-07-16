@@ -467,7 +467,7 @@ export function beginWorkflowRunSseTrace(runId: string): void {
 export async function saveWorkflowDefinition(
   workflowId: string,
   workflow: Record<string, unknown>
-): Promise<import('@/pages/WorkflowDesigner/types').WorkflowDefinition> {
+): Promise<import('@/types/workflow-definition').WorkflowDefinition> {
   const { definitionFromDetail } = await import('@/lib/workflow-designer-adapter');
   const data = await unwrap(
     hostApiFetch<ApiResponse<WorkflowDetailResponse>>(`/agent/v1/workflows/${workflowId}`, {
@@ -481,7 +481,7 @@ export async function saveWorkflowDefinition(
 
 export async function publishWorkflowDefinition(
   workflowId: string
-): Promise<import('@/pages/WorkflowDesigner/types').WorkflowDefinition> {
+): Promise<import('@/types/workflow-definition').WorkflowDefinition> {
   const { definitionFromDetail } = await import('@/lib/workflow-designer-adapter');
   const data = await unwrap(
     hostApiFetch<ApiResponse<WorkflowDetailResponse>>(`/agent/v1/workflows/${workflowId}/publish`, {

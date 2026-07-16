@@ -46,6 +46,19 @@ export async function upsertEngineSessionRegistryEntry(
   });
 }
 
+/** Patch volatile metadata without making callers reconstruct ownership fields. */
+export async function patchEngineSessionRegistryEntry(
+  sessionKey: string,
+  patch: Partial<Omit<EngineSessionRegistryEntry, 'sessionKey' | 'engineType' | 'agentId'>>,
+): Promise<void> {
+  await runRegistryMutation(async () => {
+    await ensureSessionCatalogBootstrapped();
+    const current = await getEngineBinding(sessionKey);
+    if (!current) return;
+    await upsertEngineBinding({ ...current, ...patch, sessionKey });
+  });
+}
+
 export async function deleteEngineSessionRegistryEntry(
   sessionKey: string,
 ): Promise<EngineSessionRegistryEntry | null> {

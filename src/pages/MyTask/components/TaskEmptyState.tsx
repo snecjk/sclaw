@@ -13,7 +13,7 @@ import {
   myTaskEmptyTemplateAddButtonClass,
   myTaskEmptyTemplateCardClass,
 } from '@/lib/surfaces';
-import type { OfficialWorkflowCard } from '@/pages/Workflow/types';
+import type { OfficialWorkflowCard } from '@/types/workflow-list';
 
 interface TaskEmptyStateProps {
   /** 当前搜索关键词 */

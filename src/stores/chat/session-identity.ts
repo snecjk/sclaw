@@ -26,6 +26,13 @@ export function buildFallbackMainSessionKey(agentId: string): string {
   return `agent:${normalizeAgentId(agentId)}:main`;
 }
 
+export function createTemporaryAgentSessionKey(agentId: string, now = Date.now()): string {
+  const suffix = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2, 12);
+  return `agent:${normalizeAgentId(agentId)}:session-${now}-${suffix}`;
+}
+
 export function isTemporaryAgentSessionKey(sessionKey: string): boolean {
   return /^agent:[^:]+:session-\d+/.test(sessionKey);
 }

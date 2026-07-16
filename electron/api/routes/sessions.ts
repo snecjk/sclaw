@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { getOpenClawConfigDir } from '../../utils/paths';
 import { deleteClaudeSessionByKey } from '../../engines/claude-adapter';
 import { applyClaudeSessionModelSwitch } from '../../engines/claude-session-model';
-import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry } from '../../engines/session-registry';
+import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry } from '../../engines/session-registry';
 import { getAgentIdFromSessionKey, rememberSessionEngineType, resolveSessionEngineType } from '../../engines/session-engine';
 import { getAgentPreferredModel } from '../../utils/agent-config';
 import { resolveSessionToolCwd } from '../../services/session-catalog-service';

@@ -12,7 +12,7 @@ const LOAD_HISTORY_MIN_INTERVAL_MS = 800;
 const COMPLETION_HISTORY_RELOAD_DELAYS_MS = [1_000, 3_000, 7_000];
 
 let lastLoadSessionsAt = 0;
-let lastLoadHistoryAt = 0;
+const lastLoadHistoryAtBySession = new Map<string, number>();
 
 function maybeLoadSessions(
   state: { loadSessions: () => Promise<void> },
@@ -25,13 +25,19 @@ function maybeLoadSessions(
 }
 
 function maybeLoadHistory(
-  state: { loadHistory: (quiet?: boolean, force?: boolean) => Promise<void> },
+  state: {
+    currentSessionKey: string;
+    loadHistory: (quiet?: boolean, force?: boolean, sessionKey?: string) => Promise<void>;
+  },
   force = false,
+  sessionKey?: string | null,
 ): void {
+  const targetSessionKey = sessionKey ?? state.currentSessionKey;
   const now = Date.now();
-  if (!force && now - lastLoadHistoryAt < LOAD_HISTORY_MIN_INTERVAL_MS) return;
-  lastLoadHistoryAt = now;
-  void state.loadHistory(true, force);
+  const lastLoadAt = lastLoadHistoryAtBySession.get(targetSessionKey) ?? 0;
+  if (!force && now - lastLoadAt < LOAD_HISTORY_MIN_INTERVAL_MS) return;
+  lastLoadHistoryAtBySession.set(targetSessionKey, now);
+  void state.loadHistory(true, force, targetSessionKey);
 }
 
 function eventString(value: unknown): string | null {
@@ -83,7 +89,7 @@ function scheduleCompletedRunHistoryReload(runId: unknown, sessionKey: unknown):
           const matchesActiveRun = completionRunId != null && state.activeRunId != null && completionRunId === state.activeRunId;
 
           if (matchesCurrentSession || matchesActiveRun) {
-            await state.loadHistory(true, true);
+            await state.loadHistory(true, true, targetSessionKey);
           }
 
           if (index !== COMPLETION_HISTORY_RELOAD_DELAYS_MS.length - 1) return;
@@ -135,7 +141,7 @@ async function completeRunAfterAgentCompleted(
   const matchesActiveRun = completionRunId != null && before.activeRunId != null && completionRunId === before.activeRunId;
 
   if (matchesCurrentSession || matchesActiveRun) {
-    await before.loadHistory(true, true);
+    await before.loadHistory(true, true, targetSessionKey);
   }
 
   const after = useChatStore.getState();
@@ -201,7 +207,7 @@ export function handleCompletedEngineEvent(engineEvent: Record<string, unknown>)
       const matchesActiveRun = runId != null && state.activeRunId != null && String(runId) === state.activeRunId;
 
       if (matchesCurrentSession || matchesActiveRun) {
-        maybeLoadHistory(state, true);
+        maybeLoadHistory(state, true, resolvedSessionKey);
       }
       if (shouldFinalizeCompletedRun({ runId, resolvedSessionKey, state })) {
         void completeRunAfterAgentCompleted(runId, resolvedSessionKey).catch(() => {});

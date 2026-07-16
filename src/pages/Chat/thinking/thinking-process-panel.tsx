@@ -73,7 +73,7 @@ export function ThinkingProcessPanel({
     isConnecting,
     isProcessing,
     isStillExecuting,
-    streamingTools,
+    streamingTools: streamingTools.map((tool) => ({ ...tool, updatedAt: 0 })),
     hasFinalReply: hasReplyBody || layout.finalReplyText !== null,
     connectingLabelKey,
     className,

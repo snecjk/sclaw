@@ -1,18 +1,17 @@
-import { cn } from '@/lib/utils';
 import { scheduleToggleThumbClass, scheduleToggleTrackClass } from '@/lib/surfaces';
+import { cn } from '@/lib/utils';
 
-interface WorkflowScheduleToggleProps {
+interface ScheduleToggleProps {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
   'aria-label': string;
 }
 
-/** 与 test-mockup 中 nwf-tg 同款开关 */
-export function WorkflowScheduleToggle({
+export function ScheduleToggle({
   checked,
   onCheckedChange,
   'aria-label': ariaLabel,
-}: WorkflowScheduleToggleProps) {
+}: ScheduleToggleProps) {
   return (
     <button
       type="button"
@@ -20,8 +19,8 @@ export function WorkflowScheduleToggle({
       aria-checked={checked}
       aria-label={ariaLabel}
       className={scheduleToggleTrackClass(checked)}
-      onClick={(e) => {
-        e.stopPropagation();
+      onClick={(event) => {
+        event.stopPropagation();
         onCheckedChange(!checked);
       }}
     >

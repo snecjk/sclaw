@@ -76,10 +76,10 @@ function isToolResultMessage(message: unknown): boolean {
   return role === 'toolresult' || role === 'tool_result' || role === 'toolResult';
 }
 
-function withCommonFields<T extends Record<string, unknown>>(
-  target: T,
+function withCommonFields(
+  target: Record<string, unknown>,
   event: NormalizedEngineEvent,
-): T {
+): Record<string, unknown> {
   if (event.runId) target.runId = event.runId;
   if (event.sessionKey) target.sessionKey = event.sessionKey;
   if (event.seq != null) target.seq = event.seq;

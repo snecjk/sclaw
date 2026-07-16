@@ -437,7 +437,8 @@ function resolveDeleteCandidates(exp: ExecutionExperienceSummary, injected: Inje
     const oldPathFailed = tools.some((tool) => {
       if (!tool || typeof tool !== 'object') return false;
       const record = tool as Record<string, unknown>;
-      return record.status === 'error' && typeof record.command === 'string' && directCommands.some((command) => record.command === command || record.command.startsWith(`${command} `));
+      const failedCommand = typeof record.command === 'string' ? record.command : '';
+      return record.status === 'error' && directCommands.some((command) => failedCommand === command || failedCommand.startsWith(`${command} `));
     });
     if (oldPathFailed) candidates.push(old.memoryId);
   }

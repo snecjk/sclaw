@@ -1,4 +1,5 @@
 import type { ThinkingTimelineItem } from '@/pages/Chat/message-utils';
+export type { ThinkingTimelineItem } from '@/pages/Chat/message-utils';
 
 export type RawTurnEvent =
   | { type: 'text'; text: string }
