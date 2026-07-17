@@ -15,7 +15,7 @@ import { logger } from '../../utils/logger';
 import { getStoModelSyncService } from '../../services/providers/sto-model-sync';
 import { runAuthenticatedSetup, type AuthenticatedSetupResult } from '../../services/auth-setup-orchestrator';
 import { runPendingInstallReport } from '../../services/client-update-platform';
-import { activateUserWorkspace, getCurrentActiveUserCode } from '../../services/user-skill-workspace';
+import { activateUserWorkspace, getCurrentActiveUserCode, syncMountPointToUser } from '../../services/user-skill-workspace';
 import { removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-auth';
 import { getStoPolicyReportApiHost } from '../../../shared/env-config';
 import { computeCrmWeekReportSurfaceAllowed } from '../../../shared/crm-week-report-policy';
@@ -240,6 +240,20 @@ export async function handleAuthRoutes(
 
   // POST /api/auth/logout — sign out
   if (url.pathname === '/api/auth/logout' && req.method === 'POST') {
+    // Persist the current mount-point skills back to the user's workspace BEFORE
+    // clearing auth. Skills that only live on the global mount (e.g. ones
+    // generated via natural-language chat) would otherwise be lost when the next
+    // login's clearMountPoint() runs. Best-effort: never block logout on this.
+    try {
+      const activeUserCode = await getCurrentActiveUserCode();
+      if (activeUserCode) {
+        await syncMountPointToUser(activeUserCode);
+        logger.info(`[auth] Saved mount point to user ${activeUserCode} before logout`);
+      }
+    } catch (err) {
+      logger.warn('[auth] Failed to persist skills to user workspace on logout:', err);
+    }
+
     try {
       const state = await getAuthState();
 

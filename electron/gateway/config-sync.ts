@@ -45,6 +45,7 @@ import { logger } from '../utils/logger';
 import { getDwsBinDir } from '../utils/dws-cli';
 import { prependPathEntry, prependNodePathEntry } from '../utils/env-path';
 import { copyPluginFromNodeModules, fixupPluginManifest } from '../utils/plugin-install';
+import { SAI_CLIENT_ID_VALUE, applySaiClientIdEnv } from '../utils/sai-client-id';
 
 export interface GatewayLaunchContext {
   appSettings: Awaited<ReturnType<typeof getAllSettings>>;
@@ -324,6 +325,7 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     : 'disabled';
 
   const { NODE_OPTIONS: _nodeOptions, ...baseEnv } = process.env;
+  applySaiClientIdEnv(process.env as Record<string, string | undefined>);
   const baseEnvRecord = baseEnv as Record<string, string | undefined>;
   let baseEnvPatched = binPathExists
     ? prependPathEntry(baseEnvRecord, binPath).env
@@ -348,6 +350,7 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     OPENCLAW_PACKAGE_ROOT: getOpenClawPackageRootEnv(),
     STOCLAW_WORKSPACE: mainWorkspace,
     STOCLAW_OUTPUT_DIR: mainOutputDir,
+    SAI_CLIENT_ID: SAI_CLIENT_ID_VALUE,
   }, getOpenClawNodeModulesPath());
 
   return {
