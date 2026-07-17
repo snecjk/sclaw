@@ -3,6 +3,7 @@ import initialSqliteSchemaMigration from './0001-initial-schema';
 import workflowRuntimeSchemaMigration from './0002-workflow-runtime';
 import wfRunSessionKeyMigration from './0003-wf-run-session-key';
 import workflowRuntimeShanghaiTimeMigration from './0004-workflow-runtime-shanghai-time';
+import workflowRuntimeCloudIdsMigration from './0005-workflow-runtime-cloud-ids';
 
 // Keep migrations as explicit imports so Electron/Vite bundling can retain them
 // reliably in both dev and packaged builds.
@@ -12,4 +13,5 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
   workflowRuntimeSchemaMigration,
   wfRunSessionKeyMigration,
   workflowRuntimeShanghaiTimeMigration,
+  workflowRuntimeCloudIdsMigration,
 ].sort((left, right) => left.version - right.version);

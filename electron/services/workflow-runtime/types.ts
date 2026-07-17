@@ -51,6 +51,8 @@ export interface AgentRunSpec {
     responseExample?: Record<string, unknown>;
     maxAttempts?: number;
     onIncomplete?: 'retry' | 'manual_review';
+    /** false keeps structured data inline so downstream bindings retain their declared shape. */
+    preferFileOutput?: boolean;
     task?: any;
   };
   guardrails?: { timeoutMs?: number };

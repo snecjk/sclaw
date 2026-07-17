@@ -88,6 +88,7 @@ export function mapWfRunRowToResponse(
   const nodeRuns = (opts.nodeRuns ?? []).map((n) => ({
     id: `${row.run_id}:${n.node_id}`,
     nodeId: n.node_id,
+    nodeType: n.node_type ?? undefined,
     status: n.status,
     startedAt: n.started_at ?? undefined,
     completedAt: n.completed_at ?? undefined,

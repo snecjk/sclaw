@@ -278,6 +278,7 @@ export async function startWorkflow(
 /** v2 createRunLog 注册版响应：仅建行 + 钉定 version，无 streamUrl/queryUrl。 */
 export interface StartWorkflowLocalResponse {
   runId: string;
+  runDatabaseId: number;
   workflowVersionId: string | number;
   resolvedInputs?: Record<string, unknown>;
 }
@@ -312,30 +313,45 @@ export async function startWorkflowLocal(
   const startedAt = formatShanghaiIso();
 
   // 常规会话工作流仍需在服务端注册，以保持既有运行记录关联行为。
-  const data = await unwrap(
-    hostApiFetch<ApiResponse<StartWorkflowLocalResponse>>(
-      `/agent/v2/workflows/${params.workflowId}/createRunLog`,
-      {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({
-          inputs: params.inputs,
-          agentContext: params.agentContext,
-          idempotencyKey: params.idempotencyKey,
-          runMode: params.runMode ?? 'production',
-          workflowVersionId: params.workflowVersionId,
-        }),
-      }
-    )
-  );
-  if (!data.runId || data.workflowVersionId == null) {
-    throw new Error('v2 createRunLog response missing runId/workflowVersionId');
+  let data: StartWorkflowLocalResponse | undefined;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const candidateRunDatabaseId = await invokeIpc<number>('workflow-runtime:takeDatabaseId');
+    if (!Number.isSafeInteger(candidateRunDatabaseId) || candidateRunDatabaseId <= 0) {
+      throw new Error('global workflow id pool returned an invalid run id');
+    }
+    try {
+      data = await unwrap(
+        hostApiFetch<ApiResponse<StartWorkflowLocalResponse>>(
+          `/agent/v2/workflows/${params.workflowId}/createRunLog`,
+          {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({
+              runDatabaseId: candidateRunDatabaseId,
+              inputs: params.inputs,
+              agentContext: params.agentContext,
+              idempotencyKey: params.idempotencyKey,
+              runMode: params.runMode ?? 'production',
+              workflowVersionId: params.workflowVersionId,
+            }),
+          }
+        )
+      );
+      break;
+    } catch (error) {
+      const status = (error as { details?: { status?: number } }).details?.status;
+      if (status !== 409 || attempt === 1) throw error;
+    }
+  }
+  if (!data?.runId || data.workflowVersionId == null || !Number.isSafeInteger(data.runDatabaseId)) {
+    throw new Error('v2 createRunLog response missing runId/workflowVersionId/runDatabaseId');
   }
 
   // 2. 本地执行下沉：IPC handler 在主进程 await 整个 run（dispatch 到终态/等待节点），
   //    renderer 不 await——状态走广播桥回流。
   await invokeIpc('workflow-runtime:start', {
     runId: data.runId,
+    runDatabaseId: data.runDatabaseId,
     workflowId: params.workflowId,
     versionId: String(data.workflowVersionId), // engine dslClient.fetchVersion(workflowId, versionId: string)
     input: data.resolvedInputs ?? params.inputs ?? {},

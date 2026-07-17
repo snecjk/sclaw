@@ -1,5 +1,6 @@
 import { getKyselyDatabase } from '../connection';
 import { formatShanghaiIso } from '../../../shared/workflow-timestamp';
+import { takeWorkflowDatabaseId } from '../../services/workflow-runtime/id-pool';
 
 /**
  * Workflow-runtime DAO.
@@ -21,6 +22,14 @@ function nowIso(): string {
 }
 
 export class WorkflowRuntimeRepository {
+  private async runDatabaseId(runRef: string | number): Promise<number> {
+    if (typeof runRef === 'number') return runRef;
+    const row = await getKyselyDatabase().selectFrom('wf_run').select('id')
+      .where('run_id', '=', runRef).executeTakeFirst();
+    if (!row) throw new Error(`workflow run not found: ${runRef}`);
+    return row.id;
+  }
+
   /**
    * Insert-or-replace a workflow run by `run_id`. Always refreshes `updated_at`
    * so the row reports the most recent mutation regardless of caller input.
@@ -45,7 +54,7 @@ export class WorkflowRuntimeRepository {
 
     await db
       .insertInto('wf_run')
-      .values(row)
+      .values({ ...row, id: row.id ?? await takeWorkflowDatabaseId(), created_at: row.created_at ?? nowIso() })
       .execute();
   }
 
@@ -89,18 +98,21 @@ export class WorkflowRuntimeRepository {
    */
   async upsertNodeRun(n: any): Promise<void> {
     const db = getKyselyDatabase();
+    const businessRunId = n.run_id;
+    const runPk = await this.runDatabaseId(businessRunId);
+    const stored = { ...n, run_id: runPk, updated_at: nowIso() };
     const existing = await db
       .selectFrom('wf_node_run')
       .select(['run_id', 'node_id'])
-      .where('run_id', '=', n.run_id)
+      .where('run_id', '=', runPk)
       .where('node_id', '=', n.node_id)
       .executeTakeFirst();
 
     if (existing) {
       await db
         .updateTable('wf_node_run')
-        .set(n)
-        .where('run_id', '=', n.run_id)
+        .set(stored)
+        .where('run_id', '=', runPk)
         .where('node_id', '=', n.node_id)
         .execute();
       return;
@@ -109,40 +121,47 @@ export class WorkflowRuntimeRepository {
     await db
       .insertInto('wf_node_run')
       .values({
-        ...n,
+        ...stored,
+        id: n.id ?? await takeWorkflowDatabaseId(),
         status: n.status ?? 'PENDING',
         attempt_count: n.attempt_count ?? 0,
+        created_at: n.created_at ?? nowIso(),
       })
       .execute();
   }
 
   async listNodeRuns(run_id: string): Promise<any[]> {
     const db = getKyselyDatabase();
-    return db
+    const runPk = await this.runDatabaseId(run_id);
+    const rows = await db
       .selectFrom('wf_node_run')
       .selectAll()
-      .where('run_id', '=', run_id)
+      .where('run_id', '=', runPk)
       .orderBy('started_at', 'asc')
       .orderBy('node_id', 'asc')
       .execute();
+    return rows.map((row) => ({ ...row, run_id }));
   }
 
   async getNodeRun(run_id: string, node_id: string): Promise<any> {
     const db = getKyselyDatabase();
-    return db
+    const runPk = await this.runDatabaseId(run_id);
+    const row = await db
       .selectFrom('wf_node_run')
       .selectAll()
-      .where('run_id', '=', run_id)
+      .where('run_id', '=', runPk)
       .where('node_id', '=', node_id)
       .executeTakeFirst();
+    return row ? { ...row, run_id } : row;
   }
 
   async markInflightNodeRunsInterrupted(run_id: string): Promise<void> {
     const db = getKyselyDatabase();
+    const runPk = await this.runDatabaseId(run_id);
     await db
       .updateTable('wf_node_run')
       .set({ status: 'INTERRUPTED', completed_at: nowIso() })
-      .where('run_id', '=', run_id)
+      .where('run_id', '=', runPk)
       .where('status', 'in', ['RUNNING', 'WAITING_APPROVAL', 'WAITING_INPUT'])
       .execute();
   }
@@ -153,10 +172,11 @@ export class WorkflowRuntimeRepository {
    */
   async incrementNodeAttempt(run_id: string, node_id: string): Promise<void> {
     const db = getKyselyDatabase();
+    const runPk = await this.runDatabaseId(run_id);
     await db
       .updateTable('wf_node_run')
       .set((eb: any) => ({ attempt_count: eb('attempt_count', '+', 1) }))
-      .where('run_id', '=', run_id)
+      .where('run_id', '=', runPk)
       .where('node_id', '=', node_id)
       .execute();
   }
@@ -166,72 +186,96 @@ export class WorkflowRuntimeRepository {
    */
   async insertEvent(e: any): Promise<void> {
     const db = getKyselyDatabase();
+    const runPk = await this.runDatabaseId(e.run_id);
     await db
       .insertInto('wf_event')
-      .values({ ...e, created_at: nowIso() })
+      .values({ ...e, id: e.id ?? await takeWorkflowDatabaseId(), run_id: runPk, created_at: nowIso(), updated_at: nowIso() })
       .execute();
   }
 
   async listEvents(run_id: string): Promise<any[]> {
     const db = getKyselyDatabase();
-    return db
+    const runPk = await this.runDatabaseId(run_id);
+    const rows = await db
       .selectFrom('wf_event')
       .selectAll()
-      .where('run_id', '=', run_id)
+      .where('run_id', '=', runPk)
       .orderBy('sequence', 'asc')
       .execute();
+    return rows.map((row) => ({ ...row, run_id }));
   }
 
   async nextEventSequence(run_id: string): Promise<number> {
     const db = getKyselyDatabase();
+    const runPk = await this.runDatabaseId(run_id);
     const row = await db
       .selectFrom('wf_event')
       .select((eb: any) => eb.fn.max('sequence').as('max_sequence'))
-      .where('run_id', '=', run_id)
+      .where('run_id', '=', runPk)
       .executeTakeFirst();
     return Number((row as any)?.max_sequence ?? 0) + 1;
   }
 
   async upsertArtifact(a: any): Promise<void> {
     const db = getKyselyDatabase();
+    const runPk = await this.runDatabaseId(a.run_id);
+    const existing = await db.selectFrom('wf_artifact').select('id').where('artifact_id', '=', a.artifact_id).executeTakeFirst();
+    const row = { ...a, id: existing?.id ?? a.id ?? await takeWorkflowDatabaseId(), run_id: runPk,
+      node_id: a.node_id ?? '', uri: a.uri ?? `artifact://${a.run_id}/${a.node_id ?? ''}/${a.artifact_id}`,
+      updated_at: nowIso() };
     await db
       .insertInto('wf_artifact')
-      .values(a)
-      .onConflict((eb) => eb.column('artifact_id').doUpdateSet(a))
+      .values(row)
+      .onConflict((eb) => eb.column('artifact_id').doUpdateSet(row))
       .execute();
   }
 
   async listArtifacts(run_id: string): Promise<any[]> {
-    return getKyselyDatabase().selectFrom('wf_artifact').selectAll()
-      .where('run_id', '=', run_id).orderBy('created_at', 'asc').execute();
+    const runPk = await this.runDatabaseId(run_id);
+    const rows = await getKyselyDatabase().selectFrom('wf_artifact').selectAll()
+      .where('run_id', '=', runPk).orderBy('created_at', 'asc').execute();
+    return rows.map((row) => ({ ...row, run_id }));
   }
 
   async upsertApprovalTask(t: any): Promise<void> {
     const db = getKyselyDatabase();
+    const runPk = await this.runDatabaseId(t.run_id);
+    const existing = await db.selectFrom('wf_approval_task').select('id').where('task_id', '=', t.task_id).executeTakeFirst();
+    const row = { ...t, id: existing?.id ?? t.id ?? await takeWorkflowDatabaseId(), run_id: runPk,
+      node_id: t.node_id ?? '', requested_at: t.requested_at ?? nowIso(), updated_at: nowIso() };
     await db
       .insertInto('wf_approval_task')
-      .values(t)
-      .onConflict((eb) => eb.column('task_id').doUpdateSet(t))
+      .values(row)
+      .onConflict((eb) => eb.column('task_id').doUpdateSet(row))
       .execute();
   }
 
   async listApprovalTasks(run_id: string): Promise<any[]> {
-    return getKyselyDatabase().selectFrom('wf_approval_task').selectAll()
-      .where('run_id', '=', run_id).orderBy('requested_at', 'asc').execute();
+    const runPk = await this.runDatabaseId(run_id);
+    const rows = await getKyselyDatabase().selectFrom('wf_approval_task').selectAll()
+      .where('run_id', '=', runPk).orderBy('requested_at', 'asc').execute();
+    return rows.map((row) => ({ ...row, run_id }));
   }
 
   async upsertUserInputTask(t: any): Promise<void> {
     const db = getKyselyDatabase();
+    const runPk = await this.runDatabaseId(t.run_id);
+    const existing = await db.selectFrom('wf_user_input_task').select('id').where('task_id', '=', t.task_id).executeTakeFirst();
+    const row = { ...t, id: existing?.id ?? t.id ?? await takeWorkflowDatabaseId(), run_id: runPk,
+      node_id: t.node_id ?? '', form_schema_json: t.form_schema_json ?? '[]',
+      requested_at: t.requested_at ?? nowIso(), updated_at: nowIso() };
     await db
       .insertInto('wf_user_input_task')
-      .values(t)
-      .onConflict((eb) => eb.column('task_id').doUpdateSet(t))
+      .values(row)
+      .onConflict((eb) => eb.column('task_id').doUpdateSet(row))
       .execute();
   }
 
   async listUserInputTasks(run_id: string): Promise<any[]> {
-    return getKyselyDatabase().selectFrom('wf_user_input_task').selectAll()
-      .where('run_id', '=', run_id).orderBy('requested_at', 'asc').execute();
+    const runPk = await this.runDatabaseId(run_id);
+    const rows = await getKyselyDatabase().selectFrom('wf_user_input_task').selectAll()
+      .where('run_id', '=', runPk).orderBy('requested_at', 'asc').execute();
+    return rows.map((row) => ({ ...row, run_id }));
   }
 
   /**
@@ -246,13 +290,14 @@ export class WorkflowRuntimeRepository {
     sync_kind: string,
   ): Promise<number> {
     const db = getKyselyDatabase();
+    const normalizedPayload = await this.cloudPayload(run_id, entity_type, payload);
     const result = await db
       .insertInto('wf_outbox')
       .values({
         run_id,
         entity_type,
         entity_ref,
-        payload: JSON.stringify(payload),
+        payload: JSON.stringify(normalizedPayload),
         sync_kind,
         status: 'pending',
         attempts: 0,
@@ -260,6 +305,29 @@ export class WorkflowRuntimeRepository {
       })
       .executeTakeFirstOrThrow();
     return Number(result.insertId);
+  }
+
+  /** Cloud child tables use workflow_run.id, while engine code addresses runs by run_id. */
+  private async cloudPayload(runBizId: string, entityType: string, payload: unknown): Promise<unknown> {
+    if (!payload || typeof payload !== 'object' || entityType === 'run') return payload;
+    const source = payload as Record<string, any>;
+    const runPk = await this.runDatabaseId(runBizId);
+    let stored: Record<string, any> | undefined;
+    const db = getKyselyDatabase();
+    if (entityType === 'node_run' && source.node_id) {
+      stored = await db.selectFrom('wf_node_run').selectAll().where('run_id', '=', runPk)
+        .where('node_id', '=', source.node_id).executeTakeFirst() as any;
+    } else if (entityType === 'event' && source.sequence != null) {
+      stored = await db.selectFrom('wf_event').selectAll().where('run_id', '=', runPk)
+        .where('sequence', '=', Number(source.sequence)).executeTakeFirst() as any;
+    } else if (entityType === 'artifact' && source.artifact_id) {
+      stored = await db.selectFrom('wf_artifact').selectAll().where('artifact_id', '=', source.artifact_id).executeTakeFirst() as any;
+    } else if (entityType === 'approval' && source.task_id) {
+      stored = await db.selectFrom('wf_approval_task').selectAll().where('task_id', '=', source.task_id).executeTakeFirst() as any;
+    } else if (entityType === 'user_input' && source.task_id) {
+      stored = await db.selectFrom('wf_user_input_task').selectAll().where('task_id', '=', source.task_id).executeTakeFirst() as any;
+    }
+    return { ...source, ...(stored ?? {}), run_id: runPk };
   }
 
   /**

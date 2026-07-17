@@ -7,15 +7,20 @@ import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { installWorkflowRuntime, workflowV2BackendFetch } from '../../services/workflow-runtime/bootstrap';
 import { workflowExecLog } from '../../services/workflow-runtime/logging';
+import { takeWorkflowDatabaseId } from '../../services/workflow-runtime/id-pool';
 
 type WorkflowStartBody = {
+  runDatabaseId?: number;
   inputs?: Record<string, unknown>;
   idempotencyKey?: string;
   sessionKey?: string;
+  runMode?: 'trial' | 'production';
+  workflowVersionId?: string | number;
 };
 
 type WorkflowV2StartResponse = {
   runId: string;
+  runDatabaseId: number;
   workflowId?: string;
   workflowVersionId: string | number;
   workflowVersion?: number;
@@ -203,6 +208,7 @@ function startLocalWorkflowRuntime(
   });
   void installWorkflowRuntime().startWorkflow({
     runId: registered.runId,
+    runDatabaseId: registered.runDatabaseId,
     workflowId,
     versionId: String(versionId),
     input: body.inputs ?? {},
@@ -235,20 +241,35 @@ async function registerLocalWorkflowRun(
     idempotencyKey,
     inputKeys: Object.keys(body.inputs ?? {}).join(','),
   });
-  const registered = await workflowV2BackendFetch(
-    `/agent/v2/workflows/${encodeURIComponent(workflowId)}/createRunLog`,
-    {
-      method: 'POST',
-      body: {
-        inputs: body.inputs ?? {},
-        idempotencyKey,
-      },
-      stoToken,
-    },
-  ) as WorkflowV2StartResponse;
+  let registered: WorkflowV2StartResponse | undefined;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const suppliedId = attempt === 0 ? body.runDatabaseId : undefined;
+    const runDatabaseId = Number.isSafeInteger(suppliedId) && Number(suppliedId) > 0
+      ? Number(suppliedId)
+      : await takeWorkflowDatabaseId();
+    try {
+      registered = await workflowV2BackendFetch(
+        `/agent/v2/workflows/${encodeURIComponent(workflowId)}/createRunLog`,
+        {
+          method: 'POST',
+          body: {
+            runDatabaseId,
+            inputs: body.inputs ?? {},
+            idempotencyKey,
+            runMode: body.runMode ?? 'production',
+            workflowVersionId: body.workflowVersionId,
+          },
+          stoToken,
+        },
+      ) as WorkflowV2StartResponse;
+      break;
+    } catch (error) {
+      if ((error as { status?: number }).status !== 409 || attempt === 1) throw error;
+    }
+  }
 
-  if (!registered.runId || registered.workflowVersionId == null) {
-    throw new Error('workflow v2 createRunLog response missing runId/workflowVersionId');
+  if (!registered?.runId || registered.workflowVersionId == null || !Number.isSafeInteger(registered.runDatabaseId)) {
+    throw new Error('workflow v2 createRunLog response missing runId/workflowVersionId/runDatabaseId');
   }
   workflowExecLog('info', 'host-register-succeeded', 'client-local workflow run registered', {
     runId: registered.runId,
@@ -541,7 +562,7 @@ export async function handleWorkflowRoutes(
       });
     } catch (error) {
       logger.error('[WorkflowRoutes] start workflow v2 failed:', error);
-      res.statusCode = 500;
+      res.statusCode = (error as { status?: number }).status ?? 500;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.end(JSON.stringify({ success: false, error: String(error) }));
     }

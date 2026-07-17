@@ -368,7 +368,7 @@ export function resolveAssistantCopyShareContent(options: {
     const summary = typeof state?.result?.summary === 'string'
       ? state.result.summary.trim()
       : '';
-    for (const artifact of state?.result?.artifacts ?? []) {
+    for (const artifact of state?.status === 'completed' ? state.result?.artifacts ?? [] : []) {
       if (!isUserFacingArtifactUrl(artifact.url)) continue;
       addFile(artifactToPreviewFile(artifact));
     }
@@ -1388,6 +1388,7 @@ export function usePreviewableFiles(
     // Structured workflow artifacts first — authoritative OSS URLs win dedup.
     if (workflowCardStates) {
       for (const state of Object.values(workflowCardStates)) {
+        if (state.status !== 'completed') continue;
         for (const artifact of state.result?.artifacts ?? []) {
           if (!isPreviewableArtifactUrl(artifact.url, artifact.type)) continue;
           const previewFile = artifactToPreviewFile(artifact);

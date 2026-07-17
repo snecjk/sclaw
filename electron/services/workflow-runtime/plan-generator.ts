@@ -10,6 +10,7 @@ const nowIso = () => formatShanghaiIso();
 
 export interface GeneratePlanArgs { repo: RunCtx['repo']; dslClient: { fetchVersion(workflowId: string, versionId: string): Promise<any> };
   workflowId: string; versionId: string; runId?: string; input: any; startedAt: string;
+  runDatabaseId: number;
   /** 会话键——emit 桥按它过滤 status-update 广播（use-workflow-completion.ts）。Phase 2b 由 start 注册传入。 */
   sessionKey?: string;
 }
@@ -44,7 +45,7 @@ export async function generatePlan(args: GeneratePlanArgs): Promise<string> {
     nodeCount: nodes.length,
     edgeCount: (definition.edges ?? []).length,
   });
-  await repo.upsertRun({ run_id: runId, workflow_id: workflowId, version_id: versionId,
+  await repo.upsertRun({ id: args.runDatabaseId, run_id: runId, workflow_id: workflowId, version_id: versionId,
     status: 'RUNNING', mode: 'CLIENT_LOCAL', source: 'client',
     input_json: JSON.stringify(stagedInput), definition_json: JSON.stringify(definition),
     started_at: startedAt, updated_at: nowIso(),

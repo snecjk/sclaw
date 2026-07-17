@@ -276,6 +276,7 @@ export const ChatMessage = memo(function ChatMessage({
   const workflowArtifactUrls = useMemo(() => {
     const urls = new Set<string>();
     for (const state of Object.values(workflowCardStatesForRefs)) {
+      if (state?.status !== 'completed') continue;
       for (const artifact of state?.result?.artifacts ?? []) {
         if (artifact.url?.startsWith('http')) urls.add(artifact.url);
       }

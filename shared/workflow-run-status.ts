@@ -12,6 +12,7 @@ export type WorkflowRunStatus =
 export interface WorkflowRunNodeRun {
   id: string;
   nodeId: string;
+  nodeType?: string;
   status: string;
   startedAt?: string;
   completedAt?: string;
@@ -28,6 +29,8 @@ export interface WorkflowRunArtifact {
   /** Signed OSS download URL (Content-Disposition: attachment). */
   tempUrl?: string;
   size?: number;
+  nodeId?: string;
+  kind?: string;
 }
 
 export interface WorkflowExecutionResult {
@@ -87,6 +90,7 @@ export interface WorkflowRunApiPayload {
       previewUrl?: string;
       filePath?: string;
       contentType?: string;
+      nodeId?: string;
     }
   > | null;
   output?: unknown;
@@ -227,6 +231,8 @@ export function normalizeRunArtifacts(
         previewUrl,
         tempUrl,
         size: a.size,
+        nodeId: a.nodeId,
+        kind: a.kind,
       };
     })
     .filter((a) => a.id || a.url || a.previewUrl || a.tempUrl);
@@ -282,6 +288,56 @@ export function collectAllRunArtifacts(run: WorkflowRunApiPayload): WorkflowRunA
   // Keep local artifacts alongside remote ones. De-duplication above already
   // prefers HTTP for the same artifact; globally dropping local entries would
   // hide a local HTML result whenever an unrelated OSS/JSON artifact exists.
+  return [...byName.values()];
+}
+
+function isIntermediateArtifactKind(kind: string | undefined): boolean {
+  const normalized = kind?.trim().toLowerCase();
+  return normalized === 'input' || normalized === 'intermediate' || normalized === 'process';
+}
+
+/**
+ * Return user-facing final artifacts only. Local execution persists inputs and
+ * every node's files for audit/sync, but only output-node files are results.
+ */
+export function collectFinalRunArtifacts(run: WorkflowRunApiPayload): WorkflowRunArtifact[] {
+  if (resolveWorkflowRunStatus(run) !== 'completed') return [];
+
+  const resultArtifacts = normalizeRunArtifacts(run.result?.artifacts);
+  const outputArtifacts = collectArtifactsFromOutput(run.output);
+  const topLevel = normalizeRunArtifacts(run.artifacts);
+  const outputNodeIds = new Set(
+    (run.nodeRuns ?? [])
+      .filter((node) => node.nodeType?.trim().toLowerCase() === 'output')
+      .map((node) => node.nodeId),
+  );
+  // A local run's `result` is the latest agent output, not the workflow's final
+  // output. Once output-node metadata exists, never merge that intermediate
+  // agent result into the final artifact set.
+  const explicit = outputNodeIds.size > 0
+    ? outputArtifacts
+    : [...resultArtifacts, ...outputArtifacts];
+
+  let finalRows: WorkflowRunArtifact[];
+  if (outputNodeIds.size > 0) {
+    finalRows = topLevel.filter((artifact) => artifact.nodeId && outputNodeIds.has(artifact.nodeId));
+  } else if (explicit.length > 0) {
+    const names = new Set(explicit.map((artifact) => artifact.name).filter(Boolean));
+    finalRows = topLevel.filter((artifact) => names.has(artifact.name));
+  } else {
+    // Compatibility for older cloud payloads that did not return nodeType.
+    finalRows = topLevel.filter((artifact) => !isIntermediateArtifactKind(artifact.kind));
+  }
+
+  const byName = new Map<string, WorkflowRunArtifact>();
+  for (const artifact of [...explicit, ...finalRows]) {
+    const key = artifact.name || artifact.id || artifact.url;
+    if (!key) continue;
+    const existing = byName.get(key);
+    if (!existing || (isHttpArtifactUrl(artifact.url) && !isHttpArtifactUrl(existing.url))) {
+      byName.set(key, artifact);
+    }
+  }
   return [...byName.values()];
 }
 
@@ -380,7 +436,7 @@ export function workflowRunResponseToExecutionState(run: WorkflowRunApiPayload):
     (n) => normalizeWorkflowStepStatus(n.status) === 'completed',
   ).length;
   const progress = status === 'completed' ? 100 : Math.min(99, Math.floor((completedNodes / totalNodes) * 100));
-  const artifacts = collectAllRunArtifacts(run);
+  const artifacts = collectFinalRunArtifacts(run);
 
   return {
     runId: run.id,
@@ -414,26 +470,29 @@ function extractRunResultFromPayload(
   status: WorkflowRunStatus,
   artifacts: WorkflowRunArtifact[],
 ): WorkflowExecutionResult | undefined {
+  // Non-success states can already contain input/intermediate files for audit,
+  // but they are not completed workflow results.
+  if (status !== 'completed') return undefined;
+
   const mapped = mapArtifacts(artifacts);
   const outputSummary = extractOutputSummary(run.output);
-  const resultSummary = extractOutputSummary(run.result)
+  const hasOutputNode = (run.nodeRuns ?? []).some(
+    (node) => node.nodeType?.trim().toLowerCase() === 'output',
+  );
+  const resultSummary = hasOutputNode ? undefined : extractOutputSummary(run.result)
     ?? (typeof run.result?.title === 'string' && run.result.title.trim()
       ? run.result.title.trim()
       : undefined);
 
-  if (resultSummary) {
+  if (outputSummary) {
     return {
-      summary: resultSummary,
+      summary: outputSummary,
       artifacts: mapped.length > 0 ? mapped : undefined,
     };
   }
 
-  if (outputSummary) {
-    return { summary: outputSummary, artifacts: mapped.length > 0 ? mapped : undefined };
-  }
-
-  if (status !== 'completed') {
-    return mapped.length > 0 ? { artifacts: mapped } : undefined;
+  if (resultSummary) {
+    return { summary: resultSummary, artifacts: mapped.length > 0 ? mapped : undefined };
   }
 
   return mapped.length > 0 ? { artifacts: mapped } : undefined;
@@ -442,6 +501,6 @@ function extractRunResultFromPayload(
 /** Extract client-facing result summary + artifacts from GET /runs response. */
 export function extractRunResult(run: WorkflowRunApiPayload): WorkflowExecutionResult | undefined {
   const status = resolveWorkflowRunStatus(run);
-  const artifacts = collectAllRunArtifacts(run);
+  const artifacts = collectFinalRunArtifacts(run);
   return extractRunResultFromPayload(run, status, artifacts);
 }

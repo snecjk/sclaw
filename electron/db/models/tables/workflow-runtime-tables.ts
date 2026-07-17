@@ -5,6 +5,7 @@ type TsNull = ColumnType<string | null, string | null | undefined, string | null
 type Int = ColumnType<number, number | undefined, number | undefined>;
 
 export interface WfRunTable {
+  id: number;
   run_id: string;
   workflow_id: string;
   version_id: string;
@@ -22,10 +23,14 @@ export interface WfRunTable {
   completed_at: TsNull;
   updated_at: Ts;
   synced_at: TsNull;
+  session_key: TsNull;
+  created_at: TsNull;
+  deleted_at: TsNull;
 }
 
 export interface WfNodeRunTable {
-  run_id: string;
+  id: number;
+  run_id: number;
   node_id: string;
   node_type: TsNull;
   status: string;
@@ -36,10 +41,14 @@ export interface WfNodeRunTable {
   last_completion_issue: TsNull;
   started_at: TsNull;
   completed_at: TsNull;
+  created_at: TsNull;
+  updated_at: TsNull;
+  deleted_at: TsNull;
 }
 
 export interface WfEventTable {
-  run_id: string;
+  id: number;
+  run_id: number;
   sequence: number;
   type: string;
   node_id: TsNull;
@@ -53,12 +62,15 @@ export interface WfEventTable {
   reason: TsNull;
   message: TsNull;
   created_at: Ts;
+  updated_at: TsNull;
+  deleted_at: TsNull;
 }
 
 export interface WfArtifactTable {
+  id: number;
   artifact_id: string;
-  run_id: string;
-  node_id: TsNull;
+  run_id: number;
+  node_id: string;
   kind: string;
   uri: TsNull;
   file_path: TsNull;
@@ -66,32 +78,42 @@ export interface WfArtifactTable {
   content_type: TsNull;
   summary: TsNull;
   created_at: Ts;
+  updated_at: TsNull;
+  deleted_at: TsNull;
 }
 
 export interface WfApprovalTaskTable {
+  id: number;
   task_id: string;
-  run_id: string;
-  node_id: TsNull;
+  run_id: number;
+  node_id: string;
   status: string;
   assignee_role: TsNull;
   reason: TsNull;
   decision_note: TsNull;
   requested_at: Ts;
   decided_at: TsNull;
+  created_at: TsNull;
+  updated_at: TsNull;
+  deleted_at: TsNull;
 }
 
 export interface WfUserInputTaskTable {
+  id: number;
   task_id: string;
-  run_id: string;
-  node_id: TsNull;
+  run_id: number;
+  node_id: string;
   status: string;
   assignee_role: TsNull;
   title: TsNull;
   instruction: TsNull;
-  form_schema_json: TsNull;
+  form_schema_json: string;
   submitted_data_json: TsNull;
   requested_at: Ts;
   submitted_at: TsNull;
+  created_at: TsNull;
+  updated_at: TsNull;
+  deleted_at: TsNull;
 }
 
 export interface WfOutboxTable {

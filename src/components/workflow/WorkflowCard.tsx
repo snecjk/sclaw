@@ -226,7 +226,7 @@ export function WorkflowCard({
   const isTerminal = isTerminalWorkflowRunStatus(display.status);
   const durationLabel = useDurationLabel(display.startedAt, display.completedAt, isRunning);
   const showProgress = isRunning && display.progress > 0;
-  const userFacingArtifacts = (display.result?.artifacts ?? []).filter(
+  const userFacingArtifacts = (display.status === 'completed' ? display.result?.artifacts ?? [] : []).filter(
     (artifact) => isUserFacingArtifactUrl(artifact.url),
   );
   const previewableArtifact = userFacingArtifacts.find((artifact) => shouldPreviewInSidePanel(artifact.url));

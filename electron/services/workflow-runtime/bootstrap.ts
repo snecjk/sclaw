@@ -22,6 +22,7 @@ import { getWorkflowRuntimeRepository } from '../../db';
 import type { EngineDeps } from './engine';
 import type { WorkflowRunStatus } from '../../../shared/workflow-run-status';
 import { workflowExecLog } from './logging';
+import { configureWorkflowIdPool } from './id-pool';
 
 let cachedSdk: any = null;
 let cachedWorkflowModel: string | undefined;
@@ -59,11 +60,25 @@ export async function workflowV2BackendFetch(
     body: init.body ? JSON.stringify(init.body) : undefined,
   });
   if (res.status === 401) throw Object.assign(new Error('stoToken expired'), { status: 401 });
-  if (!res.ok) throw new Error(`workflow v2 ${init.method} ${path} -> ${res.status}`);
+  if (!res.ok) {
+    let message = `workflow v2 ${init.method} ${path} -> ${res.status}`;
+    try {
+      const payload = await res.json() as { errMessage?: string; detail?: string };
+      message = payload.errMessage || payload.detail || message;
+    } catch {
+      // Keep the status-based message when the backend did not return JSON.
+    }
+    throw Object.assign(new Error(message), { status: res.status });
+  }
   return res.json();
 }
 
 export function createWorkflowRuntimeEngineDeps(): EngineDeps {
+  configureWorkflowIdPool(async (count) => {
+    const response = await workflowV2BackendFetch('/agent/v2/ids/allocate', { method: 'POST', body: { count } });
+    if (!Array.isArray(response?.ids)) throw new Error('global workflow id response missing ids');
+    return response.ids.map((id: unknown) => Number(id));
+  });
   return {
     repo: getWorkflowRuntimeRepository(),
     invokeAgent: async (args) => {

@@ -8,6 +8,7 @@ import { ipcMain } from 'electron';
 import { createEngine, type EngineDeps, type StartWorkflowArgs } from './engine';
 import { mapWfRunRowToResponse } from './mapper';
 import { workflowExecLog } from './logging';
+import { takeWorkflowDatabaseId } from './id-pool';
 
 export interface RuntimeHandlers {
   start: (a: any) => Promise<void>;
@@ -49,6 +50,7 @@ export function registerWorkflowRuntimeHandlers(deps: EngineDeps): RuntimeHandle
     });
     return { accepted: true, runId: a?.runId };
   });
+  ipcMain.handle('workflow-runtime:takeDatabaseId', async () => takeWorkflowDatabaseId());
   ipcMain.handle('workflow-runtime:resume', async (_e, runId: string) => {
     workflowExecLog('info', 'ipc-resume', 'received workflow runtime resume ipc', { runId });
     await engine.resumeRun(runId);

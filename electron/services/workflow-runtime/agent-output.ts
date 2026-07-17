@@ -5,7 +5,8 @@
  * - normalizeAgentResultOutput: 移植自 output_templates.py:414（>2KB 落盘用注入的 processFileWriter）
  */
 import fs from 'node:fs';
-import { stat } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
+import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { getDataDir } from '../../utils/paths';
@@ -231,6 +232,87 @@ export async function validateDeclaredArtifactFiles(output: unknown, workspaceDi
     }
   }
   return { ok: true };
+}
+
+/**
+ * Complete process-file metadata from files the Agent already wrote.
+ * The former server runtime owned this normalization; local execution must not
+ * force the model to reproduce filesystem metadata perfectly in JSON.
+ */
+export async function reconcileProcessFiles(
+  output: unknown,
+  nodeWorkspaceDirectory: string,
+): Promise<unknown> {
+  if (!output || typeof output !== 'object' || Array.isArray(output)) return output;
+  const record = output as Record<string, any>;
+  if (!Array.isArray(record.processFiles) || record.processFiles.length === 0) return output;
+  const workspace = path.resolve(nodeWorkspaceDirectory);
+  const files = await listWorkspaceFiles(workspace);
+  const byName = new Map<string, string[]>();
+  for (const file of files) {
+    const name = path.basename(file).toLowerCase();
+    byName.set(name, [...(byName.get(name) ?? []), file]);
+  }
+
+  const normalized = await Promise.all(record.processFiles.map(async (entry: unknown) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+    const item = { ...(entry as Record<string, any>) };
+    let localPath = toLocalFilePath({
+      filePath: typeof item.filePath === 'string' ? item.filePath : item.file_path,
+      uri: typeof item.uri === 'string' ? item.uri : undefined,
+    });
+    if (localPath && !path.isAbsolute(localPath)) localPath = path.resolve(workspace, localPath);
+    if (!localPath || !(await isWorkspaceFile(localPath, workspace))) {
+      const declaredName = String(item.name || (localPath ? path.basename(localPath) : '')).trim().toLowerCase();
+      const matches = declaredName ? (byName.get(declaredName) ?? []) : [];
+      if (matches.length === 1) localPath = matches[0];
+    }
+    if (!localPath || !(await isWorkspaceFile(localPath, workspace))) return item;
+    const info = await stat(localPath);
+    item.filePath = localPath;
+    item.name = String(item.name || path.basename(localPath));
+    item.size = Number.isInteger(item.size) && item.size >= 0 ? item.size : info.size;
+    item.fileType = String(item.fileType || item.contentType || inferFileType(localPath));
+    item.uri = pathToFileURL(localPath).href;
+    delete item.file_path;
+    return item;
+  }));
+  return { ...record, processFiles: normalized };
+}
+
+async function listWorkspaceFiles(directory: string): Promise<string[]> {
+  const out: string[] = [];
+  const visit = async (current: string): Promise<void> => {
+    let entries: Dirent[];
+    try { entries = await readdir(current, { withFileTypes: true }); } catch { return; }
+    for (const entry of entries) {
+      const target = path.join(current, entry.name);
+      if (entry.isDirectory()) await visit(target);
+      else if (entry.isFile()) out.push(target);
+    }
+  };
+  await visit(directory);
+  return out;
+}
+
+async function isWorkspaceFile(filePath: string, workspace: string): Promise<boolean> {
+  const resolved = path.resolve(filePath);
+  const relative = path.relative(workspace, resolved);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return false;
+  try { return (await stat(resolved)).isFile(); } catch { return false; }
+}
+
+function inferFileType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.json') return 'application/json';
+  if (ext === '.csv') return 'text/csv';
+  if (ext === '.xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  if (ext === '.xls') return 'application/vnd.ms-excel';
+  if (ext === '.html' || ext === '.htm') return 'text/html';
+  if (ext === '.md') return 'text/markdown';
+  if (ext === '.txt') return 'text/plain';
+  if (ext === '.pdf') return 'application/pdf';
+  return ext ? ext.slice(1) : 'application/octet-stream';
 }
 
 function collectDeclaredFileReferences(output: Record<string, unknown>): Array<{ label: string; filePath?: string; uri?: string }> {

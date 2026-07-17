@@ -8,8 +8,8 @@
  * retry-context prompt：第 2+ 次 attempt 把 lastError 喂回 prompt，提示"重做前先检查副作用"。
  */
 import type { RunCtx, AgentRunSpec, AgentNodeResult } from './types';
-import { createProcessFileWriter, normalizeAgentResultOutput, validateDeclaredArtifactFiles, validateOutputAgainstSchema, extractJsonFromText } from './agent-output';
-import { runWorkspacePath } from './workspace-paths';
+import { createProcessFileWriter, normalizeAgentResultOutput, reconcileProcessFiles, validateDeclaredArtifactFiles, validateOutputAgainstSchema, extractJsonFromText } from './agent-output';
+import { runWorkspacePath, workspacePath } from './workspace-paths';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const backoff = (a: number) => Math.min(30_000, 1000 * 2 ** (a - 1));
@@ -138,9 +138,10 @@ export async function runAgentNodeWithRetry(
     }
 
     // 输出规整：output 为空时从 rawText 抽 JSON
-    const normalized = normalizeAgentResultOutput(
+    let normalized = normalizeAgentResultOutput(
       result.output ?? extractJsonFromText(result.rawText),
       contract, node.type, { rawText: result.rawText, processFileWriter: createProcessFileWriter(ctx.runId, node.id) });
+    normalized = await reconcileProcessFiles(normalized, workspacePath(ctx.runId, node.id));
 
     if (result.status === 'failed') {
       lastError = result.error ?? 'Agent execution failed.';

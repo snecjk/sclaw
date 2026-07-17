@@ -26,6 +26,7 @@ import { buildConditionContext, resolveNodeInput } from './input-resolver';
 import { runWorkspacePath, workspacePath } from './workspace-paths';
 import { workflowExecLog } from './logging';
 import { formatShanghaiIso } from '../../../shared/workflow-timestamp';
+import { hydrateNodeInputFiles } from './node-input-files';
 
 const SMART_TYPES = new Set(['agent_task', 'agent_data_fetch', 'agent_data_process', 'agent_condition', 'agent_output']);
 const nowIso = () => formatShanghaiIso();
@@ -61,6 +62,7 @@ export interface StartRunArgs {
  * engine 内部拉 DSL → generatePlan 落本地计划 → dispatch 执行。 */
 export interface StartWorkflowArgs {
   runId: string; workflowId: string; versionId: string; input: any; startedAt: string;
+  runDatabaseId: number;
   /** 会话键——透传给 generatePlan 落 wf_run.session_key（emit 桥 + getRun hydration 用）。Phase 2b 由 start 注册传入。 */
   sessionKey?: string;
 }
@@ -140,9 +142,19 @@ export function createEngine(deps: EngineDeps) {
     while (cur) {
       if (!(await isRunActive(runId))) return;
       const runtimeInputs = { runInput, upstream, workflowOutput: parseJson(finalOutputJson) };
-      const nodeInput = cur.type === 'condition' || cur.type === 'human_approval'
+      let nodeInput = cur.type === 'condition' || cur.type === 'human_approval'
         ? buildConditionContext(runtimeInputs)
         : resolveNodeInput(cur, runtimeInputs);
+      const hydratedInput = await hydrateNodeInputFiles(cur, nodeInput, runId);
+      nodeInput = hydratedInput.input;
+      for (const file of hydratedInput.files) {
+        const artifactId = `${runId}:${cur.id}:input:${file.fileId}`;
+        const artifact = { artifact_id: artifactId, run_id: runId, node_id: cur.id, kind: 'INPUT',
+          uri: file.ossKey ? `artifact://uploads/${file.ossKey}` : file.uri, file_path: file.filePath,
+          content_type: file.contentType, summary: file.name, created_at: nowIso() };
+        await repo.upsertArtifact(artifact);
+        await repo.enqueueOutbox(runId, 'artifact', artifactId, artifact, 'progress');
+      }
       const nodeInputJson = stringifyJson(nodeInput);
       workflowExecLog('info', 'node-start', 'workflow node started', {
         runId,
@@ -308,7 +320,12 @@ export function createEngine(deps: EngineDeps) {
       if (!(await isRunActive(runId))) return;
       if (cur.type === 'output') result.output = await materializeOutput(runId, cur, result.output);
       upstream[cur.id] = result.output ?? {};
-      await enqueueArtifactsFromOutput(runId, cur.id, result.output);
+      await enqueueArtifactsFromOutput(
+        runId,
+        cur.id,
+        result.output,
+        cur.type === 'output' ? 'OUTPUT' : 'INTERMEDIATE',
+      );
       await repo.upsertNodeRun({ run_id: runId, node_id: cur.id, node_type: cur.type, status: 'SUCCEEDED', input_json: nodeInputJson, output_json: stringifyJson(result.output ?? {}), completed_at: nowIso() });
       const completedNode = await repo.getNodeRun(runId, cur.id);
       await repo.enqueueOutbox(runId, 'node_run', `${runId}:${cur.id}`, {
@@ -428,16 +445,19 @@ export function createEngine(deps: EngineDeps) {
         versionId: args.versionId,
         sessionKey: args.sessionKey,
       });
+      if (!Number.isSafeInteger(args.runDatabaseId) || args.runDatabaseId <= 0) {
+        throw new Error('workflow runDatabaseId must be a positive JavaScript-safe integer');
+      }
       try {
         await generatePlan({ repo, dslClient: deps.dslClient, workflowId: args.workflowId,
           versionId: args.versionId, runId: args.runId, input: args.input, startedAt: args.startedAt,
-          sessionKey: args.sessionKey });
+          sessionKey: args.sessionKey, runDatabaseId: args.runDatabaseId });
         const run = await repo.getRun(args.runId);
         const definition = run?.definition_json ? JSON.parse(run.definition_json) : {};
         await dispatch(args.runId, definition, undefined, { workflowId: args.workflowId, versionId: args.versionId }, parseJson(run?.input_json) ?? {});
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        await repo.upsertRun({ run_id: args.runId, workflow_id: args.workflowId, version_id: args.versionId,
+        await repo.upsertRun({ id: args.runDatabaseId, run_id: args.runId, workflow_id: args.workflowId, version_id: args.versionId,
           status: 'FAILED', mode: 'CLIENT_LOCAL', source: 'client', input_json: stringifyJson(args.input ?? {}),
           definition_json: '{}', error: message, started_at: args.startedAt, completed_at: nowIso(), session_key: args.sessionKey });
         await finalizeUnfinishedNodeRuns(args.runId, 'failed').catch(() => undefined);
@@ -598,7 +618,12 @@ export function createEngine(deps: EngineDeps) {
     }
   }
 
-  async function enqueueArtifactsFromOutput(runId: string, nodeId: string, output: unknown): Promise<void> {
+  async function enqueueArtifactsFromOutput(
+    runId: string,
+    nodeId: string,
+    output: unknown,
+    kind: 'OUTPUT' | 'INTERMEDIATE',
+  ): Promise<void> {
     const declaredPaths = collectFilePaths(output);
     const discoveredPaths = await listWorkspaceFiles(workspacePath(runId, nodeId));
     const paths = [...new Set([...declaredPaths, ...discoveredPaths])];
@@ -608,7 +633,7 @@ export function createEngine(deps: EngineDeps) {
         artifact_id: `${runId}:${nodeId}:${idHash}`,
         run_id: runId,
         node_id: nodeId,
-        kind: 'OUTPUT',
+        kind,
         file_path: filePath,
         content_type: contentTypeForPath(filePath),
         summary: path.basename(filePath),

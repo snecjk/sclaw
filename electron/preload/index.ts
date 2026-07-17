@@ -28,6 +28,7 @@ const electronAPI = {
         'workflow:appendSessionRecord',
         // Workflow runtime（客户端执行下沉）
         'workflow-runtime:start',
+        'workflow-runtime:takeDatabaseId',
         'workflow-runtime:resume',
         'workflow-runtime:cancel',
         'workflow-runtime:resumeApproval',
