@@ -59,6 +59,7 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
     requestId: string;
     resolve: (snapshot: WorkflowDraftSnapshot) => void;
     reject: (error: Error) => void;
+    promise: Promise<WorkflowDraftSnapshot>;
     timer: number;
   } | null>(null);
   const expectedOrigin = useMemo(() => new URL(getMemoryCenterWebBase(ssoEnvironment)).origin, [ssoEnvironment]);
@@ -81,16 +82,22 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
       return Promise.reject(new Error('画布尚未加载完成，请稍后重试'));
     }
     if (pendingRequestRef.current) {
-      return Promise.reject(new Error('正在获取当前画布，请稍后重试'));
+      return pendingRequestRef.current.promise;
     }
 
     const requestId = createWorkflowBridgeNonce();
-    return new Promise<WorkflowDraftSnapshot>((resolve, reject) => {
-      const timer = window.setTimeout(() => {
-        pendingRequestRef.current = null;
-        reject(new Error('未能获取当前画布草稿，请刷新画布后重试'));
-      }, DRAFT_REQUEST_TIMEOUT_MS);
-      pendingRequestRef.current = { requestId, resolve, reject, timer };
+    let resolveDraft!: (snapshot: WorkflowDraftSnapshot) => void;
+    let rejectDraft!: (error: Error) => void;
+    const promise = new Promise<WorkflowDraftSnapshot>((resolve, reject) => {
+      resolveDraft = resolve;
+      rejectDraft = reject;
+    });
+    const timer = window.setTimeout(() => {
+      pendingRequestRef.current = null;
+      rejectDraft(new Error('未能获取当前画布草稿，请刷新画布后重试'));
+    }, DRAFT_REQUEST_TIMEOUT_MS);
+    pendingRequestRef.current = { requestId, resolve: resolveDraft, reject: rejectDraft, promise, timer };
+    try {
       target.postMessage({
         protocol: WORKFLOW_IFRAME_BRIDGE_PROTOCOL,
         type: WORKFLOW_DRAFT_REQUEST,
@@ -98,7 +105,12 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
         workflowId,
         nonce: bridgeNonce,
       }, expectedOrigin);
-    });
+    } catch (error) {
+      window.clearTimeout(timer);
+      pendingRequestRef.current = null;
+      rejectDraft(error instanceof Error ? error : new Error(String(error)));
+    }
+    return promise;
   }, [bridgeNonce, expectedOrigin, workflowId]);
 
   useEffect(() => {

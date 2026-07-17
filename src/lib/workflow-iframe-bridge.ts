@@ -61,7 +61,7 @@ export function isWorkflowDraftResponse(value: unknown): value is WorkflowDraftR
     typeof data.workflowId === 'string' &&
     (typeof data.workflowVersionId === 'string' || typeof data.workflowVersionId === 'number') &&
     data.schemaVersion === 'workflow/v2' &&
-    data.versionStatus === 'draft' &&
+    (data.versionStatus === 'draft' || data.versionStatus === 'published') &&
     typeof startup.defaultValues === 'object'
   );
 }

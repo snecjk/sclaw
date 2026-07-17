@@ -169,6 +169,7 @@ function WorkflowEditRoute() {
   const navigate = useNavigate();
   const { workflowId } = useParams<{ workflowId: string }>();
   const editorRef = useRef<WorkflowMcIframeEditorHandle>(null);
+  const [isRequestingVersionSnapshot, setIsRequestingVersionSnapshot] = useState(false);
   const handleBack = useCallback(() => navigate('/workflow'), [navigate]);
   const canStartTryRun = useCallback(() => true, []);
   const tryRun = useDesignerTryRun({
@@ -178,24 +179,27 @@ function WorkflowEditRoute() {
   });
   const beginTryRun = tryRun.begin;
   const handleTryRun = useCallback(async () => {
-    if (!workflowId) return;
-    const confirmed = window.confirm('试运行会先保存当前画布，并运行保存后生成的 V2 草稿版本，是否继续？');
+    if (!workflowId || isRequestingVersionSnapshot) return;
+    const confirmed = window.confirm('试运行将运行当前画布正在编辑的版本，是否继续？');
     if (!confirmed) return;
+    setIsRequestingVersionSnapshot(true);
     try {
-      const currentDraft = await editorRef.current?.requestDraftSnapshot();
-      if (!currentDraft) throw new Error('画布尚未加载完成，请稍后重试');
-      beginTryRun(currentDraft);
+      const currentVersion = await editorRef.current?.requestDraftSnapshot();
+      if (!currentVersion) throw new Error('画布尚未加载完成，请稍后重试');
+      beginTryRun(currentVersion);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '无法加载已保存的工作流版本');
+      toast.error(error instanceof Error ? error.message : '未获取到当前画布版本号，无法试运行');
+    } finally {
+      setIsRequestingVersionSnapshot(false);
     }
-  }, [beginTryRun, workflowId]);
+  }, [beginTryRun, isRequestingVersionSnapshot, workflowId]);
 
   useWorkflowEditorContentHeader({
     workflowId: workflowId ?? '',
     onBack: handleBack,
     enabled: Boolean(workflowId),
     onTryRun: handleTryRun,
-    tryRunDisabled: tryRun.isStarting || tryRun.isRunActive,
+    tryRunDisabled: isRequestingVersionSnapshot || tryRun.isStarting || tryRun.isRunActive,
   });
 
   if (!workflowId) {

@@ -23,7 +23,7 @@ const MC_WEB_BASE: Record<SsoEnvironment, string> = {
   'pre-release': MC_WEB_TEST_BASE,
   'production-external': MC_WEB_PROD_BASE,
   'production-internal': MC_WEB_PROD_BASE,
-  local: MC_WEB_TEST_BASE,
+  local: MC_WEB_LOCAL_DEV_BASE,
 };
 
 function resolveSsoEnvironment(explicit?: SsoEnvironment): SsoEnvironment {
