@@ -28,6 +28,7 @@ describe('BrowserBridgeService', () => {
   });
 
   it('auto-connect issues token when enabled and rejects when disabled', () => {
+    service.setAutoConnectEnabled(true);
     expect(service.getSettings().autoConnectEnabled).toBe(true);
     const paired = service.autoConnect('1.0.0');
     expect(paired?.token).toBeTruthy();

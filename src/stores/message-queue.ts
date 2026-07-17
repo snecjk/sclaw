@@ -7,6 +7,7 @@
  */
 import { create } from 'zustand';
 import { useChatStore } from './chat';
+import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
@@ -35,6 +36,8 @@ interface MessageQueueState {
   queues: Map<string, SessionQueue>; // keyed by sessionKey
   enqueue: (sessionKey: string, text: string, attachments?: FileAttachment[], targetAgentId?: string | null, dingTalkMentions?: DingTalkMention[], workflowId?: string | null, skillMeta?: SkillMeta) => void;
   remove: (sessionKey: string, id: string) => void;
+  updateText: (sessionKey: string, id: string, text: string) => void;
+  takeById: (sessionKey: string, id: string) => QueuedMessage | null;
   moveUp: (sessionKey: string, id: string) => void;
   moveDown: (sessionKey: string, id: string) => void;
   clear: (sessionKey: string) => void;
@@ -80,6 +83,29 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     if (!session) return;
     queues.set(sessionKey, { queue: session.queue.filter((m) => m.id !== id) });
     set({ queues: new Map(queues) });
+  },
+
+  updateText: (sessionKey, id, text) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const { queues } = get();
+    const session = queues.get(sessionKey);
+    if (!session) return;
+    queues.set(sessionKey, {
+      queue: session.queue.map((item) => (item.id === id ? { ...item, text: trimmed } : item)),
+    });
+    set({ queues: new Map(queues) });
+  },
+
+  takeById: (sessionKey, id) => {
+    const { queues } = get();
+    const session = queues.get(sessionKey);
+    if (!session) return null;
+    const item = session.queue.find((m) => m.id === id) ?? null;
+    if (!item) return null;
+    queues.set(sessionKey, { queue: session.queue.filter((m) => m.id !== id) });
+    set({ queues: new Map(queues) });
+    return item;
   },
 
   moveUp: (sessionKey, id) => {
@@ -153,7 +179,115 @@ const autoSendCallbacks = new Set<AutoSendCallback>();
 const suppressedSessions = new Set<string>();
 let storeUnsub: (() => void) | null = null;
 let watcherRefCount = 0;
-let prevSending = false;
+const prevSendingByKey = new Map<string, boolean>();
+
+function isSessionSending(
+  sessionKey: string,
+  state: ReturnType<typeof useChatStore.getState>,
+): boolean {
+  const isCurrent = state.currentSessionKey === sessionKey;
+  const runtime = state.runtimeBySessionKey[sessionKey];
+  return Boolean(
+    runtime?.sending
+    || runtime?.activeRunId
+    || (isCurrent && (state.sending || state.activeRunId)),
+  );
+}
+
+function sessionRunError(
+  sessionKey: string,
+  state: ReturnType<typeof useChatStore.getState>,
+): string | null | undefined {
+  const isCurrent = state.currentSessionKey === sessionKey;
+  const runtime = state.runtimeBySessionKey[sessionKey];
+  if (isCurrent) return state.error;
+  return runtime?.error;
+}
+
+function collectWatchedSessionKeys(state: ReturnType<typeof useChatStore.getState>): string[] {
+  const keys = new Set<string>([state.currentSessionKey, ...Object.keys(state.runtimeBySessionKey)]);
+  for (const sessionKey of useMessageQueueStore.getState().queues.keys()) {
+    keys.add(sessionKey);
+  }
+  return [...keys].filter(Boolean);
+}
+
+function tryDrainSessionQueue(sessionKey: string, onAutoSend?: AutoSendCallback): void {
+  const queueStore = useMessageQueueStore.getState();
+  if (queueStore.getSessionQueue(sessionKey).queue.length === 0) return;
+  const msg = queueStore.dequeueFirst(sessionKey);
+  if (!msg) return;
+  if (onAutoSend) {
+    try {
+      onAutoSend();
+    } catch {
+      // Never let a UI callback block auto-send.
+    }
+  } else {
+    autoSendCallbacks.forEach((cb) => {
+      try {
+        cb();
+      } catch {
+        // Never let a UI callback block auto-send.
+      }
+    });
+  }
+  deliverQueuedMessage(sessionKey, msg);
+}
+
+async function abortSessionRun(sessionKey: string): Promise<void> {
+  const chatState = useChatStore.getState();
+  if (!isSessionSending(sessionKey, chatState)) return;
+
+  if (chatState.currentSessionKey === sessionKey) {
+    await chatState.abortRun();
+    return;
+  }
+
+  const { useGatewayStore } = await import('@/stores/gateway');
+  useChatStore.setState((state) => ({
+    runtimeBySessionKey: {
+      ...state.runtimeBySessionKey,
+      [sessionKey]: {
+        ...(state.runtimeBySessionKey[sessionKey] ?? {}),
+        sending: false,
+        activeRunId: null,
+        streamingText: '',
+        streamingMessage: null,
+        streamingMessages: [],
+        streamingToolResults: [],
+        streamingTools: [],
+        pendingFinal: false,
+        lastUserMessageAt: null,
+        pendingToolImages: [],
+      },
+    },
+  }));
+  try {
+    await useGatewayStore.getState().rpc('chat.abort', {
+      sessionKey,
+      engineType: resolveChatSessionEngineType(
+        chatState.sessions.find((session) => session.key === sessionKey),
+        undefined,
+        sessionKey,
+      ),
+    });
+  } catch (err) {
+    console.warn('[message-queue] background abort failed:', err);
+  }
+}
+
+/**
+ * Abort the active run for a session and immediately send a queued item.
+ * Does NOT call suspendAutoSend — distinct from the Stop button path.
+ */
+export async function sendImmediately(sessionKey: string, itemId: string): Promise<boolean> {
+  const item = useMessageQueueStore.getState().takeById(sessionKey, itemId);
+  if (!item) return false;
+  await abortSessionRun(sessionKey);
+  deliverQueuedMessage(sessionKey, item);
+  return true;
+}
 
 function mapQueuedAttachments(attachments?: FileAttachment[]) {
   return attachments?.map((a) => ({
@@ -243,35 +377,16 @@ export function createAutoSendWatcher(onAutoSend?: AutoSendCallback): () => void
   watcherRefCount += 1;
 
   if (!storeUnsub) {
-    prevSending = useChatStore.getState().sending;
     storeUnsub = useChatStore.subscribe((state) => {
-      const { sending, currentSessionKey, error } = state;
-      const wasSending = prevSending;
-      prevSending = sending;
-
-      // Only react to a run finishing.
-      if (!wasSending || sending) return;
-
-      // Consume any abort suppression regardless of queue state so it never lingers.
-      if (suppressedSessions.delete(currentSessionKey)) return;
-
-      // Never chain-send after a failed run.
-      if (error) return;
-
-      const queueStore = useMessageQueueStore.getState();
-      if (queueStore.getSessionQueue(currentSessionKey).queue.length === 0) return;
-
-      const msg = queueStore.dequeueFirst(currentSessionKey);
-      if (!msg) return;
-
-      autoSendCallbacks.forEach((cb) => {
-        try {
-          cb();
-        } catch {
-          // Never let a UI callback (e.g. scroll) block auto-send.
-        }
-      });
-      deliverQueuedMessage(currentSessionKey, msg);
+      for (const sessionKey of collectWatchedSessionKeys(state)) {
+        const sending = isSessionSending(sessionKey, state);
+        const wasSending = prevSendingByKey.get(sessionKey) ?? false;
+        prevSendingByKey.set(sessionKey, sending);
+        if (!wasSending || sending) continue;
+        if (suppressedSessions.delete(sessionKey)) continue;
+        if (sessionRunError(sessionKey, state)) continue;
+        tryDrainSessionQueue(sessionKey);
+      }
     });
   }
 

@@ -154,9 +154,10 @@
         "moveUp": "Move up",
         "moveDown": "Move down",
         "fileCount": "{{count}} file(s)",
+        "edit": "Edit",
+        "sendImmediately": "Send now",
         "queueFull": "Queue is full (max {{max}})"
     },
-    "splitting": "Analyzing question...",
     "systemNotice": {
         "label": "System notice",
         "expand": "Expand",

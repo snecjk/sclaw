@@ -62,6 +62,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
       setSelectionKind('drag');
       setFileName(null);
       setFileSize(0);
+      setSlug(null);
       setErrorMsg(null);
       setUploadWarning(null);
       setDragOver(false);
@@ -76,6 +77,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     setSelectionKind('drag');
     setFileName(null);
     setFileSize(0);
+    setSlug(null);
     setErrorMsg(null);
     setUploadWarning(null);
     setUploadProgress({ current: 0, total: 0 });
@@ -316,6 +318,11 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
           defaultValue: selectedItemNames.join('、'),
         })
     : null;
+
+  const handleViewSkill = () => {
+    useSkillPlazaStore.getState().setActiveTab('mine');
+    onClose();
+  };
 
   const renderSkillIcon = () => {
     if (uploadedSkill?.icon) {

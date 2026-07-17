@@ -1,3 +1,4 @@
+import type { ChatEngineType } from '@/lib/chat-engine-resolution';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import {
   isClaudeScheduledTaskRunSessionKey,
@@ -6,8 +7,6 @@ import {
   isScheduledTaskSessionKey,
 } from '@/stores/chat/cron-session-utils';
 import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
-
-export type ChatEngineType = 'openclaw' | 'claude';
 
 export interface ResolveChatSessionEngineTypeOptions {
   /**
@@ -73,3 +72,5 @@ export function resolveUnusedEmbedChatEngineType(
 ): ChatEngineType {
   return normalizeAgentEngineType(agentEngineType);
 }
+
+export type { ChatEngineType };

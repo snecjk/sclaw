@@ -1,4 +1,4 @@
-import type { WorkflowDefinition, WorkflowEdge, WorkflowNode } from '@/pages/WorkflowDesigner/types';
+import type { WorkflowEdge, WorkflowNode } from '@/pages/WorkflowDesigner/types';
 import type { WorkflowStudioTemplate, WorkflowStudioTemplateDetail } from '@/lib/workflow-studio-api';
 
 export type WizardGraphSeed = {

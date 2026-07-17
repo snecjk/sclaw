@@ -37,7 +37,10 @@ export function useSclawBrowserSplitResize(
   embedRuntimeIdRef.current = embedRuntimeId;
   const percentRef = useRef(chatSplitPercent);
 
-  percentRef.current = chatSplitPercent;
+  useLayoutEffect(() => {
+    embedRuntimeIdRef.current = embedRuntimeId;
+    percentRef.current = chatSplitPercent;
+  }, [chatSplitPercent, embedRuntimeId]);
 
   useLayoutEffect(() => {
     const root = splitRef.current;
@@ -113,7 +116,6 @@ export function useSclawBrowserSplitResize(
       upEvent.preventDefault();
       endResize();
     };
-
     const onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         endResize();

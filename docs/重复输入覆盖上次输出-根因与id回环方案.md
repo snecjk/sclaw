@@ -147,7 +147,7 @@ if (firstText && firstText === secondText && attachmentsMatch(first, second)) { 
 ### 5.2 后端改动（依赖，待验证，未实施）
 
 **已有（无需改）**：
-- `/api/chat/send`、`/api/chat/send-with-media`（`electron/api/routes/gateway.ts`）已透传 `idempotencyKey`。
+- `/api/chat/send`（`electron/api/routes/gateway.ts`）已透传 `idempotencyKey`。
 - `electron/engines/openclaw-adapter.ts:195` 已把 `idempotencyKey` 放入 `chat.send` RPC 参数。
 
 **需要（关键依赖）**：

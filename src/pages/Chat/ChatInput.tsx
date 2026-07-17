@@ -19,7 +19,6 @@ import {
   File,
   Loader2,
   AtSign,
-  AlertCircle,
   Bot,
   Workflow,
   ArrowUp,
@@ -36,8 +35,10 @@ import {
   stoChatShellHomeClass,
 } from '@/lib/surfaces';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAgentsStore } from '@/stores/agents';
+import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { getProjectIdFromProjectAgentId } from '../../../shared/project-agent';
+import { useSessionCatalogStore } from '@/stores/session-catalog';
 import type { AgentSummary } from '@/types/agent';
 import { useTranslation } from 'react-i18next';
 import { DingTalkMentionEditor, type DingTalkMentionEditorHandle } from '@/components/dingtalk/DingTalkMentionEditor';
@@ -138,22 +139,6 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-function formatBeijingDate(isoText?: string): string {
-  const date = isoText ? new Date(isoText) : new Date();
-  if (Number.isNaN(date.getTime())) return '';
-  const parts = new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-  const year = parts.find((part) => part.type === 'year')?.value ?? '';
-  const month = parts.find((part) => part.type === 'month')?.value ?? '';
-  const day = parts.find((part) => part.type === 'day')?.value ?? '';
-  if (!year || !month || !day) return '';
-  return `${year}-${month}-${day}`;
-}
-
 function FileIcon({ mimeType, className }: { mimeType: string; className?: string }) {
   if (mimeType.startsWith('video/')) return <Film className={className} />;
   if (mimeType.startsWith('audio/')) return <Music className={className} />;
@@ -233,11 +218,20 @@ export function ChatInput({
   const gatewayStatus = useGatewayStore((s) => s.status);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
-  const dailyTokenQuotaStatus = useChatStore((s) => s.dailyTokenQuotaStatus);
-  const currentAgentName = useMemo(
-    () => (agents ?? []).find((agent) => agent.id === currentAgentId)?.name ?? currentAgentId,
-    [agents, currentAgentId],
-  );
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const pendingProjectId = useChatStore((s) => s.pendingProjectId);
+  const workspaces = useSessionCatalogStore((s) => s.workspaces);
+  const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
+  const currentAgentName = useMemo(() => {
+    const projectId = getProjectIdFromProjectAgentId(currentAgentId ?? '')
+      ?? sessionWorkspaceByKey[currentSessionKey]
+      ?? pendingProjectId
+      ?? null;
+    const projectName = projectId
+      ? workspaces.find((workspace) => workspace.id === projectId)?.name
+      : null;
+    return resolveAgentById(agents ?? [], currentAgentId, projectName)?.name ?? currentAgentId;
+  }, [agents, currentAgentId, currentSessionKey, pendingProjectId, sessionWorkspaceByKey, workspaces]);
   const mentionableAgents = useMemo(
     () => (agents ?? []).filter((agent) => agent.id !== currentAgentId),
     [agents, currentAgentId],
@@ -271,22 +265,6 @@ export function ChatInput({
   const composerPlaceholder = disabled && engineType === 'openclaw'
     ? t('composer.gatewayDisconnectedPlaceholder')
     : placeholder?.trim() || t('composer.messagePlaceholder', { agent: currentAgentName });
-  const dailyTokenQuotaText = useMemo(() => {
-    const usedToday = dailyTokenQuotaStatus?.usedToday;
-    const limit = dailyTokenQuotaStatus?.limit;
-    if (!Number.isFinite(usedToday) || !Number.isFinite(limit)) return '';
-    const dayText = formatBeijingDate(dailyTokenQuotaStatus?.checkedAt);
-    if (!dayText) return '';
-    return `${dayText}: 已使用${Number(usedToday).toLocaleString('zh-CN')}/上限${Number(limit).toLocaleString('zh-CN')}`;
-  }, [dailyTokenQuotaStatus]);
-  const dailyTokenQuotaAlert = useMemo(() => {
-    const usedToday = dailyTokenQuotaStatus?.usedToday;
-    const limit = dailyTokenQuotaStatus?.limit;
-    if (!Number.isFinite(usedToday) || !Number.isFinite(limit)) return false;
-    if (dailyTokenQuotaStatus?.allowed === false) return true;
-    return Number(usedToday) > Number(limit);
-  }, [dailyTokenQuotaStatus]);
-
   // Focus editor on mount (avoids Windows focus loss after session delete + native dialog)
   useEffect(() => {
     if (!disabled) {
@@ -1302,17 +1280,6 @@ export function ChatInput({
               </div>
             ) : <div />}
             <div className="flex items-center gap-3">
-              {dailyTokenQuotaText ? (
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1 text-[11px]",
-                    dailyTokenQuotaAlert ? "text-red-500" : "text-amber-500/95",
-                  )}
-                >
-                  {dailyTokenQuotaAlert ? <AlertCircle className="h-3.5 w-3.5" /> : null}
-                  {dailyTokenQuotaText}
-                </span>
-              ) : null}
               {hasFailedAttachments && (
                 <Button
                   variant="link"

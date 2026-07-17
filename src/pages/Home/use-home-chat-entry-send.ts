@@ -5,12 +5,9 @@ import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAgentsStore } from '@/stores/agents';
 import { useMessageQueueStore } from '@/stores/message-queue';
-import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
-import { hostApiFetch } from '@/lib/host-api';
-import { resolveHomePageCarryoverModel } from '@/lib/chat-model-options';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 
 /**

@@ -81,9 +81,9 @@ export function useChatDisplay(params: {
     lastChatEventAt,
     streamMsg,
     streamText,
-    streamingMessages,
-    streamingToolResults,
-    streamingTools,
+    streamingMessages = [],
+    streamingToolResults = [],
+    streamingTools = [],
   } = params;
   const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
 

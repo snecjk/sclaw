@@ -1,5 +1,6 @@
 import { GatewayEventType, type JsonRpcNotification } from './protocol';
 import { logger } from '../utils/logger';
+import { normalizeLegacyChatPayload, toLegacyChatMessagePayload } from './normalized-engine-event';
 
 type GatewayEventEmitter = {
   emit: (event: string, payload: unknown) => boolean;
@@ -14,7 +15,7 @@ export function dispatchProtocolEvent(
     case 'tick':
       break;
     case 'chat':
-      emitter.emit('chat:message', { message: payload });
+      emitter.emit('chat:message', toLegacyChatMessagePayload(normalizeLegacyChatPayload(payload)));
       break;
     case 'agent': {
       // Keep "agent" on the canonical notification path to avoid double
@@ -40,7 +41,7 @@ export function dispatchJsonRpcNotification(
       emitter.emit('channel:status', notification.params as { channelId: string; status: string });
       break;
     case GatewayEventType.MESSAGE_RECEIVED:
-      emitter.emit('chat:message', { message: notification.params as unknown });
+      emitter.emit('chat:message', toLegacyChatMessagePayload(normalizeLegacyChatPayload(notification.params as unknown)));
       break;
     case GatewayEventType.ERROR: {
       const errorData = notification.params as { message?: string };

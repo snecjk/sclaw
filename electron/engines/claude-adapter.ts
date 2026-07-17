@@ -3,18 +3,25 @@ import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { syncClaudeSkillsForAgent } from '../services/claude-skill-bridge';
-import { getDefaultProviderAccountId, getProviderAccount } from '../services/providers/provider-store';
+import { getProviderAccount } from '../services/providers/provider-store';
 import { applyStoClaudeInferenceEnv } from '../services/sto-claude-inference-env';
-import { getAgentPreferredModel, getAgentWorkspacePath } from '../utils/agent-config';
+import { getAgentPreferredModel } from '../utils/agent-config';
 import { logger } from '../utils/logger';
 import { getClaudeConfigDir } from '../utils/paths';
 import { getApiKey } from '../utils/secure-storage';
 import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
+import { toLegacyChatMessagePayload, type NormalizedEngineEvent } from '../gateway/normalized-engine-event';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
-import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, upsertEngineSessionRegistryEntry, type EngineSessionRegistryEntry } from './session-registry';
+import { resolveSessionToolCwd } from '../services/session-catalog-service';
+import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, patchEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry, type EngineSessionRegistryEntry } from './session-registry';
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EngineSessionSummary } from './types';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ImageBlockParam, MessageParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
+import { resolveAvailableClaudeModel } from './claude-model-selection';
+import {
+  appendArchivedClaudeSessionId,
+  isMissingClaudeConversationError,
+} from './claude-session-recovery';
 
 /**
  * Minimal event sink used to forward Claude streaming events to the renderer.
@@ -111,24 +118,30 @@ async function resolveClaudeLaunchSelection(
   agentId: string,
   existing?: {
     model?: string;
+    provider?: string;
     accountId?: string;
   } | null,
-): Promise<{ model?: string; accountId?: string }> {
+): Promise<{ model?: string; provider?: string; accountId?: string }> {
   const preferredModel = await getAgentPreferredModel(agentId);
   // Session-level override wins when the user switched models inside an active dialog.
-  let model = existing?.model ?? preferredModel.model;
-  let accountId = existing?.accountId ?? preferredModel.accountId;
-
-  if (!accountId) {
-    accountId = await getDefaultProviderAccountId();
+  const requestedModel = existing?.model ?? preferredModel.model;
+  const requestedAccountId = existing?.accountId ?? preferredModel.accountId;
+  const selection = await resolveAvailableClaudeModel({ requestedModel, requestedAccountId });
+  const account = await getProviderAccount(selection.accountId);
+  if (selection.fallbackApplied) {
+    logger.warn('[claude-adapter] Stored/preferred model is unavailable; using fallback', {
+      agentId,
+      requestedModel,
+      requestedAccountId,
+      fallbackModel: selection.model,
+      fallbackAccountId: selection.accountId,
+    });
   }
-
-  if (!model && accountId) {
-    const account = await getProviderAccount(accountId);
-    model = account?.model;
-  }
-
-  return { model, accountId };
+  return {
+    model: selection.model,
+    provider: account?.vendorId ?? existing?.provider,
+    accountId: selection.accountId,
+  };
 }
 
 /**
@@ -639,8 +652,7 @@ async function consumePendingHistoryBridgeAppend(sessionKey: string): Promise<st
   if (!entry?.pendingHistoryBridge) return null;
 
   const bridge = await buildClaudeHistoryBridge(entry);
-  await upsertEngineSessionRegistryEntry({
-    sessionKey,
+  await patchEngineSessionRegistryEntry(sessionKey, {
     pendingHistoryBridge: false,
   });
 
@@ -708,6 +720,7 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
     // Never bump activity on read — sidebar order must reflect last message time only.
     ...(transcriptActivityAt > 0 ? { updatedAt: transcriptActivityAt } : {}),
     model: entry?.model,
+    provider: entry?.provider,
     accountId: entry?.accountId,
     archivedClaudeSessionIds: entry?.archivedClaudeSessionIds,
     pendingHistoryBridge: entry?.pendingHistoryBridge,
@@ -739,9 +752,14 @@ export async function consumeClaudeQuery(
   eventSink: ClaudeEventSink | null,
   runId: string,
   onMessage?: (message: Record<string, unknown>) => void | Promise<void>,
+  recoveryOptions?: {
+    suppressMissingConversationFailure?: boolean;
+    suppressStartedEvent?: boolean;
+    initialSeq?: number;
+  },
 ): Promise<void> {
   let title: string | undefined;
-  let seq = 0;
+  let seq = recoveryOptions?.initialSeq ?? 0;
   let seenResult = false;
   let errorThrown = false;
   // Accumulated streaming text for the current assistant message. The SDK yields
@@ -754,9 +772,9 @@ export async function consumeClaudeQuery(
   // message is emitted as 'final'.
   let streamText = '';
 
-  const emitChat = (payload: Record<string, unknown>) => {
+  const emitEngineEvent = (event: NormalizedEngineEvent) => {
     if (!eventSink) return;
-    eventSink.emit('chat:message', { message: { ...payload, runId, sessionKey, seq: seq++ } });
+    eventSink.emit('chat:message', toLegacyChatMessagePayload({ ...event, runId, sessionKey, seq: seq++ }));
   };
   const emitAgentCompleted = () => {
     if (!eventSink) return;
@@ -766,7 +784,9 @@ export async function consumeClaudeQuery(
   try {
     // Mirror the OpenClaw Gateway's 'started' event so the renderer adopts the
     // runId/sending state immediately, before the first token arrives.
-    emitChat({ state: 'started' });
+    if (!recoveryOptions?.suppressStartedEvent) {
+      emitEngineEvent({ type: 'turn.started' });
+    }
 
     for await (const message of query) {
       const messageSessionId = typeof message.session_id === 'string' ? message.session_id : sessionId;
@@ -785,8 +805,8 @@ export async function consumeClaudeQuery(
             const delta = event.delta as { type?: string; text?: string } | undefined;
             if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
               streamText += delta.text;
-              emitChat({
-                state: 'delta',
+              emitEngineEvent({
+                type: 'message.delta',
                 message: {
                   role: 'assistant',
                   id: runId,
@@ -868,8 +888,8 @@ export async function consumeClaudeQuery(
         // until the 'result' -> agent completed notification finalizes the run.
         if (liveMessage.type === 'assistant') {
           streamText = '';
-          emitChat({
-            state: 'final',
+          emitEngineEvent({
+            type: 'message.final',
             message: {
               id: nextEntry.id,
               role: 'assistant',
@@ -880,6 +900,7 @@ export async function consumeClaudeQuery(
         }
       }
 
+      const currentRegistryEntry = await getEngineSessionRegistryEntry(sessionKey);
       await upsertEngineSessionRegistryEntry({
         sessionKey,
         sessionId: messageSessionId,
@@ -888,8 +909,11 @@ export async function consumeClaudeQuery(
         engineType: 'claude',
         updatedAt: toEpochMs(message.timestamp) ?? Date.now(),
         title,
-        model: (await getEngineSessionRegistryEntry(sessionKey))?.model,
-        accountId: (await getEngineSessionRegistryEntry(sessionKey))?.accountId,
+        model: currentRegistryEntry?.model,
+        provider: currentRegistryEntry?.provider,
+        accountId: currentRegistryEntry?.accountId,
+        archivedClaudeSessionIds: currentRegistryEntry?.archivedClaudeSessionIds,
+        pendingHistoryBridge: currentRegistryEntry?.pendingHistoryBridge,
       });
       // Allow callers (e.g. the scheduled-task worker) to capture per-message
       // data they need (run-record summary/runtimeResult) while reusing this
@@ -899,37 +923,47 @@ export async function consumeClaudeQuery(
     }
   } catch (error) {
     errorThrown = true;
-    emitChat({ state: 'error', errorMessage: String(error) });
+    if (!(
+      recoveryOptions?.suppressMissingConversationFailure
+      && isMissingClaudeConversationError(error)
+    )) {
+      emitEngineEvent({ type: 'turn.failed', errorMessage: String(error) });
+    }
     throw error;
   } finally {
     activeClaudeQueries.delete(sessionKey);
     // If the loop ended without a result and without an error, the query was
     // closed (e.g. user abort) — emit 'aborted' so the renderer finalizes.
     if (!seenResult && !errorThrown) {
-      emitChat({ state: 'aborted' });
+      emitEngineEvent({ type: 'turn.aborted' });
     }
   }
 }
 
-async function ensureClaudeRegistryEntry(sessionKey: string) {
+async function ensureClaudeRegistryEntry(
+  sessionKey: string,
+): Promise<EngineSessionRegistryEntry | null> {
   const existing = await getEngineSessionRegistryEntry(sessionKey);
-  if (existing?.cwd) return existing;
-
   const agentId = extractAgentId(sessionKey);
-  const cwd = await getAgentWorkspacePath(agentId);
+  const cwd = await resolveSessionToolCwd(sessionKey, agentId);
   if (!cwd) return existing;
+  if (existing?.cwd === cwd) return existing;
+
   const launchSelection = await resolveClaudeLaunchSelection(agentId, existing);
 
-  const nextEntry = {
+  const nextEntry: EngineSessionRegistryEntry = {
     sessionKey,
     sessionId: existing?.sessionId,
     cwd,
     agentId,
     engineType: 'claude' as const,
-    updatedAt: existing?.updatedAt ?? Date.now(),
+    updatedAt: Date.now(),
     title: existing?.title,
     model: launchSelection.model,
+    provider: launchSelection.provider,
     accountId: launchSelection.accountId,
+    archivedClaudeSessionIds: existing?.archivedClaudeSessionIds,
+    pendingHistoryBridge: existing?.pendingHistoryBridge,
   };
   await upsertEngineSessionRegistryEntry(nextEntry);
   return nextEntry;
@@ -943,12 +977,14 @@ async function startClaudeQuery(
     eventSink?: ClaudeEventSink | null;
     /** 本轮用户原文，用于口头钉钉发送等按需注入。 */
     userPrompt?: string;
+    systemPromptAppend?: string;
   },
 ): Promise<{ success: boolean; result?: { runId: string }; error?: string }> {
   try {
     await ensureClaudeConfigDir();
     const sdk = await import('@anthropic-ai/claude-agent-sdk');
     const existing = await ensureClaudeRegistryEntry(sessionKey);
+    logger.info('[claude-adapter] ensureClaudeRegistryEntry', existing);
     const cwd = existing?.cwd;
     if (!cwd) {
       return { success: false, error: `Claude session ${sessionKey} is missing workspace cwd` };
@@ -976,9 +1012,13 @@ async function startClaudeQuery(
     claudeRuntimeResults.delete(sessionKey);
     await sanitizeClaudeSettingsEnv();
     const historyBridgeAppend = await consumePendingHistoryBridgeAppend(sessionKey);
-    const systemPromptAppend = [runtimeOptions.systemPromptAppend, historyBridgeAppend]
+    // 默认将 cwd 工作区/工作空间写入提示词：用户未指定特殊路径时，模型以该路径作为默认工作目录。
+    // 走 systemPromptAppend（与 historyBridge 一致），避免污染用户消息与侧栏标题。
+    const cwdPromptNote = `# 工作区/项目空间限制\n 当前工作目录/空间根目录为：**${cwd}**。若用户未指定特殊路径，请默认使用该路径作为工作目录进行文件读写等操作。**如果记忆中也出现了，必须以此处路径为准**。`;
+    const systemPromptAppend = [cwdPromptNote, runtimeOptions.systemPromptAppend, options?.systemPromptAppend, historyBridgeAppend]
       .filter(Boolean)
       .join('\n\n');
+    logger.info(`[claude-adapter][prompt] final systemPromptAppend: sessionKey=${sessionKey}, systemPromptAppend=\n${systemPromptAppend || '(none)'}`);
     const queryBaseOptions = {
       cwd,
       env: await buildClaudeEnvForAccount(launchSelection.accountId),
@@ -1034,20 +1074,108 @@ async function startClaudeQuery(
       engineType: 'claude',
       updatedAt: Date.now(),
       model: launchSelection.model,
+      provider: launchSelection.provider,
       accountId: launchSelection.accountId,
+      archivedClaudeSessionIds: existing?.archivedClaudeSessionIds,
+      pendingHistoryBridge: existing?.pendingHistoryBridge,
     });
 
-    void consumeClaudeQuery(sessionKey, sessionId, cwd, query as AsyncIterable<Record<string, unknown>> & { close(): void }, options?.eventSink ?? null, runId).catch((error) => {
+    const consumeWithMissingSessionRecovery = async (): Promise<void> => {
+      try {
+        await consumeClaudeQuery(
+          sessionKey,
+          sessionId,
+          cwd,
+          query as AsyncIterable<Record<string, unknown>> & { close(): void },
+          options?.eventSink ?? null,
+          runId,
+          undefined,
+          {
+            suppressMissingConversationFailure: Boolean(existing?.sessionId) && typeof prompt === 'string',
+          },
+        );
+      } catch (error) {
+        const invalidSessionId = existing?.sessionId;
+        if (
+          invalidSessionId
+          && typeof prompt === 'string'
+          && isMissingClaudeConversationError(error)
+        ) {
+          logger.warn('[claude-adapter] Resume session is unavailable; retrying as a new SDK session', {
+            sessionKey,
+            invalidSessionId,
+          });
+          const archivedClaudeSessionIds = appendArchivedClaudeSessionId(
+            existing.archivedClaudeSessionIds,
+            invalidSessionId,
+          );
+          const recoveryEntry: EngineSessionRegistryEntry = {
+            ...existing,
+            sessionKey,
+            sessionId: undefined,
+            cwd,
+            agentId: extractAgentId(sessionKey),
+            engineType: 'claude',
+            model: launchSelection.model,
+            provider: launchSelection.provider,
+            accountId: launchSelection.accountId,
+            archivedClaudeSessionIds,
+            pendingHistoryBridge: true,
+          };
+          const recoveryBridge = await buildClaudeHistoryBridge(recoveryEntry);
+          const recoverySystemPromptAppend = [systemPromptAppend, recoveryBridge]
+            .filter(Boolean)
+            .join('\n\n');
+          const recoverySessionId = randomUUID();
+          const recoveryQuery = sdk.query({
+            prompt,
+            options: {
+              ...queryBaseOptions,
+              sessionId: recoverySessionId,
+              systemPrompt: recoverySystemPromptAppend
+                ? {
+                  type: 'preset' as const,
+                  preset: 'claude_code' as const,
+                  append: recoverySystemPromptAppend,
+                }
+                : undefined,
+            },
+          });
+          activeClaudeQueries.set(sessionKey, {
+            close: () => recoveryQuery.close(),
+            runId,
+            sessionId: recoverySessionId,
+            sessionKey,
+          });
+          await upsertEngineSessionRegistryEntry({
+            ...recoveryEntry,
+            sessionId: recoverySessionId,
+            updatedAt: Date.now(),
+            pendingHistoryBridge: false,
+          });
+          await consumeClaudeQuery(
+            sessionKey,
+            recoverySessionId,
+            cwd,
+            recoveryQuery as AsyncIterable<Record<string, unknown>> & { close(): void },
+            options?.eventSink ?? null,
+            runId,
+            undefined,
+            { suppressStartedEvent: true, initialSeq: 1 },
+          );
+          return;
+        }
+        throw error;
+      }
+    };
+
+    void consumeWithMissingSessionRecovery().catch((error) => {
       logger.error('Claude query failed:', error);
       cacheClaudeErrorMessage(sessionKey, error);
-      void upsertEngineSessionRegistryEntry({
-        sessionKey,
-        sessionId,
-        cwd,
-        agentId: extractAgentId(sessionKey),
-        engineType: 'claude',
+      void patchEngineSessionRegistryEntry(sessionKey, {
         updatedAt: Date.now(),
         model: launchSelection.model,
+        provider: launchSelection.provider,
         accountId: launchSelection.accountId,
       }).catch((registryError) => {
         logger.warn('Failed to persist Claude session metadata after query error:', registryError);
@@ -1057,6 +1185,17 @@ async function startClaudeQuery(
   } catch (error) {
     return { success: false, error: String(error) };
   }
+}
+
+function isClaudeSessionAlreadyGoneError(error: unknown): boolean {
+  const message = String(error);
+  return (
+    message.includes('not found in project directory')
+    || message.includes('not found in any project directory')
+    || message.includes('not found (no projects directory)')
+    || /\bENOENT\b/.test(message)
+    || /\bENOTDIR\b/.test(message)
+  );
 }
 
 export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void> {
@@ -1069,11 +1208,22 @@ export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void
     return;
   }
 
-  const sdk = await import('@anthropic-ai/claude-agent-sdk');
-  const configDir = await resolveClaudeSessionConfigDir(entry.cwd!, entry.sessionId!) ?? getClaudeConfigDir();
-  await withClaudeConfigDirEnv(configDir, async () => {
-    await sdk.deleteSession(entry.sessionId!, { dir: entry.cwd! });
-  });
+  const cwd = typeof entry.cwd === 'string' ? entry.cwd.trim() : '';
+  if (cwd) {
+    try {
+      const sdk = await import('@anthropic-ai/claude-agent-sdk');
+      const configDir = await resolveClaudeSessionConfigDir(cwd, entry.sessionId) ?? getClaudeConfigDir();
+      await withClaudeConfigDirEnv(configDir, async () => {
+        await sdk.deleteSession(entry.sessionId!, { dir: cwd });
+      });
+    } catch (error) {
+      // Workspace may have been deleted on disk (dirty catalog rows). Still purge our registry.
+      if (!isClaudeSessionAlreadyGoneError(error)) throw error;
+      logger.warn(`[claude] deleteSession skipped for missing session/workspace ${sessionKey}:`, error);
+    }
+  } else {
+    logger.warn(`[claude] deleteSession skipped: missing cwd for ${sessionKey}`);
+  }
   await deleteEngineSessionRegistryEntry(sessionKey);
 }
 
@@ -1132,6 +1282,7 @@ export const claudeAdapter: EngineAdapter = {
     return startClaudeQuery(params.sessionKey, params.message, {
       eventSink: ctx.gatewayManager,
       userPrompt: params.message,
+      systemPromptAppend: params.systemPromptAppend,
     });
   },
 
@@ -1147,6 +1298,7 @@ export const claudeAdapter: EngineAdapter = {
       additionalDirectories,
       eventSink: ctx.gatewayManager,
       userPrompt: params.message,
+      systemPromptAppend: params.systemPromptAppend,
     });
   },
 

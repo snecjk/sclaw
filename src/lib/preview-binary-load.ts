@@ -17,7 +17,10 @@ export function uint8ArrayToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 /** Load a local or remote file as raw bytes for binary preview (Office, etc.). */
 export async function loadPreviewBinary(filePath: string): Promise<Uint8Array> {
   if (isHttpUrl(filePath)) {
-    const res = await previewBridgeHttpFetch({ url: filePath });
+    const res = await previewBridgeHttpFetch({
+      url: filePath,
+      allowedOrigin: new URL(filePath).origin,
+    });
     if (!res.ok || !res.bodyBase64) {
       throw new Error(res.error || `HTTP ${res.status ?? 'error'}`);
     }

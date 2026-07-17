@@ -17,6 +17,7 @@ import {
 } from '../../../shared/preview-raw-path';
 import type { AttachedFileMeta, ChatSession, ContentBlock, RawMessage, ToolStatus } from './types';
 import { mergeToolInput, parseOpenAiArguments, parseToolBlockInput } from '@/lib/tool-input-merge';
+import { getCachedAttachedFile, upsertImageCacheEntry } from './media-cache';
 
 // Module-level timestamp tracking the last chat event received.
 // Used by the safety timeout to avoid false-positive "no response" errors
@@ -37,87 +38,6 @@ function toMs(ts: unknown): number {
   if (typeof ts !== 'number' || !Number.isFinite(ts)) return 0;
   // Timestamps < 1e12 are in seconds (before ~2033); >= 1e12 are milliseconds
   return ts < 1e12 ? ts * 1000 : ts;
-}
-
-// Timer for fallback history polling during active sends.
-// If no streaming events arrive within a few seconds, we periodically
-// poll chat.history to surface intermediate tool-call turns.
-let _historyPollTimer: ReturnType<typeof setTimeout> | null = null;
-
-// Timer for delayed error finalization. When the Gateway reports a mid-stream
-// error (e.g. "terminated"), it may retry internally and recover. We wait
-// before committing the error to give the recovery path a chance.
-let _errorRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
-
-function clearErrorRecoveryTimer(): void {
-  if (_errorRecoveryTimer) {
-    clearTimeout(_errorRecoveryTimer);
-    _errorRecoveryTimer = null;
-  }
-}
-
-function clearHistoryPoll(): void {
-  if (_historyPollTimer) {
-    clearTimeout(_historyPollTimer);
-    _historyPollTimer = null;
-  }
-}
-
-const SESSION_LOCK_ERROR_PATTERNS = [
-  /session file locked/i,
-  /\.jsonl\.lock\b/i,
-  /locked\s*\(timeout\s*\d+ms\)/i,
-];
-
-function isSessionLockErrorMessage(message: unknown): boolean {
-  const text = String(message ?? '').trim();
-  if (!text) return false;
-  return SESSION_LOCK_ERROR_PATTERNS.some((pattern) => pattern.test(text));
-}
-
-function formatChatRuntimeError(message: unknown): string {
-  const text = String(message ?? '').trim();
-  if (!text) return 'An error occurred';
-  if (!isSessionLockErrorMessage(text)) return text;
-  return `This session is temporarily locked by another OpenClaw run. Please wait a moment and try again. (${text})`;
-}
-
-// ── Local image cache ─────────────────────────────────────────
-// The Gateway doesn't store image attachments in session content blocks,
-// so we cache them locally keyed by staged file path (which appears in the
-// [media attached: <path> ...] reference in the Gateway's user message text).
-// Keying by path avoids the race condition of keying by runId (which is only
-// available after the RPC returns, but history may load before that).
-const IMAGE_CACHE_KEY = 'stoclaw:image-cache';
-const IMAGE_CACHE_MAX = 100; // max entries to prevent unbounded growth
-
-function loadImageCache(): Map<string, AttachedFileMeta> {
-  try {
-    const raw = localStorage.getItem(IMAGE_CACHE_KEY);
-    if (raw) {
-      const entries = JSON.parse(raw) as Array<[string, AttachedFileMeta]>;
-      return new Map(entries);
-    }
-  } catch { /* ignore parse errors */ }
-  return new Map();
-}
-
-function saveImageCache(cache: Map<string, AttachedFileMeta>): void {
-  try {
-    // Evict oldest entries if over limit
-    const entries = Array.from(cache.entries());
-    const trimmed = entries.length > IMAGE_CACHE_MAX
-      ? entries.slice(entries.length - IMAGE_CACHE_MAX)
-      : entries;
-    localStorage.setItem(IMAGE_CACHE_KEY, JSON.stringify(trimmed));
-  } catch { /* ignore quota errors */ }
-}
-
-const _imageCache = loadImageCache();
-
-function upsertImageCacheEntry(filePath: string, file: Omit<AttachedFileMeta, 'filePath'>): void {
-  _imageCache.set(filePath, { ...file, filePath });
-  saveImageCache(_imageCache);
 }
 
 /** Extract plain text from message content (string or content blocks) */
@@ -386,7 +306,7 @@ function extractImagesAsAttachedFiles(content: unknown): AttachedFileMeta[] {
  * Build an AttachedFileMeta entry for a file ref, using cache if available.
  */
 function makeAttachedFile(ref: { filePath: string; mimeType: string; fileName?: string }): AttachedFileMeta {
-  const cached = _imageCache.get(ref.filePath);
+  const cached = getCachedAttachedFile(ref.filePath);
   const fileName = resolveAttachedFileName(ref.filePath, ref.fileName);
   if (cached) {
     return {
@@ -557,7 +477,7 @@ function enrichWithToolResultFiles(messages: RawMessage[]): RawMessage[] {
  * Uses local cache for previews when available; missing previews are loaded async.
  */
 function enrichWithCachedImages(messages: RawMessage[]): RawMessage[] {
-  return messages.map((msg, idx) => {
+  return messages.map((msg, _idx) => {
     // Only process user and assistant messages; skip if already enriched
     if ((msg.role !== 'user' && msg.role !== 'assistant') || msg._attachedFiles) return msg;
     const text = getMessageText(msg.content);
@@ -653,7 +573,7 @@ async function loadMissingPreviews(messages: RawMessage[]): Promise<boolean> {
         if (thumb && (thumb.preview || thumb.fileSize)) {
           if (thumb.preview) file.preview = thumb.preview;
           if (thumb.fileSize) file.fileSize = thumb.fileSize;
-          _imageCache.set(fp, { ...file });
+          upsertImageCacheEntry(fp, file);
           updated = true;
         }
       }
@@ -670,13 +590,12 @@ async function loadMissingPreviews(messages: RawMessage[]): Promise<boolean> {
           if (thumb && (thumb.preview || thumb.fileSize)) {
             if (thumb.preview) file.preview = thumb.preview;
             if (thumb.fileSize) file.fileSize = thumb.fileSize;
-            _imageCache.set(ref.filePath, { ...file });
+            upsertImageCacheEntry(ref.filePath, file);
             updated = true;
           }
         }
       }
     }
-    if (updated) saveImageCache(_imageCache);
     return updated;
   } catch (err) {
     console.warn('[loadMissingPreviews] Failed:', err);
@@ -944,18 +863,6 @@ function hasNonToolAssistantContent(message: RawMessage | undefined): boolean {
   return false;
 }
 
-function setHistoryPollTimer(timer: ReturnType<typeof setTimeout> | null): void {
-  _historyPollTimer = timer;
-}
-
-function hasErrorRecoveryTimer(): boolean {
-  return _errorRecoveryTimer != null;
-}
-
-function setErrorRecoveryTimer(timer: ReturnType<typeof setTimeout> | null): void {
-  _errorRecoveryTimer = timer;
-}
-
 function setLastChatEventAt(value: number): void {
   _lastChatEventAt = value;
 }
@@ -997,10 +904,6 @@ function mergeSessionLastActivity(
 
 export {
   toMs,
-  clearErrorRecoveryTimer,
-  clearHistoryPoll,
-  isSessionLockErrorMessage,
-  formatChatRuntimeError,
   extractImagesAsAttachedFiles,
   getMessageText,
   extractMediaRefs,
@@ -1017,9 +920,6 @@ export {
   upsertToolStatuses,
   hasNonToolAssistantContent,
   isToolOnlyMessage,
-  setHistoryPollTimer,
-  hasErrorRecoveryTimer,
-  setErrorRecoveryTimer,
   setLastChatEventAt,
   getLastChatEventAt,
   looksLikeTechnicalSessionDisplay,

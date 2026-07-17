@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { invokeIpcMock, hostApiFetchMock, agentsState } = vi.hoisted(() => ({
+const { invokeIpcMock, hostApiFetchMock, agentsState, bindSessionMock, fetchAgentsMock } = vi.hoisted(() => ({
   invokeIpcMock: vi.fn(),
   hostApiFetchMock: vi.fn(),
+  bindSessionMock: vi.fn(),
+  fetchAgentsMock: vi.fn(),
   agentsState: {
     agents: [] as Array<Record<string, unknown>>,
+    fetchAgents: null as unknown as () => Promise<void>,
   },
 }));
 
@@ -19,6 +22,12 @@ vi.mock('@/lib/host-api', () => ({
 vi.mock('@/stores/agents', () => ({
   useAgentsStore: {
     getState: () => agentsState,
+  },
+}));
+
+vi.mock('@/stores/session-catalog', () => ({
+  useSessionCatalogStore: {
+    getState: () => ({ bindSession: bindSessionMock }),
   },
 }));
 
@@ -53,6 +62,9 @@ describe('chat target routing', () => {
         channelTypes: [],
       },
     ];
+    agentsState.fetchAgents = fetchAgentsMock;
+    fetchAgentsMock.mockReset();
+    fetchAgentsMock.mockResolvedValue(undefined);
 
     invokeIpcMock.mockReset();
     invokeIpcMock.mockImplementation(async (channel: string, ...args: unknown[]) => {
@@ -74,19 +86,31 @@ describe('chat target routing', () => {
       if (channel === 'chat:sendWithMedia') {
         return { success: true, result: { runId: 'run-media' } };
       }
+      if (channel === 'session-catalog:invoke') {
+        const [request] = args as [{ action?: string }];
+        if (request?.action === 'ensureProjectAgent') {
+          return {
+            agentId: 'proj-project-a--main',
+            created: true,
+            workspaceUpdated: false,
+          };
+        }
+      }
       throw new Error(`Unexpected invokeIpc call: ${channel}`);
     });
 
     hostApiFetchMock.mockReset();
     hostApiFetchMock.mockImplementation(async (path: string) => {
-      if (path === '/api/token-quota/check') {
-        return { success: true, data: { allowed: true, used_today: 0, limit: 100 } };
+      if (path === '/api/chat/send') {
+        return { success: true, result: { runId: 'run-send' } };
       }
-      if (path === '/api/chat/send-with-media') {
-        return { success: true, result: { runId: 'run-media' } };
+      if (path === '/api/sessions/model') {
+        return { success: true };
       }
       throw new Error(`Unexpected hostApiFetch call: ${path}`);
     });
+    bindSessionMock.mockReset();
+    bindSessionMock.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -124,25 +148,111 @@ describe('chat target routing', () => {
     expect(state.currentAgentId).toBe('research');
     expect(state.sessions.some((session) => session.key === 'agent:research:desk')).toBe(true);
     expect(state.messages.at(-1)?.content).toBe('Hello direct agent');
-    expect(state.dailyTokenQuotaStatus?.usedToday).toBe(0);
-    expect(state.dailyTokenQuotaStatus?.limit).toBe(100);
-
-    expect(hostApiFetchMock).toHaveBeenCalledWith('/api/token-quota/check');
-
     const historyCall = invokeIpcMock.mock.calls.find(
       ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.history',
     );
-    expect(historyCall?.[2]).toEqual({ sessionKey: 'agent:research:desk', limit: 1000 });
+    expect(historyCall?.[2]).toEqual({ sessionKey: 'agent:research:desk', limit: 1000, engineType: 'openclaw' });
 
-    const sendCall = invokeIpcMock.mock.calls.find(
-      ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.send',
-    );
-    expect(sendCall?.[2]).toMatchObject({
+    const sendCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send');
+    expect(sendCall?.[1]).toMatchObject({
+      method: 'POST',
+      body: expect.any(String),
+    });
+    const payload = JSON.parse((sendCall?.[1] as { body: string }).body) as Record<string, unknown>;
+    expect(payload).toMatchObject({
       sessionKey: 'agent:research:desk',
       message: 'Hello direct agent',
       deliver: false,
+      engineType: 'openclaw',
     });
-    expect(typeof (sendCall?.[2] as { idempotencyKey?: unknown })?.idempotencyKey).toBe('string');
+    expect(typeof payload.idempotencyKey).toBe('string');
+  });
+
+  it('keeps a newly-created dialog when sending with its owning agent selected', async () => {
+    const { useChatStore } = await import('@/stores/chat');
+    const newSessionKey = 'agent:research:session-1770000000000-unique';
+
+    useChatStore.setState({
+      currentSessionKey: newSessionKey,
+      currentAgentId: 'research',
+      sessions: [{ key: newSessionKey, engineType: 'claude' }],
+      messages: [],
+      sessionLabels: {},
+      sessionLastActivity: {},
+      sending: false,
+      activeRunId: null,
+      streamingText: '',
+      streamingMessage: null,
+      streamingTools: [],
+      pendingFinal: false,
+      lastUserMessageAt: null,
+      pendingToolImages: [],
+      error: null,
+      loading: false,
+      thinkingLevel: null,
+      showThinking: true,
+    });
+
+    await useChatStore.getState().sendMessage('First message', undefined, 'research');
+
+    expect(useChatStore.getState().currentSessionKey).toBe(newSessionKey);
+    const sendCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send');
+    const payload = JSON.parse((sendCall?.[1] as { body: string }).body) as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      sessionKey: newSessionKey,
+      message: 'First message',
+      engineType: 'claude',
+    });
+    expect(invokeIpcMock.mock.calls.some(
+      ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.history',
+    )).toBe(false);
+  });
+
+  it('materializes and binds a project draft before its first dispatch', async () => {
+    const { useChatStore } = await import('@/stores/chat');
+    let bindingCompleted = false;
+    bindSessionMock.mockImplementation(async () => {
+      bindingCompleted = true;
+    });
+
+    useChatStore.setState({
+      currentSessionKey: 'agent:main:main',
+      currentAgentId: 'main',
+      pendingProjectId: null,
+      pendingNewSessionModel: 'dashscope/test-model',
+      sessions: [],
+      messages: [],
+      sessionLabels: {},
+      sessionLastActivity: {},
+      runtimeBySessionKey: {},
+      sending: false,
+      activeRunId: null,
+      error: null,
+      loading: false,
+    });
+
+    useChatStore.getState().newSession({ projectId: 'project-a' });
+    expect(useChatStore.getState()).toMatchObject({
+      currentSessionKey: 'agent:main:main',
+      currentAgentId: 'proj-project-a--main',
+      pendingProjectId: 'project-a',
+    });
+    expect(useChatStore.getState().sessions).toEqual([]);
+
+    await useChatStore.getState().sendMessage({ text: 'Project first message' });
+
+    const materializedKey = useChatStore.getState().currentSessionKey;
+    expect(materializedKey).toMatch(/^agent:proj-project-a--main:session-/);
+    expect(useChatStore.getState().pendingProjectId).toBeNull();
+    expect(bindSessionMock).toHaveBeenCalledWith(materializedKey, 'project-a');
+    expect(bindingCompleted).toBe(true);
+
+    const sendCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send');
+    const payload = JSON.parse((sendCall?.[1] as { body: string }).body) as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      sessionKey: materializedKey,
+      message: 'Project first message',
+    });
   });
 
   it('uses the selected agent main session for attachment sends', async () => {
@@ -184,9 +294,7 @@ describe('chat target routing', () => {
     );
 
     expect(useChatStore.getState().currentSessionKey).toBe('agent:research:desk');
-    expect(hostApiFetchMock).toHaveBeenCalledWith('/api/token-quota/check');
-
-    const mediaCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send-with-media');
+    const mediaCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send');
     expect(mediaCall?.[1]).toMatchObject({
       method: 'POST',
       body: expect.any(String),
@@ -198,107 +306,8 @@ describe('chat target routing', () => {
       media: Array<{ filePath: string }>;
     };
     expect(payload.sessionKey).toBe('agent:research:desk');
-    expect(payload.message).toBe('Process the attached file(s).');
+    expect(payload.message).toBe('');
     expect(payload.media[0]?.filePath).toBe('/tmp/design.png');
   });
 
-  it('blocks send when the daily token quota is exhausted', async () => {
-    hostApiFetchMock.mockImplementationOnce(async (path: string) => {
-      if (path === '/api/token-quota/check') {
-        return { success: true, data: { allowed: false, used_today: 1200, limit: 1200 } };
-      }
-      throw new Error(`Unexpected hostApiFetch call: ${path}`);
-    });
-
-    const { useChatStore } = await import('@/stores/chat');
-
-    useChatStore.setState({
-      currentSessionKey: 'agent:main:main',
-      currentAgentId: 'main',
-      sessions: [{ key: 'agent:main:main' }],
-      messages: [],
-      sessionLabels: {},
-      sessionLastActivity: {},
-      sending: false,
-      activeRunId: null,
-      streamingText: '',
-      streamingMessage: null,
-      streamingTools: [],
-      pendingFinal: false,
-      lastUserMessageAt: null,
-      pendingToolImages: [],
-      error: null,
-      loading: false,
-      thinkingLevel: null,
-      showThinking: true,
-    });
-
-    await useChatStore.getState().sendMessage('Blocked by quota');
-
-    const state = useChatStore.getState();
-    expect(state.messages).toHaveLength(0);
-    expect(state.error).toContain('1200/1200');
-    expect(state.dailyTokenQuotaStatus?.usedToday).toBe(1200);
-    expect(state.dailyTokenQuotaStatus?.limit).toBe(1200);
-    expect(invokeIpcMock.mock.calls.some(([channel, method]) => channel === 'gateway:rpc' && method === 'chat.send')).toBe(false);
-    expect(invokeIpcMock.mock.calls.some(([channel]) => channel === 'chat:sendWithMedia')).toBe(false);
-    expect(hostApiFetchMock.mock.calls.some(([path]) => path === '/api/chat/send-with-media')).toBe(false);
-  });
-
-  it('fails open when the quota check errors', async () => {
-    hostApiFetchMock.mockRejectedValueOnce(new Error('quota check unavailable'));
-
-    const { useChatStore } = await import('@/stores/chat');
-
-    useChatStore.setState({
-      currentSessionKey: 'agent:main:main',
-      currentAgentId: 'main',
-      sessions: [{ key: 'agent:main:main' }],
-      messages: [],
-      sessionLabels: {},
-      sessionLastActivity: {},
-      sending: false,
-      activeRunId: null,
-      streamingText: '',
-      streamingMessage: null,
-      streamingTools: [],
-      pendingFinal: false,
-      lastUserMessageAt: null,
-      pendingToolImages: [],
-      error: null,
-      loading: false,
-      thinkingLevel: null,
-      showThinking: true,
-    });
-
-    await useChatStore.getState().sendMessage(
-      '',
-      [
-        {
-          fileName: 'design.png',
-          mimeType: 'image/png',
-          fileSize: 128,
-          stagedPath: '/tmp/design.png',
-          preview: 'data:image/png;base64,abc',
-        },
-      ],
-    );
-
-    expect(hostApiFetchMock).toHaveBeenCalledWith('/api/token-quota/check');
-
-    const mediaCall = hostApiFetchMock.mock.calls.find(([path]) => path === '/api/chat/send-with-media');
-    expect(mediaCall?.[1]).toMatchObject({
-      method: 'POST',
-      body: expect.any(String),
-    });
-
-    const payload = JSON.parse((mediaCall?.[1] as { body: string }).body) as {
-      sessionKey: string;
-      message: string;
-      media: Array<{ filePath: string }>;
-    };
-    expect(payload.sessionKey).toBe('agent:main:main');
-    expect(payload.message).toBe('Process the attached file(s).');
-    expect(payload.media[0]?.filePath).toBe('/tmp/design.png');
-  });
 });

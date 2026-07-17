@@ -161,7 +161,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   const [beautifying, setBeautifying] = useState(false);
   const [recipients, setRecipients] = useState<DingTalkMention[]>(init.recipients);
   const [errors, setErrors] = useState<{ name?: string; instructions?: string }>({});
-  const [engineType, setEngineType] = useState<TaskEngineType>(init.engineType);
+  const [engineType] = useState<TaskEngineType>(init.engineType);
 
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState<string>(init.selectedWorkflow);

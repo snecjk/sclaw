@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   buildScheduledTaskGroupDisplayName,
   getGroupFirstTriggeredAtMs,
+  getSessionActivityMs,
+  getSessionFirstTriggerMs,
   deriveGroupFirstTriggeredFromSessions,
   looksLikeTechnicalTaskGroupLabel,
   resolveCronGroupNameFromSession,
@@ -61,6 +63,26 @@ describe('scheduled-task-group-name', () => {
       },
     );
     expect(name).toBe('定时任务测试');
+  });
+
+  it('getSessionActivityMs uses max of store and meta for recent order', () => {
+    const key = 'agent:main:cron:job:2026-06-25';
+    const older = Date.parse('2026-06-25T08:00:00');
+    const newer = Date.parse('2026-06-25T18:00:00');
+    expect(getSessionActivityMs(
+      { key, updatedAt: older },
+      { [key]: newer },
+    )).toBe(newer);
+  });
+
+  it('getSessionFirstTriggerMs still uses min of store and meta', () => {
+    const key = 'agent:main:cron:job:2026-06-25';
+    const older = Date.parse('2026-06-25T08:00:00');
+    const newer = Date.parse('2026-06-25T18:00:00');
+    expect(getSessionFirstTriggerMs(
+      { key, updatedAt: newer },
+      { [key]: older },
+    )).toBe(older);
   });
 
   it('sortScheduledTaskGroupsByFirstTriggerDesc orders by earliest session activity', () => {

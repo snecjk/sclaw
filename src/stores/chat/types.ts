@@ -17,10 +17,10 @@ export interface SendMessageOptions {
   runId?: string | null;
   /** Hidden workflow schema context injected into the user message for AI guidance */
   workflowContext?: WorkflowContextBlock | null;
-  /** Skill plaza context — UI tag + Gateway defaultPrompt injection */
-  skillMeta?: SkillMeta;
   /** Hidden embed-browser page snapshot for in-app preview chat */
   embedBrowserContext?: import('@/lib/sclaw-browser-embed-context').SclawBrowserEmbedContextBlock | null;
+  /** Skill plaza context — UI tag + Gateway defaultPrompt injection */
+  skillMeta?: SkillMeta;
 }
 
 /** Hidden context block describing a workflow for AI parameter guidance */
@@ -137,13 +137,6 @@ export interface ToolStatus {
   updatedAt: number;
 }
 
-export interface DailyTokenQuotaStatus {
-  allowed?: boolean;
-  usedToday?: number;
-  limit?: number;
-  checkedAt: string;
-}
-
 export interface SessionRuntimeState {
   sending: boolean;
   activeRunId: string | null;
@@ -160,7 +153,15 @@ export interface SessionRuntimeState {
   optimisticUserMessage: RawMessage | null;
   pendingToolImages: AttachedFileMeta[];
   error: string | null;
+  /** Tracks whether the Gateway has acknowledged the current optimistic send. */
+  sendAcceptance: SendAcceptanceState | null;
   updatedAt: number;
+}
+
+export interface SendAcceptanceState {
+  idempotencyKey: string;
+  status: 'pending' | 'accepted' | 'uncertain';
+  startedAt: number;
 }
 
 export interface ChatState {
@@ -175,6 +176,7 @@ export interface ChatState {
    *  sending before backend has applied the new model. */
   modelSwitching: boolean;
   activeRunId: string | null;
+  sendAcceptance: SendAcceptanceState | null;
   streamingText: string;
   streamingMessage: unknown | null;
   /** Live assistant snapshots seen during the active turn, in arrival order. */
@@ -189,9 +191,6 @@ export interface ChatState {
   optimisticUserMessage: RawMessage | null;
   /** Images collected from tool results, attached to the next assistant message */
   pendingToolImages: AttachedFileMeta[];
-  /** Last successful daily token quota check result. */
-  dailyTokenQuotaStatus: DailyTokenQuotaStatus | null;
-
   // Sessions
   sessions: ChatSession[];
   currentSessionKey: string;
@@ -216,6 +215,11 @@ export interface ChatState {
    *  is preserved instead of reverting to the global default. */
   pendingNewSessionModel: string | null;
   setPendingNewSessionModel: (model: string | null) => void;
+
+  /** Project id for an empty home draft that has not materialized a session yet.
+   *  First send creates the real session and binds it to this project. */
+  pendingProjectId: string | null;
+  setPendingProjectId: (projectId: string | null) => void;
 
   // Workflow
   workflowCardStates: Record<string, WorkflowExecutionState>;
@@ -243,13 +247,13 @@ export interface ChatState {
   switchSession: (key: string) => void;
   /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
   switchToAgentMainSession: (agentId: string) => void;
-  newSession: () => Promise<void>;
+  newSession: (options?: { projectId?: string; materialize?: boolean }) => void;
   deleteSession: (key: string, options?: {
     skipSessionRefresh?: boolean;
     additionalSuppressKeys?: string[];
   }) => Promise<boolean>;
   cleanupEmptySession: () => void;
-  loadHistory: (quiet?: boolean, force?: boolean) => Promise<void>;
+  loadHistory: (quiet?: boolean, force?: boolean, sessionKey?: string) => Promise<void>;
   sendMessage: (options: SendMessageOptions) => Promise<void>;
   abortRun: () => Promise<void>;
   handleChatEvent: (event: Record<string, unknown>) => void;
@@ -265,3 +269,10 @@ export interface ChatState {
 
 export const DEFAULT_CANONICAL_PREFIX = 'agent:main';
 export const DEFAULT_SESSION_KEY = `${DEFAULT_CANONICAL_PREFIX}:main`;
+
+/** Sidebar-only placeholder for a project "新对话" draft (not persisted until first send). */
+export const PROJECT_NEW_CHAT_DRAFT_KEY = 'project-draft:pending';
+
+export function isProjectNewChatDraftKey(sessionKey: string | null | undefined): boolean {
+  return (sessionKey ?? '').trim() === PROJECT_NEW_CHAT_DRAFT_KEY;
+}

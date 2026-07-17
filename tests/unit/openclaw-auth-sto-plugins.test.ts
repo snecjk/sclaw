@@ -76,8 +76,9 @@ describe('syncStoPluginsToOpenClaw', () => {
   it('writes sto-skill-call-monitor into plugins.allow and plugins.entries', async () => {
     const { syncStoPluginsToOpenClaw } = await import('@electron/utils/openclaw-auth');
 
-    await syncStoPluginsToOpenClaw();
+    const wrote = await syncStoPluginsToOpenClaw();
 
+    expect(wrote).toBe(true);
     expect(mockWriteFile).toHaveBeenCalled();
     const [, writtenJson] = mockWriteFile.mock.calls.at(-1) as [string, string];
     const writtenConfig = JSON.parse(writtenJson) as Record<string, any>;
@@ -115,5 +116,22 @@ describe('syncStoPluginsToOpenClaw', () => {
         commandTimeoutMs: 30_000,
       },
     });
+  });
+
+  it('skips rewriting openclaw.json when STO plugins config is unchanged', async () => {
+    const { syncStoPluginsToOpenClaw } = await import('@electron/utils/openclaw-auth');
+
+    await syncStoPluginsToOpenClaw();
+    const writeCountAfterFirst = mockWriteFile.mock.calls.length;
+    expect(writeCountAfterFirst).toBeGreaterThan(0);
+
+    const [, writtenJson] = mockWriteFile.mock.calls.at(-1) as [string, string];
+    mockReadFile.mockResolvedValue(writtenJson);
+    mockWriteFile.mockClear();
+
+    const wroteAgain = await syncStoPluginsToOpenClaw();
+
+    expect(wroteAgain).toBe(false);
+    expect(mockWriteFile).not.toHaveBeenCalled();
   });
 });

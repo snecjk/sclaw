@@ -46,8 +46,6 @@ export interface HomeComposerProps {
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
-    workflowSource?: string | null,
-    workflowName?: string | null,
     skillMeta?: SkillMeta,
   ) => void;
   /** 直接覆盖占位文案 */
@@ -124,6 +122,7 @@ export function HomeComposer({
     <div className={cn(stoHeroInputShellClass, className)}>
       <ParameterFormDock layout={stoParameterFormDockLayout('home')} />
       <PendingQueuePanel
+        sessionKey={currentSessionKey}
         queue={queue}
         onRemove={queueRemove}
         onMoveUp={queueMoveUp}

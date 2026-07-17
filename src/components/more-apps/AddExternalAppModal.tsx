@@ -29,6 +29,7 @@ export function AddExternalAppModal() {
 
   useEffect(() => {
     if (!addModalOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- closing the modal clears its local draft.
       setName('');
       setUrl('');
       setDesc('');

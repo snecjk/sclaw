@@ -25,6 +25,7 @@ import {
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { buildOpenClawControlUiUrl } from '../utils/openclaw-control-ui';
 import { logger } from '../utils/logger';
+import { registerDialogHandlers } from './ipc/dialog-handlers';
 import { safeWebContentsSend } from './safe-web-contents-send';
 import {
   saveChannelConfig,
@@ -51,10 +52,7 @@ import { applyProxySettings } from './proxy';
 import { syncLaunchAtStartupSettingFromStore } from './launch-at-startup';
 import { syncPreventSystemSleepSettingFromStore } from './prevent-sleep';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
-import { getStoToken } from '../utils/auth-store';
 import { preprocessChatSendParams } from '../utils/dingtalk-mention-send';
-import { resolveStoBaseUrl } from '../utils/sto-domain';
-import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { uploadFileToTempOSS } from '../utils/oss-temp-upload';
 import { getRecentTokenUsageHistory } from '../utils/token-usage';
 import { getProviderService } from '../services/providers/provider-service';
@@ -70,6 +68,7 @@ import {
 import { validateApiKeyWithProvider } from '../services/providers/provider-validation';
 import { appUpdater } from './updater';
 import { registerHostApiProxyHandlers } from './ipc/host-api-proxy';
+import { registerAgentMemoryHandlers } from './ipc/agent-memory';
 import { registerPreviewHttpFetchHandlers } from './ipc/preview-http-fetch';
 import { registerWorkflowStreamHandlers } from './ipc/workflow-stream-proxy';
 import { getWorkflowExecutionTracker } from './services/workflow-execution-tracker';
@@ -82,6 +81,7 @@ import {
   type AppRequest,
   type AppResponse,
 } from './ipc/request-helpers';
+import { GatewayManager } from '@electron/gateway/manager';
 
 /**
  * Register all IPC handlers
@@ -99,6 +99,7 @@ export function registerIpcHandlers(
 
   // Host API proxy handlers
   registerHostApiProxyHandlers();
+  registerAgentMemoryHandlers(gatewayManager);
   registerPreviewHttpFetchHandlers();
   registerWorkflowStreamHandlers();
 
@@ -121,9 +122,6 @@ export function registerIpcHandlers(
 
   // Shell handlers
   registerShellHandlers();
-
-  // Dialog handlers
-  registerDialogHandlers();
 
   // Session handlers
   registerSessionHandlers();
@@ -803,59 +801,6 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             },
           };
         }
-        case 'question': {
-          if (request.action === 'split') {
-            const payload = request.payload as {
-              prompt?: string;
-              agentId?: string;
-              sessionId?: string;
-            } | undefined;
-            const prompt = payload?.prompt;
-            if (!prompt || typeof prompt !== 'string') {
-              data = [];
-              break;
-            }
-            const token = await getStoToken();
-            if (!token) { data = []; break; }
-
-            const baseUrl = await resolveStoBaseUrl();
-            const url = `${baseUrl}/agent/v1/biz-agent/question-split`;
-            const headers = {
-              ...buildStoMemoryCenterAuthHeaders(token),
-              'Content-Type': 'application/json',
-            };
-
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 10_000);
-            try {
-              const resp = await proxyAwareFetch(url, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                  prompt,
-                  agentId: payload?.agentId,
-                  sessionId: payload?.sessionId,
-                }),
-                signal: controller.signal,
-              });
-              clearTimeout(timer);
-              if (!resp.ok) { data = []; break; }
-              data = await resp.json();
-            } catch {
-              clearTimeout(timer);
-              data = [];
-            }
-            break;
-          }
-          return {
-            id: request.id,
-            ok: false,
-            error: {
-              code: 'UNSUPPORTED',
-              message: `APP_REQUEST_UNSUPPORTED:${request.module}.${request.action}`,
-            },
-          };
-        }
         default:
           return {
             id: request.id,
@@ -1315,6 +1260,7 @@ function registerGatewayHandlers(
           message?: string;
           deliver?: boolean;
           idempotencyKey?: string;
+          systemPromptAppend?: string;
           engineType?: AgentEngineType;
         };
         const adapter = await getAdapterForSession(body.sessionKey ?? '', parseEngineType(body.engineType));
@@ -1325,6 +1271,7 @@ function registerGatewayHandlers(
             message: body.message ?? '',
             deliver: body.deliver,
             idempotencyKey: body.idempotencyKey ?? crypto.randomUUID(),
+            systemPromptAppend: body.systemPromptAppend,
           },
         );
         if (!result.success) {
@@ -1625,7 +1572,9 @@ function registerGatewayHandlers(
   });
 
   gatewayManager.on('chat:message', (data) => {
-    broadcast('gateway:chat-message', enrichGatewayPayload(data));
+    if (data && typeof data === 'object' && 'engineEvent' in data) {
+      broadcast('gateway:engine-event', enrichGatewayPayload((data as { engineEvent?: unknown }).engineEvent));
+    }
   });
 
   gatewayManager.on('exit', (code) => {
@@ -2345,27 +2294,8 @@ function registerClawHubHandlers(clawHubService: ClawHubService): void {
 }
 
 /**
- * Dialog-related IPC handlers
+ * Dialog-related IPC handlers — see ipc/dialog-handlers.ts
  */
-function registerDialogHandlers(): void {
-  // Show open dialog
-  ipcMain.handle('dialog:open', async (_, options: Electron.OpenDialogOptions) => {
-    const result = await dialog.showOpenDialog(options);
-    return result;
-  });
-
-  // Show save dialog
-  ipcMain.handle('dialog:save', async (_, options: Electron.SaveDialogOptions) => {
-    const result = await dialog.showSaveDialog(options);
-    return result;
-  });
-
-  // Show message box
-  ipcMain.handle('dialog:message', async (_, options: Electron.MessageBoxOptions) => {
-    const result = await dialog.showMessageBox(options);
-    return result;
-  });
-}
 
 /**
  * App-related IPC handlers

@@ -1,0 +1,45 @@
+import { describe, expect, it } from 'vitest';
+import {
+  mergeHistoryDisplayMessages,
+  prepareHistoryMessages,
+} from '@/stores/chat/history-pipeline';
+import type { RawMessage } from '@/stores/chat/types';
+
+describe('history-pipeline', () => {
+  it('keeps raw tool results but filters them from display history', () => {
+    const rawMessages: RawMessage[] = [
+      { id: 'user-1', role: 'user', content: 'make chart', timestamp: 1 },
+      { id: 'tool-1', role: 'toolresult', content: 'tool output', timestamp: 2 },
+      { id: 'assistant-1', role: 'assistant', content: 'done', timestamp: 3 },
+    ];
+
+    const prepared = prepareHistoryMessages({
+      rawMessages,
+      currentMessages: [],
+      sessionKey: 'agent:main:main',
+    });
+
+    expect(prepared.rawMessages).toHaveLength(3);
+    expect(prepared.filteredMessages.map((message) => message.id)).toEqual(['user-1', 'assistant-1']);
+    expect(prepared.enrichedMessages.map((message) => message.id)).toEqual(['user-1', 'assistant-1']);
+  });
+
+  it('dedupes redundant user messages while preserving assistant replies', () => {
+    const messages: RawMessage[] = [
+      { id: 'user-1', role: 'user', content: 'hello', timestamp: 1 },
+      { id: 'user-echo', role: 'user', content: 'hello', timestamp: 1.1 },
+      { id: 'assistant-1', role: 'assistant', content: 'hi', timestamp: 2 },
+    ];
+
+    const merged = mergeHistoryDisplayMessages({
+      messages,
+      currentMessages: [],
+      sessionKey: 'agent:main:main',
+      sessionLabels: {},
+      userMessageAt: 1000,
+      getMessageText: (content) => String(content ?? ''),
+    });
+
+    expect(merged.map((message) => message.id)).toEqual(['user-1', 'assistant-1']);
+  });
+});

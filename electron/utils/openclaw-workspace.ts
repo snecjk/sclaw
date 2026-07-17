@@ -10,7 +10,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { expandContextIncludes } from './context-fragment';
 import { logger } from './logger';
-import { getResourcesDir, getOpenClawConfigDir } from './paths';
+import { getResourcesDir, getOpenClawConfigDir, ensureWorkspaceArtifactOutputDir } from './paths';
 
 const CLAWX_BEGIN = '<!-- stoclaw:begin -->';
 const CLAWX_END = '<!-- stoclaw:end -->';
@@ -162,13 +162,14 @@ async function mergeClawXContextOnce(): Promise<number> {
 
   for (const workspaceDir of workspaceDirs) {
     await ensureDir(workspaceDir);
+    ensureWorkspaceArtifactOutputDir(workspaceDir);
 
     for (const file of files) {
       const targetName = file.replace('.stoclaw.md', '.md');
       const targetPath = join(workspaceDir, targetName);
 
       if (!(await fileExists(targetPath))) {
-        logger.debug(`Skipping ${targetName} in ${workspaceDir} (file does not exist yet, will be seeded by gateway)`);
+        // logger.debug(`Skipping ${targetName} in ${workspaceDir} (file does not exist yet, will be seeded by gateway)`);
         skipped++;
         continue;
       }
@@ -206,7 +207,7 @@ export async function ensureClawXContext(): Promise<void> {
       logger.info(`StoClaw context merge completed after ${attempt} retry(ies)`);
       return;
     }
-    logger.debug(`StoClaw context merge: ${skipped} file(s) still missing (retry ${attempt}/${MAX_RETRIES})`);
+    // logger.debug(`StoClaw context merge: ${skipped} file(s) still missing (retry ${attempt}/${MAX_RETRIES})`);
   }
 
   logger.warn(`StoClaw context merge: ${skipped} file(s) still missing after ${MAX_RETRIES} retries`);
