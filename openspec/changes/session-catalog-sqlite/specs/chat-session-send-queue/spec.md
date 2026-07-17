@@ -1,78 +1,73 @@
 ## ADDED Requirements
 
-### Requirement: Enqueue while session is answering
+### Requirement: Per-session queue while answering
 
-When a session has an active model run (`sending`), a new user send for that same session MUST be enqueued instead of interrupting the active run, unless the user explicitly chooses send-immediately. Each session MUST have an independent queue keyed by `sessionKey`.
+When a session has an active run (`sending` or equivalent runtime flag), new user messages for that session SHALL be enqueued in `useMessageQueueStore` instead of sending immediately. The queue is keyed by `sessionKey`, capped per session (existing limit), and stored in memory only.
 
-#### Scenario: Follow-up enqueued during active run
+#### Scenario: Message during active run
 
-- **WHEN** session A is answering and the user submits a new message for session A
-- **THEN** the message is added to session A's queue
-- **AND** the active run for session A continues without abort
+- **WHEN** the user submits a message while session S is answering
+- **THEN** the message is appended to S's queue
+- **AND** the chat input clears without starting a parallel run
 
-#### Scenario: Queues are isolated by session
+### Requirement: Stop retains queue
 
-- **WHEN** session A is answering and the user submits a message for session B
-- **THEN** session B's send path is independent of session A's queue
-- **AND** session A's queue is unchanged by session B's send
+When the user stops the current run, the system SHALL abort the run and SHALL NOT auto-send the next queued message as a consequence of that stop. Stop MUST use the existing `suspendAutoSend` path for the affected session.
 
-### Requirement: Send immediately aborts then runs
+#### Scenario: User presses Stop
 
-The system SHALL provide a send-immediately action on a queued item. Invoking it MUST abort the active run for that session (if any), then send that queued item without applying the Stop-path auto-send suppression, while leaving other queued items for that session in place to drain after the new run completes.
-
-#### Scenario: Send immediately from queue
-
-- **WHEN** session A is answering and has queued item Q
-- **AND** the user chooses send-immediately on Q
-- **THEN** the active run for session A is aborted
-- **AND** Q is removed from the queue and sent as the next user message
-- **AND** remaining queued items for session A stay queued
-
-#### Scenario: Stop does not auto-drain
-
-- **WHEN** the user stops the active run without choosing send-immediately
+- **WHEN** the user stops the active run on session S
 - **THEN** the run aborts
-- **AND** queued messages for that session remain queued
-- **AND** they MUST NOT auto-send solely because of that abort
+- **AND** queued messages for S remain in the queue
+- **AND** no queue item sends until the next successful run completion or explicit send-immediately
+
+### Requirement: Send immediately
+
+The queue panel SHALL offer send-immediately (↑) on each queued item. Activating it SHALL abort the current run for that session **without** calling `suspendAutoSend`, remove the chosen item from the queue, and send it as the next user message.
+
+#### Scenario: Send immediately during run
+
+- **WHEN** the user chooses send-immediately on queued item Q in session S while S is answering
+- **THEN** the current run for S is aborted without suppressing auto-send for that abort
+- **AND** Q is dequeued and sent
+- **AND** remaining queue items stay ordered after Q's former position
+
+### Requirement: Edit and delete queue items
+
+The queue panel SHALL allow editing queued message text and deleting individual items without affecting other sessions' queues.
+
+#### Scenario: Edit queued message
+
+- **WHEN** the user edits item Q in session S's queue
+- **THEN** the stored text for Q updates
+- **AND** attachments/metadata on Q are preserved unless the edit flow replaces them
+
+#### Scenario: Delete queued message
+
+- **WHEN** the user deletes item Q from session S's queue
+- **THEN** Q is removed
+- **AND** other items retain relative order
 
 ### Requirement: Per-session auto-drain
 
-When a session's run finishes successfully (sending transitions true→false without abort-suppress and without a blocking error), the system MUST dequeue and send at most one queued message for **that** session. Auto-drain MUST key off that session's runtime sending state so background sessions can drain without being the current UI session.
+When any session's run finishes successfully (runtime `sending` transitions true→false for that `sessionKey`, no error, not user-abort suppressed), the system SHALL dequeue and send at most one queued message for **that** session. Auto-drain MUST work for background sessions via `runtimeBySessionKey`, not only the current session's global `sending` flag.
 
-#### Scenario: Background session drains its own queue
+#### Scenario: Background session completes
 
-- **WHEN** session B finishes a successful run while the user is viewing session A
-- **AND** session B has a non-empty queue
-- **THEN** exactly one message is dequeued and sent for session B
-- **AND** session A's queue and run state are unaffected
+- **WHEN** session S (not the foreground session) finishes a successful run
+- **AND** S has queued messages
+- **THEN** exactly one queued message for S sends automatically
 
-#### Scenario: Failed run does not chain-send
+#### Scenario: Failed run does not drain
 
-- **WHEN** a session run ends with an error
-- **THEN** the system MUST NOT auto-dequeue the next queued message for that session
+- **WHEN** a run finishes with an error set for session S
+- **THEN** no queued message auto-sends for S
 
-### Requirement: Queue item edit and delete
+### Requirement: Queue panel UX
 
-The queue UI SHALL allow deleting a queued item and editing a queued item's text (and attachments when present) before it is sent. Queue chrome MUST follow `docs/sto-design.md` semantic surfaces (muted/Grey text; destructive affordance for delete) rather than ad-hoc hex colors.
+The chat surfaces SHALL render a Cursor-like pending queue panel listing queued items with edit, send-immediately, delete, and reorder controls (existing move up/down). UI MUST follow `docs/sto-design.md`.
 
-#### Scenario: Edit queued text
+#### Scenario: Panel visible with queue
 
-- **WHEN** the user edits a queued item's text and confirms
-- **THEN** the stored queued message text is updated
-- **AND** the item remains in its queue position
-
-#### Scenario: Delete queued item
-
-- **WHEN** the user deletes a queued item
-- **THEN** that item is removed from the session queue
-- **AND** other items keep their relative order
-
-### Requirement: Queue is not catalog storage
-
-Send-queue state MUST remain renderer runtime state and MUST NOT be persisted as rows in the SQLite session catalog. Catalog APIs remain organization-only.
-
-#### Scenario: Catalog schema has no queue table
-
-- **WHEN** migration `0002-session-catalog` is applied
-- **THEN** the schema does not require a send-queue table for this capability
-- **AND** queue behavior continues to use the in-memory per-session queue store
+- **WHEN** the active session has one or more queued messages
+- **THEN** the pending queue panel displays above or adjacent to the composer per existing layout

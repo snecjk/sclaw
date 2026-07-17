@@ -132,13 +132,15 @@ export async function unloadLaunchctlGatewayService(): Promise<void> {
   }
 }
 
-export async function waitForPortFree(port: number, timeoutMs = 30000): Promise<void> {
+export async function waitForPortFree(port: number, timeoutMs?: number): Promise<void> {
+  // Windows may need longer for TCP TIME_WAIT; elsewhere a live occupant will not free itself.
+  const effectiveTimeoutMs = timeoutMs ?? (process.platform === 'win32' ? 30_000 : 3_000);
   const net = await import('net');
   const start = Date.now();
   const pollInterval = 500;
   let logged = false;
 
-  while (Date.now() - start < timeoutMs) {
+  while (Date.now() - start < effectiveTimeoutMs) {
     const available = await new Promise<boolean>((resolve) => {
       const server = net.createServer();
       server.once('error', () => resolve(false));
@@ -157,13 +159,17 @@ export async function waitForPortFree(port: number, timeoutMs = 30000): Promise<
     }
 
     if (!logged) {
-      logger.info(`Waiting for port ${port} to become available (Windows TCP TIME_WAIT)...`);
+      logger.info(
+        process.platform === 'win32'
+          ? `Waiting for port ${port} to become available (Windows TCP TIME_WAIT)...`
+          : `Waiting for port ${port} to become available...`,
+      );
       logged = true;
     }
     await new Promise((resolve) => setTimeout(resolve, pollInterval));
   }
 
-  logger.warn(`Port ${port} still occupied after ${timeoutMs}ms, proceeding anyway`);
+  logger.warn(`Port ${port} still occupied after ${effectiveTimeoutMs}ms, proceeding anyway`);
 }
 
 export async function getListeningProcessIds(port: number): Promise<string[]> {

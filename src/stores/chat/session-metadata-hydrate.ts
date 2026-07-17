@@ -13,6 +13,7 @@ import {
   normalizeDerivedSessionLabel,
 } from '@/lib/workflow-session-hint';
 import { CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
+import { getBaseAgentIdFromProjectAgentId } from '../../../shared/project-agent';
 import { getMessageText, isToolResultRole, toMs } from './helpers';
 import type { ChatSet } from './store-api';
 import type { ChatSession, RawMessage } from './types';
@@ -42,7 +43,8 @@ let labelHydratePending = false;
 function resolveSessionAgentEngineType(session: ChatSession): ChatSession['engineType'] | undefined {
   if (!session.key.startsWith('agent:')) return undefined;
   const agentId = session.key.split(':')[1];
-  return useAgentsStore.getState().agents.find((agent) => agent.id === agentId)?.engineType;
+  const lookupId = getBaseAgentIdFromProjectAgentId(agentId.trim().toLowerCase()) ?? agentId.trim().toLowerCase();
+  return useAgentsStore.getState().agents.find((agent) => agent.id.trim().toLowerCase() === lookupId)?.engineType;
 }
 
 async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {

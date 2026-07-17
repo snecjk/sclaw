@@ -510,4 +510,84 @@ describe('user-message-merge', () => {
     expect(history[0]?._skillMeta).toEqual(skill);
     expect(history[0]?.content).toBe('');
   });
+
+  it('does not recover opening user from label while sending', () => {
+    const enriched = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '思考中…',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const merged = recoverInitialUserFromSessionLabel(
+      enriched,
+      'agent:main:session-1',
+      { 'agent:main:session-1': '帮我写周报' },
+      undefined,
+      { sending: true },
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.role).toBe('assistant');
+  });
+
+  it('does not reorder opening user while sending', () => {
+    const messages = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: 'ok',
+        timestamp: 1710000003,
+      },
+      {
+        id: 'user-1',
+        role: 'user',
+        content: '帮我写周报',
+        timestamp: 1710000123,
+      },
+    ] as RawMessage[];
+
+    const merged = ensureOpeningUserMessageFirst(
+      messages,
+      'agent:main:session-1',
+      { 'agent:main:session-1': '帮我写周报' },
+      undefined,
+      { sending: true },
+    );
+
+    expect(merged.map((m) => m.id)).toEqual(['assistant-1', 'user-1']);
+  });
+
+  it('drops non-adjacent synthetic session-label user when history has same text', () => {
+    const messages = [
+      {
+        id: 'session-label-user-agent:main:session-1',
+        role: 'user',
+        content: '帮我写周报',
+        timestamp: 1710000001,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '好的',
+        timestamp: 1710000002,
+      },
+      {
+        id: 'history-user-1',
+        role: 'user',
+        content: '帮我写周报',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const deduped = dedupeRedundantUserMessages(messages, null, {
+      sessionKey: 'agent:main:session-1',
+    });
+
+    expect(deduped.filter((m) => m.role === 'user')).toHaveLength(1);
+    expect(deduped.find((m) => m.role === 'user')?.id).toBe('history-user-1');
+  });
+
 });

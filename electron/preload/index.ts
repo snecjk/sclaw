@@ -23,6 +23,7 @@ const electronAPI = {
         'gateway:rpc',
         'gateway:httpProxy',
         'hostapi:fetch',
+        'session-catalog:invoke',
         'preview:httpFetch',
         // Workflow
         'workflow:startTracking',

@@ -32,6 +32,29 @@ describe('buildFirstTriggeredCronSessionPlaceholders', () => {
     const items = buildFirstTriggeredCronSessionPlaceholders({}, new Set(), new Map([['job-6', '测试6号']]));
     expect(items).toHaveLength(0);
   });
+
+  it('uses per-job agentId map for placeholder keys', () => {
+    const atMs = Date.parse('2026-06-28T10:00:00+08:00');
+    const items = buildFirstTriggeredCronSessionPlaceholders(
+      { 'cron:job-6': atMs },
+      new Set(),
+      new Map([['job-6', '测试6号']]),
+      new Map([['job-6', 'ops']]),
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0]?.key).toBe('agent:ops:cron:job-6:2026-06-28');
+  });
+
+  it('skips placeholder when a twin under another agent already exists', () => {
+    const atMs = Date.parse('2026-06-28T10:00:00+08:00');
+    const items = buildFirstTriggeredCronSessionPlaceholders(
+      { 'cron:job-6': atMs },
+      new Set(['agent:ops:cron:job-6:2026-06-28']),
+      new Map(),
+      'main',
+    );
+    expect(items).toHaveLength(0);
+  });
 });
 
 describe('buildFirstTriggeredClaudeSessionPlaceholders', () => {

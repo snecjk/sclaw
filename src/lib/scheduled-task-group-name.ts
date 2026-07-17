@@ -174,7 +174,9 @@ export function getSessionActivityMs(
   const precise = [fromStore, fromMeta].filter((t) => t > 0);
   let base: number;
   if (precise.length > 0) {
-    base = Math.min(...precise);
+    // Recent-within-group: prefer the freshest stamp (matches sidebar "最近").
+    // First-trigger / earliest semantics stay in getSessionFirstTriggerMs (min).
+    base = Math.max(...precise);
   } else {
     base = parseDatedSessionKeyMs(session.key) ?? 0;
   }

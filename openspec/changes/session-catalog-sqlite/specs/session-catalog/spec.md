@@ -1,111 +1,83 @@
 ## ADDED Requirements
 
-### Requirement: SQLite session catalog storage
+### Requirement: SQLite session catalog authority
 
-The system SHALL persist session organization metadata in the existing Main-process SQLite database `stoclaw.sqlite` via a versioned migration. The catalog MUST include tables for session directory rows, custom groups, and engine bindings. The system MUST NOT store chat transcript message bodies in SQLite as part of this capability.
+The system SHALL store session **organization metadata** in Main-process SQLite (`userData/sqlite/stoclaw.sqlite`), not in renderer-local persistence. Catalog data includes workspaces, session rows keyed by `(workspace_id, session_key)`, custom groups, pin/sort order, display titles, last activity timestamps, soft-delete tombstones, and engine bindings. Message bodies, run state, send queues, and unread flags MUST NOT be stored in this catalog.
 
-#### Scenario: Migration applies catalog schema
+#### Scenario: Renderer reads catalog via host-api
 
-- **WHEN** the application starts and migration version 2 has not been applied
-- **THEN** the migrator applies the session-catalog schema to `stoclaw.sqlite`
-- **AND** subsequent starts skip re-applying that migration version
+- **WHEN** the sidebar or catalog overview needs session organization data
+- **THEN** the renderer requests it through `host-api` / `api-client` session-catalog routes
+- **AND** does not open SQLite or read `engine-sessions.json` directly
 
-#### Scenario: Transcript remains on filesystem
+#### Scenario: Soft-deleted session hidden from overview
 
-- **WHEN** a chat or task run appends assistant output
-- **THEN** the message body is written to the engine JSONL (or Claude SDK) transcript path
-- **AND** SQLite catalog rows are updated only for organization metadata such as title or last activity when applicable
+- **WHEN** a catalog session row has `deleted_at` set
+- **THEN** default overview queries exclude that session
+- **AND** engine transcript files are unchanged until an explicit delete flow runs
 
-### Requirement: Engine binding registry facade
+### Requirement: Session groups in catalog
 
-The system SHALL store engine session bindings (engine id, agent id, engine session id, cwd, model, account, archived session ids, pending history bridge) in SQLite. Exported Main-process APIs equivalent to `listEngineSessionRegistryEntries`, `getEngineSessionRegistryEntry`, `upsertEngineSessionRegistryEntry`, and `deleteEngineSessionRegistryEntry` MUST continue to work for existing callers without requiring those callers to open SQLite directly.
-
-#### Scenario: Upsert binding through existing API
-
-- **WHEN** Claude adapter upserts a registry entry for a session key
-- **THEN** the binding is persisted in SQLite
-- **AND** a subsequent get by session key returns the stored fields
-
-#### Scenario: Import from legacy JSON
-
-- **WHEN** catalog initialization finds `engine-sessions.json` and bindings have not yet been imported
-- **THEN** the system imports entries into SQLite idempotently
-- **AND** later reads prefer the SQLite bindings
-
-### Requirement: Reconcile discovered sessions into catalog
-
-The system SHALL upsert discovered sessions from the existing engine and task list sources into catalog session rows without replacing those discovery APIs. Catalog organization fields (group, pin, sort, title override, soft-delete) MUST be authoritative when presenting sidebar organization.
-
-#### Scenario: Load sessions overlays catalog fields
-
-- **WHEN** the renderer loads sessions for the sidebar
-- **THEN** Main reconciles discovered session keys into the catalog for the active logical workspace
-- **AND** the response includes catalog organization fields for those sessions
-- **AND** chat send and history continue to use existing engine adapters
-
-#### Scenario: Soft-deleted session stays hidden
-
-- **WHEN** a session key is soft-deleted in the catalog
-- **AND** a later engine or task list still returns that key
-- **THEN** the session MUST remain hidden from the sidebar overview
-- **AND** the system MUST NOT clear the tombstone solely because the key reappeared in discovery
-
-### Requirement: Custom groups via host-api
-
-The system SHALL expose host-api routes under `/api/session-catalog/` for creating, renaming, dissolving groups and assigning or unassigning sessions. The renderer MUST call these routes through `host-api` / `api-client` and MUST NOT open SQLite or invoke ad-hoc Electron IPC for catalog writes. Group persistence MUST NOT rely on `localStorage` as the source of truth after migration.
+Custom sidebar groups SHALL be persisted per `workspace_id` in `session_groups`. Session-to-group assignment SHALL live on `catalog_sessions.group_id`. Empty groups MAY remain visible per product rules.
 
 #### Scenario: Assign session to group
 
-- **WHEN** the user assigns a session to a group through the sidebar UI
-- **THEN** the renderer calls the session-catalog host-api
-- **AND** the assignment is stored in SQLite for the session's workspace
-- **AND** a subsequent overview reload shows the session under that group
+- **WHEN** the user assigns session S to group G in workspace W
+- **THEN** the catalog updates S's `group_id` to G under workspace W
+- **AND** the sidebar reflects the assignment after catalog refresh
 
-#### Scenario: Import legacy localStorage groups
+### Requirement: Pin and sort
 
-- **WHEN** the client still has `stoclaw:sidebar-recent-groups` data and catalog groups have not been imported
-- **THEN** the system imports groups and session assignments into SQLite idempotently
-- **AND** later group reads use the catalog API
+The catalog SHALL support optional `pin_rank` (lower = higher in list) and stable `sort_key` / `last_activity_at` for ordering. Pin scope is per workspace (global within that workspace's session list, not per-group unless later specified).
 
-### Requirement: Global pin and ordered sessions
+#### Scenario: Pin session
 
-The system SHALL support marking sessions as globally pinned with a pin rank, and SHALL support manual sort order within a group or the ungrouped list. When presenting the sidebar overview, the system MUST order sessions as: pinned by `pin_rank` ascending, then groups by group `sort_order` ascending, then within each section manual `sort_order` when set, otherwise last activity descending.
+- **WHEN** the user pins session S in workspace W
+- **THEN** S receives a `pin_rank` value ordering it above unpinned sessions in W
+- **AND** unpinned sessions continue to sort by activity or manual order
 
-#### Scenario: Pinned session appears above groups
+### Requirement: Engine bindings in catalog
 
-- **WHEN** a session is pinned and other sessions exist in groups
-- **THEN** the overview lists the pinned session in the pinned section before group sections
+Engine session bindings (OpenClaw and Claude) SHALL be stored in `session_engine_bindings` and accessed through the existing `session-registry.ts` facade. Bindings include `engine_type`, `agent_id`, engine-native session id, optional `cwd`, model, and extensible JSON fields for engine-specific metadata.
 
-#### Scenario: Manual order overrides activity within a group
+#### Scenario: Upsert binding on chat activity
 
-- **WHEN** two sessions in the same group have explicit sort orders
-- **THEN** they appear in ascending sort order regardless of last activity timestamps
+- **WHEN** a session is used with engine E and agent A
+- **THEN** the registry facade upserts a binding row for that `session_key`
+- **AND** subsequent resolves read from SQLite
 
-### Requirement: Soft-delete tombstones in catalog
+#### Scenario: Import legacy engine-sessions.json
 
-The system SHALL record user-initiated session deletions as soft-deletes in the catalog (`deleted_at` set). Deleted-key listing used by the UI MUST be satisfiable from the catalog after migration. Existing engine-side cleanup (JSONL rename / registry delete) MAY still run as today.
+- **WHEN** the catalog initializes and bindings table is empty
+- **AND** `engine-sessions.json` exists on disk
+- **THEN** the system imports entries idempotently into SQLite
+- **AND** preserves the JSON file until a later cleanup phase
 
-#### Scenario: Delete session records catalog tombstone
+### Requirement: Session discovery reconcile
 
-- **WHEN** the user deletes a session through the existing delete flow
-- **THEN** the catalog marks that session soft-deleted
-- **AND** `/api/sessions/deleted-keys` (or equivalent catalog-backed listing) includes the key
+The catalog service SHALL reconcile rows from engine-native discovery (e.g. OpenClaw `sessions.json`, runtime session lists) into `catalog_sessions` under the default workspace when no row exists, without overwriting user-edited titles or group assignments.
 
-### Requirement: Titles and activity in catalog
+#### Scenario: Unknown session appears on disk
 
-The system SHALL persist session title/label and last-activity timestamps in the catalog. When a catalog title is set, overview presentation MUST prefer it over a transient engine label. Client localStorage label bags MUST NOT remain the source of truth after successful import.
+- **WHEN** reconcile finds a session key not in catalog
+- **THEN** it creates a default-workspace catalog row with discovered metadata
+- **AND** does not assign a custom group or pin automatically
 
-#### Scenario: Catalog title wins
+### Requirement: Migrate localStorage organization state
 
-- **WHEN** a session has both a catalog title and an engine-provided label
-- **THEN** the sidebar displays the catalog title
+On upgrade, the system SHALL one-time import `stoclaw-chat-session-labels` (titles/activity) and `stoclaw:sidebar-recent-groups` into catalog tables under workspace `default`, skipping rows already migrated.
 
-### Requirement: Catalog access boundary
+#### Scenario: First launch after upgrade
 
-Renderer code MUST access catalog data only through host-api. Main-process services MUST use repositories for SQL. The system MUST NOT add direct Gateway HTTP calls from the renderer for catalog operations.
+- **WHEN** the app starts with legacy localStorage organization data
+- **THEN** catalog rows are created or updated under `default`
+- **AND** new writes go to SQLite instead of localStorage
 
-#### Scenario: Renderer uses host-api only
+### Requirement: Catalog overview API
 
-- **WHEN** the sidebar needs group or overview data
-- **THEN** it fetches via `hostApiFetch` (or api-client wrapper) to `/api/session-catalog/*`
-- **AND** it does not call `window.electron.ipcRenderer.invoke` for catalog reads or writes from page/components
+Host-api SHALL expose CRUD/list endpoints for workspaces, groups, and catalog sessions sufficient for sidebar rendering and a future catalog overview page. All routes run in Main and use repository transactions.
+
+#### Scenario: List sessions for workspace
+
+- **WHEN** client requests sessions for workspace W
+- **THEN** the response includes organization fields and binding summaries for keys in W only

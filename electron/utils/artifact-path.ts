@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { basename, extname, isAbsolute, join, normalize } from 'node:path';
 import { homedir } from 'node:os';
-import { expandPath, getLegacyOpenClawWorkspaceRoot, getOpenClawConfigDir } from './paths';
+import { expandPath, getDefaultAgentWorkspacePath, getLegacyDefaultAgentWorkspacePath, getLegacyOpenClawWorkspaceRoot, getOpenClawConfigDir, getStoClawHomeDir } from './paths';
 import {
   isWindowsDrivePath,
   migrateLegacyOpenClawWorkspacePath,
@@ -55,24 +55,37 @@ function firstExistingAbsolutePath(normalized: string): string | null {
 }
 
 function listWorkspaceRoots(): string[] {
-  const configDir = getOpenClawConfigDir();
-  const roots = [join(configDir, 'workspace')];
+  const roots: string[] = [];
+  const pushUnique = (root: string) => {
+    const normalized = normalize(root);
+    if (!roots.some((entry) => normalize(entry) === normalized)) {
+      roots.push(root);
+    }
+  };
+
+  pushUnique(getDefaultAgentWorkspacePath());
+
   try {
-    for (const entry of readdirSync(configDir)) {
+    for (const entry of readdirSync(getStoClawHomeDir())) {
       if (entry.startsWith('workspace-')) {
-        roots.push(join(configDir, entry));
+        pushUnique(join(getStoClawHomeDir(), entry));
+      }
+    }
+  } catch { /* ignore */ }
+
+  pushUnique(getLegacyDefaultAgentWorkspacePath());
+
+  try {
+    const configDir = getOpenClawConfigDir();
+    for (const entry of readdirSync(configDir)) {
+      if (entry === 'workspace' || entry.startsWith('workspace-')) {
+        pushUnique(join(configDir, entry));
       }
     }
   } catch { /* ignore */ }
 
   const legacyRoot = getLegacyOpenClawWorkspaceRoot();
-  const normalizedLegacy = normalize(legacyRoot);
-  if (
-    existsSync(legacyRoot)
-    && !roots.some((root) => normalize(root) === normalizedLegacy)
-  ) {
-    roots.push(legacyRoot);
-  }
+  pushUnique(legacyRoot);
 
   return roots;
 }
@@ -281,7 +294,7 @@ export function resolveWorkspaceFilePath(filePath: string): string {
   const deep = findDeepInOutputSubdirs(fileName, roots);
   if (deep) return deep;
 
-  return candidates[0] ?? join(getOpenClawConfigDir(), 'workspace', normalized);
+  return candidates[0] ?? join(getDefaultAgentWorkspacePath(), normalized);
 }
 
 /** Recent Python/skill run directories (newest first) for basename fallback search. */

@@ -1,6 +1,5 @@
 <!-- stoclaw:begin -->
 # AGENTS.md - Your Workspace
-硬性规则：`~\.stoclaw\openclaw\workspace\` 无特殊要求或者用户指定文件夹，这个路径就是你的工作区
 
 ## SClaw Environment
 

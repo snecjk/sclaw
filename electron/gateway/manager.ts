@@ -31,7 +31,7 @@ import {
 import { dispatchJsonRpcNotification, dispatchProtocolEvent } from './event-dispatch';
 import { GatewayStateController } from './state';
 import { prepareGatewayLaunchContext } from './config-sync';
-import { connectGatewaySocket, waitForGatewayReady } from './ws-client';
+import { connectGatewaySocket, probeGatewayReady, waitForGatewayReady } from './ws-client';
 import {
   findExistingGatewayProcess,
   runOpenClawDoctorRepair,
@@ -216,6 +216,8 @@ export class GatewayManager extends EventEmitter {
   public static readonly RESTART_COOLDOWN_MS = 5_000;
   /** After OpenClaw self-restarts (WS 1012), skip StoClaw-managed stop/start to avoid double restart. */
   private static readonly GATEWAY_SELF_RESTART_QUIET_MS = 12_000;
+  /** How long to wait for an in-process Gateway to accept WS again after code=1012. */
+  private static readonly GATEWAY_SELF_RESTART_RECONNECT_MS = 10_000;
   private static readonly DEFERRED_RESTART_DEBOUNCE_MS = 1500;
   private lastRestartAt = 0;
   private managedRestartSuppressUntil = 0;
@@ -415,6 +417,7 @@ export class GatewayManager extends EventEmitter {
       const startupPort = await prepareGatewayStartupPort({
         defaultPort: PORTS.OPENCLAW_GATEWAY,
         keepPid: keepGatewayPid,
+        preferredPort: this.status.port,
         findAvailablePort,
       });
       if (startupPort !== this.status.port) {
@@ -1135,6 +1138,94 @@ export class GatewayManager extends EventEmitter {
   }
 
   /**
+   * After OpenClaw in-process restart (WS close 1012), reconnect to the same
+   * owned process/port instead of prepareGatewayStartupPort + spawn.
+   * Falls back to full start() if the owned process dies or readiness times out.
+   */
+  private async reconnectAfterSelfRestart(): Promise<void> {
+    if (this.startLock) {
+      logger.debug('Self-restart reconnect skipped: start already in progress');
+      return;
+    }
+
+    this.startLock = true;
+    let fallbackToStart = false;
+
+    try {
+      const ownedPid = this.process?.pid;
+      const port = this.status.port > 0 ? this.status.port : PORTS.OPENCLAW_GATEWAY;
+
+      if (!ownedPid || !this.ownsProcess) {
+        logger.warn(
+          '[gateway-refresh] Self-restart reconnect unavailable (no owned process); falling back to full start',
+        );
+        fallbackToStart = true;
+        return;
+      }
+
+      try {
+        process.kill(ownedPid, 0);
+      } catch {
+        logger.warn(
+          `[gateway-refresh] Owned Gateway pid=${ownedPid} is dead; falling back to full start`,
+        );
+        this.process = null;
+        this.ownsProcess = false;
+        clearOwnedGatewayProcess();
+        fallbackToStart = true;
+        return;
+      }
+
+      logger.info(
+        `[gateway-refresh] Self-restart reconnect waiting for port=${port} pid=${ownedPid}`,
+      );
+      this.setStatus({ state: 'reconnecting', port, pid: ownedPid });
+      await this.initDeviceIdentity();
+
+      const deadline = Date.now() + GatewayManager.GATEWAY_SELF_RESTART_RECONNECT_MS;
+      while (Date.now() < deadline) {
+        try {
+          process.kill(ownedPid, 0);
+        } catch {
+          logger.warn(
+            `[gateway-refresh] Owned Gateway pid=${ownedPid} exited during self-restart; falling back to full start`,
+          );
+          this.process = null;
+          this.ownsProcess = false;
+          clearOwnedGatewayProcess();
+          fallbackToStart = true;
+          return;
+        }
+
+        const ready = await probeGatewayReady(port, 1200);
+        if (ready) {
+          await this.connect(port);
+          logger.info(
+            `[gateway-refresh] Self-restart reconnect succeeded on port=${port} pid=${ownedPid}`,
+          );
+          return;
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+
+      logger.warn(
+        `[gateway-refresh] Self-restart reconnect timed out after ${GatewayManager.GATEWAY_SELF_RESTART_RECONNECT_MS}ms; falling back to full start`,
+      );
+      fallbackToStart = true;
+    } catch (error) {
+      logger.warn('[gateway-refresh] Self-restart reconnect failed; falling back to full start:', error);
+      fallbackToStart = true;
+    } finally {
+      this.startLock = false;
+    }
+
+    if (fallbackToStart) {
+      await this.start();
+    }
+  }
+
+  /**
    * Schedule reconnection attempt with exponential backoff
    */
   private scheduleReconnect(): void {
@@ -1170,7 +1261,11 @@ export class GatewayManager extends EventEmitter {
     const { delay, nextAttempt, maxAttempts } = decision;
     const effectiveDelay = Math.max(delay, cooldownRemaining);
     this.reconnectAttempts = nextAttempt;
-    logger.warn(`Scheduling Gateway reconnect attempt ${nextAttempt}/${maxAttempts} in ${effectiveDelay}ms`);
+    const preferSelfRestartReconnect = this.isManagedRestartSuppressed() && !!this.process?.pid && this.ownsProcess;
+    logger.warn(
+      `Scheduling Gateway reconnect attempt ${nextAttempt}/${maxAttempts} in ${effectiveDelay}ms`
+      + (preferSelfRestartReconnect ? ' (self-restart reconnect)' : ''),
+    );
 
     this.setStatus({
       state: 'reconnecting',
@@ -1191,10 +1286,16 @@ export class GatewayManager extends EventEmitter {
       }
       const attemptNo = this.reconnectAttempts;
       this.reconnectAttemptsTotal += 1;
+      const useSelfRestartReconnect =
+        this.isManagedRestartSuppressed() && !!this.process?.pid && this.ownsProcess;
       try {
-        // Use the guarded start() flow so reconnect attempts cannot bypass
-        // lifecycle locking and accidentally start duplicate Gateway processes.
-        await this.start();
+        if (useSelfRestartReconnect) {
+          await this.reconnectAfterSelfRestart();
+        } else {
+          // Use the guarded start() flow so reconnect attempts cannot bypass
+          // lifecycle locking and accidentally start duplicate Gateway processes.
+          await this.start();
+        }
         this.reconnectSuccessTotal += 1;
         this.emitReconnectMetric('success', {
           attemptNo,

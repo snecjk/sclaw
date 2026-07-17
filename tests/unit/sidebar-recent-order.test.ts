@@ -5,6 +5,7 @@ import {
   removeSidebarRecentOrderKey,
   scrubClaudeSessionLastActivity,
   sortSessionsByRecentActivity,
+  sortSessionsWithCatalogPin,
 } from '@/lib/sidebar-recent-order';
 import type { ChatSession } from '@/stores/chat/types';
 
@@ -79,6 +80,76 @@ describe('scrubClaudeSessionLastActivity', () => {
       'agent:main:claude-a': 180_000,
     });
     expect(scrubbed['agent:main:claude-a']).toBe(180_000);
+  });
+});
+
+describe('sortSessionsWithCatalogPin', () => {
+  it('keeps pinned sessions above unpinned ones', () => {
+    const sorted = sortSessionsWithCatalogPin(
+      [
+        { key: 'agent:main:session-a' },
+        { key: 'agent:main:session-b' },
+        { key: 'agent:main:session-c' },
+      ],
+      {
+        'agent:main:session-a': 100,
+        'agent:main:session-b': 300,
+        'agent:main:session-c': 200,
+      },
+      {
+        'agent:main:session-a': { pinRank: 1, lastActivityAt: null },
+      },
+    );
+    expect(sorted.map((session) => session.key)).toEqual([
+      'agent:main:session-a',
+      'agent:main:session-b',
+      'agent:main:session-c',
+    ]);
+  });
+
+  it('sorts pinned sessions by last activity descending instead of pin rank', () => {
+    const sorted = sortSessionsWithCatalogPin(
+      [
+        { key: 'agent:main:session-a' },
+        { key: 'agent:main:session-b' },
+        { key: 'agent:main:session-c' },
+      ],
+      {
+        'agent:main:session-a': 100,
+        'agent:main:session-b': 300,
+        'agent:main:session-c': 200,
+      },
+      {
+        'agent:main:session-a': { pinRank: 1, lastActivityAt: null },
+        'agent:main:session-c': { pinRank: 5, lastActivityAt: null },
+      },
+    );
+    expect(sorted.map((session) => session.key)).toEqual([
+      'agent:main:session-c',
+      'agent:main:session-a',
+      'agent:main:session-b',
+    ]);
+  });
+
+  it('uses catalog lastActivityAt when it is newer than local activity', () => {
+    const sorted = sortSessionsWithCatalogPin(
+      [
+        { key: 'agent:main:session-a' },
+        { key: 'agent:main:session-b' },
+      ],
+      {
+        'agent:main:session-a': 100,
+        'agent:main:session-b': 200,
+      },
+      {
+        'agent:main:session-a': { pinRank: 1, lastActivityAt: '2026-07-16T10:00:00.000Z' },
+        'agent:main:session-b': { pinRank: 1, lastActivityAt: '2026-07-16T12:00:00.000Z' },
+      },
+    );
+    expect(sorted.map((session) => session.key)).toEqual([
+      'agent:main:session-b',
+      'agent:main:session-a',
+    ]);
   });
 });
 

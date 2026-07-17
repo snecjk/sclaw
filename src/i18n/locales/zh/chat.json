@@ -154,6 +154,8 @@
         "moveUp": "上移",
         "moveDown": "下移",
         "fileCount": "{{count}} 个文件",
+        "edit": "编辑",
+        "sendImmediately": "立即发送",
     "queueFull": "队列已满（最多 {{max}} 条）"
   },
     "splitting": "正在分析问题...",

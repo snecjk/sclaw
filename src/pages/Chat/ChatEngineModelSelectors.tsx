@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Bot, Check, ChevronDown, Cpu } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router-dom';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,8 +9,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { useAgentsStore } from '@/stores/agents';
+import { resolveBaseAgentId, resolveEffectiveAgent, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { useSessionCatalogStore } from '@/stores/session-catalog';
+import { getProjectIdFromProjectAgentId } from '../../../shared/project-agent';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { buildProviderListItems } from '@/lib/provider-accounts';
@@ -30,6 +33,7 @@ import {
   applyClaudeSessionModel,
   applyOpenClawSessionModel,
 } from '@/lib/sync-workspace-default-to-chat';
+import { isMainChatHomePath } from '@/lib/main-chat-navigation';
 import { isTaskExecutionSessionKey } from '../../../shared/session-agent-id';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
@@ -129,6 +133,27 @@ function resolveClaudeToolbarModelId(input: {
   return agent || workspace;
 }
 
+function useProjectAgentContext(currentAgentId: string, currentSessionKey: string) {
+  const selectedProjectId = useSessionCatalogStore((s) => s.selectedProjectId);
+  const workspaces = useSessionCatalogStore((s) => s.workspaces);
+  const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
+  const pendingProjectId = useChatStore((s) => s.pendingProjectId);
+
+  const projectId = useMemo(
+    () => getProjectIdFromProjectAgentId(currentAgentId)
+      ?? sessionWorkspaceByKey[currentSessionKey]
+      ?? pendingProjectId
+      ?? selectedProjectId,
+    [currentAgentId, currentSessionKey, pendingProjectId, selectedProjectId, sessionWorkspaceByKey],
+  );
+  const projectName = useMemo(
+    () => (projectId ? workspaces.find((workspace) => workspace.id === projectId)?.name ?? null : null),
+    [projectId, workspaces],
+  );
+
+  return { projectId, projectName };
+}
+
 /* ── Engine Selector ─────────────────────────────────────────── */
 
 export function ChatEngineSelector({
@@ -138,6 +163,7 @@ export function ChatEngineSelector({
   className?: string;
   variant?: 'toolbar' | 'inline';
 }) {
+  const { pathname } = useLocation();
   const sending = useChatStore((s) => s.sending);
   const loading = useChatStore((s) => s.loading);
   const messages = useChatStore((s) => s.messages);
@@ -147,9 +173,10 @@ export function ChatEngineSelector({
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
+  const { projectId: effectiveProjectId, projectName } = useProjectAgentContext(currentAgentId, currentSessionKey);
   const currentAgent = useMemo(
-    () => (agents ?? []).find((agent) => agent.id === currentAgentId),
-    [agents, currentAgentId],
+    () => resolveEffectiveAgent(agents ?? [], currentAgentId, effectiveProjectId, projectName),
+    [agents, currentAgentId, effectiveProjectId, projectName],
   );
   const currentSession = useMemo(
     () => sessions.find((session) => session.key === currentSessionKey),
@@ -157,11 +184,13 @@ export function ChatEngineSelector({
   );
 
   const agentDefaultEngineType = currentAgent?.engineType ?? 'openclaw';
-  // Home empty slot, or embed "new" conversation that has not received any messages yet.
-  // History embed sessions keep a fixed engine — switching would risk dropping context.
+  // Only the empty home draft (DEFAULT / unused embed) can switch engines.
+  // Existing sessions — including project chats after first send — stay locked.
   const isUnusedEmbedSession = isSclawBrowserEmbedChatSessionKey(currentSessionKey)
     && !loading
     && messages.length === 0;
+  const canSwitchEngine = isMainChatHomePath(pathname)
+    && (currentSessionKey === DEFAULT_SESSION_KEY || isUnusedEmbedSession);
   const currentEngineType = resolveChatSessionEngineType(
     currentSession,
     agentDefaultEngineType,
@@ -170,8 +199,6 @@ export function ChatEngineSelector({
   );
   const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
   const currentSessionEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
-  const canSwitchEngine = currentSessionKey === DEFAULT_SESSION_KEY || isUnusedEmbedSession;
-  // Unused embed / home slot: engine resolution already follows agent default — keep labels identical.
   const displayEngineLabel = canSwitchEngine
     ? agentDefaultEngineLabel
     : currentSessionEngineLabel;
@@ -185,10 +212,20 @@ export function ChatEngineSelector({
     if (!canSwitchEngine || engineType === agentDefaultEngineType) return;
     setEngineSaving(true);
     try {
-      await hostApiFetch(`/api/agents/${encodeURIComponent(currentAgentId)}/engine`, {
+      const baseAgentId = resolveBaseAgentId(currentAgentId);
+      await hostApiFetch(`/api/agents/${encodeURIComponent(baseAgentId)}/engine`, {
         method: 'PUT',
         body: JSON.stringify({ engineType }),
       });
+      // Project draft may already point at a project agent id — keep its engine mirrored.
+      if (currentAgentId && currentAgentId !== baseAgentId) {
+        await hostApiFetch(`/api/agents/${encodeURIComponent(currentAgentId)}/engine`, {
+          method: 'PUT',
+          body: JSON.stringify({ engineType }),
+        }).catch(() => {
+          // Project agent may not exist until first send; base agent update is enough.
+        });
+      }
       await fetchAgents();
       toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : 'OpenClaw'} 引擎`);
     } catch (err) {
@@ -334,9 +371,10 @@ export function ChatModelSelector({
 
   useEffect(() => { void init(); }, [init]);
 
+  const { projectId: effectiveProjectId, projectName } = useProjectAgentContext(currentAgentId, currentSessionKey);
   const currentAgent = useMemo(
-    () => (agents ?? []).find((agent) => agent.id === currentAgentId),
-    [agents, currentAgentId],
+    () => resolveEffectiveAgent(agents ?? [], currentAgentId, effectiveProjectId, projectName),
+    [agents, currentAgentId, effectiveProjectId, projectName],
   );
   const currentSession = useMemo(
     () => sessions.find((session) => session.key === currentSessionKey),

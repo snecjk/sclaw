@@ -1,6 +1,7 @@
 import { getEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry } from './session-registry';
 import type { AgentEngineType } from './types';
 import { listAgentsSnapshot } from '../utils/agent-config';
+import { getBaseAgentIdFromProjectAgentId } from '../../shared/project-agent';
 import {
   extractAgentIdFromSessionKey,
   parseClaudeTaskIdFromSessionKey,
@@ -80,6 +81,7 @@ export async function rememberSessionEngineType(
     updatedAt: Date.now(),
     title: existing?.title,
     model: existing?.model,
+    provider: existing?.provider,
     accountId: existing?.accountId,
     ...(engineChanged && engineType === 'openclaw'
       ? { archivedClaudeSessionIds: undefined, pendingHistoryBridge: undefined }
@@ -89,6 +91,21 @@ export async function rememberSessionEngineType(
 
 async function resolveAgentEngineType(agentId: string): Promise<AgentEngineType> {
   const snapshot = await listAgentsSnapshot();
-  const match = snapshot.agents.find((agent) => agent.id.trim().toLowerCase() === agentId.trim().toLowerCase());
-  return match?.engineType === 'claude' ? 'claude' : 'openclaw';
+  const normalizedAgentId = agentId.trim().toLowerCase();
+  const match = snapshot.agents.find((agent) => agent.id.trim().toLowerCase() === normalizedAgentId);
+  if (match?.engineType) {
+    return match.engineType === 'claude' ? 'claude' : 'openclaw';
+  }
+
+  // For project agents that have not yet been persisted, fall back to the
+  // base agent's engine type so engine resolution stays consistent.
+  const baseAgentId = getBaseAgentIdFromProjectAgentId(normalizedAgentId);
+  if (baseAgentId) {
+    const baseMatch = snapshot.agents.find((agent) => agent.id.trim().toLowerCase() === baseAgentId.trim().toLowerCase());
+    if (baseMatch?.engineType) {
+      return baseMatch.engineType === 'claude' ? 'claude' : 'openclaw';
+    }
+  }
+
+  return 'openclaw';
 }

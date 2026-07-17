@@ -198,3 +198,60 @@ describe('setOpenClawDefaultModelWithOverride main agent model ref', () => {
     expect(main?.model).toBe('qwen/turbo');
   });
 });
+
+describe('syncGatewayTokenToConfig', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    await rm(testHome, { recursive: true, force: true });
+    await rm(testUserData, { recursive: true, force: true });
+  });
+
+  async function readConfig(): Promise<Record<string, any>> {
+    const raw = await readFile(join(testHome, '.stoclaw', 'openclaw', 'openclaw.json'), 'utf8');
+    return JSON.parse(raw) as Record<string, any>;
+  }
+
+  it('persists an explicit empty gateway.tailscale to avoid phantom reload diffs', async () => {
+    await writeOpenClawJson({ gateway: { mode: 'local' } });
+
+    const { syncGatewayTokenToConfig } = await import('@electron/utils/openclaw-auth');
+    await syncGatewayTokenToConfig('tok-123');
+
+    const config = await readConfig();
+    expect(config.gateway.tailscale).toEqual({});
+    expect(config.gateway.auth).toEqual({ mode: 'token', token: 'tok-123' });
+  });
+
+  it('does not overwrite an existing gateway.tailscale config', async () => {
+    await writeOpenClawJson({
+      gateway: {
+        mode: 'local',
+        auth: { mode: 'token', token: 'tok-123' },
+        controlUi: { allowedOrigins: ['file://'] },
+        tailscale: { mode: 'serve' },
+      },
+    });
+
+    const { syncGatewayTokenToConfig } = await import('@electron/utils/openclaw-auth');
+    await syncGatewayTokenToConfig('tok-123');
+
+    const config = await readConfig();
+    expect(config.gateway.tailscale).toEqual({ mode: 'serve' });
+  });
+
+  it('is a no-op rewrite-free call when config is already in the desired state', async () => {
+    await writeOpenClawJson({ gateway: { mode: 'local' } });
+
+    const { syncGatewayTokenToConfig } = await import('@electron/utils/openclaw-auth');
+    await syncGatewayTokenToConfig('tok-123');
+
+    const configPath = join(testHome, '.stoclaw', 'openclaw', 'openclaw.json');
+    const rawAfterFirst = await readFile(configPath, 'utf8');
+
+    await syncGatewayTokenToConfig('tok-123');
+
+    const rawAfterSecond = await readFile(configPath, 'utf8');
+    expect(rawAfterSecond).toBe(rawAfterFirst);
+  });
+});
