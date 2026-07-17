@@ -202,6 +202,23 @@
             "uninstallSuccess": "Deleted",
             "uninstallError": "Delete failed"
         },
+        "upload": {
+            "sourceOptions": "Choose upload source",
+            "orChoose": "or choose",
+            "selectFile": "Choose skill file",
+            "selectFileHint": "Select one or more .zip or SKILL.md files",
+            "selectFolder": "Choose skill folder",
+            "selectFolderHint": "Select one or more skill folders containing SKILL.md",
+            "recommended": "Recommended",
+            "invalidSource": "Choose a valid .zip, SKILL.md, or skill folder containing SKILL.md",
+            "selectedFolderCount": "{{count}} skill folders selected",
+            "selectedFileCount": "{{count}} skill files selected",
+            "selectedItemNames": "{{names}}",
+            "selectedFolderNamesMore": "{{names}} and {{count}} folders total",
+            "selectedFileNamesMore": "{{names}} and {{count}} skill files total",
+            "batchUploading": "Installing {{current}}/{{total}}...",
+            "batchFailed": "Completed {{completed}}/{{total}}. Remaining uploads stopped: {{error}}"
+        },
         "loading": "Loading...",
         "syncingUserSkills": "Syncing your skills...",
         "noSkills": "No skills available"
