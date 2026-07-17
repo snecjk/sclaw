@@ -16,6 +16,7 @@ import {
 import type { ChatSession } from '@/stores/chat/types';
 import { useChatStore } from '@/stores/chat';
 import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
+import { handleSidebarSessionDoubleClick } from '@/lib/sidebar-project-session-navigation';
 
 export interface SidebarRecentSessionRowProps {
   session: ChatSession;
@@ -87,7 +88,7 @@ export function SidebarRecentSessionRow({
           }}
           onBlur={onCommitRename}
           className={cn(
-            'w-full rounded-[8px] border border-[var(--sto-brand-6)] bg-white px-[10px] py-[6px] pr-16 text-left text-sm leading-5 text-foreground outline-none',
+            'w-full rounded-[8px] border border-[var(--sto-brand-6)] bg-card px-[10px] py-[6px] pr-16 text-left text-sm leading-5 text-foreground outline-none',
           )}
         />
       </div>
@@ -107,6 +108,7 @@ export function SidebarRecentSessionRow({
         <button
           type="button"
           onClick={onOpen}
+          onDoubleClick={() => handleSidebarSessionDoubleClick(session.key, onStartRename)}
           title={label}
           className="flex h-9 min-w-0 w-full flex-1 items-center gap-2 overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
         >
