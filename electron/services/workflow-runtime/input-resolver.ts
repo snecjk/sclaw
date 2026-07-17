@@ -11,6 +11,7 @@ export function unwrapEnvelope(value: any): any {
   if (!value || typeof value !== 'object') return value;
   if (value.kind === 'json' && 'value' in value) return value.value;
   if (value.kind === 'artifact') return value;
+  if (value.protocolVersion === 'workflow-packet/v1') return value.payload;
   if ('value' in value && Object.keys(value).some((key) => key === 'nodeId' || key === 'nodeType')) {
     return value.value;
   }
@@ -35,7 +36,7 @@ export function resolveNodeInput(node: any, ctx: RuntimeInputs): any {
     if (value !== undefined) fields[target] = value;
   }
 
-  const agentInputs = config.inputs ?? config.agentConfig?.inputs;
+  const agentInputs = config.agentConfig?.inputs ?? config.inputs;
   const sourceIds = Array.isArray(agentInputs?.sourceNodeIds) ? agentInputs.sourceNodeIds : [];
   for (const sourceId of sourceIds) {
     if (sourceId in ctx.upstream) fields[sourceId] = unwrapEnvelope(ctx.upstream[sourceId]);
@@ -47,6 +48,7 @@ export function resolveNodeInput(node: any, ctx: RuntimeInputs): any {
     }
   }
   if (agentInputs?.includeTriggerInputs) fields.trigger = ctx.runInput;
+  if (agentInputs?.includeUserInputs) fields.user = ctx.runInput;
 
   if (Object.keys(fields).length) return fields;
   if (config.sourceMode === 'node_output' && config.sourceNodeId) {

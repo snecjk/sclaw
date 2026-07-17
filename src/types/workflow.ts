@@ -220,11 +220,16 @@ export interface WorkflowRunNodeRun {
 
 export interface WorkflowRunArtifact {
   id: string;
+  kind?: string;
+  nodeId?: string;
   name: string;
   type: string;
   url: string;
   previewUrl?: string;
   tempUrl?: string;
+  filePath?: string;
+  uri?: string;
+  contentType?: string;
   size?: number;
 }
 
@@ -250,6 +255,18 @@ export interface WorkflowRunClientResult {
   status?: string | null;
   data?: unknown;
   artifacts?: Array<{
+    id?: string;
+    name?: string;
+    kind?: string;
+    type?: string;
+    url?: string;
+    tempUrl?: string;
+    previewUrl?: string;
+    filePath?: string;
+    contentType?: string;
+    size?: number;
+  }>;
+  processFiles?: Array<{
     id?: string;
     name?: string;
     kind?: string;

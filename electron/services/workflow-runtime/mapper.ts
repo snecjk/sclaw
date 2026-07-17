@@ -37,6 +37,7 @@ export interface WfNodeRunRow {
   input_json?: string | null;
   output_json?: string | null;
   error?: string | null;
+  last_completion_issue?: string | null;
   attempt?: number | null;
 }
 
@@ -92,7 +93,7 @@ export function mapWfRunRowToResponse(
     status: n.status,
     startedAt: n.started_at ?? undefined,
     completedAt: n.completed_at ?? undefined,
-    error: n.error ?? undefined,
+    error: n.last_completion_issue ?? n.error ?? undefined,
     input: safeParse(n.input_json, undefined),
     output: safeParse(n.output_json, undefined),
   }));
@@ -105,7 +106,10 @@ export function mapWfRunRowToResponse(
     : { inputs: parsedInput, agentContext: {}, startup: buildStartupFromDefinition(row) }) as unknown as WorkflowRunInput;
 
   // last_agent_output_json 存放 engine 产出的 client result（见 engine.ts result 落库）。
-  const result = safeParse<WorkflowRunResponse['result']>(row.last_agent_output_json, null);
+  const result = safeParse<WorkflowRunResponse['result']>(
+    row.status === 'FAILED' ? row.output_json : row.last_agent_output_json,
+    null,
+  );
 
   return {
     id: row.run_id,

@@ -23,6 +23,7 @@ import type { EngineDeps } from './engine';
 import type { WorkflowRunStatus } from '../../../shared/workflow-run-status';
 import { workflowExecLog } from './logging';
 import { configureWorkflowIdPool } from './id-pool';
+import { runWorkspacePath, workspacePath } from './workspace-paths';
 
 let cachedSdk: any = null;
 let cachedWorkflowModel: string | undefined;
@@ -87,6 +88,8 @@ export function createWorkflowRuntimeEngineDeps(): EngineDeps {
         sdk,
         ctx: { ...args.ctx, nodeId: args.nodeId },
         prompt: args.prompt,
+        cwd: workspacePath(args.ctx.runId, args.nodeId),
+        additionalDirectories: [runWorkspacePath(args.ctx.runId)],
         noProgressMs: (args as any).noProgressMs,
         deadlineMs: (args as any).deadlineMs,
         model: args.model && !['sonnet', 'haiku', 'opus'].includes(args.model)
@@ -96,6 +99,7 @@ export function createWorkflowRuntimeEngineDeps(): EngineDeps {
         allowedTools: args.allowedTools,
         allowedSkills: args.allowedSkills,
         permissionMode: args.permissionMode,
+        outputSchema: args.outputSchema,
       });
     },
     postSync: async (runId, entries) => {
@@ -110,22 +114,6 @@ export function createWorkflowRuntimeEngineDeps(): EngineDeps {
         return version;
       },
     } as any,
-    agentSpecClient: {
-      compileNode: async (args) => workflowV2BackendFetch(
-        `/agent/v2/workflows/getVersion/${encodeURIComponent(args.versionId)}/nodes/${encodeURIComponent(args.nodeId)}/compile`,
-        {
-          method: 'POST',
-          body: {
-            runId: args.runId,
-            inputs: args.inputs,
-            startupInputs: args.startupInputs,
-            startupSchema: args.startupSchema,
-            isFirstAgentNode: args.isFirstAgentNode,
-            runtimeContext: args.runtimeContext,
-          },
-        },
-      ),
-    },
     quota: async () => {
       const result = await getStoTokenQuotaService().checkTokenQuota();
       const data = result.data as Record<string, unknown>;

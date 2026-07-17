@@ -28,6 +28,7 @@ export type AgentStatus = 'succeeded' | 'failed';
 export interface InvokeResult {
   status: AgentStatus;
   rawText: string;
+  output?: unknown;
   usage?: any;
   error?: string;
 }
@@ -107,6 +108,8 @@ export interface InvokeArgs {
   allowedTools?: string[];
   allowedSkills?: string[];
   permissionMode?: string;
+  /** Passed to Claude Agent SDK outputFormat; the SDK, not prompt parsing, enforces the shape. */
+  outputSchema?: Record<string, unknown>;
 }
 
 export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
@@ -149,6 +152,7 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
     settings: args.model ? { model: args.model } : undefined,
     includePartialMessages: true,
     allowedTools: args.allowedTools?.length ? args.allowedTools : undefined,
+    outputFormat: args.outputSchema ? { type: 'json_schema', schema: args.outputSchema } : undefined,
     skills: args.allowedSkills?.length ? args.allowedSkills : undefined,
     // Deliberately exclude all 5 chat runtime extensions for the workflow agent:
     // no mcpServers, hooks, plugins, or systemPrompt. Do not pass `skills` here:
@@ -169,6 +173,7 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
   let rawText = '';
   let streamedText = '';
   let usage: any;
+  let structuredOutput: unknown;
   let lastMsgAt = Date.now();
   let settled = false;
   let watchdog: ReturnType<typeof setInterval> | undefined;
@@ -278,16 +283,17 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
           }
           if (msg?.type === 'result') {
             usage = msg.usage;
+            structuredOutput = msg.structured_output;
             const agentError = detectAgentExecutionError(rawText);
             finish(agentError
               ? { status: 'failed', rawText, usage, error: agentError }
-              : { status: 'succeeded', rawText, usage });
+              : { status: 'succeeded', rawText, usage, output: structuredOutput });
           }
         }
         const agentError = detectAgentExecutionError(rawText);
         finish(agentError
           ? { status: 'failed', rawText, usage, error: agentError }
-          : { status: 'succeeded', rawText, usage });
+          : { status: 'succeeded', rawText, usage, output: structuredOutput });
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e);
         finish({ status: 'failed', rawText, error: message });

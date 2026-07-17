@@ -5,7 +5,7 @@
 import { ipcMain, BrowserWindow, shell, dialog, app, nativeImage } from 'electron';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, extname, basename } from 'node:path';
+import { join, extname, basename, dirname } from 'node:path';
 import crypto from 'node:crypto';
 import { enrichGatewayPayload } from '../gateway/message-enrich';
 import { getAdapterForSession, listEngineSessions } from '../engines/manager';
@@ -2277,7 +2277,21 @@ function registerShellHandlers(): void {
 
   // Open path in file explorer
   ipcMain.handle('shell:showItemInFolder', async (_, path: string) => {
-    shell.showItemInFolder(path);
+    // Artifact metadata can outlive a workspace rename or contain a legacy
+    // non-ASCII filename that was persisted with the wrong encoding.  Showing
+    // the parent directory is still useful and, unlike showItemInFolder on a
+    // missing file, never fails silently for the user.
+    if (existsSync(path)) {
+      shell.showItemInFolder(path);
+      return { opened: 'item' as const };
+    }
+    const directory = dirname(path);
+    if (existsSync(directory)) {
+      const error = await shell.openPath(directory);
+      if (!error) return { opened: 'directory' as const };
+      return { opened: 'none' as const, error };
+    }
+    return { opened: 'none' as const, error: '文件及其所在目录均不存在' };
   });
 
   // Open path

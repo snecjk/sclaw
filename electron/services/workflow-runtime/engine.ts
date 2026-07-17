@@ -23,10 +23,12 @@ import { recoverOnLaunch, resumeRun } from './crash-recovery';
 import { cancelAgent } from './agent-runner';
 import { findStartNode, generatePlan, validateWorkflowDefinition } from './plan-generator';
 import { buildConditionContext, resolveNodeInput } from './input-resolver';
-import { runWorkspacePath, workspacePath } from './workspace-paths';
+import { workspacePath } from './workspace-paths';
 import { workflowExecLog } from './logging';
 import { formatShanghaiIso } from '../../../shared/workflow-timestamp';
 import { hydrateNodeInputFiles } from './node-input-files';
+import { createFailurePacket, createWorkflowPacket, isWorkflowPacket } from './workflow-packet';
+import { normalizeRuntimeDefinition } from './runtime-definition';
 
 const SMART_TYPES = new Set(['agent_task', 'agent_data_fetch', 'agent_data_process', 'agent_condition', 'agent_output']);
 const nowIso = () => formatShanghaiIso();
@@ -46,11 +48,6 @@ export interface EngineDeps {
   /** Event bridge for renderer timelines. The event is already durable before this callback fires. */
   onEvent?: (runId: string, event: { sequence: number; type: string; nodeId?: string }) => void;
   dslClient: { fetchVersion(workflowId: string, versionId: string): Promise<any> };  // GET /agent/v2/workflows/getVersion/{version_pk}
-  agentSpecClient: { compileNode(args: {
-    workflowId: string; versionId: string; runId: string; nodeId: string; inputs: any;
-    startupInputs: Record<string, unknown>; startupSchema: Record<string, unknown>;
-    isFirstAgentNode: boolean; runtimeContext: Record<string, unknown>;
-  }): Promise<AgentRunSpec> };
 }
 
 export interface StartRunArgs {
@@ -106,6 +103,7 @@ export function createEngine(deps: EngineDeps) {
     meta?: { workflowId?: string; versionId?: string },
     initialInput?: any,
   ): Promise<void> {
+    def = normalizeRuntimeDefinition(def);
     const nodes: any[] = def?.nodes ?? [];
     const edges: any[] = def?.edges ?? [];
     const existingNodeRuns = await repo.listNodeRuns(runId).catch(() => []);
@@ -185,20 +183,7 @@ export function createEngine(deps: EngineDeps) {
           workflowId: runSnapshotBase.workflow_id,
           versionId: runSnapshotBase.version_id,
         });
-        const spec = await deps.agentSpecClient.compileNode({
-          workflowId: String(runSnapshotBase.workflow_id ?? ''),
-          versionId: String(runSnapshotBase.version_id ?? ''),
-          runId,
-          nodeId: cur.id,
-          inputs: nodeInput,
-          startupInputs: runInput,
-          startupSchema,
-          isFirstAgentNode: !hasExecutedSmartNode,
-          runtimeContext: {
-            workspacePath: workspacePath(runId, cur.id),
-            runWorkspacePath: runWorkspacePath(runId),
-          },
-        });
+        const spec = compileLocalAgentSpec(cur, agentCtx, runSnapshotBase.version_id);
         const agentResult = await runAgentNodeWithRetry(agentCtx, cur, spec, { invokeAgent: deps.invokeAgent, quota: deps.quota });
         if (agentResult.status === 'succeeded') hasExecutedSmartNode = true;
         result = { action: agentResult.status === 'succeeded' ? 'continue' : 'pause', output: agentResult.output };
@@ -217,19 +202,25 @@ export function createEngine(deps: EngineDeps) {
           return;
         }
         if (agentResult.status === 'failed') {
-          const changed = await repo.updateRunIfActive(runId, { status: 'FAILED', error: agentResult.error, completed_at: nowIso() });
+          const failurePacket = isWorkflowPacket(agentResult.output) ? agentResult.output : createFailurePacket({
+            runId, nodeId: cur.id, nodeType: cur.type, attempt: maxNodeAttempt(existingNodeRuns, cur.id),
+            code: 'AGENT_EXECUTION_FAILED', category: 'agent_execution', message: agentResult.error ?? '智能节点执行失败', retryable: false,
+          });
+          const finalResult = await buildFailureResult(runId, cur.id, failurePacket);
+          const changed = await repo.updateRunIfActive(runId, { status: 'FAILED', error: agentResult.error, output_json: stringifyJson(finalResult), completed_at: nowIso() });
           if (!changed) return;
-          await repo.upsertNodeRun({ run_id: runId, node_id: cur.id, node_type: cur.type, status: 'FAILED', input_json: nodeInputJson, output_json: stringifyJson(agentResult.output), completed_at: nowIso() });
+          await repo.upsertNodeRun({ run_id: runId, node_id: cur.id, node_type: cur.type, status: 'FAILED', input_json: nodeInputJson, output_json: stringifyJson(failurePacket), last_completion_issue: agentResult.error, completed_at: nowIso() });
           await repo.enqueueOutbox(runId, 'node_run', `${runId}:${cur.id}`, {
             run_id: runId,
             node_id: cur.id,
             node_type: cur.type,
             status: 'FAILED',
             input_json: nodeInputJson,
-            output_json: stringifyJson(agentResult.output),
+            output_json: stringifyJson(failurePacket), last_completion_issue: agentResult.error,
           }, 'progress');
           await finalizeUnfinishedNodeRuns(runId, 'failed', cur.id);
-          await repo.enqueueOutbox(runId, 'run', runId, { ...runSnapshotBase, status: 'FAILED', error: agentResult.error, completed_at: nowIso() }, 'terminal');
+          await makeCtx(runId, def, seqRef).emit('workflow.failed', { nodeId: cur.id, error: agentResult.error, failure: failurePacket }, cur.id);
+          await repo.enqueueOutbox(runId, 'run', runId, { ...runSnapshotBase, status: 'FAILED', error: agentResult.error, output_json: stringifyJson(finalResult), completed_at: nowIso() }, 'terminal');
           workflowExecLog('error', 'run-failed', 'agent node failed workflow run', {
             runId,
             workflowId: runSnapshotBase.workflow_id,
@@ -241,11 +232,8 @@ export function createEngine(deps: EngineDeps) {
           deps.onStatusChange?.(runId, 'failed', { error: agentResult.error });
           return;
         }
-        const normalizedAgentOutput = cur.type === 'agent_condition'
-          ? normalizeAgentConditionOutput(agentResult.output, cur.config?.branches)
-          : agentResult.output;
-        result.output = normalizedAgentOutput;
-        const lastAgentOutputJson = stringifyJson(normalizedAgentOutput ?? {});
+        result.output = await materializeAgentOutputArtifact(runId, cur, agentResult.output);
+        const lastAgentOutputJson = stringifyJson(agentResult.output ?? {});
         await repo.upsertRun({
           run_id: runId,
           last_agent_output_json: lastAgentOutputJson,
@@ -316,6 +304,15 @@ export function createEngine(deps: EngineDeps) {
       } else {
         // 逻辑节点：trigger 使用整次运行输入，其它节点使用已成功上游节点的 output map。
         result = await executeLogicNode(cur, nodeInput, makeCtx(runId, def, seqRef));
+      }
+      if (!isWorkflowPacket(result.output)) {
+        const legacyOutput: any = result.output ?? {};
+        result.output = createWorkflowPacket({
+          runId, nodeId: cur.id, nodeType: cur.type,
+          attempt: maxNodeAttempt(existingNodeRuns, cur.id), payload: legacyOutput,
+          status: cur.type === 'human_approval' || cur.type === 'user_input' ? 'waiting' : 'succeeded',
+          selectedPort: legacyOutput?.branchKey ?? legacyOutput?.branch ?? null,
+        });
       }
       if (!(await isRunActive(runId))) return;
       if (cur.type === 'output') result.output = await materializeOutput(runId, cur, result.output);
@@ -411,6 +408,21 @@ export function createEngine(deps: EngineDeps) {
   }
 
   async function materializeOutput(runId: string, node: any, output: any): Promise<any> {
+    // An agent_output HTML delivery has already been materialized and uploaded
+    // in its own workspace.  The terminal node must promote that exact file,
+    // not stringify the whole upstream map into a second result.json.
+    const htmlDelivery = findHtmlDelivery(output?.payload ?? output);
+    if (htmlDelivery) {
+      const existing = (await repo.listArtifacts(runId)).find((artifact: any) =>
+        artifact?.content_type === 'text/html' && artifact?.node_id !== node.id,
+      );
+      if (existing) {
+        const finalArtifact = { ...existing, kind: 'OUTPUT', summary: existing.summary ?? htmlDelivery.fileName ?? 'result.html' };
+        await repo.upsertArtifact(finalArtifact);
+        await repo.enqueueOutbox(runId, 'artifact', existing.artifact_id, finalArtifact, 'progress');
+        return output;
+      }
+    }
     const format = node.config?.format ?? 'structured_json';
     const ext = format === 'html' ? 'html' : format === 'markdown' ? 'md' : format === 'text' ? 'txt' : 'json';
     const contentType = ext === 'html' ? 'text/html' : ext === 'md' ? 'text/markdown' : ext === 'txt' ? 'text/plain' : 'application/json';
@@ -427,6 +439,116 @@ export function createEngine(deps: EngineDeps) {
       kind: 'OUTPUT', file_path: filePath, content_type: contentType, summary: node.name ?? `result.${ext}`, created_at: nowIso(),
     });
     return output;
+  }
+
+  function compileLocalAgentSpec(node: any, ctx: RunCtx, versionId: unknown): AgentRunSpec {
+    const config = node?.config ?? {};
+    // Existing published DSLs use config.task/runtime/guardrails, while newer
+    // designer nodes use config.agentConfig.*.  Read both shapes before
+    // composing the client prompt; never silently turn a historical task into
+    // an empty objective.
+    const agent = config.agentConfig ?? {};
+    const task = agent.task ?? config.task ?? {};
+    const runtime = agent.runtime ?? config.runtime ?? {};
+    const guardrails = agent.guardrails ?? config.guardrails ?? {};
+    const completionContract = guardrails.completionContract ?? config.completionContract ?? {};
+    const inputConfig = agent.inputs ?? config.inputs ?? config.input ?? {};
+    const configuredSchema = config.outputContract?.schema ?? completionContract.dataJsonSchema;
+    const dataJsonSchema = requiresHtmlArtifact(node, task, config) && isUnconstrainedObjectSchema(configuredSchema)
+      ? htmlArtifactPayloadSchema()
+      : (configuredSchema ?? { type: 'object' });
+    return {
+      schemaVersion: 'agent-run-spec/v1', workflowId: ctx.workflowId, workflowVersion: String(versionId ?? ''), runId: ctx.runId, nodeId: node.id,
+      task: { name: task.name ?? node.name ?? node.id, goal: task.goal ?? config.goal ?? config.instruction ?? '', instruction: task.instruction ?? '', outputSchema: task.outputSchema },
+      target: { provider: 'client_local', kind: node.type, model: agent.model ?? runtime.model },
+      inputs: inputConfig, allowedSkills: guardrails.allowedSkills ?? [], allowedTools: guardrails.allowedTools ?? [], outputSchema: '',
+      metadata: { branches: config.branches },
+      runtimeContext: { smartNode: { kind: node.type }, startup: { schema: ctx.startupSchema ?? {}, resolvedInputs: ctx.startupInputs ?? {} }, isFirstAgentNode: Boolean(ctx.isFirstAgentNode), workspacePath: workspacePath(ctx.runId, node.id) } as any,
+      permissionPolicy: { mode: guardrails.approvalMode === 'readonly' ? 'readonly' : 'workspace_write' }, limits: { timeoutMs: guardrails.timeoutMs, maxToolCalls: guardrails.maxToolCalls },
+      completionContract: {
+        resultKind: completionContract.resultKind,
+        dataJsonSchema,
+        outputJsonSchema: completionContract.outputJsonSchema ?? { type: 'object' },
+        responseExample: completionContract.responseExample,
+        maxAttempts: config.maxAttempts ?? completionContract.maxAttempts ?? 2,
+        onIncomplete: completionContract.onIncomplete ?? 'retry',
+      },
+      guardrails: { timeoutMs: guardrails.timeoutMs }, prompt: '',
+    };
+  }
+
+  /**
+   * HTML is a delivery format, not a suggestion hidden in a task sentence.
+   * New DSLs should set businessConfig.formatPreference='html'; the goal text
+   * fallback keeps already published DSLs such as "生成Html并输出最终结果" safe.
+   */
+  function requiresHtmlArtifact(node: any, task: any, config: any): boolean {
+    if (node?.type !== 'agent_output') return false;
+    const declaredFormat = [
+      config?.businessConfig?.formatPreference,
+      config?.formatPreference,
+      config?.outputFormat,
+      task?.outputFormat,
+    ].filter((value) => typeof value === 'string').join(' ').toLowerCase();
+    if (declaredFormat.includes('html')) return true;
+    const legacyIntent = [task?.goal, task?.instruction, config?.businessConfig?.goal, config?.goal, config?.instruction]
+      .filter((value) => typeof value === 'string').join(' ');
+    return /html/i.test(legacyIntent);
+  }
+
+  function htmlArtifactPayloadSchema(): Record<string, unknown> {
+    return {
+      type: 'object', additionalProperties: false, required: ['html'],
+      properties: {
+        html: { type: 'string', minLength: 15, description: '完整 HTML 文档内容' },
+        fileName: { type: 'string', pattern: '^[^\\\\/:*?"<>|]+\\.html?$', description: '可选的 HTML 文件名' },
+      },
+    };
+  }
+
+  function isUnconstrainedObjectSchema(schema: unknown): boolean {
+    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return true;
+    const value = schema as Record<string, unknown>;
+    return value.type === 'object'
+      && !Array.isArray(value.required)
+      && (!value.properties || (typeof value.properties === 'object' && Object.keys(value.properties as object).length === 0));
+  }
+
+  async function materializeAgentOutputArtifact(runId: string, node: any, output: unknown): Promise<unknown> {
+    const config = node?.config ?? {};
+    const agent = config.agentConfig ?? {};
+    const task = agent.task ?? config.task ?? {};
+    if (!requiresHtmlArtifact(node, task, config) || !isWorkflowPacket(output)) return output;
+    const payload = output.payload;
+    const html = payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as any).html : undefined;
+    if (typeof html !== 'string' || html.trim().length < 15) {
+      throw new Error(`HTML 输出节点 ${node.name ?? node.id} 未返回有效 payload.html`);
+    }
+    const requestedName = typeof (payload as any).fileName === 'string' ? (payload as any).fileName.trim() : '';
+    const fileName = /^[^\\/:*?"<>|]+\.html?$/i.test(requestedName) ? requestedName : 'result.html';
+    const directory = workspacePath(runId, node.id);
+    const filePath = path.join(directory, fileName);
+    await mkdir(directory, { recursive: true });
+    await writeFile(filePath, html, 'utf8');
+    const info = await stat(filePath);
+    const idHash = createHash('sha1').update(`${runId}:${node.id}:${filePath}`).digest('hex').slice(0, 16);
+    const artifactId = `${runId}:${node.id}:${idHash}`;
+    const artifacts = output.artifacts.filter((artifact) => artifact.artifactId !== artifactId);
+    return {
+      ...output,
+      artifacts: [...artifacts, {
+        artifactId, kind: 'OUTPUT', name: fileName, contentType: 'text/html',
+        uri: `artifact://${runId}/${node.id}/${artifactId}`, size: info.size,
+      }],
+    };
+  }
+
+  async function buildFailureResult(runId: string, failedNodeId: string, failure: unknown): Promise<any> {
+    const nodeRuns = await repo.listNodeRuns(runId);
+    return {
+      protocolVersion: 'workflow-execution-result/v1', status: 'failed', failedNodeId, failure,
+      completedNodeIds: nodeRuns.filter((nodeRun) => nodeRun.status === 'SUCCEEDED').map((nodeRun) => nodeRun.node_id),
+    };
   }
 
   return {
@@ -579,11 +701,12 @@ export function createEngine(deps: EngineDeps) {
   };
 
   async function completeWaitingNode(runId: string, nodeId: string, nodeType: string, output: any): Promise<void> {
-    const payload = { run_id: runId, node_id: nodeId, node_type: nodeType, status: 'SUCCEEDED', output_json: stringifyJson(output), completed_at: nowIso() };
+    const packet = createWorkflowPacket({ runId, nodeId, nodeType, status: 'succeeded', payload: output });
+    const payload = { run_id: runId, node_id: nodeId, node_type: nodeType, status: 'SUCCEEDED', output_json: stringifyJson(packet), completed_at: nowIso() };
     await repo.upsertNodeRun(payload);
     await repo.enqueueOutbox(runId, 'node_run', `${runId}:${nodeId}`, payload, 'progress');
     const seq = await repo.nextEventSequence(runId);
-    const event = { run_id: runId, sequence: seq, type: nodeType === 'human_approval' ? 'approval.decided' : 'user_input.submitted', node_id: nodeId, message: stringifyJson(output) };
+    const event = { run_id: runId, sequence: seq, type: nodeType === 'human_approval' ? 'approval.decided' : 'user_input.submitted', node_id: nodeId, message: stringifyJson(packet) };
     await repo.insertEvent(event);
     await repo.enqueueOutbox(runId, 'event', `${runId}:${seq}`, event, 'progress');
   }
@@ -627,20 +750,41 @@ export function createEngine(deps: EngineDeps) {
     const declaredPaths = collectFilePaths(output);
     const discoveredPaths = await listWorkspaceFiles(workspacePath(runId, nodeId));
     const paths = [...new Set([...declaredPaths, ...discoveredPaths])];
+    const declaredArtifacts = isWorkflowPacket(output) ? output.artifacts : [];
     await Promise.all(paths.map(async (filePath) => {
       const idHash = createHash('sha1').update(`${runId}:${nodeId}:${filePath}`).digest('hex').slice(0, 16);
+      const artifactId = `${runId}:${nodeId}:${idHash}`;
+      // A packet-declared HTML delivery is OUTPUT even though it is produced by
+      // an agent node before the terminal `output` node. Do not overwrite that
+      // classification with the generic INTERMEDIATE default during upload.
+      const declared = declaredArtifacts.find((artifact) => artifact.artifactId === artifactId);
       await uploadArtifact({ repo, uploadOssFile: deps.uploadOssFile }, {
-        artifact_id: `${runId}:${nodeId}:${idHash}`,
+        artifact_id: artifactId,
         run_id: runId,
         node_id: nodeId,
-        kind,
+        kind: declared?.kind ?? kind,
         file_path: filePath,
-        content_type: contentTypeForPath(filePath),
-        summary: path.basename(filePath),
+        content_type: declared?.contentType ?? contentTypeForPath(filePath),
+        summary: declared?.name ?? path.basename(filePath),
         created_at: nowIso(),
       });
     }));
   }
+}
+
+function findHtmlDelivery(value: unknown, depth = 0): { html: string; fileName?: string } | null {
+  if (depth > 4 || !value || typeof value !== 'object') return null;
+  if (!Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    if (typeof record.html === 'string' && record.html.trim().length >= 15) {
+      return { html: record.html, fileName: typeof record.fileName === 'string' ? record.fileName : undefined };
+    }
+    for (const nested of Object.values(record)) {
+      const match = findHtmlDelivery(nested, depth + 1);
+      if (match) return match;
+    }
+  }
+  return null;
 }
 
 async function listWorkspaceFiles(directory: string): Promise<string[]> {
@@ -670,7 +814,7 @@ function contentTypeForPath(filePath: string): string {
 /** 选下一节点：优先按分支端口匹配，未命中时走无条件默认边。 */
 function nextNode(cur: any, edges: any[], nodes: any[], output: any): any {
   const outgoing = edges.filter((e: any) => e.source === cur.id);
-  const branch = output?.branch ?? output?.branchKey ?? output?.branch_key;
+  const branch = output?.control?.selectedPort ?? output?.branch ?? output?.branchKey ?? output?.branch_key;
   let edge: any = null;
   if (branch) {
     const key = String(branch);
@@ -683,21 +827,11 @@ function nextNode(cur: any, edges: any[], nodes: any[], output: any): any {
     ));
   }
   edge ??= outgoing.find((e: any) => !e.sourcePort && !e.condition && !e.branch && !e.branchKey);
-  edge ??= outgoing[0];
+  // A graph with several unconditional outgoing edges is invalid at preflight;
+  // never make execution depend on array ordering.
+  if (!edge && outgoing.length > 1) throw new Error(`节点 ${cur.id} 存在多个未绑定出边`);
   if (!edge) return null;
   return nodes.find((n: any) => n.id === edge.target) ?? null;
-}
-
-function normalizeAgentConditionOutput(output: any, branches: any[]): any {
-  const base = output && typeof output === 'object' ? output : { data: output };
-  const candidate = base.branch ?? base.branchKey ?? base.branch_key
-    ?? base.data?.branch ?? base.data?.branchKey ?? base.data?.branch_key;
-  const allowed = Array.isArray(branches) ? branches.map((branch) => branch?.branchKey ?? branch?.key).filter(Boolean) : [];
-  const fallback = Array.isArray(branches)
-    ? branches.find((branch) => branch?.isFallback)?.branchKey ?? branches.find((branch) => branch?.isFallback)?.key
-    : undefined;
-  const branch = allowed.includes(candidate) ? candidate : fallback ?? candidate;
-  return { ...base, branch, branchKey: branch, branch_key: branch };
 }
 
 function buildUpstreamMap(nodeRuns: any[]): Record<string, any> {
@@ -707,6 +841,10 @@ function buildUpstreamMap(nodeRuns: any[]): Record<string, any> {
     upstream[n.node_id] = parseJson(n.output_json);
   }
   return upstream;
+}
+
+function maxNodeAttempt(nodeRuns: any[], nodeId: string): number {
+  return Number(nodeRuns.find((nodeRun) => nodeRun.node_id === nodeId)?.attempt_count ?? 0);
 }
 
 function resolveStartupSchema(definition: any): Record<string, unknown> {

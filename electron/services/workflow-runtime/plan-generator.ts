@@ -6,6 +6,7 @@ import { copyFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { workspacePath } from './workspace-paths';
+import { normalizeRuntimeDefinition, validateRuntimeDefinition } from './runtime-definition';
 const nowIso = () => formatShanghaiIso();
 
 export interface GeneratePlanArgs { repo: RunCtx['repo']; dslClient: { fetchVersion(workflowId: string, versionId: string): Promise<any> };
@@ -34,7 +35,7 @@ export async function generatePlan(args: GeneratePlanArgs): Promise<string> {
     inputKeys: Object.keys(input ?? {}).join(','),
   });
   const versionDefinition = await dslClient.fetchVersion(workflowId, versionId);
-  const definition = versionDefinition?.definition ?? versionDefinition?.workflow ?? versionDefinition;
+  const definition = normalizeRuntimeDefinition(versionDefinition?.definition ?? versionDefinition?.workflow ?? versionDefinition);
   const nodes: any[] = definition.nodes ?? [];
   validateWorkflowDefinition(definition);
   const ordered = topoSort(nodes, definition.edges ?? []);
@@ -117,20 +118,5 @@ export function findStartNode(nodes: any[], edges: any[]): any | undefined {
 }
 
 export function validateWorkflowDefinition(definition: any): void {
-  const nodes = Array.isArray(definition?.nodes) ? definition.nodes : [];
-  const edges = Array.isArray(definition?.edges) ? definition.edges : [];
-  if (!nodes.length) throw new Error('工作流定义没有节点');
-  const ids = new Set<string>();
-  for (const node of nodes) {
-    if (!node?.id || !node?.type) throw new Error('工作流节点缺少 id 或 type');
-    if (ids.has(node.id)) throw new Error(`工作流节点 ID 重复: ${node.id}`);
-    ids.add(node.id);
-  }
-  for (const edge of edges) {
-    if (!ids.has(edge?.source) || !ids.has(edge?.target)) {
-      throw new Error(`工作流连线引用不存在节点: ${edge?.source ?? '?'} -> ${edge?.target ?? '?'}`);
-    }
-  }
-  topoSort(nodes, edges);
-  if (!findStartNode(nodes, edges)) throw new Error('工作流定义没有可执行起点');
+  validateRuntimeDefinition(normalizeRuntimeDefinition(definition));
 }

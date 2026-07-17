@@ -8,8 +8,9 @@
  * retry-context prompt：第 2+ 次 attempt 把 lastError 喂回 prompt，提示"重做前先检查副作用"。
  */
 import type { RunCtx, AgentRunSpec, AgentNodeResult } from './types';
-import { createProcessFileWriter, normalizeAgentResultOutput, reconcileProcessFiles, validateDeclaredArtifactFiles, validateOutputAgainstSchema, extractJsonFromText } from './agent-output';
-import { runWorkspacePath, workspacePath } from './workspace-paths';
+import { validateOutputAgainstSchema } from './agent-output';
+import { buildWorkflowNodePrompt } from './prompt-builder';
+import { createFailurePacket, validateWorkflowPacket, workflowPacketJsonSchema } from './workflow-packet';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const backoff = (a: number) => Math.min(30_000, 1000 * 2 ** (a - 1));
@@ -36,6 +37,7 @@ export type InvokeAgentFn = (args: {
   allowedSkills?: string[];
   permissionMode?: string;
   model?: string;
+  outputSchema?: Record<string, unknown>;
 }) =>
   Promise<{ status: 'succeeded' | 'failed'; rawText: string; output?: any; usage?: any; error?: string }>;
 
@@ -78,9 +80,9 @@ export async function runAgentNodeWithRetry(
     await ctx.repo.incrementNodeAttempt(ctx.runId, node.id);
     await ctx.emit('agent.attempt.start', { attempt }, node.id);
 
-    // 智能节点 prompt 由云端 compiler 完整生成；客户端不得解释配置或追加业务提示。
-    const prompt = spec.prompt;
-    if (!prompt?.trim()) return { status: 'failed', error: 'cloud compiled agent prompt is empty' };
+    // The client owns the prompt contract.  Never consume server-compiled prose
+    // or recover JSON from the assistant's chat text.
+    const prompt = `${buildWorkflowNodePrompt(spec, node, ctx)}${lastError ? `\n\n上次结构化校验失败：${lastError}。请按 schema 重新生成完整结果。` : ''}`;
     // 与服务端智能节点执行口径一致：在实际调用 Agent 前固化本次 prompt。
     // 重试会覆盖为最新一次尝试的 prompt，便于排查最终生效的上下文。
     await ctx.repo.upsertNodeRun({
@@ -117,8 +119,12 @@ export async function runAgentNodeWithRetry(
         deadlineMs: spec.guardrails?.timeoutMs ? Math.max(spec.guardrails.timeoutMs * 2, spec.guardrails.timeoutMs + 60_000) : undefined,
         allowedTools: spec.allowedTools,
         allowedSkills: spec.allowedSkills,
-        permissionMode: spec.permissionPolicy?.mode,
-        model: spec.target.model,
+      permissionMode: spec.permissionPolicy?.mode,
+      model: spec.target.model,
+      outputSchema: workflowPacketJsonSchema(contract.dataJsonSchema ?? node.config?.outputContract?.schema, {
+        runId: ctx.runId, nodeId: node.id, nodeType: node.type, allowedPorts: Array.isArray(node.config?.branches) ? node.config.branches.map((branch: any) => branch?.branchKey ?? branch?.key).filter(Boolean) : undefined,
+        requireSelectedPort: node.type === 'agent_condition',
+      }),
         onStreamEvent: async (event) => {
           if (event.type === 'agent.tool_start') toolCalls += 1;
           await ctx.emit(event.type, event, node.id);
@@ -137,12 +143,6 @@ export async function runAgentNodeWithRetry(
       await ctx.emit('agent.usage', result.usage, node.id);
     }
 
-    // 输出规整：output 为空时从 rawText 抽 JSON
-    let normalized = normalizeAgentResultOutput(
-      result.output ?? extractJsonFromText(result.rawText),
-      contract, node.type, { rawText: result.rawText, processFileWriter: createProcessFileWriter(ctx.runId, node.id) });
-    normalized = await reconcileProcessFiles(normalized, workspacePath(ctx.runId, node.id));
-
     if (result.status === 'failed') {
       lastError = result.error ?? 'Agent execution failed.';
       await ctx.emit('agent.attempt.failed', { attempt, error: lastError }, node.id);
@@ -150,20 +150,41 @@ export async function runAgentNodeWithRetry(
       continue;
     }
 
-    const artifactValidation = await validateDeclaredArtifactFiles(normalized, runWorkspacePath(ctx.runId));
-    const v = artifactValidation.ok ? validateOutputAgainstSchema(contract.outputJsonSchema, normalized) : artifactValidation;
-    if (v.ok) {
+    const packet = result.output;
+    if (!packet) {
+      lastError = '模型未返回 SDK 结构化结果';
+      lastOutput = createFailurePacket({ runId: ctx.runId, nodeId: node.id, nodeType: node.type, attempt, code: 'RESULT_STRUCTURED_OUTPUT_MISSING', category: 'output_validation', message: lastError, retryable: attempt < maxAttempts });
+      lastRaw = result.rawText ?? '';
+      await ctx.emit('completion.retry_scheduled', { attempt, reason: lastError, code: 'RESULT_STRUCTURED_OUTPUT_MISSING' }, node.id);
+      await sleep(backoff(attempt));
+      continue;
+    }
+    const ports = Array.isArray(node.config?.branches)
+      ? node.config.branches.map((branch: any) => branch?.branchKey ?? branch?.key).filter(Boolean)
+      : undefined;
+    const packetValidation = validateWorkflowPacket(packet, {
+      runId: ctx.runId, nodeId: node.id, nodeType: node.type, allowedPorts: ports,
+      requireSelectedPort: node.type === 'agent_condition',
+    });
+    const v = packetValidation.ok
+      ? validateOutputAgainstSchema(contract.dataJsonSchema ?? node.config?.outputContract?.schema ?? { type: 'object' }, packetValidation.packet.payload)
+      : { ok: false, reason: packetValidation.message };
+    if (v.ok && packetValidation.ok) {
       await ctx.repo.upsertNodeRun({
         run_id: ctx.runId, node_id: node.id, node_type: node.type,
         status: 'RUNNING', prompt_text: prompt, last_completion_issue: null,
       });
       await ctx.emit('agent.attempt.succeeded', { attempt }, node.id);
-      return { status: 'succeeded', output: normalized, rawText: result.rawText, usage: result.usage };
+      return { status: 'succeeded', output: packetValidation.packet, rawText: result.rawText, usage: result.usage };
     }
 
     // 校验失败 → 记 last_completion_issue + 重试
     lastError = v.reason ?? 'Agent output validation failed.';
-    lastOutput = normalized;
+    lastOutput = createFailurePacket({
+      runId: ctx.runId, nodeId: node.id, nodeType: node.type, attempt,
+      code: packetValidation.ok ? 'RESULT_SCHEMA_INVALID' : packetValidation.code,
+      category: 'output_validation', message: lastError, retryable: attempt < maxAttempts,
+    });
     lastRaw = result.rawText ?? '';
     await ctx.repo.upsertNodeRun({
       run_id: ctx.runId,

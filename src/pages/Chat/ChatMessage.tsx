@@ -51,6 +51,7 @@ import {
   unwrapPreviewablePathMarkdown,
   findWorkflowParamsSummaryAfterIntro,
   isWorkflowStartAssistantBoilerplate,
+  isWorkflowCompletionTranscript,
   resolveAssistantCopyShareContent,
 } from './message-utils';
 import { writeCopyShareFilesToClipboard, writeCopyShareTextToClipboard } from '@/lib/copy-share-clipboard';
@@ -223,13 +224,15 @@ export const ChatMessage = memo(function ChatMessage({
     const runIds = [...text.matchAll(RUN_ID_IN_TEXT)].map((m) => m[1]).filter(Boolean);
     for (let i = runIds.length - 1; i >= 0; i -= 1) {
       const runId = runIds[i]!;
-      if (!workflowCardStates[runId]) continue;
       const exec = getExecutionByRunId(runId, sessionKey);
       const card = { runId, templateName: exec?.templateName ?? '工作流' };
       return resolveCard(card);
     }
     return null;
   }, [isUser, message, text, workflowCardStates, sessionKey, sessionMessages]);
+  const isWorkflowCompletionMessage = !isUser
+    && workflowCard !== null
+    && isWorkflowCompletionTranscript(text);
   const parameterForm = useMemo(() => {
     if (isUser) return null;
     return resolveParameterFormForAssistantMessage(message, {
@@ -318,14 +321,14 @@ export const ChatMessage = memo(function ChatMessage({
   const displayNameHints = useMemo(() => extractDisplayFileNameHints(text), [text]);
 
   const previewFiles = useMemo(
-    () => applyDisplayNameHints(
+    () => isWorkflowCompletionMessage ? [] : applyDisplayNameHints(
       mergePreviewFileLists(
         attachedFiles,
         extractedRefs.map((ref) => ({ ...ref, fileSize: 0, preview: null })),
       ),
       displayNameHints,
     ),
-    [attachedFiles, extractedRefs, displayNameHints],
+    [isWorkflowCompletionMessage, attachedFiles, extractedRefs, displayNameHints],
   );
 
   useEffect(() => {
@@ -403,7 +406,7 @@ export const ChatMessage = memo(function ChatMessage({
   const showAssistantParamsFold =
     !isUser && workflowCard !== null && /参数已确认/.test(text);
   const assistantBubbleText =
-    showAssistantParamsFold && isWorkflowStartAssistantBoilerplate(text) ? '' : text;
+    (showAssistantParamsFold && isWorkflowStartAssistantBoilerplate(text)) || isWorkflowCompletionMessage ? '' : text;
   const showAssistantTextBubble = assistantBubbleText.trim().length > 0;
   const assistantCopyShareContent = useMemo(
     () => {

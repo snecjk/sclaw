@@ -24,6 +24,8 @@ import {
 } from '@/components/ui/sheet';
 import { Textarea } from '@/components/ui/textarea';
 import type { WorkflowExecutionState, WorkflowRunArtifact, WorkflowRunResponse } from '@/types/workflow';
+import { invokeIpc } from '@/lib/api-client';
+import { isHttpUrl, openExternalUrl } from '@/lib/preview-url';
 
 interface TestRunDrawerProps {
   open: boolean;
@@ -48,6 +50,7 @@ interface TestRunDrawerProps {
 type View = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
 type TimelineTone = 'default' | 'running' | 'success' | 'danger' | 'tool' | 'artifact';
 type TimelineItem = { id: string; label: string; detail?: string; timestamp?: string; tone: TimelineTone };
+type DisplayArtifact = WorkflowRunArtifact & { source: 'final' | 'process' };
 
 const STATUS_LABEL: Record<string, string> = {
   pending: '准备中', running: '运行中', waiting_approval: '待审批', waiting_input: '待填写',
@@ -181,19 +184,135 @@ function ExecutionTimeline({ items }: { items: TimelineItem[] }) {
   );
 }
 
-function ArtifactList({ artifacts }: { artifacts: WorkflowRunArtifact[] }) {
+function normalizeResultArtifact(
+  artifact: NonNullable<NonNullable<WorkflowRunResponse['result']>['artifacts']>[number],
+  index: number,
+  source: 'final' | 'process',
+): DisplayArtifact {
+  const filePath = artifact.filePath?.trim();
+  const url = artifact.previewUrl?.trim() || artifact.url?.trim() || filePath || '';
+  return {
+    // WorkflowPacket v1 uses artifactId while historical API payloads use id.
+    // Preserve that identity so the same file from run.artifacts and result
+    // does not appear twice in the drawer.
+    id: artifact.id ?? (artifact as any).artifactId ?? `${source}-${index}-${artifact.name ?? filePath ?? url}`,
+    name: artifact.name ?? filePath?.split(/[\\/]/).pop() ?? url.split('/').pop() ?? 'artifact',
+    kind: artifact.kind,
+    type: artifact.contentType ?? artifact.type ?? artifact.kind ?? 'file',
+    url,
+    previewUrl: artifact.previewUrl,
+    tempUrl: artifact.tempUrl,
+    filePath,
+    contentType: artifact.contentType,
+    size: artifact.size,
+    source,
+  };
+}
+
+function collectDisplayArtifacts(
+  run: WorkflowRunResponse | null,
+  executionState: WorkflowExecutionState | null,
+): DisplayArtifact[] {
+  const items: DisplayArtifact[] = [];
+  for (const artifact of run?.artifacts ?? []) {
+    const kind = artifact.kind?.toUpperCase();
+    items.push({
+      ...artifact,
+      source: kind && kind !== 'OUTPUT' ? 'process' : 'final',
+    });
+  }
+  run?.result?.artifacts?.forEach((artifact, index) => {
+    items.push(normalizeResultArtifact(artifact, index, 'final'));
+  });
+  run?.result?.processFiles?.forEach((artifact, index) => {
+    items.push(normalizeResultArtifact(artifact, index, 'process'));
+  });
+  for (const artifact of executionState?.result?.artifacts ?? []) {
+    items.push({ ...artifact, source: 'final' });
+  }
+
+  const seen = new Set<string>();
+  return items.filter((artifact) => {
+    const key = artifact.id || artifact.filePath || artifact.previewUrl || artifact.url;
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getArtifactTarget(artifact: DisplayArtifact): string {
+  return artifact.previewUrl?.trim()
+    || artifact.tempUrl?.trim()
+    || artifact.url?.trim()
+    || artifact.filePath?.trim()
+    || '';
+}
+
+function openArtifact(artifact: DisplayArtifact): void {
+  const target = getArtifactTarget(artifact);
+  if (!target) return;
+  if (isHttpUrl(target)) {
+    openExternalUrl(target);
+    return;
+  }
+  const localPath = artifact.filePath?.trim()
+    || (target.startsWith('file://') ? decodeURIComponent(target.replace(/^file:\/\/\/?/, '')) : target);
+  if (localPath) void invokeIpc('shell:openPath', localPath);
+}
+
+function ArtifactSection({ title, description, artifacts }: { title: string; description: string; artifacts: DisplayArtifact[] }) {
+  return (
+    <section className="space-y-2">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+        <span className="text-xs text-muted-foreground">{artifacts.length} 个</span>
+      </div>
+      {artifacts.length === 0 ? (
+        <div className="rounded-md border border-dashed border-slate-200 bg-background px-4 py-6 text-sm text-muted-foreground">暂无{title}</div>
+      ) : (
+        <ul className="space-y-2">
+          {artifacts.map((artifact) => {
+            const target = getArtifactTarget(artifact);
+            return (
+              <li key={`${artifact.source}:${artifact.id}`} className="flex items-center gap-3 rounded-md border border-border bg-background px-4 py-3">
+                <FileDown className="h-4 w-4 shrink-0 text-orange-500" />
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 truncate text-left text-sm font-medium hover:text-orange-600 hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
+                  disabled={!target}
+                  title={target || artifact.name}
+                  onClick={() => openArtifact(artifact)}
+                >
+                  {artifact.name}
+                </button>
+                <span className={`rounded-full px-2 py-0.5 text-xs ${artifact.source === 'final' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
+                  {artifact.source === 'final' ? '最终产物' : '过程产物'}
+                </span>
+                <span className="max-w-[140px] truncate text-xs text-muted-foreground">{artifact.contentType ?? artifact.type}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function ArtifactList({ artifacts }: { artifacts: DisplayArtifact[] }) {
   if (artifacts.length === 0) {
     return <div className="py-12 text-center"><p className="font-medium text-foreground">未找到可预览产物</p><p className="mt-2 text-sm text-muted-foreground">运行已完成，但没有可用于查看的输出产物。</p></div>;
   }
-  return <ul className="space-y-2">
-    {artifacts.map((artifact) => (
-      <li key={artifact.id} className="flex items-center gap-3 rounded-md border border-border bg-background px-4 py-3">
-        <FileDown className="h-4 w-4 shrink-0 text-orange-500" />
-        <a className="min-w-0 flex-1 truncate text-sm font-medium hover:underline" href={artifact.previewUrl || artifact.url} target="_blank" rel="noreferrer">{artifact.name}</a>
-        <span className="text-xs text-muted-foreground">{artifact.type}</span>
-      </li>
-    ))}
-  </ul>;
+  const finalArtifacts = artifacts.filter((artifact) => artifact.source === 'final');
+  const processArtifacts = artifacts.filter((artifact) => artifact.source === 'process');
+  return (
+    <div className="space-y-5">
+      <ArtifactSection title="最终产物" description="面向用户交付或下游消费的结果文件。" artifacts={finalArtifacts} />
+      <ArtifactSection title="过程产物" description="节点执行过程中产生的中间文件、调试文件或过程数据。" artifacts={processArtifacts} />
+    </div>
+  );
 }
 
 export function TestRunDrawer(props: TestRunDrawerProps) {
@@ -203,7 +322,7 @@ export function TestRunDrawer(props: TestRunDrawerProps) {
   const status = props.executionState?.status ?? (props.isStarting ? 'pending' : 'pending');
   const view: View = props.launchError || status === 'failed' || status === 'timeout' ? 'failed' : status === 'cancelled' ? 'cancelled' : status === 'completed' ? 'completed' : props.isStarting || props.isRunActive || status === 'waiting_approval' || status === 'waiting_input' ? 'running' : 'pending';
   const timeline = useMemo(() => buildTimeline(props.run, props.executionState), [props.run, props.executionState]);
-  const artifacts = props.run?.artifacts ?? props.executionState?.result?.artifacts ?? [];
+  const artifacts = useMemo(() => collectDisplayArtifacts(props.run, props.executionState), [props.run, props.executionState]);
   const activeRunId = props.run?.id ?? props.runId;
   const startedAt = props.run?.startedAt ?? props.executionState?.startedAt;
   const eventCount = props.run?.events.length ?? timeline.length;
@@ -215,7 +334,7 @@ export function TestRunDrawer(props: TestRunDrawerProps) {
           <div className="flex items-center gap-3">
             <span className="h-3 w-3 rounded-full bg-orange-400 shadow-[0_0_0_6px_rgba(251,146,60,0.14)]" />
             <h2 className="text-xl font-semibold">{view === 'completed' ? '试运行结果' : '试运行'}</h2>
-            {props.workflowVersionId != null ? <span className="text-sm text-muted-foreground">当前运行版本 v{props.workflowVersionId}</span> : null}
+            {props.workflowVersionId != null ? <span className="text-sm text-muted-foreground">版本ID: {props.workflowVersionId}</span> : null}
             {props.isDraftSnapshot ? <span className="rounded-full bg-orange-50 px-2 py-1 text-xs text-orange-700">当前 V2 草稿试运行</span> : null}
           </div>
           <div className="flex items-center gap-2">

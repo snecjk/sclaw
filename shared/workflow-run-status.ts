@@ -298,7 +298,9 @@ function isIntermediateArtifactKind(kind: string | undefined): boolean {
 
 /**
  * Return user-facing final artifacts only. Local execution persists inputs and
- * every node's files for audit/sync, but only output-node files are results.
+ * every node's files for audit/sync.  A client `agent_output` may already have
+ * a materialized OUTPUT artifact before the terminal output node; it is a
+ * user-facing result as well, not an intermediate merely because of node type.
  */
 export function collectFinalRunArtifacts(run: WorkflowRunApiPayload): WorkflowRunArtifact[] {
   if (resolveWorkflowRunStatus(run) !== 'completed') return [];
@@ -320,7 +322,10 @@ export function collectFinalRunArtifacts(run: WorkflowRunApiPayload): WorkflowRu
 
   let finalRows: WorkflowRunArtifact[];
   if (outputNodeIds.size > 0) {
-    finalRows = topLevel.filter((artifact) => artifact.nodeId && outputNodeIds.has(artifact.nodeId));
+    finalRows = topLevel.filter((artifact) => (
+      (artifact.nodeId && outputNodeIds.has(artifact.nodeId))
+      || artifact.kind?.trim().toUpperCase() === 'OUTPUT'
+    ));
   } else if (explicit.length > 0) {
     const names = new Set(explicit.map((artifact) => artifact.name).filter(Boolean));
     finalRows = topLevel.filter((artifact) => names.has(artifact.name));
