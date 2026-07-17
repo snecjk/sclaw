@@ -99,6 +99,7 @@
         "mem0ai": "^3.0.13",
         "ms": "^2.1.3",
         "node-machine-id": "^1.1.12",
+        "ollama": "^0.5.18",
         "posthog-node": "^5.28.0",
         "pptx-preview": "^1.0.7",
         "uri-js": "^4.4.1",

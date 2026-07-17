@@ -54,6 +54,9 @@ importers:
       node-machine-id:
         specifier: ^1.1.12
         version: 1.1.12
+      ollama:
+        specifier: ^0.5.18
+        version: 0.5.18
       posthog-node:
         specifier: ^5.28.0
         version: 5.38.2
