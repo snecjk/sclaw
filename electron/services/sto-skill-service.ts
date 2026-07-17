@@ -97,11 +97,7 @@ export class StoSkillService {
     if (params.limit) qs.set('limit', String(params.limit));
 
     const url = `${baseUrl}/agent/v1/skills/marketplace?${qs.toString()}`;
-    logger.info(`[StoSkillService] search: ${url}`);
-
     const res = await fetch(url, { method: 'GET', headers });
-    logger.info(`[StoSkillService] search: ${res.status} ${res.statusText} ${res.body}`);
-
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       throw new Error(`STO 技能搜索失败 (${res.status}): ${text}`);
@@ -131,9 +127,7 @@ export class StoSkillService {
    */
   async install(params: StoSkillInstallParams): Promise<void> {
     // Prevent concurrent installs for the same skill slug
-    while (this.installLocks.has(params.slug)) {
-      logger.info(`[StoSkillService] install: waiting for previous install of ${params.slug} to complete`);
-      await this.installLocks.get(params.slug);
+    while (this.installLocks.has(params.slug)) {      await this.installLocks.get(params.slug);
     }
 
     const installPromise = this.doInstall(params);
@@ -153,8 +147,6 @@ export class StoSkillService {
 
     const headers = buildStoMemoryCenterAuthHeaders(token);
     const url = `${baseUrl}/agent/v1/skills/slug/${encodeURIComponent(params.slug)}/download?network=external`;
-    logger.info(`[StoSkillService] install: downloading ${url}`);
-
     const res = await proxyAwareFetch(url, {
       method: 'GET',
       headers,
@@ -222,9 +214,7 @@ export class StoSkillService {
         if (params.force && fs.existsSync(userTargetDir)) {
           await safeRemoveDir(userTargetDir, { label: userTargetDir });
         }
-        await this.copyDir(targetDir, userTargetDir);
-        logger.info(`[StoSkillService] install: ${params.slug} copied to user workspace ${userTargetDir}`);
-      }
+        await this.copyDir(targetDir, userTargetDir);      }
 
       // Update lock.json with metadata from search results
       this.updateLockFile(params.slug, {
@@ -246,8 +236,6 @@ export class StoSkillService {
         });
       }
 
-      logger.info(`[StoSkillService] install: ${params.slug} installed to ${targetDir}`);
-
       // Mirror agent-scoped installs to any project agents derived from this base agent.
       if (params.agentId) {
         await syncBaseAgentSkillInstall(params.agentId, params.slug).catch((error) => {
@@ -263,8 +251,6 @@ export class StoSkillService {
         fs.unlinkSync(tmpZipPath);
       }
     }
-
-    logger.info(`[StoSkillService] install: ${params.slug} installed to ${path.join(skillsDir, params.slug)}`);
   }
 
   /**
@@ -368,11 +354,7 @@ export class StoSkillService {
         await this.copyDir(targetDir, userTargetDir);
         // Also write marker in user workspace copy
         const userMarkerPath = path.join(userTargetDir, USER_UPLOAD_MARKER_NAME);
-        fs.writeFileSync(userMarkerPath, `${JSON.stringify(markerPayload, null, 2)}\n`, 'utf-8');
-        logger.info(`[StoSkillService] uploadSkill: ${slug} synced to user workspace ${userTargetDir}`);
-      }
-
-      logger.info(`[StoSkillService] uploadSkill: ${slug} installed to ${targetDir}`);
+        fs.writeFileSync(userMarkerPath, `${JSON.stringify(markerPayload, null, 2)}\n`, 'utf-8');      }
       return { slug };
     } finally {
       if (stagingActive && fs.existsSync(stagingDir)) {
@@ -409,13 +391,9 @@ export class StoSkillService {
       : this.skillsDir;
     const skillDir = path.join(skillsDir, params.slug);
     const disabledDir = path.join(this.getDisabledDir(), params.slug);
-    if (fs.existsSync(skillDir)) {
-      logger.info(`[StoSkillService] uninstall: removing ${skillDir}`);
-      await safeRemoveDir(skillDir, { label: skillDir });
+    if (fs.existsSync(skillDir)) {      await safeRemoveDir(skillDir, { label: skillDir });
     }
-    if (fs.existsSync(disabledDir)) {
-      logger.info(`[StoSkillService] uninstall: removing disabled ${disabledDir}`);
-      await safeRemoveDir(disabledDir, { label: disabledDir });
+    if (fs.existsSync(disabledDir)) {      await safeRemoveDir(disabledDir, { label: disabledDir });
     }
 
     // For global uninstall, also remove from user workspace
@@ -543,8 +521,6 @@ export class StoSkillService {
       logger.warn(`[StoSkillService] SKILL.md not found in ${targetDir}, skipping hoist`);
       return;
     }
-
-    logger.info(`[StoSkillService] found SKILL.md in nested dir: ${skillMdDir}, hoisting to ${targetDir}`);
 
     // Move all contents from the found directory up to targetDir.
     // If a destination already exists and is a directory (e.g. nested dir with same name as targetDir),
@@ -787,9 +763,7 @@ export class StoSkillService {
         description: lockInfo?.description || mdDescription || undefined,
         author: lockInfo?.author,
         versionSource: mdVersion ? 'skill-md-backfill' : 'directory-scan',
-      });
-      logger.info(`[StoSkillService] backfillLockVersions: ${slug} -> ${version}`);
-    }
+      });    }
   }
 
   /** Read description from SKILL.md YAML frontmatter. */
@@ -902,9 +876,7 @@ export class StoSkillService {
         }
 
         if (patched !== fmBlock) {
-          fs.writeFileSync(skillMdPath, patched + rest);
-          logger.info(`[StoSkillService] patched frontmatter in ${skillMdPath}`);
-        }
+          fs.writeFileSync(skillMdPath, patched + rest);        }
       } else if (meta.name || meta.description) {
         // No frontmatter at all – prepend one
         const lines: string[] = ['---'];
@@ -918,9 +890,7 @@ export class StoSkillService {
         lines.push('---');
         lines.push('');
 
-        fs.writeFileSync(skillMdPath, lines.join('\n') + raw);
-        logger.info(`[StoSkillService] injected frontmatter into ${skillMdPath}`);
-      }
+        fs.writeFileSync(skillMdPath, lines.join('\n') + raw);      }
     } catch (err) {
       logger.warn('[StoSkillService] Failed to ensure frontmatter:', err);
     }

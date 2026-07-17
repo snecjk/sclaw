@@ -35,9 +35,7 @@ async function removeDirBestEffort(dirPath: string, label: string): Promise<bool
   }
 
   try {
-    await safeRemoveDir(dirPath, { label });
-    logger.info(`[retired-skills] removed ${label}: ${dirPath}`);
-    return true;
+    await safeRemoveDir(dirPath, { label });    return true;
   } catch (error) {
     logger.warn(
       `[retired-skills] could not remove ${label} (${dirPath}); ` +
@@ -63,9 +61,7 @@ export async function cleanupRetiredSkillsAndPlugins(
 
   try {
     const configUpdated = await removeRetiredPluginsFromOpenClawConfig();
-    if (configUpdated) {
-      logger.info('[retired-skills] removed retired plugins from openclaw.json');
-    }
+    if (configUpdated) {    }
   } catch (error) {
     logger.warn('[retired-skills] failed to update openclaw.json:', error);
   }
@@ -79,9 +75,7 @@ export async function cleanupRetiredSkillsAndPlugins(
     await removeDirBestEffort(join(claudeSkillsRoot, slug), `skill ${slug} (claude bridge)`);
   }
 
-  if (options.skipPluginDirs) {
-    logger.debug('[retired-skills] skipping plugin extension dirs (caller requested)');
-    return;
+  if (options.skipPluginDirs) {    return;
   }
 
   for (const pluginId of RETIRED_PLUGIN_IDS) {

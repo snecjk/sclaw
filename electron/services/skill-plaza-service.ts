@@ -171,9 +171,6 @@ class PythonApiClient {
     const baseUrl = await resolveStoBaseUrl();
     const headers = await this.getAuthHeaders();
     const url = `${baseUrl}${endpoint}`;
-
-    logger.info(`[PythonApiClient] ${method} ${url}`);
-
     // Abort the underlying fetch on timeout so a slow STO backend cannot hang
     // the whole request chain up to the outer 15s IPC timeout.
     const controller = new AbortController();
@@ -1076,9 +1073,7 @@ export class SkillPlazaService {
     let categoryDefs: CategoryDef[] = [];
     try {
       categoryDefs = await this.getCategories();
-      labelToSlug = new Map(categoryDefs.map((c) => [c.label, c.slug]));
-      logger.info(`[getLocalSkills] categories loaded: ${categoryDefs.map((c) => `${c.label}=${c.slug}`).join(', ')}`);
-    } catch (err) {
+      labelToSlug = new Map(categoryDefs.map((c) => [c.label, c.slug]));    } catch (err) {
       if (isSkillPlazaAuthNotReadyError(err)) throw err;
       logger.warn('[SkillPlazaService] Failed to fetch categories for local skills:', err);
     }
@@ -1087,9 +1082,7 @@ export class SkillPlazaService {
     // pull, used to enrich official skills' title/description/category.
     let plazaSkillMap = new Map<string, SkillSummary>();
     try {
-      plazaSkillMap = await this.fetchPlazaEnrichmentIndex(labelToSlug, snapshot);
-      logger.info(`[getLocalSkills] loaded ${plazaSkillMap.size} plaza skills for categorization`);
-    } catch (err) {
+      plazaSkillMap = await this.fetchPlazaEnrichmentIndex(labelToSlug, snapshot);    } catch (err) {
       logger.warn('[SkillPlazaService] Failed to fetch plaza skills for categorization:', err);
     }
 
@@ -1180,9 +1173,7 @@ export class SkillPlazaService {
           }
 
           finalCategory = resolvedLabel;
-          finalCategoryCode = resolvedCode;
-          logger.info(`[getLocalSkills] resolved for ${slug}: isOfficial=${isOfficial}, finalCategoryCode=${finalCategoryCode}, finalCategory=${finalCategory}, summary.category=${summary.category}, plazaHas=${plazaSkillMap.has(slug)}`);
-        }
+          finalCategoryCode = resolvedCode;        }
 
         // 技能广场目录中存在该 slug 时，展示 title/description 以 plaza 为准（与技能广场 tab 一致）
         const displayTitle = plazaSkill?.title ? plazaSkill.title : summary.title || slug;

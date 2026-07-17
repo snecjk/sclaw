@@ -239,8 +239,6 @@ export async function syncMountPointToUser(userCode: string): Promise<void> {
   if (fs.existsSync(globalLockPath)) {
     fs.copyFileSync(globalLockPath, userLockPath);
   }
-
-  logger.info(`[UserSkillWorkspace] Synced mount point to user ${userCode}`);
 }
 
 /**
@@ -323,8 +321,6 @@ async function fetchCloudInstalledList(): Promise<string[]> {
     'Content-Type': 'application/json',
   };
   const url = `${baseUrl}/agent/v1/skills/plaza/installed`;
-  logger.info(`[UserSkillWorkspace] Fetching cloud installed list: ${url}`);
-
   const res = await fetch(url, { method: 'GET', headers });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -345,8 +341,6 @@ async function downloadSkillZip(slug: string, targetDir: string): Promise<void> 
 
   const headers = buildStoMemoryCenterAuthHeaders(token);
   const url = `${baseUrl}/agent/v1/skills/slug/${encodeURIComponent(slug)}/download?network=external`;
-  logger.info(`[UserSkillWorkspace] Downloading skill ${slug}: ${url}`);
-
   const res = await proxyAwareFetch(url, {
     method: 'GET',
     headers,
@@ -505,9 +499,7 @@ async function downloadMissingSkills(
       const mountDir = path.join(globalSkillsDir, slug);
       await copyDir(targetUserDir, mountDir);
 
-      downloaded.push(slug);
-      logger.info(`[UserSkillWorkspace] Downloaded and installed skill ${slug} for user ${userCode}`);
-    } catch (err) {
+      downloaded.push(slug);    } catch (err) {
       logger.error(`[UserSkillWorkspace] Failed to download skill ${slug}:`, err);
       failed.push(slug);
     }
@@ -594,8 +586,6 @@ async function migrateLegacySkillsToUser(userCode: string): Promise<void> {
   if (fs.existsSync(globalLockPath)) {
     fs.copyFileSync(globalLockPath, userLockPath);
   }
-
-  logger.info(`[UserSkillWorkspace] Migrated legacy skills to user ${userCode}, backup at ${backupDir}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -635,9 +625,7 @@ export async function activateUserWorkspace(userCode: string): Promise<ActivateW
   // global mount (such as ones generated via natural-language chat) would be wiped
   // by clearMountPoint() below and never restored.
   if (previousUserCode) {
-    await syncMountPointToUser(previousUserCode);
-    logger.info(`[UserSkillWorkspace] Saved mount point to user ${previousUserCode}`);
-  }
+    await syncMountPointToUser(previousUserCode);  }
 
   // Migration
   if (detectLegacyGlobalSkills()) {
@@ -664,11 +652,6 @@ export async function activateUserWorkspace(userCode: string): Promise<ActivateW
 
   // Save current user
   await setCurrentActiveUserCode(userCode);
-
-  logger.info(
-    `[UserSkillWorkspace] Activated workspace for user ${userCode}. ` +
-    `migrated=${result.migrated}, downloaded=${result.downloaded.length}, failed=${result.failed.length}`,
-  );
 
   return result;
 }

@@ -385,8 +385,6 @@ async function installMonoDwsSkillFromReleaseZip(bundled: DwsBundledManifest): P
     if (!existsSync(join(skillDir, 'SKILL.md'))) {
       throw new Error('dws skill install failed: SKILL.md missing after extract');
     }
-
-    logger.info(`dws skill installed: ${skillDir}`);
   } finally {
     try {
       await rm(tmpDir, { recursive: true, force: true });
@@ -437,9 +435,7 @@ async function installDwsSkillToClaudeCodeDir(): Promise<void> {
   if (!result.ok) {
     logger.warn(`dws skill setup for Claude Code failed (non-fatal): ${result.error ?? ''}`);
     return;
-  }
-  logger.info('dws skill installed to ~/.claude/skills/ for Claude Code');
-}
+  }}
 
 async function installBinaryFromManifest(
   bundled: DwsBundledManifest,
@@ -636,9 +632,7 @@ export async function installOrUpdateDwsCli(
         installedAt: new Date().toISOString(),
         bundledByStoClawVersion: app.getVersion(),
       });
-      ensureDwsBinInPath();
-      logger.info(`dws skill repaired under ${getDwsOpenClawSkillDir()}`);
-      return {
+      ensureDwsBinInPath();      return {
         success: true,
         path: target,
         version: normalizeDwsVersion(local.dwsVersion),
