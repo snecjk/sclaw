@@ -57,6 +57,52 @@ export interface WorkspaceArtifactOutputRuleOptions {
   workspaceAbsolutePath?: string | null;
 }
 
+export const WORKSPACE_ARTIFACT_OUTPUT_BEGIN = '<!-- stoclaw-artifact-output:begin -->';
+export const WORKSPACE_ARTIFACT_OUTPUT_END = '<!-- stoclaw-artifact-output:end -->';
+
+/** Short durable rule block for AGENTS.md / CLAUDE.md under a workspace. */
+export function buildWorkspaceArtifactOutputAgentsMdSection(
+  workspaceAbsolutePath?: string | null,
+): string {
+  const workspaceRoot = (workspaceAbsolutePath ?? '').trim().replace(/\\/g, '/').replace(/\/+$/, '');
+  const outputAbs = workspaceRoot
+    ? getWorkspaceArtifactOutputRelPath(workspaceRoot)
+    : `./${WORKSPACE_ARTIFACT_OUTPUT_DIRNAME}`;
+  const rootHint = workspaceRoot || '当前工作区根目录';
+
+  return [
+    '## 📦 本地产物输出（硬性规则）',
+    '',
+    '本工作区生成的本地产物（HTML / 报告 / SQL / 代码 / 文档 / 表格等）**必须**写入：',
+    '',
+    `\`${outputAbs}/<文件名>\``,
+    '',
+    `- ⛔ 禁止写入工作区根目录 \`${rootHint}/\`（不要把产物直接落在项目根）`,
+    `- ⛔ 禁止 \`outputs/\`、\`output/\`、桌面、Downloads、skill 目录或其他自定义目录`,
+    `- 目录 \`${WORKSPACE_ARTIFACT_OUTPUT_DIRNAME}/\` 通常已存在；若不存在先创建再写`,
+    '- 回复中的本地文件必须用绝对路径 Markdown 链接：`[文件名](file:///绝对路径)`',
+  ].join('\n');
+}
+
+/** Idempotently merge the artifact-output section into bootstrap markdown. */
+export function mergeWorkspaceArtifactOutputSection(
+  existing: string,
+  workspaceAbsolutePath?: string | null,
+): string {
+  const section = [
+    WORKSPACE_ARTIFACT_OUTPUT_BEGIN,
+    buildWorkspaceArtifactOutputAgentsMdSection(workspaceAbsolutePath),
+    WORKSPACE_ARTIFACT_OUTPUT_END,
+  ].join('\n');
+  const beginIdx = existing.indexOf(WORKSPACE_ARTIFACT_OUTPUT_BEGIN);
+  const endIdx = existing.indexOf(WORKSPACE_ARTIFACT_OUTPUT_END);
+  if (beginIdx !== -1 && endIdx !== -1 && endIdx > beginIdx) {
+    return `${existing.slice(0, beginIdx)}${section}${existing.slice(endIdx + WORKSPACE_ARTIFACT_OUTPUT_END.length)}`;
+  }
+  if (!existing.trim()) return `${section}\n`;
+  return `${existing.trimEnd()}\n\n${section}\n`;
+}
+
 /** System-prompt lines for local artifact output rules. */
 export function buildWorkspaceArtifactOutputRule(
   defaultWorkspaceTilde: string = DEFAULT_WORKSPACE_TILDE,
@@ -71,12 +117,14 @@ export function buildWorkspaceArtifactOutputRule(
   const lines: string[] = [];
   if (outputAbs && workspaceRoot) {
     lines.push(
-      `- 【P0 本会话产物目录】本地产物必须写入：\`${outputAbs}/<文件名>\`（绝对路径）；⛔ 禁止写入工作区根目录 \`${workspaceRoot}/\` 下的文件（不要把 html/报告/sql 直接落在项目根）。`,
+      `- 【P0 硬性约束·本会话产物目录】本地产物（HTML/报告/SQL/代码/文档/表格等）**只能**写入：\`${outputAbs}/<文件名>\`（绝对路径）。`,
+      `- ⛔ **禁止**写入工作区根目录 \`${workspaceRoot}/\` 下的任何文件（不要把 html/报告/sql/md 直接落在项目根）。`,
+      `- ⛔ **禁止**写入 \`${workspaceRoot}/outputs/\`、\`${workspaceRoot}/output/\`、桌面、Downloads、skill 目录。`,
     );
   }
   lines.push(
-    `- 写入：本地产物必须 save 到当前 workspace 的 \`./${WORKSPACE_ARTIFACT_OUTPUT_DIRNAME}/<文件名>\`（子目录，不是工作区根）；目录通常已存在，若不存在先创建再写；⛔ 禁止 \`outputs/\`、\`output/\`、skill 目录；⛔ 禁止 \`~/.openclaw/workspace\` 与 \`~/.stoclaw/openclaw/workspace\`（旧路径）。`,
-    `- 默认工作区产物目录为 \`${defaultWorkspaceTilde}/${WORKSPACE_ARTIFACT_OUTPUT_DIRNAME}/\`；项目会话以当前项目目录下的 \`${WORKSPACE_ARTIFACT_OUTPUT_DIRNAME}/\` 为准（仍是子目录，不是项目根）。`,
+    `- 写入：本地产物必须 save 到当前 workspace 的 \`./${WORKSPACE_ARTIFACT_OUTPUT_DIRNAME}/<文件名>\`（**子目录**，不是工作区根）；目录通常已存在，若不存在先创建再写；⛔ 禁止 \`outputs/\`、\`output/\`、skill 目录；⛔ 禁止 \`~/.openclaw/workspace\` 与 \`~/.stoclaw/openclaw/workspace\`（旧路径）。`,
+    `- 默认工作区产物目录为 \`${defaultWorkspaceTilde}/${WORKSPACE_ARTIFACT_OUTPUT_DIRNAME}/\`；**项目会话必须以当前项目目录下的 \`${WORKSPACE_ARTIFACT_OUTPUT_DIRNAME}/\` 为准**（仍是子目录，不是项目根）。`,
     '- 路径一致：回复里的 file:/// 绝对路径必须与 write/save 实际路径逐字相同（含文件名）；⛔ 禁止写 A 名、链 B 名。',
     '- 当回复中引用用户可查看或下载的本地产物文件（HTML 报告、PDF、表格、文档等）时，必须输出绝对路径，并优先使用 file:// URL 的 Markdown 链接格式：[文件名](file:///绝对路径)。',
     `- 严禁输出相对路径链接（如 [report.md](report.md)、outputs/...、./${WORKSPACE_ARTIFACT_OUTPUT_DIRNAME}/...、./...）；必须写成绝对路径。`,

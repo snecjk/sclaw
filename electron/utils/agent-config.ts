@@ -585,7 +585,6 @@ async function provisionAgentFilesystem(
   await ensureDir(targetWorkspace);
   await ensureDir(targetAgentDir);
   await ensureDir(targetSessionsDir);
-  ensureWorkspaceArtifactOutputDir(targetWorkspace);
 
   // When inheritWorkspace is true, copy the main agent's workspace bootstrap
   // files (SOUL.md, AGENTS.md, etc.) so the new agent inherits the same
@@ -597,6 +596,9 @@ async function provisionAgentFilesystem(
   if (targetAgentDir !== sourceAgentDir) {
     await copyRuntimeFiles(sourceAgentDir, targetAgentDir);
   }
+
+  // After bootstrap files exist, ensure `.claw-output` + durable AGENTS.md rule.
+  ensureWorkspaceArtifactOutputDir(targetWorkspace);
 
   // Inject constraints into AGENTS.md（ensure* 内已 TEMP 停用英文注入）
   await ensureLongOutputConstraint(targetWorkspace);

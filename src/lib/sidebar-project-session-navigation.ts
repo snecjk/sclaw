@@ -1,7 +1,7 @@
 import type { WorkspaceDto } from '@/lib/session-catalog-api';
 import { isProjectNewChatDraftKey } from '@/stores/chat/types';
 
-/** Stable creation-time ascending order; invalid timestamps remain after dated projects. */
+/** Stable creation-time descending order (newest first); invalid timestamps remain after dated projects. */
 export function sortProjectsByCreatedAt(
   workspaces: readonly WorkspaceDto[],
 ): WorkspaceDto[] {
@@ -14,11 +14,11 @@ export function sortProjectsByCreatedAt(
     .sort((left, right) => {
       const leftTime = Number.isFinite(left.createdAt)
         ? left.createdAt
-        : Number.POSITIVE_INFINITY;
+        : Number.NEGATIVE_INFINITY;
       const rightTime = Number.isFinite(right.createdAt)
         ? right.createdAt
-        : Number.POSITIVE_INFINITY;
-      return leftTime - rightTime || left.index - right.index;
+        : Number.NEGATIVE_INFINITY;
+      return rightTime - leftTime || left.index - right.index;
     })
     .map(({ workspace }) => workspace);
 }
