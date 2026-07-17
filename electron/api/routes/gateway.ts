@@ -2,17 +2,38 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { PORTS } from '../../utils/config';
 import { buildOpenClawControlUiUrl } from '../../utils/openclaw-control-ui';
 import { getSetting } from '../../utils/store';
-import { getStoToken } from '../../utils/auth-store';
-import { buildStoMemoryCenterAuthHeaders } from '../../utils/sto-memory-api-auth';
-import { resolveStoBaseUrl } from '../../utils/sto-domain';
 import { listAgentsSnapshot } from '../../utils/agent-config';
-import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { getAdapterForSession, listEngineSessions } from '../../engines/manager';
 import type { AgentEngineType } from '../../engines/types';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { preprocessChatSendParams } from '../../utils/dingtalk-mention-send';
 import { uploadFileToTempOSS } from '../../utils/oss-temp-upload';
+import { runIdempotentChatSend } from './chat-send-idempotency';
+
+type ChatSendRouteBody = {
+  sessionKey: string;
+  message: string;
+  deliver?: boolean;
+  idempotencyKey: string;
+  systemPromptAppend?: string;
+  engineType?: AgentEngineType;
+  media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
+  dingTalkMentions?: Array<{
+    type: 'user' | 'group';
+    displayName: string;
+    userId?: string;
+    openConversationId?: string;
+    corpId?: string;
+  }>;
+  dingTalkSendFileIntent?: boolean;
+  dingTalkAttachedFiles?: Array<{
+    fileName: string;
+    filePath: string;
+    mimeType: string;
+    fileSize?: number;
+  }>;
+};
 
 export async function handleGatewayRoutes(
   req: IncomingMessage,
@@ -33,6 +54,102 @@ export async function handleGatewayRoutes(
     const agentId = getAgentIdFromSessionKey(sessionKey);
     const agent = snapshot.agents.find((entry) => entry.id.trim().toLowerCase() === agentId);
     return agent?.fileTransformByOSS === true;
+  };
+  const VISION_MIME_TYPES = new Set([
+    // Static images
+    'image/png', 'image/jpeg', 'image/bmp', 'image/webp',
+    // Animated images
+    'image/gif',
+    // Modern image formats
+    'image/avif', 'image/heic', 'image/heif', 'image/tiff',
+  ]);
+  const dispatchChatSendRequest = async (body: ChatSendRouteBody) => {
+    const adapter = await getAdapterForSession(body.sessionKey, parseEngineType(body.engineType));
+    const hasMedia = Array.isArray(body.media) && body.media.length > 0;
+    console.info('[chat-flow]', 'main.send.dispatch', {
+      sessionKey: body.sessionKey,
+      requestedEngineType: body.engineType ?? null,
+      adapterType: adapter.type,
+      hasMedia,
+      mediaCount: body.media?.length ?? 0,
+      messageLength: body.message?.length ?? 0,
+      idempotencyKey: body.idempotencyKey,
+    });
+
+    if (hasMedia && adapter.type !== 'openclaw') {
+      return adapter.sendMessageWithMedia(
+        { gatewayManager: ctx.gatewayManager },
+        {
+          sessionKey: body.sessionKey,
+          message: body.message,
+          deliver: body.deliver,
+          idempotencyKey: body.idempotencyKey,
+          systemPromptAppend: body.systemPromptAppend,
+          media: body.media,
+        },
+      );
+    }
+
+    if (!hasMedia) {
+      return adapter.sendMessage(
+        { gatewayManager: ctx.gatewayManager },
+        {
+          sessionKey: body.sessionKey,
+          message: body.message,
+          deliver: body.deliver,
+          idempotencyKey: body.idempotencyKey,
+          systemPromptAppend: body.systemPromptAppend,
+        },
+      );
+    }
+
+    const fsP = await import('node:fs/promises');
+    const imageAttachments: Array<{ content: string; mimeType: string; fileName: string }> = [];
+    const fileReferences: string[] = [];
+    const transformByOSS = await shouldTransformAttachmentsByOSS(body.sessionKey);
+
+    for (const m of body.media ?? []) {
+      if (transformByOSS) {
+        const ossTempUrl = await uploadFileToTempOSS(m.filePath, m.fileName, { bizTypeEnum: 'LLM' });
+        fileReferences.push(`[media attached: ${ossTempUrl} (${m.mimeType}) | ${ossTempUrl}]`);
+        continue;
+      }
+      fileReferences.push(`[media attached: ${m.filePath} (${m.mimeType}) | ${m.filePath}]`);
+      if (VISION_MIME_TYPES.has(m.mimeType)) {
+        const fileBuffer = await fsP.readFile(m.filePath);
+        imageAttachments.push({
+          content: fileBuffer.toString('base64'),
+          mimeType: m.mimeType,
+          fileName: m.fileName,
+        });
+      }
+    }
+
+    const message = fileReferences.length > 0
+      ? [body.message, ...fileReferences].filter(Boolean).join('\n')
+      : body.message;
+    const rpcParams: Record<string, unknown> = {
+      sessionKey: body.sessionKey,
+      message,
+      deliver: body.deliver ?? false,
+      idempotencyKey: body.idempotencyKey,
+    };
+    if (imageAttachments.length > 0) {
+      rpcParams.attachments = imageAttachments;
+    }
+    if (body.dingTalkMentions?.length) {
+      rpcParams.dingTalkMentions = body.dingTalkMentions;
+    }
+    if (body.dingTalkSendFileIntent) {
+      rpcParams.dingTalkSendFileIntent = body.dingTalkSendFileIntent;
+    }
+    if (body.dingTalkAttachedFiles?.length) {
+      rpcParams.dingTalkAttachedFiles = body.dingTalkAttachedFiles;
+    }
+    return adapter.sendMessage(
+      { gatewayManager: ctx.gatewayManager },
+      rpcParams as { sessionKey: string; message: string; deliver?: boolean; idempotencyKey: string },
+    );
   };
 
   if (url.pathname === '/api/app/gateway-info' && req.method === 'GET') {
@@ -137,38 +254,26 @@ export async function handleGatewayRoutes(
 
   if (url.pathname === '/api/chat/send' && req.method === 'POST') {
     try {
-      const rawBody = await parseJsonBody<{
-        sessionKey: string;
-        message: string;
-        deliver?: boolean;
-        idempotencyKey: string;
-        engineType?: AgentEngineType;
-        dingTalkMentions?: Array<{
-          type: 'user' | 'group';
-          displayName: string;
-          userId?: string;
-          openConversationId?: string;
-          corpId?: string;
-        }>;
-        dingTalkSendFileIntent?: boolean;
-        dingTalkAttachedFiles?: Array<{
-          fileName: string;
-          filePath: string;
-          mimeType: string;
-          fileSize?: number;
-        }>;
-      }>(req);
-      const body = await preprocessChatSendParams(rawBody) as typeof rawBody;
-      const adapter = await getAdapterForSession(body.sessionKey, parseEngineType(body.engineType));
-      const result = await adapter.sendMessage(
-        { gatewayManager: ctx.gatewayManager },
-        {
-          sessionKey: body.sessionKey,
-          message: body.message,
-          deliver: body.deliver,
-          idempotencyKey: body.idempotencyKey,
-        },
+      const rawBody = await parseJsonBody<ChatSendRouteBody>(req);
+      const body = await preprocessChatSendParams(rawBody) as ChatSendRouteBody;
+      console.info('[chat-flow]', 'main.send.received', {
+        sessionKey: body.sessionKey,
+        engineType: body.engineType ?? null,
+        mediaCount: body.media?.length ?? 0,
+        messageLength: body.message?.length ?? 0,
+        idempotencyKey: body.idempotencyKey,
+      });
+      const result = await runIdempotentChatSend(
+        body.sessionKey,
+        body.idempotencyKey,
+        () => dispatchChatSendRequest(body),
       );
+      console.info('[chat-flow]', 'main.send.result', {
+        sessionKey: body.sessionKey,
+        success: result.success,
+        runId: result.result?.runId ?? null,
+        error: result.error ?? null,
+      });
       if (!result.success) {
         sendJson(res, 500, result);
         return true;
@@ -187,117 +292,6 @@ export async function handleGatewayRoutes(
       const result = await adapter.abortRun(
         { gatewayManager: ctx.gatewayManager },
         { sessionKey: body.sessionKey },
-      );
-      if (!result.success) {
-        sendJson(res, 500, result);
-        return true;
-      }
-      sendJson(res, 200, result);
-    } catch (error) {
-      sendJson(res, 500, { success: false, error: String(error) });
-    }
-    return true;
-  }
-
-  if (url.pathname === '/api/chat/send-with-media' && req.method === 'POST') {
-    try {
-      const rawBody = await parseJsonBody<{
-        sessionKey: string;
-        message: string;
-        deliver?: boolean;
-        idempotencyKey: string;
-        engineType?: AgentEngineType;
-        media?: Array<{ filePath: string; mimeType: string; fileName: string }>;
-        dingTalkMentions?: Array<{
-          type: 'user' | 'group';
-          displayName: string;
-          userId?: string;
-          openConversationId?: string;
-          corpId?: string;
-        }>;
-        dingTalkSendFileIntent?: boolean;
-        dingTalkAttachedFiles?: Array<{
-          fileName: string;
-          filePath: string;
-          mimeType: string;
-          fileSize?: number;
-        }>;
-      }>(req);
-      const body = await preprocessChatSendParams(rawBody) as typeof rawBody;
-      const VISION_MIME_TYPES = new Set([
-        // Static images
-        'image/png', 'image/jpeg', 'image/bmp', 'image/webp',
-        // Animated images
-        'image/gif',
-        // Modern image formats
-        'image/avif', 'image/heic', 'image/heif', 'image/tiff',
-      ]);
-      const imageAttachments: Array<{ content: string; mimeType: string; fileName: string }> = [];
-      const fileReferences: string[] = [];
-      const transformByOSS = await shouldTransformAttachmentsByOSS(body.sessionKey);
-      const adapter = await getAdapterForSession(body.sessionKey, parseEngineType(body.engineType));
-      if (adapter.type !== 'openclaw') {
-        const result = await adapter.sendMessageWithMedia(
-          { gatewayManager: ctx.gatewayManager },
-          {
-            sessionKey: body.sessionKey,
-            message: body.message,
-            deliver: body.deliver,
-            idempotencyKey: body.idempotencyKey,
-            media: body.media,
-          },
-        );
-        if (!result.success) {
-          sendJson(res, 500, result);
-          return true;
-        }
-        sendJson(res, 200, result);
-        return true;
-      }
-      if (body.media && body.media.length > 0) {
-        const fsP = await import('node:fs/promises');
-        for (const m of body.media) {
-          if (transformByOSS) {
-            const ossTempUrl = await uploadFileToTempOSS(m.filePath, m.fileName, { bizTypeEnum: 'LLM' });
-            fileReferences.push(`[media attached: ${ossTempUrl} (${m.mimeType}) | ${ossTempUrl}]`);
-            continue;
-          }
-          fileReferences.push(`[media attached: ${m.filePath} (${m.mimeType}) | ${m.filePath}]`);
-          if (VISION_MIME_TYPES.has(m.mimeType)) {
-            const fileBuffer = await fsP.readFile(m.filePath);
-            imageAttachments.push({
-              content: fileBuffer.toString('base64'),
-              mimeType: m.mimeType,
-              fileName: m.fileName,
-            });
-          }
-        }
-      }
-
-      const message = fileReferences.length > 0
-        ? [body.message, ...fileReferences].filter(Boolean).join('\n')
-        : body.message;
-      const rpcParams: Record<string, unknown> = {
-        sessionKey: body.sessionKey,
-        message,
-        deliver: body.deliver ?? false,
-        idempotencyKey: body.idempotencyKey,
-      };
-      if (imageAttachments.length > 0) {
-        rpcParams.attachments = imageAttachments;
-      }
-      if (body.dingTalkMentions?.length) {
-        rpcParams.dingTalkMentions = body.dingTalkMentions;
-      }
-      if (body.dingTalkSendFileIntent) {
-        rpcParams.dingTalkSendFileIntent = body.dingTalkSendFileIntent;
-      }
-      if (body.dingTalkAttachedFiles?.length) {
-        rpcParams.dingTalkAttachedFiles = body.dingTalkAttachedFiles;
-      }
-      const result = await adapter.sendMessage(
-        { gatewayManager: ctx.gatewayManager },
-        rpcParams as { sessionKey: string; message: string; deliver?: boolean; idempotencyKey: string },
       );
       if (!result.success) {
         sendJson(res, 500, result);

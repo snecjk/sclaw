@@ -1,0 +1,400 @@
+/* SClaw in-app browser drawer — slide-in on mount; instant unmount on close */
+
+:root {
+  --sclaw-browser-toolbar-h: 44px;
+  --sclaw-browser-drawer-duration: 320ms;
+  --sclaw-browser-drawer-ease: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Disable drag-region hit testing while drawer is open (Electron ignores z-index). */
+html[data-sclaw-browser-open] .drag-region {
+  -webkit-app-region: no-drag;
+}
+
+.sclaw-browser-host {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.sclaw-browser-host--active {
+  pointer-events: auto;
+}
+
+.sclaw-browser-drawer__backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: default;
+  background: rgba(15, 23, 42, 0.12);
+  pointer-events: auto;
+  animation: sclaw-browser-backdrop-in var(--sclaw-browser-drawer-duration) var(--sclaw-browser-drawer-ease) both;
+}
+
+@keyframes sclaw-browser-backdrop-in {
+  from {
+    background: rgba(15, 23, 42, 0);
+  }
+  to {
+    background: rgba(15, 23, 42, 0.12);
+  }
+}
+
+/* Toolbar — portaled to body, above iframe/webview native layer */
+.sclaw-browser-toolbar--portal {
+  position: fixed;
+  z-index: 100000;
+  box-sizing: border-box;
+  border-radius: var(--sto-main-card-radius, 18px) var(--sto-main-card-radius, 18px) 0 0;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+/* In-host toolbar layer (deprecated — toolbar is portaled to body) */
+.sclaw-browser-toolbar--layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 60;
+}
+
+.sclaw-browser-drawer-panel {
+  position: absolute;
+  top: var(--sclaw-browser-toolbar-h);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f7f8fa;
+  box-shadow: -8px 0 32px rgba(15, 23, 42, 0.12);
+  /* clip-path — avoid transform; transform breaks Electron iframe sizing */
+  animation: sclaw-browser-drawer-in var(--sclaw-browser-drawer-duration) var(--sclaw-browser-drawer-ease) both;
+}
+
+/* Portaled panel — explicit pixel bounds from main card */
+.sclaw-browser-drawer-panel--portal {
+  position: fixed;
+  z-index: 99999;
+  top: auto;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  box-sizing: border-box;
+}
+
+@keyframes sclaw-browser-drawer-in {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.sclaw-browser-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  min-height: var(--sclaw-browser-toolbar-h);
+  padding: 8px var(--sto-content-pad-x, 16px);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.sclaw-browser-toolbar__start {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.sclaw-browser-toolbar__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.12s ease;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.sclaw-browser-toolbar__back:hover {
+  color: #0f172a;
+}
+
+.sclaw-browser-toolbar__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sclaw-browser-toolbar__external {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: #ff6700;
+  cursor: pointer;
+  text-decoration: none;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.sclaw-browser-toolbar__external:hover {
+  text-decoration: underline;
+}
+
+.sclaw-browser-toolbar__end {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.sclaw-browser-toolbar__chat {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+
+.sclaw-browser-toolbar__chat:hover,
+.sclaw-browser-toolbar__chat--active {
+  color: #ff6700;
+  background: rgba(255, 103, 0, 0.08);
+}
+
+.sclaw-browser-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4px minmax(240px, var(--sclaw-browser-chat-col, 28%));
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: #fff;
+}
+
+.sclaw-browser-split--browser-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sclaw-browser-split--resizing {
+  user-select: none;
+  cursor: col-resize;
+}
+
+.sclaw-browser-split--resizing .sclaw-browser-split__browser,
+.sclaw-browser-split--resizing .sclaw-browser-drawer__frame {
+  pointer-events: none;
+}
+
+.sclaw-browser-split__resize-shield {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+  background: transparent;
+}
+
+body.sclaw-browser-split-dragging,
+body.sclaw-browser-split-dragging * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.sclaw-browser-split__browser {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #f7f8fa;
+}
+
+.sclaw-browser-split__chat {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+}
+
+.sclaw-browser-split__resizer {
+  width: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  cursor: col-resize;
+  background: transparent;
+}
+
+.sclaw-browser-split__resizer:hover {
+  background: rgba(255, 103, 0, 0.25);
+}
+
+.sclaw-browser-embed-chat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: #fff;
+}
+
+.sclaw-browser-embed-chat__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.sclaw-browser-embed-chat__sessions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.sclaw-browser-embed-chat__session-btn,
+.sclaw-browser-embed-chat__session-picker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.04);
+  color: #64748b;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.sclaw-browser-embed-chat__session-picker {
+  width: auto;
+  min-width: 28px;
+  padding: 0 6px;
+}
+
+.sclaw-browser-embed-chat__session-btn:hover,
+.sclaw-browser-embed-chat__session-picker:hover {
+  color: #0f172a;
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.sclaw-browser-embed-chat__session-picker[data-state='open'] {
+  color: #ff6700;
+  background: rgba(255, 103, 0, 0.08);
+}
+
+.sclaw-browser-embed-chat__title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.sclaw-browser-embed-chat__subtitle {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.sclaw-browser-embed-chat__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.sclaw-browser-embed-chat__close:hover {
+  color: #475569;
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.sclaw-browser-embed-chat__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.sclaw-browser-embed-chat__error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border-top: 1px solid rgba(239, 68, 68, 0.15);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.sclaw-browser-embed-chat__composer {
+  flex-shrink: 0;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  background: #fff;
+}
+
+.sclaw-browser-drawer__frame {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  border: 0;
+}
+
+webview.sclaw-browser-drawer__frame--webview {
+  display: inline-flex;
+}

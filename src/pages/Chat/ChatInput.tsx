@@ -19,10 +19,10 @@ import {
   File,
   Loader2,
   AtSign,
-  AlertCircle,
   Bot,
   Workflow,
   ArrowUp,
+  Wrench,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { hostApiFetch } from '@/lib/host-api';
@@ -35,19 +35,23 @@ import {
   stoChatShellHomeClass,
 } from '@/lib/surfaces';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAgentsStore } from '@/stores/agents';
+import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { getProjectIdFromProjectAgentId } from '../../../shared/project-agent';
+import { useSessionCatalogStore } from '@/stores/session-catalog';
 import type { AgentSummary } from '@/types/agent';
 import { useTranslation } from 'react-i18next';
 import { DingTalkMentionEditor, type DingTalkMentionEditorHandle } from '@/components/dingtalk/DingTalkMentionEditor';
 import { DingTalkMentionPopover } from '@/components/dingtalk/DingTalkMentionPopover';
 import { WorkflowPicker } from '@/components/workflow/WorkflowPicker';
+import { SkillPicker } from '@/components/skill-plaza/SkillPicker';
 
 import { useDingTalkMention } from '@/hooks/useDingTalkMention';
-import { useAuthStore } from '@/stores/auth';
 
 import type { ActiveMentionTrigger, MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
+import { extractSkillInlineQuery /*, hasSkillInlineTrigger */ } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention, MentionSearchItem } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
 import { mentionSearchItemToMention } from '@/types/dingtalk-mention';
 import { inferMimeTypeFromPath } from '@/lib/preview-url';
 
@@ -86,6 +90,7 @@ interface ChatInputProps {
     workflowId?: string | null,
     workflowSource?: string | null,
     workflowName?: string | null,
+    skillMeta?: SkillMeta,
   ) => void;
   onStop?: () => void;
   onQueue?: (
@@ -94,6 +99,7 @@ interface ChatInputProps {
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
+    skillMeta?: SkillMeta,
   ) => void;
   disabled?: boolean;
   sending?: boolean;
@@ -105,6 +111,8 @@ interface ChatInputProps {
   variant?: 'default' | 'embedded';
   /** One-time seed into the textarea (e.g. task subitem default prompt). */
   seedText?: string;
+  /** 技能广场「使用」：预填技能标签 */
+  seedSkillSlug?: string;
   /** User-message text selected for editing and sending again. */
   editDraft?: {
     text: string;
@@ -128,22 +136,6 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-function formatBeijingDate(isoText?: string): string {
-  const date = isoText ? new Date(isoText) : new Date();
-  if (Number.isNaN(date.getTime())) return '';
-  const parts = new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-  const year = parts.find((part) => part.type === 'year')?.value ?? '';
-  const month = parts.find((part) => part.type === 'month')?.value ?? '';
-  const day = parts.find((part) => part.type === 'day')?.value ?? '';
-  if (!year || !month || !day) return '';
-  return `${year}-${month}-${day}`;
 }
 
 function FileIcon({ mimeType, className }: { mimeType: string; className?: string }) {
@@ -193,6 +185,7 @@ export function ChatInput({
   statusTone = 'warning',
   variant = 'default',
   seedText,
+  seedSkillSlug,
   editDraft = null,
   onEditDraftApplied,
   placeholder,
@@ -215,16 +208,29 @@ export function ChatInput({
   const mentionPopoverRef = useRef<HTMLDivElement>(null);
   const workflowPickerRef = useRef<HTMLDivElement>(null);
   const workflowButtonRef = useRef<HTMLButtonElement>(null);
+  const skillPickerRef = useRef<HTMLDivElement>(null);
+  const skillButtonRef = useRef<HTMLButtonElement>(null);
   const isComposingRef = useRef(false);
   const [workflowPickerOpen, setWorkflowPickerOpen] = useState(false);
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false);
+  const [skillPickerMode, setSkillPickerMode] = useState<'inline' | 'toolbar'>('inline');
   const gatewayStatus = useGatewayStore((s) => s.status);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
-  const dailyTokenQuotaStatus = useChatStore((s) => s.dailyTokenQuotaStatus);
-  const currentAgentName = useMemo(
-    () => (agents ?? []).find((agent) => agent.id === currentAgentId)?.name ?? currentAgentId,
-    [agents, currentAgentId],
-  );
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const pendingProjectId = useChatStore((s) => s.pendingProjectId);
+  const workspaces = useSessionCatalogStore((s) => s.workspaces);
+  const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
+  const currentAgentName = useMemo(() => {
+    const projectId = getProjectIdFromProjectAgentId(currentAgentId ?? '')
+      ?? sessionWorkspaceByKey[currentSessionKey]
+      ?? pendingProjectId
+      ?? null;
+    const projectName = projectId
+      ? workspaces.find((workspace) => workspace.id === projectId)?.name
+      : null;
+    return resolveAgentById(agents ?? [], currentAgentId, projectName)?.name ?? currentAgentId;
+  }, [agents, currentAgentId, currentSessionKey, pendingProjectId, sessionWorkspaceByKey, workspaces]);
   const mentionableAgents = useMemo(
     () => (agents ?? []).filter((agent) => agent.id !== currentAgentId),
     [agents, currentAgentId],
@@ -255,26 +261,9 @@ export function ChatInput({
     install: installDingTalkMention,
     installing: dingTalkInstalling,
   } = useDingTalkMention(mentionTrigger);
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const composerPlaceholder = disabled && engineType === 'openclaw'
     ? t('composer.gatewayDisconnectedPlaceholder')
     : placeholder?.trim() || t('composer.messagePlaceholder', { agent: currentAgentName });
-  const dailyTokenQuotaText = useMemo(() => {
-    const usedToday = dailyTokenQuotaStatus?.usedToday;
-    const limit = dailyTokenQuotaStatus?.limit;
-    if (!Number.isFinite(usedToday) || !Number.isFinite(limit)) return '';
-    const dayText = formatBeijingDate(dailyTokenQuotaStatus?.checkedAt);
-    if (!dayText) return '';
-    return `${dayText}: 已使用${Number(usedToday).toLocaleString('zh-CN')}/上限${Number(limit).toLocaleString('zh-CN')}`;
-  }, [dailyTokenQuotaStatus]);
-  const dailyTokenQuotaAlert = useMemo(() => {
-    const usedToday = dailyTokenQuotaStatus?.usedToday;
-    const limit = dailyTokenQuotaStatus?.limit;
-    if (!Number.isFinite(usedToday) || !Number.isFinite(limit)) return false;
-    if (dailyTokenQuotaStatus?.allowed === false) return true;
-    return Number(usedToday) > Number(limit);
-  }, [dailyTokenQuotaStatus]);
-
   // Focus editor on mount (avoids Windows focus loss after session delete + native dialog)
   useEffect(() => {
     if (!disabled) {
@@ -291,6 +280,7 @@ export function ChatInput({
     setTargetAgentId(null);
     setPickerOpen(false);
     setWorkflowPickerOpen(false);
+    setSkillPickerOpen(false);
     setMentionTrigger(null);
     closeDingTalkMention();
   }, [closeDingTalkMention]);
@@ -356,6 +346,72 @@ export function ChatInput({
       document.removeEventListener('mousedown', handlePointerDown);
     };
   }, [workflowPickerOpen]);
+
+  useEffect(() => {
+    if (!skillPickerOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (skillPickerRef.current?.contains(target)) return;
+      if (skillButtonRef.current?.contains(target)) return;
+      if (skillPickerMode === 'inline' && mentionPopoverRef.current?.contains(target)) return;
+
+      if (skillPickerMode === 'inline') {
+        mentionEditorRef.current?.consumeSkillInlineTrigger();
+      }
+      setSkillPickerOpen(false);
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [skillPickerMode, skillPickerOpen]);
+
+  // 暂时关闭 `*` 触发技能列表；恢复时取消下方注释
+  // useEffect(() => {
+  //   if (composerSnapshot.skill) return;
+  //
+  //   const hasTrigger = hasSkillInlineTrigger(composerSnapshot.plainText);
+  //
+  //   // toolbar 模式由按钮控制，不受 editor 内 `*` 影响
+  //   if (skillPickerOpen && skillPickerMode === 'toolbar') return;
+  //
+  //   if (hasTrigger) {
+  //     if (!skillPickerOpen || skillPickerMode !== 'inline') {
+  //       setWorkflowPickerOpen(false);
+  //       setSkillPickerMode('inline');
+  //       setSkillPickerOpen(true);
+  //     }
+  //     return;
+  //   }
+  //
+  //   if (skillPickerOpen && skillPickerMode === 'inline') {
+  //     setSkillPickerOpen(false);
+  //   }
+  // }, [composerSnapshot.plainText, composerSnapshot.skill, skillPickerMode, skillPickerOpen]);
+
+  const skillPickerInlineQuery = useMemo(
+    () => (skillPickerMode === 'inline' ? extractSkillInlineQuery(composerSnapshot.plainText) : ''),
+    [composerSnapshot.plainText, skillPickerMode],
+  );
+
+  const handleSkillSelect = useCallback(({ slug, title }: { slug: string; title: string }) => {
+    setSkillPickerOpen(false);
+    if (skillPickerMode === 'inline') {
+      mentionEditorRef.current?.consumeSkillInlineTrigger(skillPickerInlineQuery);
+    }
+    mentionEditorRef.current?.insertSkill(slug, title);
+    mentionEditorRef.current?.focus();
+  }, [skillPickerInlineQuery, skillPickerMode]);
+
+  const toggleSkillPickerToolbar = useCallback(() => {
+    setWorkflowPickerOpen(false);
+    setSkillPickerOpen((open) => {
+      if (!open) {
+        setSkillPickerMode('toolbar');
+      }
+      return !open;
+    });
+  }, []);
 
   const applyDingTalkMention = useCallback((item: MentionSearchItem) => {
     if (!dingTalkTrigger) return;
@@ -508,17 +564,25 @@ export function ChatInput({
 
   const allReady = attachments.length === 0 || attachments.every(a => a.status === 'ready');
   const hasFailedAttachments = attachments.some((a) => a.status === 'error');
-  const canSend = ((!composerSnapshot.isEmpty && composerSnapshot.plainText.trim().length > 0) || attachments.length > 0)
+  const canSend = ((!composerSnapshot.isEmpty && composerSnapshot.plainText.trim().length > 0)
+    || composerSnapshot.skill != null
+    || attachments.length > 0)
     && allReady
     && !disabled;
   const canStop = sending && !disabled && !!onStop;
 
   const handleSend = useCallback(() => {
-    if (!canSend) return;
     const readyAttachments = attachments.filter(a => a.status === 'ready');
     // Read DOM snapshot directly — React state can lag one frame behind the editor.
     const snapshot = mentionEditorRef.current?.getSnapshot() ?? composerSnapshot;
+    const skillMetaToSend = snapshot.skill
+      ?? composerSnapshot.skill
+      ?? mentionEditorRef.current?.readSkillMeta();
     const textToSend = snapshot.plainText.trim();
+    const canSendNow = (textToSend.length > 0 || skillMetaToSend != null || readyAttachments.length > 0)
+      && allReady
+      && !disabled;
+    if (!canSendNow) return;
     const attachmentsToSend = readyAttachments.length > 0 ? readyAttachments : undefined;
     const mentionsToSend = snapshot.mentions.length > 0 ? snapshot.mentions : undefined;
     const workflowIdToSend = snapshot.workflowId;
@@ -535,6 +599,7 @@ export function ChatInput({
       })),
       attachmentCount: readyAttachments.length,
       hasWorkflowId: Boolean(workflowIdToSend),
+      hasSkill: Boolean(skillMetaToSend),
       queued: Boolean(sending && onQueue && !workflowIdToSend),
     });
     logDingTalkMentionClient('[dingtalk-mention] chat-input: send snapshot', {
@@ -550,6 +615,8 @@ export function ChatInput({
       targetAgentId: targetAgentId ?? null,
       attachmentCount: readyAttachments.length,
       hasWorkflowId: Boolean(workflowIdToSend),
+      hasSkill: Boolean(skillMetaToSend),
+      skillSlug: skillMetaToSend?.slug ?? null,
       queued: Boolean(sending && onQueue && !workflowIdToSend),
     });
     mentionEditorRef.current?.clear();
@@ -558,15 +625,16 @@ export function ChatInput({
     // When AI is responding and queue callback is available, add to queue instead of sending directly
     // but only if no workflow is selected (workflow creation flow needs direct send)
     if (sending && onQueue && !workflowIdToSend) {
-      onQueue(textToSend, attachmentsToSend, targetAgentId, mentionsToSend, workflowIdToSend);
+      onQueue(textToSend, attachmentsToSend, targetAgentId, mentionsToSend, workflowIdToSend, skillMetaToSend);
     } else {
-      onSend(textToSend, attachmentsToSend, targetAgentId, mentionsToSend, workflowIdToSend, workflowSourceToSend, workflowNameToSend);
+      onSend(textToSend, attachmentsToSend, targetAgentId, mentionsToSend, workflowIdToSend, workflowSourceToSend, workflowNameToSend, skillMetaToSend);
     }
     setTargetAgentId(null);
     setPickerOpen(false);
     setWorkflowPickerOpen(false);
+    setSkillPickerOpen(false);
     closeDingTalkMention();
-  }, [attachments, canSend, closeDingTalkMention, composerSnapshot, onQueue, onSend, sending, targetAgentId]);
+  }, [allReady, attachments, closeDingTalkMention, composerSnapshot, disabled, onQueue, onSend, sending, targetAgentId]);
 
   const handleStop = useCallback(() => {
     if (!canStop) return;
@@ -602,6 +670,15 @@ export function ChatInput({
         }
       }
 
+      if (e.key === 'Escape' && skillPickerOpen) {
+        e.preventDefault();
+        if (skillPickerMode === 'inline') {
+          mentionEditorRef.current?.consumeSkillInlineTrigger();
+        }
+        setSkillPickerOpen(false);
+        return;
+      }
+
       if (e.key === 'Backspace' && composerSnapshot.isEmpty && targetAgentId) {
         setTargetAgentId(null);
         return;
@@ -616,8 +693,27 @@ export function ChatInput({
             closeDingTalkMention();
             setMentionTrigger(null);
           }
+          setSkillPickerOpen(false);
           setWorkflowPickerOpen(true);
         }
+      }
+
+      // 暂时关闭 `*` 触发技能列表；恢复时取消下方注释
+      // const hasSkillInEditor = !!composerSnapshot.skill;
+      // if (e.key === '*' && !hasSkillInEditor) {
+      //   const nativeEvent = e.nativeEvent as KeyboardEvent;
+      //   if (!isComposingRef.current && !nativeEvent.isComposing && nativeEvent.keyCode !== 229) {
+      //     if (dingTalkMentionOpen) {
+      //       closeDingTalkMention();
+      //       setMentionTrigger(null);
+      //     }
+      //     setWorkflowPickerOpen(false);
+      //     // 打开浮层由 plainText 同步 effect 在 `*` 写入 editor 后处理
+      //   }
+      // }
+
+      if (e.key === 'Enter' && !e.shiftKey && skillPickerOpen) {
+        return;
       }
 
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -636,9 +732,14 @@ export function ChatInput({
       dingTalkItems,
       dingTalkMentionOpen,
       composerSnapshot.isEmpty,
+      composerSnapshot.skill,
+      composerSnapshot.workflowId,
       handleSend,
       moveDingTalkActive,
+      skillPickerMode,
+      skillPickerOpen,
       targetAgentId,
+      workflowPickerOpen,
     ],
   );
 
@@ -787,7 +888,7 @@ export function ChatInput({
                 )
               : cn(attachments.length > 0 ? 'pt-1.5' : 'pt-2.5'),
           )}>
-            <div ref={mentionPopoverRef} className="relative flex-1">
+            <div ref={mentionPopoverRef} className="relative flex-1 overflow-visible">
               <DingTalkMentionPopover
                 open={dingTalkMentionOpen}
                 items={dingTalkItems}
@@ -813,6 +914,7 @@ export function ChatInput({
                 placeholder={composerPlaceholder}
                 disabled={disabled}
                 seedText={seedText}
+                seedSkillSlug={seedSkillSlug}
                 onSnapshotChange={setComposerSnapshot}
                 onTriggerChange={setMentionTrigger}
                 onKeyDown={handleKeyDown}
@@ -822,6 +924,19 @@ export function ChatInput({
                 }}
                 onCompositionEnd={() => {
                   isComposingRef.current = false;
+                }}
+              />
+              <SkillPicker
+                ref={skillPickerRef}
+                open={skillPickerOpen}
+                mode={skillPickerMode}
+                query={skillPickerInlineQuery}
+                onSelect={handleSkillSelect}
+                onClose={() => {
+                  if (skillPickerMode === 'inline') {
+                    mentionEditorRef.current?.consumeSkillInlineTrigger();
+                  }
+                  setSkillPickerOpen(false);
                 }}
               />
             </div>
@@ -850,6 +965,21 @@ export function ChatInput({
                   title={t('composer.dingTalkMention')}
                 >
                   <AtSign className="h-4 w-4" aria-hidden />
+                </Button>
+
+                <Button
+                  ref={skillButtonRef}
+                  variant="ghost"
+                  type="button"
+                  className={cn(
+                    homeToolbarIconBtn,
+                    skillPickerOpen && skillPickerMode === 'toolbar' && 'bg-primary/10 text-primary hover:bg-primary/12',
+                  )}
+                  onClick={toggleSkillPickerToolbar}
+                  disabled={disabled}
+                  title={t('composer.pickSkill')}
+                >
+                  <Wrench className="h-4 w-4" aria-hidden />
                 </Button>
 
                 {showAgentPicker ? (
@@ -901,7 +1031,10 @@ export function ChatInput({
                       homeToolbarIconBtn,
                       workflowPickerOpen && 'bg-primary/10 text-primary hover:bg-primary/12',
                     )}
-                    onClick={() => setWorkflowPickerOpen((open) => !open)}
+                    onClick={() => {
+                      setSkillPickerOpen(false);
+                      setWorkflowPickerOpen((open) => !open);
+                    }}
                     disabled={disabled}
                     title={t('composer.pickWorkflow')}
                   >
@@ -1016,6 +1149,21 @@ export function ChatInput({
                 </div>
               )}
 
+              <Button
+                ref={skillButtonRef}
+                variant="ghost"
+                type="button"
+                className={cn(
+                  'h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
+                  skillPickerOpen && skillPickerMode === 'toolbar' && 'bg-primary/10 text-primary hover:bg-primary/12',
+                )}
+                onClick={toggleSkillPickerToolbar}
+                disabled={disabled}
+                title={t('composer.pickSkill')}
+              >
+                <Wrench className="h-3.5 w-3.5" />
+              </Button>
+
               {/* Workflow picker button */}
               <div ref={workflowPickerRef} className="relative shrink-0">
                 <Button
@@ -1026,7 +1174,10 @@ export function ChatInput({
                     'h-8  rounded-full p-4 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
                     workflowPickerOpen && 'bg-primary/10 text-primary hover:bg-primary/12'
                   )}
-                  onClick={() => setWorkflowPickerOpen((open) => !open)}
+                  onClick={() => {
+                    setSkillPickerOpen(false);
+                    setWorkflowPickerOpen((open) => !open);
+                  }}
                   disabled={disabled}
                   title={t('composer.pickWorkflow')}
                 >
@@ -1117,17 +1268,6 @@ export function ChatInput({
               </div>
             ) : <div />}
             <div className="flex items-center gap-3">
-              {dailyTokenQuotaText ? (
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1 text-[11px]",
-                    dailyTokenQuotaAlert ? "text-red-500" : "text-amber-500/95",
-                  )}
-                >
-                  {dailyTokenQuotaAlert ? <AlertCircle className="h-3.5 w-3.5" /> : null}
-                  {dailyTokenQuotaText}
-                </span>
-              ) : null}
               {hasFailedAttachments && (
                 <Button
                   variant="link"

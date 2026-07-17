@@ -17,7 +17,6 @@ import { join } from 'path';
 // The actual classes are loaded dynamically in initialize() to avoid
 // blocking process startup with heavy dependency chains.
 import type { GatewayManager } from '../gateway/manager';
-import type { ClawHubService } from '../gateway/clawhub';
 import type { HostEventBus } from '../api/event-bus';
 
 // Lightweight modules needed before window creation
@@ -190,7 +189,6 @@ const gotTheLock = gotElectronLock && gotFileLock;
 // Global references
 let mainWindow: BrowserWindow | null = null;
 let gatewayManager: GatewayManager | null = null;
-let clawHubService: ClawHubService | null = null;
 let hostEventBus: HostEventBus | null = null;
 let hostApiServer: Server | null = null;
 const mainWindowFocusState = createMainWindowFocusState();
@@ -404,6 +402,16 @@ async function initialize(): Promise<void> {
   console.info(
     `[sqlite] initialized file=${sqliteInfo.filePath} journal=${sqliteInfo.journalMode} foreignKeys=${sqliteInfo.foreignKeysEnabled}`,
   );
+  const { ensureSessionCatalogBootstrapped } = await import('../services/session-catalog-service');
+  await ensureSessionCatalogBootstrapped();
+  console.info('[main] Session catalog bootstrapped; running OpenClaw session store migration...');
+  const { importOpenClawSessionStoreIfNeeded } = await import('../services/openclaw-session-store-migration');
+  await importOpenClawSessionStoreIfNeeded();
+  console.info('[main] OpenClaw session store migration complete');
+  const { registerSessionCatalogHandlers } = await import('./ipc/session-catalog-handlers');
+  registerSessionCatalogHandlers();
+  const { registerDialogHandlers } = await import('./ipc/dialog-handlers');
+  registerDialogHandlers();
 
   // Create the main window as early as possible.
   // Window shows immediately with dark background (see createWindow).
@@ -502,7 +510,7 @@ async function initialize(): Promise<void> {
   const sps = new skillPlazaMod.SkillPlazaService();
   const heb = new eventBusMod.HostEventBus();
   gatewayManager = gm;
-  clawHubService = chs;
+  // clawHubService instance is passed directly to startHostApiServer below.
   hostEventBus = heb;
 
   // Initialize Telemetry (non-blocking)
@@ -703,7 +711,9 @@ async function initialize(): Promise<void> {
   });
 
   gm.on('chat:message', (data) => {
-    heb.emit('gateway:chat-message', data);
+    if (data && typeof data === 'object' && 'engineEvent' in data) {
+      heb.emit('gateway:engine-event', (data as { engineEvent?: unknown }).engineEvent);
+    }
   });
 
   gm.on('channel:status', (data) => {
@@ -759,6 +769,14 @@ async function initialize(): Promise<void> {
   });
 
   // Install bundled plugins before Gateway so the first agent run uses the latest mirror.
+  sendStartupProgress('Preparing workspace...');
+  try {
+    const { ensureWorkspaceLayoutMigrated } = await import('../utils/workspace-migration');
+    await ensureWorkspaceLayoutMigrated();
+  } catch (error) {
+    logger.warn('Workspace layout migration failed:', error);
+  }
+
   sendStartupProgress('Installing plugins...');
   await cleanupRetiredSkillsAndPlugins().catch((error) => {
     logger.warn('Failed to cleanup retired skills/plugins before plugin install:', error);
@@ -766,6 +784,15 @@ async function initialize(): Promise<void> {
   await ensureAllBundledPluginsInstalledAsync().catch((error) => {
     logger.warn('Failed to install/upgrade bundled plugins:', error);
   });
+  try {
+    const { ensureStoBrowserBridgePluginInOpenClaw } = await import('../utils/openclaw-auth');
+    const modified = await ensureStoBrowserBridgePluginInOpenClaw();
+    if (modified) {
+      logger.info('[plugin] Enabled sto-browser-bridge in openclaw.json');
+    }
+  } catch (error) {
+    logger.warn('Failed to enable sto-browser-bridge plugin in openclaw.json:', error);
+  }
 
   // Start Gateway automatically (this seeds missing bootstrap files with full templates)
   const gatewayAutoStart = await getSetting('gatewayAutoStart');

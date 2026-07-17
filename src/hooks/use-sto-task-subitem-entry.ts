@@ -8,7 +8,6 @@ import {
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { resolveSubitemFromSessionKey } from '@/lib/sto-task-subitem-resolve';
 import { useChatStore } from '@/stores/chat';
-import { useGatewayStore } from '@/stores/gateway';
 import { useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
@@ -37,7 +36,6 @@ export function useStoTaskSubitemEntry({
   const loading = useChatStore((s) => s.loading);
   const sessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
   const markSubitemReadFromActivity = useStoTaskSubitemsStore((s) => s.markSubitemReadFromActivity);
-  const isGatewayRunning = useGatewayStore((s) => s.status.state === 'running');
   const activityForSession = useChatStore((s) => s.sessionLastActivity[currentSessionKey] ?? 0);
 
   const subitemRef = resolveSubitemFromSessionKey(currentSessionKey, sessionKeyBySubitem);
@@ -137,14 +135,14 @@ export function useStoTaskSubitemEntry({
   ]);
 
   useEffect(() => {
-    if (pendingAutoSendText === null || !isGatewayRunning || !onSend) return;
+    if (pendingAutoSendText === null || !onSend) return;
     const text = pendingAutoSendText;
     setPendingAutoSendText(null);
     scrollToLatest('auto');
     void Promise.resolve(onSend(text)).finally(() => {
       setComposeSeed(undefined);
     });
-  }, [pendingAutoSendText, isGatewayRunning, onSend, scrollToLatest]);
+  }, [pendingAutoSendText, onSend, scrollToLatest]);
 
   useEffect(() => {
     if (!isStoSubitemSession || !subitemTaskId || !subitemEntryId) return;

@@ -3,7 +3,6 @@
  */
 import type { ContentBlock, RawMessage } from '@/stores/chat/types';
 import { getExecutionByRunId, listSessionExecutions } from '@/stores/workflow-memory';
-import { useChatStore } from '@/stores/chat';
 
 export const RUN_ID_IN_TEXT = /\b(run_[\w-]+)\b/gi;
 

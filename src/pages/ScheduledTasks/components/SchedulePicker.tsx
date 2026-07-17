@@ -111,29 +111,6 @@ export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
     return value.weekDays.includes(optValue);
   }
 
-  // Cron 表达式
-  const cronExpr = useMemo(() => {
-    const [hour, minute] = value.time.split(':');
-    const m = minute || '00';
-    const h = hour || '09';
-    switch (value.frequency) {
-      case 'daily': return `${m} ${h} * * *`;
-      case 'weekly': {
-        const days = value.weekDays;
-        if (days.length === 0) return `${m} ${h} * * *`;
-        if (days.length === 7) return `${m} ${h} * * *`;
-        return `${m} ${h} * * ${days.join(',')}`;
-      }
-      case 'monthly': return `${m} ${h} ${value.monthDay ?? 1} * *`;
-      case 'once': {
-        if (!value.onceDate) return `${m} ${h} * * *`;
-        const d = new Date(value.onceDate);
-        return `${m} ${h} ${d.getDate()} ${d.getMonth() + 1} *`;
-      }
-      default: return `${m} ${h} * * *`;
-    }
-  }, [value]);
-
   return (
     <div className="space-y-4">
       {/* Row: Frequency + WeekDropdown + Date/Month + Time */}

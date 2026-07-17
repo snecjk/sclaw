@@ -11,14 +11,11 @@ import { existsSync } from 'node:fs';
 import { resolveWorkspaceFilePath } from '../utils/artifact-path';
 import { logger } from '../utils/logger';
 import { parseToolWorkspaceHints } from '../../shared/tool-workspace-hints';
-import {
-  formatPreviewExtractLogMessage,
-  truncatePreviewExtractExcerpt,
-  type PreviewExtractTraceEvent,
-} from '../../shared/preview-extract-trace';
+import { truncatePreviewExtractExcerpt, type PreviewExtractTraceEvent } from '../../shared/preview-extract-trace';
 
-function traceGatewayEnrich(event: PreviewExtractTraceEvent): void {
-  logger.info(formatPreviewExtractLogMessage(event), event);
+/** Formerly emitted `[PreviewExtract]` trace logs; logging removed, kept as a no-op. */
+function traceGatewayEnrich(_event: PreviewExtractTraceEvent): void {
+  // no-op: preview-extract logging removed
 }
 
 // ── Session-level runDir cache ─────────────────────────────────────

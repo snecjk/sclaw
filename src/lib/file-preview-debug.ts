@@ -1,14 +1,8 @@
-import { hostApiFetch } from '@/lib/host-api';
-
 /**
- * Diagnostics for chat file preview extraction/rendering.
+ * Debug-flag helper for chat file preview rendering.
  *
- * Dev: on by default. Prod: off unless `localStorage.setItem('stoclaw:debug-file-preview', '1')`.
- * Disable: `localStorage.setItem('stoclaw:debug-file-preview', '0')`
- *
- * Logs go to DevTools console and Main log file (`~/Library/Application Support/StoClaw/logs/`).
- * Filter log file by `[PreviewExtract]` or `[StoClaw file-preview]`.
- * Raw-path scans also emit `raw-path-scan-start` / `raw-path-scan-done` with full input excerpt + refs list.
+ * Controls visibility of the render-debug panel in ChatMessage.
+ * Verbose file-preview logging has been removed; this flag now only gates UI.
  */
 export function isFilePreviewDebugEnabled(): boolean {
   try {
@@ -21,20 +15,10 @@ export function isFilePreviewDebugEnabled(): boolean {
   }
 }
 
-export function logFilePreview(stage: string, payload: Record<string, unknown>): void {
-  if (!isFilePreviewDebugEnabled()) return;
-
-  const message = `[StoClaw file-preview] stage=${stage}`;
-  const data = { stage, ...payload, timestamp: new Date().toISOString() };
-
-  console.info(message, data);
-
-  void hostApiFetch('/api/logs/client', {
-    method: 'POST',
-    body: JSON.stringify({
-      level: 'info',
-      message,
-      data,
-    }),
-  }).catch(() => undefined);
+/**
+ * Formerly emitted `[StoClaw file-preview]` diagnostics logs (console + Main log
+ * file). Logging has been removed; kept as a no-op to avoid touching call sites.
+ */
+export function logFilePreview(_stage: string, _payload: Record<string, unknown>): void {
+  // no-op: file-preview logging removed
 }

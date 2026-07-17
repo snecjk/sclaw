@@ -248,14 +248,14 @@ interface TimelineBodyProps {
 function TimelineBody({
   timeline,
   isLiveStream,
-  hasFinalReply,
+  hasFinalReply: _hasFinalReply,
   batchIsCompleted,
   streamingTools,
   enableProcessTypewriter,
-  isConnecting,
-  isProcessing,
-  isStillExecuting,
-  connectingLabelKey,
+  isConnecting: _isConnecting,
+  isProcessing: _isProcessing,
+  isStillExecuting: _isStillExecuting,
+  connectingLabelKey: _connectingLabelKey,
   readonlyExpanded = false,
 }: TimelineBodyProps) {
   const { t } = useTranslation('chat');
@@ -302,8 +302,6 @@ function TimelineBody({
     mergedTimeline,
     enableProcessTypewriter,
   );
-
-  const runningTool = streamingTools.find((tool) => tool.status === 'running');
 
   const level2Collapsible = isLiveStream && !readonlyExpanded;
 

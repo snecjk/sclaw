@@ -4,7 +4,10 @@
  */
 import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
 import { stripDingTalkMentionContextForDisplay } from '@/lib/dingtalk-mention-context';
+import { stripAgentMemoryContextsForDisplay } from '@/lib/agent-memory-display';
+import { stripSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
 import { stripWorkflowCompleteForDisplay, stripWorkflowContextForDisplay } from '@/lib/workflow-context';
+import { stripSclawBrowserEmbedContextForDisplay } from '@/lib/sclaw-browser-embed-context';
 import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
 
 const GATEWAY_SYSTEM_EVENT_LINE =
@@ -13,6 +16,7 @@ const GATEWAY_SYSTEM_EVENT_LINE =
 function stripGatewayUserMetadata(text: string): string {
   return text
     .replace(GATEWAY_SYSTEM_EVENT_LINE, '')
+    .replace(/^Sender\s*\([^)]*\):\s*```[a-z]*\n[\s\S]*?```\s*/im, '')
     .replace(/\s*\[media attached:[^\]]*\]/g, '')
     .replace(/\s*\[message_id:\s*[^\]]+\]/g, '')
     .replace(/^Conversation info\s*\([^)]*\):\s*```[a-z]*\n[\s\S]*?```\s*/i, '')
@@ -28,11 +32,36 @@ export function normalizeUserMessageForDisplay(text: string): string {
   const stripped = stripDingTalkMentionContextForDisplay(
     stripWorkflowCompleteForDisplay(
       stripWorkflowSessionHintForDisplay(
-        stripWorkflowContextForDisplay(
-          stripCronTriggerTextForDisplay(stripGatewayUserMetadata(text)),
+        stripAgentMemoryContextsForDisplay(
+          stripSclawBrowserEmbedContextForDisplay(
+            stripWorkflowContextForDisplay(
+              stripCronTriggerTextForDisplay(
+                stripSkillTranscriptMarker(stripGatewayUserMetadata(text)),
+              ),
+            ),
+          ),
         ),
       ),
     ),
   );
   return stripped.replace(/\s+/g, ' ').trim();
+}
+
+/** Strip Gateway metadata for skill transcript parsing; preserve newlines for prompt/user split. */
+export function stripGatewayUserMetadataPreservingLines(text: string): string {
+  return stripDingTalkMentionContextForDisplay(
+    stripWorkflowCompleteForDisplay(
+      stripWorkflowSessionHintForDisplay(
+        stripAgentMemoryContextsForDisplay(
+          stripSclawBrowserEmbedContextForDisplay(
+            stripWorkflowContextForDisplay(
+              stripCronTriggerTextForDisplay(
+                stripSkillTranscriptMarker(stripGatewayUserMetadata(text)),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  ).trim();
 }

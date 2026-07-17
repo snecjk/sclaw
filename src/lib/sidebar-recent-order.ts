@@ -5,12 +5,14 @@ import {
   parseScheduledTaskAgentSessionKey,
 } from '@/stores/chat/cron-session-utils';
 import type { ChatSession } from '@/stores/chat/types';
+import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
 
 export function isSidebarRecentChatSessionKey(sessionKey: string): boolean {
   return !isAnyCronSessionKey(sessionKey)
     && !parseScheduledTaskAgentSessionKey(sessionKey)
     && !parseClaudeScheduledTaskRunSessionKey(sessionKey)
-    && !parseClaudeScheduledTaskSessionKey(sessionKey);
+    && !parseClaudeScheduledTaskSessionKey(sessionKey)
+    && !isSclawBrowserEmbedChatSessionKey(sessionKey);
 }
 
 export function getSessionActivityForSort(
@@ -58,6 +60,41 @@ export function sortSessionsByRecentActivity(
     const activityDiff = getSessionActivityForSort(right, sessionLastActivity)
       - getSessionActivityForSort(left, sessionLastActivity);
     if (activityDiff !== 0) return activityDiff;
+    return right.key.localeCompare(left.key);
+  });
+}
+
+export interface CatalogPinSortMeta {
+  pinRank: number | null;
+  lastActivityAt: string | null;
+}
+
+export function getCatalogSessionSortActivityMs(
+  session: Pick<ChatSession, 'key' | 'updatedAt' | 'engineType'>,
+  sessionLastActivity: Record<string, number>,
+  catalogMeta?: CatalogPinSortMeta | null,
+): number {
+  const catalogActivity = catalogMeta?.lastActivityAt
+    ? Date.parse(catalogMeta.lastActivityAt)
+    : 0;
+  return Math.max(getSessionActivityForSort(session, sessionLastActivity), catalogActivity);
+}
+
+export function sortSessionsWithCatalogPin(
+  sessions: ChatSession[],
+  sessionLastActivity: Record<string, number>,
+  catalogByKey: Record<string, CatalogPinSortMeta>,
+): ChatSession[] {
+  return [...sessions].sort((left, right) => {
+    const leftCatalog = catalogByKey[left.key];
+    const rightCatalog = catalogByKey[right.key];
+    const leftPinned = leftCatalog?.pinRank != null;
+    const rightPinned = rightCatalog?.pinRank != null;
+    if (leftPinned !== rightPinned) return leftPinned ? -1 : 1;
+
+    const leftActivity = getCatalogSessionSortActivityMs(left, sessionLastActivity, leftCatalog);
+    const rightActivity = getCatalogSessionSortActivityMs(right, sessionLastActivity, rightCatalog);
+    if (leftActivity !== rightActivity) return rightActivity - leftActivity;
     return right.key.localeCompare(left.key);
   });
 }

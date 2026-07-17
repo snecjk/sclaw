@@ -133,7 +133,62 @@ export async function handleClaudeScheduledTaskRoutes(
       const task = await getClaudeScheduledTaskService().getTask(id);
       await ensureClaudeDatedExecutionSessionPlaceholder(id, task?.name ?? `Claude 定时任务 ${id}`, dateKey);
       await ensureTaskGroupFirstTriggeredOnRun(claudeTaskGroupKey(id));
-      sendJson(res, 200, run);
+
+      const datedSessionKey = `claude-task:${id}:${dateKey}`;
+      let synced: { model: string; sessionKey: string; agentId: string } | null = null;
+      try {
+        const {
+          resolveClaudeTaskExecutionModel,
+          syncTaskExecutionModelToDatedSession,
+        } = await import('../../utils/task-execution-session-model');
+        const resolvedModel = await resolveClaudeTaskExecutionModel(task);
+        const executionModel = (
+          run.runtimeSnapshot?.model
+          || resolvedModel.model
+          || ''
+        ).trim();
+        const executionAgentId = resolvedModel.agentId;
+        if (executionModel) {
+          const datedSync = await syncTaskExecutionModelToDatedSession({
+            sessionKey: datedSessionKey,
+            model: executionModel,
+            engineType: 'claude',
+            agentId: executionAgentId,
+            accountId: resolvedModel.accountId || run.runtimeSnapshot?.providerAccountId,
+          });
+          if (run.sessionKey && run.sessionKey !== datedSessionKey) {
+            await syncTaskExecutionModelToDatedSession({
+              sessionKey: run.sessionKey,
+              model: executionModel,
+              engineType: 'claude',
+              agentId: executionAgentId,
+              accountId: resolvedModel.accountId || run.runtimeSnapshot?.providerAccountId,
+            });
+          }
+          if (datedSync) {
+            synced = {
+              model: datedSync.model,
+              sessionKey: datedSync.sessionKey,
+              agentId: datedSync.agentId,
+            };
+          }
+        } else {
+          synced = {
+            model: '',
+            sessionKey: datedSessionKey,
+            agentId: executionAgentId,
+          };
+        }
+      } catch {
+        // Trigger already succeeded — model sync is best-effort.
+      }
+
+      sendJson(res, 200, {
+        ...run,
+        executionSessionKey: datedSessionKey,
+        executionModel: synced?.model || undefined,
+        executionAgentId: synced?.agentId || task?.agentId || undefined,
+      });
     } catch (error) {
       sendJson(res, 400, { success: false, error: String(error) });
     }

@@ -1016,22 +1016,6 @@ function ensureDeferredPhaseTextsBelowFirstToolGroup(
   }
 }
 
-function ensureClaudePreBatchTextsBelowFirstGroup(
-  segments: ThinkingTurnSegment[],
-  engineProfile: EngineProfile,
-  openingText: string | null,
-  pendingPreBatchTexts: string[],
-): void {
-  if (engineProfile.name !== 'claude') return;
-  ensureDeferredPhaseTextsBelowFirstToolGroup(segments, openingText, pendingPreBatchTexts);
-}
-
-function turnHasToolGroups(segments: ThinkingTurnSegment[]): boolean {
-  return segments.some(
-    (segment) => segment.kind === 'tool-group' && groupHasTool(segment.timeline),
-  );
-}
-
 function turnHasThinkingContent(
   segments: ThinkingTurnSegment[],
   currentGroup: ThinkingTimelineItem[],
@@ -1145,11 +1129,12 @@ function mergeRawTurnEvents(
           thinkingTimelineToolIdentityKey(candidate) === identityKey
           || (isStableToolId(event.id, event.name) && candidate.id === event.id);
         if (!sameIdentity) continue;
-        merged[i] = {
+        const updatedEvent: RawTurnEvent = {
           ...candidate,
           input: mergeToolInput(candidate.input, event.input),
         };
-        registerToolEventKeys(merged[i], seenToolKeys, seenStableIds);
+        merged[i] = updatedEvent;
+        registerToolEventKeys(updatedEvent, seenToolKeys, seenStableIds);
         mergedExisting = true;
         break;
       }

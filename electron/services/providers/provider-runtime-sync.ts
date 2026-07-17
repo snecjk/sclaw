@@ -20,6 +20,23 @@ const GOOGLE_OAUTH_RUNTIME_PROVIDER = 'google-gemini-cli';
 const GOOGLE_OAUTH_DEFAULT_MODEL_REF = `${GOOGLE_OAUTH_RUNTIME_PROVIDER}/gemini-3-pro-preview`;
 const OPENAI_OAUTH_RUNTIME_PROVIDER = 'openai-codex';
 const OPENAI_OAUTH_DEFAULT_MODEL_REF = `${OPENAI_OAUTH_RUNTIME_PROVIDER}/gpt-5.3-codex`;
+export const STO_MODEL_DEFAULT_CONTEXT_WINDOW = 256_000;
+export const STO_MODEL_DEFAULT_MAX_TOKENS = 32_000;
+
+function buildStoRuntimeModels(modelIds: string[], input?: string[]) {
+  return modelIds.map((id) => ({
+    id,
+    name: id,
+    ...(input ? { input } : {}),
+    contextWindow: STO_MODEL_DEFAULT_CONTEXT_WINDOW,
+    maxTokens: STO_MODEL_DEFAULT_MAX_TOKENS,
+  }));
+}
+
+const STO_MODEL_LIMIT_DEFAULTS = {
+  defaultModelContextWindow: STO_MODEL_DEFAULT_CONTEXT_WINDOW,
+  defaultModelMaxTokens: STO_MODEL_DEFAULT_MAX_TOKENS,
+} as const;
 
 type RuntimeProviderSyncContext = {
   runtimeProviderKey: string;
@@ -318,6 +335,7 @@ async function syncRuntimeProviderConfig(
     headers: config.headers ?? context.meta?.headers,
     defaultModelInput,
     providerModelIds,
+    ...(providerModelIds ? STO_MODEL_LIMIT_DEFAULTS : {}),
   });
 }
 
@@ -347,13 +365,26 @@ async function syncCustomProviderAgentModel(
   // For STO providers, sync all models from metadata.customModels
   if (useStoModelCatalog) {
     const models = customModels.length > 0
-      ? customModels.map((id) => ({ id, name: id, input: DEFAULT_MODEL_INPUT }))
-      : config.model ? [{ id: config.model, name: config.model, input: DEFAULT_MODEL_INPUT }] : [];
+      ? buildStoRuntimeModels(customModels, DEFAULT_MODEL_INPUT)
+      : config.model ? buildStoRuntimeModels([config.model], DEFAULT_MODEL_INPUT) : [];
+
+    // Path A: write openclaw.json (with headers.secret)
+    await syncProviderConfigToOpenClaw(runtimeProviderKey, config.model, {
+      baseUrl: normalizeProviderBaseUrl(config, config.baseUrl, config.apiProtocol || 'openai-completions'),
+      api: config.apiProtocol || 'openai-completions',
+      apiKeyEnv: 'STO_API_KEY',
+      headers: config.headers,
+      defaultModelInput: DEFAULT_MODEL_INPUT,
+      ...STO_MODEL_LIMIT_DEFAULTS,
+    });
+
+    // Path B: write models.json (with apiKey + authHeader)
     await updateAgentModelProvider(runtimeProviderKey, {
       baseUrl: normalizeProviderBaseUrl(config, config.baseUrl, config.apiProtocol || 'openai-completions'),
       api: config.apiProtocol || 'openai-completions',
       models,
       apiKey: resolvedKey,
+      authHeader: true,
     });
     return;
   }
@@ -495,7 +526,11 @@ export async function syncDefaultProviderToRuntime(
       : undefined;
     const providerModelIds = await resolveStoCatalogModelIds(provider);
     const stoCatalogOverride = providerModelIds
-      ? { providerModelIds, defaultModelInput: ['text', 'image'] as string[] }
+      ? {
+          providerModelIds,
+          defaultModelInput: ['text', 'image'] as string[],
+          ...STO_MODEL_LIMIT_DEFAULTS,
+        }
       : {};
 
     if (provider.type === 'custom') {
@@ -604,8 +639,8 @@ export async function syncDefaultProviderToRuntime(
       const account = await getProviderAccount(provider.id);
       const customModels = account?.metadata?.customModels ?? [];
       const models = customModels.length > 0
-        ? customModels.map((id) => ({ id, name: id }))
-        : provider.model ? [{ id: provider.model, name: provider.model }] : [];
+        ? buildStoRuntimeModels(customModels)
+        : provider.model ? buildStoRuntimeModels([provider.model]) : [];
       await updateAgentModelProvider(ock, {
         baseUrl: normalizeProviderBaseUrl(provider, provider.baseUrl, provider.apiProtocol || 'openai-completions'),
         api: provider.apiProtocol || 'openai-completions',

@@ -67,10 +67,18 @@ describe('normalizeArtifactPathPrefix', () => {
 });
 
 describe('migrateLegacyOpenClawWorkspacePath', () => {
-  it('rewrites legacy .openclaw/workspace to .stoclaw/openclaw/workspace', () => {
+  it('rewrites legacy .openclaw/workspace to .stoclaw/workspace', () => {
     expect(
       migrateLegacyOpenClawWorkspacePath('/Users/sto/.openclaw/workspace/report.html'),
-    ).toBe('/Users/sto/.stoclaw/openclaw/workspace/report.html');
+    ).toBe('/Users/sto/.stoclaw/workspace/report.html');
+  });
+
+  it('rewrites legacy .stoclaw/openclaw/workspace to .stoclaw/workspace', () => {
+    expect(
+      migrateLegacyOpenClawWorkspacePath(
+        '/Users/sto/.stoclaw/openclaw/workspace/.claw-output/report.html',
+      ),
+    ).toBe('/Users/sto/.stoclaw/workspace/.claw-output/report.html');
   });
 
   it('rewrites legacy Windows .openclaw workspace with backslashes', () => {
@@ -78,7 +86,7 @@ describe('migrateLegacyOpenClawWorkspacePath', () => {
       migrateLegacyOpenClawWorkspacePath(
         'C:\\Users\\sto\\.openclaw\\workspace\\.claw-output\\report.html',
       ),
-    ).toBe('C:\\Users\\sto\\.stoclaw\\openclaw\\workspace\\.claw-output\\report.html');
+    ).toBe('C:\\Users\\sto\\.stoclaw\\workspace\\.claw-output\\report.html');
   });
 
   it('rewrites legacy Windows .openclaw workspace with forward slashes', () => {
@@ -86,7 +94,7 @@ describe('migrateLegacyOpenClawWorkspacePath', () => {
       migrateLegacyOpenClawWorkspacePath(
         'C:/Users/sto/.openclaw/workspace/outputs/report.html',
       ),
-    ).toBe('C:/Users/sto/.stoclaw/openclaw/workspace/outputs/report.html');
+    ).toBe('C:/Users/sto/.stoclaw/workspace/outputs/report.html');
   });
 });
 

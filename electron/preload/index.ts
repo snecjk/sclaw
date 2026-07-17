@@ -2,7 +2,7 @@
  * Preload Script
  * Exposes safe APIs to the renderer process via contextBridge
  */
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 /**
  * IPC renderer methods exposed to the renderer process
@@ -23,6 +23,23 @@ const electronAPI = {
         'gateway:rpc',
         'gateway:httpProxy',
         'hostapi:fetch',
+        'agent-memory:initialize',
+        'agent-memory:status',
+        'agent-memory:bootstrap',
+        'agent-memory:index',
+        'agent-memory:add',
+        'agent-memory:search',
+        'agent-memory:delete',
+        'agent-memory:mem0-search',
+        'agent-memory:mem0-list',
+        'agent-memory:mem0-delete',
+        'agent-memory:mem0-delete-all',
+        'agent-memory:mem0-history',
+        'agent-memory:mem0-reset',
+        'agent-memory:summarize-execution-experience',
+        'agent-memory:capture',
+        'execution-memory:bind-injected-memories',
+        'session-catalog:invoke',
         'preview:httpFetch',
         // Workflow
         'workflow:startTracking',
@@ -136,6 +153,8 @@ const electronAPI = {
         'log:getDir',
         'log:listFiles',
         // File staging & media
+        'file:stat',
+        'file:validateSkillUpload',
         'file:stage',
         'file:stageBuffer',
         'media:getThumbnails',
@@ -173,6 +192,18 @@ const electronAPI = {
         'workflow:appendSessionRecord',
         'workflow:stream:subscribe',
         'workflow:stream:unsubscribe',
+        // SClaw embed browser runtime
+        'sclaw-browser:prepareSession',
+        'sclaw-browser:registerRuntime',
+        'sclaw-browser:linkChatSession',
+        'sclaw-browser:bindWebContents',
+        'sclaw-browser:updatePageState',
+        'sclaw-browser:unregisterRuntime',
+        'sclaw-browser:capturePage',
+        'sclaw-browser:executeScript',
+        'sclaw-browser:getNetworkLog',
+        'sclaw-browser:ensureBridge',
+        'sclaw-browser:setPointerPassthrough',
       ];
 
       if (validChannels.includes(channel)) {
@@ -190,8 +221,8 @@ const electronAPI = {
         'gateway:status-changed',
         'gateway:message',
         'gateway:notification',
+        'gateway:engine-event',
         'gateway:channel-status',
-        'gateway:chat-message',
         'channel:whatsapp-qr',
         'channel:whatsapp-success',
         'channel:whatsapp-error',
@@ -222,10 +253,12 @@ const electronAPI = {
         'dws:cli-install-failed',
         'startup-progress',
         'auth:token-expired',
+        'sto:models-synced',
         'workflow:status-update',
         'workflow:poll-trace',
         'workflow:stream:event',
         'workflow:stream:error',
+        'sclaw-browser:toggle-chat',
       ];
 
       if (validChannels.includes(channel)) {
@@ -252,8 +285,8 @@ const electronAPI = {
         'gateway:status-changed',
         'gateway:message',
         'gateway:notification',
+        'gateway:engine-event',
         'gateway:channel-status',
-        'gateway:chat-message',
         'channel:whatsapp-qr',
         'channel:whatsapp-success',
         'channel:whatsapp-error',
@@ -319,6 +352,14 @@ const electronAPI = {
    * Build environment identifier (development | test | staging | production)
    */
   appEnv: (import.meta.env.VITE_APP_ENV as string) || 'production',
+
+  /**
+   * Resolve the real filesystem path for a dropped/picked File.
+   * `File.path` was removed in Electron 36+; `webUtils.getPathForFile` is the
+   * supported replacement. Required for drag & drop of files/folders, since
+   * the renderer has `nodeIntegration: false` and cannot read paths itself.
+   */
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
 };
 
 // Expose the API to the renderer process

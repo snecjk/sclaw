@@ -31,6 +31,7 @@ export interface EngineSendParams {
   message: string;
   deliver?: boolean;
   idempotencyKey: string;
+  systemPromptAppend?: string;
 }
 
 export interface EngineSendWithMediaParams extends EngineSendParams {

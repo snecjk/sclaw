@@ -3,6 +3,17 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
+function mockPaths(opts: { home: string; configDir: string; legacyRoot: string; defaultRoot: string }): void {
+  vi.doMock('../../electron/utils/paths', () => ({
+    getOpenClawConfigDir: () => opts.configDir,
+    getLegacyOpenClawWorkspaceRoot: () => opts.legacyRoot,
+    getDefaultAgentWorkspacePath: () => opts.defaultRoot,
+    getLegacyDefaultAgentWorkspacePath: () => join(opts.configDir, 'workspace'),
+    getStoClawHomeDir: () => join(opts.home, '.stoclaw'),
+    expandPath: (p: string) => p.replace(/^~/, opts.home),
+  }));
+}
+
 describe('resolveWorkspaceFilePath deep output search', () => {
   let tempRoot = '';
 
@@ -16,18 +27,15 @@ describe('resolveWorkspaceFilePath deep output search', () => {
 
   it('finds basename nested under .claw-output when hint path is wrong', async () => {
     tempRoot = join(tmpdir(), `stoclaw-artifact-${Date.now()}`);
-    const configDir = join(tempRoot, 'openclaw');
-    const workspace = join(configDir, 'workspace');
+    const home = join(tempRoot, 'home');
+    const configDir = join(home, '.stoclaw', 'openclaw');
+    const workspace = join(home, '.stoclaw', 'workspace');
     const nested = join(workspace, '.claw-output', 'stock-analysis');
     mkdirSync(nested, { recursive: true });
     const realFile = join(nested, 'weekly.html');
     writeFileSync(realFile, '<html></html>', 'utf8');
 
-    vi.doMock('../../electron/utils/paths', () => ({
-      getOpenClawConfigDir: () => configDir,
-      getLegacyOpenClawWorkspaceRoot: () => join(configDir, 'workspace'),
-      expandPath: (p: string) => p.replace(/^~/, tempRoot),
-    }));
+    mockPaths({ home, configDir, legacyRoot: join(home, '.openclaw', 'workspace'), defaultRoot: workspace });
 
     vi.resetModules();
     const { resolveWorkspaceFilePath } = await import('../../electron/utils/artifact-path');
@@ -45,13 +53,10 @@ describe('resolveWorkspaceFilePath deep output search', () => {
     writeFileSync(legacyFile, '<html>legacy</html>', 'utf8');
 
     const configDir = join(home, '.stoclaw', 'openclaw');
-    mkdirSync(join(configDir, 'workspace'), { recursive: true });
+    const defaultRoot = join(home, '.stoclaw', 'workspace');
+    mkdirSync(defaultRoot, { recursive: true });
 
-    vi.doMock('../../electron/utils/paths', () => ({
-      getOpenClawConfigDir: () => configDir,
-      getLegacyOpenClawWorkspaceRoot: () => legacyRoot,
-      expandPath: (p: string) => p.replace(/^~/, home),
-    }));
+    mockPaths({ home, configDir, legacyRoot, defaultRoot });
     vi.doMock('node:os', async (importOriginal) => {
       const actual = await importOriginal<typeof import('node:os')>();
       return { ...actual, homedir: () => home };
@@ -63,25 +68,26 @@ describe('resolveWorkspaceFilePath deep output search', () => {
     const legacyHint = legacyFile.replace(/\\/g, '/');
     expect(resolveWorkspaceFilePath(legacyHint)).toBe(legacyFile);
 
-    const migratedHint = legacyHint.replace('/.openclaw/workspace', '/.stoclaw/openclaw/workspace');
+    const migratedHint = legacyHint.replace('/.openclaw/workspace', '/.stoclaw/workspace');
     expect(resolveWorkspaceFilePath(migratedHint)).toBe(legacyFile);
   });
 
   it('falls back to migrated .stoclaw path when legacy path is missing', async () => {
     tempRoot = join(tmpdir(), `stoclaw-migrated-${Date.now()}`);
     const home = join(tempRoot, 'home');
-    const migratedRoot = join(home, '.stoclaw', 'openclaw', 'workspace');
+    const migratedRoot = join(home, '.stoclaw', 'workspace');
     const migratedFile = join(migratedRoot, '.claw-output', 'report.html');
     mkdirSync(join(migratedRoot, '.claw-output'), { recursive: true });
     writeFileSync(migratedFile, '<html>migrated</html>', 'utf8');
 
     const configDir = join(home, '.stoclaw', 'openclaw');
 
-    vi.doMock('../../electron/utils/paths', () => ({
-      getOpenClawConfigDir: () => configDir,
-      getLegacyOpenClawWorkspaceRoot: () => join(home, '.openclaw', 'workspace'),
-      expandPath: (p: string) => p.replace(/^~/, home),
-    }));
+    mockPaths({
+      home,
+      configDir,
+      legacyRoot: join(home, '.openclaw', 'workspace'),
+      defaultRoot: migratedRoot,
+    });
     vi.doMock('node:os', async (importOriginal) => {
       const actual = await importOriginal<typeof import('node:os')>();
       return { ...actual, homedir: () => home };

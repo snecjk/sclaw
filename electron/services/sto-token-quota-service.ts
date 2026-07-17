@@ -5,17 +5,11 @@
  * using the stored stoToken and the shared auth header helper.
  */
 
-import { getSsoEnvironment, getStoToken, type SsoEnvironment } from '../utils/auth-store';
+import { getAiResourceStoToken } from './sto-auth-mode';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
+import { resolveStoBaseUrl } from '../utils/sto-domain';
 import { logger } from '../utils/logger';
 
-const STO_TOKEN_QUOTA_DOMAINS: Partial<Record<SsoEnvironment, string>> = {
-  'daily-external': 'https://baseinfo-aimemory-test.sto.cn',
-  'pre-release': 'https://pre-baseinfo-aimemory.sto.cn',
-  'local': 'http://127.0.0.1:7001',
-};
-
-const STO_TOKEN_QUOTA_DOMAIN_DEFAULT = 'https://baseinfo-aimemory.sto.cn';
 const STO_TOKEN_QUOTA_PATH = '/agent/v1/token-quota/check';
 
 export interface StoTokenQuotaData {
@@ -42,9 +36,6 @@ export class StoTokenQuotaServiceError extends Error {
   }
 }
 
-function resolveStoTokenQuotaBaseUrl(env: SsoEnvironment): string {
-  return STO_TOKEN_QUOTA_DOMAINS[env] || STO_TOKEN_QUOTA_DOMAIN_DEFAULT;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -72,12 +63,12 @@ function parseStoTokenQuotaResponse(payload: unknown): StoTokenQuotaCheckRespons
 }
 
 export class StoTokenQuotaService {
-  static resolveDomain(env: SsoEnvironment): string {
-    return resolveStoTokenQuotaBaseUrl(env);
+  static async resolveDomain(): Promise<string> {
+    return resolveStoBaseUrl();
   }
 
   async checkTokenQuota(): Promise<StoTokenQuotaCheckResponse> {
-    const token = await getStoToken();
+    const token = await getAiResourceStoToken();
     if (!token) {
       throw new StoTokenQuotaServiceError(
         '未登录或 stoToken 已过期，请重新登录',
@@ -85,8 +76,7 @@ export class StoTokenQuotaService {
       );
     }
 
-    const env = await getSsoEnvironment();
-    const baseUrl = StoTokenQuotaService.resolveDomain(env);
+    const baseUrl = await StoTokenQuotaService.resolveDomain();
     const url = `${baseUrl}${STO_TOKEN_QUOTA_PATH}`;
     logger.info(`[StoTokenQuotaService] checkTokenQuota: ${url}`);
 

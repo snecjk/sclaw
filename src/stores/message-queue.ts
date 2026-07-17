@@ -9,6 +9,8 @@ import { create } from 'zustand';
 import { useChatStore } from './chat';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
+import { getAgentIdFromSessionKey } from './chat/session-identity';
 
 const QUEUE_MAX_PER_SESSION = 10;
 
@@ -22,6 +24,7 @@ export interface QueuedMessage {
   targetAgentId?: string | null;
   dingTalkMentions?: DingTalkMention[];
   workflowId?: string | null;
+  skillMeta?: SkillMeta;
   queuedAt: number;
 }
 
@@ -31,8 +34,10 @@ interface SessionQueue {
 
 interface MessageQueueState {
   queues: Map<string, SessionQueue>; // keyed by sessionKey
-  enqueue: (sessionKey: string, text: string, attachments?: FileAttachment[], targetAgentId?: string | null, dingTalkMentions?: DingTalkMention[], workflowId?: string | null) => void;
+  enqueue: (sessionKey: string, text: string, attachments?: FileAttachment[], targetAgentId?: string | null, dingTalkMentions?: DingTalkMention[], workflowId?: string | null, skillMeta?: SkillMeta) => void;
   remove: (sessionKey: string, id: string) => void;
+  updateText: (sessionKey: string, id: string, text: string) => void;
+  takeById: (sessionKey: string, id: string) => QueuedMessage | null;
   moveUp: (sessionKey: string, id: string) => void;
   moveDown: (sessionKey: string, id: string) => void;
   clear: (sessionKey: string) => void;
@@ -52,7 +57,7 @@ function getOrCreateSessionQueue(queues: Map<string, SessionQueue>, sessionKey: 
 export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   queues: new Map(),
 
-  enqueue: (sessionKey, text, attachments, targetAgentId, dingTalkMentions, workflowId) => {
+  enqueue: (sessionKey, text, attachments, targetAgentId, dingTalkMentions, workflowId, skillMeta) => {
     const { queues } = get();
     const session = getOrCreateSessionQueue(queues, sessionKey);
     if (session.queue.length >= QUEUE_MAX_PER_SESSION) return;
@@ -63,6 +68,7 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
       targetAgentId,
       dingTalkMentions,
       workflowId,
+      skillMeta,
       queuedAt: Date.now(),
     };
     // Immutable update: new array + new session object so `getQueue` selectors
@@ -77,6 +83,29 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     if (!session) return;
     queues.set(sessionKey, { queue: session.queue.filter((m) => m.id !== id) });
     set({ queues: new Map(queues) });
+  },
+
+  updateText: (sessionKey, id, text) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const { queues } = get();
+    const session = queues.get(sessionKey);
+    if (!session) return;
+    queues.set(sessionKey, {
+      queue: session.queue.map((item) => (item.id === id ? { ...item, text: trimmed } : item)),
+    });
+    set({ queues: new Map(queues) });
+  },
+
+  takeById: (sessionKey, id) => {
+    const { queues } = get();
+    const session = queues.get(sessionKey);
+    if (!session) return null;
+    const item = session.queue.find((m) => m.id === id) ?? null;
+    if (!item) return null;
+    queues.set(sessionKey, { queue: session.queue.filter((m) => m.id !== id) });
+    set({ queues: new Map(queues) });
+    return item;
   },
 
   moveUp: (sessionKey, id) => {
@@ -150,7 +179,88 @@ const autoSendCallbacks = new Set<AutoSendCallback>();
 const suppressedSessions = new Set<string>();
 let storeUnsub: (() => void) | null = null;
 let watcherRefCount = 0;
-let prevSending = false;
+const prevSendingByKey = new Map<string, boolean>();
+
+function isSessionSending(
+  sessionKey: string,
+  state: ReturnType<typeof useChatStore.getState>,
+): boolean {
+  const isCurrent = state.currentSessionKey === sessionKey;
+  const runtime = state.runtimeBySessionKey[sessionKey];
+  return Boolean(
+    runtime?.sending
+    || runtime?.activeRunId
+    || (isCurrent && (state.sending || state.activeRunId)),
+  );
+}
+
+function sessionRunError(
+  sessionKey: string,
+  state: ReturnType<typeof useChatStore.getState>,
+): string | null | undefined {
+  const isCurrent = state.currentSessionKey === sessionKey;
+  const runtime = state.runtimeBySessionKey[sessionKey];
+  if (isCurrent) return state.error;
+  return runtime?.error;
+}
+
+function collectWatchedSessionKeys(state: ReturnType<typeof useChatStore.getState>): string[] {
+  const keys = new Set<string>([state.currentSessionKey, ...Object.keys(state.runtimeBySessionKey)]);
+  for (const sessionKey of useMessageQueueStore.getState().queues.keys()) {
+    keys.add(sessionKey);
+  }
+  return [...keys].filter(Boolean);
+}
+
+function tryDrainSessionQueue(sessionKey: string, onAutoSend?: AutoSendCallback): void {
+  const queueStore = useMessageQueueStore.getState();
+  if (queueStore.getSessionQueue(sessionKey).queue.length === 0) return;
+  const msg = queueStore.dequeueFirst(sessionKey);
+  if (!msg) return;
+  if (onAutoSend) {
+    try {
+      onAutoSend();
+    } catch {
+      // Never let a UI callback block auto-send.
+    }
+  } else {
+    autoSendCallbacks.forEach((cb) => {
+      try {
+        cb();
+      } catch {
+        // Never let a UI callback block auto-send.
+      }
+    });
+  }
+  deliverQueuedMessage(sessionKey, msg);
+}
+
+async function abortSessionRun(sessionKey: string): Promise<boolean> {
+  const chatState = useChatStore.getState();
+  if (!isSessionSending(sessionKey, chatState)) return true;
+  return await chatState.abortRun(sessionKey);
+}
+
+/**
+ * Abort the active run for a session and immediately send a queued item.
+ * Suppresses the normal completion drain for this one transition so the
+ * explicitly selected item is delivered exactly once after abort succeeds.
+ */
+export async function sendImmediately(sessionKey: string, itemId: string): Promise<boolean> {
+  const item = useMessageQueueStore.getState().getQueue(sessionKey).find((entry) => entry.id === itemId);
+  if (!item) return false;
+  const wasSending = isSessionSending(sessionKey, useChatStore.getState());
+  if (wasSending) suppressedSessions.add(sessionKey);
+  const stopped = await abortSessionRun(sessionKey);
+  // The true→false transition consumes this flag synchronously. Delete it as a
+  // fallback when abort failed or another terminal path completed first.
+  suppressedSessions.delete(sessionKey);
+  if (!stopped) return false;
+  const dequeued = useMessageQueueStore.getState().takeById(sessionKey, itemId);
+  if (!dequeued) return false;
+  deliverQueuedMessage(sessionKey, dequeued);
+  return true;
+}
 
 function mapQueuedAttachments(attachments?: FileAttachment[]) {
   return attachments?.map((a) => ({
@@ -172,10 +282,14 @@ function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
         sendWithWorkflow(
           msg.text,
           msg.workflowId!,
-          { sessionKey, agentId: chatState.currentAgentId },
+          {
+            sessionKey,
+            agentId: msg.targetAgentId ?? getAgentIdFromSessionKey(sessionKey) ?? chatState.currentAgentId,
+          },
           async (textToSend, runId, wfId, ctx) => {
             await chatState.sendMessage({
               text: textToSend,
+              sessionKey,
               attachments: mapQueuedAttachments(msg.attachments),
               targetAgentId: msg.targetAgentId,
               dingTalkMentions: msg.dingTalkMentions,
@@ -191,9 +305,11 @@ function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
         // Fall back to a normal send so the message isn't lost.
         void chatState.sendMessage({
           text: msg.text,
+          sessionKey,
           attachments: mapQueuedAttachments(msg.attachments),
           targetAgentId: msg.targetAgentId,
           dingTalkMentions: msg.dingTalkMentions,
+          skillMeta: msg.skillMeta,
         });
       });
     return;
@@ -201,10 +317,12 @@ function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
 
   void chatState.sendMessage({
     text: msg.text,
+    sessionKey,
     attachments: mapQueuedAttachments(msg.attachments),
     targetAgentId: msg.targetAgentId,
     dingTalkMentions: msg.dingTalkMentions,
     workflowId: msg.workflowId,
+    skillMeta: msg.skillMeta,
   });
 }
 
@@ -238,35 +356,16 @@ export function createAutoSendWatcher(onAutoSend?: AutoSendCallback): () => void
   watcherRefCount += 1;
 
   if (!storeUnsub) {
-    prevSending = useChatStore.getState().sending;
     storeUnsub = useChatStore.subscribe((state) => {
-      const { sending, currentSessionKey, error } = state;
-      const wasSending = prevSending;
-      prevSending = sending;
-
-      // Only react to a run finishing.
-      if (!wasSending || sending) return;
-
-      // Consume any abort suppression regardless of queue state so it never lingers.
-      if (suppressedSessions.delete(currentSessionKey)) return;
-
-      // Never chain-send after a failed run.
-      if (error) return;
-
-      const queueStore = useMessageQueueStore.getState();
-      if (queueStore.getSessionQueue(currentSessionKey).queue.length === 0) return;
-
-      const msg = queueStore.dequeueFirst(currentSessionKey);
-      if (!msg) return;
-
-      autoSendCallbacks.forEach((cb) => {
-        try {
-          cb();
-        } catch {
-          // Never let a UI callback (e.g. scroll) block auto-send.
-        }
-      });
-      deliverQueuedMessage(currentSessionKey, msg);
+      for (const sessionKey of collectWatchedSessionKeys(state)) {
+        const sending = isSessionSending(sessionKey, state);
+        const wasSending = prevSendingByKey.get(sessionKey) ?? false;
+        prevSendingByKey.set(sessionKey, sending);
+        if (!wasSending || sending) continue;
+        if (suppressedSessions.delete(sessionKey)) continue;
+        if (sessionRunError(sessionKey, state)) continue;
+        tryDrainSessionQueue(sessionKey);
+      }
     });
   }
 

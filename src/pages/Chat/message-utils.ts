@@ -8,6 +8,7 @@ import { hostApiFetch } from '@/lib/host-api';
 import { tracePreviewExtract } from '@/lib/preview-extract-trace';
 import { useChatStore } from '@/stores/chat';
 import { sessionHasWorkflowExecution } from '@/stores/workflow-memory';
+import { stripAgentMemoryContextsForDisplay } from '@/lib/agent-memory-display';
 import { buildWorkflowFormConfig, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import {
   PARAM_FORM_MARKER_REGEX,
@@ -16,7 +17,6 @@ import {
 import { resolveParameterFormId } from '@/components/parameter-form/form-handlers';
 import { currentUserTurnHasWorkflowSubmission } from '@/lib/workflow-card-injection';
 import type { AttachedFileMeta, RawMessage, ContentBlock } from '@/stores/chat';
-import { getExecutionByRunId } from '@/stores/workflow-memory';
 import { truncatePreviewExtractExcerpt } from '../../../shared/preview-extract-trace';
 import {
   stripDingTalkAgentSendDisclaimerForDisplay,
@@ -24,6 +24,7 @@ import {
 } from '@/lib/dingtalk-mention-context';
 import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
 import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay, WORKFLOW_COMPLETE_TAG } from '@/lib/workflow-context';
+import { stripSclawBrowserEmbedContextForDisplay } from '@/lib/sclaw-browser-embed-context';
 import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
 import {
   isWorkflowGuidanceAssistantText,
@@ -62,6 +63,8 @@ function cleanUserText(text: string): string {
   const cleaned = text
     // Remove OpenClaw system event lines (Exec completed/failed, cron, etc.)
     .replace(GATEWAY_SYSTEM_EVENT_LINE, '')
+    // Remove Gateway-injected "Sender (untrusted metadata): ```json...```" block
+    .replace(/^Sender\s*\([^)]*\):\s*```[a-z]*\n[\s\S]*?```\s*/im, '')
     // Remove [media attached: path (mime) | path] references
     .replace(/\s*\[media attached:[^\]]*\]/g, '')
     // Remove [message_id: uuid]
@@ -79,8 +82,12 @@ function cleanUserText(text: string): string {
   return stripDingTalkMentionContextForDisplay(
     stripWorkflowCompleteForDisplay(
       stripWorkflowSessionHintForDisplay(
-        stripWorkflowContextForDisplay(
-          stripCronTriggerTextForDisplay(cleaned),
+        stripAgentMemoryContextsForDisplay(
+          stripSclawBrowserEmbedContextForDisplay(
+            stripWorkflowContextForDisplay(
+              stripCronTriggerTextForDisplay(cleaned),
+            ),
+          ),
         ),
       ),
     ),
@@ -345,14 +352,13 @@ export function resolveAssistantCopyShareContent(options: {
     assistantBubbleText,
     workflowCard,
     workflowCardStates,
-    sessionKey,
     previewFiles,
   } = options;
 
   const files: AttachedFileMeta[] = [];
   const seenFileKeys = new Set<string>();
   const addFile = (file: AttachedFileMeta) => {
-    const key = normalizePreviewFileKey(file.filePath, file.fileName);
+    const key = normalizePreviewFileKey(file.filePath ?? '', file.fileName);
     if (!key || seenFileKeys.has(key)) return;
     seenFileKeys.add(key);
     files.push(file);
@@ -363,8 +369,7 @@ export function resolveAssistantCopyShareContent(options: {
   const rawText = text.trim();
 
   if (workflowCard) {
-    const state = workflowCardStates[workflowCard.runId]
-      ?? getExecutionByRunId(workflowCard.runId, sessionKey);
+    const state = workflowCardStates[workflowCard.runId];
     const summary = state?.result?.summary?.trim() ?? '';
     for (const artifact of state?.result?.artifacts ?? []) {
       if (!isUserFacingArtifactUrl(artifact.url)) continue;
@@ -402,7 +407,7 @@ export function formatAssistantCopyShareClipboardText(
 
   for (const file of files) {
     const fileName = file.fileName.trim() || 'file';
-    const filePath = file.filePath.trim();
+    const filePath = file.filePath?.trim() ?? '';
     if (!filePath) continue;
     if (isHttpUrl(filePath)) {
       parts.push(`[${fileName}](${filePath})`);

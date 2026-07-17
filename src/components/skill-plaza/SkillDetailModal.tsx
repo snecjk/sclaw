@@ -30,9 +30,8 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
   const handleUse = () => {
     // Start a new session so the Gateway picks up any newly installed skills
     useChatStore.getState().newSession();
-    const prompt = encodeURIComponent(liveSkill.defaultPrompt || liveSkill.title);
     onClose();
-    navigate(`/?q=${prompt}`);
+    navigate(`/?skill=${encodeURIComponent(liveSkill.slug)}`);
     // Fire-and-forget use record
     useSkillPlazaStore.getState().useSkill(liveSkill.slug).catch(() => {});
   };

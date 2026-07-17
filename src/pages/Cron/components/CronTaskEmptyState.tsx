@@ -6,31 +6,13 @@ interface RecommendTask {
   schedule: string;
 }
 
-const RECOMMEND_TASKS: RecommendTask[] = [
-  {
-    title: '客户成本分析',
-    desc: '每月 1 日 8:00 拉取出港单票成本与客户成本异常，生成报表链接触达出港成本小组，指标与首页「本月出港成本报表」一致，支撑成本稽核。',
-    schedule: '每月 1 日 08:00',
-  },
-  {
-    title: '每日总部对账结果',
-    desc: '每日 8:00 汇总未闭环异常客诉与风险客户动态，同步至工作中心首页「昨日总部对账结果」卡片，与客户服务 pill 口径一致，便于片区与客户跟踪小组跟进。',
-    schedule: '每天 08:00',
-  },
-  {
-    title: '每日异常客户监控',
-    desc: '每工作日 9:00 从总部资金系统拉取上一日对账与利息到账数据，写入工作中心并与首页「昨日异常客户跟踪」卡片口径对齐，异常项自动标红便于结算小组处理。',
-    schedule: '工作日 09:00',
-  },
-];
-
 interface CronTaskEmptyStateProps {
   searchQuery: string;
   onCreate: () => void;
   onRecommendAdd: (task: RecommendTask) => void;
 }
 
-export function CronTaskEmptyState({ searchQuery, onCreate, onRecommendAdd }: CronTaskEmptyStateProps) {
+export function CronTaskEmptyState({ searchQuery, onCreate }: CronTaskEmptyStateProps) {
   // Search no results
   if (searchQuery) {
     return (

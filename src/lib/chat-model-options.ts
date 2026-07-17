@@ -14,6 +14,16 @@ export function normalizeModelIdForChat(raw: string | undefined | null): string 
   return lastSlash >= 0 ? trimmed.slice(lastSlash + 1) : trimmed;
 }
 
+/** True when a catalog id and user hint refer to the same catalog entry. */
+export function catalogModelIdsMatch(hint: string, catalogId: string): boolean {
+  const trimmedHint = hint.trim();
+  const trimmedCatalog = catalogId.trim();
+  if (!trimmedHint || !trimmedCatalog) return false;
+  if (trimmedHint === trimmedCatalog) return true;
+  if (trimmedHint.endsWith(`/${trimmedCatalog}`)) return true;
+  return false;
+}
+
 export function isConcreteModelId(raw: string | undefined | null): boolean {
   const normalized = normalizeModelIdForChat(raw);
   return Boolean(normalized) && normalized.toLowerCase() !== 'not configured';
@@ -42,13 +52,21 @@ export function upsertSessionModel(
   sessions: ChatSession[],
   sessionKey: string,
   model: string,
-  partial?: Pick<ChatSession, 'label' | 'engineType'>,
+  partial?: Pick<ChatSession, 'label' | 'engineType' | 'agentId'>,
 ): ChatSession[] {
   const normalized = model.trim();
   if (!normalized) return sessions;
   if (sessions.some((session) => session.key === sessionKey)) {
     return sessions.map((session) => (
-      session.key === sessionKey ? { ...session, model: normalized } : session
+      session.key === sessionKey
+        ? {
+          ...session,
+          model: normalized,
+          ...(partial?.label ? { label: partial.label } : {}),
+          ...(partial?.engineType ? { engineType: partial.engineType } : {}),
+          ...(partial?.agentId ? { agentId: partial.agentId } : {}),
+        }
+        : session
     ));
   }
   return [
@@ -57,12 +75,13 @@ export function upsertSessionModel(
       key: sessionKey,
       label: partial?.label ?? '新对话',
       engineType: partial?.engineType,
+      agentId: partial?.agentId,
       model: normalized,
     },
   ];
 }
 
-/** Workspace default model from the default provider account. */
+/** Workspace default model from the default provider account (normalized for UI). */
 export function getWorkspaceDefaultModelId(
   accounts: ProviderAccount[],
   defaultAccountId: string | null,
@@ -78,8 +97,80 @@ export function getWorkspaceDefaultModelId(
 }
 
 /**
+ * Match bare or partial model id to a provider catalog entry
+ * (e.g. qwen3.6-plus → dashscope/qwen3.6-plus for STO OpenClaw).
+ */
+export function resolveProviderRawModelId(
+  accounts: ProviderAccount[],
+  model: string,
+  preferredAccountId?: string | null,
+): { modelId: string; accountId: string } | null {
+  const trimmed = model.trim();
+  if (!trimmed) return null;
+
+  const tryAccount = (account: ProviderAccount): { modelId: string; accountId: string } | null => {
+    const customModels = account.metadata?.customModels as string[] | undefined;
+    const candidates = [
+      ...(customModels ?? []),
+      ...(account.model?.trim() ? [account.model.trim()] : []),
+    ];
+    for (const catalogId of candidates) {
+      if (HIDDEN_PROVIDER_IDS.has(catalogId)) continue;
+      if (catalogModelIdsMatch(trimmed, catalogId)) {
+        return { modelId: catalogId, accountId: account.id };
+      }
+    }
+    for (const catalogId of candidates) {
+      if (HIDDEN_PROVIDER_IDS.has(catalogId)) continue;
+      if (normalizeModelIdForChat(catalogId) === normalizeModelIdForChat(trimmed)) {
+        return { modelId: catalogId, accountId: account.id };
+      }
+    }
+    return null;
+  };
+
+  if (preferredAccountId) {
+    const preferred = accounts.find((account) => account.id === preferredAccountId);
+    if (preferred) {
+      const hit = tryAccount(preferred);
+      if (hit) return hit;
+    }
+  }
+
+  for (const account of accounts) {
+    const hit = tryAccount(account);
+    if (hit) return hit;
+  }
+
+  const fallbackAccountId = preferredAccountId?.trim()
+    || accounts.find((account) => account.isDefault)?.id
+    || accounts[0]?.id;
+  return fallbackAccountId ? { modelId: trimmed, accountId: fallbackAccountId } : null;
+}
+
+/**
+ * Workspace default model — raw value (preserves supplier sub-prefix).
+ * Use this when sending the model ID to the backend / Gateway, where the
+ * full original name (e.g. "dashscope/kimi-k2.6") is required.
+ */
+export function getWorkspaceDefaultRawModelId(
+  accounts: ProviderAccount[],
+  defaultAccountId: string | null,
+): string {
+  if (!defaultAccountId) return '';
+  const account = accounts.find((a) => a.id === defaultAccountId);
+  if (!account) return '';
+  const model = account.model?.trim();
+  const customModels = account.metadata?.customModels as string[] | undefined;
+  const first = customModels?.find((m) => !HIDDEN_PROVIDER_IDS.has(m));
+  const seed = model || first || '';
+  if (!seed) return '';
+  return resolveProviderRawModelId(accounts, seed, defaultAccountId)?.modelId ?? seed;
+}
+
+/**
  * Resolve toolbar selected model.
- * - Session override (toolbar switch) wins.
+ * - Session override (toolbar switch) wins when still in the live catalog.
  * - Workspace default (Settings) wins over inherited agent default.
  * - Explicit per-agent model (Agent 详情页单独配置) wins when not inherited.
  */
@@ -90,12 +181,20 @@ export function resolveChatToolbarModelId(input: {
   workspaceDefaultModel?: string;
   /** STO 内置模型列表：用于识别 main 上残留的旧显式模型，Settings 默认优先 */
   stoCatalogModelIds?: string[];
+  /** Live dropdown options — delisted session/agent models are ignored when provided */
+  chatModelOptions?: ChatModelOption[];
 }): string {
-  const session = normalizeModelIdForChat(input.sessionModel);
+  const options = input.chatModelOptions ?? [];
+  const session = options.length > 0
+    ? sanitizeChatModelHint(input.sessionModel, options)
+    : normalizeModelIdForChat(input.sessionModel);
   if (session) return session;
 
   const workspace = normalizeModelIdForChat(input.workspaceDefaultModel);
-  const agent = normalizeModelIdForChat(input.agentModelDisplay);
+  const agentRaw = normalizeModelIdForChat(input.agentModelDisplay);
+  const agent = options.length > 0 && agentRaw
+    ? (sanitizeChatModelHint(input.agentModelDisplay, options) || '')
+    : agentRaw;
   const catalog = (input.stoCatalogModelIds ?? []).map((id) => normalizeModelIdForChat(id));
 
   // Agent 绑定的模型已不在 STO 目录（如 qwen3.7-plus → qwen3.7-max 更名后）→ 回退工作区默认
@@ -143,9 +242,10 @@ export function shouldSyncSessionToWorkspaceDefault(
 
 export interface ChatModelOption {
   key: string;
-  modelId: string;
+  modelId: string;        // ← 原始值（含前缀），用于发给 Gateway / backend
+  normalizedId: string;   // ← 截断后的值，用于匹配 selectedModelId
   accountId: string;
-  displayName: string;
+  displayName: string;    // ← 与 Models 页一致的完整模型 ID（UI 展示）
   subLabel: string;
   /** true = STO 内置等 */
   isBuiltin: boolean;
@@ -159,24 +259,28 @@ export function buildChatModelOptions(providerItems: ProviderListItem[]): ChatMo
     const isBuiltin = account.vendorId === 'sto';
     const customModels = account.metadata?.customModels as string[] | undefined;
     if (customModels && customModels.length > 0) {
-      for (const modelId of customModels) {
-        if (HIDDEN_PROVIDER_IDS.has(modelId)) continue;
+      for (const rawModelId of customModels) {
+        if (HIDDEN_PROVIDER_IDS.has(rawModelId)) continue;
+        const normalizedId = normalizeModelIdForChat(rawModelId);
         options.push({
-          key: `${account.id}::${modelId}`,
-          modelId,
+          key: `${account.id}::${rawModelId}`,
+          modelId: rawModelId,
+          normalizedId,
           accountId: account.id,
-          displayName: modelId,
+          displayName: rawModelId,
           subLabel,
           isBuiltin,
         });
       }
     } else if (account.model) {
       if (!HIDDEN_PROVIDER_IDS.has(account.model)) {
+        const normalizedId = normalizeModelIdForChat(account.model);
         options.push({
           key: `${account.id}::${account.model}`,
           modelId: account.model,
+          normalizedId,
           accountId: account.id,
-          displayName: account.label || account.model,
+          displayName: account.label || normalizedId,
           subLabel: account.model,
           isBuiltin,
         });
@@ -184,4 +288,54 @@ export function buildChatModelOptions(providerItems: ProviderListItem[]): ChatMo
     }
   }
   return options;
+}
+
+/** Map session / toolbar hint to raw catalog modelId for unique dropdown selection. */
+export function resolveChatSelectedModelId(
+  options: ChatModelOption[],
+  modelHint: string | undefined | null,
+): string {
+  const trimmed = modelHint?.trim();
+  if (!trimmed) return '';
+
+  const exact = options.find((option) => catalogModelIdsMatch(trimmed, option.modelId));
+  if (exact) return exact.modelId;
+
+  const normalized = normalizeModelIdForChat(trimmed);
+  if (!normalized) return '';
+
+  const matches = options.filter((option) => option.normalizedId === normalized);
+  if (matches.length === 1) return matches[0].modelId;
+  if (matches.length > 1) {
+    const qualified = matches.find((option) => trimmed.endsWith(`/${option.modelId}`));
+    if (qualified) return qualified.modelId;
+    return matches[0].modelId;
+  }
+
+  return trimmed;
+}
+
+/** True when hint resolves to an entry still present in the chat model dropdown. */
+export function isModelAvailableInChatOptions(
+  options: ChatModelOption[],
+  hint: string | undefined | null,
+): boolean {
+  if (!hint?.trim() || options.length === 0) return false;
+  const resolved = resolveChatSelectedModelId(options, hint);
+  return options.some((option) => option.modelId === resolved);
+}
+
+/**
+ * Drop session/pending hints that no longer exist in the live catalog
+ * (e.g. STO model delisted). Empty options → keep hint (catalog not loaded yet).
+ */
+export function sanitizeChatModelHint(
+  hint: string | undefined | null,
+  options: ChatModelOption[],
+): string {
+  const normalized = normalizeModelIdForChat(hint);
+  if (!normalized) return '';
+  if (options.length === 0) return normalized;
+  if (!isModelAvailableInChatOptions(options, hint)) return '';
+  return normalizeModelIdForChat(resolveChatSelectedModelId(options, hint)) || normalized;
 }

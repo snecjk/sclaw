@@ -6,6 +6,7 @@ import { handleAuthRoutes } from './routes/auth';
 import { handleAppRoutes } from './routes/app';
 import { handleGatewayRoutes } from './routes/gateway';
 import { handleSettingsRoutes } from './routes/settings';
+import { handleMoreAppsRoutes } from './routes/more-apps';
 import { handleProviderRoutes } from './routes/providers';
 import { handleAgentRoutes } from './routes/agents';
 import { handleChannelRoutes } from './routes/channels';
@@ -15,6 +16,7 @@ import { handleSkillRoutes } from './routes/skills';
 import { handleSkillPlazaRoutes } from './routes/skill-plaza';
 import { handleFileRoutes } from './routes/files';
 import { handleSessionRoutes } from './routes/sessions';
+import { handleSessionCatalogRoutes } from './routes/session-catalog';
 import { handleTaskGroupRoutes } from './routes/task-groups';
 import { handleCronRoutes } from './routes/cron';
 import { handleScheduledTaskRoutes } from './routes/scheduled-tasks';
@@ -27,6 +29,8 @@ import { handleSubscriptionRoutes } from './routes/subscriptions';
 import { handleMyTasksRoutes } from './routes/my-tasks';
 import { handleDictionaryRoutes } from './routes/dictionaries';
 import { handleWorkflowRoutes } from './routes/workflows';
+import { handleSclawBrowserRoutes } from './routes/sclaw-browser';
+import { handleBrowserBridgeRoutes } from './routes/browser-bridge';
 
 import { sendJson } from './route-utils';
 
@@ -42,6 +46,7 @@ const routeHandlers: RouteHandler[] = [
   handleAppRoutes,
   handleGatewayRoutes,
   handleSettingsRoutes,
+  handleMoreAppsRoutes,
   handleProviderRoutes,
   handleStoSyncRoutes,
   handleTokenQuotaRoutes,
@@ -53,11 +58,14 @@ const routeHandlers: RouteHandler[] = [
   handleSkillPlazaRoutes,
   handleFileRoutes,
   handleSessionRoutes,
+  handleSessionCatalogRoutes,
   handleTaskGroupRoutes,
   handleCronRoutes,
   handleScheduledTaskRoutes,
   handleDictionaryRoutes,
   handleWorkflowRoutes,
+  handleSclawBrowserRoutes,
+  handleBrowserBridgeRoutes,
   handleClaudeScheduledTaskRoutes,
   handleDingTalkRoutes,
   handleMyTasksRoutes,

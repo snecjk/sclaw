@@ -1,0 +1,134 @@
+/**
+ * New chat + history picker for embed-browser AI assistant header.
+ */
+import { useState } from 'react';
+import { Check, ChevronDown, History, Plus, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
+import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
+
+function formatSessionTime(ts: number): string {
+  if (!ts) return '';
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(ts));
+  } catch {
+    return '';
+  }
+}
+
+export function SclawBrowserEmbedChatSessions() {
+  const { t } = useTranslation('common');
+  const chatSessionKey = useSclawBrowserOverlayStore((s) => s.chatSessionKey);
+  const chatSessions = useSclawBrowserOverlayStore((s) => s.chatSessions);
+  const createChatSession = useSclawBrowserOverlayStore((s) => s.createChatSession);
+  const switchChatSession = useSclawBrowserOverlayStore((s) => s.switchChatSession);
+  const deleteChatSession = useSclawBrowserOverlayStore((s) => s.deleteChatSession);
+  const refreshChatSessions = useSclawBrowserOverlayStore((s) => s.refreshChatSessions);
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="sclaw-browser-embed-chat__sessions">
+      <button
+        type="button"
+        className="sclaw-browser-embed-chat__session-btn"
+        onClick={() => createChatSession()}
+        title={t('moreApps.embedChat.newSession', { defaultValue: '新建对话' })}
+        aria-label={t('moreApps.embedChat.newSession', { defaultValue: '新建对话' })}
+      >
+        <Plus className="h-3.5 w-3.5" aria-hidden />
+      </button>
+
+      <DropdownMenu
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (next) refreshChatSessions();
+        }}
+      >
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="sclaw-browser-embed-chat__session-picker"
+            title={t('moreApps.embedChat.history', { defaultValue: '历史对话' })}
+            aria-label={t('moreApps.embedChat.history', { defaultValue: '历史对话' })}
+          >
+            <History className="h-3.5 w-3.5" aria-hidden />
+            <ChevronDown className="h-3 w-3 opacity-60" aria-hidden />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          sideOffset={6}
+          className="z-[100001] w-56"
+        >
+          <DropdownMenuLabel>
+            {t('moreApps.embedChat.history', { defaultValue: '历史对话' })}
+          </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {chatSessions.length === 0 ? (
+            <div className="px-2 py-3 text-xs text-muted-foreground">
+              {t('moreApps.embedChat.emptyHistory', { defaultValue: '暂无历史对话' })}
+            </div>
+          ) : (
+            chatSessions.map((item) => {
+              const active = item.key === chatSessionKey;
+              return (
+                <DropdownMenuItem
+                  key={item.key}
+                  className={cn('group flex items-start gap-2 pr-1', active && 'bg-accent')}
+                  onSelect={(event) => {
+                    const target = event.target as HTMLElement | null;
+                    if (target?.closest('[data-embed-session-delete]')) {
+                      event.preventDefault();
+                      return;
+                    }
+                    switchChatSession(item.key);
+                  }}
+                >
+                  <Check
+                    className={cn('mt-0.5 h-3.5 w-3.5 shrink-0', active ? 'opacity-100' : 'opacity-0')}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm">{item.title}</span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      {formatSessionTime(item.updatedAt)}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    data-embed-session-delete
+                    className="mt-0.5 shrink-0 rounded p-1 text-muted-foreground opacity-70 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+                    title={t('moreApps.embedChat.deleteSession', { defaultValue: '删除对话' })}
+                    aria-label={t('moreApps.embedChat.deleteSession', { defaultValue: '删除对话' })}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void deleteChatSession(item.key);
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                  </button>
+                </DropdownMenuItem>
+              );
+            })
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}

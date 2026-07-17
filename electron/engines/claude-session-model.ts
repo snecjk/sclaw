@@ -5,6 +5,7 @@
 
 import { getEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry } from './session-registry';
 import { logger } from '../utils/logger';
+import { resolveAvailableClaudeModel } from './claude-model-selection';
 
 function normalizeModelId(model?: string): string {
   return (model ?? '').trim();
@@ -19,9 +20,22 @@ export async function applyClaudeSessionModelSwitch(params: {
   title?: string;
 }): Promise<{ model: string; modelChanged: boolean }> {
   const existing = await getEngineSessionRegistryEntry(params.sessionKey);
-  const nextModel = normalizeModelId(params.rawModel);
+  const selection = await resolveAvailableClaudeModel({
+    requestedModel: params.rawModel,
+    requestedAccountId: params.accountId ?? existing?.accountId,
+  });
+  const nextModel = normalizeModelId(selection.model);
   const previousModel = normalizeModelId(existing?.model);
   const modelChanged = Boolean(nextModel && nextModel !== previousModel);
+
+  if (selection.fallbackApplied) {
+    logger.warn('[claude-session] Requested model is unavailable; using fallback', {
+      requestedModel: params.rawModel,
+      requestedAccountId: params.accountId ?? existing?.accountId,
+      fallbackModel: selection.model,
+      fallbackAccountId: selection.accountId,
+    });
+  }
 
   let archivedClaudeSessionIds = [...(existing?.archivedClaudeSessionIds ?? [])];
   let sessionId = existing?.sessionId;
@@ -47,7 +61,7 @@ export async function applyClaudeSessionModelSwitch(params: {
     updatedAt: Date.now(),
     title: params.title ?? existing?.title,
     model: nextModel,
-    accountId: params.accountId ?? existing?.accountId,
+    accountId: selection.accountId,
     archivedClaudeSessionIds,
     pendingHistoryBridge: modelChanged ? pendingHistoryBridge : existing?.pendingHistoryBridge,
   });

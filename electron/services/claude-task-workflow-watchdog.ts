@@ -23,6 +23,7 @@ import {
   dwsSendRecipientKey,
   recordDwsSent,
 } from '../utils/dws-send-dedup';
+import { normalizeArtifactUrl } from '../../shared/dws-send-text';
 import {
   pollWorkflowRunUntilTerminal,
   type WorkflowRunStatusResult,
@@ -36,6 +37,12 @@ export interface WorkflowFallbackParams {
   workflowRunIds: string[];
   /** worker 观察到 agent 已成功执行过 `dws chat message send`。 */
   dingtalkAlreadySent: boolean;
+  /**
+   * agent 最后一条 assistant 文本（执行结果/回答）。非工作流任务（无 runId）
+   * 在 agent 未自行发钉钉时，本兜底把它作为正文补发给收件人——不信任模型
+   * 一定会遵守"指定即必发"（qwen 等模型偶发回答后反问而不发）。
+   */
+  lastAssistantText?: string;
 }
 
 /** 兜底最长等待时长：覆盖真实长工作流（默认 30 分钟）。 */
@@ -118,21 +125,21 @@ function pickDingTalkArtifactUrl(art: {
 }
 
 /**
- * 把产物 URL 规范化成纯 ASCII，确保钉钉能稳定识别并自动链接化。
+ * 把产物 URL 规范化成纯 ASCII 且「恰好一次 percent-encoding」，确保钉钉能稳定识别并自动链接化。
  *
  * 工作流产物 URL 的 filePath 常带**原始中文字符**（如
  * `.../总部结算对账分析_日_20260708_1726.html`）。塞进消息后钉钉对非 ASCII
  * 的处理不稳定：偶发整条链接被吞（只剩空 bullet）或丢链只留 label 文本。
  *
- * `encodeURI` 只编码非 ASCII 与 `[` `]` 等会破坏 markdown 的字符，**保留**已存在的
- * `%XX` 转义（不会二次编码），因此对已经是 percent-encoded 的 URL 也是幂等安全的。
+ * 同时要防「双重编码」：OSS 后端返回的 `previewUrl`/`tempUrl` 到本处时通常已是
+ * percent-encoded（`%E4%B8%AD`）。**`encodeURI` 对已编码串并非幂等**——它会把已存在
+ * 的 `%` 再编成 `%25`（`%E4` → `%25E4`），即双重编码、链接失效；若上游某层已错误地
+ * `encodeURIComponent` 过一次后果相同。故改用 `normalizeArtifactUrl`（反复 `decodeURI`
+ * 剥尽冗余编码层、再 `encodeURI` 一次），无论输入是「原始中文 / 已编码 / 双重（多重）
+ * 编码」都收敛到单次编码稳定态，且对任意合法输入幂等、重复调用也安全。
  */
 function encodeArtifactUrl(url: string): string {
-  try {
-    return encodeURI(url);
-  } catch {
-    return url;
-  }
+  return normalizeArtifactUrl(url);
 }
 
 /** 产物展示名：去掉换行/制表符，trim 后为空则回退到「(未命名产物)」。 */
@@ -166,10 +173,10 @@ function formatRunSection(result: WorkflowRunStatusResult): string {
         const url = pickDingTalkArtifactUrl(a);
         const label = sanitizeArtifactLabel(a.name || a.url || '(未命名产物)');
         if (url) {
-          // 不用 `[label](url)` markdown 链接语法：产物 URL 常含中文 filePath，
-          // 钉钉对其链接解析偶发失败（吞链接 → 空 bullet，或丢链只留 label 文本）。
-          // 改用「label：裸URL」——钉钉 text / markdown 都会自动识别 http(s)
-          // 并生成可点击链接，label 也永远不空。
+          // 裸 URL 格式（与发给模型的 P0 指令一致）：钉钉对含中文 URL 的 markdown
+          // 链接偶发吞链只剩 label，裸 URL 把链接字面留在正文更稳；且 encodeArtifactUrl
+          // 会把后端可能返回的「双重编码」塌缩回单次编码（`%25E5` → `%E5`），把
+          // 原始中文统一编码一次，保证整条链接是纯 ASCII。
           lines.push(`- ${label}：${encodeArtifactUrl(url)}`);
         } else {
           lines.push(`- ${label}`);
@@ -254,22 +261,46 @@ async function sendToRecipient(recipient: DingTalkMention, title: string, body: 
 }
 
 /**
- * 工作流结果钉钉兜底主入口。**永不 reject**（worker 以 fire-and-forget 方式调用）。
+ * 去掉 agent 末尾"是否需要我发送 / 请告诉我发送内容"等违反 rule5 的反问句。
  *
- * 触发场景：agent 跑了工作流（worker 捕获到 runId）但自身未成功发出钉钉——
- * 包括超时卡死（agent 未及发出）与正常结束却未发（agent 决策遗漏，最常见于
- * prompt 仅要求"执行工作流"而未要求"把结果发钉钉"）。两种情况都由本函数
- * 轮询 runId 到终态后把结果补发给已配置收件人。
+ * 非工作流兜底把 agent 的 lastAssistantText 当正文发给收件人；但模型（尤其
+ * qwen）偶发不遵从"指定即必发"，回答后追加"请问您是否需要发送？"请示句。
+ * 原样发出去会让收件人收到一句莫名其妙的问话。真实业务结果不会以这类反问
+ * 收尾，故只剥尾、不影响正文。
+ */
+function stripSendConfirmationQuestion(text: string): string {
+  const parts = text.split(/(?<=[。？!?！\n])/);
+  while (parts.length > 0) {
+    const last = parts[parts.length - 1].trim();
+    if (!last) { parts.pop(); continue; }
+    const isAskBack =
+      /(?:是否|是不是|要不要|需不需要|需要我|请告诉|请确认).{0,20}(?:发送|发给|推送给|推送|发出去|内容)/.test(last)
+      || /(?:发送|发给|推送给|发出去).{0,12}(?:是否|要不要|需不需要)/.test(last);
+    if (isAskBack) parts.pop(); else break;
+  }
+  return parts.join('').trim();
+}
+
+function buildNonWorkflowFallbackBody(taskName: string, lastAssistantText: string): string {
+  const intro = `【定时任务】${taskName}`;
+  const cleaned = stripSendConfirmationQuestion(lastAssistantText);
+  if (!cleaned) return '';
+  return [intro, '', cleaned].join('\n');
+}
+
+/**
+ * 钉钉结果兜底主入口。**永不 reject**（worker 以 fire-and-forget 方式调用）。
+ *
+ * 触发场景：定时任务结束时含收件人块、但 agent 自身未成功发出钉钉——
+ * - 工作流任务：worker 捕获到 runId → 轮询工作流到终态后把结果补发；
+ * - 非工作流任务（无 runId）：把 agent 的 lastAssistantText（剥掉末尾反问）
+ *   作为正文补发。覆盖模型不遵从"指定即必发"、回答后反问而不发的情形。
  */
 export async function sendWorkflowResultFallback(params: WorkflowFallbackParams): Promise<void> {
-  const { taskName, promptTemplate, workflowRunIds, dingtalkAlreadySent } = params;
+  const { taskName, promptTemplate, workflowRunIds, dingtalkAlreadySent, lastAssistantText } = params;
 
   if (dingtalkAlreadySent) {
     logger.info('[WorkflowWatchdog] agent already sent dingtalk; skip fallback.');
-    return;
-  }
-  if (!workflowRunIds.length) {
-    logger.info('[WorkflowWatchdog] no workflow runId captured; skip fallback (non-workflow task).');
     return;
   }
 
@@ -280,20 +311,26 @@ export async function sendWorkflowResultFallback(params: WorkflowFallbackParams)
   }
   const recipients = dedupRecipients(parsed);
 
-  // 防「同一 runId 集合被补发多次」：详见 activeFallbacks 注释。
-  const fingerprint = [...workflowRunIds].sort().join('|');
+  const isWorkflow = workflowRunIds.length > 0;
+  // 防「同一任务被补发多次」：工作流按 runId 集合指纹，非工作流按任务名+收件人+正文指纹。
+  const fingerprint = isWorkflow
+    ? `wf:${[...workflowRunIds].sort().join('|')}`
+    : `nwf:${taskName}:${recipients
+        .map((r) => r.userId ?? r.openConversationId ?? r.displayName ?? '')
+        .join(',')}:${(lastAssistantText ?? '').length}:${(lastAssistantText ?? '').slice(0, 80)}`;
+
   const now = Date.now();
   const existing = activeFallbacks.get(fingerprint);
   if (existing && now - existing.startedAt < FALLBACK_LOCK_STALE_MS) {
     if (existing.sent) {
       logger.info(
-        `[WorkflowWatchdog] already sent for runs=${workflowRunIds.length}; skip duplicate.`,
+        `[WorkflowWatchdog] already sent for ${isWorkflow ? `runs=${workflowRunIds.length}` : 'non-workflow'}; skip duplicate.`,
       );
       return;
     }
     if (existing.running) {
       logger.info(
-        `[WorkflowWatchdog] fallback in-flight for runs=${workflowRunIds.length}; skip duplicate.`,
+        `[WorkflowWatchdog] fallback in-flight for ${isWorkflow ? `runs=${workflowRunIds.length}` : 'non-workflow'}; skip duplicate.`,
       );
       return;
     }
@@ -301,32 +338,36 @@ export async function sendWorkflowResultFallback(params: WorkflowFallbackParams)
   activeFallbacks.set(fingerprint, { running: true, sent: false, startedAt: now });
 
   logger.info(
-    `[WorkflowWatchdog] start fallback task=${taskName} runs=${workflowRunIds.length} recipients=${recipients.length}`,
+    `[WorkflowWatchdog] start fallback task=${taskName} ${isWorkflow ? `runs=${workflowRunIds.length}` : 'mode=non-workflow'} recipients=${recipients.length}`,
   );
 
   try {
-    // 并发轮询所有 runId 到终态（或整体 30 分钟到点）。runId 之间相互独立。
-    const results = await Promise.all(
-      workflowRunIds.map((runId) =>
-        pollWorkflowRunUntilTerminal(runId, {
-          intervalMs: FALLBACK_POLL_INTERVAL_MS,
-          maxWaitMs: FALLBACK_MAX_WAIT_MS,
-        }).then((result) => ({ runId, result })),
-      ),
-    );
+    let body: string;
+    if (isWorkflow) {
+      // 并发轮询所有 runId 到终态（或整体 30 分钟到点）。runId 之间相互独立。
+      const results = await Promise.all(
+        workflowRunIds.map((runId) =>
+          pollWorkflowRunUntilTerminal(runId, {
+            intervalMs: FALLBACK_POLL_INTERVAL_MS,
+            maxWaitMs: FALLBACK_MAX_WAIT_MS,
+          }).then((result) => ({ runId, result })),
+        ),
+      );
+      body = buildFallbackBody(taskName, results);
+    } else {
+      body = buildNonWorkflowFallbackBody(taskName, lastAssistantText ?? '');
+    }
 
-    const title = `【定时任务】${taskName}`;
-    const body = buildFallbackBody(taskName, results);
-
-    // 所有 run 都既无摘要也无产物（罕见）——没有可投递内容就不发，避免空消息。
+    // 无可投递内容（工作流全空 / 非工作流 lastAssistantText 为空或只剩反问）就不发，避免空消息。
     if (!body) {
       logger.info(
-        `[WorkflowWatchdog] no deliverable result (all runs empty); skip fallback task=${taskName}`,
+        `[WorkflowWatchdog] no deliverable result; skip fallback task=${taskName}`,
       );
       activeFallbacks.set(fingerprint, { running: false, sent: true, startedAt: Date.now() });
       return;
     }
 
+    const title = `【定时任务】${taskName}`;
     let okCount = 0;
     for (const recipient of recipients) {
       if (await sendToRecipient(recipient, title, body)) okCount += 1;

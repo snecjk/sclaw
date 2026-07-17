@@ -1,8 +1,11 @@
 import type { WorkflowExecutionState } from '@/types/workflow';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
 
 export interface SendMessageOptions {
   text: string;
+  /** Explicit destination used by background/queued sends. Never inferred from current UI state. */
+  sessionKey?: string | null;
   attachments?: Array<{
     fileName: string;
     mimeType: string;
@@ -16,6 +19,10 @@ export interface SendMessageOptions {
   runId?: string | null;
   /** Hidden workflow schema context injected into the user message for AI guidance */
   workflowContext?: WorkflowContextBlock | null;
+  /** Hidden embed-browser page snapshot for in-app preview chat */
+  embedBrowserContext?: import('@/lib/sclaw-browser-embed-context').SclawBrowserEmbedContextBlock | null;
+  /** Skill plaza context — UI tag + Gateway defaultPrompt injection */
+  skillMeta?: SkillMeta;
 }
 
 /** Hidden context block describing a workflow for AI parameter guidance */
@@ -59,6 +66,8 @@ export interface RawMessage {
   isError?: boolean;
   /** Local-only: file metadata for user-uploaded attachments (not sent to/from Gateway) */
   _attachedFiles?: AttachedFileMeta[];
+  /** Local-only: skill plaza tag metadata for user message bubble rendering */
+  _skillMeta?: SkillMeta;
 }
 
 /** Content block inside a message */
@@ -109,6 +118,11 @@ export interface ChatSession {
   model?: string;
   updatedAt?: number;
   engineType?: 'openclaw' | 'claude';
+  /**
+   * Owning agent for this session. Required for `claude-task:*` keys which do not
+   * embed agentId in the session key (key-derived fallback would wrongly be `main`).
+   */
+  agentId?: string;
   /** Parent session key when this session was spawned as an OpenClaw subagent. */
   spawnedBy?: string;
 }
@@ -125,15 +139,10 @@ export interface ToolStatus {
   updatedAt: number;
 }
 
-export interface DailyTokenQuotaStatus {
-  allowed?: boolean;
-  usedToday?: number;
-  limit?: number;
-  checkedAt: string;
-}
-
 export interface SessionRuntimeState {
   sending: boolean;
+  /** Abort has been requested, but the engine has not confirmed termination yet. */
+  aborting: boolean;
   activeRunId: string | null;
   streamingText: string;
   streamingMessage: unknown | null;
@@ -148,7 +157,15 @@ export interface SessionRuntimeState {
   optimisticUserMessage: RawMessage | null;
   pendingToolImages: AttachedFileMeta[];
   error: string | null;
+  /** Tracks whether the Gateway has acknowledged the current optimistic send. */
+  sendAcceptance: SendAcceptanceState | null;
   updatedAt: number;
+}
+
+export interface SendAcceptanceState {
+  idempotencyKey: string;
+  status: 'pending' | 'accepted' | 'uncertain';
+  startedAt: number;
 }
 
 export interface ChatState {
@@ -163,6 +180,7 @@ export interface ChatState {
    *  sending before backend has applied the new model. */
   modelSwitching: boolean;
   activeRunId: string | null;
+  sendAcceptance: SendAcceptanceState | null;
   streamingText: string;
   streamingMessage: unknown | null;
   /** Live assistant snapshots seen during the active turn, in arrival order. */
@@ -177,9 +195,6 @@ export interface ChatState {
   optimisticUserMessage: RawMessage | null;
   /** Images collected from tool results, attached to the next assistant message */
   pendingToolImages: AttachedFileMeta[];
-  /** Last successful daily token quota check result. */
-  dailyTokenQuotaStatus: DailyTokenQuotaStatus | null;
-
   // Sessions
   sessions: ChatSession[];
   currentSessionKey: string;
@@ -198,6 +213,17 @@ export interface ChatState {
   // Thinking
   showThinking: boolean;
   thinkingLevel: string | null;
+
+  /** Model selected on the new-conversation page (DEFAULT_SESSION_KEY) before sending.
+   *  Carried into the real session created by newSession() so the user's choice
+   *  is preserved instead of reverting to the global default. */
+  pendingNewSessionModel: string | null;
+  setPendingNewSessionModel: (model: string | null) => void;
+
+  /** Project id for an empty home draft that has not materialized a session yet.
+   *  First send creates the real session and binds it to this project. */
+  pendingProjectId: string | null;
+  setPendingProjectId: (projectId: string | null) => void;
 
   // Workflow
   workflowCardStates: Record<string, WorkflowExecutionState>;
@@ -225,15 +251,15 @@ export interface ChatState {
   switchSession: (key: string) => void;
   /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
   switchToAgentMainSession: (agentId: string) => void;
-  newSession: () => void;
+  newSession: (options?: { projectId?: string; materialize?: boolean }) => void;
   deleteSession: (key: string, options?: {
     skipSessionRefresh?: boolean;
     additionalSuppressKeys?: string[];
   }) => Promise<boolean>;
   cleanupEmptySession: () => void;
-  loadHistory: (quiet?: boolean, force?: boolean) => Promise<void>;
+  loadHistory: (quiet?: boolean, force?: boolean, sessionKey?: string) => Promise<void>;
   sendMessage: (options: SendMessageOptions) => Promise<void>;
-  abortRun: () => Promise<void>;
+  abortRun: (sessionKey?: string) => Promise<boolean>;
   handleChatEvent: (event: Record<string, unknown>) => void;
   toggleThinking: () => void;
   refresh: () => Promise<void>;
@@ -247,3 +273,10 @@ export interface ChatState {
 
 export const DEFAULT_CANONICAL_PREFIX = 'agent:main';
 export const DEFAULT_SESSION_KEY = `${DEFAULT_CANONICAL_PREFIX}:main`;
+
+/** Sidebar-only placeholder for a project "新对话" draft (not persisted until first send). */
+export const PROJECT_NEW_CHAT_DRAFT_KEY = 'project-draft:pending';
+
+export function isProjectNewChatDraftKey(sessionKey: string | null | undefined): boolean {
+  return (sessionKey ?? '').trim() === PROJECT_NEW_CHAT_DRAFT_KEY;
+}

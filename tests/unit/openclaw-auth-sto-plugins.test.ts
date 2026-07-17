@@ -76,8 +76,9 @@ describe('syncStoPluginsToOpenClaw', () => {
   it('writes sto-skill-call-monitor into plugins.allow and plugins.entries', async () => {
     const { syncStoPluginsToOpenClaw } = await import('@electron/utils/openclaw-auth');
 
-    await syncStoPluginsToOpenClaw();
+    const wrote = await syncStoPluginsToOpenClaw();
 
+    expect(wrote).toBe(true);
     expect(mockWriteFile).toHaveBeenCalled();
     const [, writtenJson] = mockWriteFile.mock.calls.at(-1) as [string, string];
     const writtenConfig = JSON.parse(writtenJson) as Record<string, any>;
@@ -85,6 +86,7 @@ describe('syncStoPluginsToOpenClaw', () => {
     expect(writtenConfig.plugins.allow).toContain('sto-skill-call-monitor');
     expect(writtenConfig.plugins.allow).toContain('sto-media-understanding');
     expect(writtenConfig.plugins.allow).toContain('sto-workflow-tool');
+    expect(writtenConfig.plugins.allow).toContain('sto-browser-bridge');
     expect(writtenConfig.plugins.allow).not.toContain('sto-distinctive-design-guard');
     expect(writtenConfig.plugins.entries['sto-workflow-tool']).toEqual({
       enabled: true,
@@ -106,5 +108,30 @@ describe('syncStoPluginsToOpenClaw', () => {
       enabled: true,
       config: {},
     });
+    expect(writtenConfig.plugins.entries['sto-browser-bridge']).toEqual({
+      enabled: true,
+      config: {
+        hostApiHost: '127.0.0.1',
+        hostApiPort: 3210,
+        commandTimeoutMs: 30_000,
+      },
+    });
+  });
+
+  it('skips rewriting openclaw.json when STO plugins config is unchanged', async () => {
+    const { syncStoPluginsToOpenClaw } = await import('@electron/utils/openclaw-auth');
+
+    await syncStoPluginsToOpenClaw();
+    const writeCountAfterFirst = mockWriteFile.mock.calls.length;
+    expect(writeCountAfterFirst).toBeGreaterThan(0);
+
+    const [, writtenJson] = mockWriteFile.mock.calls.at(-1) as [string, string];
+    mockReadFile.mockResolvedValue(writtenJson);
+    mockWriteFile.mockClear();
+
+    const wroteAgain = await syncStoPluginsToOpenClaw();
+
+    expect(wroteAgain).toBe(false);
+    expect(mockWriteFile).not.toHaveBeenCalled();
   });
 });
