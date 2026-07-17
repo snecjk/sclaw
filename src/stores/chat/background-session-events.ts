@@ -30,7 +30,6 @@ export interface BackgroundChatEvent {
   message: unknown;
   phase: unknown;
   errorMessage: string;
-  suppressTerminalEffects?: boolean;
 }
 
 export interface BackgroundSessionEventDependencies {
@@ -56,13 +55,11 @@ export function createBackgroundSessionEventHandler(dependencies: BackgroundSess
       message,
       phase,
       errorMessage,
-      suppressTerminalEffects,
     } = backgroundEvent;
     logChatFlow('event.background.apply', {
       state: resolvedState,
       runId,
       sessionKey,
-      suppressTerminalEffects: Boolean(suppressTerminalEffects),
     });
     const runtimeBefore = getSessionRuntimeState(get().runtimeBySessionKey, sessionKey);
     const decision = decideRunEvent({ sessionKey, runtime: runtimeBefore, resolvedState, runId });
@@ -136,6 +133,7 @@ export function createBackgroundSessionEventHandler(dependencies: BackgroundSess
         set((state) => {
           const patch = applyRuntimePatch(state, sessionKey, (currentRuntime) => ({
             sending: isTerminalOutput ? false : currentRuntime.sending,
+            aborting: isTerminalOutput ? false : currentRuntime.aborting,
             activeRunId: isTerminalOutput ? null : currentRuntime.activeRunId,
             sendAcceptance: isTerminalOutput ? null : currentRuntime.sendAcceptance,
             streamingText: '',
@@ -160,7 +158,7 @@ export function createBackgroundSessionEventHandler(dependencies: BackgroundSess
           }
           return patch;
         });
-        if (isTerminalOutput && !toolOnly && !suppressTerminalEffects) {
+        if (isTerminalOutput && !toolOnly) {
           executeTurnEffects(buildTerminalTurnEffects({
             agentId: getAgentIdFromSessionKey(sessionKey),
             runId: runId || undefined,

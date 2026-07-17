@@ -119,6 +119,11 @@ export function createForegroundEventActions(
         hasMessage: message != null,
       });
 
+      // Deduplicate before any foreground/background runtime mutation. The old
+      // ordering mirrored active events into the background reducer first, so
+      // duplicate/error events could terminalize a run before foreground recovery.
+      if (isDuplicateChatEvent(eventState, event)) return;
+
       const targetSessionKey = resolvedSessionKey ?? currentSessionKey;
       const runtime = getSessionRuntimeState(get().runtimeBySessionKey, targetSessionKey);
       const decision = decideRunEvent({
@@ -164,28 +169,6 @@ export function createForegroundEventActions(
         });
         return;
       }
-
-      // For active session events, also update runtimeBySessionKey so that
-      // the sidebar shows loading for the current session.
-      if (resolvedSessionKey != null && resolvedSessionKey === currentSessionKey) {
-        logChatFlow('event.active.mirror', {
-          state: resolvedState,
-          runId,
-          sessionKey: resolvedSessionKey,
-          suppressTerminalEffects: true,
-        });
-        handleBackgroundSessionEvent(set, {
-          sessionKey: resolvedSessionKey,
-          resolvedState,
-          runId,
-          message,
-          phase,
-          errorMessage,
-          suppressTerminalEffects: true,
-        });
-      }
-
-      if (isDuplicateChatEvent(eventState, event)) return;
 
       touchLastChatEventAt(set);
 

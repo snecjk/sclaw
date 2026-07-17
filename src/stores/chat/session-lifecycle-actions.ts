@@ -698,7 +698,10 @@ export function createSessionLifecycleActions(
         set((s) => {
           const nextRuntimeBySessionKey = {
             ...s.runtimeBySessionKey,
-            [currentSessionKey]: captureTopLevelRuntime(s),
+            [currentSessionKey]: captureTopLevelRuntime(
+              s,
+              s.runtimeBySessionKey[currentSessionKey]?.aborting ?? false,
+            ),
             [DEFAULT_SESSION_KEY]: createIdleSessionRuntimeState(),
           };
           if (leavingEmpty) delete nextRuntimeBySessionKey[currentSessionKey];
@@ -784,7 +787,10 @@ export function createSessionLifecycleActions(
       set((s) => {
         const nextRuntimeBySessionKey = {
           ...s.runtimeBySessionKey,
-          [currentSessionKey]: captureTopLevelRuntime(s),
+          [currentSessionKey]: captureTopLevelRuntime(
+            s,
+            s.runtimeBySessionKey[currentSessionKey]?.aborting ?? false,
+          ),
         };
         if (leavingEmpty) {
           delete nextRuntimeBySessionKey[currentSessionKey];

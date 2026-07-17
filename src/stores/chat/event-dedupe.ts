@@ -17,9 +17,10 @@ function buildChatEventDedupeKey(eventState: string, event: Record<string, unkno
   const runId = event.runId != null ? String(event.runId) : '';
   const sessionKey = event.sessionKey != null ? String(event.sessionKey) : '';
   const sequence = event.seq != null ? String(event.seq) : '';
-  const contentLength = eventState === 'delta' ? getContentLength(event.message) : '';
+  const phase = event.phase != null ? String(event.phase) : '';
+  const messageFingerprint = getMessageFingerprint(event.message);
   if (runId || sessionKey || sequence || eventState) {
-    return [runId, sessionKey, sequence, eventState, contentLength].join('|');
+    return [runId, sessionKey, sequence, eventState, phase, messageFingerprint].join('|');
   }
   if (event.message && typeof event.message === 'object') {
     const message = event.message as Record<string, unknown>;
@@ -30,17 +31,19 @@ function buildChatEventDedupeKey(eventState: string, event: Record<string, unkno
   return null;
 }
 
-function getContentLength(value: unknown): string {
-  if (!value || typeof value !== 'object') return '';
-  const message = value as Record<string, unknown>;
-  if (typeof message.content === 'string') return String(message.content.length);
-  if (Array.isArray(message.content)) {
-    return String(message.content.reduce((total, block) => {
-      if (!block || typeof block !== 'object') return total;
-      const part = block as Record<string, unknown>;
-      return total + (typeof part.text === 'string' ? part.text.length : 0)
-        + (typeof part.thinking === 'string' ? part.thinking.length : 0);
-    }, 0));
+function getMessageFingerprint(value: unknown): string {
+  if (value == null) return '';
+  let serialized: string;
+  try {
+    serialized = typeof value === 'string' ? value : JSON.stringify(value);
+  } catch {
+    serialized = String(value);
   }
-  return typeof message.text === 'string' ? String(message.text.length) : '';
+  // FNV-1a keeps dedupe keys bounded while distinguishing equal-length deltas.
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < serialized.length; index += 1) {
+    hash ^= serialized.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `${serialized.length}:${(hash >>> 0).toString(16)}`;
 }

@@ -937,6 +937,7 @@ export function Sidebar() {
             ...state.runtimeBySessionKey,
             [state.currentSessionKey]: {
               sending: state.sending,
+              aborting: state.runtimeBySessionKey[state.currentSessionKey]?.aborting ?? false,
               activeRunId: state.activeRunId,
               sendAcceptance: state.sendAcceptance,
               streamingText: state.streamingText,
@@ -953,6 +954,7 @@ export function Sidebar() {
             },
             [DEFAULT_SESSION_KEY]: {
               sending: false,
+              aborting: false,
               activeRunId: null,
               sendAcceptance: null,
               streamingText: '',
@@ -1749,6 +1751,7 @@ export function Sidebar() {
             ...runtimeBySessionKey,
             [currKey]: {
               sending,
+              aborting: useChatStore.getState().runtimeBySessionKey[currKey]?.aborting ?? false,
               activeRunId,
               sendAcceptance: useChatStore.getState().sendAcceptance,
               streamingText,
@@ -1765,6 +1768,7 @@ export function Sidebar() {
             },
             [DEFAULT_SESSION_KEY]: {
               sending: false,
+              aborting: false,
               activeRunId: null,
               sendAcceptance: null,
               streamingText: '',

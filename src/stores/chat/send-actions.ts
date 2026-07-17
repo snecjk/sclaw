@@ -16,6 +16,10 @@ import { resolveSkillGatewayText } from '@/lib/skill-gateway-text';
 import { appendSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
 import { awaitSessionSendReadiness } from '@/lib/session-send-readiness';
 import { discardAgentMemoriesForAbnormalTurn } from '@/lib/agent-execution-memory';
+import { releaseSendAttempt, tryAcquireSendAttempt } from './send-attempt-lock';
+import { recordTerminalRun } from './run-lifecycle';
+import { buildTerminalRuntimePatch } from './turn-state-machine';
+import { getAgentIdFromSessionKey } from './session-identity';
 
 export function isUncertainDispatchError(error: unknown): boolean {
   const code = normalizeAppError(error).code;
@@ -49,6 +53,7 @@ function failSendTurn(input: {
   input.clearStuckCheckTimer?.(input.sessionKey);
   setRuntimePatch(input.set, input.sessionKey, {
     sending: false,
+    aborting: false,
     activeRunId: null,
     sendAcceptance: null,
     pendingFinal: false,
@@ -97,6 +102,7 @@ export function createSendActions(
       const options = normalizeSendMessageOptions(args);
       const {
         text,
+        sessionKey: requestedSessionKey,
         attachments,
         targetAgentId,
         dingTalkMentions,
@@ -119,7 +125,7 @@ export function createSendActions(
       // resolution so a fresh home/project conversation always gets a unique
       // local key and, for projects, completes catalog binding + gateway reload
       // through the registered session-readiness promise before dispatch.
-      if (get().currentSessionKey === DEFAULT_SESSION_KEY) {
+      if (!requestedSessionKey && get().currentSessionKey === DEFAULT_SESSION_KEY) {
         const pendingProjectId = get().pendingProjectId;
         get().newSession(
           pendingProjectId
@@ -138,6 +144,7 @@ export function createSendActions(
         targetAgentId,
         dingTalkMentions,
         attachments,
+        requestedSessionKey,
         resolveMainSessionKeyForAgent,
         buildSessionSwitchPatch,
         resolveEngineTypeForSession,
@@ -154,6 +161,12 @@ export function createSendActions(
         return;
       }
 
+      if (!tryAcquireSendAttempt(currentSessionKey)) {
+        logChatFlow('send.blocked.preparing-runtime', { sessionKey: currentSessionKey });
+        return;
+      }
+
+      try {
       try {
         await awaitSessionSendReadiness(currentSessionKey);
       } catch (error) {
@@ -170,8 +183,8 @@ export function createSendActions(
         trimmedText: gatewayText,
         memoryQueryText: userDisplayText || skillMeta?.title,
         sessionKey: currentSessionKey,
-        messages: get().messages,
-        workflowCardStates: get().workflowCardStates,
+        messages: get().currentSessionKey === currentSessionKey ? get().messages : [],
+        workflowCardStates: get().currentSessionKey === currentSessionKey ? get().workflowCardStates : {},
         workflowContext,
         embedBrowserContext,
         engineType: currentSessionEngineType,
@@ -203,6 +216,7 @@ export function createSendActions(
       const idempotencyKey = userMsg.id || crypto.randomUUID();
       setRuntimePatch(set, currentSessionKey, {
         sending: true,
+        aborting: false,
         activeRunId: null,
         error: null,
         sendAcceptance: {
@@ -307,48 +321,62 @@ export function createSendActions(
           });
         }
       }
+      } finally {
+        releaseSendAttempt(currentSessionKey);
+      }
     },
 
     // ── Abort active run ──
 
-    abortRun: async () => {
-      const { currentSessionKey } = get();
-      const activeRunId = getSessionRuntimeState(
-        get().runtimeBySessionKey,
-        currentSessionKey,
-      ).activeRunId;
-      discardAgentMemoriesForAbnormalTurn({
-        sessionKey: currentSessionKey,
-        runId: activeRunId,
-        reason: 'aborted',
-      });
-      clearHistoryPoll(currentSessionKey);
-      clearErrorRecoveryTimer(currentSessionKey);
-      clearStuckCheckTimer(currentSessionKey);
-      setRuntimePatch(set, currentSessionKey, {
-        sending: false,
-        activeRunId: null,
-        sendAcceptance: null,
-        streamingText: '',
-        streamingMessage: null,
-        streamingMessages: [],
-        streamingToolResults: [],
-        streamingTools: [],
-        pendingFinal: false,
-        lastUserMessageAt: null,
-        optimisticUserMessage: null,
-        pendingToolImages: [],
-      });
-
+    abortRun: async (requestedSessionKey?: string) => {
+      const sessionKey = requestedSessionKey?.trim() || get().currentSessionKey;
+      const runtime = getSessionRuntimeState(get().runtimeBySessionKey, sessionKey);
+      if (!runtime.sending) return true;
+      if (runtime.aborting) return false;
+      const activeRunId = runtime.activeRunId;
+      setRuntimePatch(set, sessionKey, { aborting: true, error: null });
       try {
         await useGatewayStore.getState().rpc(
           'chat.abort',
           {
-            sessionKey: currentSessionKey,
+            sessionKey,
+            engineType: resolveEngineTypeForSession(
+              get().sessions,
+              sessionKey,
+              getAgentIdFromSessionKey(sessionKey) ?? get().currentAgentId,
+            ),
           },
         );
+        const latestRuntime = getSessionRuntimeState(get().runtimeBySessionKey, sessionKey);
+        // An aborted event may have already finalized this run and triggered the
+        // next queued turn while the RPC acknowledgement was still in flight.
+        if (activeRunId && latestRuntime.activeRunId && latestRuntime.activeRunId !== activeRunId) {
+          return false;
+        }
+        if (!latestRuntime.aborting) {
+          recordTerminalRun(sessionKey, activeRunId);
+          return true;
+        }
+        discardAgentMemoriesForAbnormalTurn({
+          sessionKey,
+          runId: activeRunId,
+          reason: 'aborted',
+        });
+        clearHistoryPoll(sessionKey);
+        clearErrorRecoveryTimer(sessionKey);
+        clearStuckCheckTimer(sessionKey);
+        setRuntimePatch(set, sessionKey, buildTerminalRuntimePatch(null));
+        recordTerminalRun(sessionKey, activeRunId);
+        return true;
       } catch (err) {
-        setRuntimePatch(set, currentSessionKey, { error: String(err) });
+        // The engine may still be running. Keep the run bound so subsequent
+        // delta/final events remain valid and the user can retry stopping it.
+        setRuntimePatch(set, sessionKey, (latestRuntime) => {
+          if (!latestRuntime.aborting) return {};
+          if (activeRunId && latestRuntime.activeRunId && latestRuntime.activeRunId !== activeRunId) return {};
+          return { aborting: false, error: String(err) };
+        });
+        return false;
       }
     },
 

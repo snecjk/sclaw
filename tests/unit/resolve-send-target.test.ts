@@ -3,6 +3,36 @@ import { resolveSendTarget } from '@/stores/chat/resolve-send-target';
 import type { ChatState } from '@/stores/chat/types';
 
 describe('resolveSendTarget', () => {
+  it('uses an explicit background session without switching the visible conversation', async () => {
+    const loadHistory = vi.fn();
+    const state = {
+      currentSessionKey: 'agent:main:visible',
+      currentAgentId: 'main',
+      sessions: [
+        { key: 'agent:main:visible', engineType: 'openclaw' },
+        { key: 'agent:writer:queued', engineType: 'claude' },
+      ],
+      messages: [],
+      loadHistory,
+    } as unknown as ChatState;
+    const set = vi.fn();
+
+    const target = await resolveSendTarget({
+      get: () => state,
+      set,
+      requestedSessionKey: 'agent:writer:queued',
+      resolveMainSessionKeyForAgent: () => 'agent:writer:main',
+      buildSessionSwitchPatch: () => ({ currentSessionKey: 'agent:writer:queued' }),
+      resolveEngineTypeForSession: (_sessions, key) => (
+        key === 'agent:writer:queued' ? 'claude' : 'openclaw'
+      ),
+    });
+
+    expect(target).toMatchObject({ sessionKey: 'agent:writer:queued', engineType: 'claude' });
+    expect(set).not.toHaveBeenCalled();
+    expect(loadHistory).not.toHaveBeenCalled();
+  });
+
   it('keeps a new dialog when the selected agent already owns it', async () => {
     const loadHistory = vi.fn();
     const state = {

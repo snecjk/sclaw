@@ -61,11 +61,14 @@ export function insertOptimisticUserTurn(input: {
   });
 
   set((s) => ({
-    messages: dedupeRedundantUserMessages([...s.messages, userMsg], nowMs, {
-      sessionKey,
-    }),
+    ...(s.currentSessionKey === sessionKey ? {
+      messages: dedupeRedundantUserMessages([...s.messages, userMsg], nowMs, {
+        sessionKey,
+      }),
+    } : {}),
     ...applyRuntimePatch(s, sessionKey, {
       sending: true,
+      aborting: false,
       activeRunId: null,
       sendAcceptance: null,
       streamingText: '',
@@ -84,6 +87,8 @@ export function insertOptimisticUserTurn(input: {
   const { sessionLabels, messages } = get();
   const isFirstMessage = !messages.slice(0, -1).some((m) => m.role === 'user');
   if (
+    get().currentSessionKey === sessionKey
+    &&
     !sessionKey.endsWith(':main')
     && isFirstMessage
     && shouldAutoDeriveSessionLabel(sessionKey, sessionLabels, isCorruptedSessionLabel)

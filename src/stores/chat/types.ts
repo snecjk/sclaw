@@ -4,6 +4,8 @@ import type { SkillMeta } from '@/types/skill-meta';
 
 export interface SendMessageOptions {
   text: string;
+  /** Explicit destination used by background/queued sends. Never inferred from current UI state. */
+  sessionKey?: string | null;
   attachments?: Array<{
     fileName: string;
     mimeType: string;
@@ -139,6 +141,8 @@ export interface ToolStatus {
 
 export interface SessionRuntimeState {
   sending: boolean;
+  /** Abort has been requested, but the engine has not confirmed termination yet. */
+  aborting: boolean;
   activeRunId: string | null;
   streamingText: string;
   streamingMessage: unknown | null;
@@ -255,7 +259,7 @@ export interface ChatState {
   cleanupEmptySession: () => void;
   loadHistory: (quiet?: boolean, force?: boolean, sessionKey?: string) => Promise<void>;
   sendMessage: (options: SendMessageOptions) => Promise<void>;
-  abortRun: () => Promise<void>;
+  abortRun: (sessionKey?: string) => Promise<boolean>;
   handleChatEvent: (event: Record<string, unknown>) => void;
   toggleThinking: () => void;
   refresh: () => Promise<void>;

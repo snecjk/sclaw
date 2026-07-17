@@ -11,6 +11,7 @@ export async function resolveSendTarget(input: {
   get: ChatGet;
   set: ChatSet;
   targetAgentId?: string | null;
+  requestedSessionKey?: string | null;
   dingTalkMentions?: SendMessageOptions['dingTalkMentions'];
   attachments?: SendMessageOptions['attachments'];
   resolveMainSessionKeyForAgent: (agentId: string | undefined | null) => string | null;
@@ -33,12 +34,14 @@ export async function resolveSendTarget(input: {
     get,
     resolveEngineTypeForSession,
     resolveMainSessionKeyForAgent,
+    requestedSessionKey,
     set,
     targetAgentId,
   } = input;
 
   const initialState = get();
   const currentSessionKey = initialState.currentSessionKey;
+  const explicitSessionKey = requestedSessionKey?.trim() || null;
   const selectedAgentId = normalizeAgentId(targetAgentId);
   const currentSessionAgentId = normalizeAgentId(
     getAgentIdFromSessionKey(currentSessionKey) ?? initialState.currentAgentId,
@@ -47,10 +50,11 @@ export async function resolveSendTarget(input: {
   // of a newly-created dialog, keep that dialog's unique key; otherwise every first
   // send is silently redirected to agent:<id>:main and resumes unrelated history.
   const shouldKeepCurrentSession = !selectedAgentId || selectedAgentId === currentSessionAgentId;
-  const targetSessionKey = shouldKeepCurrentSession
+  const targetSessionKey = explicitSessionKey ?? (shouldKeepCurrentSession
     ? currentSessionKey
-    : (resolveMainSessionKeyForAgent(targetAgentId) ?? currentSessionKey);
-  if (targetSessionKey !== get().currentSessionKey) {
+    : (resolveMainSessionKeyForAgent(targetAgentId) ?? currentSessionKey));
+  // Explicit background destinations must not navigate the visible conversation.
+  if (!explicitSessionKey && targetSessionKey !== get().currentSessionKey) {
     set((state) => buildSessionSwitchPatch(state, targetSessionKey));
     await get().loadHistory(true);
   }
@@ -59,7 +63,7 @@ export async function resolveSendTarget(input: {
   const engineType = resolveEngineTypeForSession(
     get().sessions,
     sessionKey,
-    targetAgentId ?? get().currentAgentId,
+    targetAgentId ?? getAgentIdFromSessionKey(sessionKey) ?? get().currentAgentId,
     {
       messageCount: get().currentSessionKey === sessionKey ? (get().messages?.length ?? 0) : undefined,
     },
