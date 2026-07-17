@@ -1,14 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { dirname, relative, resolve, sep } from 'node:path';
 import { syncClaudeSkillsForAgent } from '../services/claude-skill-bridge';
-import { getProviderAccount } from '../services/providers/provider-store';
-import { applyStoClaudeInferenceEnv } from '../services/sto-claude-inference-env';
-import { getAgentPreferredModel } from '../utils/agent-config';
 import { logger } from '../utils/logger';
-import { getClaudeConfigDir } from '../utils/paths';
-import { getApiKey } from '../utils/secure-storage';
 import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
 import { toLegacyChatMessagePayload, type NormalizedEngineEvent } from '../gateway/normalized-engine-event';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
@@ -17,7 +11,14 @@ import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEn
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EngineSessionSummary } from './types';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ImageBlockParam, MessageParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
-import { resolveAvailableClaudeModel } from './claude-model-selection';
+import {
+  createClaudeQuery,
+  deleteClaudeSdkSession,
+  ensureClaudeRuntimeReady,
+  getClaudeSessionMessages,
+  prepareClaudeRuntime,
+  resolveClaudeLaunchSelection as resolveSharedClaudeLaunchSelection,
+} from './claude-sdk-runtime';
 import {
   appendArchivedClaudeSessionId,
   isMissingClaudeConversationError,
@@ -53,66 +54,12 @@ const liveClaudeMessages = new Map<string, Array<{
   receivedAt: number;
 }>>();
 const claudeRuntimeResults = new Map<string, NonNullable<EngineHistoryResult['runtimeResult']>>();
-let claudeConfigEnvQueue: Promise<void> = Promise.resolve();
 const CLAUDE_VISION_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
   'image/gif',
   'image/webp',
 ]);
-
-function getBundledClaudeExecutablePath(): string | undefined {
-  if (!process.resourcesPath) return undefined;
-
-  const binaryName = process.platform === 'win32' ? 'claude.exe' : 'claude';
-  const packageName = `claude-agent-sdk-${process.platform}-${process.arch}`;
-  const candidate = join(
-    process.resourcesPath,
-    'app.asar.unpacked',
-    'node_modules',
-    '@anthropic-ai',
-    packageName,
-    binaryName,
-  );
-
-  return existsSync(candidate) ? candidate : undefined;
-}
-
-async function buildClaudeEnvForAccount(accountId?: string): Promise<NodeJS.ProcessEnv> {
-  const base: NodeJS.ProcessEnv = {
-    ...process.env,
-    CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
-  };
-
-  if (!accountId) {
-    logger.debug('[claude-env] No accountId, returning base env');
-    return base;
-  }
-
-  const account = await getProviderAccount(accountId);
-  if (!account) {
-    logger.debug(`[claude-env] Account "${accountId}" not found`);
-    return base;
-  }
-
-  if (account.vendorId === 'sto') {
-    await applyStoClaudeInferenceEnv(base, account);
-    return base;
-  }
-
-  // Generic: use account's baseUrl + stored API key for Anthropic-compatible providers
-  const apiKey = await getApiKey(accountId);
-  if (account.baseUrl) {
-    base.ANTHROPIC_BASE_URL = account.baseUrl;
-  }
-  if (apiKey) {
-    base.ANTHROPIC_API_KEY = apiKey;
-    base.ANTHROPIC_AUTH_TOKEN = apiKey;
-  }
-  logger.info(`[claude-env] Provider "${account.vendorId}": base_url=${account.baseUrl ?? '(default)'}`);
-
-  return base;
-}
 
 async function resolveClaudeLaunchSelection(
   agentId: string,
@@ -122,105 +69,16 @@ async function resolveClaudeLaunchSelection(
     accountId?: string;
   } | null,
 ): Promise<{ model?: string; provider?: string; accountId?: string }> {
-  const preferredModel = await getAgentPreferredModel(agentId);
-  // Session-level override wins when the user switched models inside an active dialog.
-  const requestedModel = existing?.model ?? preferredModel.model;
-  const requestedAccountId = existing?.accountId ?? preferredModel.accountId;
-  const selection = await resolveAvailableClaudeModel({ requestedModel, requestedAccountId });
-  const account = await getProviderAccount(selection.accountId);
-  if (selection.fallbackApplied) {
-    logger.warn('[claude-adapter] Stored/preferred model is unavailable; using fallback', {
-      agentId,
-      requestedModel,
-      requestedAccountId,
-      fallbackModel: selection.model,
-      fallbackAccountId: selection.accountId,
-    });
-  }
+  const selection = await resolveSharedClaudeLaunchSelection({
+    agentId,
+    requestedModel: existing?.model,
+    requestedAccountId: existing?.accountId,
+  });
   return {
     model: selection.model,
-    provider: account?.vendorId ?? existing?.provider,
+    provider: selection.provider ?? existing?.provider,
     accountId: selection.accountId,
   };
-}
-
-/**
- * Strip ANTHROPIC_* env vars from settings.json so they don't override
- * the dynamically injected values from buildClaudeEnvForAccount().
- * The Claude Agent SDK loads settings.json env AFTER receiving the
- * process env, which can overwrite our ANTHROPIC_BASE_URL / API_KEY.
- */
-async function sanitizeClaudeSettingsEnv(): Promise<void> {
-  const settingsPath = join(getClaudeConfigDir(), 'settings.json');
-  try {
-    const raw = await readFile(settingsPath, 'utf8');
-    const settings = JSON.parse(raw) as Record<string, unknown>;
-    const env = settings.env as Record<string, unknown> | undefined;
-    if (!env || typeof env !== 'object') return;
-
-    let changed = false;
-    for (const key of Object.keys(env)) {
-      if (key.startsWith('ANTHROPIC_')) {
-        delete env[key];
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      settings.env = env;
-      await writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
-      logger.info('[claude-settings] Stripped ANTHROPIC_* env vars from settings.json');
-    }
-  } catch {
-    // settings.json doesn't exist or is unreadable — nothing to sanitize
-  }
-}
-
-let ensureClaudeConfigDirPromise: Promise<void> | null = null;
-
-async function ensureClaudeConfigDir(): Promise<void> {
-  if (ensureClaudeConfigDirPromise) {
-    await ensureClaudeConfigDirPromise;
-    return;
-  }
-  ensureClaudeConfigDirPromise = mkdir(getClaudeConfigDir(), { recursive: true })
-    .catch((error) => {
-      logger.warn('Failed to ensure Claude config directory:', error);
-    })
-    .then(() => {});
-  await ensureClaudeConfigDirPromise;
-}
-
-async function withClaudeConfigDirEnv<T>(configDir: string, task: () => Promise<T>): Promise<T> {
-  const next = claudeConfigEnvQueue.then(async () => {
-    const previous = process.env.CLAUDE_CONFIG_DIR;
-    process.env.CLAUDE_CONFIG_DIR = configDir;
-    try {
-      return await task();
-    } finally {
-      if (typeof previous === 'string') {
-        process.env.CLAUDE_CONFIG_DIR = previous;
-      } else {
-        delete process.env.CLAUDE_CONFIG_DIR;
-      }
-    }
-  });
-
-  claudeConfigEnvQueue = next.then(() => undefined, () => undefined);
-  return next;
-}
-
-async function resolveClaudeSessionConfigDir(
-  cwd: string,
-  sessionId: string,
-): Promise<string | null> {
-  await ensureClaudeConfigDir();
-  const sdk = await import('@anthropic-ai/claude-agent-sdk');
-  const configDir = getClaudeConfigDir();
-  const info = await withClaudeConfigDirEnv(configDir, async () => (
-    sdk.getSessionInfo(sessionId, { dir: cwd })
-  )).catch(() => undefined);
-  return info ? configDir : null;
 }
 
 function toEpochMs(value: unknown): number | undefined {
@@ -570,11 +428,7 @@ async function loadPersistedClaudeMessagesForSdkSession(
   sdkSessionId: string,
   cwd: string,
 ): Promise<ClaudeDisplayMessage[]> {
-  const sdk = await import('@anthropic-ai/claude-agent-sdk');
-  const configDir = await resolveClaudeSessionConfigDir(cwd, sdkSessionId) ?? getClaudeConfigDir();
-  const sessionMessages = await withClaudeConfigDirEnv(configDir, async () => (
-    sdk.getSessionMessages(sdkSessionId, { dir: cwd, includeSystemMessages: false })
-  ));
+  const sessionMessages = await getClaudeSessionMessages(sdkSessionId, cwd);
 
   return sessionMessages
     .filter((entry) => {
@@ -981,8 +835,6 @@ async function startClaudeQuery(
   },
 ): Promise<{ success: boolean; result?: { runId: string }; error?: string }> {
   try {
-    await ensureClaudeConfigDir();
-    const sdk = await import('@anthropic-ai/claude-agent-sdk');
     const existing = await ensureClaudeRegistryEntry(sessionKey);
     logger.info('[claude-adapter] ensureClaudeRegistryEntry', existing);
     const cwd = existing?.cwd;
@@ -991,7 +843,16 @@ async function startClaudeQuery(
     }
 
     const agentId = extractAgentId(sessionKey);
-    const launchSelection = await resolveClaudeLaunchSelection(agentId, existing);
+    const sharedRuntime = await prepareClaudeRuntime({
+      agentId,
+      requestedAccountId: existing?.accountId,
+      requestedModel: existing?.model,
+    });
+    const launchSelection = {
+      accountId: sharedRuntime.selection.accountId,
+      model: sharedRuntime.selection.model,
+      provider: sharedRuntime.selection.provider ?? existing?.provider,
+    };
     const syncResult = await syncClaudeSkillsForAgent(agentId, cwd).catch((error) => {
       logger.warn('Failed to sync Claude skill bridge:', error);
       return null;
@@ -1006,11 +867,9 @@ async function startClaudeQuery(
 
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();
-    const pathToClaudeCodeExecutable = getBundledClaudeExecutablePath();
     const runtimeOptions = await buildClaudeRuntimeOptions(sessionKey, options?.userPrompt);
     const pluginPaths = await listClaudeBridgePluginPaths();
     claudeRuntimeResults.delete(sessionKey);
-    await sanitizeClaudeSettingsEnv();
     const historyBridgeAppend = await consumePendingHistoryBridgeAppend(sessionKey);
     // 默认将 cwd 工作区/工作空间写入提示词：用户未指定特殊路径时，模型以该路径作为默认工作目录。
     // 走 systemPromptAppend（与 historyBridge 一致），避免污染用户消息与侧栏标题。
@@ -1021,7 +880,7 @@ async function startClaudeQuery(
     logger.info(`[claude-adapter][prompt] final systemPromptAppend: sessionKey=${sessionKey}, systemPromptAppend=\n${systemPromptAppend || '(none)'}`);
     const queryBaseOptions = {
       cwd,
-      env: await buildClaudeEnvForAccount(launchSelection.accountId),
+      env: sharedRuntime.env,
       permissionMode: 'bypassPermissions' as const,
       allowDangerouslySkipPermissions: true,
       settingSources: ['user' as const],
@@ -1031,7 +890,7 @@ async function startClaudeQuery(
       includePartialMessages: true,
       settings: launchSelection.model ? { model: launchSelection.model } : undefined,
       additionalDirectories: options?.additionalDirectories,
-      pathToClaudeCodeExecutable,
+      pathToClaudeCodeExecutable: sharedRuntime.pathToClaudeCodeExecutable,
       hooks: runtimeOptions.hooks,
       mcpServers: runtimeOptions.mcpServers,
       plugins: pluginPaths.map((pluginPath) => ({
@@ -1046,7 +905,7 @@ async function startClaudeQuery(
         }
         : undefined,
     };
-    const query = sdk.query({
+    const query = await createClaudeQuery({
       prompt,
       options: existing?.sessionId
         ? {
@@ -1127,7 +986,7 @@ async function startClaudeQuery(
             .filter(Boolean)
             .join('\n\n');
           const recoverySessionId = randomUUID();
-          const recoveryQuery = sdk.query({
+          const recoveryQuery = await createClaudeQuery({
             prompt,
             options: {
               ...queryBaseOptions,
@@ -1199,7 +1058,7 @@ function isClaudeSessionAlreadyGoneError(error: unknown): boolean {
 }
 
 export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void> {
-  await ensureClaudeConfigDir();
+  await ensureClaudeRuntimeReady();
   const entry = await getEngineSessionRegistryEntry(sessionKey);
   liveClaudeMessages.delete(sessionKey);
   claudeRuntimeResults.delete(sessionKey);
@@ -1211,11 +1070,7 @@ export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void
   const cwd = typeof entry.cwd === 'string' ? entry.cwd.trim() : '';
   if (cwd) {
     try {
-      const sdk = await import('@anthropic-ai/claude-agent-sdk');
-      const configDir = await resolveClaudeSessionConfigDir(cwd, entry.sessionId) ?? getClaudeConfigDir();
-      await withClaudeConfigDirEnv(configDir, async () => {
-        await sdk.deleteSession(entry.sessionId!, { dir: cwd });
-      });
+      await deleteClaudeSdkSession(entry.sessionId, cwd);
     } catch (error) {
       // Workspace may have been deleted on disk (dirty catalog rows). Still purge our registry.
       if (!isClaudeSessionAlreadyGoneError(error)) throw error;
@@ -1231,7 +1086,7 @@ export const claudeAdapter: EngineAdapter = {
   type: 'claude',
 
   async listSessions() {
-    await ensureClaudeConfigDir();
+    await ensureClaudeRuntimeReady();
     const entries = await listEngineSessionRegistryEntries('claude');
     const sessions: EngineSessionSummary[] = await Promise.all(
       entries.map(async (entry) => {

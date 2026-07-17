@@ -16,6 +16,7 @@ import {
 import { buildClaudeTaskRuntimeContext } from './claude-task-runtime-builder';
 import { upsertEngineSessionRegistryEntry } from '../engines/session-registry';
 import { consumeClaudeQuery } from '../engines/claude-adapter';
+import { createClaudeQuery } from '../engines/claude-sdk-runtime';
 import { normalizeToolName } from '../../shared/scheduled-task-instruction';
 import { sendWorkflowResultFallback } from './claude-task-workflow-watchdog';
 
@@ -83,8 +84,6 @@ async function executeClaudeTask(params: {
     sessionId: params.run.runId,
     sessionKey: params.run.sessionKey,
   });
-  const sdk = await import('@anthropic-ai/claude-agent-sdk');
-
   await upsertEngineSessionRegistryEntry({
     sessionKey: params.run.sessionKey,
     sessionId: runtime.sessionId,
@@ -97,7 +96,7 @@ async function executeClaudeTask(params: {
     accountId: runtime.accountId,
   });
 
-  const query = sdk.query({
+  const query = await createClaudeQuery({
     prompt: params.definition.promptTemplate,
     options: {
       cwd: runtime.cwd,
