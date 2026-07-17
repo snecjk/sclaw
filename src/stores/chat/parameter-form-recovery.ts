@@ -271,7 +271,7 @@ export interface ParameterFormRecoveryOptions {
 
 export interface ParameterFormRecoveryResult {
   messages: RawMessage[];
-  /** When true, applyLoadedMessages should return early (async recovery already set state). */
+  /** When true, history snapshot application should return early (async recovery already set state). */
   deferSet: boolean;
 }
 

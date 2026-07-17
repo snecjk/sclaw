@@ -13,9 +13,10 @@ import { Models } from './pages/Models';
 import { Agents } from './pages/Agents';
 import { Channels } from './pages/Channels';
 import { SkillPlazaPage } from './components/skill-plaza/SkillPlazaPage';
+import { MoreAppsPage } from './components/more-apps/MoreAppsPage';
 import { Subscriptions } from './pages/Subscriptions';
-import { Cron } from './pages/Cron';
-import ScheduledTasks from './pages/ScheduledTasks';
+// import { Cron } from './pages/Cron';
+// import ScheduledTasks from './pages/ScheduledTasks';
 import MyTask from './pages/MyTask';
 import { Home } from './pages/Home';
 import { TaskDetail } from './pages/TaskDetail';
@@ -244,6 +245,23 @@ function App() {
     };
   }, [location.pathname]);
 
+  // STO catalog sync (login / periodic / manual) → refresh toolbar default model
+  useEffect(() => {
+    const handleStoModelsSynced = (...args: unknown[]) => {
+      const payload = args[0] as { fallbackModel?: string } | undefined;
+      void import('@/lib/sync-workspace-default-to-chat').then(({ applyStoCatalogSyncToChatUi }) => (
+        applyStoCatalogSyncToChatUi({ fallbackModel: payload?.fallbackModel })
+      ));
+    };
+
+    const unsubscribe = window.electron.ipcRenderer.on('sto:models-synced', handleStoModelsSynced);
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, []);
+
   // Listen for SAI CLI install failure and prompt user to retry
   useEffect(() => {
     const handleSaiCliInstallFailed = (...args: unknown[]) => {
@@ -336,9 +354,10 @@ function App() {
             <Route path="/agents" element={<Agents />} />
             <Route path="/channels" element={<Channels />} />
             <Route path="/skills" element={<SkillPlazaPage />} />
+            <Route path="/more-apps" element={<MoreAppsPage />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
-            <Route path="/cron" element={<Cron />} />
-            <Route path="/scheduled-tasks" element={<ScheduledTasks />} />
+            {/* <Route path="/cron" element={<Cron />} />
+            <Route path="/scheduled-tasks" element={<ScheduledTasks />} /> */}
             <Route path="/my-tasks" element={<MyTask />} />
             <Route path="/data-center" element={<DataCenter />} />
             <Route path="/workflow/*" element={<WorkflowTestPage />} />

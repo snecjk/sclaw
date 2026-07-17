@@ -2,10 +2,12 @@ import { clipboard } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, writeFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, join, normalize } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
+import { expandPath } from './paths';
 import { resolveWorkspaceFilePath } from './artifact-path';
+import { writeWindowsFilePathsToClipboard } from './windows-clipboard-files';
 
 function escapeXml(value: string): string {
   return value
@@ -14,6 +16,15 @@ function escapeXml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+function normalizeNativeClipboardPath(filePath: string): string {
+  const trimmed = filePath.trim();
+  if (!trimmed) return '';
+  if (process.platform === 'win32') {
+    return normalize(trimmed);
+  }
+  return trimmed;
 }
 
 function buildMacFilenamesPlist(filePaths: string[]): Buffer {
@@ -28,12 +39,18 @@ ${items}
   return Buffer.from(xml, 'utf8');
 }
 
-function buildWindowsHDrop(filePaths: string[]): Buffer {
+/** Windows CF_HDROP payload (DROPFILES + null-delimited UTF-16 path list). */
+export function buildWindowsHDrop(filePaths: string[]): Buffer {
   const DROPFILES_SIZE = 20;
-  const pathsUtf16 = filePaths.map((path) => Buffer.from(`${path}\0`, 'utf16le'));
+  const normalizedPaths = filePaths.map((path) => normalizeNativeClipboardPath(path)).filter(Boolean);
+  const pathsUtf16 = normalizedPaths.map((path) => Buffer.from(`${path}\0`, 'utf16le'));
   const pathsBuffer = Buffer.concat([...pathsUtf16, Buffer.from('\0\0', 'utf16le')]);
   const buf = Buffer.alloc(DROPFILES_SIZE + pathsBuffer.length);
   buf.writeUInt32LE(DROPFILES_SIZE, 0);
+  // Clipboard HDROP: pt=(-1,-1), fNC=TRUE, fWide=TRUE (MSDN DROPFILES)
+  buf.writeInt32LE(-1, 4);
+  buf.writeInt32LE(-1, 8);
+  buf.writeInt32LE(1, 12);
   buf.writeInt32LE(1, 16);
   pathsBuffer.copy(buf, DROPFILES_SIZE);
   return buf;
@@ -44,35 +61,40 @@ function buildLinuxUriList(filePaths: string[]): Buffer {
   return Buffer.from(`${lines.join('\r\n')}\r\n`, 'utf8');
 }
 
-function writeNativeFilePathsToClipboard(filePaths: string[]): void {
-  if (filePaths.length === 0) return;
+function clearClipboardBestEffort(): void {
+  try {
+    clipboard.clear();
+  } catch {
+    // Another app may own the clipboard on Windows; continue and overwrite formats.
+  }
+}
+
+async function writeNativeFilePathsToClipboard(filePaths: string[]): Promise<void> {
+  const normalizedPaths = filePaths
+    .map((path) => normalizeNativeClipboardPath(path))
+    .filter(Boolean);
+  if (normalizedPaths.length === 0) return;
 
   if (process.platform === 'darwin') {
-    clipboard.writeBuffer('NSFilenamesPboardType', buildMacFilenamesPlist(filePaths));
+    clipboard.writeBuffer('NSFilenamesPboardType', buildMacFilenamesPlist(normalizedPaths));
     return;
   }
 
   if (process.platform === 'win32') {
-    clipboard.writeBuffer('CF_HDROP', buildWindowsHDrop(filePaths));
-    clipboard.writeBuffer('Preferred DropEffect', Buffer.from([0x01, 0x00, 0x00, 0x00]));
+    // Electron writeBuffer('CF_HDROP') registers a custom format — Explorer won't paste it.
+    // Use Win32 SetClipboardData (koffi) with Set-Clipboard PowerShell fallback.
+    await writeWindowsFilePathsToClipboard(normalizedPaths);
     return;
   }
 
-  clipboard.writeBuffer('text/uri-list', buildLinuxUriList(filePaths));
+  clipboard.writeBuffer('text/uri-list', buildLinuxUriList(normalizedPaths));
 }
 
 export function writeTextToSystemClipboard(text: string): void {
-  clipboard.clear();
   const payload = text.trim() || ' ';
-  if (process.platform === 'darwin') {
-    clipboard.writeBuffer('public.utf8-plain-text', Buffer.from(payload, 'utf8'));
-    return;
-  }
-  if (process.platform === 'win32') {
-    clipboard.writeBuffer('CF_UNICODETEXT', Buffer.from(payload, 'utf16le'));
-    return;
-  }
-  clipboard.writeBuffer('text/plain;charset=utf-8', Buffer.from(payload, 'utf8'));
+  clearClipboardBestEffort();
+  // Electron writeText handles CF_UNICODETEXT null termination on Windows.
+  clipboard.writeText(payload);
 }
 
 function normalizeClipboardFilePath(filePath: string): string {
@@ -80,6 +102,7 @@ function normalizeClipboardFilePath(filePath: string): string {
   if (!path) return '';
   if (path.startsWith('preview://')) path = path.slice('preview://'.length);
   if (path.startsWith('artifact://')) path = path.slice('artifact://'.length);
+  if (path.startsWith('~')) path = expandPath(path);
   return path;
 }
 
@@ -205,7 +228,7 @@ export async function writeFilesToSystemClipboard(
     throw new Error('No copyable files found');
   }
 
-  clipboard.clear();
-  writeNativeFilePathsToClipboard(resolvedPaths);
+  clearClipboardBestEffort();
+  await writeNativeFilePathsToClipboard(resolvedPaths);
   return { copiedFileCount: resolvedPaths.length };
 }

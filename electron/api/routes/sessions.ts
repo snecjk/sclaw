@@ -3,9 +3,10 @@ import { join } from 'node:path';
 import { getOpenClawConfigDir } from '../../utils/paths';
 import { deleteClaudeSessionByKey } from '../../engines/claude-adapter';
 import { applyClaudeSessionModelSwitch } from '../../engines/claude-session-model';
-import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry } from '../../engines/session-registry';
+import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry } from '../../engines/session-registry';
 import { getAgentIdFromSessionKey, rememberSessionEngineType, resolveSessionEngineType } from '../../engines/session-engine';
-import { getAgentPreferredModel, getAgentWorkspacePath } from '../../utils/agent-config';
+import { getAgentPreferredModel } from '../../utils/agent-config';
+import { resolveSessionToolCwd } from '../../services/session-catalog-service';
 import {
   qualifyChatModelRef,
   setSessionModelViaGateway,
@@ -14,10 +15,42 @@ import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { deleteClaudeScheduledTaskSummarySession } from '../../services/claude-scheduled-task-session-store';
 import { markSessionDeleted, listDeletedSessionKeys } from '../../utils/scheduled-task-poller-store';
-import { isOpenClawHostedTaskExecutionSessionKey } from '../../../shared/session-delete-routing';
+import { isOpenClawHostedTaskExecutionSessionKey, isSessionModelSwitchKey } from '../../../shared/session-delete-routing';
+import { getProviderAccount } from '../../services/providers/provider-store';
+import {
+  isLegacyStoProviderAccountId,
+  STO_CANONICAL_ACCOUNT_ID,
+} from '../../services/providers/sto-placeholder-utils';
 
 async function persistSessionDeletion(sessionKey: string): Promise<void> {
   await markSessionDeleted(sessionKey);
+}
+
+async function resolveClaudeSessionAccountId(
+  accountId: string | undefined,
+  preferredAccountId: string | undefined,
+  hasModel: boolean,
+): Promise<string | undefined> {
+  let resolved = accountId?.trim() || preferredAccountId?.trim();
+  if (isLegacyStoProviderAccountId(resolved)) {
+    return STO_CANONICAL_ACCOUNT_ID;
+  }
+  if (!resolved && hasModel) {
+    const stoAccount = await getProviderAccount(STO_CANONICAL_ACCOUNT_ID);
+    if (stoAccount?.vendorId === 'sto') {
+      return STO_CANONICAL_ACCOUNT_ID;
+    }
+  }
+  if (resolved) {
+    const account = await getProviderAccount(resolved);
+    if (!account) {
+      const stoAccount = await getProviderAccount(STO_CANONICAL_ACCOUNT_ID);
+      if (stoAccount?.vendorId === 'sto') {
+        return STO_CANONICAL_ACCOUNT_ID;
+      }
+    }
+  }
+  return resolved;
 }
 
 /**
@@ -84,7 +117,7 @@ export async function handleSessionRoutes(
       }>(req);
       const sessionKey = (body.sessionKey ?? '').trim();
       const rawModel = (body.model ?? '').trim();
-      if (!sessionKey || !sessionKey.startsWith('agent:')) {
+      if (!isSessionModelSwitchKey(sessionKey)) {
         sendJson(res, 400, { success: false, error: 'Invalid sessionKey' });
         return true;
       }
@@ -102,15 +135,19 @@ export async function handleSessionRoutes(
         ?? await resolveSessionEngineType(sessionKey);
       await rememberSessionEngineType(sessionKey, sessionEngineType);
       if (sessionEngineType === 'claude') {
-        const agentId = body.agentId?.trim() || getAgentIdFromSessionKey(sessionKey);
         const existing = await getEngineSessionRegistryEntry(sessionKey);
+        const agentId = body.agentId?.trim() || existing?.agentId || getAgentIdFromSessionKey(sessionKey);
         const preferredModel = await getAgentPreferredModel(agentId);
-        const cwd = existing?.cwd || await getAgentWorkspacePath(agentId);
+        const cwd = existing?.cwd || await resolveSessionToolCwd(sessionKey, agentId);
         if (!cwd) {
           sendJson(res, 404, { success: false, error: `Agent '${agentId}' workspace not found` });
           return true;
         }
-        const accountId = body.accountId?.trim() || existing?.accountId || preferredModel.accountId;
+        const accountId = await resolveClaudeSessionAccountId(
+          body.accountId,
+          existing?.accountId || preferredModel.accountId,
+          Boolean(rawModel),
+        );
         const { model, modelChanged } = await applyClaudeSessionModelSwitch({
           sessionKey,
           agentId,

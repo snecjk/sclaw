@@ -4,10 +4,9 @@
  */
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
-import { useMessageQueueStore } from '@/stores/message-queue';
-import { invokeApi } from '@/lib/api-client';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { SkillMeta } from '@/types/skill-meta';
 
 export interface DispatchChatSendOptions {
   text: string;
@@ -19,9 +18,7 @@ export interface DispatchChatSendOptions {
   workflowSource?: string | null;
   /** 工作流名称（mine 来源时用于上下文块）。 */
   workflowName?: string | null;
-  /** Skip question:split (e.g. when @mentions are present). */
-  skipQuestionSplit?: boolean;
-  onSplittingChange?: (splitting: boolean) => void;
+  skillMeta?: SkillMeta;
 }
 
 export async function dispatchChatSend(options: DispatchChatSendOptions): Promise<void> {
@@ -33,8 +30,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     workflowId,
     workflowSource,
     workflowName,
-    skipQuestionSplit = false,
-    onSplittingChange,
+    skillMeta,
   } = options;
 
   const sendMessage = useChatStore.getState().sendMessage;
@@ -53,6 +49,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
       workflowId: wfId || undefined,
       runId: _runId || undefined,
       workflowContext: ctx as import('@/stores/chat').WorkflowContextBlock | undefined,
+      skillMeta,
     });
   };
 
@@ -96,6 +93,16 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
   const { tryStartRememberedWorkflowSend, tryResolvePendingWorkflow } = await import(
     '@/hooks/use-workflow-send'
   );
+
+  // Skill sends preserve their metadata and bypass workflow-intent routing.
+  if (skillMeta) {
+    await sendMessage({ text, attachments, targetAgentId, dingTalkMentions, skillMeta });
+    if (failed()) {
+      toast.error('发送失败，请重试');
+    }
+    return;
+  }
+
   const startedRemembered = await tryStartRememberedWorkflowSend({
     text,
     context: {
@@ -110,6 +117,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
         dingTalkMentions,
         workflowId: wfId ?? undefined,
         runId: runId ?? undefined,
+        skillMeta,
       });
     },
   });
@@ -117,41 +125,12 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
 
   // In-flight parameter_form confirm / cancel only — creation & search go through model tools.
   const resolved = await tryResolvePendingWorkflow(text, async (msg, runId, wfId) => {
-    await sendMessage({ text: msg, attachments, targetAgentId, dingTalkMentions, workflowId: wfId, runId });
+    await sendMessage({ text: msg, attachments, targetAgentId, dingTalkMentions, workflowId: wfId, runId, skillMeta });
   });
   if (resolved) return;
 
-  let parts: Array<{ type: string; context: string }> | null = null;
-  if (!skipQuestionSplit) {
-    onSplittingChange?.(true);
-    try {
-      const { currentAgentId, currentSessionKey } = useChatStore.getState();
-      parts = await invokeApi<Array<{ type: string; context: string }>>('question:split', {
-        prompt: text,
-        agentId: currentAgentId,
-        sessionId: currentSessionKey,
-      });
-    } catch {
-      // Silent fallback
-    } finally {
-      onSplittingChange?.(false);
-    }
-  }
-
-  if (parts && parts.length > 1) {
-    await sendMessage({ text: parts[0].context, attachments, targetAgentId, dingTalkMentions });
-    if (failed()) {
-      toast.error('发送失败，请重试');
-      return;
-    }
-    const { currentSessionKey } = useChatStore.getState();
-    for (let i = 1; i < parts.length; i++) {
-      useMessageQueueStore.getState().enqueue(currentSessionKey, parts[i].context, undefined, targetAgentId);
-    }
-  } else {
-    await sendMessage({ text, attachments, targetAgentId, dingTalkMentions });
-    if (failed()) {
-      toast.error('发送失败，请重试');
-    }
+  await sendMessage({ text, attachments, targetAgentId, dingTalkMentions, skillMeta });
+  if (failed()) {
+    toast.error('发送失败，请重试');
   }
 }

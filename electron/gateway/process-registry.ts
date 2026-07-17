@@ -15,7 +15,13 @@ import { app } from 'electron';
 import path from 'path';
 import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { logger } from '../utils/logger';
-import { getListeningProcessIds, terminateOrphanedProcessIds } from './supervisor';
+import {
+  getListeningProcessIds,
+  listGatewayChildProcessIds,
+  terminateOrphanedProcessIds,
+  terminateProcessIds,
+  waitForPortFree,
+} from './supervisor';
 
 interface OwnedGatewayRecord {
   pid: number;
@@ -115,4 +121,97 @@ export async function terminateOrphanedOwnedGateway(currentOwnedPid?: number): P
   );
   await terminateOrphanedProcessIds(record.port, [String(record.pid)]);
   clearOwnedGatewayProcess();
+}
+
+export type TerminateDuplicateGatewayChildrenOptions = {
+  /** Keep this gateway child alive (the one GatewayManager currently owns). */
+  keepPid?: number;
+  /** Electron main process whose direct openclaw-gateway children should be scanned. */
+  parentPid?: number;
+  reason: string;
+};
+
+/**
+ * Terminate duplicate openclaw-gateway children spawned by this app instance.
+ *
+ * Only targets direct Electron children named openclaw-gateway. Agent tool
+ * processes (bash/python) are grandchildren and are not affected.
+ */
+export async function terminateDuplicateGatewayChildren(
+  options: TerminateDuplicateGatewayChildrenOptions,
+): Promise<number[]> {
+  const parentPid = options.parentPid ?? process.pid;
+  const childPids = await listGatewayChildProcessIds(parentPid);
+  const targets = childPids.filter((pid) => pid !== options.keepPid);
+
+  if (targets.length === 0) {
+    return [];
+  }
+
+  logger.warn(
+    `Terminating ${targets.length} duplicate Gateway child process(es) (${options.reason}; keepPid=${options.keepPid ?? 'none'}; pids=${targets.join(', ')})`,
+  );
+  await terminateProcessIds(targets.map(String));
+  return targets;
+}
+
+export type PrepareGatewayStartupPortOptions = {
+  defaultPort: number;
+  keepPid?: number;
+  /** Last known port for the owned Gateway (may differ from default after fallback). */
+  preferredPort?: number;
+  parentPid?: number;
+  findAvailablePort: (startPort: number, maxAttempts?: number) => Promise<number>;
+};
+
+/**
+ * Ensure a single Gateway binds the default port before spawn.
+ *
+ * 1. Kill duplicate openclaw-gateway children from this app instance.
+ * 2. If our owned Gateway is already listening, reuse that port (no wait/spawn race).
+ * 3. Otherwise wait for the default port to become free.
+ * 4. Only increment the port when an unrelated process still owns it.
+ */
+export async function prepareGatewayStartupPort(
+  options: PrepareGatewayStartupPortOptions,
+): Promise<number> {
+  await terminateDuplicateGatewayChildren({
+    keepPid: options.keepPid,
+    parentPid: options.parentPid,
+    reason: 'pre-start',
+  });
+
+  if (options.keepPid) {
+    const candidates = [
+      ...new Set(
+        [options.preferredPort, options.defaultPort].filter(
+          (port): port is number => typeof port === 'number' && port > 0,
+        ),
+      ),
+    ];
+    for (const port of candidates) {
+      try {
+        const pids = await getListeningProcessIds(port);
+        if (pids.includes(String(options.keepPid))) {
+          logger.info(
+            `Reusing owned Gateway on port ${port} (pid=${options.keepPid}); skip port-free wait`,
+          );
+          return port;
+        }
+      } catch (err) {
+        logger.warn(`Failed to probe owned Gateway on port ${port}:`, err);
+      }
+    }
+  }
+
+  await waitForPortFree(options.defaultPort);
+
+  const availablePort = await options.findAvailablePort(options.defaultPort);
+  if (availablePort !== options.defaultPort) {
+    logger.warn(
+      `Default Gateway port ${options.defaultPort} is occupied by an external process; using ${availablePort}`,
+    );
+  }
+
+  return availablePort;
 }

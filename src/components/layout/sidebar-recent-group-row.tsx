@@ -78,7 +78,7 @@ export function SidebarRecentGroupRow({
           onClick={(e) => e.stopPropagation()}
           onFocus={(e) => e.currentTarget.select()}
           className={cn(
-            'h-[30px] w-full rounded-lg border border-[var(--sto-brand-6)] bg-white px-[10px] py-[5px] text-left outline-none',
+            'h-[30px] w-full rounded-lg border border-[var(--sto-brand-6)] bg-card px-[10px] py-[5px] text-left outline-none',
             sidebarSectionLabelClass,
           )}
         />

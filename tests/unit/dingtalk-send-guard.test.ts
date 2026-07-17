@@ -7,6 +7,7 @@ import {
   isBlockedDwsSendSpamCommand,
   isSuccessfulDwsChatMessageSendResult,
   rememberPendingDingTalkSend,
+  resolveDwsChatMessageSendFileProtocolInText,
   resolveDwsChatMessageSendTextFormatProblem,
   resetDingTalkSendRateLimitForTests,
 } from '../../sto-plugin/openclaw/sto-dingtalk-send-guard/dingtalk-send-guard';
@@ -67,14 +68,70 @@ describe('evaluateDingTalkSendGuard', () => {
     resetDingTalkSendRateLimitForTests();
   });
 
-  it('allows two text sends before any succeeds', () => {
+  it('blocks the second text send before any succeeds (initiate counts)', () => {
     const params = {
       command: 'dws chat message send --user u1 --title "消息" --text hello --format json',
     };
-    const first = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
-    const second = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
+    const t0 = 1_000_000;
+    const first = evaluateDingTalkSendGuard({
+      toolName: 'exec',
+      params,
+      sessionKey: 'sess-1',
+      now: t0,
+    });
+    const second = evaluateDingTalkSendGuard({
+      toolName: 'exec',
+      params,
+      sessionKey: 'sess-1',
+      now: t0 + 5_000,
+    });
     expect(first.allowed).toBe(true);
-    expect(second.allowed).toBe(true);
+    expect(second.allowed).toBe(false);
+    if (!second.allowed) {
+      expect(second.reason).toContain('文字');
+    }
+  });
+
+  it('unblocks the next text send after the 20s initiate window elapses', () => {
+    const params = {
+      command: 'dws chat message send --user u1 --title "消息" --text hello --format json',
+    };
+    const t0 = 1_000_000;
+    expect(
+      evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1', now: t0 }).allowed,
+    ).toBe(true);
+    expect(
+      evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1', now: t0 + 19_999 })
+        .allowed,
+    ).toBe(false);
+    expect(
+      evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1', now: t0 + 20_001 })
+        .allowed,
+    ).toBe(true);
+  });
+
+  it('exempts scheduled-task session keys from the 20s per-send limit', () => {
+    const params = {
+      command: 'dws chat message send --user u1 --title "消息" --text hello --format json',
+    };
+    const t0 = 1_000_000;
+    for (const sessionKey of [
+      'claude-task-run:abc',
+      'scheduled-task:xyz',
+      'agent:foo:cron:bar:baz',
+      '[cron:nightly]',
+    ]) {
+      resetDingTalkSendRateLimitForTests();
+      const first = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey, now: t0 });
+      const second = evaluateDingTalkSendGuard({
+        toolName: 'exec',
+        params,
+        sessionKey,
+        now: t0 + 1_000,
+      });
+      expect(first.allowed).toBe(true);
+      expect(second.allowed).toBe(true);
+    }
   });
 
   it('blocks the second text send after one succeeds', () => {
@@ -126,11 +183,12 @@ describe('evaluateDingTalkSendGuard', () => {
     expect(imageDecision.allowed).toBe(true);
   });
 
-  it('does not count failed sends toward rate limit', () => {
+  it('counts a failed send toward the 20s initiate window (retry blocked, later allowed)', () => {
     const params = {
       command: 'dws chat message send --user u1 --title "消息" --text hello --format json',
     };
-    evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
+    const t0 = 1_000_000;
+    evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1', now: t0 });
     rememberPendingDingTalkSend('call-fail', 'sess-1', 'text');
     handleDingTalkSendGuardAfter({
       toolName: 'exec',
@@ -139,10 +197,26 @@ describe('evaluateDingTalkSendGuard', () => {
       toolCallId: 'call-fail',
       error: 'exit 1',
       result: '{"ok":false,"error":"rate limited"}',
+      now: t0,
     });
 
-    const retry = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
-    expect(retry.allowed).toBe(true);
+    // 发起即计：失败重试在 20s 窗口内仍被挡（防止 example→summary 双发刷量）。
+    const retry = evaluateDingTalkSendGuard({
+      toolName: 'exec',
+      params,
+      sessionKey: 'sess-1',
+      now: t0 + 5_000,
+    });
+    expect(retry.allowed).toBe(false);
+
+    // 窗口过后放行。
+    const later = evaluateDingTalkSendGuard({
+      toolName: 'exec',
+      params,
+      sessionKey: 'sess-1',
+      now: t0 + 20_001,
+    });
+    expect(later.allowed).toBe(true);
   });
 
   it('blocks batch send before rate limit applies', () => {
@@ -188,5 +262,61 @@ describe('evaluateDingTalkSendGuard', () => {
     const result = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
     expect(result.allowed).toBe(true);
     expect(resolveDwsChatMessageSendTextFormatProblem(params.command)).toBeNull();
+  });
+});
+
+describe('resolveDwsChatMessageSendFileProtocolInText', () => {
+  beforeEach(() => {
+    resetDingTalkSendRateLimitForTests();
+  });
+
+  it('blocks file:// path in --text and points to drive upload', () => {
+    const cmd =
+      'dws chat message send --user u1 --text "周报：file:///Users/yaolei/.claw-output/report.html" --format json';
+    expect(resolveDwsChatMessageSendFileProtocolInText(cmd)).not.toBeNull();
+    const result = evaluateDingTalkSendGuard({ toolName: 'exec', params: { command: cmd }, sessionKey: 'sess-1' });
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) {
+      expect(result.reason).toContain('file://');
+      expect(result.reason).toContain('dws drive upload');
+      expect(result.reason).toContain('newCSpaceIdIM');
+      expect(result.reason).toContain('docUrl');
+    }
+  });
+
+  it('blocks file:// even on --dry-run (content issue, preview should be caught)', () => {
+    const cmd =
+      'dws chat message send --user u1 --text "see file:///x.html" --dry-run --format json';
+    expect(resolveDwsChatMessageSendFileProtocolInText(cmd)).not.toBeNull();
+    const result = evaluateDingTalkSendGuard({ toolName: 'exec', params: { command: cmd }, sessionKey: 'sess-1' });
+    expect(result.allowed).toBe(false);
+  });
+
+  it('allows http(s) artifact urls in --text', () => {
+    const cmd =
+      'dws chat message send --user u1 --text "周报：https://example.com/report.html" --format json';
+    expect(resolveDwsChatMessageSendFileProtocolInText(cmd)).toBeNull();
+    expect(
+      evaluateDingTalkSendGuard({ toolName: 'exec', params: { command: cmd }, sessionKey: 'sess-1' }).allowed,
+    ).toBe(true);
+  });
+
+  it('ignores file:// when the command is a drive upload, not a chat send', () => {
+    const cmd =
+      'dws drive upload --file file:///Users/yaolei/.claw-output/report.html --space-id sid -y --format json';
+    expect(resolveDwsChatMessageSendFileProtocolInText(cmd)).toBeNull();
+  });
+
+  it('does not false-positive on a stripped local path passed to --file', () => {
+    const cmd =
+      'dws drive upload --file /Users/yaolei/.claw-output/report.html --space-id sid -y --format json && dws chat message send --user u1 --text "周报已上传" --format json';
+    expect(resolveDwsChatMessageSendFileProtocolInText(cmd)).toBeNull();
+    // chained upload+send with stripped path: send itself is allowed (scheduled-task session exempts rate limit)
+    const result = evaluateDingTalkSendGuard({
+      toolName: 'exec',
+      params: { command: cmd },
+      sessionKey: 'scheduled-task:job-1',
+    });
+    expect(result.allowed).toBe(true);
   });
 });

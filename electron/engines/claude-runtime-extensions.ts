@@ -1,5 +1,6 @@
 import type { HookCallbackMatcher, HookEvent, McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import { RETIRED_SKILLS_SYSTEM_PROMPT } from '../../shared/retired-skills';
+import { buildWorkspaceArtifactOutputRule } from '../../shared/workspace-paths';
 import {
   buildStoDingTalkSendGuardClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk';
@@ -32,6 +33,8 @@ export interface ClaudeRuntimeOptions {
 
 interface ClaudeRuntimeExtensionContext {
   sessionKey: string;
+  /** 本轮用户原文；用于口头「发给某人」等按需注入启发式。 */
+  userPrompt?: string;
 }
 
 interface ClaudeRuntimeExtension {
@@ -73,7 +76,8 @@ function mergeRuntimeOptions(target: ClaudeRuntimeOptions, source: ClaudeRuntime
 
 const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
   id: 'sto-dingtalk-send-guard',
-  build: ({ sessionKey }) => buildStoDingTalkSendGuardClaudeRuntimeOptions(sessionKey),
+  build: ({ sessionKey, userPrompt }) =>
+    buildStoDingTalkSendGuardClaudeRuntimeOptions(sessionKey, userPrompt),
 };
 
 const workflowToolExtension: ClaudeRuntimeExtension = {
@@ -131,18 +135,22 @@ const agentTelemetryExtension: ClaudeRuntimeExtension = {
 
 const ssoUserContextExtension: ClaudeRuntimeExtension = {
   id: 'sto-sso-user-context',
-  async build() {
+  async build({ sessionKey }) {
     const blocks: string[] = [RETIRED_SKILLS_SYSTEM_PROMPT];
+
+    let workspaceAbsolutePath: string | null = null;
+    try {
+      const { resolveSessionToolCwd } = await import('../services/session-catalog-service');
+      const { extractAgentIdFromSessionKey } = await import('../../shared/session-agent-id');
+      const agentId = extractAgentIdFromSessionKey(sessionKey) ?? undefined;
+      workspaceAbsolutePath = await resolveSessionToolCwd(sessionKey, agentId);
+    } catch (err) {
+      logger.warn(`[claude-sso-context] failed to resolve workspace cwd (${String(err)})`);
+    }
 
     blocks.push([
       '产物文件引用规范（重要）：',
-      '- 写入：本地产物必须 save 到当前 workspace 的 `./.claw-output/<文件名>`；⛔ 禁止 `outputs/`、项目源码目录、skill 目录；⛔ 禁止 `~/.openclaw/workspace`（旧路径），统一使用 `~/.stoclaw/openclaw/workspace/.claw-output/`。',
-      '- 路径一致：回复里的 file:/// 绝对路径必须与 write/save 实际路径逐字相同（含文件名）；⛔ 禁止写 A 名、链 B 名。',
-      '- 当回复中引用用户可查看或下载的本地产物文件（HTML 报告、PDF、表格、文档等）时，必须输出绝对路径，并优先使用 file:// URL 的 Markdown 链接格式：[文件名](file:///绝对路径)。',
-      '- 严禁输出相对路径链接（如 [report.md](report.md)、outputs/...、./.claw-output/...、./...）；必须写成绝对路径。',
-      '- Windows 路径必须规范为 file:///C:/...（使用正斜杠），不要输出 file://C:\\... 或反斜杠版本。',
-      '- 如果执行结果仅提供 http(s) 可访问地址（如 OSS 链接）且没有本地绝对路径，则使用该 http(s) 链接；不要伪造 file:// 路径。',
-      '- 严禁向用户输出运行环境内部且用户不可访问的伪本地路径（如 /runtime/、/tmp/）作为 file:// 链接。',
+      buildWorkspaceArtifactOutputRule(undefined, { workspaceAbsolutePath }),
     ].join('\n'));
 
     try {
@@ -182,11 +190,14 @@ const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
   ssoUserContextExtension,
 ];
 
-export async function buildClaudeRuntimeOptions(sessionKey: string): Promise<ClaudeRuntimeOptions> {
+export async function buildClaudeRuntimeOptions(
+  sessionKey: string,
+  userPrompt?: string,
+): Promise<ClaudeRuntimeOptions> {
   logger.info(`[claude-runtime] building runtime options, sessionKey=${sessionKey}, extensions=${claudeRuntimeExtensions.length} [${claudeRuntimeExtensions.map(e => e.id).join(', ')}]`);
 
   const options: ClaudeRuntimeOptions = {};
-  const context: ClaudeRuntimeExtensionContext = { sessionKey };
+  const context: ClaudeRuntimeExtensionContext = { sessionKey, userPrompt };
 
   for (const extension of claudeRuntimeExtensions) {
     const start = Date.now();

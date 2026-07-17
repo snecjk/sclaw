@@ -18,6 +18,7 @@ import {
   rememberOptimisticTaskGroupFirstTriggered,
 } from '@/lib/task-group-first-trigger';
 import { resolveTaskGroupKeyFromSessionKey } from '../../../shared/task-group-key';
+import { applyTaskExecutionModelToChatSession } from '@/lib/apply-task-execution-model';
 import { useChatStore } from '@/stores/chat';
 import { useAgentsStore } from '@/stores/agents';
 import { navigateToMainChatHome, navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
@@ -30,7 +31,6 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { cn } from '@/lib/utils';
 import {
-  myTaskCreateButtonClass,
   myTaskPageHeaderRowClass,
   stoMainInnerShell,
   stoPageTitleClass,
@@ -296,11 +296,26 @@ export default function MyTask() {
         }
       });
       try {
-        await triggerJob(task.id, task.engineType);
+        const result = await triggerJob(task.id, task.engineType);
         if (groupKey) {
           void ensureTaskGroupFirstTriggeredOnRun(groupKey, triggeredAt);
         }
+        const executionMeta = result && typeof result === 'object'
+          ? result as {
+            executionSessionKey?: string;
+            executionModel?: string;
+            executionAgentId?: string;
+          }
+          : null;
+        const targetSessionKey = executionMeta?.executionSessionKey || sessionKey;
+        applyTaskExecutionModelToChatSession({
+          sessionKey: targetSessionKey,
+          model: executionMeta?.executionModel,
+          agentId: executionMeta?.executionAgentId || task.agentId,
+          engineType: task.engineType,
+        });
         forgetOptimisticDeletedSessionKey(sessionKey);
+        forgetOptimisticDeletedSessionKey(targetSessionKey);
         if (task.engineType !== 'claude' && task.agentId && task.agentId !== 'main') {
           const today = new Date();
           const y = today.getFullYear();
@@ -309,7 +324,7 @@ export default function MyTask() {
           forgetOptimisticDeletedSessionKey(`agent:main:cron:${task.id}:${y}-${m}-${d}`);
         }
         navigateToMainChatHome(navigate, location.pathname, () => {
-          useChatStore.getState().switchSession(sessionKey);
+          useChatStore.getState().switchSession(targetSessionKey);
         });
         await useChatStore.getState().loadSessions();
         toast.success(t('myTask.toast.triggered'));
@@ -335,7 +350,8 @@ export default function MyTask() {
             }
             const promptTemplate = prepareDingTalkAgentTurnMessage(
               input.message,
-              input.dingTalkMentions
+              input.dingTalkMentions,
+              { scenario: 'scheduled-task' },
             );
             await updateJob(editingJob.id, {
               engineType: 'claude',
@@ -373,7 +389,8 @@ export default function MyTask() {
             }
             const promptTemplate = prepareDingTalkAgentTurnMessage(
               input.message,
-              input.dingTalkMentions
+              input.dingTalkMentions,
+              { scenario: 'scheduled-task' },
             );
             await createJob({
               engineType: 'claude',
@@ -454,27 +471,18 @@ export default function MyTask() {
     <div className="h-full flex flex-col">
       <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col">
         <div className={cn(stoMainInnerShell, 'flex flex-1 flex-col')}>
-          {/* 页面标题 + 新建按钮 */}
+          {/* 页面标题 + 右侧运行保障控件 */}
           <header className="mb-6">
             <div className={myTaskPageHeaderRowClass}>
-              <h1 className={stoPageTitleClass}>{t('myTask.pageTitle')}</h1>
-              {isTasksView ? (
-                <button
-                  type="button"
-                  className={myTaskCreateButtonClass}
-                  onClick={() => {
-                    setEditingJob(null);
-                    setCreateOpen(true);
-                  }}
-                >
-                  {t('myTask.newTask')}
-                </button>
-              ) : null}
+              <div className="min-w-0">
+                <h1 className={stoPageTitleClass}>{t('myTask.pageTitle')}</h1>
+                <p className="mt-1 text-sm text-muted-foreground">{t('myTask.subtitle')}</p>
+              </div>
+              <TaskRunGuardBar />
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">{t('myTask.subtitle')}</p>
           </header>
 
-          {/* Tab 行：左侧视图 Tab + 右侧搜索/排序 */}
+          {/* Tab 行：左侧视图 Tab + 右侧搜索/排序/新建 */}
           <div className={cn(workflowListToolbarClass, 'mb-[26px]')}>
             <ViewTabs activeView={activeView} onViewChange={setActiveView} />
 
@@ -484,6 +492,10 @@ export default function MyTask() {
                 onSearchChange={setSearchQuery}
                 sortValue={sortValue}
                 onSortChange={setSortValue}
+                onCreate={() => {
+                  setEditingJob(null);
+                  setCreateOpen(true);
+                }}
               />
             ) : (
               <RecordToolbar searchQuery={recordSearch} onSearchChange={setRecordSearch} />
@@ -505,7 +517,6 @@ export default function MyTask() {
           {/* ── 定时任务视图 ── */}
           {isTasksView && (
             <section aria-label={t('myTask.taskView.aria')} className="flex-1 flex flex-col">
-              <TaskRunGuardBar />
               {jobsLoading && safeJobs.length === 0 ? (
                 <div className="flex items-center justify-center py-20">
                   <LoadingSpinner size="lg" />

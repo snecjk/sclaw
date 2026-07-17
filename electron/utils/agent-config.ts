@@ -3,7 +3,12 @@ import { constants } from 'fs';
 import { join, normalize } from 'path';
 import { deleteAgentChannelAccounts, listConfiguredChannels, readOpenClawConfig, writeOpenClawConfig } from './channel-config';
 import { withConfigLock } from './config-mutex';
-import { expandPath, getClawXConfigDir, getOpenClawConfigDir } from './paths';
+import { expandPath, getClawXConfigDir, getManagedAgentWorkspacePath, getOpenClawConfigDir, ensureWorkspaceArtifactOutputDir } from './paths';
+import {
+  DEFAULT_WORKSPACE_TILDE,
+  getAgentWorkspaceTildePath,
+  migrateWorkspaceTildePath,
+} from '../../shared/workspace-paths';
 import * as logger from './logger';
 import { OPENCLAW_WECHAT_CHANNEL_TYPE, toUiChannelType } from './channel-alias';
 import { applyWeChatChannelAccountEnabled } from './channel-config';
@@ -11,7 +16,6 @@ import { applyWeChatChannelAccountEnabled } from './channel-config';
 const MAIN_AGENT_ID = 'main';
 const MAIN_AGENT_NAME = 'Main Agent';
 const DEFAULT_ACCOUNT_ID = 'default';
-const DEFAULT_WORKSPACE_PATH = '~/.stoclaw/openclaw/workspace';
 const AGENT_BOOTSTRAP_FILES = [
   'AGENTS.md',
   'SOUL.md',
@@ -26,6 +30,7 @@ const AGENT_RUNTIME_FILES = [
   'models.json',
 ];
 
+/* TEMP: 暂时停用英文 Long Output / Thinking Language 注入（压缩初始上下文），勿删，恢复时取消注释
 const LONG_OUTPUT_CONSTRAINT = [
   '',
   '## 📄 Long Output Rule (STO Claw)',
@@ -68,6 +73,7 @@ const CHINESE_THINKING_CONSTRAINT = [
   'Even when analyzing English content or code, your step-by-step thoughts, plans, and reflections should be expressed in Chinese.',
   '',
 ].join('\n');
+*/
 
 interface AgentModelConfig {
   primary?: string;
@@ -277,9 +283,10 @@ function getDefaultWorkspacePath(config: AgentConfigDocument): string {
   const defaults = (config.agents && typeof config.agents === 'object'
     ? (config.agents as AgentsConfig).defaults
     : undefined);
-  return typeof defaults?.workspace === 'string' && defaults.workspace.trim()
+  const raw = typeof defaults?.workspace === 'string' && defaults.workspace.trim()
     ? defaults.workspace
-    : DEFAULT_WORKSPACE_PATH;
+    : DEFAULT_WORKSPACE_TILDE;
+  return migrateWorkspaceTildePath(raw) ?? DEFAULT_WORKSPACE_TILDE;
 }
 
 function getDefaultAgentDirPath(agentId: string): string {
@@ -461,8 +468,8 @@ function trimTrailingSeparators(path: string): string {
 function getManagedWorkspaceDirectory(agent: AgentListEntry): string | null {
   if (agent.id === MAIN_AGENT_ID) return null;
 
-  const configuredWorkspace = expandPath(agent.workspace || `~/.stoclaw/openclaw/workspace-${agent.id}`);
-  const managedWorkspace = join(getOpenClawConfigDir(), `workspace-${agent.id}`);
+  const configuredWorkspace = expandPath(agent.workspace || getAgentWorkspaceTildePath(agent.id));
+  const managedWorkspace = getManagedAgentWorkspacePath(agent.id);
   const normalizedConfigured = trimTrailingSeparators(normalize(configuredWorkspace));
   const normalizedManaged = trimTrailingSeparators(normalize(managedWorkspace));
 
@@ -512,7 +519,10 @@ async function copyRuntimeFiles(sourceAgentDir: string, targetAgentDir: string):
   }
 }
 
-export async function ensureLongOutputConstraint(workspacePath: string): Promise<void> {
+export async function ensureLongOutputConstraint(_workspacePath: string): Promise<void> {
+  // TEMP: 暂时停用英文 Long Output 注入；恢复时取消上方常量注释并还原下方逻辑
+  return;
+  /*
   const agentsMdPath = join(workspacePath, 'AGENTS.md');
   const marker = '## 📄 Long Output Rule (STO Claw)';
 
@@ -531,9 +541,13 @@ export async function ensureLongOutputConstraint(workspacePath: string): Promise
   } catch {
     // Best-effort: if writing fails, OpenClaw's default AGENTS.md will still work.
   }
+  */
 }
 
-export async function ensureChineseThinkingConstraint(workspacePath: string): Promise<void> {
+export async function ensureChineseThinkingConstraint(_workspacePath: string): Promise<void> {
+  // TEMP: 暂时停用英文 Thinking Language 注入；恢复时取消上方常量注释并还原下方逻辑
+  return;
+  /*
   const agentsMdPath = join(workspacePath, 'AGENTS.md');
   const marker = '## 🧠 Thinking Language Rule (STO Claw)';
 
@@ -552,6 +566,7 @@ export async function ensureChineseThinkingConstraint(workspacePath: string): Pr
   } catch {
     // Best-effort: if writing fails, OpenClaw's default AGENTS.md will still work.
   }
+  */
 }
 
 async function provisionAgentFilesystem(
@@ -562,7 +577,7 @@ async function provisionAgentFilesystem(
   const { entries } = normalizeAgentsConfig(config);
   const mainEntry = entries.find((entry) => entry.id === MAIN_AGENT_ID) ?? createImplicitMainEntry(config);
   const sourceWorkspace = expandPath(mainEntry.workspace || getDefaultWorkspacePath(config));
-  const targetWorkspace = expandPath(agent.workspace || `~/.stoclaw/openclaw/workspace-${agent.id}`);
+  const targetWorkspace = expandPath(agent.workspace || getAgentWorkspaceTildePath(agent.id));
   const sourceAgentDir = expandPath(mainEntry.agentDir || getDefaultAgentDirPath(MAIN_AGENT_ID));
   const targetAgentDir = expandPath(agent.agentDir || getDefaultAgentDirPath(agent.id));
   const targetSessionsDir = join(getOpenClawConfigDir(), 'agents', agent.id, 'sessions');
@@ -570,6 +585,7 @@ async function provisionAgentFilesystem(
   await ensureDir(targetWorkspace);
   await ensureDir(targetAgentDir);
   await ensureDir(targetSessionsDir);
+  ensureWorkspaceArtifactOutputDir(targetWorkspace);
 
   // When inheritWorkspace is true, copy the main agent's workspace bootstrap
   // files (SOUL.md, AGENTS.md, etc.) so the new agent inherits the same
@@ -582,7 +598,7 @@ async function provisionAgentFilesystem(
     await copyRuntimeFiles(sourceAgentDir, targetAgentDir);
   }
 
-  // Inject constraints into AGENTS.md
+  // Inject constraints into AGENTS.md（ensure* 内已 TEMP 停用英文注入）
   await ensureLongOutputConstraint(targetWorkspace);
   await ensureChineseThinkingConstraint(targetWorkspace);
 }
@@ -679,7 +695,7 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
       modelDisplay: modelLabel,
       modelAccountId: engineType === 'claude' ? features.preferredModelAccountId?.[entry.id] : undefined,
       inheritedModel,
-      workspace: entry.workspace || (entry.id === MAIN_AGENT_ID ? getDefaultWorkspacePath(config) : `~/.stoclaw/openclaw/workspace-${entry.id}`),
+      workspace: entry.workspace || (entry.id === MAIN_AGENT_ID ? getDefaultWorkspacePath(config) : getAgentWorkspaceTildePath(entry.id)),
       agentDir: entry.agentDir || getDefaultAgentDirPath(entry.id),
       mainSessionKey: buildAgentMainSessionKey(config, entry.id),
       channelTypes: configuredChannels
@@ -717,7 +733,7 @@ export async function getAgentWorkspacePath(agentId: string): Promise<string | n
   const entry = entries.find((e) => e.id === agentId);
   if (!entry) return null;
   const raw = entry.workspace
-    || (entry.id === MAIN_AGENT_ID ? getDefaultWorkspacePath(config) : `~/.stoclaw/openclaw/workspace-${entry.id}`);
+    || (entry.id === MAIN_AGENT_ID ? getDefaultWorkspacePath(config) : getAgentWorkspaceTildePath(entry.id));
   return expandPath(raw);
 }
 
@@ -750,7 +766,7 @@ export async function createAgent(
     const newAgent: AgentListEntry = {
       id: nextId,
       name: normalizedName,
-      workspace: `~/.stoclaw/openclaw/workspace-${nextId}`,
+      workspace: getAgentWorkspaceTildePath(nextId),
       agentDir: getDefaultAgentDirPath(nextId),
     };
 
@@ -779,11 +795,15 @@ export async function createAgent(
  * Create an agent with an explicit ID (instead of auto-generating from name).
  * Used by the biz-agent sync service to create agents whose ID matches the
  * remote `code` field, enabling dedup-by-code on subsequent syncs.
+ *
+ * Idempotent for project-agent ensure: if the ID is already in config, returns
+ * the current snapshot. If only the on-disk agent dir exists (orphan after a
+ * crashed/racy create), re-registers it into config instead of throwing.
  */
 export async function createAgentWithId(
   id: string,
   name: string,
-  options?: { inheritWorkspace?: boolean; fileTransformByOSS?: boolean },
+  options?: { inheritWorkspace?: boolean; fileTransformByOSS?: boolean; workspace?: string },
 ): Promise<AgentsSnapshot> {
   if (!id || !id.trim()) throw new Error('Agent ID must not be empty');
   if (id === MAIN_AGENT_ID) throw new Error('Cannot create agent with reserved ID "main"');
@@ -793,9 +813,16 @@ export async function createAgentWithId(
     const { agentsConfig, entries, syntheticMain } = normalizeAgentsConfig(config);
     const existingIds = new Set(entries.map((entry) => entry.id));
     const diskIds = await listExistingAgentIdsOnDisk();
+    const existsInConfig = existingIds.has(id);
+    const existsOnDisk = diskIds.has(id);
 
-    if (existingIds.has(id) || diskIds.has(id)) {
-      throw new Error(`Agent with ID "${id}" already exists`);
+    if (existsInConfig) {
+      logger.info('createAgentWithId: agent already in config (idempotent)', { agentId: id });
+      return await buildSnapshotFromConfig(config);
+    }
+
+    if (existsOnDisk) {
+      logger.warn('createAgentWithId: healing disk orphan into config', { agentId: id });
     }
 
     const normalizedName = normalizeAgentName(name);
@@ -803,7 +830,7 @@ export async function createAgentWithId(
     const newAgent: AgentListEntry = {
       id,
       name: normalizedName,
-      workspace: `~/.stoclaw/openclaw/workspace-${id}`,
+      workspace: options?.workspace?.trim() || getAgentWorkspaceTildePath(id),
       agentDir: getDefaultAgentDirPath(id),
     };
 
@@ -830,7 +857,11 @@ export async function createAgentWithId(
     }
     await writeAgentFeatures(features);
 
-    logger.info('Created agent config entry (explicit ID)', { agentId: id, inheritWorkspace: !!options?.inheritWorkspace });
+    logger.info('Created agent config entry (explicit ID)', {
+      agentId: id,
+      inheritWorkspace: !!options?.inheritWorkspace,
+      healedFromDisk: existsOnDisk,
+    });
     return await buildSnapshotFromConfig(config);
   });
 }
@@ -879,6 +910,11 @@ export async function getAgentPreferredModel(agentId: string): Promise<AgentPref
   };
 }
 
+export async function getAgentEngineType(agentId: string): Promise<AgentEngineType> {
+  const features = await readAgentFeatures();
+  return normalizeAgentEngineType(features.engineType?.[agentId]);
+}
+
 export async function setAgentPreferredModel(
   agentId: string,
   selection: { model: string; accountId?: string },
@@ -907,6 +943,107 @@ export async function setAgentPreferredModel(
   });
 }
 
+function isModelRefInStoCatalog(hint: string | undefined | null, catalogIds: string[]): boolean {
+  const trimmed = hint?.trim();
+  if (!trimmed) return true;
+  if (catalogIds.length === 0) return true;
+  if (catalogIds.includes(trimmed)) return true;
+  const bare = trimmed.includes('/') ? trimmed.slice(trimmed.lastIndexOf('/') + 1) : trimmed;
+  return catalogIds.some((catalogId) => {
+    if (catalogId === trimmed) return true;
+    if (catalogId.endsWith(`/${trimmed}`) || trimmed.endsWith(`/${catalogId}`)) return true;
+    const catalogBare = catalogId.includes('/')
+      ? catalogId.slice(catalogId.lastIndexOf('/') + 1)
+      : catalogId;
+    return catalogBare === bare;
+  });
+}
+
+/**
+ * After STO catalog sync: remap Claude preferredModel + OpenClaw agents.list
+ * entries that still point at delisted STO models onto the workspace fallback.
+ */
+export async function remapDelistedAgentModels(opts: {
+  catalogIds: string[];
+  /** Prior STO customModels — used to avoid accidental remaps of non-STO OpenClaw refs. */
+  previousCatalogIds?: string[];
+  fallbackModel: string;
+  fallbackAccountId?: string;
+}): Promise<{ preferredRemapped: number; openclawRemapped: number }> {
+  const catalogIds = opts.catalogIds.map((id) => id.trim()).filter(Boolean);
+  const previousCatalogIds = (opts.previousCatalogIds ?? [])
+    .map((id) => id.trim())
+    .filter(Boolean);
+  const fallbackModel = opts.fallbackModel.trim();
+  if (!fallbackModel || catalogIds.length === 0) {
+    return { preferredRemapped: 0, openclawRemapped: 0 };
+  }
+
+  return withConfigLock(async () => {
+    const config = await readOpenClawConfig() as AgentConfigDocument;
+    const { agentsConfig, entries } = normalizeAgentsConfig(config);
+    const features = await readAgentFeatures();
+    let preferredRemapped = 0;
+    let openclawRemapped = 0;
+
+    const nextPreferred = { ...(features.preferredModel || {}) };
+    const nextPreferredAccount = { ...(features.preferredModelAccountId || {}) };
+    for (const [agentId, model] of Object.entries(nextPreferred)) {
+      if (isModelRefInStoCatalog(model, catalogIds)) continue;
+      nextPreferred[agentId] = fallbackModel;
+      if (opts.fallbackAccountId?.trim()) {
+        nextPreferredAccount[agentId] = opts.fallbackAccountId.trim();
+      }
+      preferredRemapped += 1;
+    }
+
+    if (preferredRemapped > 0) {
+      features.preferredModel = nextPreferred;
+      features.preferredModelAccountId = nextPreferredAccount;
+      await writeAgentFeatures(features);
+    }
+
+    const openclawFallback = fallbackModel.startsWith('sto/')
+      ? fallbackModel
+      : `sto/${fallbackModel}`;
+    const nextEntries = entries.map((entry) => {
+      const engineType = normalizeAgentEngineType(features.engineType?.[entry.id]);
+      if (engineType === 'claude') return entry;
+      const rawModel = typeof entry.model === 'string'
+        ? entry.model
+        : (entry.model && typeof entry.model === 'object'
+          ? (entry.model as AgentModelConfig).primary
+          : undefined);
+      if (!rawModel?.trim()) return entry;
+      const wasStoCatalogRef = rawModel.startsWith('sto/')
+        || rawModel.startsWith('custom-sto/')
+        || (previousCatalogIds.length > 0 && isModelRefInStoCatalog(rawModel, previousCatalogIds));
+      if (!wasStoCatalogRef) return entry;
+      if (isModelRefInStoCatalog(rawModel, catalogIds)) return entry;
+      openclawRemapped += 1;
+      return { ...entry, model: openclawFallback };
+    });
+
+    if (openclawRemapped > 0) {
+      config.agents = {
+        ...agentsConfig,
+        list: nextEntries,
+      };
+      await writeOpenClawConfig(config);
+    }
+
+    if (preferredRemapped > 0 || openclawRemapped > 0) {
+      logger.info('Remapped delisted agent models after STO catalog sync', {
+        preferredRemapped,
+        openclawRemapped,
+        fallbackModel,
+      });
+    }
+
+    return { preferredRemapped, openclawRemapped };
+  });
+}
+
 export async function updateAgentName(agentId: string, name: string): Promise<AgentsSnapshot> {
   return withConfigLock(async () => {
     const config = await readOpenClawConfig() as AgentConfigDocument;
@@ -929,6 +1066,32 @@ export async function updateAgentName(agentId: string, name: string): Promise<Ag
 
     await writeOpenClawConfig(config);
     logger.info('Updated agent name', { agentId, name: normalizedName });
+    return await buildSnapshotFromConfig(config);
+  });
+}
+
+export async function updateAgentWorkspace(agentId: string, workspacePath: string): Promise<AgentsSnapshot> {
+  return withConfigLock(async () => {
+    const config = await readOpenClawConfig() as AgentConfigDocument;
+    const { agentsConfig, entries } = normalizeAgentsConfig(config);
+    const index = entries.findIndex((entry) => entry.id === agentId);
+    if (index === -1) {
+      throw new Error(`Agent "${agentId}" not found`);
+    }
+
+    entries[index] = {
+      ...entries[index],
+      workspace: workspacePath.trim(),
+    };
+
+    config.agents = {
+      ...agentsConfig,
+      list: entries,
+    };
+
+    await writeOpenClawConfig(config);
+    ensureWorkspaceArtifactOutputDir(workspacePath.trim());
+    logger.info('Updated agent workspace', { agentId, workspace: workspacePath.trim() });
     return await buildSnapshotFromConfig(config);
   });
 }

@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import {
   dropdownOptionClass,
   dropdownPanelRoundedClass,
+  myTaskCreateButtonClass,
   myTaskSortTriggerClass,
   workflowListSearchIconWrapClass,
   workflowListSearchInputClass,
@@ -26,6 +27,8 @@ interface TaskToolbarProps {
   sortValue: string;
   /** 排序变化回调 */
   onSortChange: (value: string) => void;
+  /** 新建定时任务回调（有则显示工具栏右侧按钮） */
+  onCreate?: () => void;
 }
 
 export function TaskToolbar({
@@ -33,6 +36,7 @@ export function TaskToolbar({
   onSearchChange,
   sortValue,
   onSortChange,
+  onCreate,
 }: TaskToolbarProps) {
   const { t } = useTranslation('tasks');
   const [sortOpen, setSortOpen] = useState(false);
@@ -124,6 +128,12 @@ export function TaskToolbar({
           </div>
         )}
       </div>
+
+      {onCreate ? (
+        <button type="button" className={myTaskCreateButtonClass} onClick={onCreate}>
+          {t('myTask.newTask')}
+        </button>
+      ) : null}
     </div>
   );
 }

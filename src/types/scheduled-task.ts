@@ -75,6 +75,9 @@ export interface ScheduledTaskTriggerResponse {
   outcome: string;
   run?: ScheduledTaskRun;
   hasSession?: boolean;
+  executionSessionKey?: string;
+  executionModel?: string;
+  executionAgentId?: string;
 }
 
 export type ClaudeTaskPermissionProfile =
@@ -151,6 +154,23 @@ export interface ClaudeScheduledTaskRunRecord {
   sessionKey: string;
   summary?: string;
   error?: string;
+  runtimeSnapshot?: {
+    workspacePath?: string;
+    providerAccountId?: string;
+    model?: string;
+    permissionProfile?: string;
+    pluginPaths?: string[];
+  };
+  /** Host-api enrichment after trigger: dated UI session + persisted model */
+  executionSessionKey?: string;
+  executionModel?: string;
+  executionAgentId?: string;
+}
+
+export interface TaskTriggerExecutionMeta {
+  executionSessionKey?: string;
+  executionModel?: string;
+  executionAgentId?: string;
 }
 
 export type ManagedScheduledTask =

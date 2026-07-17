@@ -9,7 +9,6 @@ import type {
 } from '@/pages/WorkflowDesigner/types';
 
 const ALL_TEMPLATES = NODE_TEMPLATES;
-
 export function createEmptyWorkflowDefinition(name: string): WorkflowDefinition {
   return {
     schemaVersion: 'workflow/v2',
@@ -97,6 +96,7 @@ export function buildCanvasEdges(
     target: edge.target,
     label: edge.condition || undefined,
     markerEnd: { type: MarkerType.ArrowClosed },
+    updatable: true,
     interactionWidth: 20,
     selected: edge.id === selectedEdgeId,
     data: (() => {

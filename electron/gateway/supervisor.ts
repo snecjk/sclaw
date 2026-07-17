@@ -132,13 +132,15 @@ export async function unloadLaunchctlGatewayService(): Promise<void> {
   }
 }
 
-export async function waitForPortFree(port: number, timeoutMs = 30000): Promise<void> {
+export async function waitForPortFree(port: number, timeoutMs?: number): Promise<void> {
+  // Windows may need longer for TCP TIME_WAIT; elsewhere a live occupant will not free itself.
+  const effectiveTimeoutMs = timeoutMs ?? (process.platform === 'win32' ? 30_000 : 3_000);
   const net = await import('net');
   const start = Date.now();
   const pollInterval = 500;
   let logged = false;
 
-  while (Date.now() - start < timeoutMs) {
+  while (Date.now() - start < effectiveTimeoutMs) {
     const available = await new Promise<boolean>((resolve) => {
       const server = net.createServer();
       server.once('error', () => resolve(false));
@@ -157,13 +159,17 @@ export async function waitForPortFree(port: number, timeoutMs = 30000): Promise<
     }
 
     if (!logged) {
-      logger.info(`Waiting for port ${port} to become available (Windows TCP TIME_WAIT)...`);
+      logger.info(
+        process.platform === 'win32'
+          ? `Waiting for port ${port} to become available (Windows TCP TIME_WAIT)...`
+          : `Waiting for port ${port} to become available...`,
+      );
       logged = true;
     }
     await new Promise((resolve) => setTimeout(resolve, pollInterval));
   }
 
-  logger.warn(`Port ${port} still occupied after ${timeoutMs}ms, proceeding anyway`);
+  logger.warn(`Port ${port} still occupied after ${effectiveTimeoutMs}ms, proceeding anyway`);
 }
 
 export async function getListeningProcessIds(port: number): Promise<string[]> {
@@ -210,14 +216,15 @@ export async function getListeningProcessIds(port: number): Promise<string[]> {
   return result;
 }
 
-export async function terminateOrphanedProcessIds(port: number, pids: string[]): Promise<void> {
-  logger.info(`Found orphaned process listening on port ${port} (PIDs: ${pids.join(', ')}), attempting to kill...`);
+export async function terminateProcessIds(pids: string[]): Promise<void> {
+  const uniquePids = [...new Set(pids.map((pid) => pid.trim()).filter(Boolean))];
+  if (uniquePids.length === 0) return;
 
   if (process.platform === 'darwin') {
     await unloadLaunchctlGatewayService();
   }
 
-  for (const pid of pids) {
+  for (const pid of uniquePids) {
     try {
       if (process.platform === 'win32') {
         const cp = await import('child_process');
@@ -239,7 +246,7 @@ export async function terminateOrphanedProcessIds(port: number, pids: string[]):
   await new Promise((resolve) => setTimeout(resolve, process.platform === 'win32' ? 2000 : 3000));
 
   if (process.platform !== 'win32') {
-    for (const pid of pids) {
+    for (const pid of uniquePids) {
       try {
         process.kill(parseInt(pid, 10), 0);
         process.kill(parseInt(pid, 10), 'SIGKILL');
@@ -249,6 +256,52 @@ export async function terminateOrphanedProcessIds(port: number, pids: string[]):
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
+}
+
+export async function terminateOrphanedProcessIds(port: number, pids: string[]): Promise<void> {
+  logger.info(`Found orphaned process listening on port ${port} (PIDs: ${pids.join(', ')}), attempting to kill...`);
+  await terminateProcessIds(pids);
+}
+
+/**
+ * List direct child PIDs of the app whose command line identifies them as
+ * openclaw-gateway UtilityProcess workers.
+ */
+export async function listGatewayChildProcessIds(parentPid: number = process.pid): Promise<number[]> {
+  const cp = await import('child_process');
+
+  if (process.platform === 'win32') {
+    const cmd =
+      'powershell -NoProfile -Command ' +
+      `"Get-CimInstance Win32_Process -Filter \\"ParentProcessId=${parentPid}\\" | ` +
+      `Where-Object { $_.CommandLine -match 'openclaw-gateway' } | ` +
+      `ForEach-Object { $_.ProcessId }"`;
+    const stdout = await new Promise<string>((resolve) => {
+      cp.exec(cmd, { timeout: 5000, windowsHide: true }, (err, output) => {
+        resolve(err ? '' : String(output ?? ''));
+      });
+    });
+    return [...new Set(
+      stdout
+        .split(/\r?\n/)
+        .map((line) => parseInt(line.trim(), 10))
+        .filter((pid) => Number.isFinite(pid) && pid > 0),
+    )];
+  }
+
+  const stdout = await new Promise<string>((resolve) => {
+    cp.exec(`pgrep -P ${parentPid} -f openclaw-gateway`, { timeout: 5000 }, (err, output) => {
+      // pgrep exits 1 when no processes match — not an error for us.
+      resolve(err ? '' : String(output ?? ''));
+    });
+  });
+
+  return [...new Set(
+    stdout
+      .split(/\r?\n/)
+      .map((line) => parseInt(line.trim(), 10))
+      .filter((pid) => Number.isFinite(pid) && pid > 0),
+  )];
 }
 
 export async function findExistingGatewayProcess(options: {

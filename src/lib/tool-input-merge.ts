@@ -23,7 +23,7 @@ export function resolveToolIdentity(
   occurrenceIndex?: number,
 ): string {
   const stableId = tool.toolCallId || tool.id;
-  if (isStableToolId(stableId, tool.name)) return stableId;
+  if (stableId && isStableToolId(stableId, tool.name)) return stableId;
   if (typeof occurrenceIndex === 'number') {
     return `occurrence::${tool.name}::${occurrenceIndex}`;
   }
@@ -62,7 +62,7 @@ export function mergeToolInput(existing: unknown, incoming: unknown): unknown {
 
 export function resolveToolInputState(
   input: unknown,
-  status: 'running' | 'completed' | 'error',
+  status: 'running' | 'completed' | 'error' | 'interrupted',
   options?: { confirmedEmpty?: boolean },
 ): ToolInputState {
   if (hasMeaningfulToolInput(input)) return 'complete';

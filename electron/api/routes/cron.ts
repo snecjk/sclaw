@@ -16,6 +16,7 @@ import {
 } from '../../utils/ensure-dated-execution-session';
 import { ensureTaskGroupFirstTriggeredOnRun, listTaskGroupFirstTriggeredAt } from '../../utils/task-group-first-trigger-store';
 import { cronTaskGroupKey } from '../../../shared/task-group-key';
+import { resolveCronJobAgentId } from '../../../shared/cron-job-agent';
 
 interface GatewayCronJob {
   id: string;
@@ -334,6 +335,8 @@ interface CronSessionListItem {
   label: string;
   displayName?: string;
   updatedAt?: number;
+  model?: string;
+  agentId?: string;
 }
 
 async function listAllCronSessions(): Promise<CronSessionListItem[]> {
@@ -341,12 +344,17 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
   const { stat, readdir, readFile: fsReadFile } = await import('node:fs/promises');
 
   const jobNamesById = new Map<string, string>();
+  const jobAgentById = new Map<string, string>();
   try {
     const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
     const jobsRaw = await readFile(jobsFile, 'utf8');
-    const jobsData = JSON.parse(jobsRaw) as { jobs?: Array<{ id: string; name?: string }> };
+    const jobsData = JSON.parse(jobsRaw) as {
+      jobs?: Array<{ id: string; name?: string; description?: string }>;
+    };
     for (const job of jobsData.jobs ?? []) {
-      if (job.id && job.name?.trim()) jobNamesById.set(job.id, job.name.trim());
+      if (!job.id) continue;
+      if (job.name?.trim()) jobNamesById.set(job.id, job.name.trim());
+      jobAgentById.set(job.id, resolveCronJobAgentId(job.description));
     }
   } catch {
     // ignore
@@ -463,11 +471,17 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
       }
 
       for (const [date, updatedAt] of runsByDate) {
-        const sessionKey = `agent:main:cron:${jobId}:${date}`;
-        // Skip if already present from physical sessions scan
-        if (sessions.some((s) => s.key === sessionKey)) continue;
-        const baseKey = `agent:main:cron:${jobId}`;
-        const label = baseSessionLabels.get(baseKey) || `Cron: ${jobId}`;
+        const agentId = jobAgentById.get(jobId) ?? 'main';
+        const sessionKey = `agent:${agentId}:cron:${jobId}:${date}`;
+        // Skip if any agent already has this job+date (physical or virtual twin)
+        if (sessions.some((s) => {
+          const parsed = parseCronSessionKey(s.key);
+          return parsed?.jobId === jobId && parsed.date === date;
+        })) continue;
+        const baseKey = `agent:${agentId}:cron:${jobId}`;
+        const label = baseSessionLabels.get(baseKey)
+          || baseSessionLabels.get(`agent:main:cron:${jobId}`)
+          || `Cron: ${jobId}`;
         sessions.push({
           key: sessionKey,
           label,
@@ -486,10 +500,28 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
   const firstTriggered = await listTaskGroupFirstTriggeredAt();
   const existingKeys = new Set(sessions.map((session) => session.key));
   sessions.push(
-    ...buildFirstTriggeredCronSessionPlaceholders(firstTriggered, existingKeys, jobNamesById)
-      .filter((placeholder) => !deletedKeys.has(placeholder.key)),
+    ...buildFirstTriggeredCronSessionPlaceholders(
+      firstTriggered,
+      existingKeys,
+      jobNamesById,
+      jobAgentById,
+    ).filter((placeholder) => !deletedKeys.has(placeholder.key)),
   );
   sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+
+  try {
+    const { listEngineSessionRegistryEntries } = await import('../../engines/session-registry');
+    const registry = await listEngineSessionRegistryEntries('openclaw');
+    const byKey = new Map(registry.map((entry) => [entry.sessionKey, entry] as const));
+    for (const session of sessions) {
+      const entry = byKey.get(session.key);
+      if (!entry) continue;
+      if (entry.model?.trim()) session.model = entry.model.trim();
+      if (entry.agentId?.trim()) session.agentId = entry.agentId.trim();
+    }
+  } catch {
+    // best-effort enrichment
+  }
 
   return filterDeletedSessions(sessions);
 }
@@ -657,7 +689,8 @@ function buildCronDescription(
 }
 
 function buildCronMessage(message: string, mentions?: DingTalkMention[]): string {
-  return prepareDingTalkAgentTurnMessage(message, mentions);
+  // OpenClaw 引擎定时任务同样为必发语义，传 scheduled-task 走必发版收件人块。
+  return prepareDingTalkAgentTurnMessage(message, mentions, { scenario: 'scheduled-task' });
 }
 
 export async function handleCronRoutes(
@@ -894,20 +927,59 @@ export async function handleCronRoutes(
     try {
       const body = await parseJsonBody<{ id: string }>(req);
       const result = await ctx.gatewayManager.rpc('cron.run', { id: body.id, mode: 'force' });
-      await reviveCronDatedExecutionSession(body.id, 'main');
+      const {
+        resolveOpenClawCronJobExecutionModel,
+        syncTaskExecutionModelToDatedSession,
+      } = await import('../../utils/task-execution-session-model');
+      const resolved = await resolveOpenClawCronJobExecutionModel(body.id);
+      const agentId = resolved?.agentId?.trim() || 'main';
+      await reviveCronDatedExecutionSession(body.id, agentId);
       let jobLabel: string | undefined;
       try {
         const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
         const jobsRaw = await readFile(jobsFile, 'utf8');
-        const jobsData = JSON.parse(jobsRaw) as { jobs?: Array<{ id: string; name?: string }> };
-        const name = jobsData.jobs?.find((job) => job.id === body.id)?.name?.trim();
+        const jobsData = JSON.parse(jobsRaw) as {
+          jobs?: Array<{ id: string; name?: string; description?: string }>;
+        };
+        const job = jobsData.jobs?.find((entry) => entry.id === body.id);
+        const name = job?.name?.trim();
         if (name) jobLabel = `${name}`;
       } catch {
         // ignore
       }
-      await ensureCronDatedExecutionSessionPlaceholder(body.id, 'main', { label: jobLabel });
+      await ensureCronDatedExecutionSessionPlaceholder(body.id, agentId, { label: jobLabel });
       await ensureTaskGroupFirstTriggeredOnRun(cronTaskGroupKey(body.id));
-      sendJson(res, 200, result);
+
+      const date = (() => {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      })();
+      const executionSessionKey = `agent:${agentId}:cron:${body.id}:${date}`;
+      let executionModel = resolved?.model?.trim() || '';
+      if (executionModel) {
+        try {
+          const synced = await syncTaskExecutionModelToDatedSession({
+            sessionKey: executionSessionKey,
+            model: executionModel,
+            engineType: 'openclaw',
+            agentId,
+            gatewayManager: ctx.gatewayManager,
+          });
+          if (synced?.model) executionModel = synced.model;
+        } catch {
+          // best-effort
+        }
+      }
+
+      sendJson(res, 200, {
+        ...(result && typeof result === 'object' ? result : { result }),
+        executionSessionKey,
+        executionModel: executionModel || undefined,
+        executionAgentId: agentId,
+      });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

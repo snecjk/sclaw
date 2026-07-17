@@ -23,6 +23,7 @@ import {
   isOpenClawOAuthPluginProviderKey,
 } from './provider-keys';
 import { withConfigLock } from './config-mutex';
+import { PORTS } from './config';
 import { resolveStoBaseUrl } from './sto-domain';
 import { getOpenClawConfigDir } from './paths';
 import { RETIRED_PLUGIN_IDS } from '../../shared/retired-skills';
@@ -185,7 +186,35 @@ function sanitizeModelsProviders(config: Record<string, unknown>): void {
   }
 }
 
-async function writeOpenClawJson(config: Record<string, unknown>): Promise<void> {
+/** Deep equality for JSON-like values (object key order ignored). */
+function deepEqualJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== typeof b) return false;
+  if (a === null || b === null) return a === b;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((value, index) => deepEqualJson(value, b[index]));
+  }
+  if (typeof a !== 'object' || typeof b !== 'object') return false;
+
+  const aObj = a as Record<string, unknown>;
+  const bObj = b as Record<string, unknown>;
+  const aKeys = Object.keys(aObj);
+  const bKeys = Object.keys(bObj);
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every((key) => Object.prototype.hasOwnProperty.call(bObj, key)
+    && deepEqualJson(aObj[key], bObj[key]));
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+/**
+ * Normalize config the same way before every openclaw.json write so no-op
+ * comparisons and on-disk content stay consistent.
+ */
+function prepareOpenClawConfigForWrite(config: Record<string, unknown>): void {
   normalizeAgentsDefaultsCompactionMode(config);
   sanitizeModelsProviders(config);
 
@@ -195,10 +224,31 @@ async function writeOpenClawJson(config: Record<string, unknown>): Promise<void>
       ? { ...(config.commands as Record<string, unknown>) }
       : {}
   ) as Record<string, unknown>;
-  commands.restart = true;
-  config.commands = commands;
+  if (commands.restart !== true) {
+    commands.restart = true;
+    config.commands = commands;
+  }
+}
+
+/**
+ * Write openclaw.json only when content actually changes.
+ * Skipping no-op writes avoids OpenClaw file-watcher hard restarts (WS 1012)
+ * after login/setup when plugins/providers are already in the desired state.
+ */
+async function writeOpenClawJson(config: Record<string, unknown>): Promise<boolean> {
+  prepareOpenClawConfigForWrite(config);
+
+  const existing = await readOpenClawJson();
+  if (Object.keys(existing).length > 0 || (await fileExists(OPENCLAW_CONFIG_PATH))) {
+    const existingPrepared = cloneJson(existing);
+    prepareOpenClawConfigForWrite(existingPrepared);
+    if (deepEqualJson(existingPrepared, config)) {
+      return false;
+    }
+  }
 
   await writeJsonFile(OPENCLAW_CONFIG_PATH, config);
+  return true;
 }
 
 // ── Exported Functions (all async) ───────────────────────────────
@@ -499,6 +549,9 @@ interface RuntimeProviderConfigOverride {
   authHeader?: boolean;
   /** Default input capabilities for new model entries (e.g. ['text', 'image']) */
   defaultModelInput?: string[];
+  /** Fallbacks used when the remote catalog omits token limits. */
+  defaultModelContextWindow?: number;
+  defaultModelMaxTokens?: number;
   /** When set, replaces single-model upsert with the full provider catalog. */
   providerModelIds?: string[];
 }
@@ -514,6 +567,8 @@ type ProviderEntryBuildOptions = {
   mergeExistingModels?: boolean;
   /** Default input capabilities for new model entries (e.g. ['text', 'image']) */
   defaultModelInput?: string[];
+  defaultModelContextWindow?: number;
+  defaultModelMaxTokens?: number;
 };
 
 function normalizeModelRef(provider: string, modelOverride?: string): string | undefined {
@@ -602,11 +657,20 @@ function upsertOpenClawProviderEntry(
   // When re-syncing a model that already exists, preserve its extra fields (e.g. input, contextWindow)
   const runtimeModels = (options.modelIds ?? []).map((id) => {
     const existing = allExistingModels.find((e) => e.id === id);
-    if (existing) return { ...existing, id, name: id };
-    // New model entry: apply defaultModelInput if specified
-    return options.defaultModelInput
+    const model: Record<string, unknown> = existing
+      ? { ...existing, id, name: id }
+      : options.defaultModelInput
       ? { id, name: id, input: options.defaultModelInput }
       : { id, name: id };
+    if (!(typeof model.contextWindow === 'number' && model.contextWindow > 0)
+      && options.defaultModelContextWindow != null) {
+      model.contextWindow = options.defaultModelContextWindow;
+    }
+    if (!(typeof model.maxTokens === 'number' && model.maxTokens > 0)
+      && options.defaultModelMaxTokens != null) {
+      model.maxTokens = options.defaultModelMaxTokens;
+    }
+    return model;
   });
 
   const nextProvider: Record<string, unknown> = {
@@ -678,6 +742,8 @@ export async function syncProviderConfigToOpenClaw(
         headers: override.headers,
         modelIds,
         defaultModelInput: override.defaultModelInput,
+        defaultModelContextWindow: override.defaultModelContextWindow,
+        defaultModelMaxTokens: override.defaultModelMaxTokens,
       });
     }
 
@@ -744,6 +810,8 @@ export async function setOpenClawDefaultModelWithOverride(
         authHeader: override.authHeader,
         modelIds,
         defaultModelInput: override.defaultModelInput,
+        defaultModelContextWindow: override.defaultModelContextWindow,
+        defaultModelMaxTokens: override.defaultModelMaxTokens,
       });
     }
 
@@ -872,12 +940,6 @@ export async function syncGatewayTokenToConfig(token: string): Promise<void> {
         : {}
     ) as Record<string, unknown>;
 
-    auth.mode = 'token';
-    auth.token = token;
-    gateway.auth = auth;
-
-    // Packaged StoClaw loads the renderer from file://, so the gateway must allow
-    // that origin for the chat WebSocket handshake.
     const controlUi = (
       gateway.controlUi && typeof gateway.controlUi === 'object'
         ? { ...(gateway.controlUi as Record<string, unknown>) }
@@ -886,16 +948,52 @@ export async function syncGatewayTokenToConfig(token: string): Promise<void> {
     const allowedOrigins = Array.isArray(controlUi.allowedOrigins)
       ? (controlUi.allowedOrigins as unknown[]).filter((value): value is string => typeof value === 'string')
       : [];
+
+    let changed = false;
+
+    if (auth.mode !== 'token') {
+      auth.mode = 'token';
+      changed = true;
+    }
+    if (auth.token !== token) {
+      auth.token = token;
+      changed = true;
+    }
     if (!allowedOrigins.includes('file://')) {
       controlUi.allowedOrigins = [...allowedOrigins, 'file://'];
+      changed = true;
     }
-    gateway.controlUi = controlUi;
+    if (!gateway.mode) {
+      gateway.mode = 'local';
+      changed = true;
+    }
 
-    if (!gateway.mode) gateway.mode = 'local';
+    // Persist an explicit (empty) gateway.tailscale object.
+    //
+    // OpenClaw bug workaround: when the gateway is launched with an auth
+    // override (our `--token` arg), applyGatewayAuthOverridesForStartupPreflight
+    // materializes `gateway.tailscale = {}` in the in-memory startup config.
+    // The config file watcher then diffs that in-memory config against the
+    // raw file; if the file has no `gateway.tailscale` key, EVERY write to
+    // openclaw.json reports a phantom "gateway.tailscale" change, which
+    // matches the `gateway` restart rule and forces a full self-restart
+    // (WS 1012) — even for no-op rewrites or hot-reloadable `models.*`
+    // changes. Writing `{}` to disk makes file and memory identical, so the
+    // phantom diff disappears.
+    if (gateway.tailscale === undefined) {
+      gateway.tailscale = {};
+      changed = true;
+    }
+
+    if (!changed) {
+      return;
+    }
+
+    gateway.auth = auth;
+    gateway.controlUi = controlUi;
     config.gateway = gateway;
 
     await writeOpenClawJson(config);
-    
   });
 }
 
@@ -1279,7 +1377,7 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
     // discover them.
     const channelsObj = config.channels as Record<string, Record<string, unknown>> | undefined;
     if (channelsObj && typeof channelsObj === 'object') {
-      for (const [channelType, section] of Object.entries(channelsObj)) {
+      for (const [_channelType, section] of Object.entries(channelsObj)) {
         if (!section || typeof section !== 'object') continue;
         const accounts = section.accounts as Record<string, Record<string, unknown>> | undefined;
         const defaultAccount = accounts?.default;
@@ -1307,6 +1405,7 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
 }
 
 const DINGTALK_SEND_GUARD_PLUGIN_ID = 'sto-dingtalk-send-guard';
+const STO_BROWSER_BRIDGE_PLUGIN_ID = 'sto-browser-bridge';
 
 /** Strip retired plugin ids from openclaw.json (skills/plugins removed from the app). */
 export async function removeRetiredPluginsFromOpenClawConfig(): Promise<boolean> {
@@ -1370,10 +1469,61 @@ function ensureDingTalkSendGuardPluginConfig(plugins: Record<string, unknown>): 
   return modified;
 }
 
+/** Enable local browser-bridge plugin (embed webview + optional Chrome extension). */
+function ensureStoBrowserBridgePluginConfig(plugins: Record<string, unknown>): boolean {
+  const allow = Array.isArray(plugins.allow) ? [...(plugins.allow as string[])] : [];
+  const entries = (
+    plugins.entries && typeof plugins.entries === 'object' && !Array.isArray(plugins.entries)
+      ? plugins.entries
+      : {}
+  ) as Record<string, Record<string, unknown>>;
+
+  let modified = false;
+  if (!allow.includes(STO_BROWSER_BRIDGE_PLUGIN_ID)) {
+    allow.push(STO_BROWSER_BRIDGE_PLUGIN_ID);
+    modified = true;
+  }
+  const current = entries[STO_BROWSER_BRIDGE_PLUGIN_ID];
+  if (!current || current.enabled !== true) {
+    entries[STO_BROWSER_BRIDGE_PLUGIN_ID] = {
+      enabled: true,
+      config: {
+        hostApiHost: '127.0.0.1',
+        hostApiPort: PORTS.CLAWX_HOST_API,
+        commandTimeoutMs: 30_000,
+      },
+    };
+    modified = true;
+  }
+  if (modified) {
+    plugins.allow = allow;
+    plugins.entries = entries;
+  }
+  return modified;
+}
+
+export async function ensureStoBrowserBridgePluginInOpenClaw(): Promise<boolean> {
+  return withConfigLock(async () => {
+    const config = await readOpenClawJson();
+    const plugins = (config.plugins || {}) as Record<string, unknown>;
+    plugins.enabled = true;
+    const modified = ensureStoBrowserBridgePluginConfig(plugins);
+    if (modified) {
+      config.plugins = plugins;
+      await writeOpenClawJson(config);
+    }
+    return modified;
+  });
+}
+
 /**
  * Configure STO plugins in a single openclaw.json write (avoids multiple hot-reload cycles).
+ * Skips the write when the desired plugin/provider config is already present so login/setup
+ * does not trigger an OpenClaw hard restart.
+ *
+ * @returns true when openclaw.json was written
  */
-export async function syncStoPluginsToOpenClaw(): Promise<void> {
+export async function syncStoPluginsToOpenClaw(): Promise<boolean> {
   return withConfigLock(async () => {
     const stoBaseUrl = await resolveStoBaseUrl();
     const config = await readOpenClawJson();
@@ -1397,6 +1547,7 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
       'sto-workflow-tool',
       'sto-skill-call-monitor',
       'sto-media-understanding',
+      STO_BROWSER_BRIDGE_PLUGIN_ID,
       DINGTALK_SEND_GUARD_PLUGIN_ID,
     ]) {
       if (!allow.includes(pluginId)) {
@@ -1452,6 +1603,14 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
       enabled: true,
       config: {},
     };
+    entries[STO_BROWSER_BRIDGE_PLUGIN_ID] = {
+      enabled: true,
+      config: {
+        hostApiHost: '127.0.0.1',
+        hostApiPort: PORTS.CLAWX_HOST_API,
+        commandTimeoutMs: 30_000,
+      },
+    };
     entries[DINGTALK_SEND_GUARD_PLUGIN_ID] = {
       enabled: true,
       config: {},
@@ -1477,8 +1636,7 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
     tools.deny = deny.filter((t) => t !== 'cron');
     config.tools = tools;
 
-    await writeOpenClawJson(config);
-    
+    return writeOpenClawJson(config);
   });
 }
 
@@ -1487,7 +1645,7 @@ export async function syncStoPluginsToOpenClaw(): Promise<void> {
  * Adds models.providers entry and plugins.allow/entries with environment-specific URLs.
  */
 export async function syncStoDynamicRoutePluginToOpenClaw(): Promise<void> {
-  return syncStoPluginsToOpenClaw();
+  await syncStoPluginsToOpenClaw();
 }
 
 /**
@@ -1495,7 +1653,7 @@ export async function syncStoDynamicRoutePluginToOpenClaw(): Promise<void> {
  * Writes ingest URL and SSO auth path into plugins.entries.
  */
 export async function syncStoAgentTelemetryPluginToOpenClaw(): Promise<void> {
-  return syncStoPluginsToOpenClaw();
+  await syncStoPluginsToOpenClaw();
 }
 
 /**

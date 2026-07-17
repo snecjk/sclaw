@@ -4,7 +4,6 @@
  * 规则：只追加、同 identity 工具合并 input、identity 不含 input。
  */
 import {
-  hasMeaningfulToolInput,
   mergeToolInput,
   resolveToolIdentity,
   resolveToolInputState,

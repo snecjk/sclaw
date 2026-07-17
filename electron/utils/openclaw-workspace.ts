@@ -8,8 +8,9 @@ import { access, readFile, writeFile, readdir, mkdir, unlink } from 'fs/promises
 import { constants } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { expandContextIncludes } from './context-fragment';
 import { logger } from './logger';
-import { getResourcesDir, getOpenClawConfigDir } from './paths';
+import { getResourcesDir, getOpenClawConfigDir, ensureWorkspaceArtifactOutputDir } from './paths';
 
 const CLAWX_BEGIN = '<!-- stoclaw:begin -->';
 const CLAWX_END = '<!-- stoclaw:end -->';
@@ -161,6 +162,7 @@ async function mergeClawXContextOnce(): Promise<number> {
 
   for (const workspaceDir of workspaceDirs) {
     await ensureDir(workspaceDir);
+    ensureWorkspaceArtifactOutputDir(workspaceDir);
 
     for (const file of files) {
       const targetName = file.replace('.stoclaw.md', '.md');
@@ -172,7 +174,8 @@ async function mergeClawXContextOnce(): Promise<number> {
         continue;
       }
 
-      const section = await readFile(join(contextDir, file), 'utf-8');
+      const rawSection = await readFile(join(contextDir, file), 'utf-8');
+      const section = await expandContextIncludes(rawSection, contextDir);
       const existing = await readFile(targetPath, 'utf-8');
 
       const merged = mergeClawXSection(existing, section);

@@ -20,7 +20,7 @@ import { removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-au
 import { getStoPolicyReportApiHost } from '../../../shared/env-config';
 import { computeCrmWeekReportSurfaceAllowed } from '../../../shared/crm-week-report-policy';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
-import { loadSiteDepartmentTypes } from '../../services/sto-apollo-config-service';
+import { loadSiteDepartmentTypes, loadClawInferenceRuntimeConfig, clearInferenceRuntimeConfigCache, fetchHqBalanceApplyUrl, DEFAULT_HQ_BALANCE_APPLY_URL } from '../../services/sto-apollo-config-service';
 import { getClientSiteAccessService } from '../../services/client-site-access-service';
 import type { ClientSiteAccessCheckResult } from '../../../shared/client-site-access';
 import { syncClaudeDefaultContext } from '../../services/claude-context-sync';
@@ -28,10 +28,19 @@ import {
   fetchAccountSwitchOptions,
   switchAccountViaMemoryCenter,
 } from '../../services/account-switch-service';
+import { resolveAuthMode } from '../../services/sto-auth-mode';
 
 const ssoLoginManager = new SsoLoginManager();
 
 const CLIENT_SITE_ACCESS_DENIED_MESSAGE = '您的所属组织无权使用 StoClaw';
+
+async function loadInferenceRuntimeConfigBeforeSetup(): Promise<void> {
+  try {
+    await loadClawInferenceRuntimeConfig();
+  } catch (err) {
+    logger.warn('[auth] Inference runtime config load before setup failed:', err);
+  }
+}
 
 function toAccessCheckPayload(result: ClientSiteAccessCheckResult) {
   const clientCode = result.clientCode;
@@ -146,6 +155,7 @@ export async function handleAuthRoutes(
         user: state.user,
         ssoEnvironment: state.ssoEnvironment,
         impersonationOrigin: await getImpersonationOrigin(),
+        authMode: await resolveAuthMode(),
       });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
@@ -191,12 +201,18 @@ export async function handleAuthRoutes(
         stoSyncService.setGatewayManager(ctx.gatewayManager);
       }
 
+      await loadInferenceRuntimeConfigBeforeSetup();
+
       let setupResult: AuthenticatedSetupResult | undefined;
       try {
+        // awaitGatewayRefresh: if the setup needs a Gateway reload/restart (e.g.
+        // STO models rebuilt after a logout), run it now and wait for the Gateway
+        // to settle, so the renderer only enters the home page once ready.
         setupResult = await runAuthenticatedSetup({
           user,
           gatewayManager: ctx.gatewayManager,
           source: 'login',
+          awaitGatewayRefresh: true,
         });
       } catch (err) {
         logger.warn('[auth] Synchronous post-login authenticated setup failed:', err);
@@ -234,27 +250,34 @@ export async function handleAuthRoutes(
         await signOut(baseUrl, state.user.openId);
       }
 
+      // 先清理 STO 模型/SK 缓存（需要 user 信息），再清除登录态
+      try {
+        await getStoModelSyncService().cleanupOnLogout(state.user);
+      } catch (err) {
+        logger.warn('STO model cleanup on logout failed:', err);
+      }
+
       await clearAuthUser();
+      clearInferenceRuntimeConfigCache();
       void removeSsoAuthFromOpenClaw();
       void removeStoDynamicRoutePluginFromOpenClaw().catch((err) =>
         logger.warn('STO dynamic route plugin cleanup on logout failed:', err),
       );
 
-      // Cleanup STO models and stop periodic sync (fire-and-forget)
-      const stoSyncLogout = getStoModelSyncService();
-      void stoSyncLogout.cleanupOnLogout().catch((err) =>
-        logger.warn('STO model cleanup on logout failed:', err),
-      );
-
       sendJson(res, 200, { success: true });
     } catch {
+      // 错误路径也尽量先清 SK（user 可能仍在 store 中）
+      try {
+        await getStoModelSyncService().cleanupOnLogout();
+      } catch {
+        // ignore
+      }
+
       // Always clear local auth even if SSO signOut fails
       await clearAuthUser().catch(() => {});
+      clearInferenceRuntimeConfigCache();
       void removeSsoAuthFromOpenClaw();
       void removeStoDynamicRoutePluginFromOpenClaw().catch(() => {});
-
-      // Best-effort STO cleanup on error path too
-      void getStoModelSyncService().cleanupOnLogout().catch(() => {});
 
       sendJson(res, 200, { success: true });
     }
@@ -273,6 +296,18 @@ export async function handleAuthRoutes(
       sendJson(res, 200, { success: true });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
+  // GET /api/auth/hq-balance-apply-url — 非网点余额申请外链（实时拉 Apollo）
+  if (url.pathname === '/api/auth/hq-balance-apply-url' && req.method === 'GET') {
+    try {
+      const result = await fetchHqBalanceApplyUrl();
+      sendJson(res, 200, { success: true, ...result });
+    } catch (error) {
+      logger.warn('[auth] HQ balance apply url fetch failed:', error);
+      sendJson(res, 200, { success: true, url: DEFAULT_HQ_BALANCE_APPLY_URL, source: 'fallback' });
     }
     return true;
   }
@@ -361,12 +396,15 @@ export async function handleAuthRoutes(
         stoSyncService.setGatewayManager(ctx.gatewayManager);
       }
 
+      await loadInferenceRuntimeConfigBeforeSetup();
+
       let setupResult: AuthenticatedSetupResult | undefined;
       try {
         setupResult = await runAuthenticatedSetup({
           user: body.user,
           gatewayManager: ctx.gatewayManager,
           source: 'login',
+          awaitGatewayRefresh: true,
         });
       } catch (err) {
         logger.warn('[auth] Post session commit authenticated setup failed:', err);
@@ -450,12 +488,15 @@ export async function handleAuthRoutes(
         stoSyncService.setGatewayManager(ctx.gatewayManager);
       }
 
+      await loadInferenceRuntimeConfigBeforeSetup();
+
       let setupResult: AuthenticatedSetupResult | undefined;
       try {
         setupResult = await runAuthenticatedSetup({
           user: newUser,
           gatewayManager: ctx.gatewayManager,
           source: 'login',
+          awaitGatewayRefresh: true,
         });
       } catch (err) {
         logger.warn('[auth] Post account-switch authenticated setup failed:', err);
@@ -494,12 +535,15 @@ export async function handleAuthRoutes(
         stoSyncService.setGatewayManager(ctx.gatewayManager);
       }
 
+      await loadInferenceRuntimeConfigBeforeSetup();
+
       let setupResult: AuthenticatedSetupResult | undefined;
       try {
         setupResult = await runAuthenticatedSetup({
           user: origin,
           gatewayManager: ctx.gatewayManager,
           source: 'login',
+          awaitGatewayRefresh: true,
         });
       } catch (err) {
         logger.warn('[auth] Post account-switch-back authenticated setup failed:', err);

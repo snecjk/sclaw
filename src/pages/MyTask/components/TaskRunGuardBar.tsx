@@ -1,14 +1,15 @@
 /**
- * 我的任务 — 运行保障条（全局防睡眠开关，仅 UI 位于定时任务 Tab）
+ * 我的任务 — 运行保障控件（标题行右侧：文案 + 问号提示 + 开关）
  */
 
+import { HelpCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSettingsStore } from '@/stores/settings';
 import { cn } from '@/lib/utils';
-import { glassSectionSurface } from '@/lib/surfaces';
+import { myTaskRunGuardBarShellClass } from '@/lib/surfaces';
+import { WorkflowScheduleToggle } from '@/pages/Workflow/components/workflow-schedule-toggle';
 
 export function TaskRunGuardBar() {
   const { t } = useTranslation('tasks');
@@ -16,35 +17,47 @@ export function TaskRunGuardBar() {
   const setPreventSystemSleep = useSettingsStore((state) => state.setPreventSystemSleep);
 
   return (
-    <section
-      className={cn(glassSectionSurface, 'mb-4 py-4')}
+    <div
+      className={myTaskRunGuardBarShellClass}
       aria-label={t('myTask.runGuard.aria')}
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <Label className="text-[15px] font-medium text-foreground/80">
-            {t('myTask.runGuard.preventSleep')}
-          </Label>
-          <p className="mt-1 text-[13px] text-muted-foreground">
-            {t('myTask.runGuard.preventSleepDesc')}
-          </p>
-          <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground/80">
-            {t('myTask.runGuard.preventSleepTips')}
-          </p>
-        </div>
-        <Switch
-          checked={preventSystemSleep}
-          onCheckedChange={(value) => {
-            setPreventSystemSleep(value);
-            toast.success(
-              value
-                ? t('myTask.runGuard.toastEnabled')
-                : t('myTask.runGuard.toastDisabled'),
-            );
-          }}
-          className="shrink-0"
-        />
-      </div>
-    </section>
+      <span className="whitespace-nowrap text-sm font-medium leading-[18px] text-foreground">
+        {t('myTask.runGuard.preventSleep')}
+      </span>
+      <Tooltip delayDuration={150}>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full',
+              'text-muted-foreground transition-colors hover:text-foreground',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+            )}
+            aria-label={t('myTask.runGuard.infoAria')}
+          >
+            <HelpCircle className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent
+          side="bottom"
+          align="end"
+          className="max-w-[280px] whitespace-normal text-xs leading-relaxed"
+        >
+          {t('myTask.runGuard.preventSleepTips')}
+        </TooltipContent>
+      </Tooltip>
+      <WorkflowScheduleToggle
+        checked={preventSystemSleep}
+        aria-label={t('myTask.runGuard.preventSleep')}
+        onCheckedChange={(value) => {
+          setPreventSystemSleep(value);
+          toast.success(
+            value
+              ? t('myTask.runGuard.toastEnabled')
+              : t('myTask.runGuard.toastDisabled'),
+          );
+        }}
+      />
+    </div>
   );
 }

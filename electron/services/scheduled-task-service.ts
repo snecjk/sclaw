@@ -174,14 +174,14 @@ export class ScheduledTaskService {
     const baseUrl = await this.resolveBaseUrl();
     const headers = await this.buildHeaders();
     const url = `${baseUrl}/list`;
-    logger.info(`[ScheduledTaskService] >>> listTasks url=${url}`);
-    logger.info(`[ScheduledTaskService] >>> listTasks headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
-    const curlCmd = `curl -X GET "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}"`;
-    logger.info(`[ScheduledTaskService] >>> listTasks curl=${curlCmd}`);
+    // logger.info(`[ScheduledTaskService] >>> listTasks url=${url}`);
+    // logger.info(`[ScheduledTaskService] >>> listTasks headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
+    // const curlCmd = `curl -X GET "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}"`;
+    // logger.info(`[ScheduledTaskService] >>> listTasks curl=${curlCmd}`);
 
     const res = await fetch(url, { method: 'GET', headers });
     const bodyText = await res.text();
-    logger.info(`[ScheduledTaskService] <<< listTasks status=${res.status} body=${bodyText.slice(0, 500)}`);
+    // logger.info(`[ScheduledTaskService] <<< listTasks status=${res.status} body=${bodyText.slice(0, 500)}`);
 
     if (!res.ok) {
       throw new Error(`Scheduled task list failed (${res.status}): ${bodyText}`);
@@ -193,7 +193,7 @@ export class ScheduledTaskService {
     }
 
     const items = data.data?.items ?? [];
-    logger.info(`[ScheduledTaskService] listTasks returned ${items.length} items`);
+    // logger.info(`[ScheduledTaskService] listTasks returned ${items.length} items`);
     return items.map(mapTask);
   }
 
@@ -227,8 +227,8 @@ export class ScheduledTaskService {
     const baseUrl = await this.resolveBaseUrl();
     const headers = await this.buildHeaders();
     const url = `${baseUrl}`;
-    logger.info(`[ScheduledTaskService] >>> createTask url=${url}`);
-    logger.info(`[ScheduledTaskService] >>> createTask headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
+    // logger.info(`[ScheduledTaskService] >>> createTask url=${url}`);
+    // logger.info(`[ScheduledTaskService] >>> createTask headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
 
     const robotCode = await getRobotCode();
     const body: Record<string, unknown> = {
@@ -249,12 +249,12 @@ export class ScheduledTaskService {
     };
 
     const bodyJson = JSON.stringify(body);
-    const curlCmd = `curl -X POST "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}" -d '${bodyJson}'`;
-    logger.info(`[ScheduledTaskService] >>> createTask curl=${curlCmd}`);
+    // const curlCmd = `curl -X POST "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}" -d '${bodyJson}'`;
+    // logger.info(`[ScheduledTaskService] >>> createTask curl=${curlCmd}`);
 
     const res = await fetch(url, { method: 'POST', headers, body: bodyJson });
     const bodyText = await res.text();
-    logger.info(`[ScheduledTaskService] <<< createTask status=${res.status} body=${bodyText.slice(0, 1000)}`);
+    // logger.info(`[ScheduledTaskService] <<< createTask status=${res.status} body=${bodyText.slice(0, 1000)}`);
 
     if (!res.ok) {
       throw new Error(`Scheduled task creation failed (${res.status}): ${bodyText}`);
@@ -275,8 +275,8 @@ export class ScheduledTaskService {
     const baseUrl = await this.resolveBaseUrl();
     const headers = await this.buildHeaders();
     const url = `${baseUrl}/update`;
-    logger.info(`[ScheduledTaskService] >>> updateTask url=${url}`);
-    logger.info(`[ScheduledTaskService] >>> updateTask headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
+    // logger.info(`[ScheduledTaskService] >>> updateTask url=${url}`);
+    // logger.info(`[ScheduledTaskService] >>> updateTask headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
 
     const robotCode = await getRobotCode();
     const body: Record<string, unknown> = { task_id: input.taskId };
@@ -292,12 +292,12 @@ export class ScheduledTaskService {
     if (robotCode !== undefined) body.robot_code = robotCode;
 
     const bodyJson = JSON.stringify(body);
-    const curlCmd = `curl -X POST "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}" -d '${bodyJson}'`;
-    logger.info(`[ScheduledTaskService] >>> updateTask curl=${curlCmd}`);
+    // const curlCmd = `curl -X POST "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}" -d '${bodyJson}'`;
+    // logger.info(`[ScheduledTaskService] >>> updateTask curl=${curlCmd}`);
 
     const res = await fetch(url, { method: 'POST', headers, body: bodyJson });
     const bodyText = await res.text();
-    logger.info(`[ScheduledTaskService] <<< updateTask status=${res.status} body=${bodyText.slice(0, 1000)}`);
+    // logger.info(`[ScheduledTaskService] <<< updateTask status=${res.status} body=${bodyText.slice(0, 1000)}`);
 
     if (!res.ok) {
       throw new Error(`Scheduled task update failed (${res.status}): ${bodyText}`);
@@ -378,10 +378,10 @@ export class ScheduledTaskService {
     if (executionTime) {
       url += `&execution_time=${encodeURIComponent(executionTime)}`;
     }
-    logger.info(`[ScheduledTaskService] >>> queryTaskRuns url=${url}`);
-    logger.info(`[ScheduledTaskService] >>> queryTaskRuns headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
-    const curlCmd = `curl -X GET "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}"`;
-    logger.info(`[ScheduledTaskService] >>> queryTaskRuns curl=${curlCmd}`);
+    // logger.info(`[ScheduledTaskService] >>> queryTaskRuns url=${url}`);
+    // logger.info(`[ScheduledTaskService] >>> queryTaskRuns headers=${JSON.stringify({ ...headers, Authorization: '[REDACTED]', stotoken: '[REDACTED]' })}`);
+    // const curlCmd = `curl -X GET "${url}" -H "stotoken: ${headers.stotoken}" -H "Authorization: ${headers.Authorization}" -H "Content-Type: ${headers['Content-Type']}"`;
+    // logger.info(`[ScheduledTaskService] >>> queryTaskRuns curl=${curlCmd}`);
 
     const res = await fetch(url, { method: 'GET', headers });
     const bodyText = await res.text();

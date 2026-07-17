@@ -86,7 +86,6 @@ const UNIFIED_CHANNELS = new Set<string>([
   'cron:toggle',
   'cron:trigger',
   'usage:recentTokenHistory',
-  'question:split',
   'sai:checkInstalled',
   'sai:version',
   'sai:whoami',

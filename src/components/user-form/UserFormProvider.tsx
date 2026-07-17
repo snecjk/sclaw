@@ -24,10 +24,10 @@ interface UserFormProviderProps {
 }
 
 export function UserFormProvider({ children }: UserFormProviderProps) {
-  const { config, isShowing, submitForm, FormModal } = useUserForm();
+  const { config, isShowing, FormModal } = useUserForm();
 
   // showForm function for programmatic form display
-  const showForm = async (formConfig: UserFormConfig): Promise<FormResult | null> => {
+  const showForm = async (_formConfig: UserFormConfig): Promise<FormResult | null> => {
     return new Promise((resolve) => {
       // This is a simplified version - in a real implementation,
       // you would need to coordinate with the IPC-based form showing

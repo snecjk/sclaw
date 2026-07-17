@@ -9,6 +9,13 @@ import type {
   WfRunTable,
   WfUserInputTaskTable,
 } from './models/tables/workflow-runtime-tables';
+import type { MemoryCaptureJobTable } from './models/tables/memory-capture-job-table';
+import type {
+  CatalogSessionsTable,
+  SessionEngineBindingsTable,
+  SessionGroupsTable,
+  WorkspacesTable,
+} from './models/tables/session-catalog-tables';
 
 // One migration file corresponds to one schema version.
 export interface SqliteMigration {
@@ -54,4 +61,9 @@ export interface SqliteDbSchema {
   wf_approval_task: WfApprovalTaskTable;
   wf_user_input_task: WfUserInputTaskTable;
   wf_outbox: WfOutboxTable;
+  memory_capture_jobs: MemoryCaptureJobTable;
+  workspaces: WorkspacesTable;
+  session_groups: SessionGroupsTable;
+  catalog_sessions: CatalogSessionsTable;
+  session_engine_bindings: SessionEngineBindingsTable;
 }

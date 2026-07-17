@@ -11,12 +11,6 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
 import { ChatProcessLoadingEllipsis } from '@/components/chat/chat-process-loading-ellipsis';
 import { useTypewriterReveal } from '@/hooks/use-typewriter-reveal';
@@ -45,7 +39,6 @@ import {
   isPreviewableFile,
   PREVIEWABLE_FILE_EXTS,
   extractWorkflowCard,
-  extractParameterForm,
   useLocalPathExistence,
   resolvePreviewCandidate,
   unwrapPreviewablePathMarkdown,
@@ -54,7 +47,7 @@ import {
   isWorkflowCompletionTranscript,
   resolveAssistantCopyShareContent,
 } from './message-utils';
-import { writeCopyShareFilesToClipboard, writeCopyShareTextToClipboard } from '@/lib/copy-share-clipboard';
+import { writeCopyShareTextToClipboard } from '@/lib/copy-share-clipboard';
 import {
   ensureWorkflowParameterFormHandler,
   ensureWorkflowParameterFormInjected,
@@ -102,6 +95,7 @@ import {
 import { buildArtifactCardMenuItems } from '@/lib/artifact-card-menu';
 import { highlightAtMentionsInChildren } from '@/lib/at-mention-highlight';
 import { renderUserMessageMentionNodes } from '@/components/dingtalk/DingTalkMentionTag';
+import { SkillMessageTag } from '@/components/skill-plaza/SkillMessageTag';
 import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessPanel';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import { ShareMessageIcon } from '@/components/icons/ShareMessageIcon';
@@ -164,7 +158,6 @@ export const ChatMessage = memo(function ChatMessage({
   onPreviewFile,
   onCreateScheduledTask,
   onEditMessage,
-  hideAvatar = false,
   hideThinkingPanel = false,
   suppressToolCards = false,
   isTurnDisplayReply = false,
@@ -175,7 +168,9 @@ export const ChatMessage = memo(function ChatMessage({
   const isSystem = role === 'system';
   const isToolResult = role === 'toolresult' || role === 'tool_result';
   const text = extractText(message);
+  const skillMeta = message._skillMeta;
   const hasText = text.trim().length > 0;
+  const showUserSkillBubble = isUser && Boolean(skillMeta);
   const [systemExpanded, setSystemExpanded] = useState(false);
   const images = extractImages(message);
   const tools = extractToolUse(message);
@@ -512,12 +507,13 @@ export const ChatMessage = memo(function ChatMessage({
   });
   /** 用户参数摘要卡由同轮最后一条助手消息统一展示 meta，避免出现在「参数已确认」上方 */
   const showUserMessageMeta =
-    hasText
+    (hasText || Boolean(skillMeta))
     && !showUserParamsFold
     && !(isLastUserInTurn && currentUserTurnIncomplete);
 
   if (
     !hasText
+    && !skillMeta
     && !showThinkingPanel
     && images.length === 0
     && visibleTools.length === 0
@@ -563,7 +559,7 @@ export const ChatMessage = memo(function ChatMessage({
       debugLinks.length > 0 ? debugLinks.join('\n') : '(none)',
     ].join('\n');
     try {
-      await navigator.clipboard.writeText(snapshot);
+      await writeCopyShareTextToClipboard({ text: snapshot });
       toast.success('已复制渲染调试快照');
     } catch {
       toast.error('复制失败，请重试');
@@ -760,10 +756,11 @@ export const ChatMessage = memo(function ChatMessage({
         ) : null}
 
         {/* Main text bubble */}
-        {!showUserParamsFold && !showAssistantParamsPanel && (isUser ? hasText : showAssistantTextBubble) ? (
+        {!showUserParamsFold && !showAssistantParamsPanel && (isUser ? (hasText || showUserSkillBubble) : showAssistantTextBubble) ? (
           isUser ? (
             <MessageBubble
               text={text}
+              skillMeta={skillMeta}
               isUser={isUser}
               isStreaming={isStreaming}
               onPreviewFile={onPreviewFile}
@@ -1002,7 +999,7 @@ function UserMessageMetaRow({
 
   const copyContent = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(text);
+      await writeCopyShareTextToClipboard({ text });
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch (error) {
@@ -1078,24 +1075,15 @@ function AssistantMessageMetaRow({
   onShare?: () => void;
 }) {
   const { t } = useTranslation('chat');
-  const [copiedMode, setCopiedMode] = useState<'text' | 'files' | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const hasCopyableText = copyShareContent.text.trim().length > 0;
-  const copyableFiles = copyShareContent.files.filter((file) => file.filePath?.trim());
-  const hasCopyableFiles = copyableFiles.length > 0;
-  const copyLayout = hasCopyableText && hasCopyableFiles
-    ? 'both'
-    : hasCopyableText
-      ? 'text'
-      : hasCopyableFiles
-        ? 'files'
-        : 'none';
 
   const copyText = useCallback(async () => {
     try {
       await writeCopyShareTextToClipboard({ text: copyShareContent.text });
-      setCopiedMode('text');
-      setTimeout(() => setCopiedMode(null), 2000);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
       toast.success(t('messageActions.copyTextSuccess'));
     } catch (error) {
       console.error('[ChatMessage] Failed to copy assistant text:', error);
@@ -1103,97 +1091,27 @@ function AssistantMessageMetaRow({
     }
   }, [copyShareContent.text, t]);
 
-  const copyFiles = useCallback(async () => {
-    try {
-      const count = await writeCopyShareFilesToClipboard({ files: copyableFiles });
-      setCopiedMode('files');
-      setTimeout(() => setCopiedMode(null), 2000);
-      toast.success(t('messageActions.copyFilesSuccess', { count }));
-    } catch (error) {
-      console.error('[ChatMessage] Failed to copy assistant files:', error);
-      toast.error(t('messageActions.copyFilesFailed'));
-    }
-  }, [copyableFiles, t]);
-
   const copyTitle = onCopyDebugSnapshot
     ? '单击复制内容，双击复制调试快照'
-    : copyLayout === 'both'
-      ? t('messageActions.copySplitHint')
-      : t('messageActions.copy');
+    : t('messageActions.copy');
 
-  const copyButtonIcon = copiedMode
+  const copyButtonIcon = copied
     ? <Check className="h-3 w-3 text-green-500" aria-hidden />
     : <Copy className="h-3 w-3" aria-hidden />;
 
-  if (copyLayout === 'none') {
-    return (
-      <div className="flex select-none items-center gap-2">
-        {onShare ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={MESSAGE_META_ICON_BUTTON_CLASS}
-            onClick={onShare}
-            aria-label={t('messageActions.share')}
-            title={t('messageActions.share')}
-          >
-            <ShareMessageIcon className={MESSAGE_META_SHARE_ICON_CLASS} />
-          </Button>
-        ) : null}
-        {timestamp ? (
-          <span className="text-xs text-muted-foreground">
-            {formatTimestamp(timestamp)}
-          </span>
-        ) : null}
-      </div>
-    );
-  }
-
   return (
     <div className="flex select-none items-center gap-2">
-      {copyLayout === 'both' ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className={MESSAGE_META_ICON_BUTTON_CLASS}
-              aria-label={t('messageActions.copy')}
-              title={copyTitle}
-            >
-              {copyButtonIcon}
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-44">
-            <DropdownMenuItem
-              onClick={() => {
-                void copyText();
-              }}
-            >
-              {t('messageActions.copyText')}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                void copyFiles();
-              }}
-            >
-              {t('messageActions.copyFiles', { count: copyableFiles.length })}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : (
+      {hasCopyableText ? (
         <Button
           type="button"
           variant="ghost"
           size="icon"
           className={MESSAGE_META_ICON_BUTTON_CLASS}
           onClick={() => {
-            void (copyLayout === 'files' ? copyFiles() : copyText());
+            void copyText();
           }}
           onDoubleClick={() => {
-            if (!onCopyDebugSnapshot || copyLayout === 'files') return;
+            if (!onCopyDebugSnapshot) return;
             void onCopyDebugSnapshot();
           }}
           aria-label={t('messageActions.copy')}
@@ -1201,7 +1119,7 @@ function AssistantMessageMetaRow({
         >
           {copyButtonIcon}
         </Button>
-      )}
+      ) : null}
       {onShare ? (
         <Button
           type="button"
@@ -1235,6 +1153,7 @@ function previewUrlTransform(url: string): string {
 
 function MessageBubble({
   text,
+  skillMeta,
   isUser,
   isStreaming,
   replyStreamKey = 'assistant-reply',
@@ -1243,6 +1162,7 @@ function MessageBubble({
   workflowGuidanceShell = false,
 }: {
   text: string;
+  skillMeta?: { slug: string; title: string };
   isUser: boolean;
   isStreaming: boolean;
   /** 流式正文打字机 reset key（message id） */
@@ -1331,7 +1251,9 @@ function MessageBubble({
     >
       {isUser ? (
         <p className="whitespace-pre-wrap break-words break-all text-sm font-normal leading-5 text-foreground">
-          {renderUserMessageMentionNodes(text)}
+          {skillMeta ? <SkillMessageTag title={skillMeta.title} /> : null}
+          {skillMeta && text.trim().length > 0 ? '\u00A0' : null}
+          {text.trim().length > 0 ? renderUserMessageMentionNodes(text) : null}
         </p>
       ) : (
         <div

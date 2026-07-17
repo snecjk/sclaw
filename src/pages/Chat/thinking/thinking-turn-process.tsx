@@ -28,7 +28,11 @@ import {
 } from '@/lib/thinking-timeline-active';
 import { useSkillsStore } from '@/stores/skills';
 import type { ToolStatus } from '@/stores/chat/types';
-import { hasDisplayableToolInput, type ThinkingTimelineItem } from '@/pages/Chat/message-utils';
+import {
+  hasDisplayableToolInput,
+  maskDwsSensitiveIdsForDisplay,
+  type ThinkingTimelineItem,
+} from '@/pages/Chat/message-utils';
 import { OPENING_PHASE_TEXT_KEY, INTERRUPTED_PHASE_TEXT_KEY } from '@/pages/Chat/thinking/types';
 import { PhaseTextBlock } from '@/pages/Chat/thinking/phase-text-block';
 import {
@@ -244,14 +248,14 @@ interface TimelineBodyProps {
 function TimelineBody({
   timeline,
   isLiveStream,
-  hasFinalReply,
+  hasFinalReply: _hasFinalReply,
   batchIsCompleted,
   streamingTools,
   enableProcessTypewriter,
-  isConnecting,
-  isProcessing,
-  isStillExecuting,
-  connectingLabelKey,
+  isConnecting: _isConnecting,
+  isProcessing: _isProcessing,
+  isStillExecuting: _isStillExecuting,
+  connectingLabelKey: _connectingLabelKey,
   readonlyExpanded = false,
 }: TimelineBodyProps) {
   const { t } = useTranslation('chat');
@@ -299,8 +303,6 @@ function TimelineBody({
     enableProcessTypewriter,
   );
 
-  const runningTool = streamingTools.find((tool) => tool.status === 'running');
-
   const level2Collapsible = isLiveStream && !readonlyExpanded;
 
   return (
@@ -311,7 +313,10 @@ function TimelineBody({
         if (!reveal.isVisible) return null;
 
         if (item.type === 'thinking') {
-          const thinkingContent = resolveSkillNamesInThinking(item.content, skills);
+          // 深度思考面板不走 extractThinking/cleanThinkingText，展示前需单独脱敏
+          const thinkingContent = maskDwsSensitiveIdsForDisplay(
+            resolveSkillNamesInThinking(item.content, skills),
+          );
           const collapse = resolveTimelineBlockCollapseState(
             i,
             mergedTimeline.length,

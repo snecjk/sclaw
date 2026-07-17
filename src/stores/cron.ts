@@ -17,6 +17,7 @@ import type {
   ScheduledTask,
   ScheduledTaskCreateInput,
   ScheduledTaskUpdateInput,
+  TaskTriggerExecutionMeta,
 } from '../types/scheduled-task';
 import {
   applyCronDeletedTombstones,
@@ -55,7 +56,12 @@ interface CronState {
   ) => Promise<void>;
   deleteJob: (id: string, engineType: 'openclaw' | 'claude') => Promise<void>;
   toggleJob: (id: string, enabled: boolean, engineType: 'openclaw' | 'claude') => Promise<void>;
-  triggerJob: (id: string, engineType: 'openclaw' | 'claude') => Promise<CronJob | ClaudeScheduledTaskRunRecord | void>;
+  triggerJob: (id: string, engineType: 'openclaw' | 'claude') => Promise<
+    | (CronJob & TaskTriggerExecutionMeta)
+    | (ClaudeScheduledTaskRunRecord & TaskTriggerExecutionMeta)
+    | TaskTriggerExecutionMeta
+    | void
+  >;
   setJobs: (jobs: ManagedLocalTask[]) => void;
 }
 
@@ -296,13 +302,13 @@ export const useCronStore = create<CronState>((set) => ({
   triggerJob: async (id, engineType) => {
     try {
       if (engineType === 'claude') {
-        const result = await hostApiFetch<ClaudeScheduledTaskRunRecord>(
+        const result = await hostApiFetch<ClaudeScheduledTaskRunRecord & TaskTriggerExecutionMeta>(
           `/api/claude-scheduled-tasks/${encodeURIComponent(id)}/trigger`,
           { method: 'POST' },
         );
         return result;
       }
-      const result = await hostApiFetch('/api/cron/trigger', {
+      const result = await hostApiFetch<TaskTriggerExecutionMeta & Record<string, unknown>>('/api/cron/trigger', {
         method: 'POST',
         body: JSON.stringify({ id }),
       });
@@ -322,7 +328,7 @@ export const useCronStore = create<CronState>((set) => ({
       } catch {
         // Ignore refresh error
       }
-      return result as CronJob | void;
+      return result;
     } catch (error) {
       console.error('Failed to trigger cron job:', error);
       throw error;

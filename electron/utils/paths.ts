@@ -7,6 +7,7 @@ import { join } from 'path';
 import { homedir } from 'os';
 import { existsSync, mkdirSync, readFileSync, realpathSync } from 'fs';
 import { logger } from './logger';
+import { WORKSPACE_ARTIFACT_OUTPUT_DIRNAME } from '../../shared/workspace-paths';
 
 export {
   quoteForCmd,
@@ -34,9 +35,51 @@ export function getOpenClawConfigDir(): string {
   return join(homedir(), '.stoclaw', 'openclaw');
 }
 
+/**
+ * StoClaw user home config root (~/.stoclaw).
+ * Survives app reinstall when Application Support / userData is wiped.
+ */
+export function getStoClawHomeDir(): string {
+  return join(homedir(), '.stoclaw');
+}
+
+/** More Apps (应用广场) registry directory under user home. */
+export function getMoreAppsDir(): string {
+  return join(getStoClawHomeDir(), 'more-apps');
+}
+
+/** More Apps registry JSON path (~/.stoclaw/more-apps/apps.json). */
+export function getMoreAppsRegistryPath(): string {
+  return join(getMoreAppsDir(), 'apps.json');
+}
+
 /** Legacy standalone OpenClaw workspace (~/.openclaw/workspace), if present on disk. */
 export function getLegacyOpenClawWorkspaceRoot(): string {
   return join(homedir(), '.openclaw', 'workspace');
+}
+
+/** Shared default agent workspace (~/.stoclaw/workspace). */
+export function getDefaultAgentWorkspacePath(): string {
+  return join(getStoClawHomeDir(), 'workspace');
+}
+
+/** Legacy default workspace before lift-out (~/.stoclaw/openclaw/workspace). */
+export function getLegacyDefaultAgentWorkspacePath(): string {
+  return join(getOpenClawConfigDir(), 'workspace');
+}
+
+/** Managed per-agent workspace under ~/.stoclaw/workspace-{agentId}. */
+export function getManagedAgentWorkspacePath(agentId: string): string {
+  const id = (agentId ?? '').trim().toLowerCase();
+  if (!id || id === 'main') return getDefaultAgentWorkspacePath();
+  return join(getStoClawHomeDir(), `workspace-${id}`);
+}
+
+/** Legacy managed workspace (~/.stoclaw/openclaw/workspace-{agentId}). */
+export function getLegacyManagedAgentWorkspacePath(agentId: string): string {
+  const id = (agentId ?? '').trim().toLowerCase();
+  if (!id || id === 'main') return getLegacyDefaultAgentWorkspacePath();
+  return join(getOpenClawConfigDir(), `workspace-${id}`);
 }
 
 /**
@@ -142,6 +185,48 @@ export function getDataDir(): string {
 }
 
 /**
+ * Get StoClaw local mem0 base directory.
+ */
+export function getMem0BaseDir(): string {
+  return join(getDataDir(), 'mem0');
+}
+
+/**
+ * Get StoClaw local mem0 history SQLite path.
+ */
+export function getMem0HistoryDbPath(): string {
+  return join(getMem0BaseDir(), 'history.db');
+}
+
+/**
+ * Get StoClaw local mem0 config snapshot path.
+ */
+export function getMem0ConfigPath(): string {
+  return join(getMem0BaseDir(), 'config.json');
+}
+
+/**
+ * Get StoClaw local mem0 sync queue path.
+ */
+export function getMem0QueuePath(): string {
+  return join(getMem0BaseDir(), 'queue.json');
+}
+
+/**
+ * Get StoClaw local mem0 vector cache directory.
+ */
+export function getMem0VectorCacheDir(): string {
+  return join(getMem0BaseDir(), 'vector-cache');
+}
+
+/**
+ * Get StoClaw local mem0 persisted user id path.
+ */
+export function getMem0UserIdPath(): string {
+  return join(getMem0BaseDir(), 'user-id.txt');
+}
+
+/**
  * Get StoClaw-managed Claude scheduled tasks directory.
  */
 export function getClaudeScheduledTasksDir(): string {
@@ -156,6 +241,29 @@ export function ensureDir(dir: string): void {
     mkdirSync(dir, { recursive: true });
   }
 }
+
+/**
+ * Ensure `<workspace>/.claw-output` exists so write tools / models have a real target.
+ * Best-effort: never throws (callers should not fail agent bootstrap on mkdir).
+ */
+export function ensureWorkspaceArtifactOutputDir(workspacePath: string | null | undefined): string | null {
+  const trimmed = workspacePath?.trim();
+  if (!trimmed) return null;
+  const root = expandPath(trimmed);
+  const outputDir = join(root, WORKSPACE_ARTIFACT_OUTPUT_DIRNAME);
+  try {
+    ensureDir(outputDir);
+    return outputDir;
+  } catch (error) {
+    logger.warn('Failed to ensure workspace artifact output dir', {
+      workspace: root,
+      outputDir,
+      error: String(error),
+    });
+    return null;
+  }
+}
+
 
 /**
  * Get resources directory (for bundled assets)

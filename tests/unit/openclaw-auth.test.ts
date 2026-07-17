@@ -159,6 +159,47 @@ describe('setOpenClawDefaultModelWithOverride main agent model ref', () => {
     expect(main?.model).toBe('sto/qwen3.5-plus');
   });
 
+  it('fills missing contextWindow and maxTokens for remote catalog models', async () => {
+    await writeOpenClawJson({
+      agents: { defaults: {}, list: [] },
+      models: {
+        mode: 'merge',
+        providers: {
+          sto: {
+            baseUrl: 'https://old.example/v1',
+            api: 'openai-completions',
+            models: [{ id: 'qwen3.6-plus', name: 'qwen3.6-plus', input: ['text', 'image'] }],
+          },
+        },
+      },
+      gateway: { mode: 'local' },
+    });
+
+    const { setOpenClawDefaultModelWithOverride } = await import('@electron/utils/openclaw-auth');
+    await setOpenClawDefaultModelWithOverride(
+      'sto',
+      'qwen3.6-plus',
+      {
+        baseUrl: 'https://example.test/v1',
+        api: 'openai-completions',
+        providerModelIds: ['qwen3.6-plus'],
+        defaultModelContextWindow: 256000,
+        defaultModelMaxTokens: 32000,
+      },
+      [],
+    );
+
+    const raw = await readFile(join(testHome, '.stoclaw', 'openclaw', 'openclaw.json'), 'utf8');
+    const parsed = JSON.parse(raw) as {
+      models: { providers: { sto: { models: Array<Record<string, unknown>> } } };
+    };
+    expect(parsed.models.providers.sto.models).toContainEqual(expect.objectContaining({
+      id: 'qwen3.6-plus',
+      contextWindow: 256000,
+      maxTokens: 32000,
+    }));
+  });
+
   it('does not overwrite main agent model when already qualified', async () => {
     await writeOpenClawJson({
       agents: {
@@ -196,5 +237,62 @@ describe('setOpenClawDefaultModelWithOverride main agent model ref', () => {
     const parsed = JSON.parse(raw) as { agents: { list: Array<{ id: string; model?: string }> } };
     const main = parsed.agents.list.find((e) => e.id === 'main');
     expect(main?.model).toBe('qwen/turbo');
+  });
+});
+
+describe('syncGatewayTokenToConfig', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+    await rm(testHome, { recursive: true, force: true });
+    await rm(testUserData, { recursive: true, force: true });
+  });
+
+  async function readConfig(): Promise<Record<string, any>> {
+    const raw = await readFile(join(testHome, '.stoclaw', 'openclaw', 'openclaw.json'), 'utf8');
+    return JSON.parse(raw) as Record<string, any>;
+  }
+
+  it('persists an explicit empty gateway.tailscale to avoid phantom reload diffs', async () => {
+    await writeOpenClawJson({ gateway: { mode: 'local' } });
+
+    const { syncGatewayTokenToConfig } = await import('@electron/utils/openclaw-auth');
+    await syncGatewayTokenToConfig('tok-123');
+
+    const config = await readConfig();
+    expect(config.gateway.tailscale).toEqual({});
+    expect(config.gateway.auth).toEqual({ mode: 'token', token: 'tok-123' });
+  });
+
+  it('does not overwrite an existing gateway.tailscale config', async () => {
+    await writeOpenClawJson({
+      gateway: {
+        mode: 'local',
+        auth: { mode: 'token', token: 'tok-123' },
+        controlUi: { allowedOrigins: ['file://'] },
+        tailscale: { mode: 'serve' },
+      },
+    });
+
+    const { syncGatewayTokenToConfig } = await import('@electron/utils/openclaw-auth');
+    await syncGatewayTokenToConfig('tok-123');
+
+    const config = await readConfig();
+    expect(config.gateway.tailscale).toEqual({ mode: 'serve' });
+  });
+
+  it('is a no-op rewrite-free call when config is already in the desired state', async () => {
+    await writeOpenClawJson({ gateway: { mode: 'local' } });
+
+    const { syncGatewayTokenToConfig } = await import('@electron/utils/openclaw-auth');
+    await syncGatewayTokenToConfig('tok-123');
+
+    const configPath = join(testHome, '.stoclaw', 'openclaw', 'openclaw.json');
+    const rawAfterFirst = await readFile(configPath, 'utf8');
+
+    await syncGatewayTokenToConfig('tok-123');
+
+    const rawAfterSecond = await readFile(configPath, 'utf8');
+    expect(rawAfterSecond).toBe(rawAfterFirst);
   });
 });

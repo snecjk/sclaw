@@ -51,26 +51,34 @@ rules:
     - Keep proposals under 2 pages; focus on WHY not HOW
     - Always include explicit New Capabilities and Modified Capabilities lists
     - If the change materially affects user-visible page or shell theming, the proposal SHOULD note alignment with docs/sto-design.md (STO theme constitution)
+    - Any user-visible UI change MUST explicitly include dark-mode compatibility in scope; a change is incomplete if dark mode is omitted
 
   design:
     - Every key decision MUST include rationale and at least one alternative considered
     - Document risks with [Risk] → Mitigation format
     - Keep design focused on architecture, not line-by-line implementation
     - UI or shell appearance decisions (colors, emphasis, status hues, typography contrast) MUST align with docs/sto-design.md; cite that document or its token names (e.g., Brand-6, Grey-10) instead of ad-hoc hex-only descriptions
+    - UI designs MUST specify dark-mode behavior, use semantic theme tokens for foreground/background/border, and MUST NOT introduce light-only hardcoded fills such as `bg-white` without a dark-mode token or variant
 
   specs:
     - Every requirement MUST use SHALL or MUST for normative statements
     - Every requirement MUST have at least one scenario with exactly four hashtags (`#### Scenario:`)
     - Renderer-visible theming requirements (page chrome, primary actions, success/warning/danger/info semantics) MUST be stated in terms consistent with docs/sto-design.md (semantic tokens / Property categories); arbitrary hex in requirements is discouraged except when quoting the canonical palette from that doc
+    - Every new or modified renderer-visible UI requirement MUST include dark-mode acceptance coverage, including readable text, appropriate semantic backgrounds, borders, focus, hover, selected, and disabled states where applicable
     - Scenarios MUST use `- **WHEN**` and `- **THEN**` format
     - For MODIFIED requirements, copy the ENTIRE requirement block from the existing spec before editing
     - DO NOT add direct `window.electron.ipcRenderer.invoke(...)` calls in pages/components; use host-api instead
     - DO NOT call Gateway HTTP endpoints directly from renderer; use Main-process proxy channels (`hostapi:fetch`, `gateway:httpProxy`)
     - Transport policy is Main-owned and fixed as `WS -> HTTP -> IPC fallback`; renderer MUST NOT implement protocol switching logic
 
+  plugins:
+    - "New or modified OpenClaw local plugins under `sto-plugin/openclaw/` MUST be registered in BOTH packaging scripts - `scripts/bundle-openclaw-plugins.mjs` (`PLUGINS` array) AND `scripts/after-pack.cjs` (`BUNDLED_PLUGINS` array). Missing either causes the plugin to exist in `build/openclaw-plugins/` but be absent from packaged installs."
+    - "The above packaging scripts are engineering-owned build scripts; AI SHALL NOT modify them automatically. Tasks MUST instruct users to update them manually or request review from the engineering owner."
+
   tasks:
     - Each task MUST reference the corresponding `### Requirement:` name from spec.md for traceability
     - For communication-related changes (gateway events, runtime send/receive, delivery, fallback), run `pnpm run comms:replay` and `pnpm run comms:compare`
     - After functional changes, review `README.md`, `README.zh-CN.md`, and `README.ja-JP.md` for required updates; update docs in the same PR/commit
+    - UI implementation tasks MUST include dark-mode verification and MUST check changed components for hardcoded light-only colors
     - Tasks MUST be grouped under numbered headings (e.g., `## 1. Group Name`)
     - Each task MUST use checkbox format (markdown list items like "- [ ] X.Y Task description")

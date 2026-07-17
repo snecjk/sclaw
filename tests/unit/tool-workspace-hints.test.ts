@@ -6,12 +6,12 @@ describe('tool-workspace-hints', () => {
     const hints = parseToolWorkspaceHints([{
       type: 'text',
       text: JSON.stringify({
-        cwd: '/Users/sto/.stoclaw/openclaw/workspace',
-        outputDir: '/Users/sto/.stoclaw/openclaw/workspace/.claw-output',
+        cwd: '/Users/sto/.stoclaw/workspace',
+        outputDir: '/Users/sto/.stoclaw/workspace/.claw-output',
       }),
     }]);
-    expect(hints.cwd).toBe('/Users/sto/.stoclaw/openclaw/workspace');
-    expect(hints.outputDir).toBe('/Users/sto/.stoclaw/openclaw/workspace/.claw-output');
+    expect(hints.cwd).toBe('/Users/sto/.stoclaw/workspace');
+    expect(hints.outputDir).toBe('/Users/sto/.stoclaw/workspace/.claw-output');
   });
 
   it('parses runDir from nested envelope data', () => {

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Bot, Check, ChevronDown, Cpu } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router-dom';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,26 +9,43 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { useAgentsStore } from '@/stores/agents';
+import { resolveBaseAgentId, resolveEffectiveAgent, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { useSessionCatalogStore } from '@/stores/session-catalog';
+import { getProjectIdFromProjectAgentId } from '../../../shared/project-agent';
 import { useGatewayStore } from '@/stores/gateway';
 import { useProviderStore } from '@/stores/providers';
 import { buildProviderListItems } from '@/lib/provider-accounts';
 import {
   buildChatModelOptions,
   getWorkspaceDefaultModelId,
+  getWorkspaceDefaultRawModelId,
   isConcreteModelId,
   normalizeModelIdForChat,
+  resolveChatSelectedModelId,
   resolveChatToolbarModelId,
+  sanitizeChatModelHint,
   upsertSessionModel,
   type ChatModelOption,
 } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
+import {
+  applyClaudeSessionModel,
+  applyOpenClawSessionModel,
+} from '@/lib/sync-workspace-default-to-chat';
+import { isMainChatHomePath } from '@/lib/main-chat-navigation';
+import { isTaskExecutionSessionKey } from '../../../shared/session-agent-id';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
+import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
 import { cn } from '@/lib/utils';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { toast } from 'sonner';
 
+/** Above SClaw embed browser drawer/toolbar portals (z-index 99999 / 100000). */
+const SELECTOR_MENU_Z = 'z-[100001]';
+
+/** Avoid remapping the same session repeatedly when catalog sanitizes its model. */
+const remappedDelistedSessionKeys = new Set<string>();
 const pillBase = cn(
   'flex min-w-0 max-w-[min(100vw-11rem,260px)] items-stretch rounded-xl border border-border/70',
   'bg-[linear-gradient(180deg,rgba(255,255,255,0.10),transparent),rgba(255,255,255,0.30)]',
@@ -46,13 +64,15 @@ const pillStatic = cn(
   'flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg py-0 pl-2.5 pr-2',
 );
 
-/** 首页 HomeComposer 内联引擎/模型：灰底 pill；flex-1 + truncate 与对侧 pill 同步截断文字 */
+/** 首页 HomeComposer 内联引擎/模型：灰底 pill；模型选中态按内容宽度完整展示。 */
 const inlinePillTrigger = cn(
   'flex h-[30px] min-w-0 items-center gap-1 rounded-[20px] bg-[#F5F6F7] px-3 outline-none',
   'text-sm font-normal text-foreground transition-colors hover:bg-black/[0.04]',
   'focus-visible:ring-2 focus-visible:ring-primary/25 focus-visible:ring-offset-0',
   'disabled:pointer-events-none disabled:opacity-60 dark:bg-muted dark:hover:bg-white/[0.06]',
 );
+
+const inlineModelPillTrigger = cn(inlinePillTrigger, 'w-max max-w-none shrink-0');
 
 function isModelNotAllowedError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
@@ -63,62 +83,74 @@ function isStoBuiltinModelOption(option: ChatModelOption | undefined): boolean {
   return option?.isBuiltin === true && option.accountId === 'sto';
 }
 
-async function applyClaudeSessionModel(params: {
+/** Sync catalog then remap session to workspace default (delisted STO models). */
+async function repairStoCatalogAndRemapToWorkspaceDefault(params: {
   currentSessionKey: string;
-  modelId: string;
-  option?: ChatModelOption;
-  currentAgentId: string;
-}): Promise<string> {
-  const result = await hostApiFetch<{
-    model?: string;
-    modelOverride?: string | null;
-  }>('/api/sessions/model', {
-    method: 'POST',
-    body: JSON.stringify({
-      sessionKey: params.currentSessionKey,
-      model: params.modelId,
-      accountId: params.option?.accountId,
-      agentId: params.currentAgentId || undefined,
-      engineType: 'claude',
-    }),
-  });
-  return (result.modelOverride || result.model || params.modelId).trim();
-}
-
-async function applyOpenClawSessionModel(params: {
-  currentSessionKey: string;
-  modelId: string;
-  option?: ChatModelOption;
-  currentAgentId: string;
-}): Promise<string> {
-  const result = await hostApiFetch<{
-    model?: string;
-    modelOverride?: string | null;
-  }>('/api/sessions/model', {
-    method: 'POST',
-    body: JSON.stringify({
-      sessionKey: params.currentSessionKey,
-      model: params.modelId,
-      accountId: params.option?.accountId,
-      agentId: params.currentAgentId || undefined,
-      engineType: 'openclaw',
-    }),
-  });
-  return (result.modelOverride || result.model || params.modelId).trim();
-}
-
-async function repairStoCatalogAndRetrySessionModel(params: {
-  currentSessionKey: string;
-  modelId: string;
-  option?: ChatModelOption;
   currentAgentId: string;
 }): Promise<string> {
   await hostApiFetch('/api/sto-model-sync', { method: 'POST' });
   await useProviderStore.getState().refreshProviderSnapshot();
   await new Promise((resolve) => setTimeout(resolve, 2500));
-  return applyOpenClawSessionModel(params);
+  const { accounts, defaultAccountId } = useProviderStore.getState();
+  const fallbackModelId = getWorkspaceDefaultRawModelId(accounts, defaultAccountId);
+  if (!fallbackModelId) {
+    throw new Error('No workspace default model available after STO catalog sync');
+  }
+  const providerItems = buildProviderListItems(
+    accounts,
+    useProviderStore.getState().statuses,
+    useProviderStore.getState().vendors,
+    defaultAccountId,
+  );
+  const options = buildChatModelOptions(providerItems);
+  const option = options.find((item) => item.modelId === fallbackModelId)
+    ?? options.find((item) => item.normalizedId === normalizeModelIdForChat(fallbackModelId));
+  return applyOpenClawSessionModel({
+    currentSessionKey: params.currentSessionKey,
+    modelId: option?.modelId ?? fallbackModelId,
+    accountId: option?.accountId,
+    currentAgentId: params.currentAgentId,
+  });
 }
 
+function resolveClaudeToolbarModelId(input: {
+  currentSessionKey: string;
+  sessionModel?: string;
+  agentModelDisplay?: string;
+  workspaceDefaultModelId: string;
+  chatModelOptions?: ChatModelOption[];
+}): string {
+  const options = input.chatModelOptions ?? [];
+  const session = sanitizeChatModelHint(input.sessionModel, options);
+  const agent = isConcreteModelId(input.agentModelDisplay)
+    ? (sanitizeChatModelHint(input.agentModelDisplay, options) || '')
+    : '';
+  const workspace = input.workspaceDefaultModelId || '';
+
+  if (input.currentSessionKey !== DEFAULT_SESSION_KEY) {
+    return session || agent || workspace;
+  }
+  return agent || workspace;
+}
+function useProjectAgentContext(currentAgentId: string, currentSessionKey: string) {
+  const workspaces = useSessionCatalogStore((s) => s.workspaces);
+  const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
+  const pendingProjectId = useChatStore((s) => s.pendingProjectId);
+
+  const projectId = useMemo(
+    () => getProjectIdFromProjectAgentId(currentAgentId)
+      ?? sessionWorkspaceByKey[currentSessionKey]
+      ?? pendingProjectId
+      ?? null,
+    [currentAgentId, currentSessionKey, pendingProjectId, sessionWorkspaceByKey],
+  );
+  const projectName = useMemo(
+    () => (projectId ? workspaces.find((workspace) => workspace.id === projectId)?.name ?? null : null),
+    [projectId, workspaces],
+  );
+
+  return { projectId, projectName };
+}
 /* ── Engine Selector ─────────────────────────────────────────── */
 
 export function ChatEngineSelector({
@@ -128,16 +160,20 @@ export function ChatEngineSelector({
   className?: string;
   variant?: 'toolbar' | 'inline';
 }) {
+  const { pathname } = useLocation();
   const sending = useChatStore((s) => s.sending);
+  const loading = useChatStore((s) => s.loading);
+  const messages = useChatStore((s) => s.messages);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessions = useChatStore((s) => s.sessions);
   const agents = useAgentsStore((s) => s.agents);
   const fetchAgents = useAgentsStore((s) => s.fetchAgents);
 
+  const { projectId: effectiveProjectId, projectName } = useProjectAgentContext(currentAgentId, currentSessionKey);
   const currentAgent = useMemo(
-    () => (agents ?? []).find((agent) => agent.id === currentAgentId),
-    [agents, currentAgentId],
+    () => resolveEffectiveAgent(agents ?? [], currentAgentId, effectiveProjectId, projectName),
+    [agents, currentAgentId, effectiveProjectId, projectName],
   );
   const currentSession = useMemo(
     () => sessions.find((session) => session.key === currentSessionKey),
@@ -145,17 +181,24 @@ export function ChatEngineSelector({
   );
 
   const agentDefaultEngineType = currentAgent?.engineType ?? 'openclaw';
+  // Only the empty home draft (DEFAULT / unused embed) can switch engines.
+  // Existing sessions — including project chats after first send — stay locked.
+  const isUnusedEmbedSession = isSclawBrowserEmbedChatSessionKey(currentSessionKey)
+    && !loading
+    && messages.length === 0;
+  const canSwitchEngine = isMainChatHomePath(pathname)
+    && (currentSessionKey === DEFAULT_SESSION_KEY || isUnusedEmbedSession);
   const currentEngineType = resolveChatSessionEngineType(
     currentSession,
     agentDefaultEngineType,
     currentSessionKey,
+    { messageCount: messages.length },
   );
   const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
   const currentSessionEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
-  const displayEngineLabel = currentSessionKey === DEFAULT_SESSION_KEY
+  const displayEngineLabel = canSwitchEngine
     ? agentDefaultEngineLabel
     : currentSessionEngineLabel;
-  const canSwitchEngine = currentSessionKey === DEFAULT_SESSION_KEY;
   const showSessionEngineHint = !canSwitchEngine
     && currentSession?.engineType != null
     && currentSession.engineType !== agentDefaultEngineType;
@@ -166,10 +209,20 @@ export function ChatEngineSelector({
     if (!canSwitchEngine || engineType === agentDefaultEngineType) return;
     setEngineSaving(true);
     try {
-      await hostApiFetch(`/api/agents/${encodeURIComponent(currentAgentId)}/engine`, {
+      const baseAgentId = resolveBaseAgentId(currentAgentId);
+      await hostApiFetch(`/api/agents/${encodeURIComponent(baseAgentId)}/engine`, {
         method: 'PUT',
         body: JSON.stringify({ engineType }),
       });
+      // Project draft may already point at a project agent id — keep its engine mirrored.
+      if (currentAgentId && currentAgentId !== baseAgentId) {
+        await hostApiFetch(`/api/agents/${encodeURIComponent(currentAgentId)}/engine`, {
+          method: 'PUT',
+          body: JSON.stringify({ engineType }),
+        }).catch(() => {
+          // Project agent may not exist until first send; base agent update is enough.
+        });
+      }
       await fetchAgents();
       toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : 'OpenClaw'} 引擎`);
     } catch (err) {
@@ -185,7 +238,7 @@ export function ChatEngineSelector({
     <DropdownMenuContent
       align="end"
       side="bottom"
-      className="min-w-[12rem] max-w-[min(100vw-2rem,300px)]"
+      className={cn(SELECTOR_MENU_Z, 'min-w-[12rem] max-w-[min(100vw-2rem,300px)]')}
     >
       {(['openclaw', 'claude'] as const).map((engineType) => {
         const label = engineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
@@ -204,13 +257,19 @@ export function ChatEngineSelector({
     </DropdownMenuContent>
   );
 
+  const engineTriggerTitle = canSwitchEngine
+    ? '切换新会话执行引擎'
+    : isSclawBrowserEmbedChatSessionKey(currentSessionKey)
+      ? '历史会话不可切换引擎（可切换模型）'
+      : '当前会话不可切换引擎';
+
   if (variant === 'inline') {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild disabled={engineSelectDisabled || engineSaving || !canSwitchEngine}>
           <button
             type="button"
-            title="切换新会话执行引擎"
+            title={engineTriggerTitle}
             className={cn(
               inlinePillTrigger,
               'min-w-0 max-w-none flex-1',
@@ -302,14 +361,17 @@ export function ChatModelSelector({
   const { t } = useTranslation('chat');
 
   const { accounts, statuses, vendors, defaultAccountId, init } = useProviderStore();
+  const pendingNewSessionModel = useChatStore((s) => s.pendingNewSessionModel);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [modelSaving, setModelSaving] = useState(false);
+  const delistRemapInFlight = useRef(false);
 
   useEffect(() => { void init(); }, [init]);
 
+  const { projectId: effectiveProjectId, projectName } = useProjectAgentContext(currentAgentId, currentSessionKey);
   const currentAgent = useMemo(
-    () => (agents ?? []).find((agent) => agent.id === currentAgentId),
-    [agents, currentAgentId],
+    () => resolveEffectiveAgent(agents ?? [], currentAgentId, effectiveProjectId, projectName),
+    [agents, currentAgentId, effectiveProjectId, projectName],
   );
   const currentSession = useMemo(
     () => sessions.find((session) => session.key === currentSessionKey),
@@ -330,47 +392,127 @@ export function ChatModelSelector({
     return (sto?.metadata?.customModels as string[] | undefined) ?? [];
   }, [accounts]);
 
+  const messagesLength = useChatStore((s) => s.messages.length);
   const agentDefaultEngineType = currentAgent?.engineType ?? 'openclaw';
   const currentEngineType = resolveChatSessionEngineType(
     currentSession,
     agentDefaultEngineType,
     currentSessionKey,
+    { messageCount: messagesLength },
   );
 
   useEffect(() => {
     if (modelSaving) return;
-    const resolved = currentEngineType === 'claude'
-      ? (
-        currentSessionKey !== DEFAULT_SESSION_KEY
-          ? (
-            normalizeModelIdForChat(currentSession?.model)
-            || (isConcreteModelId(currentAgent?.modelDisplay)
-              ? normalizeModelIdForChat(currentAgent?.modelDisplay)
-              : (workspaceDefaultModelId || ''))
-          )
-          : (
-            isConcreteModelId(currentAgent?.modelDisplay)
-              ? normalizeModelIdForChat(currentAgent?.modelDisplay)
-              : (workspaceDefaultModelId || '')
-          )
-      )
+    const safePending = sanitizeChatModelHint(pendingNewSessionModel, modelOptions);
+    if (pendingNewSessionModel?.trim() && !safePending && modelOptions.length > 0) {
+      useChatStore.getState().setPendingNewSessionModel(null);
+    }
+
+    if (currentSessionKey === DEFAULT_SESSION_KEY) {
+      if (currentEngineType !== 'claude') {
+        const hint = safePending || workspaceDefaultModelId || '';
+        setSelectedModelId(resolveChatSelectedModelId(modelOptions, hint) || hint || '');
+        return;
+      }
+      const toolbarHint = resolveClaudeToolbarModelId({
+        currentSessionKey,
+        sessionModel: currentSession?.model,
+        agentModelDisplay: currentAgent?.modelDisplay,
+        workspaceDefaultModelId,
+        chatModelOptions: modelOptions,
+      });
+      const hint = safePending || toolbarHint;
+      setSelectedModelId(resolveChatSelectedModelId(modelOptions, hint) || hint || '');
+      return;
+    }
+
+    // Task execution sessions: prefer persisted session.model only (written after trigger).
+    const sessionHint = sanitizeChatModelHint(currentSession?.model, modelOptions);
+    if (isTaskExecutionSessionKey(currentSessionKey) && sessionHint) {
+      setSelectedModelId(resolveChatSelectedModelId(modelOptions, sessionHint) || sessionHint);
+      return;
+    }
+
+    const toolbarHint = currentEngineType === 'claude'
+      ? resolveClaudeToolbarModelId({
+        currentSessionKey,
+        sessionModel: currentSession?.model,
+        agentModelDisplay: currentAgent?.modelDisplay,
+        workspaceDefaultModelId,
+        chatModelOptions: modelOptions,
+      })
       : resolveChatToolbarModelId({
         sessionModel: currentSession?.model,
         agentModelDisplay: currentAgent?.modelDisplay,
         agentInheritedModel: currentAgent?.inheritedModel,
         workspaceDefaultModel: workspaceDefaultModelId,
         stoCatalogModelIds,
+        chatModelOptions: modelOptions,
       });
-    setSelectedModelId(resolved || '');
+    const hint = sessionHint || toolbarHint;
+    setSelectedModelId(resolveChatSelectedModelId(modelOptions, hint) || toolbarHint || '');
+
+    // Persist remap for historical sessions whose override no longer exists in catalog.
+    // Skip auto-remap for task sessions — their model comes from the last trigger writeback.
+    const rawSessionModel = currentSession?.model?.trim();
+    if (
+      rawSessionModel
+      && modelOptions.length > 0
+      && !sessionHint
+      && !isTaskExecutionSessionKey(currentSessionKey)
+      && !delistRemapInFlight.current
+      && !remappedDelistedSessionKeys.has(currentSessionKey)
+      && (currentEngineType === 'claude' ? Boolean(currentAgentId) : isGatewayRunning)
+    ) {
+      const fallbackRaw = getWorkspaceDefaultRawModelId(accounts, defaultAccountId);
+      if (!fallbackRaw) return;
+      remappedDelistedSessionKeys.add(currentSessionKey);
+      delistRemapInFlight.current = true;
+      const option = modelOptions.find((item) => item.modelId === fallbackRaw)
+        ?? modelOptions.find((item) => item.normalizedId === normalizeModelIdForChat(fallbackRaw));
+      const persist = currentEngineType === 'claude'
+        ? applyClaudeSessionModel({
+          currentSessionKey,
+          modelId: option?.modelId ?? fallbackRaw,
+          accountId: option?.accountId,
+          currentAgentId,
+        })
+        : applyOpenClawSessionModel({
+          currentSessionKey,
+          modelId: option?.modelId ?? fallbackRaw,
+          accountId: option?.accountId,
+          currentAgentId,
+        });
+      void persist
+        .then((persisted) => {
+          useChatStore.setState((state) => ({
+            sessions: upsertSessionModel(state.sessions, currentSessionKey, persisted),
+          }));
+          setSelectedModelId(resolveChatSelectedModelId(modelOptions, persisted) || persisted);
+        })
+        .catch((err) => {
+          remappedDelistedSessionKeys.delete(currentSessionKey);
+          console.warn('[ChatModelSelector] failed to remap delisted session model:', err);
+        })
+        .finally(() => {
+          delistRemapInFlight.current = false;
+        });
+    }
   }, [
+    currentSessionKey,
     currentEngineType,
     modelSaving,
-    currentSessionKey,
+    pendingNewSessionModel,
     currentSession?.model,
     currentAgent?.modelDisplay,
     currentAgent?.inheritedModel,
+    currentAgentId,
     workspaceDefaultModelId,
     stoCatalogModelIds,
+    modelOptions,
+    accounts,
+    defaultAccountId,
+    isGatewayRunning,
   ]);
 
   const selectedModel = useMemo(
@@ -378,91 +520,149 @@ export function ChatModelSelector({
     [modelOptions, selectedModelId],
   );
   const claudeModelConfigured = isConcreteModelId(currentAgent?.modelDisplay);
+  // Never paint a bare delisted id that is missing from the live dropdown.
   const modelDisplayText = selectedModel?.displayName
-    || selectedModelId
+    || workspaceDefaultModelId
     || (currentEngineType === 'claude' && !claudeModelConfigured
-      ? (workspaceDefaultModelId || t('toolbar.modelNotConfigured'))
-      : (workspaceDefaultModelId || t('toolbar.currentModel')));
+      ? t('toolbar.modelNotConfigured')
+      : t('toolbar.currentModel'));
 
-  const handleModelSwitch = async (modelId: string) => {
-    if (!currentSessionKey || modelId === selectedModelId) return;
-    const option = modelOptions.find((item) => item.modelId === modelId);
-    setSelectedModelId(modelId);
+  const handleModelSwitch = async (rawModelId: string) => {
+    if (!currentSessionKey || rawModelId === selectedModelId) return;
+    const option = modelOptions.find((item) => item.modelId === rawModelId);
+
+    if (currentSessionKey === DEFAULT_SESSION_KEY) {
+      useChatStore.getState().setPendingNewSessionModel(rawModelId);
+      setModelSaving(true);
+      try {
+        if (currentEngineType === 'claude' && currentAgentId) {
+          const result = await hostApiFetch<{
+            snapshot?: { agents?: Array<{ id: string; modelDisplay?: string }> };
+          }>(`/api/agents/${encodeURIComponent(currentAgentId)}/model`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              model: rawModelId,
+              accountId: option?.accountId,
+            }),
+          });
+          await fetchAgents();
+          const persistedModel = result.snapshot?.agents?.find((agent) => agent.id === currentAgentId)?.modelDisplay?.trim()
+            || rawModelId;
+          useChatStore.setState((state) => ({
+            sessions: upsertSessionModel(
+              state.sessions,
+              currentSessionKey,
+              persistedModel,
+              { engineType: currentEngineType, label: '新对话' },
+            ),
+          }));
+          setSelectedModelId(resolveChatSelectedModelId(modelOptions, persistedModel) || persistedModel);
+        } else {
+          useChatStore.setState((state) => ({
+            sessions: upsertSessionModel(
+              state.sessions,
+              currentSessionKey,
+              rawModelId,
+              { engineType: currentEngineType, label: '新对话' },
+            ),
+          }));
+          setSelectedModelId(rawModelId);
+        }
+      } catch (err) {
+        toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));
+        const resolved = currentEngineType === 'claude'
+          ? (
+            isConcreteModelId(currentAgent?.modelDisplay)
+              ? normalizeModelIdForChat(currentAgent?.modelDisplay)
+              : (workspaceDefaultModelId || '')
+          )
+          : resolveChatToolbarModelId({
+            sessionModel: currentSession?.model,
+            agentModelDisplay: currentAgent?.modelDisplay,
+            agentInheritedModel: currentAgent?.inheritedModel,
+            workspaceDefaultModel: workspaceDefaultModelId,
+            stoCatalogModelIds,
+            chatModelOptions: modelOptions,
+          });
+        setSelectedModelId(resolveChatSelectedModelId(modelOptions, resolved) || resolved || '');
+      } finally {
+        setModelSaving(false);
+      }
+      return;
+    }
+
     setModelSaving(true);
     try {
-      let persistedModel = modelId;
       if (currentEngineType === 'claude' && currentAgentId) {
-        if (currentSessionKey !== DEFAULT_SESSION_KEY) {
-          persistedModel = await applyClaudeSessionModel({
+        const persisted = await applyClaudeSessionModel({
+          currentSessionKey,
+          modelId: rawModelId,
+          accountId: option?.accountId,
+          currentAgentId,
+        });
+        await fetchAgents();
+        useChatStore.setState((state) => ({
+          sessions: upsertSessionModel(
+            state.sessions,
             currentSessionKey,
-            modelId,
-            option,
+            persisted,
+            { engineType: currentEngineType, label: '新对话' },
+          ),
+        }));
+        setSelectedModelId(resolveChatSelectedModelId(modelOptions, persisted) || persisted);
+        return;
+      }
+
+      let appliedModelId = rawModelId;
+      try {
+        appliedModelId = await applyOpenClawSessionModel({
+          currentSessionKey,
+          modelId: rawModelId,
+          accountId: option?.accountId,
+          currentAgentId,
+        });
+      } catch (err) {
+        if (isModelNotAllowedError(err) && isStoBuiltinModelOption(option)) {
+          appliedModelId = await repairStoCatalogAndRemapToWorkspaceDefault({
+            currentSessionKey,
             currentAgentId,
           });
+          toast.message(t('toolbar.modelRemappedToDefault', {
+            model: normalizeModelIdForChat(appliedModelId) || appliedModelId,
+            defaultValue: '模型已下架，已切换为默认模型 {{model}}',
+          }));
         } else {
-          const result = await hostApiFetch<{ snapshot?: { agents?: Array<{ id: string; modelDisplay?: string }> } }>(
-            `/api/agents/${encodeURIComponent(currentAgentId)}/model`,
-            {
-              method: 'PUT',
-              body: JSON.stringify({
-                model: modelId,
-                accountId: option?.accountId,
-              }),
-            },
-          );
-          persistedModel = result.snapshot?.agents?.find((agent) => agent.id === currentAgentId)?.modelDisplay?.trim() || modelId;
-          await fetchAgents();
-        }
-      } else {
-        const sessionParams = {
-          currentSessionKey,
-          modelId,
-          option,
-          currentAgentId,
-        };
-        try {
-          persistedModel = await applyOpenClawSessionModel(sessionParams);
-        } catch (err) {
-          if (isModelNotAllowedError(err) && isStoBuiltinModelOption(option)) {
-            persistedModel = await repairStoCatalogAndRetrySessionModel(sessionParams);
-          } else {
-            throw err;
-          }
+          throw err;
         }
       }
       useChatStore.setState((state) => ({
         sessions: upsertSessionModel(
           state.sessions,
           currentSessionKey,
-          persistedModel || modelId,
+          appliedModelId,
           { engineType: currentEngineType, label: '新对话' },
         ),
       }));
+      setSelectedModelId(resolveChatSelectedModelId(modelOptions, appliedModelId) || appliedModelId);
     } catch (err) {
       toast.error(t('toolbar.modelSwitchFailed', { message: String(err) }));
       const resolved = currentEngineType === 'claude'
-        ? (
-          currentSessionKey !== DEFAULT_SESSION_KEY
-            ? (
-              normalizeModelIdForChat(currentSession?.model)
-              || (isConcreteModelId(currentAgent?.modelDisplay)
-                ? normalizeModelIdForChat(currentAgent?.modelDisplay)
-                : (workspaceDefaultModelId || ''))
-            )
-            : (
-              isConcreteModelId(currentAgent?.modelDisplay)
-                ? normalizeModelIdForChat(currentAgent?.modelDisplay)
-                : (workspaceDefaultModelId || '')
-            )
-        )
+        ? resolveClaudeToolbarModelId({
+          currentSessionKey,
+          sessionModel: currentSession?.model,
+          agentModelDisplay: currentAgent?.modelDisplay,
+          workspaceDefaultModelId,
+          chatModelOptions: modelOptions,
+        })
         : resolveChatToolbarModelId({
           sessionModel: currentSession?.model,
           agentModelDisplay: currentAgent?.modelDisplay,
           agentInheritedModel: currentAgent?.inheritedModel,
           workspaceDefaultModel: workspaceDefaultModelId,
           stoCatalogModelIds,
+          chatModelOptions: modelOptions,
         });
-      setSelectedModelId(resolved || '');
+      setSelectedModelId(resolveChatSelectedModelId(modelOptions, resolved) || resolved || '');
     } finally {
       setModelSaving(false);
     }
@@ -474,7 +674,7 @@ export function ChatModelSelector({
     <DropdownMenuContent
       align="end"
       side="bottom"
-      className="min-w-[14rem] max-w-[min(100vw-2rem,360px)]"
+      className={cn(SELECTOR_MENU_Z, 'min-w-[14rem] max-w-[min(100vw-2rem,360px)]')}
     >
       {modelOptions.length === 0 ? (
         <DropdownMenuItem disabled>
@@ -510,13 +710,12 @@ export function ChatModelSelector({
             type="button"
             title={t('toolbar.switchModelTitle')}
             className={cn(
-              inlinePillTrigger,
-              'min-w-0 max-w-none flex-1',
+              inlineModelPillTrigger,
               modelSaving && 'pointer-events-none opacity-60',
               className,
             )}
           >
-            <span className="min-w-0 flex-1 truncate">{modelDisplayText}</span>
+            <span className="shrink-0 whitespace-nowrap">{modelDisplayText}</span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
           </button>
         </DropdownMenuTrigger>

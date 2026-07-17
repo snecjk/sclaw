@@ -40,8 +40,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
     e.stopPropagation();
     // Start a new session so the Gateway picks up any newly installed skills
     useChatStore.getState().newSession();
-    const prompt = encodeURIComponent(skill.defaultPrompt || skill.title);
-    navigate(`/?q=${prompt}`);
+    navigate(`/?skill=${encodeURIComponent(skill.slug)}`);
     useSkillPlazaStore.getState().useSkill(skill.slug).catch(() => {});
   };
 
@@ -99,7 +98,7 @@ export function SkillCard({ skill, onOpenDetail, onDelete, isMineTab }: SkillCar
 
   return (
     <article
-      className="relative flex flex-col min-w-0 pt-3.5 px-4 pb-3.5 border border-border rounded-xl bg-background cursor-pointer overflow-visible transition-[border-color,box-shadow] duration-150 hover:border-border hover:shadow-sm"
+      className="relative flex flex-col min-w-0 pt-3.5 px-4 pb-3.5 border border-[#E9EAEB] rounded-xl bg-background cursor-pointer overflow-visible transition-[border-color] duration-150 dark:border-border"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onClick={() => onOpenDetail?.(skill)}

@@ -21,17 +21,24 @@ export function stripFileUrlScheme(path: string): string {
 
 /** Legacy standalone OpenClaw workspace segment (`/.openclaw/workspace`). */
 const LEGACY_OPENCLAW_WORKSPACE_RE = /([/\\])\.openclaw([/\\])workspace/g;
+/** Previous StoClaw layout before workspace lift-out (`/.stoclaw/openclaw/workspace`). */
+const LEGACY_STOCLAW_OPENCLAW_WORKSPACE_RE = /([/\\])\.stoclaw([/\\])openclaw([/\\])workspace/g;
 
 /**
- * Map legacy `~/.openclaw/workspace` paths to StoClaw layout (`~/.stoclaw/openclaw/workspace`).
+ * Map legacy workspace paths to the shared StoClaw layout (`~/.stoclaw/workspace`).
  * Callers should try the original path on disk first; use this only as a fallback candidate.
  */
 export function migrateLegacyOpenClawWorkspacePath(filePath: string): string {
   if (!filePath) return filePath;
-  return filePath.replace(
-    LEGACY_OPENCLAW_WORKSPACE_RE,
-    '$1.stoclaw$2openclaw$2workspace',
+  let result = filePath.replace(
+    LEGACY_STOCLAW_OPENCLAW_WORKSPACE_RE,
+    '$1.stoclaw$2workspace',
   );
+  result = result.replace(
+    LEGACY_OPENCLAW_WORKSPACE_RE,
+    '$1.stoclaw$2workspace',
+  );
+  return result;
 }
 
 /**

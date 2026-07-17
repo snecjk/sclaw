@@ -25,6 +25,7 @@ import {
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { buildOpenClawControlUiUrl } from '../utils/openclaw-control-ui';
 import { logger } from '../utils/logger';
+import { registerDialogHandlers } from './ipc/dialog-handlers';
 import { safeWebContentsSend } from './safe-web-contents-send';
 import {
   saveChannelConfig,
@@ -51,10 +52,7 @@ import { applyProxySettings } from './proxy';
 import { syncLaunchAtStartupSettingFromStore } from './launch-at-startup';
 import { syncPreventSystemSleepSettingFromStore } from './prevent-sleep';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
-import { getStoToken } from '../utils/auth-store';
 import { preprocessChatSendParams } from '../utils/dingtalk-mention-send';
-import { resolveStoBaseUrl } from '../utils/sto-domain';
-import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { uploadFileToTempOSS } from '../utils/oss-temp-upload';
 import { getRecentTokenUsageHistory } from '../utils/token-usage';
 import { getProviderService } from '../services/providers/provider-service';
@@ -71,6 +69,7 @@ import { validateApiKeyWithProvider } from '../services/providers/provider-valid
 import { appUpdater } from './updater';
 import { installWorkflowRuntime } from '../services/workflow-runtime/bootstrap';
 import { registerHostApiProxyHandlers } from './ipc/host-api-proxy';
+import { registerAgentMemoryHandlers } from './ipc/agent-memory';
 import { registerPreviewHttpFetchHandlers } from './ipc/preview-http-fetch';
 import { syncClaudeDefaultContext } from '../services/claude-context-sync';
 import {
@@ -81,6 +80,7 @@ import {
   type AppRequest,
   type AppResponse,
 } from './ipc/request-helpers';
+import { GatewayManager } from '@electron/gateway/manager';
 
 /**
  * Register all IPC handlers
@@ -98,6 +98,7 @@ export function registerIpcHandlers(
 
   // Host API proxy handlers
   registerHostApiProxyHandlers();
+  registerAgentMemoryHandlers(gatewayManager);
   registerPreviewHttpFetchHandlers();
 
   // Gateway handlers
@@ -119,9 +120,6 @@ export function registerIpcHandlers(
 
   // Shell handlers
   registerShellHandlers();
-
-  // Dialog handlers
-  registerDialogHandlers();
 
   // Session handlers
   registerSessionHandlers();
@@ -804,59 +802,6 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             },
           };
         }
-        case 'question': {
-          if (request.action === 'split') {
-            const payload = request.payload as {
-              prompt?: string;
-              agentId?: string;
-              sessionId?: string;
-            } | undefined;
-            const prompt = payload?.prompt;
-            if (!prompt || typeof prompt !== 'string') {
-              data = [];
-              break;
-            }
-            const token = await getStoToken();
-            if (!token) { data = []; break; }
-
-            const baseUrl = await resolveStoBaseUrl();
-            const url = `${baseUrl}/agent/v1/biz-agent/question-split`;
-            const headers = {
-              ...buildStoMemoryCenterAuthHeaders(token),
-              'Content-Type': 'application/json',
-            };
-
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 10_000);
-            try {
-              const resp = await proxyAwareFetch(url, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                  prompt,
-                  agentId: payload?.agentId,
-                  sessionId: payload?.sessionId,
-                }),
-                signal: controller.signal,
-              });
-              clearTimeout(timer);
-              if (!resp.ok) { data = []; break; }
-              data = await resp.json();
-            } catch {
-              clearTimeout(timer);
-              data = [];
-            }
-            break;
-          }
-          return {
-            id: request.id,
-            ok: false,
-            error: {
-              code: 'UNSUPPORTED',
-              message: `APP_REQUEST_UNSUPPORTED:${request.module}.${request.action}`,
-            },
-          };
-        }
         default:
           return {
             id: request.id,
@@ -1316,6 +1261,7 @@ function registerGatewayHandlers(
           message?: string;
           deliver?: boolean;
           idempotencyKey?: string;
+          systemPromptAppend?: string;
           engineType?: AgentEngineType;
         };
         const adapter = await getAdapterForSession(body.sessionKey ?? '', parseEngineType(body.engineType));
@@ -1326,6 +1272,7 @@ function registerGatewayHandlers(
             message: body.message ?? '',
             deliver: body.deliver,
             idempotencyKey: body.idempotencyKey ?? crypto.randomUUID(),
+            systemPromptAppend: body.systemPromptAppend,
           },
         );
         if (!result.success) {
@@ -1566,6 +1513,10 @@ function registerGatewayHandlers(
       }
 
       rpcParams = await preprocessChatSendParams(rpcParams) as Record<string, unknown>;
+      // Defensive: Gateway chat.send schema does not accept engineType
+      if ('engineType' in rpcParams) {
+        delete rpcParams.engineType;
+      }
       const outboundMessage = typeof rpcParams.message === 'string' ? rpcParams.message : message;
 
       logger.info(`[chat:sendWithMedia] Sending: message="${outboundMessage.substring(0, 100)}", attachments=${imageAttachments.length}, fileRefs=${fileReferences.length}`);
@@ -1622,7 +1573,9 @@ function registerGatewayHandlers(
   });
 
   gatewayManager.on('chat:message', (data) => {
-    broadcast('gateway:chat-message', enrichGatewayPayload(data));
+    if (data && typeof data === 'object' && 'engineEvent' in data) {
+      broadcast('gateway:engine-event', enrichGatewayPayload((data as { engineEvent?: unknown }).engineEvent));
+    }
   });
 
   gatewayManager.on('exit', (code) => {
@@ -2356,27 +2309,8 @@ function registerClawHubHandlers(clawHubService: ClawHubService): void {
 }
 
 /**
- * Dialog-related IPC handlers
+ * Dialog-related IPC handlers — see ipc/dialog-handlers.ts
  */
-function registerDialogHandlers(): void {
-  // Show open dialog
-  ipcMain.handle('dialog:open', async (_, options: Electron.OpenDialogOptions) => {
-    const result = await dialog.showOpenDialog(options);
-    return result;
-  });
-
-  // Show save dialog
-  ipcMain.handle('dialog:save', async (_, options: Electron.SaveDialogOptions) => {
-    const result = await dialog.showSaveDialog(options);
-    return result;
-  });
-
-  // Show message box
-  ipcMain.handle('dialog:message', async (_, options: Electron.MessageBoxOptions) => {
-    const result = await dialog.showMessageBox(options);
-    return result;
-  });
-}
 
 /**
  * App-related IPC handlers
@@ -2676,6 +2610,64 @@ function mimeToExt(mimeType: string): string {
 
 const OUTBOUND_DIR = join(getOpenClawConfigDir(), 'media', 'outbound');
 
+async function getDirectorySize(dirPath: string): Promise<number> {
+  const fsP = await import('fs/promises');
+  let total = 0;
+  const entries = await fsP.readdir(dirPath, { withFileTypes: true });
+
+  for (const entry of entries) {
+    try {
+      const entryPath = join(dirPath, entry.name);
+      if (entry.isSymbolicLink()) continue;
+
+      if (entry.isDirectory()) {
+        total += await getDirectorySize(entryPath);
+        continue;
+      }
+
+      if (entry.isFile()) {
+        const stat = await fsP.stat(entryPath);
+        total += stat.size;
+      }
+    } catch {
+      // Ignore entries that disappear or cannot be read while measuring.
+    }
+  }
+
+  return total;
+}
+
+async function skillUploadHasSkillMd(candidatePath: string): Promise<boolean> {
+  const fsP = await import('fs/promises');
+  const stat = await fsP.stat(candidatePath);
+
+  if (stat.isFile()) {
+    return basename(candidatePath).toLowerCase() === 'skill.md';
+  }
+
+  if (!stat.isDirectory()) return false;
+
+  try {
+    await fsP.access(join(candidatePath, 'SKILL.md'));
+    return true;
+  } catch {
+    // Continue with one-level nested folder check below.
+  }
+
+  const entries = await fsP.readdir(candidatePath, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    try {
+      await fsP.access(join(candidatePath, entry.name, 'SKILL.md'));
+      return true;
+    } catch {
+      // Continue searching.
+    }
+  }
+
+  return false;
+}
+
 /**
  * Generate a preview data URL for image files.
  * Resizes large images while preserving aspect ratio (only constrain the
@@ -2709,6 +2701,57 @@ async function generateImagePreview(filePath: string, mimeType: string): Promise
  * Stage files to ~/.stoclaw/openclaw/media/outbound/ for gateway access
  */
 function registerFileHandlers(): void {
+  // Lightweight stat: returns file size, or recursive content size for directories.
+  ipcMain.handle('file:stat', async (_, filePath: string) => {
+    try {
+      const fsP = await import('fs/promises');
+      const s = await fsP.stat(filePath);
+      const isDirectory = s.isDirectory();
+      return {
+        size: isDirectory ? await getDirectorySize(filePath) : s.size,
+        isDirectory,
+        isFile: s.isFile(),
+      };
+    } catch {
+      return { size: 0, isDirectory: false, isFile: false };
+    }
+  });
+
+  ipcMain.handle('file:validateSkillUpload', async (_, filePath: string) => {
+    const fsP = await import('fs/promises');
+    try {
+      const stat = await fsP.stat(filePath);
+      const isDirectory = stat.isDirectory();
+      const isFile = stat.isFile();
+      const ext = extname(filePath).toLowerCase();
+
+      if (isFile && basename(filePath).toLowerCase() === 'skill.md') {
+        return { valid: true, isDirectory, isFile };
+      }
+
+      if (isDirectory) {
+        return { valid: await skillUploadHasSkillMd(filePath), isDirectory, isFile };
+      }
+
+      if (isFile && ext === '.zip') {
+        const os = await import('os');
+        const { extractZip } = await import('../utils/zip-extract');
+        const stagingDir = join(os.tmpdir(), `stoclaw-skill-upload-validate-${Date.now()}-${crypto.randomUUID()}`);
+        try {
+          await fsP.mkdir(stagingDir, { recursive: true });
+          await extractZip(filePath, stagingDir);
+          return { valid: await skillUploadHasSkillMd(stagingDir), isDirectory, isFile };
+        } finally {
+          await fsP.rm(stagingDir, { recursive: true, force: true }).catch(() => {});
+        }
+      }
+
+      return { valid: false, isDirectory, isFile };
+    } catch {
+      return { valid: false, isDirectory: false, isFile: false };
+    }
+  });
+
   // Stage files from real disk paths (used with dialog:open)
   ipcMain.handle('file:stage', async (_, filePaths: string[]) => {
     const fsP = await import('fs/promises');
@@ -2966,5 +3009,127 @@ function registerSessionHandlers(): void {
   ipcMain.handle('workflow:appendSessionRecord', async (_, input) => {
     const { appendWorkflowSessionRecord } = await import('../services/workflow-session-writer');
     await appendWorkflowSessionRecord(input as import('../services/workflow-session-writer').AppendWorkflowSessionRecordInput);
+  });
+
+  ipcMain.handle('sclaw-browser:prepareSession', async (_, payload: { url?: string }) => {
+    const url = typeof payload?.url === 'string' ? payload.url.trim() : '';
+    if (!url) return { ok: true };
+    const { prepareSclawEmbedBrowserSession } = await import('./services/sclaw-embed-browser-session');
+    await prepareSclawEmbedBrowserSession(url);
+    return { ok: true };
+  });
+
+  ipcMain.handle('sclaw-browser:registerRuntime', async (_, payload: {
+    runtimeId?: string;
+    appTitle?: string;
+    initialUrl?: string;
+  }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    const appTitle = typeof payload?.appTitle === 'string' ? payload.appTitle.trim() : '';
+    const initialUrl = typeof payload?.initialUrl === 'string' ? payload.initialUrl.trim() : '';
+    if (!runtimeId || !initialUrl) return { ok: false };
+    const { registerSclawEmbedBrowserRuntime } = await import('./services/sclaw-embed-browser-runtime');
+    registerSclawEmbedBrowserRuntime({ runtimeId, appTitle, initialUrl });
+    return { ok: true };
+  });
+
+  ipcMain.handle('sclaw-browser:linkChatSession', async (_, payload: {
+    runtimeId?: string;
+    chatSessionKey?: string;
+  }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    const chatSessionKey = typeof payload?.chatSessionKey === 'string' ? payload.chatSessionKey.trim() : '';
+    if (!runtimeId || !chatSessionKey) return { ok: false };
+    const { linkSclawEmbedBrowserChatSession } = await import('./services/sclaw-embed-browser-runtime');
+    linkSclawEmbedBrowserChatSession(runtimeId, chatSessionKey);
+    return { ok: true };
+  });
+
+  ipcMain.handle('sclaw-browser:bindWebContents', async (_, payload: {
+    runtimeId?: string;
+    webContentsId?: number;
+    pageUrl?: string;
+    pageTitle?: string;
+  }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    const webContentsId = typeof payload?.webContentsId === 'number' ? payload.webContentsId : 0;
+    if (!runtimeId || !webContentsId) return { ok: false };
+    const { bindSclawEmbedBrowserWebContents } = await import('./services/sclaw-embed-browser-runtime');
+    const meta = bindSclawEmbedBrowserWebContents({
+      runtimeId,
+      webContentsId,
+      pageUrl: typeof payload?.pageUrl === 'string' ? payload.pageUrl : undefined,
+      pageTitle: typeof payload?.pageTitle === 'string' ? payload.pageTitle : undefined,
+    });
+    return { ok: true, meta };
+  });
+
+  ipcMain.handle('sclaw-browser:updatePageState', async (_, payload: {
+    runtimeId?: string;
+    pageUrl?: string;
+    pageTitle?: string;
+  }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false };
+    const { updateSclawEmbedBrowserPageState } = await import('./services/sclaw-embed-browser-runtime');
+    updateSclawEmbedBrowserPageState({
+      runtimeId,
+      pageUrl: typeof payload?.pageUrl === 'string' ? payload.pageUrl : undefined,
+      pageTitle: typeof payload?.pageTitle === 'string' ? payload.pageTitle : undefined,
+    });
+    return { ok: true };
+  });
+
+  ipcMain.handle('sclaw-browser:unregisterRuntime', async (_, payload: { runtimeId?: string }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false };
+    const { unregisterSclawEmbedBrowserRuntime } = await import('./services/sclaw-embed-browser-runtime');
+    unregisterSclawEmbedBrowserRuntime(runtimeId);
+    return { ok: true };
+  });
+
+  ipcMain.handle('sclaw-browser:capturePage', async (_, payload: { runtimeId?: string }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false };
+    const { captureSclawEmbedBrowserPage } = await import('./services/sclaw-embed-browser-runtime');
+    const snapshot = await captureSclawEmbedBrowserPage(runtimeId);
+    return { ok: true, snapshot };
+  });
+
+  ipcMain.handle('sclaw-browser:executeScript', async (_, payload: { runtimeId?: string; script?: string }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    const script = typeof payload?.script === 'string' ? payload.script : '';
+    if (!runtimeId || !script) return { ok: false };
+    const { executeSclawEmbedBrowserScript } = await import('./services/sclaw-embed-browser-runtime');
+    const value = await executeSclawEmbedBrowserScript(runtimeId, script);
+    return { ok: true, value };
+  });
+
+  ipcMain.handle('sclaw-browser:getNetworkLog', async (_, payload: { runtimeId?: string; since?: number }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false, events: [] };
+    const { getSclawEmbedBrowserNetworkLog } = await import('./services/sclaw-embed-browser-runtime');
+    const since = typeof payload?.since === 'number' ? payload.since : undefined;
+    const events = getSclawEmbedBrowserNetworkLog(runtimeId, since);
+    return { ok: true, events };
+  });
+
+  ipcMain.handle('sclaw-browser:ensureBridge', async (_, payload: { runtimeId?: string }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false, connected: false };
+    const { ensureSclawEmbedBridgeForRuntime } = await import('./services/sclaw-embed-browser-runtime');
+    const connected = ensureSclawEmbedBridgeForRuntime(runtimeId);
+    return { ok: true, connected };
+  });
+
+  ipcMain.handle('sclaw-browser:setPointerPassthrough', async (_, payload: {
+    runtimeId?: string;
+    passthrough?: boolean;
+  }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false };
+    const { setSclawEmbedBrowserPointerPassthrough } = await import('./services/sclaw-embed-browser-runtime');
+    const applied = setSclawEmbedBrowserPointerPassthrough(runtimeId, payload?.passthrough === true);
+    return { ok: applied };
   });
 }

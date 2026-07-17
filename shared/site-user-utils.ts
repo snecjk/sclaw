@@ -2,7 +2,7 @@
  * Shared site-user detection utilities.
  *
  * Site-user classification depends on the Apollo config key
- * `claw.site.department`.  The main process loads this config at login time
+ * `cli.registry.security.scope.group.site`.  The main process loads this config at login time
  * and the renderer syncs it via the host API.  Both sides share the same
  * in-memory cache (in their respective JS runtimes).
  */

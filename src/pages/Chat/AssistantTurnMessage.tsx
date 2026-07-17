@@ -292,8 +292,6 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       } as RawMessage;
     }
 
-    if (isStreaming) return null;
-
     if (fromHistory) {
       const fallbackText = extractText(fromHistory).trim();
 
@@ -311,6 +309,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
         return null;
       }
     }
+
+    if (isStreaming) return fromHistory;
 
     return fromHistory;
   }, [turnMessages, streamSources, isStreaming, thinkingLayout.finalReplyText, thinkingLayout.segments]);
