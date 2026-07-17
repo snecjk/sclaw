@@ -90,9 +90,9 @@ export function MoreAppsPage() {
     return [featured, ...serverItems];
   }, [categories, categoriesLoading, categoriesError, t]);
 
-  // APP set used to resolve APP-type banner targets — includes the server catalog,
-  // the authoritative "已加载 APP" set now that the market list is server-driven.
-  const bannerAppLookup = useMemo(() => [...allApps, ...apps], [allApps, apps]);
+  // APP-type Banner targets must resolve exclusively from the server catalog.
+  // Do not fall back to built-in/local URLs when the target APP is not loaded.
+  const bannerAppLookup = apps;
 
   // My apps: external apps + favorited builtin apps only
   const installedApps = useMemo(() => {

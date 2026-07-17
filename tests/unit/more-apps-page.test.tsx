@@ -92,6 +92,48 @@ describe('MoreAppsPage server catalog', () => {
     });
   });
 
+  it('opens an APP banner with the server-provided APP url', async () => {
+    fetchBannersMock.mockResolvedValueOnce([{
+      id: 'customer-relations',
+      title: '客户关系管理升级',
+      subtitle: '',
+      imageUrl: 'https://cdn.example.com/customer-relations.png',
+      targetType: 'APP',
+      targetAppId: 'org-relation',
+      targetUrl: '',
+      order: 1,
+    }]);
+    render(<MoreAppsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: '客户关系管理升级' }));
+    expect(openInSclawBrowserMock).toHaveBeenCalledWith({
+      url: 'https://example.com/org',
+      title: '客户关系',
+      appId: 'org-relation',
+    });
+  });
+
+  it('does not fall back to a built-in url when the target APP is absent from the server catalog', async () => {
+    fetchAppsMock.mockResolvedValueOnce({
+      items: [],
+      total: 0,
+      pageNum: 1,
+      pageSize: 20,
+    });
+    fetchBannersMock.mockResolvedValueOnce([{
+      id: 'customer-relations',
+      title: '客户关系管理升级',
+      subtitle: '',
+      imageUrl: 'https://cdn.example.com/customer-relations.png',
+      targetType: 'APP',
+      targetAppId: 'org-relation',
+      targetUrl: '',
+      order: 1,
+    }]);
+    render(<MoreAppsPage />);
+    await screen.findByRole('img', { name: '客户关系管理升级' });
+    expect(screen.queryByRole('button', { name: '客户关系管理升级' })).not.toBeInTheDocument();
+  });
+
   it('does not make unresolved APP or NONE banners clickable', async () => {
     fetchBannersMock.mockResolvedValueOnce([
       {
