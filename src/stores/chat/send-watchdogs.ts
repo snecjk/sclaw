@@ -64,6 +64,10 @@ export function scheduleSendWatchdogs(input: {
       clearStuckCheckTimer(sessionKey);
       return;
     }
+    if (runtime.aborting) {
+      setStuckCheckTimer(sessionKey, setTimeout(checkStuck, STUCK_RECHECK_INTERVAL_MS));
+      return;
+    }
     if (runtime.streamingMessage || runtime.streamingText) {
       setStuckCheckTimer(sessionKey, setTimeout(checkStuck, STUCK_RECHECK_INTERVAL_MS));
       return;
@@ -86,6 +90,7 @@ export function scheduleSendWatchdogs(input: {
     clearStuckCheckTimer(sessionKey);
     setRuntimePatch(set, sessionKey, {
       sending: false,
+      aborting: false,
       activeRunId: null,
       sendAcceptance: null,
       lastUserMessageAt: null,

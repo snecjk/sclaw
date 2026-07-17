@@ -33,6 +33,7 @@ export function shouldAutoCompleteTurnFromHistory(input: {
 export function buildTerminalRuntimePatch(error: string | null = null): Partial<SessionRuntimeState> {
   return {
     sending: false,
+    aborting: false,
     activeRunId: null,
     sendAcceptance: null,
     streamingText: '',

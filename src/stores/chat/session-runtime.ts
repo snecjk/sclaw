@@ -25,6 +25,7 @@ type RuntimeFields = Pick<
 export function createIdleSessionRuntimeState(): SessionRuntimeState {
   return {
     sending: false,
+    aborting: false,
     activeRunId: null,
     sendAcceptance: null,
     streamingText: '',
@@ -59,9 +60,10 @@ export function runtimePatchFromSessionRuntime(runtime: SessionRuntimeState): Ru
   };
 }
 
-export function captureTopLevelRuntime(state: RuntimeFields): SessionRuntimeState {
+export function captureTopLevelRuntime(state: RuntimeFields, aborting = false): SessionRuntimeState {
   return {
     sending: state.sending,
+    aborting,
     activeRunId: state.activeRunId,
     sendAcceptance: state.sendAcceptance,
     streamingText: state.streamingText,
@@ -188,7 +190,10 @@ export function buildSessionSwitchPatch(
     : state.sessions;
   const nextRuntimeBySessionKey = {
     ...state.runtimeBySessionKey,
-    [state.currentSessionKey]: captureTopLevelRuntime(state),
+    [state.currentSessionKey]: captureTopLevelRuntime(
+      state,
+      state.runtimeBySessionKey[state.currentSessionKey]?.aborting ?? false,
+    ),
   };
   if (leavingEmpty) delete nextRuntimeBySessionKey[state.currentSessionKey];
 

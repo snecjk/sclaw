@@ -86,6 +86,7 @@ export function handleForegroundErrorEvent(input: {
         clearHistoryPoll();
         setRuntimePatch(set, sessionKey, {
           sending: false,
+          aborting: false,
           activeRunId: null,
           sendAcceptance: null,
           lastUserMessageAt: null,
@@ -105,6 +106,7 @@ export function handleForegroundErrorEvent(input: {
   });
   setRuntimePatch(set, sessionKey, {
     sending: false,
+    aborting: false,
     activeRunId: null,
     sendAcceptance: null,
     lastUserMessageAt: null,
@@ -137,6 +139,7 @@ export function handleForegroundAbortedEvent(input: {
   });
   setRuntimePatch(set, sessionKey, {
     sending: false,
+    aborting: false,
     activeRunId: null,
     sendAcceptance: null,
     streamingText: '',
