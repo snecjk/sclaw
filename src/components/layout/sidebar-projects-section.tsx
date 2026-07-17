@@ -25,6 +25,7 @@ import {
 } from '@/stores/chat/types';
 import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
 import { sortSessionsWithCatalogPin } from '@/lib/sidebar-recent-order';
+import { sortProjectsByCreatedAt } from '@/lib/sidebar-project-session-navigation';
 import { ProjectFormDialog } from '@/components/layout/sidebar-project-form-dialog';
 import { SidebarProjectRowTrailing } from '@/components/layout/sidebar-project-row-trailing';
 import { SidebarProjectSessionRow } from '@/components/layout/sidebar-project-session-row';
@@ -72,6 +73,10 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
   const [editingValue, setEditingValue] = useState('');
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingProjectValue, setEditingProjectValue] = useState('');
+  const sortedWorkspaces = useMemo(
+    () => sortProjectsByCreatedAt(workspaces),
+    [workspaces],
+  );
 
   const sessionsByProjectId = useMemo(() => {
     const map = new Map<string, ChatSession[]>();
@@ -218,7 +223,7 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
 
       {open ? (
         <div className="mt-0.5 flex flex-col gap-0.5 pb-1">
-          {workspaces.map((workspace) => {
+          {sortedWorkspaces.map((workspace) => {
             const isExpanded = expandedProjectIds[workspace.id] ?? false;
             const projectSessions = sessionsByProjectId.get(workspace.id) ?? [];
             const isEditingProject = editingProjectId === workspace.id;
@@ -240,7 +245,7 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                       onBlur={() => {
                         void commitProjectRename();
                       }}
-                      className="w-full rounded-[8px] border border-[var(--sto-brand-6)] bg-white px-[10px] py-[6px] pr-16 text-left text-sm leading-5 text-foreground outline-none"
+                      className="w-full rounded-[8px] border border-[var(--sto-brand-6)] bg-card px-[10px] py-[6px] pr-16 text-left text-sm leading-5 text-foreground outline-none"
                     />
                   ) : (
                     <>
