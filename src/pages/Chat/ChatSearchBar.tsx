@@ -219,11 +219,7 @@ export function ChatSearchBar({
   );
 }
 
-export interface ChatContentHeaderActionsProps {
-  canShowPreviewPanel: boolean;
-  /** 预览区是否已展开（控制 icon 开/关态） */
-  isPreviewPanelOpen: boolean;
-  onTogglePreview: () => void;
+export interface ChatConversationHeaderActionsProps {
   showThinking: boolean;
   onToggleThinking: () => void;
   loading: boolean;
@@ -231,17 +227,14 @@ export interface ChatContentHeaderActionsProps {
   searchProps: Omit<ChatSearchBarProps, 'variant'>;
 }
 
-/** Chat 页注入 ContentHeader 的右侧 icon 组（预览 → 思考 → 刷新 → 搜索） */
-export function ChatContentHeaderActions({
-  canShowPreviewPanel,
-  isPreviewPanelOpen,
-  onTogglePreview,
+/** 会话区操作 icon 组：搜索 → 刷新 → 思考（三栏时贴对话列右缘） */
+export function ChatConversationHeaderActions({
   showThinking,
   onToggleThinking,
   loading,
   onRefresh,
   searchProps,
-}: ChatContentHeaderActionsProps) {
+}: ChatConversationHeaderActionsProps) {
   const { t } = useTranslation('chat');
 
   return (
@@ -280,29 +273,68 @@ export function ChatContentHeaderActions({
           label={showThinking ? t('toolbar.hideThinking') : t('toolbar.showThinking')}
         />
       </Tooltip>
-      {canShowPreviewPanel ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              className={cn(
-                'group',
-                contentHeaderActionBtnClass,
-                isPreviewPanelOpen && contentHeaderActionBtnActiveClass,
-              )}
-              onClick={onTogglePreview}
-              aria-label={
-                isPreviewPanelOpen ? t('preview.collapsePanel') : t('toolbar.openPreview')
-              }
-            >
-              <HeaderActionIcon src={panelIcon} />
-            </button>
-          </TooltipTrigger>
-          <HeaderActionTooltip
-            label={isPreviewPanelOpen ? t('preview.collapsePanel') : t('toolbar.openPreview')}
-          />
-        </Tooltip>
-      ) : null}
+    </>
+  );
+}
+
+export interface ChatPreviewToggleHeaderActionProps {
+  canShowPreviewPanel: boolean;
+  /** 预览区是否已展开（控制 icon 开/关态） */
+  isPreviewPanelOpen: boolean;
+  onTogglePreview: () => void;
+}
+
+/** 预览面板开关：三栏时留在预览列头部/右上角。 */
+export function ChatPreviewToggleHeaderAction({
+  canShowPreviewPanel,
+  isPreviewPanelOpen,
+  onTogglePreview,
+}: ChatPreviewToggleHeaderActionProps) {
+  const { t } = useTranslation('chat');
+  if (!canShowPreviewPanel) return null;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            'group',
+            contentHeaderActionBtnClass,
+            isPreviewPanelOpen && contentHeaderActionBtnActiveClass,
+          )}
+          onClick={onTogglePreview}
+          aria-label={isPreviewPanelOpen ? t('preview.collapsePanel') : t('toolbar.openPreview')}
+        >
+          <HeaderActionIcon src={panelIcon} />
+        </button>
+      </TooltipTrigger>
+      <HeaderActionTooltip
+        label={isPreviewPanelOpen ? t('preview.collapsePanel') : t('toolbar.openPreview')}
+      />
+    </Tooltip>
+  );
+}
+
+export interface ChatContentHeaderActionsProps
+  extends ChatConversationHeaderActionsProps,
+    ChatPreviewToggleHeaderActionProps {}
+
+/** 兼容旧用法：会话区 icon 组 + 预览开关同排渲染。 */
+export function ChatContentHeaderActions({
+  canShowPreviewPanel,
+  isPreviewPanelOpen,
+  onTogglePreview,
+  ...conversationProps
+}: ChatContentHeaderActionsProps) {
+  return (
+    <>
+      <ChatConversationHeaderActions {...conversationProps} />
+      <ChatPreviewToggleHeaderAction
+        canShowPreviewPanel={canShowPreviewPanel}
+        isPreviewPanelOpen={isPreviewPanelOpen}
+        onTogglePreview={onTogglePreview}
+      />
     </>
   );
 }

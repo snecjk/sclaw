@@ -21,6 +21,8 @@ export interface ContentHeaderSlot {
   title: ReactNode;
   /** 三栏预览打开时：产物 tab 行（与右侧 icon 同高对齐） */
   previewTabs?: ReactNode;
+  /** 会话区操作（搜索/刷新/思考等）：三栏时随对话列头部右对齐，单栏时并入右上角 icon 组 */
+  chatActions?: ReactNode;
   /** 右侧操作区（icon 组） */
   actions?: ReactNode;
   /** 三栏预览已展开：MainLayout body 去掉水平 px，由 split row 与 header 共用 inset */
@@ -63,6 +65,7 @@ export function ContentHeaderProvider({ children }: { children: ReactNode }) {
       if (
         prev.title === next.title &&
         prev.previewTabs === next.previewTabs &&
+        prev.chatActions === next.chatActions &&
         prev.actions === next.actions &&
         prev.isSplitLayout === next.isSplitLayout &&
         prev.onCloseSession === next.onCloseSession
@@ -94,6 +97,7 @@ function useContentHeaderRegistry() {
 export function useContentHeader({
   title,
   previewTabs,
+  chatActions,
   actions,
   isSplitLayout = false,
   onCloseSession,
@@ -106,15 +110,16 @@ export function useContentHeader({
       setSlot(null);
       return;
     }
-    setSlot({ title, previewTabs, actions, isSplitLayout, onCloseSession });
+    setSlot({ title, previewTabs, chatActions, actions, isSplitLayout, onCloseSession });
     return () => setSlot(null);
-  }, [title, previewTabs, actions, isSplitLayout, onCloseSession, enabled, setSlot]);
+  }, [title, previewTabs, chatActions, actions, isSplitLayout, onCloseSession, enabled, setSlot]);
 }
 
 /** ContentHeader 组件读取当前应展示的 title / previewTabs / actions（含路由默认标题） */
 export function useContentHeaderDisplay(): {
   title: ReactNode | null;
   previewTabs: ReactNode | null;
+  chatActions: ReactNode | null;
   actions: ReactNode | null;
   isSplitLayout: boolean;
   onCloseSession: (() => void) | null;
@@ -130,6 +135,7 @@ export function useContentHeaderDisplay(): {
   return {
     title,
     previewTabs: slot?.previewTabs ?? null,
+    chatActions: slot?.chatActions ?? null,
     actions: slot?.actions ?? null,
     isSplitLayout: slot?.isSplitLayout ?? false,
     onCloseSession: slot?.onCloseSession ?? null,

@@ -29,7 +29,7 @@ import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 
 export function ContentHeader() {
   const { t } = useTranslation('common');
-  const { title, previewTabs, actions, isSplitLayout, onCloseSession } = useContentHeaderDisplay();
+  const { title, previewTabs, chatActions, actions, isSplitLayout, onCloseSession } = useContentHeaderDisplay();
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
   const workflowEditorActive = useWorkflowUiStore((s) => s.editorActive);
@@ -81,6 +81,13 @@ export function ContentHeader() {
     </div>
   ) : null;
 
+  /** 会话区操作（搜索/刷新/思考）：三栏时贴对话列右缘，单栏时并入右上角 */
+  const chatActionsZone = chatActions ? (
+    <div className="no-drag flex shrink-0 items-center gap-1">
+      {chatActions}
+    </div>
+  ) : null;
+
   /** Win 列表页等无 actions 时，drag-region 会挡住 AppShellChromeOverlay 的窗口三分控件 */
   const winControlsReserve = isWin ? (
     <div className={contentHeaderWinControlsReserveClass} aria-hidden />
@@ -90,7 +97,15 @@ export function ContentHeader() {
     return (
       <header className={stoSplitGridContentsClass} aria-label={t('sidebar.chat')}>
         <div className={stoSplitGridHeaderChatClass}>
-          <div className={contentHeaderSplitChatZoneClass}>{titleZone}</div>
+          <div className={cn(contentHeaderSplitChatZoneClass, chatActionsZone && 'w-full')}>
+            {titleZone}
+            {chatActionsZone ? (
+              <>
+                <div className="min-w-0 flex-1" aria-hidden />
+                {chatActionsZone}
+              </>
+            ) : null}
+          </div>
         </div>
         <div className={stoSplitGridHeaderResizerClass} aria-hidden />
         <div className={stoSplitGridHeaderPreviewClass}>
@@ -117,6 +132,7 @@ export function ContentHeader() {
     <header className={contentHeaderBarClass} aria-label={t('sidebar.chat')}>
       {titleZone}
       <div className="min-w-0 flex-1" aria-hidden />
+      {chatActionsZone}
       {actionsZone}
       {winControlsReserve}
     </header>
