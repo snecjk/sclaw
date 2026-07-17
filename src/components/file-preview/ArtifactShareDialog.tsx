@@ -17,9 +17,9 @@ import {
 type DialogStep = 'preview' | 'too_long';
 
 const SHARE_DIALOG_PANEL_CLASS =
-  'mx-4 w-full max-w-[480px] rounded-2xl bg-white p-6 shadow-2xl focus:outline-none';
+  'mx-4 w-full max-w-[480px] rounded-2xl border border-[#E8EAEF] bg-white p-6 text-foreground shadow-2xl focus:outline-none dark:border-border dark:bg-card';
 const SHARE_DIALOG_CONTENT_CLASS =
-  'box-border flex w-full flex-col gap-3 self-stretch rounded-xl border border-[#E8EAEF] bg-[#FAFBFC] px-4 py-3';
+  'box-border flex w-full flex-col gap-3 self-stretch rounded-xl border border-[#E8EAEF] bg-[#FAFBFC] px-4 py-3 dark:border-border dark:bg-muted/40';
 
 type TooLongPayload = {
   defaultMsg: string;
@@ -121,7 +121,7 @@ export function ArtifactShareDialog({
           className={cn(SHARE_DIALOG_PANEL_CLASS)}
           tabIndex={-1}
         >
-          <h2 id="artifact-share-too-long-title" className="text-lg font-semibold">
+          <h2 id="artifact-share-too-long-title" className="text-lg font-semibold text-foreground">
             {t('preview.shareDialog.tooLongTitle')}
           </h2>
           <p className="mt-3 text-sm leading-6 text-foreground">
@@ -173,7 +173,7 @@ export function ArtifactShareDialog({
         className={SHARE_DIALOG_PANEL_CLASS}
         tabIndex={-1}
       >
-        <h2 id="artifact-share-dialog-title" className="text-lg font-semibold">
+        <h2 id="artifact-share-dialog-title" className="text-lg font-semibold text-foreground">
           {title}
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">
