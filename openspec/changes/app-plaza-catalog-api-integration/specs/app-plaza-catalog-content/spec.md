@@ -38,11 +38,11 @@
 
 ### Requirement: APP 列表使用服务端目录
 
-系统 MUST 从 `POST /agent/v1/app-plaza/apps` 加载当前员工可见 APP，并 MUST 使用服务端 `total`、分页结果及 APP 的名称、描述、图标、色调和 URL 渲染市场列表。系统 MUST 原样保留服务端 APP URL，且 MUST NOT因 URL 协议、相对地址或空地址过滤 APP 条目。
+系统 MUST 从 `POST /agent/v1/app-plaza/apps` 加载当前员工可见 APP，并 MUST 使用服务端 `total`、分页结果及 APP 的名称、徽标文案（`badge`）、图标、色调和 URL 渲染市场列表。系统 MUST 原样保留服务端 APP URL，且 MUST NOT因 URL 协议、相对地址或空地址过滤 APP 条目。
 
 #### Scenario: 渲染 APP 行
 - **WHEN** APP 接口返回可见应用
-- **THEN** 每个应用行 MUST 使用 `id` 作为稳定标识，展示 `name`、`description`、`iconKey`/`iconUrl` 和 `tone`，并在 URL 非空时将服务端原始 `url` 交给现有应用打开逻辑
+- **THEN** 每个应用行 MUST 使用 `id` 作为稳定标识，展示 `name`、`badge`、`iconKey`/`iconUrl` 和 `tone`；`badge` MUST 按中英文逗号拆分并去除空项，以符合 `docs/sto-design.md` 的 Grey-3 背景、Grey-9 文字圆角标签展示，每行 MUST 最多展示三个标签且后续标签 MUST 换行；系统 MUST NOT 使用 `description` 作为列表副标题，并在 URL 非空时将服务端原始 `url` 交给现有应用打开逻辑
 
 #### Scenario: APP URL 不受前端协议限制
 - **WHEN** APP 接口返回相对地址、非 HTTP/HTTPS 协议或空 `url` 的可见应用

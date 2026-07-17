@@ -29,3 +29,6 @@
 - [x] 5.3 运行相关 Vitest、定向 ESLint、TypeScript 类型检查、`git diff --check` 和 OpenSpec 严格校验（Requirement: 三块内容经 Main 代理且独立降级）
 - [x] 5.4 检查 `README.md`、`README.zh-CN.md`、`README.ja-JP.md` 是否需要同步应用广场数据源说明（Requirement: 三块内容经 Main 代理且独立降级）
 - [x] 5.5 解除 APP URL 的前端协议限制并增加相对地址、非 HTTP/HTTPS 协议及空地址适配测试（Requirement: APP 列表使用服务端目录）
+- [x] 5.6 将 APP 列表副标题从服务端 `description` 切换为 `badge`，并增加字段选择回归测试（Requirement: APP 列表使用服务端目录）
+- [x] 5.7 将逗号分隔的 `badge` 拆分为符合 STO UI 主题的单行圆角标签，并覆盖空项过滤与多标签渲染测试（Requirement: APP 列表使用服务端目录）
+- [x] 5.8 将 APP 标签限制为每行最多三个，第四个起换行，并覆盖四标签分组测试（Requirement: APP 列表使用服务端目录）

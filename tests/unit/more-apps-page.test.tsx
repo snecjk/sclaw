@@ -23,6 +23,7 @@ const serverApp = {
   id: 'org-relation',
   name: '客户关系',
   description: '维护客户归属关系',
+  badge: '客户管理, 部门岗位,,客户对账,组织分析',
   url: 'https://example.com/org',
   iconKey: 'org-relation',
   tone: 'blue' as const,
@@ -69,6 +70,19 @@ describe('MoreAppsPage server catalog', () => {
       pageNum: 1,
       pageSize: 20,
     });
+  });
+
+  it('renders comma-separated server badges as tags instead of description', async () => {
+    render(<MoreAppsPage />);
+    expect(await screen.findByText('客户管理')).toBeInTheDocument();
+    expect(screen.getByText('部门岗位')).toHaveClass('app-market__row-badge');
+    expect(screen.getByText('客户对账')).toHaveClass('app-market__row-badge');
+    expect(screen.getByText('组织分析')).toHaveClass('app-market__row-badge');
+    const badgeRows = document.querySelectorAll('.app-market__row-badge-line');
+    expect(badgeRows).toHaveLength(2);
+    expect(badgeRows[0]?.children).toHaveLength(3);
+    expect(badgeRows[1]?.children).toHaveLength(1);
+    expect(screen.queryByText('维护客户归属关系')).not.toBeInTheDocument();
   });
 
   it('renders a whole-image URL banner and opens its configured link', async () => {

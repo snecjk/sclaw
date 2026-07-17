@@ -709,6 +709,7 @@
 
 .page-more-apps .app-market__row-body {
   min-width: 0;
+  flex: 1;
 }
 
 .page-more-apps .app-market__row-title {
@@ -719,15 +720,32 @@
   color: #111827;
 }
 
-.page-more-apps .app-market__row-desc {
-  margin: 0;
+.page-more-apps .app-market__row-badges {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.page-more-apps .app-market__row-badge-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.page-more-apps .app-market__row-badge {
+  flex: 0 1 auto;
+  max-width: calc((100% - 16px) / 3);
+  padding: 2px 12px;
+  border-radius: 999px;
+  background: #f0f2f5;
   font-size: 13px;
-  line-height: 1.45;
-  color: #6b7280;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
+  font-weight: 500;
+  line-height: 20px;
+  color: #4e5969;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .page-more-apps .app-market__row-aside {

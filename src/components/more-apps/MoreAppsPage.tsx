@@ -398,6 +398,14 @@ export function MoreAppsPage() {
           {apps.map((app) => {
             const installed = isAppInstalled(app.id);
             const favorite = isAppFavorite(app.id);
+            const badges = app.badge
+              ?.split(/[,，]/)
+              .map((badge) => badge.trim())
+              .filter(Boolean) ?? [];
+            const badgeRows = Array.from(
+              { length: Math.ceil(badges.length / 3) },
+              (_, rowIndex) => badges.slice(rowIndex * 3, rowIndex * 3 + 3),
+            );
             return (
               <article
                 key={app.id}
@@ -409,7 +417,22 @@ export function MoreAppsPage() {
                   <AppIcon iconKey={app.iconKey} iconUrl={app.iconUrl} tone={app.tone} size="lg" />
                   <div className="app-market__row-body">
                     <h4 className="app-market__row-title">{app.name}</h4>
-                    <p className="app-market__row-desc">{app.description}</p>
+                    {badgeRows.length > 0 && (
+                      <div className="app-market__row-badges">
+                        {badgeRows.map((row, rowIndex) => (
+                          <div key={`${app.id}-badge-row-${rowIndex}`} className="app-market__row-badge-line">
+                            {row.map((badge, badgeIndex) => (
+                              <span
+                                key={`${app.id}-badge-${rowIndex * 3 + badgeIndex}`}
+                                className="app-market__row-badge"
+                              >
+                                {badge}
+                              </span>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="app-market__row-aside">

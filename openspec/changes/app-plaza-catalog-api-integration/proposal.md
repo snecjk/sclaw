@@ -6,7 +6,7 @@
 
 - Banner 区从当前前端拼装的模拟卡片改为“后台配置的一张完整图片 + 点击目标”，数据来自 `POST /agent/v1/app-plaza/banners`。
 - 分类导航改用 `POST /agent/v1/app-plaza/categories` 返回的 `id` 和 `name`；“精选”继续由前端固定提供，选择服务端分类时将分类 `id` 作为 `categoryCode` 查询 APP。
-- APP 列表改用 `POST /agent/v1/app-plaza/apps`，使用服务端返回的名称、描述、图标、色调和 URL 渲染并打开应用；APP URL 由服务端负责其格式与有效性，前端不做协议限制或条目过滤。
+- APP 列表改用 `POST /agent/v1/app-plaza/apps`，使用服务端返回的名称、徽标文案（`badge`）、图标、色调和 URL 渲染并打开应用；APP URL 由服务端负责其格式与有效性，前端不做协议限制或条目过滤。
 - APP 搜索、分类筛选和分页通过 `/apps` 的 query 参数由服务端执行。
 - 三个请求均经 Main 进程 Host API 代理并使用当前登录会话的 `stoToken`，Renderer 不直接调用 memory-center。
 - 接口失败时展示加载失败与重试状态，不回退到可能绕过人员可见性规则的静态应用数据。
