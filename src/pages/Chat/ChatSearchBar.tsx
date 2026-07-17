@@ -1,13 +1,54 @@
-import { ChevronDown, ChevronUp, PanelRightClose, PanelRightOpen, RefreshCw, Search, Brain, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import {
   contentHeaderActionBtnActiveClass,
   contentHeaderActionBtnClass,
 } from '@/lib/surfaces';
+import searchIcon from '@/assets/icons/search.svg';
+import refreshIcon from '@/assets/icons/refresh.svg';
+import brainIcon from '@/assets/icons/brain.svg';
+import panelIcon from '@/assets/icons/panel.svg';
+
+/** 会话面板顶部 action 图标的功能气泡：深色 Grey-10 底 + 白字 + 同色箭头。 */
+const HEADER_TOOLTIP_BG = '#1D2129';
+const headerTooltipContentClass = cn(
+  // overflow-visible: base TooltipContent sets overflow-hidden, which clips the arrow.
+  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
+  'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
+);
+
+function HeaderActionTooltip({ label }: { label: string }) {
+  return (
+    <TooltipContent className={headerTooltipContentClass}>
+      <p>{label}</p>
+      <TooltipArrow className="fill-[#1D2129]" style={{ fill: HEADER_TOOLTIP_BG }} />
+    </TooltipContent>
+  );
+}
+
+/**
+ * Header action icon. Icons ship with a fixed #4E5969 fill, so hovering darkens
+ * them toward #1D2129 via a brightness filter (~0.38 maps #4E5969 → ≈#1D2129),
+ * driven by the parent button's `group` hover state.
+ */
+function HeaderActionIcon({ src, className }: { src: string; className?: string }) {
+  return (
+    <img
+      src={src}
+      alt=""
+      aria-hidden
+      className={cn(
+        'h-4 w-4 object-contain transition duration-fast dark:invert',
+        'group-hover:brightness-[0.38]',
+        className,
+      )}
+    />
+  );
+}
 
 interface ChatSearchBarProps {
   isOpen: boolean;
@@ -49,24 +90,29 @@ export function ChatSearchBar({
   const isHeader = variant === 'header';
 
   const toggleButton = (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className={cn(
-        isHeader
-          ? cn(contentHeaderActionBtnClass, isOpen && contentHeaderActionBtnActiveClass)
-          : cn(
-              'h-8 w-8 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]',
-              isOpen && 'bg-primary/12 text-primary',
-            ),
-      )}
-      onClick={onToggle}
-      title={t('toolbar.searchToggle')}
-      aria-label={t('toolbar.searchToggle')}
-    >
-      <Search className="h-4 w-4" aria-hidden />
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={cn(
+            'group',
+            isHeader
+              ? cn(contentHeaderActionBtnClass, isOpen && contentHeaderActionBtnActiveClass)
+              : cn(
+                  'h-8 w-8 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]',
+                  isOpen && 'bg-primary/12 text-primary',
+                ),
+          )}
+          onClick={onToggle}
+          aria-label={t('toolbar.searchToggle')}
+        >
+          <HeaderActionIcon src={searchIcon} />
+        </Button>
+      </TooltipTrigger>
+      <HeaderActionTooltip label={t('toolbar.searchToggle')} />
+    </Tooltip>
   );
 
   const searchPanel = (
@@ -205,33 +251,34 @@ export function ChatContentHeaderActions({
         <TooltipTrigger asChild>
           <button
             type="button"
-            className={contentHeaderActionBtnClass}
+            className={cn('group', contentHeaderActionBtnClass)}
             onClick={onRefresh}
             disabled={loading}
             aria-label={t('toolbar.refresh')}
           >
-            <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} aria-hidden />
+            <HeaderActionIcon src={refreshIcon} className={cn(loading && 'animate-spin')} />
           </button>
         </TooltipTrigger>
-        <TooltipContent><p>{t('toolbar.refresh')}</p></TooltipContent>
+        <HeaderActionTooltip label={t('toolbar.refresh')} />
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
           <button
             type="button"
             className={cn(
+              'group',
               contentHeaderActionBtnClass,
               showThinking && contentHeaderActionBtnActiveClass,
             )}
             onClick={onToggleThinking}
             aria-label={showThinking ? t('toolbar.hideThinking') : t('toolbar.showThinking')}
           >
-            <Brain className="h-4 w-4" aria-hidden />
+            <HeaderActionIcon src={brainIcon} />
           </button>
         </TooltipTrigger>
-        <TooltipContent>
-          <p>{showThinking ? t('toolbar.hideThinking') : t('toolbar.showThinking')}</p>
-        </TooltipContent>
+        <HeaderActionTooltip
+          label={showThinking ? t('toolbar.hideThinking') : t('toolbar.showThinking')}
+        />
       </Tooltip>
       {canShowPreviewPanel ? (
         <Tooltip>
@@ -239,6 +286,7 @@ export function ChatContentHeaderActions({
             <button
               type="button"
               className={cn(
+                'group',
                 contentHeaderActionBtnClass,
                 isPreviewPanelOpen && contentHeaderActionBtnActiveClass,
               )}
@@ -247,16 +295,12 @@ export function ChatContentHeaderActions({
                 isPreviewPanelOpen ? t('preview.collapsePanel') : t('toolbar.openPreview')
               }
             >
-              {isPreviewPanelOpen ? (
-                <PanelRightClose className="h-4 w-4" aria-hidden />
-              ) : (
-                <PanelRightOpen className="h-4 w-4" aria-hidden />
-              )}
+              <HeaderActionIcon src={panelIcon} />
             </button>
           </TooltipTrigger>
-          <TooltipContent>
-            <p>{isPreviewPanelOpen ? t('preview.collapsePanel') : t('toolbar.openPreview')}</p>
-          </TooltipContent>
+          <HeaderActionTooltip
+            label={isPreviewPanelOpen ? t('preview.collapsePanel') : t('toolbar.openPreview')}
+          />
         </Tooltip>
       ) : null}
     </>
