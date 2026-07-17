@@ -87,7 +87,11 @@ export function ProjectFormDialog({
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className={cn('mb-5 w-full rounded-lg border px-3 py-2.5 text-sm', formFieldFocusClass)}
+          className={cn(
+            'mb-5 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground',
+            'placeholder:text-muted-foreground transition-colors',
+            formFieldFocusClass,
+          )}
         />
 
         <label className="mb-2 block text-sm font-medium text-foreground">
@@ -99,9 +103,9 @@ export function ProjectFormDialog({
           disabled={picking}
           onClick={() => void handlePick()}
           className={cn(
-            'mb-2 flex w-full items-center gap-2 rounded-xl border border-[var(--sto-sidebar-border)]',
-            'bg-[var(--sto-neutral-2)] px-3 py-3 text-left transition-colors',
-            'hover:bg-[var(--sto-sidebar-row-hover-bg)] disabled:opacity-60',
+            'mb-2 flex w-full items-center gap-2 rounded-xl border border-border',
+            'bg-muted/50 px-3 py-3 text-left transition-colors',
+            'hover:bg-muted disabled:opacity-60',
           )}
         >
           <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
