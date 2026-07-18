@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_WORKSPACE_TILDE,
+  buildWorkspaceArtifactOutputAgentsMdSection,
   buildWorkspaceArtifactOutputRule,
   getAgentWorkspaceTildePath,
   getLegacyAgentWorkspaceTildePath,
   getWorkspaceArtifactOutputRelPath,
+  mergeWorkspaceArtifactOutputSection,
   migrateWorkspaceTildePath,
+  WORKSPACE_ARTIFACT_OUTPUT_BEGIN,
+  WORKSPACE_ARTIFACT_OUTPUT_END,
 } from '../../shared/workspace-paths';
 
 describe('workspace-paths', () => {
@@ -53,6 +57,25 @@ describe('workspace-paths', () => {
       workspaceAbsolutePath: String.raw`C:\Users\sto\Downloads\demo`,
     });
     expect(rule).toContain('C:/Users/sto/Downloads/demo/.claw-output/<文件名>');
-    expect(rule).toContain('禁止写入工作区根目录 `C:/Users/sto/Downloads/demo/`');
+    expect(rule).toContain('工作区根目录 `C:/Users/sto/Downloads/demo/`');
+    expect(rule).toContain('outputs/');
+  });
+
+  it('builds durable AGENTS.md section with absolute .claw-output path', () => {
+    const section = buildWorkspaceArtifactOutputAgentsMdSection('/tmp/project');
+    expect(section).toContain('/tmp/project/.claw-output/<文件名>');
+    expect(section).toContain('禁止写入工作区根目录 `/tmp/project/`');
+  });
+
+  it('merges artifact section idempotently into AGENTS.md content', () => {
+    const first = mergeWorkspaceArtifactOutputSection('# AGENTS\n', '/tmp/project');
+    expect(first).toContain(WORKSPACE_ARTIFACT_OUTPUT_BEGIN);
+    expect(first).toContain('/tmp/project/.claw-output/<文件名>');
+    const second = mergeWorkspaceArtifactOutputSection(first, '/tmp/project-b');
+    expect(second).toContain('/tmp/project-b/.claw-output/<文件名>');
+    expect(second.indexOf(WORKSPACE_ARTIFACT_OUTPUT_BEGIN)).toBe(
+      second.lastIndexOf(WORKSPACE_ARTIFACT_OUTPUT_BEGIN),
+    );
+    expect(second).toContain(WORKSPACE_ARTIFACT_OUTPUT_END);
   });
 });

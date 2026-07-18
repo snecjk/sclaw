@@ -5,9 +5,12 @@
 import { app } from 'electron';
 import { join } from 'path';
 import { homedir } from 'os';
-import { existsSync, mkdirSync, readFileSync, realpathSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'fs';
 import { logger } from './logger';
-import { WORKSPACE_ARTIFACT_OUTPUT_DIRNAME } from '../../shared/workspace-paths';
+import {
+  WORKSPACE_ARTIFACT_OUTPUT_DIRNAME,
+  mergeWorkspaceArtifactOutputSection,
+} from '../../shared/workspace-paths';
 
 export {
   quoteForCmd,
@@ -243,7 +246,32 @@ export function ensureDir(dir: string): void {
 }
 
 /**
- * Ensure `<workspace>/.claw-output` exists so write tools / models have a real target.
+ * Upsert the durable `.claw-output` hard rule into AGENTS.md / CLAUDE.md when present.
+ * Best-effort: never creates bootstrap files that did not already exist.
+ */
+function ensureWorkspaceArtifactOutputConstraintDocs(workspaceRoot: string): void {
+  for (const fileName of ['AGENTS.md', 'CLAUDE.md'] as const) {
+    const filePath = join(workspaceRoot, fileName);
+    if (!existsSync(filePath)) continue;
+    try {
+      const existing = readFileSync(filePath, 'utf-8');
+      const merged = mergeWorkspaceArtifactOutputSection(existing, workspaceRoot);
+      if (merged !== existing) {
+        writeFileSync(filePath, merged, 'utf-8');
+      }
+    } catch (error) {
+      logger.warn('Failed to ensure workspace artifact output constraint doc', {
+        workspace: workspaceRoot,
+        filePath,
+        error: String(error),
+      });
+    }
+  }
+}
+
+/**
+ * Ensure `<workspace>/.claw-output` exists so write tools / models have a real target,
+ * and keep AGENTS.md / CLAUDE.md hard rules in sync when those files already exist.
  * Best-effort: never throws (callers should not fail agent bootstrap on mkdir).
  */
 export function ensureWorkspaceArtifactOutputDir(workspacePath: string | null | undefined): string | null {
@@ -253,6 +281,7 @@ export function ensureWorkspaceArtifactOutputDir(workspacePath: string | null | 
   const outputDir = join(root, WORKSPACE_ARTIFACT_OUTPUT_DIRNAME);
   try {
     ensureDir(outputDir);
+    ensureWorkspaceArtifactOutputConstraintDocs(root);
     return outputDir;
   } catch (error) {
     logger.warn('Failed to ensure workspace artifact output dir', {
