@@ -320,13 +320,31 @@ class StoMemoryCenterVectorStoreProvider implements VectorStore {
   }
 
   async get(vectorId: string): Promise<VectorStoreResult | null> {
+    try {
+      const response = await agentMemoryRemoteService.getVectors([vectorId], this.collectionName);
+      const item = response.items[0];
+      if (!item) {
+        logger.info('[mem0][vector] get remote miss', { vectorId });
+        return null;
+      }
+      const cache = await this.readCache();
+      const payload = this.payloadFromRemote(item, cache.records[vectorId]?.payload);
+      cache.records[vectorId] = { id: vectorId, payload };
+      await this.writeCache(cache);
+      logger.info('[mem0][vector] get remote hit', { vectorId });
+      return { id: vectorId, payload };
+    } catch (error) {
+      logger.warn('[mem0][vector] get remote failed, falling back to cache', {
+        vectorId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     const cache = await this.readCache();
     const record = cache.records[vectorId];
     if (!record) {
-      logger.info('[mem0][vector] get miss', { vectorId });
       return null;
     }
-    logger.info('[mem0][vector] get hit', { vectorId });
     return {
       id: record.id,
       payload: this.normalizePayload(record.payload),
@@ -349,34 +367,57 @@ class StoMemoryCenterVectorStoreProvider implements VectorStore {
 
   async deleteCol(): Promise<void> {
     const cache = await this.readCache();
-    const ids = Object.keys(cache.records);
-    logger.info('[mem0][vector] deleteCol start', { count: ids.length });
-    if (ids.length > 0) {
-      await agentMemoryRemoteService.deleteVectors(ids, this.collectionName);
-    }
+    logger.info('[mem0][vector] deleteCol start', { collectionName: this.collectionName });
+    const result = await agentMemoryRemoteService.deleteVectorCollection(this.collectionName);
     await this.writeCache({ userId: cache.userId, records: {} });
     try {
       await rm(this.cacheFilePath, { force: true });
     } catch {
       // ignore cleanup failures
     }
-    logger.info('[mem0][vector] deleteCol success', { count: ids.length });
+    logger.info('[mem0][vector] deleteCol success', { count: result.deleted });
   }
 
   async list(filters?: SearchFilters, topK = 100): Promise<[VectorStoreResult[], number]> {
-    const cache = await this.readCache();
-    const all = Object.values(cache.records)
-      .map((item) => ({
-        id: item.id,
-        payload: this.normalizePayload(item.payload),
-      }))
-      .filter((item) => this.matchesFilters(item.payload, filters));
-    logger.info('[mem0][vector] list', {
-      total: all.length,
-      topK,
-      filters,
-    });
-    return [all.slice(0, topK), all.length];
+    try {
+      const response = await agentMemoryRemoteService.listVectors({
+        collectionName: this.collectionName,
+        // 拉取服务端允许的最大窗口后再应用 mem0 的扩展 payload filter。
+        // 服务端结构化字段会先过滤，减少无关记录。
+        topK: 100,
+        agentId: this.readFilterString(filters, 'agent_id', 'agentId'),
+        runId: this.readFilterString(filters, 'run_id', 'runId'),
+        sessionId: this.readFilterString(filters, 'session_id', 'sessionId', 'sessionKey'),
+        memoryTypes: this.readMemoryTypeFilters(filters),
+      });
+      const cache = await this.readCache();
+      const all = response.items.map((item) => {
+        const payload = this.payloadFromRemote(item, cache.records[item.recordId]?.payload);
+        cache.records[item.recordId] = { id: item.recordId, payload };
+        return { id: item.recordId, payload };
+      }).filter((item) => this.matchesFilters(item.payload, filters));
+      const results = all.slice(0, topK);
+      await this.writeCache(cache);
+      logger.info('[mem0][vector] list remote success', {
+        count: results.length,
+        total: all.length,
+        topK,
+        filters,
+      });
+      return [results, all.length];
+    } catch (error) {
+      logger.warn('[mem0][vector] list remote failed, falling back to cache', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      const cache = await this.readCache();
+      const all = Object.values(cache.records)
+        .map((item) => ({
+          id: item.id,
+          payload: this.normalizePayload(item.payload),
+        }))
+        .filter((item) => this.matchesFilters(item.payload, filters));
+      return [all.slice(0, topK), all.length];
+    }
   }
 
   async getUserId(): Promise<string> {
@@ -492,6 +533,21 @@ class StoMemoryCenterVectorStoreProvider implements VectorStore {
     });
   }
 
+  /** 服务端字段具有最终权威性；缓存仅补充旧记录未同步的扩展 payload。 */
+  private payloadFromRemote(
+    item: AgentMemorySearchResultItem,
+    cachedPayload?: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const embeddedPayload = item.metadata?.payload && typeof item.metadata.payload === 'object'
+      ? item.metadata.payload as Record<string, unknown>
+      : undefined;
+    return this.normalizePayload({
+      ...(cachedPayload || {}),
+      ...(embeddedPayload || {}),
+      ...this.rehydratePayload(item),
+    });
+  }
+
   private readString(payload: Record<string, unknown>, ...keys: string[]): string | undefined {
     for (const key of keys) {
       if (typeof payload[key] === 'string' && payload[key].trim()) {
@@ -499,6 +555,24 @@ class StoMemoryCenterVectorStoreProvider implements VectorStore {
       }
     }
     return undefined;
+  }
+
+  private readFilterString(filters: SearchFilters | undefined, ...keys: string[]): string | undefined {
+    const values = filters as Record<string, unknown> | undefined;
+    return values ? this.readString(values, ...keys) : undefined;
+  }
+
+  private readMemoryTypeFilters(filters?: SearchFilters): string[] | undefined {
+    const values = filters as Record<string, unknown> | undefined;
+    if (!values) {
+      return undefined;
+    }
+    const value = values.memoryTypes ?? values.memory_types ?? values.memoryScope ?? values.memory_type;
+    if (Array.isArray(value)) {
+      const items = value.filter((item): item is string => typeof item === 'string' && Boolean(item.trim()));
+      return items.length > 0 ? items : undefined;
+    }
+    return typeof value === 'string' && value.trim() ? [value] : undefined;
   }
 
   private matchesFilters(payload: Record<string, unknown>, filters?: SearchFilters): boolean {

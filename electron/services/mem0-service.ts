@@ -62,9 +62,13 @@ async function ensureJsonFile(path: string, fallbackValue: unknown): Promise<voi
 
 async function tryLoadMem0Module(): Promise<{ module: Mem0ModuleShape | null; reason: string | null }> {
   try {
-    const dynamicImport = new Function('specifier', 'return import(specifier);') as (specifier: string) => Promise<Mem0ModuleShape>;
-    const loaded = await dynamicImport('mem0ai/oss');
-    return { module: loaded, reason: null };
+    // Keep every runtime peer imported by `mem0ai/oss` in the root `dependencies`.
+    // electron-builder only follows dependencies/optionalDependencies when building
+    // app.asar, so pnpm's auto-installed mem0 peer providers are otherwise omitted.
+    // The official OSS entry is externalized in the Electron main-process build so
+    // this stays a runtime-loaded optional SDK instead of being bundled twice.
+    const loaded = await import('mem0ai/oss');
+    return { module: loaded as Mem0ModuleShape, reason: null };
   } catch (error) {
     return {
       module: null,
