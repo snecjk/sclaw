@@ -82,6 +82,13 @@ export class Mem0Service {
   private memoryClient: unknown | null = null;
   private sdkStatus: { available: boolean; reason: string | null } = { available: false, reason: null };
 
+  async reinitializeAfterAuthChange(): Promise<Mem0ServiceStatus> {
+    logger.info('[mem0] reinitialize after auth change');
+    this.bootstrapCache = null;
+    this.memoryClient = null;
+    return await this.initialize();
+  }
+
   getStoragePaths(): Mem0StoragePaths {
     return buildStoragePaths();
   }
@@ -129,7 +136,7 @@ export class Mem0Service {
     logger.info('[mem0] initialize start');
     const paths = await this.ensureStorageLayout();
     const [bootstrap, sdk] = await Promise.all([
-      this.getBootstrap(false).catch(() => null),
+      this.getBootstrap(false),
       tryLoadMem0Module(),
     ]);
     logger.info('[mem0] initialize dependencies resolved', {

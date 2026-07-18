@@ -6,9 +6,20 @@ import { agentMemoryOrchestrator } from '../../services/agent-memory-orchestrato
 import { agentMemoryContextService } from '../../services/agent-memory-context-service';
 import { memoryCaptureService } from '../../services/memory-capture-service';
 import { registerMemoryTurnEventObserver } from '../../services/memory-turn-event-observer';
+import { onAuthenticatedUserSet } from '../../utils/auth-store';
+
+let authListenerRegistered = false;
 
 export function registerAgentMemoryHandlers(gatewayManager: GatewayManager): void {
   registerMemoryTurnEventObserver(gatewayManager);
+  if (!authListenerRegistered) {
+    authListenerRegistered = true;
+    onAuthenticatedUserSet(() => {
+      void agentMemoryContextService.reinitializeAfterLogin().catch((error) => {
+        console.warn('[agent-memory] login reinitialize failed:', error);
+      });
+    });
+  }
   agentMemoryContextService.warmup();
   void memoryCaptureService.recover(gatewayManager).catch(() => undefined);
   ipcMain.handle('agent-memory:status', async () => {

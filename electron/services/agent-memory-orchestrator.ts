@@ -59,6 +59,10 @@ export class AgentMemoryOrchestrator {
     return await mem0Service.initialize();
   }
 
+  async reinitializeAfterAuthChange() {
+    return await mem0Service.reinitializeAfterAuthChange();
+  }
+
   async getStatus() {
     return await mem0Service.getStatus();
   }
