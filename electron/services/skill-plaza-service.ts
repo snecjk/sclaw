@@ -1100,6 +1100,64 @@ export class SkillPlazaService {
     };
   }
 
+  /**
+   * 轻量路径：按给定 slug 集合读取本地 install/版本状态，**不**做 category enrichment、
+   * **不**调远端（getCategories / fetchPlazaSkillMapForLocalEnrichment / getSkillDetail 全部跳过）。
+   * 供首页推荐位等「只需 installed / installedVersion / updateAvailable、不用分类」的场景使用。
+   * 未安装的 slug 不返回（消费方靠缺省判定 installed=false）。
+   */
+  async getLocalSkillsBySlugs(slugs: string[]): Promise<PlazaListResult> {
+    const installedSlugs = this.getInstalledSlugs();
+    const enabledSlugs = this.getEnabledSlugs();
+    const lockEntries = readLockJsonSkillEntries(this.configDir);
+    const disabledDir = this.getDisabledDir();
+
+    const skills: SkillSummary[] = [];
+
+    for (const slug of slugs) {
+      if (!slug || !installedSlugs.has(slug)) continue;
+
+      const isEnabled = enabledSlugs.has(slug);
+      const baseDir = isEnabled ? this.skillsDir : disabledDir;
+      const skillDirPath = path.join(baseDir, slug);
+      const lockInfo = lockEntries.get(slug);
+      const isStoMarketplaceInstall = lockInfo?.source === 'sto-marketplace';
+      const lockVersion = isStoMarketplaceInstall ? lockInfo?.version : undefined;
+      const skillMdVersion =
+        !isPreinstalledSkill(skillDirPath) ? readSkillMdVersion(skillDirPath) : null;
+      const installedVersion = resolveInstalledVersionForCompare(lockVersion, skillMdVersion) || undefined;
+
+      const summary = readLocalSkillSummary(baseDir, slug);
+
+      skills.push({
+        slug,
+        title: summary?.title || slug,
+        description: summary?.description || '',
+        category: null,
+        categoryCode: null,
+        source: 'official',
+        installed: true,
+        enabled: isEnabled,
+        points: summary?.points ?? 8,
+        icon: summary?.icon,
+        defaultPrompt: summary?.defaultPrompt || slug,
+        installedVersion,
+        // 远端版本由消费方（首页 hook）自行拉云端对比，此处不填
+        version: undefined,
+        updateAvailable: false,
+      });
+    }
+
+    return {
+      skills,
+      categoryCounts: {},
+      hasMore: false,
+      page: 1,
+      pageSize: skills.length,
+      total: skills.length,
+    };
+  }
+
   async getSkillDetail(slug: string): Promise<SkillDetail> {
     const detail = await this.client.getSkillDetail(slug);
     const withLocalState = this.overlayLocalState(detail);

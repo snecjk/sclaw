@@ -49,6 +49,19 @@ export async function fetchLocalSkills(): Promise<PlazaListResult> {
   return res.data || { skills: [], categoryCounts: {}, hasMore: false, page: 1, pageSize: 20 };
 }
 
+// GET /api/skill-plaza/local-skills-by-slugs?slugs=a,b,c
+// 轻量路径：只按给定 slug 读本地 install/版本状态，不做 category enrichment、不调远端。
+// 供首页推荐位等只需 installed / installedVersion / updateAvailable、不用分类的场景。
+export async function fetchLocalSkillsBySlugs(slugs: string[]): Promise<PlazaListResult> {
+  const qs = new URLSearchParams();
+  if (slugs.length) qs.set('slugs', slugs.join(','));
+  const res = await hostApiFetch<{ success: boolean; data?: PlazaListResult; error?: string }>(
+    `/api/skill-plaza/local-skills-by-slugs?${qs.toString()}`,
+  );
+  if (!res.success) throw new Error(res.error || 'Failed to fetch local skills by slugs');
+  return res.data || { skills: [], categoryCounts: {}, hasMore: false, page: 1, pageSize: 20 };
+}
+
 // GET /api/skill-plaza/skill/:slug
 export async function fetchSkillDetail(slug: string): Promise<SkillDetail> {
   const res = await hostApiFetch<{ success: boolean; data?: { skill: SkillDetail }; error?: string }>(

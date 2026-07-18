@@ -14,7 +14,7 @@
  *    标记当前 slug，loading 只影响被操作的那张卡。
  */
 import { useState, useRef, useEffect } from 'react';
-import { fetchSkillPlazaList, fetchLocalSkills } from '@/lib/skill-plaza-api';
+import { fetchSkillPlazaList, fetchLocalSkillsBySlugs } from '@/lib/skill-plaza-api';
 import { isRemoteVersionNewer } from '@/lib/skill-version';
 import type { SkillSummary } from '@/types/skill-plaza';
 import type { RecommendItem } from '@/lib/recommend-api';
@@ -102,7 +102,7 @@ export function useHomeRecommendSkillStatus(recommendItems: RecommendItem[]) {
 
       const [cloudSkills, localResult] = await Promise.all([
         cloudPromise,
-        fetchLocalSkills(),
+        fetchLocalSkillsBySlugs(skillSlugs),
       ]);
 
       if (controller.signal.aborted) return;
