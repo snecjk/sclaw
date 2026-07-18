@@ -316,6 +316,7 @@ class StoMemoryCenterVectorStoreProvider implements VectorStore {
   }
 
   async keywordSearch(): Promise<VectorStoreResult[] | null> {
+    // TODO 待接入
     return null;
   }
 
