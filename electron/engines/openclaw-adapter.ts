@@ -3,6 +3,12 @@ import { join } from 'node:path';
 import { getOpenClawConfigDir } from '../utils/paths';
 import type { EngineAdapter, EngineAdapterContext, EngineSendWithMediaParams, EngineSessionSummary } from './types';
 import { ensureProjectAgentForSessionKey } from '../services/project-agent-service';
+import { logger } from '../utils/logger';
+import {
+  AGENT_EXECUTION_MEMORY_CONTEXT_MARKER,
+  AGENT_MEMORY_CONTEXT_MARKER,
+  appendAgentMemoryBlock,
+} from '../../shared/agent-memory-prompt';
 
 const VISION_MIME_TYPES = new Set([
   'image/png',
@@ -153,6 +159,15 @@ function sessionsFromOpenClawStoreMetadata(
 
 export const openClawAdapter: EngineAdapter = {
   type: 'openclaw',
+
+  prepareMemoryInjection(params, memory) {
+    let message = appendAgentMemoryBlock(params.message, memory.preference, AGENT_MEMORY_CONTEXT_MARKER);
+    message = appendAgentMemoryBlock(message, memory.execution, AGENT_EXECUTION_MEMORY_CONTEXT_MARKER);
+    if (memory.preference || memory.execution) {
+      logger.info(`[agent-memory][openclaw] message after memory injection:\n${message}`);
+    }
+    return { ...params, message };
+  },
 
   async listSessions(ctx: EngineAdapterContext) {
     const metadataByKey = await loadOpenClawSessionStoreMetadata();

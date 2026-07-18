@@ -3,7 +3,6 @@ import type { ChatGet, ChatSet } from './store-api';
 import type { RawMessage } from './types';
 import { getSessionRuntimeState } from './session-runtime';
 import { recordTerminalRun } from './run-lifecycle';
-import { discardAgentMemoriesForAbnormalTurn } from '@/lib/agent-execution-memory';
 
 export function handleForegroundFinalWithoutMessage(input: {
   get: ChatGet;
@@ -21,8 +20,7 @@ export function handleForegroundFinalWithoutMessage(input: {
     pendingFinal: true,
   });
   // A message-less final is only a transport fragment, not proof that the
-  // run completed normally. Memory capture waits for agent.completed or a
-  // successful history reconciliation.
+  // run completed normally. Wait for agent.completed or history reconciliation.
   get().loadHistory();
 }
 
@@ -78,11 +76,6 @@ export function handleForegroundErrorEvent(input: {
       const state = get();
       const runtime = getSessionRuntimeState(state.runtimeBySessionKey, sessionKey);
       if (runtime.sending && !runtime.streamingMessage && (!runId || runtime.activeRunId === runId)) {
-        discardAgentMemoriesForAbnormalTurn({
-          sessionKey,
-          runId: runId || runtime.activeRunId,
-          reason: 'failed',
-        });
         clearHistoryPoll();
         setRuntimePatch(set, sessionKey, {
           sending: false,
@@ -99,11 +92,6 @@ export function handleForegroundErrorEvent(input: {
   }
 
   clearHistoryPoll();
-  discardAgentMemoriesForAbnormalTurn({
-    sessionKey,
-    runId,
-    reason: 'failed',
-  });
   setRuntimePatch(set, sessionKey, {
     sending: false,
     aborting: false,
@@ -125,18 +113,12 @@ export function handleForegroundAbortedEvent(input: {
   const {
     clearErrorRecoveryTimer,
     clearHistoryPoll,
-    runId,
     sessionKey,
     set,
   } = input;
 
   clearHistoryPoll();
   clearErrorRecoveryTimer();
-  discardAgentMemoriesForAbnormalTurn({
-    sessionKey,
-    runId,
-    reason: 'aborted',
-  });
   setRuntimePatch(set, sessionKey, {
     sending: false,
     aborting: false,
