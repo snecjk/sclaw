@@ -16,12 +16,12 @@ import {
   agentMemoryRemoteService,
   type AgentMemorySearchResultItem,
 } from './agent-memory-remote-service';
+import { STO_MEMORY_CENTER_LLM_MODEL } from './sto-memory-center-llm';
 import { logger } from '../utils/logger';
 
 const MEM0_CUSTOM_LLM_PROVIDER = 'sto_memory_center_llm';
 const MEM0_CUSTOM_EMBEDDER_PROVIDER = 'sto_memory_center_embedder';
 const MEM0_CUSTOM_VECTOR_PROVIDER = 'sto_memory_center_vector';
-const STO_MEMORY_CENTER_LLM_MODEL = 'qwen3.6-plus';
 const STO_CLAW_MEMORY_CUSTOM_INSTRUCTIONS = `
 你是 sto-claw 的长期记忆抽取器。只抽取稳定、可长期复用的用户记忆。
 
