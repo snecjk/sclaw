@@ -16,12 +16,12 @@ import {
   agentMemoryRemoteService,
   type AgentMemorySearchResultItem,
 } from './agent-memory-remote-service';
-import { getLoginSyncedStoModel } from './providers/login-synced-sto-model';
 import { logger } from '../utils/logger';
 
 const MEM0_CUSTOM_LLM_PROVIDER = 'sto_memory_center_llm';
 const MEM0_CUSTOM_EMBEDDER_PROVIDER = 'sto_memory_center_embedder';
 const MEM0_CUSTOM_VECTOR_PROVIDER = 'sto_memory_center_vector';
+const STO_MEMORY_CENTER_LLM_MODEL = 'qwen3.6-plus';
 const STO_CLAW_MEMORY_CUSTOM_INSTRUCTIONS = `
 你是 sto-claw 的长期记忆抽取器。只抽取稳定、可长期复用的用户记忆。
 
@@ -95,12 +95,8 @@ function normalizeMessageContent(content: string | { type: string; image_url?: {
 }
 
 class StoMemoryCenterLlmProvider implements LLM {
-  private async resolveModel(): Promise<string> {
-    const model = await getLoginSyncedStoModel();
-    if (!model) {
-      throw new Error('STO model is unavailable; complete login model sync first');
-    }
-    return model;
+  private resolveModel(): string {
+    return STO_MEMORY_CENTER_LLM_MODEL;
   }
 
   async generateResponse(
@@ -108,7 +104,7 @@ class StoMemoryCenterLlmProvider implements LLM {
     responseFormat?: { type: string },
     tools?: any[],
   ): Promise<string | LLMResponse> {
-    const model = await this.resolveModel();
+    const model = this.resolveModel();
     logger.info('[mem0][llm] generateResponse start', {
       model,
       messageCount: messages.length,
