@@ -334,7 +334,7 @@ export class Mem0Service {
       historyDbPath: paths.historyDbPath,
       cacheDir: paths.vectorCacheDir,
       userIdFilePath: paths.userIdPath,
-      llmModelSource: 'login-synced-sto-provider',
+      llmModelSource: 'fixed-qwen3.6-plus',
       embeddingModel: typeof bootstrap?.embedder?.model === 'string' ? bootstrap.embedder.model : undefined,
       embeddingDimension: typeof bootstrap?.embedder?.dimension === 'number' ? bootstrap.embedder.dimension : 1536,
     });
