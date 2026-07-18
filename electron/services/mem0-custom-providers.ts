@@ -16,6 +16,7 @@ import {
   agentMemoryRemoteService,
   type AgentMemorySearchResultItem,
 } from './agent-memory-remote-service';
+import { getLoginSyncedStoModel } from './providers/login-synced-sto-model';
 import { logger } from '../utils/logger';
 
 const MEM0_CUSTOM_LLM_PROVIDER = 'sto_memory_center_llm';
@@ -94,25 +95,12 @@ function normalizeMessageContent(content: string | { type: string; image_url?: {
 }
 
 class StoMemoryCenterLlmProvider implements LLM {
-  private readonly configuredModel?: string;
-  private resolvedModel: string | null = null;
-
-  constructor(config: LLMConfig) {
-    this.configuredModel = typeof config.model === 'string' && config.model.trim() ? config.model.trim() : undefined;
-  }
-
   private async resolveModel(): Promise<string> {
-    if (this.resolvedModel) {
-      return this.resolvedModel;
+    const model = await getLoginSyncedStoModel();
+    if (!model) {
+      throw new Error('STO model is unavailable; complete login model sync first');
     }
-    if (this.configuredModel) {
-      this.resolvedModel = this.configuredModel;
-      return this.resolvedModel;
-    }
-    const result = await agentMemoryRemoteService.listModels();
-    const firstModelId = result.data?.find((item) => typeof item.id === 'string' && item.id.trim())?.id;
-    this.resolvedModel = typeof firstModelId === 'string' && firstModelId.trim() ? firstModelId : 'qwen3.6-plus';
-    return this.resolvedModel;
+    return model;
   }
 
   async generateResponse(
@@ -618,7 +606,7 @@ export function patchMem0Factories(ossModule: OssModuleShape): void {
 
   ossModule.LLMFactory.create = (provider: string, config: LLMConfig) => {
     if (provider === MEM0_CUSTOM_LLM_PROVIDER) {
-      return new StoMemoryCenterLlmProvider(config);
+      return new StoMemoryCenterLlmProvider();
     }
     return originalLlmCreate(provider, config);
   };

@@ -330,12 +330,11 @@ export class Mem0Service {
       logger.warn('[mem0] createMemoryClient skipped: sdkModule.Memory missing');
       return null;
     }
-    const llmModel = await this.resolveLlmModel().catch(() => undefined);
     logger.info('[mem0] createMemoryClient config', {
       historyDbPath: paths.historyDbPath,
       cacheDir: paths.vectorCacheDir,
       userIdFilePath: paths.userIdPath,
-      llmModel,
+      llmModelSource: 'login-synced-sto-provider',
       embeddingModel: typeof bootstrap?.embedder?.model === 'string' ? bootstrap.embedder.model : undefined,
       embeddingDimension: typeof bootstrap?.embedder?.dimension === 'number' ? bootstrap.embedder.dimension : 1536,
     });
@@ -344,23 +343,12 @@ export class Mem0Service {
         historyDbPath: paths.historyDbPath,
         cacheDir: paths.vectorCacheDir,
         userIdFilePath: paths.userIdPath,
-        llmModel,
         embeddingModel: typeof bootstrap?.embedder?.model === 'string' ? bootstrap.embedder.model : undefined,
         embeddingDimension: typeof bootstrap?.embedder?.dimension === 'number' ? bootstrap.embedder.dimension : 1536,
       }),
     );
   }
 
-  private async resolveLlmModel(): Promise<string | undefined> {
-    const result = await agentMemoryRemoteService.listModels();
-    const first = result.data?.find((item) => typeof item.id === 'string' && item.id.trim()) as { id?: string } | undefined;
-    const model = typeof first?.id === 'string' ? first.id : undefined;
-    logger.info('[mem0] resolveLlmModel', {
-      model,
-      modelCount: Array.isArray(result.data) ? result.data.length : 0,
-    });
-    return model;
-  }
 }
 
 export const mem0Service = new Mem0Service();
