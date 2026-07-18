@@ -21,6 +21,7 @@ import { PREINSTALLED_MARKER_NAME, USER_UPLOAD_MARKER_NAME } from './sto-skill-s
 import { parseSkillFrontmatter, readSkillMdFrontmatter } from '../utils/skill-frontmatter';
 import { pickNavCategoryFromApiSkill } from '../../shared/skill-plaza-category-resolve';
 import { KeyedTtlCache, mapWithConcurrency } from './skill-plaza-cache';
+import { schedulePlazaSkillAutoSync } from './plaza-skill-auto-sync';
 
 // ---------------------------------------------------------------------------
 // Auth-not-ready sentinel
@@ -75,6 +76,10 @@ export interface SkillSummary {
   version?: string;
   installedVersion?: string;
   updateAvailable?: boolean;
+  /** Remote plaza `force_update` — auto-upgrade when local lags. */
+  forceUpdate?: boolean;
+  /** Remote plaza `is_builtin` — auto-install when missing (not local preinstall). */
+  isBuiltin?: boolean;
 }
 
 export interface SkillDetail extends SkillSummary {
@@ -334,6 +339,8 @@ function normalizeSkillSummary(skill: Partial<SkillSummary>): SkillSummary {
     version: skill.version,
     installedVersion: skill.installedVersion,
     updateAvailable: skill.updateAvailable ?? false,
+    forceUpdate: skill.forceUpdate ?? false,
+    isBuiltin: skill.isBuiltin ?? false,
   };
 }
 
@@ -1287,6 +1294,9 @@ export class SkillPlazaService {
     } else if (isQitaFilter) {
       total = (result.total || 0) + listNewLocalOthers.length;
     }
+
+    // Fire-and-forget: force_update / is_builtin auto install after local overlay.
+    schedulePlazaSkillAutoSync(skills);
 
     return {
       ...result,

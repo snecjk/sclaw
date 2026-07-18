@@ -23,6 +23,8 @@ export interface SkillSummary {
   version?: string;
   installedVersion?: string;
   updateAvailable?: boolean;
+  forceUpdate?: boolean;
+  isBuiltin?: boolean;
 }
 
 export interface SkillDetail extends SkillSummary {
