@@ -12,6 +12,7 @@ import { getAgentPreferredModel } from '../utils/agent-config';
 import { logger } from '../utils/logger';
 import { getClaudeConfigDir } from '../utils/paths';
 import { getApiKey } from '../utils/secure-storage';
+import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { resolveAvailableClaudeModel } from './claude-model-selection';
 
 type ClaudeAgentSdk = typeof import('@anthropic-ai/claude-agent-sdk');
@@ -125,6 +126,7 @@ async function buildClaudeEnvForAccount(
     ...process.env,
     CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
   };
+  applySaiClientIdEnv(base as Record<string, string | undefined>);
   const resolvedAccount = account ?? await getProviderAccount(accountId);
   if (!resolvedAccount) return base;
 
