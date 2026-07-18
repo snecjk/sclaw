@@ -5,9 +5,9 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { getOpenClawConfigDir, getOpenClawSkillsDir, getOpenClawUserSkillsDir, getOpenClawUserDisabledDir } from '../utils/paths';
+import { getOpenClawConfigDir, getOpenClawSkillsDir, getSkillsManifestPath } from '../utils/paths';
 import { getCurrentActiveUserCode } from './user-skill-workspace';
-import { setSkillsEnabled, readPreinstalledManifestSlugs } from '../utils/skill-config';
+import { readPreinstalledManifestSlugs } from '../utils/skill-config';
 import { getStoToken, getAuthState, isSiteUser } from '../utils/auth-store';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
@@ -407,6 +407,65 @@ function readLockJsonSkillEntries(configDir: string): Map<string, {
   return entries;
 }
 
+/**
+ * Merge legacy lock.json with skills-store manifest (canonical).
+ * Manifest wins when present so plaza update badges track SkillManager installs.
+ */
+function readInstalledSkillMetaEntries(
+  configDir: string,
+  userCode: string | null,
+): Map<string, {
+  version?: string;
+  source?: string;
+  versionSource?: string;
+}> {
+  const entries = readLockJsonSkillEntries(configDir);
+  try {
+    const manifestPath = getSkillsManifestPath();
+    if (!fs.existsSync(manifestPath)) {
+      return entries;
+    }
+    const data = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as {
+      global?: Record<string, {
+        version?: string;
+        source?: string;
+        versionSource?: string;
+      }>;
+      users?: Record<string, Record<string, {
+        version?: string;
+        source?: string;
+        versionSource?: string;
+      }>>;
+    };
+
+    const apply = (
+      skills: Record<string, {
+        version?: string;
+        source?: string;
+        versionSource?: string;
+      }> | undefined,
+    ) => {
+      if (!skills) return;
+      for (const [slug, info] of Object.entries(skills)) {
+        if (!info || typeof info !== 'object') continue;
+        entries.set(slug, {
+          version: info.version,
+          source: info.source,
+          versionSource: info.versionSource,
+        });
+      }
+    };
+
+    apply(data.global);
+    if (userCode && data.users?.[userCode]) {
+      apply(data.users[userCode]);
+    }
+  } catch (err) {
+    logger.warn('[SkillPlazaService] Failed to read skills-store manifest:', err);
+  }
+  return entries;
+}
+
 function readSkillsDirSlugs(skillsDir: string): Set<string> {
   const slugs = new Set<string>();
   try {
@@ -593,9 +652,10 @@ export class SkillPlazaService {
     return path.join(this.configDir, 'skills-disabled');
   }
 
-  /** Read install/enable/lock state once for reuse across a whole request. */
-  private buildLocalStateSnapshot(): LocalStateSnapshot {
-    const lockEntries = readLockJsonSkillEntries(this.configDir);
+  /** Read install/enable/lock+manifest state once for reuse across a whole request. */
+  private async buildLocalStateSnapshot(): Promise<LocalStateSnapshot> {
+    const userCode = await getCurrentActiveUserCode();
+    const lockEntries = readInstalledSkillMetaEntries(this.configDir, userCode);
     const fromDir = readSkillsDirSlugs(this.skillsDir);
     const fromDisabled = readDisabledDirSlugs(this.getDisabledDir());
     return {
@@ -606,11 +666,10 @@ export class SkillPlazaService {
     };
   }
 
-  private overlayLocalState<T extends SkillSummary>(skill: T, snapshot?: LocalStateSnapshot): T {
-    const snap = snapshot ?? this.buildLocalStateSnapshot();
-    const installedSlugs = snap.installedSlugs;
-    const enabledSlugs = snap.enabledSlugs;
-    const lockEntries = snap.lockEntries;
+  private overlayLocalState<T extends SkillSummary>(skill: T, snapshot: LocalStateSnapshot): T {
+    const installedSlugs = snapshot.installedSlugs;
+    const enabledSlugs = snapshot.enabledSlugs;
+    const lockEntries = snapshot.lockEntries;
     const installed = installedSlugs.has(skill.slug);
     // overlayLocalState 仅处理 plaza API 项，不应因 lock 缺失把市场安装误判为「纯本地自建」
     const source: 'official' | 'mine' = skill.source === 'mine' ? 'mine' : 'official';
@@ -647,10 +706,9 @@ export class SkillPlazaService {
   private normalizeRemotePlazaSkills(
     skills: SkillSummary[],
     labelToSlug: Map<string, string>,
-    snapshot?: LocalStateSnapshot,
+    snapshot: LocalStateSnapshot,
   ): SkillSummary[] {
-    const snap = snapshot ?? this.buildLocalStateSnapshot();
-    return skills.map((s) => this.overlayLocalState(s, snap)).map((s) => {
+    return skills.map((s) => this.overlayLocalState(s, snapshot)).map((s) => {
       if (OFFICE_SKILL_SLUGS.has(s.slug)) {
         return { ...s, category: OFFICE_CATEGORY_LABEL, categoryCode: OFFICE_CATEGORY_SLUG };
       }
@@ -963,7 +1021,7 @@ export class SkillPlazaService {
     const localOfficeSkills = this.getOfficeSkillsFromLocal(params.q);
     const localPreinstalledOthers = this.getPreinstalledNonOfficeSkillsFromLocal(params.q);
     // Read local install state once and reuse it while normalizing every skill.
-    const snapshot = this.buildLocalStateSnapshot();
+    const snapshot = await this.buildLocalStateSnapshot();
 
     let labelToSlug = new Map<string, string>();
     try {
@@ -1061,7 +1119,7 @@ export class SkillPlazaService {
   async getLocalSkills(): Promise<PlazaListResult> {
     await this.assertAuthReady();
     // Read install/enable/lock state once for the whole request.
-    const snapshot = this.buildLocalStateSnapshot();
+    const snapshot = await this.buildLocalStateSnapshot();
     const activeSlugs = snapshot.enabledSlugs;
     const disabledSlugs = snapshot.disabledSlugs;
     const allSlugs = new Set([...activeSlugs, ...disabledSlugs]);
@@ -1225,7 +1283,8 @@ export class SkillPlazaService {
 
   async getSkillDetail(slug: string): Promise<SkillDetail> {
     const detail = await this.client.getSkillDetail(slug);
-    const withLocalState = this.overlayLocalState(detail);
+    const snapshot = await this.buildLocalStateSnapshot();
+    const withLocalState = this.overlayLocalState(detail, snapshot);
     if (OFFICE_SKILL_SLUGS.has(slug)) {
       return { ...withLocalState, category: OFFICE_CATEGORY_LABEL, categoryCode: OFFICE_CATEGORY_SLUG };
     }
@@ -1248,49 +1307,8 @@ export class SkillPlazaService {
   }
 
   async toggleSkillEnabled(slug: string, enabled: boolean): Promise<void> {
-    // Enable/disable moves the skill dir, changing overlay state.
     this.invalidateLocalCaches();
-    const disabledDir = this.getDisabledDir();
-    const activeDir = this.skillsDir;
-    const srcDir = enabled ? path.join(disabledDir, slug) : path.join(activeDir, slug);
-    const destDir = enabled ? path.join(activeDir, slug) : path.join(disabledDir, slug);
-
-    if (!fs.existsSync(srcDir)) {
-      // 源目录不存在，可能只是 openclaw.json 里的标记，同步一下即可
-      await setSkillsEnabled([slug], enabled);
-      return;
-    }
-
-    if (!fs.existsSync(disabledDir)) {
-      fs.mkdirSync(disabledDir, { recursive: true });
-    }
-
-    try {
-      fs.renameSync(srcDir, destDir);
-    } catch (err) {
-      logger.error(`[SkillPlazaService] Failed to rename ${srcDir} -> ${destDir}:`, err);
-    }
-
-    // Also toggle in user workspace if applicable
-    const userCode = await getCurrentActiveUserCode();
-    if (userCode) {
-      const userActiveDir = getOpenClawUserSkillsDir(userCode);
-      const userDisabledDir = getOpenClawUserDisabledDir(userCode);
-      const userSrcDir = enabled ? path.join(userDisabledDir, slug) : path.join(userActiveDir, slug);
-      const userDestDir = enabled ? path.join(userActiveDir, slug) : path.join(userDisabledDir, slug);
-
-      if (fs.existsSync(userSrcDir)) {
-        if (!fs.existsSync(userDisabledDir)) {
-          fs.mkdirSync(userDisabledDir, { recursive: true });
-        }
-        try {
-          fs.renameSync(userSrcDir, userDestDir);
-        } catch (err) {
-          logger.error(`[SkillPlazaService] Failed to rename user workspace ${userSrcDir} -> ${userDestDir}:`, err);
-        }
-      }
-    }
-
-    await setSkillsEnabled([slug], enabled);
+    const { getSkillManager } = await import('./skills/skill-manager');
+    await getSkillManager().setEnabled(slug, enabled);
   }
 }

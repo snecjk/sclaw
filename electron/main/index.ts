@@ -513,6 +513,11 @@ async function initialize(): Promise<void> {
   // clawHubService instance is passed directly to startHostApiServer below.
   hostEventBus = heb;
 
+  // Wire Gateway reload into OpenClaw skill adapter batches.
+  void import('../services/skills/adapters/engine-skill-adapter').then(({ setGatewayReloaderForSkills }) => {
+    setGatewayReloaderForSkills(gm);
+  }).catch(() => undefined);
+
   // Initialize Telemetry (non-blocking)
   // Note: Telemetry is disabled by default for faster cold starts
   void initTelemetry().catch((error) => {
@@ -624,6 +629,17 @@ async function initialize(): Promise<void> {
     await cleanupRetiredSkillsAndPlugins({ skipPluginDirs: true }).catch((error) => {
       logger.warn('Failed to cleanup retired skills/plugins:', error);
     });
+
+    // One-time migration into neutral skills-store, then full-engine reconcile.
+    try {
+      const { migrateSkillsStoreIfNeeded } = await import('../services/skills/migration');
+      const migration = await migrateSkillsStoreIfNeeded();
+      if (migration.migrated) {
+        logger.info('Migrated skills into neutral skills-store');
+      }
+    } catch (error) {
+      logger.warn('Failed to migrate skills store:', error);
+    }
 
     await ensureBuiltinSkillsInstalled().catch((error) => {
       logger.warn('Failed to install built-in skills:', error);

@@ -602,13 +602,13 @@ export interface ActivateWorkspaceResult {
 /**
  * Activate a user's skill workspace.
  *
- * Steps:
- * 1. If legacy global skills exist and users/ is empty, migrate to this user.
- * 2. If there is a previously active user, sync mount point back to that user.
- * 3. Clear mount point (preserve preinstalled skills).
- * 4. Copy new user's workspace to mount point.
- * 5. Fetch cloud installed list and download missing skills.
- * 6. Update current active user.
+ * After the neutral skills-store migration:
+ * 1. Persist active user code
+ * 2. Download any cloud-missing skills via SkillManager
+ * 3. Reconcile all engine projections for the active user
+ *
+ * Legacy mount-point copy is retained as a best-effort fallback when the
+ * skills store has not been migrated yet.
  */
 export async function activateUserWorkspace(userCode: string): Promise<ActivateWorkspaceResult> {
   const previousUserCode = await getCurrentActiveUserCode();
@@ -619,39 +619,65 @@ export async function activateUserWorkspace(userCode: string): Promise<ActivateW
     failed: [],
   };
 
-  // Save the current mount-point state back to whoever owns it before we clear it.
-  // This must also run on same-user re-login (previousUserCode === userCode) — e.g.
-  // after an app update forces re-auth — otherwise skills that only live on the
-  // global mount (such as ones generated via natural-language chat) would be wiped
-  // by clearMountPoint() below and never restored.
-  if (previousUserCode) {
-    await syncMountPointToUser(previousUserCode);  }
+  const { isSkillsStoreMigrated } = await import('./skills/migration');
+  const { getSkillManager } = await import('./skills/skill-manager');
+  const storeMigrated = isSkillsStoreMigrated();
 
-  // Migration
-  if (detectLegacyGlobalSkills()) {
-    await migrateLegacySkillsToUser(userCode);
-    result.migrated = true;
+  if (!storeMigrated) {
+    // Legacy path: sync mount point ↔ user workspace directories.
+    if (previousUserCode) {
+      await syncMountPointToUser(previousUserCode);
+    }
+    if (detectLegacyGlobalSkills()) {
+      await migrateLegacySkillsToUser(userCode);
+      result.migrated = true;
+    }
+    await ensureUserWorkspace(userCode);
+    clearMountPoint();
+    await copyUserToMountPoint(userCode);
+  } else {
+    await ensureUserWorkspace(userCode);
   }
 
-  // Ensure user workspace exists
-  await ensureUserWorkspace(userCode);
-
-  // Clear mount point and copy new user data
-  clearMountPoint();
-  await copyUserToMountPoint(userCode);
-
-  // Fetch cloud installed list and download missing skills
   try {
     const cloudSlugs = await fetchCloudInstalledList();
-    const downloadResult = await downloadMissingSkills(userCode, cloudSlugs);
-    result.downloaded = downloadResult.downloaded;
-    result.failed = downloadResult.failed;
+    if (storeMigrated) {
+      const manager = getSkillManager();
+      const { getSkillEntry, resolvePackageDir } = await import('./skills/canonical-store');
+      for (const slug of cloudSlugs) {
+        try {
+          const existing =
+            (await getSkillEntry({ slug, scope: 'user', userCode }))
+            || (await getSkillEntry({ slug, scope: 'global' }));
+          const packageDir = existing
+            ? resolvePackageDir(existing)
+            : resolvePackageDir({ slug, scope: 'user', userCode });
+          if (existing && fs.existsSync(path.join(packageDir, 'SKILL.md'))) {
+            continue;
+          }
+          await manager.install({ slug, force: false });
+          result.downloaded.push(slug);
+        } catch (err) {
+          result.failed.push(slug);
+          logger.warn(`[UserSkillWorkspace] Failed to install cloud skill ${slug}:`, err);
+        }
+      }
+    } else {
+      const downloadResult = await downloadMissingSkills(userCode, cloudSlugs);
+      result.downloaded = downloadResult.downloaded;
+      result.failed = downloadResult.failed;
+    }
   } catch (err) {
     logger.warn('[UserSkillWorkspace] Failed to sync with cloud installed list:', err);
   }
 
-  // Save current user
   await setCurrentActiveUserCode(userCode);
+
+  if (storeMigrated) {
+    await getSkillManager().reconcile({ userCode }).catch((err) => {
+      logger.warn('[UserSkillWorkspace] reconcile after activate failed:', err);
+    });
+  }
 
   return result;
 }

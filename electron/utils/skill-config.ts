@@ -9,7 +9,6 @@ import { readFile, writeFile, access, cp, mkdir } from 'fs/promises';
 import { existsSync, readFileSync, cpSync, rmSync, watch } from 'fs';
 import { constants } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
 import { createHash } from 'node:crypto';
 import { app } from 'electron';
 import { getOpenClawDir, getResourcesDir, getOpenClawConfigDir, ensureDir } from './paths';
@@ -365,25 +364,9 @@ async function readPreinstalledLockVersions(sourceRoot: string): Promise<Map<str
     }
 }
 
-async function tryReadMarker(markerPath: string): Promise<PreinstalledMarker | null> {
-    if (!existsSync(markerPath)) {
-        return null;
-    }
-    try {
-        const raw = await readFile(markerPath, 'utf-8');
-        const parsed = JSON.parse(raw) as PreinstalledMarker;
-        if (!parsed?.slug || !parsed?.version) {
-            return null;
-        }
-        return parsed;
-    } catch {
-        return null;
-    }
-}
-
 /**
  * Ensure third-party preinstalled skills (bundled in app resources) are
- * deployed to ~/.stoclaw/openclaw/skills/<slug>/ as full directories.
+ * deployed through SkillManager into the neutral skills-store and engine projections.
  *
  * Policy:
  * - Local built-in skills ("local": true) are ALWAYS copied over the local
@@ -405,8 +388,11 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
     }
     const lockVersions = await readPreinstalledLockVersions(sourceRoot);
 
-    const targetRoot = join(getOpenClawConfigDir(), 'skills');
-    await mkdir(targetRoot, { recursive: true });
+    const { getSkillManager, PREINSTALLED_MARKER_NAME: MANAGER_PREINSTALLED_MARKER } = await import(
+        '../services/skills/skill-manager'
+    );
+    const { getSkillEntry, resolvePackageDir } = await import('../services/skills/canonical-store');
+    const manager = getSkillManager();
     const toEnable: string[] = [];
 
     for (const spec of skills) {
@@ -417,51 +403,46 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
             continue;
         }
 
-        const targetDir = join(targetRoot, spec.slug);
-        const targetManifest = join(targetDir, 'SKILL.md');
-        const markerPath = join(targetDir, PREINSTALLED_MARKER_NAME);
-
-        // Local built-in skills use a content hash so they upgrade automatically
-        // when the bundled SKILL.md changes, even without a lock file.
         const desiredVersion = spec.local
             ? hashFileSync(sourceManifest)
             : lockVersions.get(spec.slug)
                 || (spec.version || 'unknown').trim()
                 || 'unknown';
-        const marker = await tryReadMarker(markerPath);
 
-        if (existsSync(targetManifest)) {
-            if (spec.local) {
-                // Built-in local skill: overwrite the user's copy so the app
-                // version is always authoritative.
-                if (marker && marker.version === desiredVersion) {
-                    continue; // already up to date
-                }            } else {
-                // Remote skill: conservative, don't overwrite user-managed copies.
-                if (!marker) {                    continue;
-                }
-                if (marker.version === desiredVersion) {
-                    continue;
-                }                continue;
-            }
+        const existing = await getSkillEntry({ slug: spec.slug, scope: 'global' });
+        if (existing && existing.version === desiredVersion && !spec.local) {
+            continue;
+        }
+        if (existing && spec.local && existing.version === desiredVersion) {
+            continue;
+        }
+        if (!spec.local && existing && existing.source !== 'stoclaw-preinstalled') {
+            // Conservative: never overwrite user-managed skills.
+            continue;
         }
 
         try {
-            await mkdir(targetDir, { recursive: true });
-            await cp(sourceDir, targetDir, { recursive: true, force: true });
             const markerPayload: PreinstalledMarker = {
                 source: 'stoclaw-preinstalled',
                 slug: spec.slug,
                 version: desiredVersion,
                 installedAt: new Date().toISOString(),
             };
-            await writeFile(markerPath, `${JSON.stringify(markerPayload, null, 2)}\n`, 'utf-8');
+            await manager.installFromLocalDir({
+                slug: spec.slug,
+                sourceDir,
+                version: desiredVersion,
+                source: 'stoclaw-preinstalled',
+                enabled: Boolean(spec.autoEnable),
+                scope: 'global',
+                markerName: MANAGER_PREINSTALLED_MARKER || PREINSTALLED_MARKER_NAME,
+                markerPayload,
+            });
             if (spec.autoEnable) {
                 toEnable.push(spec.slug);
             }
-            // Also sync local built-in skills into OpenClaw's bundled skills directory
-            // so the Gateway marks them as bundled (shows in the "Built-in" tab).
-            // Skip when OpenClaw is packed in ASAR — paths are read-only archives.
+
+            // Also sync local built-in skills into OpenClaw's bundled skills directory.
             if (spec.local) {
                 const openclawRoot = getOpenClawDir();
                 if (!openclawRoot.endsWith('.asar')) {
@@ -471,8 +452,13 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
                     if (existsSync(bundledTarget)) {
                         rmSync(bundledTarget, { recursive: true, force: true });
                     }
-                    cpSync(sourceDir, bundledTarget, { recursive: true, dereference: true });                }
+                    cpSync(sourceDir, bundledTarget, { recursive: true, dereference: true });
+                }
             }
+
+            // Keep a projection marker on openclaw runtime copy if present.
+            const projected = resolvePackageDir({ slug: spec.slug, scope: 'global' });
+            void projected;
         } catch (error) {
             logger.warn(`Failed to install preinstalled skill ${spec.slug}:`, error);
         }
@@ -480,7 +466,9 @@ export async function ensurePreinstalledSkillsInstalled(): Promise<void> {
 
     if (toEnable.length > 0) {
         try {
-            await setSkillsEnabled(toEnable, true);
+            for (const slug of toEnable) {
+                await manager.setEnabled(slug, true);
+            }
         } catch (error) {
             logger.warn('Failed to auto-enable preinstalled skills:', error);
         }
