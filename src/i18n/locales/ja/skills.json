@@ -202,6 +202,23 @@
             "uninstallSuccess": "削除しました",
             "uninstallError": "削除に失敗しました"
         },
+        "upload": {
+            "sourceOptions": "アップロード元を選択",
+            "orChoose": "または選択",
+            "selectFile": "スキルファイルを選択",
+            "selectFileHint": ".zip ファイルまたは SKILL.md を複数選択可能",
+            "selectFolder": "スキルフォルダを選択",
+            "selectFolderHint": "SKILL.md を含むスキルフォルダを複数選択可能",
+            "recommended": "推奨",
+            "invalidSource": "有効な .zip、SKILL.md、または SKILL.md を含むスキルフォルダを選択してください",
+            "selectedFolderCount": "{{count}} 個のスキルフォルダを選択しました",
+            "selectedFileCount": "{{count}} 個のスキルファイルを選択しました",
+            "selectedItemNames": "{{names}}",
+            "selectedFolderNamesMore": "{{names}} など全 {{count}} フォルダ",
+            "selectedFileNamesMore": "{{names}} など全 {{count}} ファイル",
+            "batchUploading": "{{current}}/{{total}} をインストール中...",
+            "batchFailed": "{{completed}}/{{total}} が完了しました。残りのアップロードを停止しました：{{error}}"
+        },
         "loading": "読み込み中...",
         "syncingUserSkills": "スキルを同期しています…",
         "noSkills": "利用可能なスキルがありません"

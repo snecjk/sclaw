@@ -1,7 +1,7 @@
 /**
- * SidebarRecentSessionStatus — 会话状态位：运行中 / 失败（与未读红点互斥，三者都在标题左侧）。
+ * SidebarRecentSessionStatus — 会话状态位：运行中 / 失败（与未读红点互斥）。
  *
- * 使用位置：Sidebar「最近」「项目」标题前、任务执行子项标题前。
+ * 使用位置：Sidebar「最近」「项目」行尾 idle 槽（hover 时由「...」覆盖）。
  */
 import { AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';

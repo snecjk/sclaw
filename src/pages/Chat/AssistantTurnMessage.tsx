@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react';
 import type { RawMessage, AttachedFileMeta, ToolStatus } from '@/stores/chat';
+import type { SkillMeta } from '@/types/skill-meta';
 import { useChatStore } from '@/stores/chat';
 import { useChatSessionEngineType } from '@/hooks/use-chat-session-engine-type';
 import { ChatMessage } from './ChatMessage';
@@ -91,7 +92,7 @@ interface AssistantTurnMessageProps {
   activeStream?: ActiveTurnStream | null;
   onPreviewFile?: (file: AttachedFileMeta) => void;
   onCreateScheduledTask?: (workflowId: string) => void;
-  onEditMessage?: (text: string) => void;
+  onEditMessage?: (text: string, skillMeta?: SkillMeta) => void;
 }
 
 function collectActiveTurnStreamSources(

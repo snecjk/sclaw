@@ -25,6 +25,7 @@ import { getWindowState, trackWindowState } from './window';
 import { logger } from '../utils/logger';
 import { sanitizeMemoryFromChatPayload } from '../../shared/agent-memory-display';
 import { warmupNetworkOptimization } from '../utils/uv-env';
+import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { isQuitting, setQuitting } from './app-state';
 import { applyProxySettings } from './proxy';
 import { syncLaunchAtStartupSettingFromStore } from './launch-at-startup';
@@ -35,6 +36,8 @@ import {
   createMainWindowFocusState,
   requestSecondInstanceFocus,
 } from './main-window-focus';
+
+applySaiClientIdEnv(process.env as Record<string, string | undefined>);
 import {
   createQuitLifecycleState,
   markQuitCleanupCompleted,

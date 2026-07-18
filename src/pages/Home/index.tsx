@@ -1,80 +1,20 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
+import { useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { HomeAgentHubSurface } from './HomeAgentHubSurface';
-import { HomeSiteSurface } from './HomeSiteSurface';
-import { HomeHero } from './HomeHero';
-import { HomeSummaryCards } from './HomeSummaryCards';
-import { HomeComposer } from './HomeComposer';
-import { HomeMainConversation } from './HomeMainConversation';
-import { homeHubFooterShellClass, homeHubMainScrollClass, homeHubMainScrollHostClass } from './home-hub-surface-styles';
-import { useHomeConversationActive } from './use-home-conversation-active';
-import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
-import { useScheduledTasksStore } from '@/stores/scheduledTasks';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { cn } from '@/lib/utils';
 import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
-import { useBuiltinToolListener } from '@/hooks/use-builtin-tool-listener';
-import { TaskCreateModal } from '@/pages/ScheduledTasks/components/TaskCreateModal';
-import type { TaskCreateInputWithRun } from '@/pages/ScheduledTasks/components/TaskCreateModal';
 
 /**
- * 首页：网点用户为工作流引导卡片；省区白名单用户为经营管理任务卡片；其余为非网点 Agent Hub。
+ * 首页：所有用户统一走 HomeAgentHubSurface，由后端推荐位 API 动态返回不同内容。
  */
 export function Home() {
-  const user = useAuthStore((s) => s.user);
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
-  const isSite =
-    siteDepartmentTypes !== null && isSiteUser(user?.categoryCode);
-  const crmWeekReportSurfaceAllowed = useAuthStore((s) => s.crmWeekReportSurfaceAllowed);
-  const showConversation = useHomeConversationActive();
   const { isSplitGridPassthrough, splitGridPassthroughClass } =
-    useSplitGridPassthroughClass(showConversation);
+    useSplitGridPassthroughClass(false);
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
-  const navigate = useNavigate();
-  const createTask = useScheduledTasksStore((s) => s.createTask);
-  const fetchTasks = useScheduledTasksStore((s) => s.fetchTasks);
-
-  const [nlModalOpen, setNlModalOpen] = useState(false);
-  const [nlInitialValues, setNlInitialValues] = useState<
-    import('@/hooks/use-scheduled-task-tool-listener').NlExtractedValues
-  >({});
-  const closeNlModal = useCallback(() => {
-    setNlModalOpen(false);
-    setNlInitialValues({});
-  }, []);
-
-  useBuiltinToolListener({
-    onScheduledTaskConfirmation: (values) => {
-      setNlInitialValues(values);
-      setNlModalOpen(true);
-    },
-  });
-
-  const handleNlSave = useCallback(
-    async (input: TaskCreateInputWithRun) => {
-      try {
-        const task = await createTask({
-          name: input.name,
-          cronExpr: input.schedule,
-          description: input.message,
-        });
-        toast.success(`任务"${task.name}"已创建`);
-        await fetchTasks().catch(() => {});
-        navigate('/scheduled-tasks');
-        closeNlModal();
-      } catch (err) {
-        const message = String(err);
-        toast.error(`创建失败：${message}`);
-        throw err;
-      }
-    },
-    [createTask, fetchTasks, navigate, closeNlModal]
-  );
 
   useEffect(() => {
     const unsub = createAutoSendWatcher();
@@ -121,92 +61,27 @@ export function Home() {
     handleHubSend(querySeedText, undefined, undefined, undefined, seedWorkflowId);
   }, [querySeedText, seedWorkflowId, gatewayStatus.state, handleHubSend, setSearchParams]);
 
-  // Wait for site-department-types before choosing HQ vs site homepage.
-  if (isAuthenticated && siteDepartmentTypes === null) {
-    return null;
-  }
+  // Wait for gateway before auto-sending workflowId prompt.
+  // if (gatewayStatus.state !== 'running' && querySeedText && seedWorkflowId && !hasAutoSentRef.current) {
+  //   // gateway not ready yet; will be sent once it's running (handled by effect below)
+  // }
 
-  // 网点用户看到 首页 UI
-  if (isSite) {
-    return (
-      <>
-        <HomeSiteSurface seedSkillSlug={seedSkillSlug} />
-        <TaskCreateModal
-          open={nlModalOpen}
-          onClose={closeNlModal}
-          onSave={handleNlSave}
-          initialValues={nlInitialValues}
-        />
-      </>
-    );
-  }
-
-  if (!crmWeekReportSurfaceAllowed) {
-    return (
-      <>
-        <div
-          className={cn(
-            isSplitGridPassthrough
-              ? splitGridPassthroughClass
-              : 'mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-2 sm:px-2',
-          )}
-        >
-          <HomeAgentHubSurface seedSkillSlug={seedSkillSlug} />
-        </div>
-        <TaskCreateModal
-          open={nlModalOpen}
-          onClose={closeNlModal}
-          onSave={handleNlSave}
-          initialValues={nlInitialValues}
-        />
-      </>
-    );
-  }
-
+  // `?q=` 是「立即运行/安装工作流」的自动发送深链：由下面的 effect 直接发送，
+  // 不再把 querySeedText 作为 seedText 预填输入框 —— 否则 DingTalkMentionEditor
+  // 写入 DOM 后不会被清空，发送完输入框里仍残留一份文本。
+  // `?skill=` 走 seedSkillSlug，与此无关。
   return (
     <>
       <div
         className={cn(
           isSplitGridPassthrough
             ? splitGridPassthroughClass
-            : 'mx-auto flex h-full min-h-0 w-full flex-1 flex-col',
+            : 'mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-2 sm:px-2',
         )}
       >
-        <div
-          className={cn(
-            isSplitGridPassthrough
-              ? splitGridPassthroughClass
-              : 'flex min-h-0 flex-1 flex-col overflow-hidden',
-            !showConversation && !isSplitGridPassthrough && 'px-4 sm:px-6',
-          )}
-        >
-          {showConversation ? (
-            <HomeMainConversation
-              className="min-h-0 flex-1"
-              seedSkillSlug={seedSkillSlug}
-              onSend={handleHubSend}
-            />
-          ) : (
-            <div className={homeHubMainScrollHostClass}>
-              <div className={homeHubMainScrollClass}>
-                <HomeHero />
-                <HomeSummaryCards />
-              </div>
-            </div>
-          )}
-        </div>
-        {!showConversation ? (
-          <div className={homeHubFooterShellClass}>
-            <HomeComposer seedSkillSlug={seedSkillSlug} onSend={handleHubSend} />
-          </div>
-        ) : null}
+        <HomeAgentHubSurface seedSkillSlug={seedSkillSlug} />
       </div>
-      <TaskCreateModal
-        open={nlModalOpen}
-        onClose={closeNlModal}
-        onSave={handleNlSave}
-        initialValues={nlInitialValues}
-      />
+
     </>
   );
 }

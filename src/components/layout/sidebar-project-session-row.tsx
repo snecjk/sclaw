@@ -1,17 +1,15 @@
 /**
  * SidebarProjectSessionRow — 项目树内嵌套会话行。
  *
- * 布局与「最近」对齐：三种状态（未读 / 运行中 / 失败）在标题左侧；置顶钉在行尾。
+ * 布局与「最近」对齐：标题纯文字；行尾最右侧非 hover 显示状态（或置顶钉），hover 用「...」覆盖。
  */
 import { useTranslation } from 'react-i18next';
 import { SidebarProjectSessionRowTrailing } from '@/components/layout/sidebar-project-session-row-trailing';
-import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { cn } from '@/lib/utils';
 import {
   sidebarListItemTextClass,
   sidebarRecentSessionActiveClass,
   sidebarSubitemTextIdleClass,
-  sidebarUnreadDotClass,
 } from '@/lib/surfaces';
 import type { ChatSession } from '@/stores/chat/types';
 import { isProjectNewChatDraftKey } from '@/stores/chat/types';
@@ -71,6 +69,7 @@ export function SidebarProjectSessionRow({
     && !isRunning
     && !hasError
     && readSessionUnread(unreadKeys, session.key);
+  const hasStatusMarker = showUnreadDot || isRunning || hasError;
   const isDraft = isProjectNewChatDraftKey(session.key);
 
   if (isEditing) {
@@ -108,24 +107,19 @@ export function SidebarProjectSessionRow({
           onClick={onOpen}
           onDoubleClick={() => handleSidebarSessionDoubleClick(session.key, onStartRename)}
           title={label}
-          className="flex h-9 min-w-0 w-full flex-1 items-center gap-2 overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
+          className="flex h-9 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
         >
-          {showUnreadDot ? (
-            <span
-              className={cn(sidebarUnreadDotClass, 'shrink-0')}
-              aria-label={t('sidebar.sessionUnread')}
-            />
-          ) : (
-            <SidebarRecentSessionStatus sessionKey={session.key} />
-          )}
           <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass, isActive && 'font-medium')}>
             {label}
           </span>
         </button>
         <SidebarProjectSessionRowTrailing
+          sessionKey={session.key}
           isActive={isActive}
           isPinned={isPinned}
           isDraft={isDraft}
+          showUnreadDot={showUnreadDot}
+          hasStatusMarker={hasStatusMarker}
           onPin={onPin}
           onRename={onStartRename}
           onDelete={onDelete}

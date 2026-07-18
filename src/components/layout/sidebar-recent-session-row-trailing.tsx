@@ -1,6 +1,7 @@
 /**
- * SidebarRecentSessionRowTrailing — 最近会话行尾：置顶钉 + hover「...」菜单。
- * 三种状态（未读 / 运行 / 失败）在标题左侧，见 SidebarRecentSessionRow。
+ * SidebarRecentSessionRowTrailing — 最近会话行尾。
+ * 非 hover：最右侧显示状态（运行中/失败/未读），无状态时显示置顶钉；
+ * hover：用「...」菜单覆盖该槽位。
  */
 import {
   MoreHorizontal,
@@ -15,17 +16,23 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { cn } from '@/lib/utils';
 import {
   sidebarRecentMenuContentClass,
   sidebarRecentMenuDeleteItemClass,
   sidebarRecentMenuItemClass,
   sidebarTextIconClass,
+  sidebarUnreadDotClass,
 } from '@/lib/surfaces';
 
 export interface SidebarRecentSessionRowTrailingProps {
+  sessionKey: string;
   isActive?: boolean;
   isPinned: boolean;
+  showUnreadDot?: boolean;
+  /** 运行中或失败（与未读互斥；用于决定 idle 槽显示状态还是置顶钉） */
+  hasStatusMarker?: boolean;
   onPin: () => void;
   onRename: () => void;
   onDelete: () => void;
@@ -35,8 +42,11 @@ export interface SidebarRecentSessionRowTrailingProps {
 const SIDEBAR_RECENT_ROW_TRAILING_W_CLASS = 'w-12';
 
 export function SidebarRecentSessionRowTrailing({
+  sessionKey,
   isActive = false,
   isPinned,
+  showUnreadDot = false,
+  hasStatusMarker = false,
   onPin,
   onRename,
   onDelete,
@@ -58,7 +68,14 @@ export function SidebarRecentSessionRowTrailing({
           'transition-opacity group-hover:opacity-0 group-hover:invisible',
         )}
       >
-        {isPinned ? (
+        {showUnreadDot ? (
+          <span
+            className={cn(sidebarUnreadDotClass, 'shrink-0')}
+            aria-label={t('sidebar.sessionUnread')}
+          />
+        ) : hasStatusMarker ? (
+          <SidebarRecentSessionStatus sessionKey={sessionKey} />
+        ) : isPinned ? (
           <Pin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
         ) : null}
       </div>

@@ -202,6 +202,23 @@
             "uninstallSuccess": "已删除",
             "uninstallError": "删除失败"
         },
+        "upload": {
+            "sourceOptions": "选择上传方式",
+            "orChoose": "或选择",
+            "selectFile": "选择技能文件",
+            "selectFileHint": "支持多选 .zip 文件或 SKILL.md 文件",
+            "selectFolder": "选择技能文件夹",
+            "selectFolderHint": "支持多选包含 SKILL.md 的技能文件夹",
+            "recommended": "推荐",
+            "invalidSource": "请选择有效的 .zip、SKILL.md 或包含 SKILL.md 的技能文件夹",
+            "selectedFolderCount": "已选择 {{count}} 个技能文件夹",
+            "selectedFileCount": "已选择 {{count}} 个技能文件",
+            "selectedItemNames": "{{names}}",
+            "selectedFolderNamesMore": "{{names}} 等 {{count}} 个文件夹",
+            "selectedFileNamesMore": "{{names}} 等 {{count}} 个技能文件",
+            "batchUploading": "正在安装 {{current}}/{{total}}...",
+            "batchFailed": "已完成 {{completed}}/{{total}}，后续上传已停止：{{error}}"
+        },
         "loading": "加载中...",
         "syncingUserSkills": "正在同步您的技能…",
         "noSkills": "暂无可用技能"

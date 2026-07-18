@@ -1,8 +1,9 @@
-import { FolderOpen, Upload } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invokeIpc } from '@/lib/api-client';
 import { stoPageTitleClass } from '@/lib/surfaces';
 import { useState } from 'react';
+import addIcon from '@/assets/icons/add.svg';
+import folderIcon from '@/assets/icons/folder.svg';
 import { SkillUploadModal } from './SkillUploadModal';
 
 interface SkillPlazaHeaderProps {
@@ -34,19 +35,19 @@ export function SkillPlazaHeader({ onUploadSuccess }: SkillPlazaHeaderProps) {
       <div className="flex items-center gap-2 flex-shrink-0">
         <button
           type="button"
-          onClick={() => setUploadOpen(true)}
-          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border-none bg-primary text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors duration-150"
+          onClick={handleOpenFolder}
+          className="inline-flex items-center gap-2 rounded-[12px] border-none bg-[#E5E6EB] px-3 py-[9px] font-['PingFang_SC'] text-[13px] font-medium text-[#1D2129] hover:bg-[#DCDDE2] transition-colors duration-150"
         >
-          <Upload className="h-4 w-4 flex-shrink-0" />
-          {t('plaza.upload.button', { defaultValue: '上传技能' })}
+          <img src={folderIcon} alt="" aria-hidden className="h-3 w-3 flex-shrink-0 object-contain" />
+          {t('openFolder', { defaultValue: '打开技能文件夹' })}
         </button>
         <button
           type="button"
-          onClick={handleOpenFolder}
-          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border-none bg-primary text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors duration-150"
+          onClick={() => setUploadOpen(true)}
+          className="inline-flex items-center gap-2 rounded-[12px] border-none bg-[#E5E6EB] px-3 py-[9px] font-['PingFang_SC'] text-[13px] font-medium text-[#1D2129] hover:bg-[#DCDDE2] transition-colors duration-150"
         >
-          <FolderOpen className="h-4 w-4 flex-shrink-0" />
-          {t('openFolder', { defaultValue: '打开技能文件夹' })}
+          <img src={addIcon} alt="" aria-hidden className="h-3 w-3 flex-shrink-0 object-contain" />
+          {t('plaza.upload.button', { defaultValue: '上传技能' })}
         </button>
       </div>
 

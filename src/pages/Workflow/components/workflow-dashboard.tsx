@@ -47,6 +47,9 @@ import { useWorkflowList } from '@/pages/Workflow/use-workflow-list';
 import { renameWorkflow, deleteWorkflow } from '@/lib/workflow-api';
 import { navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
 import { WorkflowComposer } from '@/pages/Workflow/components/workflow-composer';
+import { useRecommendItems } from '@/hooks/use-recommend-items';
+import { RECOMMEND_POSITION_KEYS } from '@/lib/recommend-api';
+import { pickCoverKeyFromWorkflowId } from '@/pages/Workflow/workflow-mapper';
 import type { WorkflowListViewState } from '@/pages/Workflow/hooks/use-workflow-list-view-state';
 
 interface WorkflowDashboardProps {
@@ -69,8 +72,21 @@ export function WorkflowDashboard({
   const navigate = useNavigate();
   const location = useLocation();
   const { tab, setTab, mineFilter, setMineFilter } = viewState;
-  const { cards, cardsByKind, mineLoading, officialLoading, error, refetchMine, officialCards } =
+  const { cards, cardsByKind, mineLoading, error, refetchMine } =
     useWorkflowList(mineFilter);
+  const { items: recommendItems, loading: recommendLoading } = useRecommendItems(
+    RECOMMEND_POSITION_KEYS.OFFICIAL_WORKFLOW,
+  );
+  const officialCards = recommendItems
+    .filter((item) => item.item_type === 'workflow_template')
+    .map((item) => ({
+      id: item.item_ref_id,
+      name: item.title,
+      category: item.category ?? '',
+      description: item.description ?? '',
+      flow: [],
+      coverKey: pickCoverKeyFromWorkflowId(item.item_ref_id),
+    }));
   /** chip 点击后 bump key，使 ChatInput 重挂载并应用 seedText */
   const [composerSeed, setComposerSeed] = useState<{ text: string; key: number } | null>(null);
   const [search, setSearch] = useState('');
@@ -416,9 +432,13 @@ export function WorkflowDashboard({
         </section>
 
         <section role="tabpanel" aria-label={t('tabs.official')} hidden={tab !== 'official'}>
-          {officialLoading ? (
+          {recommendLoading ? (
             <div className="flex justify-center py-16" aria-busy="true">
               <LoadingSpinner size="lg" />
+            </div>
+          ) : officialCards.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-16 text-center">
+              <p className="text-[15px] font-medium text-foreground/80">{t('list.empty')}</p>
             </div>
           ) : (
             <>

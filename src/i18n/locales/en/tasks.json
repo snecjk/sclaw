@@ -94,6 +94,19 @@
     "recordStatusNav": {
       "aria": "Filter by execution status"
     },
+    "newTaskDropdown": {
+      "selfCreate": "Create yourself",
+      "templateCreate": "Create from workflow"
+    },
+    "templateModal": {
+      "title": "Select Workflow",
+      "subtitle": "Select a workflow to quickly create a scheduled task",
+      "empty": "No workflows available",
+      "instantiating": "Creating…",
+      "openExisting": "Continue editing",
+      "createNew": "New",
+      "existingBadge": "Existing instance"
+    },
     "empty": {
       "searchNoMatch": "No matching tasks found",
       "noTasks": "No scheduled tasks",
