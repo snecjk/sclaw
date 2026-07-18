@@ -648,8 +648,8 @@ export async function consumeClaudeQuery(
       content.push({ type: 'text', text: streamText });
     }
     if (content.length === 0) return;
-    emitChat({
-      state: 'delta',
+    emitEngineEvent({
+      type: 'message.delta',
       message: {
         role: 'assistant',
         id: runId,
