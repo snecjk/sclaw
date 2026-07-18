@@ -204,8 +204,6 @@ function App() {
       useAuthStore.setState({
         isAuthenticated: false,
         user: null,
-        crmWeekReportSurfaceAllowed: false,
-        crmWeekReportPolicyStatus: 'idle',
       });
       // Clear both top-level and session-level chat errors so the error bar
       // doesn't persist after re-login
