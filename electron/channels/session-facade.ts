@@ -3,6 +3,10 @@ import { getAdapter } from '../engines/manager';
 import { rememberSessionEngineType } from '../engines/session-engine';
 import type { AgentEngineType } from '../engines/types';
 import type { GatewayManager } from '../gateway/manager';
+import {
+  getSessionWorkspaceId,
+  upsertCatalogSession,
+} from '../services/session-catalog-service';
 import { getChannelConnection } from './binding-service';
 import { buildDingTalkSessionKey } from './session-key';
 import { logger } from '../utils/logger';
@@ -34,6 +38,16 @@ export async function createOrGetSession(
       : 'claude';
   const sessionKey = buildDingTalkSessionKey(agentId, params.peerId);
   await rememberSessionEngineType(sessionKey, engineType);
+  // 与 upsertEngineBinding 一致：已有会话保留其 workspace，避免移入项目后写回 default 造双行
+  const workspaceId = await getSessionWorkspaceId(sessionKey);
+  await upsertCatalogSession({
+    workspaceId,
+    sessionKey,
+    sessionType: 'channel',
+    channelType: params.channelType,
+    channelId: params.peerId,
+    lastActivityAt: new Date().toISOString(),
+  });
   return { sessionKey, engineType, agentId };
 }
 
