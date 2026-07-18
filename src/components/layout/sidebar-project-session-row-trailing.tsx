@@ -1,6 +1,7 @@
 /**
- * SidebarProjectSessionRowTrailing — 项目内会话行尾：置顶钉 + hover「...」菜单。
- * 三种状态在标题左侧，见 SidebarProjectSessionRow。
+ * SidebarProjectSessionRowTrailing — 项目内会话行尾。
+ * 非 hover：最右侧显示状态（运行中/失败/未读），无状态时显示置顶钉；
+ * hover：用「...」菜单覆盖该槽位。
  */
 import { MoreHorizontal, Pin, Pencil, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -10,17 +11,23 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { cn } from '@/lib/utils';
 import {
   sidebarRecentMenuContentClass,
   sidebarRecentMenuDeleteItemClass,
   sidebarRecentMenuItemClass,
   sidebarTextIconClass,
+  sidebarUnreadDotClass,
 } from '@/lib/surfaces';
 
 export interface SidebarProjectSessionRowTrailingProps {
+  sessionKey: string;
   isActive?: boolean;
   isPinned: boolean;
+  showUnreadDot?: boolean;
+  /** 运行中或失败（与未读互斥；用于决定 idle 槽显示状态还是置顶钉） */
+  hasStatusMarker?: boolean;
   /** 项目草稿「新对话」不可重命名/置顶 */
   isDraft?: boolean;
   onPin: () => void;
@@ -32,8 +39,11 @@ export interface SidebarProjectSessionRowTrailingProps {
 const SIDEBAR_ROW_TRAILING_W_CLASS = 'w-12';
 
 export function SidebarProjectSessionRowTrailing({
+  sessionKey,
   isActive = false,
   isPinned,
+  showUnreadDot = false,
+  hasStatusMarker = false,
   isDraft = false,
   onPin,
   onRename,
@@ -56,7 +66,14 @@ export function SidebarProjectSessionRowTrailing({
           'transition-opacity group-hover:opacity-0 group-hover:invisible',
         )}
       >
-        {isPinned ? (
+        {showUnreadDot ? (
+          <span
+            className={cn(sidebarUnreadDotClass, 'shrink-0')}
+            aria-label={t('sidebar.sessionUnread')}
+          />
+        ) : hasStatusMarker ? (
+          <SidebarRecentSessionStatus sessionKey={sessionKey} />
+        ) : isPinned ? (
           <Pin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
         ) : null}
       </div>

@@ -262,6 +262,10 @@ function SidebarTaskDateLinks({
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const switchSession = useChatStore((s) => s.switchSession);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
+  const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
+  const currentSessionSending = useChatStore((s) => s.sending);
+  const currentSessionActiveRunId = useChatStore((s) => s.activeRunId);
+  const currentSessionError = useChatStore((s) => s.error);
   const sessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
   const isSubitemUnread = useStoTaskSubitemsStore((s) => s.isSubitemUnread);
   const markSubitemReadFromActivity = useStoTaskSubitemsStore((s) => s.markSubitemReadFromActivity);
@@ -297,7 +301,17 @@ function SidebarTaskDateLinks({
         const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)] ?? '';
         const active = Boolean(sk) && currentSessionKey === sk;
         const activity = sk ? (sessionLastActivity[sk] ?? 0) : 0;
-        const unread = !active && isSubitemUnread(taskId, entryId, activity);
+        const runtime = sk ? runtimeBySessionKey[sk] : undefined;
+        const isRunning = Boolean(
+          runtime?.sending
+          || runtime?.activeRunId
+          || (active && (currentSessionSending || currentSessionActiveRunId)),
+        );
+        const hasError = Boolean(
+          (runtime?.error != null && runtime.error !== '')
+          || (active && currentSessionError != null && currentSessionError !== ''),
+        );
+        const unread = !active && !isRunning && !hasError && isSubitemUnread(taskId, entryId, activity);
         const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
         const label = t('tasks:sidebarMaterialTitle', { date: dateLabel });
         return (
@@ -310,24 +324,18 @@ function SidebarTaskDateLinks({
                 openSubitemSession(entryId, sk, label);
               }}
               className={cn(
-                'relative z-[1] inline-flex h-7 w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
+                'relative z-[1] inline-flex h-7 w-full min-w-0 max-w-full items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
                 SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
                 active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
               )}
             >
-              <span className="flex min-w-0 items-center gap-1.5">
-                {unread ? (
-                  <span
-                    className={cn(sidebarUnreadDotClass, 'shrink-0')}
-                    aria-label={t('tasks:unreadBadge', { defaultValue: 'Unread' })}
-                  />
-                ) : null}
-                <span className="min-w-0 flex-1 truncate">{label}</span>
-              </span>
+              <span className="min-w-0 flex-1 truncate">{label}</span>
             </button>
             {sk ? (
               <SidebarTaskSubitemDeleteTrailing
                 isActive={active}
+                sessionKey={sk}
+                showUnreadDot={unread}
                 onDelete={() => onRequestDeleteSubitem({ taskId, entryId, label, sessionKey: sk })}
               />
             ) : null}
@@ -485,6 +493,10 @@ function SidebarScheduledTaskGroup({
   const navigate = useNavigate();
   const location = useLocation();
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
+  const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
+  const currentSessionSending = useChatStore((s) => s.sending);
+  const currentSessionActiveRunId = useChatStore((s) => s.activeRunId);
+  const currentSessionError = useChatStore((s) => s.error);
   const unreadKeys = useSessionUnreadStore((s) => s.unreadKeys);
 
   if (sessions.length === 0) return null;
@@ -560,7 +572,17 @@ function SidebarScheduledTaskGroup({
               label = s.label || s.displayName || s.key;
             }
             const active = currentSessionKey === s.key;
-            const showUnreadDot = !active && readSessionUnread(unreadKeys, s.key);
+            const runtime = runtimeBySessionKey[s.key];
+            const isRunning = Boolean(
+              runtime?.sending
+              || runtime?.activeRunId
+              || (active && (currentSessionSending || currentSessionActiveRunId)),
+            );
+            const hasError = Boolean(
+              (runtime?.error != null && runtime.error !== '')
+              || (active && currentSessionError != null && currentSessionError !== ''),
+            );
+            const showUnreadDot = !active && !isRunning && !hasError && readSessionUnread(unreadKeys, s.key);
             return (
               <div key={s.key} className="group relative flex w-full min-w-0 items-center">
                 <button
@@ -576,20 +598,12 @@ function SidebarScheduledTaskGroup({
                     active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
                   )}
                 >
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    {showUnreadDot ? (
-                      <span
-                        className={cn(sidebarUnreadDotClass, 'shrink-0')}
-                        aria-label="Unread"
-                      />
-                    ) : (
-                      <SidebarRecentSessionStatus sessionKey={s.key} />
-                    )}
-                    <span className="min-w-0 flex-1 truncate">{label}</span>
-                  </span>
+                  <span className="min-w-0 truncate">{label}</span>
                 </button>
                 <SidebarTaskSubitemDeleteTrailing
                   isActive={active}
+                  sessionKey={s.key}
+                  showUnreadDot={showUnreadDot}
                   onDelete={() => onRequestDelete({ key: s.key, label })}
                 />
               </div>
