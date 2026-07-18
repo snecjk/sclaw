@@ -1242,9 +1242,13 @@ export class SkillPlazaService {
    * 未安装的 slug 不返回（消费方靠缺省判定 installed=false）。
    */
   async getLocalSkillsBySlugs(slugs: string[]): Promise<PlazaListResult> {
-    const installedSlugs = this.getInstalledSlugs();
-    const enabledSlugs = this.getEnabledSlugs();
-    const lockEntries = readLockJsonSkillEntries(this.configDir);
+    // 复用统一的本地状态快照：installedSlugs / enabledSlugs / lockEntries 一次读盘，
+    // 避免循环内重复 IO。注意此前误调了不存在的 this.getInstalledSlugs() /
+    // this.getEnabledSlugs()，运行时抛 TypeError，导致首页技能状态永远不刷新。
+    const snapshot = this.buildLocalStateSnapshot();
+    const installedSlugs = snapshot.installedSlugs;
+    const enabledSlugs = snapshot.enabledSlugs;
+    const lockEntries = snapshot.lockEntries;
     const disabledDir = this.getDisabledDir();
 
     const skills: SkillSummary[] = [];
