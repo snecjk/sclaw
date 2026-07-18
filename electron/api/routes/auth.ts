@@ -15,7 +15,7 @@ import { logger } from '../../utils/logger';
 import { getStoModelSyncService } from '../../services/providers/sto-model-sync';
 import { runAuthenticatedSetup, type AuthenticatedSetupResult } from '../../services/auth-setup-orchestrator';
 import { runPendingInstallReport } from '../../services/client-update-platform';
-import { activateUserWorkspace, getCurrentActiveUserCode } from '../../services/user-skill-workspace';
+import { activateUserWorkspace, getCurrentActiveUserCode, syncMountPointToUser } from '../../services/user-skill-workspace';
 import { removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-auth';
 import { loadSiteDepartmentTypes, loadClawInferenceRuntimeConfig, clearInferenceRuntimeConfigCache, fetchHqBalanceApplyUrl, DEFAULT_HQ_BALANCE_APPLY_URL } from '../../services/sto-apollo-config-service';
 import { getClientSiteAccessService } from '../../services/client-site-access-service';
@@ -197,10 +197,14 @@ export async function handleAuthRoutes(
 
       let setupResult: AuthenticatedSetupResult | undefined;
       try {
+        // awaitGatewayRefresh: if the setup needs a Gateway reload/restart (e.g.
+        // STO models rebuilt after a logout), run it now and wait for the Gateway
+        // to settle, so the renderer only enters the home page once ready.
         setupResult = await runAuthenticatedSetup({
           user,
           gatewayManager: ctx.gatewayManager,
           source: 'login',
+          awaitGatewayRefresh: true,
         });
       } catch (err) {
         logger.warn('[auth] Synchronous post-login authenticated setup failed:', err);
@@ -228,6 +232,20 @@ export async function handleAuthRoutes(
 
   // POST /api/auth/logout — sign out
   if (url.pathname === '/api/auth/logout' && req.method === 'POST') {
+    // Persist the current mount-point skills back to the user's workspace BEFORE
+    // clearing auth. Skills that only live on the global mount (e.g. ones
+    // generated via natural-language chat) would otherwise be lost when the next
+    // login's clearMountPoint() runs. Best-effort: never block logout on this.
+    try {
+      const activeUserCode = await getCurrentActiveUserCode();
+      if (activeUserCode) {
+        await syncMountPointToUser(activeUserCode);
+        logger.info(`[auth] Saved mount point to user ${activeUserCode} before logout`);
+      }
+    } catch (err) {
+      logger.warn('[auth] Failed to persist skills to user workspace on logout:', err);
+    }
+
     try {
       const state = await getAuthState();
 
@@ -345,6 +363,7 @@ export async function handleAuthRoutes(
           user: body.user,
           gatewayManager: ctx.gatewayManager,
           source: 'login',
+          awaitGatewayRefresh: true,
         });
       } catch (err) {
         logger.warn('[auth] Post session commit authenticated setup failed:', err);
@@ -436,6 +455,7 @@ export async function handleAuthRoutes(
           user: newUser,
           gatewayManager: ctx.gatewayManager,
           source: 'login',
+          awaitGatewayRefresh: true,
         });
       } catch (err) {
         logger.warn('[auth] Post account-switch authenticated setup failed:', err);
@@ -482,6 +502,7 @@ export async function handleAuthRoutes(
           user: origin,
           gatewayManager: ctx.gatewayManager,
           source: 'login',
+          awaitGatewayRefresh: true,
         });
       } catch (err) {
         logger.warn('[auth] Post account-switch-back authenticated setup failed:', err);

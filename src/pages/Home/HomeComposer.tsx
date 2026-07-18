@@ -124,6 +124,7 @@ export function HomeComposer({
     <div className={cn(stoHeroInputShellClass, className)}>
       <ParameterFormDock layout={stoParameterFormDockLayout('home')} />
       <PendingQueuePanel
+        sessionKey={currentSessionKey}
         queue={queue}
         onRemove={queueRemove}
         onMoveUp={queueMoveUp}

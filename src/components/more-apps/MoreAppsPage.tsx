@@ -37,6 +37,7 @@ export function MoreAppsPage() {
     builtinApps,
     externalApps,
     favoriteIds,
+    hydrate,
     setActiveTab,
     setSearchQuery,
     setMarketCategory,
@@ -52,6 +53,10 @@ export function MoreAppsPage() {
 
   const [confirmDeleteApp, setConfirmDeleteApp] = useState<AppItem | null>(null);
   const heroTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    void hydrate();
+  }, [hydrate]);
 
   // Merge builtin + external for display
   const allApps = useMemo(() => {

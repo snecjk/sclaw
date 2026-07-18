@@ -9,6 +9,7 @@ import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
 
 import { getOpenClawConfigDir, getOpenClawSkillsDir, getOpenClawAgentSkillsDir, getOpenClawUserSkillsDir, getOpenClawUserDisabledDir, getOpenClawUserLockPath } from '../utils/paths';
+import { syncBaseAgentSkillInstall, syncBaseAgentSkillUninstall } from './project-agent-service';
 import { getStoToken } from '../utils/auth-store';
 import { getCurrentActiveUserCode } from './user-skill-workspace';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
@@ -246,6 +247,13 @@ export class StoSkillService {
       }
 
       logger.info(`[StoSkillService] install: ${params.slug} installed to ${targetDir}`);
+
+      // Mirror agent-scoped installs to any project agents derived from this base agent.
+      if (params.agentId) {
+        await syncBaseAgentSkillInstall(params.agentId, params.slug).catch((error) => {
+          logger.warn('[StoSkillService] failed to mirror skill install to project agents', { agentId: params.agentId, slug: params.slug, error });
+        });
+      }
     } finally {
       if (stagingActive && fs.existsSync(stagingDir)) {
         await safeRemoveDir(stagingDir, { label: stagingDir }).catch(() => {});
@@ -456,6 +464,13 @@ export class StoSkillService {
           }
         }
       }
+    }
+
+    // Mirror agent-scoped uninstalls to any project agents derived from this base agent.
+    if (params.agentId) {
+      await syncBaseAgentSkillUninstall(params.agentId, params.slug).catch((error) => {
+        logger.warn('[StoSkillService] failed to mirror skill uninstall to project agents', { agentId: params.agentId, slug: params.slug, error });
+      });
     }
   }
 

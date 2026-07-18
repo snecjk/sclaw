@@ -523,15 +523,19 @@ export class StoModelSyncService {
     const openClawModelsIncomplete =
       catalogModels.length > 0 && openClawModelIds.length < catalogModels.length;
     const legacyPrimary = Boolean(defaultModel && isLegacyStoOpenClawModelRef(defaultModel));
+    const accountModelRef = stoAccount.model ? `${STO_ACCOUNT_ID}/${stoAccount.model}` : undefined;
+    const primaryMismatch = Boolean(
+      defaultModel && accountModelRef && defaultModel !== accountModelRef,
+    );
 
-    if (!stoMissingFromOpenClaw && !openClawModelsIncomplete && !legacyPrimary) {
+    if (!stoMissingFromOpenClaw && !openClawModelsIncomplete && !legacyPrimary && !primaryMismatch) {
       return;
     }
 
     logger.info(
       `[sto-sync] Repairing openclaw STO runtime: missing=${stoMissingFromOpenClaw}, `
       + `incompleteModels=${openClawModelsIncomplete} (${openClawModelIds.length}/${catalogModels.length}), `
-      + `legacyPrimary=${legacyPrimary}${defaultModel ? ` (${defaultModel})` : ''}`,
+      + `legacyPrimary=${legacyPrimary}, primaryMismatch=${primaryMismatch}${defaultModel ? ` (${defaultModel})` : ''}`,
     );
 
     try {
@@ -548,7 +552,7 @@ export class StoModelSyncService {
       return;
     }
 
-    if (legacyPrimary || stoMissingFromOpenClaw || openClawModelsIncomplete) {
+    if (legacyPrimary || stoMissingFromOpenClaw || openClawModelsIncomplete || primaryMismatch) {
       try {
         await syncDefaultProviderToRuntime(STO_ACCOUNT_ID, runtimeGateway);
         if (!result.defaultSet) {

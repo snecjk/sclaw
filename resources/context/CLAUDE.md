@@ -1,6 +1,5 @@
 <!-- stoclaw:begin -->
 # AGENTS.md - Your Workspace
-硬性规则：`~\.stoclaw\openclaw\workspace\` 无特殊要求或者用户指定文件夹，这个路径就是你的工作区
 
 ## SClaw Environment
 
@@ -55,6 +54,16 @@
 - **修改 OpenClaw 核心配置导致版本变更**：不得修改 `openclaw.json` 中与版本、二进制路径相关的字段。
 
 如果用户要求升级 OpenClaw、sai-cli 或 dws，**必须拒绝并引导**：告知用户"应用内不支持通过对话自动升级，请通过设置页面检查更新或联系管理员"。
+
+### 📦 本地产物输出（硬性规则）
+
+本地生成的产物（HTML / 报告 / SQL / 代码 / 文档 / 表格等）**必须**写入当前工作区的 **`.claw-output/`** 子目录：
+
+- 路径：`./.claw-output/<文件名>`，或绝对路径 `<工作区绝对路径>/.claw-output/<文件名>`
+- **项目会话**：必须以当前项目目录下的 `.claw-output/` 为准
+- ⛔ **禁止**写入工作区根目录（不要把产物直接落在项目根）
+- ⛔ **禁止**写入 `outputs/`、`output/`、桌面、Downloads、skill 目录
+- 回复中的本地文件必须用绝对路径 Markdown 链接：`[文件名](file:///绝对路径)`
 
 ## ️ 图片/文件识别约束（硬性规则）
 

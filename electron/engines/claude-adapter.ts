@@ -9,8 +9,10 @@ import { getAgentPreferredModel, getAgentWorkspacePath } from '../utils/agent-co
 import { logger } from '../utils/logger';
 import { getClaudeConfigDir } from '../utils/paths';
 import { getApiKey } from '../utils/secure-storage';
+import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { buildClaudeRuntimeOptions } from './claude-runtime-extensions';
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
+import { resolveSessionToolCwd } from '../services/session-catalog-service';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, upsertEngineSessionRegistryEntry, type EngineSessionRegistryEntry } from './session-registry';
 import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EngineSessionSummary } from './types';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
@@ -76,6 +78,7 @@ async function buildClaudeEnvForAccount(accountId?: string): Promise<NodeJS.Proc
     ...process.env,
     CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
   };
+  applySaiClientIdEnv(base as Record<string, string | undefined>);
 
   if (!accountId) {
     logger.debug('[claude-env] No accountId, returning base env');
@@ -111,9 +114,10 @@ async function resolveClaudeLaunchSelection(
   agentId: string,
   existing?: {
     model?: string;
+    provider?: string;
     accountId?: string;
   } | null,
-): Promise<{ model?: string; accountId?: string }> {
+): Promise<{ model?: string; provider?: string; accountId?: string }> {
   const preferredModel = await getAgentPreferredModel(agentId);
   // Session-level override wins when the user switched models inside an active dialog.
   let model = existing?.model ?? preferredModel.model;
@@ -123,12 +127,16 @@ async function resolveClaudeLaunchSelection(
     accountId = await getDefaultProviderAccountId();
   }
 
-  if (!model && accountId) {
+  let provider: string | undefined;
+  if (accountId) {
     const account = await getProviderAccount(accountId);
-    model = account?.model;
+    provider = existing?.provider ?? account?.vendorId ?? undefined;
+    if (!model && account?.model) {
+      model = account.model;
+    }
   }
 
-  return { model, accountId };
+  return { model, provider, accountId };
 }
 
 /**
@@ -708,6 +716,7 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
     // Never bump activity on read — sidebar order must reflect last message time only.
     ...(transcriptActivityAt > 0 ? { updatedAt: transcriptActivityAt } : {}),
     model: entry?.model,
+    provider: entry?.provider,
     accountId: entry?.accountId,
     archivedClaudeSessionIds: entry?.archivedClaudeSessionIds,
     pendingHistoryBridge: entry?.pendingHistoryBridge,
@@ -889,6 +898,7 @@ export async function consumeClaudeQuery(
         updatedAt: toEpochMs(message.timestamp) ?? Date.now(),
         title,
         model: (await getEngineSessionRegistryEntry(sessionKey))?.model,
+        provider: (await getEngineSessionRegistryEntry(sessionKey))?.provider,
         accountId: (await getEngineSessionRegistryEntry(sessionKey))?.accountId,
       });
       // Allow callers (e.g. the scheduled-task worker) to capture per-message
@@ -913,11 +923,11 @@ export async function consumeClaudeQuery(
 
 async function ensureClaudeRegistryEntry(sessionKey: string) {
   const existing = await getEngineSessionRegistryEntry(sessionKey);
-  if (existing?.cwd) return existing;
-
   const agentId = extractAgentId(sessionKey);
-  const cwd = await getAgentWorkspacePath(agentId);
+  const cwd = await resolveSessionToolCwd(sessionKey, agentId);
   if (!cwd) return existing;
+  if (existing?.cwd === cwd) return existing;
+
   const launchSelection = await resolveClaudeLaunchSelection(agentId, existing);
 
   const nextEntry = {
@@ -926,9 +936,10 @@ async function ensureClaudeRegistryEntry(sessionKey: string) {
     cwd,
     agentId,
     engineType: 'claude' as const,
-    updatedAt: existing?.updatedAt ?? Date.now(),
+    updatedAt: Date.now(),
     title: existing?.title,
     model: launchSelection.model,
+    provider: launchSelection.provider,
     accountId: launchSelection.accountId,
   };
   await upsertEngineSessionRegistryEntry(nextEntry);
@@ -1059,6 +1070,17 @@ async function startClaudeQuery(
   }
 }
 
+function isClaudeSessionAlreadyGoneError(error: unknown): boolean {
+  const message = String(error);
+  return (
+    message.includes('not found in project directory')
+    || message.includes('not found in any project directory')
+    || message.includes('not found (no projects directory)')
+    || /\bENOENT\b/.test(message)
+    || /\bENOTDIR\b/.test(message)
+  );
+}
+
 export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void> {
   await ensureClaudeConfigDir();
   const entry = await getEngineSessionRegistryEntry(sessionKey);
@@ -1069,11 +1091,22 @@ export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void
     return;
   }
 
-  const sdk = await import('@anthropic-ai/claude-agent-sdk');
-  const configDir = await resolveClaudeSessionConfigDir(entry.cwd!, entry.sessionId!) ?? getClaudeConfigDir();
-  await withClaudeConfigDirEnv(configDir, async () => {
-    await sdk.deleteSession(entry.sessionId!, { dir: entry.cwd! });
-  });
+  const cwd = typeof entry.cwd === 'string' ? entry.cwd.trim() : '';
+  if (cwd) {
+    try {
+      const sdk = await import('@anthropic-ai/claude-agent-sdk');
+      const configDir = await resolveClaudeSessionConfigDir(cwd, entry.sessionId) ?? getClaudeConfigDir();
+      await withClaudeConfigDirEnv(configDir, async () => {
+        await sdk.deleteSession(entry.sessionId!, { dir: cwd });
+      });
+    } catch (error) {
+      // Workspace may have been deleted on disk (dirty catalog rows). Still purge our registry.
+      if (!isClaudeSessionAlreadyGoneError(error)) throw error;
+      logger.warn(`[claude] deleteSession skipped for missing session/workspace ${sessionKey}:`, error);
+    }
+  } else {
+    logger.warn(`[claude] deleteSession skipped: missing cwd for ${sessionKey}`);
+  }
   await deleteEngineSessionRegistryEntry(sessionKey);
 }
 

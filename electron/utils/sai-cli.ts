@@ -28,6 +28,7 @@ import { pipeline } from 'node:stream/promises';
 import { logger } from './logger';
 import { resolveStoBaseUrl } from './sto-domain';
 import { proxyAwareFetch } from './proxy-fetch';
+import { SAI_CLIENT_ID_VALUE } from './sai-client-id';
 
 export interface SaiCliResult {
   ok: boolean;
@@ -69,7 +70,11 @@ function runSai(args: string[], timeoutMs = 30000): Promise<SaiCliResult> {
 
   return new Promise((resolve) => {
     const child = spawn(binary, args, {
-      env: { ...process.env, SAI_OUTPUT: 'json' },
+      env: {
+        ...process.env,
+        SAI_OUTPUT: 'json',
+        SAI_CLIENT_ID: SAI_CLIENT_ID_VALUE,
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: timeoutMs,
       windowsHide: true,

@@ -158,6 +158,8 @@ export async function terminateDuplicateGatewayChildren(
 export type PrepareGatewayStartupPortOptions = {
   defaultPort: number;
   keepPid?: number;
+  /** Last known port for the owned Gateway (may differ from default after fallback). */
+  preferredPort?: number;
   parentPid?: number;
   findAvailablePort: (startPort: number, maxAttempts?: number) => Promise<number>;
 };
@@ -166,8 +168,9 @@ export type PrepareGatewayStartupPortOptions = {
  * Ensure a single Gateway binds the default port before spawn.
  *
  * 1. Kill duplicate openclaw-gateway children from this app instance.
- * 2. Reset to the default port and wait for it to become free.
- * 3. Only increment the port when an unrelated process still owns it.
+ * 2. If our owned Gateway is already listening, reuse that port (no wait/spawn race).
+ * 3. Otherwise wait for the default port to become free.
+ * 4. Only increment the port when an unrelated process still owns it.
  */
 export async function prepareGatewayStartupPort(
   options: PrepareGatewayStartupPortOptions,
@@ -177,6 +180,29 @@ export async function prepareGatewayStartupPort(
     parentPid: options.parentPid,
     reason: 'pre-start',
   });
+
+  if (options.keepPid) {
+    const candidates = [
+      ...new Set(
+        [options.preferredPort, options.defaultPort].filter(
+          (port): port is number => typeof port === 'number' && port > 0,
+        ),
+      ),
+    ];
+    for (const port of candidates) {
+      try {
+        const pids = await getListeningProcessIds(port);
+        if (pids.includes(String(options.keepPid))) {
+          logger.info(
+            `Reusing owned Gateway on port ${port} (pid=${options.keepPid}); skip port-free wait`,
+          );
+          return port;
+        }
+      } catch (err) {
+        logger.warn(`Failed to probe owned Gateway on port ${port}:`, err);
+      }
+    }
+  }
 
   await waitForPortFree(options.defaultPort);
 

@@ -12,6 +12,7 @@ import {
   recordSkillUse,
   toggleSkillEnabled,
   uploadSkillZip,
+  isSkillPlazaAuthNotReadyError,
   type InstallPlazaSkillOptions,
 } from '@/lib/skill-plaza-api';
 import { applyMineCategoryFallback, MINE_FALLBACK_CATEGORY_CODE } from '@/lib/skill-plaza-category';
@@ -48,6 +49,12 @@ interface SkillPlazaState {
 
   // Loading states
   loading: boolean;
+  // True while refreshing in the background with data already on screen
+  // (stale-while-revalidate). Never blocks the list.
+  backgroundRefreshing: boolean;
+  // True while the STO token is not ready yet: the page shows a loading state
+  // and the store retries until auth becomes available.
+  awaitingAuth: boolean;
   installing: Record<string, boolean>;
   uninstalling: Record<string, boolean>;
   uploading: boolean;
@@ -104,6 +111,84 @@ function savePlazaMetaCache(map: Record<string, PlazaSkillMeta>) {
 
 const DETAIL_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+// ---------------------------------------------------------------------------
+// Request coordination (module scope; intentionally outside React state)
+// ---------------------------------------------------------------------------
+
+// Collapse concurrent identical requests so overlapping effects / strict-mode
+// double mounts do not fan out into duplicate network round-trips.
+const inflightRequests = new Map<string, Promise<void>>();
+
+function dedupeRequest(key: string, run: () => Promise<void>): Promise<void> {
+  const existing = inflightRequests.get(key);
+  if (existing) return existing;
+  const promise = run().finally(() => {
+    if (inflightRequests.get(key) === promise) {
+      inflightRequests.delete(key);
+    }
+  });
+  inflightRequests.set(key, promise);
+  return promise;
+}
+
+// Monotonic sequence numbers guard against out-of-order responses overwriting
+// a newer query's result (e.g. fast typing in search).
+let plazaRequestSeq = 0;
+let mineRequestSeq = 0;
+
+// When a fetch reports the STO token is not ready yet, we keep the UI in a
+// loading state and retry with a bounded backoff until the token arrives.
+let authRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let authRetryAttempts = 0;
+const AUTH_RETRY_MAX_ATTEMPTS = 30;
+const AUTH_RETRY_DELAY_MS = 800;
+
+function resetAuthRetry(): void {
+  if (authRetryTimer) {
+    clearTimeout(authRetryTimer);
+    authRetryTimer = null;
+  }
+  authRetryAttempts = 0;
+}
+
+function scheduleAuthRetry(retry: () => void): void {
+  if (authRetryTimer) return; // a retry is already pending
+  if (authRetryAttempts >= AUTH_RETRY_MAX_ATTEMPTS) return; // give up after ~24s
+  authRetryTimer = setTimeout(() => {
+    authRetryTimer = null;
+    authRetryAttempts += 1;
+    retry();
+  }, AUTH_RETRY_DELAY_MS);
+}
+
+// Re-run the fetches the current view needs. Referenced lazily so it can use
+// the store instance defined below.
+function triggerAuthRetry(): void {
+  const state = useSkillPlazaStore.getState();
+  void state.fetchCategories();
+  void state.fetchPlazaSkills({ reset: true });
+  if (state.activeTab === 'mine') {
+    void state.fetchLocalSkills();
+  }
+}
+
+function plazaRequestKey(state: {
+  searchQuery: string;
+  activeCategory: string;
+  sortMode: SkillPlazaSort;
+  page: number;
+  pageSize: number;
+}): string {
+  return [
+    'plaza',
+    state.searchQuery,
+    state.activeCategory,
+    state.sortMode,
+    state.page,
+    state.pageSize,
+  ].join('|');
+}
+
 export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
   // UI state
   activeTab: 'all',
@@ -128,6 +213,8 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
 
   // Loading
   loading: false,
+  backgroundRefreshing: false,
+  awaitingAuth: false,
   installing: {},
   uninstalling: {},
   uploading: false,
@@ -153,18 +240,17 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
   },
   setActiveCategory: (category) => {
     set({ activeCategory: category, page: 1 });
+    // Plaza tab filters server-side; "mine" tab filters the already-loaded
+    // list client-side (SkillPlazaPage), so no refetch is needed there.
     if (get().activeTab === 'all') {
       get().fetchPlazaSkills({ reset: true });
-    } else {
-      get().fetchLocalSkills({ reset: true });
     }
   },
   setSearchQuery: (query) => {
     set({ searchQuery: query, page: 1 });
+    // See setActiveCategory: "mine" search is a pure client-side filter.
     if (get().activeTab === 'all') {
       get().fetchPlazaSkills({ reset: true });
-    } else {
-      get().fetchLocalSkills({ reset: true });
     }
   },
   setSortMode: (sort) => {
@@ -179,12 +265,19 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
 
   // -- Data fetching --
   fetchCategories: async () => {
-    try {
-      const categories = await fetchSkillPlazaCategories();
-      set({ categories });
-    } catch (err) {
-      set({ error: String(err) });
-    }
+    return dedupeRequest('categories', async () => {
+      try {
+        const categories = await fetchSkillPlazaCategories();
+        set({ categories });
+      } catch (err) {
+        if (isSkillPlazaAuthNotReadyError(err)) {
+          set({ awaitingAuth: true });
+          scheduleAuthRetry(triggerAuthRetry);
+          return;
+        }
+        set({ error: String(err) });
+      }
+    });
   },
 
   fetchPlazaSkills: async (opts) => {
@@ -192,55 +285,99 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     const page = reset ? 1 : get().page;
     if (reset) set({ page: 1 });
 
-    set({ loading: true, error: null });
-    try {
-      const result = await fetchSkillPlazaList({
-        q: get().searchQuery || undefined,
-        category: get().activeCategory || undefined,
-        sort: get().sortMode,
-        page,
-        pageSize: get().pageSize,
-      });
-      const metaMap = { ...get().plazaSkillMetaMap };
-      for (const skill of result.skills) {
-        metaMap[skill.slug] = {
-          title: skill.title,
-          description: skill.description,
-          category: skill.category,
-          categoryCode: skill.categoryCode,
-          categoryCodes: skill.categoryCodes,
-          categoryNames: skill.categoryNames,
-          installCount: skill.installCount,
-          useCount: skill.useCount,
-        };
-      }
-      savePlazaMetaCache(metaMap);
+    const key = plazaRequestKey({
+      searchQuery: get().searchQuery,
+      activeCategory: get().activeCategory,
+      sortMode: get().sortMode,
+      page,
+      pageSize: get().pageSize,
+    });
 
-      const nextState: Partial<SkillPlazaState> = {
-        plazaSkills: result.skills,
-        hasMore: result.hasMore,
-        page: result.page,
-        pageSize: result.pageSize,
-        total: result.total,
-        loading: false,
-        plazaStale: false,
-        plazaSkillMetaMap: metaMap,
-      };
-      if (!skipCategoryCounts && get().activeTab === 'all') {
-        nextState.categoryCounts = result.categoryCounts;
+    return dedupeRequest(key, async () => {
+      const seq = ++plazaRequestSeq;
+      // Stale-while-revalidate: keep the current list visible and only show the
+      // blocking loader when there is nothing to show yet.
+      const hasData = get().plazaSkills.length > 0;
+      set(hasData
+        ? { backgroundRefreshing: true, error: null }
+        : { loading: true, error: null });
+
+      try {
+        const result = await fetchSkillPlazaList({
+          q: get().searchQuery || undefined,
+          category: get().activeCategory || undefined,
+          sort: get().sortMode,
+          page,
+          pageSize: get().pageSize,
+        });
+        // Drop out-of-order responses so a slow earlier query cannot overwrite
+        // a newer one's result.
+        if (seq !== plazaRequestSeq) return;
+
+        const metaMap = { ...get().plazaSkillMetaMap };
+        for (const skill of result.skills) {
+          metaMap[skill.slug] = {
+            title: skill.title,
+            description: skill.description,
+            category: skill.category,
+            categoryCode: skill.categoryCode,
+            categoryCodes: skill.categoryCodes,
+            categoryNames: skill.categoryNames,
+            installCount: skill.installCount,
+            useCount: skill.useCount,
+          };
+        }
+        savePlazaMetaCache(metaMap);
+
+        // A successful list load means auth is ready; stop any retry loop.
+        resetAuthRetry();
+        const nextState: Partial<SkillPlazaState> = {
+          plazaSkills: result.skills,
+          hasMore: result.hasMore,
+          page: result.page,
+          pageSize: result.pageSize,
+          total: result.total,
+          loading: false,
+          backgroundRefreshing: false,
+          awaitingAuth: false,
+          plazaStale: false,
+          plazaSkillMetaMap: metaMap,
+        };
+        if (!skipCategoryCounts && get().activeTab === 'all') {
+          nextState.categoryCounts = result.categoryCounts;
+        }
+        set(nextState);
+      } catch (err) {
+        if (seq !== plazaRequestSeq) return;
+        if (isSkillPlazaAuthNotReadyError(err)) {
+          // Token not ready yet: keep the loading state (no error toast) and
+          // retry until it arrives.
+          set({
+            awaitingAuth: true,
+            loading: get().plazaSkills.length === 0,
+            backgroundRefreshing: false,
+          });
+          scheduleAuthRetry(triggerAuthRetry);
+          return;
+        }
+        // On a background refresh failure keep the stale data on screen.
+        set({ error: String(err), loading: false, backgroundRefreshing: false });
       }
-      set(nextState);
-    } catch (err) {
-      set({ error: String(err), loading: false });
-    }
+    });
   },
 
   fetchLocalSkills: async (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => {
     const { skipCategoryCounts } = opts || {};
 
-    set({ loading: true, error: null });
+    return dedupeRequest('local-skills', async () => {
+    const seq = ++mineRequestSeq;
+    const hasData = get().mySkills.length > 0;
+    set(hasData
+      ? { backgroundRefreshing: true, error: null }
+      : { loading: true, error: null });
     try {
       const result = await fetchLocalSkills();
+      if (seq !== mineRequestSeq) return;
       // Enrich mySkills from plaza list / cache so display matches the plaza tab
       const { plazaSkillMetaMap, categories, plazaSkills } = get();
       const enrichedSkills = result.skills.map((skill) => {
@@ -278,6 +415,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
         return applyMineCategoryFallback(merged, categories, plazaSkillMetaMap, plazaSkill);
       });
 
+      resetAuthRetry();
       const nextState: Partial<SkillPlazaState> = {
         mySkills: enrichedSkills,
         hasMore: false,
@@ -285,6 +423,8 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
         pageSize: result.skills.length || 20,
         total: result.skills.length,
         loading: false,
+        backgroundRefreshing: false,
+        awaitingAuth: false,
         mineStale: false,
       };
       if (!skipCategoryCounts && get().activeTab === 'mine') {
@@ -292,17 +432,36 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
       }
       set(nextState);
     } catch (err) {
-      set({ error: String(err), loading: false });
+      if (seq !== mineRequestSeq) return;
+      if (isSkillPlazaAuthNotReadyError(err)) {
+        set({
+          awaitingAuth: true,
+          loading: get().mySkills.length === 0,
+          backgroundRefreshing: false,
+        });
+        scheduleAuthRetry(triggerAuthRetry);
+        return;
+      }
+      set({ error: String(err), loading: false, backgroundRefreshing: false });
     }
+    });
   },
 
   syncUserSkills: async () => {
+    // Only refresh public plaza data on user change. "我的技能" loads lazily
+    // when its tab is opened, keeping the heavy local-skills scan off the
+    // first-paint critical path.
     set({ syncingUserSkills: true, error: null });
     try {
       await get().fetchCategories();
-      // Plaza list must load before local skills so title/description enrichment can apply
       await get().fetchPlazaSkills({ reset: true });
-      await get().fetchLocalSkills();
+      // Local skills are stale after an account switch; refresh them only when
+      // the user is already viewing the "mine" tab.
+      if (get().activeTab === 'mine') {
+        await get().fetchLocalSkills();
+      } else {
+        set({ mineStale: true });
+      }
     } catch (err) {
       console.error('Failed to sync user skills:', err);
       set({ error: String(err) });

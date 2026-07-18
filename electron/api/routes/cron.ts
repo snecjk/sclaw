@@ -16,6 +16,7 @@ import {
 } from '../../utils/ensure-dated-execution-session';
 import { ensureTaskGroupFirstTriggeredOnRun, listTaskGroupFirstTriggeredAt } from '../../utils/task-group-first-trigger-store';
 import { cronTaskGroupKey } from '../../../shared/task-group-key';
+import { resolveCronJobAgentId } from '../../../shared/cron-job-agent';
 
 interface GatewayCronJob {
   id: string;
@@ -343,12 +344,17 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
   const { stat, readdir, readFile: fsReadFile } = await import('node:fs/promises');
 
   const jobNamesById = new Map<string, string>();
+  const jobAgentById = new Map<string, string>();
   try {
     const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
     const jobsRaw = await readFile(jobsFile, 'utf8');
-    const jobsData = JSON.parse(jobsRaw) as { jobs?: Array<{ id: string; name?: string }> };
+    const jobsData = JSON.parse(jobsRaw) as {
+      jobs?: Array<{ id: string; name?: string; description?: string }>;
+    };
     for (const job of jobsData.jobs ?? []) {
-      if (job.id && job.name?.trim()) jobNamesById.set(job.id, job.name.trim());
+      if (!job.id) continue;
+      if (job.name?.trim()) jobNamesById.set(job.id, job.name.trim());
+      jobAgentById.set(job.id, resolveCronJobAgentId(job.description));
     }
   } catch {
     // ignore
@@ -465,11 +471,17 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
       }
 
       for (const [date, updatedAt] of runsByDate) {
-        const sessionKey = `agent:main:cron:${jobId}:${date}`;
-        // Skip if already present from physical sessions scan
-        if (sessions.some((s) => s.key === sessionKey)) continue;
-        const baseKey = `agent:main:cron:${jobId}`;
-        const label = baseSessionLabels.get(baseKey) || `Cron: ${jobId}`;
+        const agentId = jobAgentById.get(jobId) ?? 'main';
+        const sessionKey = `agent:${agentId}:cron:${jobId}:${date}`;
+        // Skip if any agent already has this job+date (physical or virtual twin)
+        if (sessions.some((s) => {
+          const parsed = parseCronSessionKey(s.key);
+          return parsed?.jobId === jobId && parsed.date === date;
+        })) continue;
+        const baseKey = `agent:${agentId}:cron:${jobId}`;
+        const label = baseSessionLabels.get(baseKey)
+          || baseSessionLabels.get(`agent:main:cron:${jobId}`)
+          || `Cron: ${jobId}`;
         sessions.push({
           key: sessionKey,
           label,
@@ -488,8 +500,12 @@ async function listAllCronSessions(): Promise<CronSessionListItem[]> {
   const firstTriggered = await listTaskGroupFirstTriggeredAt();
   const existingKeys = new Set(sessions.map((session) => session.key));
   sessions.push(
-    ...buildFirstTriggeredCronSessionPlaceholders(firstTriggered, existingKeys, jobNamesById)
-      .filter((placeholder) => !deletedKeys.has(placeholder.key)),
+    ...buildFirstTriggeredCronSessionPlaceholders(
+      firstTriggered,
+      existingKeys,
+      jobNamesById,
+      jobAgentById,
+    ).filter((placeholder) => !deletedKeys.has(placeholder.key)),
   );
   sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
 
@@ -922,8 +938,11 @@ export async function handleCronRoutes(
       try {
         const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
         const jobsRaw = await readFile(jobsFile, 'utf8');
-        const jobsData = JSON.parse(jobsRaw) as { jobs?: Array<{ id: string; name?: string }> };
-        const name = jobsData.jobs?.find((job) => job.id === body.id)?.name?.trim();
+        const jobsData = JSON.parse(jobsRaw) as {
+          jobs?: Array<{ id: string; name?: string }>;
+        };
+        const job = jobsData.jobs?.find((entry) => entry.id === body.id);
+        const name = job?.name?.trim();
         if (name) jobLabel = `${name}`;
       } catch {
         // ignore

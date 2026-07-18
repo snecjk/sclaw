@@ -242,6 +242,22 @@ export function dedupeRedundantUserMessages(
 
       const sameTurnByDisplay = displayTextMatches(first, second);
 
+      // Synthetic opener from session label vs real history user (may be non-adjacent).
+      const firstSynthetic = typeof first.id === 'string' && first.id.startsWith('session-label-user-');
+      const secondSynthetic = typeof second.id === 'string' && second.id.startsWith('session-label-user-');
+      if (sameTurnByDisplay && (firstSynthetic || secondSynthetic)) {
+        if (firstSynthetic && !secondSynthetic) {
+          drop.add(i);
+          if (first.id) droppedIds.push(first.id);
+          break;
+        }
+        if (secondSynthetic) {
+          drop.add(j);
+          if (second.id) droppedIds.push(second.id);
+          continue;
+        }
+      }
+
       // Only ADJACENT user messages can be the same turn (an optimistic user
       // message and its server echo, or a double insert). Two user messages separated by
       // an assistant reply (or anything else) are distinct turns and must be kept
@@ -433,7 +449,10 @@ export function recoverInitialUserFromSessionLabel(
   sessionKey: string,
   sessionLabels: Record<string, string>,
   gatewayLabel?: string,
+  options?: { sending?: boolean },
 ): RawMessage[] {
+  // Mid-send: optimistic user already covers the opener; label recovery doubles it.
+  if (options?.sending) return enrichedMessages;
   if (historyHasSkillUserTurn(enrichedMessages)) return enrichedMessages;
   const label = resolveOpeningSessionLabel(sessionKey, sessionLabels, gatewayLabel);
   if (!label || historyHasOpeningUserTurn(enrichedMessages, label)) return enrichedMessages;
@@ -451,11 +470,14 @@ export function ensureOpeningUserMessageFirst(
   sessionKey: string,
   sessionLabels: Record<string, string>,
   gatewayLabel?: string,
+  options?: { sending?: boolean },
 ): RawMessage[] {
+  // Mid-send: do not rewrite timestamps / inject openers while stream+history race.
+  if (options?.sending) return messages;
   const label = resolveOpeningSessionLabel(sessionKey, sessionLabels, gatewayLabel);
   let working = messages;
   if (label && !historyHasOpeningUserTurn(working, label)) {
-    working = recoverInitialUserFromSessionLabel(working, sessionKey, sessionLabels, gatewayLabel);
+    working = recoverInitialUserFromSessionLabel(working, sessionKey, sessionLabels, gatewayLabel, options);
   }
 
   const visibleUsers = working.filter((message) => hasVisibleUserMessageContent(message));

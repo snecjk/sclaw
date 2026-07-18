@@ -1,63 +1,57 @@
 ## ADDED Requirements
 
-### Requirement: Unread persists in localStorage only
+### Requirement: Unread state in localStorage
 
-The system SHALL persist session unread state in renderer localStorage via the existing session-unread store (`stoclaw:session-unread`). The system MUST NOT store unread red-dot keys in the SQLite session catalog as part of this change.
+Session unread indicators SHALL continue to persist in localStorage under `stoclaw:session-unread` via `useSessionUnreadStore`. Unread state MUST NOT be migrated to SQLite in this change.
 
-#### Scenario: Unread survives renderer reload
+#### Scenario: App restart preserves unread
 
-- **WHEN** a session is marked unread and the renderer reloads
-- **THEN** the unread key is still present from localStorage
-- **AND** no SQLite catalog table is required to restore that unread flag
+- **WHEN** the user restarts the app with unread sessions marked
+- **THEN** unread keys reload from localStorage
+- **AND** dots appear per marking rules after session list renders
 
-#### Scenario: Catalog migration does not own unread
+### Requirement: Mark unread on background success
 
-- **WHEN** migration `0002-session-catalog` is applied
-- **THEN** the schema does not require an unread/red-dot table for this capability
-- **AND** unread continues to use `stoclaw:session-unread`
+The system SHALL mark a session unread when a run completes successfully in the background (not the foreground session), subject to the gates in `session-unread-notify.ts` (observed run, grace period, readAt suppression).
 
-### Requirement: Mark unread on background successful completion
+#### Scenario: Background completion
 
-When a session run completes successfully and that session is not the current viewing session, the system SHALL mark it unread only if the anti-false-positive gates pass: the runId was observed during this app lifetime, startup grace has elapsed, and the session was not recently marked read.
+- **WHEN** session S completes successfully while the user views session T
+- **THEN** S is marked unread in the store
+- **AND** T is not marked unread solely due to S's completion
 
-#### Scenario: Background session finishes successfully
+### Requirement: Clear unread on open
 
-- **WHEN** session B completes a successful observed run
-- **AND** the user is viewing session A
-- **AND** startup grace and recent-read grace do not block
-- **THEN** session B is marked unread in the localStorage-backed store
+When the user opens or switches to a session, the system SHALL mark that session read (clear unread, update `readAt`).
 
-#### Scenario: Current session completion does not mark unread
+#### Scenario: Switch to unread session
 
-- **WHEN** the current session completes successfully in the foreground
-- **THEN** the system MUST NOT mark that session unread
-- **AND** it MAY refresh the session's recent-read timestamp
+- **WHEN** the user selects session S that was unread
+- **THEN** unread clears for S and aliases
+- **AND** `readAt` updates for the canonical key
 
-#### Scenario: Replay or unobserved run is ignored
+### Requirement: Unread dot left of title
 
-- **WHEN** a completion event arrives for a runId that was not observed in this app lifetime
-- **THEN** the system MUST NOT mark the session unread
+In sidebar recent session rows, the unread indicator SHALL render **immediately left of the session title text**, using `sidebarUnreadDotClass` from `src/lib/surfaces.ts` and semantic tokens from `docs/sto-design.md`. The trailing status area SHALL NOT show the unread dot.
 
-### Requirement: Clear unread when opening the session
+#### Scenario: Unread session in expanded sidebar
 
-Switching to or opening a session MUST clear unread for that session (including canonical aliases) and update its recent-read timestamp.
+- **WHEN** session S is unread and not running or failed
+- **THEN** a dot appears left of S's title
+- **AND** the trailing status slot is empty for unread
 
-#### Scenario: User opens an unread session
+### Requirement: Status priority
 
-- **WHEN** the user switches to a session that is marked unread
-- **THEN** the unread flag is cleared for that session's unread aliases
-- **AND** the sidebar no longer shows an unread indicator for that session
+Sidebar session status SHALL follow priority: **running** > **error** > **unread**. Running shows the running icon in the trailing slot; error shows the error icon; unread shows only the left-of-title dot (no trailing unread).
 
-### Requirement: Unread red dot left of session title
+#### Scenario: Running suppresses unread display
 
-The sidebar recent-session row SHALL show the unread indicator to the **left of the session title** when the session is unread and is not the current session. Status display MUST remain mutually exclusive with priority: running, then error, then unread. The unread glyph MUST use the existing design-system unread/destructive surface token (e.g. `sidebarUnreadDotClass` aligned with `docs/sto-design.md`), not ad-hoc hex colors.
+- **WHEN** session S is both unread and running
+- **THEN** the trailing slot shows running
+- **AND** the left-of-title unread dot is hidden
 
-#### Scenario: Unread session shows leading red dot
+#### Scenario: Error suppresses unread display
 
-- **WHEN** a non-current recent session is unread and not running and has no error status
-- **THEN** a red-dot indicator appears to the left of that session's title text
-
-#### Scenario: Running status hides unread glyph
-
-- **WHEN** a session is both unread in storage and currently running
-- **THEN** the sidebar shows the running indicator instead of the unread red dot
+- **WHEN** session S has a failed run error
+- **THEN** the trailing slot shows error
+- **AND** the left-of-title unread dot is hidden

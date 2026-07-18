@@ -2,6 +2,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getOpenClawConfigDir } from '../utils/paths';
 import type { EngineAdapter, EngineAdapterContext, EngineSendWithMediaParams, EngineSessionSummary } from './types';
+import { ensureProjectAgentForSessionKey } from '../services/project-agent-service';
 
 const VISION_MIME_TYPES = new Set([
   'image/png',
@@ -136,13 +137,27 @@ async function loadOpenClawSessionStoreMetadata(): Promise<Map<string, OpenClawS
   return metadataByKey;
 }
 
+function sessionsFromOpenClawStoreMetadata(
+  metadataByKey: Map<string, OpenClawSessionStoreMetadata>,
+): EngineSessionSummary[] {
+  return [...metadataByKey.entries()]
+    .map(([key, storeMeta]): EngineSessionSummary => ({
+      key,
+      label: storeMeta.label,
+      updatedAt: storeMeta.updatedAt,
+      spawnedBy: storeMeta.spawnedBy,
+      engineType: 'openclaw',
+    }))
+    .filter((entry) => Boolean(entry.key));
+}
+
 export const openClawAdapter: EngineAdapter = {
   type: 'openclaw',
 
   async listSessions(ctx: EngineAdapterContext) {
+    const metadataByKey = await loadOpenClawSessionStoreMetadata();
     try {
       const result = await ctx.gatewayManager.rpc<Record<string, unknown>>('sessions.list', {});
-      const metadataByKey = await loadOpenClawSessionStoreMetadata();
       const sessions: EngineSessionSummary[] = Array.isArray(result.sessions)
         ? result.sessions
           .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
@@ -169,8 +184,13 @@ export const openClawAdapter: EngineAdapter = {
           .filter((entry) => Boolean(entry.key))
         : [];
       return { success: true, result: { sessions } };
-    } catch (error) {
-      return { success: false, error: String(error) };
+    } catch {
+      // Gateway down / not connected: still list from agents/*/sessions/sessions.json
+      // so the sidebar can show recent OpenClaw history offline.
+      return {
+        success: true,
+        result: { sessions: sessionsFromOpenClawStoreMetadata(metadataByKey) },
+      };
     }
   },
 
@@ -194,9 +214,13 @@ export const openClawAdapter: EngineAdapter = {
 
   async sendMessage(ctx: EngineAdapterContext, params) {
     try {
-      // Defensive: ensure no non-schema properties leak into chat.send params
+      const sessionKey = params.sessionKey;
+      const projectAgentResult = await ensureProjectAgentForSessionKey(sessionKey);
+      if (projectAgentResult.created || projectAgentResult.workspaceUpdated) {
+        await ctx.gatewayManager.debouncedReload();
+      }
       const rpcParams: Record<string, unknown> = {
-        sessionKey: params.sessionKey,
+        sessionKey,
         message: params.message,
         deliver: params.deliver,
         idempotencyKey: params.idempotencyKey,
@@ -210,6 +234,12 @@ export const openClawAdapter: EngineAdapter = {
 
   async sendMessageWithMedia(ctx: EngineAdapterContext, params: EngineSendWithMediaParams) {
     try {
+      const sessionKey = params.sessionKey;
+      const projectAgentResult = await ensureProjectAgentForSessionKey(sessionKey);
+      if (projectAgentResult.created || projectAgentResult.workspaceUpdated) {
+        await ctx.gatewayManager.debouncedReload();
+      }
+
       let message = params.message;
       const imageAttachments: Array<Record<string, unknown>> = [];
       const fileReferences: string[] = [];

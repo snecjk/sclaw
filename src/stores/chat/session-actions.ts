@@ -26,6 +26,7 @@ import { appendPendingLocalVirtualTaskSessions } from './session-list-merge';
 import {
   scheduleSessionLabelHydrationForStore,
 } from './session-metadata-hydrate';
+import { getBaseAgentIdFromProjectAgentId } from '../../../shared/project-agent';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 
@@ -450,6 +451,10 @@ export function createSessionActions(
 
       rememberOptimisticDeletedSessionKey(key);
 
+      void import('@/stores/session-catalog').then(({ useSessionCatalogStore }) => {
+        void useSessionCatalogStore.getState().softDeleteSession(key);
+      });
+
       const { currentSessionKey, sessions } = get();
       const remaining = sessions.filter((s) => s.key !== key);
 
@@ -491,8 +496,13 @@ export function createSessionActions(
     // ── New session ──
     // NOTE: Runtime store is src/stores/chat.ts (monolithic). Keep logic in sync when refactoring.
 
-    newSession: async () => {
+    newSession: async (_options?: { projectId?: string }) => {
+      // Generate a new unique session key and switch to it.
+      // NOTE: We intentionally do NOT call sessions.reset on the old session.
+      // sessions.reset archives (renames) the session JSONL file, making old
+      // conversation history inaccessible when the user switches back to it.
       const { currentSessionKey, messages, sessions, sessionLastActivity, sessionLabels } = get();
+      // 仅将没有任何历史记录且无活动时间的会话视为空会话
       const leavingEmpty = isTemporaryAgentSessionKey(currentSessionKey)
         && messages.length === 0
         && !sessionLastActivity[currentSessionKey]
@@ -500,6 +510,7 @@ export function createSessionActions(
       const prefix = getCanonicalPrefixFromSessions(sessions) ?? DEFAULT_CANONICAL_PREFIX;
       const newKey = `${prefix}:session-${Date.now()}`;
       const newAgentId = getAgentIdFromSessionKey(newKey);
+      const lookupAgentId = getBaseAgentIdFromProjectAgentId(newAgentId.trim().toLowerCase()) ?? newAgentId.trim().toLowerCase();
       const pendingModel = get().pendingNewSessionModel?.trim();
       let chosenModel = pendingModel;
       if (!chosenModel) {
@@ -515,7 +526,7 @@ export function createSessionActions(
         }
       }
       const agentEngineType = useAgentsStore.getState().agents
-        .find((agent) => agent.id.trim().toLowerCase() === newAgentId.trim().toLowerCase())?.engineType;
+        .find((agent) => agent.id.trim().toLowerCase() === lookupAgentId)?.engineType;
       const newSessionEntry: ChatSession = {
         key: newKey,
         label: NEW_SESSION_TEMP_LABEL,

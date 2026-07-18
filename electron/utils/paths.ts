@@ -5,8 +5,12 @@
 import { app } from 'electron';
 import { join } from 'path';
 import { homedir } from 'os';
-import { existsSync, mkdirSync, readFileSync, realpathSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'fs';
 import { logger } from './logger';
+import {
+  WORKSPACE_ARTIFACT_OUTPUT_DIRNAME,
+  mergeWorkspaceArtifactOutputSection,
+} from '../../shared/workspace-paths';
 
 export {
   quoteForCmd,
@@ -34,9 +38,51 @@ export function getOpenClawConfigDir(): string {
   return join(homedir(), '.stoclaw', 'openclaw');
 }
 
+/**
+ * StoClaw user home config root (~/.stoclaw).
+ * Survives app reinstall when Application Support / userData is wiped.
+ */
+export function getStoClawHomeDir(): string {
+  return join(homedir(), '.stoclaw');
+}
+
+/** More Apps (应用广场) registry directory under user home. */
+export function getMoreAppsDir(): string {
+  return join(getStoClawHomeDir(), 'more-apps');
+}
+
+/** More Apps registry JSON path (~/.stoclaw/more-apps/apps.json). */
+export function getMoreAppsRegistryPath(): string {
+  return join(getMoreAppsDir(), 'apps.json');
+}
+
 /** Legacy standalone OpenClaw workspace (~/.openclaw/workspace), if present on disk. */
 export function getLegacyOpenClawWorkspaceRoot(): string {
   return join(homedir(), '.openclaw', 'workspace');
+}
+
+/** Shared default agent workspace (~/.stoclaw/workspace). */
+export function getDefaultAgentWorkspacePath(): string {
+  return join(getStoClawHomeDir(), 'workspace');
+}
+
+/** Legacy default workspace before lift-out (~/.stoclaw/openclaw/workspace). */
+export function getLegacyDefaultAgentWorkspacePath(): string {
+  return join(getOpenClawConfigDir(), 'workspace');
+}
+
+/** Managed per-agent workspace under ~/.stoclaw/workspace-{agentId}. */
+export function getManagedAgentWorkspacePath(agentId: string): string {
+  const id = (agentId ?? '').trim().toLowerCase();
+  if (!id || id === 'main') return getDefaultAgentWorkspacePath();
+  return join(getStoClawHomeDir(), `workspace-${id}`);
+}
+
+/** Legacy managed workspace (~/.stoclaw/openclaw/workspace-{agentId}). */
+export function getLegacyManagedAgentWorkspacePath(agentId: string): string {
+  const id = (agentId ?? '').trim().toLowerCase();
+  if (!id || id === 'main') return getLegacyDefaultAgentWorkspacePath();
+  return join(getOpenClawConfigDir(), `workspace-${id}`);
 }
 
 /**
@@ -156,6 +202,55 @@ export function ensureDir(dir: string): void {
     mkdirSync(dir, { recursive: true });
   }
 }
+
+/**
+ * Upsert the durable `.claw-output` hard rule into AGENTS.md / CLAUDE.md when present.
+ * Best-effort: never creates bootstrap files that did not already exist.
+ */
+function ensureWorkspaceArtifactOutputConstraintDocs(workspaceRoot: string): void {
+  for (const fileName of ['AGENTS.md', 'CLAUDE.md'] as const) {
+    const filePath = join(workspaceRoot, fileName);
+    if (!existsSync(filePath)) continue;
+    try {
+      const existing = readFileSync(filePath, 'utf-8');
+      const merged = mergeWorkspaceArtifactOutputSection(existing, workspaceRoot);
+      if (merged !== existing) {
+        writeFileSync(filePath, merged, 'utf-8');
+      }
+    } catch (error) {
+      logger.warn('Failed to ensure workspace artifact output constraint doc', {
+        workspace: workspaceRoot,
+        filePath,
+        error: String(error),
+      });
+    }
+  }
+}
+
+/**
+ * Ensure `<workspace>/.claw-output` exists so write tools / models have a real target,
+ * and keep AGENTS.md / CLAUDE.md hard rules in sync when those files already exist.
+ * Best-effort: never throws (callers should not fail agent bootstrap on mkdir).
+ */
+export function ensureWorkspaceArtifactOutputDir(workspacePath: string | null | undefined): string | null {
+  const trimmed = workspacePath?.trim();
+  if (!trimmed) return null;
+  const root = expandPath(trimmed);
+  const outputDir = join(root, WORKSPACE_ARTIFACT_OUTPUT_DIRNAME);
+  try {
+    ensureDir(outputDir);
+    ensureWorkspaceArtifactOutputConstraintDocs(root);
+    return outputDir;
+  } catch (error) {
+    logger.warn('Failed to ensure workspace artifact output dir', {
+      workspace: root,
+      outputDir,
+      error: String(error),
+    });
+    return null;
+  }
+}
+
 
 /**
  * Get resources directory (for bundled assets)
