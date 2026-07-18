@@ -15,7 +15,6 @@ import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
 import { resolveSkillGatewayText } from '@/lib/skill-gateway-text';
 import { appendSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
 import { awaitSessionSendReadiness } from '@/lib/session-send-readiness';
-import { discardAgentMemoriesForAbnormalTurn } from '@/lib/agent-execution-memory';
 import { releaseSendAttempt, tryAcquireSendAttempt } from './send-attempt-lock';
 import { recordTerminalRun } from './run-lifecycle';
 import { buildTerminalRuntimePatch } from './turn-state-machine';
@@ -45,10 +44,6 @@ function failSendTurn(input: {
   sessionKey: string;
   error: string;
 }): void {
-  discardAgentMemoriesForAbnormalTurn({
-    sessionKey: input.sessionKey,
-    reason: 'failed',
-  });
   input.clearHistoryPoll(input.sessionKey);
   input.clearStuckCheckTimer?.(input.sessionKey);
   setRuntimePatch(input.set, input.sessionKey, {
@@ -181,26 +176,21 @@ export function createSendActions(
 
       const preparedContext = await prepareSendContext({
         trimmedText: gatewayText,
-        memoryQueryText: userDisplayText || skillMeta?.title,
         sessionKey: currentSessionKey,
         messages: get().currentSessionKey === currentSessionKey ? get().messages : [],
         workflowCardStates: get().currentSessionKey === currentSessionKey ? get().workflowCardStates : {},
         workflowContext,
         embedBrowserContext,
-        engineType: currentSessionEngineType,
         clearPendingWorkflow: get().clearPendingWorkflow,
       });
-      const {
-        claudeMemorySystemPrompt,
-        messageWithContext,
-      } = preparedContext;
+      const { messageWithContext } = preparedContext;
       const displayText = skillMeta ? userDisplayText : preparedContext.displayText;
       logChatFlow('send.context.prepared', {
         sessionKey: currentSessionKey,
         engineType: currentSessionEngineType,
         displayLength: displayText.length,
         gatewayMessageLength: messageWithContext.length,
-        hasSystemPromptAppend: Boolean(claudeMemorySystemPrompt),
+        hasSystemPromptAppend: false,
         hasWorkflowContext: Boolean(workflowContext),
       });
 
@@ -261,8 +251,8 @@ export function createSendActions(
         const result = await dispatchChatRequest({
           sessionKey: currentSessionKey,
           message: hasMedia ? messageWithContext || '' : messageWithContext,
+          sourceText: userDisplayText || skillMeta?.title,
           idempotencyKey,
-          systemPromptAppend: claudeMemorySystemPrompt,
           engineType: currentSessionEngineType,
           attachments: hasMedia ? attachments : undefined,
           extras: dingTalkRpcExtras,
@@ -357,11 +347,6 @@ export function createSendActions(
           recordTerminalRun(sessionKey, activeRunId);
           return true;
         }
-        discardAgentMemoriesForAbnormalTurn({
-          sessionKey,
-          runId: activeRunId,
-          reason: 'aborted',
-        });
         clearHistoryPoll(sessionKey);
         clearErrorRecoveryTimer(sessionKey);
         clearStuckCheckTimer(sessionKey);

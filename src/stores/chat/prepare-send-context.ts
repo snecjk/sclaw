@@ -1,31 +1,25 @@
-import { stripAgentMemoryContextsForDisplay } from '@/lib/agent-memory-display';
 import type { WorkflowExecutionState } from '@/types/workflow';
-import type { ChatSession, RawMessage, WorkflowContextBlock } from './types';
+import type { RawMessage, WorkflowContextBlock } from './types';
 import type { SclawBrowserEmbedContextBlock } from '@/lib/sclaw-browser-embed-context';
 
 export interface PreparedSendContext {
   messageWithContext: string;
   displayText: string;
-  claudeMemorySystemPrompt?: string;
 }
 
 export async function prepareSendContext(input: {
   trimmedText: string;
-  memoryQueryText?: string;
   sessionKey: string;
   messages: RawMessage[];
   workflowCardStates: Record<string, WorkflowExecutionState>;
   workflowContext?: WorkflowContextBlock | null;
   embedBrowserContext?: SclawBrowserEmbedContextBlock | null;
-  engineType?: ChatSession['engineType'];
   clearPendingWorkflow: () => void;
 }): Promise<PreparedSendContext> {
   const {
     clearPendingWorkflow,
-    engineType,
     embedBrowserContext: embedBrowserContextInput,
     messages,
-    memoryQueryText,
     sessionKey,
     trimmedText,
     workflowCardStates,
@@ -35,14 +29,6 @@ export async function prepareSendContext(input: {
   const { isSclawBrowserEmbedChatSessionKey } = await import('@/lib/sclaw-browser-chat-session');
   const isEmbedChatSession = isSclawBrowserEmbedChatSessionKey(sessionKey);
 
-  const {
-    appendAgentMemoryContextBlock,
-  } = await import('@/lib/agent-memory');
-  const {
-    appendAgentExecutionMemoryContext,
-    rememberInjectedExecutionMemories,
-  } = await import('@/lib/agent-execution-memory');
-  const { buildAgentMemoryContextBlocks } = await import('@/lib/agent-memory-context');
   const { appendWorkflowContext, stripWorkflowContextForDisplay } = await import('@/lib/workflow-context');
   const {
     buildWorkflowSessionHint,
@@ -81,19 +67,6 @@ export async function prepareSendContext(input: {
     }
   }
 
-  const memoryBlocks = await buildAgentMemoryContextBlocks(memoryQueryText?.trim() || trimmedText);
-  rememberInjectedExecutionMemories(sessionKey, memoryBlocks.injectedExecutionMemories);
-  const claudeMemorySystemPrompt = engineType === 'claude'
-    ? [memoryBlocks.preference, memoryBlocks.execution]
-        .filter((context): context is string => Boolean(context))
-        .join('\n\n') || undefined
-    : undefined;
-
-  if (engineType !== 'claude') {
-    textForGateway = appendAgentMemoryContextBlock(textForGateway, memoryBlocks.preference);
-    textForGateway = appendAgentExecutionMemoryContext(textForGateway, memoryBlocks.execution);
-  }
-
   let embedBrowserContext = embedBrowserContextInput ?? null;
   let embedLongSessionNotice: string | null = null;
   if (!embedBrowserContext && isEmbedChatSession) {
@@ -122,15 +95,12 @@ export async function prepareSendContext(input: {
   const messageWithContext = appendWorkflowContext(messageWithEmbedContext, workflowContext);
   const displayText = stripSclawBrowserEmbedContextForDisplay(
     stripWorkflowSessionHintForDisplay(
-      stripAgentMemoryContextsForDisplay(
-        stripWorkflowContextForDisplay(messageWithContext),
-      ),
+      stripWorkflowContextForDisplay(messageWithContext),
     ),
   );
 
   return {
     messageWithContext,
     displayText,
-    claudeMemorySystemPrompt,
   };
 }

@@ -57,6 +57,10 @@ export default defineConfig(({ mode }) => {
                 external: [
                   'electron-store',
                   'electron-updater',
+                  // mem0's official OSS entry imports its provider peers at runtime.
+                  // Keep it external so electron-builder packages those dependencies
+                  // once under node_modules instead of duplicating them in this bundle.
+                  'mem0ai/oss',
                   'ws',
                   'node:sqlite',
                   /openclaw\/extensions\//,

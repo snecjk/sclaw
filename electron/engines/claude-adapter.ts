@@ -1132,6 +1132,17 @@ export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void
 export const claudeAdapter: EngineAdapter = {
   type: 'claude',
 
+  prepareMemoryInjection(params, memory) {
+    const memorySystemPrompt = [memory.preference, memory.execution].filter(Boolean).join('\n\n');
+    const systemPromptAppend = [params.systemPromptAppend?.trim(), memorySystemPrompt]
+      .filter(Boolean)
+      .join('\n\n') || undefined;
+    if (memorySystemPrompt) {
+      logger.info(`[agent-memory][claude] systemPromptAppend after memory injection:\n${systemPromptAppend}`);
+    }
+    return { ...params, systemPromptAppend };
+  },
+
   async listSessions() {
     await ensureClaudeRuntimeReady();
     const entries = await listEngineSessionRegistryEntries('claude');

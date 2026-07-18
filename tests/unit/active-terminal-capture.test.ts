@@ -24,7 +24,7 @@ describe('active terminal events', () => {
     hostApiFetchMock.mockResolvedValue({ success: true });
   });
 
-  it('captures agent memory once for an active-session terminal final', async () => {
+  it('finalizes UI state without dispatching renderer memory IPC', async () => {
     const { useChatStore } = await import('@/stores/chat');
     const sessionKey = 'agent:claude:main';
 
@@ -72,8 +72,8 @@ describe('active terminal events', () => {
 
     const captureCalls = invokeIpcMock.mock.calls.filter(([channel]) => channel === 'agent-memory:capture');
     const bindCalls = invokeIpcMock.mock.calls.filter(([channel]) => channel === 'execution-memory:bind-injected-memories');
-    expect(captureCalls).toHaveLength(1);
-    expect(bindCalls).toHaveLength(1);
+    expect(captureCalls).toHaveLength(0);
+    expect(bindCalls).toHaveLength(0);
     expect(useChatStore.getState().runtimeBySessionKey[sessionKey]?.sending).toBe(false);
     expect(useChatStore.getState().runtimeBySessionKey[sessionKey]?.activeRunId).toBeNull();
   });

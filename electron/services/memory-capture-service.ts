@@ -57,6 +57,14 @@ class MemoryCaptureService {
     trace('info', 'execution.context.bound', { runId, memoryIds: memories.map((item) => item.memoryId), count: memories.length });
   }
 
+  discardInjectedExecutionMemories(runIdValue?: string | null): void {
+    const runId = runIdValue?.trim();
+    if (!runId) return;
+    if (this.injectedMemoriesByRun.delete(runId)) {
+      trace('info', 'execution.context.discarded', { runId });
+    }
+  }
+
   async capture(input: RefreshInput, gateway: GatewayManager): Promise<void> {
     await this.captureFromHistory(input, gateway);
   }

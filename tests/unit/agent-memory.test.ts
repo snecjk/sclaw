@@ -1,100 +1,32 @@
-import { describe, expect, it, vi } from 'vitest';
-
-const { invokeIpcMock } = vi.hoisted(() => ({ invokeIpcMock: vi.fn() }));
-
-vi.mock('@/lib/api-client', () => ({
-  invokeIpc: (...args: unknown[]) => invokeIpcMock(...args),
-}));
-
-vi.mock('@/lib/host-api', () => ({
-  hostApiFetch: vi.fn().mockResolvedValue(undefined),
-}));
-
+import { describe, expect, it } from 'vitest';
 import {
-  appendAgentMemoryContextBlock,
-  buildAgentMemoryContextText,
-  coerceMemoryMessageText,
-  findLatestUserMessageBeforeAssistant,
-  stripAgentMemoryContextForDisplay,
-} from '@/lib/agent-memory';
-import {
-  buildAgentExecutionMemoryContextText,
-  captureAgentMemories,
-  discardAgentMemoriesForAbnormalTurn,
-  rememberInjectedExecutionMemories,
-  stripAgentExecutionMemoryContextForDisplay,
-} from '@/lib/agent-execution-memory';
-import { stripAgentMemoryContextsForDisplay } from '@/lib/agent-memory-display';
-import { normalizeUserMessageForDisplay } from '@/lib/user-message-display';
+  AGENT_EXECUTION_MEMORY_CONTEXT_MARKER,
+  AGENT_MEMORY_CONTEXT_MARKER,
+  appendAgentMemoryBlock,
+  buildAgentMemoryContextBlocks,
+} from '../../shared/agent-memory-prompt';
+import { sanitizeMemoryFromChatPayload, stripAgentMemoryContexts } from '../../shared/agent-memory-display';
 
-describe('agent-memory helpers', () => {
-  it('strips injected memory context for display', () => {
-    const withContext = appendAgentMemoryContextBlock('原始问题', buildAgentMemoryContextText([
-      { memory: '用户偏好中文回答', score: 0.98 },
-    ]));
-
-    expect(withContext).toContain('StoClaw-Agent-Memory');
-    expect(stripAgentMemoryContextForDisplay(withContext)).toBe('原始问题');
+describe('shared agent-memory helpers', () => {
+  it('builds ranked preference and active execution blocks', () => {
+    const blocks = buildAgentMemoryContextBlocks({ results: [
+      { id: 'p1', memory: '用户喜欢简洁输出', score: 0.91, metadata: {} },
+      { id: 'e1', memory: '执行 sai-cli 查询', score: 0.532, metadata: { memoryScope: 'execution', status: 'active', confidence: 0.8 } },
+      { id: 'e2', memory: '过期经验', score: 1, metadata: { memoryScope: 'execution', status: 'inactive' } },
+    ] });
+    expect(blocks.preference).toContain('1. [score=0.910] 用户喜欢简洁输出');
+    expect(blocks.execution).toContain('1. [score=0.532] 执行 sai-cli 查询');
+    expect(blocks.execution).not.toContain('过期经验');
+    expect(blocks.injectedExecutionMemories).toEqual([{ memoryId: 'e1', memory: '执行 sai-cli 查询' }]);
   });
 
-  it('strips execution memory context from gateway user-message echoes', () => {
-    const withContext = [
-      '一周单量数据情况',
-      buildAgentExecutionMemoryContextText([{ memory: '执行 sai-cli 查询', score: 0.532 }]),
-    ].join('\n\n');
-
-    expect(stripAgentExecutionMemoryContextForDisplay(withContext)).toBe('一周单量数据情况');
-    expect(stripAgentMemoryContextsForDisplay(withContext)).toBe('一周单量数据情况');
-    expect(normalizeUserMessageForDisplay(withContext)).toBe('一周单量数据情况');
-  });
-
-  it('formats memory context with ranked items', () => {
-    const text = buildAgentMemoryContextText([
-      { memory: '用户喜欢简洁输出', score: 0.91 },
-      { memory: '用户偏好先给结论再展开' },
-    ]);
-
-    expect(text).toContain('1. [score=0.910] 用户喜欢简洁输出');
-    expect(text).toContain('2. 用户偏好先给结论再展开');
-  });
-
-  it('extracts plain text blocks from content arrays', () => {
-    expect(coerceMemoryMessageText([
-      { type: 'thinking', thinking: '忽略这个' },
-      { type: 'text', text: '第一段' },
-      { type: 'text', text: '第二段' },
-    ])).toBe('第一段 第二段');
-  });
-
-  it('finds the latest user message before an assistant reply', () => {
-    const text = findLatestUserMessageBeforeAssistant([
-      { role: 'user', id: 'u1', content: '第一问' },
-      { role: 'assistant', id: 'a1', content: '中间回复' },
-      { role: 'user', id: 'u2', content: [{ type: 'text', text: '最终问题' }] },
-      { role: 'assistant', id: 'a2', content: '最终回复' },
-    ], 'a2');
-
-    expect(text).toBe('最终问题');
-  });
-
-  it('does not dispatch normal memory capture after an abnormal terminal event', () => {
-    invokeIpcMock.mockReset();
-    rememberInjectedExecutionMemories('agent:main:failed-run', [
-      { memoryId: 'memory-1', memory: '历史执行经验' },
-    ]);
-    discardAgentMemoriesForAbnormalTurn({
-      sessionKey: 'agent:main:failed-run',
-      runId: 'run-failed',
-      reason: 'failed',
-    });
-
-    captureAgentMemories({
-      sessionKey: 'agent:main:failed-run',
-      runId: 'run-failed',
-      agentId: 'main',
-      engineType: 'claude',
-    });
-
-    expect(invokeIpcMock).not.toHaveBeenCalled();
+  it('strips memory blocks from nested renderer payloads without mutating the source', () => {
+    let message = appendAgentMemoryBlock('原始问题', `${AGENT_MEMORY_CONTEXT_MARKER}\n偏好\n${AGENT_MEMORY_CONTEXT_MARKER}`, AGENT_MEMORY_CONTEXT_MARKER);
+    message = appendAgentMemoryBlock(message, `${AGENT_EXECUTION_MEMORY_CONTEXT_MARKER}\n经验\n${AGENT_EXECUTION_MEMORY_CONTEXT_MARKER}`, AGENT_EXECUTION_MEMORY_CONTEXT_MARKER);
+    const source = { result: { messages: [{ role: 'user', content: [{ type: 'text', text: message }] }] } };
+    const sanitized = sanitizeMemoryFromChatPayload(source);
+    expect(sanitized.result.messages[0].content[0].text).toBe('原始问题');
+    expect(source.result.messages[0].content[0].text).toContain('偏好');
+    expect(stripAgentMemoryContexts(message)).toBe('原始问题');
   });
 });

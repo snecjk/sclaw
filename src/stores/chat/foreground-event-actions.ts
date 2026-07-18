@@ -37,12 +37,6 @@ export interface ForegroundEventDeps {
     set: ChatSet,
     event: BackgroundChatEvent,
   ) => void;
-  dispatchAgentMemoryCapture: (input: {
-    agentId?: string | null;
-    runId?: string | null;
-    sessionKey?: string | null;
-    engineType?: ChatSession['engineType'];
-  }) => void;
   clearHistoryPoll: (sessionKey: string) => void;
   clearErrorRecoveryTimer: (sessionKey: string) => void;
   setErrorRecoveryTimer: (sessionKey: string, timer: ReturnType<typeof setTimeout> | null) => void;
@@ -57,7 +51,6 @@ export function createForegroundEventActions(
   const {
     resolveEngineTypeForSession,
     handleBackgroundSessionEvent,
-    dispatchAgentMemoryCapture,
     clearHistoryPoll,
     clearErrorRecoveryTimer,
     setErrorRecoveryTimer,
@@ -79,7 +72,6 @@ export function createForegroundEventActions(
       get,
       set,
       clearHistoryPoll: () => clearHistoryPoll(sessionKey),
-      dispatchMemoryCapture: dispatchAgentMemoryCapture,
     });
   };
 
