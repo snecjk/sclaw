@@ -10,10 +10,12 @@ import { safeRemoveDir } from '../../utils/fs-retry';
 import { getCurrentActiveUserCode } from '../user-skill-workspace';
 import {
   ensureSkillsStoreDirs,
+  getSkillEntry,
   listDesiredPackages,
   removeSkillEntry,
   resolvePackageDir,
   upsertSkillEntry,
+  type SkillEntryKey,
   type SkillManifestEntry,
   type SkillScope,
 } from './canonical-store';
@@ -91,6 +93,64 @@ function resolveScope(params: { agentId?: string; userCode: string | null }): {
     return { scope: 'user', userCode: params.userCode };
   }
   return { scope: 'global' };
+}
+
+/**
+ * Plaza uninstall must clear every copy that would still appear in "我的技能".
+ * Migration often left the same slug in both user + global; deleting only the
+ * active user scope then looked successful while global kept the card alive.
+ * Shared preinstalled globals are left alone so one user cannot wipe them for all.
+ */
+async function resolveUninstallTargets(
+  slug: string,
+  ctx: EngineSkillContext,
+  agentId?: string,
+): Promise<SkillEntryKey[]> {
+  if (agentId) {
+    return [{ slug, scope: 'agent', agentId: agentId.trim().toLowerCase() }];
+  }
+
+  const targets: SkillEntryKey[] = [];
+  const seen = new Set<string>();
+  const push = (key: SkillEntryKey) => {
+    const id = `${key.scope}:${key.userCode || ''}:${key.agentId || ''}:${key.slug}`;
+    if (seen.has(id)) return;
+    seen.add(id);
+    targets.push(key);
+  };
+
+  if (ctx.userCode) {
+    const userKey: SkillEntryKey = { slug, scope: 'user', userCode: ctx.userCode };
+    const userEntry = await getSkillEntry(userKey);
+    const userDir = resolvePackageDir(userKey);
+    if (userEntry || fs.existsSync(userDir)) {
+      push(userKey);
+    }
+  }
+
+  const globalKey: SkillEntryKey = { slug, scope: 'global' };
+  const globalEntry = await getSkillEntry(globalKey);
+  const globalDir = resolvePackageDir(globalKey);
+  if (globalEntry || fs.existsSync(globalDir)) {
+    const isPreinstalled =
+      globalEntry?.source === 'stoclaw-preinstalled'
+      || fs.existsSync(path.join(globalDir, PREINSTALLED_MARKER_NAME));
+    if (!isPreinstalled) {
+      push(globalKey);
+    }
+  }
+
+  if (targets.length === 0) {
+    const fallback = resolveScope({ userCode: ctx.userCode });
+    push({
+      slug,
+      scope: fallback.scope,
+      userCode: fallback.userCode,
+      agentId: fallback.agentId,
+    });
+  }
+
+  return targets;
 }
 
 async function fanOut(
@@ -214,23 +274,15 @@ export class SkillManager {
 
   async uninstall(params: SkillUninstallParams): Promise<void> {
     const ctx = await resolveContext(params.agentId);
-    const scopeInfo = resolveScope({ agentId: params.agentId, userCode: ctx.userCode });
-    const targetDir = resolvePackageDir({
-      slug: params.slug,
-      scope: scopeInfo.scope,
-      userCode: scopeInfo.userCode,
-      agentId: scopeInfo.agentId,
-    });
+    const targets = await resolveUninstallTargets(params.slug, ctx, params.agentId);
 
-    if (fs.existsSync(targetDir)) {
-      await safeRemoveDir(targetDir, { label: targetDir });
+    for (const target of targets) {
+      const targetDir = resolvePackageDir(target);
+      if (fs.existsSync(targetDir)) {
+        await safeRemoveDir(targetDir, { label: targetDir });
+      }
+      await removeSkillEntry(target);
     }
-    await removeSkillEntry({
-      slug: params.slug,
-      scope: scopeInfo.scope,
-      userCode: scopeInfo.userCode,
-      agentId: scopeInfo.agentId,
-    });
 
     await fanOut('uninstall', { slug: params.slug }, { ...ctx, agentId: params.agentId });
   }

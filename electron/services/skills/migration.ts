@@ -83,7 +83,11 @@ async function migrateSkillDir(params: {
     agentId: params.agentId,
     version,
     source: params.lockInfo?.source
-      || (isPreinstalled ? 'stoclaw-preinstalled' : 'local'),
+      || (isPreinstalled
+        ? 'stoclaw-preinstalled'
+        : params.lockInfo
+          ? 'sto-marketplace'
+          : 'local'),
     name: params.lockInfo?.name || readSkillName(params.sourceDir) || undefined,
     description: params.lockInfo?.description || readSkillMdDescription(params.sourceDir) || undefined,
     author: params.lockInfo?.author,

@@ -634,6 +634,54 @@ function isUserUploadedSkill(skillDir: string): boolean {
   }
 }
 
+/**
+ * Resolve plaza UI source (官方 vs 自建).
+ *
+ * Manifest `source` is the install provenance SoT. Filesystem markers
+ * (`.stoclaw-user-upload.json` / preinstalled) are only fallbacks when
+ * manifest source is missing — a stale upload marker must not override
+ * `sto-marketplace` / `stoclaw-preinstalled`.
+ */
+function resolveLocalSkillPlazaSource(params: {
+  slug: string;
+  lockSource?: string;
+  fromCanonicalStore: boolean;
+  hasLockEntry: boolean;
+  isPreinstalled: boolean;
+  isUserUploaded: boolean;
+  plazaApiSource?: 'official' | 'mine';
+  preinstalledManifestSlugs: Set<string>;
+}): 'official' | 'mine' {
+  const { lockSource } = params;
+
+  if (lockSource === 'sto-marketplace' || lockSource === 'stoclaw-preinstalled') {
+    return 'official';
+  }
+
+  if (lockSource === 'user-upload' || lockSource === 'local') {
+    return 'mine';
+  }
+
+  if (params.isUserUploaded) {
+    return 'mine';
+  }
+
+  if (
+    params.isPreinstalled
+    || params.plazaApiSource === 'official'
+    || params.preinstalledManifestSlugs.has(params.slug)
+  ) {
+    return 'official';
+  }
+
+  // Pre-migration OpenClaw path: lock.json presence meant marketplace-tracked install.
+  if (!params.fromCanonicalStore && params.hasLockEntry) {
+    return 'official';
+  }
+
+  return 'mine';
+}
+
 function readSkillMdVersion(skillDir: string): string | null {
   const fm = readSkillMdFrontmatter(skillDir);
   return fm?.version ?? null;
@@ -999,10 +1047,17 @@ export class SkillPlazaService {
       if (isPreinstalledSkill(skillDirPath) || isUserUploadedSkill(skillDirPath)) continue;
 
       const plazaSkill = plazaSkillMap.get(slug);
-      const isOfficial =
-        snapshot.lockEntries.has(slug) ||
-        plazaSkill?.source === 'official' ||
-        manifestSlugs.has(slug);
+      const lockInfo = snapshot.lockEntries.get(slug);
+      const isOfficial = resolveLocalSkillPlazaSource({
+        slug,
+        lockSource: lockInfo?.source,
+        fromCanonicalStore: snapshot.fromCanonicalStore,
+        hasLockEntry: snapshot.lockEntries.has(slug),
+        isPreinstalled: false,
+        isUserUploaded: false,
+        plazaApiSource: plazaSkill?.source,
+        preinstalledManifestSlugs: manifestSlugs,
+      }) === 'official';
       if (!isOfficial) continue;
 
       if (plazaSkill && pickNavCategoryFromApiSkill(plazaSkill, categoryDefs).code) continue;
@@ -1308,9 +1363,19 @@ export class SkillPlazaService {
       if (summary) {
         const plazaSkill = plazaSkillMap.get(slug);
         const isPreinstalled = isPreinstalledSkill(skillDirPath);
-        const isOfficial = fromLock.has(slug) || plazaSkill?.source === 'official' || manifestSlugs.has(slug);
-        const source: 'official' | 'mine' = isOfficial ? 'official' : 'mine';
         const isUserUploaded = isUserUploadedSkill(skillDirPath);
+        const lockInfo = snapshot.lockEntries.get(slug);
+        const source = resolveLocalSkillPlazaSource({
+          slug,
+          lockSource: lockInfo?.source,
+          fromCanonicalStore: snapshot.fromCanonicalStore,
+          hasLockEntry: fromLock.has(slug),
+          isPreinstalled,
+          isUserUploaded,
+          plazaApiSource: plazaSkill?.source,
+          preinstalledManifestSlugs: manifestSlugs,
+        });
+        const isOfficial = source === 'official';
         const isOfficeSkill = OFFICE_SKILL_SLUGS.has(slug);
 
         // 分类优先级：办公技能 > 预安装技能（其他）> 按 plaza 权威数据 / 本地元数据

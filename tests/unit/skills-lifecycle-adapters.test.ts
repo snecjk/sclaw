@@ -196,4 +196,55 @@ describe('skill lifecycle adapters + manager', () => {
     const second = await migrateSkillsStoreIfNeeded();
     expect(second.migrated).toBe(false);
   });
+
+  it('uninstall removes both user and global marketplace copies of the same slug', async () => {
+    const { upsertSkillEntry, getSkillEntry, resolvePackageDir } = await import(
+      '../../electron/services/skills/canonical-store'
+    );
+    const { setEngineSkillAdapters } = await import(
+      '../../electron/services/skills/adapters/engine-skill-adapter'
+    );
+    const { getSkillManager } = await import('../../electron/services/skills/skill-manager');
+
+    setEngineSkillAdapters([
+      {
+        id: 'openclaw',
+        applyInstall: vi.fn(async () => undefined),
+        applyUninstall: vi.fn(async () => undefined),
+        applyEnabled: vi.fn(async () => undefined),
+        reconcile: vi.fn(async () => ({ mirrored: [], removed: [], skippedConflicts: [] })),
+      },
+      {
+        id: 'claude',
+        applyInstall: vi.fn(async () => undefined),
+        applyUninstall: vi.fn(async () => undefined),
+        applyEnabled: vi.fn(async () => undefined),
+        reconcile: vi.fn(async () => ({ mirrored: [], removed: [], skippedConflicts: [] })),
+      },
+    ]);
+
+    const globalKey = { slug: 'sitekeeper-odps-sql', scope: 'global' as const };
+    const userKey = { slug: 'sitekeeper-odps-sql', scope: 'user' as const, userCode: 'u1' };
+    await writeSkill(resolvePackageDir(globalKey), 'sitekeeper-odps-sql');
+    await writeSkill(resolvePackageDir(userKey), 'sitekeeper-odps-sql');
+    await upsertSkillEntry({
+      ...globalKey,
+      version: '1.0.0',
+      source: 'sto-marketplace',
+      enabled: true,
+    });
+    await upsertSkillEntry({
+      ...userKey,
+      version: '1.0.0',
+      source: 'sto-marketplace',
+      enabled: true,
+    });
+
+    await getSkillManager().uninstall({ slug: 'sitekeeper-odps-sql' });
+
+    expect(await getSkillEntry(userKey)).toBeNull();
+    expect(await getSkillEntry(globalKey)).toBeNull();
+    expect(existsSync(join(resolvePackageDir(userKey), 'SKILL.md'))).toBe(false);
+    expect(existsSync(join(resolvePackageDir(globalKey), 'SKILL.md'))).toBe(false);
+  });
 });
