@@ -68,6 +68,24 @@ export async function handleSkillPlazaRoutes(
     return true;
   }
 
+  // GET /api/skill-plaza/local-skills-by-slugs?slugs=a,b,c
+  // 轻量路径：只按给定 slug 读本地 install/版本状态，不做 category enrichment、不调远端。
+  if (url.pathname === '/api/skill-plaza/local-skills-by-slugs' && req.method === 'GET') {
+    try {
+      const slugsParam = url.searchParams.get('slugs') || '';
+      const slugs = slugsParam.split(',').map((s) => s.trim()).filter(Boolean);
+      const data = await ctx.skillPlazaService.getLocalSkillsBySlugs(slugs);
+      sendJson(res, 200, { success: true, data });
+    } catch (error) {
+      sendJson(res, 500, {
+        success: false,
+        error: String(error),
+        code: 'LOCAL_SKILLS_FAILED',
+      });
+    }
+    return true;
+  }
+
   // GET /api/skill-plaza/local-skills
   if (url.pathname === '/api/skill-plaza/local-skills' && req.method === 'GET') {
     try {

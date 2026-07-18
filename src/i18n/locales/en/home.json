@@ -4,116 +4,16 @@
       "title": "Smarter outlet operations",
       "subtitle": "An AI work platform that reshapes smart outlet operations and empowers efficient, intelligent day-to-day management."
     },
-    "workflowGuide": {
-      "heading": "Workflow guide",
-      "monitor": {
-        "title": "Customer anomaly monitoring",
-        "pill": "Task monitoring",
-        "status": "Not configured",
-        "bodyCaption": "Workflow overview",
-        "bodyDetail": "Compare daily customer volume, product mix, P&L, and service metrics; automatically flag abnormal customers, generate monitoring reports, and support rule configuration with scheduled pushes to the work center.",
-        "footerTeam": "Customer tracking squad",
-        "footerHint": "Configure workflow",
-        "createPrompt": "Customer anomaly monitoring — create workflow"
-      },
-      "recon": {
-        "title": "HQ settlement reconciliation",
-        "pill": "Settlement",
-        "status": "Not configured",
-        "bodyCaption": "Workflow overview",
-        "bodyDetail": "Connect HQ settlement data, automatically identify abnormal cost fluctuation items, and output reconciliation results — generate trackable, standardized settlement reports.",
-        "footerTeam": "Ace settlement squad",
-        "footerHint": "Configure workflow",
-        "createPrompt": "HQ settlement reconciliation — create workflow"
-      },
-      "cost": {
-        "title": "Customer cost analysis",
-        "pill": "Cost analysis",
-        "status": "Not configured",
-        "bodyCaption": "Workflow overview",
-        "bodyDetail": "Reconstruct per-ticket outbound costs by customer/shop, identify abnormal customers by account category and route-weight segment, and auto-generate cost analysis reports with optimization suggestions.",
-        "footerTeam": "Customer tracking squad",
-        "footerHint": "Configure workflow",
-        "createPrompt": "Customer cost analysis — create workflow"
-      }
-    },
     "assistant": {
       "placeholder": "Help me prepare an HQ settlement reconciliation sheet"
     }
   },
   "homeWorkflowCard": {
-    "createPrompt": "{{label}} — create workflow",
-    "startPrompt": "Start {{label}}",
-    "bodyDetail": "Click to configure and start this workflow",
-    "stat1Label": "Status",
-    "stat1Value": "Pending",
-    "stat2Label": "Nodes",
-    "stat2Value": "-",
-    "stat3Label": "Last run",
-    "stat3Value": "-",
-    "footerTeam": "Workflow team",
     "footerHint": "Click to start"
   },
   "hero": {
     "title": "Smarter business management",
     "subtitle": "An AI workspace that drives team collaboration and stronger day-to-day operations."
-  },
-  "summary": {
-    "heading": "Overview",
-    "comingSoon": "In active development…",
-    "recon": {
-      "title": "Weekly meeting pack",
-      "pill": "Operations",
-      "status": "Done",
-      "bodyCaption": "Material modules",
-      "bodyDetail": "Volume, P&L, customer marketing, execution",
-      "stat1Label": "Net",
-      "stat1Value": "128,560",
-      "stat1Unit": "CNY",
-      "stat2Label": "Income",
-      "stat2Value": "98,750",
-      "stat2Unit": "CNY",
-      "stat3Label": "Expense",
-      "stat3Value": "29,810",
-      "stat3Unit": "CNY",
-      "footerTeam": "Settlement squad",
-      "footerHint": "4 exceptions — view",
-      "defaultComposePrompt": "Query nationwide low-price parcel volume for May 2026, generate a daily report, and allow editing."
-    },
-    "customer": {
-      "title": "Policy pricing estimate",
-      "pill": "Pricing",
-      "status": "Handled",
-      "stat1Label": "Eligible customers",
-      "stat1Value": "10",
-      "stat1Unit": "items",
-      "stat2Label": "P&L variance",
-      "stat2Value": "2",
-      "stat2Unit": "items",
-      "stat3Label": "",
-      "stat3Value": "",
-      "stat3Unit": "",
-      "footerTeam": "Policy service center",
-      "footerHint": "2 abnormal customers",
-      "defaultComposePrompt": "Policy pricing scenario (placeholder)."
-    },
-    "cost": {
-      "title": "Customer retention",
-      "pill": "Customer service",
-      "status": "Done",
-      "stat1Label": "New customers",
-      "stat1Value": "1.5",
-      "stat1Unit": "10k",
-      "stat2Label": "Churned customers",
-      "stat2Value": "-2.8",
-      "stat2Unit": "10k",
-      "stat3Label": "",
-      "stat3Value": "",
-      "stat3Unit": "",
-      "footerTeam": "Policy service center",
-      "footerHint": "7 abnormal customers",
-      "defaultComposePrompt": "Customer retention follow-up (placeholder)."
-    }
   },
   "assistant": {
     "placeholder": "Ask in natural language or attach a file…",

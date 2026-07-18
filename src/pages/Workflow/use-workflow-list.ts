@@ -2,11 +2,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { hostApiFetch } from '@/lib/host-api';
-import { listWorkflowTemplates } from '@/lib/workflow-api';
 import { pickCoverKeyFromWorkflowId } from '@/pages/Workflow/workflow-mapper';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import type {
-  OfficialWorkflowCard,
   WorkflowCardItem,
   WorkflowMineListKind,
 } from '@/pages/Workflow/types';
@@ -34,18 +32,12 @@ export interface UseWorkflowListResult {
   setCards: React.Dispatch<React.SetStateAction<WorkflowCardItem[]>>;
   /** 我的工作流加载状态 */
   mineLoading: boolean;
-  /** 官方推荐加载状态 */
-  officialLoading: boolean;
   /** 请求错误信息，无错误时为 null */
   error: string | null;
   /** 手动触发重新拉取当前 Tab 的工作流数据 */
   refetchMine: () => Promise<void>;
-  /** 手动触发重新拉取官方推荐数据 */
-  refetchOfficial: () => Promise<void>;
   /** 各 Tab（published / draft）下的卡片数量，由 cardsByKind 派生 */
   mineCounts: Record<WorkflowMineListKind, number>;
-  /** 系统官方推荐的工作流卡片列表 */
-  officialCards: OfficialWorkflowCard[];
 }
 
 /** 「我的工作流」Tab 对应的后端 lifecycle_status：已发布 Tab → ACTIVE，草稿 Tab → DRAFT */
@@ -74,9 +66,7 @@ export function useWorkflowList(mineFilter: WorkflowMineFilter): UseWorkflowList
   const [cardsByKind, setCardsByKind] = useState<
     Record<WorkflowMineListKind, WorkflowCardItem[]>
   >(EMPTY_CARDS_BY_KIND);
-  const [officialCards, setOfficialCards] = useState<OfficialWorkflowCard[]>([]);
   const [mineLoading, setMineLoading] = useState(true);
-  const [officialLoading, setOfficialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   /** 跟踪 API 刷新时序号，防止旧请求覆盖新结果 */
@@ -87,7 +77,6 @@ export function useWorkflowList(mineFilter: WorkflowMineFilter): UseWorkflowList
   });
   /** 并发在途请求计数，驱动共享的 mineLoading */
   const mineInFlight = useRef(0);
-  const officialFetchSeq = useRef(0);
 
   /** 当前 mineFilter 的最新引用，供 refetchMine 等无参闭包读取 */
   const mineFilterRef = useRef(mineFilter);
@@ -154,49 +143,9 @@ export function useWorkflowList(mineFilter: WorkflowMineFilter): UseWorkflowList
     [t]
   );
 
-  /** 官方推荐数据拉取 */
-  // FastAPI: POST /agent/v1/workflow-templates → memory-center workflow_client.py:list_templates
-  const fetchOfficial = useCallback(async () => {
-    const seq = officialFetchSeq.current + 1;
-    officialFetchSeq.current = seq;
-    setOfficialLoading(true);
-    setError(null);
-
-    try {
-      const officialResult = await listWorkflowTemplates({ page: 1, pageSize: 100 });
-      if (officialFetchSeq.current !== seq) return;
-
-      const officialItems = (officialResult.items ?? []).map((item) => ({
-        id: String(item.id ?? ''),
-        label: String(item.label ?? ''),
-        description: item.description != null ? String(item.description) : null,
-        category: item.category != null ? String(item.category) : null,
-        nodeCount: Number(item.nodeCount) || 0,
-      }));
-      setOfficialCards(
-        officialItems.map((item) => ({
-          id: item.id,
-          name: item.label,
-          category: item.category ?? '',
-          description: item.description ?? '',
-          flow: [],
-          coverKey: pickCoverKeyFromWorkflowId(item.id),
-        }))
-      );
-
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (err) {
-      if (officialFetchSeq.current !== seq) return;
-      setOfficialCards([]);
-    } finally {
-      if (officialFetchSeq.current === seq) setOfficialLoading(false);
-    }
-  }, []);
-
   /**
    * 首次加载：并发拉取 published / draft 两个 Tab（保证两个角标计数均立即准确）；
    * 切换 mineFilter 时：仅刷新当前 Tab（拉取最新数据）。
-   * official 仅首次加载（用于「官方推荐」列表展示）。
    */
   const didInitialMountRef = useRef(false);
   useEffect(() => {
@@ -215,16 +164,6 @@ export function useWorkflowList(mineFilter: WorkflowMineFilter): UseWorkflowList
       cancelled = true;
     };
   }, [fetchMine, mineFilter]);
-
-  useEffect(() => {
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (!cancelled) void fetchOfficial();
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchOfficial]);
 
   /** 由 cardsByKind 派生各 Tab 下的卡片数量，避免额外 setState */
   const mineCounts = useMemo(() => countByListKind(cardsByKind), [cardsByKind]);
@@ -255,11 +194,8 @@ export function useWorkflowList(mineFilter: WorkflowMineFilter): UseWorkflowList
     cardsByKind,
     setCards,
     mineLoading: useMinLoading(mineLoading),
-    officialLoading: useMinLoading(officialLoading),
     error,
     refetchMine,
-    refetchOfficial: fetchOfficial,
     mineCounts,
-    officialCards,
   };
 }
