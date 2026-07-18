@@ -92,6 +92,14 @@ Rationale:平滑迁移、避免调用方大改;facade/wrapper 可在后续 chang
 
 Alternative considered:一刀切替换所有调用方。回归面大、风险高,故分阶段。
 
+## Decision: 技能广场本地态读取规范库,不读引擎投影目录
+
+`SkillPlazaService.buildLocalStateSnapshot` / `getLocalSkills` / 办公与预装本地列表改为优先读取 `skills-store/manifest.json` 与对应包目录(`global/`、`users/{userCode}/skills/`),用 manifest 的 `enabled` 区分启用/禁用,用规范库包路径读取 `SKILL.md`。仅当 manifest 不存在(迁移前)时回退扫 `openclaw/skills` + `skills-disabled`。
+
+Rationale:技能广场是产品层 UI,不应绑定某一引擎的运行目录;否则移除 OpenClaw 后「已安装」态会丢失。广场远端卡片仍来自 STO plaza API,本地态与远端元数据叠加的模式不变。
+
+Alternative considered:继续读 OpenClaw 投影目录。短期可用,但与「引擎可移除」目标冲突,故改为规范库优先。
+
 # Risks / Trade-offs
 
 | Risk | Mitigation |
@@ -102,6 +110,7 @@ Alternative considered:一刀切替换所有调用方。回归面大、风险高
 | [Risk] OpenClaw Gateway 未感知投影变化 | 由 `OpenClawSkillAdapter.onAfterBatch` 触发 Gateway 刷新(沿用现有刷新/重启路径),每批一次避免抖动 |
 | [Risk] manifest 单文件并发写冲突 | 复用 `withConfigLock` 串行化所有 manifest 写入 |
 | [Risk] 迁移后与旧 `lock.json` 读取路径不一致 | 过渡期 `listInstalled`/版本比对优先读 manifest,回退旧 `lock.json`;facade 保持返回结构不变 |
+| [Risk] 广场改读规范库后与 OpenClaw 投影短暂不一致 | 安装/启用后适配器即时投影;登录与启动 reconcile 兜底;广场以 manifest 为准避免「装了但列表看不到」 |
 
 # Documentation
 

@@ -5,7 +5,7 @@
  */
 import fs from 'fs';
 import path from 'path';
-import { getOpenClawConfigDir, getOpenClawSkillsDir, getSkillsManifestPath } from '../utils/paths';
+import { getOpenClawConfigDir, getOpenClawSkillsDir, getSkillsManifestPath, getSkillsStoreGlobalDir, getSkillsStoreUserSkillsDir } from '../utils/paths';
 import { getCurrentActiveUserCode } from './user-skill-workspace';
 import { readPreinstalledManifestSlugs } from '../utils/skill-config';
 import { getStoToken, getAuthState, isSiteUser } from '../utils/auth-store';
@@ -136,14 +136,19 @@ const ENRICHMENT_INDEX_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * A one-shot snapshot of local skill install state, read once per request and
- * reused across every skill so we do not re-scan the skills directory and
- * re-parse lock.json for each entry.
+ * reused across every skill so we do not re-scan directories for each entry.
+ *
+ * Prefer skills-store (canonical). OpenClaw skills/ is only a migration fallback.
  */
 interface LocalStateSnapshot {
   installedSlugs: Set<string>;
   enabledSlugs: Set<string>;
   disabledSlugs: Set<string>;
   lockEntries: Map<string, { version?: string; source?: string; versionSource?: string }>;
+  /** slug → absolute package directory (canonical store, or OpenClaw fallback). */
+  packageDirs: Map<string, string>;
+  /** Whether snapshot was built from skills-store rather than OpenClaw dirs. */
+  fromCanonicalStore: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -466,6 +471,131 @@ function readInstalledSkillMetaEntries(
   return entries;
 }
 
+type ManifestSkillRecord = {
+  slug?: string;
+  version?: string;
+  source?: string;
+  versionSource?: string;
+  enabled?: boolean;
+};
+
+/**
+ * Build plaza local state from the engine-agnostic skills-store.
+ * Returns null when the store/manifest is not available yet (pre-migration).
+ */
+function buildSnapshotFromSkillsStore(userCode: string | null): LocalStateSnapshot | null {
+  const manifestPath = getSkillsManifestPath();
+  if (!fs.existsSync(manifestPath)) {
+    return null;
+  }
+
+  let data: {
+    global?: Record<string, ManifestSkillRecord>;
+    users?: Record<string, Record<string, ManifestSkillRecord>>;
+  };
+  try {
+    data = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as typeof data;
+  } catch (err) {
+    logger.warn('[SkillPlazaService] Failed to parse skills-store manifest:', err);
+    return null;
+  }
+
+  const installedSlugs = new Set<string>();
+  const enabledSlugs = new Set<string>();
+  const disabledSlugs = new Set<string>();
+  const lockEntries = new Map<string, { version?: string; source?: string; versionSource?: string }>();
+  const packageDirs = new Map<string, string>();
+
+  const applyEntry = (slug: string, entry: ManifestSkillRecord, packageDir: string) => {
+    const hasPackage = fs.existsSync(path.join(packageDir, 'SKILL.md'));
+    installedSlugs.add(slug);
+    lockEntries.set(slug, {
+      version: entry.version,
+      source: entry.source,
+      versionSource: entry.versionSource,
+    });
+    if (hasPackage) {
+      packageDirs.set(slug, packageDir);
+    }
+    if (entry.enabled === false) {
+      enabledSlugs.delete(slug);
+      disabledSlugs.add(slug);
+    } else {
+      disabledSlugs.delete(slug);
+      enabledSlugs.add(slug);
+    }
+  };
+
+  for (const [slug, entry] of Object.entries(data.global || {})) {
+    applyEntry(slug, entry, path.join(getSkillsStoreGlobalDir(), slug));
+  }
+  if (userCode) {
+    for (const [slug, entry] of Object.entries(data.users?.[userCode] || {})) {
+      applyEntry(slug, entry, path.join(getSkillsStoreUserSkillsDir(userCode), slug));
+    }
+  }
+
+  // Directory scan covers packages that exist on disk but are missing from manifest.
+  const scanPackageRoot = (root: string, defaultEnabled: boolean) => {
+    for (const slug of readSkillsDirSlugs(root)) {
+      if (installedSlugs.has(slug)) {
+        if (!packageDirs.has(slug)) {
+          packageDirs.set(slug, path.join(root, slug));
+        }
+        continue;
+      }
+      installedSlugs.add(slug);
+      packageDirs.set(slug, path.join(root, slug));
+      if (defaultEnabled) {
+        enabledSlugs.add(slug);
+      } else {
+        disabledSlugs.add(slug);
+      }
+      if (!lockEntries.has(slug)) {
+        lockEntries.set(slug, { source: 'local' });
+      }
+    }
+  };
+  scanPackageRoot(getSkillsStoreGlobalDir(), true);
+  if (userCode) {
+    scanPackageRoot(getSkillsStoreUserSkillsDir(userCode), true);
+  }
+
+  return {
+    installedSlugs,
+    enabledSlugs,
+    disabledSlugs,
+    lockEntries,
+    packageDirs,
+    fromCanonicalStore: true,
+  };
+}
+
+function buildSnapshotFromOpenClawFallback(configDir: string, userCode: string | null): LocalStateSnapshot {
+  const skillsDir = getOpenClawSkillsDir();
+  const disabledDir = path.join(configDir, 'skills-disabled');
+  const lockEntries = readInstalledSkillMetaEntries(configDir, userCode);
+  const fromDir = readSkillsDirSlugs(skillsDir);
+  const fromDisabled = readDisabledDirSlugs(disabledDir);
+  const packageDirs = new Map<string, string>();
+  for (const slug of fromDir) {
+    packageDirs.set(slug, path.join(skillsDir, slug));
+  }
+  for (const slug of fromDisabled) {
+    if (!packageDirs.has(slug)) {
+      packageDirs.set(slug, path.join(disabledDir, slug));
+    }
+  }
+  return {
+    installedSlugs: new Set([...lockEntries.keys(), ...fromDir, ...fromDisabled]),
+    enabledSlugs: fromDir,
+    disabledSlugs: fromDisabled,
+    lockEntries,
+    packageDirs,
+    fromCanonicalStore: false,
+  };
+}
+
 function readSkillsDirSlugs(skillsDir: string): Set<string> {
   const slugs = new Set<string>();
   try {
@@ -652,18 +782,23 @@ export class SkillPlazaService {
     return path.join(this.configDir, 'skills-disabled');
   }
 
-  /** Read install/enable/lock+manifest state once for reuse across a whole request. */
+  /** Read install/enable state once for reuse across a whole request. */
   private async buildLocalStateSnapshot(): Promise<LocalStateSnapshot> {
     const userCode = await getCurrentActiveUserCode();
-    const lockEntries = readInstalledSkillMetaEntries(this.configDir, userCode);
-    const fromDir = readSkillsDirSlugs(this.skillsDir);
-    const fromDisabled = readDisabledDirSlugs(this.getDisabledDir());
-    return {
-      installedSlugs: new Set([...lockEntries.keys(), ...fromDir, ...fromDisabled]),
-      enabledSlugs: fromDir,
-      disabledSlugs: fromDisabled,
-      lockEntries,
-    };
+    const fromStore = buildSnapshotFromSkillsStore(userCode);
+    if (fromStore) {
+      return fromStore;
+    }
+    return buildSnapshotFromOpenClawFallback(this.configDir, userCode);
+  }
+
+  private resolvePackageDir(snapshot: LocalStateSnapshot, slug: string): string | null {
+    const fromMap = snapshot.packageDirs.get(slug);
+    if (fromMap && fs.existsSync(path.join(fromMap, 'SKILL.md'))) {
+      return fromMap;
+    }
+    // Legacy fallback while migrating.
+    return resolveSkillDirForSlug(this.skillsDir, this.getDisabledDir(), slug);
   }
 
   private overlayLocalState<T extends SkillSummary>(skill: T, snapshot: LocalStateSnapshot): T {
@@ -681,7 +816,7 @@ export class SkillPlazaService {
     const isStoMarketplaceInstall = lockInfo?.source === 'sto-marketplace';
 
     if (installed && skill.version) {
-      const skillDir = resolveSkillDirForSlug(this.skillsDir, this.getDisabledDir(), skill.slug);
+      const skillDir = this.resolvePackageDir(snapshot, skill.slug);
       const lockVersion = isStoMarketplaceInstall ? lockInfo?.version : undefined;
       const skillMdVersion = skillDir && !isPreinstalledSkill(skillDir)
         ? readSkillMdVersion(skillDir)
@@ -859,10 +994,8 @@ export class SkillPlazaService {
     for (const slug of allSlugs) {
       if (OFFICE_SKILL_SLUGS.has(slug)) continue;
 
-      const isEnabled = snapshot.enabledSlugs.has(slug);
-      const skillDirPath = isEnabled
-        ? path.join(this.skillsDir, slug)
-        : path.join(this.getDisabledDir(), slug);
+      const skillDirPath = this.resolvePackageDir(snapshot, slug);
+      if (!skillDirPath) continue;
       if (isPreinstalledSkill(skillDirPath) || isUserUploadedSkill(skillDirPath)) continue;
 
       const plazaSkill = plazaSkillMap.get(slug);
@@ -893,18 +1026,15 @@ export class SkillPlazaService {
 
   // ---- Office skills from local filesystem ----
 
-  private getOfficeSkillsFromLocal(q?: string): SkillSummary[] {
-    const activeSlugs = readSkillsDirSlugs(this.skillsDir);
-    const disabledSlugs = readDisabledDirSlugs(this.getDisabledDir());
+  private getOfficeSkillsFromLocal(snapshot: LocalStateSnapshot, q?: string): SkillSummary[] {
     const skills: SkillSummary[] = [];
 
     for (const slug of OFFICE_SKILL_SLUGS) {
-      const isEnabled = activeSlugs.has(slug);
-      const isDisabled = disabledSlugs.has(slug);
-      if (!isEnabled && !isDisabled) continue;
-
-      const skillRootDir = isEnabled ? this.skillsDir : this.getDisabledDir();
-      const summary = readLocalSkillSummary(skillRootDir, slug);
+      if (!snapshot.installedSlugs.has(slug)) continue;
+      const isEnabled = snapshot.enabledSlugs.has(slug);
+      const packageDir = this.resolvePackageDir(snapshot, slug);
+      if (!packageDir) continue;
+      const summary = readLocalSkillSummary(path.dirname(packageDir), slug);
       if (!summary) continue;
 
       // Apply search filter if provided
@@ -938,22 +1068,17 @@ export class SkillPlazaService {
 
   // ---- Preinstalled non-office skills from local filesystem ----
 
-  private getPreinstalledNonOfficeSkillsFromLocal(q?: string): SkillSummary[] {
-    const activeSlugs = readSkillsDirSlugs(this.skillsDir);
-    const disabledSlugs = readDisabledDirSlugs(this.getDisabledDir());
-    const allSlugs = new Set([...activeSlugs, ...disabledSlugs]);
+  private getPreinstalledNonOfficeSkillsFromLocal(snapshot: LocalStateSnapshot, q?: string): SkillSummary[] {
     const skills: SkillSummary[] = [];
 
-    for (const slug of allSlugs) {
+    for (const slug of snapshot.installedSlugs) {
       if (OFFICE_SKILL_SLUGS.has(slug)) continue;
 
-      const isEnabled = activeSlugs.has(slug);
-      const skillRootDir = isEnabled ? this.skillsDir : this.getDisabledDir();
-      const skillDirPath = path.join(skillRootDir, slug);
+      const isEnabled = snapshot.enabledSlugs.has(slug);
+      const packageDir = this.resolvePackageDir(snapshot, slug);
+      if (!packageDir || !isPreinstalledSkill(packageDir)) continue;
 
-      if (!isPreinstalledSkill(skillDirPath)) continue;
-
-      const summary = readLocalSkillSummary(skillRootDir, slug);
+      const summary = readLocalSkillSummary(path.dirname(packageDir), slug);
       if (!summary) continue;
 
       // Apply search filter if provided
@@ -1018,10 +1143,10 @@ export class SkillPlazaService {
     const isOfficeFilter = params.category === OFFICE_CATEGORY_SLUG;
     const isQitaFilter = params.category === 'qita';
     const hasCategoryFilter = Boolean(params.category && params.category !== '');
-    const localOfficeSkills = this.getOfficeSkillsFromLocal(params.q);
-    const localPreinstalledOthers = this.getPreinstalledNonOfficeSkillsFromLocal(params.q);
-    // Read local install state once and reuse it while normalizing every skill.
+    // Read local install state once from skills-store (OpenClaw fallback only pre-migration).
     const snapshot = await this.buildLocalStateSnapshot();
+    const localOfficeSkills = this.getOfficeSkillsFromLocal(snapshot, params.q);
+    const localPreinstalledOthers = this.getPreinstalledNonOfficeSkillsFromLocal(snapshot, params.q);
 
     let labelToSlug = new Map<string, string>();
     try {
@@ -1118,11 +1243,11 @@ export class SkillPlazaService {
 
   async getLocalSkills(): Promise<PlazaListResult> {
     await this.assertAuthReady();
-    // Read install/enable/lock state once for the whole request.
+    // Read install/enable state once for the whole request (skills-store first).
     const snapshot = await this.buildLocalStateSnapshot();
     const activeSlugs = snapshot.enabledSlugs;
     const disabledSlugs = snapshot.disabledSlugs;
-    const allSlugs = new Set([...activeSlugs, ...disabledSlugs]);
+    const allSlugs = new Set([...snapshot.installedSlugs, ...activeSlugs, ...disabledSlugs]);
     const fromLock = new Set(snapshot.lockEntries.keys());
     const manifestSlugs = readPreinstalledManifestSlugs();
 
@@ -1177,11 +1302,11 @@ export class SkillPlazaService {
 
     for (const slug of allSlugs) {
       const isEnabled = activeSlugs.has(slug);
-      const skillDir = isEnabled ? this.skillsDir : this.getDisabledDir();
-      const summary = readLocalSkillSummary(skillDir, slug);
+      const skillDirPath = this.resolvePackageDir(snapshot, slug);
+      if (!skillDirPath) continue;
+      const summary = readLocalSkillSummary(path.dirname(skillDirPath), slug);
       if (summary) {
         const plazaSkill = plazaSkillMap.get(slug);
-        const skillDirPath = isEnabled ? path.join(this.skillsDir, slug) : path.join(this.getDisabledDir(), slug);
         const isPreinstalled = isPreinstalledSkill(skillDirPath);
         const isOfficial = fromLock.has(slug) || plazaSkill?.source === 'official' || manifestSlugs.has(slug);
         const source: 'official' | 'mine' = isOfficial ? 'official' : 'mine';

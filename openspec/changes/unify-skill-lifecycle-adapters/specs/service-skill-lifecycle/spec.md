@@ -82,3 +82,14 @@
 #### Scenario: 迁移已完成后再次启动
 - **WHEN** 迁移完成标记已存在
 - **THEN** 系统 SHALL 跳过迁移而直接使用现有规范库
+
+### Requirement: 技能广场本地态从规范库读取且不依赖引擎投影目录
+技能广场的「已安装 / 启用 / 禁用 / 本地版本 / 本地 SKILL.md 摘要」MUST 优先从 `~/.stoclaw/skills-store/` 与 `manifest.json` 读取。系统 MUST NOT 将任一引擎运行目录(如 `openclaw/skills`、`.claude/skills`)作为广场本地态的唯一或首选数据源。仅当规范库尚未迁移可用时,MAY 回退读取 OpenClaw 目录。
+
+#### Scenario: 广场展示已安装技能
+- **WHEN** 技能广场请求本地已安装列表或为远端卡片叠加本地态
+- **THEN** 系统 SHALL 依据规范库 manifest 与包目录判定 installed/enabled/installedVersion,而不是依据 OpenClaw 投影目录是否存在
+
+#### Scenario: 移除 OpenClaw 引擎后广场仍可读本地态
+- **WHEN** OpenClaw 适配器已从注册表移除且 `openclaw/skills` 不再维护
+- **THEN** 技能广场 SHALL 仍能依据 `skills-store` 正确展示已安装与启用状态

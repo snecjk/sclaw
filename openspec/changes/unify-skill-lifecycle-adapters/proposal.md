@@ -19,6 +19,7 @@
 - 启用/禁用与 `apiKey/env` 配置上移到 manifest 单一真源,由各适配器投影到各自引擎的配置格式。
 - 新增一次性迁移:从现有 `openclaw/users/{code}/skills`、`openclaw/skills`、`lock.json` 构建规范库与 manifest,迁移后 reconcile 重建各引擎投影;过渡期保留 `syncClaudeSkillsForAgent` 等旧入口作薄 wrapper。
 - 失败语义明确:规范库写入为事务边界,适配器投影 best-effort、失败不回滚真源,由 reconcile 自愈。
+- **技能广场本地态解耦**:`SkillPlazaService` 的「已安装 / 启用 / 本地版本 / 本地 SKILL.md」读取改为优先走 `skills-store` + `manifest.json`,不再依赖 `openclaw/skills` 作为展示数据源;OpenClaw 目录仅作迁移前回退。这样未来移除 OpenClaw 引擎后,技能广场列表仍可独立工作。
 
 # Capabilities
 
@@ -33,6 +34,7 @@
 # Impact
 
 - 影响主进程技能安装链路:`electron/services/sto-skill-service.ts`(降级为薄 facade)、`electron/services/claude-skill-bridge.ts`(逻辑迁入 Claude 适配器)、`electron/services/project-agent-service.ts`(agent 镜像并入 OpenClaw 适配器)、`electron/services/user-skill-workspace.ts`(登录挂载改为 reconcile)、`electron/utils/skill-config.ts`、`electron/utils/retired-skills-cleanup.ts`、`electron/utils/paths.ts`(新增规范库路径)。
+- 影响技能广场本地态读取:`electron/services/skill-plaza-service.ts` 改为以 `skills-store`/`manifest.json` 为已安装与启用态来源。
 - 新增 `electron/services/skills/`(`skill-manager.ts`、`canonical-store.ts`、`skill-package.ts`、`migration.ts`、`adapters/`)。
 - `electron/engines/claude-adapter.ts` 的查询前同步改为调用编排器 reconcile。
 - 磁盘布局新增 `~/.stoclaw/skills-store/`;一次性迁移现有安装数据。

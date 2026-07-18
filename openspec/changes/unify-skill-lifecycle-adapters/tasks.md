@@ -55,3 +55,9 @@
 - [ ] 8.6 运行 `pnpm run typecheck` 并修复问题
 - [x] 8.7 运行 `pnpm test` 并修复相关用例
 - [x] 8.8 复核 `README.md`、`README.zh-CN.md`、`README.ja-JP.md`,若描述了技能安装内部结构/目录布局则同步更新
+
+## 9. 技能广场本地态解耦(展示层)
+
+- [x] 9.1 将 `SkillPlazaService.buildLocalStateSnapshot` 改为优先读 `skills-store/manifest.json` + 规范库包目录,OpenClaw 目录仅作迁移前回退(Requirement: 技能广场本地态从规范库读取且不依赖引擎投影目录)
+- [x] 9.2 `getLocalSkills` / 办公技能 / 预装本地列表改为通过 snapshot.packageDirs 读取 SKILL.md,不再以 `openclaw/skills` 为唯一根(Requirement: 技能广场本地态从规范库读取且不依赖引擎投影目录)
+- [x] 9.3 更新 OpenSpec proposal/design/spec,补充广场解耦决策与验收场景(Requirement: 技能广场本地态从规范库读取且不依赖引擎投影目录)
