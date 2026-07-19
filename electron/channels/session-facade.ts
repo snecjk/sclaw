@@ -4,11 +4,12 @@ import { rememberSessionEngineType } from '../engines/session-engine';
 import type { AgentEngineType } from '../engines/types';
 import type { GatewayManager } from '../gateway/manager';
 import {
+  getLatestChannelCatalogSession,
   getSessionWorkspaceId,
   upsertCatalogSession,
 } from '../services/session-catalog-service';
 import { getChannelConnection } from './binding-service';
-import { buildDingTalkSessionKey } from './session-key';
+import { resolveDingTalkSessionKey } from './session-lifecycle';
 import { logger } from '../utils/logger';
 
 export interface SessionFacadeCreateParams {
@@ -17,6 +18,7 @@ export interface SessionFacadeCreateParams {
   accountId?: string;
   peerId: string;
   engineType?: AgentEngineType;
+  forceNew?: boolean;
 }
 
 export interface SessionFacadeHandle {
@@ -36,17 +38,30 @@ export async function createOrGetSession(
     params.engineType === 'openclaw' || params.engineType === 'claude'
       ? params.engineType
       : 'claude';
-  const sessionKey = buildDingTalkSessionKey(agentId, params.peerId);
+  const now = new Date();
+  const latestSession = await getLatestChannelCatalogSession({
+    channelType: params.channelType,
+    channelId: params.peerId,
+    agentId,
+  });
+  const sessionKey = resolveDingTalkSessionKey({
+    agentId,
+    peerId: params.peerId,
+    latestSession,
+    forceNew: params.forceNew,
+    now,
+  });
   await rememberSessionEngineType(sessionKey, engineType);
-  // 与 upsertEngineBinding 一致：已有会话保留其 workspace，避免移入项目后写回 default 造双行
-  const workspaceId = await getSessionWorkspaceId(sessionKey);
+  // 同一频道换新会话时继承原 workspace；首次创建才回落 default。
+  const workspaceId = latestSession?.workspaceId
+    ?? await getSessionWorkspaceId(sessionKey);
   await upsertCatalogSession({
     workspaceId,
     sessionKey,
     sessionType: 'channel',
     channelType: params.channelType,
     channelId: params.peerId,
-    lastActivityAt: new Date().toISOString(),
+    lastActivityAt: now.toISOString(),
   });
   return { sessionKey, engineType, agentId };
 }

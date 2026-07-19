@@ -11,6 +11,7 @@ import {
   resolveDingTalkBinding,
   sendViaFacade,
 } from './session-facade';
+import { isDingTalkNewSessionCommand } from './session-lifecycle';
 
 let gatewayManagerRef: GatewayManager | null = null;
 const peerQueues = new Map<string, Promise<void>>();
@@ -34,6 +35,7 @@ function enqueuePeer(peerId: string, task: () => Promise<void>): void {
 }
 
 function hasInboundContent(payload: NonNullable<SclawInboundEnvelope['payload']>): boolean {
+  if (payload.action === 'new_session') return true;
   const text = payload.text?.trim() || '';
   if (text) return true;
   for (const part of payload.parts ?? []) {
@@ -53,6 +55,9 @@ export function handleSclawInbound(msg: SclawInboundEnvelope): void {
   const channelTraceId = payload?.channelTraceId;
   const parts = payload?.parts;
   const text = composeInboundText(parts, payload?.text);
+  const forceNewSession =
+    payload?.action === 'new_session'
+    || isDingTalkNewSessionCommand(text);
 
   if (!peerId || !chatUid || !payload || !hasInboundContent(payload)) {
     logger.warn('[SclawIngress] ignore inbound: missing peerId/content/chatUid', {
@@ -110,7 +115,23 @@ export function handleSclawInbound(msg: SclawInboundEnvelope): void {
         channelType: 'dingtalk',
         peerId,
         engineType: binding.engineType,
+        forceNew: forceNewSession,
       });
+
+      if (forceNewSession) {
+        logger.info('[SclawIngress] started new dingtalk session', {
+          channelTraceId,
+          peerId,
+          sessionKey: handle.sessionKey,
+          source: payload.action === 'new_session' ? 'button' : 'command',
+        });
+        getSclawHubClient().sendDelta(
+          chatUid,
+          '已开启新对话，请继续发送消息。',
+          true,
+        );
+        return;
+      }
 
       const media = await materializeInboundMedia(parts, chatUid);
       if ((parts?.some((p) => p.url?.trim() && (p.type || '') !== 'text') ?? false) && media.length === 0) {

@@ -25,6 +25,8 @@ export interface SclawInboundEnvelope {
     group?: boolean;
     text?: string;
     senderNick?: string;
+    /** Hub 控制动作；卡片“新对话”按钮使用 new_session。 */
+    action?: 'new_session' | string;
     /** 钉钉原始 msgtype */
     msgtype?: string;
     /** 多模态 parts；优先于仅 text */

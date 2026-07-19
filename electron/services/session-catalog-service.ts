@@ -362,6 +362,21 @@ export async function getSessionWorkspaceId(sessionKey: string): Promise<string>
   return row?.workspaceId ?? DEFAULT_WORKSPACE_ID;
 }
 
+export async function getLatestChannelCatalogSession(input: {
+  channelType: string;
+  channelId: string;
+  agentId: string;
+}): Promise<CatalogSession | null> {
+  await ensureSessionCatalogBootstrapped();
+  const channelType = input.channelType.trim().toLowerCase();
+  const agentId = input.agentId.trim().toLowerCase() || 'main';
+  return getCatalogSessionRepository().findLatestByChannel({
+    channelType,
+    channelId: input.channelId,
+    sessionKeyPrefix: `agent:${agentId}:${channelType}:`,
+  });
+}
+
 export async function bindSessionToWorkspace(
   sessionKey: string,
   workspaceId: string,

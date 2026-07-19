@@ -26,6 +26,7 @@ import {
 import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
 import { sortSessionsWithCatalogPin } from '@/lib/sidebar-recent-order';
 import { sortProjectsByCreatedAt } from '@/lib/sidebar-project-session-navigation';
+import { resolveSidebarChannelSource } from '@/lib/session-channel-source';
 import { ProjectFormDialog } from '@/components/layout/sidebar-project-form-dialog';
 import { SidebarProjectRowTrailing } from '@/components/layout/sidebar-project-row-trailing';
 import { SidebarProjectSessionRow } from '@/components/layout/sidebar-project-session-row';
@@ -296,6 +297,9 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                           && currentSessionKey === session.key
                           && currentSessionKey !== DEFAULT_SESSION_KEY;
                       const isPinned = !isDraft && allCatalogByKey[session.key]?.pinRank != null;
+                      const channelSource = isDraft
+                        ? null
+                        : resolveSidebarChannelSource(session.key, allCatalogByKey[session.key]?.channelType);
                       return (
                         <SidebarProjectSessionRow
                           key={session.key}
@@ -303,6 +307,7 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                           label={label}
                           isActive={isActive}
                           isPinned={isPinned}
+                          channelSource={channelSource}
                           isEditing={!isDraft && editingSessionKey === session.key}
                           editingValue={editingValue}
                           onOpen={() => {
