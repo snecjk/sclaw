@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { initializeMock, searchMemoriesMock } = vi.hoisted(() => ({
+const { initializeMock, reinitializeAfterAuthChangeMock, searchMemoriesMock } = vi.hoisted(() => ({
   initializeMock: vi.fn(),
+  reinitializeAfterAuthChangeMock: vi.fn(),
   searchMemoriesMock: vi.fn(),
 }));
 
 vi.mock('../../electron/services/agent-memory-orchestrator', () => ({
   agentMemoryOrchestrator: {
     initialize: (...args: unknown[]) => initializeMock(...args),
+    reinitializeAfterAuthChange: (...args: unknown[]) => reinitializeAfterAuthChangeMock(...args),
     searchMemories: (...args: unknown[]) => searchMemoriesMock(...args),
   },
 }));
@@ -22,6 +24,7 @@ describe('AgentMemoryContextService', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     initializeMock.mockReset().mockResolvedValue({ bootstrap: { enabled: true, userId: 'user-1' } });
+    reinitializeAfterAuthChangeMock.mockReset().mockResolvedValue({ bootstrap: { enabled: true, userId: 'user-1' } });
     searchMemoriesMock.mockReset().mockResolvedValue({ results: [] });
   });
 
@@ -36,6 +39,7 @@ describe('AgentMemoryContextService', () => {
     const result = new AgentMemoryContextService().prepare('请查询最近一周的订单情况');
     await vi.advanceTimersByTimeAsync(AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS);
     await expect(result).resolves.toEqual({ injectedExecutionMemories: [] });
+    expect(initializeMock).toHaveBeenCalledWith();
     expect(searchMemoriesMock).not.toHaveBeenCalled();
   });
 
@@ -68,10 +72,41 @@ describe('AgentMemoryContextService', () => {
     service.warmup();
     const result = service.prepare('请查询最近一周的订单情况');
     expect(initializeMock).toHaveBeenCalledTimes(1);
+    expect(initializeMock).toHaveBeenCalledWith();
 
     resolveInitialization({ bootstrap: { enabled: true, userId: 'user-1' } });
     await expect(result).resolves.toEqual({ injectedExecutionMemories: [] });
     expect(searchMemoriesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses an active successful startup initialization after login', async () => {
+    let resolveInitialization!: (value: { bootstrap: { enabled: boolean; userId: string } }) => void;
+    initializeMock.mockImplementation(() => new Promise((resolve) => {
+      resolveInitialization = resolve;
+    }));
+    const service = new AgentMemoryContextService();
+
+    service.warmup();
+    const loginInitialization = service.reinitializeAfterLogin();
+    resolveInitialization({ bootstrap: { enabled: true, userId: 'user-1' } });
+
+    await expect(loginInitialization).resolves.toMatchObject({ bootstrap: { enabled: true } });
+    expect(initializeMock).toHaveBeenCalledTimes(1);
+    expect(reinitializeAfterAuthChangeMock).not.toHaveBeenCalled();
+  });
+
+  it('reinitializes once after login when startup returned without an enabled bootstrap', async () => {
+    initializeMock.mockResolvedValue({ ready: false, bootstrap: { enabled: false, userId: '' } });
+    const service = new AgentMemoryContextService();
+
+    service.warmup();
+    await vi.runAllTicks();
+    const first = service.reinitializeAfterLogin();
+    const second = service.reinitializeAfterLogin();
+
+    expect(first).toBe(second);
+    await expect(first).resolves.toMatchObject({ bootstrap: { enabled: true } });
+    expect(reinitializeAfterAuthChangeMock).toHaveBeenCalledTimes(1);
   });
 
   it('gives retrieval a fresh timeout budget', async () => {

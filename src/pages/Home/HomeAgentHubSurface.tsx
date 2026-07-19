@@ -1,113 +1,95 @@
 /**
- * 无 CRM 周报策略权限时的首页：Hero + 能力卡片 + 底部输入（色板对齐 docs/sto-design.md）。
+ * 首页 Agent Hub Surface：Hero + 能力卡片 + 底部输入。
+ * 有推荐位数据时展示推荐卡片，无数据时降级展示静态 AGENT_HUB_CARDS。
  */
 import { useMemo } from 'react';
-import { FileText, Rocket, Waypoints } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
-import { useAgentsStore } from '@/stores/agents';
-import { useChatStore } from '@/stores/chat';
-import { useGatewayStore } from '@/stores/gateway';
+import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
 import { HomeHero } from './HomeHero';
 import { HomeMainConversation } from './HomeMainConversation';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 import { useHomeConversationActive } from './use-home-conversation-active';
-import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { HomeComposer } from './HomeComposer';
+import { RecommendCardSkeletonGrid } from './RecommendCardSkeleton';
+import { RecommendCard } from './RecommendCard';
+import { useHomeRecommendSkillStatus } from './use-home-recommend-skill-status';
+import { StaticFallbackCards } from './agent-hub-static-cards';
+import { useRecommendItems } from '@/hooks/use-recommend-items';
+import { RECOMMEND_POSITION_KEYS, type RecommendItem } from '@/lib/recommend-api';
+import { navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
+import { useLatestWorkflowsByTemplates } from '@/hooks/use-latest-workflows-by-templates';
 import {
-  homeHubCardDescClass,
   homeHubCardGridClass,
-  homeHubCardShellClass,
-  homeHubCardTagClass,
-  homeHubCardTitleClass,
   homeHubFooterShellClass,
   homeHubMainScrollClass,
   homeHubMainScrollHostClass,
-  homeHubTextSecondary,
 } from './home-hub-surface-styles';
 
-/** sto-design Grey-4 边框（状态胶囊 / 隐藏 footer 保留） */
-const BORDER_DEFAULT = 'border-[#E5E6EB] dark:border-border';
-
-/**
- * 2026-06 首页改版：按 MasterGo 总部首页设计稿隐藏中间胶囊，保留代码以便恢复。
- */
-const SHOW_STATUS_CHIPS = false;
-
-/** 2026-06 首页改版：按设计稿隐藏底部网关状态行 */
-const SHOW_GATEWAY_LINE = false;
-
-/** 2026-06 首页改版：按设计稿隐藏底部用量提示 */
-const SHOW_USAGE_HINT = false;
-
-/** MasterGo paint_2:27513 — 任务处理卡图标底 */
-const CARD_ICON_WRAP_TASKS =
-  'bg-[rgba(189,243,207,0.5)] text-[#1D2129] dark:text-foreground';
-/** MasterGo paint_2:21494 — 持续执行卡图标底 */
-const CARD_ICON_WRAP_EXEC =
-  'bg-[rgba(214,200,199,0.25)] text-[#1D2129] dark:text-foreground';
-/** MasterGo paint_2:27541 — 多智能体卡图标底 */
-const CARD_ICON_WRAP_MULTI =
-  'bg-[rgba(255,232,193,0.25)] text-[#1D2129] dark:text-foreground';
-
-/** sto-design Green-6 就绪点 */
-const DOT_SUCCESS = 'bg-[#00B54B]';
-/** sto-design Brand-6 申通橙（状态胶囊隐藏后仍保留常量） */
-const DOT_BRAND = 'bg-[#FF6F00] dark:bg-[#FF8D2A]';
-
-const AGENT_HUB_CARDS: ReadonlyArray<{
-  icon: LucideIcon;
-  iconWrapClass: string;
-  titleKey: 'agentHub.cardTasksTitle' | 'agentHub.cardExecTitle' | 'agentHub.cardMultiTitle';
-  descKey: 'agentHub.cardTasksDesc' | 'agentHub.cardExecDesc' | 'agentHub.cardMultiDesc';
-}> = [
-  {
-    icon: Rocket,
-    iconWrapClass: CARD_ICON_WRAP_TASKS,
-    titleKey: 'agentHub.cardTasksTitle',
-    descKey: 'agentHub.cardTasksDesc',
-  },
-  {
-    icon: FileText,
-    iconWrapClass: CARD_ICON_WRAP_EXEC,
-    titleKey: 'agentHub.cardExecTitle',
-    descKey: 'agentHub.cardExecDesc',
-  },
-  {
-    icon: Waypoints,
-    iconWrapClass: CARD_ICON_WRAP_MULTI,
-    titleKey: 'agentHub.cardMultiTitle',
-    descKey: 'agentHub.cardMultiDesc',
-  },
-];
-
 export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: string; seedSkillSlug?: string }) {
-  const { t } = useTranslation('home');
+  const navigate = useNavigate();
   const showConversation = useHomeConversationActive();
   const { isSplitGridPassthrough, splitGridPassthroughClass } =
     useSplitGridPassthroughClass(showConversation);
 
-  const currentAgentId = useChatStore((s) => s.currentAgentId);
-  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
-  const sessions = useChatStore((s) => s.sessions);
-  const agents = useAgentsStore((s) => s.agents);
-  const gatewayStatus = useGatewayStore((s) => s.status);
-  const isGatewayRunning = gatewayStatus.state === 'running';
-  const currentAgent = useMemo(
-    () => agents.find((agent) => agent.id === currentAgentId),
-    [agents, currentAgentId],
-  );
-  const currentSession = useMemo(
-    () => sessions.find((session) => session.key === currentSessionKey),
-    [sessions, currentSessionKey],
-  );
-  const currentEngineType = currentSessionKey === DEFAULT_SESSION_KEY
-    ? currentAgent?.engineType
-    : currentSession?.engineType ?? currentAgent?.engineType;
-
   const { handleHubSend, handleHubQueue } = useHomeChatEntrySend();
+
+  const { items: recommendItems, loading: recommendLoading } = useRecommendItems(
+    RECOMMEND_POSITION_KEYS.HOME_CARD,
+  );
+
+  const { skillStatusMap, loading: skillStatusLoading, refreshingSlugs, handleRefresh: handleSkillStatusRefresh } = useHomeRecommendSkillStatus(recommendItems);
+
+  // 批量查询各模版当前用户最近实例：有实例的模版项替换为实例项（保留推荐位策划的标题/描述/图标，
+  // 仅将 item_type/item_ref_id 指向实例），点击分发逻辑保持不变。
+  const templateIds = useMemo(
+    () => recommendItems.filter((i) => i.item_type === 'workflow_template').map((i) => i.item_ref_id),
+    [recommendItems],
+  );
+  const { data: latestByTemplate, loading: latestLoading } = useLatestWorkflowsByTemplates(templateIds);
+
+  // displayItems：模版项存在实例时替换为实例项；key 始终用原始模版 id 以保证 refetch 后稳定 reconcile。
+  const displayItems = useMemo(() => {
+    return recommendItems.map((item) => {
+      if (item.item_type !== 'workflow_template') return { key: item.item_ref_id, item };
+      const latest = latestByTemplate.get(item.item_ref_id) ?? null;
+      if (!latest) return { key: item.item_ref_id, item };
+      const replaced: RecommendItem = {
+        ...item,
+        item_type: 'workflow_instance',
+        item_ref_id: latest.id,
+        title: latest.name || item.title,
+        description: latest.description ?? item.description,
+      };
+      return { key: item.item_ref_id, item: replaced };
+    });
+  }, [recommendItems, latestByTemplate]);
+
+  /** 推荐卡片点击：按 item_type 分发 */
+  const handleRecommendClick = (item: RecommendItem) => {
+      // 技能类型的点击已在 RecommendCard 内部处理（安装/更新/使用按钮）
+      if (item.item_type === 'skill') {
+        return;
+      }
+
+      if (item.item_type === 'workflow_instance') {
+        // 工作流实例：立即运行（复用"我的工作流"的立即运行逻辑）
+        navigateToNewSessionWithPrompt(
+          navigate,
+          '/home',
+          `帮我执行 id 为：${item.item_ref_id} 的工作流 【${item.title}】`,
+          { sessionTitle: `执行${item.title}工作流` },
+        );
+      } else if (item.item_type === 'workflow_template') {
+        // 工作流模版：安装（参考官方推荐模版的安装逻辑）
+        navigateToNewSessionWithPrompt(
+          navigate,
+          '/home',
+          `/${item.title}`,
+          { extraSearchParams: { workflowId: item.item_ref_id } },
+        );
+      }
+    };
 
   return (
     <div
@@ -135,56 +117,28 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
               <HomeHero />
 
               <div className={homeHubCardGridClass}>
-              {AGENT_HUB_CARDS.map(({ icon: Icon, iconWrapClass, titleKey, descKey }) => (
-                <div key={titleKey} className={homeHubCardShellClass}>
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={cn(
-                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
-                        iconWrapClass,
-                      )}
-                    >
-                      <Icon className="h-5 w-5" strokeWidth={1.75} aria-hidden />
-                    </div>
-                    <div className="min-w-0 flex-1 text-left">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className={homeHubCardTitleClass}>{t(titleKey)}</h3>
-                        <span className={homeHubCardTagClass}>{t('agentHub.functionTag')}</span>
-                      </div>
-                      <p className={cn('mt-1.5', homeHubCardDescClass)}>{t(descKey)}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {SHOW_STATUS_CHIPS ? (
-              <div className="flex flex-wrap justify-center gap-3">
-                {(
-                  [
-                    { dot: DOT_SUCCESS, label: t('agentHub.statusLabel'), value: t('agentHub.statusReady') },
-                    { dot: DOT_BRAND, label: t('agentHub.collabLabel'), value: t('agentHub.collabValue') },
-                    { dot: DOT_BRAND, label: t('agentHub.toolsLabel'), value: t('agentHub.toolsValue') },
-                  ] as const
-                ).map((row) => (
-                  <div
-                    key={row.label}
-                    className={cn(
-                      'flex items-center gap-2 rounded-xl border bg-[#F5F6F7] px-4 py-2.5 text-xs dark:bg-muted/60',
-                      BORDER_DEFAULT,
-                    )}
-                  >
-                    <span className={cn('font-medium text-[#4E5969] dark:text-muted-foreground')}>
-                      {row.label}
-                    </span>
-                    <span className="flex items-center gap-1.5 font-semibold text-[#1D2129] dark:text-foreground">
-                      <span className={cn('h-2 w-2 shrink-0 rounded-full', row.dot)} aria-hidden />
-                      {row.value}
-                    </span>
-                  </div>
-                ))}
+                {recommendLoading || latestLoading ? (
+                  <RecommendCardSkeletonGrid />
+                ) : recommendItems.length > 0 ? (
+                  displayItems.map(({ key, item }) => {
+                    const skillSlug = item.skill_slug || item.item_ref_id;
+                    return (
+                      <RecommendCard
+                        key={key}
+                        item={item}
+                        onClick={() => handleRecommendClick(item)}
+                        onSkillInstalled={() => {
+                          handleSkillStatusRefresh(skillSlug);
+                        }}
+                        skillStatus={item.item_type === 'skill' ? skillStatusMap[skillSlug] : undefined}
+                        skillStatusLoading={item.item_type === 'skill' ? (skillStatusLoading || refreshingSlugs.has(skillSlug)) : false}
+                      />
+                    );
+                  })
+                ) : (
+                  <StaticFallbackCards />
+                )}
               </div>
-            ) : null}
             </div>
           </div>
         )}
@@ -197,56 +151,7 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
             seedSkillSlug={seedSkillSlug}
             onSend={handleHubSend}
             onQueue={handleHubQueue}
-            engineType={currentEngineType}
           />
-          {SHOW_GATEWAY_LINE || SHOW_USAGE_HINT ? (
-          <div
-            className={cn(
-              'mx-auto mt-4 grid w-full max-w-[var(--sto-hero-input-max-w)] grid-cols-[1fr_auto_1fr] items-center gap-3 border-t pt-4 text-xs',
-              BORDER_DEFAULT,
-              homeHubTextSecondary,
-            )}
-          >
-            {SHOW_GATEWAY_LINE ? (
-              currentEngineType === 'openclaw' ? (
-                <span className="flex items-center gap-2">
-                  <span
-                    className={cn(
-                      'h-2 w-2 shrink-0 rounded-full',
-                      isGatewayRunning ? DOT_SUCCESS : 'bg-[#FAAD14]',
-                    )}
-                    aria-hidden
-                  />
-                  {gatewayStatus.state === 'running'
-                    ? t('agentHub.gatewayLineConnected', {
-                        port: gatewayStatus.port ?? 18789,
-                        pid: gatewayStatus.pid ?? '—',
-                      })
-                    : gatewayStatus.state === 'starting' || gatewayStatus.state === 'reconnecting'
-                      ? t('agentHub.gatewayLineConnecting', { port: gatewayStatus.port ?? 18789 })
-                      : t('agentHub.gatewayLineDisconnected', { port: gatewayStatus.port ?? 18789 })}
-                </span>
-              ) : currentEngineType === 'claude' ? (
-                <span className="flex items-center gap-2">
-                  <span className={cn('h-2 w-2 shrink-0 rounded-full', DOT_SUCCESS)} aria-hidden />
-                  {t('agentHub.claudeLineConnected')}
-                </span>
-              ) : (
-                <span />
-              )
-            ) : (
-              <span />
-            )}
-            <span />
-            {SHOW_USAGE_HINT ? (
-              <span className="justify-self-end tabular-nums text-right text-[#4E5969] dark:text-muted-foreground">
-                {t('agentHub.usageHint')}
-              </span>
-            ) : (
-              <span />
-            )}
-          </div>
-        ) : null}
         </div>
       ) : null}
     </div>

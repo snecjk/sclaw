@@ -1,24 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { getAgentWorkspacePath } from '../utils/agent-config';
+import { agentMemoryRemoteService } from './agent-memory-remote-service';
+import { STO_MEMORY_CENTER_LLM_MODEL } from './sto-memory-center-llm';
 import { logger } from '../utils/logger';
-import { createClaudeQuery, prepareClaudeRuntime } from '../engines/claude-sdk-runtime';
 
-function extractAssistantText(message: Record<string, unknown>): string {
-  if (message.type !== 'assistant' || !('message' in message)) return '';
-  const payload = (message as { message?: { content?: unknown } }).message;
-  const content = payload?.content;
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((block) => {
-        if (!block || typeof block !== 'object') return '';
-        const record = block as Record<string, unknown>;
-        return typeof record.text === 'string' ? record.text : '';
-      })
-      .filter(Boolean)
-      .join('\n');
-  }
-  return '';
+function extractAssistantText(response: Record<string, unknown>): string {
+  const firstChoice = Array.isArray(response.choices)
+    ? response.choices[0] as Record<string, unknown> | undefined
+    : undefined;
+  const message = firstChoice?.message as Record<string, unknown> | undefined;
+  return typeof message?.content === 'string' ? message.content : '';
 }
 
 function parseJsonObjectFromText(text: string): ExecutionExperienceSummary {
@@ -217,82 +207,42 @@ export class ClaudeExecutionSummaryService {
     const agentId = typeof input.agentId === 'string' && input.agentId.trim()
       ? input.agentId.trim()
       : 'main';
-    const runtime = await prepareClaudeRuntime({ agentId });
-    const launch = runtime.selection;
-    const cwd = await getAgentWorkspacePath(agentId) || process.cwd();
     const queryId = randomUUID();
 
     logger.info('[execution-memory][claude] summarize start', {
       queryId,
       agentId,
-      model: launch.model,
-      accountId: launch.accountId,
+      model: STO_MEMORY_CENTER_LLM_MODEL,
     });
 
-    const prompt = buildSummaryPrompt(input)
-      logger.debug('[execution-memory][claude] summarize prompt', {
-        queryId,
-        prompt,
-      });
-      const query = await createClaudeQuery({
-        prompt: prompt,
-        options: {
-          cwd,
-          env: runtime.env,
-          settingSources: ['user' as const],
-          settings: launch.model ? { model: launch.model } : undefined,
-          pathToClaudeCodeExecutable: runtime.pathToClaudeCodeExecutable,
-          includePartialMessages: false,
-          skills: [],
-          mcpServers: {},
-          hooks: {},
-          plugins: [],
-          systemPrompt: {
-            type: 'preset' as const,
-            preset: 'claude_code' as const,
-            append: SUMMARY_SYSTEM_PROMPT,
-          },
-        } as any,
-      }) as AsyncIterable<Record<string, unknown>> & { close(): void };
+    const prompt = buildSummaryPrompt(input);
+    logger.debug('[execution-memory][claude] summarize prompt', {
+      queryId,
+      prompt,
+    });
+    const response = await agentMemoryRemoteService.createChatCompletion({
+      model: STO_MEMORY_CENTER_LLM_MODEL,
+      messages: [
+        { role: 'system', content: SUMMARY_SYSTEM_PROMPT },
+        { role: 'user', content: prompt },
+      ],
+      response_format: { type: 'json_object' },
+    });
+    const assistantText = extractAssistantText(response);
 
-      let timedOut = false;
-      let assistantText = '';
-      const timer = setTimeout(() => {
-        timedOut = true;
-        try {
-          query.close();
-        } catch {
-          // Ignore close failures; the caller will receive a structured skip.
-        }
-      }, 60_000);
+    logger.debug('[execution-memory][claude] summarize assistant text', {
+      queryId,
+      assistantText,
+    });
 
-      try {
-        for await (const message of query) {
-          const text = extractAssistantText(message);
-          if (text) assistantText = text;
-        }
-      } finally {
-        clearTimeout(timer);
-      }
-
-      if (timedOut && !assistantText) {
-        logger.warn('[execution-memory][claude] summarize timeout', { queryId });
-        return { shouldStore: false, reason: 'claude_summary_timeout' };
-      }
-
-      logger.debug('[execution-memory][claude] summarize assistant text', {
-        queryId,
-        assistantText,
-      });
-
-      const parsed = parseJsonObjectFromText(assistantText);
-      logger.info('[execution-memory][claude] summarize done', {
-        queryId,
-        shouldStore: parsed.shouldStore,
-        reason: parsed.reason,
-        assistantTextLength: assistantText.length,
-      });
-      return parsed;
+    const parsed = parseJsonObjectFromText(assistantText);
+    logger.info('[execution-memory][claude] summarize done', {
+      queryId,
+      shouldStore: parsed.shouldStore,
+      reason: parsed.reason,
+      assistantTextLength: assistantText.length,
+    });
+    return parsed;
   }
 }
 

@@ -20,6 +20,36 @@ import {
 import { PREINSTALLED_MARKER_NAME, USER_UPLOAD_MARKER_NAME } from './sto-skill-service';
 import { parseSkillFrontmatter, readSkillMdFrontmatter } from '../utils/skill-frontmatter';
 import { pickNavCategoryFromApiSkill } from '../../shared/skill-plaza-category-resolve';
+import { KeyedTtlCache, mapWithConcurrency } from './skill-plaza-cache';
+
+// ---------------------------------------------------------------------------
+// Auth-not-ready sentinel
+// ---------------------------------------------------------------------------
+
+/** Structured code surfaced to the renderer when the STO token is not ready. */
+export const SKILL_PLAZA_AUTH_NOT_READY_CODE = 'AUTH_NOT_READY';
+
+/**
+ * Thrown when a plaza read is attempted before the STO token is available
+ * (cold start / token still loading). The renderer treats this as a transient
+ * "loading" state and retries, rather than rendering an unfiltered fallback.
+ */
+export class SkillPlazaAuthNotReadyError extends Error {
+  readonly code = SKILL_PLAZA_AUTH_NOT_READY_CODE;
+  constructor(message = 'STO token not ready') {
+    super(message);
+    this.name = 'SkillPlazaAuthNotReadyError';
+  }
+}
+
+export function isSkillPlazaAuthNotReadyError(err: unknown): err is SkillPlazaAuthNotReadyError {
+  return (
+    err instanceof SkillPlazaAuthNotReadyError ||
+    (typeof err === 'object' &&
+      err !== null &&
+      (err as { code?: string }).code === SKILL_PLAZA_AUTH_NOT_READY_CODE)
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -86,6 +116,37 @@ const OFFICE_CATEGORY_SLUG = 'bangong';
 const OFFICE_CATEGORY_LABEL = '办公';
 
 // ---------------------------------------------------------------------------
+// Request tuning
+// ---------------------------------------------------------------------------
+
+/** Timeout for list/category STO requests. */
+const PLAZA_REQUEST_TIMEOUT_MS = 5000;
+/** Timeout for per-skill detail requests (used in enrichment fallback). */
+const DETAIL_REQUEST_TIMEOUT_MS = 3000;
+/** Max concurrent detail requests when enriching local skills. */
+const DETAIL_FILL_CONCURRENCY = 4;
+
+// ---------------------------------------------------------------------------
+// Cache TTLs
+// ---------------------------------------------------------------------------
+
+const APOLLO_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const CATEGORIES_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const ENRICHMENT_INDEX_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * A one-shot snapshot of local skill install state, read once per request and
+ * reused across every skill so we do not re-scan the skills directory and
+ * re-parse lock.json for each entry.
+ */
+interface LocalStateSnapshot {
+  installedSlugs: Set<string>;
+  enabledSlugs: Set<string>;
+  disabledSlugs: Set<string>;
+  lockEntries: Map<string, { version?: string; source?: string; versionSource?: string }>;
+}
+
+// ---------------------------------------------------------------------------
 // Python API Client
 // ---------------------------------------------------------------------------
 
@@ -101,22 +162,43 @@ class PythonApiClient {
     };
   }
 
-  private async request<T>(method: string, endpoint: string, body?: unknown): Promise<T> {
+  private async request<T>(
+    method: string,
+    endpoint: string,
+    body?: unknown,
+    timeoutMs: number = PLAZA_REQUEST_TIMEOUT_MS,
+  ): Promise<T> {
     const baseUrl = await resolveStoBaseUrl();
     const headers = await this.getAuthHeaders();
     const url = `${baseUrl}${endpoint}`;
 
     logger.info(`[PythonApiClient] ${method} ${url}`);
 
+    // Abort the underlying fetch on timeout so a slow STO backend cannot hang
+    // the whole request chain up to the outer 15s IPC timeout.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     const options: RequestInit = {
       method,
       headers,
+      signal: controller.signal,
     };
     if (body !== undefined) {
       options.body = JSON.stringify(body);
     }
 
-    const res = await fetch(url, options);
+    let res: Response;
+    try {
+      res = await fetch(url, options);
+    } catch (err) {
+      if (controller.signal.aborted) {
+        throw new Error(`Python API 请求超时 (${timeoutMs}ms): ${method} ${endpoint}`, { cause: err });
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+
     if (!res.ok) {
       const text = await res.text().catch(() => '');
       throw new Error(`Python API 请求失败 (${res.status}): ${text}`);
@@ -153,7 +235,12 @@ class PythonApiClient {
   }
 
   async getSkillDetail(slug: string): Promise<SkillDetail> {
-    const raw = await this.request<Record<string, unknown>>('GET', `/agent/v1/skills/plaza/${encodeURIComponent(slug)}`);
+    const raw = await this.request<Record<string, unknown>>(
+      'GET',
+      `/agent/v1/skills/plaza/${encodeURIComponent(slug)}`,
+      undefined,
+      DETAIL_REQUEST_TIMEOUT_MS,
+    );
     return convertSkillDetail(raw);
   }
 
@@ -323,10 +410,6 @@ function readLockJsonSkillEntries(configDir: string): Map<string, {
   return entries;
 }
 
-function readLockJsonSkills(configDir: string): Set<string> {
-  return new Set(readLockJsonSkillEntries(configDir).keys());
-}
-
 function readSkillsDirSlugs(skillsDir: string): Set<string> {
   const slugs = new Set<string>();
   try {
@@ -476,9 +559,35 @@ export class SkillPlazaService {
   private configDir: string;
   private skillsDir: string;
 
+  // Shared caches (stale-while-revalidate + in-flight dedup). Apollo config and
+  // category defs change rarely; the enrichment index backs local-skill
+  // categorization. Mutations invalidate the relevant caches.
+  private apolloCache = new KeyedTtlCache<string>(APOLLO_CACHE_TTL_MS);
+  // Keyed by the resolved Apollo "categorys" filter so a role/account switch
+  // (which changes that filter) transparently uses a separate cache entry.
+  private categoriesCache = new KeyedTtlCache<CategoryDef[]>(CATEGORIES_CACHE_TTL_MS);
+  private enrichmentIndexCache = new KeyedTtlCache<Map<string, SkillSummary>>(ENRICHMENT_INDEX_TTL_MS);
+
   constructor() {
     this.configDir = getOpenClawConfigDir();
     this.skillsDir = getOpenClawSkillsDir();
+  }
+
+  /** Invalidate caches that depend on installed/enabled skill state. */
+  private invalidateLocalCaches(): void {
+    this.enrichmentIndexCache.invalidate();
+  }
+
+  /**
+   * Guard plaza reads on STO token availability. Without a token the backend
+   * cannot apply the Apollo category filter and would return an unfiltered set,
+   * so we throw a typed error the renderer maps to a loading + retry state.
+   */
+  private async assertAuthReady(): Promise<void> {
+    const token = await getStoToken();
+    if (!token) {
+      throw new SkillPlazaAuthNotReadyError();
+    }
   }
 
   // ---- Local state readers ----
@@ -487,22 +596,24 @@ export class SkillPlazaService {
     return path.join(this.configDir, 'skills-disabled');
   }
 
-  private getInstalledSlugs(): Set<string> {
-    const fromLock = readLockJsonSkills(this.configDir);
+  /** Read install/enable/lock state once for reuse across a whole request. */
+  private buildLocalStateSnapshot(): LocalStateSnapshot {
+    const lockEntries = readLockJsonSkillEntries(this.configDir);
     const fromDir = readSkillsDirSlugs(this.skillsDir);
     const fromDisabled = readDisabledDirSlugs(this.getDisabledDir());
-    return new Set([...fromLock, ...fromDir, ...fromDisabled]);
+    return {
+      installedSlugs: new Set([...lockEntries.keys(), ...fromDir, ...fromDisabled]),
+      enabledSlugs: fromDir,
+      disabledSlugs: fromDisabled,
+      lockEntries,
+    };
   }
 
-  private getEnabledSlugs(): Set<string> {
-    // 技能在 skills/ 目录下 = 启用；在 skills-disabled/ 下 = 禁用
-    return readSkillsDirSlugs(this.skillsDir);
-  }
-
-  private overlayLocalState<T extends SkillSummary>(skill: T): T {
-    const installedSlugs = this.getInstalledSlugs();
-    const enabledSlugs = this.getEnabledSlugs();
-    const lockEntries = readLockJsonSkillEntries(this.configDir);
+  private overlayLocalState<T extends SkillSummary>(skill: T, snapshot?: LocalStateSnapshot): T {
+    const snap = snapshot ?? this.buildLocalStateSnapshot();
+    const installedSlugs = snap.installedSlugs;
+    const enabledSlugs = snap.enabledSlugs;
+    const lockEntries = snap.lockEntries;
     const installed = installedSlugs.has(skill.slug);
     // overlayLocalState 仅处理 plaza API 项，不应因 lock 缺失把市场安装误判为「纯本地自建」
     const source: 'official' | 'mine' = skill.source === 'mine' ? 'mine' : 'official';
@@ -513,16 +624,19 @@ export class SkillPlazaService {
     const lockInfo = lockEntries.get(skill.slug);
     const isStoMarketplaceInstall = lockInfo?.source === 'sto-marketplace';
 
-    if (installed && skill.version) {
+    if (installed) {
       const skillDir = resolveSkillDirForSlug(this.skillsDir, this.getDisabledDir(), skill.slug);
       const lockVersion = isStoMarketplaceInstall ? lockInfo?.version : undefined;
       const skillMdVersion = skillDir && !isPreinstalledSkill(skillDir)
         ? readSkillMdVersion(skillDir)
         : null;
 
-      if (skillDir && !isPreinstalledSkill(skillDir)) {
-        installedVersion = resolveInstalledVersionForCompare(lockVersion, skillMdVersion);
-        updateAvailable = isRemoteVersionNewer(skill.version, installedVersion);
+      const cmpInstalledVersion = resolveInstalledVersionForCompare(lockVersion, skillMdVersion);
+      if (cmpInstalledVersion) {
+        installedVersion = cmpInstalledVersion;
+        if (skill.version) {
+          updateAvailable = isRemoteVersionNewer(skill.version, installedVersion);
+        }
       }
     }
 
@@ -539,8 +653,10 @@ export class SkillPlazaService {
   private normalizeRemotePlazaSkills(
     skills: SkillSummary[],
     labelToSlug: Map<string, string>,
+    snapshot?: LocalStateSnapshot,
   ): SkillSummary[] {
-    return skills.map((s) => this.overlayLocalState(s)).map((s) => {
+    const snap = snapshot ?? this.buildLocalStateSnapshot();
+    return skills.map((s) => this.overlayLocalState(s, snap)).map((s) => {
       if (OFFICE_SKILL_SLUGS.has(s.slug)) {
         return { ...s, category: OFFICE_CATEGORY_LABEL, categoryCode: OFFICE_CATEGORY_SLUG };
       }
@@ -610,82 +726,117 @@ export class SkillPlazaService {
     return skills.filter((s) => Boolean(s.categoryCode));
   }
 
-  private async resolvePlazaCategorysFilter(): Promise<string> {
+  /**
+   * Resolve the Apollo "categorys" filter for the current user role.
+   * Cached (10 min) and de-duplicated so a single load cycle resolves it once.
+   */
+  private async resolveCategorysFilter(): Promise<string> {
     try {
       const authState = await getAuthState();
       const categoryCode = authState.user?.categoryCode;
       const apolloKey = isSiteUser(categoryCode)
         ? 'claw.site.skill.category'
         : 'claw.prov_head.skill.category';
-      const configValue = await fetchApolloConfigValue(apolloKey);
-      return configValue || '';
+      // Only cache a successful (non-null) Apollo response. A null result means
+      // the token/base was not ready (cold start) or the request failed; caching
+      // it would lock in an *unfiltered* category set for the whole TTL, so we
+      // throw to skip caching and let the next call retry once auth is ready.
+      // A legitimate empty-string value ("" = no filter) is still cached.
+      return await this.apolloCache.get(apolloKey, async () => {
+        const value = await fetchApolloConfigValue(apolloKey);
+        if (value === null) {
+          throw new Error(`Apollo config "${apolloKey}" unavailable`);
+        }
+        return value;
+      });
     } catch (err) {
-      logger.warn('[SkillPlazaService] Failed to resolve categorys filter for enrichment:', err);
+      logger.warn('[SkillPlazaService] Failed to resolve categorys filter:', err);
       return '';
     }
   }
 
-  /** Raw remote plaza list for local skill category enrichment (no uncategorized filter). */
-  private async fetchPlazaSkillMapForLocalEnrichment(
+  /**
+   * Build (or reuse a cached) slug → plaza-skill index for local-skill category
+   * enrichment. A single unfiltered paginated pull replaces the previous
+   * "全量 + 每分类" N+1 serial download; per-slug category gaps are filled on
+   * demand via {@link getSkillDetail} in getLocalSkills.
+   */
+  private async fetchPlazaEnrichmentIndex(
     labelToSlug: Map<string, string>,
-    categoryDefs: CategoryDef[],
-  ): Promise<{
-    skills: Map<string, SkillSummary>;
-    navBuckets: Map<string, { slug: string; label: string }>;
-  }> {
-    const categorys = await this.resolvePlazaCategorysFilter();
-    const map = new Map<string, SkillSummary>();
-    const navBuckets = new Map<string, { slug: string; label: string }>();
-
-    const ingest = (skills: SkillSummary[], implied?: { slug: string; label: string }) => {
-      const normalized = this.normalizeRemotePlazaSkills(skills, labelToSlug).map((s) => {
-        const overlaid = this.overlayLocalState(s);
-        if (implied) {
-          if (overlaid.slug) {
-            navBuckets.set(overlaid.slug, implied);
-          }
-          // Skills listed under a nav tab use that tab's bucket (Apollo-visible categories).
-          return {
-            ...overlaid,
-            categoryCode: implied.slug,
-            category: implied.label,
-          };
-        }
-        return overlaid;
-      });
-      for (const skill of normalized) {
-        if (!skill.slug) continue;
-        const existing = map.get(skill.slug);
-        if (!existing || (!existing.categoryCode && skill.categoryCode)) {
-          map.set(skill.slug, skill);
-        }
-      }
-    };
-
-    const fetchPages = async (
-      params: SkillPlazaListParams,
-      implied?: { slug: string; label: string },
-    ) => {
+    snapshot: LocalStateSnapshot,
+  ): Promise<Map<string, SkillSummary>> {
+    const categorys = await this.resolveCategorysFilter();
+    return this.enrichmentIndexCache.get(categorys, async () => {
+      const map = new Map<string, SkillSummary>();
       let page = 1;
       while (true) {
         const result = await this.client.getPlazaSkills(
-          { ...params, page, pageSize: 1000 },
+          { page, pageSize: 1000 },
           categorys || undefined,
         );
-        ingest(result.skills, implied);
+        const normalized = this.normalizeRemotePlazaSkills(result.skills, labelToSlug, snapshot);
+        for (const skill of normalized) {
+          if (!skill.slug) continue;
+          const existing = map.get(skill.slug);
+          if (!existing || (!existing.categoryCode && skill.categoryCode)) {
+            map.set(skill.slug, skill);
+          }
+        }
         if (!result.hasMore || result.skills.length === 0) break;
         page++;
         if (page > 50) break;
       }
-    };
+      return map;
+    });
+  }
 
-    await fetchPages({ page: 1, pageSize: 1000 });
-    for (const cat of categoryDefs) {
-      if (!cat.slug) continue;
-      await fetchPages({ page: 1, pageSize: 1000, category: cat.slug }, cat);
+  /**
+   * For installed official skills whose category could not be resolved from the
+   * enrichment index, fetch skill detail with bounded concurrency to recover
+   * the nav category. Preinstalled / user-uploaded / office skills are handled
+   * separately and never reach here.
+   */
+  private async fillMissingCategoriesFromDetail(
+    allSlugs: Set<string>,
+    snapshot: LocalStateSnapshot,
+    plazaSkillMap: Map<string, SkillSummary>,
+    manifestSlugs: Set<string>,
+    categoryDefs: CategoryDef[],
+  ): Promise<Map<string, { code: string | null; label: string | null }>> {
+    const needDetail: string[] = [];
+    for (const slug of allSlugs) {
+      if (OFFICE_SKILL_SLUGS.has(slug)) continue;
+
+      const isEnabled = snapshot.enabledSlugs.has(slug);
+      const skillDirPath = isEnabled
+        ? path.join(this.skillsDir, slug)
+        : path.join(this.getDisabledDir(), slug);
+      if (isPreinstalledSkill(skillDirPath) || isUserUploadedSkill(skillDirPath)) continue;
+
+      const plazaSkill = plazaSkillMap.get(slug);
+      const isOfficial =
+        snapshot.lockEntries.has(slug) ||
+        plazaSkill?.source === 'official' ||
+        manifestSlugs.has(slug);
+      if (!isOfficial) continue;
+
+      if (plazaSkill && pickNavCategoryFromApiSkill(plazaSkill, categoryDefs).code) continue;
+      needDetail.push(slug);
     }
 
-    return { skills: map, navBuckets };
+    const result = new Map<string, { code: string | null; label: string | null }>();
+    if (needDetail.length === 0) return result;
+
+    await mapWithConcurrency(needDetail, DETAIL_FILL_CONCURRENCY, async (slug) => {
+      try {
+        const detail = await this.getSkillDetail(slug);
+        const picked = pickNavCategoryFromApiSkill(detail, categoryDefs);
+        result.set(slug, { code: picked.code, label: picked.label });
+      } catch (err) {
+        logger.warn(`[getLocalSkills] getSkillDetail failed for ${slug}:`, err);
+      }
+    });
+    return result;
   }
 
   // ---- Office skills from local filesystem ----
@@ -785,68 +936,47 @@ export class SkillPlazaService {
   // ---- Public API ----
 
   async getCategories(): Promise<CategoryDef[]> {
-    // Determine user role and fetch the appropriate Apollo config for category filtering
-    let queryParams = '';
-    try {
-      const authState = await getAuthState();
-      const categoryCode = authState.user?.categoryCode;
-      const apolloKey = isSiteUser(categoryCode)
-        ? 'claw.site.skill.category'
-        : 'claw.prov_head.skill.category';
-      const configValue = await fetchApolloConfigValue(apolloKey);
-      if (configValue) {
-        queryParams = configValue;
-        logger.info(`[SkillPlazaService] getCategories using Apollo config "${apolloKey}": ${configValue}`);
+    await this.assertAuthReady();
+    // Determine user role → Apollo category filter (cached + deduped), then
+    // cache the resolved category defs keyed by that filter.
+    const queryParams = await this.resolveCategorysFilter();
+    return this.categoriesCache.get(queryParams, async () => {
+      const res = await this.client.getCategories(queryParams || undefined);
+      const categories = [...(res.categories || [])];
+
+      // Inject "办公" category if not already present
+      if (!categories.some((c) => c.slug === OFFICE_CATEGORY_SLUG)) {
+        categories.push({ slug: OFFICE_CATEGORY_SLUG, label: OFFICE_CATEGORY_LABEL });
       }
-    } catch (err) {
-      logger.warn('[SkillPlazaService] Failed to resolve category filter config:', err);
-    }
 
-    const res = await this.client.getCategories(queryParams || undefined);
-    const categories = res.categories || [];
+      // Inject "其他" category if not already present
+      if (!categories.some((c) => c.slug === 'qita')) {
+        categories.push({ slug: 'qita', label: '其他' });
+      }
 
-    // Inject "办公" category if not already present
-    if (!categories.some((c) => c.slug === OFFICE_CATEGORY_SLUG)) {
-      categories.push({ slug: OFFICE_CATEGORY_SLUG, label: OFFICE_CATEGORY_LABEL });
-    }
-
-    // Inject "其他" category if not already present
-    if (!categories.some((c) => c.slug === 'qita')) {
-      categories.push({ slug: 'qita', label: '其他' });
-    }
-
-    return categories;
+      return categories;
+    });
   }
 
   async getPlazaSkills(params: SkillPlazaListParams): Promise<PlazaListResult> {
-    // Resolve categorys filter from Apollo config based on user role
-    let categorys = '';
-    try {
-      const authState = await getAuthState();
-      const categoryCode = authState.user?.categoryCode;
-      const apolloKey = isSiteUser(categoryCode)
-        ? 'claw.site.skill.category'
-        : 'claw.prov_head.skill.category';
-      const configValue = await fetchApolloConfigValue(apolloKey);
-      if (configValue) {
-        categorys = configValue;
-        logger.info(`[SkillPlazaService] getPlazaSkills using Apollo config "${apolloKey}": ${configValue}`);
-      }
-    } catch (err) {
-      logger.warn('[SkillPlazaService] Failed to resolve categorys filter config:', err);
-    }
+    await this.assertAuthReady();
+    // Resolve categorys filter from Apollo config (cached + deduped).
+    const categorys = await this.resolveCategorysFilter();
 
     const isOfficeFilter = params.category === OFFICE_CATEGORY_SLUG;
     const isQitaFilter = params.category === 'qita';
     const hasCategoryFilter = Boolean(params.category && params.category !== '');
     const localOfficeSkills = this.getOfficeSkillsFromLocal(params.q);
     const localPreinstalledOthers = this.getPreinstalledNonOfficeSkillsFromLocal(params.q);
+    // Read local install state once and reuse it while normalizing every skill.
+    const snapshot = this.buildLocalStateSnapshot();
 
     let labelToSlug = new Map<string, string>();
     try {
       const categories = await this.getCategories();
       labelToSlug = new Map(categories.map((c) => [c.label, c.slug]));
     } catch (err) {
+      if (isSkillPlazaAuthNotReadyError(err)) throw err;
       logger.warn('[SkillPlazaService] Failed to load categories for skill normalization:', err);
     }
 
@@ -879,7 +1009,7 @@ export class SkillPlazaService {
     // List: remote API with category_code filter so cards match backend management platform.
     const result = await this.client.getPlazaSkills(params, categorys || undefined);
     let skills = this.mergeLocalPreinstalledSkills(
-      this.normalizeRemotePlazaSkills(result.skills, labelToSlug),
+      this.normalizeRemotePlazaSkills(result.skills, labelToSlug, snapshot),
       localOfficeSkills,
       localPreinstalledOthers,
       hasCategoryFilter,
@@ -891,12 +1021,21 @@ export class SkillPlazaService {
       skills = this.filterUncategorizedPlazaSkills(skills);
     }
 
-    // Nav counts always reflect full category panorama (incl. local preinstall),
-    // regardless of which category is selected for the card list.
-    const { categoryCounts: remoteCounts, remoteSlugs } = await this.fetchRemoteCategoryCounts(
-      params,
-      categorys,
-    );
+    // Nav counts always reflect the full category panorama (incl. local
+    // preinstall). When no category filter is applied the main response is
+    // already the unfiltered panorama, so reuse it instead of firing a second
+    // identical request. Only category-filtered views need the extra
+    // unfiltered count fetch.
+    let remoteCounts: Record<string, number>;
+    let remoteSlugs: Set<string>;
+    if (!hasCategoryFilter) {
+      remoteCounts = { ...(result.categoryCounts || {}) };
+      remoteSlugs = new Set(result.skills.map((s) => s.slug));
+    } else {
+      const counts = await this.fetchRemoteCategoryCounts(params, categorys);
+      remoteCounts = counts.categoryCounts;
+      remoteSlugs = counts.remoteSlugs;
+    }
     const { newLocalOffice, newLocalOthers } = this.resolveLocalPreinstallCountDelta(
       localOfficeSkills,
       localPreinstalledOthers,
@@ -926,10 +1065,13 @@ export class SkillPlazaService {
   }
 
   async getLocalSkills(): Promise<PlazaListResult> {
-    const activeSlugs = readSkillsDirSlugs(this.skillsDir);
-    const disabledSlugs = readDisabledDirSlugs(this.getDisabledDir());
+    await this.assertAuthReady();
+    // Read install/enable/lock state once for the whole request.
+    const snapshot = this.buildLocalStateSnapshot();
+    const activeSlugs = snapshot.enabledSlugs;
+    const disabledSlugs = snapshot.disabledSlugs;
     const allSlugs = new Set([...activeSlugs, ...disabledSlugs]);
-    const fromLock = readLockJsonSkills(this.configDir);
+    const fromLock = new Set(snapshot.lockEntries.keys());
     const manifestSlugs = readPreinstalledManifestSlugs();
 
     // 获取 plaza 分类列表，建立 label → slug 映射（权威来源）
@@ -940,20 +1082,30 @@ export class SkillPlazaService {
       labelToSlug = new Map(categoryDefs.map((c) => [c.label, c.slug]));
       logger.info(`[getLocalSkills] categories loaded: ${categoryDefs.map((c) => `${c.label}=${c.slug}`).join(', ')}`);
     } catch (err) {
+      if (isSkillPlazaAuthNotReadyError(err)) throw err;
       logger.warn('[SkillPlazaService] Failed to fetch categories for local skills:', err);
     }
 
-    // 先拉 plaza 列表，用于补全官方技能的分类信息（含按分类分页拉取）
+    // Build (or reuse cached) slug → plaza-skill index from a single unfiltered
+    // pull, used to enrich official skills' title/description/category.
     let plazaSkillMap = new Map<string, SkillSummary>();
-    let navBuckets = new Map<string, { slug: string; label: string }>();
     try {
-      const enriched = await this.fetchPlazaSkillMapForLocalEnrichment(labelToSlug, categoryDefs);
-      plazaSkillMap = enriched.skills;
-      navBuckets = enriched.navBuckets;
-      logger.info(`[getLocalSkills] loaded ${plazaSkillMap.size} plaza skills, ${navBuckets.size} nav buckets for categorization`);
+      plazaSkillMap = await this.fetchPlazaEnrichmentIndex(labelToSlug, snapshot);
+      logger.info(`[getLocalSkills] loaded ${plazaSkillMap.size} plaza skills for categorization`);
     } catch (err) {
       logger.warn('[SkillPlazaService] Failed to fetch plaza skills for categorization:', err);
     }
+
+    // Determine which official skills still lack a category after the index
+    // lookup, and fill them via detail requests with bounded concurrency
+    // (replaces the previous per-skill serial awaits).
+    const detailCategoryMap = await this.fillMissingCategoriesFromDetail(
+      allSlugs,
+      snapshot,
+      plazaSkillMap,
+      manifestSlugs,
+      categoryDefs,
+    );
 
     // SKILL.md 里的 category 可能是中文标签，映射到前端 slug（仅当 plaza 完全不可用时兜底）
     const categoryLabelToSlug: Record<string, string> = {
@@ -1014,24 +1166,10 @@ export class SkillPlazaService {
             }
 
             if (!resolvedCode) {
-              try {
-                const detail = await this.getSkillDetail(slug);
-                const picked = pickNavCategoryFromApiSkill(detail, categoryDefs);
-                resolvedCode = picked.code;
-                resolvedLabel = picked.label;
-                logger.info(
-                  `[getLocalSkills] detail category_codes pick for ${slug}: categoryCode=${resolvedCode}, category=${resolvedLabel}, codes=${JSON.stringify(detail.categoryCodes)}`,
-                );
-              } catch (detailErr) {
-                logger.warn(`[getLocalSkills] getSkillDetail failed for ${slug}:`, detailErr);
-              }
-            }
-
-            if (!resolvedCode) {
-              const navBucket = navBuckets.get(slug);
-              if (navBucket) {
-                resolvedCode = navBucket.slug;
-                resolvedLabel = navBucket.label;
+              const fromDetail = detailCategoryMap.get(slug);
+              if (fromDetail) {
+                resolvedCode = fromDetail.code;
+                resolvedLabel = fromDetail.label;
               }
             }
           }
@@ -1072,7 +1210,7 @@ export class SkillPlazaService {
           updatedAt: plazaSkill?.updatedAt,
           version: plazaSkill?.version,
         };
-        skills.push(this.overlayLocalState(baseSkill));
+        skills.push(this.overlayLocalState(baseSkill, snapshot));
       }
     }
 
@@ -1097,6 +1235,68 @@ export class SkillPlazaService {
     };
   }
 
+  /**
+   * 轻量路径：按给定 slug 集合读取本地 install/版本状态，**不**做 category enrichment、
+   * **不**调远端（getCategories / fetchPlazaSkillMapForLocalEnrichment / getSkillDetail 全部跳过）。
+   * 供首页推荐位等「只需 installed / installedVersion / updateAvailable、不用分类」的场景使用。
+   * 未安装的 slug 不返回（消费方靠缺省判定 installed=false）。
+   */
+  async getLocalSkillsBySlugs(slugs: string[]): Promise<PlazaListResult> {
+    // 复用统一的本地状态快照：installedSlugs / enabledSlugs / lockEntries 一次读盘，
+    // 避免循环内重复 IO。注意此前误调了不存在的 this.getInstalledSlugs() /
+    // this.getEnabledSlugs()，运行时抛 TypeError，导致首页技能状态永远不刷新。
+    const snapshot = this.buildLocalStateSnapshot();
+    const installedSlugs = snapshot.installedSlugs;
+    const enabledSlugs = snapshot.enabledSlugs;
+    const lockEntries = snapshot.lockEntries;
+    const disabledDir = this.getDisabledDir();
+
+    const skills: SkillSummary[] = [];
+
+    for (const slug of slugs) {
+      if (!slug || !installedSlugs.has(slug)) continue;
+
+      const isEnabled = enabledSlugs.has(slug);
+      const baseDir = isEnabled ? this.skillsDir : disabledDir;
+      const skillDirPath = path.join(baseDir, slug);
+      const lockInfo = lockEntries.get(slug);
+      const isStoMarketplaceInstall = lockInfo?.source === 'sto-marketplace';
+      const lockVersion = isStoMarketplaceInstall ? lockInfo?.version : undefined;
+      const skillMdVersion =
+        !isPreinstalledSkill(skillDirPath) ? readSkillMdVersion(skillDirPath) : null;
+      const installedVersion = resolveInstalledVersionForCompare(lockVersion, skillMdVersion) || undefined;
+
+      const summary = readLocalSkillSummary(baseDir, slug);
+
+      skills.push({
+        slug,
+        title: summary?.title || slug,
+        description: summary?.description || '',
+        category: null,
+        categoryCode: null,
+        source: 'official',
+        installed: true,
+        enabled: isEnabled,
+        points: summary?.points ?? 8,
+        icon: summary?.icon,
+        defaultPrompt: summary?.defaultPrompt || slug,
+        installedVersion,
+        // 远端版本由消费方（首页 hook）自行拉云端对比，此处不填
+        version: undefined,
+        updateAvailable: false,
+      });
+    }
+
+    return {
+      skills,
+      categoryCounts: {},
+      hasMore: false,
+      page: 1,
+      pageSize: skills.length,
+      total: skills.length,
+    };
+  }
+
   async getSkillDetail(slug: string): Promise<SkillDetail> {
     const detail = await this.client.getSkillDetail(slug);
     const withLocalState = this.overlayLocalState(detail);
@@ -1111,14 +1311,19 @@ export class SkillPlazaService {
   }
 
   async recordInstall(slug: string): Promise<void> {
+    // Install changed local state; drop caches that overlay it.
+    this.invalidateLocalCaches();
     await this.client.recordInstall(slug);
   }
 
   async recordUninstall(slug: string): Promise<void> {
+    this.invalidateLocalCaches();
     await this.client.recordUninstall(slug);
   }
 
   async toggleSkillEnabled(slug: string, enabled: boolean): Promise<void> {
+    // Enable/disable moves the skill dir, changing overlay state.
+    this.invalidateLocalCaches();
     const disabledDir = this.getDisabledDir();
     const activeDir = this.skillsDir;
     const srcDir = enabled ? path.join(disabledDir, slug) : path.join(activeDir, slug);

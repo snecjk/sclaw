@@ -9,6 +9,12 @@ import {
   rewriteDwsSendSpawnInvocation,
 } from '../../shared/dws-send-text';
 
+/** Must match electron/utils/sai-client-id.ts — keep inline to avoid pulling Electron utils into preload. */
+const SAI_CLIENT_ID_VALUE = 'sto-claw';
+
+// Ensure Agent exec / skill shells inherit client id even if forkEnv was stale.
+process.env.SAI_CLIENT_ID = SAI_CLIENT_ID_VALUE;
+
 const DWS_CHAT_MSG_SEND = /dws\s+chat\s+message\s+send\b/i;
 
 function isBlockedDwsSendSpam(cmd: string, argsList: string[]): boolean {
@@ -160,6 +166,14 @@ function patchFetch(): void {
   };
 }
 
+function injectSaiClientIdIntoSpawnOptions(options: { env?: NodeJS.ProcessEnv }): void {
+  const env = options.env && typeof options.env === 'object'
+    ? { ...options.env }
+    : { ...process.env };
+  env.SAI_CLIENT_ID = SAI_CLIENT_ID_VALUE;
+  options.env = env;
+}
+
 function patchChildProcess(): void {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const cp = require('child_process') as typeof import('child_process') & { __clawxSecurityPatched?: boolean };
@@ -257,9 +271,14 @@ function patchChildProcess(): void {
         }
       }
       if (optIdx >= 0) {
-        (mutable[optIdx] as { windowsHide?: boolean }).windowsHide = true;
+        const options = mutable[optIdx] as { windowsHide?: boolean; env?: NodeJS.ProcessEnv };
+        options.windowsHide = true;
+        injectSaiClientIdIntoSpawnOptions(options);
       } else {
-        const options = { windowsHide: true };
+        const options: { windowsHide: boolean; env: NodeJS.ProcessEnv } = {
+          windowsHide: true,
+          env: { ...process.env, SAI_CLIENT_ID: SAI_CLIENT_ID_VALUE },
+        };
         if (typeof mutable[mutable.length - 1] === 'function') mutable.splice(mutable.length - 1, 0, options);
         else mutable.push(options);
       }
@@ -319,9 +338,14 @@ function patchChildProcess(): void {
         }
       }
       if (optIdx >= 0) {
-        (mutable[optIdx] as { windowsHide?: boolean }).windowsHide = true;
+        const options = mutable[optIdx] as { windowsHide?: boolean; env?: NodeJS.ProcessEnv };
+        options.windowsHide = true;
+        injectSaiClientIdIntoSpawnOptions(options);
       } else {
-        mutable.push({ windowsHide: true });
+        mutable.push({
+          windowsHide: true,
+          env: { ...process.env, SAI_CLIENT_ID: SAI_CLIENT_ID_VALUE },
+        });
       }
       return original(...(mutable as Parameters<typeof original>));
     }) as typeof cp[typeof method];

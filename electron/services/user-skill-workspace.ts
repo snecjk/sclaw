@@ -195,15 +195,24 @@ export async function syncMountPointToUser(userCode: string): Promise<void> {
   const globalDisabledDir = getGlobalDisabledDir();
   const globalLockPath = getGlobalLockPath();
 
+  // Safety guard: an unexpectedly empty mount point (e.g. a prior
+  // copyUserToMountPoint failure, or the mount being cleared out-of-band) must
+  // NOT trigger the destructive deletion passes below — otherwise syncing back
+  // would wipe the user's persisted skills. Only prune the user dir when the
+  // mount actually holds skills.
+  const mountSkillSlugs = fs.existsSync(globalSkillsDir) ? listSubdirs(globalSkillsDir) : [];
+  const mountDisabledSlugs = fs.existsSync(globalDisabledDir) ? listSubdirs(globalDisabledDir) : [];
+  const mountPopulated = mountSkillSlugs.length > 0 || mountDisabledSlugs.length > 0;
+
   // Sync skills (skip preinstalled)
-  if (fs.existsSync(globalSkillsDir)) {
-    for (const slug of listSubdirs(globalSkillsDir)) {
-      const srcDir = path.join(globalSkillsDir, slug);
-      if (isPreinstalledSkill(srcDir)) continue;
-      const destDir = path.join(userSkillsDir, slug);
-      await copyDir(srcDir, destDir);
-    }
-    // Remove skills from user dir that no longer exist in mount point
+  for (const slug of mountSkillSlugs) {
+    const srcDir = path.join(globalSkillsDir, slug);
+    if (isPreinstalledSkill(srcDir)) continue;
+    const destDir = path.join(userSkillsDir, slug);
+    await copyDir(srcDir, destDir);
+  }
+  // Remove skills from user dir that no longer exist in mount point
+  if (mountPopulated) {
     for (const slug of listSubdirs(userSkillsDir)) {
       if (!fs.existsSync(path.join(globalSkillsDir, slug))) {
         fs.rmSync(path.join(userSkillsDir, slug), { recursive: true, force: true });
@@ -212,13 +221,13 @@ export async function syncMountPointToUser(userCode: string): Promise<void> {
   }
 
   // Sync disabled skills (skip preinstalled)
-  if (fs.existsSync(globalDisabledDir)) {
-    for (const slug of listSubdirs(globalDisabledDir)) {
-      const srcDir = path.join(globalDisabledDir, slug);
-      if (isPreinstalledSkill(srcDir)) continue;
-      const destDir = path.join(userDisabledDir, slug);
-      await copyDir(srcDir, destDir);
-    }
+  for (const slug of mountDisabledSlugs) {
+    const srcDir = path.join(globalDisabledDir, slug);
+    if (isPreinstalledSkill(srcDir)) continue;
+    const destDir = path.join(userDisabledDir, slug);
+    await copyDir(srcDir, destDir);
+  }
+  if (mountPopulated) {
     for (const slug of listSubdirs(userDisabledDir)) {
       if (!fs.existsSync(path.join(globalDisabledDir, slug))) {
         fs.rmSync(path.join(userDisabledDir, slug), { recursive: true, force: true });
@@ -620,10 +629,14 @@ export async function activateUserWorkspace(userCode: string): Promise<ActivateW
     failed: [],
   };
 
-  if (previousUserCode && previousUserCode !== userCode) {
-    // Save previous user's state
+  // Save the current mount-point state back to whoever owns it before we clear it.
+  // This must also run on same-user re-login (previousUserCode === userCode) — e.g.
+  // after an app update forces re-auth — otherwise skills that only live on the
+  // global mount (such as ones generated via natural-language chat) would be wiped
+  // by clearMountPoint() below and never restored.
+  if (previousUserCode) {
     await syncMountPointToUser(previousUserCode);
-    logger.info(`[UserSkillWorkspace] Saved mount point to previous user ${previousUserCode}`);
+    logger.info(`[UserSkillWorkspace] Saved mount point to user ${previousUserCode}`);
   }
 
   // Migration
