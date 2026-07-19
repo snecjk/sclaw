@@ -130,8 +130,16 @@ export async function runAgentNodeWithRetry(
           await ctx.emit(event.type, event, node.id);
         },
       });
-      if (toolCalls > (spec.limits?.maxToolCalls ?? 20)) {
-        result = { status: 'failed', rawText: result.rawText, usage: result.usage, error: `工具调用次数超过限制 ${spec.limits?.maxToolCalls ?? 20}` };
+      // A workflow already has deadline, retry and output-contract guards.
+      // Do not impose a hidden 20-call ceiling: file-heavy or investigative
+      // nodes legitimately need more tool rounds.  A DSL may still opt in to
+      // an explicit positive limit for cost/control reasons.
+      const configuredToolCallLimit = spec.limits?.maxToolCalls;
+      if (typeof configuredToolCallLimit === 'number'
+        && Number.isFinite(configuredToolCallLimit)
+        && configuredToolCallLimit > 0
+        && toolCalls > configuredToolCallLimit) {
+        result = { status: 'failed', rawText: result.rawText, usage: result.usage, error: `工具调用次数超过显式配置限制 ${configuredToolCallLimit}` };
       }
     } catch (e: any) {
       // invokeAgent 内部已有双层卡死保护；这里保留真实异常，避免把 SDK/环境错误误报成超时。
