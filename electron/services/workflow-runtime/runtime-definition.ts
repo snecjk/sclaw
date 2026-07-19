@@ -32,10 +32,9 @@ export function validateRuntimeDefinition(definition: any): void {
   }
   for (const edge of edges) if (!byId.has(edge?.source) || !byId.has(edge?.target)) throw new Error(`工作流连线引用不存在节点: ${edge?.source ?? '?'} -> ${edge?.target ?? '?'}`);
   for (const node of nodes) {
-    const incoming = edges.filter((edge: any) => edge.target === node.id);
-    if (incoming.length > 1 && !['all', 'any', 'first'].includes(node.config?.inputPolicy)) {
-      throw new Error(`节点 ${node.id} 有多个输入，必须声明 inputPolicy(all/any/first)`);
-    }
+    // 多入边是合法图结构（如判断节点分支后多路线汇入结束节点）。
+    // 与云端编排器对齐：不强制声明 inputPolicy。多上游输出由 resolveNodeInput
+    // 兜底合并为 upstream map，节点可通过 input bindings / sourceNodeId 显式引用。
     if (node.type === 'condition' || node.type === 'agent_condition') {
       const ports = (node.config?.branches ?? []).map((branch: any) => branch.branchKey).filter(Boolean);
       if (!ports.length || new Set(ports).size !== ports.length) throw new Error(`条件节点 ${node.id} 的分支端口无效`);

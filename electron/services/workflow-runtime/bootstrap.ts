@@ -92,8 +92,11 @@ export function createWorkflowRuntimeEngineDeps(): EngineDeps {
         additionalDirectories: [runWorkspacePath(args.ctx.runId)],
         noProgressMs: (args as any).noProgressMs,
         deadlineMs: (args as any).deadlineMs,
+        // Keep the complete DSL model reference.  The shared Claude runtime
+        // resolves it against the account catalog, just as chat does; stripping
+        // its provider prefix here turns a valid reference into an invalid one.
         model: args.model && !['sonnet', 'haiku', 'opus'].includes(args.model)
-          ? args.model.split('/').pop()
+          ? args.model
           : await getConfiguredWorkflowModel(),
         onStreamEvent: args.onStreamEvent,
         allowedTools: args.allowedTools,

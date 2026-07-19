@@ -1,14 +1,14 @@
 import path from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { getDataDir } from '../../utils/paths';
-import { buildClaudeEnvForAccount, getBundledClaudeExecutablePath } from '../../engines/claude-adapter';
+import { prepareClaudeRuntime } from '../../engines/claude-sdk-runtime';
 import { getDefaultProviderAccountId } from '../../services/providers/provider-store';
 import { workflowExecLog } from './logging';
 
 /**
  * agent-runner — a slim workflow-node runner that calls the Claude Agent SDK's
- * `query()` directly (no chat EngineAdapter), reusing `buildClaudeEnvForAccount`
- * for auth and the bundled native binary path from the chat adapter.
+ * `query()` directly (no chat EngineAdapter), reusing the shared Claude SDK
+ * runtime preparation for provider auth and the bundled native binary path.
  *
  * Excludes ALL 5 chat runtime extensions (no mcpServers / hooks / plugins /
  * systemPrompt / skills) so workflow nodes run with only the SDK's built-in
@@ -85,7 +85,7 @@ export interface InvokeArgs {
   /** Workflow execution context. Requires at least `runId` + `nodeId`. */
   ctx: { runId: string; nodeId: string } & Record<string, unknown>;
   prompt: string;
-  /** Env override (skips `buildClaudeEnvForAccount`). Tests inject `{}`. */
+  /** Env override (skips shared Claude runtime preparation). Tests inject `{}`. */
   env?: Record<string, string>;
   /** cwd override (skips the per-run workspace default). Tests inject it. */
   cwd?: string;
@@ -97,7 +97,7 @@ export interface InvokeArgs {
   noProgressMs?: number;
   /** Hard deadline (ms). Default 960_000 (960s). */
   deadlineMs?: number;
-  /** Account id forwarded to `buildClaudeEnvForAccount` when `env` is not injected. */
+  /** Account id used by shared Claude runtime preparation when `env` is not injected. */
   accountId?: string;
   /** Explicit model id selected from the locally configured runtime catalog. */
   model?: string;
@@ -126,7 +126,18 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
   const additionalDirectories = args.additionalDirectories ?? [cwd];
 
   const accountId = args.accountId ?? await resolveDefaultAccountId();
-  const env = args.env ?? (await buildClaudeEnvForAccount(accountId));
+  const preparedRuntime = args.env ? undefined : await prepareClaudeRuntime({
+    agentId: 'workflow-runtime',
+    requestedAccountId: accountId,
+    requestedModel: args.model,
+  });
+  const env = args.env ?? preparedRuntime?.env ?? {};
+  // Match the chat adapter exactly: the DSL/default value only expresses a
+  // preference.  The Claude runtime selection resolves it against the active
+  // provider account catalog and returns the one model identifier that may be
+  // sent to the SDK.  Passing args.model here used to bypass that normalization
+  // and caused provider/model-format 400 errors for workflow-only runs.
+  const effectiveModel = preparedRuntime?.selection.model ?? args.model;
   const noProgressMs = args.noProgressMs ?? 300_000;
   const deadlineMs = args.deadlineMs ?? 960_000;
 
@@ -143,13 +154,13 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
     env,
     permissionMode,
     allowDangerouslySkipPermissions: permissionMode === 'bypassPermissions',
-    pathToClaudeCodeExecutable: args.pathToClaudeCodeExecutable ?? getBundledClaudeExecutablePath(),
+    pathToClaudeCodeExecutable: args.pathToClaudeCodeExecutable ?? preparedRuntime?.pathToClaudeCodeExecutable,
     settingSources: [],
     // Workflow definitions can carry cloud-only model aliases such as "sonnet".
     // The local executor must instead use the model selected in the local
     // provider catalog, otherwise the SDK falls back to an unavailable Claude
     // model before the node prompt is even sent.
-    settings: args.model ? { model: args.model } : undefined,
+    settings: effectiveModel ? { model: effectiveModel } : undefined,
     includePartialMessages: true,
     allowedTools: args.allowedTools?.length ? args.allowedTools : undefined,
     outputFormat: args.outputSchema ? { type: 'json_schema', schema: args.outputSchema } : undefined,
@@ -163,7 +174,7 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
   workflowExecLog('debug', 'agent-input', prompt, {
     runId: ctx.runId,
     nodeId: ctx.nodeId,
-    model: args.model,
+    model: effectiveModel,
     cwd,
     additionalDirectories,
   });

@@ -17,6 +17,7 @@ import {
   resumeWorkflowApproval,
   runToExecutionState,
   startWorkflowLocal,
+  getWorkflowDetail,
   submitWorkflowInput,
 } from '@/lib/workflow-api';
 import {
@@ -26,6 +27,14 @@ import {
 } from '@/lib/workflow-run-status';
 import type { WorkflowExecutionState, WorkflowRunResponse, WorkflowSchema } from '@/types/workflow';
 import type { WorkflowDraftSnapshot } from '@/lib/workflow-iframe-bridge';
+import { definitionFromDetail } from '@/lib/workflow-designer-adapter';
+
+export interface RuntimeUploadNode {
+  nodeId: string;
+  name: string;
+  acceptedExtensions?: string[];
+  maxFiles?: number;
+}
 
 export const DESIGNER_TRY_RUN_SESSION_KEY = 'designer-try-run';
 const EMPTY_STARTUP_DEFAULT_VALUES: Record<string, unknown> = {};
@@ -66,6 +75,7 @@ export interface UseDesignerTryRunResult {
   isDraftSnapshot: boolean;
   startupSchema: WorkflowSchema | null;
   startupDefaultValues: Record<string, unknown>;
+  runtimeUploadNodes: RuntimeUploadNode[];
   launchError: string | null;
   begin: (snapshot?: WorkflowDraftSnapshot) => void;
   confirmStartup: (inputs: Record<string, unknown>) => Promise<void>;
@@ -98,6 +108,7 @@ export function useDesignerTryRun({
   const [activeStartupDefaultValues, setActiveStartupDefaultValues] = useState<Record<string, unknown>>(startupDefaultValues);
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [isDraftSnapshot, setIsDraftSnapshot] = useState(false);
+  const [runtimeUploadNodes, setRuntimeUploadNodes] = useState<RuntimeUploadNode[]>([]);
   const snapshotRef = useRef<WorkflowDraftSnapshot | null>(null);
 
   const runIdRef = useRef<string | null>(null);
@@ -196,21 +207,34 @@ export function useDesignerTryRun({
 
   const begin = useCallback((snapshot?: WorkflowDraftSnapshot) => {
     if (!workflowId || !canStart()) return;
-    snapshotRef.current = snapshot ?? null;
-    setRunWorkflowVersionId(snapshot?.workflowVersionId ?? workflowVersionId);
-    setIsDraftSnapshot(snapshot != null);
-    const nextSchema = snapshot?.startup.schema ?? startupSchema ?? null;
-    const nextDefaultValues = snapshot?.startup.defaultValues ?? startupDefaultValues;
-    setActiveStartupSchema(nextSchema);
-    setActiveStartupDefaultValues(nextDefaultValues);
-    const nextHasStartupInputs = Boolean(
-      nextSchema?.enabled && Array.isArray(nextSchema.fields) && nextSchema.fields.length > 0,
-    );
-    if (nextHasStartupInputs) {
-      setIsStartupDialogOpen(true);
-    } else {
-      void launch({}, snapshot ?? null);
-    }
+    void (async () => {
+      snapshotRef.current = snapshot ?? null;
+      setRunWorkflowVersionId(snapshot?.workflowVersionId ?? workflowVersionId);
+      setIsDraftSnapshot(snapshot != null);
+      const nextSchema = snapshot?.startup.schema ?? startupSchema ?? null;
+      const nextDefaultValues = snapshot?.startup.defaultValues ?? startupDefaultValues;
+      setActiveStartupSchema(nextSchema);
+      setActiveStartupDefaultValues(nextDefaultValues);
+      let definition = snapshot?.definition;
+      if (!definition) definition = definitionFromDetail(await getWorkflowDetail(workflowId));
+      const uploads = ((definition as any)?.nodes ?? []).flatMap((node: any) => {
+        const business = node?.config?.businessConfig ?? {};
+        return node?.type === 'agent_data_fetch' && ['runtime_upload', 'mixed'].includes(business.inputProvisionMode)
+          ? [{
+              nodeId: node.id,
+              name: node.name ?? node.id,
+              acceptedExtensions: business.localImport?.acceptedExtensions,
+              maxFiles: Number.isInteger(business.localImport?.maxFiles) && business.localImport.maxFiles > 0
+                ? business.localImport.maxFiles
+                : undefined,
+            }]
+          : [];
+      });
+      setRuntimeUploadNodes(uploads);
+      const nextHasStartupInputs = Boolean(nextSchema?.enabled && Array.isArray(nextSchema.fields) && nextSchema.fields.length > 0);
+      if (nextHasStartupInputs || uploads.length > 0) setIsStartupDialogOpen(true);
+      else void launch({}, snapshot ?? null);
+    })().catch((error) => setLaunchError(error instanceof Error ? error.message : '无法读取试运行配置'));
   }, [workflowId, canStart, launch, startupDefaultValues, startupSchema, workflowVersionId]);
 
   const confirmStartup = useCallback(
@@ -241,12 +265,12 @@ export function useDesignerTryRun({
     setRun(null);
     setExecutionState(null);
     setLaunchError(null);
-    if (hasStartupInputs) {
+    if (hasStartupInputs || runtimeUploadNodes.length > 0) {
       setIsStartupDialogOpen(true);
     } else {
       void launch({}, snapshotRef.current);
     }
-  }, [hasStartupInputs, launch]);
+  }, [hasStartupInputs, launch, runtimeUploadNodes.length]);
 
   const closeDrawer = useCallback(() => setIsDrawerOpen(false), []);
   const decideApproval = useCallback(async (approved: boolean, note?: string) => {
@@ -288,6 +312,7 @@ export function useDesignerTryRun({
     isDraftSnapshot,
     startupSchema: activeStartupSchema,
     startupDefaultValues: activeStartupDefaultValues,
+    runtimeUploadNodes,
     launchError,
     begin,
     confirmStartup,

@@ -143,6 +143,11 @@ export function createEngine(deps: EngineDeps) {
       let nodeInput = cur.type === 'condition' || cur.type === 'human_approval'
         ? buildConditionContext(runtimeInputs)
         : resolveNodeInput(cur, runtimeInputs);
+      const runtimeUploadFiles = (runInput as any)?.__workflowRuntimeUploads?.[cur.id];
+      if (Array.isArray(runtimeUploadFiles) && runtimeUploadFiles.length > 0) {
+        const base = nodeInput && typeof nodeInput === 'object' && !Array.isArray(nodeInput) ? nodeInput : {};
+        nodeInput = { ...base, files: [...(Array.isArray((base as any).files) ? (base as any).files : []), ...runtimeUploadFiles] };
+      }
       const hydratedInput = await hydrateNodeInputFiles(cur, nodeInput, runId);
       nodeInput = hydratedInput.input;
       for (const file of hydratedInput.files) {

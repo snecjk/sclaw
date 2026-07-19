@@ -358,6 +358,7 @@ export function WorkflowDesigner({
         open={tryRun.isStartupDialogOpen}
         schema={tryRun.startupSchema}
         defaultValues={tryRun.startupDefaultValues}
+        runtimeUploadNodes={tryRun.runtimeUploadNodes}
         isStarting={tryRun.isStarting}
         onConfirm={(inputs) => void tryRun.confirmStartup(inputs)}
         onClose={tryRun.cancelStartupDialog}

@@ -5,18 +5,20 @@
  * so no separate startup-schema request is needed for a trial run.
  */
 import { useEffect, useState } from 'react';
-import { Loader2, Play } from 'lucide-react';
+import { Loader2, Play, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { WorkflowSchema, WorkflowSchemaField } from '@/types/workflow';
 import { invokeIpc } from '@/lib/api-client';
+import type { RuntimeUploadNode } from '@/pages/WorkflowDesigner/hooks/use-designer-try-run';
 
 interface StartupRunDialogProps {
   open: boolean;
   schema: WorkflowSchema | null | undefined;
   defaultValues?: Record<string, unknown>;
+  runtimeUploadNodes?: RuntimeUploadNode[];
   isStarting: boolean;
   onConfirm: (inputs: Record<string, unknown>) => void;
   onClose: () => void;
@@ -90,6 +92,7 @@ export function StartupRunDialog({
   open,
   schema,
   defaultValues = {},
+  runtimeUploadNodes = [],
   isStarting,
   onConfirm,
   onClose,
@@ -97,6 +100,7 @@ export function StartupRunDialog({
   const fields = schema?.enabled ? (schema.fields ?? []) : [];
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [error, setError] = useState('');
+  const [runtimeFiles, setRuntimeFiles] = useState<Record<string, any[]>>({});
 
   useEffect(() => {
     if (!open) return;
@@ -107,6 +111,7 @@ export function StartupRunDialog({
     // Reset the form only when a new dialog session opens.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setValues(initial);
+    setRuntimeFiles({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultValues]);
 
@@ -133,6 +138,10 @@ export function StartupRunDialog({
         inputs[f.key] = v;
       }
     }
+    for (const node of runtimeUploadNodes) {
+      if (!(runtimeFiles[node.nodeId]?.length)) { setError(`请为“${node.name}”上传文件`); return; }
+    }
+    if (runtimeUploadNodes.length) inputs.__workflowRuntimeUploads = runtimeFiles;
     setError('');
     onConfirm(inputs);
   };
@@ -159,6 +168,42 @@ export function StartupRunDialog({
               />
             ))
           )}
+          {runtimeUploadNodes.map((node) => {
+            const files = runtimeFiles[node.nodeId] ?? [];
+            const maxFiles = node.maxFiles ?? 20;
+            return (
+            <div key={node.nodeId} className="flex flex-col gap-1 rounded-lg border border-dashed border-border p-3">
+              <Label className="text-xs">{node.name}，运行时上传文件<span className="text-destructive"> *</span></Label>
+              <p className="text-[11px] text-muted-foreground">可选择多个文件（最多 {maxFiles} 个）。文件只会复制到本次试运行工作区，不会把原始本机路径交给 Agent。</p>
+              <Button type="button" variant="outline" size="sm" className="justify-start" onClick={async () => {
+                const result = await invokeIpc<{ filePaths: string[] }>('dialog:open', {
+                  properties: ['openFile', 'multiSelections'],
+                  filters: [{ name: '数据文件', extensions: node.acceptedExtensions ?? ['xlsx', 'xls', 'csv'] }],
+                });
+                const selected = (result.filePaths ?? []).slice(0, maxFiles).map((filePath, index) => ({
+                  kind: 'artifact',
+                  fileId: `runtime-${node.nodeId}-${index + 1}`,
+                  filePath,
+                  uri: `file:///${filePath.replace(/\\/g, '/')}`,
+                  name: filePath.split(/[\\/]/).pop(),
+                }));
+                if (selected.length) setRuntimeFiles((prev) => ({ ...prev, [node.nodeId]: selected }));
+              }}>{files.length ? `重新选择文件（已选 ${files.length} 个）` : '选择文件'}</Button>
+              {files.length ? (
+                <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
+                  {files.map((file, index) => (
+                    <li key={file.filePath} className="flex items-center justify-between gap-2 rounded bg-muted/50 px-2 py-1">
+                      <span className="truncate">{file.name}</span>
+                      <button type="button" className="shrink-0 text-muted-foreground hover:text-destructive" aria-label={`移除 ${file.name}`} onClick={() => setRuntimeFiles((prev) => ({ ...prev, [node.nodeId]: files.filter((_: unknown, fileIndex: number) => fileIndex !== index) }))}>
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+            );
+          })}
         </div>
         {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
         <div className="mt-5 flex justify-end gap-2">
