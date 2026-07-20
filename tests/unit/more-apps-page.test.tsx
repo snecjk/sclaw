@@ -50,6 +50,7 @@ function resetStore() {
     categoriesLoading: false,
     categoriesError: null,
     apps: [],
+    marketTotal: 0,
     total: 0,
     pageNum: 0,
     loading: false,
@@ -202,6 +203,31 @@ describe('MoreAppsPage server catalog', () => {
       keyword: undefined,
       categoryCode: 'org',
     }));
+  });
+
+  it('keeps the market tab count equal to the unfiltered catalog total', async () => {
+    fetchRegistryMock.mockResolvedValueOnce({
+      version: 1,
+      externalApps: [],
+      installedIds: [],
+      favoriteIds: ['org-relation', 'vip'],
+    });
+    fetchCategoriesMock.mockResolvedValueOnce([
+      { id: 'org', name: '组织管理', description: '', iconKey: '', iconUrl: '', order: 1 },
+    ]);
+    fetchAppsMock
+      .mockResolvedValueOnce({ items: [serverApp], total: 8, pageNum: 1, pageSize: 20 })
+      .mockResolvedValueOnce({ items: [], total: 3, pageNum: 1, pageSize: 20 });
+
+    render(<MoreAppsPage />);
+    expect(await screen.findByRole('tab', { name: '应用广场8' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '我的应用2' })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: '组织管理' }));
+    await waitFor(() => expect(fetchAppsMock).toHaveBeenLastCalledWith(expect.objectContaining({
+      categoryCode: 'org',
+    })));
+    expect(screen.getByRole('tab', { name: '应用广场8' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '我的应用2' })).toBeInTheDocument();
   });
 
   it('keeps the APP list available when banners fail', async () => {

@@ -50,6 +50,7 @@ describe('more apps store', () => {
       installedIds: [],
       hydrated: false,
       hydrating: false,
+      marketTotal: 0,
       total: 0,
       pageNum: 0,
       loading: false,
@@ -128,5 +129,19 @@ describe('more apps store', () => {
       installedIds: [],
       favoriteIds: ['app-a'],
     });
+  });
+
+  it('keeps the market badge total when a category query changes the list total', async () => {
+    fetchAppsMock
+      .mockResolvedValueOnce({ items: [], total: 8, pageNum: 1, pageSize: 20 })
+      .mockResolvedValueOnce({ items: [], total: 3, pageNum: 1, pageSize: 20 });
+
+    await useMoreAppsStore.getState().fetchApps({ reset: true });
+    expect(useMoreAppsStore.getState().marketTotal).toBe(8);
+
+    useMoreAppsStore.getState().setMarketCategory('org');
+    await useMoreAppsStore.getState().fetchApps({ reset: true });
+    expect(useMoreAppsStore.getState().total).toBe(3);
+    expect(useMoreAppsStore.getState().marketTotal).toBe(8);
   });
 });

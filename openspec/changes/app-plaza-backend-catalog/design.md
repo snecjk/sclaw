@@ -31,6 +31,8 @@ Renderer 通过 `/api/app-plaza/apps|categories|banners` 调用新 Host API 路�
 
 应用查询使用 `pageNum`、`pageSize`、`keyword`、`categoryCode`，搜索采用短防抖，切换搜索或分类时重置为第一页；页面提供继续加载。
 
+Store 分别维护当前查询的 `total` 和无关键词、无分类查询得到的 `marketTotal`。前者用于当前列表分页，后者固定用于“应用广场”页签总数，分类或搜索响应不得覆盖 `marketTotal`。
+
 **Rationale:** 后端在分页前完成权限过滤，`total` 只统计当前用户可见应用；服务端查询可避免全量加载和未授权数据混入。
 
 **Alternative considered:** 首次请求 `pageSize=100` 后继续前端过滤。该方案对超过 100 个应用不完整，也浪费后端分页能力，因此不采用。

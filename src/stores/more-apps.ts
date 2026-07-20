@@ -133,6 +133,8 @@ interface MoreAppsState {
 
   // Server catalog — APP block (independent loading/error, with pagination + race guard)
   apps: AppItem[];
+  /** Unfiltered catalog total shown beside the 应用广场 tab. */
+  marketTotal: number;
   total: number;
   pageNum: number;
   loading: boolean;
@@ -204,6 +206,7 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
   categoriesError: null,
 
   apps: [],
+  marketTotal: 0,
   total: 0,
   pageNum: 0,
   loading: false,
@@ -387,6 +390,7 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
     const reset = opts?.reset ?? false;
     const seq = ++appsRequestSeq;
     const { searchQuery, marketCategory, pageNum: currPage, apps: currApps } = get();
+    const isUnfiltered = !searchQuery.trim() && marketCategory === 'featured';
     const nextPage = reset ? 1 : currPage + 1;
     if (reset) {
       set({ loading: true, error: null, pageNum: 1, apps: [] });
@@ -404,6 +408,7 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
       if (reset) {
         set({
           apps: result.items,
+          ...(isUnfiltered ? { marketTotal: result.total } : {}),
           total: result.total,
           pageNum: result.pageNum,
           loading: false,
@@ -414,6 +419,7 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
         const appended = result.items.filter((a) => !seen.has(a.id));
         set({
           apps: [...currApps, ...appended],
+          ...(isUnfiltered ? { marketTotal: result.total } : {}),
           total: result.total,
           pageNum: result.pageNum,
           loadingMore: false,

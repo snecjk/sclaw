@@ -43,6 +43,7 @@ export function MoreAppsPage() {
     categoriesLoading,
     categoriesError,
     apps,
+    marketTotal,
     total,
     loading,
     loadingMore,
@@ -110,10 +111,11 @@ export function MoreAppsPage() {
     );
   }, [installedApps, searchQuery]);
 
-  // Market count is the authoritative server total (per current keyword/category query).
-  const marketAppCount = total;
+  // The tab badge always shows the unfiltered catalog total across all categories.
+  const marketAppCount = marketTotal;
 
-  const installedAppCount = installedApps.length;
+  // My-apps count comes from the local registry and is independent of market filters.
+  const installedAppCount = favoriteIds.length + externalApps.length;
 
   // Load the three server blocks on mount — each keeps independent loading/error
   // so one failure never blanks the others (Banner / 分类 / APP 经 Main 代理且独立降级).
