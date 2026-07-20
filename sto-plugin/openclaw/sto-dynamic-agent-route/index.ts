@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { RETIRED_SKILLS_SYSTEM_PROMPT } from "./shared/retired-skills.js";
-import { buildWorkspaceArtifactOutputRule } from "../../../shared/workspace-paths.js";
+import { buildWorkspaceArtifactOutputRule } from "./shared/workspace-paths.js";
 import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
 
 const PROVIDER_ID = "sto-dynamic-agent-route";
@@ -121,7 +121,7 @@ export default definePluginEntry({
 			auth: [],
 			catalog: {
 				order: "simple",
-				run: async (ctx) => {
+				run: async (_ctx) => {
 					if (!providerBaseUrl) {
 						api.logger.debug?.(
 							`[${TAG}] catalog: provider inactive — missing providerBaseUrl=${!providerBaseUrl}`,
