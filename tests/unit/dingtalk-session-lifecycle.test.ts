@@ -66,14 +66,28 @@ describe('DingTalk session lifecycle', () => {
     })).toBe('agent:main:dingtalk:cid-1:20260720120000:ffff');
   });
 
-  it.each(['新对话', '新会话', '/new', '/RESET', ' 清空上下文 '])(
+  it.each([
+    '新对话',
+    '新会话',
+    '/new',
+    '/RESET',
+    ' 清空上下文 ',
+    '开一个新会话',
+    '开启新对话',
+    '请新建会话',
+    '帮我清空上下文',
+  ])(
     'recognizes %s as a new-session command',
     (text) => {
       expect(isDingTalkNewSessionCommand(text)).toBe(true);
     },
   );
 
-  it('does not consume a normal user message', () => {
-    expect(isDingTalkNewSessionCommand('帮我总结今天的工作')).toBe(false);
+  it.each([
+    '帮我总结今天的工作',
+    '开一个新会话后帮我写周报',
+    '请说明什么是新会话',
+  ])('does not consume normal message %s', (text) => {
+    expect(isDingTalkNewSessionCommand(text)).toBe(false);
   });
 });

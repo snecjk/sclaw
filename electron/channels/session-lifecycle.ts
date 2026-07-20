@@ -10,6 +10,11 @@ const NEW_SESSION_COMMANDS = new Set([
   '/reset',
 ]);
 
+/** 整句自然说法：开一个新会话 / 请新建对话 / 帮我清空上下文 等 */
+const NEW_SESSION_NATURAL_RE = /^(?:请|帮我|麻烦)?(?:开|开启|创建|新建|换|开始)?(?:一)?(?:个)?新?(?:对话|会话)$/;
+const CLEAR_CONTEXT_NATURAL_RE = /^(?:请|帮我|麻烦)?(?:清空|清除)(?:一下)?(?:上下文|会话|对话)$/;
+const NEW_SESSION_SLASH_RE = /^\/(?:new|reset)$/;
+
 export function buildNewDingTalkSessionKey(
   agentId: string,
   peerId: string,
@@ -62,5 +67,14 @@ export function resolveDingTalkSessionKey(input: {
 }
 
 export function isDingTalkNewSessionCommand(text: string): boolean {
-  return NEW_SESSION_COMMANDS.has(text.trim().toLowerCase());
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .replace(/[!！.。？?]+$/u, '');
+  if (!normalized) return false;
+  if (NEW_SESSION_COMMANDS.has(normalized)) return true;
+  if (NEW_SESSION_SLASH_RE.test(normalized)) return true;
+  // 中文指令不做 toLowerCase 语义变化，但仍用 normalized（去首尾标点）
+  return NEW_SESSION_NATURAL_RE.test(normalized)
+    || CLEAR_CONTEXT_NATURAL_RE.test(normalized);
 }
