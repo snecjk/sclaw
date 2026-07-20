@@ -10,7 +10,6 @@ import { cn } from '@/lib/utils';
 import {
   dropdownOptionClass,
   dropdownPanelRoundedClass,
-  myTaskCreateButtonClass,
   myTaskSortTriggerClass,
   workflowListSearchIconWrapClass,
   workflowListSearchInputClass,

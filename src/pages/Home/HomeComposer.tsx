@@ -46,8 +46,6 @@ export interface HomeComposerProps {
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
-    workflowSource?: string | null,
-    workflowName?: string | null,
     skillMeta?: SkillMeta,
   ) => void;
   /** 直接覆盖占位文案 */

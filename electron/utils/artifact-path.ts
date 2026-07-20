@@ -91,11 +91,11 @@ function listWorkspaceRoots(): string[] {
 }
 
 function fuzzyExistingPath(filePath: string): string | null {
-  if (existsSync(filePath)) return filePath;
+  if (existsSync(filePath)) return normalize(filePath);
   const ext = extname(filePath);
   for (const alt of EXT_FUZZY_ALTERNATES[ext.toLowerCase()] ?? []) {
     const altPath = `${filePath.slice(0, -ext.length)}${alt}`;
-    if (existsSync(altPath)) return altPath;
+    if (existsSync(altPath)) return normalize(altPath);
   }
   return null;
 }

@@ -6,10 +6,7 @@ export function useSclawBrowserHostBounds(active: boolean): DOMRect | null {
   const [bounds, setBounds] = useState<DOMRect | null>(null);
 
   useLayoutEffect(() => {
-    if (!active) {
-      setBounds(null);
-      return;
-    }
+    if (!active) return;
 
     const host = document.getElementById(SCLAW_BROWSER_PORTAL_ID);
     if (!host) return;
@@ -28,5 +25,5 @@ export function useSclawBrowserHostBounds(active: boolean): DOMRect | null {
     };
   }, [active]);
 
-  return bounds;
+  return active ? bounds : null;
 }

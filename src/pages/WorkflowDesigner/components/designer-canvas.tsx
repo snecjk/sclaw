@@ -13,7 +13,6 @@ import ReactFlow, {
   type Connection,
   type Edge,
   type EdgeChange,
-  type Node,
   type NodeChange,
   type NodeDragHandler,
 } from 'reactflow';

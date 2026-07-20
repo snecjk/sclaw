@@ -14,7 +14,6 @@ import { SCLAW_EMBED_BROWSER_PARTITION } from '../../../shared/sclaw-embed-brows
 import {
   connectSclawEmbedBridge,
   disconnectSclawEmbedBridge,
-  refreshSclawEmbedBridgeScript,
   updateSclawEmbedBridgePage,
 } from './sclaw-embed-bridge-driver';
 import {

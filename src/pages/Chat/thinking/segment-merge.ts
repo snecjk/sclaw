@@ -11,6 +11,9 @@ import {
   relocateInterruptPhaseBetweenAdjacentToolGroups,
 } from '@/pages/Chat/thinking/adjacent-group-phase';
 
+const globalStableSegmentsByTurn = new Map<string, ThinkingTurnSegment[]>();
+const globalStableTimelineByTurn = new Map<string, ThinkingTimelineItem[]>();
+
 export function readGlobalStableSegments(turnStableKey: string | undefined): ThinkingTurnSegment[] {
   if (!turnStableKey) return [];
   return globalStableSegmentsByTurn.get(turnStableKey) ?? [];
@@ -79,7 +82,7 @@ export function mergeTurnSegmentMonotonic(
     return incoming;
   }
 
-  if (cached.kind === 'phase-text') {
+  if (cached.kind === 'phase-text' && incoming.kind === 'phase-text') {
     const cachedText = cached.text.trim();
     const incomingText = incoming.text.trim();
     return {

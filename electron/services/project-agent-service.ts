@@ -79,7 +79,10 @@ interface EnsureProjectAgentResult {
 }
 
 /** Serialize concurrent ensure calls for the same project agent (bind + send race). */
-const ensureProjectAgentInflight = new Map<string, Promise<EnsureProjectAgentResult>>();
+const ensureProjectAgentInflight = new Map<string, {
+  normalizedRootPath: string;
+  promise: Promise<EnsureProjectAgentResult>;
+}>();
 
 /**
  * Ensure a project agent exists for the given project + base agent.
@@ -92,15 +95,22 @@ export async function ensureProjectAgent(
 ): Promise<EnsureProjectAgentResult> {
   const agentId = resolveProjectAgentId(projectId, baseAgentId);
   const inflight = ensureProjectAgentInflight.get(agentId);
-  if (inflight) return inflight;
+  const normalizedRootPath = normalizeWorkspacePathForCompare(rootPath);
+  if (inflight) {
+    if (inflight.normalizedRootPath === normalizedRootPath) return inflight.promise;
+    // A concurrent path edit must not inherit the result for the previous path.
+    // Wait for that write to settle, then re-check/update the agent for this path.
+    await inflight.promise.catch(() => undefined);
+    return ensureProjectAgent(projectId, baseAgentId, rootPath);
+  }
 
   const promise = ensureProjectAgentUnlocked(projectId, baseAgentId, rootPath, agentId)
     .finally(() => {
-      if (ensureProjectAgentInflight.get(agentId) === promise) {
+      if (ensureProjectAgentInflight.get(agentId)?.promise === promise) {
         ensureProjectAgentInflight.delete(agentId);
       }
     });
-  ensureProjectAgentInflight.set(agentId, promise);
+  ensureProjectAgentInflight.set(agentId, { normalizedRootPath, promise });
   return promise;
 }
 
@@ -184,6 +194,30 @@ export async function deleteAllProjectAgentsForProject(projectId: string): Promi
     }
   }
   return removed;
+}
+
+/**
+ * Keep project-agent IDs alive for historical session keys after a project is
+ * deleted, but move their workspace back to the corresponding base agent.
+ */
+export async function rehomeProjectAgentsForProject(projectId: string): Promise<string[]> {
+  const updated: string[] = [];
+  const allIds = await listConfiguredAgentIds();
+  for (const agentId of allIds) {
+    const parsed = parseProjectAgentId(agentId);
+    if (parsed?.projectId !== projectId.toLowerCase()) continue;
+    const baseWorkspace = await getAgentWorkspacePath(parsed.baseAgentId);
+    if (!baseWorkspace) {
+      logger.warn('[project-agent] cannot rehome project agent: base workspace missing', {
+        agentId,
+        baseAgentId: parsed.baseAgentId,
+      });
+      continue;
+    }
+    await updateAgentWorkspace(agentId, baseWorkspace);
+    updated.push(agentId);
+  }
+  return updated;
 }
 
 // ── Agent-scoped skill synchronization ──────────────────────────────────────

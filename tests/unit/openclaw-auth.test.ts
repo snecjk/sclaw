@@ -159,6 +159,47 @@ describe('setOpenClawDefaultModelWithOverride main agent model ref', () => {
     expect(main?.model).toBe('sto/qwen3.5-plus');
   });
 
+  it('fills missing contextWindow and maxTokens for remote catalog models', async () => {
+    await writeOpenClawJson({
+      agents: { defaults: {}, list: [] },
+      models: {
+        mode: 'merge',
+        providers: {
+          sto: {
+            baseUrl: 'https://old.example/v1',
+            api: 'openai-completions',
+            models: [{ id: 'qwen3.6-plus', name: 'qwen3.6-plus', input: ['text', 'image'] }],
+          },
+        },
+      },
+      gateway: { mode: 'local' },
+    });
+
+    const { setOpenClawDefaultModelWithOverride } = await import('@electron/utils/openclaw-auth');
+    await setOpenClawDefaultModelWithOverride(
+      'sto',
+      'qwen3.6-plus',
+      {
+        baseUrl: 'https://example.test/v1',
+        api: 'openai-completions',
+        providerModelIds: ['qwen3.6-plus'],
+        defaultModelContextWindow: 256000,
+        defaultModelMaxTokens: 32000,
+      },
+      [],
+    );
+
+    const raw = await readFile(join(testHome, '.stoclaw', 'openclaw', 'openclaw.json'), 'utf8');
+    const parsed = JSON.parse(raw) as {
+      models: { providers: { sto: { models: Array<Record<string, unknown>> } } };
+    };
+    expect(parsed.models.providers.sto.models).toContainEqual(expect.objectContaining({
+      id: 'qwen3.6-plus',
+      contextWindow: 256000,
+      maxTokens: 32000,
+    }));
+  });
+
   it('does not overwrite main agent model when already qualified', async () => {
     await writeOpenClawJson({
       agents: {

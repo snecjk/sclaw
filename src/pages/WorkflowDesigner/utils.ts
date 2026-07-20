@@ -1,4 +1,5 @@
 import { NODE_H, NODE_TEMPLATES, NODE_W } from '@/pages/WorkflowDesigner/constants';
+import { MarkerType, Position, type Edge, type Node } from 'reactflow';
 import type {
   CanvasNodeData,
   CanvasNodeView,
@@ -8,32 +9,6 @@ import type {
 } from '@/pages/WorkflowDesigner/types';
 
 const ALL_TEMPLATES = NODE_TEMPLATES;
-const FLOW_POSITION = { Left: 'left', Right: 'right' } as const;
-const FLOW_MARKER_ARROW_CLOSED = 'arrowclosed';
-
-type FlowNodeLike<TData> = {
-  id: string;
-  type?: string;
-  position: { x: number; y: number };
-  data: TData;
-  draggable?: boolean;
-  sourcePosition?: 'left' | 'right' | 'top' | 'bottom';
-  targetPosition?: 'left' | 'right' | 'top' | 'bottom';
-  selected?: boolean;
-};
-
-type FlowEdgeLike = {
-  id: string;
-  source: string;
-  target: string;
-  label?: string;
-  markerEnd?: { type: string };
-  updatable?: boolean;
-  interactionWidth?: number;
-  selected?: boolean;
-  style?: Record<string, string | number>;
-};
-
 export function createEmptyWorkflowDefinition(name: string): WorkflowDefinition {
   return {
     schemaVersion: 'workflow/v2',
@@ -70,7 +45,7 @@ export function nodeRunStatusLabel(status: string): string {
   return labels[status] ?? '待运行';
 }
 
-export function buildCanvasNodes(workflow: WorkflowDefinition): FlowNodeLike<CanvasNodeData>[] {
+export function buildCanvasNodes(workflow: WorkflowDefinition): Node<CanvasNodeData>[] {
   return workflow.nodes.map((node, index) => {
     const position = readNodePosition(node, index);
     return {
@@ -86,8 +61,8 @@ export function buildCanvasNodes(workflow: WorkflowDefinition): FlowNodeLike<Can
         status: 'pending',
       },
       draggable: true,
-      sourcePosition: FLOW_POSITION.Right,
-      targetPosition: FLOW_POSITION.Left,
+      sourcePosition: Position.Right,
+      targetPosition: Position.Left,
     };
   });
 }
@@ -95,13 +70,13 @@ export function buildCanvasNodes(workflow: WorkflowDefinition): FlowNodeLike<Can
 export function buildCanvasEdges(
   workflow: WorkflowDefinition,
   selectedEdgeId?: string | null,
-): FlowEdgeLike[] {
+): Edge[] {
   return workflow.edges.map((edge) => ({
     id: edge.id,
     source: edge.source,
     target: edge.target,
     label: edge.condition || undefined,
-    markerEnd: { type: FLOW_MARKER_ARROW_CLOSED },
+    markerEnd: { type: MarkerType.ArrowClosed },
     updatable: true,
     interactionWidth: 20,
     selected: edge.id === selectedEdgeId,

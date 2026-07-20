@@ -547,6 +547,9 @@ interface RuntimeProviderConfigOverride {
   authHeader?: boolean;
   /** Default input capabilities for new model entries (e.g. ['text', 'image']) */
   defaultModelInput?: string[];
+  /** Fallbacks used when the remote catalog omits token limits. */
+  defaultModelContextWindow?: number;
+  defaultModelMaxTokens?: number;
   /** When set, replaces single-model upsert with the full provider catalog. */
   providerModelIds?: string[];
 }
@@ -562,6 +565,8 @@ type ProviderEntryBuildOptions = {
   mergeExistingModels?: boolean;
   /** Default input capabilities for new model entries (e.g. ['text', 'image']) */
   defaultModelInput?: string[];
+  defaultModelContextWindow?: number;
+  defaultModelMaxTokens?: number;
 };
 
 function normalizeModelRef(provider: string, modelOverride?: string): string | undefined {
@@ -650,11 +655,20 @@ function upsertOpenClawProviderEntry(
   // When re-syncing a model that already exists, preserve its extra fields (e.g. input, contextWindow)
   const runtimeModels = (options.modelIds ?? []).map((id) => {
     const existing = allExistingModels.find((e) => e.id === id);
-    if (existing) return { ...existing, id, name: id };
-    // New model entry: apply defaultModelInput if specified
-    return options.defaultModelInput
+    const model: Record<string, unknown> = existing
+      ? { ...existing, id, name: id }
+      : options.defaultModelInput
       ? { id, name: id, input: options.defaultModelInput }
       : { id, name: id };
+    if (!(typeof model.contextWindow === 'number' && model.contextWindow > 0)
+      && options.defaultModelContextWindow != null) {
+      model.contextWindow = options.defaultModelContextWindow;
+    }
+    if (!(typeof model.maxTokens === 'number' && model.maxTokens > 0)
+      && options.defaultModelMaxTokens != null) {
+      model.maxTokens = options.defaultModelMaxTokens;
+    }
+    return model;
   });
 
   const nextProvider: Record<string, unknown> = {
@@ -726,6 +740,8 @@ export async function syncProviderConfigToOpenClaw(
         headers: override.headers,
         modelIds,
         defaultModelInput: override.defaultModelInput,
+        defaultModelContextWindow: override.defaultModelContextWindow,
+        defaultModelMaxTokens: override.defaultModelMaxTokens,
       });
     }
 
@@ -792,6 +808,8 @@ export async function setOpenClawDefaultModelWithOverride(
         authHeader: override.authHeader,
         modelIds,
         defaultModelInput: override.defaultModelInput,
+        defaultModelContextWindow: override.defaultModelContextWindow,
+        defaultModelMaxTokens: override.defaultModelMaxTokens,
       });
     }
 
@@ -1357,7 +1375,7 @@ export async function sanitizeOpenClawConfig(): Promise<void> {
     // discover them.
     const channelsObj = config.channels as Record<string, Record<string, unknown>> | undefined;
     if (channelsObj && typeof channelsObj === 'object') {
-      for (const [channelType, section] of Object.entries(channelsObj)) {
+      for (const [_channelType, section] of Object.entries(channelsObj)) {
         if (!section || typeof section !== 'object') continue;
         const accounts = section.accounts as Record<string, Record<string, unknown>> | undefined;
         const defaultAccount = accounts?.default;

@@ -49,9 +49,11 @@ export function stripGatewayUserMetadataPreservingLines(text: string): string {
   return stripDingTalkMentionContextForDisplay(
     stripWorkflowCompleteForDisplay(
       stripWorkflowSessionHintForDisplay(
-        stripWorkflowContextForDisplay(
-          stripCronTriggerTextForDisplay(
-            stripSkillTranscriptMarker(stripGatewayUserMetadata(text)),
+        stripSclawBrowserEmbedContextForDisplay(
+          stripWorkflowContextForDisplay(
+            stripCronTriggerTextForDisplay(
+              stripSkillTranscriptMarker(stripGatewayUserMetadata(text)),
+            ),
           ),
         ),
       ),

@@ -1,4 +1,5 @@
 import type { GatewayManager } from '../gateway/manager';
+import type { AgentMemoryContextBlocks } from '../../shared/agent-memory-prompt';
 
 export type AgentEngineType = 'openclaw' | 'claude';
 
@@ -31,6 +32,7 @@ export interface EngineSendParams {
   message: string;
   deliver?: boolean;
   idempotencyKey: string;
+  systemPromptAppend?: string;
 }
 
 export interface EngineSendWithMediaParams extends EngineSendParams {
@@ -47,6 +49,7 @@ export interface EngineAdapterContext {
 
 export interface EngineAdapter {
   type: AgentEngineType;
+  prepareMemoryInjection(params: EngineSendParams, memory: AgentMemoryContextBlocks): EngineSendParams;
   abortRun(ctx: EngineAdapterContext, params: EngineAbortParams): Promise<{ success: boolean; error?: string }>;
   getHistory(
     ctx: EngineAdapterContext,

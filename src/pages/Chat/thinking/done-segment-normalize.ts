@@ -14,9 +14,7 @@ import {
 import type { RawTurnEvent, ThinkingTurnSegment } from '@/pages/Chat/thinking/types';
 import { OPENING_PHASE_TEXT_KEY } from '@/pages/Chat/thinking/types';
 import {
-  flushCompletedToolGroup,
   toolGroupSegmentKey,
-  upsertPhaseTextSegment,
 } from '@/pages/Chat/thinking/batch-segments';
 import { rebalanceThinkingTimelineForDisplay } from '@/pages/Chat/thinking-turn-segments';
 

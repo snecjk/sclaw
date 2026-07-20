@@ -10,6 +10,7 @@ import { useChatStore } from './chat';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
+import { getAgentIdFromSessionKey } from './chat/session-identity';
 
 const QUEUE_MAX_PER_SESSION = 10;
 
@@ -234,58 +235,30 @@ function tryDrainSessionQueue(sessionKey: string, onAutoSend?: AutoSendCallback)
   deliverQueuedMessage(sessionKey, msg);
 }
 
-async function abortSessionRun(sessionKey: string): Promise<void> {
+async function abortSessionRun(sessionKey: string): Promise<boolean> {
   const chatState = useChatStore.getState();
-  if (!isSessionSending(sessionKey, chatState)) return;
-
-  if (chatState.currentSessionKey === sessionKey) {
-    await chatState.abortRun();
-    return;
-  }
-
-  const { resolveEngineTypeForSession } = await import('@/stores/chat/helpers');
-  const { useGatewayStore } = await import('@/stores/gateway');
-  useChatStore.setState((state) => ({
-    runtimeBySessionKey: {
-      ...state.runtimeBySessionKey,
-      [sessionKey]: {
-        ...(state.runtimeBySessionKey[sessionKey] ?? {}),
-        sending: false,
-        activeRunId: null,
-        streamingText: '',
-        streamingMessage: null,
-        streamingMessages: [],
-        streamingToolResults: [],
-        streamingTools: [],
-        pendingFinal: false,
-        lastUserMessageAt: null,
-        pendingToolImages: [],
-      },
-    },
-  }));
-  try {
-    await useGatewayStore.getState().rpc('chat.abort', {
-      sessionKey,
-      engineType: resolveEngineTypeForSession(
-        chatState.sessions,
-        sessionKey,
-        chatState.currentAgentId,
-      ),
-    });
-  } catch (err) {
-    console.warn('[message-queue] background abort failed:', err);
-  }
+  if (!isSessionSending(sessionKey, chatState)) return true;
+  return await chatState.abortRun(sessionKey);
 }
 
 /**
  * Abort the active run for a session and immediately send a queued item.
- * Does NOT call suspendAutoSend — distinct from the Stop button path.
+ * Suppresses the normal completion drain for this one transition so the
+ * explicitly selected item is delivered exactly once after abort succeeds.
  */
 export async function sendImmediately(sessionKey: string, itemId: string): Promise<boolean> {
-  const item = useMessageQueueStore.getState().takeById(sessionKey, itemId);
+  const item = useMessageQueueStore.getState().getQueue(sessionKey).find((entry) => entry.id === itemId);
   if (!item) return false;
-  await abortSessionRun(sessionKey);
-  deliverQueuedMessage(sessionKey, item);
+  const wasSending = isSessionSending(sessionKey, useChatStore.getState());
+  if (wasSending) suppressedSessions.add(sessionKey);
+  const stopped = await abortSessionRun(sessionKey);
+  // The true→false transition consumes this flag synchronously. Delete it as a
+  // fallback when abort failed or another terminal path completed first.
+  suppressedSessions.delete(sessionKey);
+  if (!stopped) return false;
+  const dequeued = useMessageQueueStore.getState().takeById(sessionKey, itemId);
+  if (!dequeued) return false;
+  deliverQueuedMessage(sessionKey, dequeued);
   return true;
 }
 
@@ -309,10 +282,14 @@ function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
         sendWithWorkflow(
           msg.text,
           msg.workflowId!,
-          { sessionKey, agentId: chatState.currentAgentId },
+          {
+            sessionKey,
+            agentId: msg.targetAgentId ?? getAgentIdFromSessionKey(sessionKey) ?? chatState.currentAgentId,
+          },
           async (textToSend, runId, wfId, ctx) => {
             await chatState.sendMessage({
               text: textToSend,
+              sessionKey,
               attachments: mapQueuedAttachments(msg.attachments),
               targetAgentId: msg.targetAgentId,
               dingTalkMentions: msg.dingTalkMentions,
@@ -328,6 +305,7 @@ function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
         // Fall back to a normal send so the message isn't lost.
         void chatState.sendMessage({
           text: msg.text,
+          sessionKey,
           attachments: mapQueuedAttachments(msg.attachments),
           targetAgentId: msg.targetAgentId,
           dingTalkMentions: msg.dingTalkMentions,
@@ -339,6 +317,7 @@ function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
 
   void chatState.sendMessage({
     text: msg.text,
+    sessionKey,
     attachments: mapQueuedAttachments(msg.attachments),
     targetAgentId: msg.targetAgentId,
     dingTalkMentions: msg.dingTalkMentions,

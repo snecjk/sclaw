@@ -4,9 +4,9 @@
  * via gateway:rpc IPC. Session selector, thinking toggle, and refresh
  * are in the toolbar; messages render with markdown + streaming.
  */
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, ArrowDown, Bot, Cpu, Loader2, Orbit, Sparkles, Workflow } from 'lucide-react';
+import { AlertCircle, ArrowDown, Bot, Cpu, Orbit, Sparkles, Workflow } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
@@ -29,7 +29,6 @@ import { useMessageQueueStore, createAutoSendWatcher, suspendAutoSend } from '@/
 import { markTurnInterrupted } from '@/lib/turn-interrupt-marker';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import { useTranslation } from 'react-i18next';
-import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { cn } from '@/lib/utils';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
@@ -92,7 +91,6 @@ export function Chat() {
 
   const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
-  const [splitting, setSplitting] = useState(false);
   const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
   const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
   const { splitRowRef, previewPanelRef, startResize, isResizing } = useSplitPanelResize(
@@ -355,8 +353,6 @@ export function Chat() {
       workflowSource,
       workflowName,
       skillMeta,
-      skipQuestionSplit: !!(dingTalkMentions && dingTalkMentions.length > 0),
-      onSplittingChange: setSplitting,
     });
   }, [beginSendScroll]);
 
@@ -664,24 +660,6 @@ export function Chat() {
           </motion.button>
         </div>
       </div>
-
-      {/* Splitting indicator */}
-      <AnimatePresence>
-        {splitting && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-            className="shrink-0"
-          >
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-white/50 px-3 py-2 text-xs text-muted-foreground backdrop-blur-sm dark:bg-white/[0.06]">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-              <span>{t('splitting')}</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Pending Message Queue */}
       <PendingQueuePanel

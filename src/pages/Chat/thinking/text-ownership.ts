@@ -162,7 +162,7 @@ function removeOverlappingProcessContent(
  */
 export function applyTextOwnershipToParsedTurn(
   layout: ParsedThinkingTurn,
-  options: ApplyTextOwnershipOptions = {},
+  _options: ApplyTextOwnershipOptions = {},
 ): ParsedThinkingTurn {
   const finalTrimmed = layout.finalReplyText?.trim() ?? '';
   if (!finalTrimmed) return layout;

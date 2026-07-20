@@ -37,8 +37,6 @@ export function CronTaskCreateModal({ job, open, onClose, onSave, initialValues 
   const [errors, setErrors] = useState<{ name?: string; message?: string }>({});
 
   const isEditing = !!job;
-  const isClaudeTask = engineType === 'claude';
-
   useEffect(() => {
     if (open) {
       if (job) {

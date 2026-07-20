@@ -58,10 +58,7 @@ export interface ChatInputBindingsOptions {
     targetAgentId?: string | null,
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
-    workflowSource?: string | null,
-    workflowName?: string | null,
     skillMeta?: SkillMeta,
-    workflowContext?: import('@/stores/chat').WorkflowContextBlock | null,
   ) => void;
   /** ChatInput 变体：default（标准）或 embedded（嵌入式，如首页） */
   variant?: 'default' | 'embedded';

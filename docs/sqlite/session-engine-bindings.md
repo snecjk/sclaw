@@ -210,7 +210,7 @@ WHERE seb.session_key = 'agent:main:...'
 
 ## 相关源码
 
-- Migration: `electron/db/migrations/0003-session-types-and-channels.ts`
+- Migration: `electron/db/migrations/0004-session-types-and-channels.ts`
 - 表类型: `electron/db/models/tables/session-catalog-tables.ts` → `SessionEngineBindingsTable`
 - 领域模型: `electron/db/models/domain/session-catalog.ts` → `SessionEngineBinding`
 - Repository: `electron/db/repositories/session-engine-binding-repository.ts`

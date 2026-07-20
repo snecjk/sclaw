@@ -34,6 +34,21 @@ function getAttachmentKeys(message: RawMessage): string[] {
     .sort();
 }
 
+function hasAttachmentEvidence(message: RawMessage): boolean {
+  if ((message._attachedFiles ?? []).length > 0) return true;
+  const text = getMessageText(message.content);
+  if (/\[media attached:/i.test(text)) return true;
+  if (!Array.isArray(message.content)) return false;
+  return message.content.some((block) => {
+    if (!block || typeof block !== 'object') return false;
+    const type = (block as { type?: unknown }).type;
+    return type === 'image'
+      || type === 'image_url'
+      || type === 'input_image'
+      || type === 'file';
+  });
+}
+
 function attachmentsMatch(a: RawMessage, b: RawMessage): boolean {
   const aKeys = getAttachmentKeys(a);
   const bKeys = getAttachmentKeys(b);
@@ -41,10 +56,20 @@ function attachmentsMatch(a: RawMessage, b: RawMessage): boolean {
   return aKeys.every((key, index) => key === bKeys[index]);
 }
 
-function displayTextMatches(a: RawMessage, b: RawMessage): boolean {
+function displayTextEquals(a: RawMessage, b: RawMessage): boolean {
   const aText = normalizeUserMessageForPairing(a.content);
   const bText = normalizeUserMessageForPairing(b.content);
-  return aText.length > 0 && aText === bText && attachmentsMatch(a, b);
+  return aText.length > 0 && aText === bText;
+}
+
+function displayTextMatches(a: RawMessage, b: RawMessage): boolean {
+  return displayTextEquals(a, b) && attachmentsMatch(a, b);
+}
+
+function mediaEchoTextMatches(a: RawMessage, b: RawMessage): boolean {
+  return displayTextEquals(a, b)
+    && !attachmentsMatch(a, b)
+    && (hasAttachmentEvidence(a) || hasAttachmentEvidence(b));
 }
 
 function hasSkillUserMeta(message: RawMessage): boolean {
@@ -108,6 +133,7 @@ export function isSameUserMessage(
   if (candidate.id && optimistic.id && candidate.id === optimistic.id) return true;
 
   const displayMatches = displayTextMatches(candidate, optimistic);
+  const mediaTextMatches = mediaEchoTextMatches(candidate, optimistic);
   const candidateText = normalizeUserMessageText(candidate.content);
   const optimisticText = normalizeUserMessageText(optimistic.content);
   const rawTextMatches = candidateText.length > 0
@@ -131,12 +157,19 @@ export function isSameUserMessage(
 
   if (hasCandidateTime && Number.isFinite(referenceMs)) {
     if (Math.abs(candidateMs - referenceMs) < OPTIMISTIC_SEND_WINDOW_MS) {
-      return displayMatches || rawTextMatches;
+      return displayMatches || rawTextMatches || mediaTextMatches;
     }
     // During an active send, identical display text is the optimistic/server pair even when
     // Gateway timestamps are missing or skewed.
     if (displayMatches && userMessageAt > 0) return true;
     if (rawTextMatches && userMessageAt > 0) return true;
+    if (
+      mediaTextMatches
+      && userMessageAt > 0
+      && Math.abs(candidateMs - referenceMs) <= SERVER_ECHO_WINDOW_MS
+    ) {
+      return true;
+    }
     if (Math.abs(candidateMs - referenceMs) > 60_000) return false;
   }
 

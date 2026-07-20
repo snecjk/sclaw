@@ -367,6 +367,33 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (environment?: SsoEnvironment) => {
         set({ isLoggingIn: true, error: null });
+        const completeLogin = (user: SsoUserInfo, stoSync?: StoSyncResponse) => {
+          set({
+            isAuthenticated: true,
+            user,
+            isLoggingIn: false,
+            error: null,
+            accessDenied: false,
+            accessCheck: null,
+            accountSwitchOptions: [],
+            accountSwitchOptionsStatus: 'idle',
+            impersonationOrigin: null,
+            siteDepartmentTypes: null,
+          });
+
+          // Site metadata is useful after navigation but is not part of the
+          // authentication completion boundary.
+          void fetchRendererSiteDepartmentTypes().then((types) => {
+            if (get().isAuthenticated && get().user?.code === user.code) {
+              set({ siteDepartmentTypes: applyRendererSiteDepartmentTypes(types) });
+            }
+          });
+
+          showStoSyncErrorToasts(stoSync);
+          void syncStoModelsAndRefreshProviders('login');
+          void get().loadAccountSwitchOptions();
+        };
+
         try {
           const env = environment || get().ssoEnvironment;
           const data = await hostApiFetch<{
@@ -408,25 +435,7 @@ export const useAuthStore = create<AuthState>()(
           }
 
           if (data.success && data.user) {
-            const siteDepartmentTypes = applyRendererSiteDepartmentTypes(
-              await fetchRendererSiteDepartmentTypes(),
-            );
-            set({
-              isAuthenticated: true,
-              user: data.user,
-              isLoggingIn: false,
-              error: null,
-              accessDenied: false,
-              accessCheck: null,
-              accountSwitchOptions: [],
-              accountSwitchOptionsStatus: 'idle',
-              impersonationOrigin: null,
-              siteDepartmentTypes,
-            });
-
-            showStoSyncErrorToasts(data.stoSync);
-            void syncStoModelsAndRefreshProviders('login');
-            void get().loadAccountSwitchOptions();
+            completeLogin(data.user, data.stoSync);
           } else {
             set({
               isLoggingIn: false,
@@ -436,6 +445,21 @@ export const useAuthStore = create<AuthState>()(
             });
           }
         } catch (err) {
+          // The login response can be lost after Main has already persisted the
+          // session. Reconcile once with the authoritative state before showing
+          // a transport error or leaving the Login page pending.
+          try {
+            const recovered = await hostApiFetch<{
+              isAuthenticated: boolean;
+              user: SsoUserInfo | null;
+            }>('/api/auth/status');
+            if (recovered.isAuthenticated && recovered.user) {
+              completeLogin(recovered.user);
+              return;
+            }
+          } catch {
+            // Preserve the original login error; recovery is best-effort.
+          }
           set({
             isLoggingIn: false,
             error: err instanceof Error ? err.message : String(err),
@@ -521,7 +545,7 @@ export const useAuthStore = create<AuthState>()(
                 await postAccountSwitchDirect(user, ssoEnvironment, trimmed),
               );
               if (!switched.stoToken) {
-                throw new Error('切换响应缺少 stoToken');
+                throw new Error('切换响应缺少 stoToken', { cause: hostError });
               }
               usedDirectFallback = true;
               data = {
@@ -578,7 +602,7 @@ export const useAuthStore = create<AuthState>()(
             }
             const origin = get().impersonationOrigin;
             if (!origin?.stoToken) {
-              throw new Error('没有可恢复的总部账号');
+              throw new Error('没有可恢复的总部账号', { cause: hostError });
             }
             usedDirectFallback = true;
             data = { success: true, user: origin };

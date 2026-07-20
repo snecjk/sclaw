@@ -7,12 +7,26 @@ export type ChatSet = (
 
 export type ChatGet = () => ChatState;
 
-export type SessionHistoryActions = Pick<
+export type SessionActions = Pick<
   ChatState,
-  'loadSessions' | 'switchSession' | 'newSession' | 'deleteSession' | 'cleanupEmptySession' | 'loadHistory'
+  | 'loadSessions'
+  | 'switchSession'
+  | 'switchToAgentMainSession'
+  | 'newSession'
+  | 'deleteSession'
+  | 'cleanupEmptySession'
+  | 'renameSession'
+  | 'markScheduledSessionActivating'
+  | 'clearScheduledSessionActivating'
+  | 'releaseScheduledSessionActivating'
 >;
 
+export type HistoryActions = Pick<ChatState, 'loadHistory'>;
 export type RuntimeActions = Pick<
   ChatState,
   'sendMessage' | 'abortRun' | 'handleChatEvent' | 'toggleThinking' | 'refresh' | 'clearError'
+>;
+export type WorkflowActions = Pick<
+  ChatState,
+  'setWorkflowCardState' | 'setPendingWorkflow' | 'clearPendingWorkflowMemory' | 'clearPendingWorkflow'
 >;

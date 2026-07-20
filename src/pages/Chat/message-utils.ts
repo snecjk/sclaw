@@ -16,7 +16,6 @@ import {
 import { resolveParameterFormId } from '@/components/parameter-form/form-handlers';
 import { currentUserTurnHasWorkflowSubmission } from '@/lib/workflow-card-injection';
 import type { AttachedFileMeta, RawMessage, ContentBlock } from '@/stores/chat';
-import { getExecutionByRunId } from '@/stores/workflow-memory';
 import { truncatePreviewExtractExcerpt } from '../../../shared/preview-extract-trace';
 import {
   stripDingTalkAgentSendDisclaimerForDisplay,
@@ -350,14 +349,13 @@ export function resolveAssistantCopyShareContent(options: {
     assistantBubbleText,
     workflowCard,
     workflowCardStates,
-    sessionKey,
     previewFiles,
   } = options;
 
   const files: AttachedFileMeta[] = [];
   const seenFileKeys = new Set<string>();
   const addFile = (file: AttachedFileMeta) => {
-    const key = normalizePreviewFileKey(file.filePath, file.fileName);
+    const key = normalizePreviewFileKey(file.filePath ?? '', file.fileName);
     if (!key || seenFileKeys.has(key)) return;
     seenFileKeys.add(key);
     files.push(file);
@@ -368,8 +366,7 @@ export function resolveAssistantCopyShareContent(options: {
   const rawText = text.trim();
 
   if (workflowCard) {
-    const state = workflowCardStates[workflowCard.runId]
-      ?? getExecutionByRunId(workflowCard.runId, sessionKey);
+    const state = workflowCardStates[workflowCard.runId];
     const summary = state?.result?.summary?.trim() ?? '';
     for (const artifact of state?.result?.artifacts ?? []) {
       if (!isUserFacingArtifactUrl(artifact.url)) continue;
@@ -407,7 +404,7 @@ export function formatAssistantCopyShareClipboardText(
 
   for (const file of files) {
     const fileName = file.fileName.trim() || 'file';
-    const filePath = file.filePath.trim();
+    const filePath = file.filePath?.trim() ?? '';
     if (!filePath) continue;
     if (isHttpUrl(filePath)) {
       parts.push(`[${fileName}](${filePath})`);

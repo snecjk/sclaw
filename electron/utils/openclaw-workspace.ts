@@ -169,7 +169,7 @@ async function mergeClawXContextOnce(): Promise<number> {
       const targetPath = join(workspaceDir, targetName);
 
       if (!(await fileExists(targetPath))) {
-        logger.debug(`Skipping ${targetName} in ${workspaceDir} (file does not exist yet, will be seeded by gateway)`);
+        // logger.debug(`Skipping ${targetName} in ${workspaceDir} (file does not exist yet, will be seeded by gateway)`);
         skipped++;
         continue;
       }
@@ -207,7 +207,7 @@ export async function ensureClawXContext(): Promise<void> {
       logger.info(`StoClaw context merge completed after ${attempt} retry(ies)`);
       return;
     }
-    logger.debug(`StoClaw context merge: ${skipped} file(s) still missing (retry ${attempt}/${MAX_RETRIES})`);
+    // logger.debug(`StoClaw context merge: ${skipped} file(s) still missing (retry ${attempt}/${MAX_RETRIES})`);
   }
 
   logger.warn(`StoClaw context merge: ${skipped} file(s) still missing after ${MAX_RETRIES} retries`);

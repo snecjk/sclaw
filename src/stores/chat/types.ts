@@ -4,6 +4,8 @@ import type { SkillMeta } from '@/types/skill-meta';
 
 export interface SendMessageOptions {
   text: string;
+  /** Explicit destination used by background/queued sends. Never inferred from current UI state. */
+  sessionKey?: string | null;
   attachments?: Array<{
     fileName: string;
     mimeType: string;
@@ -17,10 +19,10 @@ export interface SendMessageOptions {
   runId?: string | null;
   /** Hidden workflow schema context injected into the user message for AI guidance */
   workflowContext?: WorkflowContextBlock | null;
-  /** Skill plaza context — UI tag + Gateway defaultPrompt injection */
-  skillMeta?: SkillMeta;
   /** Hidden embed-browser page snapshot for in-app preview chat */
   embedBrowserContext?: import('@/lib/sclaw-browser-embed-context').SclawBrowserEmbedContextBlock | null;
+  /** Skill plaza context — UI tag + Gateway defaultPrompt injection */
+  skillMeta?: SkillMeta;
 }
 
 /** Hidden context block describing a workflow for AI parameter guidance */
@@ -137,15 +139,10 @@ export interface ToolStatus {
   updatedAt: number;
 }
 
-export interface DailyTokenQuotaStatus {
-  allowed?: boolean;
-  usedToday?: number;
-  limit?: number;
-  checkedAt: string;
-}
-
 export interface SessionRuntimeState {
   sending: boolean;
+  /** Abort has been requested, but the engine has not confirmed termination yet. */
+  aborting: boolean;
   activeRunId: string | null;
   streamingText: string;
   streamingMessage: unknown | null;
@@ -160,7 +157,15 @@ export interface SessionRuntimeState {
   optimisticUserMessage: RawMessage | null;
   pendingToolImages: AttachedFileMeta[];
   error: string | null;
+  /** Tracks whether the Gateway has acknowledged the current optimistic send. */
+  sendAcceptance: SendAcceptanceState | null;
   updatedAt: number;
+}
+
+export interface SendAcceptanceState {
+  idempotencyKey: string;
+  status: 'pending' | 'accepted' | 'uncertain';
+  startedAt: number;
 }
 
 export interface ChatState {
@@ -175,6 +180,7 @@ export interface ChatState {
    *  sending before backend has applied the new model. */
   modelSwitching: boolean;
   activeRunId: string | null;
+  sendAcceptance: SendAcceptanceState | null;
   streamingText: string;
   streamingMessage: unknown | null;
   /** Live assistant snapshots seen during the active turn, in arrival order. */
@@ -189,9 +195,6 @@ export interface ChatState {
   optimisticUserMessage: RawMessage | null;
   /** Images collected from tool results, attached to the next assistant message */
   pendingToolImages: AttachedFileMeta[];
-  /** Last successful daily token quota check result. */
-  dailyTokenQuotaStatus: DailyTokenQuotaStatus | null;
-
   // Sessions
   sessions: ChatSession[];
   currentSessionKey: string;
@@ -248,15 +251,15 @@ export interface ChatState {
   switchSession: (key: string) => void;
   /** Jump to the chosen agent's main session (same prefix as sidebar / new chat). */
   switchToAgentMainSession: (agentId: string) => void;
-  newSession: (options?: { projectId?: string; materialize?: boolean }) => Promise<void>;
+  newSession: (options?: { projectId?: string; materialize?: boolean }) => void;
   deleteSession: (key: string, options?: {
     skipSessionRefresh?: boolean;
     additionalSuppressKeys?: string[];
   }) => Promise<boolean>;
   cleanupEmptySession: () => void;
-  loadHistory: (quiet?: boolean, force?: boolean) => Promise<void>;
+  loadHistory: (quiet?: boolean, force?: boolean, sessionKey?: string) => Promise<void>;
   sendMessage: (options: SendMessageOptions) => Promise<void>;
-  abortRun: () => Promise<void>;
+  abortRun: (sessionKey?: string) => Promise<boolean>;
   handleChatEvent: (event: Record<string, unknown>) => void;
   toggleThinking: () => void;
   refresh: () => Promise<void>;

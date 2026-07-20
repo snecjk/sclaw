@@ -3,6 +3,7 @@
  */
 
 export const MORE_APPS_REGISTRY_VERSION = 1 as const;
+export type MoreAppsTone = 'blue' | 'orange' | 'green' | 'purple' | 'teal' | 'gray';
 
 /** Persisted external app fields (subset of UI AppItem). */
 export interface MoreAppsExternalApp {
@@ -12,7 +13,7 @@ export interface MoreAppsExternalApp {
   description?: string;
   iconKey?: string;
   iconUrl?: string;
-  tone?: string;
+  tone?: MoreAppsTone;
   category?: string;
   hidden?: boolean;
   kind?: 'builtin' | 'external';

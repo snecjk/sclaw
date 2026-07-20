@@ -10,6 +10,7 @@ import crypto from 'node:crypto';
 import { enrichGatewayPayload } from '../gateway/message-enrich';
 import { getAdapterForSession, listEngineSessions } from '../engines/manager';
 import type { AgentEngineType } from '../engines/types';
+import { sanitizeMemoryFromChatPayload } from '../../shared/agent-memory-display';
 import { ClawHubService, ClawHubSearchParams, ClawHubInstallParams, ClawHubUninstallParams } from '../gateway/clawhub';
 import {
   type ProviderConfig,
@@ -25,7 +26,6 @@ import {
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { buildOpenClawControlUiUrl } from '../utils/openclaw-control-ui';
 import { logger } from '../utils/logger';
-import { registerDialogHandlers } from './ipc/dialog-handlers';
 import { safeWebContentsSend } from './safe-web-contents-send';
 import {
   saveChannelConfig,
@@ -52,10 +52,7 @@ import { applyProxySettings } from './proxy';
 import { syncLaunchAtStartupSettingFromStore } from './launch-at-startup';
 import { syncPreventSystemSleepSettingFromStore } from './prevent-sleep';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
-import { getStoToken } from '../utils/auth-store';
 import { preprocessChatSendParams } from '../utils/dingtalk-mention-send';
-import { resolveStoBaseUrl } from '../utils/sto-domain';
-import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { uploadFileToTempOSS } from '../utils/oss-temp-upload';
 import { getRecentTokenUsageHistory } from '../utils/token-usage';
 import { getProviderService } from '../services/providers/provider-service';
@@ -71,6 +68,7 @@ import {
 import { validateApiKeyWithProvider } from '../services/providers/provider-validation';
 import { appUpdater } from './updater';
 import { registerHostApiProxyHandlers } from './ipc/host-api-proxy';
+import { registerAgentMemoryHandlers } from './ipc/agent-memory';
 import { registerPreviewHttpFetchHandlers } from './ipc/preview-http-fetch';
 import { registerWorkflowStreamHandlers } from './ipc/workflow-stream-proxy';
 import { getWorkflowExecutionTracker } from './services/workflow-execution-tracker';
@@ -83,6 +81,7 @@ import {
   type AppRequest,
   type AppResponse,
 } from './ipc/request-helpers';
+import { GatewayManager } from '@electron/gateway/manager';
 
 /**
  * Register all IPC handlers
@@ -100,6 +99,7 @@ export function registerIpcHandlers(
 
   // Host API proxy handlers
   registerHostApiProxyHandlers();
+  registerAgentMemoryHandlers(gatewayManager);
   registerPreviewHttpFetchHandlers();
   registerWorkflowStreamHandlers();
 
@@ -801,59 +801,6 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             },
           };
         }
-        case 'question': {
-          if (request.action === 'split') {
-            const payload = request.payload as {
-              prompt?: string;
-              agentId?: string;
-              sessionId?: string;
-            } | undefined;
-            const prompt = payload?.prompt;
-            if (!prompt || typeof prompt !== 'string') {
-              data = [];
-              break;
-            }
-            const token = await getStoToken();
-            if (!token) { data = []; break; }
-
-            const baseUrl = await resolveStoBaseUrl();
-            const url = `${baseUrl}/agent/v1/biz-agent/question-split`;
-            const headers = {
-              ...buildStoMemoryCenterAuthHeaders(token),
-              'Content-Type': 'application/json',
-            };
-
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 10_000);
-            try {
-              const resp = await proxyAwareFetch(url, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                  prompt,
-                  agentId: payload?.agentId,
-                  sessionId: payload?.sessionId,
-                }),
-                signal: controller.signal,
-              });
-              clearTimeout(timer);
-              if (!resp.ok) { data = []; break; }
-              data = await resp.json();
-            } catch {
-              clearTimeout(timer);
-              data = [];
-            }
-            break;
-          }
-          return {
-            id: request.id,
-            ok: false,
-            error: {
-              code: 'UNSUPPORTED',
-              message: `APP_REQUEST_UNSUPPORTED:${request.module}.${request.action}`,
-            },
-          };
-        }
         default:
           return {
             id: request.id,
@@ -1287,7 +1234,7 @@ function registerGatewayHandlers(
 
       if (method === 'sessions.list') {
         const result = await listEngineSessions({ gatewayManager });
-        return { success: true, result: { sessions: result } };
+        return { success: true, result: { sessions: sanitizeMemoryFromChatPayload(result) } };
       }
 
       if (method === 'chat.history') {
@@ -1304,27 +1251,31 @@ function registerGatewayHandlers(
         if (!result.success) {
           return { success: false, error: result.error || 'chat.history failed' };
         }
-        return { success: true, result: result.result };
+        return { success: true, result: sanitizeMemoryFromChatPayload(result.result) };
       }
 
       if (method === 'chat.send') {
         const body = (rpcParams && typeof rpcParams === 'object' ? rpcParams : {}) as {
           sessionKey?: string;
           message?: string;
+          sourceText?: string;
           deliver?: boolean;
           idempotencyKey?: string;
+          systemPromptAppend?: string;
           engineType?: AgentEngineType;
         };
         const adapter = await getAdapterForSession(body.sessionKey ?? '', parseEngineType(body.engineType));
-        const result = await adapter.sendMessage(
-          { gatewayManager },
-          {
-            sessionKey: body.sessionKey ?? '',
-            message: body.message ?? '',
-            deliver: body.deliver,
-            idempotencyKey: body.idempotencyKey ?? crypto.randomUUID(),
-          },
-        );
+        const { runMainChatSend } = await import('../services/chat-send-service');
+        const result = await runMainChatSend(gatewayManager, {
+          sessionKey: body.sessionKey ?? '',
+          message: body.message ?? '',
+          sourceText: body.sourceText,
+          deliver: body.deliver,
+          idempotencyKey: body.idempotencyKey ?? crypto.randomUUID(),
+          systemPromptAppend: body.systemPromptAppend,
+          engineType: adapter.type,
+        }, (params, memory) => adapter.prepareMemoryInjection(params, memory),
+        (prepared) => adapter.sendMessage({ gatewayManager }, prepared));
         if (!result.success) {
           return { success: false, error: result.error || 'chat.send failed' };
         }
@@ -1344,6 +1295,8 @@ function registerGatewayHandlers(
         if (!result.success) {
           return { success: false, error: result.error || 'chat.abort failed' };
         }
+        const { getMemoryTurnCoordinator } = await import('../services/memory-turn-coordinator');
+        await getMemoryTurnCoordinator(gatewayManager).aborted(body.sessionKey ?? '', null);
         return { success: true, result: result.result };
       }
 
@@ -1615,7 +1568,7 @@ function registerGatewayHandlers(
   });
 
   gatewayManager.on('notification', (notification) => {
-    broadcast('gateway:notification', enrichGatewayPayload(notification));
+    broadcast('gateway:notification', sanitizeMemoryFromChatPayload(enrichGatewayPayload(notification)));
   });
 
   gatewayManager.on('channel:status', (data) => {
@@ -1623,7 +1576,9 @@ function registerGatewayHandlers(
   });
 
   gatewayManager.on('chat:message', (data) => {
-    broadcast('gateway:chat-message', enrichGatewayPayload(data));
+    if (data && typeof data === 'object' && 'engineEvent' in data) {
+      broadcast('gateway:engine-event', sanitizeMemoryFromChatPayload(enrichGatewayPayload((data as { engineEvent?: unknown }).engineEvent)));
+    }
   });
 
   gatewayManager.on('exit', (code) => {

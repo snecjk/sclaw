@@ -1,6 +1,6 @@
 import { Type } from "./typebox-shim.js";
 import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
-import { defineStoTool } from "./sto-toolkit/define-sto-tool.js";
+import { defineStoTool } from "./define-sto-tool.js";
 import {
 	bridgeOptionsFromParams,
 	listBridgeSessions,
