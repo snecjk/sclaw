@@ -205,12 +205,19 @@ describe('MoreAppsPage server catalog', () => {
     }));
   });
 
-  it('keeps the market tab count equal to the unfiltered catalog total', async () => {
+  it('keeps tab counts aligned with the unfiltered market and renderable installed apps', async () => {
+    const externalApp = {
+      ...serverApp,
+      id: 'external-customer-visit',
+      name: '客户拜访',
+      kind: 'external' as const,
+      external: true,
+    };
     fetchRegistryMock.mockResolvedValueOnce({
       version: 1,
-      externalApps: [],
+      externalApps: [externalApp],
       installedIds: [],
-      favoriteIds: ['org-relation', 'vip'],
+      favoriteIds: ['external-customer-visit'],
     });
     fetchCategoriesMock.mockResolvedValueOnce([
       { id: 'org', name: '组织管理', description: '', iconKey: '', iconUrl: '', order: 1 },
@@ -221,13 +228,27 @@ describe('MoreAppsPage server catalog', () => {
 
     render(<MoreAppsPage />);
     expect(await screen.findByRole('tab', { name: '应用广场8' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '我的应用2' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '我的应用1' })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: '组织管理' }));
     await waitFor(() => expect(fetchAppsMock).toHaveBeenLastCalledWith(expect.objectContaining({
       categoryCode: 'org',
     })));
     expect(screen.getByRole('tab', { name: '应用广场8' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '我的应用2' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '我的应用1' })).toBeInTheDocument();
+  });
+
+  it('shows zero installed apps when registry IDs do not resolve to rendered cards', async () => {
+    fetchRegistryMock.mockResolvedValueOnce({
+      version: 1,
+      externalApps: [],
+      installedIds: [],
+      favoriteIds: ['missing-app'],
+    });
+
+    render(<MoreAppsPage />);
+    expect(await screen.findByRole('tab', { name: '我的应用0' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '我的应用0' }));
+    expect(screen.getByText('还没有收藏或安装应用，去应用广场看看')).toBeInTheDocument();
   });
 
   it('keeps the APP list available when banners fail', async () => {

@@ -26,5 +26,5 @@
 - 影响应用广场页面、Zustand Store、应用广场类型与数据客户端。
 - 新增 Main 进程应用广场查询服务及 `/api/app-plaza/*` Host API 路由。
 - 前端生产页面不再依赖 `builtin-apps.ts` 中的 `BUILTIN_APPS`、`MARKET_CATEGORIES` 和 `MARKET_HERO_SLIDES` 模拟内容。
-- 不修改“我的应用”、收藏、安装外部应用等非本次三块内容。
+- 除让“我的应用”角标始终等于当前实际渲染的卡片数量外，不修改收藏、安装外部应用等非本次三块内容。
 - Banner 外框、轮播圆点和页面布局继续遵循 `docs/sto-design.md`；Banner 内部视觉由后台上传的完整图片承载。

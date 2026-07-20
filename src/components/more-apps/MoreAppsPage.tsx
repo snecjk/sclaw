@@ -114,8 +114,8 @@ export function MoreAppsPage() {
   // The tab badge always shows the unfiltered catalog total across all categories.
   const marketAppCount = marketTotal;
 
-  // My-apps count comes from the local registry and is independent of market filters.
-  const installedAppCount = favoriteIds.length + externalApps.length;
+  // Keep the tab badge identical to the number of cards rendered below.
+  const installedAppCount = filteredInstalledApps.length;
 
   // Load the three server blocks on mount — each keeps independent loading/error
   // so one failure never blanks the others (Banner / 分类 / APP 经 Main 代理且独立降级).

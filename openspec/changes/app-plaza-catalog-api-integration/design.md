@@ -13,7 +13,7 @@
 
 **Non-Goals:**
 
-- 不改“我的应用”、收藏、外部应用安装及本地持久化。
+- 除让“我的应用”角标按当前实际渲染的卡片集合计数外，不改收藏、外部应用安装及本地持久化。
 - 不新增 Banner 内部标题、图标、能力 stats 等结构化配置；这些内容应制作在 `imageUrl` 指向的整张图片中。
 - 不新增或修改 memory-center 管理端接口。
 
@@ -60,6 +60,12 @@ Renderer 调用 `/api/app-plaza/banners|categories|apps`，Main 使用当前会�
 **Rationale:** 符合项目 Renderer/Main API 边界，并避免 Renderer 持有后端域名和鉴权策略。
 
 **Alternative considered:** Renderer 直接请求 memory-center 并传 `stoToken`。这违反项目通信边界，因此不采用。
+
+### 6. “我的应用”角标使用实际渲染集合计数
+
+“我的应用”角标直接使用下方卡片区域采用的 `filteredInstalledApps.length`。无法解析为卡片的注册表 ID 不计数；搜索过滤后角标随当前实际卡片数量变化。
+
+**Rationale:** 产品诉求是“区域里有几个，角标显示几个”。角标和卡片共享同一最终数组可以消除重复 ID、失效 ID和搜索过滤造成的任何计数偏差。
 
 ## Risks / Trade-offs
 

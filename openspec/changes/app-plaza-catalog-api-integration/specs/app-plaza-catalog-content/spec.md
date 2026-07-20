@@ -71,3 +71,15 @@ Renderer MUST 通过 Host API 获取 Banner、分类和 APP，Main MUST 使用�
 #### Scenario: APP 请求失败
 - **WHEN** APP 请求失败
 - **THEN** 系统 MUST 展示列表加载失败和重试入口且 MUST NOT展示静态模拟 APP
+
+### Requirement: 我的应用计数与当前卡片一致
+
+系统 MUST 使用“我的应用”区域当前实际渲染的卡片集合计算该 Tab 的角标数量，角标 MUST 始终等于当前可见卡片数量。
+
+#### Scenario: 注册表 ID 无法渲染为卡片
+- **WHEN** 收藏或安装注册表中存在无法在当前“我的应用”区域渲染的应用 ID
+- **THEN** 系统 MUST NOT 将该 ID 计入角标；若区域为空，角标 MUST 显示 `0`
+
+#### Scenario: 当前区域存在应用卡片
+- **WHEN** “我的应用”区域经过搜索过滤后实际渲染 N 张应用卡片
+- **THEN** “我的应用”角标 MUST 显示 N
