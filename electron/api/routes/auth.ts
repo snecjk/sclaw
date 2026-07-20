@@ -75,8 +75,16 @@ function schedulePostLoginBackgroundWork(user: SsoUserInfo, ctx: HostApiContext)
       const previousUserCode = await getCurrentActiveUserCode();
       const workspaceResult = await activateUserWorkspace(user.code);
       if (workspaceResult.userChanged && previousUserCode) {
-        logger.info(`[auth] User changed from ${previousUserCode} to ${user.code}, restarting Gateway`);
-        await ctx.gatewayManager.restart();
+        // Skill workspace mount is per userCode; HQ↔site switch always changes it.
+        // Do NOT hard-restart here — auth-setup already schedules a coalesced reload
+        // when provider/model config changed. A second restart races Windows startLock.
+        logger.info(
+          `[auth] User skill workspace switched ${previousUserCode} → ${user.code}; `
+          + 'relying on auth-setup Gateway refresh (no extra restart)',
+        );
+        if (ctx.gatewayManager.getStatus().state === 'running') {
+          ctx.gatewayManager.debouncedReload(2000);
+        }
       }
     } catch (err) {
       logger.warn('[auth] Failed to activate user skill workspace on login:', err);
@@ -454,8 +462,11 @@ export async function handleAuthRoutes(
         setupResult = await runAuthenticatedSetup({
           user: newUser,
           gatewayManager: ctx.gatewayManager,
-          source: 'login',
-          awaitGatewayRefresh: true,
+          // Account switch is not a cold login: avoid blocking the HTTP response on a
+          // Windows full Gateway restart (reload→restart). Config is written to disk;
+          // refresh is scheduled async and coalesced with skill-workspace reload.
+          source: 'account-switch',
+          awaitGatewayRefresh: false,
         });
       } catch (err) {
         logger.warn('[auth] Post account-switch authenticated setup failed:', err);
@@ -501,8 +512,8 @@ export async function handleAuthRoutes(
         setupResult = await runAuthenticatedSetup({
           user: origin,
           gatewayManager: ctx.gatewayManager,
-          source: 'login',
-          awaitGatewayRefresh: true,
+          source: 'account-switch',
+          awaitGatewayRefresh: false,
         });
       } catch (err) {
         logger.warn('[auth] Post account-switch-back authenticated setup failed:', err);
