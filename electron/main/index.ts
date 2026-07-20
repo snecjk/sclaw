@@ -640,6 +640,9 @@ async function initialize(): Promise<void> {
       if (migration.migrated) {
         logger.info('Migrated skills into neutral skills-store');
       }
+      if (migration.deduped) {
+        logger.info('Deduped skills-store global/user duplicates');
+      }
     } catch (error) {
       logger.warn('Failed to migrate skills store:', error);
     }

@@ -24,6 +24,10 @@ vi.mock('../../electron/utils/paths', async () => {
     getSkillsStoreMigratedMarkerPath: () => join(roots.store, '.migrated'),
     getOpenClawConfigDir: () => roots.openclaw,
     getOpenClawSkillsDir: () => join(roots.openclaw, 'skills'),
+    getOpenClawUserBaseDir: (userCode: string) => join(roots.openclaw, 'users', userCode),
+    getOpenClawUserSkillsDir: (userCode: string) => join(roots.openclaw, 'users', userCode, 'skills'),
+    getOpenClawUserDisabledDir: (userCode: string) =>
+      join(roots.openclaw, 'users', userCode, 'skills-disabled'),
     getOpenClawAgentSkillsDir: (agentId: string) =>
       join(roots.openclaw, 'agents', agentId, 'agent', 'skills'),
     getClaudeConfigDir: () => roots.claude,
@@ -195,6 +199,81 @@ describe('skill lifecycle adapters + manager', () => {
 
     const second = await migrateSkillsStoreIfNeeded();
     expect(second.migrated).toBe(false);
+    expect(second.deduped).toBe(false);
+  });
+
+  it('migrates non-preinstalled skills only to user when both global and user exist', async () => {
+    const slug = 'sitekeeper-odps-sql';
+    await writeSkill(join(roots.openclaw, 'skills', slug), slug);
+    await mkdir(join(roots.openclaw, 'users', 'u1', 'skills', slug), { recursive: true });
+    await writeSkill(join(roots.openclaw, 'users', 'u1', 'skills', slug), slug);
+    await mkdir(join(roots.openclaw, '.clawhub'), { recursive: true });
+    await writeFile(
+      join(roots.openclaw, '.clawhub', 'lock.json'),
+      JSON.stringify({
+        skills: {
+          [slug]: { version: '1.0.0', source: 'sto-marketplace' },
+        },
+      }),
+      'utf-8',
+    );
+
+    const { migrateSkillsStoreIfNeeded } = await import(
+      '../../electron/services/skills/migration'
+    );
+    const result = await migrateSkillsStoreIfNeeded();
+    expect(result.migrated).toBe(true);
+    expect(existsSync(join(roots.store, 'users', 'u1', 'skills', slug, 'SKILL.md'))).toBe(true);
+    expect(existsSync(join(roots.store, 'global', slug, 'SKILL.md'))).toBe(false);
+
+    const manifest = JSON.parse(await readFile(join(roots.store, 'manifest.json'), 'utf-8')) as {
+      global: Record<string, unknown>;
+      users: Record<string, Record<string, unknown>>;
+    };
+    expect(manifest.global[slug]).toBeUndefined();
+    expect(manifest.users.u1[slug]).toBeTruthy();
+  });
+
+  it('dedupes existing v1 store that duplicated marketplace skills into global and user', async () => {
+    const { upsertSkillEntry, resolvePackageDir, getSkillEntry } = await import(
+      '../../electron/services/skills/canonical-store'
+    );
+    const { migrateSkillsStoreIfNeeded, isSkillsStoreMigrated } = await import(
+      '../../electron/services/skills/migration'
+    );
+
+    const slug = 'dup-skill';
+    const globalKey = { slug, scope: 'global' as const };
+    const userKey = { slug, scope: 'user' as const, userCode: 'u1' };
+    await writeSkill(resolvePackageDir(globalKey), slug);
+    await writeSkill(resolvePackageDir(userKey), slug);
+    await upsertSkillEntry({
+      ...globalKey,
+      version: '1.0.0',
+      source: 'sto-marketplace',
+      enabled: true,
+    });
+    await upsertSkillEntry({
+      ...userKey,
+      version: '1.0.0',
+      source: 'sto-marketplace',
+      enabled: true,
+    });
+    await writeFile(
+      join(roots.store, '.migrated'),
+      JSON.stringify({ version: 1, migratedAt: '2026-07-18T00:00:00.000Z' }),
+      'utf-8',
+    );
+
+    expect(isSkillsStoreMigrated()).toBe(false);
+    const result = await migrateSkillsStoreIfNeeded();
+    expect(result.migrated).toBe(false);
+    expect(result.deduped).toBe(true);
+    expect(isSkillsStoreMigrated()).toBe(true);
+    expect(await getSkillEntry(globalKey)).toBeNull();
+    expect(await getSkillEntry(userKey)).not.toBeNull();
+    expect(existsSync(join(resolvePackageDir(globalKey), 'SKILL.md'))).toBe(false);
+    expect(existsSync(join(resolvePackageDir(userKey), 'SKILL.md'))).toBe(true);
   });
 
   it('uninstall removes both user and global marketplace copies of the same slug', async () => {
