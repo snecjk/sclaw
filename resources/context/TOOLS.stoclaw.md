@@ -56,6 +56,15 @@ StoClaw 聊天发图时，客户端会把图片内联进用户消息（多模态
 
 如果用户要求升级 OpenClaw 或 sai-cli，必须拒绝并引导用户通过设置页面手动操作。
 
+### 📦 本地产物写入路径（硬性规则）
+
+使用 `write` / 保存文件类工具生成本地产物时：
+
+- **必须**写入当前 workspace 的 `./.claw-output/<文件名>`（项目会话 = 项目目录下的 `.claw-output/`）
+- ⛔ **禁止**写到工作区根目录、`outputs/`、`output/`、桌面、Downloads、skill 目录
+- 目录通常已存在；若不存在先创建再写
+- 回复中引用本地产物时输出绝对路径 `file:///` Markdown 链接，禁止相对路径
+
 ### uv (Python)
 
 - `uv` is bundled with StoClaw and on PATH. Do NOT use bare `python` or `pip`.

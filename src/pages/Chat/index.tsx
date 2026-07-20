@@ -11,7 +11,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAgentsStore } from '@/stores/agents';
+import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ChatMessage } from './ChatMessage';
 import { AssistantTurnMessage } from './AssistantTurnMessage';
@@ -99,7 +99,11 @@ export function Chat() {
     previewPanelPercent,
     setPreviewSplitPercent,
   );
-  const [editDraft, setEditDraft] = useState<{ text: string; version: number } | null>(null);
+  const [editDraft, setEditDraft] = useState<{
+    text: string;
+    skill?: import('@/types/skill-meta').SkillMeta;
+    version: number;
+  } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchableMessages, setSearchableMessages] = useState<Array<{ id: string; text: string }>>([]);
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
@@ -112,7 +116,7 @@ export function Chat() {
     [sessions, currentSessionKey],
   );
   const currentAgent = useMemo(
-    () => agents.find((agent) => agent.id === currentAgentId),
+    () => resolveAgentById(agents, currentAgentId),
     [agents, currentAgentId],
   );
   const currentEngineType = resolveChatSessionEngineType(
@@ -382,11 +386,14 @@ export function Chat() {
     void abortRun();
   }, [abortRun, activeTurn?.turnStableKey]);
 
-  const handleEditMessage = useCallback((text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    setEditDraft({ text: trimmed, version: Date.now() });
-  }, []);
+  const handleEditMessage = useCallback(
+    (text: string, skillMeta?: import('@/types/skill-meta').SkillMeta) => {
+      const trimmed = text.trim();
+      if (!trimmed && !skillMeta) return;
+      setEditDraft({ text: trimmed, skill: skillMeta, version: Date.now() });
+    },
+    [],
+  );
 
   const handleEditDraftApplied = useCallback(() => {
     setEditDraft(null);
@@ -678,6 +685,7 @@ export function Chat() {
 
       {/* Pending Message Queue */}
       <PendingQueuePanel
+        sessionKey={currentSessionKey}
         queue={queue}
         onRemove={queueRemove}
         onMoveUp={queueMoveUp}

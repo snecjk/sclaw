@@ -101,7 +101,7 @@ export function ConfirmDialog({
             variant="outline"
             onClick={onCancel}
             disabled={confirming}
-            className="rounded-full px-5"
+            className="rounded-[10px] px-4 py-2"
           >
             {cancelLabel}
           </Button>
@@ -110,7 +110,7 @@ export function ConfirmDialog({
             onClick={handleConfirm}
             disabled={confirming}
             className={cn(
-              'rounded-full px-5',
+              'rounded-[10px] px-4 py-2',
               variant === 'destructive' && 'bg-[#e53935] hover:bg-[#c62828]',
             )}
           >

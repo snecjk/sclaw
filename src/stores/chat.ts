@@ -14,6 +14,7 @@ import { useCronStore } from './cron';
 import {
   applyWorkspaceDefaultToNewSession,
   ensureSelectedModelPersistedBeforeSend,
+  syncSessionModelToGateway,
 } from '@/lib/sync-workspace-default-to-chat';
 import {
   isConcreteModelId,
@@ -26,6 +27,10 @@ import { fetchDeletedSessionKeys, omitDeletedSessionKeys, rememberOptimisticDele
 import { notifySessionDeleteFailed, requestSessionDelete, resolveSessionDeleteEngineType } from '@/lib/session-delete';
 import { markSessionUnreadAfterSuccessfulRun, noteObservedRun } from '@/lib/session-unread-notify';
 import { touchSessionReadAt, useSessionUnreadStore } from '@/stores/session-unread';
+import {
+  getBaseAgentIdFromProjectAgentId,
+  resolveProjectAgentId,
+} from '../../shared/project-agent';
 import { useGatewayStore } from './gateway';
 import { useAgentsStore } from './agents';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../shared/chat-config';
@@ -56,7 +61,11 @@ import {
   resolveCronGroupNameFromSession,
   resolveStoScheduledGroupNameFromSession,
 } from '@/lib/scheduled-task-group-name';
-import { appendPendingLocalVirtualTaskSessions } from '@/stores/chat/session-list-merge';
+import {
+  appendPendingLocalVirtualTaskSessions,
+  findCronDatedTwinKey,
+  omitSupersededCronDatedAgentTwins,
+} from '@/stores/chat/session-list-merge';
 import {
   buildInitialSidebarRecentOrder,
   isSidebarRecentChatSessionKey,
@@ -67,7 +76,6 @@ import {
   scheduleSessionLabelHydrationForStore,
 } from '@/stores/chat/session-metadata-hydrate';
 import {
-  DEFAULT_CANONICAL_PREFIX,
   DEFAULT_SESSION_KEY,
   type AttachedFileMeta,
   type ChatSession,
@@ -167,7 +175,8 @@ function toNumberIfFinite(value: unknown): number | undefined {
 
 function getAgentEngineType(agentId: string | undefined | null): ChatSession['engineType'] | undefined {
   const normalizedAgentId = normalizeAgentId(agentId);
-  return useAgentsStore.getState().agents.find((agent) => normalizeAgentId(agent.id) === normalizedAgentId)?.engineType;
+  const lookupId = getBaseAgentIdFromProjectAgentId(normalizedAgentId) ?? normalizedAgentId;
+  return useAgentsStore.getState().agents.find((agent) => normalizeAgentId(agent.id) === lookupId)?.engineType;
 }
 
 function resolveEngineTypeForSession(
@@ -434,14 +443,6 @@ async function loadMissingPreviews(messages: RawMessage[]): Promise<boolean> {
     console.warn('[loadMissingPreviews] Failed:', err);
     return false;
   }
-}
-
-function getCanonicalPrefixFromSessions(sessions: ChatSession[]): string | null {
-  const canonical = sessions.find((s) => s.key.startsWith('agent:'))?.key;
-  if (!canonical) return null;
-  const parts = canonical.split(':');
-  if (parts.length < 2) return null;
-  return `${parts[0]}:${parts[1]}`;
 }
 
 function getAgentIdFromSessionKey(sessionKey: string): string {
@@ -775,6 +776,7 @@ function buildSessionSwitchPatch(
   return {
     currentSessionKey: nextSessionKey,
     currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
+    pendingProjectId: null,
     sessions: ensureSessionEntry(nextSessions, nextSessionKey),
     runtimeBySessionKey: nextRuntimeBySessionKey,
     sessionLabels: leavingEmpty
@@ -979,13 +981,6 @@ function handleBackgroundSessionEvent(
       break;
     }
   }
-}
-
-function getCanonicalPrefixFromSessionKey(sessionKey: string): string | null {
-  if (!sessionKey.startsWith('agent:')) return null;
-  const parts = sessionKey.split(':');
-  if (parts.length < 2) return null;
-  return `${parts[0]}:${parts[1]}`;
 }
 
 function isToolOnlyMessage(message: RawMessage | undefined): boolean {
@@ -1254,6 +1249,11 @@ export const useChatStore = create<ChatState>()(
     set({ pendingNewSessionModel: model });
   },
 
+  pendingProjectId: null,
+  setPendingProjectId: (projectId) => {
+    set({ pendingProjectId: projectId });
+  },
+
   pendingWorkflow: null,
   setPendingWorkflow: (pending) => {
     set({ pendingWorkflow: pending });
@@ -1364,7 +1364,7 @@ export const useChatStore = create<ChatState>()(
           for (const session of sessions) {
             const cronParts = parseCronSessionKey(session.key);
             if (cronParts && cronParts.date) {
-              cronDated.add(`agent:main:cron:${cronParts.jobId}`);
+              cronDated.add(`agent:${cronParts.agentId}:cron:${cronParts.jobId}`);
               const prev = cronDatedKeyByJob.get(cronParts.jobId);
               if (!prev || session.key > prev) {
                 cronDatedKeyByJob.set(cronParts.jobId, session.key);
@@ -1397,7 +1397,10 @@ export const useChatStore = create<ChatState>()(
             // Filter out claude-task base sessions when dated replacement exists
             if (claudeTaskDated.has(s.key)) return false;
             const cronParts = parseCronSessionKey(s.key);
-            if (cronParts?.runSessionId && cronDated.has(`agent:main:cron:${cronParts.jobId}`)) {
+            if (
+              cronParts?.runSessionId
+              && cronDated.has(`agent:${cronParts.agentId}:cron:${cronParts.jobId}`)
+            ) {
               return false;
             }
             // Filter out claude-task-run sessions when their task has a dated aggregate
@@ -1423,25 +1426,15 @@ export const useChatStore = create<ChatState>()(
           // Also deduplicate cron dated sessions by jobId+date to prevent duplicates
           // Also deduplicate claude task dated sessions by taskId+date
           const seen = new Set<string>();
-          const seenCronDated = new Set<string>();
           const seenClaudeTaskDated = new Set<string>();
-          const dedupedSessions = filteredSessions.filter((s) => {
+          const twinDeduped = omitSupersededCronDatedAgentTwins(filteredSessions);
+          const dedupedSessions = twinDeduped.filter((s) => {
             if (!s.key.startsWith('agent:') && canonicalBySuffix.has(s.key)) return false;
             if (seen.has(s.key)) {
               console.warn('[loadSessions] Duplicate session key filtered:', s.key);
               return false;
             }
             seen.add(s.key);
-            // Extra dedup for cron dated sessions: same job+date should only appear once
-            const cronParts = parseCronSessionKey(s.key);
-            if (cronParts?.date) {
-              const dedupKey = `${cronParts.jobId}:${cronParts.date}`;
-              if (seenCronDated.has(dedupKey)) {
-                console.warn('[loadSessions] Duplicate cron dated session filtered:', s.key, 'dedupKey:', dedupKey);
-                return false;
-              }
-              seenCronDated.add(dedupKey);
-            }
             // Dedup for claude task dated sessions: same taskId+date should only appear once
             const claudeParts = parseClaudeScheduledTaskSessionKey(s.key);
             if (claudeParts?.date) {
@@ -1540,6 +1533,23 @@ export const useChatStore = create<ChatState>()(
             }
           }
 
+          // Trigger path builds `agent:{task.agentId}:cron:…:date` while host may still
+          // materialize `agent:main:…:date` (or the reverse). Prefer the active key, and
+          // never append a same-day twin that would show two rows under the task group.
+          const activatingKeys = Object.keys(get().activatingScheduledSessionAt ?? {});
+          const preferCronKey = activatingKeys.find((key) => parseCronSessionKey(key)?.date)
+            ?? nextSessionKey;
+          const cronTwinAlreadyListed = findCronDatedTwinKey(mergedSessions, nextSessionKey);
+          if (
+            cronTwinAlreadyListed
+            && nextSessionKey
+            && !mergedSessions.some((session) => session.key === nextSessionKey)
+            && preferCronKey !== nextSessionKey
+          ) {
+            // Active session is not the preferred trigger key — follow the listed twin.
+            nextSessionKey = cronTwinAlreadyListed;
+          }
+
           const localCurrentSession = localSessions.find((session) => session.key === nextSessionKey);
           const sessionsWithCurrent = !mergedSessions.find((s) => s.key === nextSessionKey) && nextSessionKey
             ? [...mergedSessions, {
@@ -1550,9 +1560,44 @@ export const useChatStore = create<ChatState>()(
             }]
             : mergedSessions;
 
+          const twinCollapsedSessions = omitSupersededCronDatedAgentTwins(
+            sessionsWithCurrent,
+            preferCronKey,
+          );
+          const sessionKeyBeforeTwinCollapse = nextSessionKey;
+          if (
+            nextSessionKey
+            && !twinCollapsedSessions.some((session) => session.key === nextSessionKey)
+          ) {
+            const keptTwin = twinCollapsedSessions.find((session) => {
+              const left = parseCronSessionKey(nextSessionKey);
+              const right = parseCronSessionKey(session.key);
+              return Boolean(left?.date && right?.date
+                && left.jobId === right.jobId
+                && left.date === right.date);
+            })?.key;
+            if (keptTwin) nextSessionKey = keptTwin;
+          }
+          if (
+            sessionKeyBeforeTwinCollapse
+            && nextSessionKey
+            && sessionKeyBeforeTwinCollapse !== nextSessionKey
+          ) {
+            // Move activating spinner onto the surviving twin key.
+            const activatingAt = get().activatingScheduledSessionAt[sessionKeyBeforeTwinCollapse];
+            if (activatingAt) {
+              set((s) => {
+                const nextActivating = { ...s.activatingScheduledSessionAt };
+                delete nextActivating[sessionKeyBeforeTwinCollapse];
+                nextActivating[nextSessionKey] = activatingAt;
+                return { activatingScheduledSessionAt: nextActivating };
+              });
+            }
+          }
+
           const scrubbedSessionLabels = scrubCorruptedSessionLabels(get().sessionLabels);
           const labeledSessions = sanitizeGatewaySessionLabels(
-            applyStoredSessionLabels(sessionsWithCurrent, scrubbedSessionLabels),
+            applyStoredSessionLabels(twinCollapsedSessions, scrubbedSessionLabels),
           );
 
           // ── 定时任务会话名称富化：从任务定义 API 获取 displayName ──
@@ -1762,6 +1807,9 @@ export const useChatStore = create<ChatState>()(
     }
 
     rememberOptimisticDeletedSessionKey(key);
+    void import('@/stores/session-catalog').then(({ useSessionCatalogStore }) => {
+      void useSessionCatalogStore.getState().softDeleteSession(key);
+    });
     forgetSkillMessageMetaForSession(key);
     const additionalSuppressKeys = (options?.additionalSuppressKeys ?? [])
       .map((suppressKey) => suppressKey.trim())
@@ -1835,7 +1883,7 @@ export const useChatStore = create<ChatState>()(
 
   // ── New session ──
 
-  newSession: async () => {
+  newSession: async (options?: { projectId?: string; materialize?: boolean }) => {
     // Generate a new unique session key and switch to it.
     // NOTE: We intentionally do NOT call sessions.reset on the old session.
     // sessions.reset archives (renames) the session JSONL file, making old
@@ -1846,11 +1894,80 @@ export const useChatStore = create<ChatState>()(
       && messages.length === 0
       && !sessionLastActivity[currentSessionKey]
       && !sessionLabels[currentSessionKey];
-    const prefix = getCanonicalPrefixFromSessionKey(currentSessionKey)
-      ?? getCanonicalPrefixFromSessions(sessions)
-      ?? DEFAULT_CANONICAL_PREFIX;
+    const baseAgentId = getBaseAgentIdFromProjectAgentId(get().currentAgentId)
+      ?? get().currentAgentId
+      ?? 'main';
+    const projectId = options?.projectId ?? get().pendingProjectId ?? undefined;
+    const shouldMaterialize = options?.materialize === true || !projectId;
+
+    // Project "新对话": stay on the empty home draft until the first message is sent.
+    // Create/associate the project agent immediately so OpenClaw cwd is ready before send.
+    if (projectId && projectId !== 'default' && !shouldMaterialize) {
+      const draftAgentId = resolveProjectAgentId(projectId, baseAgentId);
+      set((s) => {
+        const nextRuntimeBySessionKey = {
+          ...s.runtimeBySessionKey,
+          [currentSessionKey]: captureTopLevelRuntime(s),
+          [DEFAULT_SESSION_KEY]: createIdleSessionRuntimeState(),
+        };
+        if (leavingEmpty) {
+          delete nextRuntimeBySessionKey[currentSessionKey];
+        }
+        return {
+          currentSessionKey: DEFAULT_SESSION_KEY,
+          currentAgentId: draftAgentId,
+          pendingProjectId: projectId,
+          sessions: leavingEmpty
+            ? s.sessions.filter((sess) => sess.key !== currentSessionKey)
+            : s.sessions,
+          runtimeBySessionKey: nextRuntimeBySessionKey,
+          sessionLabels: leavingEmpty
+            ? Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey))
+            : s.sessionLabels,
+          sessionLastActivity: leavingEmpty
+            ? Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== currentSessionKey))
+            : s.sessionLastActivity,
+          sidebarRecentOrder: leavingEmpty
+            ? removeSidebarRecentOrderKey(s.sidebarRecentOrder, currentSessionKey)
+            : s.sidebarRecentOrder,
+          messages: [],
+          sending: false,
+          streamingText: '',
+          streamingMessage: null,
+          streamingMessages: [],
+          streamingToolResults: [],
+          streamingTools: [],
+          activeRunId: null,
+          error: null,
+          pendingFinal: false,
+          lastUserMessageAt: null,
+          optimisticUserMessage: null,
+          pendingToolImages: [],
+          pendingWorkflow: null,
+        };
+      });
+      touchSessionReadAt(DEFAULT_SESSION_KEY);
+      void import('@/lib/session-catalog-api').then(async ({ ensureProjectAgentForWorkspace }) => {
+        try {
+          await ensureProjectAgentForWorkspace({
+            workspaceId: projectId,
+            baseAgentId,
+          });
+          const { useAgentsStore } = await import('@/stores/agents');
+          await useAgentsStore.getState().fetchAgents().catch(() => undefined);
+        } catch (error) {
+          console.warn('[newSession] failed to ensure project agent on project new-chat', error);
+        }
+      });
+      return;
+    }
+
+    const effectiveAgentId = projectId && projectId !== 'default'
+      ? resolveProjectAgentId(projectId, baseAgentId)
+      : baseAgentId;
+    const prefix = `agent:${effectiveAgentId}`;
     const newKey = `${prefix}:session-${Date.now()}`;
-    const newAgentId = getAgentIdFromSessionKey(newKey);
+    const newAgentId = effectiveAgentId;
     const pendingModel = get().pendingNewSessionModel?.trim();
     let chosenModel = pendingModel;
     if (!chosenModel) {
@@ -1860,7 +1977,7 @@ export const useChatStore = create<ChatState>()(
         // Placeholder main may carry gateway agent default (e.g. qwen3.5) — not user choice.
         // Explicit toolbar picks use pendingNewSessionModel; Claude uses agent-scoped model.
         const carryAgent = useAgentsStore.getState().agents.find(
-          (agent) => agent.id === get().currentAgentId,
+          (agent) => agent.id === (getAgentIdFromSessionKey(currentSessionKey) ?? get().currentAgentId),
         );
         if (carryAgent?.engineType === 'claude' && isConcreteModelId(carryAgent.modelDisplay)) {
           const { accounts, defaultAccountId } = useProviderStore.getState();
@@ -1903,6 +2020,7 @@ export const useChatStore = create<ChatState>()(
       return {
         currentSessionKey: newKey,
         currentAgentId: newAgentId,
+        pendingProjectId: null,
         sessions: nextSessions,
         runtimeBySessionKey: nextRuntimeBySessionKey,
         sessionLabels: leavingEmpty
@@ -1927,7 +2045,17 @@ export const useChatStore = create<ChatState>()(
       };
     });
     touchSessionReadAt(newKey);
-    await applyWorkspaceDefaultToNewSession(newKey, newAgentId);
+    if (chosenModel?.trim()) {
+      await syncSessionModelToGateway(newKey, chosenModel, newAgentId);
+    } else {
+      await applyWorkspaceDefaultToNewSession(newKey, newAgentId);
+    }
+    if (projectId && projectId !== 'default') {
+      void import('@/stores/session-catalog').then(({ useSessionCatalogStore }) => {
+        // 只有明确指定项目时才绑定到项目；普通新对话不自动归属当前选中项目。
+        void useSessionCatalogStore.getState().bindSession(newKey, projectId);
+      });
+    }
   },
 
   // ── Cleanup empty session on navigate away ──
@@ -2053,18 +2181,21 @@ export const useChatStore = create<ChatState>()(
       finalMessages = mergeWorkflowTurnsFromMemory(finalMessages, targetSessionKey);
       finalMessages = ensureWorkflowCardsInMessages(finalMessages, targetSessionKey, getMessageText);
       const gatewaySessionLabel = get().sessions.find((session) => session.key === targetSessionKey)?.label;
+      const isSending = get().sending;
       finalMessages = restoreSkillMetaOnMessages(finalMessages, targetSessionKey, gatewaySessionLabel);
       finalMessages = recoverInitialUserFromSessionLabel(
         finalMessages,
         targetSessionKey,
         get().sessionLabels,
         gatewaySessionLabel,
+        { sending: isSending },
       );
       finalMessages = ensureOpeningUserMessageFirst(
         finalMessages,
         targetSessionKey,
         get().sessionLabels,
         gatewaySessionLabel,
+        { sending: isSending },
       );
       finalMessages = dedupeRedundantUserMessages(finalMessages, userMsgAt ?? null, {
         sessionKey: targetSessionKey,
@@ -2434,7 +2565,12 @@ export const useChatStore = create<ChatState>()(
     // so toolbar/agent model choice is persisted before chat.send hits the gateway default.
     try {
       if (get().currentSessionKey === DEFAULT_SESSION_KEY) {
-        await get().newSession();
+        const pendingProjectId = get().pendingProjectId;
+        await get().newSession(
+          pendingProjectId
+            ? { projectId: pendingProjectId, materialize: true }
+            : undefined,
+        );
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -3420,6 +3556,9 @@ export const useChatStore = create<ChatState>()(
         session.key === key ? { ...session, label: trimmed } : session
       )),
     }));
+    void import('@/stores/session-catalog').then(({ useSessionCatalogStore }) => {
+      void useSessionCatalogStore.getState().patchSessionCatalog({ sessionKey: key, title: trimmed });
+    });
   },
 
   markScheduledSessionActivating: (sessionKey: string) => {

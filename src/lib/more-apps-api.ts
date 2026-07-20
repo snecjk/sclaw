@@ -1,5 +1,5 @@
 /**
- * More Apps registry host-api client.
+ * More Apps registry host-api client
  */
 import { hostApiFetch } from '@/lib/host-api';
 import type { MoreAppsRegistry } from '../../shared/more-apps-registry';

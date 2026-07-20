@@ -39,11 +39,21 @@ export type AuthenticatedSetupOptions = {
    * Use before the first Gateway boot on cold start.
    */
   skipGatewayRefresh?: boolean;
+  /**
+   * When true and a Gateway refresh is needed, execute it immediately and wait
+   * for the Gateway to reconnect before resolving. Used by the login route so
+   * the renderer only navigates to home after the Gateway is settled.
+   */
+  awaitGatewayRefresh?: boolean;
 };
 
 const SKIP_STARTUP_AFTER_LOGIN_MS = 60_000;
 const REFRESH_BATCH_DELAY_MS = 800;
 const MIN_CONNECTED_BEFORE_RESTART_MS = 8_000;
+/** Gateway must stay `running` this long before an awaited refresh is considered settled. */
+const GATEWAY_SETTLE_STABLE_MS = 2_000;
+/** Upper bound for an awaited refresh — login must never hang on a stuck Gateway. */
+const GATEWAY_SETTLE_TIMEOUT_MS = 20_000;
 
 export type PostAuthGatewayRefreshMode = 'none' | 'reload' | 'restart';
 
@@ -192,11 +202,61 @@ function schedulePostAuthGatewayRefresh(
   }, REFRESH_BATCH_DELAY_MS);
 }
 
+async function waitForGatewaySettled(gatewayManager: GatewayManager): Promise<boolean> {
+  const deadline = Date.now() + GATEWAY_SETTLE_TIMEOUT_MS;
+  let stableSince: number | null = null;
+  while (Date.now() < deadline) {
+    const status = gatewayManager.getStatus();
+    if (status.state === 'running' && !gatewayManager.isGatewayLifecycleSettling()) {
+      stableSince ??= Date.now();
+      if (Date.now() - stableSince >= GATEWAY_SETTLE_STABLE_MS) {
+        return true;
+      }
+    } else {
+      stableSince = null;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  return false;
+}
+
+/**
+ * Execute the post-auth Gateway refresh inline (no debounce) and block until the
+ * Gateway is running and stable again. Never throws — login must not fail because
+ * a refresh went sideways; worst case we return after GATEWAY_SETTLE_TIMEOUT_MS.
+ */
+async function runPostAuthGatewayRefreshInline(
+  gatewayManager: GatewayManager,
+  logPrefix: string,
+  mode: Exclude<PostAuthGatewayRefreshMode, 'none'>,
+  options?: { forceRefresh?: boolean },
+): Promise<void> {
+  clearRefreshTimers();
+  gatewayManager.cancelPendingGatewayRefresh();
+
+  const startedAt = Date.now();
+  logger.info(`${logPrefix} Running Gateway ${mode} inline (login waits for settle)`);
+  try {
+    if (mode === 'reload') {
+      await gatewayManager.reload({ force: options?.forceRefresh === true });
+    } else {
+      await gatewayManager.restart();
+    }
+    const settled = await waitForGatewaySettled(gatewayManager);
+    logger.info(
+      `${logPrefix} Inline Gateway ${mode} ${settled ? 'settled' : 'did not settle before timeout'} `
+      + `after ${Date.now() - startedAt}ms`,
+    );
+  } catch (err) {
+    logger.warn(`${logPrefix} Inline Gateway ${mode} failed:`, err);
+  }
+}
+
 async function runSetup(
   options: AuthenticatedSetupOptions,
   generation: number,
 ): Promise<AuthenticatedSetupResult> {
-  const { gatewayManager, source, user, skipGatewayRefresh } = options;
+  const { gatewayManager, source, user, skipGatewayRefresh, awaitGatewayRefresh } = options;
   const logPrefix = `[auth-setup:${source}${skipGatewayRefresh ? ':prelaunch' : ''}]`;
 
   const userToSync = user ?? (await getAuthState()).user;
@@ -214,7 +274,12 @@ async function runSetup(
 
   try {
     await cleanupRetiredSkillsAndPlugins();
-    await syncStoPluginsToOpenClaw();
+    const wrotePlugins = await syncStoPluginsToOpenClaw();
+    if (wrotePlugins) {
+      logger.info(`${logPrefix} Wrote STO plugins config to openclaw.json`);
+    } else {
+      logger.debug(`${logPrefix} STO plugins config unchanged; skip openclaw.json write`);
+    }
   } catch (err) {
     logger.warn(`${logPrefix} STO plugins config failed:`, err);
   }
@@ -282,13 +347,22 @@ async function runSetup(
       : 'none';
 
   if (refreshMode !== 'none' && gatewayManager) {
-    schedulePostAuthGatewayRefresh(
-      gatewayManager,
-      generation,
-      logPrefix,
-      refreshMode,
-      { forceRefresh: stoResult.needsForcedGatewayRefresh === true },
-    );
+    if (awaitGatewayRefresh) {
+      await runPostAuthGatewayRefreshInline(
+        gatewayManager,
+        logPrefix,
+        refreshMode,
+        { forceRefresh: stoResult.needsForcedGatewayRefresh === true },
+      );
+    } else {
+      schedulePostAuthGatewayRefresh(
+        gatewayManager,
+        generation,
+        logPrefix,
+        refreshMode,
+        { forceRefresh: stoResult.needsForcedGatewayRefresh === true },
+      );
+    }
   } else if (source === 'login' && gatewayManager) {
     gatewayManager.cancelPendingGatewayRefresh();
   }

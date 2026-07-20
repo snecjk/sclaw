@@ -17,16 +17,35 @@ function fsPath(filePath: string): string {
 import { getAllSettings } from '../utils/store';
 import { getApiKey, getDefaultProvider, getProvider } from '../utils/secure-storage';
 import { getProviderEnvVar, getKeyableProviderTypes } from '../utils/provider-registry';
-import { getOpenClawDir, getOpenClawEntryPath, getOpenClawConfigDir, getOpenClawProcessCwd, getOpenClawNodeModulesPath, getOpenClawPackageRootEnv, getBundledPluginSourceCandidates, isOpenClawPresent } from '../utils/paths';
+import {
+  getOpenClawDir,
+  getOpenClawEntryPath,
+  getOpenClawConfigDir,
+  getOpenClawProcessCwd,
+  getOpenClawNodeModulesPath,
+  getOpenClawPackageRootEnv,
+  getBundledPluginSourceCandidates,
+  isOpenClawPresent,
+  getDefaultAgentWorkspacePath,
+  ensureWorkspaceArtifactOutputDir,
+} from '../utils/paths';
+import { WORKSPACE_ARTIFACT_OUTPUT_DIRNAME } from '../../shared/workspace-paths';
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { cleanupDanglingWeChatPluginState, listConfiguredChannels } from '../utils/channel-config';
-import { syncGatewayTokenToConfig, syncBrowserConfigToOpenClaw, syncSessionIdleMinutesToOpenClaw, sanitizeOpenClawConfig } from '../utils/openclaw-auth';
+import {
+  syncGatewayTokenToConfig,
+  syncBrowserConfigToOpenClaw,
+  syncSessionIdleMinutesToOpenClaw,
+  sanitizeOpenClawConfig,
+  syncStoPluginsToOpenClaw,
+} from '../utils/openclaw-auth';
 import { buildProxyEnv, resolveProxySettings } from '../utils/proxy';
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { logger } from '../utils/logger';
 import { getDwsBinDir } from '../utils/dws-cli';
 import { prependPathEntry, prependNodePathEntry } from '../utils/env-path';
 import { copyPluginFromNodeModules, fixupPluginManifest } from '../utils/plugin-install';
+import { SAI_CLIENT_ID_VALUE, applySaiClientIdEnv } from '../utils/sai-client-id';
 
 export interface GatewayLaunchContext {
   appSettings: Awaited<ReturnType<typeof getAllSettings>>;
@@ -174,7 +193,19 @@ export async function syncGatewayConfigBeforeLaunch(
     }),
   ]);
 
-  // Group 4: authenticated setup
+  // Group 4: STO plugin stubs before Gateway spawn — including on the login page —
+  // so post-login syncStoPluginsToOpenClaw is typically a no-op and does not
+  // trigger an OpenClaw hard restart (WS 1012) after the user signs in.
+  try {
+    const wrote = await syncStoPluginsToOpenClaw();
+    if (wrote) {
+      logger.info('Pre-launch STO plugins config written to openclaw.json');
+    }
+  } catch (err) {
+    logger.warn('Failed to sync STO plugins before launch:', err);
+  }
+
+  // Group 5: authenticated setup (SSO / models / biz-agents)
   try {
     const { getAuthState, getStoToken } = await import('../utils/auth-store');
     const { runAuthenticatedSetup } = await import('../services/auth-setup-orchestrator');
@@ -294,6 +325,7 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     : 'disabled';
 
   const { NODE_OPTIONS: _nodeOptions, ...baseEnv } = process.env;
+  applySaiClientIdEnv(process.env as Record<string, string | undefined>);
   const baseEnvRecord = baseEnv as Record<string, string | undefined>;
   let baseEnvPatched = binPathExists
     ? prependPathEntry(baseEnvRecord, binPath).env
@@ -301,8 +333,9 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
   baseEnvPatched = prependPathEntry(baseEnvPatched, getDwsBinDir()).env;
 
   const mainWorkspace = await getAgentWorkspacePath('main')
-    ?? join(getOpenClawConfigDir(), 'workspace');
-  const mainOutputDir = join(mainWorkspace, '.claw-output');
+    ?? getDefaultAgentWorkspacePath();
+  const mainOutputDir = ensureWorkspaceArtifactOutputDir(mainWorkspace)
+    ?? join(mainWorkspace, WORKSPACE_ARTIFACT_OUTPUT_DIRNAME);
 
   const forkEnv: Record<string, string | undefined> = prependNodePathEntry({
     ...baseEnvPatched,
@@ -317,6 +350,7 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     OPENCLAW_PACKAGE_ROOT: getOpenClawPackageRootEnv(),
     STOCLAW_WORKSPACE: mainWorkspace,
     STOCLAW_OUTPUT_DIR: mainOutputDir,
+    SAI_CLIENT_ID: SAI_CLIENT_ID_VALUE,
   }, getOpenClawNodeModulesPath());
 
   return {

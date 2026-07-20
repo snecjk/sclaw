@@ -3,7 +3,12 @@ import { constants } from 'fs';
 import { join, normalize } from 'path';
 import { deleteAgentChannelAccounts, listConfiguredChannels, readOpenClawConfig, writeOpenClawConfig } from './channel-config';
 import { withConfigLock } from './config-mutex';
-import { expandPath, getClawXConfigDir, getOpenClawConfigDir } from './paths';
+import { expandPath, getClawXConfigDir, getManagedAgentWorkspacePath, getOpenClawConfigDir, ensureWorkspaceArtifactOutputDir } from './paths';
+import {
+  DEFAULT_WORKSPACE_TILDE,
+  getAgentWorkspaceTildePath,
+  migrateWorkspaceTildePath,
+} from '../../shared/workspace-paths';
 import * as logger from './logger';
 import { OPENCLAW_WECHAT_CHANNEL_TYPE, toUiChannelType } from './channel-alias';
 import { applyWeChatChannelAccountEnabled } from './channel-config';
@@ -11,7 +16,6 @@ import { applyWeChatChannelAccountEnabled } from './channel-config';
 const MAIN_AGENT_ID = 'main';
 const MAIN_AGENT_NAME = 'Main Agent';
 const DEFAULT_ACCOUNT_ID = 'default';
-const DEFAULT_WORKSPACE_PATH = '~/.stoclaw/openclaw/workspace';
 const AGENT_BOOTSTRAP_FILES = [
   'AGENTS.md',
   'SOUL.md',
@@ -279,9 +283,10 @@ function getDefaultWorkspacePath(config: AgentConfigDocument): string {
   const defaults = (config.agents && typeof config.agents === 'object'
     ? (config.agents as AgentsConfig).defaults
     : undefined);
-  return typeof defaults?.workspace === 'string' && defaults.workspace.trim()
+  const raw = typeof defaults?.workspace === 'string' && defaults.workspace.trim()
     ? defaults.workspace
-    : DEFAULT_WORKSPACE_PATH;
+    : DEFAULT_WORKSPACE_TILDE;
+  return migrateWorkspaceTildePath(raw) ?? DEFAULT_WORKSPACE_TILDE;
 }
 
 function getDefaultAgentDirPath(agentId: string): string {
@@ -463,8 +468,8 @@ function trimTrailingSeparators(path: string): string {
 function getManagedWorkspaceDirectory(agent: AgentListEntry): string | null {
   if (agent.id === MAIN_AGENT_ID) return null;
 
-  const configuredWorkspace = expandPath(agent.workspace || `~/.stoclaw/openclaw/workspace-${agent.id}`);
-  const managedWorkspace = join(getOpenClawConfigDir(), `workspace-${agent.id}`);
+  const configuredWorkspace = expandPath(agent.workspace || getAgentWorkspaceTildePath(agent.id));
+  const managedWorkspace = getManagedAgentWorkspacePath(agent.id);
   const normalizedConfigured = trimTrailingSeparators(normalize(configuredWorkspace));
   const normalizedManaged = trimTrailingSeparators(normalize(managedWorkspace));
 
@@ -572,7 +577,7 @@ async function provisionAgentFilesystem(
   const { entries } = normalizeAgentsConfig(config);
   const mainEntry = entries.find((entry) => entry.id === MAIN_AGENT_ID) ?? createImplicitMainEntry(config);
   const sourceWorkspace = expandPath(mainEntry.workspace || getDefaultWorkspacePath(config));
-  const targetWorkspace = expandPath(agent.workspace || `~/.stoclaw/openclaw/workspace-${agent.id}`);
+  const targetWorkspace = expandPath(agent.workspace || getAgentWorkspaceTildePath(agent.id));
   const sourceAgentDir = expandPath(mainEntry.agentDir || getDefaultAgentDirPath(MAIN_AGENT_ID));
   const targetAgentDir = expandPath(agent.agentDir || getDefaultAgentDirPath(agent.id));
   const targetSessionsDir = join(getOpenClawConfigDir(), 'agents', agent.id, 'sessions');
@@ -591,6 +596,9 @@ async function provisionAgentFilesystem(
   if (targetAgentDir !== sourceAgentDir) {
     await copyRuntimeFiles(sourceAgentDir, targetAgentDir);
   }
+
+  // After bootstrap files exist, ensure `.claw-output` + durable AGENTS.md rule.
+  ensureWorkspaceArtifactOutputDir(targetWorkspace);
 
   // Inject constraints into AGENTS.md（ensure* 内已 TEMP 停用英文注入）
   await ensureLongOutputConstraint(targetWorkspace);
@@ -689,7 +697,7 @@ async function buildSnapshotFromConfig(config: AgentConfigDocument): Promise<Age
       modelDisplay: modelLabel,
       modelAccountId: engineType === 'claude' ? features.preferredModelAccountId?.[entry.id] : undefined,
       inheritedModel,
-      workspace: entry.workspace || (entry.id === MAIN_AGENT_ID ? getDefaultWorkspacePath(config) : `~/.stoclaw/openclaw/workspace-${entry.id}`),
+      workspace: entry.workspace || (entry.id === MAIN_AGENT_ID ? getDefaultWorkspacePath(config) : getAgentWorkspaceTildePath(entry.id)),
       agentDir: entry.agentDir || getDefaultAgentDirPath(entry.id),
       mainSessionKey: buildAgentMainSessionKey(config, entry.id),
       channelTypes: configuredChannels
@@ -727,7 +735,7 @@ export async function getAgentWorkspacePath(agentId: string): Promise<string | n
   const entry = entries.find((e) => e.id === agentId);
   if (!entry) return null;
   const raw = entry.workspace
-    || (entry.id === MAIN_AGENT_ID ? getDefaultWorkspacePath(config) : `~/.stoclaw/openclaw/workspace-${entry.id}`);
+    || (entry.id === MAIN_AGENT_ID ? getDefaultWorkspacePath(config) : getAgentWorkspaceTildePath(entry.id));
   return expandPath(raw);
 }
 
@@ -760,7 +768,7 @@ export async function createAgent(
     const newAgent: AgentListEntry = {
       id: nextId,
       name: normalizedName,
-      workspace: `~/.stoclaw/openclaw/workspace-${nextId}`,
+      workspace: getAgentWorkspaceTildePath(nextId),
       agentDir: getDefaultAgentDirPath(nextId),
     };
 
@@ -789,11 +797,15 @@ export async function createAgent(
  * Create an agent with an explicit ID (instead of auto-generating from name).
  * Used by the biz-agent sync service to create agents whose ID matches the
  * remote `code` field, enabling dedup-by-code on subsequent syncs.
+ *
+ * Idempotent for project-agent ensure: if the ID is already in config, returns
+ * the current snapshot. If only the on-disk agent dir exists (orphan after a
+ * crashed/racy create), re-registers it into config instead of throwing.
  */
 export async function createAgentWithId(
   id: string,
   name: string,
-  options?: { inheritWorkspace?: boolean; fileTransformByOSS?: boolean },
+  options?: { inheritWorkspace?: boolean; fileTransformByOSS?: boolean; workspace?: string },
 ): Promise<AgentsSnapshot> {
   if (!id || !id.trim()) throw new Error('Agent ID must not be empty');
   if (id === MAIN_AGENT_ID) throw new Error('Cannot create agent with reserved ID "main"');
@@ -803,9 +815,16 @@ export async function createAgentWithId(
     const { agentsConfig, entries, syntheticMain } = normalizeAgentsConfig(config);
     const existingIds = new Set(entries.map((entry) => entry.id));
     const diskIds = await listExistingAgentIdsOnDisk();
+    const existsInConfig = existingIds.has(id);
+    const existsOnDisk = diskIds.has(id);
 
-    if (existingIds.has(id) || diskIds.has(id)) {
-      throw new Error(`Agent with ID "${id}" already exists`);
+    if (existsInConfig) {
+      logger.info('createAgentWithId: agent already in config (idempotent)', { agentId: id });
+      return await buildSnapshotFromConfig(config);
+    }
+
+    if (existsOnDisk) {
+      logger.warn('createAgentWithId: healing disk orphan into config', { agentId: id });
     }
 
     const normalizedName = normalizeAgentName(name);
@@ -813,7 +832,7 @@ export async function createAgentWithId(
     const newAgent: AgentListEntry = {
       id,
       name: normalizedName,
-      workspace: `~/.stoclaw/openclaw/workspace-${id}`,
+      workspace: options?.workspace?.trim() || getAgentWorkspaceTildePath(id),
       agentDir: getDefaultAgentDirPath(id),
     };
 
@@ -840,7 +859,11 @@ export async function createAgentWithId(
     }
     await writeAgentFeatures(features);
 
-    logger.info('Created agent config entry (explicit ID)', { agentId: id, inheritWorkspace: !!options?.inheritWorkspace });
+    logger.info('Created agent config entry (explicit ID)', {
+      agentId: id,
+      inheritWorkspace: !!options?.inheritWorkspace,
+      healedFromDisk: existsOnDisk,
+    });
     return await buildSnapshotFromConfig(config);
   });
 }
@@ -887,6 +910,11 @@ export async function getAgentPreferredModel(agentId: string): Promise<AgentPref
     model: features.preferredModel?.[agentId],
     accountId: features.preferredModelAccountId?.[agentId],
   };
+}
+
+export async function getAgentEngineType(agentId: string): Promise<AgentEngineType> {
+  const features = await readAgentFeatures();
+  return normalizeAgentEngineType(features.engineType?.[agentId]);
 }
 
 export async function setAgentPreferredModel(
@@ -1040,6 +1068,32 @@ export async function updateAgentName(agentId: string, name: string): Promise<Ag
 
     await writeOpenClawConfig(config);
     logger.info('Updated agent name', { agentId, name: normalizedName });
+    return await buildSnapshotFromConfig(config);
+  });
+}
+
+export async function updateAgentWorkspace(agentId: string, workspacePath: string): Promise<AgentsSnapshot> {
+  return withConfigLock(async () => {
+    const config = await readOpenClawConfig() as AgentConfigDocument;
+    const { agentsConfig, entries } = normalizeAgentsConfig(config);
+    const index = entries.findIndex((entry) => entry.id === agentId);
+    if (index === -1) {
+      throw new Error(`Agent "${agentId}" not found`);
+    }
+
+    entries[index] = {
+      ...entries[index],
+      workspace: workspacePath.trim(),
+    };
+
+    config.agents = {
+      ...agentsConfig,
+      list: entries,
+    };
+
+    await writeOpenClawConfig(config);
+    ensureWorkspaceArtifactOutputDir(workspacePath.trim());
+    logger.info('Updated agent workspace', { agentId, workspace: workspacePath.trim() });
     return await buildSnapshotFromConfig(config);
   });
 }

@@ -36,8 +36,10 @@ import {
   stoChatShellHomeClass,
 } from '@/lib/surfaces';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAgentsStore } from '@/stores/agents';
+import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { getProjectIdFromProjectAgentId } from '../../../shared/project-agent';
+import { useSessionCatalogStore } from '@/stores/session-catalog';
 import type { AgentSummary } from '@/types/agent';
 import { useTranslation } from 'react-i18next';
 import { DingTalkMentionEditor, type DingTalkMentionEditorHandle } from '@/components/dingtalk/DingTalkMentionEditor';
@@ -115,6 +117,7 @@ interface ChatInputProps {
   /** User-message text selected for editing and sending again. */
   editDraft?: {
     text: string;
+    skill?: SkillMeta;
     version: number;
   } | null;
   onEditDraftApplied?: () => void;
@@ -232,11 +235,21 @@ export function ChatInput({
   const gatewayStatus = useGatewayStore((s) => s.status);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const pendingProjectId = useChatStore((s) => s.pendingProjectId);
+  const workspaces = useSessionCatalogStore((s) => s.workspaces);
+  const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
   const dailyTokenQuotaStatus = useChatStore((s) => s.dailyTokenQuotaStatus);
-  const currentAgentName = useMemo(
-    () => (agents ?? []).find((agent) => agent.id === currentAgentId)?.name ?? currentAgentId,
-    [agents, currentAgentId],
-  );
+  const currentAgentName = useMemo(() => {
+    const projectId = getProjectIdFromProjectAgentId(currentAgentId ?? '')
+      ?? sessionWorkspaceByKey[currentSessionKey]
+      ?? pendingProjectId
+      ?? null;
+    const projectName = projectId
+      ? workspaces.find((workspace) => workspace.id === projectId)?.name
+      : null;
+    return resolveAgentById(agents ?? [], currentAgentId, projectName)?.name ?? currentAgentId;
+  }, [agents, currentAgentId, currentSessionKey, pendingProjectId, sessionWorkspaceByKey, workspaces]);
   const mentionableAgents = useMemo(
     () => (agents ?? []).filter((agent) => agent.id !== currentAgentId),
     [agents, currentAgentId],
@@ -245,7 +258,8 @@ export function ChatInput({
     () => (agents ?? []).find((agent) => agent.id === targetAgentId) ?? null,
     [agents, targetAgentId],
   );
-  const showAgentPicker = mentionableAgents.length > 0;
+  // Agent 工具栏图标暂隐藏；恢复时改回 mentionableAgents.length > 0
+  const showAgentPicker = false;
   const {
     open: dingTalkMentionOpen,
     trigger: dingTalkTrigger,
@@ -293,10 +307,13 @@ export function ChatInput({
     }
   }, [disabled]);
 
-  const applyEditDraftText = useCallback((rawText: string) => {
+  const applyEditDraftText = useCallback((rawText: string, skill?: SkillMeta) => {
     const text = rawText.trim();
-    if (!text) return;
+    if (!text && !skill) return;
     mentionEditorRef.current?.setPlainText(text);
+    if (skill) {
+      mentionEditorRef.current?.insertSkill(skill.slug, skill.title);
+    }
     mentionEditorRef.current?.focus();
     setAttachments([]);
     setTargetAgentId(null);
@@ -309,15 +326,23 @@ export function ChatInput({
 
   useEffect(() => {
     if (!editDraft) return;
-    applyEditDraftText(editDraft.text);
+    applyEditDraftText(editDraft.text, editDraft.skill);
     onEditDraftApplied?.();
   }, [applyEditDraftText, editDraft, onEditDraftApplied]);
 
   useEffect(() => {
     const handleEditDraftEvent = (event: Event) => {
-      const detail = (event as CustomEvent<{ text?: unknown }>).detail;
+      const detail = (event as CustomEvent<{ text?: unknown; skill?: unknown }>).detail;
       if (typeof detail?.text !== 'string') return;
-      applyEditDraftText(detail.text);
+      const skill = detail.skill;
+      const skillMeta =
+        skill
+        && typeof skill === 'object'
+        && typeof (skill as SkillMeta).slug === 'string'
+        && typeof (skill as SkillMeta).title === 'string'
+          ? (skill as SkillMeta)
+          : undefined;
+      applyEditDraftText(detail.text, skillMeta);
     };
 
     window.addEventListener(CHAT_EDIT_DRAFT_EVENT, handleEditDraftEvent);

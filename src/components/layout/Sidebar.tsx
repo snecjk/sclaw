@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import {
-  Puzzle,
+  Wrench,
   Clock,
   Settings as SettingsIcon,
   ChevronRight,
@@ -46,14 +46,12 @@ import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
 import { SidebarSupportQrTooltip } from '@/components/layout/SidebarSupportQrTooltip';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { SidebarRecentSessionRow } from '@/components/layout/sidebar-recent-session-row';
-import { SidebarRecentGroupRow } from '@/components/layout/sidebar-recent-group-row';
+import { SidebarProjectsSection } from '@/components/layout/sidebar-projects-section';
 import {
-  SidebarRecentGroupDialogs,
-  type SidebarRecentGroupDialogState,
-} from '@/components/layout/sidebar-recent-group-dialogs';
-import { buildSidebarRecentGroupSections, suggestNextSidebarRecentGroupName } from '@/lib/sidebar-recent-groups';
-import { useSidebarRecentGroupsStore } from '@/stores/sidebar-recent-groups';
-import { isSessionUnreadNow } from '@/stores/session-unread';
+  DEFAULT_WORKSPACE_ID,
+  isSessionInActiveWorkspace,
+  useSessionCatalogStore,
+} from '@/stores/session-catalog';
 import { toast } from 'sonner';
 import {
   SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
@@ -61,7 +59,7 @@ import {
 } from '@/components/layout/sidebar-task-subitem-delete-trailing';
 import { useTranslation } from 'react-i18next';
 import { resolveSessionLabel } from '@/lib/session-label';
-import { sortSessionsByRecentActivity } from '@/lib/sidebar-recent-order';
+import { sortSessionsWithCatalogPin } from '@/lib/sidebar-recent-order';
 import { type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
@@ -116,12 +114,10 @@ import {
   sidebarTextSectionClass,
   sidebarUnreadDotClass,
   sidebarSectionStickyShellClass,
-  sidebarSectionStickyTopGroupClass,
   sidebarSectionStickyTopTaskClass,
   sidebarSectionStickyTopRecentClass,
   sidebarScrollListClass,
   sidebarScrollContainerClass,
-  sidebarRecentEmptyLineClass,
 } from '@/lib/surfaces';
 import { useSidebarTaskScrollCollapse } from '@/hooks/use-sidebar-task-scroll-collapse';
 
@@ -266,6 +262,10 @@ function SidebarTaskDateLinks({
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const switchSession = useChatStore((s) => s.switchSession);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
+  const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
+  const currentSessionSending = useChatStore((s) => s.sending);
+  const currentSessionActiveRunId = useChatStore((s) => s.activeRunId);
+  const currentSessionError = useChatStore((s) => s.error);
   const sessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
   const isSubitemUnread = useStoTaskSubitemsStore((s) => s.isSubitemUnread);
   const markSubitemReadFromActivity = useStoTaskSubitemsStore((s) => s.markSubitemReadFromActivity);
@@ -301,7 +301,17 @@ function SidebarTaskDateLinks({
         const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)] ?? '';
         const active = Boolean(sk) && currentSessionKey === sk;
         const activity = sk ? (sessionLastActivity[sk] ?? 0) : 0;
-        const unread = !active && isSubitemUnread(taskId, entryId, activity);
+        const runtime = sk ? runtimeBySessionKey[sk] : undefined;
+        const isRunning = Boolean(
+          runtime?.sending
+          || runtime?.activeRunId
+          || (active && (currentSessionSending || currentSessionActiveRunId)),
+        );
+        const hasError = Boolean(
+          (runtime?.error != null && runtime.error !== '')
+          || (active && currentSessionError != null && currentSessionError !== ''),
+        );
+        const unread = !active && !isRunning && !hasError && isSubitemUnread(taskId, entryId, activity);
         const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
         const label = t('tasks:sidebarMaterialTitle', { date: dateLabel });
         return (
@@ -314,22 +324,18 @@ function SidebarTaskDateLinks({
                 openSubitemSession(entryId, sk, label);
               }}
               className={cn(
-                'relative z-[1] inline-flex h-7 w-full min-w-0 max-w-full items-center justify-between gap-2 overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
+                'relative z-[1] inline-flex h-7 w-full min-w-0 max-w-full items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
                 SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
                 active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
               )}
             >
               <span className="min-w-0 flex-1 truncate">{label}</span>
-              {unread ? (
-                <span
-                  className={sidebarUnreadDotClass}
-                  aria-label={t('tasks:unreadBadge', { defaultValue: 'Unread' })}
-                />
-              ) : null}
             </button>
             {sk ? (
               <SidebarTaskSubitemDeleteTrailing
                 isActive={active}
+                sessionKey={sk}
+                showUnreadDot={unread}
                 onDelete={() => onRequestDeleteSubitem({ taskId, entryId, label, sessionKey: sk })}
               />
             ) : null}
@@ -487,6 +493,10 @@ function SidebarScheduledTaskGroup({
   const navigate = useNavigate();
   const location = useLocation();
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
+  const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
+  const currentSessionSending = useChatStore((s) => s.sending);
+  const currentSessionActiveRunId = useChatStore((s) => s.activeRunId);
+  const currentSessionError = useChatStore((s) => s.error);
   const unreadKeys = useSessionUnreadStore((s) => s.unreadKeys);
 
   if (sessions.length === 0) return null;
@@ -562,6 +572,17 @@ function SidebarScheduledTaskGroup({
               label = s.label || s.displayName || s.key;
             }
             const active = currentSessionKey === s.key;
+            const runtime = runtimeBySessionKey[s.key];
+            const isRunning = Boolean(
+              runtime?.sending
+              || runtime?.activeRunId
+              || (active && (currentSessionSending || currentSessionActiveRunId)),
+            );
+            const hasError = Boolean(
+              (runtime?.error != null && runtime.error !== '')
+              || (active && currentSessionError != null && currentSessionError !== ''),
+            );
+            const showUnreadDot = !active && !isRunning && !hasError && readSessionUnread(unreadKeys, s.key);
             return (
               <div key={s.key} className="group relative flex w-full min-w-0 items-center">
                 <button
@@ -577,13 +598,12 @@ function SidebarScheduledTaskGroup({
                     active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
                   )}
                 >
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="min-w-0 flex-1 truncate">{label}</span>
-                    <SidebarRecentSessionStatus sessionKey={s.key} />
-                  </span>
+                  <span className="min-w-0 truncate">{label}</span>
                 </button>
                 <SidebarTaskSubitemDeleteTrailing
                   isActive={active}
+                  sessionKey={s.key}
+                  showUnreadDot={showUnreadDot}
                   onDelete={() => onRequestDelete({ key: s.key, label })}
                 />
               </div>
@@ -723,6 +743,7 @@ function SidebarNavLink({
 export function Sidebar() {
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const pendingProjectId = useChatStore((s) => s.pendingProjectId);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
@@ -772,6 +793,7 @@ export function Sidebar() {
   /** 任务组手风琴：null = 全收起；同时仅一个 groupKey 展开 */
   const [expandedTaskGroupKey, setExpandedTaskGroupKey] = useState<string | null>(null);
   const [recentOpen, setRecentOpen] = useState(true);
+  const [projectsSectionOpen, setProjectsSectionOpen] = useState(true);
   const [workspaceSectionOpen, setWorkspaceSectionOpen] = useState(true);
   const [bucketOpen, setBucketOpen] = useState<Record<SessionBucketKey, boolean>>({
     today: true,
@@ -791,6 +813,16 @@ export function Sidebar() {
   const isProvincialSidebar = sidebarLayoutVariant === 'provincial';
   const isProvincialFullyHidden = isProvincialSidebar && sidebarCollapsed;
   const sidebarVis = useMemo(() => getSidebarVisibility(sidebarLayoutVariant), [sidebarLayoutVariant]);
+  const allCatalogByKey = useSessionCatalogStore((s) => s.allCatalogByKey);
+  const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
+  const patchSessionCatalog = useSessionCatalogStore((s) => s.patchSessionCatalog);
+  const catalogBootstrap = useSessionCatalogStore((s) => s.bootstrap);
+
+  useEffect(() => {
+    void catalogBootstrap().catch((error) => {
+      console.error('[session-catalog] sidebar bootstrap failed', error);
+    });
+  }, [catalogBootstrap]);
 
   useEffect(() => {
     if (workflowEditorActive) {
@@ -876,9 +908,10 @@ export function Sidebar() {
   }, [taskListSectionOpen, scrollContainerRef, taskSectionHeaderRef]);
 
   useEffect(() => {
-    if (!isGatewayRunning) return;
     let cancelled = false;
     (async () => {
+      // Session list (sidebar recent) must not wait for Gateway — OpenClaw can
+      // fall back to sessions.json and Claude/catalog paths are Main-local.
       await loadSessions();
       if (cancelled) return;
       scheduleSessionLabelHydrationForStore(
@@ -907,6 +940,12 @@ export function Sidebar() {
         if (isVirtualTaskSessionKey(state.currentSessionKey)) {
           const hasExistingMessages = state.messages.length > 0;
           await loadHistory(hasExistingMessages);
+          return;
+        }
+        // Home reset to :main is Gateway-era UX (avoid binding OpenClaw startup to
+        // a leftover session). Skip while Gateway is down so offline sidebar browse
+        // does not wipe the user's current session selection.
+        if (!isGatewayRunning) {
           return;
         }
         if (state.currentSessionKey !== DEFAULT_SESSION_KEY || state.messages.length > 0 || state.loading) {
@@ -946,6 +985,7 @@ export function Sidebar() {
           useChatStore.setState({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: 'main',
+            pendingProjectId: null,
             runtimeBySessionKey: nextRuntimeBySessionKey,
             messages: [],
             loading: false,
@@ -993,64 +1033,71 @@ export function Sidebar() {
 
   const [editingSessionKey, setEditingSessionKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
-  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
-  const [editingGroupValue, setEditingGroupValue] = useState('');
-  const [groupDialog, setGroupDialog] = useState<SidebarRecentGroupDialogState>({ mode: null });
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [supportQrOpen, setSupportQrOpen] = useState(false);
 
-  const recentGroups = useSidebarRecentGroupsStore((s) => s.groups);
-  const sessionGroupByKey = useSidebarRecentGroupsStore((s) => s.sessionGroupByKey);
-  const expandedGroupIds = useSidebarRecentGroupsStore((s) => s.expandedGroupIds);
-  const createGroupAndAssignSession = useSidebarRecentGroupsStore((s) => s.createGroupAndAssignSession);
-  const assignSessionToGroup = useSidebarRecentGroupsStore((s) => s.assignSessionToGroup);
-  const ungroupSession = useSidebarRecentGroupsStore((s) => s.ungroupSession);
-  const renameGroup = useSidebarRecentGroupsStore((s) => s.renameGroup);
-  const dissolveGroup = useSidebarRecentGroupsStore((s) => s.dissolveGroup);
-  const toggleRecentGroup = useSidebarRecentGroupsStore((s) => s.toggleGroup);
-  const expandRecentGroup = useSidebarRecentGroupsStore((s) => s.expandGroup);
-  const pruneMissingRecentGroupSessions = useSidebarRecentGroupsStore((s) => s.pruneMissingSessions);
+  const catalogByKey = allCatalogByKey;
 
-  const openCreateRecentGroupDialog = useCallback(
-    (sessionKey: string) => {
-      setGroupDialog({
-        mode: 'create',
-        sessionKey,
-        defaultName: suggestNextSidebarRecentGroupName(
-          recentGroups.map((g) => g.name),
-          t('common:sidebar.defaultGroupName'),
-        ),
-      });
-    },
-    [recentGroups, t],
-  );
-
-  const startRenameRecentGroup = useCallback((groupId: string, name: string) => {
-    setEditingSessionKey(null);
-    setEditingGroupId(groupId);
-    setEditingGroupValue(name);
-  }, []);
-
-  const commitRenameRecentGroup = useCallback(
-    (groupId: string, originalName: string) => {
-      const trimmed = editingGroupValue.trim();
-      setEditingGroupId(null);
-      setEditingGroupValue('');
-
-      if (!trimmed || trimmed === originalName) return;
-
-      if (renameGroup(groupId, trimmed)) {
-        toast.success(t('common:sidebar.renameGroupSucceeded'));
-      }
-    },
-    [editingGroupValue, renameGroup, t],
-  );
-
-  const cancelRenameRecentGroup = useCallback(() => {
-    setEditingGroupId(null);
-    setEditingGroupValue('');
-  }, []);
+  const renderRecentSessionRow = useCallback((s: (typeof sessions)[number]) => {
+    const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
+    const isRecentSessionActive =
+      isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
+    const isPinned = catalogByKey[s.key]?.pinRank != null;
+    return (
+      <SidebarRecentSessionRow
+        key={s.key}
+        session={s}
+        label={sessionLabel}
+        isActive={isRecentSessionActive}
+        isPinned={isPinned}
+        isEditing={editingSessionKey === s.key}
+        editingValue={editingValue}
+        onOpen={() => {
+          navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
+        }}
+        onPin={() => {
+          void (async () => {
+            const currentPin = catalogByKey[s.key]?.pinRank ?? null;
+            if (currentPin != null) {
+              await patchSessionCatalog({ sessionKey: s.key, pinRank: null });
+              toast.success(t('common:sidebar.unpinnedInRecent'));
+              return;
+            }
+            await patchSessionCatalog({ sessionKey: s.key, pinRank: 1 });
+            toast.success(t('common:sidebar.pinnedInRecent'));
+          })();
+        }}
+        onStartRename={() => {
+          setEditingSessionKey(s.key);
+          setEditingValue(sessionLabel);
+        }}
+        onEditingValueChange={setEditingValue}
+        onCommitRename={() => {
+          renameSession(s.key, editingValue);
+          setEditingSessionKey(null);
+        }}
+        onCancelRename={() => setEditingSessionKey(null)}
+        onDelete={() => {
+          requestSessionDelete({ key: s.key, label: sessionLabel });
+        }}
+      />
+    );
+  }, [
+    catalogByKey,
+    currentSessionKey,
+    editingSessionKey,
+    editingValue,
+    getSessionLabel,
+    isOnHome,
+    location.pathname,
+    navigate,
+    patchSessionCatalog,
+    renameSession,
+    requestSessionDelete,
+    switchSession,
+    t,
+  ]);
 
   const [nowMs, setNowMs] = useState(INITIAL_NOW_MS);
 
@@ -1101,6 +1148,15 @@ export function Sidebar() {
     [visibleSessions],
   );
 
+  const workspaceScopedSessions = useMemo(
+    () => normalSessions.filter((session) => isSessionInActiveWorkspace(
+      session.key,
+      null,
+      sessionWorkspaceByKey,
+    )),
+    [normalSessions, sessionWorkspaceByKey],
+  );
+
   const getEffectiveActivityMs = (session: { key: string; updatedAt?: number; label?: string }): number => {
     const sessionKey = session.key;
     const recorded = sessionLastActivity[sessionKey] ?? 0;
@@ -1114,28 +1170,9 @@ export function Sidebar() {
   };
 
   const recentSessionsSorted = useMemo(
-    () => sortSessionsByRecentActivity(normalSessions, sessionLastActivity),
-    [normalSessions, sessionLastActivity],
+    () => sortSessionsWithCatalogPin(workspaceScopedSessions, sessionLastActivity, catalogByKey),
+    [workspaceScopedSessions, sessionLastActivity, catalogByKey],
   );
-
-  const { groupedSections, ungroupedSessions } = buildSidebarRecentGroupSections({
-    groups: recentGroups,
-    sessionsSortedByRecent: recentSessionsSorted,
-    sessionGroupByKey,
-  });
-
-  useEffect(() => {
-    if (sidebarCollapsed) return;
-    pruneMissingRecentGroupSessions(recentSessionsSorted.map((s) => s.key));
-  }, [sidebarCollapsed, recentSessionsSorted, pruneMissingRecentGroupSessions]);
-
-  useEffect(() => {
-    if (sidebarCollapsed) return;
-    if (!currentSessionKey || currentSessionKey === DEFAULT_SESSION_KEY) return;
-    const groupId = sessionGroupByKey[currentSessionKey];
-    if (!groupId) return;
-    expandRecentGroup(groupId);
-  }, [sidebarCollapsed, currentSessionKey, sessionGroupByKey, expandRecentGroup]);
 
   // Legacy 日期分桶：折叠轨与潜在回滚仍可能读取 bucket 数据
   for (const session of recentSessionsSorted) {
@@ -1364,9 +1401,6 @@ export function Sidebar() {
     }
     if (wasCurrentSession) {
       navigateToMainChatHome(navigate, location.pathname);
-    }
-    if (groupKey === null) {
-      useSidebarRecentGroupsStore.getState().removeSessionAssignment(key);
     }
     return true;
   }, [
@@ -1625,7 +1659,7 @@ export function Sidebar() {
       // { to: '/scheduled-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: `${t('common:sidebar.cronTasks')}（云）` },
       { to: '/my-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myTasks') },
       // { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
-      { to: '/skills', icon: <Puzzle className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
+      { to: '/skills', icon: <Wrench className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/workflow', icon: <Workflow className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.workflow') },
       { to: '/more-apps', icon: <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.moreApps') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
@@ -1693,8 +1727,11 @@ export function Sidebar() {
         <div className="flex shrink-0 flex-col gap-0.5">
         <div className={cn('flex flex-col gap-0.5', sidebarCollapsed && 'mt-2')}>
 {primaryNav.map((item) => {
-  // 当有选中非默认会话时，新对话入口不高亮，避免与会话列表项同时高亮
-  const shouldDimHome = currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY;
+  // 当有选中非默认会话，或处于项目新对话草稿时，顶部「新对话」不高亮
+  const shouldDimHome = Boolean(
+    (currentSessionKey && currentSessionKey !== DEFAULT_SESSION_KEY)
+    || pendingProjectId,
+  );
   const homeIsActiveOverride = item.to === '/' && shouldDimHome ? false : undefined;
   
   // 点击新对话时，切换到默认会话并清空消息，让页面显示初始内容
@@ -1755,6 +1792,7 @@ export function Sidebar() {
           useChatStore.setState({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: 'main',
+            pendingProjectId: null,
             runtimeBySessionKey: nextRuntimeBySessionKey,
             messages: [],
             loading: false,
@@ -1773,6 +1811,10 @@ export function Sidebar() {
           });
         } else {
           useChatStore.getState().clearPendingWorkflowMemory();
+          useChatStore.setState({
+            pendingProjectId: null,
+            currentAgentId: 'main',
+          });
         }
       }
     : undefined;
@@ -1836,6 +1878,13 @@ export function Sidebar() {
         className={cn(sidebarScrollContainerClass, sidebarCollapsed ? 'px-0' : 'px-2')}
       >
         {!sidebarCollapsed ? (
+          <SidebarProjectsSection
+            collapsed={sidebarCollapsed}
+            open={projectsSectionOpen}
+            onToggle={() => setProjectsSectionOpen((open) => !open)}
+          />
+        ) : null}
+        {!sidebarCollapsed ? (
           <SidebarCollapsibleSectionLabel
             shellRef={taskSectionHeaderRef}
             stickyTopClass={sidebarSectionStickyTopTaskClass}
@@ -1890,101 +1939,6 @@ export function Sidebar() {
             aria-hidden
           />
         ) : null}
-
-        {!sidebarCollapsed && groupedSections.length > 0
-          ? groupedSections.map((section) => {
-              const isGroupOpen = expandedGroupIds[section.group.id] === true;
-              const hasGroupUnread =
-                !isGroupOpen && section.sessions.some((s) => isSessionUnreadNow(s.key));
-              return (
-                // section 边界：分组标题只在本组内容滚动期间吸顶；z 高于「最近」接力，滚出 section 后由最近接管同 top 层
-                <section key={section.group.id} className="flex flex-col gap-1">
-                  <div
-                    className={cn(
-                      sidebarSectionStickyShellClass,
-                      sidebarSectionStickyTopGroupClass,
-                    )}
-                  >
-                    <SidebarRecentGroupRow
-                      group={section.group}
-                      isOpen={isGroupOpen}
-                      hasUnread={hasGroupUnread}
-                      onToggle={() => toggleRecentGroup(section.group.id)}
-                      onRename={() => startRenameRecentGroup(section.group.id, section.group.name)}
-                      onDissolve={() =>
-                        setGroupDialog({ mode: 'dissolve', groupId: section.group.id })
-                      }
-                      isEditing={editingGroupId === section.group.id}
-                      editingValue={editingGroupValue}
-                      onEditingValueChange={setEditingGroupValue}
-                      onCommitRename={() =>
-                        commitRenameRecentGroup(section.group.id, section.group.name)
-                      }
-                      onCancelRename={cancelRenameRecentGroup}
-                    />
-                  </div>
-                  {isGroupOpen ? (
-                    <div className={cn('space-y-1', sidebarScrollListClass)}>
-                      {section.sessions.length > 0 ? (
-                        section.sessions.map((s) => {
-                          const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
-                          const isRecentSessionActive =
-                            isOnHome &&
-                            currentSessionKey === s.key &&
-                            currentSessionKey !== DEFAULT_SESSION_KEY;
-                          return (
-                            <SidebarRecentSessionRow
-                              key={s.key}
-                              session={s}
-                              label={sessionLabel}
-                              isActive={isRecentSessionActive}
-                              isEditing={editingSessionKey === s.key}
-                              editingValue={editingValue}
-                              groups={recentGroups}
-                              currentGroupId={sessionGroupByKey[s.key] ?? null}
-                              onOpen={() => {
-                                navigateToMainChatHome(navigate, location.pathname, () =>
-                                  switchSession(s.key),
-                                );
-                              }}
-                              onStartRename={() => {
-                                setEditingSessionKey(s.key);
-                                setEditingValue(sessionLabel);
-                              }}
-                              onEditingValueChange={setEditingValue}
-                              onCommitRename={() => {
-                                renameSession(s.key, editingValue);
-                                setEditingSessionKey(null);
-                              }}
-                              onCancelRename={() => setEditingSessionKey(null)}
-                              onDelete={() => {
-                                requestSessionDelete({ key: s.key, label: sessionLabel });
-                              }}
-                              onCreateGroup={() => {
-                                openCreateRecentGroupDialog(s.key);
-                              }}
-                              onAssignGroup={(groupId) => {
-                                assignSessionToGroup(s.key, groupId);
-                                toast.success(t('common:sidebar.groupMoved'));
-                              }}
-                              onUngroup={() => {
-                                ungroupSession(s.key);
-                                toast.success(t('common:sidebar.groupUngrouped'));
-                              }}
-                            />
-                          );
-                        })
-                      ) : (
-                        <p className={sidebarRecentEmptyLineClass}>
-                          {t('common:sidebar.emptyGroupSessions')}
-                        </p>
-                      )}
-                    </div>
-                  ) : null}
-                </section>
-              );
-            })
-          : null}
 
         {!sidebarCollapsed ? (
           <SidebarCollapsibleSectionLabel
@@ -2048,7 +2002,7 @@ export function Sidebar() {
             </div>
           ) : null}
           {!sidebarCollapsed &&
-            (recentSessionsSorted.length === 0 && recentGroups.length === 0 ? (
+            (recentSessionsSorted.length === 0 ? (
               <p className={cn('px-2 pt-2 text-center text-sm leading-5 opacity-80', sidebarTextSectionClass)}>
                 {t('common:sidebar.emptyChatHistory')}
               </p>
@@ -2077,50 +2031,9 @@ export function Sidebar() {
                           </button>
                           {bucketOpen[bucket.key] ? (
                             <>
-                              {bucket.sessions.slice(0, getBucketVisibleCount(bucket.key)).map((s) => {
-                                const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
-                                const isRecentSessionActive =
-                                  isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
-                                return (
-                                  <SidebarRecentSessionRow
-                                    key={s.key}
-                                    session={s}
-                                    label={sessionLabel}
-                                    isActive={isRecentSessionActive}
-                                    isEditing={editingSessionKey === s.key}
-                                    editingValue={editingValue}
-                                    groups={recentGroups}
-                                    currentGroupId={sessionGroupByKey[s.key] ?? null}
-                                    onOpen={() => {
-                                      navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
-                                    }}
-                                    onStartRename={() => {
-                                      setEditingSessionKey(s.key);
-                                      setEditingValue(sessionLabel);
-                                    }}
-                                    onEditingValueChange={setEditingValue}
-                                    onCommitRename={() => {
-                                      renameSession(s.key, editingValue);
-                                      setEditingSessionKey(null);
-                                    }}
-                                    onCancelRename={() => setEditingSessionKey(null)}
-                                    onDelete={() => {
-                                      requestSessionDelete({ key: s.key, label: sessionLabel });
-                                    }}
-                                    onCreateGroup={() => {
-                                      openCreateRecentGroupDialog(s.key);
-                                    }}
-                                    onAssignGroup={(groupId) => {
-                                      assignSessionToGroup(s.key, groupId);
-                                      toast.success(t('common:sidebar.groupMoved'));
-                                    }}
-                                    onUngroup={() => {
-                                      ungroupSession(s.key);
-                                      toast.success(t('common:sidebar.groupUngrouped'));
-                                    }}
-                                  />
-                                );
-                              })}
+                              {bucket.sessions.slice(0, getBucketVisibleCount(bucket.key)).map((s) =>
+                                renderRecentSessionRow(s),
+                              )}
                               {bucket.sessions.length > getBucketVisibleCount(bucket.key) ? (
                                 <button
                                   type="button"
@@ -2139,57 +2052,10 @@ export function Sidebar() {
                       ) : null,
                     )
                   : null}
-                {ungroupedSessions.length > 0 ? (
-                  ungroupedSessions.slice(0, getRecentVisibleCount()).map((s) => {
-                    const sessionLabel = getSessionLabel(s.key, s.displayName, s.label);
-                    const isRecentSessionActive =
-                      isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
-                    return (
-                      <SidebarRecentSessionRow
-                        key={s.key}
-                        session={s}
-                        label={sessionLabel}
-                        isActive={isRecentSessionActive}
-                        isEditing={editingSessionKey === s.key}
-                        editingValue={editingValue}
-                        groups={recentGroups}
-                        currentGroupId={null}
-                        onOpen={() => {
-                          navigateToMainChatHome(navigate, location.pathname, () => switchSession(s.key));
-                        }}
-                        onStartRename={() => {
-                          setEditingSessionKey(s.key);
-                          setEditingValue(sessionLabel);
-                        }}
-                        onEditingValueChange={setEditingValue}
-                        onCommitRename={() => {
-                          renameSession(s.key, editingValue);
-                          setEditingSessionKey(null);
-                        }}
-                        onCancelRename={() => setEditingSessionKey(null)}
-                        onDelete={() => {
-                          requestSessionDelete({ key: s.key, label: sessionLabel });
-                        }}
-                        onCreateGroup={() => {
-                          openCreateRecentGroupDialog(s.key);
-                        }}
-                        onAssignGroup={(groupId) => {
-                          assignSessionToGroup(s.key, groupId);
-                          toast.success(t('common:sidebar.groupMoved'));
-                        }}
-                        onUngroup={() => {
-                          ungroupSession(s.key);
-                          toast.success(t('common:sidebar.groupUngrouped'));
-                        }}
-                      />
-                    );
-                  })
-                ) : (
-                  <p className={sidebarRecentEmptyLineClass}>
-                    {t('common:sidebar.emptyUngroupedSessions')}
-                  </p>
-                )}
-                {ungroupedSessions.length > getRecentVisibleCount() ? (
+                {recentSessionsSorted.length > 0 ? (
+                  recentSessionsSorted.slice(0, getRecentVisibleCount()).map((s) => renderRecentSessionRow(s))
+                ) : null}
+                {recentSessionsSorted.length > getRecentVisibleCount() ? (
                   <button
                     type="button"
                     onClick={showMoreRecentSessions}
@@ -2197,7 +2063,7 @@ export function Sidebar() {
                   >
                     {t('common:actions.showMore', {
                       defaultValue: '显示更多（{{count}}）',
-                      count: ungroupedSessions.length - getRecentVisibleCount(),
+                      count: recentSessionsSorted.length - getRecentVisibleCount(),
                     })}
                   </button>
                 ) : null}
@@ -2435,21 +2301,6 @@ export function Sidebar() {
       ) : null}
         </>
       ) : null}
-
-      <SidebarRecentGroupDialogs
-        dialog={groupDialog}
-        onClose={() => setGroupDialog({ mode: null })}
-        onCreateConfirm={(name, sessionKey) => {
-          const id = createGroupAndAssignSession(name, sessionKey);
-          if (id) {
-            toast.success(t('common:sidebar.groupAdded'));
-          }
-        }}
-        onDissolveConfirm={(groupId) => {
-          dissolveGroup(groupId);
-          toast.success(t('common:sidebar.groupDissolved'));
-        }}
-      />
 
       <ConfirmDialog
         open={showLogoutConfirm}

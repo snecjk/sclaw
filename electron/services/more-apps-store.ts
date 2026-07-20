@@ -1,5 +1,5 @@
 /**
- * More Apps registry persistence under ~/.stoclaw/more-apps/apps.json.
+ * More Apps registry persistence under ~/.stoclaw/more-apps/apps.json
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -61,6 +61,7 @@ function normalizeIdList(raw: unknown): string[] {
   return out;
 }
 
+/** Normalize unknown JSON into a registry document. Exported for unit tests. */
 export function normalizeMoreAppsRegistry(raw: unknown): MoreAppsRegistry {
   if (!isRecord(raw)) return createEmptyMoreAppsRegistry();
   const externalApps = Array.isArray(raw.externalApps)
@@ -109,6 +110,10 @@ export interface MoreAppsMigrateResult {
   registry: MoreAppsRegistry;
 }
 
+/**
+ * Import legacy renderer localStorage payload when on-disk registry is empty.
+ * Non-empty disk MUST NOT be overwritten.
+ */
 export function migrateMoreAppsRegistry(
   payload: unknown,
   filePath = getMoreAppsRegistryPath(),

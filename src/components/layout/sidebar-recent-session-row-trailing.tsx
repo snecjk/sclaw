@@ -1,13 +1,12 @@
 /**
- * SidebarRecentSessionRowTrailing — 最近会话行尾：状态位 + hover「...」菜单（重命名 / 分组 / 删除）。
- *
- * 使用位置：SidebarRecentSessionRow
+ * SidebarRecentSessionRowTrailing — 最近会话行尾。
+ * 非 hover：最右侧显示状态（运行中/失败/未读），无状态时显示置顶钉；
+ * hover：用「...」菜单覆盖该槽位。
  */
 import {
-  ChevronRight,
-  Folder,
   MoreHorizontal,
   Pencil,
+  Pin,
   Trash2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -15,10 +14,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
@@ -26,31 +21,21 @@ import { cn } from '@/lib/utils';
 import {
   sidebarRecentMenuContentClass,
   sidebarRecentMenuDeleteItemClass,
-  sidebarRecentMenuDividerClass,
   sidebarRecentMenuItemClass,
   sidebarTextIconClass,
+  sidebarUnreadDotClass,
 } from '@/lib/surfaces';
-import type { SidebarRecentGroup } from '@/stores/sidebar-recent-groups';
 
 export interface SidebarRecentSessionRowTrailingProps {
-  /** OpenClaw session key */
   sessionKey: string;
-  /** 当前会话行是否选中 */
   isActive?: boolean;
-  /** 全部分组（子菜单列表） */
-  groups: SidebarRecentGroup[];
-  /** 当前会话所属 groupId；null = 未分组 */
-  currentGroupId: string | null;
-  /** 点击重命名 */
+  isPinned: boolean;
+  showUnreadDot?: boolean;
+  /** 运行中或失败（与未读互斥；用于决定 idle 槽显示状态还是置顶钉） */
+  hasStatusMarker?: boolean;
+  onPin: () => void;
   onRename: () => void;
-  /** 点击删除 */
   onDelete: () => void;
-  /** 子菜单：新建分组 */
-  onCreateGroup: () => void;
-  /** 子菜单：移入已有分组 */
-  onAssignGroup: (groupId: string) => void;
-  /** 子菜单：不分组（仅已分组时展示） */
-  onUngroup: () => void;
   className?: string;
 }
 
@@ -59,17 +44,15 @@ const SIDEBAR_RECENT_ROW_TRAILING_W_CLASS = 'w-12';
 export function SidebarRecentSessionRowTrailing({
   sessionKey,
   isActive = false,
-  groups,
-  currentGroupId,
+  isPinned,
+  showUnreadDot = false,
+  hasStatusMarker = false,
+  onPin,
   onRename,
   onDelete,
-  onCreateGroup,
-  onAssignGroup,
-  onUngroup,
   className,
 }: SidebarRecentSessionRowTrailingProps) {
   const { t } = useTranslation('common');
-  const assignableGroups = groups.filter((group) => group.id !== currentGroupId);
 
   return (
     <div
@@ -81,11 +64,20 @@ export function SidebarRecentSessionRowTrailing({
     >
       <div
         className={cn(
-          'pointer-events-none flex h-5 w-full items-center justify-end',
+          'pointer-events-none flex h-5 w-full items-center justify-end gap-1',
           'transition-opacity group-hover:opacity-0 group-hover:invisible',
         )}
       >
-        <SidebarRecentSessionStatus sessionKey={sessionKey} />
+        {showUnreadDot ? (
+          <span
+            className={cn(sidebarUnreadDotClass, 'shrink-0')}
+            aria-label={t('sidebar.sessionUnread')}
+          />
+        ) : hasStatusMarker ? (
+          <SidebarRecentSessionStatus sessionKey={sessionKey} />
+        ) : isPinned ? (
+          <Pin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        ) : null}
       </div>
       <div
         className={cn(
@@ -117,63 +109,22 @@ export function SidebarRecentSessionRowTrailing({
               className={sidebarRecentMenuItemClass}
               onClick={(e) => {
                 e.stopPropagation();
+                onPin();
+              }}
+            >
+              <Pin className="h-4 w-4 shrink-0" aria-hidden />
+              {isPinned ? t('sidebar.unpinInRecent') : t('sidebar.pinInRecent')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className={sidebarRecentMenuItemClass}
+              onClick={(e) => {
+                e.stopPropagation();
                 onRename();
               }}
             >
               <Pencil className="h-4 w-4 shrink-0" aria-hidden />
               {t('actions.rename')}
             </DropdownMenuItem>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger className={sidebarRecentMenuItemClass}>
-                <Folder className="h-4 w-4 shrink-0" aria-hidden />
-                <span className="flex-1 truncate">{t('sidebar.group')}</span>
-                <ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className={sidebarRecentMenuContentClass}>
-                {currentGroupId !== null ? (
-                  <DropdownMenuItem
-                    className={cn(sidebarRecentMenuItemClass, 'justify-start')}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onUngroup();
-                    }}
-                  >
-                    {t('sidebar.ungroup')}
-                  </DropdownMenuItem>
-                ) : null}
-                <DropdownMenuItem
-                  className={cn(sidebarRecentMenuItemClass, 'justify-start')}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCreateGroup();
-                  }}
-                >
-                  {t('sidebar.newGroup')}
-                </DropdownMenuItem>
-                {assignableGroups.length > 0 ? (
-                  <>
-                    <DropdownMenuSeparator className={sidebarRecentMenuDividerClass} />
-                    {assignableGroups.map((group) => (
-                      <DropdownMenuItem
-                        key={group.id}
-                        className={cn(sidebarRecentMenuItemClass, 'justify-start')}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAssignGroup(group.id);
-                        }}
-                      >
-                        <span
-                          className="min-w-0 max-w-[8em] truncate text-left"
-                          title={group.name}
-                        >
-                          {group.name}
-                        </span>
-                      </DropdownMenuItem>
-                    ))}
-                  </>
-                ) : null}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
             <DropdownMenuItem
               className={sidebarRecentMenuDeleteItemClass}
               onClick={(e) => {

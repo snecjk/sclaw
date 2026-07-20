@@ -72,7 +72,7 @@ export function MoreAppsPage() {
   // already fetches the first APP page, so we don't double-fire on initial render.
   const searchMountedRef = useRef(false);
 
-  // "我的应用" uses the current server catalog plus main's local external-app registry.
+  // Merge builtin + external for display
   const allApps = useMemo(() => {
     return [...apps, ...externalApps].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }, [apps, externalApps]);
