@@ -19,9 +19,11 @@ import {
   ChevronDown,
   Workflow,
   Check,
-  Database,
   LayoutGrid,
+  ListCollapse,
+  ListTree,
 } from 'lucide-react';
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,11 +47,11 @@ import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unrea
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
 import { SidebarSupportQrTooltip } from '@/components/layout/SidebarSupportQrTooltip';
+import { SidebarCollapsibleSectionLabel } from '@/components/layout/sidebar-collapsible-section-label';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { SidebarRecentSessionRow } from '@/components/layout/sidebar-recent-session-row';
 import { SidebarProjectsSection } from '@/components/layout/sidebar-projects-section';
 import {
-  DEFAULT_WORKSPACE_ID,
   isSessionInActiveWorkspace,
   useSessionCatalogStore,
 } from '@/stores/session-catalog';
@@ -97,29 +99,41 @@ import {
 } from '@/stores/sidebar-delete-confirm';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
+import {
+  resolveSidebarAccountFooterMode,
+  shouldRenderAccountGearIcon,
+} from '@/lib/sidebar-account-footer';
+import {
+  appendGroupExpanded,
+  areAllExpandableGroupsExpanded,
+  collapseAllGroups,
+  expandAllGroups,
+  toggleGroupExpanded,
+} from '@/lib/sidebar-section-group-expand';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
 import {
   sidebarFooterMetaClass,
   sidebarFooterNameClass,
+  sidebarAccountHelpTriggerClass,
+  sidebarAccountHotzoneTriggerClass,
   sidebarFooterSettingsIconClass,
   sidebarListItemTextClass,
   sidebarMetaLinkClass,
   sidebarNavExpandedActiveClass,
   sidebarNavExpandedIdleClass,
-  sidebarSectionChevronClass,
   sidebarSectionLabelClass,
   sidebarSubitemTextActiveClass,
   sidebarSubitemTextIdleClass,
   sidebarTextIconClass,
   sidebarTextSectionClass,
   sidebarUnreadDotClass,
-  sidebarSectionStickyShellClass,
+  sidebarSectionStickyTopProjectClass,
   sidebarSectionStickyTopTaskClass,
   sidebarSectionStickyTopRecentClass,
   sidebarScrollListClass,
   sidebarScrollContainerClass,
 } from '@/lib/surfaces';
-import { useSidebarTaskScrollCollapse } from '@/hooks/use-sidebar-task-scroll-collapse';
+import { useSidebarSectionScrollCollapse } from '@/hooks/use-sidebar-section-scroll-collapse';
 
 type SessionBucketKey =
   | 'today'
@@ -149,7 +163,7 @@ const SIDEBAR_ACCOUNT_MENU_LOGOUT_CLASS =
 const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
   'hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7] dark:hover:bg-muted dark:focus:bg-muted dark:data-[highlighted]:bg-muted dark:data-[state=open]:bg-muted';
 const SIDEBAR_ACCOUNT_MENU_DIVIDER_CLASS = 'mx-6 my-0 h-px bg-[#E5E6EB] dark:bg-border';
-/** 设置齿轮：点击/展开时圆形 #E5E6EB 底 */
+/** 收起态 / provincial 紧凑设置入口：圆形 #E5E6EB 底（展开态账号热区不再用齿轮） */
 const SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS = cn(
   'flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-colors',
   'hover:bg-[#E5E6EB] dark:hover:bg-muted',
@@ -615,61 +629,6 @@ function SidebarScheduledTaskGroup({
   );
 }
 
-/** 任务 / 工作台 / 最近：标题 chevron 常显 + sticky 钉住（docs/侧边栏改造 §5.2/5.6） */
-function SidebarCollapsibleSectionLabel({
-  open,
-  onToggle,
-  label,
-  toggleAriaLabel,
-  className,
-  shellRef,
-  stickyTopClass,
-}: {
-  open: boolean;
-  onToggle: () => void;
-  label: string;
-  toggleAriaLabel: string;
-  /** 分区标题与上方区块间距；主导航→首滚动分区由 nav pb-2（8px）承担，此处默认不加 mt */
-  className?: string;
-  /** sticky 外壳 ref（任务区 scroll-collapse 检测用） */
-  shellRef?: React.RefObject<HTMLDivElement | null>;
-  /** sticky 叠层 + top 偏移（任务 / 最近分层吸顶） */
-  stickyTopClass?: string;
-}) {
-  return (
-    <div
-      ref={shellRef}
-      className={cn(
-        sidebarSectionStickyShellClass,
-        stickyTopClass ?? sidebarSectionStickyTopTaskClass,
-        className,
-      )}
-    >
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-label={toggleAriaLabel}
-        onClick={onToggle}
-        className={cn(
-          'group/sto-sidebar-section-toggle flex h-[30px] w-full items-center rounded-lg px-[10px] py-[5px] text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring',
-          sidebarSectionLabelClass,
-        )}
-      >
-        <span className="inline-flex min-w-0 max-w-full items-center gap-1">
-          <span className="min-w-0 truncate">{label}</span>
-          <span className={sidebarSectionChevronClass} aria-hidden>
-            {open ? (
-              <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} />
-            ) : (
-              <ChevronRight className="h-3.5 w-3.5" strokeWidth={2} />
-            )}
-          </span>
-        </span>
-      </button>
-    </div>
-  );
-}
-
 function SidebarNavLink({
   to,
   end,
@@ -790,8 +749,8 @@ export function Sidebar() {
   const scheduledTaskNameMaps = useScheduledTaskNameMaps(!sidebarCollapsed, sessions.length);
   const stoEntriesByTask = useStoTaskSubitemsStore((s) => s.entriesByTask);
   const stoSessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
-  /** 任务组手风琴：null = 全收起；同时仅一个 groupKey 展开 */
-  const [expandedTaskGroupKey, setExpandedTaskGroupKey] = useState<string | null>(null);
+  /** 任务组多开：Record 与项目同构；模块收起不清空 */
+  const [expandedTaskGroupIds, setExpandedTaskGroupIds] = useState<Record<string, boolean>>({});
   const [recentOpen, setRecentOpen] = useState(true);
   const [projectsSectionOpen, setProjectsSectionOpen] = useState(true);
   const [workspaceSectionOpen, setWorkspaceSectionOpen] = useState(true);
@@ -813,6 +772,10 @@ export function Sidebar() {
   const isProvincialSidebar = sidebarLayoutVariant === 'provincial';
   const isProvincialFullyHidden = isProvincialSidebar && sidebarCollapsed;
   const sidebarVis = useMemo(() => getSidebarVisibility(sidebarLayoutVariant), [sidebarLayoutVariant]);
+  const accountFooterMode = resolveSidebarAccountFooterMode({
+    userProfileCard: sidebarVis.userProfileCard,
+    sidebarCollapsed,
+  });
   const allCatalogByKey = useSessionCatalogStore((s) => s.allCatalogByKey);
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
   const patchSessionCatalog = useSessionCatalogStore((s) => s.patchSessionCatalog);
@@ -842,10 +805,16 @@ export function Sidebar() {
 
   const revealTaskListAfterOpenRef = useRef(false);
   const suppressNextTaskAutoCollapseRef = useRef(false);
+  const revealProjectsAfterOpenRef = useRef(false);
+  const suppressNextProjectsAutoCollapseRef = useRef(false);
 
   const closeTaskListSection = useCallback(() => {
     setTaskListSectionOpen(false);
     setTaskListShowAll(false);
+  }, []);
+
+  const closeProjectsSection = useCallback(() => {
+    setProjectsSectionOpen(false);
   }, []);
 
   const toggleTaskListSection = useCallback(() => {
@@ -858,6 +827,16 @@ export function Sidebar() {
     }
   }, [taskListSectionOpen, closeTaskListSection]);
 
+  const toggleProjectsSection = useCallback(() => {
+    if (projectsSectionOpen) {
+      closeProjectsSection();
+    } else {
+      revealProjectsAfterOpenRef.current = true;
+      suppressNextProjectsAutoCollapseRef.current = true;
+      setProjectsSectionOpen(true);
+    }
+  }, [projectsSectionOpen, closeProjectsSection]);
+
   useEffect(() => {
     if (sidebarCollapsed) return;
     void fetchTaskGroupFirstTriggeredMap().then(setTaskGroupFirstTriggeredAt);
@@ -868,23 +847,60 @@ export function Sidebar() {
     closeTaskListSection();
   }, [closeTaskListSection]);
 
+  const handleCollapseProjectsSectionFromScroll = useCallback(() => {
+    if (suppressNextProjectsAutoCollapseRef.current) return;
+    closeProjectsSection();
+  }, [closeProjectsSection]);
+
   const {
     scrollContainerRef,
+    projectSectionHeaderRef,
     taskSectionHeaderRef,
     recentSectionSentinelRef,
-  } = useSidebarTaskScrollCollapse({
-    enabled: !sidebarCollapsed && taskListSectionOpen && recentOpen,
+  } = useSidebarSectionScrollCollapse({
+    enabled: !sidebarCollapsed && (projectsSectionOpen || taskListSectionOpen),
+    projectsSectionOpen,
     taskListSectionOpen,
+    onCollapseProjectsSection: handleCollapseProjectsSectionFromScroll,
     onCollapseTaskSection: handleCollapseTaskSectionFromScroll,
   });
 
-  // 用户手动展开任务：吸顶态下滚回顶部露出列表，并暂缓 scroll-collapse（不改 sticky top 栈）
+  // 用户手动展开项目：按分区锚点揭示内容，并暂缓下一次自动收起
+  useLayoutEffect(() => {
+    if (!revealProjectsAfterOpenRef.current || !projectsSectionOpen) return;
+    revealProjectsAfterOpenRef.current = false;
+
+    const container = scrollContainerRef.current;
+    const projectHeader = projectSectionHeaderRef.current;
+    if (!container || !projectHeader) {
+      suppressNextProjectsAutoCollapseRef.current = false;
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+    const projectRect = projectHeader.getBoundingClientRect();
+    const isStuck = projectRect.top <= containerRect.top + 1;
+    if (isStuck) {
+      // 揭示项目内容：滚到项目标题贴顶即可看到下方列表
+      const delta = projectRect.top - containerRect.top;
+      container.scrollTo({ top: Math.max(0, container.scrollTop + delta) });
+    }
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        suppressNextProjectsAutoCollapseRef.current = false;
+      });
+    });
+  }, [projectsSectionOpen, scrollContainerRef, projectSectionHeaderRef]);
+
+  // 用户手动展开任务：在项目 sticky 下方揭示任务内容，不一律 scrollTop=0
   useLayoutEffect(() => {
     if (!revealTaskListAfterOpenRef.current || !taskListSectionOpen) return;
     revealTaskListAfterOpenRef.current = false;
 
     const container = scrollContainerRef.current;
     const taskHeader = taskSectionHeaderRef.current;
+    const projectHeader = projectSectionHeaderRef.current;
     if (!container || !taskHeader) {
       suppressNextTaskAutoCollapseRef.current = false;
       return;
@@ -892,12 +908,14 @@ export function Sidebar() {
 
     const containerRect = container.getBoundingClientRect();
     const taskHeaderRect = taskHeader.getBoundingClientRect();
+    const projectH = projectHeader?.getBoundingClientRect().height ?? 0;
+    const stuckTop = containerRect.top + (projectsSectionOpen ? projectH : 0);
+    const isTaskHeaderStuck = taskHeaderRect.top <= stuckTop + 1;
 
-    const isTaskHeaderStuck = taskHeaderRect.top <= containerRect.top + 1;
-
-    // 须在 expand 后判定：sentinel 已被任务列表顶下去，不能再用 sentinel 决定是否滚动
     if (isTaskHeaderStuck) {
-      container.scrollTo({ top: 0 });
+      const targetTop = stuckTop;
+      const delta = taskHeaderRect.top - targetTop;
+      container.scrollTo({ top: Math.max(0, container.scrollTop + delta) });
     }
 
     requestAnimationFrame(() => {
@@ -905,7 +923,13 @@ export function Sidebar() {
         suppressNextTaskAutoCollapseRef.current = false;
       });
     });
-  }, [taskListSectionOpen, scrollContainerRef, taskSectionHeaderRef]);
+  }, [
+    taskListSectionOpen,
+    projectsSectionOpen,
+    scrollContainerRef,
+    taskSectionHeaderRef,
+    projectSectionHeaderRef,
+  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1522,12 +1546,34 @@ export function Sidebar() {
     && taskListRenderPlan.totalRows > SIDEBAR_TASK_LIST_INITIAL_ROW_LIMIT;
 
   const handleTaskGroupToggle = useCallback((groupKey: string) => {
-    setExpandedTaskGroupKey((prev) => (prev === groupKey ? null : groupKey));
+    setExpandedTaskGroupIds((prev) => toggleGroupExpanded(prev, groupKey));
   }, []);
 
   const handleTaskGroupExpand = useCallback((groupKey: string) => {
-    setExpandedTaskGroupKey(groupKey);
+    setExpandedTaskGroupIds((prev) => appendGroupExpanded(prev, groupKey));
   }, []);
+
+  const expandableTaskGroupIds = useMemo(() => {
+    return taskListRenderPlan.items.map((item) =>
+      item.kind === 'sto'
+        ? stoTaskSidebarGroupKey(item.navItem.id)
+        : scheduledTaskSidebarGroupKey(item.group.key),
+    );
+  }, [taskListRenderPlan.items]);
+
+  // 全部已展开 → 下次收起全部；否则（含部分展开）→ 展开全部
+  const taskGroupsAllExpanded = areAllExpandableGroupsExpanded(
+    expandedTaskGroupIds,
+    expandableTaskGroupIds,
+  );
+
+  const handleTaskBatchExpandOrCollapse = () => {
+    if (taskGroupsAllExpanded) {
+      setExpandedTaskGroupIds(collapseAllGroups(expandableTaskGroupIds));
+      return;
+    }
+    setExpandedTaskGroupIds(expandAllGroups(expandableTaskGroupIds));
+  };
 
   const sidebarTaskFocusTokenRef = useRef<string | null>(null);
 
@@ -1546,7 +1592,8 @@ export function Sidebar() {
       setTaskListShowAll(true);
     }
 
-    setExpandedTaskGroupKey(expandKey);
+    // 自动聚焦只追加目标组，不关闭其它已展开组
+    setExpandedTaskGroupIds((prev) => appendGroupExpanded(prev, expandKey));
   }, [taskListRenderPlan.items]);
 
   useEffect(() => {
@@ -1599,7 +1646,7 @@ export function Sidebar() {
     if (!groupKey) return;
 
     const expandKey = resolveSidebarExpandKeyForTaskGroup(groupKey);
-    if (expandedTaskGroupKey !== expandKey) return;
+    if (expandedTaskGroupIds[expandKey] !== true) return;
 
     let cancelled = false;
     const rafId = requestAnimationFrame(() => {
@@ -1622,7 +1669,7 @@ export function Sidebar() {
     taskListSectionOpen,
     currentSessionKey,
     activatingScheduledSessionAt,
-    expandedTaskGroupKey,
+    expandedTaskGroupIds,
     scrollContainerRef,
     taskListRenderPlan.items,
   ]);
@@ -1885,7 +1932,9 @@ export function Sidebar() {
           <SidebarProjectsSection
             collapsed={sidebarCollapsed}
             open={projectsSectionOpen}
-            onToggle={() => setProjectsSectionOpen((open) => !open)}
+            onToggle={toggleProjectsSection}
+            shellRef={projectSectionHeaderRef}
+            stickyTopClass={sidebarSectionStickyTopProjectClass}
           />
         ) : null}
         {!sidebarCollapsed ? (
@@ -1896,6 +1945,39 @@ export function Sidebar() {
             onToggle={toggleTaskListSection}
             label={t('common:sidebar.taskList')}
             toggleAriaLabel={t('common:sidebar.toggleTaskListSection')}
+            actions={
+              taskListSectionOpen && expandableTaskGroupIds.length > 0 ? (
+                <Tooltip delayDuration={300}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={
+                        taskGroupsAllExpanded
+                          ? t('common:sidebar.collapseAllGroups')
+                          : t('common:sidebar.expandAllGroups')
+                      }
+                      onClick={handleTaskBatchExpandOrCollapse}
+                      className={cn(
+                        'flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+                        sidebarTextIconClass,
+                      )}
+                    >
+                      {/* MasterGo：已展开显示折叠 icon；有未展开项显示展开 icon */}
+                      {taskGroupsAllExpanded ? (
+                        <ListCollapse className="h-4 w-4" aria-hidden />
+                      ) : (
+                        <ListTree className="h-4 w-4" aria-hidden />
+                      )}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="text-xs">
+                    {taskGroupsAllExpanded
+                      ? t('common:sidebar.collapseAllGroups')
+                      : t('common:sidebar.expandAllGroups')}
+                  </TooltipContent>
+                </Tooltip>
+              ) : null
+            }
           />
         ) : null}
         {!sidebarCollapsed && taskListSectionOpen ? (
@@ -1906,7 +1988,7 @@ export function Sidebar() {
                   key={item.navItem.id}
                   taskId={item.navItem.id}
                   label={t(`common:sidebar.${item.navItem.labelKey}`)}
-                  isOpen={expandedTaskGroupKey === stoTaskSidebarGroupKey(item.navItem.id)}
+                  isOpen={expandedTaskGroupIds[stoTaskSidebarGroupKey(item.navItem.id)] === true}
                   onToggle={() => handleTaskGroupToggle(stoTaskSidebarGroupKey(item.navItem.id))}
                   onRequestExpand={() => handleTaskGroupExpand(stoTaskSidebarGroupKey(item.navItem.id))}
                   onRequestDeleteSubitem={requestSubitemDelete}
@@ -1917,7 +1999,7 @@ export function Sidebar() {
                   key={item.group.key}
                   name={item.group.name}
                   sessions={item.group.sessions}
-                  isOpen={expandedTaskGroupKey === scheduledTaskSidebarGroupKey(item.group.key)}
+                  isOpen={expandedTaskGroupIds[scheduledTaskSidebarGroupKey(item.group.key)] === true}
                   onToggle={() => handleTaskGroupToggle(scheduledTaskSidebarGroupKey(item.group.key))}
                   onRequestDelete={requestSessionDelete}
                   maxVisibleSessions={item.maxVisibleSessions}
@@ -2099,42 +2181,34 @@ export function Sidebar() {
               }
             }}
           >
-            {sidebarVis.userProfileCard && !sidebarCollapsed ? (
-              <div className="flex w-full min-w-0 items-center rounded-[8px] transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.04]">
-                <button
-                  type="button"
-                  className="flex min-w-0 flex-1 flex-col gap-0.5 px-2 py-3 text-left"
-                  title={
-                    isGatewayRunning
-                      ? t('common:status.connected')
-                      : t('common:status.disconnected')
-                  }
-                >
-                  <span className={sidebarFooterNameClass}>
-                    {authUser.realName?.trim() || authUser.userName}
-                  </span>
-                  {authUser.companyName?.trim() ? (
-                    <span className={sidebarFooterMetaClass}>
-                      {authUser.companyName.trim()}
-                    </span>
-                  ) : null}
-                </button>
+            {accountFooterMode === 'expanded-hotzone' ? (
+              <div className="flex w-full min-w-0 items-center gap-3">
+                {/* 展开态：整块账号信息为菜单热区，无齿轮；问号独立（MasterGo 39:35844） */}
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className={SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS}
-                    aria-label={t('common:sidebar.settings')}
+                    className={sidebarAccountHotzoneTriggerClass}
+                    aria-label={t('common:sidebar.compactAccountMenu')}
+                    title={
+                      isGatewayRunning
+                        ? t('common:status.connected')
+                        : t('common:status.disconnected')
+                    }
                     onPointerEnter={() => setSupportQrOpen(false)}
                     onPointerDown={() => setSupportQrOpen(false)}
                   >
-                    <SettingsIcon
-                      className={sidebarFooterSettingsIconClass}
-                      strokeWidth={1.5}
-                      aria-hidden
-                    />
+                    <span className={sidebarFooterNameClass}>
+                      {authUser.realName?.trim() || authUser.userName}
+                    </span>
+                    {authUser.companyName?.trim() ? (
+                      <span className={sidebarFooterMetaClass}>
+                        {authUser.companyName.trim()}
+                      </span>
+                    ) : null}
                   </button>
                 </DropdownMenuTrigger>
                 <SidebarSupportQrTooltip
+                  className={sidebarAccountHelpTriggerClass}
                   open={supportQrOpen}
                   onOpenChange={(open) => {
                     setSupportQrOpen(open);
@@ -2150,10 +2224,8 @@ export function Sidebar() {
                   type="button"
                   className={cn(
                     'flex min-w-0 text-left transition-colors',
-                    sidebarVis.userProfileCard
-                      ? sidebarCollapsed
-                        ? 'w-full flex-col items-center justify-center gap-0 p-2 hover:bg-black/[0.02] dark:hover:bg-white/[0.04]'
-                        : 'min-w-0 flex-1 items-center justify-between gap-3 px-2 py-3 hover:bg-black/[0.02] dark:hover:bg-white/[0.04]'
+                    accountFooterMode === 'collapsed-avatar'
+                      ? 'w-full flex-col items-center justify-center gap-0 p-2 hover:bg-black/[0.02] dark:hover:bg-white/[0.04]'
                       : cn(
                           'w-full items-center justify-center',
                           SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS,
@@ -2162,21 +2234,25 @@ export function Sidebar() {
                   onPointerEnter={() => setSupportQrOpen(false)}
                   onPointerDown={() => setSupportQrOpen(false)}
                   title={
-                    sidebarVis.userProfileCard
+                    accountFooterMode === 'collapsed-avatar'
                       ? isGatewayRunning
                         ? t('common:status.connected')
                         : t('common:status.disconnected')
                       : `${t('common:sidebar.compactAccountMenu')} — ${isGatewayRunning ? t('common:status.connected') : t('common:status.disconnected')}`
                   }
-                  aria-label={sidebarVis.userProfileCard ? undefined : t('common:sidebar.compactAccountMenu')}
+                  aria-label={
+                    accountFooterMode === 'collapsed-avatar'
+                      ? undefined
+                      : t('common:sidebar.compactAccountMenu')
+                  }
                 >
-                  {sidebarVis.userProfileCard ? (
+                  {accountFooterMode === 'collapsed-avatar' ? (
                     <span className="mx-auto flex h-9 w-9 items-center justify-center rounded-[8px] border border-[var(--sto-sidebar-border)] bg-white text-[13px] font-semibold text-[var(--sto-brand-6)] dark:bg-card">
                       {authUser.realName?.[0] || authUser.userName?.[0] || '?'}
                     </span>
-                  ) : (
+                  ) : shouldRenderAccountGearIcon(accountFooterMode) ? (
                     <SettingsIcon className={sidebarFooterSettingsIconClass} strokeWidth={1.75} aria-hidden />
-                  )}
+                  ) : null}
                 </button>
               </DropdownMenuTrigger>
             )}
@@ -2289,7 +2365,7 @@ export function Sidebar() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          {!(sidebarVis.userProfileCard && !sidebarCollapsed) ? (
+          {accountFooterMode !== 'expanded-hotzone' ? (
             <SidebarSupportQrTooltip
               open={supportQrOpen}
               onOpenChange={(open) => {

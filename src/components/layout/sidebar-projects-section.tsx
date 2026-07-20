@@ -2,17 +2,25 @@
  * SidebarProjectsSection — 项目树：标题行 + 项目文件夹 + 嵌套会话。
  * 项目仅支持行内重命名（不支持改路径）；项目草稿「新对话」也可行内改名。
  */
+import type { RefObject } from 'react';
 import { useCallback, useMemo, useState } from 'react';
-import { ChevronDown, Folder, FolderPlus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder, FolderOpen, FolderPlus, ListCollapse, ListTree } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
   sidebarListItemTextClass,
-  sidebarSectionLabelClass,
+  sidebarSectionChevronClass,
   sidebarSubitemTextIdleClass,
+  sidebarTextIconClass,
 } from '@/lib/surfaces';
+import {
+  areAllExpandableGroupsExpanded,
+  collapseAllGroups,
+  expandAllGroups,
+  toggleGroupExpanded,
+} from '@/lib/sidebar-section-group-expand';
 import { DEFAULT_WORKSPACE_ID, useSessionCatalogStore } from '@/stores/session-catalog';
 import { useChatStore } from '@/stores/chat';
 import { resolveSessionLabel } from '@/lib/session-label';
@@ -27,10 +35,16 @@ import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
 import { sortSessionsWithCatalogPin } from '@/lib/sidebar-recent-order';
 import { sortProjectsByCreatedAt } from '@/lib/sidebar-project-session-navigation';
 import { ProjectFormDialog } from '@/components/layout/sidebar-project-form-dialog';
+import { SidebarCollapsibleSectionLabel } from '@/components/layout/sidebar-collapsible-section-label';
 import { SidebarProjectRowTrailing } from '@/components/layout/sidebar-project-row-trailing';
 import { SidebarProjectSessionRow } from '@/components/layout/sidebar-project-session-row';
 import { useSidebarDeleteConfirmStore } from '@/stores/sidebar-delete-confirm';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { invokeIpc } from '@/lib/api-client';
 import type { WorkspaceDto } from '@/lib/session-catalog-api';
 
@@ -38,9 +52,19 @@ interface SidebarProjectsSectionProps {
   collapsed: boolean;
   open: boolean;
   onToggle: () => void;
+  /** sticky 外壳 ref（三级吸顶 / 滚动收起） */
+  shellRef?: RefObject<HTMLDivElement | null>;
+  /** sticky top class（项目层 top-0） */
+  stickyTopClass?: string;
 }
 
-export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarProjectsSectionProps) {
+export function SidebarProjectsSection({
+  collapsed,
+  open,
+  onToggle,
+  shellRef,
+  stickyTopClass,
+}: SidebarProjectsSectionProps) {
   const { t } = useTranslation('common');
   const navigate = useNavigate();
   const location = useLocation();
@@ -108,8 +132,28 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
   );
 
   const toggleProjectExpand = useCallback((projectId: string) => {
-    setExpandedProjectIds((prev) => ({ ...prev, [projectId]: !(prev[projectId] ?? false) }));
+    setExpandedProjectIds((prev) => toggleGroupExpanded(prev, projectId));
   }, []);
+
+  const expandableProjectIds = useMemo(() => {
+    return sortedWorkspaces
+      .filter((workspace) => (sessionsByProjectId.get(workspace.id) ?? []).length > 0)
+      .map((workspace) => workspace.id);
+  }, [sortedWorkspaces, sessionsByProjectId]);
+
+  // 全部已展开 → 下次收起全部；否则（含部分展开）→ 展开全部
+  const projectGroupsAllExpanded = areAllExpandableGroupsExpanded(
+    expandedProjectIds,
+    expandableProjectIds,
+  );
+
+  const handleProjectBatchExpandOrCollapse = () => {
+    if (projectGroupsAllExpanded) {
+      setExpandedProjectIds(collapseAllGroups(expandableProjectIds));
+      return;
+    }
+    setExpandedProjectIds(expandAllGroups(expandableProjectIds));
+  };
 
   const startProjectRename = useCallback((workspace: WorkspaceDto) => {
     setEditingSessionKey(null);
@@ -195,37 +239,83 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
 
   return (
     <>
-      <div className="mt-4 flex h-[30px] w-full items-center justify-between px-[10px]">
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={onToggle}
-          className={cn(
-            'inline-flex min-w-0 items-center gap-1 text-left transition-colors',
-            sidebarSectionLabelClass,
-          )}
-        >
-          <span className="truncate">{t('sidebar.projects')}</span>
-          <ChevronDown
-            className={cn('h-3.5 w-3.5 shrink-0 transition-transform', !open && '-rotate-90')}
-            aria-hidden
-          />
-        </button>
-        <button
-          type="button"
-          aria-label={t('sidebar.newProject')}
-          onClick={() => setCreateOpen(true)}
-          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)]"
-        >
-          <FolderPlus className="h-4 w-4" />
-        </button>
-      </div>
+      <SidebarCollapsibleSectionLabel
+        className="mt-4"
+        open={open}
+        onToggle={onToggle}
+        label={t('sidebar.projects')}
+        toggleAriaLabel={t('sidebar.toggleProjectsSection')}
+        shellRef={shellRef}
+        stickyTopClass={stickyTopClass}
+        actions={
+          <>
+            {open && expandableProjectIds.length > 0 ? (
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={
+                      projectGroupsAllExpanded
+                        ? t('sidebar.collapseAllGroups')
+                        : t('sidebar.expandAllGroups')
+                    }
+                    onClick={handleProjectBatchExpandOrCollapse}
+                    className={cn(
+                      'flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+                      sidebarTextIconClass,
+                    )}
+                  >
+                    {/* MasterGo：已展开显示折叠 icon；有未展开项显示展开 icon */}
+                    {projectGroupsAllExpanded ? (
+                      <ListCollapse className="h-4 w-4" aria-hidden />
+                    ) : (
+                      <ListTree className="h-4 w-4" aria-hidden />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="text-xs">
+                  {projectGroupsAllExpanded
+                    ? t('sidebar.collapseAllGroups')
+                    : t('sidebar.expandAllGroups')}
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={t('sidebar.newProject')}
+                  onClick={() => setCreateOpen(true)}
+                  className={cn(
+                    'flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+                    sidebarTextIconClass,
+                  )}
+                >
+                  <FolderPlus className="h-4 w-4" aria-hidden />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="text-xs">
+                {t('sidebar.newProject')}
+              </TooltipContent>
+            </Tooltip>
+          </>
+        }
+      />
 
       {open ? (
         <div className="mt-0.5 flex flex-col gap-0.5 pb-1">
-          {sortedWorkspaces.map((workspace) => {
-            const isExpanded = expandedProjectIds[workspace.id] ?? false;
+          {sortedWorkspaces.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 px-3 py-6 text-center">
+              <FolderOpen className="h-10 w-10 text-[#C9CDD4]" aria-hidden />
+              <p className="text-[13px] leading-[18px] text-muted-foreground">
+                {t('sidebar.projectsEmpty')}
+              </p>
+            </div>
+          ) : (
+            sortedWorkspaces.map((workspace) => {
+            const isExpanded = expandedProjectIds[workspace.id] === true;
             const projectSessions = sessionsByProjectId.get(workspace.id) ?? [];
+            const canExpand = projectSessions.length > 0;
             const isEditingProject = editingProjectId === workspace.id;
 
             return (
@@ -252,7 +342,10 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                       <button
                         type="button"
                         title={`${workspace.name}\n${workspace.rootPath}`}
-                        onClick={() => toggleProjectExpand(workspace.id)}
+                        aria-expanded={canExpand ? isExpanded : undefined}
+                        onClick={() => {
+                          if (canExpand) toggleProjectExpand(workspace.id);
+                        }}
                         onDoubleClick={(e) => {
                           e.preventDefault();
                           startProjectRename(workspace);
@@ -262,9 +355,20 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                           sidebarSubitemTextIdleClass,
                         )}
                       >
-                        <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                        <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>
-                          {workspace.name}
+                        <Folder className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                        <span className="inline-flex min-w-0 flex-1 items-center gap-0.5">
+                          <span className={cn('min-w-0 truncate', sidebarListItemTextClass)}>
+                            {workspace.name}
+                          </span>
+                          {canExpand ? (
+                            <span className={sidebarSectionChevronClass} aria-hidden>
+                              {isExpanded ? (
+                                <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} />
+                              ) : (
+                                <ChevronRight className="h-3.5 w-3.5" strokeWidth={2} />
+                              )}
+                            </span>
+                          ) : null}
                         </span>
                       </button>
                       <SidebarProjectRowTrailing
@@ -349,7 +453,8 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                 ) : null}
               </div>
             );
-          })}
+          })
+          )}
         </div>
       ) : null}
 

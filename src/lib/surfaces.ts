@@ -1370,23 +1370,27 @@ export const sidebarSectionChevronClass = cn(
 );
 
 /**
- * 侧栏滚动区内分区标题 sticky 壳层 — §5.6 吸顶 + 实底盖住下方列表（无描边）。
- * 任务 top-0；分组·最近同 top 接力（z 分组 19 > 最近 18，section 内分组压住最近，滚出后最近接管）。
+ * 侧栏滚动区内分区标题 sticky 壳层 — 三级吸顶实底盖住下方列表。
+ * 项目 top-0；任务 1×h；最近/分组 2×h（分组 z 略高于最近做同层接力）。
  */
 export const sidebarSectionStickyShellClass = cn(
   'sticky bg-[var(--sto-sidebar-bg)]',
 );
 
-/** 任务分区 sticky 锚点 */
-export const sidebarSectionStickyTopTaskClass = 'top-0 z-20';
+/** 项目分区 sticky 锚点 — 最高层 */
+export const sidebarSectionStickyTopProjectClass = 'top-0 z-[21]';
 
-/** 自建分组 sticky 锚点 — 与「最近」同 top 接力；section 内 z 高于最近，滚出本组后释放 */
+/** 任务分区 sticky 锚点 — 叠在项目下方 */
+export const sidebarSectionStickyTopTaskClass =
+  'top-[var(--sto-sidebar-section-sticky-h)] z-20';
+
+/** 自建分组 sticky 锚点 — 与「最近」同 top 接力；section 内 z 高于最近 */
 export const sidebarSectionStickyTopGroupClass =
-  'top-[var(--sto-sidebar-section-sticky-h)] z-[19]';
+  'top-[calc(2*var(--sto-sidebar-section-sticky-h))] z-[19]';
 
-/** 最近分区 sticky 锚点 — 叠在任务标题下方；无活跃分组 section 时显示于同 top 层 */
+/** 最近分区 sticky 锚点 — 叠在任务下方 */
 export const sidebarSectionStickyTopRecentClass =
-  'top-[var(--sto-sidebar-section-sticky-h)] z-[18]';
+  'top-[calc(2*var(--sto-sidebar-section-sticky-h))] z-[18]';
 
 /** 侧栏滚动列表 — 层级低于 sticky 分区标题 */
 export const sidebarScrollListClass = 'relative z-0';
@@ -1445,7 +1449,22 @@ export const sidebarFooterNameClass =
 export const sidebarFooterMetaClass =
   'truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-meta)]';
 
-/** 侧栏底部设置图标 — Grey-9 */
+/**
+ * 展开态底部账号热区 trigger — MasterGo 39:35844「底部热区」
+ * hover/open：rgba(0,0,0,0.1) + rounded 4px；dark 用 white/10；问号独立不在此热区内
+ */
+export const sidebarAccountHotzoneTriggerClass = cn(
+  'flex min-w-0 flex-1 flex-col gap-0.5 rounded-[4px] px-2.5 py-2 text-left transition-colors',
+  'hover:bg-black/10 data-[state=open]:bg-black/10',
+  'dark:hover:bg-white/10 dark:data-[state=open]:bg-white/10',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sto-sidebar-bg)]',
+);
+
+/** 展开态底部问号按钮 — MCP 24×24，与账号热区 gap 12px */
+export const sidebarAccountHelpTriggerClass =
+  'flex h-6 w-6 shrink-0 items-center justify-center rounded p-1 text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] hover:text-foreground data-[state=open]:bg-[var(--sto-sidebar-row-hover-bg)] data-[state=open]:text-foreground';
+
+/** 侧栏底部设置图标 — Grey-9（收起态紧凑入口仍用） */
 export const sidebarFooterSettingsIconClass = cn('h-5 w-5 shrink-0', sidebarTextIconClass);
 
 /** 最近会话运行中 spinner — MasterGo #5F9274 */

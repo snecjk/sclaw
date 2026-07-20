@@ -96,16 +96,6 @@ export function SidebarProjectRowTrailing({
               className={sidebarRecentMenuItemClass}
               onClick={(e) => {
                 e.stopPropagation();
-                onNewChat();
-              }}
-            >
-              <MessageSquarePlus className="h-4 w-4 shrink-0" aria-hidden />
-              {t('sidebar.newChatInProject')}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className={sidebarRecentMenuItemClass}
-              onClick={(e) => {
-                e.stopPropagation();
                 onRename();
               }}
             >

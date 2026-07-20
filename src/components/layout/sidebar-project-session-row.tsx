@@ -74,7 +74,12 @@ export function SidebarProjectSessionRow({
 
   if (isEditing) {
     return (
-      <div className="relative flex w-full min-w-0 items-center pl-5">
+      <div className="relative flex w-full min-w-0 items-center pl-6">
+        {/* 编辑态同样保留层级竖线，避免二级行左右跳动 */}
+        <span
+          className="pointer-events-none absolute bottom-0 left-[17px] top-0 w-px bg-[#DCDCDC] dark:bg-border"
+          aria-hidden
+        />
         <input
           type="text"
           autoFocus
@@ -93,7 +98,12 @@ export function SidebarProjectSessionRow({
   }
 
   return (
-    <div className="relative flex w-full min-w-0 items-center pl-5">
+    <div className="relative flex w-full min-w-0 items-center pl-6">
+      {/* MasterGo 项目二级：左侧层级竖线 #DCDCDC，对齐一级 folder 中心 */}
+      <span
+        className="pointer-events-none absolute bottom-0 left-[17px] top-0 w-px bg-[#DCDCDC] dark:bg-border"
+        aria-hidden
+      />
       <div
         className={cn(
           'group relative flex h-9 w-full items-center rounded-lg transition-colors',
