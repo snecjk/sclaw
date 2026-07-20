@@ -1085,8 +1085,8 @@ export class SkillPlazaService {
         const detail = await this.getSkillDetail(slug);
         const picked = pickNavCategoryFromApiSkill(detail, categoryDefs);
         result.set(slug, { code: picked.code, label: picked.label });
-      } catch (err) {
-        logger.warn(`[getLocalSkills] getSkillDetail failed for ${slug}:`, err);
+      } catch {
+        // logger.warn(`[SkillPlazaService] Failed to fill missing categories from detail for ${slug}`);
       }
     });
     return result;
