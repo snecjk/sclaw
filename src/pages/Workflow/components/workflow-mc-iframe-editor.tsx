@@ -16,6 +16,7 @@ import {
   openMemoryCenterWorkflowDesigner,
 } from '@/lib/memory-center-web-url';
 import { getWorkflowStoToken } from '@/lib/workflow-api';
+import { invokeIpc } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth';
 import { workflowMcEditorShell } from '@/lib/surfaces';
 import {
@@ -24,6 +25,7 @@ import {
   createWorkflowBridgeNonce,
   isWorkflowDraftError,
   isWorkflowDraftResponse,
+  isWorkflowPerformanceMetric,
   type WorkflowDraftSnapshot,
 } from '@/lib/workflow-iframe-bridge';
 import { getMemoryCenterWebBase } from '@/lib/memory-center-web-url';
@@ -55,6 +57,7 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
   const token = useMemo(() => stoToken?.trim() || getWorkflowStoToken() || '', [stoToken]);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [bridgeNonce] = useState(createWorkflowBridgeNonce);
+  const iframeCreatedAtRef = useRef<number | null>(null);
   const pendingRequestRef = useRef<{
     requestId: string;
     resolve: (snapshot: WorkflowDraftSnapshot) => void;
@@ -75,6 +78,11 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
     ),
     [workflowId, token, ssoEnvironment, promptCacheId, prompt, bridgeNonce],
   );
+
+  useEffect(() => {
+    iframeCreatedAtRef.current = performance.now();
+    void invokeEditorMetric({ workflowId, stage: 'iframe_created', elapsedMs: 0 });
+  }, [iframeSrc, workflowId]);
 
   const requestDraftSnapshot = useCallback(() => {
     const target = iframeRef.current?.contentWindow;
@@ -115,9 +123,21 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>) => {
-      const pending = pendingRequestRef.current;
-      if (!pending || event.origin !== expectedOrigin || event.source !== iframeRef.current?.contentWindow) return;
+      if (event.origin !== expectedOrigin || event.source !== iframeRef.current?.contentWindow) return;
       const payload = event.data;
+      if (isWorkflowPerformanceMetric(payload)) {
+        if (payload.nonce !== bridgeNonce || payload.workflowId !== workflowId) return;
+        void invokeEditorMetric({
+          workflowId,
+          stage: payload.stage,
+          elapsedMs: performance.now() - (iframeCreatedAtRef.current ?? performance.now()),
+          embeddedElapsedMs: payload.elapsedMs,
+          error: payload.error,
+        });
+        return;
+      }
+      const pending = pendingRequestRef.current;
+      if (!pending) return;
       if (isWorkflowDraftResponse(payload)) {
         if (
           payload.requestId !== pending.requestId ||
@@ -164,6 +184,11 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
           promptCacheId={promptCacheId}
           workflowId={workflowId}
           token={token}
+          onIframeLoad={() => void invokeEditorMetric({
+            workflowId,
+            stage: 'iframe_load',
+            elapsedMs: performance.now() - (iframeCreatedAtRef.current ?? performance.now()),
+          })}
         />
       </div>
     </div>
@@ -177,6 +202,7 @@ function McEditorIframe({
   promptCacheId,
   workflowId,
   token,
+  onIframeLoad,
 }: {
   src: string;
   iframeRef: RefObject<HTMLIFrameElement | null>;
@@ -184,12 +210,14 @@ function McEditorIframe({
   promptCacheId?: string;
   workflowId: string;
   token: string;
+  onIframeLoad: () => void;
 }) {
   const [loadFailed, setLoadFailed] = useState(false);
   const [iframeLoading, setIframeLoading] = useState(true);
 
   const handleIframeLoad = () => {
     setIframeLoading(false);
+    onIframeLoad();
     if (src.includes('/workflows-workbench/')) {
       markMcWebAuthedInSession();
     }
@@ -230,4 +258,12 @@ function McEditorIframe({
       )}
     </>
   );
+}
+
+async function invokeEditorMetric(metric: Record<string, unknown>): Promise<void> {
+  try {
+    await invokeIpc('workflow-editor:metric', metric);
+  } catch {
+    // 性能日志不可用不应影响画布编辑。
+  }
 }

@@ -4,6 +4,23 @@ export const WORKFLOW_IFRAME_BRIDGE_PROTOCOL = 'stoclaw-workflow-bridge/v1';
 export const WORKFLOW_DRAFT_REQUEST = 'workflow-draft-request';
 export const WORKFLOW_DRAFT_RESPONSE = 'workflow-draft-response';
 export const WORKFLOW_DRAFT_ERROR = 'workflow-draft-error';
+export const WORKFLOW_PERFORMANCE_METRIC = 'workflow-performance-metric';
+
+export type WorkflowPerformanceStage =
+  | 'designer_mounted'
+  | 'workflow_loaded'
+  | 'capabilities_loaded'
+  | 'canvas_first_paint';
+
+export interface WorkflowPerformanceMetricMessage {
+  protocol: typeof WORKFLOW_IFRAME_BRIDGE_PROTOCOL;
+  type: typeof WORKFLOW_PERFORMANCE_METRIC;
+  workflowId: string;
+  nonce: string;
+  stage: WorkflowPerformanceStage;
+  elapsedMs: number;
+  error?: string;
+}
 
 export interface WorkflowDraftSnapshot {
   workflowId: string;
@@ -76,5 +93,21 @@ export function isWorkflowDraftError(value: unknown): value is WorkflowDraftErro
     typeof data.nonce === 'string' &&
     typeof data.workflowId === 'string' &&
     typeof data.message === 'string'
+  );
+}
+
+export function isWorkflowPerformanceMetric(value: unknown): value is WorkflowPerformanceMetricMessage {
+  if (!value || typeof value !== 'object') return false;
+  const data = value as Record<string, unknown>;
+  return (
+    data.protocol === WORKFLOW_IFRAME_BRIDGE_PROTOCOL &&
+    data.type === WORKFLOW_PERFORMANCE_METRIC &&
+    typeof data.workflowId === 'string' &&
+    typeof data.nonce === 'string' &&
+    ['designer_mounted', 'workflow_loaded', 'capabilities_loaded', 'canvas_first_paint'].includes(String(data.stage)) &&
+    typeof data.elapsedMs === 'number' &&
+    Number.isFinite(data.elapsedMs) &&
+    data.elapsedMs >= 0 &&
+    (data.error === undefined || typeof data.error === 'string')
   );
 }

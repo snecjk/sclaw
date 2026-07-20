@@ -81,6 +81,22 @@ export function registerWorkflowRuntimeHandlers(deps: EngineDeps): RuntimeHandle
     ]);
     return mapWfRunRowToResponse(row, { nodeRuns, events, approvalTasks, userInputTasks, artifacts });
   });
+  /**
+   * 查询当前工作流保存在本机的运行摘要，供画布「本地运行记录」弹窗使用。
+   * 详情仍必须通过 getRun 按 runId 单独读取，避免一次 IPC 传输所有事件和产物。
+   */
+  ipcMain.handle('workflow-runtime:listRuns', async (_e, workflowId: unknown) => {
+    if (typeof workflowId !== 'string' || !workflowId.trim()) return [];
+    const rows = await repo.listLocalRunSummaries(workflowId.trim());
+    return rows.map((row) => ({
+      runId: row.run_id,
+      workflowId: row.workflow_id,
+      versionId: row.version_id,
+      status: row.status,
+      startedAt: row.started_at,
+      completedAt: row.completed_at ?? null,
+    }));
+  });
   ipcMain.handle('workflow-runtime:retrySync', async (_e, runId?: string) => {
     await engine.retrySync(runId);
     return { accepted: true };

@@ -20,6 +20,7 @@ import {
 import { workflowBuilderShell } from '@/lib/surfaces';
 import { DesignerCanvas } from '@/pages/WorkflowDesigner/components/designer-canvas';
 import { HistoryVersionsDrawer } from '@/pages/WorkflowDesigner/components/history-versions-drawer';
+import { LocalRunHistoryDialog } from '@/pages/WorkflowDesigner/components/local-run-history-dialog';
 import { DesignerNodeLibrary } from '@/pages/WorkflowDesigner/components/designer-node-library';
 import { StartupRunDialog } from '@/pages/WorkflowDesigner/components/startup-run-dialog';
 import { TestRunDrawer } from '@/pages/WorkflowDesigner/components/test-run-drawer';
@@ -49,6 +50,7 @@ export function WorkflowDesigner({
   const { t } = useTranslation('workflow');
   const navigate = useNavigate();
   const canvasWrapRef = useRef<HTMLDivElement>(null);
+  const tryRunButtonRef = useRef<HTMLButtonElement>(null);
   const isNew = !workflowId;
 
   const [loading, setLoading] = useState(!isNew);
@@ -66,6 +68,7 @@ export function WorkflowDesigner({
   const [startupDefaultValues, setStartupDefaultValues] = useState<Record<string, unknown>>({});
   const [workflowVersionId, setWorkflowVersionId] = useState<number | undefined>();
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [localRunHistoryOpen, setLocalRunHistoryOpen] = useState(false);
 
   const loadWorkflow = useCallback(async () => {
     if (!workflowId) return;
@@ -190,6 +193,14 @@ export function WorkflowDesigner({
     beginTryRun();
   }, [beginTryRun, dirty, workflow?.id]);
 
+  const handleTryRunFromHistory = useCallback(() => {
+    setLocalRunHistoryOpen(false);
+    window.setTimeout(() => {
+      tryRunButtonRef.current?.focus();
+      handleTryRun();
+    }, 0);
+  }, [handleTryRun]);
+
   const handleHistoryRestored = useCallback((restoredWorkflow: WorkflowDefinition) => {
     setWorkflow(normalizeConditionBranches(restoredWorkflow));
     setSelectedNodeId(null);
@@ -265,7 +276,11 @@ export function WorkflowDesigner({
             <History className="mr-1 h-3.5 w-3.5" />
             版本列表
           </Button>
-          <Button type="button" variant="outline" size="sm" disabled={isTryRunStarting} onClick={handleTryRun}>
+          <Button type="button" variant="outline" size="sm" onClick={() => setLocalRunHistoryOpen(true)}>
+            <History className="mr-1 h-3.5 w-3.5" />
+            本地运行记录
+          </Button>
+          <Button ref={tryRunButtonRef} type="button" variant="outline" size="sm" disabled={isTryRunStarting} onClick={handleTryRun}>
             <Play className="mr-1 h-3.5 w-3.5" />
             {isTryRunStarting ? '启动中' : t('builder.tryRun')}
           </Button>
@@ -351,6 +366,14 @@ export function WorkflowDesigner({
           workflow={workflow}
           onClose={() => setHistoryOpen(false)}
           onRestored={handleHistoryRestored}
+        />
+        <LocalRunHistoryDialog
+          open={localRunHistoryOpen}
+          workflowId={workflow.id}
+          workflowName={workflow.name}
+          onClose={() => setLocalRunHistoryOpen(false)}
+          onTryRun={handleTryRunFromHistory}
+          onSelectRun={tryRun.openExistingRun}
         />
       </div>
 

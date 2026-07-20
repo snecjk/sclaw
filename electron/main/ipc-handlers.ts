@@ -165,6 +165,16 @@ export function registerIpcHandlers(
 
   // Workflow runtime（客户端执行下沉）：注册 workflow-runtime:* IPC + 注入生产依赖
   installWorkflowRuntime();
+  ipcMain.handle('workflow-editor:metric', async (_event, metric: unknown) => {
+    if (!metric || typeof metric !== 'object') return { accepted: false };
+    const data = metric as Record<string, unknown>;
+    const stage = typeof data.stage === 'string' ? data.stage : '';
+    const workflowId = typeof data.workflowId === 'string' ? data.workflowId : '';
+    const elapsedMs = typeof data.elapsedMs === 'number' ? data.elapsedMs : NaN;
+    if (!workflowId || !stage || !Number.isFinite(elapsedMs) || elapsedMs < 0) return { accepted: false };
+    logger.info(`[workflow-editor][stage=${stage}][workflowId=${workflowId}][elapsedMs=${Math.round(elapsedMs)}] iframe editor performance metric`);
+    return { accepted: true };
+  });
 }
 
 function parseEngineType(value: unknown): AgentEngineType | undefined {

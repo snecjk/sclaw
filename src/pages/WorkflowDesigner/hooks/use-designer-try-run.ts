@@ -82,6 +82,8 @@ export interface UseDesignerTryRunResult {
   cancelStartupDialog: () => void;
   cancel: () => Promise<void>;
   rerun: () => void;
+  /** Open an already persisted local run in the shared result drawer. */
+  openExistingRun: (runId: string) => Promise<boolean>;
   closeDrawer: () => void;
   decideApproval: (approved: boolean, note?: string) => Promise<void>;
   submitInput: (values: Record<string, unknown>) => Promise<void>;
@@ -272,6 +274,23 @@ export function useDesignerTryRun({
     }
   }, [hasStartupInputs, launch, runtimeUploadNodes.length]);
 
+  const openExistingRun = useCallback(async (id: string): Promise<boolean> => {
+    const existingRun = await getRunViaIpc(id);
+    if (!existingRun) return false;
+    setRunId(id);
+    runIdRef.current = id;
+    setRun(existingRun);
+    setExecutionState(runToExecutionState(existingRun));
+    setRunWorkflowVersionId(undefined);
+    setIsStarting(false);
+    setIsCancelling(false);
+    setIsSyncing(false);
+    setIsDraftSnapshot(false);
+    setLaunchError(null);
+    setIsDrawerOpen(true);
+    return true;
+  }, []);
+
   const closeDrawer = useCallback(() => setIsDrawerOpen(false), []);
   const decideApproval = useCallback(async (approved: boolean, note?: string) => {
     const id = runIdRef.current;
@@ -319,6 +338,7 @@ export function useDesignerTryRun({
     cancelStartupDialog,
     cancel,
     rerun,
+    openExistingRun,
     closeDrawer,
     decideApproval,
     submitInput,

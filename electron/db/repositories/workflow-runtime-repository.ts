@@ -94,6 +94,25 @@ export class WorkflowRuntimeRepository {
   }
 
   /**
+   * Return the most recent client-local runs for one workflow. This intentionally
+   * returns summary rows only: the renderer loads children lazily through
+   * `workflow-runtime:getRun` after the user chooses a record.
+   */
+  async listLocalRunSummaries(workflow_id: string, limit = 50): Promise<any[]> {
+    const db = getKyselyDatabase();
+    return db
+      .selectFrom('wf_run')
+      .select(['run_id', 'workflow_id', 'version_id', 'status', 'started_at', 'completed_at'])
+      .where('workflow_id', '=', workflow_id)
+      .where('mode', '=', 'CLIENT_LOCAL')
+      .where('source', '=', 'client')
+      .orderBy('started_at', 'desc')
+      .orderBy('run_id', 'desc')
+      .limit(Math.min(Math.max(limit, 1), 50))
+      .execute();
+  }
+
+  /**
    * Insert-or-replace a node-run row by the composite key `(run_id, node_id)`.
    */
   async upsertNodeRun(n: any): Promise<void> {

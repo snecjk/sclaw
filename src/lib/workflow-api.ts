@@ -392,6 +392,20 @@ export async function getRunViaIpc(runId: string): Promise<WorkflowRunResponse |
   return invokeIpc<WorkflowRunResponse | null>('workflow-runtime:getRun', runId);
 }
 
+/** Lightweight local-run list for the canvas history dialog. */
+export interface LocalWorkflowRunSummary {
+  runId: string;
+  workflowId: string;
+  versionId: string;
+  status: string;
+  startedAt: string;
+  completedAt: string | null;
+}
+
+export async function listLocalWorkflowRuns(workflowId: string): Promise<LocalWorkflowRunSummary[]> {
+  return invokeIpc<LocalWorkflowRunSummary[]>('workflow-runtime:listRuns', workflowId);
+}
+
 // ── 6c. Cancel run (client-local runtime IPC) ───────────────────
 //   Pure client-side cancel: signals the local engine to stop the active
 //   agent query (sdk.close()) + marks the run CANCELLED + outbox syncs

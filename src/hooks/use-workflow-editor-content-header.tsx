@@ -3,7 +3,7 @@
  */
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ExternalLink, Play } from 'lucide-react';
+import { ChevronLeft, ExternalLink, History, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { openMemoryCenterWorkflowDesigner } from '@/lib/memory-center-web-url';
@@ -28,6 +28,8 @@ export interface UseWorkflowEditorContentHeaderOptions {
   /** 客户端本地试运行入口，由编辑路由提供，和 iframe 内画布交互解耦。 */
   onTryRun?: () => void;
   tryRunDisabled?: boolean;
+  /** 打开当前工作流的客户端本地运行记录。 */
+  onOpenLocalRunHistory?: () => void;
 }
 
 function truncatePrompt(prompt: string, maxLen = 50): string {
@@ -47,6 +49,7 @@ export function useWorkflowEditorContentHeader({
   create = false,
   onTryRun,
   tryRunDisabled = false,
+  onOpenLocalRunHistory,
 }: UseWorkflowEditorContentHeaderOptions): void {
   const { t } = useTranslation('workflow');
   const stoToken = useAuthStore((s) => s.user?.stoToken);
@@ -108,6 +111,12 @@ export function useWorkflowEditorContentHeader({
             {t('builder.tryRun')}
           </Button>
         ) : null}
+        {onOpenLocalRunHistory ? (
+          <Button type="button" variant="outline" size="sm" onClick={onOpenLocalRunHistory}>
+            <History className="mr-1 h-3.5 w-3.5" aria-hidden />
+            本地运行记录
+          </Button>
+        ) : null}
         <Button
           type="button"
           variant="outline"
@@ -119,7 +128,7 @@ export function useWorkflowEditorContentHeader({
         </Button>
       </>
     );
-  }, [enabled, onTryRun, prompt, promptCacheId, t, token, tryRunDisabled, workflowId]);
+  }, [enabled, onOpenLocalRunHistory, onTryRun, prompt, promptCacheId, t, token, tryRunDisabled, workflowId]);
 
   useContentHeader({
     title,

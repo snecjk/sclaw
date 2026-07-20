@@ -11,6 +11,7 @@ import { WorkflowMcIframeEditor, type WorkflowMcIframeEditorHandle } from '@/pag
 import { useWorkflowEditorContentHeader } from '@/hooks/use-workflow-editor-content-header';
 import { StartupRunDialog } from '@/pages/WorkflowDesigner/components/startup-run-dialog';
 import { TestRunDrawer } from '@/pages/WorkflowDesigner/components/test-run-drawer';
+import { LocalRunHistoryDialog } from '@/pages/WorkflowDesigner/components/local-run-history-dialog';
 import { useDesignerTryRun } from '@/pages/WorkflowDesigner/hooks/use-designer-try-run';
 import { cacheAiWorkflowPrompt, createWorkflowStudio } from '@/lib/workflow-studio-api';
 import { workflowPageContentClass, workflowPageRootClass } from '@/lib/surfaces';
@@ -170,7 +171,9 @@ function WorkflowEditRoute() {
   const { workflowId } = useParams<{ workflowId: string }>();
   const editorRef = useRef<WorkflowMcIframeEditorHandle>(null);
   const [isRequestingVersionSnapshot, setIsRequestingVersionSnapshot] = useState(false);
+  const [localRunHistoryOpen, setLocalRunHistoryOpen] = useState(false);
   const handleBack = useCallback(() => navigate('/workflow'), [navigate]);
+  const handleOpenLocalRunHistory = useCallback(() => setLocalRunHistoryOpen(true), []);
   const canStartTryRun = useCallback(() => true, []);
   const tryRun = useDesignerTryRun({
     workflowId,
@@ -200,6 +203,7 @@ function WorkflowEditRoute() {
     enabled: Boolean(workflowId),
     onTryRun: handleTryRun,
     tryRunDisabled: isRequestingVersionSnapshot || tryRun.isStarting || tryRun.isRunActive,
+    onOpenLocalRunHistory: handleOpenLocalRunHistory,
   });
 
   if (!workflowId) {
@@ -236,6 +240,13 @@ function WorkflowEditRoute() {
         onRetrySync={() => void tryRun.retrySync()}
         onDecideApproval={(approved, note) => void tryRun.decideApproval(approved, note)}
         onSubmitInput={(values) => void tryRun.submitInput(values)}
+      />
+      <LocalRunHistoryDialog
+        open={localRunHistoryOpen}
+        workflowId={workflowId}
+        onClose={() => setLocalRunHistoryOpen(false)}
+        onTryRun={() => void handleTryRun()}
+        onSelectRun={tryRun.openExistingRun}
       />
     </div>
   );

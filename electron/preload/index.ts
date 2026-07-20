@@ -52,6 +52,8 @@ const electronAPI = {
         'workflow-runtime:resumeInput',
         'workflow-runtime:retrySync',
         'workflow-runtime:getRun',
+        'workflow-runtime:listRuns',
+        'workflow-editor:metric',
         'gateway:health',
         'gateway:getControlUiUrl',
         // OpenClaw
