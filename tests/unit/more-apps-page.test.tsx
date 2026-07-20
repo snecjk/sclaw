@@ -5,6 +5,7 @@ const fetchAppsMock = vi.fn();
 const fetchCategoriesMock = vi.fn();
 const fetchBannersMock = vi.fn();
 const openInSclawBrowserMock = vi.fn();
+const fetchRegistryMock = vi.fn();
 
 vi.mock('@/lib/app-plaza-api', () => ({
   fetchAppPlazaApps: (...args: unknown[]) => fetchAppsMock(...args),
@@ -14,6 +15,12 @@ vi.mock('@/lib/app-plaza-api', () => ({
 
 vi.mock('@/lib/open-sclaw-browser', () => ({
   openInSclawBrowser: (...args: unknown[]) => openInSclawBrowserMock(...args),
+}));
+
+vi.mock('@/lib/more-apps-api', () => ({
+  fetchMoreAppsRegistry: (...args: unknown[]) => fetchRegistryMock(...args),
+  saveMoreAppsRegistry: vi.fn(async (registry) => registry),
+  migrateMoreAppsRegistry: vi.fn(async (registry) => ({ migrated: true, registry })),
 }));
 
 import { MoreAppsPage } from '@/components/more-apps/MoreAppsPage';
@@ -36,7 +43,6 @@ function resetStore() {
     searchQuery: '',
     marketCategory: 'featured',
     heroSlideIndex: 0,
-    userCode: '',
     banners: [],
     bannersLoading: false,
     bannersError: null,
@@ -52,6 +58,8 @@ function resetStore() {
     externalApps: [],
     installedIds: [],
     favoriteIds: [],
+    hydrated: false,
+    hydrating: false,
     addModalOpen: false,
     editingExternalAppId: null,
   });
@@ -69,6 +77,12 @@ describe('MoreAppsPage server catalog', () => {
       total: 1,
       pageNum: 1,
       pageSize: 20,
+    });
+    fetchRegistryMock.mockReset().mockResolvedValue({
+      version: 1,
+      externalApps: [],
+      installedIds: [],
+      favoriteIds: [],
     });
   });
 

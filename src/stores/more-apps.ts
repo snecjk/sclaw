@@ -1,11 +1,11 @@
 /**
- * More Apps Store — manages 应用广场 UI state and localStorage persistence
+ * More Apps Store — server catalog + Main-backed local registry persistence.
  * Aligned with the PRD demo (more-apps.js)
  *
  * Market tab (Banner / 分类 / APP) is driven by server catalog state fetched via the
  * Main Host API proxy. The three blocks keep independent loading/error so one failure
  * does not break the others; APP supports reset, append pagination and request-race
- * protection. "我的应用"、收藏和外部应用 remain per-user localStorage-backed.
+ * protection. "我的应用"、收藏和外部应用 keep main's ~/.stoclaw/more-apps registry behavior.
  */
 import { create } from 'zustand';
 import type {
@@ -16,24 +16,28 @@ import type {
   MoreAppsSortMode,
   MoreAppsTab,
 } from '@/types/more-apps';
-import { VISIBLE_BUILTIN_APPS } from '@/components/more-apps/builtin-apps';
 import {
   fetchAppPlazaApps,
   fetchAppPlazaBanners,
   fetchAppPlazaCategories,
 } from '@/lib/app-plaza-api';
+import {
+  fetchMoreAppsRegistry,
+  migrateMoreAppsRegistry,
+  saveMoreAppsRegistry,
+} from '@/lib/more-apps-api';
+import {
+  createEmptyMoreAppsRegistry,
+  isMoreAppsRegistryEmpty,
+  MORE_APPS_REGISTRY_VERSION,
+  type MoreAppsRegistry,
+} from '../../shared/more-apps-registry';
 
 const STORAGE_KEY_EXTERNAL = 'stoclaw:more-apps:external';
 const STORAGE_KEY_INSTALLED = 'stoclaw:more-apps:installed';
 const STORAGE_KEY_FAVORITES = 'stoclaw:more-apps:favorites';
 
 const APP_PAGE_SIZE = 20;
-
-// Per-user storage key — falls back to the legacy global key when no user is signed
-// in, so external apps / favorites keep working across the migration to per-user scope.
-function storageKey(base: string, userCode: string): string {
-  return userCode ? `${base}:${userCode}` : base;
-}
 
 // Request-sequence guards — a stale slow response is discarded when a newer
 // reset/append has started, so the UI never shows out-of-order catalog results.
@@ -45,65 +49,67 @@ function toError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-// ── localStorage helpers ──────────────────────────────────────────
-function loadExternalApps(userCode: string): AppItem[] {
+// Read main's legacy renderer storage once, then migrate it into the durable registry.
+function readLegacyLocalStorage(): MoreAppsRegistry {
+  const empty = createEmptyMoreAppsRegistry();
   try {
-    const raw = localStorage.getItem(storageKey(STORAGE_KEY_EXTERNAL, userCode));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (a) => a && typeof a.id === 'string' && typeof a.url === 'string',
-    );
+    const externalRaw = localStorage.getItem(STORAGE_KEY_EXTERNAL);
+    const installedRaw = localStorage.getItem(STORAGE_KEY_INSTALLED);
+    const favoritesRaw = localStorage.getItem(STORAGE_KEY_FAVORITES);
+    if (!externalRaw && !installedRaw && !favoritesRaw) return empty;
+    const externalParsed = externalRaw ? JSON.parse(externalRaw) : [];
+    const installedParsed = installedRaw ? JSON.parse(installedRaw) : [];
+    const favoritesParsed = favoritesRaw ? JSON.parse(favoritesRaw) : [];
+    return {
+      version: MORE_APPS_REGISTRY_VERSION,
+      externalApps: Array.isArray(externalParsed)
+        ? externalParsed.filter(
+            (app: unknown): app is AppItem =>
+              !!app && typeof app === 'object' &&
+              typeof (app as AppItem).id === 'string' &&
+              typeof (app as AppItem).url === 'string',
+          )
+        : [],
+      installedIds: Array.isArray(installedParsed)
+        ? installedParsed.filter((id): id is string => typeof id === 'string')
+        : [],
+      favoriteIds: Array.isArray(favoritesParsed)
+        ? favoritesParsed.filter((id): id is string => typeof id === 'string')
+        : [],
+    };
   } catch {
-    return [];
+    return empty;
   }
 }
 
-function saveExternalApps(apps: AppItem[], userCode: string): void {
+function clearLegacyLocalStorage(): void {
   try {
-    localStorage.setItem(storageKey(STORAGE_KEY_EXTERNAL, userCode), JSON.stringify(apps));
+    localStorage.removeItem(STORAGE_KEY_EXTERNAL);
+    localStorage.removeItem(STORAGE_KEY_INSTALLED);
+    localStorage.removeItem(STORAGE_KEY_FAVORITES);
   } catch {
     // ignore
   }
 }
 
-function loadInstalled(userCode: string): string[] {
-  try {
-    const raw = localStorage.getItem(storageKey(STORAGE_KEY_INSTALLED, userCode));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+function toRegistry(state: Pick<MoreAppsState, 'externalApps' | 'installedIds' | 'favoriteIds'>): MoreAppsRegistry {
+  return {
+    version: MORE_APPS_REGISTRY_VERSION,
+    externalApps: state.externalApps,
+    installedIds: state.installedIds,
+    favoriteIds: state.favoriteIds,
+  };
 }
 
-function saveInstalled(ids: string[], userCode: string): void {
-  try {
-    localStorage.setItem(storageKey(STORAGE_KEY_INSTALLED, userCode), JSON.stringify(ids));
-  } catch {
-    // ignore
-  }
-}
-
-function loadFavorites(userCode: string): string[] {
-  try {
-    const raw = localStorage.getItem(storageKey(STORAGE_KEY_FAVORITES, userCode));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveFavorites(ids: string[], userCode: string): void {
-  try {
-    localStorage.setItem(storageKey(STORAGE_KEY_FAVORITES, userCode), JSON.stringify(ids));
-  } catch {
-    // ignore
-  }
+function asAppItems(apps: MoreAppsRegistry['externalApps']): AppItem[] {
+  return apps.map((app) => ({
+    ...app,
+    tone: ['blue', 'orange', 'green', 'purple', 'teal', 'gray'].includes(app.tone ?? '')
+      ? app.tone as AppItem['tone']
+      : 'gray',
+    kind: app.kind === 'builtin' ? 'builtin' : 'external',
+    external: app.external ?? true,
+  }));
 }
 
 // ── Store interface ────────────────────────────────────────────────
@@ -114,9 +120,6 @@ interface MoreAppsState {
   sortMode: MoreAppsSortMode;
   marketCategory: MarketCategory;
   heroSlideIndex: number;
-
-  // Per-user scope
-  userCode: string;
 
   // Server catalog — Banner block (independent loading/error)
   banners: AppPlazaBanner[];
@@ -136,11 +139,12 @@ interface MoreAppsState {
   loadingMore: boolean;
   error: string | null;
 
-  // Per-user data (localStorage-backed; unchanged behavior)
-  builtinApps: AppItem[];
+  // Main-backed local registry (same behavior as main).
   externalApps: AppItem[];
   installedIds: string[];
   favoriteIds: string[];
+  hydrated: boolean;
+  hydrating: boolean;
 
   // Modal
   addModalOpen: boolean;
@@ -156,7 +160,8 @@ interface MoreAppsState {
   openEditModal: (id: string) => void;
   closeAddModal: () => void;
 
-  // Actions — external / installed / favorites (unchanged behavior)
+  // Actions — external / installed / favorites
+  hydrate: () => Promise<void>;
   addExternalApp: (app: { name: string; url: string; description?: string }) => void;
   updateExternalApp: (id: string, app: { name: string; url: string; description?: string }) => void;
   removeExternalApp: (id: string) => void;
@@ -167,11 +172,20 @@ interface MoreAppsState {
   isAppFavorite: (id: string) => boolean;
 
   // Actions — server catalog
-  initialize: (userCode: string) => Promise<void>;
   fetchBanners: () => Promise<void>;
   fetchCategories: () => Promise<void>;
   fetchApps: (opts?: { reset?: boolean }) => Promise<void>;
   loadMoreApps: () => Promise<void>;
+}
+
+async function persistRegistry(get: () => MoreAppsState): Promise<void> {
+  const state = get();
+  if (!state.hydrated) return;
+  try {
+    await saveMoreAppsRegistry(toRegistry(state));
+  } catch (error) {
+    console.error('[more-apps] persist failed', error);
+  }
 }
 
 export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
@@ -180,8 +194,6 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
   sortMode: 'default',
   marketCategory: 'featured',
   heroSlideIndex: 0,
-
-  userCode: '',
 
   banners: [],
   bannersLoading: false,
@@ -198,13 +210,43 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
   loadingMore: false,
   error: null,
 
-  builtinApps: VISIBLE_BUILTIN_APPS,
-  externalApps: loadExternalApps(''),
-  installedIds: loadInstalled(''),
-  favoriteIds: loadFavorites(''),
+  externalApps: [],
+  installedIds: [],
+  favoriteIds: [],
+  hydrated: false,
+  hydrating: false,
 
   addModalOpen: false,
   editingExternalAppId: null,
+
+  hydrate: async () => {
+    const current = get();
+    if (current.hydrated || current.hydrating) return;
+    set({ hydrating: true });
+    try {
+      let registry = await fetchMoreAppsRegistry();
+      const legacy = readLegacyLocalStorage();
+      if (!isMoreAppsRegistryEmpty(legacy)) {
+        try {
+          const result = await migrateMoreAppsRegistry(legacy);
+          registry = result.registry;
+          if (result.migrated || !isMoreAppsRegistryEmpty(registry)) clearLegacyLocalStorage();
+        } catch (error) {
+          console.error('[more-apps] migrate failed', error);
+        }
+      }
+      set({
+        externalApps: asAppItems(registry.externalApps),
+        installedIds: registry.installedIds,
+        favoriteIds: registry.favoriteIds,
+        hydrated: true,
+        hydrating: false,
+      });
+    } catch (error) {
+      console.error('[more-apps] hydrate failed', error);
+      set({ hydrated: true, hydrating: false });
+    }
+  },
 
   setActiveTab: (tab) => set({ activeTab: tab, searchQuery: '' }),
   setSearchQuery: (q) => set({ searchQuery: q }),
@@ -217,7 +259,7 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
   closeAddModal: () => set({ addModalOpen: false, editingExternalAppId: null }),
 
   addExternalApp: ({ name, url, description }) => {
-    const userCode = get().userCode;
+    if (!get().hydrated) return;
     const id = `ext-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const newApp: AppItem = {
       id,
@@ -234,20 +276,18 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
       order: 999,
     };
     const updated = [...get().externalApps, newApp];
-    saveExternalApps(updated, userCode);
-    // Also add to installed
     const updatedInstalled = [...get().installedIds, id];
-    saveInstalled(updatedInstalled, userCode);
     set({
       externalApps: updated,
       installedIds: updatedInstalled,
       addModalOpen: false,
       editingExternalAppId: null,
     });
+    void persistRegistry(get);
   },
 
   updateExternalApp: (id, { name, url, description }) => {
-    const userCode = get().userCode;
+    if (!get().hydrated) return;
     const updated = get().externalApps.map((app) =>
       app.id === id
         ? {
@@ -258,44 +298,42 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
           }
         : app,
     );
-    saveExternalApps(updated, userCode);
     set({
       externalApps: updated,
       addModalOpen: false,
       editingExternalAppId: null,
     });
+    void persistRegistry(get);
   },
 
   removeExternalApp: (id) => {
-    const userCode = get().userCode;
+    if (!get().hydrated) return;
     const updated = get().externalApps.filter((a) => a.id !== id);
-    saveExternalApps(updated, userCode);
     const updatedInstalled = get().installedIds.filter((x) => x !== id);
-    saveInstalled(updatedInstalled, userCode);
     const updatedFavorites = get().favoriteIds.filter((x) => x !== id);
-    saveFavorites(updatedFavorites, userCode);
     set({
       externalApps: updated,
       installedIds: updatedInstalled,
       favoriteIds: updatedFavorites,
     });
+    void persistRegistry(get);
   },
 
   installApp: (id) => {
-    const userCode = get().userCode;
+    if (!get().hydrated) return;
     const installedIds = get().installedIds;
     if (installedIds.indexOf(id) === -1) {
       const updated = [...installedIds, id];
-      saveInstalled(updated, userCode);
       set({ installedIds: updated });
+      void persistRegistry(get);
     }
   },
 
   uninstallApp: (id) => {
-    const userCode = get().userCode;
+    if (!get().hydrated) return;
     const updated = get().installedIds.filter((x) => x !== id);
-    saveInstalled(updated, userCode);
     set({ installedIds: updated });
+    void persistRegistry(get);
   },
 
   isAppInstalled: (id) => {
@@ -303,49 +341,20 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
   },
 
   toggleFavorite: (id) => {
-    const userCode = get().userCode;
+    if (!get().hydrated) return;
     const favoriteIds = get().favoriteIds;
     if (favoriteIds.indexOf(id) !== -1) {
       const updated = favoriteIds.filter((x) => x !== id);
-      saveFavorites(updated, userCode);
       set({ favoriteIds: updated });
     } else {
       const updated = [...favoriteIds, id];
-      saveFavorites(updated, userCode);
       set({ favoriteIds: updated });
     }
+    void persistRegistry(get);
   },
 
   isAppFavorite: (id) => {
     return get().favoriteIds.indexOf(id) !== -1;
-  },
-
-  initialize: async (userCode) => {
-    // Per-user data is loaded synchronously so the installed/favorites views stay
-    // responsive; catalog state is reset before the three independent fetches kick off.
-    set({
-      userCode,
-      externalApps: loadExternalApps(userCode),
-      installedIds: loadInstalled(userCode),
-      favoriteIds: loadFavorites(userCode),
-      banners: [],
-      bannersLoading: false,
-      bannersError: null,
-      categories: [],
-      categoriesLoading: false,
-      categoriesError: null,
-      apps: [],
-      total: 0,
-      pageNum: 0,
-      loading: false,
-      loadingMore: false,
-      error: null,
-    });
-    await Promise.all([
-      get().fetchBanners(),
-      get().fetchCategories(),
-      get().fetchApps({ reset: true }),
-    ]);
   },
 
   fetchBanners: async () => {

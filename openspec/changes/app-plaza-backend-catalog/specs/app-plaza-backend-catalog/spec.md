@@ -44,17 +44,21 @@
 - **WHEN** `targetType=APP` 但当前应用缓存不包含 `targetAppId`
 - **THEN** 系统 MUST 展示 Banner 但 MUST NOT 猜测或打开未知 URL
 
-### Requirement: 本地个人应用数据按用户隔离
+### Requirement: 收藏与外部应用沿用 Main 本地注册表
 
-系统 MUST 保留用户添加的外部应用和收藏，并 MUST 使用当前员工工号隔离本地存储；“我的应用” MUST 由本地外部应用和当前用户收藏的可见服务端应用组成。
+系统 MUST 保留 `main` 已有的外部应用和收藏行为，并 MUST 通过 Main Host API 将 `externalApps`、`installedIds` 和 `favoriteIds` 持久化到 `~/.stoclaw/more-apps/apps.json`；“我的应用” MUST 由本地外部应用和已收藏的可见服务端应用组成。
 
-#### Scenario: 同机切换账号
-- **WHEN** 桌面客户端从一个员工账号切换到另一个员工账号
-- **THEN** 系统 MUST 加载新员工自己的外部应用和收藏且 MUST NOT 展示前一员工的个人数据
+#### Scenario: 启动后恢复收藏
+- **WHEN** 用户重新启动桌面客户端并进入应用广场
+- **THEN** 系统 MUST 从 Main 本地注册表恢复外部应用、安装 ID 和收藏 ID
 
 #### Scenario: 收藏服务端应用
 - **WHEN** 用户收藏一个当前可见的服务端应用
-- **THEN** 系统 MUST 将其加入该用户的“我的应用”并持久化该用户的收藏 ID
+- **THEN** 系统 MUST 将其加入“我的应用”并通过 Main Host API 将收藏 ID 持久化到本地注册表
+
+#### Scenario: 迁移旧收藏
+- **WHEN** Main 本地注册表为空且旧版 renderer localStorage 存在外部应用或收藏
+- **THEN** 系统 MUST 将旧数据迁移到本地注册表，并在迁移成功后清理旧 key
 
 ### Requirement: 服务端数据经过安全适配
 

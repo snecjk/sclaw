@@ -34,6 +34,21 @@ export function getOpenClawConfigDir(): string {
   return join(homedir(), '.stoclaw', 'openclaw');
 }
 
+/** StoClaw user home config root (~/.stoclaw). */
+export function getStoClawHomeDir(): string {
+  return join(homedir(), '.stoclaw');
+}
+
+/** More Apps registry directory under the StoClaw user home. */
+export function getMoreAppsDir(): string {
+  return join(getStoClawHomeDir(), 'more-apps');
+}
+
+/** More Apps registry JSON path (~/.stoclaw/more-apps/apps.json). */
+export function getMoreAppsRegistryPath(): string {
+  return join(getMoreAppsDir(), 'apps.json');
+}
+
 /** Legacy standalone OpenClaw workspace (~/.openclaw/workspace), if present on disk. */
 export function getLegacyOpenClawWorkspaceRoot(): string {
   return join(homedir(), '.openclaw', 'workspace');

@@ -43,13 +43,13 @@ URL Banner 直接打开 `targetUrl`，NONE Banner 不可点击；APP Banner 仅�
 
 **Alternative considered:** 为找目标 APP 拉取所有分页或把 `targetAppId` 拼成 URL。前者成本无界，后者不符合契约，因此不采用。后续后端可返回目标应用最小快照或提供详情接口。
 
-### 4. 本地个人数据按员工隔离
+### 4. 收藏与外部应用沿用 main 的本地注册表
 
-外部应用和收藏使用包含 `userCode` 的 localStorage key；首次读取账号专属 key 为空时兼容迁移旧 key。服务端应用目录不落本地静态兜底。
+外部应用、安装 ID 和收藏 ID 继续通过 Main Host API 持久化到 `~/.stoclaw/more-apps/apps.json`。首次加载时兼容迁移旧版 renderer `localStorage`，服务端应用目录不落本地静态兜底。
 
-**Rationale:** 本地能力仍需保留，但不能在同一桌面客户端的不同账号间共享。
+**Rationale:** 本次变更只负责把应用广场 mock 目录替换为服务端目录；收藏和外部应用应与 `main` 保持相同行为，并由 Main 进程负责本地文件写入。
 
-**Alternative considered:** 继续使用全局 key。该方案会导致总部、网点切换时个人应用互相可见，因此不采用。
+**Alternative considered:** 将收藏改为按工号写 renderer `localStorage`。该方案偏离 `main`、清理 Web 数据后会丢失，因此不采用。
 
 ### 5. 删除伪安装对页面语义的控制
 
@@ -70,7 +70,7 @@ URL Banner 直接打开 `targetUrl`，NONE Banner 不可点击；APP Banner 仅�
 
 1. 发布新 Host API 和 Renderer 客户端。
 2. 页面改用服务端目录并保留旧静态文件但不再作为生产数据源，便于短期回滚。
-3. 首次访问按员工迁移旧外部应用和收藏数据。
+3. 首次访问将旧版全局 localStorage 外部应用和收藏迁移到 Main 本地注册表。
 4. 回滚时恢复静态目录引用；服务端和本地数据无需迁移。
 
 ## Open Questions

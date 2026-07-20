@@ -33,9 +33,9 @@ export function MoreAppsPage() {
     searchQuery,
     marketCategory,
     heroSlideIndex,
-    builtinApps,
     externalApps,
     favoriteIds,
+    hydrate,
     banners,
     bannersLoading,
     bannersError,
@@ -71,10 +71,10 @@ export function MoreAppsPage() {
   // already fetches the first APP page, so we don't double-fire on initial render.
   const searchMountedRef = useRef(false);
 
-  // Merge builtin + external for the "我的应用" tab (favorites/external behavior unchanged).
+  // "我的应用" uses the current server catalog plus main's local external-app registry.
   const allApps = useMemo(() => {
-    return [...builtinApps, ...externalApps].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  }, [builtinApps, externalApps]);
+    return [...apps, ...externalApps].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }, [apps, externalApps]);
 
   // Server categories with a fixed "精选" entry first; while loading or on error
   // only "精选" is shown (分类失败时保留精选 — independent degradation).
@@ -118,10 +118,11 @@ export function MoreAppsPage() {
   // Load the three server blocks on mount — each keeps independent loading/error
   // so one failure never blanks the others (Banner / 分类 / APP 经 Main 代理且独立降级).
   useEffect(() => {
+    void hydrate();
     void fetchBanners();
     void fetchCategories();
     void fetchApps({ reset: true });
-  }, [fetchBanners, fetchCategories, fetchApps]);
+  }, [hydrate, fetchBanners, fetchCategories, fetchApps]);
 
   // Debounced keyword search — resets to page 1 with the new keyword after input
   // settles. Skips the initial mount run (the mount effect already fetched page 1)

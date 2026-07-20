@@ -3,11 +3,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const fetchAppsMock = vi.fn();
 const fetchCategoriesMock = vi.fn();
 const fetchBannersMock = vi.fn();
+const fetchRegistryMock = vi.fn();
+const saveRegistryMock = vi.fn();
+const migrateRegistryMock = vi.fn();
 
 vi.mock('@/lib/app-plaza-api', () => ({
   fetchAppPlazaApps: (...args: unknown[]) => fetchAppsMock(...args),
   fetchAppPlazaCategories: (...args: unknown[]) => fetchCategoriesMock(...args),
   fetchAppPlazaBanners: (...args: unknown[]) => fetchBannersMock(...args),
+}));
+
+vi.mock('@/lib/more-apps-api', () => ({
+  fetchMoreAppsRegistry: (...args: unknown[]) => fetchRegistryMock(...args),
+  saveMoreAppsRegistry: (...args: unknown[]) => saveRegistryMock(...args),
+  migrateMoreAppsRegistry: (...args: unknown[]) => migrateRegistryMock(...args),
 }));
 
 import { useMoreAppsStore } from '@/stores/more-apps';
@@ -18,16 +27,29 @@ describe('more apps store', () => {
     fetchAppsMock.mockReset().mockResolvedValue({ items: [], total: 0, pageNum: 1, pageSize: 20 });
     fetchCategoriesMock.mockReset().mockResolvedValue([]);
     fetchBannersMock.mockReset().mockResolvedValue([]);
+    fetchRegistryMock.mockReset().mockResolvedValue({
+      version: 1,
+      externalApps: [],
+      installedIds: [],
+      favoriteIds: [],
+    });
+    saveRegistryMock.mockReset().mockImplementation(async (registry) => registry);
+    migrateRegistryMock.mockReset().mockImplementation(async (registry) => ({
+      migrated: true,
+      registry,
+    }));
     useMoreAppsStore.setState({
       activeTab: 'market',
       searchQuery: '',
       marketCategory: 'featured',
-      userCode: '',
       apps: [],
       categories: [],
       banners: [],
       externalApps: [],
       favoriteIds: [],
+      installedIds: [],
+      hydrated: false,
+      hydrating: false,
       total: 0,
       pageNum: 0,
       loading: false,
@@ -37,7 +59,7 @@ describe('more apps store', () => {
   });
 
   it('loads the server catalog and forwards filters', async () => {
-    await useMoreAppsStore.getState().initialize('u-1');
+    await useMoreAppsStore.getState().hydrate();
     useMoreAppsStore.getState().setSearchQuery('客户');
     useMoreAppsStore.getState().setMarketCategory('org');
     await useMoreAppsStore.getState().fetchApps({ reset: true });
@@ -81,7 +103,11 @@ describe('more apps store', () => {
       pageNum: 1,
       pageSize: 20,
     });
-    await useMoreAppsStore.getState().initialize('u-1');
+    await Promise.all([
+      useMoreAppsStore.getState().fetchBanners(),
+      useMoreAppsStore.getState().fetchCategories(),
+      useMoreAppsStore.getState().fetchApps({ reset: true }),
+    ]);
     expect(useMoreAppsStore.getState().bannersError).toContain('banner unavailable');
     expect(useMoreAppsStore.getState().categories).toEqual([
       expect.objectContaining({ id: 'org' }),
@@ -92,17 +118,15 @@ describe('more apps store', () => {
     expect(useMoreAppsStore.getState().error).toBeNull();
   });
 
-  it('isolates external apps and favorites by user code', async () => {
-    await useMoreAppsStore.getState().initialize('alice');
-    useMoreAppsStore.getState().addExternalApp({ name: 'Alice App', url: 'https://example.com' });
+  it('persists favorites through main-backed registry', async () => {
+    await useMoreAppsStore.getState().hydrate();
     useMoreAppsStore.getState().toggleFavorite('app-a');
-
-    await useMoreAppsStore.getState().initialize('bob');
-    expect(useMoreAppsStore.getState().externalApps).toEqual([]);
-    expect(useMoreAppsStore.getState().favoriteIds).toEqual([]);
-
-    await useMoreAppsStore.getState().initialize('alice');
-    expect(useMoreAppsStore.getState().externalApps[0]?.name).toBe('Alice App');
     expect(useMoreAppsStore.getState().favoriteIds).toEqual(['app-a']);
+    expect(saveRegistryMock).toHaveBeenLastCalledWith({
+      version: 1,
+      externalApps: [],
+      installedIds: [],
+      favoriteIds: ['app-a'],
+    });
   });
 });
