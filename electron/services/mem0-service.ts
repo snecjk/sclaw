@@ -245,7 +245,7 @@ export class Mem0Service {
     });
     const client = await this.getClient<{ search: (query: string, options: { filters: Record<string, unknown>; topK?: number }) => Promise<unknown> }>();
     const result = await client.search(query, options);
-    logger.info('[mem0] search success');
+    logger.info('[mem0] search success:', result);
     return result;
   }
 
