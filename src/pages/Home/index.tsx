@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { HomeAgentHubSurface } from './HomeAgentHubSurface';
+import { useHomeConversationActive } from './use-home-conversation-active';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { createAutoSendWatcher } from '@/stores/message-queue';
@@ -12,8 +13,10 @@ import { useHomeChatEntrySend } from './use-home-chat-entry-send';
  * 首页：所有用户统一走 HomeAgentHubSurface，由后端推荐位 API 动态返回不同内容。
  */
 export function Home() {
+  // 开预览时外层须 display:contents，否则对话/预览列进不了 main 的三栏 grid（白屏）
+  const showConversation = useHomeConversationActive();
   const { isSplitGridPassthrough, splitGridPassthroughClass } =
-    useSplitGridPassthroughClass(false);
+    useSplitGridPassthroughClass(showConversation);
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
 
   useEffect(() => {
