@@ -20,10 +20,6 @@ import {
 } from './types';
 import type { ChatSet } from './store-api';
 import { scrubCorruptedSessionLabels } from '@/lib/session-label';
-import { stripAgentMemoryContextsForDisplay } from '@/lib/agent-memory-display';
-import {
-  captureAgentMemories,
-} from '@/lib/agent-execution-memory';
 import {
   buildSessionSwitchPatch as buildSessionSwitchPatchFromRuntime,
 } from './session-runtime';
@@ -63,7 +59,6 @@ import {
   normalizeSendMessageOptions,
   parseSessionUpdatedAtMs,
   resolveEngineTypeForSession as resolveEngineTypeForSessionWithAgent,
-  stripAgentMemoryFromHistoryMessage as stripAgentMemoryMessage,
   toMs,
 } from './store-helpers';
 import type { ResolveChatSessionEngineTypeOptions } from '@/lib/resolve-chat-session-engine-type';
@@ -86,9 +81,6 @@ function getAgentEngineType(agentId: string | undefined | null): ChatSession['en
   return useAgentsStore.getState().agents.find((agent) => normalizeAgentId(agent.id) === normalizedAgentId)?.engineType;
 }
 
-function stripAgentMemoryFromHistoryMessage(message: Parameters<typeof stripAgentMemoryMessage>[0]) {
-  return stripAgentMemoryMessage(message, stripAgentMemoryContextsForDisplay);
-}
 
 function resolveEngineTypeForSession(
   sessions: ChatSession[],
@@ -139,7 +131,6 @@ function handleBackgroundSessionEvent(
     get: () => useChatStore.getState(),
     resolveEngineType: resolveEngineTypeForSession,
     isToolOnlyMessage,
-    dispatchMemoryCapture: dispatchAgentMemoryCapture,
     markUnreadAfterRun: markSessionUnreadAfterSuccessfulRun,
   })(set, event);
 }
@@ -169,8 +160,6 @@ export const useChatStore = create<ChatState>()(
     toMs,
     clearHistoryPoll,
     resolveEngineTypeForSession,
-    stripAgentMemoryFromHistoryMessage,
-    dispatchAgentMemoryCapture,
   }),
 
   ...createSendActions(set, get, {
@@ -188,7 +177,6 @@ export const useChatStore = create<ChatState>()(
   ...createForegroundEventActions(set, get, {
     resolveEngineTypeForSession,
     handleBackgroundSessionEvent,
-    dispatchAgentMemoryCapture,
     clearHistoryPoll,
     clearErrorRecoveryTimer,
     setErrorRecoveryTimer,
@@ -221,15 +209,6 @@ export const useChatStore = create<ChatState>()(
   },
 }));
 
-function dispatchAgentMemoryCapture(input: {
-  agentId?: string | null;
-  runId?: string | null;
-  sessionKey?: string | null;
-  engineType?: string | null;
-}): void {
-  captureAgentMemories(input);
-}
-
 /** OpenClaw has no Claude-style runtimeResult; agent.completed is the terminal signal. */
 export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null, runId?: string | null): void {
   const state = useChatStore.getState();
@@ -241,10 +220,8 @@ export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null
   // path to clear sending. Without it the spinner stays stuck after the run.
   if (engineType !== 'openclaw' && engineType !== 'claude') return;
 
-  // Agentic 'final' chat events lack phase=completed, so their
-  // isTerminalOutput gate never fires the memory-capture dispatch. This
-  // agent.completed path is the real terminal point — capture the run id
-  // before clearing runtime state and dispatch execution-memory precipitation.
+  // Agentic 'final' chat events lack phase=completed. agent.completed is the
+  // real terminal point used to clear runtime state and finalize visible output.
   const resolvedRunId = runId ?? state.activeRunId ?? undefined;
   const agentId = getAgentIdFromSessionKey(targetKey);
 
@@ -270,6 +247,5 @@ export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null
     set: (partial) => {
       useChatStore.setState(partial);
     },
-    dispatchMemoryCapture: dispatchAgentMemoryCapture,
   });
 }

@@ -11,6 +11,7 @@ import { applyStoClaudeInferenceEnv } from '../services/sto-claude-inference-env
 import { getAgentPreferredModel } from '../utils/agent-config';
 import { logger } from '../utils/logger';
 import { getClaudeConfigDir } from '../utils/paths';
+import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { getApiKey } from '../utils/secure-storage';
 import { resolveAvailableClaudeModel } from './claude-model-selection';
 
@@ -125,6 +126,7 @@ async function buildClaudeEnvForAccount(
     ...process.env,
     CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
   };
+  applySaiClientIdEnv(base as Record<string, string | undefined>);
   const resolvedAccount = account ?? await getProviderAccount(accountId);
   if (!resolvedAccount) return base;
 

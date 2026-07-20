@@ -3,14 +3,25 @@ import { ipcMain } from 'electron';
 import type { GatewayManager } from '../../gateway/manager';
 
 import { agentMemoryOrchestrator } from '../../services/agent-memory-orchestrator';
-import { memoryCaptureService, type MemoryCaptureInput } from '../../services/memory-capture-service';
+import { agentMemoryContextService } from '../../services/agent-memory-context-service';
+import { memoryCaptureService } from '../../services/memory-capture-service';
+import { registerMemoryTurnEventObserver } from '../../services/memory-turn-event-observer';
+import { onAuthenticatedUserSet } from '../../utils/auth-store';
+
+let authListenerRegistered = false;
 
 export function registerAgentMemoryHandlers(gatewayManager: GatewayManager): void {
+  registerMemoryTurnEventObserver(gatewayManager);
+  if (!authListenerRegistered) {
+    authListenerRegistered = true;
+    onAuthenticatedUserSet(() => {
+      void agentMemoryContextService.reinitializeAfterLogin().catch((error) => {
+        console.warn('[agent-memory] login reinitialize failed:', error);
+      });
+    });
+  }
+  agentMemoryContextService.warmup();
   void memoryCaptureService.recover(gatewayManager).catch(() => undefined);
-  ipcMain.handle('agent-memory:initialize', async () => {
-    return await agentMemoryOrchestrator.initialize();
-  });
-
   ipcMain.handle('agent-memory:status', async () => {
     return await agentMemoryOrchestrator.getStatus();
   });
@@ -59,17 +70,6 @@ export function registerAgentMemoryHandlers(gatewayManager: GatewayManager): voi
   });
 
   ipcMain.handle(
-    'agent-memory:mem0-search',
-    async (
-      _event: IpcMainInvokeEvent,
-      query: string,
-      options: { userId?: string; agentId?: string; runId?: string; topK?: number },
-    ) => {
-      return await agentMemoryOrchestrator.searchMemories(query, options ?? {});
-    },
-  );
-
-  ipcMain.handle(
     'agent-memory:mem0-list',
     async (
       _event: IpcMainInvokeEvent,
@@ -104,30 +104,6 @@ export function registerAgentMemoryHandlers(gatewayManager: GatewayManager): voi
       return await agentMemoryOrchestrator.summarizeExecutionExperience(
         input && typeof input === 'object' ? input : {},
       );
-    },
-  );
-
-  ipcMain.handle(
-    'agent-memory:capture',
-    async (_event: IpcMainInvokeEvent, input: MemoryCaptureInput) => {
-      if (input?.terminalStatus !== 'completed') {
-        return { accepted: false, reason: 'non_completed_turn' };
-      }
-      await memoryCaptureService.capture(input, gatewayManager);
-      return { accepted: true };
-    },
-  );
-
-  ipcMain.handle(
-    'execution-memory:bind-injected-memories',
-    async (_event: IpcMainInvokeEvent, input: {
-      runId?: string;
-      sessionKey?: string;
-      agentId?: string;
-      memories?: Array<{ memoryId?: string; memory?: string }>;
-    }) => {
-      memoryCaptureService.bindInjectedExecutionMemories(input ?? {});
-      return { accepted: true };
     },
   );
 

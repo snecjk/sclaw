@@ -11,6 +11,7 @@ export interface ChatSendAttachment {
 export interface DispatchChatRequestInput {
   sessionKey: string;
   message: string;
+  sourceText?: string;
   idempotencyKey: string;
   engineType?: ChatSession['engineType'];
   systemPromptAppend?: string;
@@ -46,6 +47,7 @@ export async function dispatchChatRequest(
       body: JSON.stringify({
         sessionKey: input.sessionKey,
         message: input.message,
+        sourceText: input.sourceText,
         deliver: false,
         idempotencyKey: input.idempotencyKey,
         systemPromptAppend: input.systemPromptAppend,

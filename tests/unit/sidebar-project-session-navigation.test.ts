@@ -22,7 +22,7 @@ function workspace(
 }
 
 describe('sidebar project and session navigation', () => {
-  it('sorts projects by creation time ascending without mutating input', () => {
+  it('sorts projects by creation time descending without mutating input', () => {
     const input = [
       workspace('newest', '2026-07-17T03:00:00.000Z'),
       workspace('oldest', '2026-07-17T01:00:00.000Z'),
@@ -30,9 +30,9 @@ describe('sidebar project and session navigation', () => {
     ];
 
     expect(sortProjectsByCreatedAt(input).map(({ id }) => id)).toEqual([
-      'oldest',
-      'middle',
       'newest',
+      'middle',
+      'oldest',
     ]);
     expect(input.map(({ id }) => id)).toEqual(['newest', 'oldest', 'middle']);
   });

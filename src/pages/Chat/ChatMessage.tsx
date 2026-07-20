@@ -46,6 +46,7 @@ import {
   isWorkflowStartAssistantBoilerplate,
   isWorkflowCompletionTranscript,
   resolveAssistantCopyShareContent,
+  resolveUserBubbleActionText,
 } from './message-utils';
 import { writeCopyShareTextToClipboard } from '@/lib/copy-share-clipboard';
 import {
@@ -96,6 +97,7 @@ import { buildArtifactCardMenuItems } from '@/lib/artifact-card-menu';
 import { highlightAtMentionsInChildren } from '@/lib/at-mention-highlight';
 import { renderUserMessageMentionNodes } from '@/components/dingtalk/DingTalkMentionTag';
 import { SkillMessageTag } from '@/components/skill-plaza/SkillMessageTag';
+import type { SkillMeta } from '@/types/skill-meta';
 import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessPanel';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import { ShareMessageIcon } from '@/components/icons/ShareMessageIcon';
@@ -122,7 +124,7 @@ interface ChatMessageProps {
   }>;
   onPreviewFile?: (file: AttachedFileMeta) => void;
   onCreateScheduledTask?: (workflowId: string) => void;
-  onEditMessage?: (text: string) => void;
+  onEditMessage?: (text: string, skillMeta?: SkillMeta) => void;
   /** Used when rendered inside AssistantTurnMessage */
   hideAvatar?: boolean;
   hideThinkingPanel?: boolean;
@@ -171,6 +173,11 @@ export const ChatMessage = memo(function ChatMessage({
   const skillMeta = message._skillMeta;
   const hasText = text.trim().length > 0;
   const showUserSkillBubble = isUser && Boolean(skillMeta);
+  /** Text for copy/share on a user bubble (skill title + body); see helper. */
+  const userActionText = useMemo(
+    () => resolveUserBubbleActionText(text, skillMeta),
+    [text, skillMeta],
+  );
   const [systemExpanded, setSystemExpanded] = useState(false);
   const images = extractImages(message);
   const tools = extractToolUse(message);
@@ -406,7 +413,7 @@ export const ChatMessage = memo(function ChatMessage({
   const assistantCopyShareContent = useMemo(
     () => {
       if (isUser) {
-        return { text: text.trim(), files: previewFiles };
+        return { text: userActionText.trim(), files: previewFiles };
       }
       return resolveAssistantCopyShareContent({
         text,
@@ -417,7 +424,7 @@ export const ChatMessage = memo(function ChatMessage({
         previewFiles,
       });
     },
-    [isUser, text, assistantBubbleText, workflowCard, workflowCardStates, sessionKey, previewFiles],
+    [isUser, text, userActionText, assistantBubbleText, workflowCard, workflowCardStates, sessionKey, previewFiles],
   );
   const showUserParamsFold = isUser && hasText && isWorkflowParamsUserText(text);
 
@@ -897,7 +904,9 @@ export const ChatMessage = memo(function ChatMessage({
 
         {isUser && showUserMessageMeta ? (
           <UserMessageMetaRow
-            text={text}
+            copyText={userActionText}
+            editText={text}
+            skillMeta={skillMeta}
             timestamp={message.timestamp}
             onEditMessage={onEditMessage}
             onShare={openConversationShare}
@@ -984,14 +993,21 @@ function ToolStatusBar({
 }
 
 function UserMessageMetaRow({
-  text,
+  copyText,
+  editText,
+  skillMeta,
   timestamp,
   onEditMessage,
   onShare,
 }: {
-  text: string;
+  /** Combined skill title + body, used for copy/share. */
+  copyText: string;
+  /** Raw user-typed body, restored into the composer on edit. */
+  editText: string;
+  /** Skill token to re-insert into the composer on edit, if any. */
+  skillMeta?: SkillMeta;
   timestamp?: number;
-  onEditMessage?: (text: string) => void;
+  onEditMessage?: (text: string, skillMeta?: SkillMeta) => void;
   onShare?: () => void;
 }) {
   const { t } = useTranslation('chat');
@@ -999,22 +1015,24 @@ function UserMessageMetaRow({
 
   const copyContent = useCallback(async () => {
     try {
-      await writeCopyShareTextToClipboard({ text });
+      await writeCopyShareTextToClipboard({ text: copyText });
       setCopied(true);
       setTimeout(() => setCopied(false), 1600);
     } catch (error) {
       console.error('[ChatMessage] Failed to copy user message:', error);
       toast.error(t('messageActions.copyFailed'));
     }
-  }, [text, t]);
+  }, [copyText, t]);
 
   const editAgain = useCallback(() => {
     if (onEditMessage) {
-      onEditMessage(text);
+      onEditMessage(editText, skillMeta);
       return;
     }
-    window.dispatchEvent(new CustomEvent(CHAT_EDIT_DRAFT_EVENT, { detail: { text } }));
-  }, [onEditMessage, text]);
+    window.dispatchEvent(
+      new CustomEvent(CHAT_EDIT_DRAFT_EVENT, { detail: { text: editText, skill: skillMeta } }),
+    );
+  }, [onEditMessage, editText, skillMeta]);
 
   return (
     <div className={cn('flex select-none items-center gap-2', HOVER_REVEAL_CLASS)}>

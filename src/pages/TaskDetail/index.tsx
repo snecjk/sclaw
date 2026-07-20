@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { isStoTaskId, isYmdEntryId, taskOverviewPath, type StoTaskId } from '@/lib/sto-tasks';
 import { stoChatShellPageClass } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
-import { useAuthStore } from '@/stores/auth';
 import { useStoTaskSubitemsStore, stoTaskSubitemKey } from '@/stores/sto-task-subitems';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { useChatStore } from '@/stores/chat';
@@ -57,12 +56,7 @@ function TaskSubitemRedirect({ id, entryId }: { id: StoTaskId; entryId: string }
 
 export function TaskDetail() {
   const { taskId, entryId } = useParams<{ taskId: string; entryId?: string }>();
-  const crmWeekReportSurfaceAllowed = useAuthStore((s) => s.crmWeekReportSurfaceAllowed);
   const listEntries = useStoTaskSubitemsStore((s) => s.listEntries);
-
-  if (!crmWeekReportSurfaceAllowed) {
-    return <Navigate to="/" replace />;
-  }
 
   if (!taskId || !isStoTaskId(taskId)) {
     return <Navigate to="/" replace />;

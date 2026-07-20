@@ -4,13 +4,6 @@ import type { ChatSession } from './types';
 
 export type TurnEffect =
   | {
-      type: 'captureMemory';
-      agentId?: string | null;
-      runId?: string | null;
-      sessionKey?: string | null;
-      engineType?: ChatSession['engineType'];
-    }
-  | {
       type: 'reloadHistoryAndFinalize';
       agentId?: string | null;
       runId?: string | null;
@@ -27,12 +20,6 @@ export interface TurnEffectExecutor {
   get: ChatGet;
   set: ChatSet;
   clearHistoryPoll?: () => void;
-  dispatchMemoryCapture: (input: {
-    agentId?: string | null;
-    runId?: string | null;
-    sessionKey?: string | null;
-    engineType?: ChatSession['engineType'];
-  }) => void | Promise<void>;
 }
 
 export function executeTurnEffects(
@@ -40,16 +27,6 @@ export function executeTurnEffects(
   executor: TurnEffectExecutor,
 ): void {
   for (const effect of effects) {
-    if (effect.type === 'captureMemory') {
-      void executor.dispatchMemoryCapture({
-        agentId: effect.agentId,
-        runId: effect.runId,
-        sessionKey: effect.sessionKey,
-        engineType: effect.engineType,
-      });
-      continue;
-    }
-
     if (effect.type === 'reloadHistoryAndFinalize') {
       executor.clearHistoryPoll?.();
       void executor.get().loadHistory(true, true, effect.sessionKey).then(() => {
@@ -79,13 +56,7 @@ export function buildTerminalTurnEffects(input: {
   reloadHistory?: boolean;
   finalizeVisibleMessages?: boolean;
 }): TurnEffect[] {
-  const effects: TurnEffect[] = [{
-    type: 'captureMemory',
-    agentId: input.agentId,
-    runId: input.runId,
-    sessionKey: input.sessionKey,
-    engineType: input.engineType,
-  }];
+  const effects: TurnEffect[] = [];
 
   if (input.reloadHistory) {
     effects.push({

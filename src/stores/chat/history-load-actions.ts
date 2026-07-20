@@ -39,13 +39,6 @@ export interface HistoryLoadDeps {
     sessionKey: string,
     currentAgentId?: string | null,
   ) => ChatSession['engineType'] | undefined;
-  stripAgentMemoryFromHistoryMessage: (message: RawMessage) => RawMessage;
-  dispatchAgentMemoryCapture: (input: {
-    agentId?: string | null;
-    runId?: string | null;
-    sessionKey?: string | null;
-    engineType?: ChatSession['engineType'];
-  }) => void;
 }
 
 async function loadFallbackMessagesForSession(sessionKey: string): Promise<RawMessage[]> {

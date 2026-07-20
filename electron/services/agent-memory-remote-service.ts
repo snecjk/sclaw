@@ -75,7 +75,10 @@ const AGENT_MEMORY_BOOTSTRAP_PATH = '/agent/v1/agent-memory/bootstrap';
 const AGENT_MEMORY_EMBEDDER_CREATE_PATH = '/agent/v1/agent-memory/embedder/create';
 const AGENT_MEMORY_VECTOR_UPSERT_PATH = '/agent/v1/agent-memory/vector/upsert';
 const AGENT_MEMORY_VECTOR_SEARCH_PATH = '/agent/v1/agent-memory/vector/search';
+const AGENT_MEMORY_VECTOR_GET_PATH = '/agent/v1/agent-memory/vector/get';
+const AGENT_MEMORY_VECTOR_LIST_PATH = '/agent/v1/agent-memory/vector/list';
 const AGENT_MEMORY_VECTOR_DELETE_PATH = '/agent/v1/agent-memory/vector/delete';
+const AGENT_MEMORY_VECTOR_DELETE_COL_PATH = '/agent/v1/agent-memory/vector/delete-col';
 const AGENT_MEMORY_CHAT_COMPLETIONS_PATH = '/agent/v1/chat/completions';
 const AGENT_MEMORY_MODELS_PATH = '/agent/v1/models';
 const AGENT_MEMORY_TOP_K_MAX = 20;
@@ -230,6 +233,64 @@ export class AgentMemoryRemoteService {
     return await requestMemoryCenter<{ deleted: number }>(AGENT_MEMORY_VECTOR_DELETE_PATH, {
       method: 'POST',
       body: JSON.stringify({ recordIds, collectionName }),
+    });
+  }
+
+  async getVectors(recordIds: string[], collectionName?: string): Promise<{
+    items: AgentMemorySearchResultItem[];
+    count: number;
+  }> {
+    logger.info('[mem0][remote] getVectors', {
+      count: recordIds.length,
+      collectionName,
+    });
+    return await requestMemoryCenter<{
+      items: AgentMemorySearchResultItem[];
+      count: number;
+    }>(AGENT_MEMORY_VECTOR_GET_PATH, {
+      method: 'POST',
+      body: JSON.stringify({ recordIds, collectionName }),
+    });
+  }
+
+  async listVectors(params: {
+    collectionName?: string;
+    topK?: number;
+    agentId?: string;
+    runId?: string;
+    sessionId?: string;
+    memoryTypes?: string[];
+  }): Promise<{
+    items: AgentMemorySearchResultItem[];
+    count: number;
+    total: number;
+    topK: number;
+  }> {
+    const topK = Math.min(Math.max(Math.trunc(params.topK ?? 100), 1), 100);
+    logger.info('[mem0][remote] listVectors', {
+      collectionName: params.collectionName,
+      topK,
+      agentId: params.agentId,
+      runId: params.runId,
+      sessionId: params.sessionId,
+      memoryTypes: params.memoryTypes,
+    });
+    return await requestMemoryCenter<{
+      items: AgentMemorySearchResultItem[];
+      count: number;
+      total: number;
+      topK: number;
+    }>(AGENT_MEMORY_VECTOR_LIST_PATH, {
+      method: 'POST',
+      body: JSON.stringify({ ...params, topK }),
+    });
+  }
+
+  async deleteVectorCollection(collectionName?: string): Promise<{ deleted: number }> {
+    logger.info('[mem0][remote] deleteVectorCollection', { collectionName });
+    return await requestMemoryCenter<{ deleted: number }>(AGENT_MEMORY_VECTOR_DELETE_COL_PATH, {
+      method: 'POST',
+      body: JSON.stringify({ collectionName }),
     });
   }
 

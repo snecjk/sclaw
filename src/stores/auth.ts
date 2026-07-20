@@ -70,8 +70,6 @@ export {
   type AuthMode,
 } from '../../shared/auth-mode-utils';
 
-export type CrmWeekReportPolicyStatus = 'idle' | 'loading' | 'ok' | 'error';
-
 export interface ClientSiteAccessDeniedInfo {
   allowed: boolean;
   clientCode?: string;
@@ -92,9 +90,6 @@ interface AuthState {
   /** 客户端网点白名单校验未通过（登录或冷启动） */
   accessDenied: boolean;
   accessCheck: ClientSiteAccessDeniedInfo | null;
-  /** CRM 周报首页 /tasks 表面：仅在为 true 时展示（策略白名单命中）；未登录或 fail-closed 时为 false。 */
-  crmWeekReportSurfaceAllowed: boolean;
-  crmWeekReportPolicyStatus: CrmWeekReportPolicyStatus;
   /** 切换网点前保存的总部原账号（演示用） */
   impersonationOrigin: SsoUserInfo | null;
   accountSwitchOptions: AccountSwitchOption[];
@@ -107,7 +102,6 @@ interface AuthState {
   login: (environment?: SsoEnvironment) => Promise<void>;
   logout: () => Promise<void>;
   setSsoEnvironment: (env: SsoEnvironment) => Promise<void>;
-  refreshCrmWeekReportPolicy: () => Promise<void>;
   clearAccessDenied: () => void;
   loadAccountSwitchOptions: () => Promise<void>;
   switchToAccount: (targetCode: string) => Promise<void>;
@@ -290,8 +284,6 @@ export const useAuthStore = create<AuthState>()(
       error: null,
       accessDenied: false,
       accessCheck: null,
-      crmWeekReportSurfaceAllowed: false,
-      crmWeekReportPolicyStatus: 'idle',
       impersonationOrigin: null,
       accountSwitchOptions: [],
       accountSwitchOptionsStatus: 'idle',
@@ -299,30 +291,6 @@ export const useAuthStore = create<AuthState>()(
 
       clearAccessDenied: () => {
         set({ accessDenied: false, accessCheck: null, error: null });
-      },
-
-      refreshCrmWeekReportPolicy: async () => {
-        const { isAuthenticated, user } = get();
-        if (!isAuthenticated || !user?.userName?.trim()) {
-          set({
-            crmWeekReportSurfaceAllowed: false,
-            crmWeekReportPolicyStatus: 'idle',
-          });
-          return;
-        }
-        set({ crmWeekReportPolicyStatus: 'loading' });
-        try {
-          const data = await hostApiFetch<{ allowed: boolean }>('/api/auth/crm-week-report-policy');
-          set({
-            crmWeekReportSurfaceAllowed: data.allowed === true,
-            crmWeekReportPolicyStatus: 'ok',
-          });
-        } catch {
-          set({
-            crmWeekReportSurfaceAllowed: false,
-            crmWeekReportPolicyStatus: 'error',
-          });
-        }
       },
 
       init: async () => {
@@ -360,8 +328,6 @@ export const useAuthStore = create<AuthState>()(
                   }
                 : null,
               error: data.error || '您的所属组织无权使用 StoClaw',
-              crmWeekReportSurfaceAllowed: false,
-              crmWeekReportPolicyStatus: 'idle',
             });
             return;
           }
@@ -381,13 +347,7 @@ export const useAuthStore = create<AuthState>()(
             impersonationOrigin: data.impersonationOrigin ?? null,
             siteDepartmentTypes,
           });
-          if (!data.isAuthenticated) {
-            set({
-              crmWeekReportSurfaceAllowed: false,
-              crmWeekReportPolicyStatus: 'idle',
-            });
-          } else {
-            void get().refreshCrmWeekReportPolicy();
+          if (data.isAuthenticated) {
             // If already authenticated on startup, ensure STO models are synced and
             // the renderer's provider list is up-to-date. The main process runs its
             // own startup sync (index.ts), but the renderer may have fetched providers
@@ -401,16 +361,39 @@ export const useAuthStore = create<AuthState>()(
         } catch {
           // Main-process unreachable — trust the renderer-persisted state as fallback.
           // Still mark as initialized so the auth guard can proceed.
-          set({
-            isInitialized: true,
-            crmWeekReportSurfaceAllowed: false,
-            crmWeekReportPolicyStatus: 'idle',
-          });
+          set({ isInitialized: true });
         }
       },
 
       login: async (environment?: SsoEnvironment) => {
         set({ isLoggingIn: true, error: null });
+        const completeLogin = (user: SsoUserInfo, stoSync?: StoSyncResponse) => {
+          set({
+            isAuthenticated: true,
+            user,
+            isLoggingIn: false,
+            error: null,
+            accessDenied: false,
+            accessCheck: null,
+            accountSwitchOptions: [],
+            accountSwitchOptionsStatus: 'idle',
+            impersonationOrigin: null,
+            siteDepartmentTypes: null,
+          });
+
+          // Site metadata is useful after navigation but is not part of the
+          // authentication completion boundary.
+          void fetchRendererSiteDepartmentTypes().then((types) => {
+            if (get().isAuthenticated && get().user?.code === user.code) {
+              set({ siteDepartmentTypes: applyRendererSiteDepartmentTypes(types) });
+            }
+          });
+
+          showStoSyncErrorToasts(stoSync);
+          void syncStoModelsAndRefreshProviders('login');
+          void get().loadAccountSwitchOptions();
+        };
+
         try {
           const env = environment || get().ssoEnvironment;
           const data = await hostApiFetch<{
@@ -452,26 +435,7 @@ export const useAuthStore = create<AuthState>()(
           }
 
           if (data.success && data.user) {
-            const siteDepartmentTypes = applyRendererSiteDepartmentTypes(
-              await fetchRendererSiteDepartmentTypes(),
-            );
-            set({
-              isAuthenticated: true,
-              user: data.user,
-              isLoggingIn: false,
-              error: null,
-              accessDenied: false,
-              accessCheck: null,
-              accountSwitchOptions: [],
-              accountSwitchOptionsStatus: 'idle',
-              impersonationOrigin: null,
-              siteDepartmentTypes,
-            });
-
-            showStoSyncErrorToasts(data.stoSync);
-            void syncStoModelsAndRefreshProviders('login');
-            void get().refreshCrmWeekReportPolicy();
-            void get().loadAccountSwitchOptions();
+            completeLogin(data.user, data.stoSync);
           } else {
             set({
               isLoggingIn: false,
@@ -481,6 +445,21 @@ export const useAuthStore = create<AuthState>()(
             });
           }
         } catch (err) {
+          // The login response can be lost after Main has already persisted the
+          // session. Reconcile once with the authoritative state before showing
+          // a transport error or leaving the Login page pending.
+          try {
+            const recovered = await hostApiFetch<{
+              isAuthenticated: boolean;
+              user: SsoUserInfo | null;
+            }>('/api/auth/status');
+            if (recovered.isAuthenticated && recovered.user) {
+              completeLogin(recovered.user);
+              return;
+            }
+          } catch {
+            // Preserve the original login error; recovery is best-effort.
+          }
           set({
             isLoggingIn: false,
             error: err instanceof Error ? err.message : String(err),
@@ -500,8 +479,6 @@ export const useAuthStore = create<AuthState>()(
           error: null,
           accessDenied: false,
           accessCheck: null,
-          crmWeekReportSurfaceAllowed: false,
-          crmWeekReportPolicyStatus: 'idle',
           impersonationOrigin: null,
           accountSwitchOptions: [],
           accountSwitchOptionsStatus: 'idle',
@@ -568,7 +545,7 @@ export const useAuthStore = create<AuthState>()(
                 await postAccountSwitchDirect(user, ssoEnvironment, trimmed),
               );
               if (!switched.stoToken) {
-                throw new Error('切换响应缺少 stoToken');
+                throw new Error('切换响应缺少 stoToken', { cause: hostError });
               }
               usedDirectFallback = true;
               data = {
@@ -625,7 +602,7 @@ export const useAuthStore = create<AuthState>()(
             }
             const origin = get().impersonationOrigin;
             if (!origin?.stoToken) {
-              throw new Error('没有可恢复的总部账号');
+              throw new Error('没有可恢复的总部账号', { cause: hostError });
             }
             usedDirectFallback = true;
             data = { success: true, user: origin };

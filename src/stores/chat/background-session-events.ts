@@ -21,7 +21,6 @@ import { buildTerminalRuntimePatch, resolveAssistantFinalTurnState } from './tur
 import { buildTerminalTurnEffects, executeTurnEffects } from './turn-effects';
 import { logChatFlow } from './chat-flow-log';
 import { decideRunEvent, recordTerminalRun } from './run-lifecycle';
-import { discardAgentMemoriesForAbnormalTurn } from '@/lib/agent-execution-memory';
 
 export interface BackgroundChatEvent {
   sessionKey: string;
@@ -36,17 +35,11 @@ export interface BackgroundSessionEventDependencies {
   get: ChatGet;
   resolveEngineType: (sessions: ChatSession[], sessionKey: string, agentId: string) => ChatSession['engineType'];
   isToolOnlyMessage: (message: RawMessage) => boolean;
-  dispatchMemoryCapture: (input: {
-    agentId?: string | null;
-    runId?: string | null;
-    sessionKey?: string | null;
-    engineType?: string | null;
-  }) => void;
   markUnreadAfterRun: (sessionKey: string, currentSessionKey: string, options: { runId: string }) => void;
 }
 
 export function createBackgroundSessionEventHandler(dependencies: BackgroundSessionEventDependencies) {
-  const { get, resolveEngineType, isToolOnlyMessage, dispatchMemoryCapture, markUnreadAfterRun } = dependencies;
+  const { get, resolveEngineType, isToolOnlyMessage, markUnreadAfterRun } = dependencies;
   return (set: ChatSet, backgroundEvent: BackgroundChatEvent): void => {
     const {
       resolvedState,
@@ -164,24 +157,18 @@ export function createBackgroundSessionEventHandler(dependencies: BackgroundSess
             runId: runId || undefined,
             sessionKey,
             engineType,
-          }), {
-            get,
-            set,
-            dispatchMemoryCapture,
-          });
+          }), { get, set });
         }
         if (isTerminalOutput) recordTerminalRun(sessionKey, runId);
         break;
       }
       case 'error':
-        discardAgentMemoriesForAbnormalTurn({ sessionKey, runId, reason: 'failed' });
         set((state) => applyRuntimePatch(state, sessionKey, buildTerminalRuntimePatch(
           errorMessage,
         )));
         recordTerminalRun(sessionKey, runId);
         break;
       case 'aborted':
-        discardAgentMemoriesForAbnormalTurn({ sessionKey, runId, reason: 'aborted' });
         set((state) => applyRuntimePatch(state, sessionKey, buildTerminalRuntimePatch(null)));
         recordTerminalRun(sessionKey, runId);
         break;

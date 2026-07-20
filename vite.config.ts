@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync } from 'fs';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import electron from 'vite-plugin-electron';
@@ -8,6 +8,7 @@ import { resolve } from 'path';
 function copyGatewayPreloadCjs(outDir: string) {
   const src = resolve(__dirname, 'electron/gateway/gateway-fetch-preload.cjs');
   if (!existsSync(src)) return;
+  mkdirSync(outDir, { recursive: true });
   copyFileSync(src, resolve(outDir, 'gateway-fetch-preload.cjs'));
 }
 
@@ -53,8 +54,13 @@ export default defineConfig(({ mode }) => {
                 external: [
                   'electron-store',
                   'electron-updater',
+                  // mem0's official OSS entry imports its provider peers at runtime.
+                  // Keep it external so electron-builder packages those dependencies
+                  // once under node_modules instead of duplicating them in this bundle.
+                  'mem0ai/oss',
                   'ws',
                   /openclaw\/extensions\//,
+                  /^node:/,
                 ],
               },
             },

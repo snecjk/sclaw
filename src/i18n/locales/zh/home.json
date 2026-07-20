@@ -4,116 +4,16 @@
       "title": "让网点经营更高效",
       "subtitle": "搭载 AI智能工作台，重塑网点智慧经营新模式，赋能经营管理新价值"
     },
-    "workflowGuide": {
-      "heading": "工作流引导",
-      "monitor": {
-        "title": "客户异常监控",
-        "pill": "任务监控",
-        "status": "未配置",
-        "bodyCaption": "工作流简介",
-        "bodyDetail": "按日对比客户件量、货品结构、损益与服务指标，自动识别异常客户并生成监控报告，支持配置规则与定时推送至工作中心。",
-        "footerTeam": "客户跟踪小组",
-        "footerHint": "配置工作流",
-        "createPrompt": "客户异常监控 创建工作流"
-      },
-      "recon": {
-        "title": "总部结算对账",
-        "pill": "结算对账",
-        "status": "未配置",
-        "bodyCaption": "工作流简介",
-        "bodyDetail": "对接总部结算数据，自动识别费用结算异常波动科目并输出对账结果，生成可对账、可追踪的标准化结算报告。",
-        "footerTeam": "王牌结算小组",
-        "footerHint": "配置工作流",
-        "createPrompt": "总部结算对账 创建工作流"
-      },
-      "cost": {
-        "title": "客户成本分析",
-        "pill": "成本分析",
-        "status": "未配置",
-        "bodyCaption": "工作流简介",
-        "bodyDetail": "按客户/店铺维度还原出港发件单票成本，识别科目、流向-重量段成本异常客户，自动生成成本分析报表与优化建议。",
-        "footerTeam": "客户跟踪小组",
-        "footerHint": "配置工作流",
-        "createPrompt": "客户成本分析 创建工作流"
-      }
-    },
     "assistant": {
       "placeholder": "帮我做一份客户异常监控"
     }
   },
   "homeWorkflowCard": {
-    "createPrompt": "{{label}} 创建工作流",
-    "startPrompt": "启动 {{label}}",
-    "bodyDetail": "点击配置并启动该工作流",
-    "stat1Label": "状态",
-    "stat1Value": "待启动",
-    "stat2Label": "节点",
-    "stat2Value": "-",
-    "stat3Label": "最近运行",
-    "stat3Value": "-",
-    "footerTeam": "工作流团队",
     "footerHint": "点击启动"
   },
   "hero": {
     "title": "让经营管理更高效",
     "subtitle": "搭载AI智能工作台，驱动组织高效协同，赋能经营管理新价值"
-  },
-  "summary": {
-    "heading": "数据概览",
-    "comingSoon": "全力研发中…",
-    "recon": {
-      "title": "周会材料生成",
-      "pill": "经营管理",
-      "status": "已完成",
-      "bodyCaption": "材料模块",
-      "bodyDetail": "单量、损益、客户营销、执行力",
-      "stat1Label": "总收支",
-      "stat1Value": "128,560",
-      "stat1Unit": "元",
-      "stat2Label": "收入",
-      "stat2Value": "98,750",
-      "stat2Unit": "元",
-      "stat3Label": "支出",
-      "stat3Value": "29,810",
-      "stat3Unit": "元",
-      "footerTeam": "政策服务中心",
-      "footerHint": "待核对2个模版",
-      "defaultComposePrompt": "生成周报PPT"
-    },
-    "customer": {
-      "title": "政策定价测算",
-      "pill": "定价测算",
-      "status": "已处理",
-      "stat1Label": "准入客户",
-      "stat1Value": "10",
-      "stat1Unit": "个",
-      "stat2Label": "损益向差",
-      "stat2Value": "2",
-      "stat2Unit": "个",
-      "stat3Label": "",
-      "stat3Value": "",
-      "stat3Unit": "",
-      "footerTeam": "政策服务中心",
-      "footerHint": "存在异常客户2个",
-      "defaultComposePrompt": "政策定价测算场景（占位）。"
-    },
-    "cost": {
-      "title": "客户留存管理",
-      "pill": "客户服务",
-      "status": "已完成",
-      "stat1Label": "新增客户",
-      "stat1Value": "1.5",
-      "stat1Unit": "万",
-      "stat2Label": "流失客户",
-      "stat2Value": "-2.8",
-      "stat2Unit": "万",
-      "stat3Label": "",
-      "stat3Value": "",
-      "stat3Unit": "",
-      "footerTeam": "政策服务中心",
-      "footerHint": "存在异常客户7个",
-      "defaultComposePrompt": "客户留存跟进（占位）。"
-    }
   },
   "assistant": {
     "placeholder": "请输入您的问题，支持自然语言提问或上传文件…",

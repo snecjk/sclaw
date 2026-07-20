@@ -13,13 +13,10 @@ import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { logger } from '../../utils/logger';
 import { getStoModelSyncService } from '../../services/providers/sto-model-sync';
-import { runAuthenticatedSetup, type AuthenticatedSetupResult } from '../../services/auth-setup-orchestrator';
+import { runAuthenticatedSetup } from '../../services/auth-setup-orchestrator';
 import { runPendingInstallReport } from '../../services/client-update-platform';
-import { activateUserWorkspace, getCurrentActiveUserCode } from '../../services/user-skill-workspace';
+import { activateUserWorkspace, getCurrentActiveUserCode, syncMountPointToUser } from '../../services/user-skill-workspace';
 import { removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-auth';
-import { getStoPolicyReportApiHost } from '../../../shared/env-config';
-import { computeCrmWeekReportSurfaceAllowed } from '../../../shared/crm-week-report-policy';
-import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { loadSiteDepartmentTypes, loadClawInferenceRuntimeConfig, clearInferenceRuntimeConfigCache, fetchHqBalanceApplyUrl, DEFAULT_HQ_BALANCE_APPLY_URL } from '../../services/sto-apollo-config-service';
 import { getClientSiteAccessService } from '../../services/client-site-access-service';
 import type { ClientSiteAccessCheckResult } from '../../../shared/client-site-access';
@@ -99,10 +96,42 @@ function schedulePostLoginBackgroundWork(user: SsoUserInfo, ctx: HostApiContext)
   })();
 }
 
-const CRM_WEEK_REPORT_POLICY_PATH =
-  '/sto-policy/api/v1/base/getReportAuthUserIgnoreLogin?reportType=POLICY_CRM_WEEK_REPORT';
+/**
+ * Runtime preparation is deliberately decoupled from authentication completion.
+ * Once access is validated and setAuthUser() returns, the renderer can safely
+ * enter the application while this serialized setup continues in the background.
+ */
+export function schedulePostLoginInitialization(
+  user: SsoUserInfo,
+  ctx: HostApiContext,
+): void {
+  const startedAt = Date.now();
+  logger.info(`[auth] Post-login initialization scheduled for user=${user.code}`);
 
-const CRM_POLICY_FETCH_TIMEOUT_MS = 15_000;
+  void (async () => {
+    try {
+      await loadInferenceRuntimeConfigBeforeSetup();
+      const setupResult = await runAuthenticatedSetup({
+        user,
+        gatewayManager: ctx.gatewayManager,
+        source: 'login',
+        awaitGatewayRefresh: true,
+      });
+      logger.info(
+        `[auth] Post-login initialization completed for user=${user.code} `
+        + `in ${Date.now() - startedAt}ms (models created=${setupResult.stoSync.created.length} `
+        + `updated=${setupResult.stoSync.updated.length})`,
+      );
+    } catch (err) {
+      logger.warn(
+        `[auth] Post-login initialization failed for user=${user.code} after ${Date.now() - startedAt}ms:`,
+        err,
+      );
+    } finally {
+      schedulePostLoginBackgroundWork(user, ctx);
+    }
+  })();
+}
 
 export async function handleAuthRoutes(
   req: IncomingMessage,
@@ -201,30 +230,12 @@ export async function handleAuthRoutes(
         stoSyncService.setGatewayManager(ctx.gatewayManager);
       }
 
-      await loadInferenceRuntimeConfigBeforeSetup();
-
-      let setupResult: AuthenticatedSetupResult | undefined;
-      try {
-        // awaitGatewayRefresh: if the setup needs a Gateway reload/restart (e.g.
-        // STO models rebuilt after a logout), run it now and wait for the Gateway
-        // to settle, so the renderer only enters the home page once ready.
-        setupResult = await runAuthenticatedSetup({
-          user,
-          gatewayManager: ctx.gatewayManager,
-          source: 'login',
-          awaitGatewayRefresh: true,
-        });
-      } catch (err) {
-        logger.warn('[auth] Synchronous post-login authenticated setup failed:', err);
-      }
-
       stoSyncService.startPeriodicSync();
-      schedulePostLoginBackgroundWork(user, ctx);
+      schedulePostLoginInitialization(user, ctx);
 
       sendJson(res, 200, {
         success: true,
         user,
-        stoSync: setupResult?.stoSync,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -240,6 +251,20 @@ export async function handleAuthRoutes(
 
   // POST /api/auth/logout — sign out
   if (url.pathname === '/api/auth/logout' && req.method === 'POST') {
+    // Persist the current mount-point skills back to the user's workspace BEFORE
+    // clearing auth. Skills that only live on the global mount (e.g. ones
+    // generated via natural-language chat) would otherwise be lost when the next
+    // login's clearMountPoint() runs. Best-effort: never block logout on this.
+    try {
+      const activeUserCode = await getCurrentActiveUserCode();
+      if (activeUserCode) {
+        await syncMountPointToUser(activeUserCode);
+        logger.info(`[auth] Saved mount point to user ${activeUserCode} before logout`);
+      }
+    } catch (err) {
+      logger.warn('[auth] Failed to persist skills to user workspace on logout:', err);
+    }
+
     try {
       const state = await getAuthState();
 
@@ -320,53 +345,6 @@ export async function handleAuthRoutes(
     } catch (error) {
       logger.warn('Site department types fetch failed:', error);
       sendJson(res, 200, { success: false, types: [] });
-    }
-    return true;
-  }
-
-  // GET /api/auth/crm-week-report-policy — CRM 周报策略白名单（Main 代理，fail-closed）
-  if (url.pathname === '/api/auth/crm-week-report-policy' && req.method === 'GET') {
-    try {
-      const state = await getAuthState();
-      if (!state.isAuthenticated || !state.user?.userName?.trim()) {
-        sendJson(res, 200, { allowed: false });
-        return true;
-      }
-
-      const host = getStoPolicyReportApiHost();
-      const policyUrl = `https://${host}${CRM_WEEK_REPORT_POLICY_PATH}`;
-      const signal = AbortSignal.timeout(CRM_POLICY_FETCH_TIMEOUT_MS);
-
-      const response = await proxyAwareFetch(policyUrl, {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        signal,
-      });
-
-      if (!response.ok) {
-        logger.warn(`CRM week report policy: HTTP ${response.status} (host ${host})`);
-        sendJson(res, 200, { allowed: false });
-        return true;
-      }
-
-      let json: unknown;
-      try {
-        json = await response.json() as unknown;
-      } catch {
-        logger.warn('CRM week report policy: response body is not valid JSON');
-        sendJson(res, 200, { allowed: false });
-        return true;
-      }
-
-      const allowed = computeCrmWeekReportSurfaceAllowed(
-        state.user.code,
-        state.user.userName,
-        json,
-      );
-      sendJson(res, 200, { allowed });
-    } catch (error) {
-      logger.warn('CRM week report policy fetch failed:', error);
-      sendJson(res, 200, { allowed: false });
     }
     return true;
   }

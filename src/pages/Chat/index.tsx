@@ -97,7 +97,11 @@ export function Chat() {
     previewPanelPercent,
     setPreviewSplitPercent,
   );
-  const [editDraft, setEditDraft] = useState<{ text: string; version: number } | null>(null);
+  const [editDraft, setEditDraft] = useState<{
+    text: string;
+    skill?: import('@/types/skill-meta').SkillMeta;
+    version: number;
+  } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchableMessages, setSearchableMessages] = useState<Array<{ id: string; text: string }>>([]);
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
@@ -378,11 +382,14 @@ export function Chat() {
     void abortRun();
   }, [abortRun, activeTurn?.turnStableKey]);
 
-  const handleEditMessage = useCallback((text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    setEditDraft({ text: trimmed, version: Date.now() });
-  }, []);
+  const handleEditMessage = useCallback(
+    (text: string, skillMeta?: import('@/types/skill-meta').SkillMeta) => {
+      const trimmed = text.trim();
+      if (!trimmed && !skillMeta) return;
+      setEditDraft({ text: trimmed, skill: skillMeta, version: Date.now() });
+    },
+    [],
+  );
 
   const handleEditDraftApplied = useCallback(() => {
     setEditDraft(null);

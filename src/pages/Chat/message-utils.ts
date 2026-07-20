@@ -8,7 +8,6 @@ import { hostApiFetch } from '@/lib/host-api';
 import { tracePreviewExtract } from '@/lib/preview-extract-trace';
 import { useChatStore } from '@/stores/chat';
 import { sessionHasWorkflowExecution } from '@/stores/workflow-memory';
-import { stripAgentMemoryContextsForDisplay } from '@/lib/agent-memory-display';
 import { buildWorkflowFormConfig, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import {
   PARAM_FORM_MARKER_REGEX,
@@ -82,11 +81,9 @@ function cleanUserText(text: string): string {
   return stripDingTalkMentionContextForDisplay(
     stripWorkflowCompleteForDisplay(
       stripWorkflowSessionHintForDisplay(
-        stripAgentMemoryContextsForDisplay(
-          stripSclawBrowserEmbedContextForDisplay(
-            stripWorkflowContextForDisplay(
-              stripCronTriggerTextForDisplay(cleaned),
-            ),
+        stripSclawBrowserEmbedContextForDisplay(
+          stripWorkflowContextForDisplay(
+            stripCronTriggerTextForDisplay(cleaned),
           ),
         ),
       ),
@@ -709,6 +706,25 @@ export function extractText(message: RawMessage | unknown): string {
   }
 
   return result;
+}
+
+/**
+ * Resolve the text used for copy / share / edit on a user bubble.
+ *
+ * Skill bubbles keep the visible title in `_skillMeta.title` rather than in
+ * `content` (which is often empty after skill normalization), so copy/share/edit
+ * must combine the skill title with any user-typed body to mirror the visible
+ * bubble. Without this, skill-only messages would copy/share/edit an empty
+ * string and the actions appear broken.
+ */
+export function resolveUserBubbleActionText(
+  bodyText: string,
+  skillMeta?: { title?: string } | null,
+): string {
+  const body = (bodyText ?? '').trim();
+  const title = (skillMeta?.title ?? '').trim();
+  if (title && body) return `${title} ${body}`;
+  return title || body;
 }
 
 /**
