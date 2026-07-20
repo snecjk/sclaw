@@ -8,6 +8,7 @@ import { readSkillMdFrontmatter } from '../../utils/skill-frontmatter';
 import { logger } from '../../utils/logger';
 import { safeRemoveDir } from '../../utils/fs-retry';
 import { getCurrentActiveUserCode } from '../user-skill-workspace';
+import { readPreinstalledManifestSlugs } from '../../utils/skill-config';
 import {
   ensureSkillsStoreDirs,
   getSkillEntry,
@@ -99,7 +100,10 @@ function resolveScope(params: { agentId?: string; userCode: string | null }): {
  * Plaza uninstall must clear every copy that would still appear in "我的技能".
  * Migration often left the same slug in both user + global; deleting only the
  * active user scope then looked successful while global kept the card alive.
- * Shared preinstalled globals are left alone so one user cannot wipe them for all.
+ * Only slugs listed in resources/skills/preinstalled-manifest.json are protected
+ * as shared preinstall — a leftover `.stoclaw-preinstalled.json` marker or
+ * `source: stoclaw-preinstalled` alone must not block uninstall (e.g. locally
+ * authored skills that were mis-marked during migration).
  */
 async function resolveUninstallTargets(
   slug: string,
@@ -132,10 +136,8 @@ async function resolveUninstallTargets(
   const globalEntry = await getSkillEntry(globalKey);
   const globalDir = resolvePackageDir(globalKey);
   if (globalEntry || fs.existsSync(globalDir)) {
-    const isPreinstalled =
-      globalEntry?.source === 'stoclaw-preinstalled'
-      || fs.existsSync(path.join(globalDir, PREINSTALLED_MARKER_NAME));
-    if (!isPreinstalled) {
+    const officialPreinstall = readPreinstalledManifestSlugs().has(slug);
+    if (!officialPreinstall) {
       push(globalKey);
     }
   }

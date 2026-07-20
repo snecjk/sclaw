@@ -80,6 +80,8 @@ export interface SkillSummary {
   forceUpdate?: boolean;
   /** Remote plaza `is_builtin` — auto-install when missing (not local preinstall). */
   isBuiltin?: boolean;
+  /** False when slug is in resources/skills/preinstalled-manifest.json. */
+  canUninstall?: boolean;
 }
 
 export interface SkillDetail extends SkillSummary {
@@ -341,6 +343,7 @@ function normalizeSkillSummary(skill: Partial<SkillSummary>): SkillSummary {
     updateAvailable: skill.updateAvailable ?? false,
     forceUpdate: skill.forceUpdate ?? false,
     isBuiltin: skill.isBuiltin ?? false,
+    canUninstall: skill.canUninstall,
   };
 }
 
@@ -1458,6 +1461,7 @@ export class SkillPlazaService {
           defaultPrompt: summary.defaultPrompt || displayTitle || slug,
           updatedAt: plazaSkill?.updatedAt,
           version: plazaSkill?.version,
+          canUninstall: !manifestSlugs.has(slug),
         };
         skills.push(this.overlayLocalState(baseSkill, snapshot));
       }

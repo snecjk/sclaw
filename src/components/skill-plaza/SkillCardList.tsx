@@ -70,7 +70,7 @@ function SkillCardListImpl({ skill, onOpenDetail, onDelete }: SkillCardListProps
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
-        {onDelete && (
+        {onDelete && skill.canUninstall !== false && (
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(skill); }}
             className={cn(

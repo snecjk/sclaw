@@ -40,9 +40,12 @@ vi.mock('../../electron/utils/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
+const preinstalledWhitelist = vi.hoisted(() => new Set<string>());
+
 vi.mock('../../electron/utils/skill-config', () => ({
   setSkillsEnabled: vi.fn(async () => undefined),
   updateSkillConfig: vi.fn(async () => ({ success: true })),
+  readPreinstalledManifestSlugs: () => new Set(preinstalledWhitelist),
 }));
 
 vi.mock('../../electron/services/project-agent-service', () => ({
@@ -68,6 +71,7 @@ describe('skill lifecycle adapters + manager', () => {
 
   beforeEach(async () => {
     vi.resetModules();
+    preinstalledWhitelist.clear();
     tempRoot = await mkdtemp(join(tmpdir(), 'stoclaw-skill-lifecycle-'));
     roots.store = join(tempRoot, 'skills-store');
     roots.openclaw = join(tempRoot, 'openclaw');
@@ -325,5 +329,68 @@ describe('skill lifecycle adapters + manager', () => {
     expect(await getSkillEntry(globalKey)).toBeNull();
     expect(existsSync(join(resolvePackageDir(userKey), 'SKILL.md'))).toBe(false);
     expect(existsSync(join(resolvePackageDir(globalKey), 'SKILL.md'))).toBe(false);
+  });
+
+  it('uninstall removes mis-marked global skills not in official preinstall whitelist', async () => {
+    const { upsertSkillEntry, getSkillEntry, resolvePackageDir } = await import(
+      '../../electron/services/skills/canonical-store'
+    );
+    const { setEngineSkillAdapters } = await import(
+      '../../electron/services/skills/adapters/engine-skill-adapter'
+    );
+    const { getSkillManager, PREINSTALLED_MARKER_NAME } = await import(
+      '../../electron/services/skills/skill-manager'
+    );
+
+    setEngineSkillAdapters([
+      {
+        id: 'openclaw',
+        applyInstall: vi.fn(async () => undefined),
+        applyUninstall: vi.fn(async () => undefined),
+        applyEnabled: vi.fn(async () => undefined),
+        reconcile: vi.fn(async () => ({ mirrored: [], removed: [], skippedConflicts: [] })),
+      },
+    ]);
+
+    // Official whitelist only protects real bundled skills (e.g. pdf).
+    preinstalledWhitelist.add('pdf');
+
+    const fakeKey = { slug: 'wechat-product-promo', scope: 'global' as const };
+    const fakeDir = resolvePackageDir(fakeKey);
+    await writeSkill(fakeDir, 'wechat-product-promo');
+    await writeFile(
+      join(fakeDir, PREINSTALLED_MARKER_NAME),
+      `${JSON.stringify({ source: 'stoclaw-user', slug: 'wechat-product-promo' }, null, 2)}\n`,
+      'utf-8',
+    );
+    await upsertSkillEntry({
+      ...fakeKey,
+      version: '1.0.0',
+      source: 'stoclaw-preinstalled',
+      enabled: true,
+    });
+
+    const protectedKey = { slug: 'pdf', scope: 'global' as const };
+    const protectedDir = resolvePackageDir(protectedKey);
+    await writeSkill(protectedDir, 'pdf');
+    await writeFile(
+      join(protectedDir, PREINSTALLED_MARKER_NAME),
+      `${JSON.stringify({ source: 'stoclaw-preinstalled', slug: 'pdf' }, null, 2)}\n`,
+      'utf-8',
+    );
+    await upsertSkillEntry({
+      ...protectedKey,
+      version: '1.0.0',
+      source: 'stoclaw-preinstalled',
+      enabled: true,
+    });
+
+    await getSkillManager().uninstall({ slug: 'wechat-product-promo' });
+    await getSkillManager().uninstall({ slug: 'pdf' });
+
+    expect(await getSkillEntry(fakeKey)).toBeNull();
+    expect(existsSync(join(fakeDir, 'SKILL.md'))).toBe(false);
+    expect(await getSkillEntry(protectedKey)).not.toBeNull();
+    expect(existsSync(join(protectedDir, 'SKILL.md'))).toBe(true);
   });
 });
