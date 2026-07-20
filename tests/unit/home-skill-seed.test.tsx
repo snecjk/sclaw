@@ -13,7 +13,6 @@ vi.mock('@/stores/auth', () => ({
     user: null,
     isAuthenticated: false,
     siteDepartmentTypes: [],
-    crmWeekReportSurfaceAllowed: false,
   }),
   isSiteUser: () => false,
 }));

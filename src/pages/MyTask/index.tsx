@@ -21,7 +21,7 @@ import { resolveTaskGroupKeyFromSessionKey } from '../../../shared/task-group-ke
 import { applyTaskExecutionModelToChatSession } from '@/lib/apply-task-execution-model';
 import { useChatStore } from '@/stores/chat';
 import { useAgentsStore } from '@/stores/agents';
-import { navigateToMainChatHome, navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
+import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import {
   stripInstructionFromTaskMessage,
   prepareDingTalkAgentTurnMessage,
@@ -38,12 +38,15 @@ import {
 } from '@/lib/surfaces';
 import { toast } from 'sonner';
 import { TaskCreateModal, type TaskCreateInputWithRun } from './components/TaskCreateModal';
+import { NewTaskDropdownButton } from './components/NewTaskDropdownButton';
+import { TemplateSelectModal } from './components/TemplateSelectModal';
 
 import { useMyTaskStore, selectRecordCounts, selectCurrentRecords } from './store';
 import type { TaskView, TaskViewModel, ExecutionRecord } from './types';
-import { listWorkflowTemplates } from '@/lib/workflow-api';
-import { mapTemplateMineItemToOfficialCard } from '@/pages/Workflow/workflow-mapper';
+import { pickCoverKeyFromWorkflowId } from '@/pages/Workflow/workflow-mapper';
 import type { OfficialWorkflowCard } from '@/pages/Workflow/types';
+import { useRecommendItems } from '@/hooks/use-recommend-items';
+import { RECOMMEND_POSITION_KEYS } from '@/lib/recommend-api';
 import { ViewTabs } from './components/ViewTabs';
 import { TaskToolbar } from './components/TaskToolbar';
 import { RecordToolbar } from './components/RecordToolbar';
@@ -155,10 +158,11 @@ export default function MyTask() {
   const {
     recordStatus,
     recordSearch,
-    fetchRecords,
     setRecordStatus,
     setRecordSearch,
   } = useMyTaskStore();
+
+  const fetchRecords = useMyTaskStore((s) => s.fetchRecords);
 
   const recordCounts = useMyTaskStore(useShallow(selectRecordCounts));
   const currentRecords = useMyTaskStore(useShallow(selectCurrentRecords));
@@ -175,32 +179,30 @@ export default function MyTask() {
   const [editingJob, setEditingJob] = useState<ManagedLocalTask | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ManagedLocalTask | null>(null);
   const [detailRecord, setDetailRecord] = useState<ExecutionRecord | null>(null);
-  const [officialCards, setOfficialCards] = useState<OfficialWorkflowCard[]>([]);
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const { items: recommendItems } = useRecommendItems(
+    RECOMMEND_POSITION_KEYS.MY_TASK,
+  );
+  const officialCards: OfficialWorkflowCard[] = useMemo(
+    () =>
+      recommendItems
+        .filter((item) => item.item_type === 'workflow_template')
+        .map((item) => ({
+          id: item.item_ref_id,
+          name: item.title,
+          category: item.item_type,
+          description: item.description ?? '',
+          flow: [],
+          coverKey: pickCoverKeyFromWorkflowId(item.item_ref_id),
+        })),
+    [recommendItems],
+  );
+  const [selectedWorkflowCode, setSelectedWorkflowCode] = useState<string | null>(null);
+  const [selectedTemplateName, setSelectedTemplateName] = useState<string | null>(null);
 
   // ── 初始化加载 ──
   useEffect(() => {
     fetchJobs().catch(() => {});
-    // 拉取官方推荐工作流模版（与 Workflow 页面逻辑一致）
-    listWorkflowTemplates({ page: 1, pageSize: 100 })
-      .then((result) => {
-        const officialItems = (result.items ?? []).map((item) => ({
-          id: String(item.id ?? ''),
-          label: String(item.label ?? ''),
-          description: item.description != null ? String(item.description) : null,
-          category: item.category != null ? String(item.category) : null,
-          scope: 'system' as const,
-          ownerUserId: null,
-          createdAt: null,
-          updatedAt: null,
-          nodeCount: Number(item.nodeCount) || 0,
-          nodes: Array.isArray(item.nodes) ? (item.nodes as Record<string, unknown>[]) : [],
-          edges: Array.isArray(item.edges) ? (item.edges as Record<string, unknown>[]) : [],
-        }));
-        setOfficialCards(officialItems.map(mapTemplateMineItemToOfficialCard));
-      })
-      .catch(() => {
-        setOfficialCards([]);
-      });
   }, [fetchJobs]);
 
   // ── 切换到执行记录 Tab 时串行加载 3 个状态桶 ──
@@ -211,7 +213,9 @@ export default function MyTask() {
         .then(() => fetchRecords('failed'))
         .catch(() => {});
     }
-  }, [activeView, fetchRecords]);
+    // fetchRecords 是 Zustand 稳定引用，仅在视图或状态切换时触发
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView, recordStatus]);
 
   // ── 任务视图轮询：到点后端会推进 nextRunAt，需及时拉取以重启倒计时。
   //     仅在页面可见时轮询；切回可见时立即补一次，避免长时间隐藏后数据陈旧 ──
@@ -341,7 +345,6 @@ export default function MyTask() {
   const handleSave = useCallback(
     async (input: TaskCreateInputWithRun) => {
       const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, input.engineType);
-      console.log('创建input -->', input, '所选 agent -->', selectedAgent, 'edit--> ', editingJob);
       try {
         if (editingJob) {
           if (editingJob.engineType === 'claude') {
@@ -455,30 +458,38 @@ export default function MyTask() {
     })();
   }, [deleteTarget, deleteJob, t]);
 
-  const handleTemplateInstall = useCallback(
-    (card: OfficialWorkflowCard) => {
-      navigateToNewSessionWithPrompt(navigate, location.pathname, `/${card.name}`, {
-        extraSearchParams: { workflowId: card.id },
-      });
+  const handleTemplateSelect = useCallback(
+    (instanceId: string, templateName: string) => {
+      setTemplateOpen(false);
+      setEditingJob(null);
+      setSelectedWorkflowCode(instanceId);
+      setSelectedTemplateName(templateName);
+      setCreateOpen(true);
     },
-    [navigate, location.pathname]
+    []
   );
+	
+  // const handleTemplateInstall = useCallback(
+  //   (card: OfficialWorkflowCard) => {
+  //     navigateToNewSessionWithPrompt(navigate, location.pathname, `/${card.name}`, {
+  //       extraSearchParams: { workflowId: card.id },
+  //     });
+  //   },
+  //   [navigate, location.pathname]
+  // );
 
   // ── 渲染 ──
   const isTasksView = activeView === 'tasks';
 
   return (
     <div className="h-full flex flex-col">
-      <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col">
+      <div className="flex-1 overflow-y-auto px-6 py-6 flex flex-col [scrollbar-gutter:stable]">
         <div className={cn(stoMainInnerShell, 'flex flex-1 flex-col')}>
           {/* 页面标题 + 右侧运行保障控件 */}
           <header className="mb-6">
             <div className={myTaskPageHeaderRowClass}>
-              <div className="min-w-0">
-                <h1 className={stoPageTitleClass}>{t('myTask.pageTitle')}</h1>
-                <p className="mt-1 text-sm text-muted-foreground">{t('myTask.subtitle')}</p>
-              </div>
-              <TaskRunGuardBar />
+              <h1 className={cn(stoPageTitleClass, 'h-[34px]')}>{t('myTask.pageTitle')}</h1>
+							<TaskRunGuardBar />
             </div>
           </header>
 
@@ -492,11 +503,15 @@ export default function MyTask() {
                 onSearchChange={setSearchQuery}
                 sortValue={sortValue}
                 onSortChange={setSortValue}
-                onCreate={() => {
-                  setEditingJob(null);
-                  setCreateOpen(true);
-                }}
-              />
+              >
+								<NewTaskDropdownButton
+                  onSelfCreate={() => {
+                    setEditingJob(null);
+                    setCreateOpen(true);
+                  }}
+                  onTemplateCreate={() => setTemplateOpen(true)}
+                />
+							</TaskToolbar>
             ) : (
               <RecordToolbar searchQuery={recordSearch} onSearchChange={setRecordSearch} />
             )}
@@ -524,12 +539,11 @@ export default function MyTask() {
               ) : filteredTasks.length === 0 ? (
                 <TaskEmptyState
                   searchQuery={searchQuery}
-                  onCreate={() => {
+                  onSelfCreate={() => {
                     setEditingJob(null);
                     setCreateOpen(true);
                   }}
-                  officialCards={officialCards}
-                  onTemplateInstall={handleTemplateInstall}
+                  onTemplateCreate={() => setTemplateOpen(true)}
                 />
               ) : (
                 <div className="grid grid-cols-1 items-stretch sm:grid-cols-2 lg:grid-cols-3 gap-[clamp(12px,1.4vw,16px)]">
@@ -590,8 +604,25 @@ export default function MyTask() {
       <TaskCreateModal
         job={editingJob}
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateOpen(false);
+          setSelectedWorkflowCode(null);
+          setSelectedTemplateName(null);
+        }}
         onSave={(input) => handleSave(input)}
+        initialValues={
+          selectedWorkflowCode
+            ? { workflowCode: selectedWorkflowCode, name: selectedTemplateName ?? '' }
+            : undefined
+        }
+      />
+
+      {/* 模版选择弹窗 */}
+      <TemplateSelectModal
+        open={templateOpen}
+        onClose={() => setTemplateOpen(false)}
+        officialCards={officialCards}
+        onInstantiated={handleTemplateSelect}
       />
 
       {/* 删除确认弹窗 */}

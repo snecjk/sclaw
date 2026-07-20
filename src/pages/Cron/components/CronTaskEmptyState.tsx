@@ -52,8 +52,7 @@ export function CronTaskEmptyState({ searchQuery, onCreate }: CronTaskEmptyState
       </div>
 
       {/* Recommend Grid */}
-      {/* 2026-06-12 秀峰要下周一615推广给省区用，所以要把这个网点的定时任务的推荐功能暂时去掉 */}
-      {/* <div className="w-full">
+      <div className="w-full">
         <p className="text-[13px] text-muted-foreground mb-3">推荐任务</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {RECOMMEND_TASKS.map((task, i) => (
@@ -81,7 +80,7 @@ export function CronTaskEmptyState({ searchQuery, onCreate }: CronTaskEmptyState
             </article>
           ))}
         </div>
-      </div> */}
+      </div>
     </div>
   );
 }

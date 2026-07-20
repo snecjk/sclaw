@@ -35,7 +35,7 @@ export const homeHubCardBodyRegionClass = 'mt-5 min-h-[4.5rem] flex-1';
 
 /** 卡片底栏（头像 + 团队名 + CTA），同行卡片底部对齐 */
 export const homeHubCardFooterRegionClass =
-  'mt-5 flex min-h-[40px] shrink-0 items-center gap-3 border-t border-[#E5E6EB] pt-4 dark:border-border';
+  'flex min-h-[30px] shrink-0 items-center gap-3 border-t border-[#E5E6EB] pt-4 dark:border-border';
 
 /** 首页 Hero / 卡片 / 输入区共用最大宽（与 --sto-hero-input-max-w 同源，当前 780px） */
 export const homeHubContentMaxWidthClass =

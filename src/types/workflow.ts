@@ -198,6 +198,43 @@ export interface StartWorkflowResponse {
   streamUrl?: string | null;
 }
 
+// ── My Workflow Summary ───────────────────────────────────────
+
+/** 工作流生命周期状态（后端 _to_workflow_summary 输出 lowercase 字符串） */
+export type WorkflowLifecycleStatus = 'active' | 'draft' | string;
+
+/**
+ * 工作流实例摘要 —— 与后端 `_to_workflow_summary` 同构。
+ * 用于「我的工作流」列表项与 `latest-by-templates` 返回值（无实例时前端取 null）。
+ */
+export interface MyWorkflowSummary {
+  /** 工作流实例 ID（workflow_id） */
+  id: string;
+  name: string;
+  description?: string | null;
+  /** 来源模版 ID（若由模版实例化） */
+  templateId?: string | null;
+  /** 当前展示版本 ID */
+  versionId?: number | null;
+  /** 当前展示版本号 */
+  version?: number | null;
+  /** 生命周期状态：active(已发布) / draft(草稿) */
+  lifecycleStatus?: WorkflowLifecycleStatus | null;
+  /** 版本状态（draft/published/...） */
+  versionStatus?: string | null;
+  /** 已发布激活版本 ID */
+  activeVersionId?: string | number | null;
+  /** 已发布激活版本号 */
+  activeVersion?: number | null;
+  /** 已发布激活版本状态 */
+  activeVersionStatus?: string | null;
+  updatedAt?: string | null;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  updatedBy?: string | null;
+  updatedByName?: string | null;
+}
+
 // ── Run / Execution ─────────────────────────────────────────────
 
 export type WorkflowRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'timeout' | 'unknown';

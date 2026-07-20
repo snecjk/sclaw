@@ -240,7 +240,8 @@ export function ChatInput({
     () => (agents ?? []).find((agent) => agent.id === targetAgentId) ?? null,
     [agents, targetAgentId],
   );
-  const showAgentPicker = mentionableAgents.length > 0;
+  // Agent 工具栏图标暂隐藏；恢复时改回 mentionableAgents.length > 0
+  const showAgentPicker = false;
   const {
     open: dingTalkMentionOpen,
     trigger: dingTalkTrigger,

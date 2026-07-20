@@ -4,116 +4,16 @@
       "title": "拠点オペレーションをより効率的に",
       "subtitle": "AI ワークプラットフォームで拠点のスマート運営を再構築し、効率的で知的な現場運営を支援します。"
     },
-    "workflowGuide": {
-      "heading": "ワークフローガイド",
-      "monitor": {
-        "title": "顧客異常モニタリング",
-        "pill": "タスク監視",
-        "status": "未設定",
-        "bodyCaption": "ワークフロー概要",
-        "bodyDetail": "顧客件数・商品構成・損益・サービス指標を日次で比較し、異常顧客を自動検知してモニタリングレポートを生成。ルール設定とワークセンターへの定期プッシュに対応。",
-        "footerTeam": "顧客追跡チーム",
-        "footerHint": "ワークフローを設定",
-        "createPrompt": "顧客異常モニタリング ワークフローを作成"
-      },
-      "recon": {
-        "title": "本社精算照合",
-        "pill": "精算",
-        "status": "未設定",
-        "bodyCaption": "ワークフロー概要",
-        "bodyDetail": "本社精算データと連携し、費用精算の異常変動科目を自動検知して照合結果を出力。追跡可能な標準化精算レポートを生成。",
-        "footerTeam": "精算チーム",
-        "footerHint": "ワークフローを設定",
-        "createPrompt": "本社精算照合 ワークフローを作成"
-      },
-      "cost": {
-        "title": "顧客コスト分析",
-        "pill": "コスト分析",
-        "status": "未設定",
-        "bodyCaption": "ワークフロー概要",
-        "bodyDetail": "顧客/店舗ごとに出港発送の単票コストを还原し、科目・ルート-重量区分のコスト異常顧客を特定。コスト分析レポートと最適化提案を自動生成。",
-        "footerTeam": "顧客追跡チーム",
-        "footerHint": "ワークフローを設定",
-        "createPrompt": "顧客コスト分析 ワークフローを作成"
-      }
-    },
     "assistant": {
       "placeholder": "本社精算照合表を作成してください"
     }
   },
   "homeWorkflowCard": {
-    "createPrompt": "{{label}} ワークフローを作成",
-    "startPrompt": "{{label}} を起動",
-    "bodyDetail": "クリックしてワークフローを設定・起動",
-    "stat1Label": "状態",
-    "stat1Value": "待機中",
-    "stat2Label": "ノード",
-    "stat2Value": "-",
-    "stat3Label": "最終実行",
-    "stat3Value": "-",
-    "footerTeam": "ワークフローチーム",
     "footerHint": "クリックして起動"
   },
   "hero": {
     "title": "経営管理をより効率的に",
     "subtitle": "AI ワークスペースで組織の連携と現場オペレーションを強化します。"
-  },
-  "summary": {
-    "heading": "データ概要",
-    "comingSoon": "鋭意開発中…",
-    "recon": {
-      "title": "週次会議資料",
-      "pill": "経営管理",
-      "status": "完了",
-      "bodyCaption": "資料モジュール",
-      "bodyDetail": "件数、損益、顧客マーケ、実行力",
-      "stat1Label": "収支",
-      "stat1Value": "128,560",
-      "stat1Unit": "CNY",
-      "stat2Label": "収入",
-      "stat2Value": "98,750",
-      "stat2Unit": "CNY",
-      "stat3Label": "支出",
-      "stat3Value": "29,810",
-      "stat3Unit": "CNY",
-      "footerTeam": "精算チーム",
-      "footerHint": "例外 4 件",
-      "defaultComposePrompt": "2026年5月の全国低価格荷物量を照会し、日報を生成し、編集可能にする。"
-    },
-    "customer": {
-      "title": "政策価格試算",
-      "pill": "価格試算",
-      "status": "処理済",
-      "stat1Label": "准入顧客",
-      "stat1Value": "10",
-      "stat1Unit": "件",
-      "stat2Label": "損益差異",
-      "stat2Value": "2",
-      "stat2Unit": "件",
-      "stat3Label": "",
-      "stat3Value": "",
-      "stat3Unit": "",
-      "footerTeam": "政策サービスセンター",
-      "footerHint": "異常顧客 2 件",
-      "defaultComposePrompt": "政策価格試算シナリオ（プレースホルダー）。"
-    },
-    "cost": {
-      "title": "顧客リテンション",
-      "pill": "カスタマー",
-      "status": "完了",
-      "stat1Label": "新規顧客",
-      "stat1Value": "1.5",
-      "stat1Unit": "万",
-      "stat2Label": "離反顧客",
-      "stat2Value": "-2.8",
-      "stat2Unit": "万",
-      "stat3Label": "",
-      "stat3Value": "",
-      "stat3Unit": "",
-      "footerTeam": "政策サービスセンター",
-      "footerHint": "異常顧客 7 件",
-      "defaultComposePrompt": "顧客リテンションのフォローアップ（プレースホルダー）。"
-    }
   },
   "assistant": {
     "placeholder": "自然言語で質問するか、ファイルを添付…",

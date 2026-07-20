@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { ChatInput } from '@/pages/Chat/ChatInput';
 
 const { agentsState, chatState, gatewayState } = vi.hoisted(() => ({
@@ -16,9 +16,11 @@ const { agentsState, chatState, gatewayState } = vi.hoisted(() => ({
 
 vi.mock('@/stores/agents', () => ({
   useAgentsStore: (selector: (state: typeof agentsState) => unknown) => selector(agentsState),
-  resolveAgentById: (agents: Array<Record<string, unknown>>, agentId: string) => (
-    agents.find((agent) => agent.id === agentId)
-  ),
+  resolveAgentById: (
+    agents: Array<{ id?: string; name?: string }>,
+    agentId: string | null | undefined,
+    _projectName?: string | null,
+  ) => agents.find((agent) => agent.id === agentId),
 }));
 
 vi.mock('@/stores/chat', () => ({
@@ -99,8 +101,7 @@ describe('ChatInput agent targeting', () => {
     expect(screen.queryByTitle('Choose agent')).not.toBeInTheDocument();
   });
 
-  it('lets the user select an agent target and sends it with the message', () => {
-    const onSend = vi.fn();
+  it('hides the agent toolbar picker even when multiple agents are configured', () => {
     agentsState.agents = [
       {
         id: 'main',
@@ -126,16 +127,8 @@ describe('ChatInput agent targeting', () => {
       },
     ];
 
-    render(<ChatInput onSend={onSend} />);
+    render(<ChatInput onSend={vi.fn()} />);
 
-    fireEvent.click(screen.getByTitle('Choose agent'));
-    fireEvent.click(screen.getByText('Research'));
-
-    expect(screen.getByText('@Research')).toBeInTheDocument();
-
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Hello direct agent' } });
-    fireEvent.click(screen.getByTitle('Send'));
-
-    expect(onSend).toHaveBeenCalledWith('Hello direct agent', undefined, 'research');
+    expect(screen.queryByTitle('Choose agent')).not.toBeInTheDocument();
   });
 });

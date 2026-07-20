@@ -222,16 +222,18 @@ export function WorkflowMineListCard({
           >
             {t('card.edit')}
           </button>
-          <button
-            type="button"
-            className={workflowListCardPrimaryActionClass}
-            onClick={(e) => {
-              e.stopPropagation();
-              onRun();
-            }}
-          >
-            {t('card.run')}
-          </button>
+          {card.listKind === 'published' ? (
+            <button
+              type="button"
+              className={workflowListCardPrimaryActionClass}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRun();
+              }}
+            >
+              {t('card.run')}
+            </button>
+          ) : null}
         </div>
       </div>
     </WorkflowCardShell>

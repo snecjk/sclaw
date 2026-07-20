@@ -870,16 +870,19 @@ export class SkillPlazaService {
     const lockInfo = lockEntries.get(skill.slug);
     const isStoMarketplaceInstall = lockInfo?.source === 'sto-marketplace';
 
-    if (installed && skill.version) {
+    if (installed) {
       const skillDir = this.resolvePackageDir(snapshot, skill.slug);
       const lockVersion = isStoMarketplaceInstall ? lockInfo?.version : undefined;
       const skillMdVersion = skillDir && !isPreinstalledSkill(skillDir)
         ? readSkillMdVersion(skillDir)
         : null;
 
-      if (skillDir && !isPreinstalledSkill(skillDir)) {
-        installedVersion = resolveInstalledVersionForCompare(lockVersion, skillMdVersion);
-        updateAvailable = isRemoteVersionNewer(skill.version, installedVersion);
+      const cmpInstalledVersion = resolveInstalledVersionForCompare(lockVersion, skillMdVersion);
+      if (cmpInstalledVersion) {
+        installedVersion = cmpInstalledVersion;
+        if (skill.version) {
+          updateAvailable = isRemoteVersionNewer(skill.version, installedVersion);
+        }
       }
     }
 
@@ -1474,6 +1477,68 @@ export class SkillPlazaService {
     return {
       skills,
       categoryCounts: finalCategoryCounts,
+      hasMore: false,
+      page: 1,
+      pageSize: skills.length,
+      total: skills.length,
+    };
+  }
+
+  /**
+   * 轻量路径：按给定 slug 集合读取本地 install/版本状态，**不**做 category enrichment、
+   * **不**调远端（getCategories / fetchPlazaSkillMapForLocalEnrichment / getSkillDetail 全部跳过）。
+   * 供首页推荐位等「只需 installed / installedVersion / updateAvailable、不用分类」的场景使用。
+   * 未安装的 slug 不返回（消费方靠缺省判定 installed=false）。
+   */
+  async getLocalSkillsBySlugs(slugs: string[]): Promise<PlazaListResult> {
+    // 复用统一的本地状态快照：installedSlugs / enabledSlugs / lockEntries 一次读盘，
+    // 避免循环内重复 IO。注意此前误调了不存在的 this.getInstalledSlugs() /
+    // this.getEnabledSlugs()，运行时抛 TypeError，导致首页技能状态永远不刷新。
+    const snapshot = this.buildLocalStateSnapshot();
+    const installedSlugs = snapshot.installedSlugs;
+    const enabledSlugs = snapshot.enabledSlugs;
+    const lockEntries = snapshot.lockEntries;
+    const disabledDir = this.getDisabledDir();
+
+    const skills: SkillSummary[] = [];
+
+    for (const slug of slugs) {
+      if (!slug || !installedSlugs.has(slug)) continue;
+
+      const isEnabled = enabledSlugs.has(slug);
+      const baseDir = isEnabled ? this.skillsDir : disabledDir;
+      const skillDirPath = path.join(baseDir, slug);
+      const lockInfo = lockEntries.get(slug);
+      const isStoMarketplaceInstall = lockInfo?.source === 'sto-marketplace';
+      const lockVersion = isStoMarketplaceInstall ? lockInfo?.version : undefined;
+      const skillMdVersion =
+        !isPreinstalledSkill(skillDirPath) ? readSkillMdVersion(skillDirPath) : null;
+      const installedVersion = resolveInstalledVersionForCompare(lockVersion, skillMdVersion) || undefined;
+
+      const summary = readLocalSkillSummary(baseDir, slug);
+
+      skills.push({
+        slug,
+        title: summary?.title || slug,
+        description: summary?.description || '',
+        category: null,
+        categoryCode: null,
+        source: 'official',
+        installed: true,
+        enabled: isEnabled,
+        points: summary?.points ?? 8,
+        icon: summary?.icon,
+        defaultPrompt: summary?.defaultPrompt || slug,
+        installedVersion,
+        // 远端版本由消费方（首页 hook）自行拉云端对比，此处不填
+        version: undefined,
+        updateAvailable: false,
+      });
+    }
+
+    return {
+      skills,
+      categoryCounts: {},
       hasMore: false,
       page: 1,
       pageSize: skills.length,
