@@ -60,8 +60,9 @@ describe('sidebar account hotzone surfaces', () => {
     expect(sidebarAccountHotzoneTriggerClass).toContain('focus-visible:ring-2');
   });
 
-  it('sizes help trigger to 24px with independent hotzone', () => {
-    expect(sidebarAccountHelpTriggerClass).toContain('h-6');
-    expect(sidebarAccountHelpTriggerClass).toContain('w-6');
+  it('sizes help trigger to 32px with independent hotzone', () => {
+    expect(sidebarAccountHelpTriggerClass).toContain('h-8');
+    expect(sidebarAccountHelpTriggerClass).toContain('w-8');
+    expect(sidebarAccountHelpTriggerClass).toContain('p-1.5');
   });
 });

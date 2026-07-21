@@ -1458,9 +1458,9 @@ export const sidebarAccountHotzoneTriggerClass = cn(
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sto-sidebar-bg)]',
 );
 
-/** 展开态底部问号按钮 — MCP 24×24，与账号热区 gap 12px */
+/** 展开态底部问号按钮 — 点击热区 32×32，图标仍 20×20（p-1.5 居中），与账号热区 gap 12px */
 export const sidebarAccountHelpTriggerClass =
-  'flex h-6 w-6 shrink-0 items-center justify-center rounded p-1 text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] hover:text-foreground data-[state=open]:bg-[var(--sto-sidebar-row-hover-bg)] data-[state=open]:text-foreground';
+  'flex h-8 w-8 shrink-0 items-center justify-center rounded p-1.5 text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] hover:text-foreground data-[state=open]:bg-[var(--sto-sidebar-row-hover-bg)] data-[state=open]:text-foreground';
 
 /** 侧栏底部设置图标 — Grey-9（收起态紧凑入口仍用） */
 export const sidebarFooterSettingsIconClass = cn('h-5 w-5 shrink-0', sidebarTextIconClass);
