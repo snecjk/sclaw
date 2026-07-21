@@ -280,6 +280,8 @@ export interface StartWorkflowLocalResponse {
   runId: string;
   runDatabaseId: number;
   workflowVersionId: string | number;
+  /** 用户可见的流程版本号（不同于 workflowVersionId 数据库主键）。 */
+  workflowVersion?: string | number | null;
   resolvedInputs?: Record<string, unknown>;
 }
 
@@ -354,6 +356,7 @@ export async function startWorkflowLocal(
     runDatabaseId: data.runDatabaseId,
     workflowId: params.workflowId,
     versionId: String(data.workflowVersionId), // engine dslClient.fetchVersion(workflowId, versionId: string)
+    workflowVersion: data.workflowVersion,
     input: data.resolvedInputs ?? params.inputs ?? {},
     startedAt,
     sessionKey: params.sessionKey,
@@ -397,6 +400,8 @@ export interface LocalWorkflowRunSummary {
   runId: string;
   workflowId: string;
   versionId: string;
+  /** 用户可见的流程版本号；versionId 仅用于运行时拉取版本 DSL。 */
+  workflowVersion: string | number | null;
   status: string;
   startedAt: string;
   completedAt: string | null;
@@ -414,6 +419,11 @@ export async function listLocalWorkflowRuns(workflowId: string): Promise<LocalWo
 
 export async function cancelRun(runId: string): Promise<void> {
   await invokeIpc('workflow-runtime:cancel', runId);
+}
+
+/** Continue a user-cancelled local run from its first unfinished node. */
+export async function resumeWorkflowRun(runId: string): Promise<void> {
+  await invokeIpc('workflow-runtime:resume', runId);
 }
 
 export async function resumeWorkflowApproval(

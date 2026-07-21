@@ -9,6 +9,7 @@ export interface WfRunTable {
   run_id: string;
   workflow_id: string;
   version_id: string;
+  workflow_version: ColumnType<number | string | null, number | string | null | undefined, number | string | null | undefined>;
   status: string;
   mode: string;
   source: string;

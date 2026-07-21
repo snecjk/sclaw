@@ -92,6 +92,7 @@ export function registerWorkflowRuntimeHandlers(deps: EngineDeps): RuntimeHandle
       runId: row.run_id,
       workflowId: row.workflow_id,
       versionId: row.version_id,
+      workflowVersion: resolveWorkflowVersion(row),
       status: row.status,
       startedAt: row.started_at,
       completedAt: row.completed_at ?? null,
@@ -122,4 +123,22 @@ export function registerWorkflowRuntimeHandlers(deps: EngineDeps): RuntimeHandle
     stopSync: () => engine.stopSync(),
     retrySync: (runId) => engine.retrySync(runId),
   };
+}
+
+/** Older local rows predate wf_run.workflow_version; infer from their persisted DSL when possible. */
+function resolveWorkflowVersion(row: { workflow_version?: unknown; definition_json?: unknown }): string | number | null {
+  const stored = normalizeWorkflowVersion(row.workflow_version);
+  if (stored != null) return stored;
+  if (typeof row.definition_json !== 'string') return null;
+  try {
+    return normalizeWorkflowVersion(JSON.parse(row.definition_json)?.version);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeWorkflowVersion(value: unknown): string | number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) return value;
+  return null;
 }

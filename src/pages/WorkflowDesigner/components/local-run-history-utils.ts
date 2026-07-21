@@ -32,3 +32,8 @@ export function formatLocalRunDuration(run: LocalWorkflowRunSummary): string {
   const minutes = Math.floor(seconds / 60);
   return `${minutes} 分 ${seconds % 60} 秒`;
 }
+
+/** Never expose the version-row primary key to users as a workflow version. */
+export function formatLocalRunVersion(run: LocalWorkflowRunSummary): string {
+  return run.workflowVersion == null || run.workflowVersion === '' ? '版本未知' : `v${run.workflowVersion}`;
+}

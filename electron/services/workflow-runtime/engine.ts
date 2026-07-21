@@ -17,7 +17,7 @@ import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { evaluateCondition as evaluateWorkflowCondition, executeLogicNode } from './logic-nodes';
 import { runAgentNodeWithRetry, type InvokeAgentFn } from './agent-retry';
-import { startFlushLoop, stopFlushLoop, type FlushDeps } from './outbox-flusher';
+import { flushOnce, startFlushLoop, stopFlushLoop, type FlushDeps } from './outbox-flusher';
 import { uploadArtifact, type ArtifactRow } from './artifact-uploader';
 import { recoverOnLaunch, resumeRun } from './crash-recovery';
 import { cancelAgent } from './agent-runner';
@@ -59,6 +59,8 @@ export interface StartRunArgs {
  * engine 内部拉 DSL → generatePlan 落本地计划 → dispatch 执行。 */
 export interface StartWorkflowArgs {
   runId: string; workflowId: string; versionId: string; input: any; startedAt: string;
+  /** 版本序号，供本地运行历史展示；不能用 versionId（数据库主键）替代。 */
+  workflowVersion?: string | number | null;
   runDatabaseId: number;
   /** 会话键——透传给 generatePlan 落 wf_run.session_key（emit 桥 + getRun hydration 用）。Phase 2b 由 start 注册传入。 */
   sessionKey?: string;
@@ -578,13 +580,14 @@ export function createEngine(deps: EngineDeps) {
       try {
         await generatePlan({ repo, dslClient: deps.dslClient, workflowId: args.workflowId,
           versionId: args.versionId, runId: args.runId, input: args.input, startedAt: args.startedAt,
-          sessionKey: args.sessionKey, runDatabaseId: args.runDatabaseId });
+          sessionKey: args.sessionKey, workflowVersion: args.workflowVersion, runDatabaseId: args.runDatabaseId });
         const run = await repo.getRun(args.runId);
         const definition = run?.definition_json ? JSON.parse(run.definition_json) : {};
         await dispatch(args.runId, definition, undefined, { workflowId: args.workflowId, versionId: args.versionId }, parseJson(run?.input_json) ?? {});
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await repo.upsertRun({ id: args.runDatabaseId, run_id: args.runId, workflow_id: args.workflowId, version_id: args.versionId,
+          workflow_version: args.workflowVersion ?? null,
           status: 'FAILED', mode: 'CLIENT_LOCAL', source: 'client', input_json: stringifyJson(args.input ?? {}),
           definition_json: '{}', error: message, started_at: args.startedAt, completed_at: nowIso(), session_key: args.sessionKey });
         await finalizeUnfinishedNodeRuns(args.runId, 'failed').catch(() => undefined);
@@ -599,11 +602,25 @@ export function createEngine(deps: EngineDeps) {
       // definition 已由外部拉取注入（测试/直用）
       await dispatch(args.runId, args.definition, undefined, { workflowId: args.workflowId, versionId: args.versionId }, args.input ?? {});
     },
-    /** 恢复异常中断的运行：crash-recovery 找到恢复节点后重新进入 dispatch。 */
+    /** 恢复异常中断或用户取消的运行：从首个未完成节点重新进入 dispatch。 */
     async resumeRun(runId: string): Promise<void> {
-      workflowExecLog('info', 'run-resume', 'resuming interrupted workflow run', { runId });
+      workflowExecLog('info', 'run-resume', 'resuming interrupted or cancelled workflow run', { runId });
       const r = await resumeRun(repo, runId);
-      if (r) await dispatch(r.runId, r.definition, r.startNodeId);
+      if (!r) return;
+      const resumedRun = await repo.getRun(r.runId);
+      await repo.enqueueOutbox(r.runId, 'run', r.runId, {
+        run_id: r.runId,
+        workflow_id: resumedRun?.workflow_id,
+        version_id: resumedRun?.version_id,
+        mode: resumedRun?.mode ?? 'CLIENT_LOCAL',
+        source: resumedRun?.source ?? 'client',
+        status: 'RUNNING',
+        started_at: resumedRun?.started_at ?? nowIso(),
+        completed_at: null,
+      }, 'progress');
+      deps.onStatusChange?.(r.runId, 'running');
+      await flushOnce({ repo, postSync: deps.postSync, onTokenExpired: deps.onTokenExpired });
+      await dispatch(r.runId, r.definition, r.startNodeId);
     },
     /** 审批通过/拒绝后的继续执行入口：根据审批结果选下一条边。 */
     async resumeApproval(runId: string, nodeId: string, decision: any): Promise<void> {
@@ -667,6 +684,11 @@ export function createEngine(deps: EngineDeps) {
         started_at: run?.started_at ?? nowIso(),
         completed_at: nowIso(),
       }, 'terminal');
+      // The client is the source of truth for a user cancellation. Do not wait
+      // for the background two-second loop before telling the cloud about the
+      // terminal state; a failed request remains in the outbox for backoff.
+      await repo.retryFailedOutbox(runId);
+      await flushOnce({ repo, postSync: deps.postSync, onTokenExpired: deps.onTokenExpired });
       workflowExecLog('warn', 'run-cancelled', 'workflow run marked cancelled', { runId, nodeId });
       deps.onStatusChange?.(runId, 'cancelled', { error: 'cancelled' });
     },
@@ -685,7 +707,10 @@ export function createEngine(deps: EngineDeps) {
     },
     async retrySync(runId?: string): Promise<void> {
       await repo.retryFailedOutbox(runId);
-      if (!runId) return;
+      if (!runId) {
+        await flushOnce({ repo, postSync: deps.postSync, onTokenExpired: deps.onTokenExpired });
+        return;
+      }
       const run = await repo.getRun(runId);
       if (!run || !TERMINAL_STATUSES.has(run.status)) return;
       if (run.status === 'FAILED') await finalizeUnfinishedNodeRuns(runId, 'failed');
@@ -702,6 +727,7 @@ export function createEngine(deps: EngineDeps) {
       for (const artifact of artifacts) await repo.enqueueOutbox(runId, 'artifact', artifact.artifact_id, artifact, 'progress');
       for (const task of approvalTasks) await repo.enqueueOutbox(runId, 'approval', task.task_id, task, 'progress');
       for (const task of userInputTasks) await repo.enqueueOutbox(runId, 'user_input', task.task_id, task, 'progress');
+      await flushOnce({ repo, postSync: deps.postSync, onTokenExpired: deps.onTokenExpired });
     },
   };
 

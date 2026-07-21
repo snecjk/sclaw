@@ -24,6 +24,7 @@ export interface FlushDeps {
 }
 
 let running = false;
+let activeFlush: Promise<void> | null = null;
 export function startFlushLoop(deps: FlushDeps): void {
   if (running) return;
   running = true;
@@ -47,6 +48,19 @@ async function loop(deps: FlushDeps): Promise<void> {
 }
 
 export async function flushOnce(deps: FlushDeps): Promise<void> {
+  // The periodic loop and an explicit terminal-state flush can arrive together.
+  // Serialize them so one outbox row is never posted twice concurrently.
+  if (activeFlush) return activeFlush;
+  const flush = flushOnceUnsafe(deps);
+  activeFlush = flush;
+  try {
+    await flush;
+  } finally {
+    if (activeFlush === flush) activeFlush = null;
+  }
+}
+
+async function flushOnceUnsafe(deps: FlushDeps): Promise<void> {
   const pending = await deps.repo.listPendingOutbox(200); // id asc = FIFO
   if (!pending.length) return;
   workflowExecLog('debug', 'sync-pending', 'workflow outbox pending entries loaded', { pendingCount: pending.length });

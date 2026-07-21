@@ -11,6 +11,7 @@ const nowIso = () => formatShanghaiIso();
 
 export interface GeneratePlanArgs { repo: RunCtx['repo']; dslClient: { fetchVersion(workflowId: string, versionId: string): Promise<any> };
   workflowId: string; versionId: string; runId?: string; input: any; startedAt: string;
+  workflowVersion?: string | number | null;
   runDatabaseId: number;
   /** 会话键——emit 桥按它过滤 status-update 广播（use-workflow-completion.ts）。Phase 2b 由 start 注册传入。 */
   sessionKey?: string;
@@ -47,6 +48,7 @@ export async function generatePlan(args: GeneratePlanArgs): Promise<string> {
     edgeCount: (definition.edges ?? []).length,
   });
   await repo.upsertRun({ id: args.runDatabaseId, run_id: runId, workflow_id: workflowId, version_id: versionId,
+    workflow_version: args.workflowVersion ?? normalizeWorkflowVersion(versionDefinition),
     status: 'RUNNING', mode: 'CLIENT_LOCAL', source: 'client',
     input_json: JSON.stringify(stagedInput), definition_json: JSON.stringify(definition),
     started_at: startedAt, updated_at: nowIso(),
@@ -76,6 +78,13 @@ export async function generatePlan(args: GeneratePlanArgs): Promise<string> {
     nodeRunCount: ordered.length,
   });
   return runId;
+}
+
+/** The version endpoint returns the visible sequence on its wrapper. */
+function normalizeWorkflowVersion(versionDefinition: unknown): string | number | null {
+  if (!versionDefinition || typeof versionDefinition !== 'object') return null;
+  const value = (versionDefinition as { version?: unknown }).version;
+  return typeof value === 'number' || (typeof value === 'string' && value.trim()) ? value : null;
 }
 
 async function stageInputArtifacts(input: any, runId: string): Promise<any> {

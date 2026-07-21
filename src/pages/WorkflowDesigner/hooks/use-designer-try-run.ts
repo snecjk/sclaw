@@ -13,7 +13,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   cancelRun,
   getRunViaIpc,
-  retryWorkflowSync,
+  resumeWorkflowRun,
   resumeWorkflowApproval,
   runToExecutionState,
   startWorkflowLocal,
@@ -68,7 +68,6 @@ export interface UseDesignerTryRunResult {
   executionState: WorkflowExecutionState | null;
   isStarting: boolean;
   isCancelling: boolean;
-  isSyncing: boolean;
   isStartupDialogOpen: boolean;
   isDrawerOpen: boolean;
   isRunActive: boolean;
@@ -81,13 +80,13 @@ export interface UseDesignerTryRunResult {
   confirmStartup: (inputs: Record<string, unknown>) => Promise<void>;
   cancelStartupDialog: () => void;
   cancel: () => Promise<void>;
+  continueRun: () => Promise<void>;
   rerun: () => void;
   /** Open an already persisted local run in the shared result drawer. */
   openExistingRun: (runId: string) => Promise<boolean>;
   closeDrawer: () => void;
   decideApproval: (approved: boolean, note?: string) => Promise<void>;
   submitInput: (values: Record<string, unknown>) => Promise<void>;
-  retrySync: () => Promise<void>;
 }
 
 export function useDesignerTryRun({
@@ -103,7 +102,6 @@ export function useDesignerTryRun({
   const [executionState, setExecutionState] = useState<WorkflowExecutionState | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [isStartupDialogOpen, setIsStartupDialogOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [activeStartupSchema, setActiveStartupSchema] = useState<WorkflowSchema | null>(startupSchema ?? null);
@@ -261,6 +259,20 @@ export function useDesignerTryRun({
     }
   }, [hydrateRun]);
 
+  const continueRun = useCallback(async () => {
+    const id = runIdRef.current;
+    if (!id) return;
+    setIsStarting(true);
+    setLaunchError(null);
+    try {
+      await resumeWorkflowRun(id);
+      void hydrateRun(id);
+    } catch (error) {
+      setIsStarting(false);
+      setLaunchError(error instanceof Error ? error.message : '继续运行失败');
+    }
+  }, [hydrateRun]);
+
   const rerun = useCallback(() => {
     setRunId(null);
     runIdRef.current = null;
@@ -284,7 +296,6 @@ export function useDesignerTryRun({
     setRunWorkflowVersionId(undefined);
     setIsStarting(false);
     setIsCancelling(false);
-    setIsSyncing(false);
     setIsDraftSnapshot(false);
     setLaunchError(null);
     setIsDrawerOpen(true);
@@ -306,17 +317,6 @@ export function useDesignerTryRun({
     await submitWorkflowInput(id, nodeId, values);
     await hydrateRun(id);
   }, [executionState?.waitingNodeId, hydrateRun]);
-  const retrySync = useCallback(async () => {
-    const id = runIdRef.current;
-    if (!id) return;
-    setIsSyncing(true);
-    try {
-      await retryWorkflowSync(id);
-    } finally {
-      setIsSyncing(false);
-    }
-  }, []);
-
   return {
     runId,
     run,
@@ -324,7 +324,6 @@ export function useDesignerTryRun({
     executionState,
     isStarting,
     isCancelling,
-    isSyncing,
     isStartupDialogOpen,
     isDrawerOpen,
     isRunActive,
@@ -337,11 +336,11 @@ export function useDesignerTryRun({
     confirmStartup,
     cancelStartupDialog,
     cancel,
+    continueRun,
     rerun,
     openExistingRun,
     closeDrawer,
     decideApproval,
     submitInput,
-    retrySync,
   };
 }

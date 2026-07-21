@@ -35,14 +35,13 @@ interface TestRunDrawerProps {
   workflowVersionId?: string | number;
   isStarting: boolean;
   isCancelling: boolean;
-  isSyncing: boolean;
   isRunActive: boolean;
   isDraftSnapshot: boolean;
   launchError: string | null;
   onClose: () => void;
   onCancel: () => void;
+  onContinue: () => void;
   onRerun: () => void;
-  onRetrySync: () => void;
   onDecideApproval: (approved: boolean, note?: string) => void;
   onSubmitInput: (values: Record<string, unknown>) => void;
 }
@@ -326,6 +325,7 @@ export function TestRunDrawer(props: TestRunDrawerProps) {
   const activeRunId = props.run?.id ?? props.runId;
   const startedAt = props.run?.startedAt ?? props.executionState?.startedAt;
   const eventCount = props.run?.events.length ?? timeline.length;
+  const activeVersionId = props.run?.versionId ?? props.workflowVersionId;
 
   return (
     <Sheet open={props.open} onOpenChange={(open) => { if (!open) props.onClose(); }}>
@@ -339,8 +339,8 @@ export function TestRunDrawer(props: TestRunDrawerProps) {
           </div>
           <div className="flex items-center gap-2">
             {view === 'running' ? <Button variant="outline" className="border-orange-200 text-orange-700 hover:bg-orange-50" onClick={props.onCancel} disabled={props.isCancelling}>{props.isCancelling ? '取消中' : '取消运行'}</Button> : null}
-            {view === 'failed' || view === 'cancelled' ? <Button variant="outline" onClick={props.onRetrySync} disabled={props.isSyncing}><RefreshCw className={`mr-2 h-4 w-4 ${props.isSyncing ? 'animate-spin' : ''}`} />{props.isSyncing ? '同步中' : '补齐云端记录'}</Button> : null}
-            {view === 'completed' || view === 'failed' || view === 'cancelled' ? <Button variant="outline" onClick={props.onRerun}><RefreshCw className="mr-2 h-4 w-4" />重新运行</Button> : null}
+            {view === 'cancelled' ? <Button variant="outline" onClick={props.onContinue}><Play className="mr-2 h-4 w-4" />继续运行</Button> : null}
+            {view === 'completed' || view === 'failed' ? <Button variant="outline" onClick={props.onRerun}><RefreshCw className="mr-2 h-4 w-4" />重新运行</Button> : null}
             <button type="button" aria-label="关闭" onClick={props.onClose} className="ml-1 inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button>
           </div>
         </header>
@@ -353,8 +353,9 @@ export function TestRunDrawer(props: TestRunDrawerProps) {
                   <Loader2 className="h-7 w-7 animate-spin text-slate-400" />
                   <div><p className="text-sm font-semibold text-orange-600">当前运行</p><h3 className="text-xl font-semibold">{status === 'waiting_approval' ? '等待人工审批' : status === 'waiting_input' ? '等待补充输入' : props.isStarting && !activeRunId ? '正在创建运行' : '正在运行中'}</h3><p className="mt-1 text-sm text-muted-foreground">{activeRunId ?? '等待运行创建'}</p></div>
                 </div>
-                <dl className="mt-5 grid grid-cols-3 gap-3">
+                <dl className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">状态</dt><dd className="mt-1 font-semibold">{STATUS_LABEL[status] ?? '准备中'}</dd></div>
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">当前版本号</dt><dd className="mt-1 font-semibold">{activeVersionId == null ? '-' : `v${activeVersionId}`}</dd></div>
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">开始时间</dt><dd className="mt-1 font-semibold">{formatTime(startedAt)}</dd></div>
                   <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">事件</dt><dd className="mt-1 font-semibold">{eventCount}</dd></div>
                 </dl>

@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import {
   formatLocalRunDuration,
   formatLocalRunTime,
+  formatLocalRunVersion,
   resolveLocalRunHistoryStatus,
   type LocalRunHistoryStatus,
 } from './local-run-history-utils';
@@ -101,7 +102,7 @@ function RunHistoryItem({ run, latest, busy, onClick }: { run: LocalWorkflowRunS
   const { Icon, label, className } = STATUS_META[status];
   return <li><button type="button" disabled={busy} onClick={onClick} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60">
     <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-full', className)}><Icon className="h-4 w-4" /></span>
-    <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="text-sm font-medium text-foreground">{label}</span>{latest ? <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">最近</span> : null}</span><span className="mt-1 block text-xs text-muted-foreground">{formatLocalRunTime(run.startedAt)} · v{run.versionId}</span></span>
+    <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="text-sm font-medium text-foreground">{label}</span>{latest ? <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">最近</span> : null}</span><span className="mt-1 block text-xs text-muted-foreground">{formatLocalRunTime(run.startedAt)} · {formatLocalRunVersion(run)}</span></span>
     <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" />{busy ? '打开中' : formatLocalRunDuration(run)}</span>
   </button></li>;
 }

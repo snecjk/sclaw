@@ -181,10 +181,12 @@ function WorkflowEditRoute() {
     canStart: canStartTryRun,
   });
   const beginTryRun = tryRun.begin;
-  const handleTryRun = useCallback(async () => {
+  const startCurrentDraftTryRun = useCallback(async (confirmBeforeStart: boolean) => {
     if (!workflowId || isRequestingVersionSnapshot) return;
-    const confirmed = window.confirm('试运行将运行当前画布正在编辑的版本，是否继续？');
-    if (!confirmed) return;
+    if (confirmBeforeStart) {
+      const confirmed = window.confirm('试运行将运行当前画布正在编辑的版本，是否继续？');
+      if (!confirmed) return;
+    }
     setIsRequestingVersionSnapshot(true);
     try {
       const currentVersion = await editorRef.current?.requestDraftSnapshot();
@@ -196,6 +198,16 @@ function WorkflowEditRoute() {
       setIsRequestingVersionSnapshot(false);
     }
   }, [beginTryRun, isRequestingVersionSnapshot, workflowId]);
+  const handleTryRun = useCallback(() => {
+    void startCurrentDraftTryRun(true);
+  }, [startCurrentDraftTryRun]);
+  // A cancelled run must not reuse the previous iframe snapshot: its draft
+  // version can have changed while the run was active. Request the current
+  // snapshot again so the new local run always references a server-recognized
+  // version.
+  const rerunCurrentDraft = useCallback(() => {
+    void startCurrentDraftTryRun(false);
+  }, [startCurrentDraftTryRun]);
 
   useWorkflowEditorContentHeader({
     workflowId: workflowId ?? '',
@@ -236,7 +248,8 @@ function WorkflowEditRoute() {
         launchError={tryRun.launchError}
         onClose={tryRun.closeDrawer}
         onCancel={() => void tryRun.cancel()}
-        onRerun={tryRun.rerun}
+        onContinue={() => void tryRun.continueRun()}
+        onRerun={rerunCurrentDraft}
         onRetrySync={() => void tryRun.retrySync()}
         onDecideApproval={(approved, note) => void tryRun.decideApproval(approved, note)}
         onSubmitInput={(values) => void tryRun.submitInput(values)}

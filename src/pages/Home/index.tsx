@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import { HomeAgentHubSurface } from './HomeAgentHubSurface';
 import { useHomeConversationActive } from './use-home-conversation-active';
 import { useChatStore } from '@/stores/chat';
@@ -38,6 +39,7 @@ export function Home() {
   // URIError when the prompt contains a literal '%' (e.g. "完成率50%").
   const querySeedText = searchParams.get('q')?.trim() || undefined;
   const seedWorkflowId = searchParams.get('workflowId')?.trim() || undefined;
+  const isWorkflowRun = searchParams.get('workflowRun') === '1';
   const { handleHubSend } = useHomeChatEntrySend();
   const gatewayStatus = useGatewayStore((s) => s.status);
   const hasAutoSentRef = useRef(false);
@@ -62,13 +64,28 @@ export function Home() {
       return;
     }
     if (hasAutoSentRef.current) return;
-    if (gatewayStatus.state !== 'running') return;
+    if (gatewayStatus.state !== 'running' && !isWorkflowRun) return;
 
     hasAutoSentRef.current = true;
-    // Clear q and workflowId from URL so refresh doesn't re-trigger
+    // Clear q and workflow metadata from URL so refresh doesn't re-trigger
     setSearchParams({}, { replace: true });
-    handleHubSend(querySeedText, undefined, undefined, undefined, seedWorkflowId);
-  }, [querySeedText, seedWorkflowId, gatewayStatus.state, handleHubSend, setSearchParams]);
+    void (async () => {
+      if (isWorkflowRun) {
+        try {
+          const { currentAgentId, currentSessionKey } = useChatStore.getState();
+          const { configureWorkflowRunSession } = await import('@/lib/workflow-run-session-engine');
+          await configureWorkflowRunSession({
+            sessionKey: currentSessionKey,
+            agentId: currentAgentId || 'main',
+          });
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : '工作流运行引擎初始化失败');
+          return;
+        }
+      }
+      await handleHubSend(querySeedText, undefined, undefined, undefined, seedWorkflowId);
+    })();
+  }, [querySeedText, seedWorkflowId, isWorkflowRun, gatewayStatus.state, handleHubSend, setSearchParams]);
 
   // Wait for gateway before auto-sending workflowId prompt.
   // if (gatewayStatus.state !== 'running' && querySeedText && seedWorkflowId && !hasAutoSentRef.current) {

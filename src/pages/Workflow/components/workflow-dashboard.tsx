@@ -168,7 +168,7 @@ export function WorkflowDashboard({
         navigate,
         location.pathname,
         `帮我执行 id 为：${card.id} 的工作流 【${card.name}】`,
-        { sessionTitle: `执行${card.name}工作流` }
+        { sessionTitle: `执行${card.name}工作流`, workflowRun: true }
       );
     },
     [navigate, location.pathname]

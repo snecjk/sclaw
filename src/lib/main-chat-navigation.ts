@@ -16,6 +16,8 @@ export interface NavigateToSessionWithPromptOptions {
   createIfMissing?: boolean;
   /** Extra query params forwarded to Home (e.g. workflowId). */
   extraSearchParams?: Record<string, string>;
+  /** Mark this auto-send as a workflow run so Home can choose its execution engine. */
+  workflowRun?: boolean;
 }
 
 /**
@@ -106,7 +108,8 @@ function normalizePromptNavigationOptions(
     !('sessionKey' in options)
     && !('sessionTitle' in options)
     && !('createIfMissing' in options)
-    && !('extraSearchParams' in options);
+    && !('extraSearchParams' in options)
+    && !('workflowRun' in options);
   if (isLegacyExtraSearchParamsOnly) {
     return { ...defaults, extraSearchParams: options as Record<string, string> };
   }
@@ -130,8 +133,12 @@ export function navigateToSessionWithPrompt(
   options?: NavigateToSessionWithPromptOptions | Record<string, string>,
 ): void {
   const normalized = normalizePromptNavigationOptions(options);
-  const { extraSearchParams, ...sessionOptions } = normalized;
-  const params = new URLSearchParams({ q: prompt, ...extraSearchParams });
+  const { extraSearchParams, workflowRun, ...sessionOptions } = normalized;
+  const params = new URLSearchParams({
+    q: prompt,
+    ...extraSearchParams,
+    ...(workflowRun ? { workflowRun: '1' } : {}),
+  });
   navigateToMainChatHome(
     navigate,
     pathname,

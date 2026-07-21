@@ -47,7 +47,7 @@ export async function recoverOnLaunch(deps: RecoverDeps): Promise<void> {
 }
 
 /**
- * 续跑：把 INTERRUPTED run 恢复为 RUNNING，返回该 run 的快照供 engine 继续调度。
+ * 续跑：把 INTERRUPTED 或用户主动 CANCELLED 的 run 恢复为 RUNNING，返回该 run 的快照供 engine 继续调度。
  * engine 从 wf_node_run 找首个非 SUCCEEDED 节点重跑（上游输出从 wf_node_run.output_json 取）。
  */
 export async function resumeRun(
@@ -55,12 +55,12 @@ export async function resumeRun(
   runId: string,
 ): Promise<{ runId: string; definition: any; startNodeId?: string } | null> {
   const run = await repo.getRun(runId);
-  if (!run || run.status !== 'INTERRUPTED') {
+  if (!run || !['INTERRUPTED', 'CANCELLED'].includes(run.status)) {
     workflowExecLog('warn', 'recover-resume-skip', 'workflow run is not resumable', { runId, status: run?.status });
     return null;
   }
-  await repo.upsertRun({ ...run, status: 'RUNNING', updated_at: nowIso() });
-  let definition: any = {};
+  await repo.upsertRun({ ...run, status: 'RUNNING', completed_at: null, updated_at: nowIso() });
+  let definition: any;
   try {
     definition = run.definition_json ? JSON.parse(run.definition_json) : {};
   } catch {
