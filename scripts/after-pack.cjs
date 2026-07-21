@@ -19,11 +19,13 @@
  *      @mariozechner/clipboard).
  */
 
-const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, mkdtempSync, realpathSync, readFileSync } = require('fs');
+const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, mkdtempSync, realpathSync, readFileSync, createWriteStream } = require('fs');
 const { execSync } = require('child_process');
 const { join, dirname, basename } = require('path');
 const { tmpdir } = require('os');
 const { createPackageWithOptions } = require('@electron/asar');
+const zlib = require('zlib');
+const tar = require('tar');
 
 // On Windows, paths in pnpm's virtual store can exceed the default MAX_PATH
 // limit (260 chars). Node.js 18.17+ respects the system LongPathsEnabled
@@ -118,7 +120,13 @@ function installClaudeSdkPackageViaPack(spec, destFolder) {
     }
     const tgzPath = join(tmpPackDir, basename(tgzName));
     mkdirSync(destFolder, { recursive: true });
-    execSync(`tar -xzf "${tgzPath}" -C "${destFolder}" --strip-components=1`, { stdio: 'inherit' });
+    // Use Node.js tar module instead of shell tar for Windows compatibility
+    tar.extract({
+      file: tgzPath,
+      cwd: destFolder,
+      strip: 1,
+      sync: true,
+    });
   } finally {
     rmSync(tmpPackDir, { recursive: true, force: true });
   }
@@ -604,7 +612,13 @@ function installSharpPackageViaPack(spec, destFolder) {
     }
     const tgzPath = join(tmpPackDir, basename(tgzName));
     mkdirSync(destFolder, { recursive: true });
-    execSync(`tar -xzf "${tgzPath}" -C "${destFolder}" --strip-components=1`, { stdio: 'inherit' });
+    // Use Node.js tar module instead of shell tar for Windows compatibility
+    tar.extract({
+      file: tgzPath,
+      cwd: destFolder,
+      strip: 1,
+      sync: true,
+    });
   } finally {
     rmSync(tmpPackDir, { recursive: true, force: true });
   }
@@ -664,7 +678,13 @@ function installClaudeSdkPackageViaPack(spec, destFolder) {
     }
     const tgzPath = join(tmpPackDir, basename(tgzName));
     mkdirSync(destFolder, { recursive: true });
-    execSync(`tar -xzf "${tgzPath}" -C "${destFolder}" --strip-components=1`, { stdio: 'inherit' });
+    // Use Node.js tar module instead of shell tar for Windows compatibility
+    tar.extract({
+      file: tgzPath,
+      cwd: destFolder,
+      strip: 1,
+      sync: true,
+    });
   } finally {
     rmSync(tmpPackDir, { recursive: true, force: true });
   }
