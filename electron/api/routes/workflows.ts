@@ -211,6 +211,7 @@ function startLocalWorkflowRuntime(
     runDatabaseId: registered.runDatabaseId,
     workflowId,
     versionId: String(versionId),
+    workflowVersion: registered.workflowVersion,
     input: body.inputs ?? {},
     startedAt,
     sessionKey: body.sessionKey ?? '',

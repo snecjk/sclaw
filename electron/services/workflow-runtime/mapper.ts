@@ -10,6 +10,7 @@ export interface WfRunRow {
   run_id: string;
   workflow_id: string;
   version_id: string;
+  workflow_version?: string | number | null;
   status: string;
   mode?: string | null;
   source?: string | null;
@@ -114,6 +115,8 @@ export function mapWfRunRowToResponse(
   return {
     id: row.run_id,
     workflowId: row.workflow_id,
+    versionId: row.version_id,
+    workflowVersion: resolveWorkflowVersion(row),
     status: normalizeWorkflowRunStatus(row.status),
     mode: row.mode ?? null,
     startedAt: row.started_at,
@@ -160,6 +163,16 @@ export function mapWfRunRowToResponse(
     lastAgentRawText: row.last_agent_raw_text ?? null,
     error: row.error ?? null,
   };
+}
+
+function resolveWorkflowVersion(row: Pick<WfRunRow, 'workflow_version' | 'definition_json'>): string | number | null {
+  if (typeof row.workflow_version === 'number' && Number.isFinite(row.workflow_version)) return row.workflow_version;
+  if (typeof row.workflow_version === 'string' && row.workflow_version.trim()) return row.workflow_version;
+  const definition = safeParse<Record<string, unknown>>(row.definition_json, {});
+  const version = definition.version;
+  return typeof version === 'number' && Number.isFinite(version)
+    ? version
+    : typeof version === 'string' && version.trim() ? version : null;
 }
 
 /** 由 definition_json 构造最小可用 WorkflowRunStartupInfo。

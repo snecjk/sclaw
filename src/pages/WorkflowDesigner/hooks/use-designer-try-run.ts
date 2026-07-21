@@ -25,7 +25,7 @@ import {
   isTerminalWorkflowRunStatus,
   normalizeWorkflowRunStatus,
 } from '@/lib/workflow-run-status';
-import type { WorkflowExecutionState, WorkflowRunResponse, WorkflowSchema } from '@/types/workflow';
+import type { WorkflowDetailResponse, WorkflowExecutionState, WorkflowRunResponse, WorkflowSchema } from '@/types/workflow';
 import type { WorkflowDraftSnapshot } from '@/lib/workflow-iframe-bridge';
 import { definitionFromDetail } from '@/lib/workflow-designer-adapter';
 
@@ -64,7 +64,7 @@ export interface UseDesignerTryRunArgs {
 export interface UseDesignerTryRunResult {
   runId: string | null;
   run: WorkflowRunResponse | null;
-  runWorkflowVersionId?: string | number;
+  runWorkflowVersion?: string | number | null;
   executionState: WorkflowExecutionState | null;
   isStarting: boolean;
   isCancelling: boolean;
@@ -98,7 +98,7 @@ export function useDesignerTryRun({
 }: UseDesignerTryRunArgs): UseDesignerTryRunResult {
   const [runId, setRunId] = useState<string | null>(null);
   const [run, setRun] = useState<WorkflowRunResponse | null>(null);
-  const [runWorkflowVersionId, setRunWorkflowVersionId] = useState<string | number | undefined>();
+  const [runWorkflowVersion, setRunWorkflowVersion] = useState<string | number | null | undefined>();
   const [executionState, setExecutionState] = useState<WorkflowExecutionState | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -196,6 +196,7 @@ export function useDesignerTryRun({
         });
         setRunId(result.runId);
         runIdRef.current = result.runId;
+        setRunWorkflowVersion(result.workflowVersion);
         void hydrateRun(result.runId);
       } catch (error) {
         setIsStarting(false);
@@ -209,14 +210,30 @@ export function useDesignerTryRun({
     if (!workflowId || !canStart()) return;
     void (async () => {
       snapshotRef.current = snapshot ?? null;
-      setRunWorkflowVersionId(snapshot?.workflowVersionId ?? workflowVersionId);
+      setRunWorkflowVersion(undefined);
       setIsDraftSnapshot(snapshot != null);
-      const nextSchema = snapshot?.startup.schema ?? startupSchema ?? null;
-      const nextDefaultValues = snapshot?.startup.defaultValues ?? startupDefaultValues;
+      // The draft snapshot only carries canvas data. Fetch the workflow detail
+      // on every launch so the startup form is initialized from this user's
+      // current default preset, just like the web-side trial run.
+      let workflowDetail: WorkflowDetailResponse | null = null;
+      let definition = snapshot?.definition;
+      try {
+        workflowDetail = await getWorkflowDetail(workflowId);
+      } catch (error) {
+        // A saved draft can still be tried locally if refreshing its user
+        // preset fails. Without a draft definition, keep the existing error.
+        if (!definition) throw error;
+      }
+      if (!definition) definition = definitionFromDetail(workflowDetail!);
+
+      const nextSchema = snapshot?.startup.schema ?? workflowDetail?.startup?.schema ?? startupSchema ?? null;
+      const nextDefaultValues = {
+        ...startupDefaultValues,
+        ...snapshot?.startup.defaultValues,
+        ...workflowDetail?.startup?.defaultPreset?.values,
+      };
       setActiveStartupSchema(nextSchema);
       setActiveStartupDefaultValues(nextDefaultValues);
-      let definition = snapshot?.definition;
-      if (!definition) definition = definitionFromDetail(await getWorkflowDetail(workflowId));
       const uploads = ((definition as any)?.nodes ?? []).flatMap((node: any) => {
         const business = node?.config?.businessConfig ?? {};
         return node?.type === 'agent_data_fetch' && ['runtime_upload', 'mixed'].includes(business.inputProvisionMode)
@@ -235,7 +252,7 @@ export function useDesignerTryRun({
       if (nextHasStartupInputs || uploads.length > 0) setIsStartupDialogOpen(true);
       else void launch({}, snapshot ?? null);
     })().catch((error) => setLaunchError(error instanceof Error ? error.message : '无法读取试运行配置'));
-  }, [workflowId, canStart, launch, startupDefaultValues, startupSchema, workflowVersionId]);
+  }, [workflowId, canStart, launch, startupDefaultValues, startupSchema]);
 
   const confirmStartup = useCallback(
     async (inputs: Record<string, unknown>) => {
@@ -293,7 +310,7 @@ export function useDesignerTryRun({
     runIdRef.current = id;
     setRun(existingRun);
     setExecutionState(runToExecutionState(existingRun));
-    setRunWorkflowVersionId(undefined);
+    setRunWorkflowVersion(existingRun.workflowVersion);
     setIsStarting(false);
     setIsCancelling(false);
     setIsDraftSnapshot(false);
@@ -320,7 +337,7 @@ export function useDesignerTryRun({
   return {
     runId,
     run,
-    runWorkflowVersionId,
+    runWorkflowVersion,
     executionState,
     isStarting,
     isCancelling,

@@ -4,6 +4,7 @@ import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { WorkflowDashboard } from '@/pages/Workflow/components/workflow-dashboard';
 import { WorkflowPageShading } from '@/pages/Workflow/components/workflow-page-shading';
 import { CreateWorkflowModal } from '@/pages/Workflow/components/create-workflow-modal';
@@ -172,6 +173,7 @@ function WorkflowEditRoute() {
   const editorRef = useRef<WorkflowMcIframeEditorHandle>(null);
   const [isRequestingVersionSnapshot, setIsRequestingVersionSnapshot] = useState(false);
   const [localRunHistoryOpen, setLocalRunHistoryOpen] = useState(false);
+  const [draftRunConfirmOpen, setDraftRunConfirmOpen] = useState(false);
   const handleBack = useCallback(() => navigate('/workflow'), [navigate]);
   const handleOpenLocalRunHistory = useCallback(() => setLocalRunHistoryOpen(true), []);
   const canStartTryRun = useCallback(() => true, []);
@@ -181,12 +183,8 @@ function WorkflowEditRoute() {
     canStart: canStartTryRun,
   });
   const beginTryRun = tryRun.begin;
-  const startCurrentDraftTryRun = useCallback(async (confirmBeforeStart: boolean) => {
+  const startCurrentDraftTryRun = useCallback(async () => {
     if (!workflowId || isRequestingVersionSnapshot) return;
-    if (confirmBeforeStart) {
-      const confirmed = window.confirm('试运行将运行当前画布正在编辑的版本，是否继续？');
-      if (!confirmed) return;
-    }
     setIsRequestingVersionSnapshot(true);
     try {
       const currentVersion = await editorRef.current?.requestDraftSnapshot();
@@ -199,14 +197,18 @@ function WorkflowEditRoute() {
     }
   }, [beginTryRun, isRequestingVersionSnapshot, workflowId]);
   const handleTryRun = useCallback(() => {
-    void startCurrentDraftTryRun(true);
+    setDraftRunConfirmOpen(true);
+  }, []);
+  const confirmTryRun = useCallback(() => {
+    setDraftRunConfirmOpen(false);
+    void startCurrentDraftTryRun();
   }, [startCurrentDraftTryRun]);
   // A cancelled run must not reuse the previous iframe snapshot: its draft
   // version can have changed while the run was active. Request the current
   // snapshot again so the new local run always references a server-recognized
   // version.
   const rerunCurrentDraft = useCallback(() => {
-    void startCurrentDraftTryRun(false);
+    void startCurrentDraftTryRun();
   }, [startCurrentDraftTryRun]);
 
   useWorkflowEditorContentHeader({
@@ -225,6 +227,15 @@ function WorkflowEditRoute() {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
       <WorkflowMcIframeEditor ref={editorRef} workflowId={workflowId} />
+      <ConfirmDialog
+        open={draftRunConfirmOpen}
+        title="提示"
+        message="试运行将使用当前画布正在编辑的版本，是否继续？"
+        confirmLabel="确认"
+        cancelLabel="取消"
+        onConfirm={confirmTryRun}
+        onCancel={() => setDraftRunConfirmOpen(false)}
+      />
       <StartupRunDialog
         open={tryRun.isStartupDialogOpen}
         schema={tryRun.startupSchema}
@@ -239,10 +250,9 @@ function WorkflowEditRoute() {
         runId={tryRun.runId}
         run={tryRun.run}
         executionState={tryRun.executionState}
-        workflowVersionId={tryRun.runWorkflowVersionId}
+        workflowVersion={tryRun.runWorkflowVersion}
         isStarting={tryRun.isStarting}
         isCancelling={tryRun.isCancelling}
-        isSyncing={tryRun.isSyncing}
         isRunActive={tryRun.isRunActive}
         isDraftSnapshot={tryRun.isDraftSnapshot}
         launchError={tryRun.launchError}
@@ -250,7 +260,6 @@ function WorkflowEditRoute() {
         onCancel={() => void tryRun.cancel()}
         onContinue={() => void tryRun.continueRun()}
         onRerun={rerunCurrentDraft}
-        onRetrySync={() => void tryRun.retrySync()}
         onDecideApproval={(approved, note) => void tryRun.decideApproval(approved, note)}
         onSubmitInput={(values) => void tryRun.submitInput(values)}
       />

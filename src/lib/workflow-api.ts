@@ -301,6 +301,8 @@ export interface StartWorkflowLocalResult {
   workflowId: string;
   /** 钉定版本，供 WorkflowExecutionRecord.versionId 落库 + hydration 用。 */
   versionId: string | number;
+  /** 用户可见版本号，不同于 versionId 数据库主键。 */
+  workflowVersion?: string | number | null;
   startedAt: string;
 }
 
@@ -366,6 +368,7 @@ export async function startWorkflowLocal(
     runId: data.runId,
     workflowId: params.workflowId,
     versionId: data.workflowVersionId,
+    workflowVersion: data.workflowVersion,
     startedAt,
   };
 }

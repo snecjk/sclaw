@@ -391,7 +391,7 @@ export function WorkflowDesigner({
         runId={tryRun.runId}
         run={tryRun.run}
         executionState={tryRun.executionState}
-        workflowVersionId={workflowVersionId}
+        workflowVersion={tryRun.runWorkflowVersion}
         isStarting={tryRun.isStarting}
         isCancelling={tryRun.isCancelling}
         isRunActive={tryRun.isRunActive}

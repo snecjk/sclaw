@@ -320,6 +320,10 @@ export interface WorkflowRunClientResult {
 export interface WorkflowRunResponse {
   id: string;
   workflowId: string;
+  /** 版本记录主键，仅供内部关联，不能作为用户可见版本号。 */
+  versionId?: string | number | null;
+  /** 服务端返回的用户可见流程版本号。 */
+  workflowVersion?: string | number | null;
   status: WorkflowRunStatus;
   mode?: string | null;
   startedAt: string;
