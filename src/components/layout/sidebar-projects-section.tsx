@@ -4,7 +4,7 @@
  */
 import type { RefObject } from 'react';
 import { useCallback, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Folder, FolderOpen } from 'lucide-react';
+import { ChevronDown, Folder, FolderOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -14,7 +14,6 @@ import sidebarNewProjectIcon from '@/assets/icons/sidebar-new-project.svg';
 import { cn } from '@/lib/utils';
 import {
   sidebarListItemTextClass,
-  sidebarSectionChevronClass,
   sidebarSubitemTextIdleClass,
   sidebarTextIconClass,
 } from '@/lib/surfaces';
@@ -379,13 +378,15 @@ export function SidebarProjectsSection({
                             {workspace.name}
                           </span>
                           {canExpand ? (
-                            <span className={sidebarSectionChevronClass} aria-hidden>
-                              {isExpanded ? (
-                                <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} />
-                              ) : (
-                                <ChevronRight className="h-3.5 w-3.5" strokeWidth={2} />
+                            <ChevronDown
+                              className={cn(
+                                'h-4 w-4 shrink-0 transition-transform',
+                                sidebarTextIconClass,
+                                isExpanded ? 'rotate-180' : '',
                               )}
-                            </span>
+                              strokeWidth={2}
+                              aria-hidden
+                            />
                           ) : null}
                         </span>
                       </button>
