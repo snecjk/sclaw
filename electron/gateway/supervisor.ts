@@ -25,12 +25,52 @@ export function warmupManagedPythonReadiness(): void {
   });
 }
 
+/**
+ * Windows `child_process.exec` timeout is unreliable (shell may ignore signals).
+ * Always race against a hard timer so Gateway start/stop cannot wedge forever.
+ */
+export async function execWindowsTaskKill(pid: number | string, timeoutMs = 5_000): Promise<void> {
+  const cp = await import('child_process');
+  const normalizedPid = String(pid).trim();
+  if (!normalizedPid || !/^\d+$/.test(normalizedPid)) return;
+
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    const done = (reason: 'callback' | 'timeout' | 'error') => {
+      if (settled) return;
+      settled = true;
+      if (reason === 'timeout') {
+        logger.warn(
+          `taskkill hard-timeout for pid=${normalizedPid} after ${timeoutMs}ms; continuing without waiting`,
+        );
+      }
+      resolve();
+    };
+
+    const timer = setTimeout(() => done('timeout'), timeoutMs);
+    try {
+      const child = cp.exec(
+        `taskkill /F /PID ${normalizedPid} /T`,
+        { timeout: timeoutMs, windowsHide: true, killSignal: 'SIGKILL' },
+        () => {
+          clearTimeout(timer);
+          done('callback');
+        },
+      );
+      child.on('error', () => {
+        clearTimeout(timer);
+        done('error');
+      });
+    } catch {
+      clearTimeout(timer);
+      done('error');
+    }
+  });
+}
+
 export async function terminateOwnedGatewayProcess(child: Electron.UtilityProcess): Promise<void> {
   const terminateWindowsProcessTree = async (pid: number): Promise<void> => {
-    const cp = await import('child_process');
-    await new Promise<void>((resolve) => {
-      cp.exec(`taskkill /F /PID ${pid} /T`, { timeout: 5000, windowsHide: true }, () => resolve());
-    });
+    await execWindowsTaskKill(pid, 5_000);
   };
 
   const pid = child.pid;
@@ -227,14 +267,7 @@ export async function terminateProcessIds(pids: string[]): Promise<void> {
   for (const pid of uniquePids) {
     try {
       if (process.platform === 'win32') {
-        const cp = await import('child_process');
-        await new Promise<void>((resolve) => {
-          cp.exec(
-            `taskkill /F /PID ${pid} /T`,
-            { timeout: 5000, windowsHide: true },
-            () => resolve(),
-          );
-        });
+        await execWindowsTaskKill(pid, 5_000);
       } else {
         process.kill(parseInt(pid, 10), 'SIGTERM');
       }

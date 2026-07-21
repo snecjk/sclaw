@@ -22,7 +22,7 @@ import {
 } from './sto-biz-agent-sync';
 import { syncClaudeDefaultContext } from './claude-context-sync';
 
-export type AuthenticatedSetupSource = 'login' | 'startup';
+export type AuthenticatedSetupSource = 'login' | 'startup' | 'account-switch';
 
 export interface AuthenticatedSetupResult {
   stoSync: StoSyncResult;
@@ -78,7 +78,7 @@ export function resolvePostAuthGatewayRefresh(params: {
     ? Date.now() - status.connectedAt
     : Number.POSITIVE_INFINITY;
 
-  if (source === 'login') {
+  if (source === 'login' || source === 'account-switch') {
     if (
       gatewayManager.isGatewayLifecycleSettling()
       || status.state === 'starting'
@@ -363,7 +363,7 @@ async function runSetup(
         { forceRefresh: stoResult.needsForcedGatewayRefresh === true },
       );
     }
-  } else if (source === 'login' && gatewayManager) {
+  } else if ((source === 'login' || source === 'account-switch') && gatewayManager) {
     gatewayManager.cancelPendingGatewayRefresh();
   }
 
@@ -371,8 +371,8 @@ async function runSetup(
     logger.info(`${logPrefix} Config synced to disk; Gateway will load it on next start`);
   } else if (needsGatewayRefresh && generation !== setupGeneration) {
     logger.info(`${logPrefix} Config updated but skip Gateway refresh (stale generation)`);
-  } else if (needsGatewayRefresh && refreshMode === 'none' && source === 'login') {
-    logger.info(`${logPrefix} Config synced to disk; skip Gateway refresh on login`);
+  } else if (needsGatewayRefresh && refreshMode === 'none' && (source === 'login' || source === 'account-switch')) {
+    logger.info(`${logPrefix} Config synced to disk; skip Gateway refresh on ${source}`);
   }
 
   logger.info(
@@ -403,7 +403,7 @@ export function runAuthenticatedSetup(
       return lastSetupResult;
     }
 
-    if (options.source === 'login') {
+    if (options.source === 'login' || options.source === 'account-switch') {
       lastLoginSetupAt = Date.now();
     }
 

@@ -2,7 +2,7 @@
  * 首页 Agent Hub Surface：Hero + 能力卡片 + 底部输入。
  * 有推荐位数据时展示推荐卡片，无数据时降级展示静态 AGENT_HUB_CARDS。
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
@@ -34,7 +34,7 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
 
   const { handleHubSend, handleHubQueue } = useHomeChatEntrySend();
 
-  const { items: recommendItems, loading: recommendLoading } = useRecommendItems(
+  const { items: recommendItems, loading: recommendLoading, refetch: refetchRecommend } = useRecommendItems(
     RECOMMEND_POSITION_KEYS.HOME_CARD,
   );
 
@@ -46,7 +46,22 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
     () => recommendItems.filter((i) => i.item_type === 'workflow_template').map((i) => i.item_ref_id),
     [recommendItems],
   );
-  const { data: latestByTemplate, loading: latestLoading } = useLatestWorkflowsByTemplates(templateIds);
+  const { data: latestByTemplate, loading: latestLoading, refetch: refetchLatest } = useLatestWorkflowsByTemplates(templateIds);
+
+  // 从会话切回首页落地态时刷新推荐位与各模版最近实例。
+  // 「新对话」是同路由原地重置 store（Home 不 remount），两个 hook 的 mount-effect
+  // 都不会重跑，故在此监听 showConversation 回落到 false 时显式 refetch；
+  // 首次挂载跳过一次以避免与 hook 自身的初始请求重复。
+  const didMountRef = useRef(false);
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
+    if (showConversation) return;
+    void refetchRecommend();
+    void refetchLatest();
+  }, [showConversation, refetchRecommend, refetchLatest]);
 
   // displayItems：模版项存在实例时替换为实例项；key 始终用原始模版 id 以保证 refetch 后稳定 reconcile。
   const displayItems = useMemo(() => {

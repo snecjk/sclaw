@@ -255,6 +255,7 @@ class StoMemoryCenterVectorStoreProvider implements VectorStore {
         role: this.readString(payload, 'role'),
         expirationDate: this.readString(payload, 'expiration_date', 'expirationDate'),
         attributedTo: this.readString(payload, 'attributed_to', 'attributedTo'),
+        textLemmatized: this.readString(payload, 'text_lemmatized', 'textLemmatized'),
         hash: this.readString(payload, 'hash'),
         metadata: this.compactMetadata(payload),
       };
@@ -299,9 +300,36 @@ class StoMemoryCenterVectorStoreProvider implements VectorStore {
     return results;
   }
 
-  async keywordSearch(): Promise<VectorStoreResult[] | null> {
-    // TODO 待接入
-    return null;
+  async keywordSearch(
+    query: string,
+    topK = 60,
+    filters?: SearchFilters,
+  ): Promise<VectorStoreResult[]> {
+    logger.info('[mem0][vector] keywordSearch start', {
+      query: query,
+      requestedTopK: topK,
+      collectionName: this.collectionName,
+    });
+    const response = await agentMemoryRemoteService.searchKeywords({
+      query,
+      topK,
+      collectionName: this.collectionName,
+      agentId: this.readFilterString(filters, 'agent_id', 'agentId'),
+      runId: this.readFilterString(filters, 'run_id', 'runId'),
+      sessionId: this.readFilterString(filters, 'session_id', 'sessionId', 'sessionKey'),
+      memoryTypes: this.readMemoryTypeFilters(filters),
+    });
+    const cache = await this.readCache();
+    const results = response.items.map((item) => ({
+      id: item.recordId,
+      payload: this.payloadFromRemote(item, cache.records[item.recordId]?.payload),
+      score: item.score,
+    }));
+    logger.info('[mem0][vector] keywordSearch success', {
+      topK: response.topK,
+      count: results.length,
+    });
+    return results;
   }
 
   async get(vectorId: string): Promise<VectorStoreResult | null> {
