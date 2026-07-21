@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import {
   X,
-  CheckCircle2,
   AlertCircle,
   FileArchive,
   FileText,
@@ -13,8 +12,6 @@ import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { invokeIpc } from '@/lib/api-client';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import type { SkillSummary } from '@/types/skill-plaza';
-import fileIcon from '@/assets/icons/file.svg';
 
 function formatFileSize(bytes: number): string {
   if (!bytes || bytes <= 0) return '-';
@@ -30,20 +27,18 @@ interface SkillUploadModalProps {
   onUploadSuccess?: () => void;
 }
 
-type UploadStatus = 'idle' | 'preview' | 'uploading' | 'success' | 'error';
+type UploadStatus = 'idle' | 'preview' | 'uploading' | 'error';
 type SelectionKind = 'file' | 'folder' | 'drag';
 
 export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUploadModalProps) {
   const { t } = useTranslation('skills');
   const uploadSkill = useSkillPlazaStore((s) => s.uploadSkill);
-  const mySkills = useSkillPlazaStore((s) => s.mySkills);
   const [status, setStatus] = useState<UploadStatus>('idle');
   const [filePath, setFilePath] = useState<string | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [selectionKind, setSelectionKind] = useState<SelectionKind>('drag');
   const [fileName, setFileName] = useState<string | null>(null);
   const [fileSize, setFileSize] = useState<number>(0);
-  const [slug, setSlug] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -259,19 +254,13 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     setUploadProgress({ current: 1, total: paths.length });
     let completed = 0;
     try {
-      let uploadedSlug: string | null = null;
       for (const path of paths) {
         setUploadProgress({ current: completed + 1, total: paths.length });
-        uploadedSlug = await uploadSkill(path);
+        await uploadSkill(path);
         completed += 1;
       }
       onUploadSuccess?.();
-      if (paths.length === 1) {
-        setSlug(uploadedSlug);
-        setStatus('success');
-      } else {
-        onClose();
-      }
+      onClose();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setErrorMsg(
@@ -288,14 +277,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     }
   };
 
-  // "查看技能": jump to the "我的技能" tab where the uploaded skill appears.
-  // The store refreshes mySkills after upload, so look up the skill by slug
-  // to enrich the success card (icon / title / category tag).
-  const uploadedSkill: SkillSummary | undefined = slug
-    ? mySkills.find((s) => s.slug === slug)
-    : undefined;
-  const skillTitle = uploadedSkill?.title || slug || '';
-  const skillCategoryCode = uploadedSkill?.categoryCode;
+  // Step 2 done: selected paths summary for the preview panel.
   const selectedItemNames = selectedPaths.map(
     (selectedPath) => selectedPath.split(/[\\/]/).pop() || selectedPath,
   );
@@ -317,21 +299,6 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
           defaultValue: selectedItemNames.join('、'),
         })
     : null;
-
-  const renderSkillIcon = () => {
-    if (uploadedSkill?.icon) {
-      return (
-        <span
-          dangerouslySetInnerHTML={{
-            __html: uploadedSkill.icon
-              .replace(/width="[^"]*"/, 'width="20"')
-              .replace(/height="[^"]*"/, 'height="20"'),
-          }}
-        />
-      );
-    }
-    return <img src={fileIcon} alt="" aria-hidden className="h-5 w-5 object-contain" />;
-  };
 
   return (
     <Dialog.Root open={open} onOpenChange={(v) => !v && onClose()}>
@@ -522,56 +489,6 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
                         })
                       : t('plaza.upload.uploading', { defaultValue: '安装...' })}
                   </p>
-                </div>
-              )}
-
-              {status === 'success' && (
-                <div className="flex flex-col items-center text-center py-4">
-                  {/* Success banner: check icon + title on #E6FFEA panel */}
-                  <div
-                    className="w-full rounded-xl px-4 py-5 flex flex-col items-center"
-                    style={{ background: '#E6FFEA' }}
-                  >
-                    <div className="w-12 h-12 rounded-full bg-[#DCF5E2] flex items-center justify-center mb-3">
-                      <CheckCircle2 className="h-6 w-6 text-[#00B54B]" />
-                    </div>
-                    <p className="text-sm font-medium text-foreground">
-                      {t('plaza.upload.successTitle', { defaultValue: '安装成功' })}
-                    </p>
-                  </div>
-                  {/* Skill card: icon + name + category tag */}
-                  <div className="flex items-center gap-2 mt-3 px-3 py-2 rounded-lg bg-muted/60 w-full justify-center">
-                    <div className="w-7 h-7 rounded flex items-center justify-center bg-background border border-border flex-shrink-0">
-                      {renderSkillIcon()}
-                    </div>
-                    <span className="text-sm font-medium text-foreground break-all line-clamp-1">
-                      {skillTitle}
-                    </span>
-                    {skillCategoryCode && (
-                      <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium bg-[#F0F4FF] text-[#4760FE] flex-shrink-0">
-                        {t(`plaza.category.${skillCategoryCode}`, { defaultValue: skillCategoryCode })}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {t('plaza.upload.successHint', { defaultValue: '关闭后可在技能广场列表查看' })}
-                  </p>
-                  <div className="flex gap-2 mt-5 w-full">
-                    <button
-                      type="button"
-                      onClick={resetToIdle}
-                      className="flex-1 inline-flex items-center justify-center h-9 px-4 rounded-lg border border-border bg-background text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
-                    >
-                      {t('plaza.upload.uploadAnother', { defaultValue: '继续安装' })}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleViewSkill}
-                      className="flex-1 inline-flex items-center justify-center h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-                    >
-                      {t('plaza.upload.viewSkill', { defaultValue: '查看技能' })}
-                    </button>
-                  </div>
                 </div>
               )}
 
