@@ -14,6 +14,7 @@ const getDefaultWorkspaceMock = vi.fn();
 const countActiveMock = vi.fn();
 const getBySessionKeyMock = vi.fn();
 const softDeleteBindingMock = vi.fn();
+const ensureWorkspaceArtifactOutputDirMock = vi.fn();
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
@@ -31,6 +32,7 @@ vi.mock('electron', () => ({
 
 vi.mock('../../electron/utils/paths', () => ({
   getClawXConfigDir: vi.fn(() => '/tmp'),
+  ensureWorkspaceArtifactOutputDir: ensureWorkspaceArtifactOutputDirMock,
 }));
 
 vi.mock('../../electron/utils/logger', () => ({
@@ -112,7 +114,7 @@ describe('session catalog gateway reload', () => {
   });
 
   it('creates a workspace without creating a project agent or reloading gateway', async () => {
-    const gatewayManager = { debouncedReload: vi.fn() };
+    const gatewayManager = { debouncedReload: vi.fn(), reload: vi.fn() };
     const { createWorkspace } = await import('../../electron/services/session-catalog-service');
 
     const workspace = await createWorkspace(
@@ -121,8 +123,10 @@ describe('session catalog gateway reload', () => {
     );
 
     expect(workspace).toEqual({ id: 'project-a', rootPath: '/tmp/project-a', name: 'A' });
+    expect(ensureWorkspaceArtifactOutputDirMock).toHaveBeenCalledWith('/tmp/project-a');
     expect(ensureProjectAgentMock).not.toHaveBeenCalled();
     expect(gatewayManager.debouncedReload).not.toHaveBeenCalled();
+    expect(gatewayManager.reload).not.toHaveBeenCalled();
   });
 
   it('ensures project agent when starting a chat in the project', async () => {
@@ -131,7 +135,7 @@ describe('session catalog gateway reload', () => {
       created: true,
       workspaceUpdated: false,
     });
-    const gatewayManager = { debouncedReload: vi.fn() };
+    const gatewayManager = { reload: vi.fn().mockResolvedValue(undefined) };
     const { ensureWorkspaceProjectAgent } = await import('../../electron/services/session-catalog-service');
 
     const result = await ensureWorkspaceProjectAgent('project-a', 'main', gatewayManager as never);
@@ -142,17 +146,17 @@ describe('session catalog gateway reload', () => {
       workspaceUpdated: false,
     });
     expect(ensureProjectAgentMock).toHaveBeenCalledWith('project-a', 'main', '/tmp/project-a');
-    expect(gatewayManager.debouncedReload).toHaveBeenCalledTimes(1);
+    expect(gatewayManager.reload).toHaveBeenCalledWith({ force: true });
   });
 
   it('skips agent sync on path change when the project has no agents yet', async () => {
-    const gatewayManager = { debouncedReload: vi.fn() };
+    const gatewayManager = { reload: vi.fn() };
     const { updateWorkspace } = await import('../../electron/services/session-catalog-service');
 
     await updateWorkspace('project-a', { rootPath: '/tmp/project-b' }, gatewayManager as never);
 
     expect(ensureProjectAgentMock).not.toHaveBeenCalled();
-    expect(gatewayManager.debouncedReload).not.toHaveBeenCalled();
+    expect(gatewayManager.reload).not.toHaveBeenCalled();
   });
 
   it('updates existing project agents when workspace path changes', async () => {
@@ -162,13 +166,13 @@ describe('session catalog gateway reload', () => {
       created: false,
       workspaceUpdated: true,
     });
-    const gatewayManager = { debouncedReload: vi.fn() };
+    const gatewayManager = { reload: vi.fn().mockResolvedValue(undefined) };
     const { updateWorkspace } = await import('../../electron/services/session-catalog-service');
 
     await updateWorkspace('project-a', { rootPath: '/tmp/project-b' }, gatewayManager as never);
 
     expect(ensureProjectAgentMock).toHaveBeenCalledWith('project-a', 'main', '/tmp/project-b');
-    expect(gatewayManager.debouncedReload).toHaveBeenCalledTimes(1);
+    expect(gatewayManager.reload).toHaveBeenCalledWith({ force: true });
   });
 
   it('skips reload when project agent already matches workspace', async () => {
@@ -184,6 +188,26 @@ describe('session catalog gateway reload', () => {
 
     expect(ensureProjectAgentMock).toHaveBeenCalledWith('project-a', 'agent-main', '/tmp/project-a');
     expect(gatewayManager.debouncedReload).not.toHaveBeenCalled();
+  });
+
+  it('awaits reload when bind creates a project agent so first send can route', async () => {
+    ensureProjectAgentMock.mockResolvedValue({
+      agentId: 'proj-project-a--main',
+      created: true,
+      workspaceUpdated: false,
+    });
+    let reloadCompleted = false;
+    const gatewayManager = {
+      reload: vi.fn(async () => {
+        reloadCompleted = true;
+      }),
+    };
+    const { bindSessionToWorkspace } = await import('../../electron/services/session-catalog-service');
+
+    await bindSessionToWorkspace('agent:main:session-1', 'project-a', gatewayManager as never);
+
+    expect(gatewayManager.reload).toHaveBeenCalledWith({ force: true });
+    expect(reloadCompleted).toBe(true);
   });
 
   it('reloads when project agent is created during move', async () => {

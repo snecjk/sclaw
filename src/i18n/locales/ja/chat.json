@@ -158,7 +158,6 @@
         "sendImmediately": "今すぐ送信",
         "queueFull": "キューが満杯です（最大 {{max}} 件）"
     },
-    "splitting": "質問を分析中...",
     "systemNotice": {
         "label": "システム通知",
         "expand": "展開",

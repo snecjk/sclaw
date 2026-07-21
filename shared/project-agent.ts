@@ -7,9 +7,8 @@
  */
 
 export const PROJECT_AGENT_PREFIX = 'proj';
-
-/** Workspace IDs are UUIDs; project agent IDs embed them after the `proj-` prefix. */
-const PROJECT_ID_UUID_PATTERN = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(.+)$/i;
+const PROJECT_AGENT_SEPARATOR = '--';
+const LEGACY_UUID_PROJECT_AGENT_PATTERN = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(.+)$/i;
 
 function normalizeAgentId(value: string | undefined | null): string {
   return (value ?? '').trim().toLowerCase() || 'main';
@@ -25,7 +24,7 @@ export function resolveProjectAgentId(projectId: string, baseAgentId: string): s
   const base = normalizeAgentId(baseAgentId);
   if (!pid) throw new Error('projectId is required');
 
-  const prefix = `${PROJECT_AGENT_PREFIX}-${pid}-`;
+  const prefix = `${PROJECT_AGENT_PREFIX}-${pid}${PROJECT_AGENT_SEPARATOR}`;
   const maxBaseLen = Math.max(1, 64 - prefix.length);
   const truncatedBase = base.slice(0, maxBaseLen);
   if (!truncatedBase) throw new Error(`baseAgentId too long to form project agent ID: ${baseAgentId}`);
@@ -33,7 +32,7 @@ export function resolveProjectAgentId(projectId: string, baseAgentId: string): s
   return `${prefix}${truncatedBase}`;
 }
 
-function parseWithKnownBaseAgentIds(
+function parseLegacyWithKnownBaseAgentIds(
   inner: string,
   knownBaseAgentIds: readonly string[],
 ): { projectId: string; baseAgentId: string } | null {
@@ -46,11 +45,8 @@ function parseWithKnownBaseAgentIds(
     const suffix = `-${baseAgentId}`;
     if (!inner.endsWith(suffix)) continue;
     const projectId = inner.slice(0, -suffix.length);
-    if (projectId) {
-      return { projectId, baseAgentId };
-    }
+    if (projectId) return { projectId, baseAgentId };
   }
-
   return null;
 }
 
@@ -65,24 +61,30 @@ export function parseProjectAgentId(
   const inner = trimmed.slice(prefix.length);
   if (!inner) return null;
 
-  const uuidMatch = inner.match(PROJECT_ID_UUID_PATTERN);
-  if (uuidMatch) {
-    return { projectId: uuidMatch[1], baseAgentId: uuidMatch[2] };
+  // New IDs use an explicit double-dash separator so dashed project IDs and
+  // dashed base-agent IDs can both be recovered without external context.
+  const separatorIndex = inner.lastIndexOf(PROJECT_AGENT_SEPARATOR);
+  if (separatorIndex > 0) {
+    const projectId = inner.slice(0, separatorIndex);
+    const baseAgentId = inner.slice(separatorIndex + PROJECT_AGENT_SEPARATOR.length);
+    return projectId && baseAgentId ? { projectId, baseAgentId } : null;
   }
 
+  // Keep reading IDs produced before the separator migration. UUID projects
+  // are unambiguous; arbitrary dashed IDs can be disambiguated with known base IDs.
+  const uuidMatch = LEGACY_UUID_PROJECT_AGENT_PATTERN.exec(inner);
+  if (uuidMatch) return { projectId: uuidMatch[1], baseAgentId: uuidMatch[2] };
+
   if (knownBaseAgentIds?.length) {
-    const knownMatch = parseWithKnownBaseAgentIds(inner, knownBaseAgentIds);
+    const knownMatch = parseLegacyWithKnownBaseAgentIds(inner, knownBaseAgentIds);
     if (knownMatch) return knownMatch;
   }
 
   const lastDash = inner.lastIndexOf('-');
   if (lastDash <= 0) return null;
-
   const projectId = inner.slice(0, lastDash);
   const baseAgentId = inner.slice(lastDash + 1);
-  if (!projectId || !baseAgentId) return null;
-
-  return { projectId, baseAgentId };
+  return projectId && baseAgentId ? { projectId, baseAgentId } : null;
 }
 
 export function isProjectAgentId(agentId: string): boolean {

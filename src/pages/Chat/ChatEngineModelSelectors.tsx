@@ -41,11 +41,11 @@ import { cn } from '@/lib/utils';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { toast } from 'sonner';
 
-/** Avoid remapping the same session repeatedly when catalog sanitizes its model. */
-const remappedDelistedSessionKeys = new Set<string>();
 /** Above SClaw embed browser drawer/toolbar portals (z-index 99999 / 100000). */
 const SELECTOR_MENU_Z = 'z-[100001]';
 
+/** Avoid remapping the same session repeatedly when catalog sanitizes its model. */
+const remappedDelistedSessionKeys = new Set<string>();
 const pillBase = cn(
   'flex min-w-0 max-w-[min(100vw-11rem,260px)] items-stretch rounded-xl border border-border/70',
   'bg-[linear-gradient(180deg,rgba(255,255,255,0.10),transparent),rgba(255,255,255,0.30)]',
@@ -132,9 +132,7 @@ function resolveClaudeToolbarModelId(input: {
   }
   return agent || workspace;
 }
-
 function useProjectAgentContext(currentAgentId: string, currentSessionKey: string) {
-  const selectedProjectId = useSessionCatalogStore((s) => s.selectedProjectId);
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
   const pendingProjectId = useChatStore((s) => s.pendingProjectId);
@@ -143,8 +141,8 @@ function useProjectAgentContext(currentAgentId: string, currentSessionKey: strin
     () => getProjectIdFromProjectAgentId(currentAgentId)
       ?? sessionWorkspaceByKey[currentSessionKey]
       ?? pendingProjectId
-      ?? selectedProjectId,
-    [currentAgentId, currentSessionKey, pendingProjectId, selectedProjectId, sessionWorkspaceByKey],
+      ?? null,
+    [currentAgentId, currentSessionKey, pendingProjectId, sessionWorkspaceByKey],
   );
   const projectName = useMemo(
     () => (projectId ? workspaces.find((workspace) => workspace.id === projectId)?.name ?? null : null),
@@ -153,7 +151,6 @@ function useProjectAgentContext(currentAgentId: string, currentSessionKey: strin
 
   return { projectId, projectName };
 }
-
 /* ── Engine Selector ─────────────────────────────────────────── */
 
 export function ChatEngineSelector({

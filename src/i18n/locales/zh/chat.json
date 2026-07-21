@@ -158,7 +158,6 @@
         "sendImmediately": "立即发送",
     "queueFull": "队列已满（最多 {{max}} 条）"
   },
-    "splitting": "正在分析问题...",
     "systemNotice": {
         "label": "系统提示",
         "expand": "展开",

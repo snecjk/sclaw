@@ -38,7 +38,7 @@
 - **含义**：工作区唯一标识，同时被 `catalog_sessions.workspace_id`、`session_groups.workspace_id` 引用。
 - **取值**：
   - 用户创建的项目：`randomUUID()` 生成，如 `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
-  - 系统内置：`default`（migration `0002` 插入，不可删除）
+  - 系统内置：`default`（migration `0003` 插入，不可删除）
 - **写入时机**：创建项目时生成；`default` 在首次 migration 时写入。
 - **读取方**：侧栏项目列表、会话归属解析、`getWorkspaceRootPath()`。
 
@@ -128,7 +128,7 @@ SELECT * FROM workspaces WHERE id = 'default' AND deleted_at IS NULL;
 
 ## 相关源码
 
-- Migration: `electron/db/migrations/0002-session-catalog-schema.ts`
+- Migration: `electron/db/migrations/0003-session-catalog-schema.ts`
 - 表类型: `electron/db/models/tables/session-catalog-tables.ts` → `WorkspacesTable`
 - 领域模型: `electron/db/models/domain/session-catalog.ts` → `Workspace`
 - Repository: `electron/db/repositories/workspace-repository.ts`

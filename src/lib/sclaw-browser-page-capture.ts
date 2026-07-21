@@ -35,11 +35,15 @@ export function registerSclawBrowserWebview(element: EmbedWebviewElement | null)
 }
 
 export async function captureSclawBrowserPageContext(input: {
+  embedRuntimeId: string;
+  bridgeSessionId: string;
   appTitle: string;
   url: string;
 }): Promise<SclawBrowserEmbedContextBlock> {
   const capturedAt = Date.now();
   const base: SclawBrowserEmbedContextBlock = {
+    embedRuntimeId: input.embedRuntimeId,
+    bridgeSessionId: input.bridgeSessionId,
     appTitle: input.appTitle,
     pageUrl: input.url,
     pageTitle: '',
@@ -64,11 +68,10 @@ export async function captureSclawBrowserPageContext(input: {
       : (webview.getURL?.() ?? input.url);
 
     return {
-      appTitle: input.appTitle,
+      ...base,
       pageUrl,
       pageTitle: typeof result?.title === 'string' ? result.title.trim() : '',
       visibleTextExcerpt: typeof result?.text === 'string' ? result.text.trim() : '',
-      capturedAt,
     };
   } catch {
     return {

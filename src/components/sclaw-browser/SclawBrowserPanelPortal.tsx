@@ -20,7 +20,7 @@ export function SclawBrowserPanelPortal() {
   const setChatSplitPercent = useSclawBrowserOverlayStore((s) => s.setChatSplitPercent);
   const embedRuntimeId = useSclawBrowserOverlayStore((s) => s.embedRuntimeId);
   const bounds = useSclawBrowserHostBounds(session !== null);
-  const [frameReady, setFrameReady] = useState(false);
+  const [readySession, setReadySession] = useState<typeof session>(null);
   const { splitRef, startResize, isResizing } = useSclawBrowserSplitResize(
     chatSplitPercent,
     setChatSplitPercent,
@@ -29,16 +29,12 @@ export function SclawBrowserPanelPortal() {
   );
 
   useEffect(() => {
-    if (!session) {
-      setFrameReady(false);
-      return;
-    }
-    const id = window.setTimeout(() => setFrameReady(true), SCLAW_BROWSER_DRAWER_ANIM_MS);
+    if (!session) return;
+    const id = window.setTimeout(() => setReadySession(session), SCLAW_BROWSER_DRAWER_ANIM_MS);
     return () => {
       window.clearTimeout(id);
-      setFrameReady(false);
     };
-  }, [session?.url]);
+  }, [session]);
 
   if (!session || !bounds) return null;
 
@@ -67,7 +63,7 @@ export function SclawBrowserPanelPortal() {
         }
       >
         <div className="sclaw-browser-split__browser">
-          {frameReady ? (
+          {readySession === session ? (
             <SclawBrowserFrame url={session.url} title={session.title} />
           ) : null}
         </div>

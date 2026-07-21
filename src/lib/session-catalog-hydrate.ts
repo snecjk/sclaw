@@ -6,12 +6,15 @@ export function hydrateRecentGroupsFromCatalog(
   sessions: CatalogSessionDto[],
 ): void {
   if (groups.length === 0 && sessions.every((s) => !s.groupId)) return;
-  const mappedGroups = groups.map((group) => ({
-    id: group.id,
-    name: group.name,
-    createdAt: Date.parse(group.createdAt) || Date.now(),
-    updatedAt: Date.parse(group.updatedAt ?? group.createdAt) || Date.now(),
-  }));
+  const mappedGroups = groups.map((group) => {
+    const createdAt = group.createdAt ?? new Date().toISOString();
+    return {
+      id: group.id,
+      name: group.name,
+      createdAt: Date.parse(createdAt) || Date.now(),
+      updatedAt: Date.parse(group.updatedAt ?? createdAt) || Date.now(),
+    };
+  });
   const assignments = Object.fromEntries(
     sessions
       .filter((row) => row.groupId)

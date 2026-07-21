@@ -1,6 +1,6 @@
 ## 1. Database and repositories
 
-- [x] 1.1 Add migration `0002` (`workspaces`, `session_groups`, `catalog_sessions`, `session_engine_bindings`) + seed `default` workspace
+- [x] 1.1 Add migration `0003` (`workspaces`, `session_groups`, `catalog_sessions`, `session_engine_bindings`) + seed `default` workspace
 - [x] 1.2 Kysely table types, DTOs, repositories with soft-delete and `(workspace_id, session_key)` queries
 - [x] 1.3 Wire catalog DB init in Main startup (`electron/db/index.ts`)
 

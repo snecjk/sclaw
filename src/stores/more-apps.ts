@@ -2,7 +2,7 @@
  * More Apps Store — UI state + Main-backed persistence (~/.stoclaw/more-apps)
  */
 import { create } from 'zustand';
-import type { AppItem, MoreAppsTab, MoreAppsSortMode, MarketCategory } from '@/types/more-apps';
+import type { AppItem, AppTone, MoreAppsTab, MoreAppsSortMode, MarketCategory } from '@/types/more-apps';
 import { VISIBLE_BUILTIN_APPS } from '@/components/more-apps/builtin-apps';
 import {
   fetchMoreAppsRegistry,
@@ -79,6 +79,12 @@ function toRegistry(state: {
   };
 }
 
+const APP_TONES = new Set<AppTone>(['blue', 'orange', 'green', 'purple', 'teal', 'gray']);
+
+function normalizeAppTone(tone: string | undefined): AppTone | undefined {
+  return tone && APP_TONES.has(tone as AppTone) ? tone as AppTone : undefined;
+}
+
 function asAppItems(apps: MoreAppsRegistry['externalApps']): AppItem[] {
   return apps.map((app) => ({
     ...app,
@@ -86,6 +92,7 @@ function asAppItems(apps: MoreAppsRegistry['externalApps']): AppItem[] {
     url: app.url,
     kind: app.kind === 'builtin' ? 'builtin' : 'external',
     external: app.external ?? true,
+    tone: normalizeAppTone(app.tone),
   }));
 }
 

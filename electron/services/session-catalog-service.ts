@@ -199,7 +199,9 @@ export async function ensureWorkspaceProjectAgent(
   const resolvedBase = getBaseAgentIdFromProjectAgentId(baseAgentId) || baseAgentId.trim() || 'main';
   const result = await ensureProjectAgent(trimmedId, resolvedBase, workspace.rootPath);
   if (result.created || result.workspaceUpdated) {
-    gatewayManager?.debouncedReload();
+    // Project new-chat readiness waits for this call. A scheduled/debounced reload
+    // can run after chat.send and leave the newly-created agent temporarily unroutable.
+    await gatewayManager?.reload({ force: true });
   }
   return result;
 }
@@ -213,25 +215,39 @@ export async function updateWorkspace(
   const workspace = await getWorkspaceRepository().update(workspaceId, input);
   if (input.rootPath != null) {
     const sessions = await getCatalogSessionRepository().list({ workspaceId });
-    await Promise.all(sessions.map((session) => syncSessionEngineBindingCwd(session.sessionKey)));
     try {
-      // Only sync agents that already exist for this project. Empty projects stay agent-less.
-      const existingProjectAgents = (await listProjectAgentIds()).filter((agentId) => {
-        return getProjectIdFromProjectAgentId(agentId) === workspaceId.trim().toLowerCase();
-      });
-      let needsReload = false;
-      for (const agentId of existingProjectAgents) {
-        const baseAgentId = getBaseAgentIdFromProjectAgentId(agentId) || 'main';
-        const result = await ensureProjectAgent(workspaceId, baseAgentId, input.rootPath);
-        if (result.created || result.workspaceUpdated) {
-          needsReload = true;
-        }
+      // Empty projects stay agent-less. Existing project agents and agents required
+      // by real catalog sessions are both synchronized, healing partial state without
+      // creating a main project agent merely because the path was edited.
+      const baseAgentIds = new Set<string>();
+      for (const session of sessions) {
+        const rawAgentId = getAgentIdFromSessionKey(session.sessionKey);
+        baseAgentIds.add(
+          isProjectAgentId(rawAgentId)
+            ? (getBaseAgentIdFromProjectAgentId(rawAgentId) ?? 'main')
+            : rawAgentId,
+        );
       }
-      if (needsReload) {
-        gatewayManager?.debouncedReload();
+      const existingProjectAgents = (await listProjectAgentIds()).filter((agentId) => (
+        getProjectIdFromProjectAgentId(agentId) === workspaceId.trim().toLowerCase()
+      ));
+      for (const agentId of existingProjectAgents) {
+        baseAgentIds.add(getBaseAgentIdFromProjectAgentId(agentId) || 'main');
+      }
+
+      const results = await Promise.all([...baseAgentIds].map((baseAgentId) => (
+        ensureProjectAgent(workspaceId, baseAgentId, input.rootPath!)
+      )));
+      await Promise.all(sessions.map((session) => syncSessionEngineBindingCwd(session.sessionKey)));
+      if (results.some((result) => result.created || result.workspaceUpdated)) {
+        await gatewayManager?.reload({ force: true });
       }
     } catch (error) {
-      logger.warn('[session-catalog] failed to sync project agents on workspace path change', { workspaceId, error });
+      logger.warn('[session-catalog] failed to sync project agents on workspace path change', {
+        workspaceId,
+        error: String(error),
+      });
+      throw error;
     }
   }
   return workspace;
@@ -364,7 +380,9 @@ export async function bindSessionToWorkspace(
       try {
         const result = await ensureProjectAgent(workspaceId, baseAgentId, workspace.rootPath);
         if (result.created || result.workspaceUpdated) {
-          gatewayManager?.debouncedReload();
+          // Session readiness waits for this API call. Awaiting reload here ensures
+          // the newly-created project agent is routable before the first send.
+          await gatewayManager?.reload({ force: true });
         }
       } catch (error) {
         logger.warn('[session-catalog] failed to ensure project agent on bind', {
@@ -372,6 +390,7 @@ export async function bindSessionToWorkspace(
           sessionKey,
           error: String(error),
         });
+        throw error;
       }
     }
   }

@@ -51,11 +51,11 @@ export const assistantChatCardBgStreaming = cn(
 );
 
 /**
- * 用户消息气泡（chat-interaction-style-spec §4.1）：#F0F2F5、圆角 12px 0 12px 12px、内距 8px。
+ * 用户消息气泡（chat-interaction-style-spec §4.1）：#E4E4E4、圆角 12px 0 12px 12px、内距 8px。
  * 使用位置：ChatMessage MessageBubble、对话列表用户侧。
  */
 export const userChatBubbleSurfaceClass = cn(
-  'rounded-xl rounded-tr-none bg-[#F0F2F5] p-2 text-foreground shadow-none',
+  'rounded-xl rounded-tr-none bg-[#E4E4E4] p-2 text-foreground shadow-none',
   'dark:bg-muted dark:shadow-none',
 );
 
@@ -156,10 +156,10 @@ export const myTaskCreateButtonClass = cn(
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
 
-/** 我的任务卡片外框（MasterGo 容器 7377）：18px 圆角 + 16px 内距 + glow，无描边；等高网格内 h-full */
+/** 我的任务卡片外框（MasterGo 容器 7377）：18px 圆角 + 16px 内距 + #E9EAEB 描边，无阴影；等高网格内 h-full */
 export const myTaskCardShellClass = cn(
-  'relative flex h-full min-w-0 flex-col rounded-[18px] bg-card p-4 shadow-glow dark:bg-secondary',
-  'transition-[box-shadow] duration-base hover:shadow-soft',
+  'relative flex h-full min-w-0 flex-col rounded-[18px] border border-[#E9EAEB] bg-card p-4 dark:border-border dark:bg-secondary',
+  'transition-[border-color] duration-base',
 );
 
 /** 我的任务运行保障控件：标题行右侧紧凑排布（文案 + 问号 + 开关） */
@@ -559,10 +559,10 @@ export const stoSplitChatPaneClass = cn(
 export const stoSplitPreviewPaneClass =
   'flex h-full min-h-0 min-w-0 flex-col overflow-hidden [contain:inline-size]';
 
-/** 三栏预览区产物内容壳（描边在 tab 行下方，不含 tab） */
+/** 三栏预览区产物内容壳（白色背景；描边在 tab 行下方，不含 tab） */
 export const stoPreviewContentShellClass = cn(
   'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[18px] border border-border',
-  'bg-[var(--sto-main-card-bg)] shadow-glow',
+  'bg-white shadow-glow dark:bg-card',
 );
 
 /** @deprecated 整卡描边已拆至 {@link stoPreviewContentShellClass}，tab 行在外 */
@@ -581,9 +581,9 @@ export function stoPreviewArtifactTabClass(isActive: boolean): string {
   );
 }
 
-/** 预览操作行（标题 + 元信息 + 图标按钮） */
+/** 预览操作行（标题 + 元信息 + 图标按钮，46px 高） */
 export const stoPreviewActionRowClass = cn(
-  'flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3',
+  'flex h-[46px] shrink-0 items-center justify-between gap-3 border-b border-border px-4',
 );
 
 /** 预览操作行图标按钮（30×30，圆角 7px） */
@@ -927,10 +927,8 @@ export const workflowListCardGridClass =
 
 /** 工作流列表卡片外框 */
 export const workflowListCardShellClass = cn(
-  'flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[18px] bg-card dark:bg-secondary',
-  'shadow-[0_0_4px_rgba(0,0,0,0.04)] dark:shadow-glow',
-  'transition-[box-shadow] duration-base',
-  'hover:shadow-[0_0_16px_rgba(0,0,0,0.06)] dark:hover:shadow-soft',
+  'flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[#E9EAEB] bg-card dark:border-border dark:bg-secondary',
+  'transition-[border-color] duration-base',
 );
 
 /** 工作流卡片头图：距卡片边框上/左/右 4px（设计稿） */

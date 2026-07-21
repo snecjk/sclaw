@@ -4,13 +4,9 @@
  */
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
-import { useMessageQueueStore } from '@/stores/message-queue';
-import { invokeApi } from '@/lib/api-client';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
-import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
-import { resolveSkillGatewayText } from '@/lib/skill-gateway-text';
 
 export interface DispatchChatSendOptions {
   text: string;
@@ -23,9 +19,6 @@ export interface DispatchChatSendOptions {
   /** 工作流名称（mine 来源时用于上下文块）。 */
   workflowName?: string | null;
   skillMeta?: SkillMeta;
-  /** Skip question:split (e.g. when @mentions are present). */
-  skipQuestionSplit?: boolean;
-  onSplittingChange?: (splitting: boolean) => void;
 }
 
 export async function dispatchChatSend(options: DispatchChatSendOptions): Promise<void> {
@@ -38,13 +31,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     workflowSource,
     workflowName,
     skillMeta,
-    skipQuestionSplit = false,
-    onSplittingChange,
   } = options;
-
-  const gatewayPrompt = skillMeta
-    ? resolveSkillGatewayText(resolveSkillFromPlaza(skillMeta.slug).defaultPrompt, text)
-    : text;
 
   const sendMessage = useChatStore.getState().sendMessage;
 
@@ -107,7 +94,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     '@/hooks/use-workflow-send'
   );
 
-  // Skill sends: skip question:split so the optimistic user bubble appears immediately.
+  // Skill sends preserve their metadata and bypass workflow-intent routing.
   if (skillMeta) {
     await sendMessage({ text, attachments, targetAgentId, dingTalkMentions, skillMeta });
     if (failed()) {
@@ -142,37 +129,8 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
   });
   if (resolved) return;
 
-  let parts: Array<{ type: string; context: string }> | null = null;
-  if (!skipQuestionSplit) {
-    onSplittingChange?.(true);
-    try {
-      const { currentAgentId, currentSessionKey } = useChatStore.getState();
-      parts = await invokeApi<Array<{ type: string; context: string }>>('question:split', {
-        prompt: gatewayPrompt,
-        agentId: currentAgentId,
-        sessionId: currentSessionKey,
-      });
-    } catch {
-      // Silent fallback
-    } finally {
-      onSplittingChange?.(false);
-    }
-  }
-
-  if (parts && parts.length > 1) {
-    await sendMessage({ text: parts[0].context, attachments, targetAgentId, dingTalkMentions, skillMeta });
-    if (failed()) {
-      toast.error('发送失败，请重试');
-      return;
-    }
-    const { currentSessionKey } = useChatStore.getState();
-    for (let i = 1; i < parts.length; i++) {
-      useMessageQueueStore.getState().enqueue(currentSessionKey, parts[i].context, undefined, targetAgentId);
-    }
-  } else {
-    await sendMessage({ text, attachments, targetAgentId, dingTalkMentions, skillMeta });
-    if (failed()) {
-      toast.error('发送失败，请重试');
-    }
+  await sendMessage({ text, attachments, targetAgentId, dingTalkMentions, skillMeta });
+  if (failed()) {
+    toast.error('发送失败，请重试');
   }
 }

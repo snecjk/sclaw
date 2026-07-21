@@ -38,6 +38,7 @@ import { SidebarUpdateNotice } from '@/components/layout/sidebar-update-notice';
 import { useSettingsStore } from '@/stores/settings';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
+import { getCurrentEnvConfig } from '../../../shared/env-config';
 import { closeSclawBrowser, isSclawBrowserOpen } from '@/lib/open-sclaw-browser';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
@@ -97,7 +98,6 @@ import {
   type SidebarSubitemDeletePayload,
   useSidebarDeleteConfirmStore,
 } from '@/stores/sidebar-delete-confirm';
-import { getCurrentEnvConfig } from '../../../shared/env-config';
 import { getSidebarLayoutVariant, getSidebarVisibility } from '@/lib/sidebar-layout';
 import {
   resolveSidebarAccountFooterMode,
@@ -977,7 +977,9 @@ export function Sidebar() {
             ...state.runtimeBySessionKey,
             [state.currentSessionKey]: {
               sending: state.sending,
+              aborting: state.runtimeBySessionKey[state.currentSessionKey]?.aborting ?? false,
               activeRunId: state.activeRunId,
+              sendAcceptance: state.sendAcceptance,
               streamingText: state.streamingText,
               streamingMessage: state.streamingMessage,
               streamingMessages: state.streamingMessages,
@@ -992,7 +994,9 @@ export function Sidebar() {
             },
             [DEFAULT_SESSION_KEY]: {
               sending: false,
+              aborting: false,
               activeRunId: null,
+              sendAcceptance: null,
               streamingText: '',
               streamingMessage: null,
               streamingMessages: [],
@@ -1020,6 +1024,7 @@ export function Sidebar() {
             streamingToolResults: [],
             streamingTools: [],
             activeRunId: null,
+            sendAcceptance: null,
             error: null,
             pendingFinal: false,
             lastUserMessageAt: null,
@@ -1718,8 +1723,6 @@ export function Sidebar() {
       if (item.to === '/more-apps' && (siteDepartmentTypes === null || !isSite)) return false;
       if (item.to === '/scheduled-tasks' && getCurrentEnvConfig().isProduction) return false;
       if (item.to === '/cron' && getCurrentEnvConfig().isProduction) return false;
-      // if (item.to === '/scheduled-tasks' && getCurrentEnvConfig().isProduction) return false;
-      // if (item.to === '/cron' && getCurrentEnvConfig().isProduction) return false;
       return true;
     });
   }, [isSite, sidebarVis.primaryMyData, siteDepartmentTypes, t]);
@@ -1811,7 +1814,9 @@ export function Sidebar() {
             ...runtimeBySessionKey,
             [currKey]: {
               sending,
+              aborting: useChatStore.getState().runtimeBySessionKey[currKey]?.aborting ?? false,
               activeRunId,
+              sendAcceptance: useChatStore.getState().sendAcceptance,
               streamingText,
               streamingMessage,
               streamingMessages,
@@ -1826,7 +1831,9 @@ export function Sidebar() {
             },
             [DEFAULT_SESSION_KEY]: {
               sending: false,
+              aborting: false,
               activeRunId: null,
+              sendAcceptance: null,
               streamingText: '',
               streamingMessage: null,
               streamingMessages: [],
@@ -1854,6 +1861,7 @@ export function Sidebar() {
             streamingToolResults: [],
             streamingTools: [],
             activeRunId: null,
+            sendAcceptance: null,
             error: null,
             pendingFinal: false,
             lastUserMessageAt: null,

@@ -14,7 +14,7 @@ import {
 } from '../../shared/dingtalk-share-text';
 import { markdownToPlainText } from '../../shared/markdown-to-plain-text';
 import { hostApiFetch, uploadFileToTempOSS } from '@/lib/host-api';
-import { inferMimeTypeFromUrl, isHttpUrl } from '@/lib/preview-url';
+import { isHttpUrl } from '@/lib/preview-url';
 import type { AttachedFileMeta } from '@/stores/chat';
 import {
   buildArtifactMetaLine,
@@ -203,10 +203,10 @@ export function buildConversationShareDialogDraft(
   files: AttachedFileMeta[],
 ): DingTalkShareDialogDraft {
   const shareFiles = files
-    .filter((file) => file.filePath.trim().length > 0)
+    .filter((file) => file.filePath?.trim().length)
     .map((file) => ({
       fileName: file.fileName.trim() || 'file',
-      filePath: file.filePath.trim(),
+      filePath: file.filePath!.trim(),
       mimeType: file.mimeType,
     }));
   const plainText = markdownToPlainText(text.trim());

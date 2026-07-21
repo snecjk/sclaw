@@ -45,7 +45,7 @@ SQLite lives at `userData/sqlite/stoclaw.sqlite` (Main only). Renderer never tou
 
 **Rationale**: Catalog is queryable and migratable; hot runtime paths stay fast and unchanged.
 
-### 2. Schema (migration `0002`)
+### 2. Schema (migration `0003` after integration with memory capture)
 
 ```text
 workspaces
@@ -144,7 +144,7 @@ Renderer uses `host-api.ts` only.
 
 ## Migration Plan
 
-1. Ship migration `0002` + seed default workspace
+1. Ship migration `0003` + seed default workspace
 2. Background import `engine-sessions.json` + localStorage on app start (Main)
 3. Renderer switches catalog reads to host-api; writes stop touching localStorage
 4. Optional: delete stale localStorage keys after N launches (logged)

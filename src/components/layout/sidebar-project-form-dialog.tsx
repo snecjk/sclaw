@@ -2,7 +2,7 @@
  * ProjectFormDialog — 新建项目（名称 + 项目位置）。
  * 项目创建后仅支持侧栏行内重命名，不支持改路径。
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Folder, Loader2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
@@ -30,12 +30,6 @@ export function ProjectFormDialog({
   const [rootPath, setRootPath] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [picking, setPicking] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
-    setName('');
-    setRootPath('');
-  }, [open]);
 
   if (!open) return null;
 

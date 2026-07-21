@@ -74,7 +74,10 @@ SELECT * FROM schema_migrations ORDER BY version;
 ## 相关源码
 
 - `electron/db/migrations/0001-initial-schema.ts`
-- `electron/db/migrations/0002-session-catalog-schema.ts`
-- `electron/db/migrations/0003-session-types-and-channels.ts`
+- `electron/db/migrations/0002-memory-capture-jobs.ts`
+- `electron/db/migrations/0003-session-catalog-schema.ts`
+- `electron/db/migrations/0004-session-types-and-channels.ts`
+
+兼容说明：若本地曾运行合并前的会话目录业务分支（catalog/types 使用 `v2/v3`），migrator 会先按 migration name 将其原子归一化为 `v3/v4`，再执行当前分支的 `v2-memory-capture-jobs`。
 - `electron/db/migrations/index.ts`
 - `electron/db/migrator.ts`

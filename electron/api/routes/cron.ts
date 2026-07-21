@@ -939,7 +939,7 @@ export async function handleCronRoutes(
         const jobsFile = join(getOpenClawConfigDir(), 'cron', 'jobs.json');
         const jobsRaw = await readFile(jobsFile, 'utf8');
         const jobsData = JSON.parse(jobsRaw) as {
-          jobs?: Array<{ id: string; name?: string }>;
+          jobs?: Array<{ id: string; name?: string; description?: string }>;
         };
         const job = jobsData.jobs?.find((entry) => entry.id === body.id);
         const name = job?.name?.trim();

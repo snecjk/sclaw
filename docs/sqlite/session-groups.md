@@ -98,7 +98,7 @@ ORDER BY sg.workspace_id, sg.sort_order;
 
 ## 相关源码
 
-- Migration: `electron/db/migrations/0002-session-catalog-schema.ts`
+- Migration: `electron/db/migrations/0003-session-catalog-schema.ts`
 - 表类型: `electron/db/models/tables/session-catalog-tables.ts` → `SessionGroupsTable`
 - 领域模型: `electron/db/models/domain/session-catalog.ts` → `SessionGroup`
 - Repository: `electron/db/repositories/session-group-repository.ts`

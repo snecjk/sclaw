@@ -12,7 +12,7 @@
 | 项 | 值 |
 |----|-----|
 | 文件 | `{userData}/sqlite/stoclaw.sqlite` |
-| 当前 schema 版本 | **3**（migration `0001` + `0002` + `0003`） |
+| 当前 schema 版本 | **4**（migration `0001` + `0002` + `0003` + `0004`） |
 | 访问层 | Main Process → Kysely → `node:sqlite` |
 | 外键 | DDL 中声明，`PRAGMA foreign_keys = OFF`（未强制） |
 

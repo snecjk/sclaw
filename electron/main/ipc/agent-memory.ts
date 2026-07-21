@@ -1,0 +1,110 @@
+import type { IpcMainInvokeEvent } from 'electron';
+import { ipcMain } from 'electron';
+import type { GatewayManager } from '../../gateway/manager';
+
+import { agentMemoryOrchestrator } from '../../services/agent-memory-orchestrator';
+import { agentMemoryContextService } from '../../services/agent-memory-context-service';
+import { memoryCaptureService } from '../../services/memory-capture-service';
+import { registerMemoryTurnEventObserver } from '../../services/memory-turn-event-observer';
+import { onAuthenticatedUserSet } from '../../utils/auth-store';
+
+let authListenerRegistered = false;
+
+export function registerAgentMemoryHandlers(gatewayManager: GatewayManager): void {
+  registerMemoryTurnEventObserver(gatewayManager);
+  if (!authListenerRegistered) {
+    authListenerRegistered = true;
+    onAuthenticatedUserSet(() => {
+      void agentMemoryContextService.reinitializeAfterLogin().catch((error) => {
+        console.warn('[agent-memory] login reinitialize failed:', error);
+      });
+    });
+  }
+  agentMemoryContextService.warmup();
+  void memoryCaptureService.recover(gatewayManager).catch(() => undefined);
+  ipcMain.handle('agent-memory:status', async () => {
+    return await agentMemoryOrchestrator.getStatus();
+  });
+
+  ipcMain.handle('agent-memory:bootstrap', async (_event: IpcMainInvokeEvent, forceRefresh?: boolean) => {
+    return await agentMemoryOrchestrator.getBootstrap(forceRefresh === true);
+  });
+
+  ipcMain.handle('agent-memory:index', async (_event: IpcMainInvokeEvent, records: unknown) => {
+    return await agentMemoryOrchestrator.indexRecords(
+      Array.isArray(records) ? records : [],
+    );
+  });
+
+  ipcMain.handle(
+    'agent-memory:add',
+    async (
+      _event: IpcMainInvokeEvent,
+      messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>,
+      options?: {
+        userId?: string;
+        agentId?: string;
+        runId?: string;
+        metadata?: Record<string, unknown>;
+        infer?: boolean;
+      },
+    ) => {
+      return await agentMemoryOrchestrator.addMemories(Array.isArray(messages) ? messages : [], options);
+    },
+  );
+
+  ipcMain.handle(
+    'agent-memory:search',
+    async (_event: IpcMainInvokeEvent, query: string, options?: Record<string, unknown>) => {
+    return await agentMemoryOrchestrator.search(query, options as {
+      topK?: number;
+      agentId?: string;
+      sessionId?: string;
+      memoryTypes?: string[];
+    });
+    },
+  );
+
+  ipcMain.handle('agent-memory:delete', async (_event: IpcMainInvokeEvent, recordIds: string[]) => {
+    return await agentMemoryOrchestrator.delete(Array.isArray(recordIds) ? recordIds : []);
+  });
+
+  ipcMain.handle(
+    'agent-memory:mem0-list',
+    async (
+      _event: IpcMainInvokeEvent,
+      options: { userId?: string; agentId?: string; runId?: string; topK?: number },
+    ) => {
+      return await agentMemoryOrchestrator.getAllMemories(options ?? {});
+    },
+  );
+
+  ipcMain.handle('agent-memory:mem0-delete', async (_event: IpcMainInvokeEvent, memoryId: string) => {
+    return await agentMemoryOrchestrator.deleteMemory(memoryId);
+  });
+
+  ipcMain.handle(
+    'agent-memory:mem0-delete-all',
+    async (_event: IpcMainInvokeEvent, options: { userId?: string; agentId?: string; runId?: string }) => {
+      return await agentMemoryOrchestrator.deleteAllMemories(options ?? {});
+    },
+  );
+
+  ipcMain.handle('agent-memory:mem0-history', async (_event: IpcMainInvokeEvent, memoryId: string) => {
+    return await agentMemoryOrchestrator.getMemoryHistory(memoryId);
+  });
+
+  ipcMain.handle('agent-memory:mem0-reset', async () => {
+    return await agentMemoryOrchestrator.resetMemories();
+  });
+
+  ipcMain.handle(
+    'agent-memory:summarize-execution-experience',
+    async (_event: IpcMainInvokeEvent, input: Record<string, unknown>) => {
+      return await agentMemoryOrchestrator.summarizeExecutionExperience(
+        input && typeof input === 'object' ? input : {},
+      );
+    },
+  );
+
+}

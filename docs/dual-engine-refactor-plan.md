@@ -185,7 +185,7 @@ Claude skill bridge 仍是运行时实现主路径，SkillCatalog / RuntimeSkill
 
 - session delete 仍在 route 层按引擎分叉
 - session model override 仍在 route 层按引擎分叉
-- send-with-media 仍在 route 层显式特判 `openclaw`
+- 媒体发送已统一到 `/api/chat/send`，route 层仍需继续关注 session model/delete 等其他能力是否按引擎分叉
 
 这说明“统一抽象”只覆盖了部分 happy path，没有真正包住差异。后续再增加能力或引擎时，路由和 store 层会继续膨胀。
 
@@ -678,7 +678,7 @@ UI sendMessage
 
 1. 为附件、model override、delete、resume 等能力建立 capability 描述
 2. 将 route 层的引擎特判逐步下沉到 runtime
-3. 将 send-with-media、session model、session delete 等统一为 runtime API
+3. 将 session model、session delete 等统一为 runtime API
 
 阶段收益：
 

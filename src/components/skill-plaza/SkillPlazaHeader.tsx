@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { invokeIpc } from '@/lib/api-client';
 import { stoPageTitleClass } from '@/lib/surfaces';
 import { useState } from 'react';
 import addIcon from '@/assets/icons/add.svg';
@@ -15,9 +16,7 @@ export function SkillPlazaHeader({ onUploadSuccess }: SkillPlazaHeaderProps) {
 
   const handleOpenFolder = async () => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { ipcRenderer } = window.electron as any;
-      await ipcRenderer.invoke('open-skill-folder');
+      await invokeIpc('open-skill-folder');
     } catch {
       // fallback: do nothing
     }
