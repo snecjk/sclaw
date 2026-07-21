@@ -35,7 +35,6 @@ import { SidebarUpdateNotice } from '@/components/layout/sidebar-update-notice';
 import { useSettingsStore } from '@/stores/settings';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
-import { getCurrentEnvConfig } from '../../../shared/env-config';
 import { closeSclawBrowser, isSclawBrowserOpen } from '@/lib/open-sclaw-browser';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
@@ -1659,9 +1658,7 @@ export function Sidebar() {
       badge?: ReactNode;
     }> = [
       { to: '/', end: true, icon: <MessageSquarePlus className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.newChat') },
-      // { to: '/scheduled-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: `${t('common:sidebar.cronTasks')}（云）` },
       { to: '/my-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myTasks') },
-      // { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
       { to: '/skills', icon: <Wrench className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/workflow', icon: <Workflow className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.workflow') },
       { to: '/more-apps', icon: <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.moreApps') },
@@ -1672,8 +1669,6 @@ export function Sidebar() {
       if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
       if (item.to === '/data-center' && (siteDepartmentTypes === null || !isSite)) return false;
       if (item.to === '/more-apps' && (siteDepartmentTypes === null || !isSite)) return false;
-      if (item.to === '/scheduled-tasks' && getCurrentEnvConfig().isProduction) return false;
-      if (item.to === '/cron' && getCurrentEnvConfig().isProduction) return false;
       return true;
     });
   }, [isSite, sidebarVis.primaryMyData, siteDepartmentTypes, t]);

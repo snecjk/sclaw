@@ -8,7 +8,7 @@ import {
   scheduleValueToCron,
   cronToScheduleValue,
   defaultScheduleValue,
-} from '@/pages/Cron/components/schedule-utils';
+} from '../lib/schedule-utils';
 import { DingTalkRecipientField } from '@/components/dingtalk/DingTalkRecipientField';
 import { useMyTaskStore } from '../store';
 import { cn } from '@/lib/utils';

@@ -8,9 +8,7 @@ import { matchPath } from 'react-router-dom';
 
 const SIDEBAR_PRIMARY_NAV_ROUTE_MATCHERS: ReadonlyArray<{ path: string; end?: boolean }> = [
   { path: '/', end: true },
-  { path: '/scheduled-tasks' },
   { path: '/my-tasks' },
-  { path: '/cron' },
   { path: '/skills' },
   { path: '/workflow' },
   { path: '/more-apps' },

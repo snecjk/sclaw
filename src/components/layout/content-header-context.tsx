@@ -41,7 +41,6 @@ function resolveDefaultTitle(pathname: string, t: (key: string) => string): stri
   if (matchPath({ path: '/tasks/:taskId/:entryId', end: true }, pathname)) return t('common:sidebar.taskList');
   if (matchPath({ path: '/tasks/:taskId', end: true }, pathname)) return t('common:sidebar.taskList');
   if (pathname.startsWith('/workflow')) return t('common:sidebar.workflow');
-  // if (pathname.startsWith('/scheduled-tasks') || pathname.startsWith('/cron')) return t('common:sidebar.cronTasks');
   if (pathname.startsWith('/my-tasks')) return t('common:sidebar.myTasks');
   if (pathname.startsWith('/skills')) return t('common:sidebar.skills');
   if (pathname.startsWith('/more-apps')) return t('common:sidebar.moreApps');

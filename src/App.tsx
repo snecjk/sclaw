@@ -15,8 +15,6 @@ import { Channels } from './pages/Channels';
 import { SkillPlazaPage } from './components/skill-plaza/SkillPlazaPage';
 import { MoreAppsPage } from './components/more-apps/MoreAppsPage';
 import { Subscriptions } from './pages/Subscriptions';
-// import { Cron } from './pages/Cron';
-// import ScheduledTasks from './pages/ScheduledTasks';
 import MyTask from './pages/MyTask';
 import { Home } from './pages/Home';
 import { TaskDetail } from './pages/TaskDetail';
@@ -223,10 +221,12 @@ function App() {
   // Listen for scheduled task new results from main process
   useEffect(() => {
     const handleNewResult = (...args: unknown[]) => {
+			// TODO YL 此处待确认
+			console.log('Received scheduled-task:new-result event:', args);
       const payload = args[0] as { taskId: number } | undefined;
       if (!payload || typeof payload.taskId !== 'number') return;
-      // Only add unread if user is not currently on the Scheduled Tasks page
-      if (location.pathname !== '/scheduled-tasks') {
+      // Only add unread if user is not currently on the My Tasks page
+      if (location.pathname !== '/my-tasks') {
         useScheduledTaskUnreadStore.getState().addUnread(payload.taskId);
       }
     };
@@ -354,8 +354,6 @@ function App() {
             <Route path="/skills" element={<SkillPlazaPage />} />
             <Route path="/more-apps" element={<MoreAppsPage />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
-            {/* <Route path="/cron" element={<Cron />} />
-            <Route path="/scheduled-tasks" element={<ScheduledTasks />} /> */}
             <Route path="/my-tasks" element={<MyTask />} />
             <Route path="/data-center" element={<DataCenter />} />
             <Route path="/workflow/*" element={<WorkflowTestPage />} />
