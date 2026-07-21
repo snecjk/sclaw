@@ -1,0 +1,36 @@
+{
+  "id": "sto-user-skill-tool",
+  "name": "StoClaw 用户技能保存工具",
+  "description": "将会话创建的技能写入 skills-store 用户目录（save_user_skill）",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "hostApiHost": {
+        "type": "string",
+        "default": "127.0.0.1",
+        "description": "StoClaw Host API host"
+      },
+      "hostApiPort": {
+        "type": "number",
+        "default": 3210,
+        "description": "StoClaw Host API port"
+      },
+      "timeoutMs": {
+        "type": "number",
+        "default": 60000,
+        "description": "HTTP 超时毫秒"
+      }
+    }
+  },
+  "tools": ["save_user_skill"],
+  "toolConfig": {
+    "save_user_skill": {
+      "label": "保存用户技能",
+      "help": "将 SKILL.md（及可选资产）写入当前登录用户的 skills-store，使其出现在「我的技能」"
+    }
+  }
+}

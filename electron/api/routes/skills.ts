@@ -1,7 +1,28 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { getAllSkillConfigs, updateSkillConfig } from '../../utils/skill-config';
+import {
+  saveUserSkill,
+  SaveUserSkillError,
+  type SaveUserSkillInput,
+} from '../../services/skills/create-user-skill';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
+
+function statusForSaveUserSkillError(code: SaveUserSkillError['code']): number {
+  switch (code) {
+    case 'NOT_LOGGED_IN':
+      return 401;
+    case 'INVALID_SLUG':
+    case 'INVALID_SKILL_MD':
+      return 400;
+    case 'PREINSTALL_PROTECTED':
+      return 403;
+    case 'ALREADY_EXISTS':
+      return 409;
+    default:
+      return 500;
+  }
+}
 
 export async function handleSkillRoutes(
   req: IncomingMessage,
@@ -9,6 +30,29 @@ export async function handleSkillRoutes(
   url: URL,
   ctx: HostApiContext,
 ): Promise<boolean> {
+  if (url.pathname === '/api/skills/save-user' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<SaveUserSkillInput>(req);
+      const data = await saveUserSkill(body);
+      sendJson(res, 200, { success: true, data });
+    } catch (error) {
+      if (error instanceof SaveUserSkillError) {
+        sendJson(res, statusForSaveUserSkillError(error.code), {
+          success: false,
+          code: error.code,
+          error: error.message,
+        });
+      } else {
+        sendJson(res, 500, {
+          success: false,
+          code: 'WRITE_FAILED',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/skills/configs' && req.method === 'GET') {
     sendJson(res, 200, await getAllSkillConfigs());
     return true;

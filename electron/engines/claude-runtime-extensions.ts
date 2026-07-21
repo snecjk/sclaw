@@ -15,6 +15,10 @@ import {
   createClaudeScheduledTaskMcpServer,
 } from '../../sto-plugin/claude/claude-scheduled-task-tool/tools';
 import {
+  createUserSkillMcpServer,
+  USER_SKILL_SYSTEM_PROMPT,
+} from '../../sto-plugin/claude/sto-user-skill-tool/tools';
+import {
   isScheduledTaskExecutionSessionKey,
   SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT,
 } from '../../shared/scheduled-task-instruction';
@@ -128,6 +132,19 @@ const scheduledTaskToolExtension: ClaudeRuntimeExtension = {
   },
 };
 
+const userSkillToolExtension: ClaudeRuntimeExtension = {
+  id: 'sto-user-skill-tool',
+  build() {
+    logger.info('[claude-user-skill] registering save_user_skill MCP');
+    return {
+      systemPromptAppend: USER_SKILL_SYSTEM_PROMPT,
+      mcpServers: {
+        'sto-user-skill-tool': createUserSkillMcpServer(),
+      },
+    };
+  },
+};
+
 const agentTelemetryExtension: ClaudeRuntimeExtension = {
   id: 'sto-agent-telemetry',
   build: ({ sessionKey }) => buildStoAgentTelemetryClaudeRuntimeOptions(sessionKey),
@@ -186,6 +203,7 @@ const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
   dingTalkSendGuardExtension,
   workflowToolExtension,
   scheduledTaskToolExtension,
+  userSkillToolExtension,
   agentTelemetryExtension,
   ssoUserContextExtension,
 ];

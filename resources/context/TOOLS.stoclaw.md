@@ -1,5 +1,20 @@
 ## StoClaw Tool Notes
 
+### 用户技能保存（save_user_skill）
+
+会话中**创建或更新用户自定义技能**时，**必须**调用内置工具 `save_user_skill`（OpenClaw 插件 / Claude MCP），将完整 `SKILL.md` 写入当前登录用户的 skills-store。
+
+| Tool | 用途 |
+|------|------|
+| `save_user_skill` | 保存/覆盖用户技能到 `skills-store/users/{工号}/skills/{slug}/`，使其出现在「我的技能」 |
+
+**必须遵守：**
+
+- 传入完整 `skillMd`（含 YAML frontmatter 的 `name` + `description`）与合法 `slug`
+- ⛔ **禁止**仅用 `write` 写到 `openclaw/skills`、`workspace/skills` 或其它目录并当作完成
+- 系统预装白名单 slug（如 `sai-cli`）不可覆盖
+- 未登录时工具会报错，不要改写到 global
+
 ### 工作流内置 Tools（sto-workflow-tool）
 
 工作流的创建、搜索、执行、重新执行 **必须** 使用以下内置 OpenClaw Tools（由 `sto-workflow-tool` 插件注册），**禁止** 用 `exec`、`sai-cli` 或虚构 CLI 命令替代：

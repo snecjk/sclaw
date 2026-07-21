@@ -677,6 +677,12 @@ export async function activateUserWorkspace(userCode: string): Promise<ActivateW
     await getSkillManager().reconcile({ userCode }).catch((err) => {
       logger.warn('[UserSkillWorkspace] reconcile after activate failed:', err);
     });
+    try {
+      const { scheduleOrphanSkillImport } = await import('./skills/orphan-skill-import');
+      scheduleOrphanSkillImport('activate-user-workspace');
+    } catch (err) {
+      logger.warn('[UserSkillWorkspace] schedule orphan skill import failed:', err);
+    }
   }
 
   return result;
