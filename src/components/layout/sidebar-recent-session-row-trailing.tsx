@@ -6,10 +6,11 @@
 import {
   MoreHorizontal,
   Pencil,
-  Pin,
   Trash2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import sidebarPinIcon from '@/assets/icons/sidebar-pin.svg';
+import sidebarUnpinIcon from '@/assets/icons/sidebar-unpin.svg';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,7 +77,7 @@ export function SidebarRecentSessionRowTrailing({
         ) : hasStatusMarker ? (
           <SidebarRecentSessionStatus sessionKey={sessionKey} />
         ) : isPinned ? (
-          <Pin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <img src={sidebarPinIcon} alt="" className="h-4 w-4 shrink-0" aria-hidden />
         ) : null}
       </div>
       <div
@@ -112,7 +113,12 @@ export function SidebarRecentSessionRowTrailing({
                 onPin();
               }}
             >
-              <Pin className="h-4 w-4 shrink-0" aria-hidden />
+              <img
+                src={isPinned ? sidebarUnpinIcon : sidebarPinIcon}
+                alt=""
+                className="h-4 w-4 shrink-0"
+                aria-hidden
+              />
               {isPinned ? t('sidebar.unpinInRecent') : t('sidebar.pinInRecent')}
             </DropdownMenuItem>
             <DropdownMenuItem

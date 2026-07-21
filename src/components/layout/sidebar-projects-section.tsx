@@ -4,10 +4,13 @@
  */
 import type { RefObject } from 'react';
 import { useCallback, useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Folder, FolderOpen, FolderPlus, ListCollapse, ListTree } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder, FolderOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg';
+import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg';
+import sidebarNewProjectIcon from '@/assets/icons/sidebar-new-project.svg';
 import { cn } from '@/lib/utils';
 import {
   sidebarListItemTextClass,
@@ -267,9 +270,19 @@ export function SidebarProjectsSection({
                   >
                     {/* MasterGo：已展开显示折叠 icon；有未展开项显示展开 icon */}
                     {projectGroupsAllExpanded ? (
-                      <ListCollapse className="h-4 w-4" aria-hidden />
+                      <img
+                        src={sidebarCollapseAllGroupsIcon}
+                        alt=""
+                        className="h-[18px] w-[18px]"
+                        aria-hidden
+                      />
                     ) : (
-                      <ListTree className="h-4 w-4" aria-hidden />
+                      <img
+                        src={sidebarExpandAllGroupsIcon}
+                        alt=""
+                        className="h-[18px] w-[18px]"
+                        aria-hidden
+                      />
                     )}
                   </button>
                 </TooltipTrigger>
@@ -291,7 +304,12 @@ export function SidebarProjectsSection({
                     sidebarTextIconClass,
                   )}
                 >
-                  <FolderPlus className="h-4 w-4" aria-hidden />
+                  <img
+                    src={sidebarNewProjectIcon}
+                    alt=""
+                    className="h-[18px] w-[18px]"
+                    aria-hidden
+                  />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right" className="text-xs">

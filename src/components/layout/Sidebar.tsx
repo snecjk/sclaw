@@ -20,9 +20,9 @@ import {
   Workflow,
   Check,
   LayoutGrid,
-  ListCollapse,
-  ListTree,
 } from 'lucide-react';
+import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg';
+import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg';
 
 import {
   DropdownMenu,
@@ -1972,9 +1972,19 @@ export function Sidebar() {
                     >
                       {/* MasterGo：已展开显示折叠 icon；有未展开项显示展开 icon */}
                       {taskGroupsAllExpanded ? (
-                        <ListCollapse className="h-4 w-4" aria-hidden />
+                        <img
+                          src={sidebarCollapseAllGroupsIcon}
+                          alt=""
+                          className="h-[18px] w-[18px]"
+                          aria-hidden
+                        />
                       ) : (
-                        <ListTree className="h-4 w-4" aria-hidden />
+                        <img
+                          src={sidebarExpandAllGroupsIcon}
+                          alt=""
+                          className="h-[18px] w-[18px]"
+                          aria-hidden
+                        />
                       )}
                     </button>
                   </TooltipTrigger>

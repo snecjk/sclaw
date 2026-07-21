@@ -1,12 +1,20 @@
 import { mkdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync as DatabaseSyncType } from 'node:sqlite';
 import type { Kysely } from 'kysely';
 import { getDataDir } from '../utils/paths';
 import { createKyselySqliteClient } from './kysely-sqlite';
 import { applyDatabasePragmas, getDatabaseJournalMode, getForeignKeysEnabled } from './pragmas';
 import { runDatabaseMigrations } from './migrator';
 import type { SqliteDatabase, SqliteDatabaseInfo, SqliteDbSchema } from './types';
+
+// Vite 会把静态 `import from 'node:sqlite'` 错误解析成 browser external，导致主进程包构建失败、
+// session-catalog IPC handler 无法注册。主进程改用 createRequire 在运行时加载 Node 内置模块。
+const nodeRequire = createRequire(import.meta.url);
+const { DatabaseSync } = nodeRequire('node:sqlite') as {
+  DatabaseSync: typeof DatabaseSyncType;
+};
 
 const SQLITE_DIR_NAME = 'sqlite';
 const SQLITE_DB_FILE_NAME = 'stoclaw.sqlite';

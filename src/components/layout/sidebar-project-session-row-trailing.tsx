@@ -3,8 +3,10 @@
  * 非 hover：最右侧显示状态（运行中/失败/未读），无状态时显示置顶钉；
  * hover：用「...」菜单覆盖该槽位。
  */
-import { MoreHorizontal, Pin, Pencil, Trash2 } from 'lucide-react';
+import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import sidebarPinIcon from '@/assets/icons/sidebar-pin.svg';
+import sidebarUnpinIcon from '@/assets/icons/sidebar-unpin.svg';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -74,7 +76,7 @@ export function SidebarProjectSessionRowTrailing({
         ) : hasStatusMarker ? (
           <SidebarRecentSessionStatus sessionKey={sessionKey} />
         ) : isPinned ? (
-          <Pin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <img src={sidebarPinIcon} alt="" className="h-4 w-4 shrink-0" aria-hidden />
         ) : null}
       </div>
       <div
@@ -111,7 +113,12 @@ export function SidebarProjectSessionRowTrailing({
                   onPin();
                 }}
               >
-                <Pin className="h-4 w-4 shrink-0" aria-hidden />
+                <img
+                  src={isPinned ? sidebarUnpinIcon : sidebarPinIcon}
+                  alt=""
+                  className="h-4 w-4 shrink-0"
+                  aria-hidden
+                />
                 {isPinned ? t('sidebar.unpinInProject') : t('sidebar.pinInProject')}
               </DropdownMenuItem>
             ) : null}
