@@ -66,6 +66,7 @@ import { resolveSessionLabel } from '@/lib/session-label';
 import { sortSessionsWithCatalogPin } from '@/lib/sidebar-recent-order';
 import { type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
+import { resolveSidebarChannelSource } from '@/lib/session-channel-source';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { scheduleSessionLabelHydrationForStore } from '@/stores/chat/session-metadata-hydrate';
 import { isSidebarHiddenChatSessionKey, buildBuiltinStoGroupSortSessions } from '@/lib/sto-task-session';
@@ -1073,6 +1074,7 @@ export function Sidebar() {
     const isRecentSessionActive =
       isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
     const isPinned = catalogByKey[s.key]?.pinRank != null;
+    const channelSource = resolveSidebarChannelSource(s.key, catalogByKey[s.key]?.channelType);
     return (
       <SidebarRecentSessionRow
         key={s.key}
@@ -1080,6 +1082,7 @@ export function Sidebar() {
         label={sessionLabel}
         isActive={isRecentSessionActive}
         isPinned={isPinned}
+        channelSource={channelSource}
         isEditing={editingSessionKey === s.key}
         editingValue={editingValue}
         onOpen={() => {

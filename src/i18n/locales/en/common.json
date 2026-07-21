@@ -46,6 +46,11 @@
         "sessionRunning": "Running",
         "sessionFailed": "Run failed",
         "sessionUnread": "Unread",
+        "channelSource": {
+            "dingtalk": "DingTalk",
+            "wechat": "WeChat",
+            "app": "App"
+        },
         "compactAccountMenu": "Account and settings",
         "supportGroup": {
             "title": "S Claw Product Support Group",

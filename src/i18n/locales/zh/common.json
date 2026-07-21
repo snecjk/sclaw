@@ -47,6 +47,11 @@
         "sessionRunning": "运行中",
         "sessionFailed": "执行失败",
         "sessionUnread": "未读",
+        "channelSource": {
+            "dingtalk": "钉钉",
+            "wechat": "微信",
+            "app": "App"
+        },
         "compactAccountMenu": "账户与设置",
         "supportGroup": {
             "title": "S Claw产品咨询群",

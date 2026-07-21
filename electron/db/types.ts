@@ -7,6 +7,7 @@ import type {
   SessionGroupsTable,
   WorkspacesTable,
 } from './models/tables/session-catalog-tables';
+import type { ChannelConnectionTable } from './models/tables/channel-connection-table';
 
 // One migration file corresponds to one schema version.
 export interface SqliteMigration {
@@ -50,4 +51,5 @@ export interface SqliteDbSchema {
   session_groups: SessionGroupsTable;
   catalog_sessions: CatalogSessionsTable;
   session_engine_bindings: SessionEngineBindingsTable;
+  channel_connections: ChannelConnectionTable;
 }

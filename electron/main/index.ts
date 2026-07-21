@@ -607,6 +607,13 @@ async function initialize(): Promise<void> {
     mainWindow: window,
   });
 
+  // Channel Hub：已绑定则用 refreshToken 重连 WS，并挂入站执行（失败不阻塞启动）
+  void import('../channels/startup')
+    .then(({ maybeConnectSclawHubOnStartup }) => maybeConnectSclawHubOnStartup(gm))
+    .catch((error) => {
+      logger.warn('[SclawHub] startup import/connect failed:', error);
+    });
+
   // Register update handlers
   registerUpdateHandlers(appUpdater, window);
 

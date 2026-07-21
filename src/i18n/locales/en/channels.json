@@ -52,6 +52,7 @@
         "invalidId": "Account ID cannot be empty",
         "idLabel": "ID: {{id}}",
         "boundTo": "Bound to: {{agent}}",
+        "accountCount": "{{count}} accounts",
         "handledBy": "Handled by {{agent}}",
         "bindingStatusLabel": "Binding: {{status}}",
         "connectionStatusLabel": "Connection: {{status}}",
@@ -171,7 +172,7 @@
             ]
         },
         "dingtalk": {
-            "description": "Connect DingTalk via OpenClaw channel plugin (Stream mode)",
+            "description": "Scan to bind the org-wide DingTalk bot; Hub routes messages to this StoClaw",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/Y5eNwiSiZidkLskrwtJc1rUln0b#doxcnDgA78n43DbkiQjI1OqUA7b",
             "fields": {
                 "clientId": {
@@ -206,10 +207,10 @@
                 }
             },
             "instructions": [
-                "Install and enable the dingtalk plugin in OpenClaw",
-                "Create a DingTalk internal app and enable Stream mode",
-                "Fill in Client ID and Client Secret (required)",
-                "Fill in Robot Code / Corp ID / Agent ID if your setup requires them"
+                "Open Channels and choose DingTalk to start QR binding",
+                "Scan with DingTalk and confirm on the mobile H5 page",
+                "After binding, this device connects to Hub; pick Claude or OpenClaw Agent",
+                "No local DingTalk AK/SK required"
             ]
         },
         "signal": {
@@ -376,6 +377,43 @@
                 "Get App ID and Client Secret",
                 "Fill in your credentials below"
             ]
+        }
+    },
+    "hub": {
+        "dingtalk": {
+            "title": "DingTalk Channel Hub",
+            "subtitle": "Personal bot · scan to bind this device",
+            "scanHint": "Scan the QR code with DingTalk and confirm on your phone.",
+            "startBind": "Generate bind QR",
+            "refreshQr": "Refresh QR",
+            "waitingScan": "Confirm by scanning in DingTalk",
+            "claiming": "Claiming credentials and connecting…",
+            "expired": "QR expired. Generate a new one.",
+            "bound": "Bound",
+            "dingUserId": "DingTalk user",
+            "wsStatus": "Hub connection",
+            "wsOnline": "Online",
+            "wsOffline": "Offline",
+            "engineLabel": "Engine",
+            "agentLabel": "Agent",
+            "saveBinding": "Save",
+            "unbind": "Unbind",
+            "linkCopied": "Bind link copied",
+            "bindSuccess": "DingTalk bound successfully",
+            "unbindSuccess": "DingTalk unbound",
+            "replacedByOtherDevice": "DingTalk is now bound on another computer. This device is inactive — scan again to rebind.",
+            "replacedUnbound": "DingTalk binding was removed",
+            "notBoundHint": "Not bound — tap to scan and bind",
+            "boundHint": "Engine: {{engine}} · {{agent}}",
+            "agentRequired": "Please select an Agent",
+            "noAgentsForEngine": "No Agents for this engine. Create one first.",
+            "rebindTitle": "Rebind DingTalk",
+            "rebindSubtitle": "Scanning will replace the current DingTalk binding",
+            "rebindHint": "Scan the QR code with DingTalk to rebind",
+            "statusFailed": "Failed to load bind status: {{error}}",
+            "createFailed": "Failed to create QR: {{error}}",
+            "bindFailed": "Bind failed: {{error}}",
+            "unbindFailed": "Unbind failed: {{error}}"
         }
     },
     "viewDocs": "View Documentation"

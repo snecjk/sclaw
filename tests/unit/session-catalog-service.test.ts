@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const moveToWorkspaceMock = vi.fn();
 const listCatalogSessionsMock = vi.fn();
 const softDeleteCatalogSessionMock = vi.fn();
+const findLatestByChannelMock = vi.fn();
 const ensureProjectAgentMock = vi.fn();
 const listProjectAgentIdsMock = vi.fn();
 const deleteAllProjectAgentsForProjectMock = vi.fn();
@@ -48,6 +49,7 @@ vi.mock('../../electron/db/repositories/catalog-session-repository', () => ({
     list: listCatalogSessionsMock,
     softDelete: softDeleteCatalogSessionMock,
     findBySessionKey: vi.fn(),
+    findLatestByChannel: findLatestByChannelMock,
     upsert: vi.fn(),
   })),
 }));
@@ -101,6 +103,7 @@ describe('session catalog gateway reload', () => {
     moveToWorkspaceMock.mockResolvedValue(undefined);
     listCatalogSessionsMock.mockResolvedValue([]);
     softDeleteCatalogSessionMock.mockResolvedValue(true);
+    findLatestByChannelMock.mockResolvedValue(null);
     getDefaultWorkspaceMock.mockResolvedValue({ id: 'default' });
     countActiveMock.mockResolvedValue(1);
     getBySessionKeyMock.mockResolvedValue(null);
@@ -111,6 +114,29 @@ describe('session catalog gateway reload', () => {
     createWorkspaceMock.mockResolvedValue({ id: 'project-a', rootPath: '/tmp/project-a', name: 'A' });
     updateWorkspaceMock.mockResolvedValue({ id: 'project-a', rootPath: '/tmp/project-b', name: 'A' });
     getByIdMock.mockResolvedValue({ id: 'project-a', rootPath: '/tmp/project-a' });
+  });
+
+  it('gets the latest active channel session through the catalog repository', async () => {
+    const latest = {
+      workspaceId: 'default',
+      sessionKey: 'agent:main:dingtalk:cid-1:20260719120000:a3f2',
+      lastActivityAt: '2026-07-19T12:00:00.000Z',
+    };
+    findLatestByChannelMock.mockResolvedValue(latest);
+    const { getLatestChannelCatalogSession } = await import(
+      '../../electron/services/session-catalog-service'
+    );
+
+    await expect(getLatestChannelCatalogSession({
+      channelType: 'dingtalk',
+      channelId: 'cid-1',
+      agentId: 'main',
+    })).resolves.toEqual(latest);
+    expect(findLatestByChannelMock).toHaveBeenCalledWith({
+      channelType: 'dingtalk',
+      channelId: 'cid-1',
+      sessionKeyPrefix: 'agent:main:dingtalk:',
+    });
   });
 
   it('creates a workspace without creating a project agent or reloading gateway', async () => {

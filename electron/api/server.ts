@@ -43,6 +43,7 @@ import { handleCronRoutes } from './routes/cron';
 import { handleScheduledTaskRoutes } from './routes/scheduled-tasks';
 import { handleClaudeScheduledTaskRoutes } from './routes/claude-scheduled-tasks';
 import { handleDingTalkRoutes } from './routes/dingtalk';
+import { handleChannelHubRoutes } from './routes/channel-hub';
 import { handleStoSyncRoutes } from './routes/sto-sync';
 import { handleTokenQuotaRoutes } from './routes/token-quota';
 import { handleSubscriptionRoutes } from './routes/subscriptions';
@@ -77,6 +78,7 @@ const routeHandlers: RouteHandler[] = [
   handleTokenQuotaRoutes,
   handleSubscriptionRoutes,
   handleAgentRoutes,
+  handleChannelHubRoutes,
   handleChannelRoutes,
   handleSkillRoutes,
   handleSkillPlazaRoutes,

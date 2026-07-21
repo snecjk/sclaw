@@ -33,6 +33,7 @@ describe('SQLite legacy session catalog migration normalization', () => {
       { version: 2, name: 'memory-capture-jobs' },
       { version: 3, name: 'session-catalog-schema' },
       { version: 4, name: 'session-types-and-channels' },
+      { version: 5, name: 'channel-plane-channel-connections' },
     ]);
 
     const memoryTable = db.prepare(
@@ -40,4 +41,5 @@ describe('SQLite legacy session catalog migration normalization', () => {
     ).get() as { name?: string } | undefined;
     expect(memoryTable?.name).toBe('memory_capture_jobs');
   });
+
 });

@@ -4,6 +4,7 @@
  * 布局与「最近」对齐：标题纯文字；行尾最右侧非 hover 显示状态（或置顶钉），hover 用「...」覆盖。
  */
 import { useTranslation } from 'react-i18next';
+import { SidebarChannelSourceBadge } from '@/components/layout/sidebar-channel-source-badge';
 import { SidebarProjectSessionRowTrailing } from '@/components/layout/sidebar-project-session-row-trailing';
 import { cn } from '@/lib/utils';
 import {
@@ -11,6 +12,7 @@ import {
   sidebarRecentSessionActiveClass,
   sidebarSubitemTextIdleClass,
 } from '@/lib/surfaces';
+import type { SidebarChannelSource } from '@/lib/session-channel-source';
 import type { ChatSession } from '@/stores/chat/types';
 import { isProjectNewChatDraftKey } from '@/stores/chat/types';
 import { useChatStore } from '@/stores/chat';
@@ -22,6 +24,7 @@ export interface SidebarProjectSessionRowProps {
   label: string;
   isActive: boolean;
   isPinned: boolean;
+  channelSource?: SidebarChannelSource | null;
   isEditing: boolean;
   editingValue: string;
   onOpen: () => void;
@@ -38,6 +41,7 @@ export function SidebarProjectSessionRow({
   label,
   isActive,
   isPinned,
+  channelSource = null,
   isEditing,
   editingValue,
   onOpen,
@@ -119,8 +123,11 @@ export function SidebarProjectSessionRow({
           title={label}
           className="flex h-9 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
         >
-          <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass, isActive && 'font-medium')}>
-            {label}
+          <span className="flex min-w-0 flex-1 items-center gap-0">
+            <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass, isActive && 'font-medium')}>
+              {label}
+            </span>
+            <SidebarChannelSourceBadge source={channelSource} />
           </span>
         </button>
         <SidebarProjectSessionRowTrailing

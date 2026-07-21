@@ -47,6 +47,9 @@ import {
 import { whatsAppLoginManager } from '../../utils/whatsapp-login';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
+import { getChannelConnection } from '../../channels/binding-service';
+import { getSclawHubClient } from '../../channels/hub-client';
+import { ensureSclawHubConnected } from '../../channels/startup';
 
 const WECHAT_QR_TIMEOUT_MS = 8 * 60 * 1000;
 const activeQrLogins = new Map<string, string>();
@@ -397,6 +400,51 @@ async function buildChannelAccountsView(ctx: HostApiContext): Promise<ChannelAcc
   return channels.sort((left, right) => left.channelType.localeCompare(right.channelType));
 }
 
+async function mergeHubDingTalkChannel(
+  channels: ChannelAccountsView[],
+): Promise<ChannelAccountsView[]> {
+  try {
+    const hubConn = await getChannelConnection('dingtalk');
+    if (!hubConn || hubConn.bindStatus !== 'bound') {
+      return channels;
+    }
+    // 已绑定但 WS 掉线时（如退出登录后），打开频道列表时兜底重连
+    await ensureSclawHubConnected();
+    const ws = getSclawHubClient().getStatus();
+    const status: ChannelAccountsView['status'] = ws.connected
+      ? 'connected'
+      : ws.state === 'connecting'
+        ? 'connecting'
+        : 'disconnected';
+    const hubView: ChannelAccountsView = {
+      channelType: 'dingtalk',
+      defaultAccountId: 'default',
+      status,
+      accounts: [
+        {
+          accountId: 'default',
+          name: hubConn.externalUserId
+            ? `钉钉 Hub（${hubConn.externalUserId}）`
+            : '钉钉 Hub',
+          configured: true,
+          connected: ws.connected,
+          running: ws.connected,
+          linked: true,
+          status,
+          isDefault: true,
+          agentId: hubConn.agentId || undefined,
+        },
+      ],
+    };
+    const withoutOcDingTalk = channels.filter((item) => item.channelType !== 'dingtalk');
+    return [...withoutOcDingTalk, hubView].sort((left, right) =>
+      left.channelType.localeCompare(right.channelType),
+    );
+  } catch {
+    return channels;
+  }
+}
+
 export async function handleChannelRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -411,7 +459,7 @@ export async function handleChannelRoutes(
 
   if (url.pathname === '/api/channels/accounts' && req.method === 'GET') {
     try {
-      const channels = await buildChannelAccountsView(ctx);
+      const channels = await mergeHubDingTalkChannel(await buildChannelAccountsView(ctx));
       sendJson(res, 200, { success: true, channels });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
