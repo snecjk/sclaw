@@ -43,6 +43,7 @@ export function MoreAppsPage() {
     categoriesLoading,
     categoriesError,
     apps,
+    catalogApps,
     marketTotal,
     total,
     loading,
@@ -72,10 +73,11 @@ export function MoreAppsPage() {
   // already fetches the first APP page, so we don't double-fire on initial render.
   const searchMountedRef = useRef(false);
 
-  // Merge builtin + external for display
+  // My apps use a stable session catalog so market category/search requests cannot
+  // remove favorited apps from the installed view.
   const allApps = useMemo(() => {
-    return [...apps, ...externalApps].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  }, [apps, externalApps]);
+    return [...catalogApps, ...externalApps].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }, [catalogApps, externalApps]);
 
   // Server categories with a fixed "精选" entry first; while loading or on error
   // only "精选" is shown (分类失败时保留精选 — independent degradation).

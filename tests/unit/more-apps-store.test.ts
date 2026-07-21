@@ -43,6 +43,7 @@ describe('more apps store', () => {
       searchQuery: '',
       marketCategory: 'featured',
       apps: [],
+      catalogApps: [],
       categories: [],
       banners: [],
       externalApps: [],
@@ -143,5 +144,23 @@ describe('more apps store', () => {
     await useMoreAppsStore.getState().fetchApps({ reset: true });
     expect(useMoreAppsStore.getState().total).toBe(3);
     expect(useMoreAppsStore.getState().marketTotal).toBe(8);
+  });
+
+  it('keeps a stable catalog snapshot when category results replace the market list', async () => {
+    const featuredApp = { id: 'featured-app', name: 'Featured', url: 'https://featured.example', kind: 'builtin' as const };
+    const categoryApp = { id: 'category-app', name: 'Category', url: 'https://category.example', kind: 'builtin' as const };
+    fetchAppsMock
+      .mockResolvedValueOnce({ items: [featuredApp], total: 1, pageNum: 1, pageSize: 20 })
+      .mockResolvedValueOnce({ items: [categoryApp], total: 1, pageNum: 1, pageSize: 20 });
+
+    await useMoreAppsStore.getState().fetchApps({ reset: true });
+    useMoreAppsStore.getState().setMarketCategory('org');
+    await useMoreAppsStore.getState().fetchApps({ reset: true });
+
+    expect(useMoreAppsStore.getState().apps.map((app) => app.id)).toEqual(['category-app']);
+    expect(useMoreAppsStore.getState().catalogApps.map((app) => app.id)).toEqual([
+      'featured-app',
+      'category-app',
+    ]);
   });
 });

@@ -112,6 +112,12 @@ function asAppItems(apps: MoreAppsRegistry['externalApps']): AppItem[] {
   }));
 }
 
+function mergeAppItems(current: AppItem[], incoming: AppItem[]): AppItem[] {
+  const merged = new Map(current.map((app) => [app.id, app]));
+  incoming.forEach((app) => merged.set(app.id, app));
+  return Array.from(merged.values());
+}
+
 // ── Store interface ────────────────────────────────────────────────
 interface MoreAppsState {
   // UI state
@@ -133,6 +139,8 @@ interface MoreAppsState {
 
   // Server catalog — APP block (independent loading/error, with pagination + race guard)
   apps: AppItem[];
+  /** Stable session catalog used by 我的应用; market filters never remove entries. */
+  catalogApps: AppItem[];
   /** Unfiltered catalog total shown beside the 应用广场 tab. */
   marketTotal: number;
   total: number;
@@ -206,6 +214,7 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
   categoriesError: null,
 
   apps: [],
+  catalogApps: [],
   marketTotal: 0,
   total: 0,
   pageNum: 0,
@@ -389,7 +398,13 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
   fetchApps: async (opts) => {
     const reset = opts?.reset ?? false;
     const seq = ++appsRequestSeq;
-    const { searchQuery, marketCategory, pageNum: currPage, apps: currApps } = get();
+    const {
+      searchQuery,
+      marketCategory,
+      pageNum: currPage,
+      apps: currApps,
+      catalogApps: currCatalogApps,
+    } = get();
     const isUnfiltered = !searchQuery.trim() && marketCategory === 'featured';
     const nextPage = reset ? 1 : currPage + 1;
     if (reset) {
@@ -408,6 +423,7 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
       if (reset) {
         set({
           apps: result.items,
+          catalogApps: mergeAppItems(currCatalogApps, result.items),
           ...(isUnfiltered ? { marketTotal: result.total } : {}),
           total: result.total,
           pageNum: result.pageNum,
@@ -419,6 +435,7 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
         const appended = result.items.filter((a) => !seen.has(a.id));
         set({
           apps: [...currApps, ...appended],
+          catalogApps: mergeAppItems(currCatalogApps, result.items),
           ...(isUnfiltered ? { marketTotal: result.total } : {}),
           total: result.total,
           pageNum: result.pageNum,

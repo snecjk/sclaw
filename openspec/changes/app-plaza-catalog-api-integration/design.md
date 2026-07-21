@@ -67,6 +67,12 @@ Renderer 调用 `/api/app-plaza/banners|categories|apps`，Main 使用当前会�
 
 **Rationale:** 产品诉求是“区域里有几个，角标显示几个”。角标和卡片共享同一最终数组可以消除重复 ID、失效 ID和搜索过滤造成的任何计数偏差。
 
+### 7. “我的应用”使用独立会话目录快照
+
+Store 在 `apps` 之外维护按 APP `id` 去重合并的 `catalogApps`。`apps` 继续表示当前市场分类/搜索结果并可被查询覆盖；`catalogApps` 只合并本会话成功加载的应用，不因市场查询而删除条目。“我的应用”从 `catalogApps + externalApps` 解析收藏卡片。
+
+**Rationale:** 市场分类是应用广场的浏览状态，不应改变用户的“我的应用”集合。分离当前查询结果与会话目录快照可以保持两个 Tab 的状态边界，同时不新增后端接口。
+
 ## Risks / Trade-offs
 
 - **[Risk]** APP 类型 Banner 的目标应用不在当前 APP 分页内，无法取得 URL。→ **Mitigation:** Banner 保持展示但不可点击；后续如要求保证跳转，后端增加目标 APP URL/快照或详情接口。

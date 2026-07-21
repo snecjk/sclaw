@@ -50,6 +50,7 @@ function resetStore() {
     categoriesLoading: false,
     categoriesError: null,
     apps: [],
+    catalogApps: [],
     marketTotal: 0,
     total: 0,
     pageNum: 0,
@@ -205,19 +206,12 @@ describe('MoreAppsPage server catalog', () => {
     }));
   });
 
-  it('keeps tab counts aligned with the unfiltered market and renderable installed apps', async () => {
-    const externalApp = {
-      ...serverApp,
-      id: 'external-customer-visit',
-      name: '客户拜访',
-      kind: 'external' as const,
-      external: true,
-    };
+  it('keeps installed apps independent from market category changes', async () => {
     fetchRegistryMock.mockResolvedValueOnce({
       version: 1,
-      externalApps: [externalApp],
+      externalApps: [],
       installedIds: [],
-      favoriteIds: ['external-customer-visit'],
+      favoriteIds: ['org-relation'],
     });
     fetchCategoriesMock.mockResolvedValueOnce([
       { id: 'org', name: '组织管理', description: '', iconKey: '', iconUrl: '', order: 1 },
@@ -229,12 +223,17 @@ describe('MoreAppsPage server catalog', () => {
     render(<MoreAppsPage />);
     expect(await screen.findByRole('tab', { name: '应用广场8' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '我的应用1' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '我的应用1' }));
+    expect(screen.getByText('客户关系')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '应用广场8' }));
     fireEvent.click(await screen.findByRole('button', { name: '组织管理' }));
     await waitFor(() => expect(fetchAppsMock).toHaveBeenLastCalledWith(expect.objectContaining({
       categoryCode: 'org',
     })));
     expect(screen.getByRole('tab', { name: '应用广场8' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '我的应用1' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '我的应用1' }));
+    expect(screen.getByText('客户关系')).toBeInTheDocument();
   });
 
   it('shows zero installed apps when registry IDs do not resolve to rendered cards', async () => {
