@@ -38,7 +38,8 @@ export function shouldPreserveManifestProvenance(existingSource?: string | null)
 
 /**
  * Resolve the source written by lock/version backfill.
- * Protected existing provenance always wins over lock.json / marketplace default.
+ * - Never demote local / user-upload.
+ * - Without clawhub lock, do NOT invent sto-marketplace (that strips「自建」).
  */
 export function resolveBackfillManifestSource(params: {
   lockSource?: string | null;
@@ -47,7 +48,24 @@ export function resolveBackfillManifestSource(params: {
   if (shouldPreserveManifestProvenance(params.existingSource)) {
     return params.existingSource as string;
   }
-  return params.lockSource || 'sto-marketplace';
+  if (params.lockSource?.trim()) {
+    return params.lockSource.trim();
+  }
+  if (params.existingSource?.trim()) {
+    return params.existingSource.trim();
+  }
+  return 'local';
+}
+
+/**
+ * True when a marketplace label is almost certainly a false positive from
+ * legacy backfill (no clawhub lock tracking the install).
+ */
+export function shouldHealFalseMarketplaceProvenance(params: {
+  existingSource?: string | null;
+  lockSource?: string | null;
+}): boolean {
+  return params.existingSource === 'sto-marketplace' && !params.lockSource?.trim();
 }
 
 export interface StoSkillSearchParams {
@@ -291,13 +309,53 @@ export class StoSkillService {
             return;
           }
 
+          const lockSource = lockInfo?.source;
+          // Heal legacy false positives: marketplace label but no clawhub lock.
+          if (
+            shouldHealFalseMarketplaceProvenance({
+              existingSource: existing?.source,
+              lockSource,
+            })
+            && existing
+          ) {
+            await upsertSkillEntry({
+              ...existing,
+              source: 'local',
+              versionSource:
+                existing.versionSource === 'directory-scan'
+                  ? 'install'
+                  : existing.versionSource || 'install',
+            });
+            logger.info(
+              `[StoSkillService] healed false marketplace provenance for ${slug} → local`,
+            );
+            return;
+          }
+
+          // Without lock + without existing entry, record as local (session/orphan),
+          // never invent sto-marketplace.
+          if (!existing && !lockSource) {
+            await upsertSkillEntry({
+              slug,
+              scope: userCode ? 'user' : 'global',
+              userCode: userCode || undefined,
+              version,
+              source: 'local',
+              name: this.readSkillName(dir) || undefined,
+              description: this.readSkillMdDescription(dir) || undefined,
+              enabled: fs.existsSync(skillDir),
+              versionSource: mdVersion ? 'skill-md-backfill' : 'directory-scan',
+            });
+            return;
+          }
+
           await upsertSkillEntry({
             slug,
             scope: userCode ? 'user' : 'global',
             userCode: userCode || undefined,
             version,
             source: resolveBackfillManifestSource({
-              lockSource: lockInfo?.source,
+              lockSource,
               existingSource: existing?.source,
             }),
             name: lockInfo?.name || this.readSkillName(dir) || undefined,
