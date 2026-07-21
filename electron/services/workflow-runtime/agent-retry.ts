@@ -10,7 +10,13 @@
 import type { RunCtx, AgentRunSpec, AgentNodeResult } from './types';
 import { validateOutputAgainstSchema } from './agent-output';
 import { buildWorkflowNodePrompt } from './prompt-builder';
-import { createFailurePacket, validateWorkflowPacket, workflowPacketJsonSchema } from './workflow-packet';
+import {
+  createFailurePacket,
+  getWorkflowPacketFailureMessage,
+  isRetryableWorkflowPacketFailure,
+  validateWorkflowPacket,
+  workflowPacketJsonSchema,
+} from './workflow-packet';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const backoff = (a: number) => Math.min(30_000, 1000 * 2 ** (a - 1));
@@ -174,6 +180,22 @@ export async function runAgentNodeWithRetry(
       runId: ctx.runId, nodeId: node.id, nodeType: node.type, allowedPorts: ports,
       requireSelectedPort: node.type === 'agent_condition',
     });
+    if (packetValidation.ok && packetValidation.outcome === 'failed') {
+      lastOutput = packetValidation.packet;
+      lastRaw = result.rawText ?? '';
+      lastError = getWorkflowPacketFailureMessage(packetValidation.packet) ?? 'Agent 返回了未说明原因的失败包';
+      const retryable = isRetryableWorkflowPacketFailure(packetValidation.packet);
+      await ctx.emit('agent.attempt.failed', { attempt, error: lastError, retryable, source: 'agent_packet' }, node.id);
+      if (!retryable) {
+        await ctx.emit('completion.failed', { reason: lastError, source: 'agent_packet' }, node.id);
+        return { status: 'failed', output: lastOutput, error: lastError, rawText: lastRaw, usage: result.usage };
+      }
+      if (attempt < maxAttempts) {
+        await ctx.emit('completion.retry_scheduled', { attempt, reason: lastError, source: 'agent_packet' }, node.id);
+        await sleep(backoff(attempt));
+      }
+      continue;
+    }
     const v = packetValidation.ok
       ? validateOutputAgainstSchema(contract.dataJsonSchema ?? node.config?.outputContract?.schema ?? { type: 'object' }, packetValidation.packet.payload)
       : { ok: false, reason: packetValidation.message };

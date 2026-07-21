@@ -27,7 +27,7 @@ import { workspacePath } from './workspace-paths';
 import { workflowExecLog } from './logging';
 import { formatShanghaiIso } from '../../../shared/workflow-timestamp';
 import { hydrateNodeInputFiles } from './node-input-files';
-import { createFailurePacket, createWorkflowPacket, isWorkflowPacket } from './workflow-packet';
+import { createFailurePacket, createWorkflowPacket, getWorkflowPacketFailureMessage, isWorkflowPacket } from './workflow-packet';
 import { normalizeRuntimeDefinition } from './runtime-definition';
 
 const SMART_TYPES = new Set(['agent_task', 'agent_data_fetch', 'agent_data_process', 'agent_condition', 'agent_output']);
@@ -213,30 +213,31 @@ export function createEngine(deps: EngineDeps) {
             runId, nodeId: cur.id, nodeType: cur.type, attempt: maxNodeAttempt(existingNodeRuns, cur.id),
             code: 'AGENT_EXECUTION_FAILED', category: 'agent_execution', message: agentResult.error ?? '智能节点执行失败', retryable: false,
           });
+          const failureMessage = getWorkflowPacketFailureMessage(failurePacket) ?? agentResult.error ?? '智能节点执行失败';
           const finalResult = await buildFailureResult(runId, cur.id, failurePacket);
-          const changed = await repo.updateRunIfActive(runId, { status: 'FAILED', error: agentResult.error, output_json: stringifyJson(finalResult), completed_at: nowIso() });
+          const changed = await repo.updateRunIfActive(runId, { status: 'FAILED', error: failureMessage, output_json: stringifyJson(finalResult), completed_at: nowIso() });
           if (!changed) return;
-          await repo.upsertNodeRun({ run_id: runId, node_id: cur.id, node_type: cur.type, status: 'FAILED', input_json: nodeInputJson, output_json: stringifyJson(failurePacket), last_completion_issue: agentResult.error, completed_at: nowIso() });
+          await repo.upsertNodeRun({ run_id: runId, node_id: cur.id, node_type: cur.type, status: 'FAILED', input_json: nodeInputJson, output_json: stringifyJson(failurePacket), last_completion_issue: failureMessage, completed_at: nowIso() });
           await repo.enqueueOutbox(runId, 'node_run', `${runId}:${cur.id}`, {
             run_id: runId,
             node_id: cur.id,
             node_type: cur.type,
             status: 'FAILED',
             input_json: nodeInputJson,
-            output_json: stringifyJson(failurePacket), last_completion_issue: agentResult.error,
+            output_json: stringifyJson(failurePacket), last_completion_issue: failureMessage,
           }, 'progress');
           await finalizeUnfinishedNodeRuns(runId, 'failed', cur.id);
-          await makeCtx(runId, def, seqRef).emit('workflow.failed', { nodeId: cur.id, error: agentResult.error, failure: failurePacket }, cur.id);
-          await repo.enqueueOutbox(runId, 'run', runId, { ...runSnapshotBase, status: 'FAILED', error: agentResult.error, output_json: stringifyJson(finalResult), completed_at: nowIso() }, 'terminal');
+          await makeCtx(runId, def, seqRef).emit('workflow.failed', { nodeId: cur.id, error: failureMessage, failure: failurePacket }, cur.id);
+          await repo.enqueueOutbox(runId, 'run', runId, { ...runSnapshotBase, status: 'FAILED', error: failureMessage, output_json: stringifyJson(finalResult), completed_at: nowIso() }, 'terminal');
           workflowExecLog('error', 'run-failed', 'agent node failed workflow run', {
             runId,
             workflowId: runSnapshotBase.workflow_id,
             versionId: runSnapshotBase.version_id,
             nodeId: cur.id,
             nodeType: cur.type,
-            error: agentResult.error,
+            error: failureMessage,
           });
-          deps.onStatusChange?.(runId, 'failed', { error: agentResult.error });
+          deps.onStatusChange?.(runId, 'failed', { error: failureMessage });
           return;
         }
         result.output = await materializeAgentOutputArtifact(runId, cur, agentResult.output);

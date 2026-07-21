@@ -30,6 +30,14 @@ export function buildWorkflowNodePrompt(spec: AgentRunSpec, node: any, ctx: RunC
     control: { selectedPort: node?.type === 'agent_condition' ? '<必须从允许端口选择>' : null },
     diagnostics: { warnings: [], errors: [] },
   };
+  const failureTemplate = {
+    protocolVersion: WORKFLOW_PACKET_VERSION,
+    status: 'failed',
+    producer: { runId: ctx.runId, nodeId: node?.id, nodeType: node?.type, attempt: '<当前尝试次数>' },
+    payload: { reason: '<可选：简短业务上下文，不能伪装成成功结果>' }, artifacts: [],
+    control: { selectedPort: null },
+    diagnostics: { warnings: [], errors: [{ code: '<稳定错误码>', category: '<错误分类>', message: '<面向用户的明确失败原因>', retryable: false, attemptsUsed: '<当前尝试次数>' }] },
+  };
   const taskGoal = spec.task?.goal ?? node?.config?.goal ?? node?.config?.instruction ?? '';
   const instruction = spec.task?.instruction ?? '';
   return [
@@ -48,10 +56,11 @@ export function buildWorkflowNodePrompt(spec: AgentRunSpec, node: any, ctx: RunC
       htmlArtifactOutput
         ? '最终 HTML 由客户端转换为 OUTPUT 产物；除此之外，任何要交给下游且 UTF-8 编码超过 1024 字节的文本，都必须写入当前节点工作区的 processFiles/ 文件，并以 INTERMEDIATE artifact 引用传递。'
         : largeTextArtifactRule(),
+      failureOutputRule(),
       'SDK 已启用 JSON Schema 结构化输出。最终回答必须直接产生该结构化结果；不要写 node-result.json，不要输出 Markdown、代码块或额外文本。',
       'artifacts 不得包含 checksum。',
     ].join('\n\n')),
-    promptSection('结果模板', `结构化结果必须严格采用以下动态模板；替换 payload、artifacts、selectedPort 与 attempt，禁止新增或删减根字段。\n\n\`\`\`json\n${JSON.stringify(resultTemplate, null, 2)}\n\`\`\``),
+    promptSection('结果模板', `成功时使用成功包；任务无法完成时使用失败包。替换 payload、artifacts、selectedPort 与 attempt，禁止新增或删减根字段。\n\n成功包：\n\`\`\`json\n${JSON.stringify(resultTemplate, null, 2)}\n\`\`\`\n\n失败包：\n\`\`\`json\n${JSON.stringify(failureTemplate, null, 2)}\n\`\`\``),
   ].filter(Boolean).join('\n\n');
 }
 
@@ -80,6 +89,7 @@ function buildDataFetchPrompt(spec: AgentRunSpec, node: any, ctx: RunCtx): strin
     promptSection('执行与输出约束', [
       '输入文件只能通过 artifacts[].resourceId 读取；它是当前节点工作目录下的相对路径。不得使用、输出或臆造绝对路径、file:// 路径、OSS 地址或临时下载链接。',
       largeTextArtifactRule(),
+      failureOutputRule(),
       'SDK 已强制结果 schema。最终只返回符合 WorkflowPacket 的 JSON，不要 Markdown、代码块、解释性文字或 node-result.json。',
     ].join('\n\n')),
   ].filter(Boolean).join('\n\n');
@@ -91,6 +101,10 @@ function promptSection(title: string, content: string): string {
 
 function largeTextArtifactRule(): string {
   return '大文本传递规则：任何要交给下游、UTF-8 编码超过 1024 字节的文本，不得内联在 payload。必须写入当前节点工作区的 processFiles/ 文件（JSON 用 .json，其它文本用 .txt），并在 artifacts 中声明 kind=INTERMEDIATE、artifactId、name、contentType 与相对 resourceId；payload 只保留简短摘要和该 artifactId。';
+}
+
+function failureOutputRule(): string {
+  return '失败输出规则：如果当前任务明确无法完成，必须返回 status="failed" 的完整 WorkflowPacket，失败原因必须写入 diagnostics.errors[0].message。不得把 result="failed"、reason 或错误文字仅放在 payload 后仍返回 status="succeeded"。技能不存在、权限不足、必需参数/数据不可用且无法继续属于确定性失败，retryable 必须为 false；仅网络抖动、上游服务暂不可用等瞬态问题才可设为 true。失败包的 selectedPort 必须为 null，失败不会传给下游节点。';
 }
 
 function createDataFetchInputPacket(ctx: RunCtx): Record<string, unknown> {
