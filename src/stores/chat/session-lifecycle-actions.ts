@@ -12,8 +12,6 @@ import { useAgentsStore } from '../agents';
 import {
   isVirtualTaskSessionKey,
   parseCronSessionKey,
-  parseScheduledTaskAgentSessionKey,
-  parseScheduledTaskSessionKey,
   parseClaudeScheduledTaskRunSessionKey,
   parseClaudeScheduledTaskSessionKey,
 } from './cron-session-utils';
@@ -21,7 +19,6 @@ import { sanitizeSessionDisplayField, mergeSessionLastActivity } from './helpers
 import {
   resolveClaudeGroupNameFromSession,
   resolveCronGroupNameFromSession,
-  resolveStoScheduledGroupNameFromSession,
 } from '@/lib/scheduled-task-group-name';
 import {
   appendPendingLocalVirtualTaskSessions,
@@ -121,21 +118,18 @@ export function createSessionLifecycleActions(
             rawSessions = data.sessions;
           }
 
-          // ── Merge local filesystem sessions (dated cron + scheduled-task runs) ──
+          // ── Merge local filesystem sessions (dated cron + claude task runs) ──
           try {
-            const [stRes, cronRes, claudeTaskRes] = await Promise.all([
-              hostApiFetch('/api/scheduled-tasks/sessions').catch(() => null),
+            const [cronRes, claudeTaskRes] = await Promise.all([
               hostApiFetch('/api/cron/sessions').catch(() => null),
               hostApiFetch('/api/claude-scheduled-tasks/sessions').catch(() => null),
             ]);
-            const stData = stRes && typeof stRes === 'object' ? (stRes as Record<string, unknown>) : null;
             const cronData = cronRes && typeof cronRes === 'object' ? (cronRes as Record<string, unknown>) : null;
             const claudeTaskData = claudeTaskRes && typeof claudeTaskRes === 'object' ? (claudeTaskRes as Record<string, unknown>) : null;
-            const stSessions = Array.isArray(stData?.sessions) ? (stData.sessions as Record<string, unknown>[]) : [];
             const cronSessions = Array.isArray(cronData?.sessions) ? (cronData.sessions as Record<string, unknown>[]) : [];
             const claudeTaskSessions = Array.isArray(claudeTaskData?.sessions) ? (claudeTaskData.sessions as Record<string, unknown>[]) : [];
 
-            rawSessions = [...rawSessions, ...stSessions, ...cronSessions, ...claudeTaskSessions];
+            rawSessions = [...rawSessions, ...cronSessions, ...claudeTaskSessions];
           } catch {
             // ignore
           }
@@ -165,7 +159,6 @@ export function createSessionLifecycleActions(
 
             // ── Identify which jobs already have real dated sessions ──
             const cronDated = new Set<string>();
-            const scheduledTaskDated = new Set<string>();
             const claudeTaskDated = new Set<string>();
             // Most-recent dated aggregate key per task/job. Key order is lexicographic
             // == chronological for `...:{YYYY-MM-DD}` suffixes, so the greatest key is
@@ -173,7 +166,6 @@ export function createSessionLifecycleActions(
             // below, so the dated-supersedes-base rule also governs the active session.
             const claudeTaskDatedKeyByTask = new Map<string, string>();
             const cronDatedKeyByJob = new Map<string, string>();
-            const scheduledTaskDatedKeyByTask = new Map<number, string>();
             for (const session of sessions) {
               const cronParts = parseCronSessionKey(session.key);
               if (cronParts && cronParts.date) {
@@ -181,14 +173,6 @@ export function createSessionLifecycleActions(
                 const prev = cronDatedKeyByJob.get(cronParts.jobId);
                 if (!prev || session.key > prev) {
                   cronDatedKeyByJob.set(cronParts.jobId, session.key);
-                }
-              }
-              const stParts = parseScheduledTaskAgentSessionKey(session.key);
-              if (stParts && stParts.date) {
-                scheduledTaskDated.add(`agent:main:scheduled-task:${stParts.taskId}`);
-                const prev = scheduledTaskDatedKeyByTask.get(stParts.taskId);
-                if (!prev || session.key > prev) {
-                  scheduledTaskDatedKeyByTask.set(stParts.taskId, session.key);
                 }
               }
               // Claude dated aggregate: claude-task:{taskId}:{YYYY-MM-DD}
@@ -206,7 +190,6 @@ export function createSessionLifecycleActions(
             // Also filter out run sessions when the job has dated aggregate sessions
             let filteredSessions = sessions.filter((s) => {
               if (cronDated.has(s.key)) return false;
-              if (scheduledTaskDated.has(s.key)) return false;
               // Filter out claude-task base sessions when dated replacement exists
               if (claudeTaskDated.has(s.key)) return false;
               const cronParts = parseCronSessionKey(s.key);
@@ -309,18 +292,6 @@ export function createSessionLifecycleActions(
                 const datedKey = cronDatedKeyByJob.get(cronParts.jobId);
                 if (datedKey && mergedSessions.some((s) => s.key === datedKey)) {
                   nextSessionKey = datedKey;
-                }
-              }
-              if (nextSessionKey.startsWith('agent:')) {
-                const stParts = nextSessionKey.split(':');
-                if (stParts.length === 4 && stParts[2] === 'scheduled-task') {
-                  const stTaskId = Number(stParts[3]);
-                  if (!Number.isNaN(stTaskId)) {
-                    const datedKey = scheduledTaskDatedKeyByTask.get(stTaskId);
-                    if (datedKey && mergedSessions.some((s) => s.key === datedKey)) {
-                      nextSessionKey = datedKey;
-                    }
-                  }
                 }
               }
             }
@@ -449,26 +420,7 @@ export function createSessionLifecycleActions(
               // Ignore cron name enrichment failure
             }
 
-            // 2) Scheduled tasks (STO)
-            try {
-              const tasksResult = await hostApiFetch<Array<{ id: number; name: string }>>('/api/scheduled-tasks');
-              const taskNameMap = new Map(tasksResult.map((t) => [t.id, t.name]));
-              for (const session of labeledSessions) {
-                const parsed = parseScheduledTaskSessionKey(session.key);
-                const stAgentParsed = parseScheduledTaskAgentSessionKey(session.key);
-                if (parsed) {
-                  const name = taskNameMap.get(parsed.taskId);
-                  if (name) session.displayName = name;
-                } else if (stAgentParsed) {
-                  const name = taskNameMap.get(stAgentParsed.taskId);
-                  if (name) session.displayName = name;
-                }
-              }
-            } catch {
-              // Ignore scheduled-task name enrichment failure
-            }
-
-            // 3) Claude scheduled tasks
+            // 2) Claude scheduled tasks
             try {
               const tasksResult = await hostApiFetch<Array<{ id: string; name: string }>>('/api/claude-scheduled-tasks');
               const taskNameMap = new Map(tasksResult.map((task) => [task.id, task.name]));
@@ -484,20 +436,17 @@ export function createSessionLifecycleActions(
               // Ignore Claude scheduled-task name enrichment failure
             }
 
-            // 4) Label-based fallback when task APIs are unavailable (401 / Gateway down)
+            // 3) Label-based fallback when task APIs are unavailable (401 / Gateway down)
             for (const session of labeledSessions) {
               if (session.displayName?.trim()) continue;
-              const stAgentParsed = parseScheduledTaskAgentSessionKey(session.key);
               const cronParsed = parseCronSessionKey(session.key);
               const claudeSummaryParsed = parseClaudeScheduledTaskSessionKey(session.key);
               const claudeRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
-              const fromLabel = stAgentParsed
-                ? resolveStoScheduledGroupNameFromSession(session)
-                : cronParsed
-                  ? resolveCronGroupNameFromSession(session)
-                  : (claudeSummaryParsed || claudeRunParsed)
-                    ? resolveClaudeGroupNameFromSession(session)
-                    : undefined;
+              const fromLabel = cronParsed
+                ? resolveCronGroupNameFromSession(session)
+                : (claudeSummaryParsed || claudeRunParsed)
+                  ? resolveClaudeGroupNameFromSession(session)
+                  : undefined;
               if (fromLabel) session.displayName = fromLabel;
             }
 

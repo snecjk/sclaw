@@ -68,7 +68,6 @@ import {
   parseClaudeScheduledTaskSessionKey,
   parseClaudeScheduledTaskRunSessionKey,
   parseCronSessionKey,
-  parseScheduledTaskAgentSessionKey,
   isAnyCronSessionKey,
   isVirtualTaskSessionKey,
 } from '@/stores/chat/cron-session-utils';
@@ -1128,11 +1127,10 @@ export function Sidebar() {
     [sessions],
   );
 
-  // Legacy cron + scheduled-task agent + Claude task (base, dated, run) sessions — shown under "任务列表" grouped by task name
+  // Legacy cron + Claude task (base, dated, run) sessions — shown under "任务列表" grouped by task name
   const taskListScheduledSessions = useMemo(
     () => visibleSessions.filter((s) => (
       isAnyCronSessionKey(s.key)
-      || parseScheduledTaskAgentSessionKey(s.key)
       || parseClaudeScheduledTaskRunSessionKey(s.key)
       || parseClaudeScheduledTaskSessionKey(s.key) != null  // covers base & dated
     )),
@@ -1143,7 +1141,6 @@ export function Sidebar() {
   const normalSessions = useMemo(
     () => visibleSessions.filter((s) => (
       !isAnyCronSessionKey(s.key)
-      && !parseScheduledTaskAgentSessionKey(s.key)
       && !parseClaudeScheduledTaskRunSessionKey(s.key)
       && !parseClaudeScheduledTaskSessionKey(s.key)  // excludes base & dated
     )),
@@ -1195,15 +1192,12 @@ export function Sidebar() {
     const groups = new Map<string, GroupDraft>();
 
     for (const session of taskListScheduledSessions) {
-      const stParsed = parseScheduledTaskAgentSessionKey(session.key);
       const cronParsed = parseCronSessionKey(session.key);
       const claudeTaskRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
       const claudeTaskDatedParsed = parseClaudeScheduledTaskSessionKey(session.key);
 
       let draft: GroupDraft | undefined;
-      if (stParsed) {
-        draft = { key: `st:${stParsed.taskId}`, kind: 'st', taskId: stParsed.taskId, sessions: [] };
-      } else if (cronParsed) {
+      if (cronParsed) {
         draft = { key: `cron:${cronParsed.jobId}`, kind: 'cron', taskId: cronParsed.jobId, sessions: [] };
       } else if (claudeTaskDatedParsed) {
         draft = {

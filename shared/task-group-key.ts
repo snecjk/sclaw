@@ -4,10 +4,6 @@ export function cronTaskGroupKey(jobId: string): string {
   return `cron:${jobId}`;
 }
 
-export function stoCloudTaskGroupKey(taskId: number | string): string {
-  return `st:${taskId}`;
-}
-
 export function claudeTaskGroupKey(taskId: string): string {
   return `claude-task:${taskId}`;
 }
@@ -31,9 +27,6 @@ export function resolveTaskGroupKeyFromSessionKey(sessionKey: string): string | 
     const parts = trimmed.split(':');
     if (parts.length >= 5 && parts[2] === 'cron' && YMD.test(parts[4] ?? '')) {
       return cronTaskGroupKey(parts[3] ?? '');
-    }
-    if (parts.length >= 5 && parts[2] === 'scheduled-task' && YMD.test(parts[4] ?? '')) {
-      return stoCloudTaskGroupKey(parts[3] ?? '');
     }
     if (parts.length >= 3 && parts[1] === 'main' && parts[2]?.startsWith('sto-')) {
       const rest = parts[2]!.slice('sto-'.length);

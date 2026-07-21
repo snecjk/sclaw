@@ -28,14 +28,6 @@ export async function reviveCronDatedExecutionSession(
   await reviveDeletedExecutionSession(`agent:${agentId}:cron:${jobId}:${date}`);
 }
 
-export async function reviveScheduledTaskAgentDatedExecutionSession(
-  taskId: number,
-  agentId = 'main',
-  date = formatLocalYmd(),
-): Promise<void> {
-  await reviveDeletedExecutionSession(`agent:${agentId}:scheduled-task:${taskId}:${date}`);
-}
-
 export async function reviveClaudeTaskDatedExecutionSession(
   taskId: string,
   date = formatLocalYmd(),

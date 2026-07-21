@@ -73,63 +73,6 @@ export function buildCronSessionHistoryPath(sessionKey: string, limit = CHAT_HIS
 }
 
 // ---------------------------------------------------------------------------
-// Scheduled Task Session Keys
-// ---------------------------------------------------------------------------
-
-export interface ScheduledTaskSessionKeyParts {
-  taskId: number;
-}
-
-export function parseScheduledTaskSessionKey(sessionKey: string): ScheduledTaskSessionKeyParts | null {
-  if (!sessionKey.startsWith('scheduled-task:')) return null;
-  const taskIdStr = sessionKey.slice('scheduled-task:'.length);
-  const taskId = Number(taskIdStr);
-  if (Number.isNaN(taskId)) return null;
-  return { taskId };
-}
-
-export function isScheduledTaskSessionKey(sessionKey: string): boolean {
-  return parseScheduledTaskSessionKey(sessionKey) != null || parseScheduledTaskAgentSessionKey(sessionKey) != null;
-}
-
-export function buildScheduledTaskSessionHistoryPath(sessionKey: string, limit = CHAT_HISTORY_LIMIT): string {
-  const params = new URLSearchParams({ sessionKey });
-  if (Number.isFinite(limit) && limit > 0) {
-    params.set('limit', String(Math.floor(limit)));
-  }
-  return `/api/scheduled-tasks/session-history?${params.toString()}`;
-}
-
-// ---------------------------------------------------------------------------
-// Scheduled Task Agent Session Keys (e.g. agent:main:scheduled-task:1:2026-06-04)
-// ---------------------------------------------------------------------------
-
-export interface ScheduledTaskAgentSessionKeyParts {
-  agentId: string;
-  taskId: number;
-  date: string; // YYYY-MM-DD
-}
-
-export function parseScheduledTaskAgentSessionKey(sessionKey: string): ScheduledTaskAgentSessionKeyParts | null {
-  if (!sessionKey.startsWith('agent:')) return null;
-  const parts = sessionKey.split(':');
-  // agent:{agentId}:scheduled-task:{taskId}:{date}
-  if (parts.length === 5 && parts[2] === 'scheduled-task') {
-    const agentId = parts[1] || 'main';
-    const taskId = Number(parts[3]);
-    const date = parts[4];
-    if (!Number.isNaN(taskId) && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return { agentId, taskId, date };
-    }
-  }
-  return null;
-}
-
-export function isScheduledTaskAgentSessionKey(sessionKey: string): boolean {
-  return parseScheduledTaskAgentSessionKey(sessionKey) !== null;
-}
-
-// ---------------------------------------------------------------------------
 // Claude Scheduled Task Session Keys
 // ---------------------------------------------------------------------------
 
@@ -213,7 +156,6 @@ export function isClaudeScheduledTaskRunSessionKey(sessionKey: string): boolean 
 export function isVirtualTaskSessionKey(sessionKey: string): boolean {
   return (
     isAnyCronSessionKey(sessionKey)
-    || isScheduledTaskSessionKey(sessionKey)
     || isClaudeScheduledTaskSessionKey(sessionKey)
     || isClaudeScheduledTaskRunSessionKey(sessionKey)
   );

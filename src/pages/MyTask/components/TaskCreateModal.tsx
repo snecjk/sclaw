@@ -165,7 +165,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   const [beautifying, setBeautifying] = useState(false);
   const [recipients, setRecipients] = useState<DingTalkMention[]>(init.recipients);
   const [errors, setErrors] = useState<{ name?: string; instructions?: string }>({});
-  const [engineType] = useState<TaskEngineType>(init.engineType);
+  const [engineType, setEngineType] = useState<TaskEngineType>(init.engineType);
 
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState<string>(init.selectedWorkflow);
@@ -335,7 +335,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
           </div>
 
           {/* 执行引擎已固定为 Claude，暂时隐藏选择器 */}
-          {/* <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.engineLabel')}</label>
             <select
               value={engineType}
@@ -357,7 +357,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                   ? t('myTask.createModal.engineClaudeHint')
                   : t('myTask.createModal.engineOpenclawHint')}
             </p>
-          </div> */}
+          </div>
 
           <div className="flex flex-col gap-2">
             <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.workflowLabel')}</label>

@@ -31,7 +31,6 @@ import { useGatewayStore } from './stores/gateway';
 import { useProviderStore } from './stores/providers';
 import { useAgentsStore } from './stores/agents';
 import { useChatStore } from './stores/chat';
-import { useScheduledTaskUnreadStore } from './stores/scheduled-task-unread';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
 import { AccountSwitchFab } from './components/layout/AccountSwitchFab';
 
@@ -217,31 +216,6 @@ function App() {
       }
     };
   }, []);
-
-  // Listen for scheduled task new results from main process
-  useEffect(() => {
-    const handleNewResult = (...args: unknown[]) => {
-			// TODO YL 此处待确认
-			console.log('Received scheduled-task:new-result event:', args);
-      const payload = args[0] as { taskId: number } | undefined;
-      if (!payload || typeof payload.taskId !== 'number') return;
-      // Only add unread if user is not currently on the My Tasks page
-      if (location.pathname !== '/my-tasks') {
-        useScheduledTaskUnreadStore.getState().addUnread(payload.taskId);
-      }
-    };
-
-    const unsubscribe = window.electron.ipcRenderer.on(
-      'scheduled-task:new-result',
-      handleNewResult
-    );
-
-    return () => {
-      if (typeof unsubscribe === 'function') {
-        unsubscribe();
-      }
-    };
-  }, [location.pathname]);
 
   // STO catalog sync (login / periodic / manual) → refresh toolbar default model
   useEffect(() => {
