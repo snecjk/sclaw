@@ -35,6 +35,7 @@ import { handleLogRoutes } from './routes/logs';
 import { handleUsageRoutes } from './routes/usage';
 import { handleSkillRoutes } from './routes/skills';
 import { handleSkillPlazaRoutes } from './routes/skill-plaza';
+import { handleAppPlazaRoutes } from './routes/app-plaza';
 import { handleFileRoutes } from './routes/files';
 import { handleSessionRoutes } from './routes/sessions';
 import { handleSessionCatalogRoutes } from './routes/session-catalog';
@@ -82,6 +83,7 @@ const routeHandlers: RouteHandler[] = [
   handleChannelRoutes,
   handleSkillRoutes,
   handleSkillPlazaRoutes,
+  handleAppPlazaRoutes,
   handleFileRoutes,
   handleSessionRoutes,
   handleSessionCatalogRoutes,

@@ -63,11 +63,9 @@ function normalizeIdList(raw: unknown): string[] {
 
 /** Normalize unknown JSON into a registry document. Exported for unit tests. */
 export function normalizeMoreAppsRegistry(raw: unknown): MoreAppsRegistry {
-  if (!isRecord(raw)) {
-    return createEmptyMoreAppsRegistry();
-  }
+  if (!isRecord(raw)) return createEmptyMoreAppsRegistry();
   const externalApps = Array.isArray(raw.externalApps)
-    ? raw.externalApps.map(normalizeExternalApp).filter((a): a is MoreAppsExternalApp => a !== null)
+    ? raw.externalApps.map(normalizeExternalApp).filter((app): app is MoreAppsExternalApp => app !== null)
     : [];
   return {
     version: MORE_APPS_REGISTRY_VERSION,
@@ -88,13 +86,9 @@ function writeRegistryFile(filePath: string, registry: MoreAppsRegistry): void {
 
 export function readMoreAppsRegistry(filePath = getMoreAppsRegistryPath()): MoreAppsRegistry {
   try {
-    if (!existsSync(filePath)) {
-      return createEmptyMoreAppsRegistry();
-    }
+    if (!existsSync(filePath)) return createEmptyMoreAppsRegistry();
     const raw = readFileSync(filePath, 'utf-8');
-    if (!raw.trim()) {
-      return createEmptyMoreAppsRegistry();
-    }
+    if (!raw.trim()) return createEmptyMoreAppsRegistry();
     return normalizeMoreAppsRegistry(JSON.parse(raw) as unknown);
   } catch (error) {
     logger.warn('[more-apps] failed to read registry, using empty:', error);
@@ -125,13 +119,9 @@ export function migrateMoreAppsRegistry(
   filePath = getMoreAppsRegistryPath(),
 ): MoreAppsMigrateResult {
   const existing = readMoreAppsRegistry(filePath);
-  if (!isMoreAppsRegistryEmpty(existing)) {
-    return { migrated: false, registry: existing };
-  }
+  if (!isMoreAppsRegistryEmpty(existing)) return { migrated: false, registry: existing };
   const incoming = normalizeMoreAppsRegistry(payload);
-  if (isMoreAppsRegistryEmpty(incoming)) {
-    return { migrated: false, registry: existing };
-  }
+  if (isMoreAppsRegistryEmpty(incoming)) return { migrated: false, registry: existing };
   const written = writeMoreAppsRegistry(incoming, filePath);
   return { migrated: true, registry: written };
 }

@@ -324,8 +324,6 @@ importers:
 
   sto-plugin/openclaw/sto-browser-bridge: {}
 
-  sto-plugin/openclaw/sto-browser-bridge/sto-toolkit: {}
-
   sto-plugin/openclaw/sto-dingtalk-send-guard: {}
 
   sto-plugin/openclaw/sto-dynamic-agent-route: {}
@@ -337,8 +335,6 @@ importers:
   sto-plugin/openclaw/sto-skill-call-monitor: {}
 
   sto-plugin/openclaw/sto-workflow-tool: {}
-
-  sto-plugin/openclaw/sto-workflow-tool/sto-toolkit: {}
 
   sto-plugin/sto-toolkit: {}
 

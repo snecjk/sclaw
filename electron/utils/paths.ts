@@ -38,15 +38,12 @@ export function getOpenClawConfigDir(): string {
   return join(homedir(), '.stoclaw', 'openclaw');
 }
 
-/**
- * StoClaw user home config root (~/.stoclaw).
- * Survives app reinstall when Application Support / userData is wiped.
- */
+/** StoClaw user home config root (~/.stoclaw). */
 export function getStoClawHomeDir(): string {
   return join(homedir(), '.stoclaw');
 }
 
-/** More Apps (应用广场) registry directory under user home. */
+/** More Apps registry directory under the StoClaw user home. */
 export function getMoreAppsDir(): string {
   return join(getStoClawHomeDir(), 'more-apps');
 }
