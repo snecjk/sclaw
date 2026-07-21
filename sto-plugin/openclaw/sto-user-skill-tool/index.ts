@@ -3,15 +3,20 @@ import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
 import { defineStoTool } from "./define-sto-tool.js";
 import {
 	postSaveUserSkill,
+	scheduleOrphanSkillImportViaHost,
 	type UserSkillToolPluginConfig,
 } from "./host-api-client.js";
+import {
+	evaluateUserSkillWriteGuard,
+	shouldScheduleOrphanImportAfterTool,
+} from "./user-skill-write-guard.js";
 
 const TAG = "sto-user-skill-tool";
 
 const USER_SKILL_SYSTEM_PROMPT = [
-	"用户技能保存（save_user_skill，重要）：",
+	"用户技能保存（save_user_skill，硬性规则）：",
 	"- 在会话中**创建或更新用户技能**时，必须调用 `save_user_skill`，传入完整 `skillMd`（含 YAML frontmatter 的 name + description）与 `slug`。",
-	"- ⛔ **禁止**仅用 write/编辑工具把技能写到 `openclaw/skills`、`workspace/skills` 或其它临时目录并当作完成——那样不会进入「我的技能」。",
+	"- ⛔ **禁止**用 write / edit / apply_patch / Bash 把技能写到 `openclaw/skills`、`workspace/skills`、`skills-store`——系统会拦截；那样也不会进入「我的技能」。",
 	"- 可选 `assets` 附加相对技能根的文件；禁止路径穿越（`..`）。",
 	"- 同 slug 默认覆盖已有用户技能；系统预装白名单 slug 会被拒绝。",
 ].join("\n");
@@ -19,7 +24,7 @@ const USER_SKILL_SYSTEM_PROMPT = [
 export default definePluginEntry({
 	id: "sto-user-skill-tool",
 	name: "StoClaw 用户技能保存工具",
-	description: "将会话创建的技能写入 skills-store 用户目录",
+	description: "将会话创建的技能写入 skills-store 用户目录，并拦截直接写技能目录",
 	register(api: OpenClawPluginApi) {
 		const cfg = (api.pluginConfig ?? {}) as UserSkillToolPluginConfig;
 		api.logger.info?.(
@@ -30,6 +35,47 @@ export default definePluginEntry({
 			appendSystemContext: USER_SKILL_SYSTEM_PROMPT,
 		}));
 
+		api.on(
+			"before_tool_call",
+			(event) => {
+				const decision = evaluateUserSkillWriteGuard({
+					toolName: event.toolName,
+					params: (event.params ?? {}) as Record<string, unknown>,
+				});
+				if (decision.blocked) {
+					api.logger.warn?.(
+						`[${TAG}] blocked tool=${event.toolName} path=${decision.matchedPath ?? "(n/a)"}`,
+					);
+					return {
+						block: true,
+						blockReason: decision.reason,
+					};
+				}
+			},
+			{ priority: 120 },
+		);
+
+		api.on(
+			"after_tool_call",
+			(event) => {
+				if (
+					shouldScheduleOrphanImportAfterTool({
+						toolName: event.toolName,
+						params: (event.params ?? {}) as Record<string, unknown>,
+					})
+				) {
+					void scheduleOrphanSkillImportViaHost(cfg, "openclaw-after-skill-path-tool").catch(
+						(error) => {
+							api.logger.warn?.(
+								`[${TAG}] orphan import schedule failed: ${error instanceof Error ? error.message : String(error)}`,
+							);
+						},
+					);
+				}
+			},
+			{ priority: 120 },
+		);
+
 		defineStoTool(api, {
 			id: "save_user_skill",
 			domain: "user-skill",
@@ -38,7 +84,7 @@ export default definePluginEntry({
 			description: [
 				"将会话创建/更新的技能写入当前登录用户的 skills-store（「我的技能」）。",
 				"必须传入完整 SKILL.md 文本（含 name/description frontmatter）。",
-				"禁止仅用 write 写到 openclaw/skills 或 workspace/skills。",
+				"禁止仅用 write 写到 openclaw/skills 或 workspace/skills（会被拦截）。",
 			].join(" "),
 			parameters: Type.Object({
 				slug: Type.Optional(

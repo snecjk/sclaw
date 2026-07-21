@@ -1,6 +1,6 @@
 ## StoClaw Tool Notes
 
-### 用户技能保存（save_user_skill）
+### 用户技能保存（save_user_skill，硬性规则）
 
 会话中**创建或更新用户自定义技能**时，**必须**调用内置工具 `save_user_skill`（OpenClaw 插件 / Claude MCP），将完整 `SKILL.md` 写入当前登录用户的 skills-store。
 
@@ -11,7 +11,8 @@
 **必须遵守：**
 
 - 传入完整 `skillMd`（含 YAML frontmatter 的 `name` + `description`）与合法 `slug`
-- ⛔ **禁止**仅用 `write` 写到 `openclaw/skills`、`workspace/skills` 或其它目录并当作完成
+- ⛔ **禁止**用 `write` / `edit` / `apply_patch` / Bash 写到 `openclaw/skills`、`workspace/skills`、`skills-store`（**系统会拦截**）；那样也不会进入「我的技能」
+- 被拦截后请直接改调 `save_user_skill`，不要换工具绕过
 - 系统预装白名单 slug（如 `sai-cli`）不可覆盖
 - 未登录时工具会报错，不要改写到 global
 

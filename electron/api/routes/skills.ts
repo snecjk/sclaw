@@ -53,6 +53,21 @@ export async function handleSkillRoutes(
     return true;
   }
 
+  if (url.pathname === '/api/skills/import-orphans' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ reason?: string }>(req);
+      const { scheduleOrphanSkillImport } = await import('../../services/skills/orphan-skill-import');
+      scheduleOrphanSkillImport(body.reason || 'host-api');
+      sendJson(res, 200, { success: true, scheduled: true });
+    } catch (error) {
+      sendJson(res, 500, {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return true;
+  }
+
   if (url.pathname === '/api/skills/configs' && req.method === 'GET') {
     sendJson(res, 200, await getAllSkillConfigs());
     return true;

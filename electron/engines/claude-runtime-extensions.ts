@@ -18,6 +18,7 @@ import {
   createUserSkillMcpServer,
   USER_SKILL_SYSTEM_PROMPT,
 } from '../../sto-plugin/claude/sto-user-skill-tool/tools';
+import { buildUserSkillHooks } from '../../sto-plugin/claude/sto-user-skill-tool/hooks';
 import {
   isScheduledTaskExecutionSessionKey,
   SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT,
@@ -135,8 +136,9 @@ const scheduledTaskToolExtension: ClaudeRuntimeExtension = {
 const userSkillToolExtension: ClaudeRuntimeExtension = {
   id: 'sto-user-skill-tool',
   build() {
-    logger.info('[claude-user-skill] registering save_user_skill MCP');
+    logger.info('[claude-user-skill] registering save_user_skill MCP + write guard');
     return {
+      hooks: buildUserSkillHooks(),
       systemPromptAppend: USER_SKILL_SYSTEM_PROMPT,
       mcpServers: {
         'sto-user-skill-tool': createUserSkillMcpServer(),

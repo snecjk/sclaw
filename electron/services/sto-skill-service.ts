@@ -24,6 +24,32 @@ import {
 
 export { PREINSTALLED_MARKER_NAME, USER_UPLOAD_MARKER_NAME };
 
+/** Session-created / upload provenance — must not be demoted by lock backfill. */
+const PROTECTED_MANIFEST_SOURCES = new Set(['local', 'user-upload']);
+
+/**
+ * Whether backfill must leave an existing skills-store entry alone.
+ * Prevents startup `backfillLockVersions` from rewriting `local` → `sto-marketplace`
+ * (which drops the「自建」tag after re-login / restart).
+ */
+export function shouldPreserveManifestProvenance(existingSource?: string | null): boolean {
+  return Boolean(existingSource && PROTECTED_MANIFEST_SOURCES.has(existingSource));
+}
+
+/**
+ * Resolve the source written by lock/version backfill.
+ * Protected existing provenance always wins over lock.json / marketplace default.
+ */
+export function resolveBackfillManifestSource(params: {
+  lockSource?: string | null;
+  existingSource?: string | null;
+}): string {
+  if (shouldPreserveManifestProvenance(params.existingSource)) {
+    return params.existingSource as string;
+  }
+  return params.lockSource || 'sto-marketplace';
+}
+
 export interface StoSkillSearchParams {
   query?: string;
   limit?: number;
@@ -251,15 +277,29 @@ export class StoSkillService {
 
       void (async () => {
         try {
-          const { upsertSkillEntry } = await import('./skills/canonical-store');
+          const { getSkillEntry, upsertSkillEntry } = await import('./skills/canonical-store');
           const { getCurrentActiveUserCode } = await import('./user-skill-workspace');
           const userCode = await getCurrentActiveUserCode();
+          const existing =
+            (userCode
+              ? await getSkillEntry({ slug, scope: 'user', userCode })
+              : null)
+            || (await getSkillEntry({ slug, scope: 'global' }));
+
+          // Do not demote session-created / upload skills to marketplace.
+          if (shouldPreserveManifestProvenance(existing?.source)) {
+            return;
+          }
+
           await upsertSkillEntry({
             slug,
             scope: userCode ? 'user' : 'global',
             userCode: userCode || undefined,
             version,
-            source: lockInfo?.source || 'sto-marketplace',
+            source: resolveBackfillManifestSource({
+              lockSource: lockInfo?.source,
+              existingSource: existing?.source,
+            }),
             name: lockInfo?.name || this.readSkillName(dir) || undefined,
             description: lockInfo?.description || this.readSkillMdDescription(dir) || undefined,
             author: lockInfo?.author,

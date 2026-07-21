@@ -29,21 +29,20 @@ function baseUrl(cfg: UserSkillToolPluginConfig): string {
 	return `http://${host}:${port}`;
 }
 
-export async function postSaveUserSkill(
+async function fetchJson<T>(
 	cfg: UserSkillToolPluginConfig,
-	body: SaveUserSkillRequest,
-): Promise<Record<string, unknown>> {
+	path: string,
+	init?: RequestInit,
+): Promise<T> {
 	const timeoutMs = cfg.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), timeoutMs);
 	try {
-		const response = await fetch(`${baseUrl(cfg)}/api/skills/save-user`, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify(body),
+		const response = await fetch(`${baseUrl(cfg)}${path}`, {
+			...init,
 			signal: controller.signal,
 		});
-		const payload = (await response.json()) as Record<string, unknown> & {
+		const payload = (await response.json()) as T & {
 			success?: boolean;
 			error?: string;
 			code?: string;
@@ -60,4 +59,27 @@ export async function postSaveUserSkill(
 	} finally {
 		clearTimeout(timer);
 	}
+}
+
+export async function postSaveUserSkill(
+	cfg: UserSkillToolPluginConfig,
+	body: SaveUserSkillRequest,
+): Promise<Record<string, unknown>> {
+	return fetchJson(cfg, "/api/skills/save-user", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(body),
+	});
+}
+
+/** Best-effort: ask Main to debounce-import unmanaged skill dirs. */
+export async function scheduleOrphanSkillImportViaHost(
+	cfg: UserSkillToolPluginConfig,
+	reason = "plugin",
+): Promise<void> {
+	await fetchJson(cfg, "/api/skills/import-orphans", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ reason }),
+	});
 }

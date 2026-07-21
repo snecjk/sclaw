@@ -915,6 +915,18 @@ function afterStoPluginInstall(pluginDirName: string, sourceDir?: string): void 
     ensureStoDynamicRouteSharedFiles(targetDir);
     ensureStoDynamicRouteWorkspacePathsFiles(targetDir);
   }
+  if (pluginDirName === 'sto-user-skill-tool') {
+    const targetDir = join(getOpenClawConfigDir(), 'extensions', pluginDirName);
+    ensureStoDynamicRouteSharedFile(
+      targetDir,
+      'user-skill-write-guard.ts',
+      [
+        join(process.cwd(), 'sto-plugin', 'openclaw', 'sto-user-skill-tool', 'user-skill-write-guard.ts'),
+        join(process.cwd(), 'shared', 'user-skill-write-guard.ts'),
+        join(app.getAppPath(), 'shared', 'user-skill-write-guard.ts'),
+      ],
+    );
+  }
   if (PLUGIN_RUNTIME_DEPS[pluginDirName]) {
     ensurePluginRuntimeDeps(pluginDirName);
   }
