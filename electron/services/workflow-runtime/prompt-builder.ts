@@ -1,5 +1,6 @@
 import type { AgentRunSpec, RunCtx } from './types';
 import { WORKFLOW_PACKET_VERSION } from './workflow-packet';
+import { WORKFLOW_PACKET_ARTIFACTS_KEY, type UpstreamWorkflowArtifact } from './input-resolver';
 
 /** Builds the client-owned prompt. Cloud compiled prompts are deliberately ignored. */
 export function buildWorkflowNodePrompt(spec: AgentRunSpec, node: any, ctx: RunCtx): string {
@@ -16,11 +17,12 @@ export function buildWorkflowNodePrompt(spec: AgentRunSpec, node: any, ctx: RunC
   const ports = Array.isArray(node?.config?.branches)
     ? node.config.branches.map((branch: any) => branch?.branchKey ?? branch?.key).filter(Boolean)
     : [];
+  const { payload: inputPayload, artifacts: inputArtifacts } = splitWorkflowInput(ctx.resolvedInputs);
   const inputPacket = {
     protocolVersion: WORKFLOW_PACKET_VERSION,
     status: 'succeeded',
     producer: { runId: ctx.runId, nodeId: 'runtime-input', nodeType: 'input', attempt: 0 },
-    payload: ctx.resolvedInputs ?? {}, artifacts: [], control: { selectedPort: null }, diagnostics: { warnings: [], errors: [] },
+    payload: inputPayload, artifacts: inputArtifacts, control: { selectedPort: null }, diagnostics: { warnings: [], errors: [] },
   };
   const resultTemplate = {
     protocolVersion: WORKFLOW_PACKET_VERSION,
@@ -111,7 +113,7 @@ function createDataFetchInputPacket(ctx: RunCtx): Record<string, unknown> {
   const rawInput = ctx.resolvedInputs && typeof ctx.resolvedInputs === 'object' && !Array.isArray(ctx.resolvedInputs)
     ? ctx.resolvedInputs as Record<string, unknown>
     : {};
-  const { files, localImport, ...payload } = rawInput;
+  const { files, localImport, [WORKFLOW_PACKET_ARTIFACTS_KEY]: upstreamArtifacts, ...payload } = rawInput;
   const fallbackFiles = localImport && typeof localImport === 'object' && !Array.isArray(localImport)
     ? (localImport as Record<string, unknown>).files
     : undefined;
@@ -122,10 +124,24 @@ function createDataFetchInputPacket(ctx: RunCtx): Record<string, unknown> {
     status: 'succeeded',
     producer: { runId: ctx.runId, nodeId: 'runtime-input', nodeType: 'input', attempt: 0 },
     payload,
-    artifacts: sourceFiles.flatMap((source, index) => toInputArtifact(source, index)),
+    artifacts: [...sourceFiles.flatMap((source, index) => toInputArtifact(source, index)), ...toUpstreamArtifacts(upstreamArtifacts)],
     control: { selectedPort: null },
     diagnostics: { warnings: [], errors: [] },
   };
+}
+
+function splitWorkflowInput(value: unknown): { payload: Record<string, unknown>; artifacts: Array<Record<string, unknown>> } {
+  const raw = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+  const { [WORKFLOW_PACKET_ARTIFACTS_KEY]: upstreamArtifacts, ...payload } = raw;
+  return { payload, artifacts: toUpstreamArtifacts(upstreamArtifacts) };
+}
+
+function toUpstreamArtifacts(value: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry: unknown) => {
+    const artifact = (entry as UpstreamWorkflowArtifact | undefined)?.artifact;
+    return artifact ? [{ ...artifact }] : [];
+  });
 }
 
 function toInputArtifact(source: unknown, index: number): Array<Record<string, unknown>> {

@@ -546,7 +546,9 @@ export function createEngine(deps: EngineDeps) {
       ...output,
       artifacts: [...artifacts, {
         artifactId, kind: 'OUTPUT', name: fileName, contentType: 'text/html',
-        uri: `artifact://${runId}/${node.id}/${artifactId}`, size: info.size,
+        // Keep a local, node-relative reference so a later output node can
+        // consume this HTML without depending on OSS upload completion.
+        resourceId: fileName, uri: `artifact://${runId}/${node.id}/${artifactId}`, size: info.size,
       }],
     };
   }

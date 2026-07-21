@@ -1,4 +1,13 @@
 /** Runtime input binding compatibility with the former server orchestrator. */
+import { isWorkflowPacket, type WorkflowArtifactRef } from './workflow-packet';
+
+/** Internal-only carrier; prompt builders convert this into packet.artifacts. */
+export const WORKFLOW_PACKET_ARTIFACTS_KEY = '__workflowPacketArtifacts';
+
+export interface UpstreamWorkflowArtifact {
+  sourceNodeId: string;
+  artifact: WorkflowArtifactRef;
+}
 
 export interface RuntimeInputs {
   runInput: Record<string, unknown>;
@@ -50,14 +59,27 @@ export function resolveNodeInput(node: any, ctx: RuntimeInputs): any {
   if (agentInputs?.includeTriggerInputs) fields.trigger = ctx.runInput;
   if (agentInputs?.includeUserInputs) fields.user = ctx.runInput;
 
-  if (Object.keys(fields).length) return fields;
+  const withArtifacts = (value: Record<string, unknown>): Record<string, unknown> => {
+    const artifacts = collectUpstreamArtifacts(ctx.upstream);
+    return artifacts.length ? { ...value, [WORKFLOW_PACKET_ARTIFACTS_KEY]: artifacts } : value;
+  };
+  if (Object.keys(fields).length) return withArtifacts(fields);
   if (config.sourceMode === 'node_output' && config.sourceNodeId) {
-    return unwrapEnvelope(ctx.upstream[config.sourceNodeId]);
+    const value = unwrapEnvelope(ctx.upstream[config.sourceNodeId]);
+    return withArtifacts(value && typeof value === 'object' && !Array.isArray(value) ? value : { payload: value });
   }
   if (config.sourceMode === 'workflow_output' && ctx.workflowOutput !== undefined) {
-    return unwrapEnvelope(ctx.workflowOutput);
+    const value = unwrapEnvelope(ctx.workflowOutput);
+    return withArtifacts(value && typeof value === 'object' && !Array.isArray(value) ? value : { payload: value });
   }
-  return Object.fromEntries(Object.entries(ctx.upstream).map(([key, value]) => [key, unwrapEnvelope(value)]));
+  return withArtifacts(Object.fromEntries(Object.entries(ctx.upstream).map(([key, value]) => [key, unwrapEnvelope(value)])));
+}
+
+export function collectUpstreamArtifacts(upstream: Record<string, unknown>): UpstreamWorkflowArtifact[] {
+  return Object.entries(upstream).flatMap(([sourceNodeId, value]) => {
+    if (!isWorkflowPacket(value) || value.status !== 'succeeded') return [];
+    return value.artifacts.map((artifact) => ({ sourceNodeId, artifact }));
+  });
 }
 
 export function buildConditionContext(ctx: RuntimeInputs): Record<string, unknown> {

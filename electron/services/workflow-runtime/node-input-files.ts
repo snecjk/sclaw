@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { workspacePath } from './workspace-paths';
+import { WORKFLOW_PACKET_ARTIFACTS_KEY, type UpstreamWorkflowArtifact } from './input-resolver';
 
 type FetchLike = (input: string | URL, init?: RequestInit & { timeoutMs?: number }) => Promise<Response>;
 
@@ -25,7 +26,8 @@ export async function hydrateNodeInputFiles(
   runId: string,
   fetchImpl: FetchLike = proxyAwareFetch,
 ): Promise<{ input: unknown; files: HydratedNodeFile[] }> {
-  if (node?.type !== 'agent_data_fetch') return { input: nodeInput, files: [] };
+  const upstreamInput = await hydrateUpstreamWorkflowArtifacts(nodeInput, runId, node?.id);
+  if (node?.type !== 'agent_data_fetch') return { input: upstreamInput, files: [] };
   const business = node?.config?.businessConfig ?? {};
   if (business.sourceType && business.sourceType !== 'local_upload') return { input: nodeInput, files: [] };
   const declared = Array.isArray(business.localImport?.files) ? business.localImport.files : [];
@@ -36,9 +38,9 @@ export async function hydrateNodeInputFiles(
   // Do not discard them merely because of that label; only fail later when no
   // actual uploaded file was supplied at all.
   if (!['node_embedded', 'mixed', 'runtime_upload'].includes(mode)) return { input: nodeInput, files: [] };
-  const base = nodeInput && typeof nodeInput === 'object' && !Array.isArray(nodeInput)
-    ? { ...(nodeInput as Record<string, unknown>) }
-    : (nodeInput == null ? {} : { payload: nodeInput });
+  const base = upstreamInput && typeof upstreamInput === 'object' && !Array.isArray(upstreamInput)
+    ? { ...(upstreamInput as Record<string, unknown>) }
+    : (upstreamInput == null ? {} : { payload: upstreamInput });
   const existing = Array.isArray((base as any).files) ? (base as any).files : [];
   if (!declared.length && !existing.length) return { input: nodeInput, files: [] };
 
@@ -96,6 +98,51 @@ export async function hydrateNodeInputFiles(
     },
     files,
   };
+}
+
+async function hydrateUpstreamWorkflowArtifacts(nodeInput: unknown, runId: string, targetNodeId?: string): Promise<unknown> {
+  if (!targetNodeId || !nodeInput || typeof nodeInput !== 'object' || Array.isArray(nodeInput)) return nodeInput;
+  const base = nodeInput as Record<string, unknown>;
+  const entries = Array.isArray(base[WORKFLOW_PACKET_ARTIFACTS_KEY])
+    ? base[WORKFLOW_PACKET_ARTIFACTS_KEY] as UpstreamWorkflowArtifact[]
+    : [];
+  // Presentation-only or historical remote artifacts may not have a local
+  // resourceId. They are valid output metadata, but cannot be mounted as a
+  // downstream input file and must not block an otherwise complete flow.
+  const transferable = entries.filter((entry) => typeof entry?.artifact?.resourceId === 'string' && entry.artifact.resourceId.trim());
+  if (!transferable.length) return nodeInput;
+
+  const targetDirectory = path.join(workspacePath(runId, targetNodeId), 'inputs');
+  await mkdir(targetDirectory, { recursive: true });
+  const hydrated = await Promise.all(transferable.map(async (entry, index) => {
+    const artifact = entry?.artifact;
+    const sourceNodeId = entry?.sourceNodeId;
+    if (!artifact || !sourceNodeId || !artifact.resourceId) {
+      throw new Error(`上游节点产物缺少本地 resourceId，无法传递给节点 ${targetNodeId}`);
+    }
+    const sourceDirectory = path.resolve(workspacePath(runId, sourceNodeId));
+    const sourcePath = path.resolve(sourceDirectory, artifact.resourceId);
+    const relative = path.relative(sourceDirectory, sourcePath);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw new Error(`上游节点产物 resourceId 非法: ${artifact.resourceId}`);
+    }
+    const targetName = `${String(index + 1).padStart(2, '0')}-${safeFileName(artifact.name)}`;
+    const targetPath = path.join(targetDirectory, targetName);
+    try {
+      await copyFile(sourcePath, targetPath);
+    } catch {
+      throw new Error(`上游节点产物不存在，无法传递给节点 ${targetNodeId}: ${artifact.name}`);
+    }
+    return {
+      ...entry,
+      artifact: {
+        ...artifact,
+        // resourceId is intentionally relative to the consumer workspace.
+        resourceId: `inputs/${targetName}`,
+      },
+    };
+  }));
+  return { ...base, [WORKFLOW_PACKET_ARTIFACTS_KEY]: hydrated };
 }
 
 function safeFileName(name: string): string {
