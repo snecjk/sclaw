@@ -25,6 +25,15 @@ function isSsoDomain(hostname: string): boolean {
   return SSO_DOMAINS.some((d) => hostname === d.slice(1) || hostname.endsWith(d));
 }
 
+export function createSsoCallbackClaimGuard(): () => boolean {
+  let claimed = false;
+  return () => {
+    if (claimed) return false;
+    claimed = true;
+    return true;
+  };
+}
+
 export class SsoLoginManager {
   private loginWindow: BrowserWindow | null = null;
 
@@ -87,6 +96,7 @@ export class SsoLoginManager {
 
       this.loginWindow = win;
       let settled = false;
+      const claimCallback = createSsoCallbackClaimGuard();
 
       const cleanup = () => {
         ses.webRequest.onBeforeRequest(null);
@@ -136,6 +146,11 @@ export class SsoLoginManager {
       };
 
       const handleCallbackUrl = async (url: string) => {
+        if (settled || !claimCallback()) {
+          logger.info('Ignoring duplicate SSO callback while code exchange is already in progress');
+          return;
+        }
+
         logger.info(`SSO callback URL intercepted (full): ${url}`);
 
         const code = extractCode(url);

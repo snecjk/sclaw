@@ -2,8 +2,6 @@
  * Self-contained copy for Gateway extension install (~/.stoclaw/openclaw/extensions/...).
  * Keep in sync with repository root `shared/retired-skills.ts`.
  */
-
-/** Preinstalled skills removed from the app; must not be read or invoked. */
 export const RETIRED_SKILL_SLUGS = [
   'sto-distinctive-design',
   'cli-report-generator',

@@ -397,14 +397,16 @@ function bundleOneLocalPlugin({ localDir, pluginId }) {
   echo`   ✅ ${pluginId}: local plugin bundled${copiedCount > 0 ? `, copied ${copiedCount} deps (skipped dupes: ${skippedDupes})` : ' (no deps)'}`;
 }
 
-const WORKFLOW_TOOL_RUNTIME_DEPS = ['@sinclair/typebox'];
+const STO_TOOLKIT_RUNTIME_DEPS = ['@sinclair/typebox'];
 
 /**
- * Nest sto-toolkit inside sto-workflow-tool (OpenClaw scans extensions/* as plugins).
+ * Nest sto-toolkit inside a plugin that imports it at runtime.
+ * OpenClaw scans extensions/* as plugins, so sto-toolkit cannot live as a
+ * sibling extension; it must be nested inside each consumer plugin.
  */
-function bundleStoToolkitIntoWorkflowTool() {
-  const workflowOutDir = path.join(OUTPUT_ROOT, 'sto-workflow-tool');
-  if (!fs.existsSync(path.join(workflowOutDir, 'openclaw.plugin.json'))) return;
+function bundleStoToolkitIntoPlugin(pluginId) {
+  const pluginOutDir = path.join(OUTPUT_ROOT, pluginId);
+  if (!fs.existsSync(path.join(pluginOutDir, 'openclaw.plugin.json'))) return;
 
   const sourceDir = path.join(STO_PLUGIN_ROOT, STO_TOOLKIT_DIR);
   if (!fs.existsSync(path.join(sourceDir, 'index.ts'))) {
@@ -412,7 +414,7 @@ function bundleStoToolkitIntoWorkflowTool() {
     return;
   }
 
-  const outputDir = path.join(workflowOutDir, STO_TOOLKIT_DIR);
+  const outputDir = path.join(pluginOutDir, STO_TOOLKIT_DIR);
   echo`📦 Bundling ${STO_TOOLKIT_DIR} -> ${outputDir}`;
 
   if (fs.existsSync(outputDir)) {
@@ -427,25 +429,27 @@ function bundleStoToolkitIntoWorkflowTool() {
     fs.rmSync(legacySibling, { recursive: true, force: true });
   }
 
-  for (const depName of WORKFLOW_TOOL_RUNTIME_DEPS) {
+  for (const depName of STO_TOOLKIT_RUNTIME_DEPS) {
     const depPath = path.join(NODE_MODULES, ...depName.split('/'));
     if (!fs.existsSync(depPath)) {
       echo`   ⚠️  Runtime dep "${depName}" not found, skipping`;
       continue;
     }
-    const destNM = path.join(workflowOutDir, 'node_modules', depName);
+    const destNM = path.join(pluginOutDir, 'node_modules', depName);
     if (fs.existsSync(destNM)) continue;
     try {
       fs.mkdirSync(normWin(path.dirname(destNM)), { recursive: true });
       fs.cpSync(normWin(fs.realpathSync(depPath)), normWin(destNM), { recursive: true, dereference: true });
-      echo`   ✅ Copied runtime dep ${depName} for sto-workflow-tool`;
+      echo`   ✅ Copied runtime dep ${depName} for ${pluginId}`;
     } catch (err) {
       echo`   ⚠️  Skipped ${depName}: ${err.message}`;
     }
   }
 
-  echo`   ✅ ${STO_TOOLKIT_DIR}: nested into sto-workflow-tool`;
+  echo`   ✅ ${STO_TOOLKIT_DIR}: nested into ${pluginId}`;
 }
+
+
 
 /**
  * Patch plugin entry JS files so the exported `id` matches openclaw.plugin.json.
@@ -523,7 +527,8 @@ for (const plugin of PLUGINS) {
   }
 }
 
-bundleStoToolkitIntoWorkflowTool();
+bundleStoToolkitIntoPlugin('sto-workflow-tool');
+bundleStoToolkitIntoPlugin('sto-browser-bridge');
 
 // Save to cache for future builds
 if (cacheKey) {

@@ -10,6 +10,7 @@ import crypto from 'node:crypto';
 import { enrichGatewayPayload } from '../gateway/message-enrich';
 import { getAdapterForSession, listEngineSessions } from '../engines/manager';
 import type { AgentEngineType } from '../engines/types';
+import { sanitizeMemoryFromChatPayload } from '../../shared/agent-memory-display';
 import { ClawHubService, ClawHubSearchParams, ClawHubInstallParams, ClawHubUninstallParams } from '../gateway/clawhub';
 import {
   type ProviderConfig,
@@ -25,7 +26,6 @@ import {
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { buildOpenClawControlUiUrl } from '../utils/openclaw-control-ui';
 import { logger } from '../utils/logger';
-import { registerDialogHandlers } from './ipc/dialog-handlers';
 import { safeWebContentsSend } from './safe-web-contents-send';
 import {
   saveChannelConfig,
@@ -1234,7 +1234,7 @@ function registerGatewayHandlers(
 
       if (method === 'sessions.list') {
         const result = await listEngineSessions({ gatewayManager });
-        return { success: true, result: { sessions: result } };
+        return { success: true, result: { sessions: sanitizeMemoryFromChatPayload(result) } };
       }
 
       if (method === 'chat.history') {
@@ -1251,29 +1251,31 @@ function registerGatewayHandlers(
         if (!result.success) {
           return { success: false, error: result.error || 'chat.history failed' };
         }
-        return { success: true, result: result.result };
+        return { success: true, result: sanitizeMemoryFromChatPayload(result.result) };
       }
 
       if (method === 'chat.send') {
         const body = (rpcParams && typeof rpcParams === 'object' ? rpcParams : {}) as {
           sessionKey?: string;
           message?: string;
+          sourceText?: string;
           deliver?: boolean;
           idempotencyKey?: string;
           systemPromptAppend?: string;
           engineType?: AgentEngineType;
         };
         const adapter = await getAdapterForSession(body.sessionKey ?? '', parseEngineType(body.engineType));
-        const result = await adapter.sendMessage(
-          { gatewayManager },
-          {
-            sessionKey: body.sessionKey ?? '',
-            message: body.message ?? '',
-            deliver: body.deliver,
-            idempotencyKey: body.idempotencyKey ?? crypto.randomUUID(),
-            systemPromptAppend: body.systemPromptAppend,
-          },
-        );
+        const { runMainChatSend } = await import('../services/chat-send-service');
+        const result = await runMainChatSend(gatewayManager, {
+          sessionKey: body.sessionKey ?? '',
+          message: body.message ?? '',
+          sourceText: body.sourceText,
+          deliver: body.deliver,
+          idempotencyKey: body.idempotencyKey ?? crypto.randomUUID(),
+          systemPromptAppend: body.systemPromptAppend,
+          engineType: adapter.type,
+        }, (params, memory) => adapter.prepareMemoryInjection(params, memory),
+        (prepared) => adapter.sendMessage({ gatewayManager }, prepared));
         if (!result.success) {
           return { success: false, error: result.error || 'chat.send failed' };
         }
@@ -1293,6 +1295,8 @@ function registerGatewayHandlers(
         if (!result.success) {
           return { success: false, error: result.error || 'chat.abort failed' };
         }
+        const { getMemoryTurnCoordinator } = await import('../services/memory-turn-coordinator');
+        await getMemoryTurnCoordinator(gatewayManager).aborted(body.sessionKey ?? '', null);
         return { success: true, result: result.result };
       }
 
@@ -1564,7 +1568,7 @@ function registerGatewayHandlers(
   });
 
   gatewayManager.on('notification', (notification) => {
-    broadcast('gateway:notification', enrichGatewayPayload(notification));
+    broadcast('gateway:notification', sanitizeMemoryFromChatPayload(enrichGatewayPayload(notification)));
   });
 
   gatewayManager.on('channel:status', (data) => {
@@ -1573,7 +1577,7 @@ function registerGatewayHandlers(
 
   gatewayManager.on('chat:message', (data) => {
     if (data && typeof data === 'object' && 'engineEvent' in data) {
-      broadcast('gateway:engine-event', enrichGatewayPayload((data as { engineEvent?: unknown }).engineEvent));
+      broadcast('gateway:engine-event', sanitizeMemoryFromChatPayload(enrichGatewayPayload((data as { engineEvent?: unknown }).engineEvent)));
     }
   });
 

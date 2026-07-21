@@ -43,7 +43,7 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
   const [selectionKind, setSelectionKind] = useState<SelectionKind>('drag');
   const [fileName, setFileName] = useState<string | null>(null);
   const [fileSize, setFileSize] = useState<number>(0);
-  const [slug] = useState<string | null>(null);
+  const [slug, setSlug] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [uploadWarning, setUploadWarning] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -259,13 +259,19 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
     setUploadProgress({ current: 1, total: paths.length });
     let completed = 0;
     try {
+      let uploadedSlug: string | null = null;
       for (const path of paths) {
         setUploadProgress({ current: completed + 1, total: paths.length });
-        await uploadSkill(path);
+        uploadedSlug = await uploadSkill(path);
         completed += 1;
       }
-      onClose();
       onUploadSuccess?.();
+      if (paths.length === 1) {
+        setSlug(uploadedSlug);
+        setStatus('success');
+      } else {
+        onClose();
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setErrorMsg(
@@ -280,11 +286,6 @@ export function SkillUploadModal({ open, onClose, onUploadSuccess }: SkillUpload
       );
       setStatus('error');
     }
-  };
-
-  const handleViewSkill = () => {
-    useSkillPlazaStore.getState().setActiveTab('mine');
-    onClose();
   };
 
   // "查看技能": jump to the "我的技能" tab where the uploaded skill appears.

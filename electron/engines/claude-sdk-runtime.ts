@@ -11,6 +11,7 @@ import { applyStoClaudeInferenceEnv } from '../services/sto-claude-inference-env
 import { getAgentPreferredModel } from '../utils/agent-config';
 import { logger } from '../utils/logger';
 import { getClaudeConfigDir } from '../utils/paths';
+import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { getApiKey } from '../utils/secure-storage';
 import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { resolveAvailableClaudeModel } from './claude-model-selection';

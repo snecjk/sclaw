@@ -8,6 +8,12 @@ const { agentsState, chatState, gatewayState } = vi.hoisted(() => ({
   },
   chatState: {
     currentAgentId: 'main',
+    dailyTokenQuotaStatus: null as null | {
+      allowed?: boolean;
+      usedToday?: number;
+      limit?: number;
+      checkedAt: string;
+    },
   },
   gatewayState: {
     status: { state: 'running', port: 18789 },
@@ -78,6 +84,7 @@ describe('ChatInput agent targeting', () => {
   beforeEach(() => {
     agentsState.agents = [];
     chatState.currentAgentId = 'main';
+    chatState.dailyTokenQuotaStatus = null;
     gatewayState.status = { state: 'running', port: 18789 };
   });
 

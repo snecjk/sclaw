@@ -18,17 +18,10 @@ export function reconcileHistoryRuntimeCompletion(input: {
   activeEngineType?: ChatSession['engineType'];
   toMs: (ts: unknown) => number;
   clearHistoryPoll: (sessionKey: string) => void;
-  dispatchAgentMemoryCapture: (input: {
-    agentId?: string | null;
-    runId?: string | null;
-    sessionKey?: string | null;
-    engineType?: ChatSession['engineType'];
-  }) => void;
 }): void {
   const {
     activeEngineType,
     clearHistoryPoll,
-    dispatchAgentMemoryCapture,
     filteredMessages,
     get,
     runtimeState,
@@ -65,7 +58,7 @@ export function reconcileHistoryRuntimeCompletion(input: {
       runId: completionRunId,
       sessionKey,
       engineType: activeEngineType,
-    }), { get, set, dispatchMemoryCapture: dispatchAgentMemoryCapture });
+    }), { get, set });
   } else if (recentAssistantActivity.hasRecentAssistantActivity && !pendingFinal && isSendingNow) {
     set((state) => applyRuntimePatch(state, sessionKey, { pendingFinal: true }));
   }

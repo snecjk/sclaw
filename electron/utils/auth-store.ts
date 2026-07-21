@@ -86,6 +86,14 @@ async function getAuthStore() {
   return authStoreInstance;
 }
 
+type AuthenticatedUserListener = (user: SsoUserInfo) => void;
+const authenticatedUserListeners = new Set<AuthenticatedUserListener>();
+
+export function onAuthenticatedUserSet(listener: AuthenticatedUserListener): () => void {
+  authenticatedUserListeners.add(listener);
+  return () => authenticatedUserListeners.delete(listener);
+}
+
 async function getEffectiveSsoEnvironment(): Promise<SsoEnvironment> {
   const envConfig = getCurrentEnvConfig();
   const compiledEnv = envConfig.ssoEnvironment as SsoEnvironment;
@@ -162,6 +170,14 @@ export async function setAuthUser(user: SsoUserInfo): Promise<void> {
   
   // Sync to OpenClaw plugin
   await syncSsoAuthToOpenClaw(user);
+
+  for (const listener of authenticatedUserListeners) {
+    try {
+      listener(user);
+    } catch (error) {
+      logger.warn('[auth] Authenticated user listener failed:', error);
+    }
+  }
 }
 
 export async function clearAuthUser(): Promise<void> {

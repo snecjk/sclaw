@@ -41,13 +41,6 @@ export interface ApplyLoadedHistoryDeps {
     sessionKey: string,
     currentAgentId?: string | null,
   ) => ChatSession['engineType'] | undefined;
-  stripAgentMemoryFromHistoryMessage: (message: RawMessage) => RawMessage;
-  dispatchAgentMemoryCapture: (input: {
-    agentId?: string | null;
-    runId?: string | null;
-    sessionKey?: string | null;
-    engineType?: ChatSession['engineType'];
-  }) => void;
 }
 
 export async function prepareHistoryToolEffects(input: {
@@ -130,9 +123,7 @@ export function applyLoadedHistorySnapshot(input: {
   } = input;
   const {
     clearHistoryPoll,
-    dispatchAgentMemoryCapture,
     resolveEngineTypeForSession,
-    stripAgentMemoryFromHistoryMessage,
     toMs,
   } = deps;
 
@@ -241,7 +232,6 @@ export function applyLoadedHistorySnapshot(input: {
   }
   finalMessages = formRecovery.messages;
   finalMessages = patchLastAssistantWithWorkflowForm(finalMessages, getMessageText, { rawMessages: preparedRawMessages });
-  finalMessages = finalMessages.map(stripAgentMemoryFromHistoryMessage);
 
   set({
     messages: finalMessages,
@@ -314,6 +304,5 @@ export function applyLoadedHistorySnapshot(input: {
     clearHistoryPoll,
     activeEngineType,
     toMs,
-    dispatchAgentMemoryCapture,
   });
 }

@@ -14,13 +14,46 @@ importers:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
         specifier: ^0.3.168
-        version: 0.3.186(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@3.25.76))(zod@3.25.76)
+        version: 0.3.186(@anthropic-ai/sdk@0.105.0(zod@3.25.76))(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@3.25.76))(zod@3.25.76)
+      '@anthropic-ai/sdk':
+        specifier: ^0.105.0
+        version: 0.105.0(zod@3.25.76)
+      '@azure/identity':
+        specifier: ^4.13.1
+        version: 4.13.1
+      '@azure/search-documents':
+        specifier: ^12.2.0
+        version: 12.2.0
+      '@google/genai':
+        specifier: ^1.52.0
+        version: 1.52.0(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@3.25.76))
+      '@langchain/core':
+        specifier: ^1.2.2
+        version: 1.2.2(openai@6.26.0(ws@8.21.0)(zod@3.25.76))(ws@8.21.0)
+      '@mistralai/mistralai':
+        specifier: ^1.14.1
+        version: 1.14.1
+      '@qdrant/js-client-rest':
+        specifier: ^1.18.0
+        version: 1.18.0(typescript@5.9.3)
+      '@supabase/supabase-js':
+        specifier: ^2.110.2
+        version: 2.110.2
       ajv:
         specifier: ^6.12.6
         version: 6.15.0
+      better-sqlite3:
+        specifier: ^12.11.1
+        version: 12.11.1
       clawhub:
         specifier: ^0.5.0
         version: 0.5.0
+      cloudflare:
+        specifier: ^4.5.0
+        version: 4.5.0
+      compromise:
+        specifier: ^14.15.1
+        version: 14.15.1
       electron-store:
         specifier: ^11.0.2
         version: 11.0.2
@@ -36,6 +69,9 @@ importers:
       fast-json-stable-stringify:
         specifier: ^2.1.0
         version: 2.1.0
+      groq-sdk:
+        specifier: 0.3.0
+        version: 0.3.0
       json-schema-traverse:
         specifier: ^0.4.1
         version: 0.4.1
@@ -47,19 +83,31 @@ importers:
         version: 1.12.0
       mem0ai:
         specifier: ^3.0.13
-        version: 3.0.13(@azure/identity@4.13.1)(@azure/search-documents@12.2.0)(@cloudflare/workers-types@4.20260120.0)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@3.25.76)))(@langchain/core@1.2.2(openai@6.26.0(ws@8.21.0)(zod@3.25.76))(ws@8.21.0))(@mistralai/mistralai@1.14.1)(@qdrant/js-client-rest@1.18.0(typescript@5.9.3))(@supabase/supabase-js@2.110.2)(@types/jest@29.5.14)(@types/pg@8.11.0)(better-sqlite3@12.11.1)(cloudflare@4.5.0)(compromise@14.15.1)(groq-sdk@0.3.0)(natural@8.1.1(socks@2.8.9))(ollama@0.5.18)(pg@8.11.3)(redis@5.12.1)(ws@8.21.0)
+        version: 3.0.13(@anthropic-ai/sdk@0.105.0(zod@3.25.76))(@azure/identity@4.13.1)(@azure/search-documents@12.2.0)(@cloudflare/workers-types@4.20260120.0)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@3.25.76)))(@langchain/core@1.2.2(openai@6.26.0(ws@8.21.0)(zod@3.25.76))(ws@8.21.0))(@mistralai/mistralai@1.14.1)(@qdrant/js-client-rest@1.18.0(typescript@5.9.3))(@supabase/supabase-js@2.110.2)(@types/jest@29.5.14)(@types/pg@8.11.0)(better-sqlite3@12.11.1)(cloudflare@4.5.0)(compromise@14.15.1)(groq-sdk@0.3.0)(natural@8.1.1(socks@2.8.9))(ollama@0.5.18)(pg@8.11.3)(redis@5.12.1)(ws@8.21.0)
       ms:
         specifier: ^2.1.3
         version: 2.1.3
+      natural:
+        specifier: ^8.1.1
+        version: 8.1.1(socks@2.8.9)
       node-machine-id:
         specifier: ^1.1.12
         version: 1.1.12
+      ollama:
+        specifier: ^0.5.18
+        version: 0.5.18
+      pg:
+        specifier: 8.11.3
+        version: 8.11.3
       posthog-node:
         specifier: ^5.28.0
         version: 5.38.2
       pptx-preview:
         specifier: ^1.0.7
         version: 1.0.7
+      redis:
+        specifier: ^5.12.1
+        version: 5.12.1
       uri-js:
         specifier: ^4.4.1
         version: 4.4.1
@@ -7587,8 +7635,9 @@ snapshots:
   '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.187':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk@0.3.186(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@3.25.76))(zod@3.25.76)':
+  '@anthropic-ai/claude-agent-sdk@0.3.186(@anthropic-ai/sdk@0.105.0(zod@3.25.76))(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@3.25.76))(zod@3.25.76)':
     dependencies:
+      '@anthropic-ai/sdk': 0.105.0(zod@3.25.76)
       '@modelcontextprotocol/sdk': 1.27.1(@cfworker/json-schema@4.1.1)(zod@3.25.76)
       zod: 3.25.76
     optionalDependencies:
@@ -13284,8 +13333,9 @@ snapshots:
 
   media-typer@2.0.0: {}
 
-  mem0ai@3.0.13(@azure/identity@4.13.1)(@azure/search-documents@12.2.0)(@cloudflare/workers-types@4.20260120.0)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@3.25.76)))(@langchain/core@1.2.2(openai@6.26.0(ws@8.21.0)(zod@3.25.76))(ws@8.21.0))(@mistralai/mistralai@1.14.1)(@qdrant/js-client-rest@1.18.0(typescript@5.9.3))(@supabase/supabase-js@2.110.2)(@types/jest@29.5.14)(@types/pg@8.11.0)(better-sqlite3@12.11.1)(cloudflare@4.5.0)(compromise@14.15.1)(groq-sdk@0.3.0)(natural@8.1.1(socks@2.8.9))(ollama@0.5.18)(pg@8.11.3)(redis@5.12.1)(ws@8.21.0):
+  mem0ai@3.0.13(@anthropic-ai/sdk@0.105.0(zod@3.25.76))(@azure/identity@4.13.1)(@azure/search-documents@12.2.0)(@cloudflare/workers-types@4.20260120.0)(@google/genai@1.52.0(@modelcontextprotocol/sdk@1.27.1(@cfworker/json-schema@4.1.1)(zod@3.25.76)))(@langchain/core@1.2.2(openai@6.26.0(ws@8.21.0)(zod@3.25.76))(ws@8.21.0))(@mistralai/mistralai@1.14.1)(@qdrant/js-client-rest@1.18.0(typescript@5.9.3))(@supabase/supabase-js@2.110.2)(@types/jest@29.5.14)(@types/pg@8.11.0)(better-sqlite3@12.11.1)(cloudflare@4.5.0)(compromise@14.15.1)(groq-sdk@0.3.0)(natural@8.1.1(socks@2.8.9))(ollama@0.5.18)(pg@8.11.3)(redis@5.12.1)(ws@8.21.0):
     dependencies:
+      '@anthropic-ai/sdk': 0.105.0(zod@3.25.76)
       '@azure/identity': 4.13.1
       '@azure/search-documents': 12.2.0
       '@cloudflare/workers-types': 4.20260120.0

@@ -9,11 +9,14 @@ import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { preprocessChatSendParams } from '../../utils/dingtalk-mention-send';
 import { uploadFileToTempOSS } from '../../utils/oss-temp-upload';
-import { runIdempotentChatSend } from './chat-send-idempotency';
+import { runMainChatSend } from '../../services/chat-send-service';
+import { sanitizeMemoryFromChatPayload } from '../../../shared/agent-memory-display';
+import { getMemoryTurnCoordinator } from '../../services/memory-turn-coordinator';
 
 type ChatSendRouteBody = {
   sessionKey: string;
   message: string;
+  sourceText?: string;
   deliver?: boolean;
   idempotencyKey: string;
   systemPromptAppend?: string;
@@ -221,7 +224,7 @@ export async function handleGatewayRoutes(
   if (url.pathname === '/api/chat/sessions' && req.method === 'GET') {
     try {
       const sessions = await listEngineSessions({ gatewayManager: ctx.gatewayManager });
-      sendJson(res, 200, { success: true, sessions });
+      sendJson(res, 200, { success: true, sessions: sanitizeMemoryFromChatPayload(sessions) });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }
@@ -245,7 +248,7 @@ export async function handleGatewayRoutes(
         sendJson(res, 500, result);
         return true;
       }
-      sendJson(res, 200, result);
+      sendJson(res, 200, sanitizeMemoryFromChatPayload(result));
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }
@@ -263,10 +266,20 @@ export async function handleGatewayRoutes(
         messageLength: body.message?.length ?? 0,
         idempotencyKey: body.idempotencyKey,
       });
-      const result = await runIdempotentChatSend(
-        body.sessionKey,
-        body.idempotencyKey,
-        () => dispatchChatSendRequest(body),
+      const adapter = await getAdapterForSession(body.sessionKey, parseEngineType(body.engineType));
+      const result = await runMainChatSend(
+        ctx.gatewayManager,
+        {
+          sessionKey: body.sessionKey,
+          message: body.message,
+          sourceText: body.sourceText,
+          deliver: body.deliver,
+          idempotencyKey: body.idempotencyKey,
+          systemPromptAppend: body.systemPromptAppend,
+          engineType: adapter.type,
+        },
+        (params, memory) => adapter.prepareMemoryInjection(params, memory),
+        (prepared) => dispatchChatSendRequest({ ...body, ...prepared }),
       );
       console.info('[chat-flow]', 'main.send.result', {
         sessionKey: body.sessionKey,
@@ -297,6 +310,7 @@ export async function handleGatewayRoutes(
         sendJson(res, 500, result);
         return true;
       }
+      await getMemoryTurnCoordinator(ctx.gatewayManager).aborted(body.sessionKey, null);
       sendJson(res, 200, result);
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

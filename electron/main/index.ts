@@ -23,6 +23,7 @@ import type { HostEventBus } from '../api/event-bus';
 import { createMenu } from './menu';
 import { getWindowState, trackWindowState } from './window';
 import { logger } from '../utils/logger';
+import { sanitizeMemoryFromChatPayload } from '../../shared/agent-memory-display';
 import { warmupNetworkOptimization } from '../utils/uv-env';
 import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { isQuitting, setQuitting } from './app-state';
@@ -722,12 +723,12 @@ async function initialize(): Promise<void> {
   });
 
   gm.on('notification', (notification) => {
-    heb.emit('gateway:notification', notification);
+    heb.emit('gateway:notification', sanitizeMemoryFromChatPayload(notification));
   });
 
   gm.on('chat:message', (data) => {
     if (data && typeof data === 'object' && 'engineEvent' in data) {
-      heb.emit('gateway:engine-event', (data as { engineEvent?: unknown }).engineEvent);
+      heb.emit('gateway:engine-event', sanitizeMemoryFromChatPayload((data as { engineEvent?: unknown }).engineEvent));
     }
   });
 

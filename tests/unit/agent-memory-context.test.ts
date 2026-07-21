@@ -1,34 +1,31 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { invokeIpcMock, resolveAgentMemoryUserIdMock } = vi.hoisted(() => ({
-  invokeIpcMock: vi.fn(),
-  resolveAgentMemoryUserIdMock: vi.fn(),
+const { initializeMock, reinitializeAfterAuthChangeMock, searchMemoriesMock } = vi.hoisted(() => ({
+  initializeMock: vi.fn(),
+  reinitializeAfterAuthChangeMock: vi.fn(),
+  searchMemoriesMock: vi.fn(),
 }));
 
-vi.mock('@/lib/api-client', () => ({
-  invokeIpc: (...args: unknown[]) => invokeIpcMock(...args),
+vi.mock('../../electron/services/agent-memory-orchestrator', () => ({
+  agentMemoryOrchestrator: {
+    initialize: (...args: unknown[]) => initializeMock(...args),
+    reinitializeAfterAuthChange: (...args: unknown[]) => reinitializeAfterAuthChangeMock(...args),
+    searchMemories: (...args: unknown[]) => searchMemoriesMock(...args),
+  },
 }));
-
-vi.mock('@/lib/agent-memory', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/agent-memory')>();
-  return {
-    ...actual,
-    resolveAgentMemoryUserId: () => resolveAgentMemoryUserIdMock(),
-  };
-});
 
 import {
   AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS,
   AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS,
-  buildAgentMemoryContextBlocks,
-} from '@/lib/agent-memory-context';
+  AgentMemoryContextService,
+} from '../../electron/services/agent-memory-context-service';
 
-describe('buildAgentMemoryContextBlocks', () => {
+describe('AgentMemoryContextService', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    invokeIpcMock.mockReset();
-    resolveAgentMemoryUserIdMock.mockReset();
-    resolveAgentMemoryUserIdMock.mockResolvedValue('user-1');
+    initializeMock.mockReset().mockResolvedValue({ bootstrap: { enabled: true, userId: 'user-1' } });
+    reinitializeAfterAuthChangeMock.mockReset().mockResolvedValue({ bootstrap: { enabled: true, userId: 'user-1' } });
+    searchMemoriesMock.mockReset().mockResolvedValue({ results: [] });
   });
 
   afterEach(() => {
@@ -36,62 +33,103 @@ describe('buildAgentMemoryContextBlocks', () => {
     vi.useRealTimers();
   });
 
-  it('falls back to empty memory when retrieval exceeds the send budget', async () => {
-    invokeIpcMock.mockImplementation(() => new Promise(() => undefined));
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-
-    const resultPromise = buildAgentMemoryContextBlocks('请查询最近一周的订单情况');
-    await vi.advanceTimersByTimeAsync(AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS);
-
-    await expect(resultPromise).resolves.toEqual({ injectedExecutionMemories: [] });
-    expect(warn).toHaveBeenCalledWith(
-      '[agent-memory] context blocks retrieval failed:',
-      expect.objectContaining({ name: 'AgentMemoryRetrievalTimeoutError' }),
-    );
+  it('fails open when initialization exceeds its own budget', async () => {
+    initializeMock.mockImplementation(() => new Promise(() => undefined));
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const result = new AgentMemoryContextService().prepare('请查询最近一周的订单情况');
+    await vi.advanceTimersByTimeAsync(AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS);
+    await expect(result).resolves.toEqual({ injectedExecutionMemories: [] });
+    expect(initializeMock).toHaveBeenCalledWith();
+    expect(searchMemoriesMock).not.toHaveBeenCalled();
   });
 
-  it('does not start mem0 search when initialization exceeds its own budget', async () => {
-    let finishInitialization: ((userId: string) => void) | undefined;
-    resolveAgentMemoryUserIdMock.mockImplementation(() => new Promise<string>((resolve) => {
-      finishInitialization = resolve;
+  it('keeps the timed-out initialization alive and reuses it on the next request', async () => {
+    let resolveInitialization!: (value: { bootstrap: { enabled: boolean; userId: string } }) => void;
+    initializeMock.mockImplementation(() => new Promise((resolve) => {
+      resolveInitialization = resolve;
     }));
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const service = new AgentMemoryContextService();
 
-    const resultPromise = buildAgentMemoryContextBlocks('请查询最近一周的订单情况');
+    const firstResult = service.prepare('请查询最近一周的订单情况');
     await vi.advanceTimersByTimeAsync(AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS);
+    await expect(firstResult).resolves.toEqual({ injectedExecutionMemories: [] });
 
-    await expect(resultPromise).resolves.toEqual({ injectedExecutionMemories: [] });
-    finishInitialization?.('user-1');
-    await Promise.resolve();
-    expect(invokeIpcMock).not.toHaveBeenCalled();
+    resolveInitialization({ bootstrap: { enabled: true, userId: 'user-1' } });
+    await vi.runAllTicks();
+    await expect(service.prepare('请继续查询订单情况')).resolves.toEqual({ injectedExecutionMemories: [] });
+    expect(initializeMock).toHaveBeenCalledTimes(1);
+    expect(searchMemoriesMock).toHaveBeenCalledTimes(1);
   });
 
-  it('gives search a fresh budget after slow initialization', async () => {
-    resolveAgentMemoryUserIdMock.mockImplementation(() => new Promise<string>((resolve) => {
-      setTimeout(() => resolve('user-1'), AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS - 100);
+  it('shares initialization between startup warmup and the first request', async () => {
+    let resolveInitialization!: (value: { bootstrap: { enabled: boolean; userId: string } }) => void;
+    initializeMock.mockImplementation(() => new Promise((resolve) => {
+      resolveInitialization = resolve;
     }));
-    invokeIpcMock.mockImplementation(() => new Promise<unknown>((resolve) => {
-      setTimeout(() => resolve([]), AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS - 100);
-    }));
+    const service = new AgentMemoryContextService();
 
-    const resultPromise = buildAgentMemoryContextBlocks('请查询最近一周的订单情况');
-    await vi.advanceTimersByTimeAsync(
-      AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS + AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS - 200,
-    );
+    service.warmup();
+    const result = service.prepare('请查询最近一周的订单情况');
+    expect(initializeMock).toHaveBeenCalledTimes(1);
+    expect(initializeMock).toHaveBeenCalledWith();
 
-    await expect(resultPromise).resolves.toEqual({ injectedExecutionMemories: [] });
-    expect(invokeIpcMock).toHaveBeenCalledTimes(1);
+    resolveInitialization({ bootstrap: { enabled: true, userId: 'user-1' } });
+    await expect(result).resolves.toEqual({ injectedExecutionMemories: [] });
+    expect(searchMemoriesMock).toHaveBeenCalledTimes(1);
   });
 
-  it('uses memory results that arrive within the send budget', async () => {
-    invokeIpcMock.mockResolvedValue([]);
+  it('reuses an active successful startup initialization after login', async () => {
+    let resolveInitialization!: (value: { bootstrap: { enabled: boolean; userId: string } }) => void;
+    initializeMock.mockImplementation(() => new Promise((resolve) => {
+      resolveInitialization = resolve;
+    }));
+    const service = new AgentMemoryContextService();
 
-    await expect(buildAgentMemoryContextBlocks('请查询最近一周的订单情况'))
-      .resolves.toEqual({ injectedExecutionMemories: [] });
-    expect(invokeIpcMock).toHaveBeenCalledWith(
-      'agent-memory:mem0-search',
-      '请查询最近一周的订单情况',
-      { userId: 'user-1', topK: 12 },
-    );
+    service.warmup();
+    const loginInitialization = service.reinitializeAfterLogin();
+    resolveInitialization({ bootstrap: { enabled: true, userId: 'user-1' } });
+
+    await expect(loginInitialization).resolves.toMatchObject({ bootstrap: { enabled: true } });
+    expect(initializeMock).toHaveBeenCalledTimes(1);
+    expect(reinitializeAfterAuthChangeMock).not.toHaveBeenCalled();
+  });
+
+  it('reinitializes once after login when startup returned without an enabled bootstrap', async () => {
+    initializeMock.mockResolvedValue({ ready: false, bootstrap: { enabled: false, userId: '' } });
+    const service = new AgentMemoryContextService();
+
+    service.warmup();
+    await vi.runAllTicks();
+    const first = service.reinitializeAfterLogin();
+    const second = service.reinitializeAfterLogin();
+
+    expect(first).toBe(second);
+    await expect(first).resolves.toMatchObject({ bootstrap: { enabled: true } });
+    expect(reinitializeAfterAuthChangeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives retrieval a fresh timeout budget', async () => {
+    initializeMock.mockImplementation(() => new Promise((resolve) => {
+      setTimeout(() => resolve({ bootstrap: { enabled: true, userId: 'user-1' } }), AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS - 100);
+    }));
+    searchMemoriesMock.mockImplementation(() => new Promise((resolve) => {
+      setTimeout(() => resolve({ results: [] }), AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS - 100);
+    }));
+    const result = new AgentMemoryContextService().prepare('请查询最近一周的订单情况');
+    await vi.advanceTimersByTimeAsync(AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS + AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS - 200);
+    await expect(result).resolves.toEqual({ injectedExecutionMemories: [] });
+  });
+
+  it('uses the trusted bootstrap user and builds both memory blocks', async () => {
+    searchMemoriesMock.mockResolvedValue({ results: [
+      { id: 'pref-1', memory: '用户偏好简洁回答', score: 0.9, metadata: {} },
+      { id: 'exec-1', memory: '先查询再汇总', score: 0.8, metadata: { memoryScope: 'execution', status: 'active', confidence: 0.9 } },
+    ] });
+    const result = await new AgentMemoryContextService().prepare('请查询最近一周的订单情况');
+    expect(searchMemoriesMock).toHaveBeenCalledWith('请查询最近一周的订单情况', { userId: 'user-1', topK: 12 });
+    expect(result.preference).toContain('用户偏好简洁回答');
+    expect(result.execution).toContain('先查询再汇总');
+    expect(result.injectedExecutionMemories).toEqual([{ memoryId: 'exec-1', memory: '先查询再汇总' }]);
   });
 });

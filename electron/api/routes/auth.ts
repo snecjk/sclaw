@@ -13,7 +13,7 @@ import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
 import { logger } from '../../utils/logger';
 import { getStoModelSyncService } from '../../services/providers/sto-model-sync';
-import { runAuthenticatedSetup, type AuthenticatedSetupResult } from '../../services/auth-setup-orchestrator';
+import { runAuthenticatedSetup } from '../../services/auth-setup-orchestrator';
 import { runPendingInstallReport } from '../../services/client-update-platform';
 import { activateUserWorkspace, getCurrentActiveUserCode, syncMountPointToUser } from '../../services/user-skill-workspace';
 import { removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-auth';
@@ -75,8 +75,16 @@ function schedulePostLoginBackgroundWork(user: SsoUserInfo, ctx: HostApiContext)
       const previousUserCode = await getCurrentActiveUserCode();
       const workspaceResult = await activateUserWorkspace(user.code);
       if (workspaceResult.userChanged && previousUserCode) {
-        logger.info(`[auth] User changed from ${previousUserCode} to ${user.code}, restarting Gateway`);
-        await ctx.gatewayManager.restart();
+        // Skill workspace mount is per userCode; HQ↔site switch always changes it.
+        // Do NOT hard-restart here — auth-setup already schedules a coalesced reload
+        // when provider/model config changed. A second restart races Windows startLock.
+        logger.info(
+          `[auth] User skill workspace switched ${previousUserCode} → ${user.code}; `
+          + 'relying on auth-setup Gateway refresh (no extra restart)',
+        );
+        if (ctx.gatewayManager.getStatus().state === 'running') {
+          ctx.gatewayManager.debouncedReload(2000);
+        }
       }
     } catch (err) {
       logger.warn('[auth] Failed to activate user skill workspace on login:', err);
@@ -93,6 +101,43 @@ function schedulePostLoginBackgroundWork(user: SsoUserInfo, ctx: HostApiContext)
       logger.warn('SAI CLI auto-install on login failed:', err);
     }
     void runPendingInstallReport(app.getVersion(), process.platform);
+  })();
+}
+
+/**
+ * Runtime preparation is deliberately decoupled from authentication completion.
+ * Once access is validated and setAuthUser() returns, the renderer can safely
+ * enter the application while this serialized setup continues in the background.
+ */
+export function schedulePostLoginInitialization(
+  user: SsoUserInfo,
+  ctx: HostApiContext,
+): void {
+  const startedAt = Date.now();
+  logger.info(`[auth] Post-login initialization scheduled for user=${user.code}`);
+
+  void (async () => {
+    try {
+      await loadInferenceRuntimeConfigBeforeSetup();
+      const setupResult = await runAuthenticatedSetup({
+        user,
+        gatewayManager: ctx.gatewayManager,
+        source: 'login',
+        awaitGatewayRefresh: true,
+      });
+      logger.info(
+        `[auth] Post-login initialization completed for user=${user.code} `
+        + `in ${Date.now() - startedAt}ms (models created=${setupResult.stoSync.created.length} `
+        + `updated=${setupResult.stoSync.updated.length})`,
+      );
+    } catch (err) {
+      logger.warn(
+        `[auth] Post-login initialization failed for user=${user.code} after ${Date.now() - startedAt}ms:`,
+        err,
+      );
+    } finally {
+      schedulePostLoginBackgroundWork(user, ctx);
+    }
   })();
 }
 
@@ -193,30 +238,12 @@ export async function handleAuthRoutes(
         stoSyncService.setGatewayManager(ctx.gatewayManager);
       }
 
-      await loadInferenceRuntimeConfigBeforeSetup();
-
-      let setupResult: AuthenticatedSetupResult | undefined;
-      try {
-        // awaitGatewayRefresh: if the setup needs a Gateway reload/restart (e.g.
-        // STO models rebuilt after a logout), run it now and wait for the Gateway
-        // to settle, so the renderer only enters the home page once ready.
-        setupResult = await runAuthenticatedSetup({
-          user,
-          gatewayManager: ctx.gatewayManager,
-          source: 'login',
-          awaitGatewayRefresh: true,
-        });
-      } catch (err) {
-        logger.warn('[auth] Synchronous post-login authenticated setup failed:', err);
-      }
-
       stoSyncService.startPeriodicSync();
-      schedulePostLoginBackgroundWork(user, ctx);
+      schedulePostLoginInitialization(user, ctx);
 
       sendJson(res, 200, {
         success: true,
         user,
-        stoSync: setupResult?.stoSync,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -454,8 +481,11 @@ export async function handleAuthRoutes(
         setupResult = await runAuthenticatedSetup({
           user: newUser,
           gatewayManager: ctx.gatewayManager,
-          source: 'login',
-          awaitGatewayRefresh: true,
+          // Account switch is not a cold login: avoid blocking the HTTP response on a
+          // Windows full Gateway restart (reload→restart). Config is written to disk;
+          // refresh is scheduled async and coalesced with skill-workspace reload.
+          source: 'account-switch',
+          awaitGatewayRefresh: false,
         });
       } catch (err) {
         logger.warn('[auth] Post account-switch authenticated setup failed:', err);
@@ -501,8 +531,8 @@ export async function handleAuthRoutes(
         setupResult = await runAuthenticatedSetup({
           user: origin,
           gatewayManager: ctx.gatewayManager,
-          source: 'login',
-          awaitGatewayRefresh: true,
+          source: 'account-switch',
+          awaitGatewayRefresh: false,
         });
       } catch (err) {
         logger.warn('[auth] Post account-switch-back authenticated setup failed:', err);

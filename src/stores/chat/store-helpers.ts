@@ -1,43 +1,10 @@
-import { type ChatSession, type RawMessage, type SendMessageOptions, type WorkflowContextBlock } from './types';
+import { type ChatSession, type SendMessageOptions, type WorkflowContextBlock } from './types';
 import { resolveChatEngineType } from '@/lib/chat-engine-resolution';
 import {
   resolveChatSessionEngineType,
   type ResolveChatSessionEngineTypeOptions,
 } from '@/lib/resolve-chat-session-engine-type';
 import { getAgentIdFromSessionKey } from './session-identity';
-
-export function stripAgentMemoryFromHistoryMessage(
-  message: RawMessage,
-  stripText: (text: string) => string,
-): RawMessage {
-  if (message.role !== 'user') {
-    return message;
-  }
-
-  if (typeof message.content === 'string') {
-    const stripped = stripText(message.content);
-    return stripped === message.content ? message : { ...message, content: stripped };
-  }
-
-  if (!Array.isArray(message.content)) {
-    return message;
-  }
-
-  let changed = false;
-  const content = message.content.map((block) => {
-    if (block.type !== 'text' || typeof block.text !== 'string') {
-      return block;
-    }
-    const stripped = stripText(block.text);
-    if (stripped === block.text) {
-      return block;
-    }
-    changed = true;
-    return { ...block, text: stripped };
-  });
-
-  return changed ? { ...message, content } : message;
-}
 
 export function toMs(ts: unknown): number {
   if (typeof ts === 'string') {

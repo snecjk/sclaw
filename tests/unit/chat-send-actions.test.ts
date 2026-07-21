@@ -13,7 +13,6 @@ vi.mock('@/stores/chat/resolve-send-target', () => ({
 }));
 vi.mock('@/stores/chat/prepare-send-context', () => ({
   prepareSendContext: vi.fn(async ({ trimmedText }: { trimmedText: string }) => ({
-    claudeMemorySystemPrompt: undefined,
     displayText: trimmedText,
     messageWithContext: trimmedText,
   })),
@@ -24,9 +23,6 @@ vi.mock('@/stores/chat/optimistic-turn', () => ({
 vi.mock('@/stores/chat/send-watchdogs', () => ({ scheduleSendWatchdogs: vi.fn() }));
 vi.mock('@/stores/chat/media-preview-cache', () => ({ cacheUploadedAttachments: vi.fn() }));
 vi.mock('@/stores/chat/dispatch-chat-request', () => ({ dispatchChatRequest: vi.fn() }));
-vi.mock('@/lib/agent-execution-memory', () => ({
-  discardAgentMemoriesForAbnormalTurn: vi.fn(),
-}));
 
 import { dispatchChatRequest } from '@/stores/chat/dispatch-chat-request';
 import { prepareSendContext } from '@/stores/chat/prepare-send-context';
@@ -67,7 +63,6 @@ describe('chat send action acceptance state', () => {
     clearSessionRunLifecycle('agent:main:main');
     vi.mocked(dispatchChatRequest).mockReset();
     vi.mocked(prepareSendContext).mockReset().mockImplementation(async ({ trimmedText }) => ({
-      claudeMemorySystemPrompt: undefined,
       displayText: trimmedText,
       messageWithContext: trimmedText,
     }));
