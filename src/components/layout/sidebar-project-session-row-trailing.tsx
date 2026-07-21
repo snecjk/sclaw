@@ -81,7 +81,7 @@ export function SidebarProjectSessionRowTrailing({
       </div>
       <div
         className={cn(
-          'absolute inset-0 flex items-center justify-end',
+          'absolute inset-y-0 right-0 flex w-7 items-center justify-end',
           'invisible opacity-0 transition-opacity group-hover:visible group-hover:opacity-100',
           'rounded-md',
           isActive

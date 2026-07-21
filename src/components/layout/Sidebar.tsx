@@ -187,9 +187,9 @@ const SIDEBAR_SHOW_TASK_GROUP_CHEVRON = true;
 /** 任务组二级行 — 不用 justify-between，短标题时 Chevron 紧跟标题（对齐项目一级行） */
 const SIDEBAR_TASK_GROUP_ROW_CLASS =
   'flex h-9 w-full items-center gap-1.5 rounded-lg px-[10px] py-2 text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring';
-/** 三级子项容器 — 竖线过二级 icon 中心；w-[calc(100%-18px)] 避免 ml+w-full 右侧溢出被裁切 */
+/** 三级子项容器 — 竖线与项目二级对齐；w-[calc(100%-17px)] 避免 ml+w-full 右侧溢出被裁切 */
 const SIDEBAR_TASK_SUBITEMS_CONTAINER_CLASS =
-  'ml-[18px] flex w-[calc(100%-18px)] flex-col gap-0.5 border-l border-border pl-4';
+  'ml-[17px] flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-4 dark:border-border';
 
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   if (!activityMs || activityMs <= 0) return 'older';
@@ -338,7 +338,7 @@ function SidebarTaskDateLinks({
                 openSubitemSession(entryId, sk, label);
               }}
               className={cn(
-                'relative z-[1] inline-flex h-7 w-full min-w-0 max-w-full items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
+                'relative z-[1] inline-flex h-8 w-full min-w-0 max-w-full items-center overflow-hidden rounded-lg px-[10px] py-1.5 text-left transition-colors',
                 SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
                 active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
               )}
@@ -609,7 +609,7 @@ function SidebarScheduledTaskGroup({
                   }}
                   title={label}
                   className={cn(
-                    'h-7 w-full min-w-0 overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
+                    'h-8 w-full min-w-0 overflow-hidden rounded-lg px-[10px] py-1.5 text-left transition-colors',
                     SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
                     active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
                   )}
