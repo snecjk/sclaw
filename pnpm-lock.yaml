@@ -311,6 +311,8 @@ importers:
         specifier: ^8.8.5
         version: 8.8.5
 
+  sto-plugin/claude/sto-user-skill-tool: {}
+
   sto-plugin/claude/sto-workflow-tool:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
@@ -335,6 +337,8 @@ importers:
   sto-plugin/openclaw/sto-scheduled-task-tool: {}
 
   sto-plugin/openclaw/sto-skill-call-monitor: {}
+
+  sto-plugin/openclaw/sto-user-skill-tool: {}
 
   sto-plugin/openclaw/sto-workflow-tool: {}
 
