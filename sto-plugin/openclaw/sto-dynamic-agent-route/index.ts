@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { RETIRED_SKILLS_SYSTEM_PROMPT } from "./shared/retired-skills.js";
-import { buildWorkspaceArtifactOutputRule } from "../../../shared/workspace-paths.js";
+import { buildWorkspaceArtifactOutputRule } from "./shared/workspace-paths.js";
 import { definePluginEntry, type OpenClawPluginApi } from "./api.js";
 
 const PROVIDER_ID = "sto-dynamic-agent-route";

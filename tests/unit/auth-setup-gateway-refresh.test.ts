@@ -72,4 +72,28 @@ describe('resolvePostAuthGatewayRefresh', () => {
       }),
     ).toBe('none');
   });
+
+  it('returns reload on account-switch when models changed and gateway is stable', () => {
+    expect(
+      resolvePostAuthGatewayRefresh({
+        source: 'account-switch',
+        needsGatewayRefresh: true,
+        gatewayManager: mockGateway({ state: 'running' }),
+        stoResult: { ...emptySto, updated: ['sto-key'] },
+        bizResult: emptyBiz,
+      }),
+    ).toBe('reload');
+  });
+
+  it('returns none on account-switch when config did not change', () => {
+    expect(
+      resolvePostAuthGatewayRefresh({
+        source: 'account-switch',
+        needsGatewayRefresh: true,
+        gatewayManager: mockGateway({ state: 'running' }),
+        stoResult: emptySto,
+        bizResult: emptyBiz,
+      }),
+    ).toBe('none');
+  });
 });
