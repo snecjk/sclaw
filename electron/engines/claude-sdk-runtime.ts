@@ -13,6 +13,7 @@ import { logger } from '../utils/logger';
 import { getClaudeConfigDir } from '../utils/paths';
 import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { getApiKey } from '../utils/secure-storage';
+import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { resolveAvailableClaudeModel } from './claude-model-selection';
 
 type ClaudeAgentSdk = typeof import('@anthropic-ai/claude-agent-sdk');

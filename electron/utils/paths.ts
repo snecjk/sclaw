@@ -163,6 +163,42 @@ export function getClaudeSkillsDir(): string {
   return join(getClaudeConfigDir(), 'skills');
 }
 
+// ── Engine-agnostic skills store (canonical source of truth) ──
+
+/**
+ * Neutral skills store root (~/.stoclaw/skills-store).
+ * Engine runtimes (openclaw/skills, .claude/skills) are projections of this store.
+ */
+export function getSkillsStoreDir(): string {
+  return join(getStoClawHomeDir(), 'skills-store');
+}
+
+/** Preinstalled / shared skills that do not switch with the logged-in user. */
+export function getSkillsStoreGlobalDir(): string {
+  return join(getSkillsStoreDir(), 'global');
+}
+
+/** Per-user installed skills in the canonical store. */
+export function getSkillsStoreUserSkillsDir(userCode: string): string {
+  return join(getSkillsStoreDir(), 'users', sanitizeUserCodeForPath(userCode), 'skills');
+}
+
+/** Agent-scoped skills in the canonical store. */
+export function getSkillsStoreAgentSkillsDir(agentId: string): string {
+  const id = (agentId ?? '').trim().toLowerCase() || 'main';
+  return join(getSkillsStoreDir(), 'agents', id, 'skills');
+}
+
+/** Canonical skills manifest path. */
+export function getSkillsManifestPath(): string {
+  return join(getSkillsStoreDir(), 'manifest.json');
+}
+
+/** Migration completion marker under the skills store. */
+export function getSkillsStoreMigratedMarkerPath(): string {
+  return join(getSkillsStoreDir(), '.migrated');
+}
+
 /**
  * Get Claude plugins directory managed by StoClaw.
  */

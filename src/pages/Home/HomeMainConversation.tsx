@@ -11,7 +11,7 @@ import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
-import { ChatContentHeaderActions } from '@/pages/Chat/ChatSearchBar';
+import { ChatConversationHeaderActions, ChatPreviewToggleHeaderAction } from '@/pages/Chat/ChatSearchBar';
 import { ChatPreviewHeaderTabs } from '@/pages/Chat/ChatPreviewHeaderTabs';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
@@ -317,15 +317,9 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     [currentSessionKey, currentSession?.displayName, currentSession?.label, sessionLabels, t],
   );
 
-  const headerActions = useMemo(
+  const conversationHeaderActions = useMemo(
     () => (
-      <ChatContentHeaderActions
-        canShowPreviewPanel={canShowPreviewPanel}
-        isPreviewPanelOpen={showPreviewPanel}
-        onTogglePreview={() => {
-          if (showPreviewPanel) closePreviewPanel();
-          else openPreviewPanel();
-        }}
+      <ChatConversationHeaderActions
         showThinking={showThinking}
         onToggleThinking={toggleThinking}
         loading={loading}
@@ -349,10 +343,6 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
       />
     ),
     [
-      canShowPreviewPanel,
-      showPreviewPanel,
-      closePreviewPanel,
-      openPreviewPanel,
       showThinking,
       toggleThinking,
       loading,
@@ -366,6 +356,20 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
       searchMatches.length,
       activeSearchIndex,
     ],
+  );
+
+  const previewToggleAction = useMemo(
+    () => (
+      <ChatPreviewToggleHeaderAction
+        canShowPreviewPanel={canShowPreviewPanel}
+        isPreviewPanelOpen={showPreviewPanel}
+        onTogglePreview={() => {
+          if (showPreviewPanel) closePreviewPanel();
+          else openPreviewPanel();
+        }}
+      />
+    ),
+    [canShowPreviewPanel, showPreviewPanel, closePreviewPanel, openPreviewPanel],
   );
 
   const previewHeaderTabs = useMemo(
@@ -391,7 +395,8 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   useContentHeader({
     title: sessionTitle,
     previewTabs: previewHeaderTabs,
-    actions: headerActions,
+    chatActions: conversationHeaderActions,
+    actions: previewToggleAction,
     isSplitLayout: canShowPreviewPanel && showPreviewPanel,
   });
 

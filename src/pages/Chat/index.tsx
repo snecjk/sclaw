@@ -19,7 +19,7 @@ import { useChatDisplay } from './use-chat-display';
 import { isAssistantRole, resolveActiveTurnStableKey } from './chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
-import { ChatContentHeaderActions } from './ChatSearchBar';
+import { ChatConversationHeaderActions, ChatPreviewToggleHeaderAction } from './ChatSearchBar';
 import { ChatPreviewHeaderTabs } from './ChatPreviewHeaderTabs';
 import { PendingQueuePanel } from './PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
@@ -441,15 +441,9 @@ export function Chat() {
     [currentSessionKey, currentSession?.displayName, currentSession?.label, sessionLabels, t],
   );
 
-  const headerActions = useMemo(
+  const conversationHeaderActions = useMemo(
     () => (
-      <ChatContentHeaderActions
-        canShowPreviewPanel={canShowPreviewPanel}
-        isPreviewPanelOpen={showPreviewPanel}
-        onTogglePreview={() => {
-          if (showPreviewPanel) closePreviewPanel();
-          else openPreviewPanel();
-        }}
+      <ChatConversationHeaderActions
         showThinking={showThinking}
         onToggleThinking={toggleThinking}
         loading={loading}
@@ -473,10 +467,6 @@ export function Chat() {
       />
     ),
     [
-      canShowPreviewPanel,
-      showPreviewPanel,
-      closePreviewPanel,
-      openPreviewPanel,
       showThinking,
       toggleThinking,
       loading,
@@ -490,6 +480,20 @@ export function Chat() {
       searchMatches.length,
       activeSearchIndex,
     ],
+  );
+
+  const previewToggleAction = useMemo(
+    () => (
+      <ChatPreviewToggleHeaderAction
+        canShowPreviewPanel={canShowPreviewPanel}
+        isPreviewPanelOpen={showPreviewPanel}
+        onTogglePreview={() => {
+          if (showPreviewPanel) closePreviewPanel();
+          else openPreviewPanel();
+        }}
+      />
+    ),
+    [canShowPreviewPanel, showPreviewPanel, closePreviewPanel, openPreviewPanel],
   );
 
   const previewHeaderTabs = useMemo(
@@ -515,7 +519,8 @@ export function Chat() {
   useContentHeader({
     title: sessionTitle,
     previewTabs: previewHeaderTabs,
-    actions: headerActions,
+    chatActions: conversationHeaderActions,
+    actions: previewToggleAction,
     isSplitLayout: canShowPreviewPanel && showPreviewPanel,
   });
 

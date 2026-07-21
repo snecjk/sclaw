@@ -23,6 +23,10 @@ export interface SkillSummary {
   version?: string;
   installedVersion?: string;
   updateAvailable?: boolean;
+  forceUpdate?: boolean;
+  isBuiltin?: boolean;
+  /** False for official preinstall whitelist skills — UI hides delete. */
+  canUninstall?: boolean;
 }
 
 export interface SkillDetail extends SkillSummary {

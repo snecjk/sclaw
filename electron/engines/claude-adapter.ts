@@ -900,17 +900,10 @@ async function startClaudeQuery(
       model: sharedRuntime.selection.model,
       provider: sharedRuntime.selection.provider ?? existing?.provider,
     };
-    const syncResult = await syncClaudeSkillsForAgent(agentId, cwd).catch((error) => {
+    await syncClaudeSkillsForAgent(agentId, cwd).catch((error) => {
       logger.warn('Failed to sync Claude skill bridge:', error);
       return null;
     });
-    if (syncResult) {
-      logger.info('Synced Claude skill bridge', {
-        agentId,
-        mirrored: syncResult.mirrored,
-        skippedConflicts: syncResult.skippedConflicts,
-      });
-    }
 
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();

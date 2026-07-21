@@ -302,12 +302,6 @@ export async function syncProjectAgentSkillsFromBaseAgent(
       logger.warn('[project-agent] failed to copy skill to project agent', { projectAgentId, slug, error });
     }
   }
-
-  logger.info('[project-agent] synced agent-scoped skills from base agent', {
-    projectAgentId,
-    baseAgentId: normalizedBase,
-    count: slugs.length,
-  });
 }
 
 /**
@@ -331,12 +325,6 @@ export async function syncBaseAgentSkillInstall(
       logger.warn('[project-agent] failed to mirror skill install to project agent', { projectAgentId, slug, error });
     }
   }
-
-  logger.info('[project-agent] mirrored skill install to project agents', {
-    baseAgentId,
-    slug,
-    count: projectAgentIds.length,
-  });
 }
 
 /**
@@ -360,12 +348,6 @@ export async function syncBaseAgentSkillUninstall(
       logger.warn('[project-agent] failed to mirror skill uninstall to project agent', { projectAgentId, slug, error });
     }
   }
-
-  logger.info('[project-agent] mirrored skill uninstall to project agents', {
-    baseAgentId,
-    slug,
-    count: projectAgentIds.length,
-  });
 }
 
 /**
@@ -388,10 +370,4 @@ export async function syncBaseAgentSkillsToProjectAgents(agentId: string): Promi
       }
     }
   }
-
-  logger.info('[project-agent] synchronized base agent skills to project agents', {
-    baseAgentId,
-    projectCount: projectAgentIds.length,
-    skillCount: slugs.length,
-  });
 }
