@@ -32,7 +32,8 @@ interface TestRunDrawerProps {
   runId: string | null;
   run: WorkflowRunResponse | null;
   executionState: WorkflowExecutionState | null;
-  workflowVersionId?: string | number;
+  /** The human-facing workflow version, never the persistence version ID. */
+  workflowVersion?: string | number | null;
   isStarting: boolean;
   isCancelling: boolean;
   isRunActive: boolean;
@@ -63,6 +64,12 @@ function formatTime(value?: string | null) {
   return new Intl.DateTimeFormat('zh-CN', {
     month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
   }).format(date);
+}
+
+function formatWorkflowVersion(value?: string | number | null) {
+  if (value == null || String(value).trim() === '') return '-';
+  const version = String(value).trim();
+  return /^v/i.test(version) ? version : `v${version}`;
 }
 
 function eventDetail(event: Record<string, unknown>, type: string) {
@@ -325,7 +332,11 @@ export function TestRunDrawer(props: TestRunDrawerProps) {
   const activeRunId = props.run?.id ?? props.runId;
   const startedAt = props.run?.startedAt ?? props.executionState?.startedAt;
   const eventCount = props.run?.events.length ?? timeline.length;
-  const activeVersionId = props.run?.versionId ?? props.workflowVersionId;
+  // `versionId` is the local persistence record ID (for example 827), not a
+  // workflow version. Prefer the version captured when this run was started,
+  // then the version returned by the persisted run after it finishes.
+  const workflowVersion = props.run?.workflowVersion ?? props.workflowVersion;
+  const workflowVersionLabel = formatWorkflowVersion(workflowVersion);
 
   return (
       <Sheet open={props.open} onOpenChange={(open) => { if (!open) props.onClose(); }}>
@@ -334,8 +345,8 @@ export function TestRunDrawer(props: TestRunDrawerProps) {
             <div className="flex items-center gap-3">
               <span className="h-3 w-3 rounded-full bg-orange-400 shadow-[0_0_0_6px_rgba(251,146,60,0.14)]" />
               <h2 className="text-xl font-semibold">{view === 'completed' ? '试运行结果' : '试运行'}</h2>
-              {props.workflowVersionId != null ? <span className="text-sm text-muted-foreground">版本ID: {props.workflowVersionId}</span> : null}
-              {props.isDraftSnapshot ? <span className="rounded-full bg-orange-50 px-2 py-1 text-xs text-orange-700">当前 V2 草稿试运行</span> : null}
+              {workflowVersion !== null && workflowVersion !== undefined ? <span className="text-sm text-muted-foreground">版本 {workflowVersionLabel}</span> : null}
+              {props.isDraftSnapshot ? <span className="rounded-full bg-orange-50 px-2 py-1 text-xs text-orange-700">当前 {workflowVersionLabel} 草稿试运行</span> : null}
             </div>
             <div className="flex items-center gap-2">
               {view === 'running' ? <Button variant="outline" className="border-orange-200 text-orange-700 hover:bg-orange-50" onClick={props.onCancel} disabled={props.isCancelling}>{props.isCancelling ? '取消中' : '取消运行'}</Button> : null}
@@ -355,7 +366,7 @@ export function TestRunDrawer(props: TestRunDrawerProps) {
                     </div>
                     <dl className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
                       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">状态</dt><dd className="mt-1 font-semibold">{STATUS_LABEL[status] ?? '准备中'}</dd></div>
-                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">当前版本号</dt><dd className="mt-1 font-semibold">{activeVersionId == null ? '-' : `v${activeVersionId}`}</dd></div>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">当前版本号</dt><dd className="mt-1 font-semibold">{workflowVersionLabel}</dd></div>
                       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">开始时间</dt><dd className="mt-1 font-semibold">{formatTime(startedAt)}</dd></div>
                       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">事件</dt><dd className="mt-1 font-semibold">{eventCount}</dd></div>
                     </dl>
@@ -367,9 +378,9 @@ export function TestRunDrawer(props: TestRunDrawerProps) {
                 </div>
             ) : null}
 
-            {view === 'completed' ? <div className="space-y-5"><section className="rounded-xl border border-slate-200 bg-background p-5"><p className="text-sm font-semibold text-orange-600">当前运行</p><strong className="mt-1 block text-lg">{activeRunId ?? '本次试运行'}</strong><dl className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">状态</dt><dd className="mt-1 font-semibold text-emerald-700">已完成</dd></div><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">开始时间</dt><dd className="mt-1 font-semibold">{formatTime(startedAt)}</dd></div></dl></section><div className="flex gap-6 border-b border-slate-200"><button type="button" onClick={() => setTab('artifact')} className={`border-b-2 px-1 py-3 text-sm font-medium ${tab === 'artifact' ? 'border-orange-500 text-orange-600' : 'border-transparent text-slate-500'}`}>产物</button><button type="button" onClick={() => setTab('process')} className={`border-b-2 px-1 py-3 text-sm font-medium ${tab === 'process' ? 'border-orange-500 text-orange-600' : 'border-transparent text-slate-500'}`}>执行过程</button></div>{tab === 'artifact' ? <ArtifactList artifacts={artifacts} /> : <ExecutionTimeline items={timeline} />}</div> : null}
+            {view === 'completed' ? <div className="space-y-5"><section className="rounded-xl border border-slate-200 bg-background p-5"><p className="text-sm font-semibold text-orange-600">当前运行</p><strong className="mt-1 block text-lg">{activeRunId ?? '本次试运行'}</strong><dl className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">状态</dt><dd className="mt-1 font-semibold text-emerald-700">已完成</dd></div><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">当前版本号</dt><dd className="mt-1 font-semibold">{workflowVersionLabel}</dd></div><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">开始时间</dt><dd className="mt-1 font-semibold">{formatTime(startedAt)}</dd></div></dl></section><div className="flex gap-6 border-b border-slate-200"><button type="button" onClick={() => setTab('artifact')} className={`border-b-2 px-1 py-3 text-sm font-medium ${tab === 'artifact' ? 'border-orange-500 text-orange-600' : 'border-transparent text-slate-500'}`}>产物</button><button type="button" onClick={() => setTab('process')} className={`border-b-2 px-1 py-3 text-sm font-medium ${tab === 'process' ? 'border-orange-500 text-orange-600' : 'border-transparent text-slate-500'}`}>执行过程</button></div>{tab === 'artifact' ? <ArtifactList artifacts={artifacts} /> : <ExecutionTimeline items={timeline} />}</div> : null}
 
-            {view === 'failed' ? <section className="rounded-xl border border-red-200 bg-background p-6"><div className="flex items-center gap-3 text-red-600"><AlertCircle className="h-6 w-6" /><h3 className="text-lg font-semibold">运行失败</h3></div><p className="mt-4 break-words text-sm text-muted-foreground">{props.launchError ?? props.executionState?.error ?? props.run?.error ?? '试运行失败，请稍后重试。'}</p>{timeline.length > 0 ? <div className="mt-5"><ExecutionTimeline items={timeline} /></div> : null}</section> : null}
+            {view === 'failed' ? <section className="rounded-xl border border-red-200 bg-background p-6"><div className="flex items-center gap-3 text-red-600"><AlertCircle className="h-6 w-6" /><h3 className="text-lg font-semibold">运行失败</h3></div><dl className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">当前版本号</dt><dd className="mt-1 font-semibold text-slate-900">{workflowVersionLabel}</dd></div><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">运行编号</dt><dd className="mt-1 truncate font-semibold text-slate-900" title={activeRunId ?? undefined}>{activeRunId ?? '-'}</dd></div></dl><p className="mt-4 break-words text-sm text-muted-foreground">{props.launchError ?? props.executionState?.error ?? props.run?.error ?? '试运行失败，请稍后重试。'}</p>{timeline.length > 0 ? <div className="mt-5"><ExecutionTimeline items={timeline} /></div> : null}</section> : null}
             {view === 'cancelled' ? <section className="rounded-xl border border-slate-200 bg-background p-6"><div className="flex items-center gap-3"><XCircle className="h-6 w-6 text-slate-500" /><h3 className="text-lg font-semibold">已取消</h3></div><p className="mt-3 text-sm text-muted-foreground">本次试运行已取消。</p></section> : null}
           </div>
         </SheetContent>
