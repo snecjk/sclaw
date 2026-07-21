@@ -16,6 +16,7 @@ export interface SclawInboundMediaPart {
 export interface SclawInboundEnvelope {
   type: string;
   deviceId?: string;
+  reason?: string;
   payload?: {
     channelTraceId?: string;
     chatUid?: string;
@@ -33,6 +34,8 @@ export interface SclawInboundEnvelope {
     parts?: SclawInboundMediaPart[];
   };
 }
+
+export type SclawBindReplacedReason = 'bound_on_another_device' | 'unbound' | string;
 
 type HubClientState = 'idle' | 'connecting' | 'connected' | 'closed';
 
@@ -73,6 +76,12 @@ export class SclawHubClient extends EventEmitter {
       this.ws = null;
     }
     this.state = 'closed';
+  }
+
+  /** 被换绑/解绑后永久停连，避免旧 refreshToken 无限重连 */
+  disconnectPermanently(): void {
+    this.refreshToken = null;
+    this.disconnect();
   }
 
   send(payload: Record<string, unknown>): boolean {
@@ -171,6 +180,13 @@ export class SclawHubClient extends EventEmitter {
       }
       if (msg.type === 'inbound') {
         this.emit('inbound', msg);
+        return;
+      }
+      if (msg.type === 'bind.replaced') {
+        const reason = (msg.reason || 'bound_on_another_device') as SclawBindReplacedReason;
+        logger.info(`[SclawHub] bind.replaced reason=${reason}`);
+        this.emit('bindReplaced', { reason, deviceId: msg.deviceId });
+        this.disconnectPermanently();
         return;
       }
       logger.debug('[SclawHub] ignore message type=', msg.type);

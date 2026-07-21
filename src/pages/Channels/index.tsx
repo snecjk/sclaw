@@ -187,6 +187,10 @@ export function Channels() {
   const [dingTalkBinding, setDingTalkBinding] = useState<{
     engineType?: 'claude' | 'openclaw' | null;
     agentId?: string | null;
+    /** Hub 本机绑定状态 */
+    bindStatus?: string | null;
+    /** 被其他设备抢走时的提示（打开频道页时展示在条目副文案） */
+    replaceHint?: 'other_device' | 'unbound' | null;
   } | null>(null);
   /** 切换引擎后若当前 Agent 不兼容，先本地记下引擎，等用户显式选 Agent 再保存 */
   const [pendingDingTalkEngine, setPendingDingTalkEngine] = useState<'claude' | 'openclaw' | null>(
@@ -213,7 +217,13 @@ export function Channels() {
         hostApiFetch<{ success: boolean; agents?: AgentItem[]; error?: string }>('/api/agents'),
         hostApiFetch<{
           success: boolean;
-          local?: { engineType?: string | null; agentId?: string | null } | null;
+          local?: {
+            engineType?: string | null;
+            agentId?: string | null;
+            bindStatus?: string | null;
+          } | null;
+          remote?: { bound?: boolean; deviceId?: string; error?: string } | null;
+          deviceId?: string;
         }>('/api/channels/hub/dingtalk/status').catch(() => null),
       ]);
 
@@ -229,15 +239,33 @@ export function Channels() {
       setAgents(agentsRes.agents || []);
 
       const local = dingTalkStatusRes?.success ? dingTalkStatusRes.local : null;
+      const remote = dingTalkStatusRes?.success ? dingTalkStatusRes.remote : null;
+      const localDeviceId = dingTalkStatusRes?.success ? dingTalkStatusRes.deviceId : undefined;
       const engineType =
         local?.engineType === 'openclaw' || local?.engineType === 'claude'
           ? local.engineType
           : null;
+      let replaceHint: 'other_device' | 'unbound' | null = null;
+      const remoteOk = Boolean(remote && !('error' in remote && remote.error));
+      if (remoteOk && remote) {
+        if (remote.bound === false) {
+          replaceHint = 'unbound';
+        } else if (
+          remote.bound
+          && remote.deviceId
+          && localDeviceId
+          && remote.deviceId !== localDeviceId
+        ) {
+          replaceHint = 'other_device';
+        }
+      }
       setDingTalkBinding(
         local
           ? {
               engineType,
               agentId: local.agentId ?? null,
+              bindStatus: local.bindStatus ?? null,
+              replaceHint,
             }
           : null,
       );
@@ -257,6 +285,20 @@ export function Channels() {
     const unsubscribe = subscribeHostEvent('gateway:channel-status', () => {
       void fetchPageData();
     });
+    return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
+    };
+  }, [fetchPageData]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeHostEvent<{ reason?: string }>(
+      'channel:dingtalk-bind-replaced',
+      () => {
+        void fetchPageData();
+      },
+    );
     return () => {
       if (typeof unsubscribe === 'function') {
         unsubscribe();
@@ -488,7 +530,15 @@ export function Channels() {
                   : undefined;
 
                 const channelSubtitle =
-                  isDingTalk && (boundEngineLabel || dingTalkSelectedAgentName)
+                  isDingTalk && dingTalkBinding?.replaceHint === 'other_device'
+                    ? t('hub.dingtalk.replacedByOtherDevice')
+                    : isDingTalk && dingTalkBinding?.replaceHint === 'unbound'
+                    ? t('hub.dingtalk.replacedUnbound')
+                    : isDingTalk && dingTalkBinding?.bindStatus !== 'bound'
+                    ? t('hub.dingtalk.notBoundHint', {
+                        defaultValue: '未绑定，点击扫码绑定',
+                      })
+                    : isDingTalk && (boundEngineLabel || dingTalkSelectedAgentName)
                     ? t('hub.dingtalk.boundHint', {
                         defaultValue: '引擎：{{engine}} · {{agent}}',
                         engine: boundEngineLabel || t('account.unassigned'),
