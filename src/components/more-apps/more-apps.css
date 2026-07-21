@@ -817,17 +817,11 @@
   border-radius: 999px;
   background: #f0f2f5;
   font-size: 13px;
-<<<<<<< HEAD
-  font-weight: 500;
-  line-height: 20px;
-  color: #4e5969;
-=======
   line-height: 1.45;
   color: var(--ma-text-soft);
   display: -webkit-box;
   -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
->>>>>>> canyang-ui-flow2
   overflow: hidden;
   text-overflow: ellipsis;
 }
