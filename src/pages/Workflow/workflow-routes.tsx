@@ -95,6 +95,10 @@ function WorkflowGenerateRoute() {
   const promptCacheId = searchParams.get('promptCacheId') ?? '';
   const [createError, setCreateError] = useState<string | null>(null);
   const createStartedRef = useRef(false);
+  const editorRef = useRef<WorkflowMcIframeEditorHandle>(null);
+  const [isRequestingVersionSnapshot, setIsRequestingVersionSnapshot] = useState(false);
+  const [localRunHistoryOpen, setLocalRunHistoryOpen] = useState(false);
+  const [draftRunConfirmOpen, setDraftRunConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!prompt.trim() || workflowId || createStartedRef.current) return;
@@ -122,6 +126,35 @@ function WorkflowGenerateRoute() {
   }, [prompt, workflowId, navigate]);
 
   const handleBack = useCallback(() => navigate('/workflow'), [navigate]);
+  const handleOpenLocalRunHistory = useCallback(() => setLocalRunHistoryOpen(true), []);
+  const canStartTryRun = useCallback(() => true, []);
+  const tryRun = useDesignerTryRun({
+    workflowId,
+    startupSchema: null,
+    canStart: canStartTryRun,
+  });
+  const beginTryRun = tryRun.begin;
+  const startCurrentDraftTryRun = useCallback(async () => {
+    if (!workflowId || isRequestingVersionSnapshot) return;
+    setIsRequestingVersionSnapshot(true);
+    try {
+      const currentVersion = await editorRef.current?.requestDraftSnapshot();
+      if (!currentVersion) throw new Error('画布尚未加载完成，请稍后重试');
+      beginTryRun(currentVersion);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '未获取到当前画布版本号，无法试运行');
+    } finally {
+      setIsRequestingVersionSnapshot(false);
+    }
+  }, [beginTryRun, isRequestingVersionSnapshot, workflowId]);
+  const handleTryRun = useCallback(() => setDraftRunConfirmOpen(true), []);
+  const confirmTryRun = useCallback(() => {
+    setDraftRunConfirmOpen(false);
+    void startCurrentDraftTryRun();
+  }, [startCurrentDraftTryRun]);
+  const rerunCurrentDraft = useCallback(() => {
+    void startCurrentDraftTryRun();
+  }, [startCurrentDraftTryRun]);
 
   useWorkflowEditorContentHeader({
     workflowId,
@@ -129,6 +162,9 @@ function WorkflowGenerateRoute() {
     prompt: prompt || undefined,
     promptCacheId: promptCacheId || undefined,
     enabled: Boolean(workflowId),
+    onTryRun: handleTryRun,
+    tryRunDisabled: isRequestingVersionSnapshot || tryRun.isStarting || tryRun.isRunActive,
+    onOpenLocalRunHistory: handleOpenLocalRunHistory,
   });
 
   if (!prompt.trim() && !workflowId) {
@@ -158,9 +194,53 @@ function WorkflowGenerateRoute() {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
       <WorkflowMcIframeEditor
+        ref={editorRef}
         workflowId={workflowId}
         prompt={prompt || undefined}
         promptCacheId={promptCacheId || undefined}
+      />
+      <ConfirmDialog
+        open={draftRunConfirmOpen}
+        title="提示"
+        message="试运行将使用当前画布正在编辑的版本，是否继续？"
+        confirmLabel="确认"
+        cancelLabel="取消"
+        onConfirm={confirmTryRun}
+        onCancel={() => setDraftRunConfirmOpen(false)}
+      />
+      <StartupRunDialog
+        open={tryRun.isStartupDialogOpen}
+        schema={tryRun.startupSchema}
+        defaultValues={tryRun.startupDefaultValues}
+        runtimeUploadNodes={tryRun.runtimeUploadNodes}
+        isStarting={tryRun.isStarting}
+        onConfirm={(inputs) => void tryRun.confirmStartup(inputs)}
+        onClose={tryRun.cancelStartupDialog}
+      />
+      <TestRunDrawer
+        open={tryRun.isDrawerOpen}
+        runId={tryRun.runId}
+        run={tryRun.run}
+        executionState={tryRun.executionState}
+        workflowVersion={tryRun.runWorkflowVersion}
+        isStarting={tryRun.isStarting}
+        isCancelling={tryRun.isCancelling}
+        isRunActive={tryRun.isRunActive}
+        isDraftSnapshot={tryRun.isDraftSnapshot}
+        launchError={tryRun.launchError}
+        onClose={tryRun.closeDrawer}
+        onCancel={() => void tryRun.cancel()}
+        onContinue={() => void tryRun.continueRun()}
+        onRerun={rerunCurrentDraft}
+        onDecideApproval={(approved, note) => void tryRun.decideApproval(approved, note)}
+        onSubmitInput={(values) => void tryRun.submitInput(values)}
+      />
+      <LocalRunHistoryDialog
+        open={localRunHistoryOpen}
+        workflowId={workflowId}
+        onClose={() => setLocalRunHistoryOpen(false)}
+        onTryRun={handleTryRun}
+        onSelectRun={tryRun.openExistingRun}
       />
     </div>
   );
