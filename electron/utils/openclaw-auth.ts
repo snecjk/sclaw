@@ -27,9 +27,11 @@ import { PORTS } from './config';
 import { resolveStoBaseUrl } from './sto-domain';
 import { getOpenClawConfigDir } from './paths';
 import { RETIRED_PLUGIN_IDS } from '../../shared/retired-skills';
+import { PORTS } from './config';
 
 const AUTH_STORE_VERSION = 1;
 const AUTH_PROFILE_FILENAME = 'auth-profiles.json';
+const LOCAL_HOST_API_BASE_URL = `http://127.0.0.1:${PORTS.CLAWX_HOST_API}`;
 
 function getOAuthPluginId(provider: string): string {
   return `${provider}-auth`;
@@ -1585,7 +1587,7 @@ export async function syncStoPluginsToOpenClaw(): Promise<boolean> {
     entries['sto-workflow-tool'] = {
       enabled: true,
       config: {
-        baseUrl: stoBaseUrl,
+        baseUrl: LOCAL_HOST_API_BASE_URL,
         ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
         timeoutMs: 30000,
       },

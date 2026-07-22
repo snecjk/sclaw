@@ -367,8 +367,10 @@ export function resolveAssistantCopyShareContent(options: {
 
   if (workflowCard) {
     const state = workflowCardStates[workflowCard.runId];
-    const summary = state?.result?.summary?.trim() ?? '';
-    for (const artifact of state?.result?.artifacts ?? []) {
+    const summary = typeof state?.result?.summary === 'string'
+      ? state.result.summary.trim()
+      : '';
+    for (const artifact of state?.status === 'completed' ? state.result?.artifacts ?? [] : []) {
       if (!isUserFacingArtifactUrl(artifact.url)) continue;
       addFile(artifactToPreviewFile(artifact));
     }
@@ -632,6 +634,14 @@ export function extractWorkflowCard(message: RawMessage | unknown): { runId: str
     }
   }
   return latest;
+}
+
+/** Legacy workflow tools may return a Markdown status report after completion.
+ * It is transport text; the hydrated WorkflowCard is the user-facing result. */
+export function isWorkflowCompletionTranscript(text: string): boolean {
+  return /run_[\w-]+/.test(text)
+    && /(执行状态|生成产物|预览链接)/.test(text)
+    && /(工作流.*(?:已执行完成|执行完成)|状态[：:])/.test(text);
 }
 
 /** Latest workflow_card across assistant snapshots in a turn (newest message / block wins). */
@@ -1407,6 +1417,7 @@ export function usePreviewableFiles(
     // Structured workflow artifacts first — authoritative OSS URLs win dedup.
     if (workflowCardStates) {
       for (const state of Object.values(workflowCardStates)) {
+        if (state.status !== 'completed') continue;
         for (const artifact of state.result?.artifacts ?? []) {
           if (!isPreviewableArtifactUrl(artifact.url, artifact.type)) continue;
           const previewFile = artifactToPreviewFile(artifact);

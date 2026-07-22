@@ -18,6 +18,9 @@ export interface WorkflowExecutionStartedData {
   status?: string;
   templateName?: string;
   startedAt?: string;
+  /** 服务端执行路径返回的版本 ID（用于 getRun hydration 对齐版本）。 */
+  versionId?: string | number;
+  workflowVersionId?: string | number;
 }
 
 export interface WorkflowTemplatesFoundData {

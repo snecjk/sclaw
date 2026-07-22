@@ -22,8 +22,9 @@ import {
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
 import { clearPendingWorkflowDraft, saveWorkflowRecord, sessionHasWorkflowExecution } from '@/stores/workflow-memory';
 import { useChatStore } from '@/stores/chat';
+import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import { isToolResultRole } from '@/stores/chat/helpers';
-import type { WorkflowSchema } from '@/types/workflow';
+import type { WorkflowExecutionState, WorkflowSchema } from '@/types/workflow';
 import type { ContentBlock, RawMessage } from './types';
 import type { ChatGet, ChatSet } from './store-api';
 
@@ -367,9 +368,8 @@ function registerWorkflowSubmitHandler(
   registerParameterFormHandler(formId, async (values: Record<string, unknown>) => {
     const chatState = get();
     try {
-      const { createWorkflow, startWorkflow, beginWorkflowRunSseTrace } = await import('@/lib/workflow-api');
+      const { createWorkflow, startWorkflowLocal } = await import('@/lib/workflow-api');
       const { saveWorkflowExecution } = await import('@/stores/workflow-memory');
-      const { invokeIpc } = await import('@/lib/api-client');
       const created = await createWorkflow({
         templateId,
         startup: buildStartupPreset(values, schemaHash),
@@ -384,9 +384,11 @@ function registerWorkflowSubmitHandler(
         createdAt: Date.now(),
       });
       const trackStartMs = Date.now();
-      const run = await startWorkflow(created.workflowId, {
+      const run = await startWorkflowLocal({
+        workflowId: created.workflowId,
         inputs: values,
         idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
+        sessionKey: chatState.currentSessionKey,
       });
       const { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } = await import('@/lib/workflow-local-turn');
       const userText = buildWorkflowStartUserText(schema, values);
@@ -409,6 +411,7 @@ function registerWorkflowSubmitHandler(
         updatedAt: trackStartMs,
         collectedInputs: values,
         paramsSummary: userText,
+        versionId: run.versionId,
       });
       appendWorkflowSessionRecord({
         phase: 'started',
@@ -421,22 +424,25 @@ function registerWorkflowSubmitHandler(
         paramsSummary: userText,
         collectedInputs: values,
       });
-      chatState.setWorkflowCardState(run.runId, {
+      const initialCardState = {
         runId: run.runId,
         workflowId: created.workflowId,
         status: 'running',
         progress: 0,
         steps: [],
         startedAt: startedAtIso,
-      });
+      } satisfies WorkflowExecutionState;
+      // 与常规启动入口相同：完成事件可能先于本地卡片初始化到达，不能回写为 running。
+      const existingCardState = chatState.workflowCardStates[run.runId];
+      chatState.setWorkflowCardState(
+        run.runId,
+        existingCardState && isTerminalWorkflowRunStatus(existingCardState.status)
+          ? existingCardState
+          : initialCardState,
+      );
       chatState.clearPendingWorkflow();
-      await invokeIpc('workflow:startTracking', {
-        runId: run.runId,
-        workflowId: created.workflowId,
-        sessionKey: chatState.currentSessionKey,
-        agentId: chatState.currentAgentId,
-      });
-      beginWorkflowRunSseTrace(run.runId);
+      // 客户端本地执行：startWorkflowLocal 已 fire-and-forget 触发 engine，
+      // 状态经 'workflow:status-update' 广播桥回流，无需 startTracking/SSE trace。
     } catch (err) {
       const messageErr = err instanceof Error ? err.message : String(err);
       console.error('[parameter-form-recovery] handler error', err);

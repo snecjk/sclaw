@@ -1,5 +1,13 @@
-import { BASIC_NODE_TEMPLATES, SMART_NODE_TEMPLATES } from '@/pages/WorkflowDesigner/constants';
+import { NODE_TEMPLATES } from '@/pages/WorkflowDesigner/constants';
 import { cn } from '@/lib/utils';
+
+const WEB_CANVAS_LIBRARY_TYPES = [
+  'agent_data_fetch',
+  'agent_task',
+  'agent_condition',
+  'agent_output',
+  'output',
+];
 
 interface DesignerNodeLibraryProps {
   onPick: (type: string) => void;
@@ -7,34 +15,36 @@ interface DesignerNodeLibraryProps {
 }
 
 export function DesignerNodeLibrary({ onPick, className }: DesignerNodeLibraryProps) {
+  const items = WEB_CANVAS_LIBRARY_TYPES
+    .map((type) => NODE_TEMPLATES.find((template) => template.type === type))
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
   return (
-    <div className={cn('px-3 pb-3', className)}>
-      <p className="mb-2 text-xs font-medium text-muted-foreground">智能节点</p>
-      <div className="mb-3 flex flex-col gap-1">
-        {SMART_NODE_TEMPLATES.map((item) => (
+    <div className={cn('workflow-node-library-list', className)}>
+      {items.map((item) => {
+        const Icon = item.icon;
+        return (
           <button
             key={item.type}
             type="button"
+            draggable
             onClick={() => onPick(item.type)}
-            className="rounded-lg border border-border px-3 py-2 text-left text-sm hover:bg-muted"
+            onDragStart={(event) => {
+              event.dataTransfer.setData('application/reactflow', item.type);
+              event.dataTransfer.effectAllowed = 'move';
+            }}
+            className={cn('workflow-node-library-item', `tile-${item.accent}`)}
           >
-            {item.label}
+            <span className="workflow-node-library-icon">
+              <Icon size={18} />
+            </span>
+            <span className="workflow-node-library-copy">
+              <span className="workflow-node-library-title">{item.label}</span>
+              <span className="workflow-node-library-summary">{item.summary}</span>
+            </span>
           </button>
-        ))}
-      </div>
-      <p className="mb-2 text-xs font-medium text-muted-foreground">基础节点</p>
-      <div className="flex flex-col gap-1">
-        {BASIC_NODE_TEMPLATES.map((item) => (
-          <button
-            key={item.type}
-            type="button"
-            onClick={() => onPick(item.type)}
-            className="rounded-lg border border-border px-3 py-2 text-left text-sm hover:bg-muted"
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+        );
+      })}
     </div>
   );
 }

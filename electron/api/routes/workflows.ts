@@ -4,7 +4,29 @@ import { resolveStoBaseUrl } from '../../utils/sto-domain';
 import { getStoToken } from '../../utils/auth-store';
 import { logger } from '../../utils/logger';
 import type { HostApiContext } from '../context';
-import { parseJsonBody } from '../route-utils';
+import { parseJsonBody, sendJson } from '../route-utils';
+import { installWorkflowRuntime, workflowV2BackendFetch } from '../../services/workflow-runtime/bootstrap';
+import { workflowExecLog } from '../../services/workflow-runtime/logging';
+import { takeWorkflowDatabaseId } from '../../services/workflow-runtime/id-pool';
+
+type WorkflowStartBody = {
+  runDatabaseId?: number;
+  inputs?: Record<string, unknown>;
+  idempotencyKey?: string;
+  sessionKey?: string;
+  runMode?: 'trial' | 'production';
+  workflowVersionId?: string | number;
+};
+
+type WorkflowV2StartResponse = {
+  runId: string;
+  runDatabaseId: number;
+  workflowId?: string;
+  workflowVersionId: string | number;
+  workflowVersion?: number;
+  status?: string;
+  startedAt?: string;
+};
 
 async function proxyWorkflowStreamRequest(
   req: IncomingMessage,
@@ -167,6 +189,108 @@ async function proxyWorkflowRequest(
   res.end(responseBody);
 }
 
+function makeWorkflowStartIdempotencyKey(workflowId: string): string {
+  return `start-wf-${workflowId}-${Date.now()}`;
+}
+
+function startLocalWorkflowRuntime(
+  workflowId: string,
+  registered: WorkflowV2StartResponse,
+  body: WorkflowStartBody,
+): void {
+  const versionId = registered.workflowVersionId;
+  const startedAt = registered.startedAt ?? new Date().toISOString();
+  workflowExecLog('info', 'host-runtime-start', 'starting local workflow runtime from host route', {
+    runId: registered.runId,
+    workflowId,
+    versionId,
+    sessionKey: body.sessionKey,
+  });
+  void installWorkflowRuntime().startWorkflow({
+    runId: registered.runId,
+    runDatabaseId: registered.runDatabaseId,
+    workflowId,
+    versionId: String(versionId),
+    workflowVersion: registered.workflowVersion,
+    input: body.inputs ?? {},
+    startedAt,
+    sessionKey: body.sessionKey ?? '',
+  }).catch((error) => {
+    workflowExecLog('error', 'host-runtime-start-failed', 'local workflow runtime failed', {
+      runId: registered.runId,
+      workflowId,
+      versionId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    logger.error(
+      '[workflow-trace] local workflow runtime failed runId=%s workflowId=%s:',
+      registered.runId,
+      workflowId,
+      error,
+    );
+  });
+}
+
+async function registerLocalWorkflowRun(
+  workflowId: string,
+  body: WorkflowStartBody,
+  stoToken?: string,
+): Promise<WorkflowV2StartResponse> {
+  const idempotencyKey = body.idempotencyKey || makeWorkflowStartIdempotencyKey(workflowId);
+  workflowExecLog('info', 'host-register-start', 'registering client-local workflow run', {
+    workflowId,
+    idempotencyKey,
+    inputKeys: Object.keys(body.inputs ?? {}).join(','),
+  });
+  let registered: WorkflowV2StartResponse | undefined;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const suppliedId = attempt === 0 ? body.runDatabaseId : undefined;
+    const runDatabaseId = Number.isSafeInteger(suppliedId) && Number(suppliedId) > 0
+      ? Number(suppliedId)
+      : await takeWorkflowDatabaseId();
+    try {
+      registered = await workflowV2BackendFetch(
+        `/agent/v2/workflows/${encodeURIComponent(workflowId)}/createRunLog`,
+        {
+          method: 'POST',
+          body: {
+            runDatabaseId,
+            inputs: body.inputs ?? {},
+            idempotencyKey,
+            runMode: body.runMode ?? 'production',
+            workflowVersionId: body.workflowVersionId,
+          },
+          stoToken,
+        },
+      ) as WorkflowV2StartResponse;
+      break;
+    } catch (error) {
+      if ((error as { status?: number }).status !== 409 || attempt === 1) throw error;
+    }
+  }
+
+  if (!registered?.runId || registered.workflowVersionId == null || !Number.isSafeInteger(registered.runDatabaseId)) {
+    throw new Error('workflow v2 createRunLog response missing runId/workflowVersionId/runDatabaseId');
+  }
+  workflowExecLog('info', 'host-register-succeeded', 'client-local workflow run registered', {
+    runId: registered.runId,
+    workflowId: registered.workflowId ?? workflowId,
+    versionId: registered.workflowVersionId,
+    status: registered.status,
+  });
+  return registered;
+}
+
+async function registerAndStartLocalWorkflow(
+  workflowId: string,
+  body: WorkflowStartBody,
+  stoToken?: string,
+): Promise<WorkflowV2StartResponse> {
+  const registered = await registerLocalWorkflowRun(workflowId, body, stoToken);
+  startLocalWorkflowRuntime(workflowId, registered, body);
+  return registered;
+}
+
 export async function handleWorkflowRoutes(
   req: IncomingMessage,
   res: ServerResponse,
@@ -239,6 +363,28 @@ export async function handleWorkflowRoutes(
       res.end(JSON.stringify({ success: false, error: String(error) }));
     }
     return true;
+  }
+
+  // 0c. Workflow studio history versions (memory-center-web parity)
+  const studioWorkflowVersionMatch = pathname.match(
+    /^\/workflow\/v1\/workflows\/([^/]+)\/versions(?:\/([^/]+)(?:\/restore)?)?$/,
+  );
+  if (studioWorkflowVersionMatch) {
+    const isRestore = pathname.endsWith('/restore');
+    const isAllowed = req.method === 'GET' || (isRestore && req.method === 'POST');
+    if (isAllowed) {
+      try {
+        const body = isRestore ? await parseJsonBody<Record<string, unknown>>(req) : undefined;
+        logger.info('[workflow-trace] %s %s (proxy)', req.method, pathname);
+        await proxyWorkflowRequest(req, res, pathname, body);
+      } catch (error) {
+        logger.error('[WorkflowRoutes] workflow studio versions failed:', error);
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.end(JSON.stringify({ success: false, error: String(error) }));
+      }
+      return true;
+    }
   }
 
   // 1. POST /agent/v1/workflow-templates
@@ -357,20 +503,67 @@ export async function handleWorkflowRoutes(
   }
 
   // 5. POST /agent/v1/workflows/:workflowId/start
+  //
+  // Legacy tool compatibility bridge: OpenClaw/Claude workflow tools may still
+  // call the historical v1 start path. After client-side execution migration,
+  // backend v1 intentionally returns 426, so the desktop host API translates
+  // this local request into v2 register-only start + local runtime dispatch.
   const startMatch = pathname.match(/^\/agent\/v1\/workflows\/([^/]+)\/start$/);
   if (startMatch && req.method === 'POST') {
     try {
-      const body = await parseJsonBody<Record<string, unknown>>(req);
+      const workflowId = decodeURIComponent(startMatch[1]);
+      const body = await parseJsonBody<WorkflowStartBody>(req);
       logger.info(
-        '[workflow-trace] POST %s idempotencyKey=%s inputKeys=%o',
+        '[workflow-trace] POST %s local-bridge idempotencyKey=%s inputKeys=%o',
         pathname,
         body.idempotencyKey,
-        Object.keys((body.inputs as Record<string, unknown> | undefined) ?? {}),
+        Object.keys(body.inputs ?? {}),
       );
-      await proxyWorkflowRequest(req, res, pathname, body);
+      const registered = await registerAndStartLocalWorkflow(workflowId, body, String(req.headers.stotoken ?? ''));
+      sendJson(res, 200, {
+        success: true,
+        data: {
+          runId: registered.runId,
+          workflowId: registered.workflowId ?? workflowId,
+          workflowVersionId: registered.workflowVersionId,
+          workflowVersion: registered.workflowVersion,
+          status: String(registered.status ?? 'RUNNING').toLowerCase(),
+          startedAt: registered.startedAt ?? new Date().toISOString(),
+        },
+      });
     } catch (error) {
       logger.error('[WorkflowRoutes] start workflow failed:', error);
       res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.end(JSON.stringify({ success: false, error: String(error) }));
+    }
+    return true;
+  }
+
+  // 5b. POST /agent/v2/workflows/:workflowId/createRunLog
+  //
+  // Renderer startWorkflowLocal enters through Host API. Keep this endpoint
+  // register-only: renderer starts workflow-runtime over IPC after receiving
+  // runId/workflowVersionId.
+  const startV2Match = pathname.match(/^\/agent\/v2\/workflows\/([^/]+)\/createRunLog$/);
+  if (startV2Match && req.method === 'POST') {
+    try {
+      const workflowId = decodeURIComponent(startV2Match[1]);
+      const body = await parseJsonBody<WorkflowStartBody>(req);
+      logger.info(
+        '[workflow-trace] POST %s local-runtime idempotencyKey=%s inputKeys=%o',
+        pathname,
+        body.idempotencyKey,
+        Object.keys(body.inputs ?? {}),
+      );
+      const registered = await registerLocalWorkflowRun(workflowId, body, String(req.headers.stotoken ?? ''));
+      sendJson(res, 200, {
+        success: true,
+        data: registered,
+      });
+    } catch (error) {
+      logger.error('[WorkflowRoutes] start workflow v2 failed:', error);
+      res.statusCode = (error as { status?: number }).status ?? 500;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.end(JSON.stringify({ success: false, error: String(error) }));
     }

@@ -1,7 +1,7 @@
 import type { SqliteMigration } from '../types';
 
 export default {
-  version: 2,
+  version: 6,
   name: 'memory-capture-jobs',
   sql: `
     CREATE TABLE IF NOT EXISTS memory_capture_jobs (

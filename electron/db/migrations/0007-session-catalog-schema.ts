@@ -3,7 +3,7 @@ import type { SqliteMigration } from '../types';
 const DEFAULT_WORKSPACE_ID = 'default';
 
 export const sessionCatalogSchemaMigration: SqliteMigration = {
-  version: 3,
+  version: 7,
   name: 'session-catalog-schema',
   sql: `
     CREATE TABLE IF NOT EXISTS workspaces (

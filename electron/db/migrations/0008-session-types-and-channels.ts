@@ -1,7 +1,7 @@
 import type { SqliteMigration } from '../types';
 
 export const sessionTypesAndChannelsMigration: SqliteMigration = {
-  version: 4,
+  version: 8,
   name: 'session-types-and-channels',
   sql: `
     -- Session classification and channel association

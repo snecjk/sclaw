@@ -195,6 +195,17 @@ export function WorkflowCard({
     void hydrateWorkflowRun(runId, { sessionKey, agentId });
   }, [runId, sessionKey, agentId, state?.status, state?.result?.summary, state?.result?.artifacts]);
 
+  useEffect(() => {
+    if (state && isTerminalWorkflowRunStatus(state.status)) return undefined;
+    // A legacy tool start has no renderer session key, so its terminal push can
+    // precede card registration or be filtered by an older client. Polling the
+    // local runtime while active closes that gap and stops immediately at a terminal state.
+    const timer = window.setInterval(() => {
+      void hydrateWorkflowRun(runId, { sessionKey, agentId });
+    }, 3_000);
+    return () => window.clearInterval(timer);
+  }, [runId, sessionKey, agentId, state?.status]);
+
   const display = useMemo<WorkflowExecutionState>(() => {
     if (!state) {
       return {
@@ -215,7 +226,7 @@ export function WorkflowCard({
   const isTerminal = isTerminalWorkflowRunStatus(display.status);
   const durationLabel = useDurationLabel(display.startedAt, display.completedAt, isRunning);
   const showProgress = isRunning && display.progress > 0;
-  const userFacingArtifacts = (display.result?.artifacts ?? []).filter(
+  const userFacingArtifacts = (display.status === 'completed' ? display.result?.artifacts ?? [] : []).filter(
     (artifact) => isUserFacingArtifactUrl(artifact.url),
   );
   const previewableArtifact = userFacingArtifacts.find((artifact) => shouldPreviewInSidePanel(artifact.url));
