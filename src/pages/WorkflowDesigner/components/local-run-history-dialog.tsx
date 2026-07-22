@@ -1,0 +1,112 @@
+import * as Dialog from '@radix-ui/react-dialog';
+import { AlertCircle, CheckCircle2, Circle, CircleDot, Clock3, History, Play, RotateCcw, X, XCircle } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { listLocalWorkflowRuns, type LocalWorkflowRunSummary } from '@/lib/workflow-api';
+import { cn } from '@/lib/utils';
+import {
+  formatLocalRunDuration,
+  formatLocalRunTime,
+  formatLocalRunVersion,
+  resolveLocalRunHistoryStatus,
+  type LocalRunHistoryStatus,
+} from './local-run-history-utils';
+
+interface LocalRunHistoryDialogProps {
+  open: boolean;
+  workflowId?: string;
+  workflowName?: string;
+  onClose: () => void;
+  onTryRun: () => void;
+  onSelectRun: (runId: string) => Promise<boolean>;
+}
+
+const STATUS_META: Record<LocalRunHistoryStatus, { label: string; className: string; Icon: typeof CheckCircle2 }> = {
+  success: { label: '成功', className: 'text-emerald-600 bg-emerald-50', Icon: CheckCircle2 },
+  failed: { label: '失败', className: 'text-destructive bg-destructive/10', Icon: XCircle },
+  cancelled: { label: '已取消', className: 'text-slate-500 bg-slate-100', Icon: Circle },
+  interrupted: { label: '已中断', className: 'text-amber-700 bg-amber-50', Icon: AlertCircle },
+  running: { label: '进行中', className: 'text-primary bg-primary/10', Icon: CircleDot },
+};
+
+export function LocalRunHistoryDialog({ open, workflowId, workflowName, onClose, onTryRun, onSelectRun }: LocalRunHistoryDialogProps) {
+  const [runs, setRuns] = useState<LocalWorkflowRunSummary[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectingRunId, setSelectingRunId] = useState<string | null>(null);
+
+  const loadRuns = useCallback(async () => {
+    if (!workflowId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      setRuns(await listLocalWorkflowRuns(workflowId));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '本地运行记录加载失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [workflowId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setTimeout(() => void loadRuns(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadRuns, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const ipc = window.electron?.ipcRenderer;
+    if (!ipc?.on) return;
+    return ipc.on('workflow:status-update', () => void loadRuns());
+  }, [loadRuns, open]);
+
+  const handleSelect = async (runId: string) => {
+    setSelectingRunId(runId);
+    try {
+      if (await onSelectRun(runId)) onClose();
+      else setError('该运行记录已不可用，请刷新后重试');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '无法读取运行详情');
+    } finally {
+      setSelectingRunId(null);
+    }
+  };
+
+  return (
+    <Dialog.Root open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="no-drag fixed inset-0 z-[120] bg-slate-950/30 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Content className="no-drag fixed left-1/2 top-1/2 z-[121] flex max-h-[min(680px,calc(100vh-3rem))] w-[640px] max-w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-modal focus:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95">
+          <header className="flex items-start justify-between border-b border-border px-6 py-5">
+            <div className="min-w-0">
+              <Dialog.Title className="flex items-center gap-2 text-base font-semibold text-foreground"><History className="h-4 w-4" />本地运行记录</Dialog.Title>
+              <Dialog.Description className="mt-1 truncate text-sm text-muted-foreground">{workflowName || '当前工作流'}</Dialog.Description>
+            </div>
+            <Dialog.Close asChild><button type="button" aria-label="关闭本地运行记录" className="-mr-2 -mt-1 flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button></Dialog.Close>
+          </header>
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+            {loading && runs.length === 0 ? <RunHistorySkeleton /> : null}
+            {!loading && error ? <ErrorState message={error} onRetry={() => void loadRuns()} /> : null}
+            {!loading && !error && runs.length === 0 ? <EmptyState onTryRun={() => { onClose(); onTryRun(); }} /> : null}
+            {!error && runs.length > 0 ? <ol className="space-y-1">{runs.map((run, index) => <RunHistoryItem key={run.runId} run={run} latest={index === 0} busy={selectingRunId === run.runId} onClick={() => void handleSelect(run.runId)} />)}</ol> : null}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function RunHistoryItem({ run, latest, busy, onClick }: { run: LocalWorkflowRunSummary; latest: boolean; busy: boolean; onClick: () => void }) {
+  const status = resolveLocalRunHistoryStatus(run.status);
+  const { Icon, label, className } = STATUS_META[status];
+  return <li><button type="button" disabled={busy} onClick={onClick} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60">
+    <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-full', className)}><Icon className="h-4 w-4" /></span>
+    <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="text-sm font-medium text-foreground">{label}</span>{latest ? <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">最近</span> : null}</span><span className="mt-1 block text-xs text-muted-foreground">{formatLocalRunTime(run.startedAt)} · {formatLocalRunVersion(run)}</span></span>
+    <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" />{busy ? '打开中' : formatLocalRunDuration(run)}</span>
+  </button></li>;
+}
+
+function RunHistorySkeleton() { return <div className="space-y-2 p-2">{[0, 1, 2].map((index) => <div key={index} className="flex items-center gap-3 rounded-xl px-3 py-3"><div className="h-8 w-8 animate-pulse rounded-full bg-muted" /><div className="flex-1 space-y-2"><div className="h-3 w-16 animate-pulse rounded bg-muted" /><div className="h-3 w-28 animate-pulse rounded bg-muted" /></div><div className="h-3 w-12 animate-pulse rounded bg-muted" /></div>)}</div>; }
+function EmptyState({ onTryRun }: { onTryRun: () => void }) { return <div className="flex min-h-[240px] flex-col items-center justify-center px-6 text-center"><History className="mb-3 h-8 w-8 text-muted-foreground/60" /><p className="text-sm font-medium text-foreground">还没有本地运行记录</p><p className="mt-1 text-xs text-muted-foreground">试运行后，可以在这里查看执行结果。</p><Button type="button" variant="outline" size="sm" className="mt-4" onClick={onTryRun}><Play className="mr-1 h-3.5 w-3.5" />去试运行</Button></div>; }
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) { return <div className="flex min-h-[240px] flex-col items-center justify-center px-6 text-center"><AlertCircle className="mb-3 h-7 w-7 text-destructive" /><p className="max-w-sm text-sm text-muted-foreground">{message}</p><Button type="button" variant="outline" size="sm" className="mt-4" onClick={onRetry}><RotateCcw className="mr-1 h-3.5 w-3.5" />重试</Button></div>; }

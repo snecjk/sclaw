@@ -20,37 +20,29 @@ interface WorkflowStatusPayload {
   progress?: number;
   steps?: WorkflowExecutionState['steps'];
   workflowId?: string;
+  /** 暂停态目标节点（waiting_approval/waiting_input）——gap2 emit 桥透传。 */
+  waitingNodeId?: string | null;
+}
+
+export function shouldAcceptWorkflowStatusUpdate(
+  payloadSessionKey: string,
+  currentSessionKey: string,
+  sessionOwnsRun: boolean,
+): boolean {
+  return payloadSessionKey === currentSessionKey || (payloadSessionKey === '' && sessionOwnsRun);
 }
 
 export function useWorkflowCompletion(sessionKey: string) {
   useEffect(() => {
-    const pollTraceHandler = (payload: unknown) => {
-      const data = payload as {
-        runId: string;
-        sessionKey: string;
-        pollCount: number;
-        apiStatus: string;
-        uiStatus: string;
-        data: unknown;
-      };
-      if (data.sessionKey !== sessionKey) return;
-      
-    };
-
-    const unsubPollTrace = window.electron.ipcRenderer.on(
-      'workflow:poll-trace',
-      pollTraceHandler as (payload: unknown) => void,
-    );
-
     const handler = async (payload: unknown) => {
       const data = payload as WorkflowStatusPayload;
-      if (data.sessionKey !== sessionKey) return;
-
-      
-
       const chatState = useChatStore.getState();
       const currentState = chatState.workflowCardStates[data.runId];
       const exec = getExecutionByRunId(data.runId, sessionKey);
+      // Legacy tool starts go through the local host route without a renderer
+      // sessionKey. Accept an empty-key broadcast only when this session already
+      // owns the runId; never let it update unrelated conversation cards.
+      if (!shouldAcceptWorkflowStatusUpdate(data.sessionKey, sessionKey, Boolean(exec))) return;
       const incoming: WorkflowExecutionState = {
         runId: data.runId,
         workflowId: data.workflowId ?? currentState?.workflowId ?? '',
@@ -61,6 +53,7 @@ export function useWorkflowCompletion(sessionKey: string) {
         error: data.error ?? currentState?.error,
         startedAt: data.startedAt ?? currentState?.startedAt,
         completedAt: data.completedAt ?? currentState?.completedAt,
+        waitingNodeId: data.waitingNodeId ?? currentState?.waitingNodeId ?? null,
       };
       chatState.setWorkflowCardState(
         data.runId,
@@ -78,7 +71,6 @@ export function useWorkflowCompletion(sessionKey: string) {
       handler as (payload: unknown) => void,
     );
     return () => {
-      if (typeof unsubPollTrace === 'function') unsubPollTrace();
       if (typeof unsubscribe === 'function') unsubscribe();
     };
   }, [sessionKey]);

@@ -28,7 +28,7 @@ import {
 } from '../../sto-plugin/claude/sto-agent-telemetry/sdk';
 import { getAuthState, getStoToken } from '../utils/auth-store';
 import { logger } from '../utils/logger';
-import { resolveStoBaseUrl } from '../utils/sto-domain';
+import { PORTS } from '../utils/config';
 
 export interface ClaudeRuntimeOptions {
   hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
@@ -94,7 +94,7 @@ const workflowToolExtension: ClaudeRuntimeExtension = {
       return {};
     }
 
-    const baseUrl = await resolveStoBaseUrl();
+    const baseUrl = `http://127.0.0.1:${PORTS.CLAWX_HOST_API}`;
     logger.info(`[claude-workflow] registering workflow tools baseUrl=${baseUrl}`);
 
     return {

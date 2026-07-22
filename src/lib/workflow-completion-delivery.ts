@@ -2,7 +2,7 @@
  * Finalize workflow runs when they reach a terminal state.
  * Results render on WorkflowCard directly — no extra Gateway sendMessage round-trip.
  */
-import { getWorkflowRun, runToExecutionState } from '@/lib/workflow-api';
+import { getRunViaIpc, getWorkflowRun, runToExecutionState } from '@/lib/workflow-api';
 import { mergeWorkflowCardState } from '@/lib/workflow-card-state-merge';
 import { WORKFLOW_COMPLETE_TAG } from '@/lib/workflow-context';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
@@ -51,8 +51,16 @@ export async function deliverWorkflowCompletionIfNeeded(
     let state = prefetchedState;
     let workflowId = state?.workflowId ?? exec?.workflowId ?? '';
 
-    if (!state || !isTerminalWorkflowRunStatus(state.status)) {
-      const run = await getWorkflowRun(runId);
+    if (
+      !state
+      || !isTerminalWorkflowRunStatus(state.status)
+      || !(state.result?.artifacts?.length)
+    ) {
+      // Terminal broadcasts are intentionally lightweight and may arrive with
+      // a summary before the renderer has hydrated wf_artifact. Read the local
+      // authoritative snapshot once before rendering completion actions.
+      const localRun = await getRunViaIpc(runId);
+      const run = localRun ?? await getWorkflowRun(runId);
       state = runToExecutionState(run);
       workflowId = run.workflowId;
     }

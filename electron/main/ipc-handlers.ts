@@ -5,7 +5,7 @@
 import { ipcMain, BrowserWindow, shell, dialog, app, nativeImage } from 'electron';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, extname, basename } from 'node:path';
+import { join, extname, basename, dirname } from 'node:path';
 import crypto from 'node:crypto';
 import { enrichGatewayPayload } from '../gateway/message-enrich';
 import { getAdapterForSession, listEngineSessions } from '../engines/manager';
@@ -67,11 +67,10 @@ import {
 } from '../services/providers/provider-runtime-sync';
 import { validateApiKeyWithProvider } from '../services/providers/provider-validation';
 import { appUpdater } from './updater';
+import { installWorkflowRuntime } from '../services/workflow-runtime/bootstrap';
 import { registerHostApiProxyHandlers } from './ipc/host-api-proxy';
 import { registerAgentMemoryHandlers } from './ipc/agent-memory';
 import { registerPreviewHttpFetchHandlers } from './ipc/preview-http-fetch';
-import { registerWorkflowStreamHandlers } from './ipc/workflow-stream-proxy';
-import { getWorkflowExecutionTracker } from './services/workflow-execution-tracker';
 import { syncClaudeDefaultContext } from '../services/claude-context-sync';
 import {
   isLaunchAtStartupKey,
@@ -101,7 +100,6 @@ export function registerIpcHandlers(
   registerHostApiProxyHandlers();
   registerAgentMemoryHandlers(gatewayManager);
   registerPreviewHttpFetchHandlers();
-  registerWorkflowStreamHandlers();
 
   // Gateway handlers
   registerGatewayHandlers(
@@ -164,6 +162,19 @@ export function registerIpcHandlers(
 
   // Float icon handlers (desktop floating launcher)
   registerFloatIconHandlers(getFloatIconWindow);
+
+  // Workflow runtime（客户端执行下沉）：注册 workflow-runtime:* IPC + 注入生产依赖
+  installWorkflowRuntime();
+  ipcMain.handle('workflow-editor:metric', async (_event, metric: unknown) => {
+    if (!metric || typeof metric !== 'object') return { accepted: false };
+    const data = metric as Record<string, unknown>;
+    const stage = typeof data.stage === 'string' ? data.stage : '';
+    const workflowId = typeof data.workflowId === 'string' ? data.workflowId : '';
+    const elapsedMs = typeof data.elapsedMs === 'number' ? data.elapsedMs : NaN;
+    if (!workflowId || !stage || !Number.isFinite(elapsedMs) || elapsedMs < 0) return { accepted: false };
+    logger.info(`[workflow-editor][stage=${stage}][workflowId=${workflowId}][elapsedMs=${Math.round(elapsedMs)}] iframe editor performance metric`);
+    return { accepted: true };
+  });
 }
 
 function parseEngineType(value: unknown): AgentEngineType | undefined {
@@ -2233,7 +2244,21 @@ function registerShellHandlers(): void {
 
   // Open path in file explorer
   ipcMain.handle('shell:showItemInFolder', async (_, path: string) => {
-    shell.showItemInFolder(path);
+    // Artifact metadata can outlive a workspace rename or contain a legacy
+    // non-ASCII filename that was persisted with the wrong encoding.  Showing
+    // the parent directory is still useful and, unlike showItemInFolder on a
+    // missing file, never fails silently for the user.
+    if (existsSync(path)) {
+      shell.showItemInFolder(path);
+      return { opened: 'item' as const };
+    }
+    const directory = dirname(path);
+    if (existsSync(directory)) {
+      const error = await shell.openPath(directory);
+      if (!error) return { opened: 'directory' as const };
+      return { opened: 'none' as const, error };
+    }
+    return { opened: 'none' as const, error: '文件及其所在目录均不存在' };
   });
 
   // Open path
@@ -2994,20 +3019,7 @@ function registerSessionHandlers(): void {
     }
   });
 
-  // ── Workflow Execution Tracker ──
-  ipcMain.handle('workflow:startTracking', async (_, { runId, sessionKey, agentId, workflowId }: { runId: string; sessionKey: string; agentId: string; workflowId: string }) => {
-    logger.info(`[workflow-trace] IPC workflow:startTracking runId=${runId} workflowId=${workflowId} sessionKey=${sessionKey}`);
-    getWorkflowExecutionTracker().startTracking(runId, sessionKey, agentId, workflowId);
-  });
-
-  ipcMain.handle('workflow:stopTracking', async (_, { runId }: { runId: string }) => {
-    getWorkflowExecutionTracker().stopTracking(runId);
-  });
-
-  ipcMain.handle('workflow:sync-state', async (_, { runId }: { runId: string }) => {
-    return getWorkflowExecutionTracker().getState(runId);
-  });
-
+  // ── Workflow session record (persist wf run turns; client-execution path) ──
   ipcMain.handle('workflow:appendSessionRecord', async (_, input) => {
     const { appendWorkflowSessionRecord } = await import('../services/workflow-session-writer');
     await appendWorkflowSessionRecord(input as import('../services/workflow-session-writer').AppendWorkflowSessionRecordInput);

@@ -17,6 +17,8 @@ export interface WorkflowMemoryRecord {
   schemaHash: string;
   collectedInputs: Record<string, unknown>;
   createdAt: number; // timestamp
+  /** Workflow version snapshot used by workflow-runtime:start to fetch DSL. */
+  versionId?: string | number;
   /** Last run id for re-execution and result lookup */
   lastRunId?: string;
   /** Last known execution status */
@@ -44,6 +46,8 @@ export interface WorkflowExecutionRecord {
   runId: string;            // ID returned from startWorkflow
   templateId: string;
   templateName: string;
+  /** Workflow version snapshot used by workflow-runtime:start to fetch DSL. */
+  versionId?: string | number;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'timeout' | 'unknown';
   createdAt: number;        // When execution was started
   updatedAt: number;        // Last status update

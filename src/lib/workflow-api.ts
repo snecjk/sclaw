@@ -5,7 +5,7 @@
  * All endpoints return { success, data, traceId } and require stoToken header.
  */
 import { invokeIpc } from '@/lib/api-client';
-import { hostApiFetch, hostApiFetchStream } from '@/lib/host-api';
+import { hostApiFetch } from '@/lib/host-api';
 import { useAuthStore } from '@/stores/auth';
 import type {
   ApiResponse,
@@ -22,6 +22,7 @@ import type {
   WorkflowExecutionState,
 } from '@/types/workflow';
 import { workflowRunResponseToExecutionState } from '@/lib/workflow-run-status';
+import { formatShanghaiIso } from '../../shared/workflow-timestamp';
 
 /** Extract stoToken — prefer in-memory auth store (avoids zustand persist lag after login). */
 export function getWorkflowStoToken(): string | undefined {
@@ -268,6 +269,110 @@ export async function startWorkflow(
   return data;
 }
 
+// ── 5b. Start workflow (client-side execution, v2) ──────────────
+// FastAPI: POST /agent/v2/workflows/{workflow_id}/createRunLog → 仅建 workflow_run 行
+// （source=client, mode=CLIENT_LOCAL, status=RUNNING），返回 runId + workflowVersionId。
+// 后续执行下沉到客户端 engine（经 workflow-runtime:start IPC 触发），状态经
+// 'workflow:status-update' 广播桥回流（Phase 2a-3 bootstrap.onStatusChange）。
+
+/** v2 createRunLog 注册版响应：仅建行 + 钉定 version，无 streamUrl/queryUrl。 */
+export interface StartWorkflowLocalResponse {
+  runId: string;
+  runDatabaseId: number;
+  workflowVersionId: string | number;
+  /** 用户可见的流程版本号（不同于 workflowVersionId 数据库主键）。 */
+  workflowVersion?: string | number | null;
+  resolvedInputs?: Record<string, unknown>;
+}
+
+export interface StartWorkflowLocalParams {
+  workflowId: string;
+  inputs?: Record<string, unknown>;
+  agentContext?: Record<string, unknown>;
+  idempotencyKey: string;
+  /** 会话键——仅透传给本地 engine 落 wf_run.session_key，不发给后端。 */
+  sessionKey: string;
+  runMode?: 'trial' | 'production';
+  workflowVersionId?: string | number;
+}
+
+export interface StartWorkflowLocalResult {
+  runId: string;
+  workflowId: string;
+  /** 钉定版本，供 WorkflowExecutionRecord.versionId 落库 + hydration 用。 */
+  versionId: string | number;
+  /** 用户可见版本号，不同于 versionId 数据库主键。 */
+  workflowVersion?: string | number | null;
+  startedAt: string;
+}
+
+/**
+ * v2 本地执行下沉入口：
+ * 常规会话工作流：POST /agent/v2/workflows/{id}/createRunLog 注册后启动。
+ * 画布试运行同样先保存到云端版本；客户端只按版本 ID 拉取执行 DSL。
+ */
+export async function startWorkflowLocal(
+  params: StartWorkflowLocalParams
+): Promise<StartWorkflowLocalResult> {
+  const startedAt = formatShanghaiIso();
+
+  // 常规会话工作流仍需在服务端注册，以保持既有运行记录关联行为。
+  let data: StartWorkflowLocalResponse | undefined;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const candidateRunDatabaseId = await invokeIpc<number>('workflow-runtime:takeDatabaseId');
+    if (!Number.isSafeInteger(candidateRunDatabaseId) || candidateRunDatabaseId <= 0) {
+      throw new Error('global workflow id pool returned an invalid run id');
+    }
+    try {
+      data = await unwrap(
+        hostApiFetch<ApiResponse<StartWorkflowLocalResponse>>(
+          `/agent/v2/workflows/${params.workflowId}/createRunLog`,
+          {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({
+              runDatabaseId: candidateRunDatabaseId,
+              inputs: params.inputs,
+              agentContext: params.agentContext,
+              idempotencyKey: params.idempotencyKey,
+              runMode: params.runMode ?? 'production',
+              workflowVersionId: params.workflowVersionId,
+            }),
+          }
+        )
+      );
+      break;
+    } catch (error) {
+      const status = (error as { details?: { status?: number } }).details?.status;
+      if (status !== 409 || attempt === 1) throw error;
+    }
+  }
+  if (!data?.runId || data.workflowVersionId == null || !Number.isSafeInteger(data.runDatabaseId)) {
+    throw new Error('v2 createRunLog response missing runId/workflowVersionId/runDatabaseId');
+  }
+
+  // 2. 本地执行下沉：IPC handler 在主进程 await 整个 run（dispatch 到终态/等待节点），
+  //    renderer 不 await——状态走广播桥回流。
+  await invokeIpc('workflow-runtime:start', {
+    runId: data.runId,
+    runDatabaseId: data.runDatabaseId,
+    workflowId: params.workflowId,
+    versionId: String(data.workflowVersionId), // engine dslClient.fetchVersion(workflowId, versionId: string)
+    workflowVersion: data.workflowVersion,
+    input: data.resolvedInputs ?? params.inputs ?? {},
+    startedAt,
+    sessionKey: params.sessionKey,
+  });
+
+  return {
+    runId: data.runId,
+    workflowId: params.workflowId,
+    versionId: data.workflowVersionId,
+    workflowVersion: data.workflowVersion,
+    startedAt,
+  };
+}
+
 // ── 6. Get run status ───────────────────────────────────────────
 // FastAPI: GET /agent/v1/runs/{run_id} → memory-center workflow_client.py:get_workflow_run
 
@@ -281,6 +386,69 @@ export async function getWorkflowRun(runId: string): Promise<WorkflowRunResponse
   return data;
 }
 
+// ── 6b. Get run via client-local runtime IPC (gap3 hydration) ────
+//   Client-local executions live in the renderer-side DB (wf_run / wf_node_run).
+//   The workflow-runtime:getRun IPC reads from that local store and returns the
+//   full WorkflowRunResponse (or null when the run row is absent — e.g. a run
+//   owned by another site or not yet persisted). Used by card hydration on
+//   session switch / app init, where the authoritative source is the local DB
+//   rather than the backend HTTP route above.
+
+export async function getRunViaIpc(runId: string): Promise<WorkflowRunResponse | null> {
+  return invokeIpc<WorkflowRunResponse | null>('workflow-runtime:getRun', runId);
+}
+
+/** Lightweight local-run list for the canvas history dialog. */
+export interface LocalWorkflowRunSummary {
+  runId: string;
+  workflowId: string;
+  versionId: string;
+  /** 用户可见的流程版本号；versionId 仅用于运行时拉取版本 DSL。 */
+  workflowVersion: string | number | null;
+  status: string;
+  startedAt: string;
+  completedAt: string | null;
+}
+
+export async function listLocalWorkflowRuns(workflowId: string): Promise<LocalWorkflowRunSummary[]> {
+  return invokeIpc<LocalWorkflowRunSummary[]>('workflow-runtime:listRuns', workflowId);
+}
+
+// ── 6c. Cancel run (client-local runtime IPC) ───────────────────
+//   Pure client-side cancel: signals the local engine to stop the active
+//   agent query (sdk.close()) + marks the run CANCELLED + outbox syncs
+//   terminal. The admin POST /runs/{id}/cancel is disabled for client runs
+//   (see workflow-canvas-client-native-migration spec §5).
+
+export async function cancelRun(runId: string): Promise<void> {
+  await invokeIpc('workflow-runtime:cancel', runId);
+}
+
+/** Continue a user-cancelled local run from its first unfinished node. */
+export async function resumeWorkflowRun(runId: string): Promise<void> {
+  await invokeIpc('workflow-runtime:resume', runId);
+}
+
+export async function resumeWorkflowApproval(
+  runId: string,
+  nodeId: string,
+  decision: { approved: boolean; note?: string },
+): Promise<void> {
+  await invokeIpc('workflow-runtime:resumeApproval', { runId, nodeId, decision });
+}
+
+export async function submitWorkflowInput(
+  runId: string,
+  nodeId: string,
+  submittedData: Record<string, unknown>,
+): Promise<void> {
+  await invokeIpc('workflow-runtime:resumeInput', { runId, nodeId, submittedData });
+}
+
+export async function retryWorkflowSync(runId?: string): Promise<void> {
+  await invokeIpc('workflow-runtime:retrySync', runId);
+}
+
 // ── Helper: convert WorkflowRunResponse to UI execution state ───
 
 export function runToExecutionState(run: WorkflowRunResponse): WorkflowExecutionState {
@@ -288,177 +456,13 @@ export function runToExecutionState(run: WorkflowRunResponse): WorkflowExecution
 }
 
 // ── 7. Subscribe to run stream (SSE) ────────────────────────────
+//   Migrated to client-side execution. The legacy SSE / IPC
+//   subscription stack (isElectronRenderer, parseRunUpdateEvent,
+//   subscribeWorkflowRun, subscribeWorkflowRunViaIpc,
+//   beginWorkflowRunSseTrace, fetchWorkflowStatus) has been removed.
+//   Runtime push is delivered by the client-local workflow runtime
+//   via the workflow-runtime:* channels.
 
-function isElectronRenderer(): boolean {
-  return typeof window !== 'undefined' && Boolean(window.electron?.ipcRenderer);
-}
-
-function parseRunUpdateEvent(
-  runId: string,
-  currentData: string,
-  _eventCount: number,
-  onEvent: (data: WorkflowRunResponse) => void,
-  onError?: (error: Error) => void
-): void {
-  try {
-    const payload = JSON.parse(currentData) as WorkflowRunResponse;
-
-    onEvent(payload);
-  } catch (e) {
-    const parseError = new Error(`SSE parse error: ${String(e)}`);
-    console.error('[workflow-trace] SSE parse error runId=%s %s', runId, parseError.message);
-    onError?.(parseError);
-  }
-}
-
-function subscribeWorkflowRunViaIpc(
-  runId: string,
-  onEvent: (data: WorkflowRunResponse) => void,
-  onError?: (error: Error) => void
-): () => void {
-  let eventCount = 0;
-
-  void invokeIpc('workflow:stream:subscribe', runId).catch((err) => {
-    const error = err instanceof Error ? err : new Error(String(err));
-    console.error(
-      '[workflow-trace] IPC workflow:stream:subscribe failed runId=%s: %s',
-      runId,
-      error.message
-    );
-    onError?.(error);
-  });
-
-  const eventHandler = (payload: unknown) => {
-    const data = payload as { runId: string; event: string; data: string };
-    if (data.runId !== runId) return;
-    if (data.event !== 'run.update') {
-      return;
-    }
-    eventCount += 1;
-    parseRunUpdateEvent(runId, data.data, eventCount, onEvent, onError);
-  };
-
-  const errorHandler = (payload: unknown) => {
-    const data = payload as { runId: string; error: string; url?: string };
-    if (data.runId !== runId) return;
-    const detail = data.url ? `${data.error} (url=${data.url})` : data.error;
-    const error = new Error(detail);
-    console.error(
-      '[workflow-trace] IPC SSE error runId=%s url=%s: %s',
-      runId,
-      data.url ?? '',
-      data.error
-    );
-    onError?.(error);
-  };
-
-  const unsubEvent = window.electron!.ipcRenderer.on('workflow:stream:event', eventHandler);
-  const unsubError = window.electron!.ipcRenderer.on('workflow:stream:error', errorHandler);
-
-  return () => {
-    unsubEvent?.();
-    unsubError?.();
-    void invokeIpc('workflow:stream:unsubscribe', runId).catch(() => {});
-  };
-}
-
-/**
- * Subscribe to real-time workflow run updates via SSE.
- * Electron: Main process proxies to resolveStoBaseUrl() (same domain as create/start).
- * Browser fallback: direct fetch to local Host API.
- */
-export function subscribeWorkflowRun(
-  runId: string,
-  onEvent: (data: WorkflowRunResponse) => void,
-  onError?: (error: Error) => void
-): () => void {
-  if (isElectronRenderer()) {
-    return subscribeWorkflowRunViaIpc(runId, onEvent, onError);
-  }
-
-  const abort = new AbortController();
-  let closed = false;
-  let eventCount = 0;
-
-  const connect = async () => {
-    const streamPath = `/agent/v1/runs/${runId}/stream`;
-
-    try {
-      const response = await hostApiFetchStream(streamPath, {
-        headers: authHeaders(),
-        signal: abort.signal,
-      });
-
-      if (!response.ok || !response.body) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (!closed && !abort.signal.aborted) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        let currentEvent = '';
-        let currentData = '';
-
-        for (const line of lines) {
-          if (line.startsWith('event:')) {
-            currentEvent = line.slice(6).trim();
-          } else if (line.startsWith('data:')) {
-            currentData += line.slice(5);
-          } else if (line === '' && currentEvent && currentData) {
-            if (currentEvent === 'run.update') {
-              eventCount += 1;
-              parseRunUpdateEvent(runId, currentData, eventCount, onEvent, onError);
-            } else {
-              /* empty */
-            }
-            currentEvent = '';
-            currentData = '';
-          }
-        }
-      }
-    } catch (err) {
-      if (closed || abort.signal.aborted) {
-        return;
-      }
-      const error = err instanceof Error ? err : new Error(String(err));
-      console.error(
-        '[workflow-trace] GET /agent/v1/runs/%s/stream error: %s',
-        runId,
-        error.message
-      );
-      onError?.(error);
-    }
-  };
-
-  void connect();
-
-  return () => {
-    closed = true;
-    abort.abort();
-  };
-}
-
-/** Fire-and-forget SSE trace subscription after a workflow run starts. */
-export function beginWorkflowRunSseTrace(runId: string): void {
-  subscribeWorkflowRun(
-    runId,
-    () => {
-      /* trace-only; IPC polling drives UI updates */
-    },
-    (error) => {
-      console.warn('[workflow-trace] SSE trace stopped runId=%s: %s', runId, error.message);
-    }
-  );
-}
 
 // ── 8. Save / publish workflow definition (designer) ─────────────
 // FastAPI: PUT  /agent/v1/workflows/{workflow_id}       → memory-center workflow_client.py:save_workflow
@@ -523,20 +527,4 @@ export async function deleteWorkflow(workflowId: string): Promise<void> {
   };
   await unwrap(hostApiFetch<ApiResponse<null>>(`/agent/v1/workflows/${workflowId}`, init));
   console.log('[workflow-trace] DELETE /agent/v1/workflows/%s ok', workflowId);
-}
-
-// ── Legacy compatibility: query execution status (fallback) ─────
-
-export async function fetchWorkflowStatus(runId: string): Promise<WorkflowExecutionState | null> {
-  try {
-    const run = await getWorkflowRun(runId);
-    return runToExecutionState(run);
-  } catch (err) {
-    console.warn(
-      '[workflow-trace] fetchWorkflowStatus failed runId=%s error=%s',
-      runId,
-      String(err)
-    );
-    return null;
-  }
 }

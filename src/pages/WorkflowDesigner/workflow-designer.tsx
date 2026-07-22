@@ -1,26 +1,34 @@
 /**
  * 工作流设计器 — memory-center 功能 + StoClaw 壳层（React Flow 画布对齐 MC）
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { ChevronLeft, Loader2, Play, Save } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, History, Loader2, Play, Save, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useContentHeader } from '@/components/layout/content-header-context';
 import { definitionFromDetail, definitionToSavePayload } from '@/lib/workflow-designer-adapter';
+import { normalizeConditionBranches } from '@/pages/WorkflowDesigner/normalize-conditions';
 import { persistNewWorkflow } from '@/lib/workflow-designer-persist';
 import {
   getWorkflowDetail,
   publishWorkflowDefinition,
   saveWorkflowDefinition,
-  startWorkflow,
 } from '@/lib/workflow-api';
 import { workflowBuilderShell } from '@/lib/surfaces';
 import { DesignerCanvas } from '@/pages/WorkflowDesigner/components/designer-canvas';
-import { DesignerInspector } from '@/pages/WorkflowDesigner/components/designer-inspector';
+import { HistoryVersionsDrawer } from '@/pages/WorkflowDesigner/components/history-versions-drawer';
+import { LocalRunHistoryDialog } from '@/pages/WorkflowDesigner/components/local-run-history-dialog';
 import { DesignerNodeLibrary } from '@/pages/WorkflowDesigner/components/designer-node-library';
-import type { WorkflowDefinition, WorkflowNode } from '@/pages/WorkflowDesigner/types';
+import { StartupRunDialog } from '@/pages/WorkflowDesigner/components/startup-run-dialog';
+import { TestRunDrawer } from '@/pages/WorkflowDesigner/components/test-run-drawer';
+import { useDesignerTryRun } from '@/pages/WorkflowDesigner/hooks/use-designer-try-run';
+import type { WorkflowDefinition } from '@/pages/WorkflowDesigner/types';
+import type { WorkflowSchema } from '@/types/workflow';
 import {
+  buildAiWorkflowGenerateTarget,
   createEmptyWorkflowDefinition,
   createNode,
   formatSavedAt,
@@ -40,7 +48,9 @@ export function WorkflowDesigner({
   onCreated,
 }: WorkflowDesignerProps) {
   const { t } = useTranslation('workflow');
+  const navigate = useNavigate();
   const canvasWrapRef = useRef<HTMLDivElement>(null);
+  const tryRunButtonRef = useRef<HTMLButtonElement>(null);
   const isNew = !workflowId;
 
   const [loading, setLoading] = useState(!isNew);
@@ -51,10 +61,14 @@ export function WorkflowDesigner({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [running, setRunning] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [savedAtLabel, setSavedAtLabel] = useState('');
+  const [startupSchema, setStartupSchema] = useState<WorkflowSchema | null>(null);
+  const [startupDefaultValues, setStartupDefaultValues] = useState<Record<string, unknown>>({});
+  const [workflowVersionId, setWorkflowVersionId] = useState<number | undefined>();
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [localRunHistoryOpen, setLocalRunHistoryOpen] = useState(false);
 
   const loadWorkflow = useCallback(async () => {
     if (!workflowId) return;
@@ -62,7 +76,10 @@ export function WorkflowDesigner({
     setLoadError(null);
     try {
       const detail = await getWorkflowDetail(workflowId);
-      setWorkflow(definitionFromDetail(detail));
+      setWorkflow(normalizeConditionBranches(definitionFromDetail(detail)));
+      setStartupSchema(detail.startup?.schema ?? null);
+      setStartupDefaultValues(detail.startup?.defaultPreset?.values ?? {});
+      setWorkflowVersionId(detail.workflowVersionId);
       setDirty(false);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
@@ -72,53 +89,55 @@ export function WorkflowDesigner({
   }, [workflowId]);
 
   useEffect(() => {
-    if (workflowId) void loadWorkflow();
+    if (!workflowId) return undefined;
+    const timer = window.setTimeout(() => {
+      void loadWorkflow();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadWorkflow, workflowId]);
 
-  const selectedNode = workflow?.nodes.find((n) => n.id === selectedNodeId) ?? null;
+  const canStartTryRun = useCallback(() => Boolean(workflow?.id) && !dirty, [dirty, workflow?.id]);
+  const tryRun = useDesignerTryRun({
+    workflowId: workflow?.id,
+    startupSchema,
+    startupDefaultValues,
+    workflowVersionId,
+    canStart: canStartTryRun,
+  });
+  const beginTryRun = tryRun.begin;
+  const isTryRunStarting = tryRun.isStarting;
 
-  const markDirty = () => setDirty(true);
+  const markDirty = useCallback(() => setDirty(true), []);
 
-  const patchWorkflow = (patch: Partial<WorkflowDefinition>) => {
+  const patchWorkflow = useCallback((patch: Partial<WorkflowDefinition>) => {
     if (!workflow) return;
     setWorkflow({ ...workflow, ...patch });
     markDirty();
-  };
+  }, [markDirty, workflow]);
 
-  const patchSelectedNode = (node: WorkflowNode) => {
-    if (!workflow) return;
-    setWorkflow({
-      ...workflow,
-      nodes: workflow.nodes.map((n) => (n.id === node.id ? node : n)),
-    });
-    markDirty();
-  };
-
-  const handleAddNode = (type: string) => {
+  const handleAddNodeAt = useCallback((type: string, position?: { x: number; y: number }) => {
     if (!workflow) return;
     if (type === 'startup_config' && workflow.nodes.some((n) => n.type === 'startup_config')) {
       toast.info('每个流程只能有一个启动配置节点');
       return;
     }
-    const node = createNode(type, workflow.nodes.length);
+    const node = createNode(type, workflow.nodes.length, position);
     setWorkflow({ ...workflow, nodes: [...workflow.nodes, node] });
     setSelectedNodeId(node.id);
     setSelectedEdgeId(null);
     markDirty();
-  };
+  }, [markDirty, workflow]);
 
-  const handleDeleteNode = () => {
-    if (!workflow || !selectedNode) return;
-    setWorkflow({
-      ...workflow,
-      nodes: workflow.nodes.filter((n) => n.id !== selectedNode.id),
-      edges: workflow.edges.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id),
-    });
-    setSelectedNodeId(null);
-    markDirty();
-  };
+  const handleAddNode = useCallback((type: string) => {
+    handleAddNodeAt(type);
+  }, [handleAddNodeAt]);
 
-  const handleSave = async () => {
+  const handleAiBuild = useCallback(() => {
+    const target = buildAiWorkflowGenerateTarget(workflow);
+    navigate(target.pathname, { state: { prompt: target.prompt } });
+  }, [navigate, workflow]);
+
+  const handleSave = useCallback(async () => {
     if (!workflow) return;
     setSaving(true);
     try {
@@ -141,9 +160,9 @@ export function WorkflowDesigner({
     } finally {
       setSaving(false);
     }
-  };
+  }, [onCreated, t, workflow]);
 
-  const handlePublish = async () => {
+  const handlePublish = useCallback(async () => {
     if (!workflow?.id) {
       toast.info('请先保存工作流');
       return;
@@ -160,9 +179,9 @@ export function WorkflowDesigner({
     } finally {
       setPublishing(false);
     }
-  };
+  }, [dirty, handleSave, workflow]);
 
-  const handleTryRun = async () => {
+  const handleTryRun = useCallback(() => {
     if (!workflow?.id) {
       toast.info('请先保存工作流');
       return;
@@ -171,27 +190,118 @@ export function WorkflowDesigner({
       toast.info('请先保存草稿再试运行');
       return;
     }
-    setRunning(true);
-    try {
-      const result = await startWorkflow(workflow.id, {
-        idempotencyKey: `designer-run-${Date.now()}`,
-        inputs: {},
-      });
-      toast.success(`试运行已启动（runId: ${result.runId}）`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : '试运行失败');
-    } finally {
-      setRunning(false);
-    }
-  };
+    beginTryRun();
+  }, [beginTryRun, dirty, workflow?.id]);
 
-  const handleBack = () => {
+  const handleTryRunFromHistory = useCallback(() => {
+    setLocalRunHistoryOpen(false);
+    window.setTimeout(() => {
+      tryRunButtonRef.current?.focus();
+      handleTryRun();
+    }, 0);
+  }, [handleTryRun]);
+
+  const handleHistoryRestored = useCallback((restoredWorkflow: WorkflowDefinition) => {
+    setWorkflow(normalizeConditionBranches(restoredWorkflow));
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setDirty(false);
+    setSavedAtLabel(new Date().toLocaleString());
+  }, []);
+
+  const handleBack = useCallback(() => {
     if (dirty) {
       const ok = window.confirm('有未保存的修改，确定离开？');
       if (!ok) return;
     }
     onBack();
-  };
+  }, [dirty, onBack]);
+
+  const headerTitle = useMemo(
+    () => (
+      <div className="no-drag flex min-w-0 max-w-full items-center gap-2 overflow-hidden">
+        <button
+          type="button"
+          aria-label={t('builder.back')}
+          onClick={handleBack}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground/80 hover:bg-muted"
+        >
+          <ChevronLeft className="h-5 w-5" aria-hidden />
+        </button>
+        <div className="min-w-0 flex-1">
+          {workflow ? (
+            <Input
+              value={workflow.name}
+              onChange={(e) => patchWorkflow({ name: e.target.value })}
+              className="h-6 min-w-0 border-transparent bg-transparent px-1 text-sm font-semibold leading-5 shadow-none hover:bg-muted focus-visible:border-primary/30 focus-visible:bg-card"
+            />
+          ) : (
+            <p className="min-w-0 truncate px-1 text-sm font-semibold leading-5">
+              {t('editor.editTitle')}
+              {workflowId ? ` · ${workflowId}` : ''}
+            </p>
+          )}
+          <p className="min-w-0 truncate px-1 text-xs leading-4 text-muted-foreground">
+            {workflow?.id ? `v${workflow.version}` : workflow ? '新建草稿' : workflowId}
+            {savedAtLabel ? ` · ${savedAtLabel}` : null}
+            {dirty ? ' · 未保存' : null}
+          </p>
+        </div>
+      </div>
+    ),
+    [dirty, handleBack, patchWorkflow, savedAtLabel, t, workflow, workflowId],
+  );
+
+  const headerActions = useMemo(
+    () =>
+      workflow ? (
+        <>
+          <div className="mr-4 hidden items-center gap-9 text-xs text-muted-foreground xl:flex">
+            <div>
+              <p>当前编辑版本</p>
+              <p className="text-sm font-semibold text-foreground">
+                v{workflow.version || 1}
+                <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">已发布</span>
+              </p>
+            </div>
+            <div>
+              <p>当前生效版本</p>
+              <p className="text-sm font-semibold text-foreground">
+                v{workflow.version || 1}
+                <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">已发布</span>
+              </p>
+            </div>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => setHistoryOpen(true)}>
+            <History className="mr-1 h-3.5 w-3.5" />
+            版本列表
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={() => setLocalRunHistoryOpen(true)}>
+            <History className="mr-1 h-3.5 w-3.5" />
+            本地运行记录
+          </Button>
+          <Button ref={tryRunButtonRef} type="button" variant="outline" size="sm" disabled={isTryRunStarting} onClick={handleTryRun}>
+            <Play className="mr-1 h-3.5 w-3.5" />
+            {isTryRunStarting ? '启动中' : t('builder.tryRun')}
+          </Button>
+          <Button type="button" variant="outline" size="sm" disabled={saving || !dirty} onClick={() => void handleSave()}>
+            <Save className="mr-1 h-3.5 w-3.5" />
+            {saving ? '保存中' : '另存草稿'}
+          </Button>
+          <Button type="button" size="sm" className="bg-[#5f6672] text-white hover:bg-[#4b5563]" disabled={publishing} onClick={() => void handlePublish()}>
+            <SlidersHorizontal className="mr-1 h-3.5 w-3.5" />
+            {publishing ? '发布中' : t('builder.publish')}
+          </Button>
+        </>
+      ) : null,
+    [dirty, handlePublish, handleSave, handleTryRun, isTryRunStarting, publishing, saving, t, workflow],
+  );
+
+  useContentHeader({
+    title: headerTitle,
+    actions: headerActions,
+    enabled: true,
+  });
 
   if (loading) {
     return (
@@ -224,48 +334,19 @@ export function WorkflowDesigner({
 
   return (
     <div className={workflowBuilderShell}>
-      <header className="flex min-h-[54px] shrink-0 flex-wrap items-center gap-x-2.5 gap-y-2 border-b border-border bg-card px-4 py-2">
-        <button
-          type="button"
-          aria-label={t('builder.back')}
-          onClick={handleBack}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground/80 hover:bg-muted"
-        >
-          <ChevronLeft className="h-5 w-5" aria-hidden />
-        </button>
-        <div className="min-w-0 flex-1 basis-[200px]">
-          <Input
-            value={workflow.name}
-            onChange={(e) => patchWorkflow({ name: e.target.value })}
-            className="h-auto border-transparent bg-transparent px-1.5 text-base font-semibold shadow-none hover:bg-muted focus-visible:border-primary/30 focus-visible:bg-card"
-          />
-          <p className="px-1.5 text-xs text-muted-foreground">
-            {workflow.id ? `v${workflow.version}` : '新建草稿'}
-            {savedAtLabel ? ` · ${savedAtLabel}` : null}
-            {dirty ? ' · 未保存' : null}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" size="sm" disabled={saving || !dirty} onClick={() => void handleSave()}>
-            <Save className="mr-1 h-3.5 w-3.5" />
-            {saving ? '保存中' : t('builder.saveDraft')}
-          </Button>
-          <Button type="button" variant="outline" size="sm" disabled={running} onClick={() => void handleTryRun()}>
-            <Play className="mr-1 h-3.5 w-3.5" />
-            {running ? '启动中' : t('builder.tryRun')}
-          </Button>
-          <Button type="button" size="sm" disabled={publishing} onClick={() => void handlePublish()}>
-            {publishing ? '发布中' : t('builder.publish')}
-          </Button>
-        </div>
-      </header>
-
       <div className="relative flex min-h-0 min-w-0 flex-1">
-        <div className="absolute left-4 top-4 z-[24] flex w-[220px] max-h-[calc(100%-2rem)] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <div className="shrink-0 border-b border-border px-3 py-2">
-            <b className="text-sm font-semibold">{t('nodeLib.title')}</b>
+        <div className="pointer-events-none absolute left-5 top-5 z-[24] flex w-[300px] max-w-[calc(100%-2.5rem)] flex-col gap-8">
+          <button
+            type="button"
+            onClick={handleAiBuild}
+            className="pointer-events-auto inline-flex h-12 w-fit items-center gap-2.5 rounded-[18px] border border-orange-200 bg-orange-50/80 px-5 text-base font-bold text-orange-500 shadow-sm hover:bg-orange-50"
+          >
+            <Sparkles className="h-5 w-5" />
+            AI 帮我建
+          </button>
+          <div className="pointer-events-auto max-h-[440px] overflow-hidden rounded-[20px] border border-slate-100 bg-white/95 p-5 shadow-[0_16px_34px_rgba(15,23,42,0.08)]">
+            <DesignerNodeLibrary onPick={handleAddNode} className="max-h-[400px] overflow-auto" />
           </div>
-          <DesignerNodeLibrary onPick={handleAddNode} className="flex-1 overflow-auto" />
         </div>
 
         <DesignerCanvas
@@ -275,23 +356,54 @@ export function WorkflowDesigner({
           onSelectNode={setSelectedNodeId}
           onSelectEdge={setSelectedEdgeId}
           onWorkflowChange={setWorkflow}
+          onAddNodeAt={handleAddNodeAt}
           onDirty={markDirty}
           canvasWrapRef={canvasWrapRef}
         />
 
-        <aside className="flex w-[280px] shrink-0 flex-col border-l border-border bg-card">
-          <div className="border-b border-border px-3 py-2">
-            <p className="text-sm font-semibold">属性</p>
-          </div>
-          <DesignerInspector
-            workflow={workflow}
-            selectedNode={selectedNode}
-            onWorkflowDescriptionChange={(description) => patchWorkflow({ description })}
-            onNodeChange={patchSelectedNode}
-            onDeleteNode={handleDeleteNode}
-          />
-        </aside>
+        <HistoryVersionsDrawer
+          open={historyOpen}
+          workflow={workflow}
+          onClose={() => setHistoryOpen(false)}
+          onRestored={handleHistoryRestored}
+        />
+        <LocalRunHistoryDialog
+          open={localRunHistoryOpen}
+          workflowId={workflow.id}
+          workflowName={workflow.name}
+          onClose={() => setLocalRunHistoryOpen(false)}
+          onTryRun={handleTryRunFromHistory}
+          onSelectRun={tryRun.openExistingRun}
+        />
       </div>
+
+      <StartupRunDialog
+        open={tryRun.isStartupDialogOpen}
+        schema={tryRun.startupSchema}
+        defaultValues={tryRun.startupDefaultValues}
+        runtimeUploadNodes={tryRun.runtimeUploadNodes}
+        isStarting={tryRun.isStarting}
+        onConfirm={(inputs) => void tryRun.confirmStartup(inputs)}
+        onClose={tryRun.cancelStartupDialog}
+      />
+      <TestRunDrawer
+        open={tryRun.isDrawerOpen}
+        runId={tryRun.runId}
+        run={tryRun.run}
+        executionState={tryRun.executionState}
+        workflowVersion={tryRun.runWorkflowVersion}
+        isStarting={tryRun.isStarting}
+        isCancelling={tryRun.isCancelling}
+        isRunActive={tryRun.isRunActive}
+        isDraftSnapshot={tryRun.isDraftSnapshot}
+        launchError={tryRun.launchError}
+        onClose={tryRun.closeDrawer}
+        onCancel={() => void tryRun.cancel()}
+        onContinue={() => void tryRun.continueRun()}
+        onRerun={tryRun.rerun}
+        onDecideApproval={(approved, note) => void tryRun.decideApproval(approved, note)}
+        onSubmitInput={(values) => void tryRun.submitInput(values)}
+      />
     </div>
   );
 }

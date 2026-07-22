@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { artifactToPreviewFile, isUserFacingArtifactUrl } from '@/lib/preview-url';
 import { shouldPreviewInSidePanel } from '@/lib/preview-href';
-import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import type { AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
 import { ArtifactProductCard, buildArtifactMetaLine } from '@/components/chat/artifact-product-card';
@@ -18,7 +17,7 @@ export function WorkflowCompletionActions({
 }: WorkflowCompletionActionsProps) {
   const { t } = useTranslation('chat');
   const state = useChatStore((s) => s.workflowCardStates[runId]);
-  if (!state || !isTerminalWorkflowRunStatus(state.status)) return null;
+  if (!state || state.status !== 'completed') return null;
 
   const artifacts = (state.result?.artifacts ?? []).filter((a) => isUserFacingArtifactUrl(a.url));
   const primaryArtifact = artifacts.find((a) => shouldPreviewInSidePanel(a.url)) ?? null;

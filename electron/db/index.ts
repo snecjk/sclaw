@@ -26,6 +26,15 @@ export type {
   DemoRecordTable,
 } from './models/tables/demo-record-table';
 export type {
+  WfRunTable,
+  WfNodeRunTable,
+  WfEventTable,
+  WfArtifactTable,
+  WfApprovalTaskTable,
+  WfUserInputTaskTable,
+  WfOutboxTable,
+} from './models/tables/workflow-runtime-tables';
+export type {
   CatalogSessionsTable,
   SessionEngineBindingsTable,
   SessionGroupsTable,
@@ -35,6 +44,10 @@ export {
   DemoRecordRepository,
   getDemoRecordRepository,
 } from './repositories/demo-record-repository';
+export {
+  WorkflowRuntimeRepository,
+  getWorkflowRuntimeRepository,
+} from './repositories/workflow-runtime-repository';
 export {
   CatalogSessionRepository,
   getCatalogSessionRepository,

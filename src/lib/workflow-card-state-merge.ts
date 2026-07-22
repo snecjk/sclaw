@@ -7,10 +7,12 @@ export function mergeWorkflowCardState(
   incoming: WorkflowExecutionState,
   options?: { localStartedAtMs?: number },
 ): WorkflowExecutionState {
-  const completedAt = incoming.completedAt ?? previous?.completedAt;
+  const isIncomingActive = incoming.status === 'running' || incoming.status === 'waiting_approval' || incoming.status === 'waiting_input';
+  const completedAt = isIncomingActive ? undefined : (incoming.completedAt ?? previous?.completedAt);
+  const incomingStartedAt = previous?.startedAt && completedAt ? undefined : incoming.startedAt;
   const startedAt = resolveWorkflowStartedAt(
     previous?.startedAt,
-    incoming.startedAt,
+    incomingStartedAt,
     options?.localStartedAtMs,
     completedAt,
   );

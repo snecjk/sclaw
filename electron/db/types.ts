@@ -1,5 +1,14 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { DemoRecordTable } from './models/tables/demo-record-table';
+import type {
+  WfApprovalTaskTable,
+  WfArtifactTable,
+  WfEventTable,
+  WfNodeRunTable,
+  WfOutboxTable,
+  WfRunTable,
+  WfUserInputTaskTable,
+} from './models/tables/workflow-runtime-tables';
 import type { MemoryCaptureJobTable } from './models/tables/memory-capture-job-table';
 import type {
   CatalogSessionsTable,
@@ -46,6 +55,13 @@ export interface SchemaMigrationsTable {
 export interface SqliteDbSchema {
   schema_migrations: SchemaMigrationsTable;
   app_demo_records: DemoRecordTable;
+  wf_run: WfRunTable;
+  wf_node_run: WfNodeRunTable;
+  wf_event: WfEventTable;
+  wf_artifact: WfArtifactTable;
+  wf_approval_task: WfApprovalTaskTable;
+  wf_user_input_task: WfUserInputTaskTable;
+  wf_outbox: WfOutboxTable;
   memory_capture_jobs: MemoryCaptureJobTable;
   workspaces: WorkspacesTable;
   session_groups: SessionGroupsTable;

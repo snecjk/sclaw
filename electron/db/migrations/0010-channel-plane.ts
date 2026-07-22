@@ -1,7 +1,7 @@
 import type { SqliteMigration } from '../types';
 
 export const channelPlaneMigration: SqliteMigration = {
-  version: 5,
+  version: 10,
   name: 'channel-plane-channel-connections',
   sql: `
     CREATE TABLE IF NOT EXISTS channel_connections (

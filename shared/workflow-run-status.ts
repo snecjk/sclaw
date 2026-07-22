@@ -3,12 +3,16 @@ export type WorkflowRunStatus =
   | 'running'
   | 'completed'
   | 'failed'
+  | 'cancelled'
   | 'timeout'
+  | 'waiting_approval'
+  | 'waiting_input'
   | 'unknown';
 
 export interface WorkflowRunNodeRun {
   id: string;
   nodeId: string;
+  nodeType?: string;
   status: string;
   startedAt?: string;
   completedAt?: string;
@@ -25,6 +29,8 @@ export interface WorkflowRunArtifact {
   /** Signed OSS download URL (Content-Disposition: attachment). */
   tempUrl?: string;
   size?: number;
+  nodeId?: string;
+  kind?: string;
 }
 
 export interface WorkflowExecutionResult {
@@ -62,6 +68,9 @@ export interface WorkflowExecutionState {
   }>;
   result?: WorkflowExecutionResult;
   error?: string;
+  waitingNodeId?: string | null;
+  approvalTasks?: unknown[];
+  userInputTasks?: unknown[];
 }
 import { normalizeWorkflowTimestamp, parseWorkflowTimestampMs } from './workflow-timestamp';
 
@@ -81,6 +90,7 @@ export interface WorkflowRunApiPayload {
       previewUrl?: string;
       filePath?: string;
       contentType?: string;
+      nodeId?: string;
     }
   > | null;
   output?: unknown;
@@ -91,9 +101,16 @@ export interface WorkflowRunApiPayload {
     artifacts?: WorkflowRunApiPayload['artifacts'];
   } | null;
   error?: string | null;
+  waitingNodeId?: string | null;
+  approvalTasks?: unknown[] | null;
+  userInputTasks?: unknown[] | null;
 }
 
-/** Map Agent Workflow API status values to UI status. */
+/** Map Agent Workflow API status values to UI status.
+ *
+ * 客户端本地执行体（engine.ts）以大写 DB 枚举落库（RUNNING/WAITING_APPROVAL/…），
+ * renderer 端统一为小写 UI 枚举；两者都须归一化。
+ * INTERRUPTED（崩溃收口）映射到 failed，保留 failed 语义。 */
 export function normalizeWorkflowRunStatus(status: string | undefined | null): WorkflowRunStatus {
   switch (status?.toLowerCase()) {
     case 'succeed':
@@ -103,14 +120,21 @@ export function normalizeWorkflowRunStatus(status: string | undefined | null): W
       return 'completed';
     case 'failed':
     case 'error':
+    case 'interrupted':
       return 'failed';
     case 'cancelled':
     case 'canceled':
-      return 'failed';
+      return 'cancelled';
     case 'running':
       return 'running';
     case 'pending':
       return 'pending';
+    case 'waiting_approval':
+    case 'waiting approval':
+      return 'waiting_approval';
+    case 'waiting_input':
+    case 'waiting input':
+      return 'waiting_input';
     case 'timeout':
       return 'timeout';
     default:
@@ -156,11 +180,18 @@ export function normalizeWorkflowStepStatus(status: string): 'pending' | 'runnin
 }
 
 export function isActiveWorkflowRunStatus(status: WorkflowRunStatus): boolean {
-  return status === 'pending' || status === 'running';
+  // active = 未结束且仍可流转（pending/running + 两种 waiting）。
+  return (
+    status === 'pending'
+    || status === 'running'
+    || status === 'waiting_approval'
+    || status === 'waiting_input'
+  );
 }
 
 export function isTerminalWorkflowRunStatus(status: WorkflowRunStatus): boolean {
-  return status === 'completed' || status === 'failed' || status === 'timeout';
+  // terminal = 终态，不再变化（completed/failed/timeout）。
+  return status === 'completed' || status === 'failed' || status === 'cancelled' || status === 'timeout';
 }
 
 function isHttpArtifactUrl(url: string): boolean {
@@ -200,6 +231,8 @@ export function normalizeRunArtifacts(
         previewUrl,
         tempUrl,
         size: a.size,
+        nodeId: a.nodeId,
+        kind: a.kind,
       };
     })
     .filter((a) => a.id || a.url || a.previewUrl || a.tempUrl);
@@ -252,9 +285,65 @@ export function collectAllRunArtifacts(run: WorkflowRunApiPayload): WorkflowRunA
     }
   }
 
-  const merged = [...byName.values()];
-  const httpArtifacts = merged.filter((a) => isHttpArtifactUrl(a.url));
-  return httpArtifacts.length > 0 ? httpArtifacts : merged;
+  // Keep local artifacts alongside remote ones. De-duplication above already
+  // prefers HTTP for the same artifact; globally dropping local entries would
+  // hide a local HTML result whenever an unrelated OSS/JSON artifact exists.
+  return [...byName.values()];
+}
+
+function isIntermediateArtifactKind(kind: string | undefined): boolean {
+  const normalized = kind?.trim().toLowerCase();
+  return normalized === 'input' || normalized === 'intermediate' || normalized === 'process';
+}
+
+/**
+ * Return user-facing final artifacts only. Local execution persists inputs and
+ * every node's files for audit/sync.  A client `agent_output` may already have
+ * a materialized OUTPUT artifact before the terminal output node; it is a
+ * user-facing result as well, not an intermediate merely because of node type.
+ */
+export function collectFinalRunArtifacts(run: WorkflowRunApiPayload): WorkflowRunArtifact[] {
+  if (resolveWorkflowRunStatus(run) !== 'completed') return [];
+
+  const resultArtifacts = normalizeRunArtifacts(run.result?.artifacts);
+  const outputArtifacts = collectArtifactsFromOutput(run.output);
+  const topLevel = normalizeRunArtifacts(run.artifacts);
+  const outputNodeIds = new Set(
+    (run.nodeRuns ?? [])
+      .filter((node) => node.nodeType?.trim().toLowerCase() === 'output')
+      .map((node) => node.nodeId),
+  );
+  // A local run's `result` is the latest agent output, not the workflow's final
+  // output. Once output-node metadata exists, never merge that intermediate
+  // agent result into the final artifact set.
+  const explicit = outputNodeIds.size > 0
+    ? outputArtifacts
+    : [...resultArtifacts, ...outputArtifacts];
+
+  let finalRows: WorkflowRunArtifact[];
+  if (outputNodeIds.size > 0) {
+    finalRows = topLevel.filter((artifact) => (
+      (artifact.nodeId && outputNodeIds.has(artifact.nodeId))
+      || artifact.kind?.trim().toUpperCase() === 'OUTPUT'
+    ));
+  } else if (explicit.length > 0) {
+    const names = new Set(explicit.map((artifact) => artifact.name).filter(Boolean));
+    finalRows = topLevel.filter((artifact) => names.has(artifact.name));
+  } else {
+    // Compatibility for older cloud payloads that did not return nodeType.
+    finalRows = topLevel.filter((artifact) => !isIntermediateArtifactKind(artifact.kind));
+  }
+
+  const byName = new Map<string, WorkflowRunArtifact>();
+  for (const artifact of [...explicit, ...finalRows]) {
+    const key = artifact.name || artifact.id || artifact.url;
+    if (!key) continue;
+    const existing = byName.get(key);
+    if (!existing || (isHttpArtifactUrl(artifact.url) && !isHttpArtifactUrl(existing.url))) {
+      byName.set(key, artifact);
+    }
+  }
+  return [...byName.values()];
 }
 
 function mapArtifacts(artifacts: WorkflowRunArtifact[]) {
@@ -352,7 +441,7 @@ export function workflowRunResponseToExecutionState(run: WorkflowRunApiPayload):
     (n) => normalizeWorkflowStepStatus(n.status) === 'completed',
   ).length;
   const progress = status === 'completed' ? 100 : Math.min(99, Math.floor((completedNodes / totalNodes) * 100));
-  const artifacts = collectAllRunArtifacts(run);
+  const artifacts = collectFinalRunArtifacts(run);
 
   return {
     runId: run.id,
@@ -375,6 +464,9 @@ export function workflowRunResponseToExecutionState(run: WorkflowRunApiPayload):
     })),
     result: extractRunResultFromPayload(run, status, artifacts),
     error: run.error ?? undefined,
+    waitingNodeId: run.waitingNodeId ?? null,
+    approvalTasks: run.approvalTasks ?? [],
+    userInputTasks: run.userInputTasks ?? [],
   };
 }
 
@@ -383,22 +475,29 @@ function extractRunResultFromPayload(
   status: WorkflowRunStatus,
   artifacts: WorkflowRunArtifact[],
 ): WorkflowExecutionResult | undefined {
+  // Non-success states can already contain input/intermediate files for audit,
+  // but they are not completed workflow results.
+  if (status !== 'completed') return undefined;
+
   const mapped = mapArtifacts(artifacts);
   const outputSummary = extractOutputSummary(run.output);
+  const hasOutputNode = (run.nodeRuns ?? []).some(
+    (node) => node.nodeType?.trim().toLowerCase() === 'output',
+  );
+  const resultSummary = hasOutputNode ? undefined : extractOutputSummary(run.result)
+    ?? (typeof run.result?.title === 'string' && run.result.title.trim()
+      ? run.result.title.trim()
+      : undefined);
 
-  if (run.result?.summary || run.result?.title) {
+  if (outputSummary) {
     return {
-      summary: run.result.summary ?? run.result.title ?? outputSummary ?? undefined,
+      summary: outputSummary,
       artifacts: mapped.length > 0 ? mapped : undefined,
     };
   }
 
-  if (outputSummary) {
-    return { summary: outputSummary, artifacts: mapped.length > 0 ? mapped : undefined };
-  }
-
-  if (status !== 'completed') {
-    return mapped.length > 0 ? { artifacts: mapped } : undefined;
+  if (resultSummary) {
+    return { summary: resultSummary, artifacts: mapped.length > 0 ? mapped : undefined };
   }
 
   return mapped.length > 0 ? { artifacts: mapped } : undefined;
@@ -407,6 +506,6 @@ function extractRunResultFromPayload(
 /** Extract client-facing result summary + artifacts from GET /runs response. */
 export function extractRunResult(run: WorkflowRunApiPayload): WorkflowExecutionResult | undefined {
   const status = resolveWorkflowRunStatus(run);
-  const artifacts = collectAllRunArtifacts(run);
+  const artifacts = collectFinalRunArtifacts(run);
   return extractRunResultFromPayload(run, status, artifacts);
 }

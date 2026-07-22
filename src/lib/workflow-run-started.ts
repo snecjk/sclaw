@@ -2,8 +2,6 @@
  * Shared post-start UI for workflow runs (frontend API path or builtin tool result).
  */
 import { toast } from 'sonner';
-import { invokeIpc } from '@/lib/api-client';
-import { beginWorkflowRunSseTrace } from '@/lib/workflow-api';
 import {
   ensureWorkflowCardsInMessages,
   getAssistantMessageText,
@@ -32,6 +30,8 @@ export interface ApplyWorkflowRunStartedOptions {
   assistantText?: string;
   /** patch_assistant: attach card to model reply; local_turn: client-only turn (form submit). */
   presentation?: WorkflowRunPresentation;
+  /** 钉定版本，落 WorkflowExecutionRecord.versionId（仅 startWorkflowLocal 路径可得）。 */
+  versionId?: string | number;
 }
 
 /** After POST /workflows/{id}/start — card, tracker, memory (no Gateway send). */
@@ -40,7 +40,6 @@ export async function applyWorkflowRunStarted(
 ): Promise<boolean> {
   const {
     sessionKey,
-    agentId,
     workflowId,
     runId,
     templateName,
@@ -48,6 +47,7 @@ export async function applyWorkflowRunStarted(
     userText,
     assistantText,
     presentation = 'local_turn',
+    versionId,
   } = options;
 
   if (!canStartWorkflow()) {
@@ -112,6 +112,7 @@ export async function applyWorkflowRunStarted(
     updatedAt: startedAtMs,
     collectedInputs: inputs,
     paramsSummary: resolvedUserText,
+    versionId,
   });
 
   if (presentation === 'local_turn' && wfRecord?.templateId) {
@@ -138,14 +139,6 @@ export async function applyWorkflowRunStarted(
     startedAt: startedAtIso,
   });
   chatStore.clearPendingWorkflow();
-
-  await invokeIpc('workflow:startTracking', {
-    runId,
-    workflowId,
-    sessionKey,
-    agentId,
-  });
-  beginWorkflowRunSseTrace(runId);
 
   return true;
 }

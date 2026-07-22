@@ -93,7 +93,7 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
           navigate,
           '/home',
           `帮我执行 id 为：${item.item_ref_id} 的工作流 【${item.title}】`,
-          { sessionTitle: `执行${item.title}工作流` },
+          { sessionTitle: `执行${item.title}工作流`, workflowRun: true },
         );
       } else if (item.item_type === 'workflow_template') {
         // 工作流模版：安装（参考官方推荐模版的安装逻辑）

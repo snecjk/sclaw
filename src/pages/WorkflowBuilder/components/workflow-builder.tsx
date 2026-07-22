@@ -1,4 +1,12 @@
-/** 工作流编辑器主组件：顶栏 + 侧栏（AI助手/节点库） + 画布 + 各种弹窗/抽屉 */
+/**
+ * @deprecated 工作流画布已原生化迁移到 `src/pages/WorkflowDesigner/`
+ * （@xyflow/react v12，数据模型与 memory-center-web 对齐）。本目录为早期自研
+ * SVG 画布，数据模型（db/proc/cond/task/notify/end/ai）与生产工作流不兼容，
+ * 未接入任何路由、不可复用。保留仅作历史参考，请勿新增引用。
+ * 见 docs/superpowers/specs/2026-07-14-workflow-canvas-client-native-migration.md
+ *
+ * 工作流编辑器主组件：顶栏 + 侧栏（AI助手/节点库） + 画布 + 各种弹窗/抽屉
+ */
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { useTranslation } from 'react-i18next';

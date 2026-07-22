@@ -68,6 +68,27 @@ describe('resolveAssistantCopyShareContent', () => {
 
     expect(result.text).toBe(summary);
   });
+
+  it('accepts a structured workflow summary without crashing', () => {
+    const result = resolveAssistantCopyShareContent({
+      text: boilerplate,
+      assistantBubbleText: '',
+      workflowCard: { runId: 'run_1', templateName: '客户异常监控' },
+      workflowCardStates: {
+        run_1: {
+          runId: 'run_1',
+          workflowId: 'wf_cb81b6b7',
+          status: 'completed',
+          progress: 100,
+          steps: [],
+          result: { summary: { text: summary } as unknown as string },
+        },
+      },
+      previewFiles: [],
+    });
+
+    expect(result.text).toBe(boilerplate);
+  });
 });
 
 describe('formatAssistantCopyShareTextOnly', () => {
