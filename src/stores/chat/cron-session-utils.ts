@@ -180,6 +180,24 @@ export function getCronRunSessionAggregateKey(runSessionKey: string): string | n
   return `agent:${parsed.agentId}:cron:${parsed.jobId}:${y}-${m}-${d}`;
 }
 
+/**
+ * Maps a cron BASE key (`agent:{a}:cron:{job}` — no date, no run) to today's
+ * dated aggregate key. The OpenClaw Gateway emits a base key for `delta`/
+ * `final` events while `started` carries a dated key; without normalization the
+ * background handler sees the base key as an orphan session and drops the
+ * stream, leaving the dated session stuck in `sending` with no unread badge.
+ * Mirrors `getCronRunSessionAggregateKey` but acts on base keys.
+ */
+export function getCronBaseSessionTodayDatedKey(sessionKey: string): string | null {
+  const parsed = parseCronSessionKey(sessionKey);
+  if (!parsed || parsed.date || parsed.runSessionId) return null;
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, '0');
+  const d = String(today.getDate()).padStart(2, '0');
+  return `agent:${parsed.agentId}:cron:${parsed.jobId}:${y}-${m}-${d}`;
+}
+
 // ---------------------------------------------------------------------------
 // Claude Task Run Session → Daily Aggregate Key Mapping
 // ---------------------------------------------------------------------------
@@ -192,6 +210,22 @@ export function getCronRunSessionAggregateKey(runSessionKey: string): string | n
 export function getClaudeTaskRunSessionAggregateKey(runSessionKey: string): string | null {
   const parsed = parseClaudeScheduledTaskRunSessionKey(runSessionKey);
   if (!parsed) return null;
+  const today = new Date();
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, '0');
+  const d = String(today.getDate()).padStart(2, '0');
+  return `claude-task:${parsed.taskId}:${y}-${m}-${d}`;
+}
+
+/**
+ * Maps a Claude task BASE key (`claude-task:{taskId}` — no date) to today's
+ * dated aggregate key. Symmetric to {@link getCronBaseSessionTodayDatedKey};
+ * ensures any base-key event emitted by the Claude worker routes to today's
+ * dated session instead of leaking into a viewed yesterday-dated session.
+ */
+export function getClaudeTaskBaseSessionTodayDatedKey(sessionKey: string): string | null {
+  const parsed = parseClaudeScheduledTaskSessionKey(sessionKey);
+  if (!parsed || parsed.date) return null;
   const today = new Date();
   const y = today.getFullYear();
   const m = String(today.getMonth() + 1).padStart(2, '0');

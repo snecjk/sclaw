@@ -60,6 +60,7 @@ import {
   groupHasTool,
   markToolGroupStreamStates,
   midPhaseTextKey,
+  phaseTextKeyForRebuild,
   replaceOpeningPhaseTextSegment,
   toolGroupSegmentKey,
   upsertPhaseTextSegment,
@@ -376,12 +377,9 @@ function rebuildDoneSegmentsFromEvents(
       if (isEchoOfUserQuery(trimmed, precedingUserText)) continue;
 
       flushBatch();
-      const hasOpeningPhaseText = segments.some((segment) => segment.kind === 'phase-text');
       segments.push({
         kind: 'phase-text',
-        key: hasOpeningPhaseText
-          ? `phase-text-after-${groupIndex - 1}`
-          : OPENING_PHASE_TEXT_KEY,
+        key: phaseTextKeyForRebuild(segments, groupIndex),
         text: trimmed,
       });
       continue;

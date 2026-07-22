@@ -331,7 +331,7 @@ export default function MyTask() {
           useChatStore.getState().switchSession(targetSessionKey);
         });
         await useChatStore.getState().loadSessions();
-        toast.success(t('myTask.toast.triggered'));
+        // toast.success(t('myTask.toast.triggered'));
       } catch (err) {
         useChatStore.getState().clearScheduledSessionActivating(sessionKey);
         toast.error(String(err));

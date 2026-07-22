@@ -16,6 +16,13 @@ import type { AttachedFileMeta, ChatSession, RawMessage } from './types';
 import { getAgentIdFromSessionKey } from './session-identity';
 import { getSessionRuntimeState } from './session-runtime';
 import { applyRuntimePatch } from './runtime-controller';
+import { isVirtualTaskSessionKey } from './cron-session-utils';
+import { clearStuckCheckTimer, setStuckCheckTimer } from './runtime-timers';
+import {
+  clearBackgroundRunActivity,
+  noteBackgroundRunActivity,
+  scheduleBackgroundRunWatchdog,
+} from './background-run-watchdog';
 import { appendStreamingAssistantSnapshot, appendStreamingToolResultSnapshot } from './streaming-state';
 import { buildTerminalRuntimePatch, resolveAssistantFinalTurnState } from './turn-state-machine';
 import { buildTerminalTurnEffects, executeTurnEffects } from './turn-effects';
@@ -66,15 +73,45 @@ export function createBackgroundSessionEventHandler(dependencies: BackgroundSess
       });
       return;
     }
+    // G3: refresh "last observed activity" for any accepted event (incl. agent-only),
+    // so the background-run watchdog doesn't misfire on long tasks that stream
+    // agent-phase events between deltas.
+    noteBackgroundRunActivity(sessionKey);
     if (decision.bindRun) {
-      set((state) => applyRuntimePatch(state, sessionKey, {
-        sending: true,
-        activeRunId: runId,
-        error: null,
-        sendAcceptance: runtimeBefore.sendAcceptance
-          ? { ...runtimeBefore.sendAcceptance, status: 'accepted' }
-          : null,
-      }));
+      set((state) => {
+        const runtimePatch = applyRuntimePatch(state, sessionKey, {
+          sending: true,
+          activeRunId: runId,
+          error: null,
+          sendAcceptance: runtimeBefore.sendAcceptance
+            ? { ...runtimeBefore.sendAcceptance, status: 'accepted' }
+            : null,
+        });
+        // Phase 2: a scheduled run fires in the background into a dated session
+        // that may not yet exist in the sidebar list — the backend materializes
+        // the transcript asynchronously after the run completes. Pre-instantiate
+        // a placeholder entry (keyed by sessionKey for dedup) so the sidebar
+        // shows the session — and its `sending` loading state — immediately.
+        // `loadSessions` later overwrites this with the real transcript entry.
+        const sessions = ensureVirtualTaskSessionEntry(
+          state.sessions,
+          sessionKey,
+          resolveEngineType,
+        );
+        return sessions === state.sessions ? runtimePatch : { ...runtimePatch, sessions };
+      });
+      // G3: arm a watchdog on the shared stuck-check slot so a run whose final
+      // never arrives (gateway crash / dropped event) can't leave the session
+      // stuck in `sending` forever. Auto-cleared by recordTerminalRun on normal
+      // terminal events. Scoped to virtual task sessions inside the scheduler.
+      scheduleBackgroundRunWatchdog({
+        get,
+        set,
+        sessionKey,
+        runId,
+        setStuckCheckTimer,
+        clearStuckCheckTimer,
+      });
     }
     switch (resolvedState) {
       case 'started': {
@@ -160,6 +197,7 @@ export function createBackgroundSessionEventHandler(dependencies: BackgroundSess
           }), { get, set });
         }
         if (isTerminalOutput) recordTerminalRun(sessionKey, runId);
+        if (isTerminalOutput) clearBackgroundRunActivity(sessionKey);
         break;
       }
       case 'error':
@@ -167,10 +205,12 @@ export function createBackgroundSessionEventHandler(dependencies: BackgroundSess
           errorMessage,
         )));
         recordTerminalRun(sessionKey, runId);
+        clearBackgroundRunActivity(sessionKey);
         break;
       case 'aborted':
         set((state) => applyRuntimePatch(state, sessionKey, buildTerminalRuntimePatch(null)));
         recordTerminalRun(sessionKey, runId);
+        clearBackgroundRunActivity(sessionKey);
         break;
       default:
         if (message && typeof message === 'object') {
@@ -234,4 +274,27 @@ async function dispatchToolResultAndRefresh(get: ChatGet, sessionKey: string, me
   syncWorkflowCardsAfterToolDispatch(sessionKey);
   const state = get();
   if (state.currentSessionKey === sessionKey) void state.loadHistory(true);
+}
+
+/**
+ * Appends a placeholder `ChatSession` entry for a virtual task session key
+ * (cron / claude-task dated) if it doesn't already exist in the sessions list.
+ * The placeholder carries `engineType` + `agentId` so the sidebar renders the
+ * correct icon and the background handler can resolve routing on subsequent
+ * events.  `loadSessions` later overwrites this with the real transcript entry,
+ * keyed by `sessionKey` for dedup.
+ */
+function ensureVirtualTaskSessionEntry(
+  sessions: ChatSession[],
+  sessionKey: string,
+  resolveEngineType: (sessions: ChatSession[], sessionKey: string, agentId: string) => ChatSession['engineType'],
+): ChatSession[] {
+  if (!isVirtualTaskSessionKey(sessionKey)) return sessions;
+  if (sessions.some((s) => s.key === sessionKey)) return sessions;
+  const agentId = getAgentIdFromSessionKey(sessionKey);
+  return [...sessions, {
+    key: sessionKey,
+    engineType: resolveEngineType(sessions, sessionKey, agentId),
+    agentId,
+  }];
 }
