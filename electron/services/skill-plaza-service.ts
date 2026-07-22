@@ -1496,13 +1496,14 @@ export class SkillPlazaService {
    */
   async getLocalSkillsBySlugs(slugs: string[]): Promise<PlazaListResult> {
     // 复用统一的本地状态快照：installedSlugs / enabledSlugs / lockEntries 一次读盘，
-    // 避免循环内重复 IO。注意此前误调了不存在的 this.getInstalledSlugs() /
-    // this.getEnabledSlugs()，运行时抛 TypeError，导致首页技能状态永远不刷新。
-    const snapshot = this.buildLocalStateSnapshot();
+    // 避免循环内重复 IO。buildLocalStateSnapshot 是 async（读用户态需要 await
+    // getCurrentActiveUserCode），漏写 await 会让 snapshot 变成 Promise，下面
+    // snapshot.installedSlugs 取到 undefined，循环里 installedSlugs.has() 抛 TypeError，
+    // /local-skills-by-slugs 整体 500，首页安装后状态永远不刷新（按钮不变）。
+    const snapshot = await this.buildLocalStateSnapshot();
     const installedSlugs = snapshot.installedSlugs;
     const enabledSlugs = snapshot.enabledSlugs;
     const lockEntries = snapshot.lockEntries;
-    const disabledDir = this.getDisabledDir();
 
     const skills: SkillSummary[] = [];
 
@@ -1510,8 +1511,11 @@ export class SkillPlazaService {
       if (!slug || !installedSlugs.has(slug)) continue;
 
       const isEnabled = enabledSlugs.has(slug);
-      const baseDir = isEnabled ? this.skillsDir : disabledDir;
-      const skillDirPath = path.join(baseDir, slug);
+      // 重构后包落在 skills-store（canonical），不再在 legacy openclaw/skills；
+      // 用 resolvePackageDir 统一解析，否则 readLocalSkillSummary / readSkillMdVersion
+      // 读旧目录拿不到文件，返回的 title/version 全是兜底值。
+      const skillDirPath = this.resolvePackageDir(snapshot, slug);
+      if (!skillDirPath) continue;
       const lockInfo = lockEntries.get(slug);
       const isStoMarketplaceInstall = lockInfo?.source === 'sto-marketplace';
       const lockVersion = isStoMarketplaceInstall ? lockInfo?.version : undefined;
@@ -1519,7 +1523,7 @@ export class SkillPlazaService {
         !isPreinstalledSkill(skillDirPath) ? readSkillMdVersion(skillDirPath) : null;
       const installedVersion = resolveInstalledVersionForCompare(lockVersion, skillMdVersion) || undefined;
 
-      const summary = readLocalSkillSummary(baseDir, slug);
+      const summary = readLocalSkillSummary(path.dirname(skillDirPath), slug);
 
       skills.push({
         slug,
