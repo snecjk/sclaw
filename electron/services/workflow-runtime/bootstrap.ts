@@ -24,6 +24,7 @@ import type { WorkflowRunStatus } from '../../../shared/workflow-run-status';
 import { workflowExecLog } from './logging';
 import { configureWorkflowIdPool } from './id-pool';
 import { runWorkspacePath, workspacePath } from './workspace-paths';
+import { notifyWorkflowCompletion } from './completion-notification';
 
 let cachedSdk: any = null;
 let cachedWorkflowModel: string | undefined;
@@ -142,9 +143,10 @@ export function createWorkflowRuntimeEngineDeps(): EngineDeps {
       const repo = getWorkflowRuntimeRepository();
       void (async () => {
         let sessionKey = '';
+        let runRow: { session_key?: string | null; workflow_id?: string; last_agent_raw_text?: string | null } | undefined;
         try {
-          const row = await repo.getRun(runId);
-          sessionKey = row?.session_key ?? '';
+          runRow = await repo.getRun(runId);
+          sessionKey = runRow?.session_key ?? '';
         } catch { /* run 行缺失时退化为无 sessionKey，renderer 侧按 sessionKey 过滤会自然丢弃 */ }
         const payload: {
           runId: string; sessionKey: string; status: WorkflowRunStatus;
@@ -162,6 +164,14 @@ export function createWorkflowRuntimeEngineDeps(): EngineDeps {
         for (const w of BrowserWindow.getAllWindows()) {
           w.webContents.send('workflow:status-update', payload);
         }
+        notifyWorkflowCompletion(BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null, {
+          runId,
+          sessionKey,
+          status,
+          workflowName: runRow?.workflow_id,
+          summary: typeof runRow?.last_agent_raw_text === 'string' ? runRow.last_agent_raw_text.slice(0, 120) : undefined,
+          error: extra?.error,
+        });
       })();
     },
     onTokenExpired: () => {

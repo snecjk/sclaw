@@ -342,6 +342,8 @@ export function WorkflowCard({
 
   return (
     <div
+      id={`workflow-card-${runId}`}
+      tabIndex={-1}
       className={cn(
         'w-full space-y-2',
         layout === 'default' && section === 'full' && 'mt-3',

@@ -36,6 +36,7 @@ import { useChatStore } from './stores/chat';
 import { useScheduledTaskUnreadStore } from './stores/scheduled-task-unread';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
 import { AccountSwitchFab } from './components/layout/AccountSwitchFab';
+import { WorkflowCompletionNotifier } from './components/workflow/WorkflowCompletionNotifier';
 
 /**
  * Error Boundary to catch and display React rendering errors
@@ -329,6 +330,7 @@ function App() {
   return (
     <ErrorBoundary>
       <TooltipProvider delayDuration={300}>
+        <WorkflowCompletionNotifier />
         <Routes>
           {/* SSO Login page */}
           <Route path="/login" element={<Login />} />

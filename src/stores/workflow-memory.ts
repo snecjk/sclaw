@@ -56,6 +56,8 @@ export interface WorkflowExecutionRecord {
   paramsSummary?: string;
   /** Model completion summary already sent for this run. */
   completionSummaryDelivered?: boolean;
+  /** Completion notification already delivered in this client profile. */
+  completionNotificationDeliveredAt?: number;
 }
 
 const STORAGE_KEY = 'stoclaw:session-workflows';
@@ -368,7 +370,7 @@ export function saveWorkflowExecution(record: WorkflowExecutionRecord): void {
 export function patchWorkflowExecution(
   sessionKey: string,
   runId: string,
-  patch: Partial<Pick<WorkflowExecutionRecord, 'status' | 'paramsSummary' | 'completionSummaryDelivered' | 'updatedAt'>>,
+  patch: Partial<Pick<WorkflowExecutionRecord, 'status' | 'paramsSummary' | 'completionSummaryDelivered' | 'completionNotificationDeliveredAt' | 'updatedAt'>>,
 ): void {
   const store = loadExecutions();
   const records = store[sessionKey];
@@ -382,6 +384,11 @@ export function patchWorkflowExecution(
 
 export function markCompletionSummaryDelivered(sessionKey: string, runId: string): void {
   patchWorkflowExecution(sessionKey, runId, { completionSummaryDelivered: true });
+}
+
+/** Persist notification delivery so duplicate terminal broadcasts never re-toast a run. */
+export function markCompletionNotificationDelivered(sessionKey: string, runId: string): void {
+  patchWorkflowExecution(sessionKey, runId, { completionNotificationDeliveredAt: Date.now() });
 }
 
 /**

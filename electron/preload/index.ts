@@ -254,6 +254,7 @@ const electronAPI = {
         'auth:token-expired',
         'sto:models-synced',
         'workflow:status-update',
+        'workflow:completion-open',
         'workflow:event',
         'workflow:poll-trace',
         'workflow:stream:event',

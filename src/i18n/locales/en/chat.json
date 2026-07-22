@@ -182,6 +182,12 @@
         "backgroundRunningWithId": "Workflow ID: {{workflowId}}",
         "withId": "Workflow ID: {{workflowId}}",
         "viewArtifact": "View artifact",
+        "notificationCompleted": "{{workflowName}} completed",
+        "notificationFailed": "{{workflowName}} failed",
+        "notificationCompletedDescription": "Open the run result.",
+        "notificationFailedDescription": "Open the failure details.",
+        "notificationViewResult": "View result",
+        "notificationViewDetails": "View details",
         "openArtifactLink": "Open link",
         "viewWorkflowAction": "View workflow",
         "createScheduledTaskAction": "Create scheduled task"

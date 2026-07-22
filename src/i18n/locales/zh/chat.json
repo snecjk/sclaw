@@ -182,6 +182,12 @@
         "backgroundRunningWithId": "工作流 ID: {{workflowId}}",
         "withId": "工作流 ID: {{workflowId}}",
         "viewArtifact": "查看产物",
+        "notificationCompleted": "{{workflowName}} 已完成",
+        "notificationFailed": "{{workflowName}} 执行失败",
+        "notificationCompletedDescription": "点击查看运行结果。",
+        "notificationFailedDescription": "点击查看失败详情。",
+        "notificationViewResult": "查看结果",
+        "notificationViewDetails": "查看详情",
         "openArtifactLink": "打开链接",
         "viewWorkflowAction": "查看工作流",
         "createScheduledTaskAction": "创建定时任务"
