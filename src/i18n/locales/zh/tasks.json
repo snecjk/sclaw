@@ -100,8 +100,8 @@
     },
     "templateModal": {
       "title": "官方推荐",
-      "subtitle": "选择一个工作流快速创建定时任务",
-      "empty": "暂无可用工作流",
+      "subtitle": "选择一个官方推荐快速创建定时任务",
+      "empty": "暂无可用官方推荐",
       "instantiating": "实例化中…",
       "openExisting": "继续编排",
       "createNew": "新建",
@@ -113,7 +113,7 @@
       "noTasksDescription": "创建定时任务来自动化执行周期性 AI 代理工作",
       "officialAria": "官方推荐工作流",
       "templateFallbackCategory": "工作流模版",
-      "addTemplate": "添加"
+      "addTemplate": "官方推荐"
     },
     "createModal": {
       "editTitle": "编辑定时任务",
