@@ -206,6 +206,23 @@ describe('MoreAppsPage server catalog', () => {
     }));
   });
 
+  it('shows the app link in my apps when a favorited server app has no recent usage', async () => {
+    fetchRegistryMock.mockResolvedValueOnce({
+      version: 1,
+      externalApps: [],
+      installedIds: [],
+      favoriteIds: ['org-relation'],
+    });
+
+    render(<MoreAppsPage />);
+    expect(await screen.findByRole('tab', { name: '我的应用1' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '我的应用1' }));
+
+    expect(screen.getByText('客户关系')).toBeInTheDocument();
+    expect(screen.getByText('example.com')).toBeInTheDocument();
+    expect(screen.queryByText('点击安装后可用')).not.toBeInTheDocument();
+  });
+
   it('keeps installed apps independent from market category changes', async () => {
     fetchRegistryMock.mockResolvedValueOnce({
       version: 1,
