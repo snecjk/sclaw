@@ -100,8 +100,8 @@
     },
     "templateModal": {
       "title": "公式おすすめ",
-      "subtitle": "ワークフローを選んで定期タスクをすばやく作成",
-      "empty": "利用可能なワークフローがありません",
+      "subtitle": "公式おすすめを選んで定期タスクをすばやく作成",
+      "empty": "利用可能な公式おすすめがありません",
       "instantiating": "作成中…",
       "openExisting": "編集を続ける",
       "createNew": "新規",
@@ -113,7 +113,7 @@
       "noTasksDescription": "定期タスクを作成してAIエージェントの定常業務を自動化",
       "officialAria": "公式おすすめワークフロー",
       "templateFallbackCategory": "ワークフローテンプレート",
-      "addTemplate": "追加"
+      "addTemplate": "公式おすすめ"
     },
     "createModal": {
       "editTitle": "定期タスクを編集",
