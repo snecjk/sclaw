@@ -6,7 +6,7 @@ export interface ScheduleValueCompat {
   time: string;
 }
 
-/** 完整计划值类型（含 once，用于 Cron/ScheduledTasks 页面） */
+/** 完整计划值类型（含 once，用于 MyTask 页面的任务调度） */
 export interface ScheduleValueFull {
   frequency: 'daily' | 'weekly' | 'monthly' | 'once';
   onceDate?: string;

@@ -12,8 +12,8 @@ import {
   shouldPromoteTextToFinalReply,
 } from '@/pages/Chat/thinking/classify-text';
 import type { RawTurnEvent, ThinkingTurnSegment } from '@/pages/Chat/thinking/types';
-import { OPENING_PHASE_TEXT_KEY } from '@/pages/Chat/thinking/types';
 import {
+  phaseTextKeyForRebuild,
   toolGroupSegmentKey,
 } from '@/pages/Chat/thinking/batch-segments';
 import { rebalanceThinkingTimelineForDisplay } from '@/pages/Chat/thinking-turn-segments';
@@ -137,12 +137,9 @@ function rebuildDoneSegmentsFromEvents(
       if (isEchoOfUserQuery(trimmed, precedingUserText)) continue;
 
       flushBatch();
-      const hasOpeningPhaseText = segments.some((segment) => segment.kind === 'phase-text');
       segments.push({
         kind: 'phase-text',
-        key: hasOpeningPhaseText
-          ? `phase-text-after-${groupIndex - 1}`
-          : OPENING_PHASE_TEXT_KEY,
+        key: phaseTextKeyForRebuild(segments, groupIndex),
         text: trimmed,
       });
       continue;

@@ -2,8 +2,6 @@ import { preferCronDatedSessionKey } from '../../../shared/cron-job-agent';
 import {
   isVirtualTaskSessionKey,
   parseCronSessionKey,
-  parseScheduledTaskSessionKey,
-  parseScheduledTaskAgentSessionKey,
   parseClaudeScheduledTaskSessionKey,
   parseClaudeScheduledTaskRunSessionKey,
 } from '@/stores/chat/cron-session-utils';
@@ -40,7 +38,6 @@ export function appendPendingLocalVirtualTaskSessions<T extends SessionListEntry
   // ── Build sets of jobs/tasks that already have dated aggregate sessions remotely ──
   const cronDatedJobs = new Set<string>();
   const cronDatedJobDates = new Set<string>();
-  const scheduledTaskDatedIds = new Set<number>();
   const claudeTaskDatedIds = new Set<string>();
 
   for (const session of remoteSessions) {
@@ -49,9 +46,6 @@ export function appendPendingLocalVirtualTaskSessions<T extends SessionListEntry
       cronDatedJobs.add(cronParts.jobId);
       cronDatedJobDates.add(`${cronParts.jobId}:${cronParts.date}`);
     }
-
-    const stAgentParts = parseScheduledTaskAgentSessionKey(session.key);
-    if (stAgentParts?.date) scheduledTaskDatedIds.add(stAgentParts.taskId);
 
     const claudeParts = parseClaudeScheduledTaskSessionKey(session.key);
     if (claudeParts?.date) claudeTaskDatedIds.add(claudeParts.taskId);
@@ -73,10 +67,6 @@ export function appendPendingLocalVirtualTaskSessions<T extends SessionListEntry
       return false;
     }
     if (cronParts && !cronParts.date && cronDatedJobs.has(cronParts.jobId)) return false;
-
-    // ── Scheduled-task (STO): base key is superseded by any dated agent aggregate ──
-    const stParts = parseScheduledTaskSessionKey(session.key);
-    if (stParts && scheduledTaskDatedIds.has(stParts.taskId)) return false;
 
     // ── Claude-task: base & run keys are superseded by any dated aggregate ──
     const claudeParts = parseClaudeScheduledTaskSessionKey(session.key);

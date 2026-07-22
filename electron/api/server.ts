@@ -41,7 +41,6 @@ import { handleSessionRoutes } from './routes/sessions';
 import { handleSessionCatalogRoutes } from './routes/session-catalog';
 import { handleTaskGroupRoutes } from './routes/task-groups';
 import { handleCronRoutes } from './routes/cron';
-import { handleScheduledTaskRoutes } from './routes/scheduled-tasks';
 import { handleClaudeScheduledTaskRoutes } from './routes/claude-scheduled-tasks';
 import { handleDingTalkRoutes } from './routes/dingtalk';
 import { handleChannelHubRoutes } from './routes/channel-hub';
@@ -89,7 +88,6 @@ const routeHandlers: RouteHandler[] = [
   handleSessionCatalogRoutes,
   handleTaskGroupRoutes,
   handleCronRoutes,
-  handleScheduledTaskRoutes,
   handleDictionaryRoutes,
   handleWorkflowRoutes,
   handleSclawBrowserRoutes,

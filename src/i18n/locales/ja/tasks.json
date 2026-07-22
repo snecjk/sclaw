@@ -96,10 +96,10 @@
     },
     "newTaskDropdown": {
       "selfCreate": "自分で作成",
-      "templateCreate": "ワークフローから作成"
+      "templateCreate": "公式おすすめ"
     },
     "templateModal": {
-      "title": "ワークフローを選択",
+      "title": "公式おすすめ",
       "subtitle": "ワークフローを選んで定期タスクをすばやく作成",
       "empty": "利用可能なワークフローがありません",
       "instantiating": "作成中…",

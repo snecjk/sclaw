@@ -1,5 +1,6 @@
 import type { SessionRuntimeState } from './types';
 import { clearSessionRuntimeTimers } from './runtime-timers';
+import { logChatFlow } from './chat-flow-log';
 
 const MAX_TERMINAL_RUNS_PER_SESSION = 32;
 const terminalRunsBySession = new Map<string, string[]>();
@@ -7,7 +8,7 @@ const terminalRunsBySession = new Map<string, string[]>();
 export interface RunEventDecision {
   accept: boolean;
   bindRun: boolean;
-  reason?: 'terminal' | 'different-active-run' | 'orphan-event';
+  reason?: 'terminal' | 'different-active-run' | 'orphan-event' | 'reopened';
 }
 
 export function decideRunEvent(input: {
@@ -24,6 +25,17 @@ export function decideRunEvent(input: {
   }
 
   if (terminalRunsBySession.get(sessionKey)?.includes(runId)) {
+    // A 'started' for an already-terminal runId means the gateway restarted the
+    // run with the SAME runId (e.g. OpenClaw transient-error retry reuses the
+    // runId). Reopen it instead of rejecting — otherwise the retry's
+    // started/delta/final are all dropped and the session stays stuck in the
+    // stale error state (persistent red banner). A truly-dead run never
+    // re-emits 'started', so reopening is safe.
+    if (resolvedState === 'started') {
+      evictTerminalRun(sessionKey, runId);
+      logChatFlow('event.run.reopened', { sessionKey, runId });
+      return { accept: true, bindRun: true, reason: 'reopened' };
+    }
     return { accept: false, bindRun: false, reason: 'terminal' };
   }
 
@@ -53,6 +65,17 @@ export function recordTerminalRun(sessionKey: string, runId: string | null | und
     sessionKey,
     [...current, runId].slice(-MAX_TERMINAL_RUNS_PER_SESSION),
   );
+}
+
+export function evictTerminalRun(sessionKey: string, runId: string): void {
+  const current = terminalRunsBySession.get(sessionKey);
+  if (!current || !current.includes(runId)) return;
+  const next = current.filter((id) => id !== runId);
+  if (next.length === 0) {
+    terminalRunsBySession.delete(sessionKey);
+  } else {
+    terminalRunsBySession.set(sessionKey, next);
+  }
 }
 
 export function clearSessionRunLifecycle(sessionKey: string): void {
