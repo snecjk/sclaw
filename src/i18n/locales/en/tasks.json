@@ -96,10 +96,10 @@
     },
     "newTaskDropdown": {
       "selfCreate": "Create yourself",
-      "templateCreate": "Create from workflow"
+      "templateCreate": "Official recommended"
     },
     "templateModal": {
-      "title": "Select Workflow",
+      "title": "Official Recommended",
       "subtitle": "Select a workflow to quickly create a scheduled task",
       "empty": "No workflows available",
       "instantiating": "Creating…",

@@ -96,10 +96,10 @@
     },
     "newTaskDropdown": {
       "selfCreate": "自己创建",
-      "templateCreate": "工作流创建"
+      "templateCreate": "官方推荐"
     },
     "templateModal": {
-      "title": "选择工作流",
+      "title": "官方推荐",
       "subtitle": "选择一个工作流快速创建定时任务",
       "empty": "暂无可用工作流",
       "instantiating": "实例化中…",
