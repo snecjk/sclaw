@@ -4,6 +4,7 @@ import type { SkillMeta } from '@/types/skill-meta';
 import { useChatStore } from '@/stores/chat';
 import { useChatSessionEngineType } from '@/hooks/use-chat-session-engine-type';
 import { ChatMessage } from './ChatMessage';
+import { resolveChatMessageSearchKey } from './chat-message-search';
 import { appendWorkflowCardBlockToMessage, sessionHasParamsConfirmedWorkflowForRun } from '@/lib/workflow-card-injection';
 import {
   collectTurnAssistantSources,
@@ -88,8 +89,8 @@ interface AssistantTurnMessageProps {
   /** 与 buildChatDisplayItems 的 turn key 对齐，流式→完成 remount 时保留 timeline 缓存 */
   turnStableKey?: string;
   showThinking: boolean;
-  matchedMessageIds?: ReadonlySet<string>;
-  activeMessageId?: string | null;
+  matchedMessageKeys?: ReadonlySet<string>;
+  activeMessageKey?: string | null;
   activeStream?: ActiveTurnStream | null;
   onPreviewFile?: (file: AttachedFileMeta) => void;
   onCreateScheduledTask?: (workflowId: string) => void;
@@ -133,8 +134,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   precedingUserMessage = null,
   turnStableKey,
   showThinking,
-  matchedMessageIds,
-  activeMessageId = null,
+  matchedMessageKeys,
+  activeMessageKey = null,
   activeStream = null,
   onPreviewFile,
   onCreateScheduledTask,
@@ -543,27 +544,40 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
         {hasDingTalkSentPreview ? (
           <DingTalkSentPreview previews={dingTalkSentPreviews} />
         ) : null}
-        {preambleMessages.map((preambleMessage) => (
+        {preambleMessages.map((preambleMessage, preambleIndex) => {
+          const searchKey = resolveChatMessageSearchKey(
+            preambleMessage.id,
+            `turn:${turnStableKey ?? 'unknown'}:preamble:${preambleIndex}`,
+          );
+          return (
           <ChatMessage
-            key={preambleMessage.id ?? `preamble-${extractText(preambleMessage).slice(0, 24)}`}
+            key={preambleMessage.id ?? searchKey}
             message={preambleMessage}
             showThinking={false}
-            isSearchMatch={!!preambleMessage.id && !!matchedMessageIds?.has(preambleMessage.id)}
-            isSearchActive={!!preambleMessage.id && preambleMessage.id === activeMessageId}
+            searchMessageKey={searchKey}
+            isSearchMatch={!!matchedMessageKeys?.has(searchKey)}
+            isSearchActive={activeMessageKey === searchKey}
             onPreviewFile={onPreviewFile}
             onEditMessage={onEditMessage}
             hideAvatar
             hideThinkingPanel
             suppressToolCards={showThinking}
           />
-        ))}
+          );
+        })}
         {replyDisplayHasText || chatDisplayHasWorkflowCard ? (
-          chatDisplayMessageWithTimestamp ? (
+          chatDisplayMessageWithTimestamp ? (() => {
+            const replySearchKey = resolveChatMessageSearchKey(
+              chatDisplayMessageWithTimestamp.id,
+              `turn:${turnStableKey ?? 'unknown'}:reply`,
+            );
+            return (
             <ChatMessage
               message={chatDisplayMessageWithTimestamp}
               showThinking={false}
-              isSearchMatch={!!chatDisplayMessageWithTimestamp.id && !!matchedMessageIds?.has(chatDisplayMessageWithTimestamp.id)}
-              isSearchActive={!!chatDisplayMessageWithTimestamp.id && chatDisplayMessageWithTimestamp.id === activeMessageId}
+              searchMessageKey={replySearchKey}
+              isSearchMatch={!!matchedMessageKeys?.has(replySearchKey)}
+              isSearchActive={activeMessageKey === replySearchKey}
               isStreaming={isStreaming && replyDisplayHasText}
               streamingTools={isStreaming ? streamingTools : []}
               onPreviewFile={onPreviewFile}
@@ -574,7 +588,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
               suppressToolCards={showThinking}
               isTurnDisplayReply
             />
-          ) : null
+            );
+          })() : null
         ) : null}
       </div>
     );

@@ -174,15 +174,23 @@ describe('skill lifecycle adapters + manager', () => {
     expect(okAdapter.applyEnabled).toHaveBeenCalled();
   });
 
-  it('migrates legacy openclaw layout into skills-store and is idempotent', async () => {
+  it('migrates preinstalled global skills and user skills into skills-store', async () => {
+    const { PREINSTALLED_MARKER_NAME } = await import(
+      '../../electron/services/skills/skill-manager'
+    );
     const openclawSkills = join(roots.openclaw, 'skills', 'pdf');
     await writeSkill(openclawSkills, 'pdf');
+    await writeFile(
+      join(openclawSkills, PREINSTALLED_MARKER_NAME),
+      JSON.stringify({ source: 'stoclaw-preinstalled' }),
+      'utf-8',
+    );
     await mkdir(join(roots.openclaw, '.clawhub'), { recursive: true });
     await writeFile(
       join(roots.openclaw, '.clawhub', 'lock.json'),
       JSON.stringify({
         skills: {
-          pdf: { version: '2.0.0', source: 'sto-marketplace', name: 'PDF' },
+          pdf: { version: '2.0.0', source: 'stoclaw-preinstalled', name: 'PDF' },
         },
       }),
       'utf-8',
@@ -197,13 +205,26 @@ describe('skill lifecycle adapters + manager', () => {
     expect(existsSync(join(roots.store, 'global', 'pdf', 'SKILL.md'))).toBe(true);
 
     const manifest = JSON.parse(await readFile(join(roots.store, 'manifest.json'), 'utf-8')) as {
-      global: Record<string, { version?: string }>;
+      global: Record<string, { version?: string; source?: string }>;
     };
     expect(manifest.global.pdf.version).toBe('2.0.0');
 
     const second = await migrateSkillsStoreIfNeeded();
     expect(second.migrated).toBe(false);
     expect(second.deduped).toBe(false);
+  });
+
+  it('skips non-preinstalled packages that only exist on the global mount', async () => {
+    const slug = 'mount-only-skill';
+    await writeSkill(join(roots.openclaw, 'skills', slug), slug);
+
+    const { migrateSkillsStoreIfNeeded } = await import(
+      '../../electron/services/skills/migration'
+    );
+    const result = await migrateSkillsStoreIfNeeded();
+    expect(result.migrated).toBe(true);
+    expect(existsSync(join(roots.store, 'global', slug, 'SKILL.md'))).toBe(false);
+    expect(existsSync(join(roots.store, 'users'))).toBe(false);
   });
 
   it('migrates non-preinstalled skills only to user when both global and user exist', async () => {
@@ -229,6 +250,9 @@ describe('skill lifecycle adapters + manager', () => {
     expect(result.migrated).toBe(true);
     expect(existsSync(join(roots.store, 'users', 'u1', 'skills', slug, 'SKILL.md'))).toBe(true);
     expect(existsSync(join(roots.store, 'global', slug, 'SKILL.md'))).toBe(false);
+    // Legacy openclaw/users (+ nested skills-disabled) removed after successful migration.
+    expect(existsSync(join(roots.openclaw, 'users'))).toBe(false);
+    expect(existsSync(join(roots.openclaw, 'skills-disabled'))).toBe(false);
 
     const manifest = JSON.parse(await readFile(join(roots.store, 'manifest.json'), 'utf-8')) as {
       global: Record<string, unknown>;
@@ -238,46 +262,47 @@ describe('skill lifecycle adapters + manager', () => {
     expect(manifest.users.u1[slug]).toBeTruthy();
   });
 
-  it('dedupes existing v1 store that duplicated marketplace skills into global and user', async () => {
-    const { upsertSkillEntry, resolvePackageDir, getSkillEntry } = await import(
-      '../../electron/services/skills/canonical-store'
-    );
+  it('treats version 1 and legacy version 2 markers as already migrated', async () => {
     const { migrateSkillsStoreIfNeeded, isSkillsStoreMigrated } = await import(
       '../../electron/services/skills/migration'
     );
 
-    const slug = 'dup-skill';
-    const globalKey = { slug, scope: 'global' as const };
-    const userKey = { slug, scope: 'user' as const, userCode: 'u1' };
-    await writeSkill(resolvePackageDir(globalKey), slug);
-    await writeSkill(resolvePackageDir(userKey), slug);
-    await upsertSkillEntry({
-      ...globalKey,
-      version: '1.0.0',
-      source: 'sto-marketplace',
-      enabled: true,
-    });
-    await upsertSkillEntry({
-      ...userKey,
-      version: '1.0.0',
-      source: 'sto-marketplace',
-      enabled: true,
-    });
     await writeFile(
       join(roots.store, '.migrated'),
       JSON.stringify({ version: 1, migratedAt: '2026-07-18T00:00:00.000Z' }),
       'utf-8',
     );
-
-    expect(isSkillsStoreMigrated()).toBe(false);
-    const result = await migrateSkillsStoreIfNeeded();
-    expect(result.migrated).toBe(false);
-    expect(result.deduped).toBe(true);
     expect(isSkillsStoreMigrated()).toBe(true);
-    expect(await getSkillEntry(globalKey)).toBeNull();
-    expect(await getSkillEntry(userKey)).not.toBeNull();
-    expect(existsSync(join(resolvePackageDir(globalKey), 'SKILL.md'))).toBe(false);
-    expect(existsSync(join(resolvePackageDir(userKey), 'SKILL.md'))).toBe(true);
+    expect(await migrateSkillsStoreIfNeeded()).toEqual({ migrated: false, deduped: false });
+
+    await writeFile(
+      join(roots.store, '.migrated'),
+      JSON.stringify({ version: 2, migratedAt: '2026-07-18T00:00:00.000Z' }),
+      'utf-8',
+    );
+    expect(isSkillsStoreMigrated()).toBe(true);
+    expect(await migrateSkillsStoreIfNeeded()).toEqual({ migrated: false, deduped: false });
+  });
+
+  it('removes leftover openclaw/users and skills-disabled when already migrated', async () => {
+    await writeFile(
+      join(roots.store, '.migrated'),
+      JSON.stringify({ version: 1, migratedAt: '2026-07-18T00:00:00.000Z' }),
+      'utf-8',
+    );
+    const leftoverUser = join(roots.openclaw, 'users', 'u1', 'skills', 'old-skill');
+    await writeSkill(leftoverUser, 'old-skill');
+    const leftoverDisabled = join(roots.openclaw, 'skills-disabled', 'old-disabled');
+    await writeSkill(leftoverDisabled, 'old-disabled');
+    expect(existsSync(join(roots.openclaw, 'users'))).toBe(true);
+    expect(existsSync(join(roots.openclaw, 'skills-disabled'))).toBe(true);
+
+    const { migrateSkillsStoreIfNeeded } = await import(
+      '../../electron/services/skills/migration'
+    );
+    await migrateSkillsStoreIfNeeded();
+    expect(existsSync(join(roots.openclaw, 'users'))).toBe(false);
+    expect(existsSync(join(roots.openclaw, 'skills-disabled'))).toBe(false);
   });
 
   it('uninstall removes both user and global marketplace copies of the same slug', async () => {
