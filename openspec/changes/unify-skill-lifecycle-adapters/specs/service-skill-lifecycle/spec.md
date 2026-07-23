@@ -45,7 +45,7 @@
 
 #### Scenario: 禁用一个技能
 - **WHEN** 用户禁用一个技能
-- **THEN** 系统 SHALL 将 manifest 中该技能标记为禁用,并投影使其从各引擎的启用集合中移除(OpenClaw 移入 `skills-disabled`、Claude 移除镜像)
+- **THEN** 系统 SHALL 将 manifest 中该技能标记为禁用,并投影使其从各引擎的启用集合中移除(OpenClaw 与 Claude 均从各自启用技能目录移除镜像;OpenClaw 另写 `openclaw.json` `skills.entries.*.enabled=false`,并清理遗留的 `skills-disabled` 投影)
 
 ### Requirement: 幂等 reconcile 维持最终一致并处理 agent 级技能
 编排器 SHALL 提供幂等的 `reconcile` 操作,依据规范库为给定用户与 agent 上下文计算期望技能集合,并对齐目标引擎(补齐缺失、更新变化、移除多余的受管副本);reconcile MUST 可安全重复执行且在无差异时不产生变更。reconcile SHALL 在 Claude 对话开始前、用户工作区激活时、启动引导时被调用。

@@ -9,6 +9,11 @@ import { useWorkflowCompletion } from '@/hooks/use-workflow-completion';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
+import {
+  collectSearchableChatMessages,
+  findChatMessageSearchTarget,
+  resolveChatMessageSearchKey,
+} from '@/pages/Chat/chat-message-search';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
 import { ChatConversationHeaderActions, ChatPreviewToggleHeaderAction } from '@/pages/Chat/ChatSearchBar';
@@ -87,7 +92,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
 
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchableMessages, setSearchableMessages] = useState<Array<{ id: string; text: string }>>([]);
+  const [searchableMessages, setSearchableMessages] = useState<Array<{ key: string; text: string }>>([]);
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const { contentRef, scrollRef, scrollToBottom } = useStickToBottomInstant(currentSessionKey);
@@ -158,6 +163,8 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   ]);
 
   useEffect(() => {
+    if (!isSearchOpen) return;
+
     const contentElement = contentRef.current;
     if (!contentElement) {
        
@@ -166,20 +173,13 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     }
 
     const frameId = window.requestAnimationFrame(() => {
-      const nodes = Array.from(contentElement.querySelectorAll<HTMLElement>('[data-chat-message-id]'));
-      const nextSearchableMessages = nodes
-        .map((node) => ({
-          id: node.dataset.chatMessageId?.trim() ?? '',
-          text: (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim(),
-        }))
-        .filter((entry) => entry.id.length > 0 && entry.text.length > 0);
-      setSearchableMessages(nextSearchableMessages);
+      setSearchableMessages(collectSearchableChatMessages(contentElement));
     });
 
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [contentRef, currentSessionKey, staticItems, activeTurn, showThinking, streamText, streamingTools.length]);
+  }, [isSearchOpen, contentRef, currentSessionKey, staticItems, activeTurn, showThinking, streamText, streamingTools.length]);
 
   const searchMatches = useMemo(() => {
     if (!deferredSearchQuery) return [];
@@ -202,18 +202,17 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   }, [searchMatches]);
 
   const activeSearchMatch = searchMatches[activeSearchIndex] ?? null;
-  const matchedMessageIds = useMemo(
-    () => new Set(searchMatches.map((entry) => entry.id)),
+  const matchedMessageKeys = useMemo(
+    () => new Set(searchMatches.map((entry) => entry.key)),
     [searchMatches],
   );
 
-  const scrollToMessageMatch = useCallback((messageId: string, behavior: ScrollBehavior = 'smooth') => {
+  const scrollToMessageMatch = useCallback((searchKey: string, behavior: ScrollBehavior = 'smooth') => {
     const container = scrollRef.current;
     const contentElement = contentRef.current;
     if (!container || !contentElement) return;
 
-    const target = Array.from(contentElement.querySelectorAll<HTMLElement>('[data-chat-message-id]'))
-      .find((node) => node.dataset.chatMessageId === messageId);
+    const target = findChatMessageSearchTarget(contentElement, searchKey);
     if (!target) return;
 
     const delta = target.getBoundingClientRect().top - container.getBoundingClientRect().top - 28;
@@ -222,7 +221,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
 
   useEffect(() => {
     if (!activeSearchMatch || !deferredSearchQuery) return;
-    scrollToMessageMatch(activeSearchMatch.id, 'smooth');
+    scrollToMessageMatch(activeSearchMatch.key, 'smooth');
   }, [activeSearchMatch, deferredSearchQuery, scrollToMessageMatch]);
 
   const handleSearchNext = useCallback(() => {
@@ -446,21 +445,27 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
                       turnMessages={item.messages}
                       turnToolResults={item.toolResults}
                       precedingUserMessage={item.precedingUserMessage}
+                      turnStableKey={item.key}
                       showThinking={showThinking}
-                      matchedMessageIds={matchedMessageIds}
-                      activeMessageId={activeSearchMatch?.id ?? null}
+                      matchedMessageKeys={matchedMessageKeys}
+                      activeMessageKey={activeSearchMatch?.key ?? null}
                       onPreviewFile={openArtifactPreview}
                       onCreateScheduledTask={openWorkflowCronTaskModal}
                     />
                   );
                 }
+                const searchMessageKey = resolveChatMessageSearchKey(
+                  item.message.id,
+                  `single:${item.key}`,
+                );
                 return (
                   <ChatMessage
                     key={item.key}
                     message={item.message}
                     showThinking={showThinking}
-                    isSearchMatch={!!item.message.id && matchedMessageIds.has(item.message.id)}
-                    isSearchActive={!!item.message.id && item.message.id === activeSearchMatch?.id}
+                    searchMessageKey={searchMessageKey}
+                    isSearchMatch={matchedMessageKeys.has(searchMessageKey)}
+                    isSearchActive={searchMessageKey === activeSearchMatch?.key}
                     onPreviewFile={openArtifactPreview}
                     onCreateScheduledTask={openWorkflowCronTaskModal}
                   />
@@ -472,9 +477,10 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
                   turnMessages={activeTurn.turnMessages}
                   turnToolResults={activeTurn.turnToolResults}
                   precedingUserMessage={activeTurn.precedingUserMessage}
+                  turnStableKey={activeTurn.turnStableKey}
                   showThinking={showThinking}
-                  matchedMessageIds={matchedMessageIds}
-                  activeMessageId={activeSearchMatch?.id ?? null}
+                  matchedMessageKeys={matchedMessageKeys}
+                  activeMessageKey={activeSearchMatch?.key ?? null}
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={openArtifactPreview}
                   onCreateScheduledTask={openWorkflowCronTaskModal}
