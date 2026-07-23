@@ -134,7 +134,6 @@
       "instructionsPlaceholder": "让 S Claw 帮你做什么…",
       "instructionsRequired": "请描述让 S Claw 帮你做什么",
       "workflowAutoHint": "已关联工作流，描述内容自动生成",
-      "instructionsHint": "计划时间请在上方的「计划时间」中设置；可点击 AI美化 由模型优化执行描述。",
       "beautifyAria": "AI 美化任务描述",
       "beautifyButton": "AI美化",
       "beautifying": "美化中…",
