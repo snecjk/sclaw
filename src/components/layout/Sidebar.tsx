@@ -134,7 +134,7 @@ import {
   sidebarScrollContainerClass,
 } from '@/lib/surfaces';
 import { useSidebarSectionScrollCollapse } from '@/hooks/use-sidebar-section-scroll-collapse';
-import { getCurrentEnvConfig } from 'shared/env-config';
+import { getCurrentEnvConfig } from '../../../shared/env-config';
 
 type SessionBucketKey =
   | 'today'
