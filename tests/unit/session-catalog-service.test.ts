@@ -149,7 +149,7 @@ describe('session catalog gateway reload', () => {
     );
 
     expect(workspace).toEqual({ id: 'project-a', rootPath: '/tmp/project-a', name: 'A' });
-    expect(ensureWorkspaceArtifactOutputDirMock).toHaveBeenCalledWith('/tmp/project-a');
+    expect(ensureWorkspaceArtifactOutputDirMock).toHaveBeenCalledWith('/tmp/project-a/.sclaw');
     expect(ensureProjectAgentMock).not.toHaveBeenCalled();
     expect(gatewayManager.debouncedReload).not.toHaveBeenCalled();
     expect(gatewayManager.reload).not.toHaveBeenCalled();

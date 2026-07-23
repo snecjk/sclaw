@@ -78,6 +78,23 @@ export function processSegmentsCoverText(
   });
 }
 
+/**
+ * process 侧已「拥有」该正文（same / final 仅为 process 前缀）时，气泡不应再渲染。
+ * 与 processSegmentsCoverText 不同：不含 process_prefix_of_final（那种情况应由 final 气泡展示）。
+ */
+export function processSegmentsOwnText(
+  segments: ThinkingTurnSegment[],
+  text: string,
+): boolean {
+  const target = text.trim();
+  if (!target) return false;
+
+  return collectProcessTexts(segments).some((processText) => {
+    const overlap = classifyTextOverlap(processText, target);
+    return overlap === 'same' || overlap === 'final_prefix_of_process';
+  });
+}
+
 function collectProcessTexts(segments: ThinkingTurnSegment[]): string[] {
   const texts: string[] = [];
   for (const segment of segments) {

@@ -166,6 +166,7 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
             seedSkillSlug={seedSkillSlug}
             onSend={handleHubSend}
             onQueue={handleHubQueue}
+            showProjectPicker
           />
         </div>
       ) : null}

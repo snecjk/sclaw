@@ -26,6 +26,12 @@
     "gatewayRequired": "送信前にゲートウェイを接続してください。",
     "sendFailed": "送信に失敗しました。チャット画面で確認してください。"
   },
+  "projectWork": {
+    "enter": "プロジェクト作業に入る",
+    "createBlank": "空白プロジェクトを作成",
+    "useExistingFolder": "既存フォルダを使用",
+    "clearFolder": "フォルダを使用しない"
+  },
   "agentHub": {
     "conversationLabel": "会話の相手",
     "mainAgentDefault": "Main Agent（既定）",

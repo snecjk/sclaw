@@ -26,6 +26,7 @@ import type { EngineSessionRegistryEntry } from '../engines/session-registry-typ
 import type { AgentEngineType } from '../engines/types';
 import { getAgentWorkspacePath } from '../utils/agent-config';
 import { ensureWorkspaceArtifactOutputDir } from '../utils/paths';
+import { resolveProjectAgentWorkspacePath } from '../../shared/workspace-paths';
 import type { GatewayManager } from '../gateway/manager';
 import {
   deleteAllProjectAgentsForProject,
@@ -171,7 +172,7 @@ export async function createWorkspace(
   await ensureSessionCatalogBootstrapped();
   // Do not create a project agent here — defer until the user starts a chat in
   // this project (sidebar「新建对话」), so creating a project does not reload the gateway.
-  ensureWorkspaceArtifactOutputDir(input.rootPath);
+  ensureWorkspaceArtifactOutputDir(resolveProjectAgentWorkspacePath(input.rootPath));
   return getWorkspaceRepository().create({
     name: input.name,
     rootPath: input.rootPath,
@@ -179,8 +180,8 @@ export async function createWorkspace(
 }
 
 /**
- * Ensure the OpenClaw project agent for a workspace exists and points at its rootPath.
- * Called when the user starts a new chat in the project (before first message).
+ * Ensure the OpenClaw project agent for a workspace exists and points at
+ * `<rootPath>/.sclaw`. Called when the user starts a new chat in the project.
  */
 export async function ensureWorkspaceProjectAgent(
   workspaceId: string,
@@ -462,8 +463,9 @@ export async function resolveSessionToolCwd(sessionKey: string, agentId?: string
   if (row && row.workspaceId !== DEFAULT_WORKSPACE_ID) {
     const root = await getWorkspaceRootPath(row.workspaceId);
     if (root) {
-      ensureWorkspaceArtifactOutputDir(root);
-      return root;
+      const agentWorkspace = resolveProjectAgentWorkspacePath(root);
+      ensureWorkspaceArtifactOutputDir(agentWorkspace);
+      return agentWorkspace;
     }
   }
   const resolvedAgentId = agentId?.trim() || getAgentIdFromSessionKey(sessionKey);

@@ -1,15 +1,22 @@
 import { touchLastChatEventAt } from './history-finalization';
 import { setRuntimePatch } from './runtime-controller';
+import { buildTerminalRuntimePatch } from './turn-state-machine';
 import type { ChatGet, ChatSet } from './store-api';
 import { getSessionRuntimeState } from './session-runtime';
+import { logChatFlow } from './chat-flow-log';
 
 const HISTORY_POLL_SILENCE_WINDOW_MS = 2_500;
 const POLL_START_DELAY_MS = 3_000;
 const POLL_INTERVAL_MS = 4_000;
 const SAFETY_TIMEOUT_MS = 90_000;
-const STUCK_RECHECK_INTERVAL_MS = 10_000;
-const STUCK_INITIAL_DELAY_MS = 30_000;
+const STUCK_RECHECK_INTERVAL_MS = 3_000;
+const STUCK_INITIAL_DELAY_MS = 5_000;
 const ACCEPTANCE_RECONCILE_TIMEOUT_MS = 135_000;
+/** OpenClaw 等不到 agent.completed 时，pendingFinal 持续多久后强制收尾 */
+const PENDING_FINAL_STUCK_HOLD_MS = 2_000;
+
+/** sessionKey → first time we observed pendingFinal with no running tools */
+const pendingFinalStuckSinceBySession = new Map<string, number>();
 
 export function scheduleSendWatchdogs(input: {
   get: ChatGet;
@@ -36,6 +43,7 @@ export function scheduleSendWatchdogs(input: {
   clearHistoryPoll(sessionKey);
   clearErrorRecoveryTimer(sessionKey);
   clearStuckCheckTimer(sessionKey);
+  pendingFinalStuckSinceBySession.delete(sessionKey);
 
   const pollHistory = () => {
     const state = get();
@@ -61,6 +69,7 @@ export function scheduleSendWatchdogs(input: {
     const state = get();
     const runtime = getSessionRuntimeState(state.runtimeBySessionKey, sessionKey);
     if (!runtime.sending) {
+      pendingFinalStuckSinceBySession.delete(sessionKey);
       clearStuckCheckTimer(sessionKey);
       return;
     }
@@ -72,17 +81,39 @@ export function scheduleSendWatchdogs(input: {
       setStuckCheckTimer(sessionKey, setTimeout(checkStuck, STUCK_RECHECK_INTERVAL_MS));
       return;
     }
-    if (runtime.pendingFinal) {
+
+    const hasRunningTool = runtime.streamingTools.some((tool) => tool.status === 'running');
+
+    // pendingFinal：正文/工具轮已落定，但 agent.completed 未到。
+    // 不依赖 currentSession.messages（切会话后 messages 不是本 session），直接强制收尾。
+    if (runtime.pendingFinal && !hasRunningTool) {
+      const firstSeen = pendingFinalStuckSinceBySession.get(sessionKey) ?? Date.now();
+      pendingFinalStuckSinceBySession.set(sessionKey, firstSeen);
+      if (Date.now() - firstSeen >= PENDING_FINAL_STUCK_HOLD_MS) {
+        logChatFlow('watchdog.pending-final.force-complete', {
+          sessionKey,
+          heldFor: Date.now() - firstSeen,
+          activeRunId: runtime.activeRunId,
+        });
+        pendingFinalStuckSinceBySession.delete(sessionKey);
+        clearHistoryPoll(sessionKey);
+        clearStuckCheckTimer(sessionKey);
+        setRuntimePatch(set, sessionKey, buildTerminalRuntimePatch(null));
+        return;
+      }
       setStuckCheckTimer(sessionKey, setTimeout(checkStuck, STUCK_RECHECK_INTERVAL_MS));
       return;
     }
+    pendingFinalStuckSinceBySession.delete(sessionKey);
+
+    // 用 sendAcceptance.startedAt，避免 history poll 刷新 updatedAt 导致永不超时
     const acceptanceAge = runtime.sendAcceptance
       ? Date.now() - runtime.sendAcceptance.startedAt
-      : 0;
+      : Date.now() - (runtime.updatedAt || Date.now());
     const timeoutMs = runtime.sendAcceptance?.status === 'uncertain'
       ? ACCEPTANCE_RECONCILE_TIMEOUT_MS
       : SAFETY_TIMEOUT_MS;
-    if (acceptanceAge < timeoutMs && Date.now() - runtime.updatedAt < timeoutMs) {
+    if (acceptanceAge < timeoutMs) {
       setStuckCheckTimer(sessionKey, setTimeout(checkStuck, STUCK_RECHECK_INTERVAL_MS));
       return;
     }
@@ -95,6 +126,7 @@ export function scheduleSendWatchdogs(input: {
       sendAcceptance: null,
       lastUserMessageAt: null,
       optimisticUserMessage: null,
+      pendingFinal: false,
       error: runtime.sendAcceptance?.status === 'uncertain'
         ? '无法确认消息是否已发送，请刷新历史记录确认后再重试。'
         : 'No response received from the model. The provider may be unavailable or the API key may have insufficient quota. Please check your provider settings.',

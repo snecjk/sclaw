@@ -26,6 +26,12 @@
     "gatewayRequired": "请先连接网关后再发送。",
     "sendFailed": "发送失败，请到对话页查看详情。"
   },
+  "projectWork": {
+    "enter": "进入项目工作",
+    "createBlank": "新建空白项目",
+    "useExistingFolder": "使用现有文件夹",
+    "clearFolder": "不使用文件夹"
+  },
   "agentHub": {
     "conversationLabel": "当前对话对象",
     "mainAgentDefault": "Main Agent（默认）",

@@ -36,8 +36,9 @@ import {
 import { DingTalkSentPreview } from './DingTalkSentPreview';
 import { ThinkingTurnProcess, type ConnectingLabelKey } from './ThinkingProcessPanel';
 import { resolveTurnProcessStatus } from '@/pages/Chat/thinking/turn-process-status';
-import { processSegmentsCoverText } from '@/pages/Chat/thinking/text-ownership';
+import { processSegmentsCoverText, processSegmentsOwnText } from '@/pages/Chat/thinking/text-ownership';
 import {
+  dedupePhaseTextsAgainstFinalReply,
   isLikelyPlanningNarration,
   isLikelyUserClarificationReply,
 } from '@/pages/Chat/thinking/classify-text';
@@ -325,6 +326,10 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
     if (fromHistory) {
       const fallbackText = extractText(fromHistory).trim();
+      // Ownership 已把正文留给 process（finalReplyText === null）：勿再落气泡，避免「思考区 + 气泡」重复。
+      if (fallbackText && processSegmentsOwnText(thinkingLayout.segments, fallbackText)) {
+        return null;
+      }
 
       const coveredByThinking = processSegmentsCoverText(
         thinkingLayout.segments,
@@ -340,8 +345,6 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
         return null;
       }
     }
-
-    if (isStreaming) return fromHistory;
 
     return fromHistory;
   }, [turnMessages, streamSources, isStreaming, thinkingLayout.finalReplyText, thinkingLayout.segments]);
@@ -459,7 +462,14 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     || (!isStreaming && chatDisplayHasWorkflowCard);
 
   const thinkingSegmentsForDisplay = useMemo(() => {
-    const { segments } = thinkingLayout;
+    let segments = thinkingLayout.segments;
+    // Sticky merge 可能把 ownership 已删掉的 phase-text 复活；相对 final 再去重一次。
+    const finalForDedupe = thinkingLayout.finalReplyText?.trim() ?? null;
+    if (finalForDedupe && segments.length > 0) {
+      segments = [...segments];
+      dedupePhaseTextsAgainstFinalReply(segments, finalForDedupe);
+    }
+
     if (isStreaming || segments.length === 0) return segments;
 
     const replyShownOutside =
@@ -489,7 +499,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
         hasProcessSegments:
           thinkingSegmentsForDisplay.length > 0 || bakedStreamingTools.length > 0,
         hasFinalReplyStreaming:
-          isStreaming && replyDisplayHasText,
+          isStreaming && replyDisplayHasText && !isProcessing,
+        hasVisibleFinalReply: replyDisplayHasText,
       }),
     [
       isStreaming,
@@ -516,6 +527,10 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       isStillExecuting={isStillExecuting}
       streamingTools={bakedStreamingTools}
       hasFinalReply={hasThinkingFinalReply}
+      finalReplyText={
+        thinkingLayout.finalReplyText
+          ?? (replyDisplayHasText && replyMessage ? extractText(replyMessage) : null)
+      }
       connectingLabelKey={connectingLabelKey}
       processStatus={processStatus}
     />

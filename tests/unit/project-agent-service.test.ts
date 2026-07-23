@@ -36,6 +36,13 @@ vi.mock('../../electron/utils/paths', () => ({
   ensureWorkspaceArtifactOutputDir: ensureWorkspaceArtifactOutputDirMock,
 }));
 
+vi.mock('../../electron/services/project-agent-workspace', () => ({
+  prepareProjectAgentWorkspace: vi.fn(async (rootPath: string) => {
+    const root = rootPath.replace(/[/\\]+$/, '');
+    return `${root}/.sclaw`;
+  }),
+}));
+
 vi.mock('../../electron/utils/fs-retry', () => ({
   safeRemoveDir: vi.fn(),
 }));
@@ -48,7 +55,7 @@ describe('ensureProjectAgent workspace comparison', () => {
   });
 
   it('does not update workspace when only trailing slash differs', async () => {
-    getAgentWorkspacePathMock.mockResolvedValue('/tmp/project-a');
+    getAgentWorkspacePathMock.mockResolvedValue('/tmp/project-a/.sclaw');
     const { ensureProjectAgent } = await import('../../electron/services/project-agent-service');
 
     const result = await ensureProjectAgent('project-a', 'main', '/tmp/project-a/');
@@ -59,11 +66,11 @@ describe('ensureProjectAgent workspace comparison', () => {
       workspaceUpdated: false,
     });
     expect(updateAgentWorkspaceMock).not.toHaveBeenCalled();
-    expect(ensureWorkspaceArtifactOutputDirMock).toHaveBeenCalledWith('/tmp/project-a/');
+    expect(ensureWorkspaceArtifactOutputDirMock).toHaveBeenCalledWith('/tmp/project-a/.sclaw');
   });
 
   it('updates workspace when normalized paths differ', async () => {
-    getAgentWorkspacePathMock.mockResolvedValue('/tmp/project-a');
+    getAgentWorkspacePathMock.mockResolvedValue('/tmp/project-a/.sclaw');
     const { ensureProjectAgent } = await import('../../electron/services/project-agent-service');
 
     const result = await ensureProjectAgent('project-a', 'main', '/tmp/project-b');
@@ -73,8 +80,8 @@ describe('ensureProjectAgent workspace comparison', () => {
       created: false,
       workspaceUpdated: true,
     });
-    expect(updateAgentWorkspaceMock).toHaveBeenCalledWith('proj-project-a--main', '/tmp/project-b');
-    expect(ensureWorkspaceArtifactOutputDirMock).toHaveBeenCalledWith('/tmp/project-b');
+    expect(updateAgentWorkspaceMock).toHaveBeenCalledWith('proj-project-a--main', '/tmp/project-b/.sclaw');
+    expect(ensureWorkspaceArtifactOutputDirMock).toHaveBeenCalledWith('/tmp/project-b/.sclaw');
   });
 
   it('dedupes concurrent ensure calls for the same project agent', async () => {
@@ -107,11 +114,13 @@ describe('ensureProjectAgent workspace comparison', () => {
     });
     getAgentEngineTypeMock.mockResolvedValue('openclaw');
     setAgentEngineTypeMock.mockResolvedValue({});
-    getAgentWorkspacePathMock.mockResolvedValue('/tmp/project-c-old');
+    getAgentWorkspacePathMock.mockResolvedValue('/tmp/project-c-old/.sclaw');
 
     const { ensureProjectAgent } = await import('../../electron/services/project-agent-service');
     const first = ensureProjectAgent('project-c', 'main', '/tmp/project-c-old');
-    await Promise.resolve();
+    await vi.waitFor(() => {
+      expect(typeof releaseCreate).toBe('function');
+    });
     const second = ensureProjectAgent('project-c', 'main', '/tmp/project-c-new');
     releaseCreate();
 
@@ -120,7 +129,7 @@ describe('ensureProjectAgent workspace comparison', () => {
     expect(createAgentWithIdMock).toHaveBeenCalledTimes(1);
     expect(updateAgentWorkspaceMock).toHaveBeenCalledWith(
       'proj-project-c--main',
-      '/tmp/project-c-new',
+      '/tmp/project-c-new/.sclaw',
     );
   });
 });
