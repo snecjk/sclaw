@@ -1,6 +1,7 @@
 /**
  * One-time migration from OpenClaw-era skill layout into ~/.stoclaw/skills-store.
- * Also repairs v1 stores that duplicated the same slug into global + users.
+ * Migrates all openclaw/users/{code} skills (+ disabled), only preinstalled packages
+ * from openclaw/skills(+disabled), plus agent skills; then dedupes. `.migrated` v1 = done.
  */
 import fs from 'fs';
 import path from 'path';
@@ -28,10 +29,11 @@ import {
 import { copyDir, readSkillMdDescription, readSkillMdVersion, readSkillName } from './skill-package';
 import { getSkillManager } from './skill-manager';
 
-/** Initial OpenClaw → skills-store copy. */
-const INITIAL_MIGRATED_VERSION = 1;
-/** Drop non-preinstalled global copies when any user already owns the slug. */
-const DEDUPE_MIGRATED_VERSION = 2;
+/**
+ * One-shot completion: OpenClaw → skills-store copy + global/user dedupe.
+ * Legacy markers with version >= 2 still count as done.
+ */
+const MIGRATED_VERSION = 1;
 
 interface LegacyLockSkill {
   version?: string;
@@ -91,25 +93,6 @@ function getMarkerVersion(): number {
   return Number(marker?.version) || 0;
 }
 
-/** Collect slugs present under any openclaw/users/{code}/skills(-disabled). */
-export function collectLegacyUserSkillSlugs(): Set<string> {
-  const slugs = new Set<string>();
-  const usersRoot = path.join(getOpenClawConfigDir(), 'users');
-  if (!fs.existsSync(usersRoot)) return slugs;
-
-  for (const userEntry of fs.readdirSync(usersRoot, { withFileTypes: true })) {
-    if (!userEntry.isDirectory()) continue;
-    const userCode = userEntry.name;
-    for (const slug of listSkillSlugs(path.join(getOpenClawUserBaseDir(userCode), 'skills'))) {
-      slugs.add(slug);
-    }
-    for (const slug of listSkillSlugs(path.join(getOpenClawUserBaseDir(userCode), 'skills-disabled'))) {
-      slugs.add(slug);
-    }
-  }
-  return slugs;
-}
-
 async function migrateSkillDir(params: {
   sourceDir: string;
   slug: string;
@@ -156,10 +139,49 @@ async function migrateSkillDir(params: {
 }
 
 /**
- * True when skills-store initial migration + global/user dedupe are complete.
+ * True when skills-store one-shot migration (copy + dedupe) is complete.
  */
 export function isSkillsStoreMigrated(): boolean {
-  return getMarkerVersion() >= DEDUPE_MIGRATED_VERSION;
+  return getMarkerVersion() >= MIGRATED_VERSION;
+}
+
+/**
+ * After skills-store migration, legacy openclaw/users and openclaw/skills-disabled
+ * are no longer SoT (canonical data is skills-store; disable = remove from skills/).
+ * Best-effort: never throw; never run before migration is marked complete.
+ */
+export async function cleanupLegacyOpenClawUsersDir(): Promise<boolean> {
+  return cleanupLegacyOpenClawPath(
+    path.join(getOpenClawConfigDir(), 'users'),
+    'openclaw/users',
+  );
+}
+
+export async function cleanupLegacyOpenClawSkillsDisabledDir(): Promise<boolean> {
+  return cleanupLegacyOpenClawPath(
+    path.join(getOpenClawConfigDir(), 'skills-disabled'),
+    'openclaw/skills-disabled',
+  );
+}
+
+async function cleanupLegacyOpenClawPath(targetPath: string, label: string): Promise<boolean> {
+  if (!isSkillsStoreMigrated()) return false;
+  if (!fs.existsSync(targetPath)) return false;
+
+  try {
+    await safeRemoveDir(targetPath, { label: targetPath });
+    logger.info(`[skills-migration] removed legacy ${label} after skills-store migration`);
+    return true;
+  } catch (error) {
+    logger.warn(`[skills-migration] Failed to remove legacy ${label}:`, error);
+    return false;
+  }
+}
+
+/** Remove openclaw/users + openclaw/skills-disabled once migration is complete. */
+export async function cleanupLegacyOpenClawDirsAfterMigration(): Promise<void> {
+  await cleanupLegacyOpenClawUsersDir();
+  await cleanupLegacyOpenClawSkillsDisabledDir();
 }
 
 /**
@@ -215,14 +237,14 @@ export async function dedupeGlobalUserSkillDuplicates(): Promise<number> {
   return removed;
 }
 
-async function runFullMigration(legacyUserSlugs: Set<string>): Promise<void> {
+async function runFullMigration(): Promise<void> {
   await ensureSkillsStoreDirs();
 
   const globalSkillsDir = getOpenClawSkillsDir();
   const globalDisabledDir = path.join(getOpenClawConfigDir(), 'skills-disabled');
   const globalLock = readLockSkills(path.join(getOpenClawConfigDir(), '.clawhub', 'lock.json'));
 
-  // Users first so ownership is clear before deciding global copies.
+  // Users first: full per-user skills (+ disabled) are the SoT for account-owned installs.
   const usersRoot = path.join(getOpenClawConfigDir(), 'users');
   if (fs.existsSync(usersRoot)) {
     for (const userEntry of fs.readdirSync(usersRoot, { withFileTypes: true })) {
@@ -257,11 +279,11 @@ async function runFullMigration(legacyUserSlugs: Set<string>): Promise<void> {
     }
   }
 
+  // Global openclaw/skills is mostly the active-user mount. Only migrate
+  // preinstalled packages into skills-store global; user mounts are covered above.
   for (const slug of listSkillSlugs(globalSkillsDir)) {
     const sourceDir = path.join(globalSkillsDir, slug);
-    const isPreinstalled = fs.existsSync(path.join(sourceDir, PREINSTALLED_MARKER_NAME));
-    // Non-preinstalled skills already owned by a user stay user-scoped only.
-    if (!isPreinstalled && legacyUserSlugs.has(slug)) {
+    if (!fs.existsSync(path.join(sourceDir, PREINSTALLED_MARKER_NAME))) {
       continue;
     }
     await migrateSkillDir({
@@ -275,8 +297,7 @@ async function runFullMigration(legacyUserSlugs: Set<string>): Promise<void> {
 
   for (const slug of listSkillSlugs(globalDisabledDir)) {
     const sourceDir = path.join(globalDisabledDir, slug);
-    const isPreinstalled = fs.existsSync(path.join(sourceDir, PREINSTALLED_MARKER_NAME));
-    if (!isPreinstalled && legacyUserSlugs.has(slug)) {
+    if (!fs.existsSync(path.join(sourceDir, PREINSTALLED_MARKER_NAME))) {
       continue;
     }
     await migrateSkillDir({
@@ -309,15 +330,17 @@ async function runFullMigration(legacyUserSlugs: Set<string>): Promise<void> {
 }
 
 /**
- * Migrate legacy OpenClaw skill dirs into the neutral skills store, then
- * dedupe global vs user duplicates. Safe to call repeatedly.
+ * Migrate legacy OpenClaw skill dirs into the neutral skills store and
+ * dedupe global vs user duplicates in one pass. Safe to call repeatedly.
  */
 export async function migrateSkillsStoreIfNeeded(): Promise<{
   migrated: boolean;
   deduped: boolean;
 }> {
   const version = getMarkerVersion();
-  if (version >= DEDUPE_MIGRATED_VERSION) {
+  if (version >= MIGRATED_VERSION) {
+    // Cover installs that migrated earlier but still retain legacy dirs.
+    await cleanupLegacyOpenClawDirsAfterMigration();
     return { migrated: false, deduped: false };
   }
 
@@ -327,24 +350,20 @@ export async function migrateSkillsStoreIfNeeded(): Promise<{
   let deduped = false;
 
   try {
-    if (version < INITIAL_MIGRATED_VERSION) {
-      const finalExists = fs.existsSync(storeDir) && fs.existsSync(getSkillsManifestPath());
-      if (!finalExists) {
-        fs.mkdirSync(tempRoot, { recursive: true });
-      }
-
-      const legacyUserSlugs = collectLegacyUserSkillSlugs();
-      await runFullMigration(legacyUserSlugs);
-      migrated = true;
+    const finalExists = fs.existsSync(storeDir) && fs.existsSync(getSkillsManifestPath());
+    if (!finalExists) {
+      fs.mkdirSync(tempRoot, { recursive: true });
     }
 
-    // Always run dedupe when below v2 (covers fresh migrate + existing v1 stores).
+    await runFullMigration();
+    migrated = true;
+
     const removed = await dedupeGlobalUserSkillDuplicates();
-    deduped = removed > 0 || version < DEDUPE_MIGRATED_VERSION;
+    deduped = removed > 0;
 
     writeMigratedMarker({
-      version: DEDUPE_MIGRATED_VERSION,
-      migratedAt: readMigratedMarker()?.migratedAt || new Date().toISOString(),
+      version: MIGRATED_VERSION,
+      migratedAt: new Date().toISOString(),
       dedupedAt: new Date().toISOString(),
     });
 
@@ -360,6 +379,8 @@ export async function migrateSkillsStoreIfNeeded(): Promise<{
         removed,
       });
     }
+
+    await cleanupLegacyOpenClawDirsAfterMigration();
 
     return { migrated, deduped };
   } catch (error) {
