@@ -36,6 +36,23 @@ export function shouldStartNewDingTalkSession(input: {
   return input.nowMs - lastActivityMs >= DINGTALK_SESSION_IDLE_TTL_MS;
 }
 
+/**
+ * 策略 C：改选脑后不得复用旧 sessionKey，也不得用新引擎改写旧 registry。
+ * 仅当 registry 已登记引擎且与当前 Binding 不一致时强制新建。
+ */
+export function shouldForceNewDingTalkSessionForEngine(input: {
+  forceNew?: boolean;
+  boundEngineType: 'claude' | 'openclaw';
+  registeredEngineType?: 'claude' | 'openclaw' | null;
+}): boolean {
+  if (input.forceNew) return true;
+  const registered = input.registeredEngineType;
+  if (registered === 'claude' || registered === 'openclaw') {
+    return registered !== input.boundEngineType;
+  }
+  return false;
+}
+
 export function resolveDingTalkSessionKey(input: {
   agentId: string;
   peerId: string;
