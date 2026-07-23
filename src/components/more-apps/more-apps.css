@@ -13,7 +13,6 @@
   --ma-card-border: #e5e6eb;
   --ma-node-icon-fill: #bdf3cf;
   --ma-node-icon-foreground: #1d2129;
-  --ma-tab-rail: #eef0f4;
   --ma-count: #b0b7c3;
   --ma-count-active: #6b7280;
   --ma-category-divider: #eceef2;
@@ -41,7 +40,6 @@
   --ma-card-border: hsl(var(--border));
   --ma-node-icon-fill: color-mix(in srgb, #bdf3cf 18%, hsl(var(--muted)));
   --ma-node-icon-foreground: #bdf3cf;
-  --ma-tab-rail: rgba(255, 255, 255, 0.05);
   --ma-count: hsl(var(--muted-foreground));
   --ma-count-active: hsl(var(--foreground));
   --ma-category-divider: hsl(var(--border));
@@ -93,20 +91,18 @@
 .page-more-apps .more-apps-tabs {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 10px;
-  background: var(--ma-tab-rail);
+  gap: 28px;
+  padding: 0;
+  background: transparent;
   flex-shrink: 0;
 }
 
 .page-more-apps .more-apps-tab {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 6px 12px;
+  gap: 4px;
+  padding: 6px 0;
   border: 0;
-  border-radius: 8px;
   background: transparent;
   font: inherit;
   font-size: 14px;
@@ -115,7 +111,7 @@
   color: var(--ma-text-secondary);
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+  transition: color 0.12s ease;
 }
 
 .page-more-apps .more-apps-tab:hover {
@@ -123,20 +119,8 @@
 }
 
 .page-more-apps .more-apps-tab--active {
-  background: var(--ma-white);
   color: var(--ma-text);
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
-}
-
-.page-more-apps .more-apps-tab__count {
-  font-size: 14px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  color: var(--ma-count);
-}
-
-.page-more-apps .more-apps-tab--active .more-apps-tab__count {
-  color: var(--ma-count-active);
+  font-weight: 600;
 }
 
 .page-more-apps .more-apps-search-wrap {

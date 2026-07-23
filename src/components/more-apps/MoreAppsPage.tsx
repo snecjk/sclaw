@@ -120,12 +120,6 @@ export function MoreAppsPage() {
     );
   }, [installedApps, searchQuery]);
 
-  // The tab badge always shows the unfiltered catalog total across all categories.
-  const marketAppCount = marketTotal;
-
-  // Keep the tab badge identical to the number of cards rendered below.
-  const installedAppCount = filteredInstalledApps.length;
-
   // Load the three server blocks on mount — each keeps independent loading/error
   // so one failure never blanks the others (Banner / 分类 / APP 经 Main 代理且独立降级).
   useEffect(() => {
@@ -592,9 +586,6 @@ export function MoreAppsPage() {
                 {tab === 'market'
                   ? t('moreApps.tabMarket', { defaultValue: '应用广场' })
                   : t('moreApps.tabInstalled', { defaultValue: '我的应用' })}
-              </span>
-              <span className="more-apps-tab__count">
-                {tab === 'market' ? marketAppCount : installedAppCount}
               </span>
             </button>
           ))}
