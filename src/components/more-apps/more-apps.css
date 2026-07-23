@@ -169,8 +169,7 @@
   align-items: center;
   gap: 28px;
   padding: 0;
-  border-radius: 10px;
-  background: var(--ma-surface-muted);
+  background: transparent;
   flex-shrink: 0;
 }
 
@@ -196,20 +195,7 @@
 }
 
 .page-more-apps .more-apps-tab--active {
-  background: var(--ma-surface-elevated);
   color: var(--ma-text);
-  box-shadow: var(--ma-tab-active-shadow);
-}
-
-.page-more-apps .more-apps-tab__count {
-  font-size: 14px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  color: var(--ma-tab-count);
-}
-
-.page-more-apps .more-apps-tab--active .more-apps-tab__count {
-  color: var(--ma-tab-count-active);
   font-weight: 600;
 }
 
