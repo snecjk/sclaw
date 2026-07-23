@@ -23,6 +23,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AppIcon } from './AppIcon';
 import type { AppItem, AppPlazaBanner, MarketCategory } from '@/types/more-apps';
 import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
+import { formatAppBadges } from './format-app-badges';
 
 const HERO_CAROUSEL_INTERVAL = 5000;
 
@@ -403,57 +404,58 @@ export function MoreAppsPage() {
           {apps.map((app) => {
             const installed = isAppInstalled(app.id);
             const favorite = isAppFavorite(app.id);
-            const badges = app.badge
-              ?.split(/[,，]/)
-              .map((badge) => badge.trim())
-              .filter(Boolean) ?? [];
-            const badgeRows = Array.from(
-              { length: Math.ceil(badges.length / 3) },
-              (_, rowIndex) => badges.slice(rowIndex * 3, rowIndex * 3 + 3),
-            );
+            const badgeText = formatAppBadges(app.badge);
             return (
               <article
                 key={app.id}
                 className={cn('app-market__row', installed && 'app-market__row--installed')}
                 data-app-id={app.id}
+                role="button"
+                tabIndex={0}
+                aria-label={t('moreApps.openApp', {
+                  appName: app.name,
+                  defaultValue: `打开${app.name}`,
+                })}
                 onClick={() => handleOpenApp(app)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleOpenApp(app);
+                  }
+                }}
               >
                 <div className="app-market__row-main">
-                  <AppIcon iconKey={app.iconKey} iconUrl={app.iconUrl} tone={app.tone} size="lg" />
+                  <AppIcon
+                    iconKey={app.iconKey}
+                    iconUrl={app.iconUrl}
+                    tone={app.tone}
+                    size="lg"
+                    shape="rounded"
+                  />
                   <div className="app-market__row-body">
                     <h4 className="app-market__row-title">{app.name}</h4>
-                    {badgeRows.length > 0 && (
-                      <div className="app-market__row-badges">
-                        {badgeRows.map((row, rowIndex) => (
-                          <div key={`${app.id}-badge-row-${rowIndex}`} className="app-market__row-badge-line">
-                            {row.map((badge, badgeIndex) => (
-                              <span
-                                key={`${app.id}-badge-${rowIndex * 3 + badgeIndex}`}
-                                className="app-market__row-badge"
-                              >
-                                {badge}
-                              </span>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <p
+                      className="app-market__row-tags"
+                      title={badgeText || undefined}
+                      aria-hidden={!badgeText}
+                    >
+                      {badgeText}
+                    </p>
                   </div>
                 </div>
-                <div className="app-market__row-aside">
-                  {!app.external && (
-                    <button
-                      className={cn('app-market__row-favorite', favorite && 'app-market__row-favorite--active')}
-                      onClick={(e) => { e.stopPropagation(); handleToggleFavorite(app.id); }}
-                      aria-label={favorite ? t('moreApps.unfavorite', { defaultValue: '取消收藏' }) : t('moreApps.favorite', { defaultValue: '收藏' })}
-                    >
-                      <Heart className="h-4 w-4" fill={favorite ? 'currentColor' : 'none'} />
-                    </button>
-                  )}
-                  <svg className="app-market__row-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
+                {!app.external && (
+                  <button
+                    type="button"
+                    className={cn('app-market__row-favorite', favorite && 'app-market__row-favorite--active')}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleToggleFavorite(app.id);
+                    }}
+                    aria-label={favorite ? t('moreApps.unfavorite', { defaultValue: '取消收藏' }) : t('moreApps.favorite', { defaultValue: '收藏' })}
+                  >
+                    <Heart className="h-4 w-4" fill={favorite ? 'currentColor' : 'none'} />
+                  </button>
+                )}
               </article>
             );
           })}

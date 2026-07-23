@@ -8,8 +8,45 @@
   --ma-text-secondary: #86909c;
   --ma-text-muted: #aeb4bd;
   --ma-border: #e5e6eb;
+  --ma-card: #ffffff;
+  --ma-card-hover: hsl(var(--muted));
+  --ma-card-border: #e5e6eb;
+  --ma-node-icon-fill: #bdf3cf;
+  --ma-node-icon-foreground: #1d2129;
+  --ma-tab-rail: #eef0f4;
+  --ma-count: #b0b7c3;
+  --ma-count-active: #6b7280;
+  --ma-category-divider: #eceef2;
+  --ma-category-text: #6b7280;
+  --ma-category-fill: #f4f4f5;
+  --ma-category-active-text: #111827;
+  --ma-focus: hsl(var(--ring));
+  --ma-favorite: hsl(var(--warning));
   --ma-shadow-panel: 0 2px 16px rgba(15, 23, 42, 0.04);
   --ma-shadow-dialog: 0 24px 48px rgba(15, 23, 42, 0.16);
+}
+
+.dark .page-more-apps {
+  --ma-white: hsl(var(--background));
+  --ma-orange: hsl(var(--primary));
+  --ma-orange-soft: color-mix(in srgb, hsl(var(--primary)) 12%, transparent);
+  --ma-text: hsl(var(--foreground));
+  --ma-text-secondary: hsl(var(--muted-foreground));
+  --ma-text-muted: color-mix(in srgb, hsl(var(--muted-foreground)) 76%, transparent);
+  --ma-border: hsl(var(--border));
+  --ma-card: hsl(var(--background));
+  --ma-card-hover: color-mix(in srgb, white 5%, hsl(var(--background)));
+  --ma-card-border: hsl(var(--border));
+  --ma-node-icon-fill: color-mix(in srgb, #bdf3cf 18%, hsl(var(--muted)));
+  --ma-node-icon-foreground: #bdf3cf;
+  --ma-tab-rail: rgba(255, 255, 255, 0.05);
+  --ma-count: hsl(var(--muted-foreground));
+  --ma-count-active: hsl(var(--foreground));
+  --ma-category-divider: hsl(var(--border));
+  --ma-category-text: hsl(var(--muted-foreground));
+  --ma-category-fill: rgba(255, 255, 255, 0.08);
+  --ma-category-active-text: hsl(var(--foreground));
+  --ma-shadow-panel: 0 6px 20px rgba(0, 0, 0, 0.24);
 }
 
 /* ── Hero header ── */
@@ -46,7 +83,7 @@
   gap: 4px;
   padding: 4px;
   border-radius: 10px;
-  background: #eef0f4;
+  background: var(--ma-tab-rail);
   flex-shrink: 0;
 }
 
@@ -82,11 +119,11 @@
   font-size: 14px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: #b0b7c3;
+  color: var(--ma-count);
 }
 
 .page-more-apps .more-apps-tab--active .more-apps-tab__count {
-  color: #6b7280;
+  color: var(--ma-count-active);
 }
 
 .page-more-apps .more-apps-search-wrap {
@@ -103,6 +140,12 @@
   border-radius: 10px;
   background: var(--ma-white);
   box-sizing: border-box;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.page-more-apps .more-apps-search-wrap:focus-within {
+  border-color: var(--ma-orange);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ma-orange) 16%, transparent);
 }
 
 .page-more-apps .more-apps-search-wrap .more-apps-search__icon {
@@ -229,6 +272,17 @@
 
 .page-more-apps .app-icon--image {
   overflow: hidden;
+}
+
+.page-more-apps .app-icon--rounded {
+  border-radius: 12px;
+  background: var(--ma-node-icon-fill);
+  box-shadow: none;
+}
+
+.page-more-apps .app-icon--rounded:not(.app-icon--image) svg {
+  color: var(--ma-node-icon-foreground);
+  stroke: var(--ma-node-icon-foreground);
 }
 
 .page-more-apps .app-icon__img {
@@ -647,7 +701,7 @@
   gap: 6px;
   margin-bottom: 20px;
   padding-bottom: 14px;
-  border-bottom: 1px solid #eceef2;
+  border-bottom: 1px solid var(--ma-category-divider);
 }
 
 .page-more-apps .app-market__cat {
@@ -658,19 +712,19 @@
   font: inherit;
   font-size: 14px;
   font-weight: 500;
-  color: #6b7280;
+  color: var(--ma-category-text);
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
 }
 
 .page-more-apps .app-market__cat:hover {
-  background: #f4f4f5;
-  color: #111827;
+  background: var(--ma-category-fill);
+  color: var(--ma-category-active-text);
 }
 
 .page-more-apps .app-market__cat--active {
-  background: #f4f4f5;
-  color: #111827;
+  background: var(--ma-category-fill);
+  color: var(--ma-category-active-text);
   font-weight: 600;
 }
 
@@ -678,31 +732,41 @@
 
 .page-more-apps .app-market__grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 40px;
-  row-gap: 2px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .page-more-apps .app-market__row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  min-height: 76px;
-  padding: 12px 6px;
-  border-radius: 12px;
+  gap: 10px;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 64px;
+  padding: 8px;
+  border: 0.8px solid var(--ma-card-border);
+  border-radius: 14px;
+  background: var(--ma-card);
   cursor: pointer;
-  transition: background 0.12s ease;
+  transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
 }
 
 .page-more-apps .app-market__row:hover {
-  background: #f7f7f8;
+  background: var(--ma-card-hover);
+  border-color: color-mix(in srgb, var(--ma-focus) 28%, var(--ma-card-border));
+  box-shadow: var(--ma-shadow-panel);
+}
+
+.page-more-apps .app-market__row:focus-visible {
+  outline: 2px solid var(--ma-focus);
+  outline-offset: 2px;
 }
 
 .page-more-apps .app-market__row-main {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
   min-width: 0;
   flex: 1;
 }
@@ -713,49 +777,29 @@
 }
 
 .page-more-apps .app-market__row-title {
-  margin: 0 0 3px;
-  font-size: 15px;
+  margin: 0;
+  overflow: hidden;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: #111827;
-}
-
-.page-more-apps .app-market__row-badges {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.page-more-apps .app-market__row-badge-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
+  line-height: 22px;
+  color: var(--ma-text);
   white-space: nowrap;
-}
-
-.page-more-apps .app-market__row-badge {
-  flex: 0 1 auto;
-  max-width: calc((100% - 16px) / 3);
-  padding: 2px 12px;
-  border-radius: 999px;
-  background: #f0f2f5;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 20px;
-  color: #4e5969;
-  overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.page-more-apps .app-market__row-aside {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
+.page-more-apps .app-market__row-tags {
+  margin: 0;
+  min-height: 18px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ma-text-secondary);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.page-more-apps .app-market__row-aside .app-market__row-favorite {
+.page-more-apps .app-market__row .app-market__row-favorite {
   opacity: 0;
   transition: opacity 0.12s ease;
 }
@@ -775,23 +819,18 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #c4c9d4;
+  color: var(--ma-text-muted);
   cursor: pointer;
   transition: color 0.12s ease, background 0.12s ease;
 }
 
 .page-more-apps .app-market__row-favorite:hover {
-  color: #f59e0b;
-  background: rgba(245, 158, 11, 0.08);
+  color: var(--ma-favorite);
+  background: color-mix(in srgb, var(--ma-favorite) 12%, transparent);
 }
 
 .page-more-apps .app-market__row-favorite--active {
-  color: #f59e0b;
-}
-
-.page-more-apps .app-market__row-chevron {
-  flex-shrink: 0;
-  color: #d1d5db;
+  color: var(--ma-favorite);
 }
 
 .page-more-apps .app-market__empty {
@@ -805,16 +844,20 @@
 
 .page-more-apps .app-market__list-skeleton {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 40px;
-  row-gap: 2px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .page-more-apps .app-market__row--skeleton {
-  min-height: 76px;
-  padding: 12px 6px;
-  border-radius: 12px;
-  background: linear-gradient(90deg, #f4f5f7 25%, #e9ecf2 50%, #f4f5f7 75%);
+  min-height: 64px;
+  padding: 8px;
+  border-radius: 14px;
+  background: linear-gradient(
+    90deg,
+    var(--ma-card) 25%,
+    var(--ma-card-hover) 50%,
+    var(--ma-card) 75%
+  );
   background-size: 200% 100%;
   animation: ma-list-skeleton 1.4s ease-in-out infinite;
   cursor: default;
@@ -1490,7 +1533,11 @@
   }
 
   .page-more-apps .app-market__grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .page-more-apps .app-market__list-skeleton {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .page-more-apps .app-plaza-featured__scroll {
@@ -1518,6 +1565,8 @@
 }
 
 @media (max-width: 640px) {
+  .page-more-apps .app-market__grid,
+  .page-more-apps .app-market__list-skeleton,
   .page-more-apps .app-plaza-featured__scroll,
   .page-more-apps .more-apps-grid {
     grid-template-columns: 1fr;

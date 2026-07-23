@@ -30,9 +30,10 @@ const serverApp = {
   id: 'org-relation',
   name: '客户关系',
   description: '维护客户归属关系',
-  badge: '客户管理, 部门岗位,,客户对账,组织分析',
+  badge: '客户管理, 部门岗位；客户对账、部门岗位',
   url: 'https://example.com/org',
   iconKey: 'org-relation',
+  iconUrl: 'https://cdn.example.com/org-relation.png',
   tone: 'blue' as const,
   kind: 'builtin' as const,
 };
@@ -88,17 +89,63 @@ describe('MoreAppsPage server catalog', () => {
     });
   });
 
-  it('renders comma-separated server badges as tags instead of description', async () => {
+  it('renders mixed-delimiter server badges as one deduplicated ideographic-comma label', async () => {
     render(<MoreAppsPage />);
-    expect(await screen.findByText('客户管理')).toBeInTheDocument();
-    expect(screen.getByText('部门岗位')).toHaveClass('app-market__row-badge');
-    expect(screen.getByText('客户对账')).toHaveClass('app-market__row-badge');
-    expect(screen.getByText('组织分析')).toHaveClass('app-market__row-badge');
-    const badgeRows = document.querySelectorAll('.app-market__row-badge-line');
-    expect(badgeRows).toHaveLength(2);
-    expect(badgeRows[0]?.children).toHaveLength(3);
-    expect(badgeRows[1]?.children).toHaveLength(1);
+    expect(await screen.findByText('客户管理、部门岗位、客户对账')).toHaveClass('app-market__row-tags');
+    expect(document.querySelectorAll('.app-market__row-tags')).toHaveLength(1);
     expect(screen.queryByText('维护客户归属关系')).not.toBeInTheDocument();
+  });
+
+  it('shows the uploaded app image and falls back to the configured icon when it fails', async () => {
+    render(<MoreAppsPage />);
+    const image = await waitFor(() => {
+      const element = document.querySelector<HTMLImageElement>(
+        '.app-market__row .app-icon__img',
+      );
+      expect(element).not.toBeNull();
+      return element!;
+    });
+    expect(image).toHaveAttribute('src', 'https://cdn.example.com/org-relation.png');
+    expect(image.closest('.app-icon')).toHaveClass('app-icon--rounded');
+
+    fireEvent.error(image);
+    await waitFor(() => {
+      expect(document.querySelector('.app-market__row .app-icon__img')).not.toBeInTheDocument();
+      expect(document.querySelector('.app-market__row .app-icon svg')).toBeInTheDocument();
+    });
+  });
+
+  it('reserves the tag row when the app has no valid badges', async () => {
+    fetchAppsMock.mockResolvedValueOnce({
+      items: [{ ...serverApp, badge: '，；、  ' }],
+      total: 1,
+      pageNum: 1,
+      pageSize: 20,
+    });
+
+    render(<MoreAppsPage />);
+    expect(await screen.findByText('客户关系')).toBeInTheDocument();
+    const emptyTagRow = document.querySelector('.app-market__row-tags');
+    expect(emptyTagRow).toBeInTheDocument();
+    expect(emptyTagRow).toBeEmptyDOMElement();
+    expect(emptyTagRow).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('opens the card by keyboard and keeps favorite clicks isolated from opening', async () => {
+    render(<MoreAppsPage />);
+    const card = await screen.findByRole('button', { name: '打开客户关系' });
+
+    fireEvent.keyDown(card, { key: 'Enter' });
+    expect(openInSclawBrowserMock).toHaveBeenCalledWith({
+      url: 'https://example.com/org',
+      title: '客户关系',
+      appId: 'org-relation',
+    });
+
+    openInSclawBrowserMock.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: '收藏' }));
+    expect(openInSclawBrowserMock).not.toHaveBeenCalled();
+    expect(useMoreAppsStore.getState().favoriteIds).toContain('org-relation');
   });
 
   it('renders a whole-image URL banner and opens its configured link', async () => {
