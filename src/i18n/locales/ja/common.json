@@ -81,7 +81,7 @@
         "projectFolder": "プロジェクトフォルダ",
         "projectLocationLabel": "プロジェクトの場所",
         "projectLocationPlaceholder": "クリックしてフォルダを選択",
-        "projectArtifactHint": "このプロジェクト内の会話で生成された成果物は、プロジェクトフォルダ内の `.claw-output` に保存されます。",
+        "projectArtifactHint": "このプロジェクト内の会話で生成された成果物は、プロジェクトフォルダ内の `.sclaw/.claw-output` に保存されます。",
         "pickFolder": "フォルダを選択",
         "projectCreated": "プロジェクトを作成しました",
         "projectUpdated": "プロジェクトを更新しました",

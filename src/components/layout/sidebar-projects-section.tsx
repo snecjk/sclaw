@@ -1,6 +1,6 @@
 /**
  * SidebarProjectsSection — 项目树：标题行 + 项目文件夹 + 嵌套会话。
- * 项目仅支持行内重命名（不支持改路径）；项目草稿「新对话」也可行内改名。
+ * 项目仅支持行内重命名（不支持改路径）。项目内「新建」跳转首页并带上项目，不插侧栏草稿行。
  */
 import { useCallback, useMemo, useState } from 'react';
 import { ChevronDown, Folder, FolderPlus } from 'lucide-react';
@@ -19,8 +19,6 @@ import { resolveSessionLabel } from '@/lib/session-label';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import {
   DEFAULT_SESSION_KEY,
-  PROJECT_NEW_CHAT_DRAFT_KEY,
-  isProjectNewChatDraftKey,
   type ChatSession,
 } from '@/stores/chat/types';
 import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
@@ -56,13 +54,11 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
 
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
-  const pendingProjectId = useChatStore((s) => s.pendingProjectId);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const switchSession = useChatStore((s) => s.switchSession);
   const renameSession = useChatStore((s) => s.renameSession);
   const newSession = useChatStore((s) => s.newSession);
-  const setPendingProjectId = useChatStore((s) => s.setPendingProjectId);
 
   const requestSessionDelete = useSidebarDeleteConfirmStore((s) => s.requestSessionDelete);
 
@@ -86,20 +82,13 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
         const workspaceId = sessionWorkspaceByKey[session.key] ?? DEFAULT_WORKSPACE_ID;
         return workspaceId === workspace.id;
       });
-      const sorted = sortSessionsWithCatalogPin(scoped, sessionLastActivity, allCatalogByKey);
-      // UI-only draft row: show under the pending project, never persisted to catalog/session.
-      if (pendingProjectId === workspace.id) {
-        const draftSession: ChatSession = {
-          key: PROJECT_NEW_CHAT_DRAFT_KEY,
-          label: t('sidebar.newChat'),
-        };
-        map.set(workspace.id, [draftSession, ...sorted]);
-      } else {
-        map.set(workspace.id, sorted);
-      }
+      map.set(
+        workspace.id,
+        sortSessionsWithCatalogPin(scoped, sessionLastActivity, allCatalogByKey),
+      );
     }
     return map;
-  }, [workspaces, sessions, sessionWorkspaceByKey, sessionLastActivity, allCatalogByKey, pendingProjectId, t]);
+  }, [workspaces, sessions, sessionWorkspaceByKey, sessionLastActivity, allCatalogByKey]);
 
   const getSessionLabel = useCallback(
     (key: string, displayName?: string, label?: string) =>
@@ -149,7 +138,7 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
     }
   }, []);
 
-  /** 在指定项目下新建对话：进入项目草稿并创建/关联 project agent；首条消息发出时才真正创建 session。 */
+  /** 在指定项目下新建对话：跳转首页并带上项目（pendingProjectId + project agent），不在侧栏插「新对话」草稿行。 */
   const handleNewChatInProject = useCallback(async (projectId: string) => {
     try {
       await selectProject(projectId);
@@ -166,10 +155,7 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
     for (const workspaceId of Object.values(sessionWorkspaceByKey)) {
       if (workspaceId === projectId) count += 1;
     }
-    // 侧栏可见真实会话也算关联；临时草稿不计入删除确认数量
-    const visible = (sessionsByProjectId.get(projectId) ?? [])
-      .filter((session) => !isProjectNewChatDraftKey(session.key))
-      .length;
+    const visible = (sessionsByProjectId.get(projectId) ?? []).length;
     return Math.max(count, visible);
   }, [sessionWorkspaceByKey, sessionsByProjectId]);
 
@@ -284,18 +270,11 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                 {isExpanded && projectSessions.length > 0 ? (
                   <div className="mb-0.5 flex flex-col gap-0.5">
                     {projectSessions.map((session) => {
-                      const isDraft = isProjectNewChatDraftKey(session.key);
-                      const label = isDraft
-                        ? t('sidebar.newChat')
-                        : getSessionLabel(session.key, session.displayName, session.label);
-                      const isActive = isDraft
-                        ? isOnHome
-                          && pendingProjectId === workspace.id
-                          && currentSessionKey === DEFAULT_SESSION_KEY
-                        : isOnHome
-                          && currentSessionKey === session.key
-                          && currentSessionKey !== DEFAULT_SESSION_KEY;
-                      const isPinned = !isDraft && allCatalogByKey[session.key]?.pinRank != null;
+                      const label = getSessionLabel(session.key, session.displayName, session.label);
+                      const isActive = isOnHome
+                        && currentSessionKey === session.key
+                        && currentSessionKey !== DEFAULT_SESSION_KEY;
+                      const isPinned = allCatalogByKey[session.key]?.pinRank != null;
                       return (
                         <SidebarProjectSessionRow
                           key={session.key}
@@ -303,43 +282,27 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                           label={label}
                           isActive={isActive}
                           isPinned={isPinned}
-                          isEditing={!isDraft && editingSessionKey === session.key}
+                          isEditing={editingSessionKey === session.key}
                           editingValue={editingValue}
                           onOpen={() => {
-                            if (isDraft) {
-                              void handleNewChatInProject(workspace.id);
-                              return;
-                            }
                             void selectProject(workspace.id);
                             navigateToMainChatHome(navigate, location.pathname, () => switchSession(session.key));
                           }}
                           onPin={() => {
-                            if (isDraft) return;
                             void handlePinInProject(session.key);
                           }}
                           onStartRename={() => {
-                            if (isDraft) return;
                             setEditingProjectId(null);
                             setEditingSessionKey(session.key);
                             setEditingValue(label);
                           }}
                           onEditingValueChange={setEditingValue}
                           onCommitRename={() => {
-                            if (isDraft) return;
                             renameSession(session.key, editingValue);
                             setEditingSessionKey(null);
                           }}
                           onCancelRename={() => setEditingSessionKey(null)}
                           onDelete={() => {
-                            if (isDraft) {
-                              setPendingProjectId(null);
-                              useChatStore.setState({
-                                currentSessionKey: DEFAULT_SESSION_KEY,
-                                currentAgentId: 'main',
-                                messages: [],
-                              });
-                              return;
-                            }
                             requestSessionDelete({ key: session.key, label });
                           }}
                         />

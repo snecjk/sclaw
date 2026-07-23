@@ -37,6 +37,9 @@ import { createSendActions } from './send-actions';
 import { createForegroundEventActions } from './foreground-event-actions';
 import { buildTerminalRuntimePatch } from './turn-state-machine';
 import { buildTerminalTurnEffects, executeTurnEffects } from './turn-effects';
+// Keep a live import so Vite HMR invalidates the chat store when run-completion changes.
+import { resolveAssistantFinalTerminalState as _openClawTerminalProbe } from './run-completion';
+void _openClawTerminalProbe;
 import {
   clearErrorRecoveryTimer,
   clearHistoryPoll,

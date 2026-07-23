@@ -304,6 +304,7 @@ export function listRecentPythonRunDirs(limit = 10): string[] {
     join(getOpenClawConfigDir(), 'runtime', 'python'),
     ...listWorkspaceRoots().flatMap((root) => [
       join(root, '.claw-output'),
+      join(root, '.sclaw', '.claw-output'),
       join(root, 'outputs'),
     ]),
   ];

@@ -59,7 +59,10 @@ export function shouldRefreshSessionList(input: {
 export function shouldFinalizeCompletedRun(input: {
   runId: unknown;
   resolvedSessionKey: string | null;
-  state: Pick<ChatState, 'activeRunId' | 'currentSessionKey' | 'runtimeBySessionKey' | 'sending'>;
+  state: Pick<
+    ChatState,
+    'activeRunId' | 'currentSessionKey' | 'runtimeBySessionKey' | 'sending'
+  >;
 }): boolean {
   const { resolvedSessionKey, runId, state } = input;
   const sessionKey = resolvedSessionKey ?? state.currentSessionKey;
@@ -68,10 +71,15 @@ export function shouldFinalizeCompletedRun(input: {
   const runtime = getSessionRuntimeState(state.runtimeBySessionKey, sessionKey);
   if (!runtime.sending) return false;
   if (runtime.activeRunId) return completionRunId === runtime.activeRunId;
-  return Boolean(completionRunId && (
-    runtime.sendAcceptance?.status === 'pending'
+  if (!completionRunId) return false;
+  // activeRunId 尚未绑定或已清空时：仍允许在发送中 finalize，避免 agent.completed
+  // 因 sendAcceptance 状态不匹配而被丢弃，导致「整理工具结果」永久卡住。
+  return (
+    runtime.pendingFinal
+    || runtime.sendAcceptance?.status === 'pending'
     || runtime.sendAcceptance?.status === 'uncertain'
-  ));
+    || runtime.sendAcceptance == null
+  );
 }
 
 function scheduleCompletedRunHistoryReload(runId: unknown, sessionKey: unknown): void {
