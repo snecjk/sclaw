@@ -3,14 +3,6 @@ import { agentMemoryRemoteService } from './agent-memory-remote-service';
 import { STO_MEMORY_CENTER_LLM_MODEL } from './sto-memory-center-llm';
 import { logger } from '../utils/logger';
 
-function extractAssistantText(response: Record<string, unknown>): string {
-  const firstChoice = Array.isArray(response.choices)
-    ? response.choices[0] as Record<string, unknown> | undefined
-    : undefined;
-  const message = firstChoice?.message as Record<string, unknown> | undefined;
-  return typeof message?.content === 'string' ? message.content : '';
-}
-
 function parseJsonObjectFromText(text: string): ExecutionExperienceSummary {
   const trimmed = text.trim();
   if (!trimmed) {
@@ -109,7 +101,7 @@ function buildSummaryPrompt(input: Record<string, unknown>): string {
     '  "avoidPath": [{"command": "具体命令或工具", "reason": "为什么不推荐"}],',
     '  "parameterPattern": {"字段名": "如何从用户问题提取/取值规则，可多字段"},',
     '  "constraints": ["必须遵守的约束，如：已知目标命令时直接执行 directCommand、跳过 discoveryPath；不可复用历史具体数值必须重新查询；日期以系统当前为基准不可硬编码"],',
-    '  "confidence": 0.7',
+    `  "confidence": 0.7${hasInjectedExperiences ? ',' : ''}`,
     ...(hasInjectedExperiences ? ['  "candidateAssessments": [{"memoryId": "仅从输入 injectedExperiences 复制", "decision": "supersedes|still_valid|irrelevant_to_run|uncertain", "sameIntent": true, "oldPathAttempted": true, "oldPathFailed": true, "newPathSucceeded": true, "reason": "基于工具调用结果的简短依据"}]'] : []),
     '}',
     '',
@@ -221,7 +213,7 @@ export class ClaudeExecutionSummaryService {
       queryId,
       prompt,
     });
-    const response = await agentMemoryRemoteService.createChatCompletion({
+    const assistantText = await agentMemoryRemoteService.createChatCompletionStream({
       model: STO_MEMORY_CENTER_LLM_MODEL,
       messages: [
         { role: 'system', content: SUMMARY_SYSTEM_PROMPT },
@@ -229,7 +221,6 @@ export class ClaudeExecutionSummaryService {
       ],
       response_format: { type: 'json_object' },
     });
-    const assistantText = extractAssistantText(response);
 
     logger.debug('[execution-memory][claude] summarize assistant text', {
       queryId,

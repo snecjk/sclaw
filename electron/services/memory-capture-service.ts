@@ -6,6 +6,7 @@ import { getAdapterForSession } from '../engines/manager';
 import type { ExecutionSnapshot } from '../engines/execution-snapshot';
 import { extractDirectExecutionCommands, formatExecutionMemoryText, type ExecutionExperienceCandidateAssessment, type ExecutionExperienceSummary } from './claude-execution-summary-service';
 import { sanitizeMemoryCaptureUserMessage } from '../../shared/memory-capture-text';
+import { scheduleMemoryCaptureRetry } from './memory-capture-retry';
 
 type RefreshInput = {
   runId?: string | null;
@@ -400,11 +401,30 @@ class MemoryCaptureService {
   }
 
   private async retry(id: string, error: unknown, retry: () => void): Promise<void> {
-    const db = getKyselyDatabase(); const job = await db.selectFrom('memory_capture_jobs').select(['retry_count']).where('id', '=', id).executeTakeFirst(); const count = (job?.retry_count || 0) + 1; const again = count < 3;
+    const db = getKyselyDatabase();
+    const job = await db.selectFrom('memory_capture_jobs').select(['retry_count']).where('id', '=', id).executeTakeFirst();
+    const count = (job?.retry_count || 0) + 1;
+    const again = count < 3;
     const retryInMs = count * RETRY_BASE_DELAY_MS;
     await db.updateTable('memory_capture_jobs').set({ status: again ? 'retry_wait' : 'failed', retry_count: count, error_message: String(error).slice(0, 500), next_retry_at: again ? new Date(Date.now() + retryInMs).toISOString() : null, completed_at: again ? null : now(), updated_at: now() }).where('id', '=', id).execute();
     trace('warn', again ? 'job.retry_wait' : 'job.failed', { jobId: id, retryCount: count, retryInMs: again ? retryInMs : null, error: String(error).slice(0, 500) });
-    if (again) { const timer = setTimeout(retry, retryInMs); timer.unref?.(); }
+    if (again) {
+      scheduleMemoryCaptureRetry(
+        retryInMs,
+        async () => {
+          await db.updateTable('memory_capture_jobs')
+            .set({ status: 'ready', next_retry_at: null, updated_at: now() })
+            .where('id', '=', id)
+            .where('status', '=', 'retry_wait')
+            .execute();
+        },
+        retry,
+        (resumeError) => trace('warn', 'job.retry_resume_failed', {
+          jobId: id,
+          error: String(resumeError).slice(0, 500),
+        }),
+      );
+    }
   }
 
   private pruneInjectedMemoryBindings(): void {
