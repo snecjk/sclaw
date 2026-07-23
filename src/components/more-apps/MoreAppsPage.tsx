@@ -7,7 +7,7 @@
  * - Installed tab: Card grid layout
  */
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { Search, ExternalLink, Heart } from 'lucide-react';
+import { Search, Plus, Heart } from 'lucide-react';
 import './more-apps.css';
 import { toast } from 'sonner';
 import { useMoreAppsStore } from '@/stores/more-apps';
@@ -23,6 +23,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AppIcon } from './AppIcon';
 import type { AppItem, AppPlazaBanner, MarketCategory } from '@/types/more-apps';
 import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
+import { formatAppBadges } from './format-app-badges';
 
 const HERO_CAROUSEL_INTERVAL = 5000;
 
@@ -40,6 +41,7 @@ export function MoreAppsPage() {
     bannersLoading,
     bannersError,
     categories,
+    categoryCounts,
     categoriesLoading,
     categoriesError,
     apps,
@@ -85,13 +87,18 @@ export function MoreAppsPage() {
     const featured = {
       id: 'featured' as MarketCategory,
       label: t('moreApps.categoryFeatured', { defaultValue: '精选' }),
+      count: marketTotal,
     };
     const serverItems =
       categoriesLoading || categoriesError
         ? []
-        : categories.map((c) => ({ id: c.id as MarketCategory, label: c.name }));
+        : categories.map((c) => ({
+            id: c.id as MarketCategory,
+            label: c.name,
+            count: categoryCounts[c.id] ?? 0,
+          }));
     return [featured, ...serverItems];
-  }, [categories, categoriesLoading, categoriesError, t]);
+  }, [categories, categoryCounts, categoriesLoading, categoriesError, marketTotal, t]);
 
   // APP-type Banner targets must resolve exclusively from the server catalog.
   // Do not fall back to built-in/local URLs when the target APP is not loaded.
@@ -112,12 +119,6 @@ export function MoreAppsPage() {
         a.description?.toLowerCase().includes(q),
     );
   }, [installedApps, searchQuery]);
-
-  // The tab badge always shows the unfiltered catalog total across all categories.
-  const marketAppCount = marketTotal;
-
-  // Keep the tab badge identical to the number of cards rendered below.
-  const installedAppCount = filteredInstalledApps.length;
 
   // Load the three server blocks on mount — each keeps independent loading/error
   // so one failure never blanks the others (Banner / 分类 / APP 经 Main 代理且独立降级).
@@ -403,57 +404,58 @@ export function MoreAppsPage() {
           {apps.map((app) => {
             const installed = isAppInstalled(app.id);
             const favorite = isAppFavorite(app.id);
-            const badges = app.badge
-              ?.split(/[,，]/)
-              .map((badge) => badge.trim())
-              .filter(Boolean) ?? [];
-            const badgeRows = Array.from(
-              { length: Math.ceil(badges.length / 3) },
-              (_, rowIndex) => badges.slice(rowIndex * 3, rowIndex * 3 + 3),
-            );
+            const badgeText = formatAppBadges(app.badge);
             return (
               <article
                 key={app.id}
                 className={cn('app-market__row', installed && 'app-market__row--installed')}
                 data-app-id={app.id}
+                role="button"
+                tabIndex={0}
+                aria-label={t('moreApps.openApp', {
+                  appName: app.name,
+                  defaultValue: `打开${app.name}`,
+                })}
                 onClick={() => handleOpenApp(app)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleOpenApp(app);
+                  }
+                }}
               >
                 <div className="app-market__row-main">
-                  <AppIcon iconKey={app.iconKey} iconUrl={app.iconUrl} tone={app.tone} size="lg" />
+                  <AppIcon
+                    iconKey={app.iconKey}
+                    iconUrl={app.iconUrl}
+                    tone={app.tone}
+                    size="lg"
+                    shape="rounded"
+                  />
                   <div className="app-market__row-body">
                     <h4 className="app-market__row-title">{app.name}</h4>
-                    {badgeRows.length > 0 && (
-                      <div className="app-market__row-badges">
-                        {badgeRows.map((row, rowIndex) => (
-                          <div key={`${app.id}-badge-row-${rowIndex}`} className="app-market__row-badge-line">
-                            {row.map((badge, badgeIndex) => (
-                              <span
-                                key={`${app.id}-badge-${rowIndex * 3 + badgeIndex}`}
-                                className="app-market__row-badge"
-                              >
-                                {badge}
-                              </span>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <p
+                      className="app-market__row-tags"
+                      title={badgeText || undefined}
+                      aria-hidden={!badgeText}
+                    >
+                      {badgeText}
+                    </p>
                   </div>
                 </div>
-                <div className="app-market__row-aside">
-                  {!app.external && (
-                    <button
-                      className={cn('app-market__row-favorite', favorite && 'app-market__row-favorite--active')}
-                      onClick={(e) => { e.stopPropagation(); handleToggleFavorite(app.id); }}
-                      aria-label={favorite ? t('moreApps.unfavorite', { defaultValue: '取消收藏' }) : t('moreApps.favorite', { defaultValue: '收藏' })}
-                    >
-                      <Heart className="h-4 w-4" fill={favorite ? 'currentColor' : 'none'} />
-                    </button>
-                  )}
-                  <svg className="app-market__row-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
+                {!app.external && (
+                  <button
+                    type="button"
+                    className={cn('app-market__row-favorite', favorite && 'app-market__row-favorite--active')}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleToggleFavorite(app.id);
+                    }}
+                    aria-label={favorite ? t('moreApps.unfavorite', { defaultValue: '取消收藏' }) : t('moreApps.favorite', { defaultValue: '收藏' })}
+                  >
+                    <Heart className="h-4 w-4" fill={favorite ? 'currentColor' : 'none'} />
+                  </button>
+                )}
               </article>
             );
           })}
@@ -494,7 +496,10 @@ export function MoreAppsPage() {
               aria-pressed={marketCategory === cat.id ? 'true' : 'false'}
               onClick={() => handleSelectCategory(cat.id)}
             >
-              {cat.label}
+              <span>{cat.label}</span>
+              <span className="app-market__cat-count" aria-hidden="true">
+                {cat.count}
+              </span>
             </button>
           ))}
         </nav>
@@ -542,17 +547,29 @@ export function MoreAppsPage() {
   // ── Main Layout ──────────────────────────────────────────────
   return (
     <div className={cn(stoMainInnerShell, 'page-more-apps flex h-full flex-col', activeTab === 'market' && 'page-more-apps--market')}>
-      {/* Header with title and subtitle */}
-      <div className="app-plaza-hero">
-        <h1 className={cn(stoPageTitleClass, 'app-plaza-hero__title')}>
-          {t('moreApps.title', { defaultValue: '应用广场' })}
-        </h1>
-        <p className="app-plaza-hero__subtitle">
-          {t('moreApps.subtitle', { defaultValue: '发现、安装与管理网点经营应用，像应用商店一样即装即用' })}
-        </p>
+      {/* Heading row: title at left, external app action at right */}
+      <div className="app-plaza-heading-row">
+        <div className="app-plaza-hero">
+          <h1 className={cn(stoPageTitleClass, 'app-plaza-hero__title')}>
+            {t('moreApps.title', { defaultValue: '应用广场' })}
+          </h1>
+          <p className="app-plaza-hero__subtitle">
+            {t('moreApps.subtitle', { defaultValue: '发现、安装与管理网点经营应用，像应用商店一样即装即用' })}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          className="more-apps-add-btn"
+          id="more-apps-add-external-btn"
+          onClick={openAddModal}
+        >
+          <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
+          {t('moreApps.addExternal', { defaultValue: '安装外部应用' })}
+        </button>
       </div>
 
-      {/* Toolbar Row: Tabs + Search + Add Button */}
+      {/* Toolbar row: tabs at left, search at right */}
       <div className="more-apps-toolbar-row">
         <div className="more-apps-tabs" role="tablist" aria-label={t('moreApps.tabAria', { defaultValue: '应用类型' })}>
           {(['market', 'installed'] as const).map((tab) => (
@@ -570,9 +587,6 @@ export function MoreAppsPage() {
                   ? t('moreApps.tabMarket', { defaultValue: '应用广场' })
                   : t('moreApps.tabInstalled', { defaultValue: '我的应用' })}
               </span>
-              <span className="more-apps-tab__count">
-                {tab === 'market' ? marketAppCount : installedAppCount}
-              </span>
             </button>
           ))}
         </div>
@@ -589,16 +603,6 @@ export function MoreAppsPage() {
             autoComplete="off"
           />
         </label>
-
-        <button
-          type="button"
-          className="more-apps-add-btn"
-          id="more-apps-add-external-btn"
-          onClick={openAddModal}
-        >
-          <ExternalLink className="more-apps-add-btn__icon" aria-hidden="true" />
-          {t('moreApps.addExternal', { defaultValue: '安装外部应用' })}
-        </button>
       </div>
 
       {/* Content */}
