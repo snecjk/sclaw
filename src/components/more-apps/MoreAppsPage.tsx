@@ -41,6 +41,7 @@ export function MoreAppsPage() {
     bannersLoading,
     bannersError,
     categories,
+    categoryCounts,
     categoriesLoading,
     categoriesError,
     apps,
@@ -86,13 +87,18 @@ export function MoreAppsPage() {
     const featured = {
       id: 'featured' as MarketCategory,
       label: t('moreApps.categoryFeatured', { defaultValue: '精选' }),
+      count: marketTotal,
     };
     const serverItems =
       categoriesLoading || categoriesError
         ? []
-        : categories.map((c) => ({ id: c.id as MarketCategory, label: c.name }));
+        : categories.map((c) => ({
+            id: c.id as MarketCategory,
+            label: c.name,
+            count: categoryCounts[c.id] ?? 0,
+          }));
     return [featured, ...serverItems];
-  }, [categories, categoriesLoading, categoriesError, t]);
+  }, [categories, categoryCounts, categoriesLoading, categoriesError, marketTotal, t]);
 
   // APP-type Banner targets must resolve exclusively from the server catalog.
   // Do not fall back to built-in/local URLs when the target APP is not loaded.
@@ -496,7 +502,10 @@ export function MoreAppsPage() {
               aria-pressed={marketCategory === cat.id ? 'true' : 'false'}
               onClick={() => handleSelectCategory(cat.id)}
             >
-              {cat.label}
+              <span>{cat.label}</span>
+              <span className="app-market__cat-count" aria-hidden="true">
+                {cat.count}
+              </span>
             </button>
           ))}
         </nav>

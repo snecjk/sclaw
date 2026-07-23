@@ -18,7 +18,7 @@
   --ma-count-active: #6b7280;
   --ma-category-divider: #eceef2;
   --ma-category-text: #6b7280;
-  --ma-category-fill: #f4f4f5;
+  --ma-category-fill: #e5e6eb;
   --ma-category-active-text: #111827;
   --ma-focus: hsl(var(--ring));
   --ma-favorite: hsl(var(--warning));
@@ -705,9 +705,12 @@
 }
 
 .page-more-apps .app-market__cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 7px 14px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 8px;
   background: transparent;
   font: inherit;
   font-size: 14px;
@@ -715,6 +718,15 @@
   color: var(--ma-category-text);
   cursor: pointer;
   transition: background 0.12s ease, color 0.12s ease;
+}
+
+.page-more-apps .app-market__cat-count {
+  color: var(--ma-count);
+  font-variant-numeric: tabular-nums;
+}
+
+.page-more-apps .app-market__cat--active .app-market__cat-count {
+  color: var(--ma-count-active);
 }
 
 .page-more-apps .app-market__cat:hover {

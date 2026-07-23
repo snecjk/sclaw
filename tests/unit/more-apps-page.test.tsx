@@ -48,6 +48,7 @@ function resetStore() {
     bannersLoading: false,
     bannersError: null,
     categories: [],
+    categoryCounts: {},
     categoriesLoading: false,
     categoriesError: null,
     apps: [],
@@ -251,6 +252,25 @@ describe('MoreAppsPage server catalog', () => {
       keyword: undefined,
       categoryCode: 'org',
     }));
+  });
+
+  it('shows the unfiltered total for featured and each server category', async () => {
+    fetchCategoriesMock.mockResolvedValueOnce([
+      { id: 'test', name: '测试专用', description: '', iconKey: '', iconUrl: '', order: 1 },
+      { id: 'ops', name: '经营管理', description: '', iconKey: '', iconUrl: '', order: 2 },
+    ]);
+    fetchAppsMock.mockImplementation(async (params: { categoryCode?: string; pageSize: number }) => ({
+      items: params.pageSize === 20 && !params.categoryCode ? [serverApp] : [],
+      total: params.categoryCode === 'test' ? 4 : params.categoryCode === 'ops' ? 2 : 13,
+      pageNum: 1,
+      pageSize: params.pageSize,
+    }));
+
+    render(<MoreAppsPage />);
+
+    expect(await screen.findByRole('button', { name: '测试专用' })).toHaveTextContent('测试专用4');
+    expect(screen.getByRole('button', { name: '经营管理' })).toHaveTextContent('经营管理2');
+    expect(screen.getByRole('button', { name: '精选' })).toHaveTextContent('精选13');
   });
 
   it('shows the app link in my apps when a favorited server app has no recent usage', async () => {
