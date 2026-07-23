@@ -6,6 +6,17 @@ import { getEngineSessionRegistryEntry } from './session-registry';
 import type { AgentEngineType, EngineAdapter, EngineAdapterContext } from './types';
 import { filterDeletedSessions } from '../utils/scheduled-task-poller-store';
 
+const adaptersByType = {
+  openclaw: openClawAdapter,
+  claude: claudeAdapter,
+} satisfies Record<AgentEngineType, EngineAdapter>;
+
+export function getRegisteredEngineType(value: unknown): AgentEngineType | undefined {
+  return typeof value === 'string' && Object.hasOwn(adaptersByType, value)
+    ? value as AgentEngineType
+    : undefined;
+}
+
 export async function resolveAgentEngineType(agentId: string): Promise<AgentEngineType> {
   const snapshot = await listAgentsSnapshot();
   const match = snapshot.agents.find((agent) => agent.id.trim().toLowerCase() === agentId.trim().toLowerCase());
@@ -13,14 +24,14 @@ export async function resolveAgentEngineType(agentId: string): Promise<AgentEngi
 }
 
 export function getAdapter(engineType: AgentEngineType): EngineAdapter {
-  return engineType === 'claude' ? claudeAdapter : openClawAdapter;
+  return adaptersByType[engineType];
 }
 
 export async function getAdapterForSession(
   sessionKey: string,
-  preferredEngineType?: AgentEngineType,
+  preferredEngineType?: unknown,
 ): Promise<EngineAdapter> {
-  const engineType = await resolveSessionEngineType(sessionKey, preferredEngineType);
+  const engineType = await resolveSessionEngineType(sessionKey, getRegisteredEngineType(preferredEngineType));
   return getAdapter(engineType);
 }
 
@@ -34,9 +45,7 @@ export async function listEngineSessions(ctx: EngineAdapterContext): Promise<Arr
     const sessionKey = String(session.key || '');
     if (!sessionKey) return;
 
-    const engineType = (session.engineType === 'claude' || session.engineType === 'openclaw'
-      ? session.engineType
-      : fallbackEngineType) as AgentEngineType;
+    const engineType = getRegisteredEngineType(session.engineType) ?? fallbackEngineType;
 
     const normalized = {
       ...session,
@@ -67,17 +76,12 @@ export async function listEngineSessions(ctx: EngineAdapterContext): Promise<Arr
     sessionsByKey.set(sessionKey, normalized);
   };
 
-  const openClawSessions = await openClawAdapter.listSessions(ctx);
-  if (openClawSessions.success && openClawSessions.result?.sessions) {
-    for (const session of openClawSessions.result.sessions) {
-      await upsertSessionSummary(session, 'openclaw');
-    }
-  }
-
-  const claudeSessions = await claudeAdapter.listSessions(ctx);
-  if (claudeSessions.success && claudeSessions.result?.sessions) {
-    for (const session of claudeSessions.result.sessions) {
-      await upsertSessionSummary(session, 'claude');
+  for (const adapter of Object.values(adaptersByType)) {
+    const result = await adapter.listSessions(ctx);
+    if (result.success && result.result?.sessions) {
+      for (const session of result.result.sessions) {
+        await upsertSessionSummary(session, adapter.type);
+      }
     }
   }
 

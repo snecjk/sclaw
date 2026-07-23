@@ -3,8 +3,7 @@ import { getKyselyDatabase } from '../db';
 import { agentMemoryOrchestrator } from './agent-memory-orchestrator';
 import { logger } from '../utils/logger';
 import { getAdapterForSession } from '../engines/manager';
-import type { AgentEngineType } from '../engines/types';
-import { parseExecutionTurnFromHistory, type ExecutionSnapshot } from '../engines/execution-snapshot';
+import type { ExecutionSnapshot } from '../engines/execution-snapshot';
 import { extractDirectExecutionCommands, formatExecutionMemoryText, type ExecutionExperienceCandidateAssessment, type ExecutionExperienceSummary } from './claude-execution-summary-service';
 import { sanitizeMemoryCaptureUserMessage } from '../../shared/memory-capture-text';
 
@@ -85,7 +84,7 @@ class MemoryCaptureService {
       if (!plan.prepareConversation && !plan.prepareExecution) return;
 
       trace('info', 'capture.prepare.requested', { jobId: context.executionJobId, runId: context.sourceId, sessionKey: context.sessionKey, agentId: input.agentId ?? null, engineType: input.engineType ?? null, ...plan });
-      const snapshot = await this.loadTurnSnapshot(context, gateway);
+      const snapshot = await this.loadTurnSnapshot(context, gateway, plan.prepareExecution);
       if (!snapshot) throw new Error('execution_history_not_ready');
 
       if (plan.prepareConversation) await this.prepareConversationFromSnapshot(context, snapshot);
@@ -160,13 +159,30 @@ class MemoryCaptureService {
     } catch { return false; }
   }
 
-  private async loadTurnSnapshot(context: CaptureContext, gateway: GatewayManager): Promise<ExecutionSnapshot | null> {
+  private async loadTurnSnapshot(
+    context: CaptureContext,
+    gateway: GatewayManager,
+    requireCompleteTools: boolean,
+  ): Promise<ExecutionSnapshot | null> {
     await new Promise((resolve) => setTimeout(resolve, HISTORY_READY_DELAY_MS));
-    const preferredEngineType: AgentEngineType | undefined = context.engineType === 'claude' ? 'claude' : context.engineType === 'openclaw' ? 'openclaw' : undefined;
-    const adapter = await getAdapterForSession(context.sessionKey, preferredEngineType);
-    const historyResult = await adapter.getHistory({ gatewayManager: gateway }, { sessionKey: context.sessionKey, limit: 200 });
-    const snapshot = parseExecutionTurnFromHistory(historyResult.success ? historyResult.result : undefined);
+    const adapter = await getAdapterForSession(context.sessionKey, context.engineType);
+    const snapshotResult = await adapter.getExecutionSnapshot(
+      { gatewayManager: gateway },
+      { sessionKey: context.sessionKey, limit: 200 },
+    );
+    if (!snapshotResult.success) throw new Error(snapshotResult.error || 'execution_snapshot_failed');
+    const snapshot = snapshotResult.result;
     if (!snapshot) return null;
+    if (requireCompleteTools && snapshot.tools.some((tool) => tool.status === 'unknown')) {
+      const executionJob = await getKyselyDatabase()
+        .selectFrom('memory_capture_jobs')
+        .select('retry_count')
+        .where('id', '=', context.executionJobId)
+        .executeTakeFirst();
+      if ((executionJob?.retry_count ?? 0) < 2) {
+        throw new Error('execution_tool_results_not_ready');
+      }
+    }
     return {
       ...snapshot,
       userMessage: sanitizeMemoryCaptureUserMessage(snapshot.userMessage),

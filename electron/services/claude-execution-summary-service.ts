@@ -117,7 +117,8 @@ function buildSummaryPrompt(input: Record<string, unknown>): string {
     '1. directCommand 是真正命中目标、下次同类任务可直接复用的命令（含参数模板/占位符），不要把 discover/help/技能触发这类探索性步骤放进来。',
     '2. discoveryPath 放探索过程（discover/help/技能触发等），仅在不确定或命令变更时才需要；已知目标命令时应跳过。',
     '3. directCommand/avoidPath 的 command 必须是具体命令串（含参数），不要只写工具类别名（如不要只写 Bash）。',
-    ...(hasInjectedExperiences ? ['4. injectedExperiences 是本轮实际注入给模型的旧经验。只有旧路径已在本轮实际尝试且失败、并且新路径已成功完成同一目标时，才可输出 decision=supersedes。未使用或与本轮无关时必须输出 irrelevant_to_run 或 uncertain，绝不能输出 supersedes。没有工具证据时输出 uncertain。'] : []),
+    '4. status=unknown 表示未取得工具结果，不能作为命令成功或失败的证据，也不能据此沉淀 directCommand 或 avoidPath。',
+    ...(hasInjectedExperiences ? ['5. injectedExperiences 是本轮实际注入给模型的旧经验。只有旧路径已在本轮实际尝试且失败、并且新路径已成功完成同一目标时，才可输出 decision=supersedes。未使用或与本轮无关时必须输出 irrelevant_to_run 或 uncertain，绝不能输出 supersedes。没有工具证据时输出 uncertain。'] : []),
     '如果不值得沉淀，输出：{"shouldStore": false, "reason": "原因"}',
   ].join('\n');
 }
@@ -195,7 +196,7 @@ export function formatExecutionMemoryText(exp: ExecutionExperienceSummary): stri
 
 const SUMMARY_SYSTEM_PROMPT = [
   '你是 StoClaw Agent 执行经验总结器。',
-  '你的任务是根据一轮用户任务、最终回答、工具调用摘要，判断是否值得沉淀为长期执行经验。',
+  '你的任务是根据一轮用户任务、最终回答、工具调用记录，判断是否值得沉淀为长期执行经验。',
   '只总结以后遇到类似任务时，应该如何选择工具、组织参数、避开什么错误路径。',
   '禁止记录本次查询得到的具体业务数值、报表结果、订单量、金额等。',
   '禁止记录大段原始工具返回、临时上下文、用户一次性问题本身。',
