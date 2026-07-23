@@ -647,10 +647,11 @@ function isUserUploadedSkill(skillDir: string): boolean {
 /**
  * Resolve plaza UI source (官方 vs 自建).
  *
- * Manifest `source` is the install provenance SoT. Filesystem markers
- * (`.stoclaw-user-upload.json` / preinstalled) are only fallbacks when
- * manifest source is missing — a stale upload marker must not override
- * `sto-marketplace` / `stoclaw-preinstalled`.
+ * Manifest `source` is the install provenance SoT for local-only packages.
+ * When the slug is present in the remote plaza index, display it as a plaza
+ * skill even if an older local manifest says `local` from migration/orphan import.
+ * Filesystem markers (`.stoclaw-user-upload.json` / preinstalled) are only
+ * fallbacks when manifest source and plaza metadata are missing.
  */
 function resolveLocalSkillPlazaSource(params: {
   slug: string;
@@ -668,20 +669,20 @@ function resolveLocalSkillPlazaSource(params: {
     return 'official';
   }
 
+  if (
+    params.isPreinstalled
+    || params.plazaApiSource
+    || params.preinstalledManifestSlugs.has(params.slug)
+  ) {
+    return 'official';
+  }
+
   if (lockSource === 'user-upload' || lockSource === 'local') {
     return 'mine';
   }
 
   if (params.isUserUploaded) {
     return 'mine';
-  }
-
-  if (
-    params.isPreinstalled
-    || params.plazaApiSource === 'official'
-    || params.preinstalledManifestSlugs.has(params.slug)
-  ) {
-    return 'official';
   }
 
   // Pre-migration OpenClaw path: lock.json presence meant marketplace-tracked install.
