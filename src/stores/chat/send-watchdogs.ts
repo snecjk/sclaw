@@ -6,7 +6,7 @@ import { getSessionRuntimeState } from './session-runtime';
 const HISTORY_POLL_SILENCE_WINDOW_MS = 2_500;
 const POLL_START_DELAY_MS = 3_000;
 const POLL_INTERVAL_MS = 4_000;
-const SAFETY_TIMEOUT_MS = 90_000;
+const SAFETY_TIMEOUT_MS = 3 * 60_000;
 const STUCK_RECHECK_INTERVAL_MS = 10_000;
 const STUCK_INITIAL_DELAY_MS = 30_000;
 const ACCEPTANCE_RECONCILE_TIMEOUT_MS = 135_000;
@@ -97,7 +97,7 @@ export function scheduleSendWatchdogs(input: {
       optimisticUserMessage: null,
       error: runtime.sendAcceptance?.status === 'uncertain'
         ? '无法确认消息是否已发送，请刷新历史记录确认后再重试。'
-        : 'No response received from the model. The provider may be unavailable or the API key may have insufficient quota. Please check your provider settings.',
+        : '等待响应时间较长，界面已停止等待。任务可能仍在后台执行，请稍后刷新对话查看结果；如仍无结果，请重试。',
     });
   };
   setStuckCheckTimer(sessionKey, setTimeout(checkStuck, STUCK_INITIAL_DELAY_MS));
