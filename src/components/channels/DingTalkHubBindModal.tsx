@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2, QrCode, X } from 'lucide-react';
+import { CheckCircle2, Loader2, QrCode, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { hostApiFetch } from '@/lib/host-api';
 import { cn } from '@/lib/utils';
@@ -44,6 +44,8 @@ export function DingTalkHubBindModal({ onClose, onChanged }: DingTalkHubBindModa
   const [qrContent, setQrContent] = useState<string | null>(null);
   const [pollHint, setPollHint] = useState<string | null>(null);
   const [qrExpired, setQrExpired] = useState(false);
+  /** 扫码中 / 绑定完成页 */
+  const [phase, setPhase] = useState<'scan' | 'done'>('scan');
   const pollTimerRef = useRef<number | null>(null);
   const claimedRef = useRef(false);
   const autoStartedRef = useRef(false);
@@ -61,6 +63,11 @@ export function DingTalkHubBindModal({ onClose, onChanged }: DingTalkHubBindModa
     return result;
   }, []);
 
+  const finishAndClose = useCallback(async () => {
+    await onChanged?.();
+    onClose();
+  }, [onChanged, onClose]);
+
   const claimTicket = useCallback(
     async (ticket: string) => {
       if (claimedRef.current) return;
@@ -73,13 +80,11 @@ export function DingTalkHubBindModal({ onClose, onChanged }: DingTalkHubBindModa
           method: 'POST',
           body: JSON.stringify({ ticket }),
         });
-        toast.success(t('hub.dingtalk.bindSuccess'));
         setQrContent(null);
         setPollHint(null);
         setQrExpired(false);
         await refreshStatus();
-        await onChanged?.();
-        onClose();
+        setPhase('done');
       } catch (error) {
         claimedRef.current = false;
         toast.error(t('hub.dingtalk.bindFailed', { error: String(error) }));
@@ -88,12 +93,13 @@ export function DingTalkHubBindModal({ onClose, onChanged }: DingTalkHubBindModa
         setBusy(false);
       }
     },
-    [clearPoll, onChanged, onClose, refreshStatus, t],
+    [clearPoll, refreshStatus, t],
   );
 
   const startBind = useCallback(async () => {
     clearPoll();
     claimedRef.current = false;
+    setPhase('scan');
     setBusy(true);
     setPollHint(null);
     setQrExpired(false);
@@ -161,19 +167,27 @@ export function DingTalkHubBindModal({ onClose, onChanged }: DingTalkHubBindModa
 
   // 编辑 = 重新绑定：无论当前是否已绑定，都直接拉起扫码
   useEffect(() => {
-    if (loading || status == null) return;
+    if (loading || status == null || phase === 'done') return;
     if (qrContent || autoStartedRef.current) return;
     autoStartedRef.current = true;
     void startBind();
-  }, [loading, qrContent, startBind, status]);
+  }, [loading, phase, qrContent, startBind, status]);
 
   const alreadyBound = status?.local?.bindStatus === 'bound';
+  const handleDismiss = useCallback(() => {
+    if (busy) return;
+    if (phase === 'done') {
+      void finishAndClose();
+      return;
+    }
+    onClose();
+  }, [busy, finishAndClose, onClose, phase]);
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !busy) onClose();
+        if (event.target === event.currentTarget) handleDismiss();
       }}
     >
       <div
@@ -187,14 +201,20 @@ export function DingTalkHubBindModal({ onClose, onChanged }: DingTalkHubBindModa
             </div>
             <div className="min-w-0">
               <h2 className="text-[16px] font-semibold leading-tight text-[#1D2129] dark:text-foreground">
-                {alreadyBound ? t('hub.dingtalk.rebindTitle', { defaultValue: '重新绑定钉钉' }) : t('hub.dingtalk.title')}
+                {phase === 'done'
+                  ? t('hub.dingtalk.bindSuccessTitle')
+                  : alreadyBound
+                    ? t('hub.dingtalk.rebindTitle', { defaultValue: '重新绑定钉钉' })
+                    : t('hub.dingtalk.title')}
               </h2>
               <p className="mt-1 text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground">
-                {alreadyBound
-                  ? t('hub.dingtalk.rebindSubtitle', {
-                      defaultValue: '扫码后将替换当前钉钉绑定账号',
-                    })
-                  : t('hub.dingtalk.subtitle')}
+                {phase === 'done'
+                  ? t('hub.dingtalk.robotNameHint')
+                  : alreadyBound
+                    ? t('hub.dingtalk.rebindSubtitle', {
+                        defaultValue: '扫码后将替换当前钉钉绑定账号',
+                      })
+                    : t('hub.dingtalk.subtitle')}
               </p>
             </div>
           </div>
@@ -202,7 +222,7 @@ export function DingTalkHubBindModal({ onClose, onChanged }: DingTalkHubBindModa
             variant="ghost"
             size="icon"
             className="h-8 w-8 shrink-0 text-[#86909C] hover:bg-[#F7F8FA] hover:text-[#1D2129] dark:hover:bg-white/[0.04]"
-            onClick={onClose}
+            onClick={handleDismiss}
             disabled={busy}
           >
             <X className="h-4 w-4" />
@@ -214,6 +234,21 @@ export function DingTalkHubBindModal({ onClose, onChanged }: DingTalkHubBindModa
             <div className="flex min-h-[160px] items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-[#86909C]" />
             </div>
+          ) : phase === 'done' ? (
+            <div className="flex flex-col items-center gap-4 py-2">
+              <CheckCircle2 className="h-12 w-12 text-emerald-500" />
+              <div className="space-y-2 text-center">
+                <p className="text-[15px] font-medium text-[#1D2129] dark:text-foreground">
+                  {t('hub.dingtalk.bindSuccess')}
+                </p>
+                <p className="text-[13px] leading-relaxed text-[#4E5969] dark:text-muted-foreground">
+                  {t('hub.dingtalk.bindSuccessHint')}
+                </p>
+              </div>
+              <Button className={primaryButtonClass} onClick={() => void finishAndClose()}>
+                {t('hub.dingtalk.bindSuccessDone')}
+              </Button>
+            </div>
           ) : (
             <>
               <p className="text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground">
@@ -222,6 +257,9 @@ export function DingTalkHubBindModal({ onClose, onChanged }: DingTalkHubBindModa
                       defaultValue: '使用钉钉扫描下方二维码完成重新绑定',
                     })
                   : t('hub.dingtalk.scanHint')}
+              </p>
+              <p className="text-[12px] leading-relaxed text-[#86909C] dark:text-muted-foreground">
+                {t('hub.dingtalk.robotNameHint')}
               </p>
 
               {qrContent ? (
