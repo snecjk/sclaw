@@ -69,6 +69,7 @@ import {
   registerSessionSendReadiness,
   transferSessionSendReadiness,
 } from '@/lib/session-send-readiness';
+import { useSessionCatalogStore } from '@/stores/session-catalog';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 const SESSION_LOAD_MIN_INTERVAL_MS = 1_200;
@@ -784,6 +785,16 @@ export function createSessionLifecycleActions(
         ...(currentSessionModel ? { model: currentSessionModel } : {}),
       };
       const createdAtMs = Date.now();
+      if (projectId && projectId !== 'default') {
+        // Optimistic workspace bind before session switch so the first paint
+        // already places the row under the project and sidebar can expand it.
+        useSessionCatalogStore.setState((catalog) => ({
+          sessionWorkspaceByKey: {
+            ...catalog.sessionWorkspaceByKey,
+            [newKey]: projectId,
+          },
+        }));
+      }
       set((s) => {
         const nextRuntimeBySessionKey = {
           ...s.runtimeBySessionKey,
@@ -841,7 +852,7 @@ export function createSessionLifecycleActions(
         ? syncSessionModelToGateway(newKey, currentSessionModel, newAgentId)
         : applyWorkspaceDefaultToNewSession(newKey, newAgentId);
       const setupPromise = projectId && projectId !== 'default'
-        ? import('@/stores/session-catalog').then(async ({ useSessionCatalogStore }) => {
+        ? Promise.resolve().then(async () => {
           await useSessionCatalogStore.getState().bindSession(newKey, projectId);
           await syncModel();
         })

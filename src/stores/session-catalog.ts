@@ -173,10 +173,11 @@ export const useSessionCatalogStore = create<SessionCatalogState>((set, get) => 
 
   bindSession: async (sessionKey: string, workspaceId?: string) => {
     const targetWorkspaceId = workspaceId ?? get().activeWorkspaceId();
-    await bindSessionToCatalog(sessionKey, targetWorkspaceId);
+    // Optimistic bind so sidebar can expand/show the row before catalog RPC returns.
     set((state) => ({
       sessionWorkspaceByKey: { ...state.sessionWorkspaceByKey, [sessionKey]: targetWorkspaceId },
     }));
+    await bindSessionToCatalog(sessionKey, targetWorkspaceId);
     await get().refreshAllCatalogMeta();
   },
 

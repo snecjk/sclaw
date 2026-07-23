@@ -1892,6 +1892,8 @@ export function Sidebar() {
             collapsed={sidebarCollapsed}
             open={projectsSectionOpen}
             onToggle={() => setProjectsSectionOpen((open) => !open)}
+            onEnsureOpen={() => setProjectsSectionOpen(true)}
+            scrollContainerRef={scrollContainerRef}
           />
         ) : null}
         {!sidebarCollapsed ? (

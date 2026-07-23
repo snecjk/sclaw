@@ -1,8 +1,9 @@
 /**
  * SidebarProjectsSection — 项目树：标题行 + 项目文件夹 + 嵌套会话。
  * 项目仅支持行内重命名（不支持改路径）。项目内「新建」跳转首页并带上项目，不插侧栏草稿行。
+ * 当前会话或首页草稿绑定项目时，自动展开对应项目并滚到会话行。
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Folder, FolderPlus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -23,7 +24,10 @@ import {
 } from '@/stores/chat/types';
 import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
 import { sortSessionsWithCatalogPin } from '@/lib/sidebar-recent-order';
-import { sortProjectsByCreatedAt } from '@/lib/sidebar-project-session-navigation';
+import {
+  resolveSidebarProjectFocus,
+  sortProjectsByCreatedAt,
+} from '@/lib/sidebar-project-session-navigation';
 import { ProjectFormDialog } from '@/components/layout/sidebar-project-form-dialog';
 import { SidebarProjectRowTrailing } from '@/components/layout/sidebar-project-row-trailing';
 import { SidebarProjectSessionRow } from '@/components/layout/sidebar-project-session-row';
@@ -36,9 +40,17 @@ interface SidebarProjectsSectionProps {
   collapsed: boolean;
   open: boolean;
   onToggle: () => void;
+  onEnsureOpen?: () => void;
+  scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
-export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarProjectsSectionProps) {
+export function SidebarProjectsSection({
+  collapsed,
+  open,
+  onToggle,
+  onEnsureOpen,
+  scrollContainerRef,
+}: SidebarProjectsSectionProps) {
   const { t } = useTranslation('common');
   const navigate = useNavigate();
   const location = useLocation();
@@ -54,6 +66,7 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
 
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
+  const pendingProjectId = useChatStore((s) => s.pendingProjectId);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
   const switchSession = useChatStore((s) => s.switchSession);
@@ -69,6 +82,8 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
   const [editingValue, setEditingValue] = useState('');
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingProjectValue, setEditingProjectValue] = useState('');
+  const sidebarProjectFocusTokenRef = useRef<string | null>(null);
+  const focusSessionKeyRef = useRef<string | null>(null);
   const sortedWorkspaces = useMemo(
     () => sortProjectsByCreatedAt(workspaces),
     [workspaces],
@@ -175,6 +190,73 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
     }
   }, [deleteProject, deleteTarget, t]);
 
+  useEffect(() => {
+    if (collapsed) return;
+
+    const focus = resolveSidebarProjectFocus({
+      currentSessionKey,
+      pendingProjectId,
+      sessionWorkspaceByKey,
+      defaultWorkspaceId: DEFAULT_WORKSPACE_ID,
+      defaultSessionKey: DEFAULT_SESSION_KEY,
+    });
+    if (!focus) {
+      sidebarProjectFocusTokenRef.current = null;
+      focusSessionKeyRef.current = null;
+      return;
+    }
+
+    const activity = focus.sessionKey ? (sessionLastActivity[focus.sessionKey] ?? 0) : 0;
+    const focusToken = `${focus.projectId}:${focus.sessionKey ?? 'draft'}:${activity}:${pendingProjectId ?? ''}`;
+    focusSessionKeyRef.current = focus.sessionKey;
+    if (sidebarProjectFocusTokenRef.current === focusToken) return;
+    sidebarProjectFocusTokenRef.current = focusToken;
+
+    onEnsureOpen?.();
+    setExpandedProjectIds((prev) => ({ ...prev, [focus.projectId]: true }));
+  }, [
+    collapsed,
+    currentSessionKey,
+    pendingProjectId,
+    sessionWorkspaceByKey,
+    sessionLastActivity,
+    onEnsureOpen,
+  ]);
+
+  useLayoutEffect(() => {
+    if (collapsed || !open) return;
+    const focusSessionKey = focusSessionKeyRef.current;
+    if (!focusSessionKey || focusSessionKey === DEFAULT_SESSION_KEY) return;
+    const projectId = sessionWorkspaceByKey[focusSessionKey] ?? pendingProjectId;
+    if (!projectId || !(expandedProjectIds[projectId] ?? false)) return;
+
+    let cancelled = false;
+    const rafId = requestAnimationFrame(() => {
+      if (cancelled) return;
+      const container = scrollContainerRef?.current;
+      const el = container?.querySelector(
+        `[data-sidebar-project-session="${CSS.escape(focusSessionKey)}"]`,
+      );
+      if (el instanceof HTMLElement) {
+        el.scrollIntoView({ block: 'nearest' });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+    };
+  }, [
+    collapsed,
+    open,
+    expandedProjectIds,
+    sessionWorkspaceByKey,
+    pendingProjectId,
+    currentSessionKey,
+    sessionLastActivity,
+    scrollContainerRef,
+  ]);
+
   if (collapsed) {
     return <div className="mx-auto mt-2 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />;
   }
@@ -276,36 +358,40 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                         && currentSessionKey !== DEFAULT_SESSION_KEY;
                       const isPinned = allCatalogByKey[session.key]?.pinRank != null;
                       return (
-                        <SidebarProjectSessionRow
+                        <div
                           key={session.key}
-                          session={session}
-                          label={label}
-                          isActive={isActive}
-                          isPinned={isPinned}
-                          isEditing={editingSessionKey === session.key}
-                          editingValue={editingValue}
-                          onOpen={() => {
-                            void selectProject(workspace.id);
-                            navigateToMainChatHome(navigate, location.pathname, () => switchSession(session.key));
-                          }}
-                          onPin={() => {
-                            void handlePinInProject(session.key);
-                          }}
-                          onStartRename={() => {
-                            setEditingProjectId(null);
-                            setEditingSessionKey(session.key);
-                            setEditingValue(label);
-                          }}
-                          onEditingValueChange={setEditingValue}
-                          onCommitRename={() => {
-                            renameSession(session.key, editingValue);
-                            setEditingSessionKey(null);
-                          }}
-                          onCancelRename={() => setEditingSessionKey(null)}
-                          onDelete={() => {
-                            requestSessionDelete({ key: session.key, label });
-                          }}
-                        />
+                          data-sidebar-project-session={session.key}
+                        >
+                          <SidebarProjectSessionRow
+                            session={session}
+                            label={label}
+                            isActive={isActive}
+                            isPinned={isPinned}
+                            isEditing={editingSessionKey === session.key}
+                            editingValue={editingValue}
+                            onOpen={() => {
+                              void selectProject(workspace.id);
+                              navigateToMainChatHome(navigate, location.pathname, () => switchSession(session.key));
+                            }}
+                            onPin={() => {
+                              void handlePinInProject(session.key);
+                            }}
+                            onStartRename={() => {
+                              setEditingProjectId(null);
+                              setEditingSessionKey(session.key);
+                              setEditingValue(label);
+                            }}
+                            onEditingValueChange={setEditingValue}
+                            onCommitRename={() => {
+                              renameSession(session.key, editingValue);
+                              setEditingSessionKey(null);
+                            }}
+                            onCancelRename={() => setEditingSessionKey(null)}
+                            onDelete={() => {
+                              requestSessionDelete({ key: session.key, label });
+                            }}
+                          />
+                        </div>
                       );
                     })}
                   </div>
