@@ -92,6 +92,11 @@ describe('MoreAppsPage server catalog', () => {
 
   it('renders mixed-delimiter server badges as one deduplicated ideographic-comma label', async () => {
     render(<MoreAppsPage />);
+    const addButton = screen.getByRole('button', { name: '安装外部应用' });
+    expect(addButton.querySelector('.lucide-plus')).toBeInTheDocument();
+    expect(addButton.closest('.app-plaza-heading-row')).toBeInTheDocument();
+    expect(screen.getByRole('tablist').closest('.more-apps-toolbar-row')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('搜索应用名称或关键词').closest('.more-apps-toolbar-row')).toBeInTheDocument();
     expect(await screen.findByText('客户管理、部门岗位、客户对账')).toHaveClass('app-market__row-tags');
     expect(document.querySelectorAll('.app-market__row-tags')).toHaveLength(1);
     expect(screen.queryByText('维护客户归属关系')).not.toBeInTheDocument();

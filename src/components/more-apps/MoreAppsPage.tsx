@@ -7,7 +7,7 @@
  * - Installed tab: Card grid layout
  */
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { Search, ExternalLink, Heart } from 'lucide-react';
+import { Search, Plus, Heart } from 'lucide-react';
 import './more-apps.css';
 import { toast } from 'sonner';
 import { useMoreAppsStore } from '@/stores/more-apps';
@@ -553,17 +553,29 @@ export function MoreAppsPage() {
   // ── Main Layout ──────────────────────────────────────────────
   return (
     <div className={cn(stoMainInnerShell, 'page-more-apps flex h-full flex-col', activeTab === 'market' && 'page-more-apps--market')}>
-      {/* Header with title and subtitle */}
-      <div className="app-plaza-hero">
-        <h1 className={cn(stoPageTitleClass, 'app-plaza-hero__title')}>
-          {t('moreApps.title', { defaultValue: '应用广场' })}
-        </h1>
-        <p className="app-plaza-hero__subtitle">
-          {t('moreApps.subtitle', { defaultValue: '发现、安装与管理网点经营应用，像应用商店一样即装即用' })}
-        </p>
+      {/* Heading row: title at left, external app action at right */}
+      <div className="app-plaza-heading-row">
+        <div className="app-plaza-hero">
+          <h1 className={cn(stoPageTitleClass, 'app-plaza-hero__title')}>
+            {t('moreApps.title', { defaultValue: '应用广场' })}
+          </h1>
+          <p className="app-plaza-hero__subtitle">
+            {t('moreApps.subtitle', { defaultValue: '发现、安装与管理网点经营应用，像应用商店一样即装即用' })}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          className="more-apps-add-btn"
+          id="more-apps-add-external-btn"
+          onClick={openAddModal}
+        >
+          <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
+          {t('moreApps.addExternal', { defaultValue: '安装外部应用' })}
+        </button>
       </div>
 
-      {/* Toolbar Row: Tabs + Search + Add Button */}
+      {/* Toolbar row: tabs at left, search at right */}
       <div className="more-apps-toolbar-row">
         <div className="more-apps-tabs" role="tablist" aria-label={t('moreApps.tabAria', { defaultValue: '应用类型' })}>
           {(['market', 'installed'] as const).map((tab) => (
@@ -600,16 +612,6 @@ export function MoreAppsPage() {
             autoComplete="off"
           />
         </label>
-
-        <button
-          type="button"
-          className="more-apps-add-btn"
-          id="more-apps-add-external-btn"
-          onClick={openAddModal}
-        >
-          <ExternalLink className="more-apps-add-btn__icon" aria-hidden="true" />
-          {t('moreApps.addExternal', { defaultValue: '安装外部应用' })}
-        </button>
       </div>
 
       {/* Content */}
