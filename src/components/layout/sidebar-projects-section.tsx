@@ -4,7 +4,7 @@
  */
 import type { RefObject } from 'react';
 import { useCallback, useMemo, useState } from 'react';
-import { ChevronDown, Folder, FolderOpen } from 'lucide-react';
+import { ChevronDown, Folder } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -323,9 +323,15 @@ export function SidebarProjectsSection({
       {open ? (
         <div className="mt-0.5 flex flex-col gap-0.5 pb-1">
           {sortedWorkspaces.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 px-3 py-6 text-center">
-              <FolderOpen className="h-10 w-10 text-[#C9CDD4]" aria-hidden />
-              <p className="text-[13px] leading-[18px] text-muted-foreground">
+            <div className="flex h-9 min-w-0 items-center gap-2 px-[10px]">
+              <Folder className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+              <p
+                className={cn(
+                  'min-w-0 truncate',
+                  sidebarListItemTextClass,
+                  'text-[#86909C]', // Grey-8，覆盖 sidebarListItemTextClass 默认正文色
+                )}
+              >
                 {t('sidebar.projectsEmpty')}
               </p>
             </div>
