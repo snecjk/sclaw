@@ -362,6 +362,14 @@ export async function getSessionWorkspaceId(sessionKey: string): Promise<string>
   return row?.workspaceId ?? DEFAULT_WORKSPACE_ID;
 }
 
+/** Channel 会话应落在 default；若历史误挂到项目下，入站时纠正回 default。 */
+export async function ensureCatalogSessionInDefaultWorkspace(sessionKey: string): Promise<void> {
+  await ensureSessionCatalogBootstrapped();
+  const row = await getCatalogSessionRepository().findBySessionKey(sessionKey);
+  if (!row || row.workspaceId === DEFAULT_WORKSPACE_ID) return;
+  await getCatalogSessionRepository().moveToWorkspace(sessionKey, DEFAULT_WORKSPACE_ID);
+}
+
 export async function getLatestChannelCatalogSession(input: {
   channelType: string;
   channelId: string;
