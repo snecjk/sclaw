@@ -49,7 +49,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
   const handleInstall = () => {
     if (isInstalling) return;
     const isUpdate = liveSkill.updateAvailable;
-    const { installSkill, fetchPlazaSkills } = useSkillPlazaStore.getState();
+    const { installSkill } = useSkillPlazaStore.getState();
     installSkill(liveSkill.slug, {
       version: liveSkill.version,
       force: liveSkill.updateAvailable,
@@ -57,7 +57,6 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
       description: liveSkill.description,
     })
       .then(() => {
-        fetchPlazaSkills({ reset: true });
         toast.success(
           isUpdate
             ? t('plaza.toast.updateSuccess', { defaultValue: '更新成功，正在生效' })

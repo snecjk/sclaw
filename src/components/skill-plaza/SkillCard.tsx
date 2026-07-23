@@ -74,7 +74,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
     e.stopPropagation();
     if (isInstalling) return;
     const isUpdate = skill.updateAvailable;
-    const { installSkill, fetchPlazaSkills } = useSkillPlazaStore.getState();
+    const { installSkill } = useSkillPlazaStore.getState();
     installSkill(skill.slug, {
       version: skill.version,
       force: skill.updateAvailable,
@@ -82,7 +82,6 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
       description: skill.description,
     })
       .then(() => {
-        fetchPlazaSkills({ reset: true });
         toast.success(
           isUpdate
             ? t('plaza.toast.updateSuccess', { defaultValue: '更新成功，正在生效' })
