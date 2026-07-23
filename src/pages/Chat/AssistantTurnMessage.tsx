@@ -36,8 +36,9 @@ import {
 import { DingTalkSentPreview } from './DingTalkSentPreview';
 import { ThinkingTurnProcess, type ConnectingLabelKey } from './ThinkingProcessPanel';
 import { resolveTurnProcessStatus } from '@/pages/Chat/thinking/turn-process-status';
-import { processSegmentsCoverText } from '@/pages/Chat/thinking/text-ownership';
+import { processSegmentsCoverText, processSegmentsOwnText } from '@/pages/Chat/thinking/text-ownership';
 import {
+  dedupePhaseTextsAgainstFinalReply,
   isLikelyPlanningNarration,
   isLikelyUserClarificationReply,
 } from '@/pages/Chat/thinking/classify-text';
@@ -101,6 +102,22 @@ function collectActiveTurnStreamSources(
   precedingUserMessage: RawMessage | null,
   activeStream: ActiveTurnStream,
 ): RawMessage[] {
+  // Fresh background/cron trigger (no preceding user message): this activeTurn
+  // is a brand-new run that must NOT inherit the previous turn's assistant
+  // messages. Skip the session-history scan entirely — otherwise
+  // findTurnStartIndex falls back to the previous user message and pulls the
+  // previous completed answer into the connecting indicator. Only the live
+  // streaming content is shown; the empty case renders just the loading
+  // indicator (delegated to collectTurnAssistantSources with an empty history
+  // so snapshot-replace/dedup logic stays shared).
+  if (!precedingUserMessage) {
+    return collectTurnAssistantSources(
+      [],
+      [...turnMessages, ...activeStream.streamingMessages],
+      null,
+      activeStream.streamMessage,
+    );
+  }
   const sources = collectTurnAssistantSources(
     sessionMessages,
     [...turnMessages, ...activeStream.streamingMessages],
@@ -179,6 +196,19 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   );
 
   const chronologicalEntries = useMemo(() => {
+    // Fresh background/cron trigger (active turn, no preceding user message):
+    // this is a brand-new run — do NOT scan session history for the timeline,
+    // otherwise walkTurnChronologicalEntries falls back to the previous user
+    // message and bleeds the previous turn's tool calls into the connecting
+    // indicator. Live tools still surface via bakedStreamingTools (streamingTools).
+    if (activeStream && !precedingUserMessage) {
+      return resolveTurnChronologicalEntries(
+        [],
+        null,
+        turnMessages,
+        [...turnToolResults, ...streamingToolResults],
+      );
+    }
     const cachedToolResults = cachedToolResultsForTurn;
     const toolResults =
       cachedToolResults.length > 0
@@ -191,6 +221,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       toolResults,
     );
   }, [
+    activeStream,
     sessionMessages,
     precedingUserMessage,
     turnMessages,
@@ -295,6 +326,10 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
     if (fromHistory) {
       const fallbackText = extractText(fromHistory).trim();
+      // Ownership 已把正文留给 process（finalReplyText === null）：勿再落气泡，避免「思考区 + 气泡」重复。
+      if (fallbackText && processSegmentsOwnText(thinkingLayout.segments, fallbackText)) {
+        return null;
+      }
 
       const coveredByThinking = processSegmentsCoverText(
         thinkingLayout.segments,
@@ -310,8 +345,6 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
         return null;
       }
     }
-
-    if (isStreaming) return fromHistory;
 
     return fromHistory;
   }, [turnMessages, streamSources, isStreaming, thinkingLayout.finalReplyText, thinkingLayout.segments]);
@@ -429,7 +462,14 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     || (!isStreaming && chatDisplayHasWorkflowCard);
 
   const thinkingSegmentsForDisplay = useMemo(() => {
-    const { segments } = thinkingLayout;
+    let segments = thinkingLayout.segments;
+    // Sticky merge 可能把 ownership 已删掉的 phase-text 复活；相对 final 再去重一次。
+    const finalForDedupe = thinkingLayout.finalReplyText?.trim() ?? null;
+    if (finalForDedupe && segments.length > 0) {
+      segments = [...segments];
+      dedupePhaseTextsAgainstFinalReply(segments, finalForDedupe);
+    }
+
     if (isStreaming || segments.length === 0) return segments;
 
     const replyShownOutside =
@@ -459,7 +499,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
         hasProcessSegments:
           thinkingSegmentsForDisplay.length > 0 || bakedStreamingTools.length > 0,
         hasFinalReplyStreaming:
-          isStreaming && replyDisplayHasText,
+          isStreaming && replyDisplayHasText && !isProcessing,
+        hasVisibleFinalReply: replyDisplayHasText,
       }),
     [
       isStreaming,
@@ -486,6 +527,10 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       isStillExecuting={isStillExecuting}
       streamingTools={bakedStreamingTools}
       hasFinalReply={hasThinkingFinalReply}
+      finalReplyText={
+        thinkingLayout.finalReplyText
+          ?? (replyDisplayHasText && replyMessage ? extractText(replyMessage) : null)
+      }
       connectingLabelKey={connectingLabelKey}
       processStatus={processStatus}
     />

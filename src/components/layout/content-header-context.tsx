@@ -21,10 +21,10 @@ export interface ContentHeaderSlot {
   title: ReactNode;
   /** 三栏预览打开时：产物 tab 行（与右侧 icon 同高对齐） */
   previewTabs?: ReactNode;
-  /** 页面/会话级操作：搜索、刷新、思考等 */
+  /** 会话区操作（搜索/刷新/思考等）：三栏时随对话列头部右对齐，单栏时并入右上角 icon 组 */
+  chatActions?: ReactNode;
+  /** 右侧操作区（icon 组）：预览面板展开/收起等 */
   actions?: ReactNode;
-  /** 面板级操作：预览展开/收起等；三栏时落在预览列尾部 */
-  panelActions?: ReactNode;
   /** 三栏预览已展开：MainLayout body 去掉水平 px，由 split row 与 header 共用 inset */
   isSplitLayout?: boolean;
   /** 会话标题 chip 关闭；传入时在字符串标题上渲染 pill + × */
@@ -43,7 +43,6 @@ function resolveDefaultTitle(pathname: string, t: (key: string) => string): stri
   if (matchPath({ path: '/tasks/:taskId/:entryId', end: true }, pathname)) return t('common:sidebar.taskList');
   if (matchPath({ path: '/tasks/:taskId', end: true }, pathname)) return t('common:sidebar.taskList');
   if (pathname.startsWith('/workflow')) return t('common:sidebar.workflow');
-  // if (pathname.startsWith('/scheduled-tasks') || pathname.startsWith('/cron')) return t('common:sidebar.cronTasks');
   if (pathname.startsWith('/my-tasks')) return t('common:sidebar.myTasks');
   if (pathname.startsWith('/skills')) return t('common:sidebar.skills');
   if (pathname.startsWith('/more-apps')) return t('common:sidebar.moreApps');
@@ -65,8 +64,8 @@ export function ContentHeaderProvider({ children }: { children: ReactNode }) {
       if (
         prev.title === next.title &&
         prev.previewTabs === next.previewTabs &&
+        prev.chatActions === next.chatActions &&
         prev.actions === next.actions &&
-        prev.panelActions === next.panelActions &&
         prev.isSplitLayout === next.isSplitLayout &&
         prev.onCloseSession === next.onCloseSession
       ) {
@@ -93,12 +92,12 @@ function useContentHeaderRegistry() {
   return ctx;
 }
 
-/** 当前页面向全局 ContentHeader 注入 title / previewTabs / actions / panelActions；卸载时自动清空 */
+/** 当前页面向全局 ContentHeader 注入 title / previewTabs / chatActions / actions；卸载时自动清空 */
 export function useContentHeader({
   title,
   previewTabs,
+  chatActions,
   actions,
-  panelActions,
   isSplitLayout = false,
   onCloseSession,
   enabled = true,
@@ -110,17 +109,17 @@ export function useContentHeader({
       setSlot(null);
       return;
     }
-    setSlot({ title, previewTabs, actions, panelActions, isSplitLayout, onCloseSession });
+    setSlot({ title, previewTabs, chatActions, actions, isSplitLayout, onCloseSession });
     return () => setSlot(null);
-  }, [title, previewTabs, actions, panelActions, isSplitLayout, onCloseSession, enabled, setSlot]);
+  }, [title, previewTabs, chatActions, actions, isSplitLayout, onCloseSession, enabled, setSlot]);
 }
 
 /** ContentHeader 组件读取当前应展示的槽位（含路由默认标题） */
 export function useContentHeaderDisplay(): {
   title: ReactNode | null;
   previewTabs: ReactNode | null;
+  chatActions: ReactNode | null;
   actions: ReactNode | null;
-  panelActions: ReactNode | null;
   isSplitLayout: boolean;
   onCloseSession: (() => void) | null;
 } {
@@ -135,8 +134,8 @@ export function useContentHeaderDisplay(): {
   return {
     title,
     previewTabs: slot?.previewTabs ?? null,
+    chatActions: slot?.chatActions ?? null,
     actions: slot?.actions ?? null,
-    panelActions: slot?.panelActions ?? null,
     isSplitLayout: slot?.isSplitLayout ?? false,
     onCloseSession: slot?.onCloseSession ?? null,
   };

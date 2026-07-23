@@ -47,6 +47,11 @@
         "sessionRunning": "运行中",
         "sessionFailed": "执行失败",
         "sessionUnread": "未读",
+        "channelSource": {
+            "dingtalk": "钉钉",
+            "wechat": "微信",
+            "app": "App"
+        },
         "compactAccountMenu": "账户与设置",
         "supportGroup": {
             "title": "S Claw产品咨询群",
@@ -86,7 +91,7 @@
         "projectFolder": "项目文件夹",
         "projectLocationLabel": "选择项目位置",
         "projectLocationPlaceholder": "点击选择项目文件夹",
-        "projectArtifactHint": "在此项目下创建的会话所产生的产物，将保存在该项目目录的 `.claw-output` 文件夹内。",
+        "projectArtifactHint": "在此项目下创建的会话所产生的产物，将保存在该项目目录的 `.sclaw/.claw-output` 文件夹内。",
         "pickFolder": "选择文件夹",
         "projectCreated": "项目已创建",
         "projectUpdated": "项目已更新",

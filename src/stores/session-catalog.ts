@@ -22,6 +22,8 @@ export const DEFAULT_WORKSPACE_ID = 'default';
 export type CatalogSessionMeta = {
   pinRank: number | null;
   lastActivityAt: string | null;
+  /** 来源渠道：dingtalk / wechat / app；PC 桌面会话为 null */
+  channelType: string | null;
 };
 
 /** Persist across Electron restarts — sessionStorage clears every app launch. */
@@ -95,7 +97,11 @@ export const useSessionCatalogStore = create<SessionCatalogState>((set, get) => 
     const allCatalogByKey = Object.fromEntries(
       batches.flat().map((row) => [
         row.sessionKey,
-        { pinRank: row.pinRank, lastActivityAt: row.lastActivityAt },
+        {
+          pinRank: row.pinRank,
+          lastActivityAt: row.lastActivityAt,
+          channelType: row.channelType ?? null,
+        },
       ]),
     );
     const targetId = get().selectedProjectId ?? DEFAULT_WORKSPACE_ID;
@@ -173,10 +179,11 @@ export const useSessionCatalogStore = create<SessionCatalogState>((set, get) => 
 
   bindSession: async (sessionKey: string, workspaceId?: string) => {
     const targetWorkspaceId = workspaceId ?? get().activeWorkspaceId();
-    await bindSessionToCatalog(sessionKey, targetWorkspaceId);
+    // Optimistic bind so sidebar can expand/show the row before catalog RPC returns.
     set((state) => ({
       sessionWorkspaceByKey: { ...state.sessionWorkspaceByKey, [sessionKey]: targetWorkspaceId },
     }));
+    await bindSessionToCatalog(sessionKey, targetWorkspaceId);
     await get().refreshAllCatalogMeta();
   },
 

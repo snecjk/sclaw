@@ -1,8 +1,8 @@
 /**
  * ContentHeader — 省区主内容白卡片顶部 52px 全局标题栏。
  *
- * 双栏：左=侧栏展开钮+会话 chip，右=actions + panelActions。
- * 三栏：真实连续 52px Header（内嵌三列 grid 对齐 body）；左列=title+会话工具，右列=预览 tab+面板工具。
+ * 双栏：左=侧栏展开钮+会话 chip，右=chatActions + actions。
+ * 三栏：真实连续 52px Header（内嵌三列 grid 对齐 body）；左列=title+chatActions，右列=预览 tab+actions。
  * macOS 侧栏收起时 pad-start 走 CSS 变量（与 split row 共用），避让红绿灯。
  */
 import { isValidElement } from 'react';
@@ -28,7 +28,7 @@ import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 
 export function ContentHeader() {
   const { t } = useTranslation('common');
-  const { title, previewTabs, actions, panelActions, isSplitLayout, onCloseSession } =
+  const { title, previewTabs, chatActions, actions, isSplitLayout, onCloseSession } =
     useContentHeaderDisplay();
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
@@ -77,15 +77,16 @@ export function ContentHeader() {
     </div>
   );
 
-  const actionsZone = actions ? (
+  /** 会话区操作（搜索/刷新/思考）：三栏时贴对话列右缘，单栏时并入右上角 */
+  const chatActionsZone = chatActions ? (
     <div className="no-drag flex shrink-0 items-center gap-1">
-      {actions}
+      {chatActions}
     </div>
   ) : null;
 
-  const panelActionsZone = panelActions ? (
+  const actionsZone = actions ? (
     <div className="no-drag flex shrink-0 items-center gap-1">
-      {panelActions}
+      {actions}
     </div>
   ) : null;
 
@@ -101,14 +102,14 @@ export function ContentHeader() {
           <div className={contentHeaderSplitChatZoneClass}>
             {titleZone}
             <div className="min-w-0 flex-1" aria-hidden />
-            {actionsZone}
+            {chatActionsZone}
           </div>
         </div>
         <div className={stoSplitGridHeaderPreviewClass}>
           <div
             className={cn(
               contentHeaderSplitPreviewZoneClass,
-              !previewTabs && panelActionsZone && 'justify-end',
+              !previewTabs && actionsZone && 'justify-end',
             )}
           >
             {previewTabs ? (
@@ -116,7 +117,7 @@ export function ContentHeader() {
             ) : (
               <div className="min-w-0 flex-1" aria-hidden />
             )}
-            {panelActionsZone}
+            {actionsZone}
             {winControlsReserve}
           </div>
         </div>
@@ -128,8 +129,8 @@ export function ContentHeader() {
     <header className={contentHeaderBarClass} aria-label={t('sidebar.chat')}>
       {titleZone}
       <div className="min-w-0 flex-1" aria-hidden />
+      {chatActionsZone}
       {actionsZone}
-      {panelActionsZone}
       {winControlsReserve}
     </header>
   );

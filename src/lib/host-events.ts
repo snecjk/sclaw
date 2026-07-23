@@ -19,6 +19,7 @@ const HOST_EVENT_TO_IPC_CHANNEL: Record<string, string> = {
   'channel:wechat-qr': 'channel:wechat-qr',
   'channel:wechat-success': 'channel:wechat-success',
   'channel:wechat-error': 'channel:wechat-error',
+  'channel:dingtalk-bind-replaced': 'channel:dingtalk-bind-replaced',
 };
 
 function getEventSource(): EventSource {

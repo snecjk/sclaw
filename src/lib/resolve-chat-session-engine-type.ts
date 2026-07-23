@@ -4,7 +4,6 @@ import {
   isClaudeScheduledTaskRunSessionKey,
   isClaudeScheduledTaskSessionKey,
   isAnyCronSessionKey,
-  isScheduledTaskSessionKey,
 } from '@/stores/chat/cron-session-utils';
 import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
 
@@ -37,12 +36,12 @@ export function resolveChatSessionEngineType(
   if (sessionKey && (isClaudeScheduledTaskSessionKey(sessionKey) || isClaudeScheduledTaskRunSessionKey(sessionKey))) {
     return 'claude';
   }
-  // OpenClaw cron/scheduled-task session keys are inherently openclaw — claude
-  // tasks use the separate `claude-task:*` format. Inferring from the key prefix
-  // avoids mirroring the main agent's persisted (home-composer) engine for a
-  // freshly triggered `agent:*:cron:*` dated session whose entry may not yet
-  // carry an engineType.
-  if (sessionKey && (isAnyCronSessionKey(sessionKey) || isScheduledTaskSessionKey(sessionKey))) {
+  // OpenClaw cron session keys are inherently openclaw — claude tasks use the
+  // separate `claude-task:*` format. Inferring from the key prefix avoids
+  // mirroring the main agent's persisted (home-composer) engine for a freshly
+  // triggered `agent:*:cron:*` dated session whose entry may not yet carry an
+  // engineType.
+  if (sessionKey && isAnyCronSessionKey(sessionKey)) {
     return 'openclaw';
   }
   if (sessionKey === DEFAULT_SESSION_KEY) {

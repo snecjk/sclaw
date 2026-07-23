@@ -8,12 +8,48 @@ const textFinalMsg: RawMessage = {
 };
 
 describe('resolveAssistantFinalTerminalState', () => {
-  it('OpenClaw never terminal while sending (waits for agent.completed)', () => {
+  it('OpenClaw text final without pending tools is terminal while sending', () => {
     const result = resolveAssistantFinalTerminalState(
       'openclaw',
       true,
-      'completed',
+      undefined,
       textFinalMsg,
+    );
+    expect(result.isTerminalOutput).toBe(true);
+    expect(result.isAgenticRunFragment).toBe(false);
+  });
+
+  it('OpenClaw merged buffer with historical tool_use + trailing text is terminal', () => {
+    const mergedFinal: RawMessage = {
+      role: 'assistant',
+      content: [
+        { type: 'tool_use', id: 't1', name: 'exec', input: { command: 'weather' } },
+        { type: 'text', text: '青浦现在晴，29°C。' },
+      ],
+    };
+    const result = resolveAssistantFinalTerminalState(
+      'openclaw',
+      true,
+      undefined,
+      mergedFinal,
+    );
+    expect(result.isTerminalOutput).toBe(true);
+    expect(result.isAgenticRunFragment).toBe(false);
+  });
+
+  it('OpenClaw tool_use final stays non-terminal while sending', () => {
+    const toolFinalMsg: RawMessage = {
+      role: 'assistant',
+      content: [
+        { type: 'text', text: '让我查一下' },
+        { type: 'tool_use', id: 't1', name: 'weather', input: {} },
+      ],
+    };
+    const result = resolveAssistantFinalTerminalState(
+      'openclaw',
+      true,
+      undefined,
+      toolFinalMsg,
     );
     expect(result.isTerminalOutput).toBe(false);
     expect(result.isAgenticRunFragment).toBe(true);

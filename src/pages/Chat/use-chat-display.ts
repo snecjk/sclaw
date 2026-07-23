@@ -4,7 +4,6 @@ import {
   buildChatDisplayItems,
   findLastUserMessage,
   isAssistantRole,
-  resolveActiveTurnStableKey,
   type ChatDisplayItem,
 } from './chat-display';
 import type { ActiveTurnStream } from './AssistantTurnMessage';
@@ -186,14 +185,21 @@ export function useChatDisplay(params: {
       };
     }
 
-    const precedingUserMessage = findLastUserMessage(messages);
+    // Fresh background/cron trigger (lastUserMessageAt === null): the activeTurn
+    // represents a brand-new run that must NOT anchor to the previous user
+    // message. Passing `precedingUserMessage: null` keeps
+    // collectActiveTurnStreamSources from scanning session history, so the
+    // connecting indicator renders as a new line instead of overlaying the
+    // previous completed answer. `turnStableKey: 'active-turn'` avoids reusing
+    // the previous turn's tool/timeline cache (migrated to the real key on
+    // completion via migrateTurnDisplayCache).
     return {
       staticItems: displayItems,
       activeTurn: {
-        turnStableKey: resolveActiveTurnStableKey(messages) ?? 'active-turn',
+        turnStableKey: 'active-turn',
         turnMessages: [],
         turnToolResults: [],
-        precedingUserMessage,
+        precedingUserMessage: null,
         activeStream,
       },
     };

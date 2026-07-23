@@ -1,5 +1,6 @@
 import type { GatewayManager } from '../gateway/manager';
 import type { AgentMemoryContextBlocks } from '../../shared/agent-memory-prompt';
+import type { ExecutionSnapshot } from './execution-snapshot';
 
 export type AgentEngineType = 'openclaw' | 'claude';
 
@@ -55,6 +56,10 @@ export interface EngineAdapter {
     ctx: EngineAdapterContext,
     params: { sessionKey: string; limit: number },
   ): Promise<{ success: boolean; result?: EngineHistoryResult; error?: string }>;
+  getExecutionSnapshot(
+    ctx: EngineAdapterContext,
+    params: { sessionKey: string; limit: number },
+  ): Promise<{ success: boolean; result?: ExecutionSnapshot | null; error?: string }>;
   listSessions(ctx: EngineAdapterContext): Promise<{ success: boolean; result?: { sessions: EngineSessionSummary[] }; error?: string }>;
   sendMessage(
     ctx: EngineAdapterContext,

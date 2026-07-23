@@ -56,6 +56,7 @@ export function handleForegroundAssistantFinal(input: {
     isTerminalOutput,
     toolOnly,
     phase: phase ?? null,
+    hasOutput: hasNonToolAssistantContent(finalMessage),
   });
 
   // OpenClaw gateway final events carry a merged stream buffer, not the

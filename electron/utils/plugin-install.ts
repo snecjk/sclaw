@@ -266,6 +266,7 @@ const LOCAL_PLUGIN_DIRS: Record<string, string> = {
   'sto-agent-telemetry': 'sto-agent-telemetry',
   'sto-scheduled-task-tool': 'sto-scheduled-task-tool',
   'sto-workflow-tool': 'sto-workflow-tool',
+  'sto-user-skill-tool': 'sto-user-skill-tool',
   'sto-browser-bridge': 'sto-browser-bridge',
   'sto-skill-call-monitor': 'sto-skill-call-monitor',
   'sto-media-understanding': 'sto-media-understanding',
@@ -312,6 +313,7 @@ const PLUGIN_RUNTIME_DEPS: Record<string, readonly string[]> = {
   'sto-workflow-tool': ['@sinclair/typebox'],
   'sto-scheduled-task-tool': ['@sinclair/typebox'],
   'sto-browser-bridge': ['@sinclair/typebox'],
+  'sto-user-skill-tool': ['@sinclair/typebox'],
 };
 
 function pluginRuntimeDepNodeModuleRoots(): string[] {
@@ -913,6 +915,18 @@ function afterStoPluginInstall(pluginDirName: string, sourceDir?: string): void 
     ensureStoDynamicRouteSharedFiles(targetDir);
     ensureStoDynamicRouteWorkspacePathsFiles(targetDir);
   }
+  if (pluginDirName === 'sto-user-skill-tool') {
+    const targetDir = join(getOpenClawConfigDir(), 'extensions', pluginDirName);
+    ensureStoDynamicRouteSharedFile(
+      targetDir,
+      'user-skill-write-guard.ts',
+      [
+        join(process.cwd(), 'sto-plugin', 'openclaw', 'sto-user-skill-tool', 'user-skill-write-guard.ts'),
+        join(process.cwd(), 'shared', 'user-skill-write-guard.ts'),
+        join(app.getAppPath(), 'shared', 'user-skill-write-guard.ts'),
+      ],
+    );
+  }
   if (PLUGIN_RUNTIME_DEPS[pluginDirName]) {
     ensurePluginRuntimeDeps(pluginDirName);
   }
@@ -1321,6 +1335,14 @@ export function ensureStoWorkflowToolPluginInstalled(): { installed: boolean; wa
   return result;
 }
 
+export function ensureStoUserSkillToolPluginInstalled(): { installed: boolean; warning?: string } {
+  return ensurePluginInstalled(
+    'sto-user-skill-tool',
+    buildCandidateSources('sto-user-skill-tool'),
+    'STO User Skill Tool',
+  );
+}
+
 export function ensureStoBrowserBridgePluginInstalled(): { installed: boolean; warning?: string } {
   const result = ensurePluginInstalled(
     'sto-browser-bridge',
@@ -1376,6 +1398,7 @@ const ALL_BUNDLED_PLUGINS = [
   { fn: ensureStoAgentTelemetryPluginInstalled, label: 'STO Agent Telemetry' },
   { fn: ensureStoScheduledTaskToolPluginInstalled, label: 'STO Scheduled Task Tool' },
   { fn: ensureStoWorkflowToolPluginInstalled, label: 'STO Workflow Tool' },
+  { fn: ensureStoUserSkillToolPluginInstalled, label: 'STO User Skill Tool' },
   { fn: ensureStoBrowserBridgePluginInstalled, label: 'STO Browser Bridge' },
   { fn: ensureStoSkillCallMonitorPluginInstalled, label: 'STO Skill Call Monitor' },
   { fn: ensureStoMediaUnderstandingPluginInstalled, label: 'STO Media Understanding' },
@@ -1510,6 +1533,7 @@ export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
     { dirName: 'sto-agent-telemetry', label: 'STO Agent Telemetry' },
     { dirName: 'sto-scheduled-task-tool', label: 'STO Scheduled Task Tool' },
     { dirName: 'sto-workflow-tool', label: 'STO Workflow Tool' },
+    { dirName: 'sto-user-skill-tool', label: 'STO User Skill Tool' },
     { dirName: 'sto-browser-bridge', label: 'STO Browser Bridge' },
     { dirName: 'sto-skill-call-monitor', label: 'STO Skill Call Monitor' },
     { dirName: 'sto-media-understanding', label: 'STO Media Understanding' },

@@ -1543,6 +1543,7 @@ export async function syncStoPluginsToOpenClaw(): Promise<boolean> {
       'sto-agent-telemetry',
       'sto-scheduled-task-tool',
       'sto-workflow-tool',
+      'sto-user-skill-tool',
       'sto-skill-call-monitor',
       'sto-media-understanding',
       STO_BROWSER_BRIDGE_PLUGIN_ID,
@@ -1587,6 +1588,14 @@ export async function syncStoPluginsToOpenClaw(): Promise<boolean> {
         baseUrl: stoBaseUrl,
         ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
         timeoutMs: 30000,
+      },
+    };
+    entries['sto-user-skill-tool'] = {
+      enabled: true,
+      config: {
+        hostApiHost: '127.0.0.1',
+        hostApiPort: PORTS.CLAWX_HOST_API,
+        timeoutMs: 60_000,
       },
     };
     entries['sto-skill-call-monitor'] = {

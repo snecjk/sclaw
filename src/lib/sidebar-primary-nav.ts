@@ -8,15 +8,31 @@ import { matchPath } from 'react-router-dom';
 
 const SIDEBAR_PRIMARY_NAV_ROUTE_MATCHERS: ReadonlyArray<{ path: string; end?: boolean }> = [
   { path: '/', end: true },
-  { path: '/scheduled-tasks' },
   { path: '/my-tasks' },
-  { path: '/cron' },
   { path: '/skills' },
   { path: '/workflow' },
   { path: '/more-apps' },
   { path: '/models' },
   { path: '/data-center' },
 ];
+
+export interface SidebarPrimaryNavVisibilityOptions {
+  primaryMyData: boolean;
+  siteDepartmentTypesLoaded: boolean;
+  isSite: boolean;
+  isProduction: boolean;
+}
+
+/** Resolve account/environment visibility without coupling public entries to site identity. */
+export function isSidebarPrimaryNavItemVisible(
+  path: string,
+  options: SidebarPrimaryNavVisibilityOptions,
+): boolean {
+  if (path === '/models' && !options.primaryMyData) return false;
+  if (path === '/data-center' && (!options.siteDepartmentTypesLoaded || !options.isSite)) return false;
+  if ((path === '/scheduled-tasks' || path === '/cron') && options.isProduction) return false;
+  return true;
+}
 
 /** 当前 pathname 是否命中侧栏 primaryNav 固定入口（非工作台二级 nav） */
 export function isSidebarPrimaryNavRoute(pathname: string): boolean {

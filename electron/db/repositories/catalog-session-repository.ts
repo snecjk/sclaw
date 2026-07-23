@@ -71,6 +71,25 @@ export class CatalogSessionRepository {
     return row ? mapRow(row) : null;
   }
 
+  async findLatestByChannel(input: {
+    channelType: string;
+    channelId: string;
+    sessionKeyPrefix: string;
+  }): Promise<CatalogSession | null> {
+    const db = getKyselyDatabase();
+    const row = await db
+      .selectFrom('catalog_sessions')
+      .selectAll()
+      .where('channel_type', '=', input.channelType)
+      .where('channel_id', '=', input.channelId)
+      .where('session_key', 'like', `${input.sessionKeyPrefix}%`)
+      .where('deleted_at', 'is', null)
+      .orderBy('last_activity_at', 'desc')
+      .orderBy('updated_at', 'desc')
+      .executeTakeFirst();
+    return row ? mapRow(row) : null;
+  }
+
   async list(options: ListCatalogSessionsOptions): Promise<CatalogSession[]> {
     const db = getKyselyDatabase();
     const limit = Math.max(1, options.limit ?? 500);

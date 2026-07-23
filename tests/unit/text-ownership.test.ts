@@ -5,6 +5,7 @@ import {
   classifyTextOverlap,
   normalizeDisplayTextForOwnership,
   processSegmentsCoverText,
+  processSegmentsOwnText,
   textsAreOwnershipDuplicates,
 } from '@/pages/Chat/thinking/text-ownership';
 
@@ -132,6 +133,15 @@ describe('TextOwnership', () => {
     ];
     expect(processSegmentsCoverText(segments, narration)).toBe(true);
     expect(processSegmentsCoverText(segments, '完全不同的正文')).toBe(false);
+  });
+
+  it('processSegmentsOwnText hides bubble when process owns the deliverable', () => {
+    const deliverable = '你是曹宇，工号 1119856，所属组织是总部 · 前端技术。';
+    const segments = [
+      { kind: 'phase-text' as const, key: 'phase-text-0', text: deliverable },
+    ];
+    expect(processSegmentsOwnText(segments, deliverable)).toBe(true);
+    expect(processSegmentsOwnText(segments, `${deliverable}还想确认一下吗？`)).toBe(false);
   });
 
   it('parseThinkingTurnLayout applies ownership on duplicate final', () => {

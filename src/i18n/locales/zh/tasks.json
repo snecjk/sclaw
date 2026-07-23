@@ -96,12 +96,12 @@
     },
     "newTaskDropdown": {
       "selfCreate": "自己创建",
-      "templateCreate": "工作流创建"
+      "templateCreate": "官方推荐"
     },
     "templateModal": {
-      "title": "选择工作流",
-      "subtitle": "选择一个工作流快速创建定时任务",
-      "empty": "暂无可用工作流",
+      "title": "官方推荐",
+      "subtitle": "选择一个官方推荐快速创建定时任务",
+      "empty": "暂无可用官方推荐",
       "instantiating": "实例化中…",
       "openExisting": "继续编排",
       "createNew": "新建",
@@ -113,7 +113,7 @@
       "noTasksDescription": "创建定时任务来自动化执行周期性 AI 代理工作",
       "officialAria": "官方推荐工作流",
       "templateFallbackCategory": "工作流模版",
-      "addTemplate": "添加"
+      "addTemplate": "官方推荐"
     },
     "createModal": {
       "editTitle": "编辑定时任务",
@@ -134,7 +134,6 @@
       "instructionsPlaceholder": "让 S Claw 帮你做什么…",
       "instructionsRequired": "请描述让 S Claw 帮你做什么",
       "workflowAutoHint": "已关联工作流，描述内容自动生成",
-      "instructionsHint": "计划时间请在上方的「计划时间」中设置；可点击 AI美化 由模型优化执行描述。",
       "beautifyAria": "AI 美化任务描述",
       "beautifyButton": "AI美化",
       "beautifying": "美化中…",

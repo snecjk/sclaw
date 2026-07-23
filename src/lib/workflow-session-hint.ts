@@ -14,6 +14,14 @@ import type { WorkflowExecutionState } from '@/types/workflow';
 
 export const WORKFLOW_SESSION_HINT_MARKER = '<!-- StoClaw-Workflow-Session -->';
 
+/** Kept in sync with SKILL_MARKER_RE in skill-transcript-marker.ts (local copy avoids a circular import). */
+const SKILL_TRANSCRIPT_MARKER_RE = /<!--\s*SClaw-Skill\s+(\{[\s\S]*?\})\s*-->/;
+
+/** Remove the persisted SClaw-Skill transcript marker before deriving a human title. */
+function stripSkillTranscriptMarkerForLabel(text: string): string {
+  return text.replace(SKILL_TRANSCRIPT_MARKER_RE, '').trimEnd();
+}
+
 export interface WorkflowCreationTemplateHint {
   id: string;
   label: string;
@@ -127,7 +135,9 @@ export function deriveSessionLabelFromUserText(rawText: string): string {
   const subagentTask = extractSubagentTaskLabel(rawText);
   if (subagentTask) return subagentTask;
   const stripped = stripDingTalkMentionContextForDisplay(
-    stripWorkflowContextForDisplay(stripWorkflowSessionHintForDisplay(rawText)),
+    stripWorkflowContextForDisplay(
+      stripWorkflowSessionHintForDisplay(stripSkillTranscriptMarkerForLabel(rawText)),
+    ),
   ).trim();
   if (isSubagentInjectedUserText(stripped)) return '';
   return stripped;
@@ -242,6 +252,7 @@ export function normalizeDerivedSessionLabel(label: string | undefined): string 
 
 export function isCorruptedSessionLabel(label: string): boolean {
   return label.includes('<!-- StoClaw-Workflow')
+    || label.includes('<!-- SClaw-Skill')
     || label.includes('## 工作流')
     || messageHasDingTalkRecipientContext(label)
     || isSubagentContextOnlyLabel(label);

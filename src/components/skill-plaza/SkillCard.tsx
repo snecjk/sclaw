@@ -276,7 +276,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
               ? t('plaza.action.disable', { defaultValue: '禁用技能' })
               : t('plaza.action.enable', { defaultValue: '启用技能' })}
           </DropdownMenuItem>
-          {onDelete && (
+          {onDelete && skill.canUninstall !== false && (
             <DropdownMenuItem
               className="text-red-600 focus:text-red-600"
               onClick={() => onDelete(skill)}

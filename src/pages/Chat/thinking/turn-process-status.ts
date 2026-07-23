@@ -31,6 +31,8 @@ export interface ResolveTurnProcessStatusInput {
   hasProcessSegments: boolean;
   /** 正文气泡正在流式输出 */
   hasFinalReplyStreaming: boolean;
+  /** 正文气泡已有可见内容（含已落入 messages 的完成态正文） */
+  hasVisibleFinalReply?: boolean;
   isWaitingUser?: boolean;
   isQueued?: boolean;
   isInterrupted?: boolean;
@@ -58,8 +60,11 @@ export function resolveTurnProcessStatus(input: ResolveTurnProcessStatusInput): 
     return 'tool_running';
   }
 
-  if (input.isProcessing) return 'organizing_tool_results';
+  // 正文仍在流式输出：显示「生成回复」。
   if (input.hasFinalReplyStreaming) return 'finalizing';
+  // 正文已落盘可见但尚在等待 agent.completed：勿再显示「整理工具结果」。
+  if (input.hasVisibleFinalReply) return 'idle';
+  if (input.isProcessing) return 'organizing_tool_results';
 
   if (
     input.hasProcessSegments

@@ -136,7 +136,11 @@ function summarizeRpcPayload(value: unknown): string {
   if (data.sessionKey != null) parts.push(`sessionKey=${String(data.sessionKey)}`);
   if (data.runId != null) parts.push(`runId=${String(data.runId)}`);
   if (data.state != null) parts.push(`state=${String(data.state)}`);
+  if (data.stream != null) parts.push(`stream=${String(data.stream)}`);
   if (data.phase != null) parts.push(`phase=${String(data.phase)}`);
+  else if (data.data && typeof data.data === 'object' && (data.data as { phase?: unknown }).phase != null) {
+    parts.push(`phase=${String((data.data as { phase?: unknown }).phase)}`);
+  }
   if (data.seq != null) parts.push(`seq=${String(data.seq)}`);
   if (typeof data.message === 'string') {
     parts.push(`message="${summarizeText(data.message)}"`);

@@ -38,7 +38,6 @@ import { SidebarUpdateNotice } from '@/components/layout/sidebar-update-notice';
 import { useSettingsStore } from '@/stores/settings';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
-import { getCurrentEnvConfig } from '../../../shared/env-config';
 import { closeSclawBrowser, isSclawBrowserOpen } from '@/lib/open-sclaw-browser';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
@@ -66,6 +65,7 @@ import { resolveSessionLabel } from '@/lib/session-label';
 import { sortSessionsWithCatalogPin } from '@/lib/sidebar-recent-order';
 import { type StoTaskId } from '@/lib/sto-tasks';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
+import { resolveSidebarChannelSource } from '@/lib/session-channel-source';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { scheduleSessionLabelHydrationForStore } from '@/stores/chat/session-metadata-hydrate';
 import { isSidebarHiddenChatSessionKey, buildBuiltinStoGroupSortSessions } from '@/lib/sto-task-session';
@@ -73,7 +73,6 @@ import {
   parseClaudeScheduledTaskSessionKey,
   parseClaudeScheduledTaskRunSessionKey,
   parseCronSessionKey,
-  parseScheduledTaskAgentSessionKey,
   isAnyCronSessionKey,
   isVirtualTaskSessionKey,
 } from '@/stores/chat/cron-session-utils';
@@ -110,6 +109,7 @@ import {
   expandAllGroups,
   toggleGroupExpanded,
 } from '@/lib/sidebar-section-group-expand';
+import { isSidebarPrimaryNavItemVisible } from '@/lib/sidebar-primary-nav';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
 import {
   sidebarFooterMetaClass,
@@ -134,6 +134,7 @@ import {
   sidebarScrollContainerClass,
 } from '@/lib/surfaces';
 import { useSidebarSectionScrollCollapse } from '@/hooks/use-sidebar-section-scroll-collapse';
+import { getCurrentEnvConfig } from '../../../shared/env-config';
 
 type SessionBucketKey =
   | 'today'
@@ -1075,6 +1076,7 @@ export function Sidebar() {
     const isRecentSessionActive =
       isOnHome && currentSessionKey === s.key && currentSessionKey !== DEFAULT_SESSION_KEY;
     const isPinned = catalogByKey[s.key]?.pinRank != null;
+    const channelSource = resolveSidebarChannelSource(s.key, catalogByKey[s.key]?.channelType);
     return (
       <SidebarRecentSessionRow
         key={s.key}
@@ -1082,6 +1084,7 @@ export function Sidebar() {
         label={sessionLabel}
         isActive={isRecentSessionActive}
         isPinned={isPinned}
+        channelSource={channelSource}
         isEditing={editingSessionKey === s.key}
         editingValue={editingValue}
         onOpen={() => {
@@ -1157,11 +1160,10 @@ export function Sidebar() {
     [sessions],
   );
 
-  // Legacy cron + scheduled-task agent + Claude task (base, dated, run) sessions — shown under "任务列表" grouped by task name
+  // Legacy cron + Claude task (base, dated, run) sessions — shown under "任务列表" grouped by task name
   const taskListScheduledSessions = useMemo(
     () => visibleSessions.filter((s) => (
       isAnyCronSessionKey(s.key)
-      || parseScheduledTaskAgentSessionKey(s.key)
       || parseClaudeScheduledTaskRunSessionKey(s.key)
       || parseClaudeScheduledTaskSessionKey(s.key) != null  // covers base & dated
     )),
@@ -1172,7 +1174,6 @@ export function Sidebar() {
   const normalSessions = useMemo(
     () => visibleSessions.filter((s) => (
       !isAnyCronSessionKey(s.key)
-      && !parseScheduledTaskAgentSessionKey(s.key)
       && !parseClaudeScheduledTaskRunSessionKey(s.key)
       && !parseClaudeScheduledTaskSessionKey(s.key)  // excludes base & dated
     )),
@@ -1224,15 +1225,12 @@ export function Sidebar() {
     const groups = new Map<string, GroupDraft>();
 
     for (const session of taskListScheduledSessions) {
-      const stParsed = parseScheduledTaskAgentSessionKey(session.key);
       const cronParsed = parseCronSessionKey(session.key);
       const claudeTaskRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
       const claudeTaskDatedParsed = parseClaudeScheduledTaskSessionKey(session.key);
 
       let draft: GroupDraft | undefined;
-      if (stParsed) {
-        draft = { key: `st:${stParsed.taskId}`, kind: 'st', taskId: stParsed.taskId, sessions: [] };
-      } else if (cronParsed) {
+      if (cronParsed) {
         draft = { key: `cron:${cronParsed.jobId}`, kind: 'cron', taskId: cronParsed.jobId, sessions: [] };
       } else if (claudeTaskDatedParsed) {
         draft = {
@@ -1710,23 +1708,19 @@ export function Sidebar() {
       badge?: ReactNode;
     }> = [
       { to: '/', end: true, icon: <MessageSquarePlus className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.newChat') },
-      // { to: '/scheduled-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: `${t('common:sidebar.cronTasks')}（云）` },
       { to: '/my-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myTasks') },
-      // { to: '/cron', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.cronTasks') },
       { to: '/skills', icon: <Wrench className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/workflow', icon: <Workflow className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.workflow') },
       { to: '/more-apps', icon: <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.moreApps') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
       // { to: '/data-center', icon: <Database className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.dataCenter') },
     ];
-    return all.filter((item) => {
-      if (item.to === '/models' && !sidebarVis.primaryMyData) return false;
-      if (item.to === '/data-center' && (siteDepartmentTypes === null || !isSite)) return false;
-      if (item.to === '/more-apps' && (siteDepartmentTypes === null || !isSite)) return false;
-      if (item.to === '/scheduled-tasks' && getCurrentEnvConfig().isProduction) return false;
-      if (item.to === '/cron' && getCurrentEnvConfig().isProduction) return false;
-      return true;
-    });
+    return all.filter((item) => isSidebarPrimaryNavItemVisible(item.to, {
+      primaryMyData: sidebarVis.primaryMyData,
+      siteDepartmentTypesLoaded: siteDepartmentTypes !== null,
+      isSite,
+      isProduction: getCurrentEnvConfig().isProduction,
+    }));
   }, [isSite, sidebarVis.primaryMyData, siteDepartmentTypes, t]);
 
   const workspaceNav = [
@@ -1945,6 +1939,12 @@ export function Sidebar() {
             onToggle={toggleProjectsSection}
             shellRef={projectSectionHeaderRef}
             stickyTopClass={sidebarSectionStickyTopProjectClass}
+            onEnsureOpen={() => {
+              revealProjectsAfterOpenRef.current = true;
+              suppressNextProjectsAutoCollapseRef.current = true;
+              setProjectsSectionOpen(true);
+            }}
+            scrollContainerRef={scrollContainerRef}
           />
         ) : null}
         {!sidebarCollapsed ? (

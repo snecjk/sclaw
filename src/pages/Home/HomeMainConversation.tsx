@@ -11,7 +11,7 @@ import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
-import { ChatConversationHeaderActions, ChatPreviewPanelActions } from '@/pages/Chat/ChatSearchBar';
+import { ChatConversationHeaderActions, ChatPreviewToggleHeaderAction } from '@/pages/Chat/ChatSearchBar';
 import { ChatPreviewHeaderTabs } from '@/pages/Chat/ChatPreviewHeaderTabs';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
@@ -357,9 +357,9 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     ],
   );
 
-  const previewPanelHeaderActions = useMemo(
+  const previewToggleAction = useMemo(
     () => (
-      <ChatPreviewPanelActions
+      <ChatPreviewToggleHeaderAction
         canShowPreviewPanel={canShowPreviewPanel}
         isPreviewPanelOpen={showPreviewPanel}
         onTogglePreview={() => {
@@ -368,12 +368,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
         }}
       />
     ),
-    [
-      canShowPreviewPanel,
-      showPreviewPanel,
-      closePreviewPanel,
-      openPreviewPanel,
-    ],
+    [canShowPreviewPanel, showPreviewPanel, closePreviewPanel, openPreviewPanel],
   );
 
   const previewHeaderTabs = useMemo(
@@ -399,8 +394,8 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   useContentHeader({
     title: sessionTitle,
     previewTabs: previewHeaderTabs,
-    actions: conversationHeaderActions,
-    panelActions: previewPanelHeaderActions,
+    chatActions: conversationHeaderActions,
+    actions: previewToggleAction,
     isSplitLayout: canShowPreviewPanel && showPreviewPanel,
   });
 

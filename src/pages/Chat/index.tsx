@@ -19,7 +19,7 @@ import { useChatDisplay } from './use-chat-display';
 import { isAssistantRole, resolveActiveTurnStableKey } from './chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
-import { ChatConversationHeaderActions, ChatPreviewPanelActions } from './ChatSearchBar';
+import { ChatConversationHeaderActions, ChatPreviewToggleHeaderAction } from './ChatSearchBar';
 import { ChatPreviewHeaderTabs } from './ChatPreviewHeaderTabs';
 import { PendingQueuePanel } from './PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
@@ -481,9 +481,9 @@ export function Chat() {
     ],
   );
 
-  const previewPanelHeaderActions = useMemo(
+  const previewToggleAction = useMemo(
     () => (
-      <ChatPreviewPanelActions
+      <ChatPreviewToggleHeaderAction
         canShowPreviewPanel={canShowPreviewPanel}
         isPreviewPanelOpen={showPreviewPanel}
         onTogglePreview={() => {
@@ -492,12 +492,7 @@ export function Chat() {
         }}
       />
     ),
-    [
-      canShowPreviewPanel,
-      showPreviewPanel,
-      closePreviewPanel,
-      openPreviewPanel,
-    ],
+    [canShowPreviewPanel, showPreviewPanel, closePreviewPanel, openPreviewPanel],
   );
 
   const previewHeaderTabs = useMemo(
@@ -523,8 +518,8 @@ export function Chat() {
   useContentHeader({
     title: sessionTitle,
     previewTabs: previewHeaderTabs,
-    actions: conversationHeaderActions,
-    panelActions: previewPanelHeaderActions,
+    chatActions: conversationHeaderActions,
+    actions: previewToggleAction,
     isSplitLayout: canShowPreviewPanel && showPreviewPanel,
   });
 

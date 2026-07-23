@@ -73,10 +73,6 @@ vi.mock('@/hooks/use-builtin-tool-listener', () => ({
   useBuiltinToolListener: () => {},
 }));
 
-vi.mock('@/pages/ScheduledTasks/components/TaskCreateModal', () => ({
-  TaskCreateModal: () => null,
-}));
-
 describe('Home skill seed', () => {
   beforeEach(() => {
     observedSeeds.length = 0;
