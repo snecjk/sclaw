@@ -11,7 +11,7 @@
   --ma-card: #ffffff;
   --ma-card-hover: hsl(var(--muted));
   --ma-card-border: #e5e6eb;
-  --ma-node-icon-fill: #bdf3cf;
+  --ma-node-icon-fill: rgba(189, 243, 207, 0.5);
   --ma-node-icon-foreground: #1d2129;
   --ma-count: #b0b7c3;
   --ma-count-active: #6b7280;
@@ -237,8 +237,8 @@
 }
 
 .page-more-apps .app-icon--lg {
-  width: 48px;
-  height: 48px;
+  width: 42px;
+  height: 42px;
 }
 
 .page-more-apps .app-icon--tone-blue {
@@ -278,7 +278,7 @@
 }
 
 .page-more-apps .app-icon--rounded {
-  border-radius: 12px;
+  border-radius: 11px;
   background: var(--ma-node-icon-fill);
   box-shadow: none;
 }
@@ -755,13 +755,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 18px;
   box-sizing: border-box;
   min-width: 0;
-  min-height: 64px;
-  padding: 8px;
+  height: 74px;
+  padding: 16px;
   border: 0.8px solid var(--ma-card-border);
-  border-radius: 14px;
+  border-radius: 18px;
   background: var(--ma-card);
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
