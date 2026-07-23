@@ -319,6 +319,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
           metaMap[skill.slug] = {
             title: skill.title,
             description: skill.description,
+            icon: skill.icon,
             category: skill.category,
             categoryCode: skill.categoryCode,
             categoryCodes: skill.categoryCodes,
@@ -396,6 +397,11 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
             merged.description = plazaSkill.description;
           } else if (meta?.description) {
             merged.description = meta.description;
+          }
+          if (plazaSkill?.icon) {
+            merged.icon = plazaSkill.icon;
+          } else if (meta?.icon) {
+            merged.icon = meta.icon;
           }
           if (plazaSkill?.installCount != null) {
             merged.installCount = plazaSkill.installCount;
@@ -570,15 +576,26 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
   },
 
   toggleSkill: async (slug, enabled) => {
+    const previousMySkills = get().mySkills;
+    const previousPlazaSkills = get().plazaSkills;
+    set((state) => ({
+      mySkills: state.mySkills.map((s) =>
+        s.slug === slug ? { ...s, enabled } : s
+      ),
+      plazaSkills: state.plazaSkills.map((s) =>
+        s.slug === slug ? { ...s, enabled } : s
+      ),
+    }));
+
     try {
       await toggleSkillEnabled(slug, enabled);
-      set((state) => ({
-        mySkills: state.mySkills.map((s) =>
-          s.slug === slug ? { ...s, enabled } : s
-        ),
-      }));
     } catch (err) {
-      set({ error: String(err) });
+      set({
+        error: String(err),
+        mySkills: previousMySkills,
+        plazaSkills: previousPlazaSkills,
+      });
+      throw err;
     }
   },
 

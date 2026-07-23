@@ -71,11 +71,13 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
     const activeQuery = mode === 'toolbar' ? toolbarQuery : inlineQuery;
 
     const items: SkillPickerItem[] = useMemo(
-      () => mySkills.map((skill) => ({
-        slug: skill.slug,
-        title: skill.title,
-        description: skill.description ?? '',
-      })),
+      () => mySkills
+        .filter((skill) => skill.enabled !== false)
+        .map((skill) => ({
+          slug: skill.slug,
+          title: skill.title,
+          description: skill.description ?? '',
+        })),
       [mySkills],
     );
 
