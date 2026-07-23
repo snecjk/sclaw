@@ -2,14 +2,12 @@ import {
   isAnyCronSessionKey,
   parseClaudeScheduledTaskRunSessionKey,
   parseClaudeScheduledTaskSessionKey,
-  parseScheduledTaskAgentSessionKey,
 } from '@/stores/chat/cron-session-utils';
 import type { ChatSession } from '@/stores/chat/types';
 import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
 
 export function isSidebarRecentChatSessionKey(sessionKey: string): boolean {
   return !isAnyCronSessionKey(sessionKey)
-    && !parseScheduledTaskAgentSessionKey(sessionKey)
     && !parseClaudeScheduledTaskRunSessionKey(sessionKey)
     && !parseClaudeScheduledTaskSessionKey(sessionKey)
     && !isSclawBrowserEmbedChatSessionKey(sessionKey);

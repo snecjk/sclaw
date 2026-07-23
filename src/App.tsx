@@ -15,8 +15,6 @@ import { Channels } from './pages/Channels';
 import { SkillPlazaPage } from './components/skill-plaza/SkillPlazaPage';
 import { MoreAppsPage } from './components/more-apps/MoreAppsPage';
 import { Subscriptions } from './pages/Subscriptions';
-// import { Cron } from './pages/Cron';
-// import ScheduledTasks from './pages/ScheduledTasks';
 import MyTask from './pages/MyTask';
 import { Home } from './pages/Home';
 import { TaskDetail } from './pages/TaskDetail';
@@ -33,7 +31,6 @@ import { useGatewayStore } from './stores/gateway';
 import { useProviderStore } from './stores/providers';
 import { useAgentsStore } from './stores/agents';
 import { useChatStore } from './stores/chat';
-import { useScheduledTaskUnreadStore } from './stores/scheduled-task-unread';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
 import { AccountSwitchFab } from './components/layout/AccountSwitchFab';
 
@@ -220,29 +217,6 @@ function App() {
     };
   }, []);
 
-  // Listen for scheduled task new results from main process
-  useEffect(() => {
-    const handleNewResult = (...args: unknown[]) => {
-      const payload = args[0] as { taskId: number } | undefined;
-      if (!payload || typeof payload.taskId !== 'number') return;
-      // Only add unread if user is not currently on the Scheduled Tasks page
-      if (location.pathname !== '/scheduled-tasks') {
-        useScheduledTaskUnreadStore.getState().addUnread(payload.taskId);
-      }
-    };
-
-    const unsubscribe = window.electron.ipcRenderer.on(
-      'scheduled-task:new-result',
-      handleNewResult
-    );
-
-    return () => {
-      if (typeof unsubscribe === 'function') {
-        unsubscribe();
-      }
-    };
-  }, [location.pathname]);
-
   // STO catalog sync (login / periodic / manual) → refresh toolbar default model
   useEffect(() => {
     const handleStoModelsSynced = (...args: unknown[]) => {
@@ -354,8 +328,6 @@ function App() {
             <Route path="/skills" element={<SkillPlazaPage />} />
             <Route path="/more-apps" element={<MoreAppsPage />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
-            {/* <Route path="/cron" element={<Cron />} />
-            <Route path="/scheduled-tasks" element={<ScheduledTasks />} /> */}
             <Route path="/my-tasks" element={<MyTask />} />
             <Route path="/data-center" element={<DataCenter />} />
             <Route path="/workflow/*" element={<WorkflowTestPage />} />

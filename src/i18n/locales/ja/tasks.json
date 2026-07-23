@@ -96,12 +96,12 @@
     },
     "newTaskDropdown": {
       "selfCreate": "自分で作成",
-      "templateCreate": "ワークフローから作成"
+      "templateCreate": "公式おすすめ"
     },
     "templateModal": {
-      "title": "ワークフローを選択",
-      "subtitle": "ワークフローを選んで定期タスクをすばやく作成",
-      "empty": "利用可能なワークフローがありません",
+      "title": "公式おすすめ",
+      "subtitle": "公式おすすめを選んで定期タスクをすばやく作成",
+      "empty": "利用可能な公式おすすめがありません",
       "instantiating": "作成中…",
       "openExisting": "編集を続ける",
       "createNew": "新規",
@@ -113,7 +113,7 @@
       "noTasksDescription": "定期タスクを作成してAIエージェントの定常業務を自動化",
       "officialAria": "公式おすすめワークフロー",
       "templateFallbackCategory": "ワークフローテンプレート",
-      "addTemplate": "追加"
+      "addTemplate": "公式おすすめ"
     },
     "createModal": {
       "editTitle": "定期タスクを編集",
@@ -134,7 +134,6 @@
       "instructionsPlaceholder": "S Clawに何をさせますか…",
       "instructionsRequired": "S Clawにさせる内容を説明してください",
       "workflowAutoHint": "関連ワークフロー — 説明は自動生成されます",
-      "instructionsHint": "スケジュールは上の「スケジュール」で設定してください。AI美化でモデルが実行内容を最適化します。",
       "beautifyAria": "AIでタスク説明を美化",
       "beautifyButton": "AI美化",
       "beautifying": "美化中…",

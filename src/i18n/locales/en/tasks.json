@@ -96,12 +96,12 @@
     },
     "newTaskDropdown": {
       "selfCreate": "Create yourself",
-      "templateCreate": "Create from workflow"
+      "templateCreate": "Official recommended"
     },
     "templateModal": {
-      "title": "Select Workflow",
-      "subtitle": "Select a workflow to quickly create a scheduled task",
-      "empty": "No workflows available",
+      "title": "Official Recommended",
+      "subtitle": "Select an official recommendation to quickly create a scheduled task",
+      "empty": "No official recommendations available",
       "instantiating": "Creating…",
       "openExisting": "Continue editing",
       "createNew": "New",
@@ -113,7 +113,7 @@
       "noTasksDescription": "Create scheduled tasks to automate recurring AI agent work",
       "officialAria": "Official recommended workflows",
       "templateFallbackCategory": "Workflow template",
-      "addTemplate": "Add"
+      "addTemplate": "Official Recommended"
     },
     "createModal": {
       "editTitle": "Edit Scheduled Task",
@@ -134,7 +134,6 @@
       "instructionsPlaceholder": "What should S Claw do for you…",
       "instructionsRequired": "Please describe what S Claw should do",
       "workflowAutoHint": "Linked workflow — description auto-generated",
-      "instructionsHint": "Set the schedule above; click AI Beautify to refine the task description with the model.",
       "beautifyAria": "AI beautify task description",
       "beautifyButton": "AI Beautify",
       "beautifying": "Beautifying…",

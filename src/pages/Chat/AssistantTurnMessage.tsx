@@ -101,6 +101,22 @@ function collectActiveTurnStreamSources(
   precedingUserMessage: RawMessage | null,
   activeStream: ActiveTurnStream,
 ): RawMessage[] {
+  // Fresh background/cron trigger (no preceding user message): this activeTurn
+  // is a brand-new run that must NOT inherit the previous turn's assistant
+  // messages. Skip the session-history scan entirely — otherwise
+  // findTurnStartIndex falls back to the previous user message and pulls the
+  // previous completed answer into the connecting indicator. Only the live
+  // streaming content is shown; the empty case renders just the loading
+  // indicator (delegated to collectTurnAssistantSources with an empty history
+  // so snapshot-replace/dedup logic stays shared).
+  if (!precedingUserMessage) {
+    return collectTurnAssistantSources(
+      [],
+      [...turnMessages, ...activeStream.streamingMessages],
+      null,
+      activeStream.streamMessage,
+    );
+  }
   const sources = collectTurnAssistantSources(
     sessionMessages,
     [...turnMessages, ...activeStream.streamingMessages],
@@ -179,6 +195,19 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   );
 
   const chronologicalEntries = useMemo(() => {
+    // Fresh background/cron trigger (active turn, no preceding user message):
+    // this is a brand-new run — do NOT scan session history for the timeline,
+    // otherwise walkTurnChronologicalEntries falls back to the previous user
+    // message and bleeds the previous turn's tool calls into the connecting
+    // indicator. Live tools still surface via bakedStreamingTools (streamingTools).
+    if (activeStream && !precedingUserMessage) {
+      return resolveTurnChronologicalEntries(
+        [],
+        null,
+        turnMessages,
+        [...turnToolResults, ...streamingToolResults],
+      );
+    }
     const cachedToolResults = cachedToolResultsForTurn;
     const toolResults =
       cachedToolResults.length > 0
@@ -191,6 +220,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       toolResults,
     );
   }, [
+    activeStream,
     sessionMessages,
     precedingUserMessage,
     turnMessages,

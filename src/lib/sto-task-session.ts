@@ -28,13 +28,6 @@ export function isMainAgentChatSessionKey(sessionKey: string): boolean {
   return sessionKey.endsWith(':main');
 }
 
-/** Scheduled-task summary session (e.g. scheduled-task:1) — hidden because per-run agent sessions are shown instead. */
-export function isScheduledTaskSummarySessionKey(sessionKey: string): boolean {
-  if (!sessionKey.startsWith('scheduled-task:')) return false;
-  const rest = sessionKey.slice('scheduled-task:'.length);
-  return /^\d+$/.test(rest);
-}
-
 /** Claude scheduled-task summary session (e.g. claude-task:{taskId}) — hidden because task-list section shows run sessions. */
 export function isClaudeScheduledTaskSummarySessionKey(sessionKey: string): boolean {
   const parsed = parseClaudeScheduledTaskSessionKey(sessionKey);
@@ -52,7 +45,6 @@ export function isSidebarHiddenChatSessionKey(sessionKey: string): boolean {
     isHiddenStoTaskSubitemChatSessionKey(sessionKey) ||
     isMainAgentChatSessionKey(sessionKey) ||
     isSclawBrowserEmbedChatSessionKey(sessionKey) ||
-    isScheduledTaskSummarySessionKey(sessionKey) ||
     isClaudeScheduledTaskSummarySessionKey(sessionKey) ||
     isCronRunSessionKey(sessionKey)
   );

@@ -581,15 +581,6 @@ async function initialize(): Promise<void> {
   const { registerFormHandlers } = await import('./ipc/form-handlers');
   registerFormHandlers();
 
-  // Start scheduled task result poller
-  const { getScheduledTaskResultPoller } = await import('../services/scheduled-task-result-poller');
-  const scheduledTaskPoller = getScheduledTaskResultPoller();
-  scheduledTaskPoller.attachMainWindow(window);
-  scheduledTaskPoller.start();
-  app.on('before-quit', () => {
-    scheduledTaskPoller.stop();
-  });
-
   const { getClaudeScheduledTaskService } = await import('../services/claude-scheduled-task-service');
   const claudeScheduledTaskService = getClaudeScheduledTaskService();
   // Inject the gateway event sink before the scheduler starts ticking so that

@@ -4,7 +4,6 @@ import {
   getCronRunSessionAggregateKey,
   parseClaudeScheduledTaskSessionKey,
   parseCronSessionKey,
-  parseScheduledTaskAgentSessionKey,
 } from '@/stores/chat/cron-session-utils';
 
 function todayDateKey(): string {
@@ -21,7 +20,6 @@ export function buildCronDatedSessionKey(agentId: string, jobId: string, date: s
 
 type CronDayBucket = { agentId: string; jobId: string; date: string };
 type ClaudeDayBucket = { taskId: string; date: string };
-type ScheduledTaskDayBucket = { agentId: string; taskId: number; date: string };
 
 function resolveCronDayBucket(
   sessionKey: string,
@@ -66,12 +64,6 @@ function resolveClaudeDayBucket(sessionKey: string): ClaudeDayBucket | null {
   };
 }
 
-function resolveScheduledTaskDayBucket(sessionKey: string): ScheduledTaskDayBucket | null {
-  const scheduled = parseScheduledTaskAgentSessionKey(sessionKey);
-  if (!scheduled) return null;
-  return scheduled;
-}
-
 function cronDayBucketAliases(bucket: CronDayBucket): string[] {
   const aliases = new Set<string>();
   aliases.add(buildCronDatedSessionKey(bucket.agentId, bucket.jobId, bucket.date));
@@ -91,10 +83,6 @@ function claudeDayBucketAliases(bucket: ClaudeDayBucket): string[] {
   return [...aliases];
 }
 
-function scheduledTaskDayBucketAliases(bucket: ScheduledTaskDayBucket): string[] {
-  return [`agent:${bucket.agentId}:scheduled-task:${bucket.taskId}:${bucket.date}`];
-}
-
 /** Pick the sidebar-visible dated key used for unread storage/display. */
 export function canonicalSessionUnreadKey(sessionKey: string): string {
   const trimmed = sessionKey.trim();
@@ -110,11 +98,6 @@ export function canonicalSessionUnreadKey(sessionKey: string): string {
     return buildClaudeTaskDatedSessionKey(claudeBucket.taskId, claudeBucket.date);
   }
 
-  const scheduledBucket = resolveScheduledTaskDayBucket(trimmed);
-  if (scheduledBucket) {
-    return `agent:${scheduledBucket.agentId}:scheduled-task:${scheduledBucket.taskId}:${scheduledBucket.date}`;
-  }
-
   return trimmed;
 }
 
@@ -128,9 +111,6 @@ export function collectSessionUnreadAliases(sessionKey: string): string[] {
 
   const claudeBucket = resolveClaudeDayBucket(trimmed);
   if (claudeBucket) return claudeDayBucketAliases(claudeBucket);
-
-  const scheduledBucket = resolveScheduledTaskDayBucket(trimmed);
-  if (scheduledBucket) return scheduledTaskDayBucketAliases(scheduledBucket);
 
   return [trimmed];
 }

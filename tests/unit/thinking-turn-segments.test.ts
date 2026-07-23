@@ -886,6 +886,35 @@ describe('parseThinkingTurnLayout', () => {
       ),
     ).toBe(true);
   });
+
+  it('keeps distinct stable keys for adjacent phase-text segments after a tool group (done rebuild)', () => {
+    const messages = [
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: '我来帮你查天气，先拉一下数据。' },
+          { type: 'thinking', thinking: '先拉数据' },
+          { type: 'tool_use', id: 't1', name: 'exec', input: {} },
+          { type: 'tool_use', id: 't2', name: 'exec', input: {} },
+          { type: 'text', text: '让我换一个工具试试。' },
+          { type: 'text', text: '改用 deep-research 检索补充。' },
+          { type: 'thinking', thinking: '换工具' },
+          { type: 'tool_use', id: 't3', name: 'web_search', input: {} },
+        ],
+      },
+    ];
+
+    const done = parseThinkingTurnLayout(messages, { isLiveStream: false });
+    const phaseTexts = done.segments.filter(
+      (segment): segment is Extract<typeof segment, { kind: 'phase-text' }> =>
+        segment.kind === 'phase-text',
+    );
+    expect(phaseTexts).toHaveLength(3);
+    const keys = phaseTexts.map((segment) => segment.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys[0]).toBe(OPENING_PHASE_TEXT_KEY);
+    expect(done.segments.filter((s) => s.kind === 'tool-group')).toHaveLength(2);
+  });
 });
 
 describe('rebalanceThinkingTimelineForDisplay', () => {
