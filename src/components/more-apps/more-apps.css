@@ -1267,6 +1267,12 @@
   color: var(--ma-text-muted);
 }
 
+.page-more-apps .more-apps-card__foot-actions {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+}
+
 .page-more-apps .more-apps-card__install {
   flex-shrink: 0;
   padding: 5px 14px;
