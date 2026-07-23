@@ -635,9 +635,9 @@ export async function activateUserWorkspace(userCode: string): Promise<ActivateW
     await ensureUserWorkspace(userCode);
     clearMountPoint();
     await copyUserToMountPoint(userCode);
-  } else {
-    await ensureUserWorkspace(userCode);
   }
+  // After skills-store migration, do not recreate openclaw/users — canonical
+  // user skills live under skills-store/users and OpenClaw only mirrors openclaw/skills.
 
   try {
     const cloudSlugs = await fetchCloudInstalledList();
