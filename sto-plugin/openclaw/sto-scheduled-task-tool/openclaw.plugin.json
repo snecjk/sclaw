@@ -20,13 +20,6 @@
       }
     }
   },
-  "tools": ["create_scheduled_task"],
-  "toolConfig": {
-    "create_scheduled_task": {
-      "label": "创建定时任务",
-      "help": "当用户需要创建定时任务时调用此工具，从自然语言描述中提取任务参数"
-    }
-  },
   "uiHints": {
     "toolSelection": {
       "label": "工具选择",

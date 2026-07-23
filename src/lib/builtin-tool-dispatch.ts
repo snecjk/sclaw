@@ -4,7 +4,6 @@
  */
 import { toast } from 'sonner';
 import {
-  extractToolResultText,
   parseStoToolEnvelope,
   type WorkflowCreatedData,
   type WorkflowExecutionStartedData,
@@ -45,21 +44,6 @@ function resolveDispatchContext(ctx?: BuiltinToolDispatchContext): BuiltinToolDi
   };
 }
 
-export type ScheduledTaskConfirmationValues = {
-  name: string;
-  message?: string;
-  schedule: string;
-};
-
-let scheduledTaskConfirmationHandler: ((values: ScheduledTaskConfirmationValues) => void) | undefined;
-
-/** Registered by useBuiltinToolListener (Home NL scheduled-task modal). */
-export function registerScheduledTaskConfirmationHandler(
-  handler: ((values: ScheduledTaskConfirmationValues) => void) | undefined,
-): void {
-  scheduledTaskConfirmationHandler = handler;
-}
-
 const processedToolResults = new Set<string>();
 
 function messageDedupeKey(msg: BuiltinToolResultMessage): string | null {
@@ -81,7 +65,7 @@ function handleWorkflowCreated(data: WorkflowCreatedData): void {
     collectedInputs: data.values ?? {},
     createdAt: Date.now(),
   });
-  
+
 }
 
 async function handleWorkflowExecutionStarted(
@@ -117,36 +101,9 @@ export function syncWorkflowCardsAfterToolDispatch(sessionKey: string): void {
   }
 }
 
-/** Parse legacy scheduled_task_confirmation envelope for UI callback. */
-function parseScheduledTaskConfirmation(content: unknown): {
-  name: string;
-  message?: string;
-  schedule: string;
-} | null {
-  const text = extractToolResultText(content);
-  if (!text) return null;
-  try {
-    const parsed = JSON.parse(text) as {
-      type?: string;
-      success?: boolean;
-      extractedParams?: { name?: string; cronExpr?: string; description?: string };
-    };
-    if (parsed.type !== 'scheduled_task_confirmation' || parsed.success === false) return null;
-    const params = parsed.extractedParams ?? {};
-    if (!params.name || !params.cronExpr) return null;
-    return {
-      name: params.name,
-      message: params.description,
-      schedule: params.cronExpr,
-    };
-  } catch {
-    return null;
-  }
-}
-
 /**
- * Process a Gateway tool_result final message (workflow + scheduled task).
- * Returns true when the result was handled (workflow envelope or scheduled task).
+ * Process a Gateway tool_result final message (workflow envelopes).
+ * Returns true when the result was handled (workflow envelope).
  */
 export async function dispatchBuiltinToolResult(
   msg: BuiltinToolResultMessage,
@@ -183,17 +140,6 @@ export async function dispatchBuiltinToolResult(
   if (envelope?.type === 'dingtalk_share_picker_opened' && envelope.success) {
     toast.success(envelope.message ?? '已唤起钉钉选人发送页面');
     return true;
-  }
-
-  if (
-    msg.toolName === 'create_scheduled_task'
-    || envelope?.type === 'scheduled_task_confirmation'
-  ) {
-    const values = parseScheduledTaskConfirmation(msg.content);
-    if (values && scheduledTaskConfirmationHandler) {
-      scheduledTaskConfirmationHandler(values);
-      return true;
-    }
   }
 
   return false;

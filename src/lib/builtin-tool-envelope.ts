@@ -46,17 +46,6 @@ export interface WorkflowCreatedData {
   values?: Record<string, unknown>;
 }
 
-export interface ScheduledTaskConfirmationData {
-  type: 'scheduled_task_confirmation';
-  success?: boolean;
-  extractedParams?: {
-    name?: string;
-    cronExpr?: string;
-    description?: string;
-    notifyMode?: string;
-  };
-}
-
 /** Extract JSON text from tool result content (string or content blocks). */
 export function extractToolResultText(content: unknown): string | null {
   if (typeof content === 'string') return content;

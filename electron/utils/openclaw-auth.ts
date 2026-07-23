@@ -1628,13 +1628,8 @@ export async function syncStoPluginsToOpenClaw(): Promise<boolean> {
     plugins.entries = entries;
     config.plugins = plugins;
 
-    // Deny create_scheduled_task so natural-language requests do not route to the cloud flow.
-    // The built-in "cron" tool is left available for local scheduled jobs if the runtime provides it.
     const tools = (config.tools || {}) as Record<string, unknown>;
     const deny = Array.isArray(tools.deny) ? [...(tools.deny as string[])] : [];
-    if (!deny.includes('create_scheduled_task')) {
-      deny.push('create_scheduled_task');
-    }
     // NL workflow creation uses inline parameter form + HostApi; model must not create with defaults.
     if (!deny.includes('create_workflow')) {
       deny.push('create_workflow');
