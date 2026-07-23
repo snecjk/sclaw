@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildNewDingTalkSessionKey,
   isDingTalkNewSessionCommand,
+  resolveChannelBaseAgentId,
   resolveDingTalkSessionKey,
   shouldForceNewDingTalkSessionForEngine,
   shouldStartNewDingTalkSession,
@@ -140,5 +141,11 @@ describe('DingTalk session lifecycle', () => {
       }),
       nonce: 'bbbb',
     })).toBe('agent:main:dingtalk:cid-1:20260720110000:bbbb');
+  });
+
+  it('strips project agent ids so channel sessions stay on the base agent', () => {
+    expect(resolveChannelBaseAgentId('proj-ws-test-2--main')).toBe('main');
+    expect(resolveChannelBaseAgentId('Main')).toBe('main');
+    expect(resolveChannelBaseAgentId(null)).toBe('main');
   });
 });
