@@ -28,7 +28,16 @@ export const homeHubCardTitleClass = cn('text-sm font-medium leading-[18px]', ho
 
 export const homeHubCardDescClass = cn('text-xs leading-[18px]', homeHubTextSecondary);
 
-export const homeHubCardGridClass = 'grid w-full items-stretch gap-4 sm:grid-cols-3';
+/**
+ * 卡片区滚动壳：占满 Hero 下方剩余高度并在内部滚动。
+ * 必须用独立 block 容器承载 overflow（不要直接挂在 grid 上），
+ * 且父级需 overflow-hidden，避免和外层抢滚轮。
+ */
+export const homeHubCardScrollClass =
+  'min-h-0 w-full flex-1 basis-0 overflow-y-auto overscroll-y-contain';
+
+/** 能力卡片网格（只负责布局，高度/滚动由 homeHubCardScrollClass 负责） */
+export const homeHubCardGridClass = 'grid w-full items-stretch content-start gap-4 sm:grid-cols-3';
 
 /** 卡片中间区：占据剩余高度，把底栏顶到底部 */
 export const homeHubCardBodyRegionClass = 'mt-5 min-h-[4.5rem] flex-1';
@@ -45,10 +54,13 @@ export const homeHubContentMaxWidthClass =
 export const homeHubMainScrollHostClass =
   'home-hub-main-scroll-host flex min-h-0 flex-1 flex-col overflow-hidden';
 
-/** Hero + 卡片主滚动区（与底部输入框同宽居中；对齐策略见 globals.css @container home-hub-main） */
+/**
+ * Hero + 卡片列：与底部输入同宽居中。
+ * overflow-hidden：滚动交给卡片滚动壳，避免嵌套滚动导致“滚不动”。
+ */
 export const homeHubMainScrollClass = cn(
   homeHubContentMaxWidthClass,
-  'home-hub-main-scroll flex min-h-0 flex-1 flex-col justify-start gap-10 overflow-y-auto overscroll-y-contain pb-6 pt-4 sm:pt-6',
+  'home-hub-main-scroll flex min-h-0 flex-1 flex-col justify-start gap-10 overflow-hidden pb-6 pt-4 sm:pt-6',
 );
 
 /** 底部输入 + 免责区外壳（底边距与对话列一致，仅依赖 MainLayout body pb-5） */
