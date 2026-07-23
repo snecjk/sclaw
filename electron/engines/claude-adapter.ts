@@ -23,6 +23,7 @@ import {
   appendArchivedClaudeSessionId,
   isMissingClaudeConversationError,
 } from './claude-session-recovery';
+import { mergeClaudeExecutionEntries, parseClaudeExecutionTurn, type ClaudeExecutionEntryBatch } from './claude-execution-snapshot';
 
 /**
  * Minimal event sink used to forward Claude streaming events to the renderer.
@@ -586,6 +587,28 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
     isRunning: activeClaudeQueries.has(sessionKey),
     runtimeResult: claudeRuntimeResults.get(sessionKey) ?? null,
   };
+}
+
+async function buildClaudeExecutionSnapshot(
+  entry: EngineSessionRegistryEntry,
+  limit: number,
+) {
+  const sessionIds = [
+    ...(entry.archivedClaudeSessionIds ?? []),
+    ...(entry.sessionId ? [entry.sessionId] : []),
+  ];
+  const batches: ClaudeExecutionEntryBatch[] = [];
+
+  for (const sessionId of sessionIds) {
+    const batch = await getClaudeSessionMessages(sessionId, entry.cwd ?? '');
+    batches.push({
+      sessionId,
+      entries: batch as unknown as Record<string, unknown>[],
+    });
+  }
+
+  const entries = mergeClaudeExecutionEntries(batches, limit);
+  return parseClaudeExecutionTurn(entries);
 }
 
 function shouldKeepClaudeWorkflowToolResult(messagePayload: unknown): boolean {
@@ -1179,6 +1202,22 @@ export const claudeAdapter: EngineAdapter = {
         entry.cwd,
       );
       return { success: true, result };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  },
+
+  async getExecutionSnapshot(_ctx, params) {
+    const entry = await getEngineSessionRegistryEntry(params.sessionKey);
+    if (!entry?.cwd || (!entry.sessionId && !(entry.archivedClaudeSessionIds?.length))) {
+      return { success: true, result: null };
+    }
+
+    try {
+      return {
+        success: true,
+        result: await buildClaudeExecutionSnapshot(entry, params.limit),
+      };
     } catch (error) {
       return { success: false, error: String(error) };
     }
