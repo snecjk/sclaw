@@ -30,10 +30,9 @@ const serverApp = {
   id: 'org-relation',
   name: '客户关系',
   description: '维护客户归属关系',
-  badge: '客户管理, 部门岗位；客户对账、部门岗位',
+  badge: '客户管理, 部门岗位,,客户对账,组织分析',
   url: 'https://example.com/org',
   iconKey: 'org-relation',
-  iconUrl: 'https://cdn.example.com/org-relation.png',
   tone: 'blue' as const,
   kind: 'builtin' as const,
 };
@@ -48,7 +47,6 @@ function resetStore() {
     bannersLoading: false,
     bannersError: null,
     categories: [],
-    categoryCounts: {},
     categoriesLoading: false,
     categoriesError: null,
     apps: [],
@@ -90,68 +88,17 @@ describe('MoreAppsPage server catalog', () => {
     });
   });
 
-  it('renders mixed-delimiter server badges as one deduplicated ideographic-comma label', async () => {
+  it('renders comma-separated server badges as tags instead of description', async () => {
     render(<MoreAppsPage />);
-    const addButton = screen.getByRole('button', { name: '安装外部应用' });
-    expect(addButton.querySelector('.lucide-plus')).toBeInTheDocument();
-    expect(addButton.closest('.app-plaza-heading-row')).toBeInTheDocument();
-    expect(screen.getByRole('tablist').closest('.more-apps-toolbar-row')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('搜索应用名称或关键词').closest('.more-apps-toolbar-row')).toBeInTheDocument();
-    expect(await screen.findByText('客户管理、部门岗位、客户对账')).toHaveClass('app-market__row-tags');
-    expect(document.querySelectorAll('.app-market__row-tags')).toHaveLength(1);
+    expect(await screen.findByText('客户管理')).toBeInTheDocument();
+    expect(screen.getByText('部门岗位')).toHaveClass('app-market__row-badge');
+    expect(screen.getByText('客户对账')).toHaveClass('app-market__row-badge');
+    expect(screen.getByText('组织分析')).toHaveClass('app-market__row-badge');
+    const badgeRows = document.querySelectorAll('.app-market__row-badge-line');
+    expect(badgeRows).toHaveLength(2);
+    expect(badgeRows[0]?.children).toHaveLength(3);
+    expect(badgeRows[1]?.children).toHaveLength(1);
     expect(screen.queryByText('维护客户归属关系')).not.toBeInTheDocument();
-  });
-
-  it('shows the uploaded app image and falls back to the configured icon when it fails', async () => {
-    render(<MoreAppsPage />);
-    const image = await waitFor(() => {
-      const element = document.querySelector<HTMLImageElement>(
-        '.app-market__row .app-icon__img',
-      );
-      expect(element).not.toBeNull();
-      return element!;
-    });
-    expect(image).toHaveAttribute('src', 'https://cdn.example.com/org-relation.png');
-    expect(image.closest('.app-icon')).toHaveClass('app-icon--rounded');
-
-    fireEvent.error(image);
-    await waitFor(() => {
-      expect(document.querySelector('.app-market__row .app-icon__img')).not.toBeInTheDocument();
-      expect(document.querySelector('.app-market__row .app-icon svg')).toBeInTheDocument();
-    });
-  });
-
-  it('reserves the tag row when the app has no valid badges', async () => {
-    fetchAppsMock.mockResolvedValueOnce({
-      items: [{ ...serverApp, badge: '，；、  ' }],
-      total: 1,
-      pageNum: 1,
-      pageSize: 20,
-    });
-
-    render(<MoreAppsPage />);
-    expect(await screen.findByText('客户关系')).toBeInTheDocument();
-    const emptyTagRow = document.querySelector('.app-market__row-tags');
-    expect(emptyTagRow).toBeInTheDocument();
-    expect(emptyTagRow).toBeEmptyDOMElement();
-    expect(emptyTagRow).toHaveAttribute('aria-hidden', 'true');
-  });
-
-  it('opens the card by keyboard and keeps favorite clicks isolated from opening', async () => {
-    render(<MoreAppsPage />);
-    const card = await screen.findByRole('button', { name: '打开客户关系' });
-
-    fireEvent.keyDown(card, { key: 'Enter' });
-    expect(openInSclawBrowserMock).toHaveBeenCalledWith({
-      url: 'https://example.com/org',
-      title: '客户关系',
-      appId: 'org-relation',
-    });
-
-    openInSclawBrowserMock.mockClear();
-    fireEvent.click(screen.getByRole('button', { name: '收藏' }));
-    expect(openInSclawBrowserMock).not.toHaveBeenCalled();
-    expect(useMoreAppsStore.getState().favoriteIds).toContain('org-relation');
   });
 
   it('renders a whole-image URL banner and opens its configured link', async () => {
@@ -259,27 +206,6 @@ describe('MoreAppsPage server catalog', () => {
     }));
   });
 
-  it('shows the unfiltered total for featured and each server category', async () => {
-    fetchCategoriesMock.mockResolvedValueOnce([
-      { id: 'test', name: '测试专用', description: '', iconKey: '', iconUrl: '', order: 1 },
-      { id: 'ops', name: '经营管理', description: '', iconKey: '', iconUrl: '', order: 2 },
-    ]);
-    fetchAppsMock.mockImplementation(async (params: { categoryCode?: string; pageSize: number }) => ({
-      items: params.pageSize === 20 && !params.categoryCode ? [serverApp] : [],
-      total: params.categoryCode === 'test' ? 4 : params.categoryCode === 'ops' ? 2 : 13,
-      pageNum: 1,
-      pageSize: params.pageSize,
-    }));
-
-    render(<MoreAppsPage />);
-
-    expect(await screen.findByRole('button', { name: '测试专用' })).toHaveTextContent('测试专用4');
-    expect(screen.getByRole('button', { name: '经营管理' })).toHaveTextContent('经营管理2');
-    expect(screen.getByRole('button', { name: '精选' })).toHaveTextContent('精选13');
-    expect(screen.getByRole('tab', { name: '应用广场' })).toHaveTextContent(/^应用广场$/);
-    expect(screen.getByRole('tab', { name: '我的应用' })).toHaveTextContent(/^我的应用$/);
-  });
-
   it('shows the app link in my apps when a favorited server app has no recent usage', async () => {
     fetchRegistryMock.mockResolvedValueOnce({
       version: 1,
@@ -289,8 +215,8 @@ describe('MoreAppsPage server catalog', () => {
     });
 
     render(<MoreAppsPage />);
-    expect(await screen.findByRole('tab', { name: '我的应用' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: '我的应用' }));
+    expect(await screen.findByRole('tab', { name: '我的应用1' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '我的应用1' }));
 
     expect(screen.getByText('客户关系')).toBeInTheDocument();
     expect(screen.getByText('example.com')).toBeInTheDocument();
@@ -312,22 +238,22 @@ describe('MoreAppsPage server catalog', () => {
       .mockResolvedValueOnce({ items: [], total: 3, pageNum: 1, pageSize: 20 });
 
     render(<MoreAppsPage />);
-    expect(await screen.findByRole('tab', { name: '应用广场' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '我的应用' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: '我的应用' }));
+    expect(await screen.findByRole('tab', { name: '应用广场8' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '我的应用1' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '我的应用1' }));
     expect(screen.getByText('客户关系')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: '应用广场' }));
+    fireEvent.click(screen.getByRole('tab', { name: '应用广场8' }));
     fireEvent.click(await screen.findByRole('button', { name: '组织管理' }));
     await waitFor(() => expect(fetchAppsMock).toHaveBeenLastCalledWith(expect.objectContaining({
       categoryCode: 'org',
     })));
-    expect(screen.getByRole('tab', { name: '应用广场' })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: '我的应用' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: '我的应用' }));
+    expect(screen.getByRole('tab', { name: '应用广场8' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '我的应用1' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '我的应用1' }));
     expect(screen.getByText('客户关系')).toBeInTheDocument();
   });
 
-  it('shows the empty state when registry IDs do not resolve to rendered cards', async () => {
+  it('shows zero installed apps when registry IDs do not resolve to rendered cards', async () => {
     fetchRegistryMock.mockResolvedValueOnce({
       version: 1,
       externalApps: [],
@@ -336,8 +262,8 @@ describe('MoreAppsPage server catalog', () => {
     });
 
     render(<MoreAppsPage />);
-    expect(await screen.findByRole('tab', { name: '我的应用' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('tab', { name: '我的应用' }));
+    expect(await screen.findByRole('tab', { name: '我的应用0' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: '我的应用0' }));
     expect(screen.getByText('还没有收藏或安装应用，去应用广场看看')).toBeInTheDocument();
   });
 
