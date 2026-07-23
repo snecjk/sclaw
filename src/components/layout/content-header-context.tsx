@@ -21,8 +21,10 @@ export interface ContentHeaderSlot {
   title: ReactNode;
   /** 三栏预览打开时：产物 tab 行（与右侧 icon 同高对齐） */
   previewTabs?: ReactNode;
-  /** 右侧操作区（icon 组） */
+  /** 页面/会话级操作：搜索、刷新、思考等 */
   actions?: ReactNode;
+  /** 面板级操作：预览展开/收起等；三栏时落在预览列尾部 */
+  panelActions?: ReactNode;
   /** 三栏预览已展开：MainLayout body 去掉水平 px，由 split row 与 header 共用 inset */
   isSplitLayout?: boolean;
   /** 会话标题 chip 关闭；传入时在字符串标题上渲染 pill + × */
@@ -64,6 +66,7 @@ export function ContentHeaderProvider({ children }: { children: ReactNode }) {
         prev.title === next.title &&
         prev.previewTabs === next.previewTabs &&
         prev.actions === next.actions &&
+        prev.panelActions === next.panelActions &&
         prev.isSplitLayout === next.isSplitLayout &&
         prev.onCloseSession === next.onCloseSession
       ) {
@@ -90,11 +93,12 @@ function useContentHeaderRegistry() {
   return ctx;
 }
 
-/** 当前页面向全局 ContentHeader 注入 title / previewTabs / actions；卸载时自动清空 */
+/** 当前页面向全局 ContentHeader 注入 title / previewTabs / actions / panelActions；卸载时自动清空 */
 export function useContentHeader({
   title,
   previewTabs,
   actions,
+  panelActions,
   isSplitLayout = false,
   onCloseSession,
   enabled = true,
@@ -106,16 +110,17 @@ export function useContentHeader({
       setSlot(null);
       return;
     }
-    setSlot({ title, previewTabs, actions, isSplitLayout, onCloseSession });
+    setSlot({ title, previewTabs, actions, panelActions, isSplitLayout, onCloseSession });
     return () => setSlot(null);
-  }, [title, previewTabs, actions, isSplitLayout, onCloseSession, enabled, setSlot]);
+  }, [title, previewTabs, actions, panelActions, isSplitLayout, onCloseSession, enabled, setSlot]);
 }
 
-/** ContentHeader 组件读取当前应展示的 title / previewTabs / actions（含路由默认标题） */
+/** ContentHeader 组件读取当前应展示的槽位（含路由默认标题） */
 export function useContentHeaderDisplay(): {
   title: ReactNode | null;
   previewTabs: ReactNode | null;
   actions: ReactNode | null;
+  panelActions: ReactNode | null;
   isSplitLayout: boolean;
   onCloseSession: (() => void) | null;
 } {
@@ -131,6 +136,7 @@ export function useContentHeaderDisplay(): {
     title,
     previewTabs: slot?.previewTabs ?? null,
     actions: slot?.actions ?? null,
+    panelActions: slot?.panelActions ?? null,
     isSplitLayout: slot?.isSplitLayout ?? false,
     onCloseSession: slot?.onCloseSession ?? null,
   };

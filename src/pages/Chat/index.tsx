@@ -19,7 +19,7 @@ import { useChatDisplay } from './use-chat-display';
 import { isAssistantRole, resolveActiveTurnStableKey } from './chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
-import { ChatContentHeaderActions } from './ChatSearchBar';
+import { ChatConversationHeaderActions, ChatPreviewPanelActions } from './ChatSearchBar';
 import { ChatPreviewHeaderTabs } from './ChatPreviewHeaderTabs';
 import { PendingQueuePanel } from './PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
@@ -38,11 +38,10 @@ import {
   stoChatScrollContentClass,
   stoSplitGridBodyChatClass,
   stoSplitGridBodyPreviewClass,
-  stoSplitGridBodyResizerClass,
-  stoSplitResizerActiveClass,
   stoSplitRowContentsClass,
 } from '@/lib/surfaces';
 import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
+import { SplitPanelResizeHandle } from '@/components/layout/split-panel-resize-handle';
 import { useSettingsStore } from '@/stores/settings';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
@@ -93,7 +92,7 @@ export function Chat() {
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
   const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
-  const { splitRowRef, previewPanelRef, startResize, isResizing } = useSplitPanelResize(
+  const { splitRowRef, previewPanelRef, startResize, adjustPreviewPercent, isResizing } = useSplitPanelResize(
     previewPanelPercent,
     setPreviewSplitPercent,
   );
@@ -441,15 +440,9 @@ export function Chat() {
     [currentSessionKey, currentSession?.displayName, currentSession?.label, sessionLabels, t],
   );
 
-  const headerActions = useMemo(
+  const conversationHeaderActions = useMemo(
     () => (
-      <ChatContentHeaderActions
-        canShowPreviewPanel={canShowPreviewPanel}
-        isPreviewPanelOpen={showPreviewPanel}
-        onTogglePreview={() => {
-          if (showPreviewPanel) closePreviewPanel();
-          else openPreviewPanel();
-        }}
+      <ChatConversationHeaderActions
         showThinking={showThinking}
         onToggleThinking={toggleThinking}
         loading={loading}
@@ -473,10 +466,6 @@ export function Chat() {
       />
     ),
     [
-      canShowPreviewPanel,
-      showPreviewPanel,
-      closePreviewPanel,
-      openPreviewPanel,
       showThinking,
       toggleThinking,
       loading,
@@ -489,6 +478,25 @@ export function Chat() {
       handleSearchClear,
       searchMatches.length,
       activeSearchIndex,
+    ],
+  );
+
+  const previewPanelHeaderActions = useMemo(
+    () => (
+      <ChatPreviewPanelActions
+        canShowPreviewPanel={canShowPreviewPanel}
+        isPreviewPanelOpen={showPreviewPanel}
+        onTogglePreview={() => {
+          if (showPreviewPanel) closePreviewPanel();
+          else openPreviewPanel();
+        }}
+      />
+    ),
+    [
+      canShowPreviewPanel,
+      showPreviewPanel,
+      closePreviewPanel,
+      openPreviewPanel,
     ],
   );
 
@@ -515,7 +523,8 @@ export function Chat() {
   useContentHeader({
     title: sessionTitle,
     previewTabs: previewHeaderTabs,
-    actions: headerActions,
+    actions: conversationHeaderActions,
+    panelActions: previewPanelHeaderActions,
     isSplitLayout: canShowPreviewPanel && showPreviewPanel,
   });
 
@@ -706,18 +715,14 @@ export function Chat() {
         </div>
       )}
       </ChatConversationColumn>
-      {/* Resizer */}
+      {/* Resize handle — 0px track; hit + hint edge align preview left stroke */}
       {canShowPreviewPanel && showPreviewPanel && (
-        <div
-          onMouseDown={startResize}
-          className={cn(
-            stoSplitGridBodyResizerClass,
-            isResizing && stoSplitResizerActiveClass,
-          )}
-          style={{ cursor: isResizing ? 'col-resize' : undefined }}
-        >
-          <div className={cn('h-8 w-0.5 rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
-        </div>
+        <SplitPanelResizeHandle
+          valuePercent={previewPanelPercent}
+          isResizing={isResizing}
+          onResizeStart={startResize}
+          onKeyboardAdjust={adjustPreviewPercent}
+        />
       )}
 
       {/* Right: Preview Panel */}

@@ -203,6 +203,7 @@
     },
     "preview": {
         "collapsePanel": "Collapse preview",
+        "resizeSeparator": "Resize preview panel",
         "overflowMenu": "All artifacts",
         "fullscreen": "Fullscreen",
         "refresh": "Refresh",

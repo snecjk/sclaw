@@ -1,8 +1,8 @@
 /**
  * ContentHeader — 省区主内容白卡片顶部 52px 全局标题栏。
  *
- * 双栏：左=侧栏展开钮+会话 chip，右=actions。
- * 三栏：grid 与 split row 同列宽——左=侧栏+会话，中=resizer 占位，右=预览 tab+actions。
+ * 双栏：左=侧栏展开钮+会话 chip，右=actions + panelActions。
+ * 三栏：真实连续 52px Header（内嵌三列 grid 对齐 body）；左列=title+会话工具，右列=预览 tab+面板工具。
  * macOS 侧栏收起时 pad-start 走 CSS 变量（与 split row 共用），避让红绿灯。
  */
 import { isValidElement } from 'react';
@@ -10,15 +10,14 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
   contentHeaderBarClass,
+  contentHeaderSplitBarClass,
   contentHeaderSplitChatZoneClass,
   contentHeaderSplitPreviewZoneClass,
   contentHeaderTitleClass,
   contentHeaderTitleGroupClass,
   contentHeaderWinControlsReserveClass,
-  stoSplitGridContentsClass,
   stoSplitGridHeaderChatClass,
   stoSplitGridHeaderPreviewClass,
-  stoSplitGridHeaderResizerClass,
 } from '@/lib/surfaces';
 import { ContentHeaderSessionChip } from '@/components/layout/content-header-session-chip';
 import { useContentHeaderDisplay } from '@/components/layout/content-header-context';
@@ -29,7 +28,8 @@ import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 
 export function ContentHeader() {
   const { t } = useTranslation('common');
-  const { title, previewTabs, actions, isSplitLayout, onCloseSession } = useContentHeaderDisplay();
+  const { title, previewTabs, actions, panelActions, isSplitLayout, onCloseSession } =
+    useContentHeaderDisplay();
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
   const workflowEditorActive = useWorkflowUiStore((s) => s.editorActive);
@@ -50,7 +50,9 @@ export function ContentHeader() {
     <div
       className={cn(
         contentHeaderTitleGroupClass,
-        isSplitLayout && 'max-w-none min-w-0 shrink',
+        // 三栏只允许继续收缩，不得取消 max-w-[min(34vw,280px)]（与两栏一致）
+        isSplitLayout && 'min-w-0 shrink',
+        isSplitLayout && 'overflow-hidden',
         workflowEditorActive && showTitle && 'max-w-none min-w-0 flex-1',
         !showTitle && !sidebarCollapsed && 'min-w-0',
       )}
@@ -81,6 +83,12 @@ export function ContentHeader() {
     </div>
   ) : null;
 
+  const panelActionsZone = panelActions ? (
+    <div className="no-drag flex shrink-0 items-center gap-1">
+      {panelActions}
+    </div>
+  ) : null;
+
   /** Win 列表页等无 actions 时，drag-region 会挡住 AppShellChromeOverlay 的窗口三分控件 */
   const winControlsReserve = isWin ? (
     <div className={contentHeaderWinControlsReserveClass} aria-hidden />
@@ -88,16 +96,19 @@ export function ContentHeader() {
 
   if (isSplitLayout) {
     return (
-      <header className={stoSplitGridContentsClass} aria-label={t('sidebar.chat')}>
+      <header className={contentHeaderSplitBarClass} aria-label={t('sidebar.chat')}>
         <div className={stoSplitGridHeaderChatClass}>
-          <div className={contentHeaderSplitChatZoneClass}>{titleZone}</div>
+          <div className={contentHeaderSplitChatZoneClass}>
+            {titleZone}
+            <div className="min-w-0 flex-1" aria-hidden />
+            {actionsZone}
+          </div>
         </div>
-        <div className={stoSplitGridHeaderResizerClass} aria-hidden />
         <div className={stoSplitGridHeaderPreviewClass}>
           <div
             className={cn(
               contentHeaderSplitPreviewZoneClass,
-              !previewTabs && actionsZone && 'justify-end',
+              !previewTabs && panelActionsZone && 'justify-end',
             )}
           >
             {previewTabs ? (
@@ -105,7 +116,7 @@ export function ContentHeader() {
             ) : (
               <div className="min-w-0 flex-1" aria-hidden />
             )}
-            {actionsZone}
+            {panelActionsZone}
             {winControlsReserve}
           </div>
         </div>
@@ -118,6 +129,7 @@ export function ContentHeader() {
       {titleZone}
       <div className="min-w-0 flex-1" aria-hidden />
       {actionsZone}
+      {panelActionsZone}
       {winControlsReserve}
     </header>
   );

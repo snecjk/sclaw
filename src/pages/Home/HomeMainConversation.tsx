@@ -11,7 +11,7 @@ import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
-import { ChatContentHeaderActions } from '@/pages/Chat/ChatSearchBar';
+import { ChatConversationHeaderActions, ChatPreviewPanelActions } from '@/pages/Chat/ChatSearchBar';
 import { ChatPreviewHeaderTabs } from '@/pages/Chat/ChatPreviewHeaderTabs';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
@@ -25,11 +25,10 @@ import {
   stoChatScrollPaneSplitClass,
   stoSplitGridBodyChatClass,
   stoSplitGridBodyPreviewClass,
-  stoSplitGridBodyResizerClass,
-  stoSplitResizerActiveClass,
   stoSplitRowContentsClass,
 } from '@/lib/surfaces';
 import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
+import { SplitPanelResizeHandle } from '@/components/layout/split-panel-resize-handle';
 import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
 import { useStoTaskSubitemEntry } from '@/hooks/use-sto-task-subitem-entry';
@@ -262,7 +261,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
 
   const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
   const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
-  const { splitRowRef, previewPanelRef, startResize, isResizing } = useSplitPanelResize(
+  const { splitRowRef, previewPanelRef, startResize, adjustPreviewPercent, isResizing } = useSplitPanelResize(
     previewPanelPercent,
     setPreviewSplitPercent,
   );
@@ -317,15 +316,9 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     [currentSessionKey, currentSession?.displayName, currentSession?.label, sessionLabels, t],
   );
 
-  const headerActions = useMemo(
+  const conversationHeaderActions = useMemo(
     () => (
-      <ChatContentHeaderActions
-        canShowPreviewPanel={canShowPreviewPanel}
-        isPreviewPanelOpen={showPreviewPanel}
-        onTogglePreview={() => {
-          if (showPreviewPanel) closePreviewPanel();
-          else openPreviewPanel();
-        }}
+      <ChatConversationHeaderActions
         showThinking={showThinking}
         onToggleThinking={toggleThinking}
         loading={loading}
@@ -349,10 +342,6 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
       />
     ),
     [
-      canShowPreviewPanel,
-      showPreviewPanel,
-      closePreviewPanel,
-      openPreviewPanel,
       showThinking,
       toggleThinking,
       loading,
@@ -365,6 +354,25 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
       handleSearchClear,
       searchMatches.length,
       activeSearchIndex,
+    ],
+  );
+
+  const previewPanelHeaderActions = useMemo(
+    () => (
+      <ChatPreviewPanelActions
+        canShowPreviewPanel={canShowPreviewPanel}
+        isPreviewPanelOpen={showPreviewPanel}
+        onTogglePreview={() => {
+          if (showPreviewPanel) closePreviewPanel();
+          else openPreviewPanel();
+        }}
+      />
+    ),
+    [
+      canShowPreviewPanel,
+      showPreviewPanel,
+      closePreviewPanel,
+      openPreviewPanel,
     ],
   );
 
@@ -391,7 +399,8 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   useContentHeader({
     title: sessionTitle,
     previewTabs: previewHeaderTabs,
-    actions: headerActions,
+    actions: conversationHeaderActions,
+    panelActions: previewPanelHeaderActions,
     isSplitLayout: canShowPreviewPanel && showPreviewPanel,
   });
 
@@ -540,18 +549,14 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
       ) : null}
       </ChatConversationColumn>
 
-    {/* Resizer */}
+    {/* Resize handle — 0px track; hit + hint edge align preview left stroke */}
     {canShowPreviewPanel && showPreviewPanel && (
-      <div
-        onMouseDown={startResize}
-        className={cn(
-          stoSplitGridBodyResizerClass,
-          isResizing && stoSplitResizerActiveClass,
-        )}
-        style={{ cursor: isResizing ? 'col-resize' : undefined }}
-      >
-        <div className={cn('h-8 w-0.5 rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
-      </div>
+      <SplitPanelResizeHandle
+        valuePercent={previewPanelPercent}
+        isResizing={isResizing}
+        onResizeStart={startResize}
+        onKeyboardAdjust={adjustPreviewPercent}
+      />
     )}
 
     {/* Right: Preview Panel */}
