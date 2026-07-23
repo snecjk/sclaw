@@ -64,7 +64,7 @@ export const userChatBubbleSurfaceClass = cn(
  * 使用位置：HomeComposer showProjectPicker。
  */
 export const chatComposerHomeStackShellClass = cn(
-  'flex flex-col gap-2 overflow-hidden rounded-[22px] bg-[#F5F5F5] p-0',
+  'flex flex-col gap-2 rounded-[22px] bg-[#F5F5F5] p-0',
   'dark:bg-muted/60',
 );
 
