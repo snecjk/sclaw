@@ -4,13 +4,15 @@ import { rememberSessionEngineType } from '../engines/session-engine';
 import { getEngineSessionRegistryEntry } from '../engines/session-registry';
 import type { AgentEngineType } from '../engines/types';
 import type { GatewayManager } from '../gateway/manager';
+import { DEFAULT_WORKSPACE_ID } from '../db/models/domain/session-catalog';
 import {
+  ensureCatalogSessionInDefaultWorkspace,
   getLatestChannelCatalogSession,
-  getSessionWorkspaceId,
   upsertCatalogSession,
 } from '../services/session-catalog-service';
 import { getChannelConnection } from './binding-service';
 import {
+  resolveChannelBaseAgentId,
   resolveDingTalkSessionKey,
   shouldForceNewDingTalkSessionForEngine,
 } from './session-lifecycle';
@@ -37,7 +39,8 @@ export interface SessionFacadeHandle {
 export async function createOrGetSession(
   params: SessionFacadeCreateParams,
 ): Promise<SessionFacadeHandle> {
-  const agentId = (params.agentId || 'main').trim() || 'main';
+  // Channel 会话只用 base agent，避免 sessionKey / currentAgentId 带上 proj-… 从而命中输入框项目名规则
+  const agentId = resolveChannelBaseAgentId(params.agentId);
   const engineType: AgentEngineType =
     params.engineType === 'openclaw' || params.engineType === 'claude'
       ? params.engineType
@@ -66,11 +69,11 @@ export async function createOrGetSession(
     now,
   });
   await rememberSessionEngineType(sessionKey, engineType);
-  // 同一频道换新会话时继承原 workspace；首次创建才回落 default。
-  const workspaceId = latestSession?.workspaceId
-    ?? await getSessionWorkspaceId(sessionKey);
+  // Channel 会话固定挂 default（进「最近」），不继承侧栏项目 workspace，
+  // 否则会命中输入框 sessionWorkspaceByKey → 「Main Agent · 测试2」。
+  await ensureCatalogSessionInDefaultWorkspace(sessionKey);
   await upsertCatalogSession({
-    workspaceId,
+    workspaceId: DEFAULT_WORKSPACE_ID,
     sessionKey,
     sessionType: 'channel',
     channelType: params.channelType,
@@ -89,7 +92,7 @@ export async function resolveDingTalkBinding(): Promise<{
     throw new Error('DingTalk hub not bound');
   }
   return {
-    agentId: conn.agentId || 'main',
+    agentId: resolveChannelBaseAgentId(conn.agentId),
     engineType: conn.engineType === 'openclaw' ? 'openclaw' : 'claude',
   };
 }
