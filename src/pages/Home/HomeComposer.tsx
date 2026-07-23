@@ -12,7 +12,12 @@ import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useMessageQueueStore } from '@/stores/message-queue';
 import { cn } from '@/lib/utils';
-import { stoChatShellHomeClass, stoHeroInputShellClass, stoParameterFormDockLayout } from '@/lib/surfaces';
+import {
+  chatComposerHomeStackShellClass,
+  stoChatShellHomeClass,
+  stoHeroInputShellClass,
+  stoParameterFormDockLayout,
+} from '@/lib/surfaces';
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
 import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
@@ -134,13 +139,24 @@ export function HomeComposer({
         className={cn(stoChatShellHomeClass, 'px-0')}
       />
       <section className="flex flex-col" aria-label={t('assistant.placeholder')}>
-        <ChatInput
-          {...inputProps}
-          composerLayout="home"
-          toolbarInlineSelectors={inlineToolbarSelectors}
-          engineType={resolvedEngineType}
-        />
-        {showProjectPicker ? <HomeProjectWorkPicker /> : null}
+        {showProjectPicker ? (
+          <div className={chatComposerHomeStackShellClass}>
+            <ChatInput
+              {...inputProps}
+              composerLayout="home"
+              toolbarInlineSelectors={inlineToolbarSelectors}
+              engineType={resolvedEngineType}
+            />
+            <HomeProjectWorkPicker />
+          </div>
+        ) : (
+          <ChatInput
+            {...inputProps}
+            composerLayout="home"
+            toolbarInlineSelectors={inlineToolbarSelectors}
+            engineType={resolvedEngineType}
+          />
+        )}
         {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
       </section>
       {showDisclaimer ? (
