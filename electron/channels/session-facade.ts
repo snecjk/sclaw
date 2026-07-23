@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { getAdapter } from '../engines/manager';
 import { rememberSessionEngineType } from '../engines/session-engine';
+import { getEngineSessionRegistryEntry } from '../engines/session-registry';
 import type { AgentEngineType } from '../engines/types';
 import type { GatewayManager } from '../gateway/manager';
 import {
@@ -9,7 +10,10 @@ import {
   upsertCatalogSession,
 } from '../services/session-catalog-service';
 import { getChannelConnection } from './binding-service';
-import { resolveDingTalkSessionKey } from './session-lifecycle';
+import {
+  resolveDingTalkSessionKey,
+  shouldForceNewDingTalkSessionForEngine,
+} from './session-lifecycle';
 import { logger } from '../utils/logger';
 
 export interface SessionFacadeCreateParams {
@@ -44,11 +48,21 @@ export async function createOrGetSession(
     channelId: params.peerId,
     agentId,
   });
+  // 改选脑（策略 C）：同 agentId 的旧 channel session 若已登记为另一引擎，强制新 key，
+  // 避免 rememberSessionEngineType 覆盖旧 key 导致 PC「当前会话」看不到原引擎历史。
+  let forceNew = !!params.forceNew;
+  if (!forceNew && latestSession?.sessionKey) {
+    const registered = await getEngineSessionRegistryEntry(latestSession.sessionKey);
+    forceNew = shouldForceNewDingTalkSessionForEngine({
+      boundEngineType: engineType,
+      registeredEngineType: registered?.engineType,
+    });
+  }
   const sessionKey = resolveDingTalkSessionKey({
     agentId,
     peerId: params.peerId,
     latestSession,
-    forceNew: params.forceNew,
+    forceNew,
     now,
   });
   await rememberSessionEngineType(sessionKey, engineType);

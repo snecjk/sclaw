@@ -3,6 +3,7 @@ import {
   buildNewDingTalkSessionKey,
   isDingTalkNewSessionCommand,
   resolveDingTalkSessionKey,
+  shouldForceNewDingTalkSessionForEngine,
   shouldStartNewDingTalkSession,
 } from '../../electron/channels/session-lifecycle';
 
@@ -89,5 +90,55 @@ describe('DingTalk session lifecycle', () => {
     '请说明什么是新会话',
   ])('does not consume normal message %s', (text) => {
     expect(isDingTalkNewSessionCommand(text)).toBe(false);
+  });
+
+  it('forces a new session when registered engine differs from binding', () => {
+    expect(shouldForceNewDingTalkSessionForEngine({
+      boundEngineType: 'claude',
+      registeredEngineType: 'openclaw',
+    })).toBe(true);
+    expect(shouldForceNewDingTalkSessionForEngine({
+      boundEngineType: 'openclaw',
+      registeredEngineType: 'claude',
+    })).toBe(true);
+  });
+
+  it('reuses when registered engine matches binding or is unknown', () => {
+    expect(shouldForceNewDingTalkSessionForEngine({
+      boundEngineType: 'claude',
+      registeredEngineType: 'claude',
+    })).toBe(false);
+    expect(shouldForceNewDingTalkSessionForEngine({
+      boundEngineType: 'openclaw',
+      registeredEngineType: null,
+    })).toBe(false);
+    expect(shouldForceNewDingTalkSessionForEngine({
+      boundEngineType: 'claude',
+    })).toBe(false);
+  });
+
+  it('honors explicit forceNew even when engines match', () => {
+    expect(shouldForceNewDingTalkSessionForEngine({
+      forceNew: true,
+      boundEngineType: 'claude',
+      registeredEngineType: 'claude',
+    })).toBe(true);
+  });
+
+  it('creates a new key when forceNew is set for engine switch', () => {
+    expect(resolveDingTalkSessionKey({
+      agentId: 'main',
+      peerId: 'cid-1',
+      now: new Date('2026-07-20T11:00:00.000Z'),
+      latestSession: {
+        sessionKey: 'agent:main:dingtalk:cid-1:20260719120000:a3f2',
+        lastActivityAt: '2026-07-20T10:00:00.000Z',
+      },
+      forceNew: shouldForceNewDingTalkSessionForEngine({
+        boundEngineType: 'claude',
+        registeredEngineType: 'openclaw',
+      }),
+      nonce: 'bbbb',
+    })).toBe('agent:main:dingtalk:cid-1:20260720110000:bbbb');
   });
 });
