@@ -45,6 +45,7 @@ describe('more apps store', () => {
       apps: [],
       catalogApps: [],
       categories: [],
+      categoryCounts: {},
       banners: [],
       externalApps: [],
       favoriteIds: [],
@@ -118,6 +119,28 @@ describe('more apps store', () => {
       expect.objectContaining({ id: 'a' }),
     ]);
     expect(useMoreAppsStore.getState().error).toBeNull();
+  });
+
+  it('loads each category total without fetching the category app list', async () => {
+    fetchCategoriesMock.mockResolvedValueOnce([
+      { id: 'test', name: '测试专用', order: 1 },
+      { id: 'ops', name: '经营管理', order: 2 },
+    ]);
+    fetchAppsMock.mockImplementation(async (params: { categoryCode?: string; pageSize: number }) => ({
+      items: [],
+      total: params.categoryCode === 'test' ? 4 : 2,
+      pageNum: 1,
+      pageSize: params.pageSize,
+    }));
+
+    await useMoreAppsStore.getState().fetchCategories();
+
+    expect(useMoreAppsStore.getState().categoryCounts).toEqual({ test: 4, ops: 2 });
+    expect(fetchAppsMock).toHaveBeenCalledWith({
+      pageNum: 1,
+      pageSize: 1,
+      categoryCode: 'test',
+    });
   });
 
   it('persists favorites through main-backed registry', async () => {

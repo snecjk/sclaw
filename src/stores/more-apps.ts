@@ -134,6 +134,7 @@ interface MoreAppsState {
 
   // Server catalog — 分类 block (independent loading/error)
   categories: AppPlazaCategory[];
+  categoryCounts: Record<string, number>;
   categoriesLoading: boolean;
   categoriesError: string | null;
 
@@ -210,6 +211,7 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
   bannersError: null,
 
   categories: [],
+  categoryCounts: {},
   categoriesLoading: false,
   categoriesError: null,
 
@@ -389,9 +391,28 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
       const categories = await fetchAppPlazaCategories();
       if (seq !== categoriesRequestSeq) return;
       set({ categories, categoriesLoading: false, categoriesError: null });
+
+      const countResults = await Promise.allSettled(
+        categories.map((category) =>
+          fetchAppPlazaApps({
+            pageNum: 1,
+            pageSize: 1,
+            categoryCode: category.id,
+          }),
+        ),
+      );
+      if (seq !== categoriesRequestSeq) return;
+      const categoryCounts = countResults.reduce<Record<string, number>>((counts, result, index) => {
+        const category = categories[index];
+        if (result.status === 'fulfilled' && category) {
+          counts[category.id] = result.value.total;
+        }
+        return counts;
+      }, {});
+      set({ categoryCounts });
     } catch (err) {
       if (seq !== categoriesRequestSeq) return;
-      set({ categoriesError: toError(err), categoriesLoading: false });
+      set({ categoriesError: toError(err), categoriesLoading: false, categoryCounts: {} });
     }
   },
 
@@ -406,6 +427,7 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
       catalogApps: currCatalogApps,
     } = get();
     const isUnfiltered = !searchQuery.trim() && marketCategory === 'featured';
+    const isUnfilteredCategory = !searchQuery.trim() && marketCategory !== 'featured';
     const nextPage = reset ? 1 : currPage + 1;
     if (reset) {
       set({ loading: true, error: null, pageNum: 1, apps: [] });
@@ -425,6 +447,9 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
           apps: result.items,
           catalogApps: mergeAppItems(currCatalogApps, result.items),
           ...(isUnfiltered ? { marketTotal: result.total } : {}),
+          ...(isUnfilteredCategory
+            ? { categoryCounts: { ...get().categoryCounts, [marketCategory]: result.total } }
+            : {}),
           total: result.total,
           pageNum: result.pageNum,
           loading: false,
@@ -437,6 +462,9 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
           apps: [...currApps, ...appended],
           catalogApps: mergeAppItems(currCatalogApps, result.items),
           ...(isUnfiltered ? { marketTotal: result.total } : {}),
+          ...(isUnfilteredCategory
+            ? { categoryCounts: { ...get().categoryCounts, [marketCategory]: result.total } }
+            : {}),
           total: result.total,
           pageNum: result.pageNum,
           loadingMore: false,
