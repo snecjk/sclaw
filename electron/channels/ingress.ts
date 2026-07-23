@@ -8,10 +8,12 @@ import {
 } from './inbound-media';
 import {
   createOrGetSession,
-  resolveDingTalkBinding,
+  resolveChannelBinding,
   sendViaFacade,
 } from './session-facade';
 import { isDingTalkNewSessionCommand } from './session-lifecycle';
+import type { PlatformChannelType } from './session-key';
+import { randomUUID } from 'node:crypto';
 
 let gatewayManagerRef: GatewayManager | null = null;
 const peerQueues = new Map<string, Promise<void>>();
@@ -24,14 +26,14 @@ export function getChannelGatewayManager(): GatewayManager | null {
   return gatewayManagerRef;
 }
 
-function enqueuePeer(peerId: string, task: () => Promise<void>): void {
-  const prev = peerQueues.get(peerId) ?? Promise.resolve();
+function enqueuePeer(queueKey: string, task: () => Promise<void>): void {
+  const prev = peerQueues.get(queueKey) ?? Promise.resolve();
   const next = prev.then(task, task).finally(() => {
-    if (peerQueues.get(peerId) === next) {
-      peerQueues.delete(peerId);
+    if (peerQueues.get(queueKey) === next) {
+      peerQueues.delete(queueKey);
     }
   });
-  peerQueues.set(peerId, next);
+  peerQueues.set(queueKey, next);
 }
 
 function hasInboundContent(payload: NonNullable<SclawInboundEnvelope['payload']>): boolean {
@@ -44,20 +46,33 @@ function hasInboundContent(payload: NonNullable<SclawInboundEnvelope['payload']>
   return false;
 }
 
+function resolveInboundChannelType(
+  payload: NonNullable<SclawInboundEnvelope['payload']>,
+): PlatformChannelType {
+  const raw = (payload.channelType || 'dingtalk').trim().toLowerCase();
+  return raw === 'mobile' ? 'mobile' : 'dingtalk';
+}
+
 /**
  * Hub inbound → SessionFacade（多模态）→ 流式回程。
  */
 export function handleSclawInbound(msg: SclawInboundEnvelope): void {
   const payload = msg.payload;
   // 单聊偶发无 conversationId：退回 dingUserId，避免整轮入站被静默丢弃
-  const peerId = payload?.peerId?.trim() || payload?.dingUserId?.trim() || '';
+  const peerId = payload?.peerId?.trim()
+    || payload?.dingUserId?.trim()
+    || (payload?.channelType === 'mobile' ? `mobile-${payload.chatUid || randomUUID().slice(0, 8)}` : '')
+    || '';
   const chatUid = payload?.chatUid?.trim() || '';
   const channelTraceId = payload?.channelTraceId;
   const parts = payload?.parts;
   const text = composeInboundText(parts, payload?.text);
+  const channelType = payload ? resolveInboundChannelType(payload) : 'dingtalk';
+  const requestedSessionKey = payload?.sessionKey?.trim() || '';
   const forceNewSession =
     payload?.action === 'new_session'
-    || isDingTalkNewSessionCommand(text);
+    || (channelType === 'dingtalk' && isDingTalkNewSessionCommand(text))
+    || (channelType === 'mobile' && !requestedSessionKey && payload?.action === 'new_session');
 
   if (!peerId || !chatUid || !payload || !hasInboundContent(payload)) {
     logger.warn('[SclawIngress] ignore inbound: missing peerId/content/chatUid', {
@@ -86,7 +101,11 @@ export function handleSclawInbound(msg: SclawInboundEnvelope): void {
     return;
   }
 
-  enqueuePeer(peerId, async () => {
+  const queueKey = channelType === 'mobile'
+    ? `mobile:${requestedSessionKey || chatUid}`
+    : peerId;
+
+  enqueuePeer(queueKey, async () => {
     const gm = gatewayManagerRef;
     if (!gm) {
       logger.warn('[SclawIngress] no gatewayManager', { channelTraceId, peerId });
@@ -95,8 +114,10 @@ export function handleSclawInbound(msg: SclawInboundEnvelope): void {
 
     logger.info('[SclawIngress] handle inbound', {
       channelTraceId,
+      channelType,
       peerId,
       chatUid,
+      sessionKey: requestedSessionKey || null,
       textLen: text.length,
       partsCount: parts?.length ?? 0,
       msgtype: payload.msgtype ?? null,
@@ -109,16 +130,22 @@ export function handleSclawInbound(msg: SclawInboundEnvelope): void {
     });
 
     try {
-      const binding = await resolveDingTalkBinding();
+      const binding = await resolveChannelBinding(channelType);
       const handle = await createOrGetSession({
         agentId: binding.agentId,
-        channelType: 'dingtalk',
+        channelType,
         peerId,
         engineType: binding.engineType,
         forceNew: forceNewSession,
+        sessionKey: channelType === 'mobile' ? (requestedSessionKey || null) : null,
       });
 
-      if (forceNewSession) {
+      // 续聊排队：已有 sessionKey 后按真实 key 串行（首包用 chatUid 入队）
+      if (channelType === 'mobile' && requestedSessionKey !== handle.sessionKey) {
+        // no-op：本任务已在 chatUid 队列；后续同 session 用 sessionKey 队列
+      }
+
+      if (forceNewSession && channelType === 'dingtalk') {
         logger.info('[SclawIngress] started new dingtalk session', {
           channelTraceId,
           peerId,
@@ -129,13 +156,16 @@ export function handleSclawInbound(msg: SclawInboundEnvelope): void {
           chatUid,
           '已开启新对话，请继续发送消息。',
           true,
+          { sessionKey: handle.sessionKey },
         );
         return;
       }
 
       const media = await materializeInboundMedia(parts, chatUid);
       if ((parts?.some((p) => p.url?.trim() && (p.type || '') !== 'text') ?? false) && media.length === 0) {
-        getSclawHubClient().sendDelta(chatUid, '媒体文件下载失败，请重试或改发文字', true);
+        getSclawHubClient().sendDelta(chatUid, '媒体文件下载失败，请重试或改发文字', true, {
+          sessionKey: handle.sessionKey,
+        });
         return;
       }
 
@@ -149,7 +179,9 @@ export function handleSclawInbound(msg: SclawInboundEnvelope): void {
           : '');
 
       if (!prompt && media.length === 0) {
-        getSclawHubClient().sendDelta(chatUid, '暂不支持该消息类型，请发送文字、图片、语音或文件', true);
+        getSclawHubClient().sendDelta(chatUid, '暂不支持该消息类型，请发送文字、图片、语音或文件', true, {
+          sessionKey: handle.sessionKey,
+        });
         return;
       }
 
@@ -167,7 +199,12 @@ export function handleSclawInbound(msg: SclawInboundEnvelope): void {
         throw error;
       }
     } catch (error) {
-      logger.error('[SclawIngress] failed', { channelTraceId, peerId, error: String(error) });
+      logger.error('[SclawIngress] failed', {
+        channelTraceId,
+        peerId,
+        channelType,
+        error: String(error),
+      });
       try {
         getSclawHubClient().sendDelta(chatUid, `处理失败：${String(error)}`, true);
       } catch {

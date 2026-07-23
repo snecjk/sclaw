@@ -10,27 +10,49 @@ import {
   getLatestChannelCatalogSession,
   upsertCatalogSession,
 } from '../services/session-catalog-service';
+import { getCatalogSessionRepository } from '../db/repositories/catalog-session-repository';
 import { getChannelConnection } from './binding-service';
 import {
   resolveChannelBaseAgentId,
-  resolveDingTalkSessionKey,
+  resolveChannelIdleTtlMs,
+  resolveChannelSessionKey,
   shouldForceNewDingTalkSessionForEngine,
 } from './session-lifecycle';
+import { parseChannelSessionKey, type PlatformChannelType } from './session-key';
 import { logger } from '../utils/logger';
+import { getSetting } from '../utils/store';
 
 export interface SessionFacadeCreateParams {
   agentId: string;
-  channelType: 'dingtalk';
+  channelType: PlatformChannelType;
   accountId?: string;
   peerId: string;
   engineType?: AgentEngineType;
   forceNew?: boolean;
+  /** App 续聊：有值则优先复用；无效则策略 B 静默新建 */
+  sessionKey?: string | null;
 }
 
 export interface SessionFacadeHandle {
   sessionKey: string;
   engineType: AgentEngineType;
   agentId: string;
+  /** 是否因无效 sessionKey 被忽略并新建 */
+  sessionKeyIgnored?: boolean;
+}
+
+async function findUsableSessionKey(input: {
+  sessionKey: string;
+  channelType: PlatformChannelType;
+  agentId: string;
+}): Promise<string | null> {
+  const parsed = parseChannelSessionKey(input.sessionKey);
+  if (!parsed || parsed.channelType !== input.channelType) return null;
+  if (parsed.agentId !== input.agentId) return null;
+  const row = await getCatalogSessionRepository().findBySessionKey(input.sessionKey);
+  if (!row || row.deletedAt) return null;
+  if ((row.channelType || '').toLowerCase() !== input.channelType) return null;
+  return input.sessionKey;
 }
 
 /**
@@ -41,19 +63,50 @@ export async function createOrGetSession(
 ): Promise<SessionFacadeHandle> {
   // Channel 会话只用 base agent，避免 sessionKey / currentAgentId 带上 proj-… 从而命中输入框项目名规则
   const agentId = resolveChannelBaseAgentId(params.agentId);
+  const channelType = params.channelType;
   const engineType: AgentEngineType =
     params.engineType === 'openclaw' || params.engineType === 'claude'
       ? params.engineType
       : 'claude';
   const now = new Date();
+
+  const requestedKey = params.sessionKey?.trim() || '';
+  if (requestedKey) {
+    const usable = await findUsableSessionKey({
+      sessionKey: requestedKey,
+      channelType,
+      agentId,
+    });
+    if (usable) {
+      await rememberSessionEngineType(usable, engineType);
+      await ensureCatalogSessionInDefaultWorkspace(usable);
+      await upsertCatalogSession({
+        workspaceId: DEFAULT_WORKSPACE_ID,
+        sessionKey: usable,
+        sessionType: 'channel',
+        channelType,
+        channelId: params.peerId,
+        lastActivityAt: now.toISOString(),
+      });
+      return { sessionKey: usable, engineType, agentId };
+    }
+    logger.info('[SessionFacade] sessionKeyIgnored, creating new', {
+      channelType,
+      requestedKey,
+    });
+  }
+
   const latestSession = await getLatestChannelCatalogSession({
-    channelType: params.channelType,
+    channelType,
     channelId: params.peerId,
     agentId,
   });
-  // 改选脑（策略 C）：同 agentId 的旧 channel session 若已登记为另一引擎，强制新 key，
-  // 避免 rememberSessionEngineType 覆盖旧 key 导致 PC「当前会话」看不到原引擎历史。
-  let forceNew = !!params.forceNew;
+  // 改选脑（策略 C）：同 agentId 的旧 channel session 若已登记为另一引擎，强制新 key
+  let forceNew = !!params.forceNew || (channelType === 'mobile' && !requestedKey);
+  // mobile：无 sessionKey = 显式新建；有 peer 也不复用 latest（App 清空字段即新对话）
+  if (channelType === 'mobile' && !requestedKey) {
+    forceNew = true;
+  }
   if (!forceNew && latestSession?.sessionKey) {
     const registered = await getEngineSessionRegistryEntry(latestSession.sessionKey);
     forceNew = shouldForceNewDingTalkSessionForEngine({
@@ -61,40 +114,61 @@ export async function createOrGetSession(
       registeredEngineType: registered?.engineType,
     });
   }
-  const sessionKey = resolveDingTalkSessionKey({
+  const [idleEnabled, idleHours] = await Promise.all([
+    getSetting('channelSessionIdleEnabled'),
+    getSetting('channelSessionIdleHours'),
+  ]);
+  const idleTtlMs = resolveChannelIdleTtlMs({
+    channelType,
+    idleEnabled,
+    idleHours,
+  });
+  const sessionKey = resolveChannelSessionKey({
+    channelType,
     agentId,
     peerId: params.peerId,
-    latestSession,
+    latestSession: channelType === 'mobile' && !requestedKey ? null : latestSession,
     forceNew,
     now,
+    idleTtlMs,
   });
   await rememberSessionEngineType(sessionKey, engineType);
-  // Channel 会话固定挂 default（进「最近」），不继承侧栏项目 workspace，
-  // 否则会命中输入框 sessionWorkspaceByKey → 「Main Agent · 测试2」。
   await ensureCatalogSessionInDefaultWorkspace(sessionKey);
   await upsertCatalogSession({
     workspaceId: DEFAULT_WORKSPACE_ID,
     sessionKey,
     sessionType: 'channel',
-    channelType: params.channelType,
+    channelType,
     channelId: params.peerId,
     lastActivityAt: now.toISOString(),
   });
-  return { sessionKey, engineType, agentId };
+  return {
+    sessionKey,
+    engineType,
+    agentId,
+    sessionKeyIgnored: !!requestedKey,
+  };
+}
+
+export async function resolveChannelBinding(channelType: PlatformChannelType): Promise<{
+  agentId: string;
+  engineType: AgentEngineType;
+}> {
+  const conn = await getChannelConnection(channelType);
+  if (!conn || conn.bindStatus !== 'bound') {
+    throw new Error(`${channelType} hub not bound`);
+  }
+  return {
+    agentId: resolveChannelBaseAgentId(conn.agentId),
+    engineType: conn.engineType === 'openclaw' ? 'openclaw' : 'claude',
+  };
 }
 
 export async function resolveDingTalkBinding(): Promise<{
   agentId: string;
   engineType: AgentEngineType;
 }> {
-  const conn = await getChannelConnection('dingtalk');
-  if (!conn || conn.bindStatus !== 'bound') {
-    throw new Error('DingTalk hub not bound');
-  }
-  return {
-    agentId: resolveChannelBaseAgentId(conn.agentId),
-    engineType: conn.engineType === 'openclaw' ? 'openclaw' : 'claude',
-  };
+  return resolveChannelBinding('dingtalk');
 }
 
 export async function sendViaFacade(

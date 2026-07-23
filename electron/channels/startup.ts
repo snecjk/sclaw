@@ -73,6 +73,19 @@ export function wireSclawInboundListener(): void {
   client.on('inbound', (msg) => {
     handleSclawInbound(msg);
   });
+  client.on('historyRpc', (msg) => {
+    void import('./history-facade').then(({ handleHistoryRpc }) => {
+      void handleHistoryRpc(msg as {
+        type: string;
+        requestId?: string;
+        payload?: {
+          limit?: number;
+          cursor?: string | null;
+          sessionKey?: string;
+        };
+      });
+    });
+  });
 }
 
 function wireSclawBindReplacedListener(): void {

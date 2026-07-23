@@ -32,6 +32,10 @@ export interface SclawInboundEnvelope {
     msgtype?: string;
     /** 多模态 parts；优先于仅 text */
     parts?: SclawInboundMediaPart[];
+    /** dingtalk | mobile；缺省按 dingtalk 兼容 */
+    channelType?: 'dingtalk' | 'mobile' | string;
+    /** App 续聊；空则新建 */
+    sessionKey?: string | null;
   };
 }
 
@@ -92,12 +96,18 @@ export class SclawHubClient extends EventEmitter {
     return true;
   }
 
-  sendDelta(chatUid: string, content: string, finalize = false): boolean {
+  sendDelta(
+    chatUid: string,
+    content: string,
+    finalize = false,
+    extras?: { sessionKey?: string },
+  ): boolean {
     return this.send({
       type: finalize ? 'done' : 'delta',
       chatUid,
       content,
       finalize,
+      ...(extras?.sessionKey ? { sessionKey: extras.sessionKey } : {}),
     });
   }
 
@@ -180,6 +190,10 @@ export class SclawHubClient extends EventEmitter {
       }
       if (msg.type === 'inbound') {
         this.emit('inbound', msg);
+        return;
+      }
+      if (msg.type === 'history.list' || msg.type === 'history.get') {
+        this.emit('historyRpc', msg);
         return;
       }
       if (msg.type === 'bind.replaced') {

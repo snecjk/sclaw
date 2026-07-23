@@ -67,14 +67,20 @@ function sameSessionKey(left: string | undefined, right: string): boolean {
   return left === right || left.toLowerCase() === right.toLowerCase();
 }
 
-function pushReply(chatUid: string, content: string, finalize: boolean): void {
+function pushReply(
+  chatUid: string,
+  content: string,
+  finalize: boolean,
+  sessionKey?: string,
+): void {
   const client = getSclawHubClient();
-  const ok = client.sendDelta(chatUid, content, finalize);
+  const ok = client.sendDelta(chatUid, content, finalize, { sessionKey });
   if (ok) {
     logger.info('[SclawDelivery] ws reply', {
       chatUid,
       finalize,
       contentLen: content.length,
+      sessionKey: sessionKey ?? null,
     });
     if (finalize) {
       void hubReplyStream({ chatUid, content, finalize: true }).catch((error) => {
@@ -151,7 +157,7 @@ export function attachStreamingDelivery(input: {
     if (!finalize && content === lastSent) return;
     lastSent = content;
     lastPushAt = Date.now();
-    pushReply(chatUid, content, finalize);
+    pushReply(chatUid, content, finalize, sessionKey);
   };
 
   const schedulePush = () => {

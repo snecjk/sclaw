@@ -16,9 +16,20 @@
     "configured": "設定済みチャンネル",
     "configuredDesc": "すでに設定済みのチャンネルを管理",
     "configuredBadge": "設定済み",
+    "sessionIdle": {
+        "sectionTitle": "セッション管理",
+        "title": "自動で新規セッション",
+        "subtitle": "一定時間会話がない場合、新しい会話を開始（DingTalk など）",
+        "overPrefix": "超過",
+        "overSuffix": "時間会話がない場合、新しいセッションを開始",
+        "hoursLabel": "アイドル時間（時間）",
+        "tip": "有効にすると、長時間非アクティブな履歴はモデルに送られず、Token 消費を抑え応答が速くなります。",
+        "saveFailed": "保存に失敗: {{error}}"
+    },
     "deleteConfirm": "このチャンネルを削除してもよろしいですか？",
     "showAll": "すべて表示",
     "pluginBadge": "プラグイン",
+    "recommendedBadge": "おすすめ",
     "toast": {
         "whatsappConnected": "WhatsApp が正常に接続されました",
         "whatsappFailed": "WhatsApp 接続に失敗しました: {{error}}",
@@ -38,6 +49,7 @@
     "account": {
         "add": "アカウントを追加",
         "edit": "編集",
+        "bind": "紐づけ",
         "delete": "アカウントを削除",
         "deleteChannel": "チャンネルを削除",
         "deleteConfirm": "このアカウントを削除してもよろしいですか？",
@@ -408,6 +420,8 @@
             "replacedUnbound": "DingTalk の紐づけが解除されました",
             "notBoundHint": "未紐づけ — タップしてスキャン",
             "boundHint": "エンジン：{{engine}} · {{agent}}",
+            "boundStatusHint": "紐づけ済み",
+            "bindingRow": "デフォルト紐づけ",
             "agentRequired": "Agent を選択してください",
             "noAgentsForEngine": "このエンジンには Agent がありません。先に作成してください",
             "rebindTitle": "DingTalk を再紐づけ",
@@ -417,6 +431,25 @@
             "createFailed": "QR の生成に失敗: {{error}}",
             "bindFailed": "紐づけに失敗: {{error}}",
             "unbindFailed": "解除に失敗: {{error}}"
+        },
+        "mobile": {
+            "title": "企業 App（ローカルチャネル）",
+            "subtitle": "スマホ App「ローカル」→ 本機 StoClaw",
+            "enabledHint": "ON — スマホ「ローカル」から本機に接続できます",
+            "disabledHint": "OFF のとき App は本機に届きません。ON 後は StoClaw をオンラインに保ってください",
+            "hubOfflineHint": "ON — Hub 未接続のためスマホはまだ届きません",
+            "needDingTalkWs": "先に DingTalk Hub を紐づけて、本機をチャネル中枢に接続してください",
+            "wsOnline": "Hub オンライン",
+            "wsOffline": "Hub オフライン",
+            "toggleLabel": "App バインド",
+            "bindingRow": "デフォルト紐づけ",
+            "engineLabel": "エンジン",
+            "agentLabel": "Agent",
+            "enableSuccess": "App ローカルチャネルを有効にしました",
+            "disableSuccess": "App ローカルチャネルを無効にしました",
+            "toggleFailed": "切り替え失敗: {{error}}",
+            "agentRequired": "Agent を選択してください",
+            "noAgentsForEngine": "このエンジンには Agent がありません。先に作成してください"
         }
     },
     "viewDocs": "ドキュメントを表示"
