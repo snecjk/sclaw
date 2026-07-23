@@ -6,9 +6,9 @@
  * send-guard 的 20s 频率限制）。key = `recipientKey:contentHash`，仅匹配**完全
  * 相同**的正文——不同正文的合法多次发送不受影响。
  *
- * 作用域：进程内 Map。定时任务路径下，Claude SDK 的 send-guard hook 与
- * claude-task-workflow-watchdog 的兜底发送同处 electron 主进程，共享本单例。
- * 跨进程的 OpenClaw 交互会话不共享，但交互会话无兜底发送，无此问题。
+ * 作用域：进程内 Map。定时任务路径下，Claude SDK 的 send-guard hook 同处
+ * electron 主进程，共享本单例。跨进程的 OpenClaw 交互会话不共享，但交互会话
+ * 无兜底发送，无此问题。
  *
  * 与既有去重的关系：
  * - `dingtalkAlreadySent`（worker onMessage）：挡 agent-vs-兜底（正文不同，本模块不覆盖）。

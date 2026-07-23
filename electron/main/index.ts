@@ -581,17 +581,21 @@ async function initialize(): Promise<void> {
   const { registerFormHandlers } = await import('./ipc/form-handlers');
   registerFormHandlers();
 
-  const { getClaudeScheduledTaskService } = await import('../services/claude-scheduled-task-service');
-  const claudeScheduledTaskService = getClaudeScheduledTaskService();
-  // Inject the gateway event sink before the scheduler starts ticking so that
-  // Claude scheduled-task runs (including 立即运行) stream to the renderer.
-  claudeScheduledTaskService.setEventSink(gm);
-  claudeScheduledTaskService.startScheduler();
-  void claudeScheduledTaskService.refreshSchedule().catch((error) => {
-    logger.warn('[claude-task] initial schedule refresh failed:', error);
+  // 引擎无关通用定时任务（Step 4 起为唯一驱动；旧 claude 调度代码已退役）。
+  // setGatewayManager 注入 dispatcher + eventSink → 一次性迁移遗留 claude
+  // definitions.json + openclaw Gateway cron → schedule_tasks → startScheduler
+  // （discard→start）。迁移幂等（marker + per-row 存在检查，崩溃可重跑续传）。
+  const { getScheduledTaskService } = await import('../services/scheduled-task-service');
+  const { runScheduledTasksMigration } = await import('../scripts/migrate-scheduled-tasks');
+  const scheduledTaskService = getScheduledTaskService();
+  scheduledTaskService.setGatewayManager(gm);
+  await runScheduledTasksMigration(gm, scheduledTaskService);
+  scheduledTaskService.startScheduler();
+  void scheduledTaskService.refreshSchedule().catch((error) => {
+    logger.warn('[scheduled-task] initial schedule refresh failed:', error);
   });
   app.on('before-quit', () => {
-    claudeScheduledTaskService.stopScheduler();
+    scheduledTaskService.stopScheduler();
   });
 
   hostApiServer = startHostApiServer({

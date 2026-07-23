@@ -8,6 +8,7 @@ import type {
   WorkspacesTable,
 } from './models/tables/session-catalog-tables';
 import type { ChannelConnectionTable } from './models/tables/channel-connection-table';
+import type { ScheduleTaskRunsTable, ScheduleTasksTable } from './models/tables/schedule-task-tables';
 
 // One migration file corresponds to one schema version.
 export interface SqliteMigration {
@@ -52,4 +53,6 @@ export interface SqliteDbSchema {
   catalog_sessions: CatalogSessionsTable;
   session_engine_bindings: SessionEngineBindingsTable;
   channel_connections: ChannelConnectionTable;
+  schedule_tasks: ScheduleTasksTable;
+  schedule_task_runs: ScheduleTaskRunsTable;
 }

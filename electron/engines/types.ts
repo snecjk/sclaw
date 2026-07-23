@@ -27,12 +27,22 @@ export interface EngineHistoryResult {
   } | null;
 }
 
+/**
+ * 引擎无关的权限档位（与 `ScheduleTaskPermissionProfile` 同构，本地定义以避免
+ * `engines/types` ↔ `db/models/domain/schedule-task` 的循环依赖）。
+ *  - `dangerous-bypass`：跳过权限确认（Claude `bypassPermissions`）
+ *  - `workspace-write` / `readonly-safe`：让引擎以默认权限跑（受约束）
+ */
+export type EnginePermissionProfile = 'readonly-safe' | 'workspace-write' | 'dangerous-bypass';
+
 export interface EngineSendParams {
   sessionKey: string;
   message: string;
   deliver?: boolean;
   idempotencyKey: string;
   systemPromptAppend?: string;
+  /** 定时任务执行时由 executor 透传；交互式 chat 不设（undefined）以保留引擎默认。 */
+  permissionProfile?: EnginePermissionProfile;
 }
 
 export interface EngineSendWithMediaParams extends EngineSendParams {

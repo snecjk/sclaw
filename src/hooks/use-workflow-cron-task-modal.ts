@@ -54,27 +54,24 @@ export function useWorkflowCronTaskModal() {
           );
           await createJob({
             engineType: 'claude',
-            payload: {
-              name: input.name,
-              cronExpr: input.schedule,
-              promptTemplate,
-              agentId: selectedAgent.id,
-              workspacePath: input.claudeWorkspacePath || selectedAgent.workspace,
-              permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
-              workflowCode: input.workflowCode,
-            },
+            name: input.name,
+            cronExpr: input.schedule,
+            prompt: promptTemplate,
+            agentId: selectedAgent.id,
+            workspacePath: input.claudeWorkspacePath || selectedAgent.workspace,
+            permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
+            workflowCode: input.workflowCode,
           });
         } else {
           await createJob({
             engineType: 'openclaw',
-            payload: {
-              name: input.name,
-              message: input.message,
-              schedule: input.schedule,
-              enabled: input.enabled,
-              dingTalkMentions: input.dingTalkMentions,
-              workflowCode: input.workflowCode,
-            },
+            name: input.name,
+            cronExpr: input.schedule,
+            prompt: input.message,
+            enabled: input.enabled,
+            agentId: selectedAgent?.id || 'main',
+            dingtalkRecipients: input.dingTalkMentions,
+            workflowCode: input.workflowCode,
           });
         }
         toast.success('任务已创建');

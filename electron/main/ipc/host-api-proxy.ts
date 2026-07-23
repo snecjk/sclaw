@@ -26,7 +26,7 @@ function resolveHostApiTimeoutMs(path: string): number {
   if (SKILL_INSTALL_PATHS.has(path)) {
     return TIMEOUTS.SKILL_INSTALL;
   }
-  if (path === '/api/cron/beautify-instruction') {
+  if (path === '/api/scheduled-tasks/beautify-instruction') {
     return TIMEOUTS.BEAUTIFY_INSTRUCTION;
   }
   return TIMEOUTS.DEFAULT_FETCH;

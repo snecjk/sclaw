@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { getOpenClawConfigDir } from './paths';
-import { computeNextRunAt } from '../services/claude-task-scheduler';
+import { computeNextRunAt } from '../services/scheduled-task-scheduler';
 import { logger } from './logger';
 
 /**
