@@ -362,9 +362,6 @@ export const ChatMessage = memo(function ChatMessage({
   // Previewable file cards (merged from _attachedFiles + text-extracted refs, deduped once)
   const hasRenderableFiles = previewFiles.length > 0;
 
-  // Never render tool result messages in chat UI
-  if (isToolResult) return null;
-
   const hasStreamingToolStatus = isStreaming && streamingTools.length > 0;
   const isWorkflowThinkingContext =
     pendingWorkflow !== null || parameterForm !== null || workflowCard !== null;
@@ -517,22 +514,6 @@ export const ChatMessage = memo(function ChatMessage({
     && !showUserParamsFold
     && !(isLastUserInTurn && currentUserTurnIncomplete);
 
-  if (
-    !hasText
-    && !skillMeta
-    && !showThinkingPanel
-    && images.length === 0
-    && visibleTools.length === 0
-    && !hasRenderableFiles
-    && extractedRefs.length === 0
-    && !hasStreamingToolStatus
-    && !parameterForm
-    && !workflowCard
-    && !showAssistantParamsFold
-    && !showAssistantParamsPanel
-  ) {
-    return null;
-  }
   const showRenderDebugPanel = !isUser && isFilePreviewDebugEnabled();
   const debugMarkdownSource = useMemo(
     () => (onPreviewFile ? preprocessTextForPreviewLinks(text) : text),
@@ -578,13 +559,31 @@ export const ChatMessage = memo(function ChatMessage({
       assistantCopyShareContent.files,
     ));
     setShareDialogOpen(true);
-  }, [assistantCopyShareContent]);
+  }, [assistantCopyShareContent, setShareDialogOpen, setShareDraft]);
 
   const handleShareCompleted = useCallback(() => {
     toast.success(t('preview.shareDialog.success'));
     setShareDialogOpen(false);
     setShareDraft(null);
-  }, [t]);
+  }, [setShareDialogOpen, setShareDraft, t]);
+
+  // Never render tool result messages in chat UI
+  if (isToolResult || (
+    !hasText
+    && !skillMeta
+    && !showThinkingPanel
+    && images.length === 0
+    && visibleTools.length === 0
+    && !hasRenderableFiles
+    && extractedRefs.length === 0
+    && !hasStreamingToolStatus
+    && !parameterForm
+    && !workflowCard
+    && !showAssistantParamsFold
+    && !showAssistantParamsPanel
+  )) {
+    return null;
+  }
 
   if (isSystem) {
     const compactText = text.replace(/\s+/g, ' ').trim();
