@@ -60,6 +60,15 @@ export const userChatBubbleSurfaceClass = cn(
 );
 
 /**
+ * 首页新对话：输入框 + 项目条外层灰底壳（圆角 + 描边）。
+ * 使用位置：HomeComposer showProjectPicker。
+ */
+export const chatComposerHomeStackShellClass = cn(
+  'flex flex-col gap-2 overflow-hidden rounded-[22px] bg-[#F5F5F5] p-0',
+  'dark:bg-muted/60',
+);
+
+/**
  * 首页/对话页 home 布局输入复合框壳（rounded-[22px]）。
  * 使用位置：ChatInput composerLayout=home。
  */

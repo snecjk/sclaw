@@ -1,6 +1,6 @@
 /**
- * HomeProjectWorkPicker — 新对话落地页输入框下方的「进入项目工作」选择条。
- * 仅在无会话内容时展示；选中项目后写入 pendingProjectId，并切换到该项目的 OpenClaw project agent。
+ * HomeProjectWorkPicker — 新对话落地页「进入项目工作」选择条。
+ * 结构约定：父级灰底圆角壳内，输入框为独立白底圆角边框；本组件白底、无圆角、无描边。
  */
 import { useMemo, useState } from 'react';
 import { Check, ChevronDown, Folder, FolderInput, FolderMinus, FolderPlus } from 'lucide-react';
@@ -104,9 +104,11 @@ export function HomeProjectWorkPicker({ className }: { className?: string }) {
             type="button"
             disabled={usingExisting}
             className={cn(
-              'mt-2 flex h-10 w-full items-center gap-2 rounded-[14px] bg-muted/70 px-3 text-left',
-              'text-sm text-muted-foreground transition-colors',
-              'hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20',
+              'flex h-9 w-full items-center gap-2 bg-transparent px-5 pb-2 text-left',
+              'text-sm text-muted-foreground',
+              'outline-none ring-0',
+              'focus:outline-none focus-visible:outline-none focus-visible:ring-0',
+              'data-[state=open]:bg-transparent data-[state=open]:outline-none data-[state=open]:ring-0',
               'disabled:opacity-60',
               selectedProject && 'text-foreground',
               className,
@@ -114,7 +116,7 @@ export function HomeProjectWorkPicker({ className }: { className?: string }) {
             aria-label={t('projectWork.enter')}
           >
             <Folder className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-            <span className="min-w-0 flex-1 truncate">
+            <span className="min-w-0 truncate">
               {selectedProject ? selectedProject.name : t('projectWork.enter')}
             </span>
             <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
