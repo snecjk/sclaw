@@ -34,12 +34,14 @@ describe('background-run-watchdog', () => {
   let runtime: Record<string, any>;
   let get: () => any;
   let set: (fn: (s: any) => any) => void;
+  let loadHistory: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     runtime = {};
-    get = () => ({ runtimeBySessionKey: runtime });
+    loadHistory = vi.fn().mockResolvedValue(undefined);
+    get = () => ({ runtimeBySessionKey: runtime, loadHistory });
     set = (fn) => fn({ runtimeBySessionKey: runtime });
     getSessionRuntimeStateMock.mockImplementation((_, sk) => runtime[sk]);
     isVirtualMock.mockImplementation((k) => k.startsWith('agent:main:cron:'));
@@ -79,8 +81,10 @@ describe('background-run-watchdog', () => {
       get, set, sessionKey: 'agent:main:cron:job-1', runId: 'r1',
       setStuckCheckTimer, clearStuckCheckTimer,
     });
-    await vi.advanceTimersByTimeAsync(95_000);
-    // Still streaming → rescheduled, never force-cleared.
+    await vi.advanceTimersByTimeAsync(60_000);
+    noteBackgroundRunActivity('agent:main:cron:job-1');
+    await vi.advanceTimersByTimeAsync(35_000);
+    // Recent activity, rather than a stale streaming snapshot, keeps the run healthy.
     expect(setRuntimePatchMock).not.toHaveBeenCalled();
     expect(recordTerminalRunMock).not.toHaveBeenCalled();
     // Keep refreshing activity (agent-only events) so silence never accumulates.
@@ -92,7 +96,7 @@ describe('background-run-watchdog', () => {
   });
 
   it('forces terminal patch when a run goes silent > 90s with no final (stuck loading)', async () => {
-    const { scheduleBackgroundRunWatchdog, noteBackgroundRunActivity, clearBackgroundRunActivity } = await import('@/stores/chat/background-run-watchdog');
+    const { scheduleBackgroundRunWatchdog, noteBackgroundRunActivity } = await import('@/stores/chat/background-run-watchdog');
     const sk = 'agent:main:cron:job-1';
     runtime[sk] = { sending: true, activeRunId: 'r1', streamingMessage: null, streamingText: '', pendingFinal: false, updatedAt: 0 };
     // `started` fired once (activity noted), then the gateway went dark.
@@ -104,9 +108,34 @@ describe('background-run-watchdog', () => {
     await vi.advanceTimersByTimeAsync(95_000);
     expect(recordTerminalRunMock).toHaveBeenCalledWith(sk, 'r1');
     expect(setRuntimePatchMock).toHaveBeenCalledTimes(1);
+    expect(loadHistory).toHaveBeenCalledWith(true, true, sk);
     const patch = setRuntimePatchMock.mock.calls[0][2];
     expect(patch.sending).toBe(false);
     expect(patch.activeRunId).toBe(null);
     expect(patch.error).toEqual(expect.any(String));
+  });
+
+  it('does not let stale streaming content mask 90 seconds of silence', async () => {
+    const { scheduleBackgroundRunWatchdog, noteBackgroundRunActivity } = await import('@/stores/chat/background-run-watchdog');
+    const sk = 'agent:main:cron:job-stale-stream';
+    runtime[sk] = {
+      sending: true,
+      activeRunId: 'r-stale',
+      streamingMessage: { role: 'assistant', content: 'old partial' },
+      streamingText: 'old partial',
+      pendingFinal: true,
+      updatedAt: 0,
+    };
+    noteBackgroundRunActivity(sk);
+    scheduleBackgroundRunWatchdog({
+      get, set, sessionKey: sk, runId: 'r-stale',
+      setStuckCheckTimer, clearStuckCheckTimer,
+    });
+
+    await vi.advanceTimersByTimeAsync(95_000);
+
+    expect(loadHistory).toHaveBeenCalledWith(true, true, sk);
+    expect(recordTerminalRunMock).toHaveBeenCalledWith(sk, 'r-stale');
+    expect(setRuntimePatchMock).toHaveBeenCalledTimes(1);
   });
 });

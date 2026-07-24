@@ -62,11 +62,6 @@ export function scheduleBackgroundRunWatchdog(input: {
       clearBackgroundRunActivity(sessionKey);
       return;
     }
-    // 健康迹象：仍在流式或待 final。
-    if (runtime.streamingMessage || runtime.streamingText || runtime.pendingFinal) {
-      setStuckCheckTimer(sessionKey, setTimeout(checkStuck, BG_STUCK_RECHECK_INTERVAL_MS));
-      return;
-    }
     // 静默时长：用"最近观测活动"（agent 事件也算）而非 updatedAt，避免长任务误判。
     const lastObserved = lastObservedAtBySession.get(sessionKey) ?? runtime.updatedAt;
     const silentFor = Date.now() - lastObserved;
@@ -74,7 +69,9 @@ export function scheduleBackgroundRunWatchdog(input: {
       setStuckCheckTimer(sessionKey, setTimeout(checkStuck, BG_STUCK_RECHECK_INTERVAL_MS));
       return;
     }
-    // 卡住：>90s 无任何活动且 run 从未终态。强制清 sending/activeRunId，避免永久 loading。
+    // 卡住：即使残留 streaming/pendingFinal，只要 >90s 无新事件也先同步
+    // history，再清 sending/activeRunId，避免旧快照让后台会话永久 loading。
+    void state.loadHistory(true, true, sessionKey);
     clearStuckCheckTimer(sessionKey);
     clearBackgroundRunActivity(sessionKey);
     recordTerminalRun(sessionKey, runId);
