@@ -1,23 +1,16 @@
 import { touchLastChatEventAt } from './history-finalization';
 import { setRuntimePatch } from './runtime-controller';
-import { buildTerminalRuntimePatch } from './turn-state-machine';
 import type { ChatGet, ChatSet } from './store-api';
 import { getSessionRuntimeState } from './session-runtime';
 import { logChatFlow } from './chat-flow-log';
 
-const HISTORY_POLL_SILENCE_WINDOW_MS = 2_500;
+const HISTORY_POLL_SILENCE_WINDOW_MS = 5_000;
 const POLL_START_DELAY_MS = 3_000;
 const POLL_INTERVAL_MS = 4_000;
 const SAFETY_TIMEOUT_MS = 5 * 60_000;
 const STUCK_RECHECK_INTERVAL_MS = 3_000;
 const STUCK_INITIAL_DELAY_MS = 5_000;
 const ACCEPTANCE_RECONCILE_TIMEOUT_MS = 135_000;
-/** OpenClaw 等不到 agent.completed 时，pendingFinal 持续多久后强制收尾 */
-const PENDING_FINAL_STUCK_HOLD_MS = 2_000;
-
-/** sessionKey → first time we observed pendingFinal with no running tools */
-const pendingFinalStuckSinceBySession = new Map<string, number>();
-
 export function scheduleSendWatchdogs(input: {
   get: ChatGet;
   set: ChatSet;
@@ -43,8 +36,6 @@ export function scheduleSendWatchdogs(input: {
   clearHistoryPoll(sessionKey);
   clearErrorRecoveryTimer(sessionKey);
   clearStuckCheckTimer(sessionKey);
-  pendingFinalStuckSinceBySession.delete(sessionKey);
-
   const pollHistory = () => {
     const state = get();
     const runtime = getSessionRuntimeState(state.runtimeBySessionKey, sessionKey);
@@ -52,15 +43,11 @@ export function scheduleSendWatchdogs(input: {
       clearHistoryPoll(sessionKey);
       return;
     }
-    if (runtime.streamingMessage) {
-      setHistoryPollTimer(sessionKey, setTimeout(pollHistory, POLL_INTERVAL_MS));
-      return;
-    }
     if (Date.now() - runtime.updatedAt < HISTORY_POLL_SILENCE_WINDOW_MS) {
       setHistoryPollTimer(sessionKey, setTimeout(pollHistory, POLL_INTERVAL_MS));
       return;
     }
-    void state.loadHistory(true, false, sessionKey);
+    void state.loadHistory(true, true, sessionKey);
     setHistoryPollTimer(sessionKey, setTimeout(pollHistory, POLL_INTERVAL_MS));
   };
   setHistoryPollTimer(sessionKey, setTimeout(pollHistory, POLL_START_DELAY_MS));
@@ -69,7 +56,6 @@ export function scheduleSendWatchdogs(input: {
     const state = get();
     const runtime = getSessionRuntimeState(state.runtimeBySessionKey, sessionKey);
     if (!runtime.sending) {
-      pendingFinalStuckSinceBySession.delete(sessionKey);
       clearStuckCheckTimer(sessionKey);
       return;
     }
@@ -77,34 +63,17 @@ export function scheduleSendWatchdogs(input: {
       setStuckCheckTimer(sessionKey, setTimeout(checkStuck, STUCK_RECHECK_INTERVAL_MS));
       return;
     }
-    if (runtime.streamingMessage || runtime.streamingText) {
-      setStuckCheckTimer(sessionKey, setTimeout(checkStuck, STUCK_RECHECK_INTERVAL_MS));
-      return;
-    }
-
     const hasRunningTool = runtime.streamingTools.some((tool) => tool.status === 'running');
 
-    // pendingFinal：正文/工具轮已落定，但 agent.completed 未到。
-    // 不依赖 currentSession.messages（切会话后 messages 不是本 session），直接强制收尾。
+    // pendingFinal 不是整轮 completed。先用权威 history 校准；只有 history
+    // 确认已有 assistant 正文后，history-runtime-completion 才会结束运行态。
     if (runtime.pendingFinal && !hasRunningTool) {
-      const firstSeen = pendingFinalStuckSinceBySession.get(sessionKey) ?? Date.now();
-      pendingFinalStuckSinceBySession.set(sessionKey, firstSeen);
-      if (Date.now() - firstSeen >= PENDING_FINAL_STUCK_HOLD_MS) {
-        logChatFlow('watchdog.pending-final.force-complete', {
-          sessionKey,
-          heldFor: Date.now() - firstSeen,
-          activeRunId: runtime.activeRunId,
-        });
-        pendingFinalStuckSinceBySession.delete(sessionKey);
-        clearHistoryPoll(sessionKey);
-        clearStuckCheckTimer(sessionKey);
-        setRuntimePatch(set, sessionKey, buildTerminalRuntimePatch(null));
-        return;
-      }
-      setStuckCheckTimer(sessionKey, setTimeout(checkStuck, STUCK_RECHECK_INTERVAL_MS));
-      return;
+      logChatFlow('watchdog.pending-final.reconcile-history', {
+        sessionKey,
+        activeRunId: runtime.activeRunId,
+      });
+      void state.loadHistory(true, true, sessionKey);
     }
-    pendingFinalStuckSinceBySession.delete(sessionKey);
 
     // 用 sendAcceptance.startedAt，避免 history poll 刷新 updatedAt 导致永不超时
     const acceptanceAge = runtime.sendAcceptance

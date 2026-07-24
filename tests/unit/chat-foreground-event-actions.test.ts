@@ -33,16 +33,17 @@ function createHarness() {
   };
   const handleBackgroundSessionEvent = vi.fn();
   const setErrorRecoveryTimer = vi.fn();
+  const clearHistoryPoll = vi.fn();
   const actions = createForegroundEventActions(set, get, {
     resolveEngineTypeForSession: () => 'openclaw',
     handleBackgroundSessionEvent,
     dispatchAgentMemoryCapture: vi.fn(),
-    clearHistoryPoll: vi.fn(),
+    clearHistoryPoll,
     clearErrorRecoveryTimer: vi.fn(),
     setErrorRecoveryTimer,
     hasErrorRecoveryTimer: vi.fn(() => false),
   });
-  return { actions, get, handleBackgroundSessionEvent, setErrorRecoveryTimer };
+  return { actions, clearHistoryPoll, get, handleBackgroundSessionEvent, setErrorRecoveryTimer };
 }
 
 describe('foreground event routing', () => {
@@ -97,5 +98,19 @@ describe('foreground event routing', () => {
     actions.handleChatEvent({ ...base, message: { role: 'assistant', content: 'other' } });
 
     expect(handleBackgroundSessionEvent).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps history reconciliation active after a foreground delta', () => {
+    const { actions, clearHistoryPoll } = createHarness();
+
+    actions.handleChatEvent({
+      state: 'delta',
+      sessionKey: SESSION,
+      runId: 'run-active',
+      seq: crypto.randomUUID(),
+      message: { role: 'assistant', content: 'partial' },
+    });
+
+    expect(clearHistoryPoll).not.toHaveBeenCalled();
   });
 });
