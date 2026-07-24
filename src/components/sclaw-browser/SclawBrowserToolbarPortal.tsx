@@ -11,7 +11,9 @@ import {
   openSclawBrowserInSystemBrowser,
 } from '@/lib/open-sclaw-browser';
 import { invokeIpc } from '@/lib/api-client';
+import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
+import { useSettingsStore } from '@/stores/settings';
 import { useSclawBrowserHostBounds } from './use-sclaw-browser-host-bounds';
 import { sclawBrowserEmbedChatShortcutLabel } from '../../../shared/sclaw-embed-browser-shortcut';
 import { cn } from '@/lib/utils';
@@ -27,6 +29,8 @@ export function SclawBrowserToolbarPortal() {
   const session = useSclawBrowserOverlayStore((s) => s.session);
   const chatPanelOpen = useSclawBrowserOverlayStore((s) => s.chatPanelOpen);
   const toggleChatPanel = useSclawBrowserOverlayStore((s) => s.toggleChatPanel);
+  const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
+  const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
   const bounds = useSclawBrowserHostBounds(session !== null);
   const [windowFullScreen, setWindowFullScreen] = useState(false);
 
@@ -77,6 +81,15 @@ export function SclawBrowserToolbarPortal() {
       aria-label={session.title}
     >
       <div className="sclaw-browser-toolbar__start">
+        {sidebarCollapsed ? (
+          <SidebarHeaderToggle
+            isCollapsed
+            onToggle={() => setSidebarCollapsed(false)}
+            collapseLabel={t('sidebar.toggleSidebarCollapse')}
+            expandLabel={t('sidebar.toggleSidebarExpand')}
+            className="sclaw-browser-toolbar__sidebar-toggle"
+          />
+        ) : null}
         <button
           type="button"
           className="sclaw-browser-toolbar__back no-drag"

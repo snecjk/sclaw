@@ -123,6 +123,12 @@ html[data-sclaw-browser-open] .drag-region {
   flex: 1;
 }
 
+.sclaw-browser-toolbar__sidebar-toggle {
+  width: 28px;
+  height: 28px;
+  color: #64748b;
+}
+
 .sclaw-browser-toolbar__back {
   display: inline-flex;
   align-items: center;
