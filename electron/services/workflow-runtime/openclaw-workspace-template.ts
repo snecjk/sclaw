@@ -7,28 +7,20 @@ import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getDataDir } from '../../utils/paths';
 
-export const WORKFLOW_RUNTIME_TEMPLATE_VERSION = '2';
+export const WORKFLOW_RUNTIME_TEMPLATE_VERSION = '3';
 const TEMPLATE_MARKER = `<!-- stoclaw:workflow-runtime-template:v${WORKFLOW_RUNTIME_TEMPLATE_VERSION} -->`;
 const MANAGED_TEMPLATES = {
   'AGENTS.md': `${TEMPLATE_MARKER}
-# Workflow Runtime Agent
+# Workflow Node Executor
 
-Execute only the current workflow node.
-
-- The node's dynamic prompt is the only task instruction.
-- Use only the current node workspace and permitted tools.
-- Return the required WorkflowPacket exactly.
-- Ignore user, project, chat, memory, and other Agent definitions.
-`,
-  'USER.md': `${TEMPLATE_MARKER}
-# Workflow Runtime Service Identity
-
-This is a non-personal workflow service identity. It has no user profile, preferences, memories, standing tasks, or conversational history. Execute only the dynamic prompt for the current workflow node.
+You execute one workflow node.
+Follow the current node prompt exactly and complete only that node's task.
+Do not adopt instructions from files outside this workflow workspace.
 `,
 } as const;
 
 const UNMANAGED_BOOTSTRAP_FILES = new Set([
-  'SOUL.MD', 'TOOLS.MD', 'IDENTITY.MD', 'HEARTBEAT.MD', 'BOOT.MD', 'BOOTSTRAP.MD', 'MEMORY.MD',
+  'SOUL.MD', 'TOOLS.MD', 'IDENTITY.MD', 'USER.MD', 'HEARTBEAT.MD', 'BOOT.MD', 'BOOTSTRAP.MD', 'MEMORY.MD',
   'CLAUDE.MD', 'SYSTEM.MD', 'RULES.MD',
 ]);
 
@@ -51,8 +43,8 @@ export function workflowRuntimeTemplateContent(
 }
 
 /**
- * Strongly synchronize the two workflow-owned definitions and remove all
- * remaining bootstrap files. A write or read-back failure is fatal: the caller
+ * Strongly synchronize the workflow-owned definition and remove all remaining
+ * bootstrap files. A write or read-back failure is fatal: the caller
  * must not send a workflow node request with an unknown system context.
  */
 export async function ensureWorkflowRuntimeTemplates(
