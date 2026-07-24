@@ -203,6 +203,7 @@
     },
     "preview": {
         "collapsePanel": "收起预览区",
+        "resizeSeparator": "调整预览区宽度",
         "overflowMenu": "全部产物",
         "fullscreen": "全屏放映",
         "refresh": "刷新",

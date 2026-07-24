@@ -4,6 +4,7 @@ import type { SkillMeta } from '@/types/skill-meta';
 import { useChatStore } from '@/stores/chat';
 import { useChatSessionEngineType } from '@/hooks/use-chat-session-engine-type';
 import { ChatMessage } from './ChatMessage';
+import { resolveChatMessageSearchKey } from './chat-message-search';
 import { appendWorkflowCardBlockToMessage, sessionHasParamsConfirmedWorkflowForRun } from '@/lib/workflow-card-injection';
 import {
   collectTurnAssistantSources,
@@ -36,8 +37,9 @@ import {
 import { DingTalkSentPreview } from './DingTalkSentPreview';
 import { ThinkingTurnProcess, type ConnectingLabelKey } from './ThinkingProcessPanel';
 import { resolveTurnProcessStatus } from '@/pages/Chat/thinking/turn-process-status';
-import { processSegmentsCoverText } from '@/pages/Chat/thinking/text-ownership';
+import { processSegmentsCoverText, processSegmentsOwnText } from '@/pages/Chat/thinking/text-ownership';
 import {
+  dedupePhaseTextsAgainstFinalReply,
   isLikelyPlanningNarration,
   isLikelyUserClarificationReply,
 } from '@/pages/Chat/thinking/classify-text';
@@ -87,8 +89,8 @@ interface AssistantTurnMessageProps {
   /** 与 buildChatDisplayItems 的 turn key 对齐，流式→完成 remount 时保留 timeline 缓存 */
   turnStableKey?: string;
   showThinking: boolean;
-  matchedMessageIds?: ReadonlySet<string>;
-  activeMessageId?: string | null;
+  matchedMessageKeys?: ReadonlySet<string>;
+  activeMessageKey?: string | null;
   activeStream?: ActiveTurnStream | null;
   onPreviewFile?: (file: AttachedFileMeta) => void;
   onCreateScheduledTask?: (workflowId: string) => void;
@@ -132,8 +134,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   precedingUserMessage = null,
   turnStableKey,
   showThinking,
-  matchedMessageIds,
-  activeMessageId = null,
+  matchedMessageKeys,
+  activeMessageKey = null,
   activeStream = null,
   onPreviewFile,
   onCreateScheduledTask,
@@ -325,6 +327,10 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
     if (fromHistory) {
       const fallbackText = extractText(fromHistory).trim();
+      // Ownership 已把正文留给 process（finalReplyText === null）：勿再落气泡，避免「思考区 + 气泡」重复。
+      if (fallbackText && processSegmentsOwnText(thinkingLayout.segments, fallbackText)) {
+        return null;
+      }
 
       const coveredByThinking = processSegmentsCoverText(
         thinkingLayout.segments,
@@ -340,8 +346,6 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
         return null;
       }
     }
-
-    if (isStreaming) return fromHistory;
 
     return fromHistory;
   }, [turnMessages, streamSources, isStreaming, thinkingLayout.finalReplyText, thinkingLayout.segments]);
@@ -459,7 +463,14 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     || (!isStreaming && chatDisplayHasWorkflowCard);
 
   const thinkingSegmentsForDisplay = useMemo(() => {
-    const { segments } = thinkingLayout;
+    let segments = thinkingLayout.segments;
+    // Sticky merge 可能把 ownership 已删掉的 phase-text 复活；相对 final 再去重一次。
+    const finalForDedupe = thinkingLayout.finalReplyText?.trim() ?? null;
+    if (finalForDedupe && segments.length > 0) {
+      segments = [...segments];
+      dedupePhaseTextsAgainstFinalReply(segments, finalForDedupe);
+    }
+
     if (isStreaming || segments.length === 0) return segments;
 
     const replyShownOutside =
@@ -489,7 +500,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
         hasProcessSegments:
           thinkingSegmentsForDisplay.length > 0 || bakedStreamingTools.length > 0,
         hasFinalReplyStreaming:
-          isStreaming && replyDisplayHasText,
+          isStreaming && replyDisplayHasText && !isProcessing,
+        hasVisibleFinalReply: replyDisplayHasText,
       }),
     [
       isStreaming,
@@ -516,6 +528,10 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
       isStillExecuting={isStillExecuting}
       streamingTools={bakedStreamingTools}
       hasFinalReply={hasThinkingFinalReply}
+      finalReplyText={
+        thinkingLayout.finalReplyText
+          ?? (replyDisplayHasText && replyMessage ? extractText(replyMessage) : null)
+      }
       connectingLabelKey={connectingLabelKey}
       processStatus={processStatus}
     />
@@ -528,27 +544,40 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
         {hasDingTalkSentPreview ? (
           <DingTalkSentPreview previews={dingTalkSentPreviews} />
         ) : null}
-        {preambleMessages.map((preambleMessage) => (
+        {preambleMessages.map((preambleMessage, preambleIndex) => {
+          const searchKey = resolveChatMessageSearchKey(
+            preambleMessage.id,
+            `turn:${turnStableKey ?? 'unknown'}:preamble:${preambleIndex}`,
+          );
+          return (
           <ChatMessage
-            key={preambleMessage.id ?? `preamble-${extractText(preambleMessage).slice(0, 24)}`}
+            key={preambleMessage.id ?? searchKey}
             message={preambleMessage}
             showThinking={false}
-            isSearchMatch={!!preambleMessage.id && !!matchedMessageIds?.has(preambleMessage.id)}
-            isSearchActive={!!preambleMessage.id && preambleMessage.id === activeMessageId}
+            searchMessageKey={searchKey}
+            isSearchMatch={!!matchedMessageKeys?.has(searchKey)}
+            isSearchActive={activeMessageKey === searchKey}
             onPreviewFile={onPreviewFile}
             onEditMessage={onEditMessage}
             hideAvatar
             hideThinkingPanel
             suppressToolCards={showThinking}
           />
-        ))}
+          );
+        })}
         {replyDisplayHasText || chatDisplayHasWorkflowCard ? (
-          chatDisplayMessageWithTimestamp ? (
+          chatDisplayMessageWithTimestamp ? (() => {
+            const replySearchKey = resolveChatMessageSearchKey(
+              chatDisplayMessageWithTimestamp.id,
+              `turn:${turnStableKey ?? 'unknown'}:reply`,
+            );
+            return (
             <ChatMessage
               message={chatDisplayMessageWithTimestamp}
               showThinking={false}
-              isSearchMatch={!!chatDisplayMessageWithTimestamp.id && !!matchedMessageIds?.has(chatDisplayMessageWithTimestamp.id)}
-              isSearchActive={!!chatDisplayMessageWithTimestamp.id && chatDisplayMessageWithTimestamp.id === activeMessageId}
+              searchMessageKey={replySearchKey}
+              isSearchMatch={!!matchedMessageKeys?.has(replySearchKey)}
+              isSearchActive={activeMessageKey === replySearchKey}
               isStreaming={isStreaming && replyDisplayHasText}
               streamingTools={isStreaming ? streamingTools : []}
               onPreviewFile={onPreviewFile}
@@ -559,7 +588,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
               suppressToolCards={showThinking}
               isTurnDisplayReply
             />
-          ) : null
+            );
+          })() : null
         ) : null}
       </div>
     );

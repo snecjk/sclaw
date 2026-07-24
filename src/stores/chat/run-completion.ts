@@ -23,6 +23,51 @@ export function hasPendingToolUse(message: RawMessage | undefined): boolean {
   return Array.isArray(toolCalls) && toolCalls.length > 0;
 }
 
+/**
+ * OpenClaw chat final 常是整轮合并 buffer，历史 tool_use 会一直留在 content 里。
+ * 只有「末尾仍是 tool_use」或 stopReason=tooluse 才算工具未完成。
+ */
+export function hasTrailingPendingToolUse(message: RawMessage | undefined): boolean {
+  if (!message) return false;
+
+  const msg = message as unknown as Record<string, unknown>;
+  const stopReason = String(msg.stopReason ?? msg.stop_reason ?? '').toLowerCase();
+  if (stopReason === 'tooluse' || stopReason === 'tool_use') return true;
+  if (
+    stopReason === 'end_turn'
+    || stopReason === 'endturn'
+    || stopReason === 'stop'
+    || stopReason === 'completed'
+  ) {
+    return false;
+  }
+
+  const content = message.content;
+  if (Array.isArray(content)) {
+    for (let i = content.length - 1; i >= 0; i -= 1) {
+      const block = content[i] as { type?: string; text?: string };
+      const type = block?.type;
+      if (!type) continue;
+      if (type === 'tool_use' || type === 'toolCall') return true;
+      if (type === 'text' && typeof block.text === 'string' && block.text.trim()) return false;
+      if (
+        type === 'thinking'
+        || type === 'tool_result'
+        || type === 'toolResult'
+        || type === 'image'
+      ) {
+        continue;
+      }
+    }
+  }
+
+  if (typeof message.content === 'string' && message.content.trim()) return false;
+  if (typeof msg.text === 'string' && msg.text.trim()) return false;
+
+  const toolCalls = msg.tool_calls ?? msg.toolCalls;
+  return Array.isArray(toolCalls) && toolCalls.length > 0;
+}
+
 export function isClaudeRuntimeResultDone(runtimeResult: unknown): boolean {
   if (!runtimeResult || typeof runtimeResult !== 'object') return false;
   const result = runtimeResult as Record<string, unknown>;
@@ -50,23 +95,30 @@ export function resolveAssistantFinalTerminalState(
   eventPhase: unknown,
   finalMsg: RawMessage,
 ): { isAgenticRunFragment: boolean; isTerminalOutput: boolean } {
-  // OpenClaw 整轮 terminal 只认 agent.completed（finalizeOpenClawRunAfterAgentCompleted）；
-  // 中间 assistant final 即使带正文也只是 fragment，不能清 sending / 不能 defer 成完成态。
+  const hasOutput = hasNonToolAssistantContent(finalMsg);
+
+  // OpenClaw: gateway 经常在 chat.state=final 后触发 agent_end，但不再下发
+  // turn.completed。合并 buffer 里的历史 tool_use 不能挡住终态。
   if (engineType === 'openclaw' && sending) {
+    const trailingTools = hasTrailingPendingToolUse(finalMsg);
+    if (hasOutput && !trailingTools) {
+      return { isAgenticRunFragment: false, isTerminalOutput: true };
+    }
     return { isAgenticRunFragment: true, isTerminalOutput: false };
   }
 
+  const pendingTools = hasPendingToolUse(finalMsg);
+
   // Multi-step agentic runs emit many assistant 'final' events before the run
   // truly ends. While sending=true and agent.completed has not arrived, treat
-  // these as non-terminal for BOTH Claude and OpenClaw.
+  // these as non-terminal for Claude.
   const isAgenticRunFragment =
     isAgenticEngine(engineType)
     && sending
     && !isAgentCompletedEventPhase(eventPhase);
-  const hasOutput = hasNonToolAssistantContent(finalMsg);
   const isTerminalOutput =
     hasOutput
-    && !hasPendingToolUse(finalMsg)
+    && !pendingTools
     && !isAgenticRunFragment;
   return { isAgenticRunFragment, isTerminalOutput };
 }

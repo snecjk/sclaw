@@ -128,20 +128,12 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       });
     }, [onSnapshotChange, onTriggerChange]);
 
-    const resizeEditor = useCallback(() => {
-      const root = editorRef.current;
-      if (!root) return;
-      root.style.height = 'auto';
-      root.style.height = `${Math.min(root.scrollHeight, 200)}px`;
-    }, []);
-
     useImperativeHandle(ref, () => ({
       focus: () => editorRef.current?.focus(),
       clear: () => {
         const root = editorRef.current;
         if (!root) return;
         clearMentionEditor(root);
-        resizeEditor();
         syncFromDom();
       },
       getSnapshot: () => {
@@ -159,28 +151,24 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         if (!root) return;
         lastAppliedSeedRef.current = undefined;
         setMentionEditorPlainText(root, text);
-        resizeEditor();
         syncFromDom();
       },
       insertPlainText: (text) => {
         const root = editorRef.current;
         if (!root) return;
         insertPlainTextAtCaret(root, text);
-        resizeEditor();
         syncFromDom(false);
       },
       setMentions: (mentions) => {
         const root = editorRef.current;
         if (!root) return;
         setMentionEditorMentions(root, mentions, { removable: removableMentions });
-        resizeEditor();
         syncFromDom(false);
       },
       insertMention: (mention, trigger) => {
         const root = editorRef.current;
         if (!root) return;
         insertMentionAtTrigger(root, trigger, mention, { removable: removableMentions });
-        resizeEditor();
         syncFromDom();
         onTriggerChange?.(null);
       },
@@ -188,14 +176,12 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         const root = editorRef.current;
         if (!root) return;
         insertWorkflowSpan(root, workflowId, name, source);
-        resizeEditor();
         syncFromDom();
       },
       insertSkill: (slug, title) => {
         const root = editorRef.current;
         if (!root) return;
         insertSkillSpan(root, slug, title);
-        resizeEditor();
         syncFromDom();
       },
       consumeSkillInlineTrigger: (query) => {
@@ -203,7 +189,6 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         if (!root) return false;
         const consumed = consumeSkillTriggerText(root, query);
         if (consumed) {
-          resizeEditor();
           syncFromDom();
         }
         return consumed;
@@ -212,22 +197,16 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         const root = editorRef.current;
         if (!root) return;
         removeSkillSpan(root);
-        resizeEditor();
         syncFromDom();
       },
       openMentionPicker: () => {
         const root = editorRef.current;
         if (!root) return;
         insertAtTriggerCharacter(root);
-        resizeEditor();
         syncFromDom();
         onTriggerChange?.(detectActiveMentionTrigger(root));
       },
-    }), [onTriggerChange, removableMentions, resizeEditor, syncFromDom]);
-
-    useEffect(() => {
-      resizeEditor();
-    }, [resizeEditor]);
+    }), [onTriggerChange, removableMentions, syncFromDom]);
 
     useEffect(() => {
       const trimmed = seedText?.trim();
@@ -239,13 +218,12 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         lastAppliedSeedRef.current = trimmed;
         setMentionEditorPlainText(root, `${trimmed} `);
         focusEditorAtEnd(root);
-        resizeEditor();
         syncFromDom();
         return;
       }
 
       lastAppliedSeedRef.current = undefined;
-    }, [resizeEditor, seedText, syncFromDom]);
+    }, [seedText, syncFromDom]);
 
     useEffect(() => {
       const slug = seedSkillSlug?.trim();
@@ -261,14 +239,12 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       appliedSkillSeedRef.current = slug;
       const { title } = resolveSkillFromPlaza(slug);
       insertSkillSpan(root, slug, title);
-      resizeEditor();
       syncFromDom();
-    }, [resizeEditor, seedSkillSlug, syncFromDom]);
+    }, [seedSkillSlug, syncFromDom]);
 
     const handleInput = useCallback(() => {
-      resizeEditor();
       syncFromDom();
-    }, [resizeEditor, syncFromDom]);
+    }, [syncFromDom]);
 
     const handleMentionRemove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
       const target = event.target as HTMLElement;
@@ -282,23 +258,21 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       if (!root || !(span instanceof HTMLSpanElement)) return;
 
       removeMentionSpan(root, span);
-      resizeEditor();
       syncFromDom();
       root.focus();
-    }, [resizeEditor, syncFromDom]);
+    }, [syncFromDom]);
 
     const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
       if (event.key === 'Backspace' && !isComposingRef.current) {
         const root = editorRef.current;
         if (root && removeMentionBeforeCaret(root)) {
           event.preventDefault();
-          resizeEditor();
           syncFromDom();
           return;
         }
       }
       onKeyDown?.(event);
-    }, [onKeyDown, resizeEditor, syncFromDom]);
+    }, [onKeyDown, syncFromDom]);
 
     const handleKeyUp = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
       syncFromDom();
@@ -330,13 +304,11 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
           onCompositionStart?.();
         }}
         onCompositionUpdate={() => {
-          resizeEditor();
           syncFromDom();
         }}
         onCompositionEnd={() => {
           isComposingRef.current = false;
           onCompositionEnd?.();
-          resizeEditor();
           syncFromDom();
         }}
       />

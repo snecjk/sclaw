@@ -90,7 +90,7 @@
         "projectFolder": "Project folder",
         "projectLocationLabel": "Project location",
         "projectLocationPlaceholder": "Click to choose a project folder",
-        "projectArtifactHint": "Artifacts from conversations in this project are saved under `.claw-output` in the project folder.",
+        "projectArtifactHint": "Artifacts from conversations in this project are saved under `.sclaw/.claw-output` in the project folder.",
         "pickFolder": "Choose folder",
         "projectCreated": "Project created",
         "projectUpdated": "Project updated",

@@ -8,7 +8,7 @@ import { useChatStore } from '@/stores/chat';
 import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import fileIcon from '@/assets/icons/file.svg';
+import { SkillIcon } from './SkillIcon';
 
 interface SkillDetailModalProps {
   skill: SkillSummary | null;
@@ -29,13 +29,15 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
 
   // Use live skill data from store so the modal reflects install/uninstall changes immediately
   const liveSkill = skill
-    ? ([...plazaSkills, ...mySkills].find((s) => s.slug === skill.slug) ?? skill)
+    ? ([...mySkills, ...plazaSkills].find((s) => s.slug === skill.slug) ?? skill)
     : null;
   const isInstalling = liveSkill ? installing[liveSkill.slug] : false;
+  const isDisabled = liveSkill?.enabled === false;
 
   if (!liveSkill) return null;
 
   const handleUse = () => {
+    if (isDisabled) return;
     // Start a new session so the Gateway picks up any newly installed skills
     useChatStore.getState().newSession();
     onClose();
@@ -47,7 +49,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
   const handleInstall = () => {
     if (isInstalling) return;
     const isUpdate = liveSkill.updateAvailable;
-    const { installSkill, fetchPlazaSkills } = useSkillPlazaStore.getState();
+    const { installSkill } = useSkillPlazaStore.getState();
     installSkill(liveSkill.slug, {
       version: liveSkill.version,
       force: liveSkill.updateAvailable,
@@ -55,7 +57,6 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
       description: liveSkill.description,
     })
       .then(() => {
-        fetchPlazaSkills({ reset: true });
         toast.success(
           isUpdate
             ? t('plaza.toast.updateSuccess', { defaultValue: '更新成功，正在生效' })
@@ -77,18 +78,6 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
     : liveSkill.source === 'mine'
       ? { label: t('plaza.tag.mine', { defaultValue: '自建' }), bg: '#FFF5E6', text: '#D95700' }
       : null;
-
-  const renderIcon = () => {
-    if (liveSkill.icon) {
-      return (
-        <span
-          className="inline-flex dark:invert"
-          dangerouslySetInnerHTML={{ __html: liveSkill.icon.replace(/width="[^"]*"/, 'width="20"').replace(/height="[^"]*"/, 'height="20"') }}
-        />
-      );
-    }
-    return <img src={fileIcon} alt="" aria-hidden className="h-5 w-5 object-contain dark:invert" />;
-  };
 
   // Optional workflow steps from skill data (future backend support)
   const workflowSteps = (liveSkill as unknown as Record<string, unknown>).workflowSteps as string[] | undefined;
@@ -127,10 +116,7 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
               </Dialog.Close>
 
               <div className="flex items-start gap-3 pr-8">
-                <div className="relative w-10 h-10 rounded-lg flex items-center justify-center bg-background flex-shrink-0 border border-border"
-                  style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}>
-                  {renderIcon()}
-                </div>
+                <SkillIcon icon={liveSkill.icon} size="md" className="bg-background" />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h2 className="text-base font-semibold text-foreground">{liveSkill.title}</h2>
@@ -221,7 +207,8 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
             ) : liveSkill.installed || liveSkill.source === 'mine' ? (
               <button
                 onClick={handleUse}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 transition-colors"
+                disabled={isDisabled}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Play className="h-4 w-4" />
                 {t('plaza.action.useNow', { defaultValue: '立即使用' })}

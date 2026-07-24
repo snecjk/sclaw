@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const createChatCompletionMock = vi.hoisted(() => vi.fn());
+const createChatCompletionStreamMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@electron/services/agent-memory-remote-service', () => ({
   agentMemoryRemoteService: {
-    createChatCompletion: (...args: unknown[]) => createChatCompletionMock(...args),
+    createChatCompletionStream: (...args: unknown[]) => createChatCompletionStreamMock(...args),
   },
 }));
 
@@ -22,14 +22,9 @@ import { ClaudeExecutionSummaryService } from '@electron/services/claude-executi
 describe('ClaudeExecutionSummaryService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    createChatCompletionMock.mockResolvedValue({
-      choices: [{
-        message: {
-          role: 'assistant',
-          content: JSON.stringify({ shouldStore: true, intent: '查询经营数据' }),
-        },
-      }],
-    });
+    createChatCompletionStreamMock.mockResolvedValue(
+      JSON.stringify({ shouldStore: true, intent: '查询经营数据' }),
+    );
   });
 
   it('summarizes with the fixed Memory Center model and chat completion API', async () => {
@@ -39,8 +34,8 @@ describe('ClaudeExecutionSummaryService', () => {
       userTask: '查询今日经营数据',
     });
 
-    expect(createChatCompletionMock).toHaveBeenCalledOnce();
-    expect(createChatCompletionMock).toHaveBeenCalledWith(expect.objectContaining({
+    expect(createChatCompletionStreamMock).toHaveBeenCalledOnce();
+    expect(createChatCompletionStreamMock).toHaveBeenCalledWith(expect.objectContaining({
       model: 'qwen3.6-plus',
       messages: [
         expect.objectContaining({ role: 'system' }),
@@ -49,5 +44,19 @@ describe('ClaudeExecutionSummaryService', () => {
       response_format: { type: 'json_object' },
     }));
     expect(result).toMatchObject({ shouldStore: true, intent: '查询经营数据' });
+  });
+
+  it('emits valid JSON example punctuation when candidate assessments are requested', async () => {
+    const service = new ClaudeExecutionSummaryService();
+    await service.summarize({
+      userTask: '查询今日经营数据',
+      injectedExperiences: [{ memoryId: 'memory-1', memory: '旧经验' }],
+    });
+
+    const request = createChatCompletionStreamMock.mock.calls[0]?.[0] as {
+      messages?: Array<{ role?: string; content?: string }>;
+    };
+    const prompt = request.messages?.find((message) => message.role === 'user')?.content;
+    expect(prompt).toContain('"confidence": 0.7,\n  "candidateAssessments"');
   });
 });

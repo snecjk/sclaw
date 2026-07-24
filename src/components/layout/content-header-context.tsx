@@ -23,7 +23,7 @@ export interface ContentHeaderSlot {
   previewTabs?: ReactNode;
   /** 会话区操作（搜索/刷新/思考等）：三栏时随对话列头部右对齐，单栏时并入右上角 icon 组 */
   chatActions?: ReactNode;
-  /** 右侧操作区（icon 组） */
+  /** 右侧操作区（icon 组）：预览面板展开/收起等 */
   actions?: ReactNode;
   /** 三栏预览已展开：MainLayout body 去掉水平 px，由 split row 与 header 共用 inset */
   isSplitLayout?: boolean;
@@ -92,7 +92,7 @@ function useContentHeaderRegistry() {
   return ctx;
 }
 
-/** 当前页面向全局 ContentHeader 注入 title / previewTabs / actions；卸载时自动清空 */
+/** 当前页面向全局 ContentHeader 注入 title / previewTabs / chatActions / actions；卸载时自动清空 */
 export function useContentHeader({
   title,
   previewTabs,
@@ -114,7 +114,7 @@ export function useContentHeader({
   }, [title, previewTabs, chatActions, actions, isSplitLayout, onCloseSession, enabled, setSlot]);
 }
 
-/** ContentHeader 组件读取当前应展示的 title / previewTabs / actions（含路由默认标题） */
+/** ContentHeader 组件读取当前应展示的槽位（含路由默认标题） */
 export function useContentHeaderDisplay(): {
   title: ReactNode | null;
   previewTabs: ReactNode | null;

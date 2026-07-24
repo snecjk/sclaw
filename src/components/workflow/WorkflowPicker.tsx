@@ -1,4 +1,13 @@
-import { useState, useEffect, useMemo, forwardRef, useRef } from 'react';
+import {
+  useState,
+  useEffect,
+  useMemo,
+  forwardRef,
+  useRef,
+  useLayoutEffect,
+  type RefObject,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { Search, Workflow } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -8,13 +17,23 @@ interface WorkflowPickerProps {
   open: boolean;
   onClose: () => void;
   onSelect: (id: string, name: string) => void;
+  /** 锚定按钮：有则 portal + fixed 定位，避免被输入壳 overflow 裁切 */
+  anchorRef?: RefObject<HTMLElement | null>;
   className?: string;
 }
 
+type PickerPosition = {
+  left: number;
+  bottom: number;
+  width: number;
+};
+
 export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
-  ({ open, onClose, onSelect, className }, ref) => {
+  ({ open, onClose, onSelect, anchorRef, className }, ref) => {
     const { t } = useTranslation('chat');
     const [query, setQuery] = useState('');
+    const [position, setPosition] = useState<PickerPosition | null>(null);
+    const localRef = useRef<HTMLDivElement | null>(null);
 
     const { workflows, loading, refetch } = useMyPublishedWorkflows();
 
@@ -35,6 +54,36 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
       prevOpenRef.current = open;
     }, [open, refetch]);
 
+    useLayoutEffect(() => {
+      if (!open || !anchorRef?.current) {
+        setPosition(null);
+        return;
+      }
+
+      const updatePosition = () => {
+        const rect = anchorRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        const width = Math.min(320, Math.max(280, window.innerWidth - 24));
+        const left = Math.min(
+          Math.max(12, rect.left),
+          window.innerWidth - width - 12,
+        );
+        setPosition({
+          left,
+          bottom: window.innerHeight - rect.top + 8,
+          width,
+        });
+      };
+
+      updatePosition();
+      window.addEventListener('resize', updatePosition);
+      window.addEventListener('scroll', updatePosition, true);
+      return () => {
+        window.removeEventListener('resize', updatePosition);
+        window.removeEventListener('scroll', updatePosition, true);
+      };
+    }, [open, anchorRef]);
+
     const filtered = useMemo(() => {
       const trimmed = query.trim().toLowerCase();
       if (!trimmed) return workflows;
@@ -47,13 +96,31 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
 
     if (!open) return null;
 
-    return (
+    const setRefs = (node: HTMLDivElement | null) => {
+      localRef.current = node;
+      if (typeof ref === 'function') ref(node);
+      else if (ref) ref.current = node;
+    };
+
+    const panel = (
       <div
-        ref={ref}
+        ref={setRefs}
         className={cn(
-          'absolute left-0 bottom-full z-50 mb-2 w-80 overflow-hidden rounded-2xl border border-glass-border glass p-2',
+          'z-50 overflow-hidden rounded-2xl border border-glass-border glass p-2',
+          position
+            ? 'fixed'
+            : 'absolute left-0 bottom-full mb-2 w-80',
           className,
         )}
+        style={
+          position
+            ? {
+                left: position.left,
+                bottom: position.bottom,
+                width: position.width,
+              }
+            : undefined
+        }
       >
         {/* Search */}
         <div className="flex items-center gap-2 px-2 py-1.5">
@@ -99,6 +166,12 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
         </div>
       </div>
     );
+
+    // Portal 到 body，彻底避开输入壳 / 首页列的 overflow 裁切。
+    if (anchorRef) {
+      return createPortal(panel, document.body);
+    }
+    return panel;
   },
 );
 

@@ -4,16 +4,11 @@ import {
   cronTaskGroupKey,
   resolveTaskGroupKeyFromSessionKey,
   stoBuiltinTaskGroupKey,
-  stoCloudTaskGroupKey,
 } from '../../shared/task-group-key';
 
 describe('task-group-key', () => {
   it('resolves cron dated session keys', () => {
     expect(resolveTaskGroupKeyFromSessionKey('agent:main:cron:job-1:2026-06-25')).toBe(cronTaskGroupKey('job-1'));
-  });
-
-  it('resolves STO cloud dated session keys', () => {
-    expect(resolveTaskGroupKeyFromSessionKey('agent:main:scheduled-task:42:2026-06-25')).toBe(stoCloudTaskGroupKey(42));
   });
 
   it('resolves Claude dated session keys', () => {

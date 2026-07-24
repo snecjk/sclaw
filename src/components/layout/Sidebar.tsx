@@ -1939,6 +1939,12 @@ export function Sidebar() {
             onToggle={toggleProjectsSection}
             shellRef={projectSectionHeaderRef}
             stickyTopClass={sidebarSectionStickyTopProjectClass}
+            onEnsureOpen={() => {
+              revealProjectsAfterOpenRef.current = true;
+              suppressNextProjectsAutoCollapseRef.current = true;
+              setProjectsSectionOpen(true);
+            }}
+            scrollContainerRef={scrollContainerRef}
           />
         ) : null}
         {!sidebarCollapsed ? (
