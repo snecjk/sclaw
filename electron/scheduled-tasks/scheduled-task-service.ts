@@ -37,13 +37,13 @@ import type { GatewayManager } from '../gateway/manager';
  * 承担「CRUD + 校验 + 占位会话 + dingtalk 上下文烘焙」——这些都是两引擎共用、
  * 与执行（`runMainChatSend`）正交的职责。
  *
- * Step 3：**不接生产**（`getScheduledTaskService` 不在 app 启动/路由引用），
- * 生产仍走 `ClaudeTaskScheduler` + Gateway cron。Step 4 起数据迁移、Step 5 接执行器。
+ * 生产路径：app 启动 `setGatewayManager` → 迁移 → `startScheduler`；
+ * CRUD / trigger 经 `/api/scheduled-tasks/*`。
  *
  * 复用锚点：
- *  - 校验/默认值/refresh 模式：`claude-scheduled-task-service.ts`（openclaw 旧 service 同构）
+ *  - 校验/默认值/refresh 模式：原 claude-scheduled-task-service（已退役）
  *  - dingtalk 烘焙：`buildDingTalkMentionSystemContextForScheduledTask`（scenario='scheduled-task'，"指定即必发"）
- *  - catalog 占位 upsert：`CatalogSessionRepository.upsert`（`inferSessionCatalogMeta` 自动推 session_type+task_id）
+ *  - catalog 占位 upsert：`CatalogSessionRepository.upsert`（`inferSessionCatalogMeta` 推 session_type+task_id；P2-C 不收敛类型）
  */
 
 const PERMISSION_PROFILES: readonly ScheduleTaskPermissionProfile[] = [
@@ -179,7 +179,7 @@ export class ScheduledTaskService {
    * `inferSessionCatalogMeta` 自动推出 `session_type`（openclaw→`cron`、
    * claude→`claude_task`）与 `task_id`。title 取任务名，保证历史面板可读。
    *
-   * Step 3 不收敛 `session_type`（仍产 `cron`/`claude_task`，Step 5 才统一）。
+   * P2-C：**不**收敛 `session_type`（保留 `cron`/`claude_task`）。
    */
   async ensureDatedSessionPlaceholder(
     task: ScheduleTask,
@@ -281,8 +281,7 @@ export class ScheduledTaskService {
 }
 
 /**
- * 惰性单例。Step 3 **不**在 app 启动调它、也不自启 scheduler——
- * 生产照旧走 `ClaudeTaskScheduler` + Gateway cron（双跑不冲突）。
+ * 惰性单例。app 启动经 `setGatewayManager` + `startScheduler` 接入生产路径。
  */
 export function getScheduledTaskService(): ScheduledTaskService {
   if (!scheduledTaskService) {

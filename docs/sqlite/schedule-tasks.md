@@ -207,7 +207,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_schedule_task_runs_idem
 | `definitions.json` 其余 | `extra_json` | claude |
 | `scheduler-state.json` nextRunAt | `next_run_at` | claude |
 
-> 历史 run 不导入（`schedule_task_runs` 起始空）。孤儿会话（已删任务）Step 5 按 `task_id` 收敛 `session_type`。
+> 历史 run 不导入（`schedule_task_runs` 起始空）。catalog `session_type` **不收敛**（P2-C）；侧栏只展示 dated 的 `cron`/`claude_task`。
 
 ---
 

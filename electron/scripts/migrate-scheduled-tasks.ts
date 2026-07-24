@@ -19,9 +19,9 @@ import { getAuthState } from '../utils/auth-store';
  *
  * 幂等：marker 文件 + per-row `getById` 存在检查双闸——进程崩溃可重跑续传。
  *
- * OpenClaw **不依赖 Gateway**：直读/改写 `jobs.json`（与
- * `advance-openclaw-cron-next-runs.ts` 同路径约定）。启动早期即可跑，避免
- * `cron.list` 在 Gateway 未连接时失败 → 仍写 marker → 永久漏迁。
+ * OpenClaw **不依赖 Gateway**：直读/改写 `jobs.json`（路径：
+ * `openclaw/cron/jobs.json`）。启动早期即可跑，避免 `cron.list` 在 Gateway
+ * 未连接时失败 → 仍写 marker → 永久漏迁。
  *
  * 字段映射原则（两引擎对称）：
  *  - `dingtalkRecipients=null`、prompt **原样保留烘焙块**。
