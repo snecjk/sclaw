@@ -23,7 +23,8 @@ import {
   DINGTALK_RECIPIENTS_MARKER,
   hasResolvedDingTalkMentions,
 } from '../../shared/dingtalk-mention-context';
-import { ScheduledTaskScheduler, validateCronExpr } from './scheduled-task-scheduler';
+import { ScheduledTaskScheduler } from './scheduled-task-scheduler';
+import { validateCronExpr } from '../utils/cron-math';
 import {
   EngineScheduledTaskDispatcher,
   loggingEventSink,

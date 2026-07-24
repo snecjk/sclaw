@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { computeNextRunAt } from '../utils/cron-math';
 import { ScheduleTaskRepository } from '../db/repositories/schedule-task-repository';
 import { ScheduleTaskRunRepository } from '../db/repositories/schedule-task-run-repository';
 import type {
@@ -17,15 +18,12 @@ import type {
  * lease_until 表。执行（`runMainChatSend` 等）由 Step 5 注入的 `dispatcher`
  * 承接；本调度器只负责「何时触发 + claim 单飞」，不 await 执行。
  *
- * cron 数学（`parseCronField` / `parseCronExpression` / `matchesCron` /
- * `roundUpToNextMinute` / `computeNextRunAt`）逐字移植自 `claude-task-scheduler.ts`，
- * 保持两引擎行为一致。
+ * cron 数学（`computeNextRunAt` / `validateCronExpr`）抽到
+ * `electron/utils/cron-math.ts`（croner 包装）；行为与旧 claude 调度器一致
+ * （5 字段强制、host-local 时区、Vixie OR、排他 nextRun 等价旧 roundUp+扫描）。
  */
 
 const DEFAULT_TICK_INTERVAL_MS = 30_000;
-const MAX_SCAN_MINUTES = 366 * 24 * 60;
-
-type CronFieldMatcher = (value: number) => boolean;
 
 export interface ScheduledTaskScheduleSnapshot {
   taskId: string;
@@ -49,111 +47,6 @@ const noopDispatcher: ScheduledTaskDispatcher = {
     });
   },
 };
-
-function parseCronField(field: string, min: number, max: number): CronFieldMatcher {
-  const normalized = field.trim();
-  if (normalized === '*') {
-    return () => true;
-  }
-
-  const allowed = new Set<number>();
-  for (const segment of normalized.split(',')) {
-    const part = segment.trim();
-    if (!part) continue;
-
-    const [rangePart, stepPart] = part.split('/');
-    const step = stepPart ? Math.max(1, Number(stepPart)) : 1;
-    if (!Number.isFinite(step) || step <= 0) {
-      throw new Error(`Invalid cron step: ${part}`);
-    }
-
-    let start = min;
-    let end = max;
-    if (rangePart !== '*') {
-      const [rawStart, rawEnd] = rangePart.split('-');
-      start = Number(rawStart);
-      end = rawEnd != null ? Number(rawEnd) : start;
-    }
-
-    if (!Number.isFinite(start) || !Number.isFinite(end) || start < min || end > max || start > end) {
-      throw new Error(`Invalid cron range: ${part}`);
-    }
-
-    for (let value = start; value <= end; value += step) {
-      allowed.add(value);
-    }
-  }
-
-  return (value: number) => allowed.has(value);
-}
-
-function parseCronExpression(expr: string): {
-  dayOfMonthAny: boolean;
-  dayOfMonthMatches: CronFieldMatcher;
-  dayOfWeekAny: boolean;
-  dayOfWeekMatches: CronFieldMatcher;
-  hourMatches: CronFieldMatcher;
-  minuteMatches: CronFieldMatcher;
-  monthMatches: CronFieldMatcher;
-} {
-  const parts = expr.trim().split(/\s+/);
-  if (parts.length !== 5) {
-    throw new Error(`Expected 5-field cron expression, received: ${expr}`);
-  }
-
-  const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
-  return {
-    dayOfMonthAny: dayOfMonth === '*',
-    dayOfMonthMatches: parseCronField(dayOfMonth, 1, 31),
-    dayOfWeekAny: dayOfWeek === '*',
-    dayOfWeekMatches: parseCronField(dayOfWeek, 0, 6),
-    hourMatches: parseCronField(hour, 0, 23),
-    minuteMatches: parseCronField(minute, 0, 59),
-    monthMatches: parseCronField(month, 1, 12),
-  };
-}
-
-function matchesCron(date: Date, expr: string): boolean {
-  const parsed = parseCronExpression(expr);
-  if (!parsed.minuteMatches(date.getMinutes())) return false;
-  if (!parsed.hourMatches(date.getHours())) return false;
-  if (!parsed.monthMatches(date.getMonth() + 1)) return false;
-
-  const domMatches = parsed.dayOfMonthMatches(date.getDate());
-  const dowMatches = parsed.dayOfWeekMatches(date.getDay());
-  if (parsed.dayOfMonthAny && parsed.dayOfWeekAny) return true;
-  if (parsed.dayOfMonthAny) return dowMatches;
-  if (parsed.dayOfWeekAny) return domMatches;
-  return domMatches || dowMatches;
-}
-
-function roundUpToNextMinute(date: Date): Date {
-  const next = new Date(date.getTime());
-  next.setSeconds(0, 0);
-  next.setMinutes(next.getMinutes() + 1);
-  return next;
-}
-
-/** 计算从 `from` 之后第一个 cron 命中时刻（ISO）。逐字移植自 claude 调度器。 */
-export function computeNextRunAt(expr: string, from: Date): string {
-  let candidate = roundUpToNextMinute(from);
-  for (let i = 0; i < MAX_SCAN_MINUTES; i++) {
-    if (matchesCron(candidate, expr)) {
-      return candidate.toISOString();
-    }
-    candidate = new Date(candidate.getTime() + 60_000);
-  }
-  throw new Error(`Could not find next run time within scan horizon for cron: ${expr}`);
-}
-
-/**
- * 强校验 cron：5 字段格式 + 区间合法 + 366 天地平线内确有命中
- * （挡 `0 9 31 2 *` 这类永不命中的表达式）。非法即 throw。
- */
-export function validateCronExpr(expr: string): void {
-  parseCronExpression(expr);
-  computeNextRunAt(expr, new Date(0));
-}
 
 export class ScheduledTaskScheduler {
   private isRunning = false;
@@ -272,12 +165,68 @@ export class ScheduledTaskScheduler {
   }
 
   /**
+   * 清扫挂起的 `running` run：`started_at + task.timeout_sec` 已过即判 stale
+   * （引擎回调丢失、进程未重启但单飞被占），finalize 为 `timed_out` 释放单飞。
+   * 镜像 claude 家族的时间 lease 自愈——generic 是 status lease，无 lease_until
+   * 自愈，故靠 tick 内主动 reap 兜底。
+   *
+   * 仅 reap `running`（有 `started_at`）；`queued` 无 startedAt，超时路径不判
+   * （崩溃残留由启动期 `cancelAllActiveRuns` 清）。`timeoutSec` 为 null 的任务
+   * 无法判定超时→跳过（留待未来 per-task 默认 timeout）。
+   *
+   * 不走执行器失败重试/pause 路径：执行器持有 event sink 与 recovery 重试编排，
+   * scheduler 不耦合。reaped run 计为失败 firing（`countConsecutiveFailedFirings`
+   * 把 `timed_out` 计入），pause-on-timeout 留后续扩展。见
+   * docs/sqlite/schedule-tasks-step5-handoff.md「已知限制」。
+   */
+  private async reapStaleRuns(now: Date, tasks: ScheduleTask[]): Promise<number> {
+    const activeRuns = await this.runRepo.listActiveRuns();
+    if (activeRuns.length === 0) return 0;
+
+    const tasksById = new Map(tasks.map((task) => [task.id, task]));
+    let reaped = 0;
+
+    for (const run of activeRuns) {
+      if (run.status !== 'running' || run.startedAt == null) continue;
+      const task = tasksById.get(run.taskId);
+      if (!task || task.timeoutSec == null) continue;
+
+      const startedMs = new Date(run.startedAt).getTime();
+      const deadlineMs = startedMs + task.timeoutSec * 1000;
+      if (deadlineMs > now.getTime()) continue; // 仍在超时窗口内，不 reap
+
+      await this.runRepo.updateRun(run.runId, {
+        status: 'timed_out',
+        completedAt: now.toISOString(),
+        error: `run exceeded timeout_sec=${task.timeoutSec} (stale lease reaped by scheduler)`,
+        runtimeResult: {
+          stopReason: 'timeout',
+          isError: true,
+          durationMs: now.getTime() - startedMs,
+        },
+      });
+      reaped++;
+      logger.warn('[scheduled-task] reaped stale run (timeout)', {
+        taskId: run.taskId,
+        runId: run.runId,
+        startedAt: run.startedAt,
+        timeoutSec: task.timeoutSec,
+      });
+    }
+    return reaped;
+  }
+
+  /**
    * 单次扫描：对每个 due 的 enabled 任务 claim 一次（单飞）、推进 `next_run_at`、
    * fire-and-forget dispatch。busy（已有 active run）时丢弃该 missed-busy 瞬间、
    * 推进到 now 之后（不堆积）。not-due 且 `next_run_at` 为空时补算（兜底新建任务）。
    */
   async tick(now: Date = new Date()): Promise<void> {
     const tasks = await this.taskRepo.list({});
+
+    // 先于 claim：释放挂起的 stale running run，避免 getActiveRun 永久阻塞
+    // 到期任务的后续触发（引擎回调丢失时 status lease 无法自愈）。
+    await this.reapStaleRuns(now, tasks);
 
     for (const task of tasks) {
       if (!task.enabled) continue;

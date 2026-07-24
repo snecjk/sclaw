@@ -133,9 +133,11 @@ export { DINGTALK_RECIPIENTS_MARKER, hasResolvedDingTalkMentions }
   - 顺序 ✅ `discardMissedOnStartup()` 先于 `start()`（`startScheduler` 的 `.finally(start)`）。
 - **已知限制（不本步修，留后续）**：generic 调度器 lease 是 **status-based**（`schedule_task_runs.status ∈ {queued,running}` 即 active，无时间分量，见 scheduler 头注释 `:15-17`），而旧 claude 家族是 **time-based lease**（`leaseUntil > now`，`claude-task-scheduler.ts:225`）。后果：长会话中若 dispatched run 永久挂起（引擎不回调、进程不重启），`running` 行不释放，`getActiveRun` **永久阻塞该 task 的后续 claim 直到重启**——claude 靠 lease 过期自愈，generic 不能。闭合方案：后续在 tick 内加 stale-run reaper（用已有 `timeout_sec` 字段判定 `started_at` 超时→finalize 为 failed 释放单飞），镜像 claude 运行期 lease 自愈。本步骤按决策仅文档化，未新建代码。
 
+  **【2026-07-24 已落地】** `ScheduledTaskScheduler.reapStaleRuns` 已在 `tick` 入口先于 claim 调用：`runRepo.listActiveRuns()`（新增）筛全部非终态 run，`running` 且 `started_at + task.timeout_sec < now` → `updateRun({ status: 'timed_out', completedAt, error, runtimeResult })` 释放单飞；`queued`（无 startedAt）与 `timeoutSec=null` 的任务不 reap。reaped run 不走执行器重试/pause 路径（scheduler 不耦合 executor 的 event sink / recovery 编排），pause-on-timeout 留后续。测试见 `tests/db/scheduled-task-scheduler.test.ts` 的 `tick (stale-run reaper)` 3 例。
+
 ## 快速验证命令（新会话起步自检）
 ```
-npx vitest run --config vitest.db.config.ts        # 期望 36/36 通过
+npx vitest run --config vitest.db.config.ts        # 期望 43/43 通过
 npx tsc --noEmit -p tsconfig.node.json 2>&1 | grep -iE "scheduled-task|tests/db|connection"  # 期望无输出
 grep -rn "getScheduledTaskService" electron --include="*.ts"   # Step 5 接线后：应出现在 main/index.ts + api/routes/scheduled-tasks.ts（+ service.ts 定义）
 ```

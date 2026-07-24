@@ -4,9 +4,9 @@ import { ScheduleTaskRepository } from '../../electron/db/repositories/schedule-
 import { ScheduleTaskRunRepository } from '../../electron/db/repositories/schedule-task-run-repository';
 import {
   ScheduledTaskScheduler,
-  validateCronExpr,
   type ScheduledTaskDispatcher,
 } from '../../electron/services/scheduled-task-scheduler';
+import { validateCronExpr } from '../../electron/utils/cron-math';
 import type { ScheduleTask, ScheduleTaskRun } from '../../electron/db/models/domain/schedule-task';
 
 function makeRecordingDispatcher() {
@@ -148,6 +148,95 @@ describe('ScheduledTaskScheduler', () => {
       await scheduler.tick(new Date('2024-01-01T00:00:45.000Z')); // not due
       expect(dispatched).toHaveLength(0);
       expect((await taskRepo.getById('future'))?.nextRunAt).toBe('2024-01-01T00:01:00.000Z');
+    });
+  });
+
+  describe('tick (stale-run reaper)', () => {
+    it('reaps a running run past its timeout_sec and releases single-flight', async () => {
+      const { dispatcher, dispatched } = makeRecordingDispatcher();
+      const scheduler = new ScheduledTaskScheduler(taskRepo, runRepo, dispatcher);
+      await taskRepo.create({ id: 'hang', name: 'H', enabled: true, ...baseTaskInput, timeoutSec: 60 });
+
+      // Started 120s ago with a 60s timeout → stale by 60s.
+      const startedAt = '2024-01-01T00:00:00.000Z';
+      const now = new Date('2024-01-01T00:02:00.000Z');
+      const run = await runRepo.createRun({
+        taskId: 'hang',
+        triggerSource: 'schedule',
+        scheduledFor: startedAt,
+        status: 'running',
+        startedAt,
+        idempotencyKey: 'hang:2024-01-01T00:00:00.000Z',
+      });
+      // Keep the task not-due so tick won't claim a fresh run in the same pass.
+      await taskRepo.updateScheduleState('hang', { nextRunAt: '2024-01-01T00:10:00.000Z' });
+
+      await scheduler.tick(now);
+
+      const reaped = await runRepo.getRun(run.runId);
+      expect(reaped?.status).toBe('timed_out');
+      expect(reaped?.completedAt).toBe(now.toISOString());
+      expect(reaped?.error).toMatch(/timeout_sec=60/);
+      expect(reaped?.runtimeResult?.stopReason).toBe('timeout');
+      expect(reaped?.runtimeResult?.isError).toBe(true);
+      expect(reaped?.runtimeResult?.durationMs).toBe(120_000);
+      expect(await runRepo.getActiveRun('hang')).toBeNull();
+
+      // Single-flight released: a fresh manual claim now succeeds.
+      await scheduler.triggerTaskNow('hang', now);
+      expect(dispatched).toHaveLength(1);
+    });
+
+    it('does not reap a running run still within its timeout_sec', async () => {
+      const scheduler = new ScheduledTaskScheduler(
+        taskRepo,
+        runRepo,
+        makeRecordingDispatcher().dispatcher,
+      );
+      await taskRepo.create({ id: 'fresh', name: 'F', enabled: true, ...baseTaskInput, timeoutSec: 60 });
+      const startedAt = '2024-01-01T00:01:50.000Z'; // 10s elapsed, 60s timeout → still fresh
+      const now = new Date('2024-01-01T00:02:00.000Z');
+      const run = await runRepo.createRun({
+        taskId: 'fresh',
+        triggerSource: 'schedule',
+        scheduledFor: startedAt,
+        status: 'running',
+        startedAt,
+        idempotencyKey: 'fresh:2024-01-01T00:01:50.000Z',
+      });
+      await taskRepo.updateScheduleState('fresh', { nextRunAt: '2024-01-01T00:10:00.000Z' });
+
+      await scheduler.tick(now);
+
+      const untouched = await runRepo.getRun(run.runId);
+      expect(untouched?.status).toBe('running');
+      const active = await runRepo.getActiveRun('fresh');
+      expect(active?.runId).toBe(run.runId);
+      expect(active?.status).toBe('running');
+    });
+
+    it('skips reaping when the task has no timeout_sec', async () => {
+      const scheduler = new ScheduledTaskScheduler(
+        taskRepo,
+        runRepo,
+        makeRecordingDispatcher().dispatcher,
+      );
+      await taskRepo.create({ id: 'notmo', name: 'N', enabled: true, ...baseTaskInput }); // timeoutSec null
+      const startedAt = '2024-01-01T00:00:00.000Z';
+      const now = new Date('2024-01-01T01:00:00.000Z'); // 1h elapsed, but no timeout → cannot judge
+      const run = await runRepo.createRun({
+        taskId: 'notmo',
+        triggerSource: 'schedule',
+        scheduledFor: startedAt,
+        status: 'running',
+        startedAt,
+        idempotencyKey: 'notmo:2024-01-01T00:00:00.000Z',
+      });
+      await taskRepo.updateScheduleState('notmo', { nextRunAt: '2024-01-02T00:00:00.000Z' });
+
+      await scheduler.tick(now);
+
+      expect((await runRepo.getRun(run.runId))?.status).toBe('running');
     });
   });
 

@@ -148,6 +148,25 @@ export class ScheduleTaskRunRepository {
   }
 
   /**
+   * 全部非终态 run（`queued`/`running`），跨任务，按创建时间升序。
+   * 供 scheduler 的 stale-run reaper 查找 `running` 且 `started_at` 已超
+   * `task.timeout_sec` 的挂起 run（引擎回调丢失）→ finalize 释放单飞。
+   * `queued` 无 `started_at`，超时路径不 reap（启动期 `cancelAllActiveRuns`
+   * 兜底崩溃残留）；`getActiveRun` 是按任务查单条，此处按需全量列出。
+   */
+  async listActiveRuns(): Promise<ScheduleTaskRun[]> {
+    const db = getKyselyDatabase();
+    const rows = await db
+      .selectFrom('schedule_task_runs')
+      .selectAll()
+      .where('status', 'in', ['queued', 'running'])
+      .where('deleted_at', 'is', null)
+      .orderBy('created_at', 'asc')
+      .execute();
+    return rows.map(mapRow);
+  }
+
+  /**
    * 数连续失败的 firing（triggerSource 为 `schedule`/`manual` 的 run），跳过
    * `recovery` 重试 run。从最新 run 倒序遍历，遇到第一个非失败的 firing
    * （succeeded/cancelled/queued/running）即停。
