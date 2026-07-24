@@ -18,7 +18,7 @@ import path from 'node:path';
 import { evaluateCondition as evaluateWorkflowCondition, executeLogicNode } from './logic-nodes';
 import { runAgentNodeWithRetry, type InvokeAgentFn } from './agent-retry';
 import { flushOnce, startFlushLoop, stopFlushLoop, type FlushDeps } from './outbox-flusher';
-import { uploadArtifact, type ArtifactRow } from './artifact-uploader';
+import { recordArtifact as persistArtifact, type ArtifactRow } from './artifact-recorder';
 import { recoverOnLaunch, resumeRun } from './crash-recovery';
 import { cancelAgent } from './agent-runner-claude';
 import { cancelOpenClawWorkflowAgent } from './agent-runner-openclaw';
@@ -41,7 +41,6 @@ export interface EngineDeps {
   quota?: () => Promise<boolean>;          // /api/token-quota/check
   postSync: FlushDeps['postSync'];        // POST /agent/v2/runs/{id}/sync
   onTokenExpired?: () => void;
-  uploadOssFile?: any;                     // uploadOssFile（artifact-uploader）
   onRecover?: (runs: any[]) => void;
   /** 状态转换桥（gap2）：dispatch 热路径 4 个转换点 + crash-recovery 调用，
    * bootstrap 读 run 行拿 session_key 组装 WorkflowStatusPayload 广播到所有 renderer。 */
@@ -456,7 +455,7 @@ export function createEngine(deps: EngineDeps) {
     await mkdir(directory, { recursive: true });
     await writeFile(filePath, content, 'utf8');
     const idHash = createHash('sha1').update(`${runId}:${node.id}:${filePath}`).digest('hex').slice(0, 16);
-    await uploadArtifact({ repo, uploadOssFile: deps.uploadOssFile }, {
+    await persistArtifact(repo, {
       artifact_id: `${runId}:${node.id}:${idHash}`, run_id: runId, node_id: node.id,
       kind: 'OUTPUT', file_path: filePath, content_type: contentType, summary: node.name ?? `result.${ext}`, created_at: nowIso(),
     });
@@ -725,9 +724,9 @@ export function createEngine(deps: EngineDeps) {
     stopSync(): void {
       stopFlushLoop();
     },
-    // 供 NodeDispatcher 在智能节点产出 artifact 后调
-    async uploadArtifact(art: ArtifactRow): Promise<void> {
-      await uploadArtifact({ repo, uploadOssFile: deps.uploadOssFile }, art);
+    // 供 NodeDispatcher 在智能节点产出 artifact 后记录本地元数据。
+    async recordArtifact(art: ArtifactRow): Promise<void> {
+      await persistArtifact(repo, art);
     },
     async retrySync(runId?: string): Promise<void> {
       await repo.retryFailedOutbox(runId);
@@ -811,9 +810,9 @@ export function createEngine(deps: EngineDeps) {
       const artifactId = `${runId}:${nodeId}:${idHash}`;
       // A packet-declared HTML delivery is OUTPUT even though it is produced by
       // an agent node before the terminal `output` node. Do not overwrite that
-      // classification with the generic INTERMEDIATE default during upload.
+      // classification with the generic INTERMEDIATE default during recording.
       const declared = declaredArtifacts.find((artifact) => artifact.artifactId === artifactId);
-      await uploadArtifact({ repo, uploadOssFile: deps.uploadOssFile }, {
+      await persistArtifact(repo, {
         artifact_id: artifactId,
         run_id: runId,
         node_id: nodeId,

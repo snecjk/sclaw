@@ -1,3 +1,5 @@
+import type { WorkflowRunStatus } from '@/types/workflow';
+
 /**
  * Workflow Memory Store
  *
@@ -22,7 +24,7 @@ export interface WorkflowMemoryRecord {
   /** Last run id for re-execution and result lookup */
   lastRunId?: string;
   /** Last known execution status */
-  lastStatus?: 'pending' | 'running' | 'completed' | 'failed' | 'timeout' | 'unknown';
+  lastStatus?: WorkflowRunStatus;
   /** When the workflow last completed (success or failure) */
   completedAt?: number;
   /** All runs for this workflow instance (newest first). */
@@ -48,7 +50,7 @@ export interface WorkflowExecutionRecord {
   templateName: string;
   /** Workflow version snapshot used by workflow-runtime:start to fetch DSL. */
   versionId?: string | number;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'timeout' | 'unknown';
+  status: WorkflowRunStatus;
   createdAt: number;        // When execution was started
   updatedAt: number;        // Last status update
   collectedInputs: Record<string, unknown>;  // User-filled parameters
@@ -412,7 +414,7 @@ export function updateExecutionStatus(
       store[key] = records;
       saveExecutionsStore(store);
       syncRunStatusToWorkflowRecord(key, exec.workflowId, runId, status, now);
-      if (exec.templateId && (status === 'completed' || status === 'failed' || status === 'timeout')) {
+      if (exec.templateId && (status === 'completed' || status === 'failed' || status === 'timeout' || status === 'cancelled')) {
         clearPendingWorkflowDraft(key, exec.templateId);
       }
       return;
@@ -436,7 +438,7 @@ function syncRunStatusToWorkflowRecord(
   const runs = (prev.runs ?? []).map((r) =>
     r.runId === runId ? { ...r, status, updatedAt } : r,
   );
-  const isTerminal = status === 'completed' || status === 'failed' || status === 'timeout';
+  const isTerminal = status === 'completed' || status === 'failed' || status === 'timeout' || status === 'cancelled';
   sessionRecords[idx] = {
     ...prev,
     lastStatus: prev.lastRunId === runId ? status : prev.lastStatus,

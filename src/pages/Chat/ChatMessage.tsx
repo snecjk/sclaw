@@ -58,6 +58,9 @@ import {
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
 import { RUN_ID_IN_TEXT, sessionHasParamsConfirmedWorkflowForRun } from '@/lib/workflow-card-injection';
 import { getExecutionByRunId } from '@/stores/workflow-memory';
+import { listLocalWorkflowRuns } from '@/lib/workflow-api';
+import { applyWorkflowRunStarted } from '@/lib/workflow-run-started';
+import { selectWorkflowRunForCard } from '@/lib/workflow-card-recovery';
 import {
   artifactToPreviewFile,
   inferMimeTypeFromUrl,
@@ -212,6 +215,7 @@ export const ChatMessage = memo(function ChatMessage({
   const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
   const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
   const sessionKey = useChatStore((s) => s.currentSessionKey);
+  const agentId = useChatStore((s) => s.currentAgentId);
   const workflowCardStates = useChatStore((s) => s.workflowCardStates);
   const workflowCard = useMemo(() => {
     if (isUser) return null;
@@ -235,6 +239,40 @@ export const ChatMessage = memo(function ChatMessage({
     }
     return null;
   }, [isUser, message, text, workflowCardStates, sessionKey, sessionMessages]);
+  const workflowIdMention = useMemo(() => text.match(/\b(wf_[\w-]+)\b/i)?.[1], [text]);
+
+  // OpenClaw may finish the reply with only a workflowId, omitting the runId
+  // returned by execute_workflow. Recover the newest local run for that ID and
+  // attach the normal WorkflowCard so its active polling can start immediately.
+  useEffect(() => {
+    if (isUser || workflowCard || !workflowIdMention) return undefined;
+    if (!isLastAssistantAfterUserTurn(message, sessionMessages)) return undefined;
+
+    let disposed = false;
+    void (async () => {
+      try {
+        const run = selectWorkflowRunForCard(await listLocalWorkflowRuns(workflowIdMention));
+        if (!run || disposed || useChatStore.getState().currentSessionKey !== sessionKey) return;
+        await applyWorkflowRunStarted({
+          sessionKey,
+          agentId,
+          workflowId: workflowIdMention,
+          runId: run.runId,
+          templateName: '工作流',
+          presentation: 'patch_assistant',
+          versionId: run.versionId,
+        });
+      } catch (error) {
+        console.warn('[workflow-trace] workflow card recovery failed', {
+          workflowId: workflowIdMention,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, [agentId, isUser, message, sessionKey, sessionMessages, workflowCard, workflowIdMention]);
   const isWorkflowCompletionMessage = !isUser
     && workflowCard !== null
     && isWorkflowCompletionTranscript(text);

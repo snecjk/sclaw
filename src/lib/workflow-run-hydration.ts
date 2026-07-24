@@ -1,11 +1,8 @@
 /**
- * Hydrate workflow card state from the client-local runtime DB (workflow-runtime:getRun).
- * This is a one-shot initial fetch on session switch / app init / card mount. Active runs
- * do NOT need an explicit subscribe here — the runtime emits a 'workflow:status-update'
- * broadcast on every engine status transition, which the app-wide useWorkflowCompletion
- * listener merges into card state and finalizes on terminal. Terminal runs render once.
+ * Hydrate workflow card state from the client-local runtime DB, with the workflow API as
+ * a fallback for a status-query card whose local snapshot is not available yet.
  */
-import { getRunViaIpc, runToExecutionState } from '@/lib/workflow-api';
+import { getRunViaIpc, getWorkflowRun, runToExecutionState } from '@/lib/workflow-api';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import { mergeWorkflowCardState } from '@/lib/workflow-card-state-merge';
 import { deliverWorkflowCompletionIfNeeded } from '@/lib/workflow-completion-delivery';
@@ -48,12 +45,17 @@ export async function hydrateWorkflowRun(
 
   hydrateInFlight.add(runId);
   try {
-    // gap3 hydration: client-local runs live in the renderer-side DB. Fetch the full
-    // WorkflowRunResponse via the runtime IPC and map to UI execution state.
-    const run = await getRunViaIpc(runId);
+    // Prefer the client-local snapshot. A queried run can arrive before that snapshot
+    // is visible (or be owned by another client), so use the status API to keep the
+    // conversation progress bar moving instead of leaving it at its initial value.
+    let run = await getRunViaIpc(runId);
     if (!run) {
-      console.warn('[workflow-trace] hydrateWorkflowRun failed runId=%s (getRun returned null)', runId);
-      return;
+      try {
+        run = await getWorkflowRun(runId);
+      } catch (error) {
+        console.warn('[workflow-trace] hydrateWorkflowRun failed runId=%s (local and API snapshots unavailable)', runId, error);
+        return;
+      }
     }
 
     if (useChatStore.getState().currentSessionKey !== ctx.sessionKey) return;

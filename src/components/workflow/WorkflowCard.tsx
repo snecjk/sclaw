@@ -22,6 +22,7 @@ import { buildArtifactCardMenuItems } from '@/lib/artifact-card-menu';
 import { getExecutionByRunId } from '@/stores/workflow-memory';
 import { hydrateWorkflowRun } from '@/lib/workflow-run-hydration';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
+import { getWorkflowProgressDetails } from '@/lib/workflow-card-progress';
 import type { WorkflowExecutionState, WorkflowRunStatus } from '@/types/workflow';
 
 interface WorkflowCardProps {
@@ -82,6 +83,27 @@ const STATUS_THEMES: Record<WorkflowRunStatus | 'pending', StatusTheme> = {
   },
   timeout: {
     labelKey: 'workflow.statusTimeout',
+    icon: Clock,
+    statusTextClass: 'text-warning',
+    statusIconClass: 'text-warning',
+    progressClass: 'bg-warning',
+  },
+  cancelled: {
+    labelKey: 'workflow.statusCancelled',
+    icon: Circle,
+    statusTextClass: 'text-muted-foreground',
+    statusIconClass: 'text-muted-foreground',
+    progressClass: 'bg-muted-foreground',
+  },
+  waiting_approval: {
+    labelKey: 'workflow.statusWaitingApproval',
+    icon: Clock,
+    statusTextClass: 'text-warning',
+    statusIconClass: 'text-warning',
+    progressClass: 'bg-warning',
+  },
+  waiting_input: {
+    labelKey: 'workflow.statusWaitingInput',
     icon: Clock,
     statusTextClass: 'text-warning',
     statusIconClass: 'text-warning',
@@ -222,17 +244,14 @@ export function WorkflowCard({
   const statusKey = display.status in STATUS_THEMES ? display.status : 'pending';
   const theme = STATUS_THEMES[statusKey];
   const StatusIcon = theme.icon;
-  const isRunning = display.status === 'running';
+  const progressDetails = getWorkflowProgressDetails(display);
+  const isRunning = progressDetails.isActive;
   const isTerminal = isTerminalWorkflowRunStatus(display.status);
   const durationLabel = useDurationLabel(display.startedAt, display.completedAt, isRunning);
-  const showProgress = isRunning && display.progress > 0;
+  const showProgress = isRunning;
   const userFacingArtifacts = (display.status === 'completed' ? display.result?.artifacts ?? [] : []).filter(
     (artifact) => isUserFacingArtifactUrl(artifact.url),
   );
-  const previewableArtifact = userFacingArtifacts.find((artifact) => shouldPreviewInSidePanel(artifact.url));
-  const primaryArtifact = previewableArtifact ?? userFacingArtifacts[0];
-  const shouldShowPreviewAction = Boolean(previewableArtifact);
-  const canOpenArtifactPreview = Boolean(previewableArtifact && onPreviewArtifact);
   const showWorkflowActions = isTerminal
     && !!display.workflowId
     && !!onCreateScheduledTask;
@@ -241,7 +260,7 @@ export function WorkflowCard({
   const showResults = section === 'full' || section === 'results';
   const hasResultsContent = showResults && (
     Boolean(display.result?.summary)
-    || Boolean(primaryArtifact)
+    || userFacingArtifacts.length > 0
     || showWorkflowActions
   );
 
@@ -279,13 +298,31 @@ export function WorkflowCard({
 
       {showProgress ? (
         <div className="mt-2.5">
-          <div className="h-1 overflow-hidden rounded-full bg-muted">
+          <div className="h-1 overflow-hidden rounded-full bg-muted" aria-label={t('workflow.progressLabel')}>
             {/* 动态进度宽：Tailwind 无法静态表达百分比，保留 inline width */}
             <div
-              className={cn('h-full rounded-full transition-all duration-500', theme.progressClass)}
-              style={{ width: `${Math.max(display.progress, 8)}%` }}
+              className={cn(
+                'h-full rounded-full transition-all duration-500',
+                theme.progressClass,
+                display.progress === 0 && 'animate-pulse',
+              )}
+              style={{ width: `${display.progress > 0 ? Math.max(display.progress, 8) : 28}%` }}
             />
           </div>
+          {progressDetails.helperText ? (
+            <p className="mt-1.5 truncate text-[12px] leading-4 text-muted-foreground">
+              {progressDetails.helperText === 'preparing' ? t('workflow.preparingProgress') : null}
+              {progressDetails.helperText === 'steps'
+                ? t('workflow.stepProgress', {
+                  completed: progressDetails.completedSteps,
+                  total: progressDetails.totalSteps,
+                  current: progressDetails.currentStep ?? t('workflow.stepPending'),
+                })
+                : null}
+              {progressDetails.helperText === 'waitingApproval' ? t('workflow.waitingApprovalProgress') : null}
+              {progressDetails.helperText === 'waitingInput' ? t('workflow.waitingInputProgress') : null}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -303,24 +340,33 @@ export function WorkflowCard({
         </p>
       ) : null}
 
-      {primaryArtifact ? (
-        <ArtifactProductCard
-          title={primaryArtifact.name}
-          metaLine={buildArtifactMetaLine({
-            fileName: primaryArtifact.name,
-            mimeType: primaryArtifact.type || 'application/octet-stream',
-            t,
+      {userFacingArtifacts.length > 0 ? (
+        <div className="space-y-2">
+          {userFacingArtifacts.map((artifact) => {
+            const previewable = shouldPreviewInSidePanel(artifact.url);
+            const previewFile = artifactToPreviewFile(artifact);
+            return (
+              <ArtifactProductCard
+                key={artifact.id || artifact.url || artifact.name}
+                title={artifact.name}
+                metaLine={buildArtifactMetaLine({
+                  fileName: artifact.name,
+                  mimeType: artifact.type || 'application/octet-stream',
+                  t,
+                })}
+                actionLabel={previewable ? t('artifact.preview') : t('workflow.openArtifactLink')}
+                menuItems={buildArtifactCardMenuItems(previewFile, t)}
+                onAction={() => {
+                  if (previewable && onPreviewArtifact) {
+                    onPreviewArtifact(previewFile);
+                    return;
+                  }
+                  openExternalUrl(artifact.url);
+                }}
+              />
+            );
           })}
-          actionLabel={shouldShowPreviewAction ? t('artifact.preview') : t('workflow.openArtifactLink')}
-          menuItems={buildArtifactCardMenuItems(artifactToPreviewFile(primaryArtifact), t)}
-          onAction={() => {
-            if (canOpenArtifactPreview) {
-              onPreviewArtifact!(artifactToPreviewFile(previewableArtifact!));
-              return;
-            }
-            openExternalUrl(primaryArtifact.url);
-          }}
-        />
+        </div>
       ) : null}
 
       {showWorkflowActions ? (

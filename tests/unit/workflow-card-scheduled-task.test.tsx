@@ -126,4 +126,25 @@ describe('WorkflowCard scheduled task action', () => {
     fireEvent.click(screen.getByRole('button', { name: '创建定时任务' }));
     expect(onCreateScheduledTask).toHaveBeenCalledWith('wf_abc');
   });
+
+  it('renders every completed workflow artifact as a product card', () => {
+    chatState.workflowCardStates.run_123 = {
+      runId: 'run_123',
+      workflowId: 'wf_abc',
+      status: 'completed',
+      progress: 100,
+      steps: [],
+      result: {
+        artifacts: [
+          { id: 'art_1', name: '出行报告.html', type: 'text/html', url: 'file:///C:/workflow/出行报告.html' },
+          { id: 'art_2', name: '天气数据.json', type: 'application/json', url: 'file:///C:/workflow/天气数据.json' },
+        ],
+      },
+    } as never;
+
+    render(<WorkflowCard runId="run_123" templateName="测试工作流" />);
+
+    expect(screen.getByText('出行报告.html')).toBeTruthy();
+    expect(screen.getByText('天气数据.json')).toBeTruthy();
+  });
 });

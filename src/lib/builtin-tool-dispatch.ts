@@ -8,9 +8,12 @@ import {
   parseStoToolEnvelope,
   type WorkflowCreatedData,
   type WorkflowExecutionStartedData,
+  type WorkflowRunStatusData,
   type WorkflowSchemaReadyData,
 } from '@/lib/builtin-tool-envelope';
 import { applyWorkflowRunStarted } from '@/lib/workflow-run-started';
+import { mergeWorkflowCardState } from '@/lib/workflow-card-state-merge';
+import { workflowRunResponseToExecutionState } from '@/lib/workflow-run-status';
 import { useChatStore } from '@/stores/chat';
 import {
   applyWorkflowSchemaReady,
@@ -22,7 +25,12 @@ import {
 } from '@/lib/workflow-card-injection';
 import type { RawMessage } from '@/stores/chat/types';
 import { isToolResultRole } from '@/stores/chat/helpers';
-import { getExecutionByRunId, saveWorkflowRecord } from '@/stores/workflow-memory';
+import {
+  getExecutionByRunId,
+  saveWorkflowExecution,
+  saveWorkflowRecord,
+  updateExecutionStatus,
+} from '@/stores/workflow-memory';
 
 export interface BuiltinToolResultMessage {
   id?: string;
@@ -104,6 +112,53 @@ async function handleWorkflowExecutionStarted(
   });
 }
 
+/**
+ * A status query is also a request to follow that exact run in the current
+ * conversation. Persist the minimal execution link first, then hydrate the
+ * card from the tool snapshot so the following assistant reply can always own
+ * a workflow_card even when its prose omits the run ID.
+ */
+function handleWorkflowRunStatus(
+  data: WorkflowRunStatusData,
+  ctx: BuiltinToolDispatchContext,
+): void {
+  const runId = data.id ?? data.runId;
+  const workflowId = data.workflowId;
+  if (!runId || !workflowId) return;
+
+  const existing = getExecutionByRunId(runId, ctx.sessionKey);
+  const templateName = existing?.templateName ?? '工作流';
+  const executionState = workflowRunResponseToExecutionState({
+    ...data,
+    id: runId,
+    workflowId,
+  });
+
+  if (existing) {
+    updateExecutionStatus(runId, executionState.status, ctx.sessionKey);
+  } else {
+    const startedAtMs = Date.parse(executionState.startedAt ?? '') || Date.now();
+    saveWorkflowExecution({
+      sessionKey: ctx.sessionKey,
+      workflowId,
+      runId,
+      templateId: '',
+      templateName,
+      status: executionState.status,
+      createdAt: startedAtMs,
+      updatedAt: Date.now(),
+      collectedInputs: {},
+    });
+  }
+
+  const chatState = useChatStore.getState();
+  const current = chatState.workflowCardStates[runId];
+  chatState.setWorkflowCardState(
+    runId,
+    mergeWorkflowCardState(current, executionState, { localStartedAtMs: existing?.createdAt }),
+  );
+}
+
 /** Patch visible messages when the target session is active. */
 export function syncWorkflowCardsAfterToolDispatch(sessionKey: string): void {
   const chatState = useChatStore.getState();
@@ -175,6 +230,15 @@ export async function dispatchBuiltinToolResult(
   if (envelope?.type === 'workflow_execution_started' && envelope.success) {
     await handleWorkflowExecutionStarted(
       (envelope.data ?? {}) as WorkflowExecutionStartedData,
+      resolvedCtx,
+    );
+    syncWorkflowCardsAfterToolDispatch(resolvedCtx.sessionKey);
+    return true;
+  }
+
+  if (envelope?.type === 'workflow_run_status' && envelope.success) {
+    handleWorkflowRunStatus(
+      (envelope.data ?? {}) as WorkflowRunStatusData,
       resolvedCtx,
     );
     syncWorkflowCardsAfterToolDispatch(resolvedCtx.sessionKey);
