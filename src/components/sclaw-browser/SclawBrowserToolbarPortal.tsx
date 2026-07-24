@@ -3,12 +3,14 @@
  */
 import { createPortal } from 'react-dom';
 import type { CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   closeSclawBrowser,
   openSclawBrowserInSystemBrowser,
 } from '@/lib/open-sclaw-browser';
+import { invokeIpc } from '@/lib/api-client';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 import { useSclawBrowserHostBounds } from './use-sclaw-browser-host-bounds';
 import { sclawBrowserEmbedChatShortcutLabel } from '../../../shared/sclaw-embed-browser-shortcut';
@@ -26,12 +28,39 @@ export function SclawBrowserToolbarPortal() {
   const chatPanelOpen = useSclawBrowserOverlayStore((s) => s.chatPanelOpen);
   const toggleChatPanel = useSclawBrowserOverlayStore((s) => s.toggleChatPanel);
   const bounds = useSclawBrowserHostBounds(session !== null);
+  const [windowFullScreen, setWindowFullScreen] = useState(false);
+
+  useEffect(() => {
+    if (!session || window.electron?.platform !== 'darwin') {
+      return;
+    }
+
+    let disposed = false;
+    const refreshFullScreen = () => {
+      invokeIpc<boolean>('window:isFullScreen')
+        .then((value) => {
+          if (!disposed) setWindowFullScreen(Boolean(value));
+        })
+        .catch(() => {
+          if (!disposed) setWindowFullScreen(false);
+        });
+    };
+
+    refreshFullScreen();
+    window.addEventListener('resize', refreshFullScreen);
+    window.addEventListener('focus', refreshFullScreen);
+    return () => {
+      disposed = true;
+      window.removeEventListener('resize', refreshFullScreen);
+      window.removeEventListener('focus', refreshFullScreen);
+    };
+  }, [session]);
 
   if (!session || !bounds) return null;
 
   const shortcut = sclawBrowserEmbedChatShortcutLabel(window.electron?.platform ?? 'darwin');
   const shouldAvoidMacTrafficLights =
-    window.electron?.platform === 'darwin' && bounds.left < 80;
+    window.electron?.platform === 'darwin' && !windowFullScreen && bounds.left < 80;
   const toolbarStyle: SclawBrowserToolbarStyle = {
     top: bounds.top,
     left: bounds.left,
