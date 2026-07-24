@@ -5,6 +5,7 @@ import { getEngineSessionRegistryEntry } from '../engines/session-registry';
 import type { AgentEngineType } from '../engines/types';
 import type { GatewayManager } from '../gateway/manager';
 import { DEFAULT_WORKSPACE_ID } from '../db/models/domain/session-catalog';
+import { runMainChatSend } from '../services/chat-send-service';
 import {
   ensureCatalogSessionInDefaultWorkspace,
   getLatestChannelCatalogSession,
@@ -105,26 +106,30 @@ export async function sendViaFacade(
 ): Promise<{ runId?: string }> {
   const adapter = getAdapter(handle.engineType);
   const hasMedia = !!media && media.length > 0;
-  const result = hasMedia
-    ? await adapter.sendMessageWithMedia(
-        { gatewayManager },
-        {
-          sessionKey: handle.sessionKey,
-          message: text,
-          media,
-          deliver: false,
-          idempotencyKey: randomUUID(),
-        },
-      )
-    : await adapter.sendMessage(
-        { gatewayManager },
-        {
-          sessionKey: handle.sessionKey,
-          message: text,
-          deliver: false,
-          idempotencyKey: randomUUID(),
-        },
-      );
+  const idempotencyKey = randomUUID();
+  // 与主聊 IPC/gateway 同路：记忆注入 + idempotent + memory turn 绑定
+  const result = await runMainChatSend(
+    gatewayManager,
+    {
+      sessionKey: handle.sessionKey,
+      message: text,
+      sourceText: text,
+      deliver: false,
+      idempotencyKey,
+      engineType: handle.engineType,
+    },
+    (params, memory) => adapter.prepareMemoryInjection(params, memory),
+    (prepared) =>
+      hasMedia
+        ? adapter.sendMessageWithMedia(
+            { gatewayManager },
+            {
+              ...prepared,
+              media,
+            },
+          )
+        : adapter.sendMessage({ gatewayManager }, prepared),
+  );
   if (!result.success) {
     logger.warn('[SessionFacade] send failed', result.error);
     throw new Error(result.error || 'sendViaFacade failed');
