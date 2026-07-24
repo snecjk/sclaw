@@ -75,21 +75,6 @@ export interface ToolCall {
 }
 
 /**
- * Cron task definition
- */
-export interface CronTask {
-  id: string;
-  name: string;
-  schedule: string;
-  command: string;
-  enabled: boolean;
-  lastRun?: string;
-  nextRun?: string;
-  status: 'idle' | 'running' | 'error';
-  error?: string;
-}
-
-/**
  * Provider configuration
  */
 export interface ProviderConfig {
@@ -218,43 +203,6 @@ export class GatewayClient {
    */
   async clearChatHistory(): Promise<void> {
     return this.manager.rpc<void>('chat.clear');
-  }
-
-  // ==================== Cron Methods ====================
-
-  /**
-   * List all cron tasks
-   */
-  async listCronTasks(): Promise<CronTask[]> {
-    return this.manager.rpc<CronTask[]>('cron.list');
-  }
-
-  /**
-   * Create a new cron task
-   */
-  async createCronTask(task: Omit<CronTask, 'id' | 'status'>): Promise<CronTask> {
-    return this.manager.rpc<CronTask>('cron.create', task);
-  }
-
-  /**
-   * Update a cron task
-   */
-  async updateCronTask(taskId: string, updates: Partial<CronTask>): Promise<CronTask> {
-    return this.manager.rpc<CronTask>('cron.update', { taskId, ...updates });
-  }
-
-  /**
-   * Delete a cron task
-   */
-  async deleteCronTask(taskId: string): Promise<void> {
-    return this.manager.rpc<void>('cron.delete', { taskId });
-  }
-
-  /**
-   * Run a cron task immediately
-   */
-  async runCronTask(taskId: string): Promise<void> {
-    return this.manager.rpc<void>('cron.run', { taskId });
   }
 
   // ==================== Provider Methods ====================

@@ -9,14 +9,20 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
-      "baseUrl": {
+      "hostApiHost": {
         "type": "string",
-        "description": "STO 后端 base URL，如 https://baseinfo-aimemory.sto.cn"
+        "default": "127.0.0.1",
+        "description": "StoClaw HostApi 地址（创建任务打 /api/scheduled-tasks）"
       },
-      "ssoAuthPath": {
-        "type": "string",
-        "default": "~/.stoclaw/openclaw/sso-auth.json",
-        "description": "SSO 凭据文件路径"
+      "hostApiPort": {
+        "type": "number",
+        "default": 3210,
+        "description": "StoClaw HostApi 端口"
+      },
+      "timeoutMs": {
+        "type": "number",
+        "default": 60000,
+        "description": "HostApi 请求超时（毫秒）"
       }
     }
   },

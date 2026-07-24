@@ -1553,7 +1553,7 @@ export async function syncStoPluginsToOpenClaw(): Promise<boolean> {
         allow.push(pluginId);
       }
     }
-    // sto-scheduled-task-tool is temporarily disabled; cloud scheduled tasks are not live this release
+    // sto-scheduled-task-tool：NL 建任务 → HostApi /api/scheduled-tasks（见 sync 下方 tools.deny）
     plugins.allow = allow.filter((id) => !RETIRED_PLUGIN_IDS.includes(id as typeof RETIRED_PLUGIN_IDS[number]));
 
     const entries = (plugins.entries || {}) as Record<string, unknown>;
@@ -1581,7 +1581,14 @@ export async function syncStoPluginsToOpenClaw(): Promise<boolean> {
         },
       },
     };
-    entries['sto-scheduled-task-tool'] = { enabled: true, config: {} };
+    entries['sto-scheduled-task-tool'] = {
+      enabled: true,
+      config: {
+        hostApiHost: '127.0.0.1',
+        hostApiPort: PORTS.CLAWX_HOST_API,
+        timeoutMs: 60_000,
+      },
+    };
     entries['sto-workflow-tool'] = {
       enabled: true,
       config: {
@@ -1634,8 +1641,12 @@ export async function syncStoPluginsToOpenClaw(): Promise<boolean> {
     if (!deny.includes('create_workflow')) {
       deny.push('create_workflow');
     }
-    // Remove the old 'cron' deny so local cron creation is possible again
-    tools.deny = deny.filter((t) => t !== 'cron');
+    // 切断 Gateway cron 双写：内置 cron 工具直写 jobs.json，必须 deny。
+    // openclaw NL 建任务改走插件 create_scheduled_task → HostApi /api/scheduled-tasks。
+    if (!deny.includes('cron')) {
+      deny.push('cron');
+    }
+    tools.deny = deny.filter((t) => t !== 'create_scheduled_task');
     config.tools = tools;
 
     return writeOpenClawJson(config);
