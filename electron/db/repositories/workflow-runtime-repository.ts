@@ -102,7 +102,7 @@ export class WorkflowRuntimeRepository {
     const db = getKyselyDatabase();
     return db
       .selectFrom('wf_run')
-      .select(['run_id', 'workflow_id', 'version_id', 'workflow_version', 'definition_json', 'status', 'started_at', 'completed_at'])
+      .select(['run_id', 'workflow_id', 'version_id', 'workflow_version', 'definition_json', 'status', 'started_at', 'completed_at', 'engine_type', 'engine_model'])
       .where('workflow_id', '=', workflow_id)
       .where('mode', '=', 'CLIENT_LOCAL')
       .where('source', '=', 'client')

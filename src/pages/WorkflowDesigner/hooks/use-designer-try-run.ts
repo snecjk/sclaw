@@ -77,7 +77,7 @@ export interface UseDesignerTryRunResult {
   runtimeUploadNodes: RuntimeUploadNode[];
   launchError: string | null;
   begin: (snapshot?: WorkflowDraftSnapshot) => void;
-  confirmStartup: (inputs: Record<string, unknown>) => Promise<void>;
+  confirmStartup: (inputs: Record<string, unknown>, engineType: 'claude' | 'openclaw') => Promise<void>;
   cancelStartupDialog: () => void;
   cancel: () => Promise<void>;
   continueRun: () => Promise<void>;
@@ -176,7 +176,7 @@ export function useDesignerTryRun({
   );
 
   const launch = useCallback(
-    async (inputs: Record<string, unknown>, snapshot = snapshotRef.current) => {
+    async (inputs: Record<string, unknown>, snapshot = snapshotRef.current, engineType: 'claude' | 'openclaw') => {
       if (!workflowId) return;
       setIsStarting(true);
       setIsDrawerOpen(true);
@@ -193,6 +193,7 @@ export function useDesignerTryRun({
           sessionKey: DESIGNER_TRY_RUN_SESSION_KEY,
           runMode: 'trial',
           workflowVersionId: snapshot?.workflowVersionId ?? workflowVersionId,
+          engineType,
         });
         setRunId(result.runId);
         runIdRef.current = result.runId;
@@ -248,16 +249,15 @@ export function useDesignerTryRun({
           : [];
       });
       setRuntimeUploadNodes(uploads);
-      const nextHasStartupInputs = Boolean(nextSchema?.enabled && Array.isArray(nextSchema.fields) && nextSchema.fields.length > 0);
-      if (nextHasStartupInputs || uploads.length > 0) setIsStartupDialogOpen(true);
-      else void launch({}, snapshot ?? null);
+      // Engine selection is mandatory even when the workflow has no startup fields.
+      setIsStartupDialogOpen(true);
     })().catch((error) => setLaunchError(error instanceof Error ? error.message : '无法读取试运行配置'));
   }, [workflowId, canStart, launch, startupDefaultValues, startupSchema]);
 
   const confirmStartup = useCallback(
-    async (inputs: Record<string, unknown>) => {
+    async (inputs: Record<string, unknown>, engineType: 'claude' | 'openclaw') => {
       setIsStartupDialogOpen(false);
-      await launch(inputs);
+      await launch(inputs, snapshotRef.current, engineType);
     },
     [launch],
   );
@@ -296,11 +296,7 @@ export function useDesignerTryRun({
     setRun(null);
     setExecutionState(null);
     setLaunchError(null);
-    if (hasStartupInputs || runtimeUploadNodes.length > 0) {
-      setIsStartupDialogOpen(true);
-    } else {
-      void launch({}, snapshotRef.current);
-    }
+    setIsStartupDialogOpen(true);
   }, [hasStartupInputs, launch, runtimeUploadNodes.length]);
 
   const openExistingRun = useCallback(async (id: string): Promise<boolean> => {

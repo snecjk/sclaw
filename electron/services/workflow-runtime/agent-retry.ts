@@ -1,7 +1,7 @@
 /**
  * agent-retry — attempt 循环（spec §11.1）。
  *
- * 每次 attempt：配额门（/api/token-quota/check）→ invokeAgent（agent-runner）→
+ * 每次 attempt：配额门（/api/token-quota/check）→ invokeAgent（agent-runner-claude / agent-runner-openclaw）→
  * 输出规整 + JSON Schema 校验 → 失败（引擎失败 / 校验失败 / 卡死超时）退避重试；
  * maxAttempts 耗尽 → failed。事件 agent.attempt.{}、completion.{}、agent.usage 落库。
  *
@@ -31,11 +31,13 @@ export interface AgentStreamEvent {
   isError?: boolean;
 }
 
-/** invokeAgent 由引擎注入（绑好 sdk + env + 卡死保护）；agent-retry 不直接依赖 agent-runner 的 InvokeArgs。 */
+/** invokeAgent 由引擎注入（绑好 sdk + env + 卡死保护）；agent-retry 不直接依赖具体运行器的 InvokeArgs。 */
 export type InvokeAgentFn = (args: {
   ctx: RunCtx;
   prompt: string;
   nodeId: string;
+  /** Attempt-scoped identity used by transient workflow engines. */
+  attempt?: number;
   noProgressMs?: number;
   deadlineMs?: number;
   onStreamEvent?: (event: AgentStreamEvent) => void | Promise<void>;
@@ -121,6 +123,7 @@ export async function runAgentNodeWithRetry(
         ctx,
         prompt,
         nodeId: node.id,
+        attempt,
         noProgressMs: spec.guardrails?.timeoutMs,
         deadlineMs: spec.guardrails?.timeoutMs ? Math.max(spec.guardrails.timeoutMs * 2, spec.guardrails.timeoutMs + 60_000) : undefined,
         allowedTools: spec.allowedTools,

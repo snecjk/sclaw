@@ -20,7 +20,8 @@ import { runAgentNodeWithRetry, type InvokeAgentFn } from './agent-retry';
 import { flushOnce, startFlushLoop, stopFlushLoop, type FlushDeps } from './outbox-flusher';
 import { uploadArtifact, type ArtifactRow } from './artifact-uploader';
 import { recoverOnLaunch, resumeRun } from './crash-recovery';
-import { cancelAgent } from './agent-runner';
+import { cancelAgent } from './agent-runner-claude';
+import { cancelOpenClawWorkflowAgent } from './agent-runner-openclaw';
 import { findStartNode, generatePlan, validateWorkflowDefinition } from './plan-generator';
 import { buildConditionContext, resolveNodeInput } from './input-resolver';
 import { workspacePath } from './workspace-paths';
@@ -64,6 +65,8 @@ export interface StartWorkflowArgs {
   runDatabaseId: number;
   /** 会话键——透传给 generatePlan 落 wf_run.session_key（emit 桥 + getRun hydration 用）。Phase 2b 由 start 注册传入。 */
   sessionKey?: string;
+  engineType: 'claude' | 'openclaw';
+  engineModel?: string;
 }
 
 export function createEngine(deps: EngineDeps) {
@@ -114,6 +117,7 @@ export function createEngine(deps: EngineDeps) {
     const startupSchema = resolveStartupSchema(def);
     let hasExecutedSmartNode = existingNodeRuns.some((nodeRun) => SMART_TYPES.has(nodeRun.node_type) && nodeRun.status === 'SUCCEEDED');
     const runRow = await Promise.resolve(repo.getRun(runId)).catch(() => undefined);
+    const execEngine = runRow?.engine_type === 'openclaw' ? 'openclaw' : 'claude';
     const runInput = initialInput ?? parseJson(runRow?.input_json) ?? {};
     const runSnapshotBase = {
       run_id: runId,
@@ -167,6 +171,7 @@ export function createEngine(deps: EngineDeps) {
         versionId: runSnapshotBase.version_id,
         nodeId: cur.id,
         nodeType: cur.type,
+        execEngine,
       });
       await repo.upsertNodeRun({ run_id: runId, node_id: cur.id, node_type: cur.type, status: 'RUNNING', input_json: nodeInputJson, started_at: nowIso() });
       await repo.enqueueOutbox(runId, 'node_run', `${runId}:${cur.id}`, { run_id: runId, node_id: cur.id, node_type: cur.type, status: 'RUNNING', input_json: nodeInputJson }, 'progress');
@@ -177,6 +182,15 @@ export function createEngine(deps: EngineDeps) {
       let result: { action: 'continue' | 'pause'; output?: any };
       // 智能节点：编译为 agent run spec 后交给 agent-retry，内部处理配额、重试和卡死保护。
       if (SMART_TYPES.has(cur.type)) {
+        // Log before invoking either transport so an initialization, gateway,
+        // or model failure still leaves an unambiguous engine audit record.
+        workflowExecLog('info', 'agent-engine-selected', 'smart node execution engine selected', {
+          runId,
+          workflowId: runSnapshotBase.workflow_id,
+          nodeId: cur.id,
+          nodeType: cur.type,
+          execEngine,
+        });
         if (cur.type === 'agent_data_fetch'
           && ['runtime_upload', 'mixed'].includes(cur.config?.businessConfig?.inputProvisionMode)
           && !containsArtifact(nodeInput)) {
@@ -576,14 +590,19 @@ export function createEngine(deps: EngineDeps) {
         workflowId: args.workflowId,
         versionId: args.versionId,
         sessionKey: args.sessionKey,
+        requestedExecEngine: args.engineType,
       });
       if (!Number.isSafeInteger(args.runDatabaseId) || args.runDatabaseId <= 0) {
         throw new Error('workflow runDatabaseId must be a positive JavaScript-safe integer');
       }
+      if (args.engineType !== 'claude' && args.engineType !== 'openclaw') {
+        throw new Error('workflow execution engine is required');
+      }
       try {
         await generatePlan({ repo, dslClient: deps.dslClient, workflowId: args.workflowId,
           versionId: args.versionId, runId: args.runId, input: args.input, startedAt: args.startedAt,
-          sessionKey: args.sessionKey, workflowVersion: args.workflowVersion, runDatabaseId: args.runDatabaseId });
+          sessionKey: args.sessionKey, workflowVersion: args.workflowVersion, runDatabaseId: args.runDatabaseId,
+          engineType: args.engineType, engineModel: args.engineModel });
         const run = await repo.getRun(args.runId);
         const definition = run?.definition_json ? JSON.parse(run.definition_json) : {};
         await dispatch(args.runId, definition, undefined, { workflowId: args.workflowId, versionId: args.versionId }, parseJson(run?.input_json) ?? {});
@@ -592,7 +611,8 @@ export function createEngine(deps: EngineDeps) {
         await repo.upsertRun({ id: args.runDatabaseId, run_id: args.runId, workflow_id: args.workflowId, version_id: args.versionId,
           workflow_version: args.workflowVersion ?? null,
           status: 'FAILED', mode: 'CLIENT_LOCAL', source: 'client', input_json: stringifyJson(args.input ?? {}),
-          definition_json: '{}', error: message, started_at: args.startedAt, completed_at: nowIso(), session_key: args.sessionKey });
+          definition_json: '{}', error: message, started_at: args.startedAt, completed_at: nowIso(), session_key: args.sessionKey,
+          engine_type: args.engineType, engine_model: args.engineModel ?? null });
         await finalizeUnfinishedNodeRuns(args.runId, 'failed').catch(() => undefined);
         await repo.enqueueOutbox(args.runId, 'run', args.runId, { run_id: args.runId, workflow_id: args.workflowId,
           version_id: args.versionId, status: 'FAILED', mode: 'CLIENT_LOCAL', source: 'client',
@@ -672,6 +692,7 @@ export function createEngine(deps: EngineDeps) {
     async cancel(runId: string, nodeId: string): Promise<void> {
       workflowExecLog('warn', 'run-cancel', 'cancelling workflow run', { runId, nodeId });
       cancelAgent(runId, nodeId);
+      cancelOpenClawWorkflowAgent(runId, nodeId);
       const run = await repo.getRun(runId).catch(() => undefined);
       if (run && TERMINAL_STATUSES.has(run.status)) return;
       const changed = await repo.updateRunIfActive(runId, { status: 'CANCELLED', completed_at: nowIso() });

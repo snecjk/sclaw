@@ -294,6 +294,8 @@ export interface StartWorkflowLocalParams {
   sessionKey: string;
   runMode?: 'trial' | 'production';
   workflowVersionId?: string | number;
+  /** Fixed for the entire local run and persisted before dispatch. */
+  engineType: 'claude' | 'openclaw';
 }
 
 export interface StartWorkflowLocalResult {
@@ -362,6 +364,7 @@ export async function startWorkflowLocal(
     input: data.resolvedInputs ?? params.inputs ?? {},
     startedAt,
     sessionKey: params.sessionKey,
+    engineType: params.engineType,
   });
 
   return {

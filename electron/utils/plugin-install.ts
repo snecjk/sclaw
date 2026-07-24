@@ -760,10 +760,20 @@ function syncStoDingTalkSendGuardDevSources(candidateSources: string[]): void {
   logger.info(`[plugin] Synced sto-dingtalk-send-guard dev sources from ${sourceDir}`);
 }
 
+/** Resolve the source of truth for the development workflow extension. */
+export function resolveStoWorkflowToolDevSyncSource(candidateSources: string[]): string | undefined {
+  return getLocalPluginSourceCandidates('sto-workflow-tool').find(
+    (candidate) => existsSync(fsPath(join(candidate, 'openclaw.plugin.json'))),
+  ) ?? pickPluginSourceDir('sto-workflow-tool', candidateSources);
+}
+
 /** Dev-only: keep ~/.stoclaw extension in sync with sto-plugin sources without a version bump. */
 function syncStoWorkflowToolDevSources(candidateSources: string[]): void {
   if (app.isPackaged) return;
-  const sourceDir = pickPluginSourceDir('sto-workflow-tool', candidateSources);
+  // Dev runs must copy the checked-out plugin source even when a bundled copy
+  // has the same package version. `pickPluginSourceDir` ranks equal versions
+  // by candidate order, which otherwise leaves ~/.stoclaw on stale code.
+  const sourceDir = resolveStoWorkflowToolDevSyncSource(candidateSources);
   if (!sourceDir) return;
 
   const targetDir = join(getOpenClawConfigDir(), 'extensions', 'sto-workflow-tool');
@@ -774,7 +784,7 @@ function syncStoWorkflowToolDevSources(candidateSources: string[]): void {
     if (!existsSync(fsPath(src))) continue;
     cpSync(fsPath(src), fsPath(join(targetDir, file)), { force: true });
   }
-  logger.info(`[plugin] Synced sto-workflow-tool dev sources from ${sourceDir}`);
+  logger.info(`[plugin] Synced sto-workflow-tool dev sources source=${sourceDir} target=${targetDir}`);
 }
 
 function ensureStoToolkitLibraryInstalled(): void {
@@ -1415,9 +1425,15 @@ async function ensurePluginInstalledAsync(
   const targetPkgJson = join(targetDir, 'package.json');
   const sourceDir = pickPluginSourceDir(pluginDirName, candidateSources);
 
-  // Keep dev behavior unchanged (including node_modules fallback) by
-  // delegating to the existing sync implementation outside packaged mode.
+  // Development startup used to call the generic installer here. That bypassed
+  // `syncStoWorkflowToolDevSources`, leaving the Gateway on an older
+  // ~/.stoclaw extension even though the Electron source had changed. Use the
+  // workflow-specific installer so its checked-out source is always mirrored
+  // before Gateway starts.
   if (!app.isPackaged) {
+    if (pluginDirName === 'sto-workflow-tool') {
+      return ensureStoWorkflowToolPluginInstalled();
+    }
     return ensurePluginInstalled(pluginDirName, candidateSources, pluginLabel);
   }
 

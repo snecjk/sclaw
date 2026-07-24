@@ -31,6 +31,14 @@ export interface WorkflowSendContext {
   agentId: string;
 }
 
+/** The list-card selector persists its choice on the workflow chat session. */
+function chooseImmediateWorkflowEngine(): 'claude' | 'openclaw' {
+  const { currentSessionKey, sessions } = useChatStore.getState();
+  return sessions.find((session) => session.key === currentSessionKey)?.engineType === 'openclaw'
+    ? 'openclaw'
+    : 'claude';
+}
+
 /**
  * Phase 1: Send the user's message with workflow schema context so the AI
  * can guide parameter confirmation naturally. Does NOT create the workflow yet.
@@ -159,6 +167,7 @@ export async function createAndStartWorkflowDirect(
       inputs,
       idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
       sessionKey: context.sessionKey,
+      engineType: chooseImmediateWorkflowEngine(),
     });
 
     const userText = buildWorkflowStartUserText(schema, inputs);
@@ -289,6 +298,7 @@ export async function startExistingWorkflow(
       inputs,
       idempotencyKey,
       sessionKey: context.sessionKey,
+      engineType: chooseImmediateWorkflowEngine(),
     });
 
     const { isReExecutionIntent } = await import('@/hooks/use-workflow-intent');

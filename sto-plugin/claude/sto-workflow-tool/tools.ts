@@ -7,6 +7,7 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "../zod-shim.js";
+import { buildClaudeWorkflowStartBody } from "./workflow-start.js";
 
 interface WorkflowConfig {
   baseUrl: string;
@@ -347,7 +348,8 @@ export function createWorkflowTools(config: WorkflowConfig) {
         `/agent/v1/workflows/${encodeURIComponent(workflowId)}/start`,
         {
           method: "POST",
-          body: JSON.stringify({ inputs: inputs ?? {}, idempotencyKey }),
+          // This MCP server is only mounted for Claude Agent SDK sessions.
+          body: buildClaudeWorkflowStartBody(inputs ?? {}, idempotencyKey),
         },
       );
 

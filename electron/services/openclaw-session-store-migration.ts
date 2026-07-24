@@ -16,6 +16,7 @@ import { DEFAULT_WORKSPACE_ID } from '../db/models/domain/session-catalog';
 import { getCatalogSessionRepository } from '../db/repositories/catalog-session-repository';
 import { getSessionEngineBindingRepository } from '../db/repositories/session-engine-binding-repository';
 import { logger } from '../utils/logger';
+import { isWorkflowOpenClawSessionKey } from './workflow-runtime/openclaw-workflow-session-cleanup';
 
 const SYNCED_FLAG = 'syncedToSQLite';
 
@@ -133,6 +134,9 @@ async function migrateAgentSessionStore(agentId: string): Promise<number> {
     if (entry[SYNCED_FLAG]) continue;
 
     const sessionKey = entry.key;
+    // Workflow node executions are audit records, not user conversations.
+    // They are removed after each run; skip any stale residue defensively.
+    if (isWorkflowOpenClawSessionKey(sessionKey)) continue;
     const agentIdFromKey = getAgentIdFromSessionKey(sessionKey);
     const resolvedAgentId = agentIdFromKey || agentId;
     const updatedAtIso = toIsoString(entry.updatedAt);

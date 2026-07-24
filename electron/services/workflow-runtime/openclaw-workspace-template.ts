@@ -1,0 +1,97 @@
+/**
+ * Versioned bootstrap files for the isolated OpenClaw workflow runtime agent.
+ * These files are deliberately owned by the client: never copy a user or
+ * project Agent workspace into a workflow node execution environment.
+ */
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { getDataDir } from '../../utils/paths';
+
+export const WORKFLOW_RUNTIME_TEMPLATE_VERSION = '2';
+const TEMPLATE_MARKER = `<!-- stoclaw:workflow-runtime-template:v${WORKFLOW_RUNTIME_TEMPLATE_VERSION} -->`;
+const MANAGED_TEMPLATES = {
+  'AGENTS.md': `${TEMPLATE_MARKER}
+# Workflow Runtime Agent
+
+Execute only the current workflow node.
+
+- The node's dynamic prompt is the only task instruction.
+- Use only the current node workspace and permitted tools.
+- Return the required WorkflowPacket exactly.
+- Ignore user, project, chat, memory, and other Agent definitions.
+`,
+  'USER.md': `${TEMPLATE_MARKER}
+# Workflow Runtime Service Identity
+
+This is a non-personal workflow service identity. It has no user profile, preferences, memories, standing tasks, or conversational history. Execute only the dynamic prompt for the current workflow node.
+`,
+} as const;
+
+const UNMANAGED_BOOTSTRAP_FILES = new Set([
+  'SOUL.MD', 'TOOLS.MD', 'IDENTITY.MD', 'HEARTBEAT.MD', 'BOOT.MD', 'BOOTSTRAP.MD', 'MEMORY.MD',
+  'CLAUDE.MD', 'SYSTEM.MD', 'RULES.MD',
+]);
+
+export interface WorkflowRuntimeTemplateResult {
+  workspace: string;
+  templateVersion: string;
+  createdFiles: string[];
+  updatedFiles: string[];
+  removedFiles: string[];
+}
+
+export function workflowRuntimeWorkspacePath(): string {
+  return path.join(getDataDir(), 'workflow-runtime', 'workspaces');
+}
+
+export function workflowRuntimeTemplateContent(
+  fileName: keyof typeof MANAGED_TEMPLATES,
+): string {
+  return MANAGED_TEMPLATES[fileName];
+}
+
+/**
+ * Strongly synchronize the two workflow-owned definitions and remove all
+ * remaining bootstrap files. A write or read-back failure is fatal: the caller
+ * must not send a workflow node request with an unknown system context.
+ */
+export async function ensureWorkflowRuntimeTemplates(
+  workspace = workflowRuntimeWorkspacePath(),
+): Promise<WorkflowRuntimeTemplateResult> {
+  try {
+    await mkdir(workspace, { recursive: true });
+    const createdFiles: string[] = [];
+    const updatedFiles: string[] = [];
+    const removedFiles: string[] = [];
+
+    for (const entry of await readdir(workspace, { withFileTypes: true })) {
+      if (!entry.isFile() || !UNMANAGED_BOOTSTRAP_FILES.has(entry.name.toUpperCase())) continue;
+      await rm(path.join(workspace, entry.name), { force: true });
+      removedFiles.push(entry.name);
+    }
+
+    for (const fileName of Object.keys(MANAGED_TEMPLATES) as Array<keyof typeof MANAGED_TEMPLATES>) {
+      const content = workflowRuntimeTemplateContent(fileName);
+      const filePath = path.join(workspace, fileName);
+      let existing: string | undefined;
+      try {
+        existing = await readFile(filePath, 'utf8');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+      if (existing === content) continue;
+      await writeFile(filePath, content, 'utf8');
+      const verified = await readFile(filePath, 'utf8');
+      if (verified !== content || !verified.includes(TEMPLATE_MARKER)) {
+        throw new Error(`${fileName} template read-back verification failed`);
+      }
+      if (existing === undefined) createdFiles.push(fileName);
+      else updatedFiles.push(fileName);
+    }
+
+    return { workspace, templateVersion: WORKFLOW_RUNTIME_TEMPLATE_VERSION, createdFiles, updatedFiles, removedFiles };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`OpenClaw workflow runtime template preparation failed: ${message}`, { cause: error });
+  }
+}

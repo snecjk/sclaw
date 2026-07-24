@@ -119,6 +119,8 @@ export function mapWfRunRowToResponse(
     workflowVersion: resolveWorkflowVersion(row),
     status: normalizeWorkflowRunStatus(row.status),
     mode: row.mode ?? null,
+    engineType: row.engine_type === 'openclaw' ? 'openclaw' : 'claude',
+    engineModel: row.engine_model ?? null,
     startedAt: row.started_at,
     completedAt: row.completed_at ?? null,
     waitingNodeId: row.waiting_node_id ?? null,

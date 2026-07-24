@@ -24,6 +24,7 @@ import {
   workflowListToolbarClass,
 } from '@/lib/surfaces';
 import { WorkflowDeleteConfirm } from '@/pages/Workflow/components/workflow-delete-confirm';
+import { WorkflowEngineSelectDialog } from '@/pages/Workflow/components/workflow-engine-select-dialog';
 // TODO: 预览/详情弹窗暂不启用
 // import {
 //   WorkflowDetailModal,
@@ -101,6 +102,7 @@ export function WorkflowDashboard({
   const [renameLoading, setRenameLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<WorkflowCardItem | null>(null);
+  const [runTarget, setRunTarget] = useState<Pick<WorkflowCardItem, 'id' | 'name'> | null>(null);
 
   /** 快捷提示词 i18n label 映射 */
   const chipLabels: Record<(typeof EXAMPLE_CHIPS)[number], string> = {
@@ -161,14 +163,14 @@ export function WorkflowDashboard({
     return list;
   })();
 
-  /** 立即运行：按标题复用已有会话，否则新建并命名，再跳转首页自动发送。 */
+  /** 立即运行：先选择本次工作流引擎，再跳转首页自动发送。 */
   const runWorkflowInChat = useCallback(
-    (card: Pick<WorkflowCardItem, 'id' | 'name'>) => {
+    (card: Pick<WorkflowCardItem, 'id' | 'name'>, engineType: 'claude' | 'openclaw') => {
       navigateToNewSessionWithPrompt(
         navigate,
         location.pathname,
         `帮我执行 id 为：${card.id} 的工作流 【${card.name}】`,
-        { sessionTitle: `执行${card.name}工作流`, workflowRun: true }
+        { sessionTitle: `执行${card.name}工作流`, workflowRun: true, workflowEngine: engineType }
       );
     },
     [navigate, location.pathname]
@@ -410,7 +412,7 @@ export function WorkflowDashboard({
                   // }}
                   // TODO: 等待后端 API 对接 — onCardClick 暂不启用
                   // onCardClick={() => openDetailForMine(card)}
-                  onRun={() => runWorkflowInChat(card)}
+                  onRun={() => setRunTarget({ id: card.id, name: card.name })}
                   onEdit={() => onEditCard(card.id)}
                   isRenameDisabled={renameLoading}
                   isDeleteDisabled={deleteLoading}
@@ -537,6 +539,15 @@ export function WorkflowDashboard({
         workflowName={deleteTarget?.name ?? ''}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={confirmDelete}
+      />
+      <WorkflowEngineSelectDialog
+        open={Boolean(runTarget)}
+        workflowName={runTarget?.name ?? ''}
+        onCancel={() => setRunTarget(null)}
+        onConfirm={(engineType) => {
+          if (runTarget) runWorkflowInChat(runTarget, engineType);
+          setRunTarget(null);
+        }}
       />
     </div>
   );

@@ -201,7 +201,10 @@ describe("sto-workflow-tool plugin", () => {
 		expect(envelope.data.runId).toBe("run_abc");
 		expect(fetchJsonMock).toHaveBeenCalledWith(
 			expect.stringContaining("/agent/v1/workflows/wf_816b0847/start"),
-			expect.objectContaining({ method: "POST" }),
+			expect.objectContaining({
+				method: "POST",
+				body: expect.stringContaining('"engineType":"openclaw"'),
+			}),
 		);
 	});
 });

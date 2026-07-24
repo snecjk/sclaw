@@ -11,29 +11,26 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { getDataDir } from '../../utils/paths';
 
-const TAG_RE = /<[^>]+>/g;
 const JSON_FENCE_RE = /```json\s*([\s\S]*?)```/i;
 
 export function extractJsonFromText(text: string): any | null {
   if (!text || !text.trim()) return null;
   // 1) 直接 parse
   try { return JSON.parse(text); } catch { /* fallthrough */ }
-  // 2) 去除 HTML 标签后再 parse
-  const cleaned = text.replace(TAG_RE, '').trim();
-  if (cleaned && cleaned !== text) {
-    try { return JSON.parse(cleaned); } catch { /* fallthrough */ }
-  }
-  const target = cleaned || text;
-  // 3) ```json fence
-  const m = target.match(JSON_FENCE_RE);
+  // 2) Parse a fenced JSON response before attempting any text cleanup. A
+  // WorkflowPacket can legitimately contain HTML in a string field; stripping
+  // tags from the whole response corrupts output artifacts on the OpenClaw
+  // text transport while Claude structured output remains intact.
+  const m = text.match(JSON_FENCE_RE);
   if (m) {
     try { return JSON.parse(m[1]); } catch { /* fallthrough */ }
   }
-  // 4) 首个 { 到末个 } 的子串
-  const first = target.indexOf('{');
-  const last = target.lastIndexOf('}');
+  // 3) First complete JSON object embedded in explanatory text. Do not remove
+  // HTML tags here: JSON.parse already distinguishes syntax from data.
+  const first = text.indexOf('{');
+  const last = text.lastIndexOf('}');
   if (first !== -1 && last > first) {
-    try { return JSON.parse(target.slice(first, last + 1)); } catch { /* fallthrough */ }
+    try { return JSON.parse(text.slice(first, last + 1)); } catch { /* fallthrough */ }
   }
   return null;
 }

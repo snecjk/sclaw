@@ -145,6 +145,9 @@ export default definePluginEntry({
 						body: JSON.stringify({
 							inputs: params.inputs ?? {},
 							idempotencyKey,
+							// This plugin is invoked only by the OpenClaw chat runtime.
+							// The host bridge persists this onto the workflow run snapshot.
+							engineType: "openclaw",
 						}),
 					},
 				);

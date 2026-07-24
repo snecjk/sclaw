@@ -40,6 +40,7 @@ export function Home() {
   const querySeedText = searchParams.get('q')?.trim() || undefined;
   const seedWorkflowId = searchParams.get('workflowId')?.trim() || undefined;
   const isWorkflowRun = searchParams.get('workflowRun') === '1';
+  const workflowEngine = searchParams.get('workflowEngine') === 'openclaw' ? 'openclaw' : 'claude';
   const { handleHubSend } = useHomeChatEntrySend();
   const gatewayStatus = useGatewayStore((s) => s.status);
   const hasAutoSentRef = useRef(false);
@@ -77,6 +78,7 @@ export function Home() {
           await configureWorkflowRunSession({
             sessionKey: currentSessionKey,
             agentId: currentAgentId || 'main',
+            engineType: workflowEngine,
           });
         } catch (error) {
           toast.error(error instanceof Error ? error.message : '工作流运行引擎初始化失败');
@@ -85,7 +87,7 @@ export function Home() {
       }
       await handleHubSend(querySeedText, undefined, undefined, undefined, seedWorkflowId);
     })();
-  }, [querySeedText, seedWorkflowId, isWorkflowRun, gatewayStatus.state, handleHubSend, setSearchParams]);
+  }, [querySeedText, seedWorkflowId, isWorkflowRun, workflowEngine, gatewayStatus.state, handleHubSend, setSearchParams]);
 
   // Wait for gateway before auto-sending workflowId prompt.
   // if (gatewayStatus.state !== 'running' && querySeedText && seedWorkflowId && !hasAutoSentRef.current) {

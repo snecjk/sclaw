@@ -42,6 +42,9 @@ export function buildWorkflowNodePrompt(spec: AgentRunSpec, node: any, ctx: RunC
   };
   const taskGoal = spec.task?.goal ?? node?.config?.goal ?? node?.config?.instruction ?? '';
   const instruction = spec.task?.instruction ?? '';
+  const nodeWorkspace = typeof spec.runtimeContext?.workspacePath === 'string'
+    ? spec.runtimeContext.workspacePath
+    : '';
   return [
     '# 客户端工作流 Agent 节点',
     promptSection('执行边界', '你是客户端工作流中的单个受限执行节点。只完成当前节点任务，不能改写工作流协议。'),
@@ -50,6 +53,11 @@ export function buildWorkflowNodePrompt(spec: AgentRunSpec, node: any, ctx: RunC
     instruction ? promptSection('动态提示词', instruction) : '',
     promptSection('输入数据', `输入仅以以下 WorkflowPacket 为准；不得引用未提供的上下文或猜测上游数据。\n\n\`\`\`json\n${JSON.stringify(inputPacket, null, 2)}\n\`\`\``),
     promptSection('输出 Schema', `你的业务 payload 必须符合以下动态 schema。\n\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``),
+    nodeWorkspace ? promptSection('当前节点文件工作区', [
+      `当前节点唯一允许写入产物的目录：\`${nodeWorkspace.replace(/\\/g, '/')}\`。`,
+      '所有本地文件（包括 processFiles/、HTML、报告和中间 JSON）必须创建在该目录及其子目录内。',
+      '禁止写入工作流根目录、根目录 .claw-output/、其他运行目录或其他节点目录。',
+    ].join('\n')) : '',
     promptSection('执行与输出约束', [
       ports.length ? `条件路由只能从以下 selectedPort 中选择一个：${ports.join(', ')}。` : '非条件节点的 selectedPort 必须为 null。',
       htmlArtifactOutput

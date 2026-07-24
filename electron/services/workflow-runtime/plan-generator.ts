@@ -15,6 +15,8 @@ export interface GeneratePlanArgs { repo: RunCtx['repo']; dslClient: { fetchVers
   runDatabaseId: number;
   /** 会话键——emit 桥按它过滤 status-update 广播（use-workflow-completion.ts）。Phase 2b 由 start 注册传入。 */
   sessionKey?: string;
+  engineType: 'claude' | 'openclaw';
+  engineModel?: string;
 }
 
 /**
@@ -33,6 +35,7 @@ export async function generatePlan(args: GeneratePlanArgs): Promise<string> {
     workflowId,
     versionId,
     sessionKey,
+    execEngine: args.engineType,
     inputKeys: Object.keys(input ?? {}).join(','),
   });
   const versionDefinition = await dslClient.fetchVersion(workflowId, versionId);
@@ -52,7 +55,7 @@ export async function generatePlan(args: GeneratePlanArgs): Promise<string> {
     status: 'RUNNING', mode: 'CLIENT_LOCAL', source: 'client',
     input_json: JSON.stringify(stagedInput), definition_json: JSON.stringify(definition),
     started_at: startedAt, updated_at: nowIso(),
-    session_key: sessionKey });
+    session_key: sessionKey, engine_type: args.engineType, engine_model: args.engineModel ?? null });
   for (const n of ordered) {
     const nodeRun = { run_id: runId, node_id: n.id, node_type: n.type, status: 'PENDING', attempt_count: 0 };
     await repo.upsertNodeRun(nodeRun);
@@ -69,7 +72,7 @@ export async function generatePlan(args: GeneratePlanArgs): Promise<string> {
     await repo.enqueueOutbox(runId, 'artifact', artifactId, row, 'progress');
   }
   await repo.enqueueOutbox(runId, 'run', runId, { run_id: runId, workflow_id: workflowId,
-    version_id: versionId, status: 'RUNNING', mode: 'CLIENT_LOCAL', source: 'client',
+    version_id: versionId, status: 'RUNNING', mode: 'CLIENT_LOCAL', source: 'client', engine_type: args.engineType, engine_model: args.engineModel ?? null,
     started_at: startedAt }, 'progress');
   workflowExecLog('info', 'plan-ready', 'local workflow plan persisted', {
     runId,

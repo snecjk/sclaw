@@ -8,6 +8,7 @@ import { parseJsonBody, sendJson } from '../route-utils';
 import { installWorkflowRuntime, workflowV2BackendFetch } from '../../services/workflow-runtime/bootstrap';
 import { workflowExecLog } from '../../services/workflow-runtime/logging';
 import { takeWorkflowDatabaseId } from '../../services/workflow-runtime/id-pool';
+import type { AgentEngineType } from '../../engines/types';
 
 type WorkflowStartBody = {
   runDatabaseId?: number;
@@ -16,6 +17,8 @@ type WorkflowStartBody = {
   sessionKey?: string;
   runMode?: 'trial' | 'production';
   workflowVersionId?: string | number;
+  /** The chat workflow tool's selected execution engine. */
+  engineType?: AgentEngineType;
 };
 
 type WorkflowV2StartResponse = {
@@ -27,6 +30,24 @@ type WorkflowV2StartResponse = {
   status?: string;
   startedAt?: string;
 };
+
+/**
+ * The v1 start bridge is still called by engine-owned workflow tools. Treat an
+ * omitted value as an old-plugin request, but never rewrite an explicit engine
+ * choice while creating the immutable workflow-run snapshot.
+ */
+export function resolveWorkflowStartEngine(engineType: unknown): {
+  engineType: AgentEngineType;
+  source: 'request' | 'legacy-default';
+} {
+  if (engineType === 'openclaw' || engineType === 'claude') {
+    return { engineType, source: 'request' };
+  }
+  if (engineType === undefined) {
+    return { engineType: 'claude', source: 'legacy-default' };
+  }
+  throw new Error(`Unsupported workflow execution engine: ${String(engineType)}`);
+}
 
 async function proxyWorkflowStreamRequest(
   req: IncomingMessage,
@@ -200,11 +221,15 @@ function startLocalWorkflowRuntime(
 ): void {
   const versionId = registered.workflowVersionId;
   const startedAt = registered.startedAt ?? new Date().toISOString();
+  const resolvedEngine = resolveWorkflowStartEngine(body.engineType);
   workflowExecLog('info', 'host-runtime-start', 'starting local workflow runtime from host route', {
     runId: registered.runId,
     workflowId,
     versionId,
     sessionKey: body.sessionKey,
+    requestedExecEngine: body.engineType ?? null,
+    execEngine: resolvedEngine.engineType,
+    engineSource: resolvedEngine.source,
   });
   void installWorkflowRuntime().startWorkflow({
     runId: registered.runId,
@@ -215,6 +240,7 @@ function startLocalWorkflowRuntime(
     input: body.inputs ?? {},
     startedAt,
     sessionKey: body.sessionKey ?? '',
+    engineType: resolvedEngine.engineType,
   }).catch((error) => {
     workflowExecLog('error', 'host-runtime-start-failed', 'local workflow runtime failed', {
       runId: registered.runId,
@@ -514,10 +540,11 @@ export async function handleWorkflowRoutes(
       const workflowId = decodeURIComponent(startMatch[1]);
       const body = await parseJsonBody<WorkflowStartBody>(req);
       logger.info(
-        '[workflow-trace] POST %s local-bridge idempotencyKey=%s inputKeys=%o',
+        '[workflow-trace] POST %s local-bridge idempotencyKey=%s inputKeys=%o requestedExecEngine=%s',
         pathname,
         body.idempotencyKey,
         Object.keys(body.inputs ?? {}),
+        body.engineType ?? 'legacy-default',
       );
       const registered = await registerAndStartLocalWorkflow(workflowId, body, String(req.headers.stotoken ?? ''));
       sendJson(res, 200, {
@@ -533,7 +560,9 @@ export async function handleWorkflowRoutes(
       });
     } catch (error) {
       logger.error('[WorkflowRoutes] start workflow failed:', error);
-      res.statusCode = 500;
+      res.statusCode = error instanceof Error && error.message.startsWith('Unsupported workflow execution engine:')
+        ? 400
+        : 500;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.end(JSON.stringify({ success: false, error: String(error) }));
     }

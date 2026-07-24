@@ -18,6 +18,8 @@ export interface NavigateToSessionWithPromptOptions {
   extraSearchParams?: Record<string, string>;
   /** Mark this auto-send as a workflow run so Home can choose its execution engine. */
   workflowRun?: boolean;
+  /** Explicit workflow execution engine selected before navigating to chat. */
+  workflowEngine?: 'claude' | 'openclaw';
 }
 
 /**
@@ -109,7 +111,8 @@ function normalizePromptNavigationOptions(
     && !('sessionTitle' in options)
     && !('createIfMissing' in options)
     && !('extraSearchParams' in options)
-    && !('workflowRun' in options);
+    && !('workflowRun' in options)
+    && !('workflowEngine' in options);
   if (isLegacyExtraSearchParamsOnly) {
     return { ...defaults, extraSearchParams: options as Record<string, string> };
   }
@@ -133,11 +136,12 @@ export function navigateToSessionWithPrompt(
   options?: NavigateToSessionWithPromptOptions | Record<string, string>,
 ): void {
   const normalized = normalizePromptNavigationOptions(options);
-  const { extraSearchParams, workflowRun, ...sessionOptions } = normalized;
+  const { extraSearchParams, workflowRun, workflowEngine, ...sessionOptions } = normalized;
   const params = new URLSearchParams({
     q: prompt,
     ...extraSearchParams,
     ...(workflowRun ? { workflowRun: '1' } : {}),
+    ...(workflowEngine ? { workflowEngine } : {}),
   });
   navigateToMainChatHome(
     navigate,

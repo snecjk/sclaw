@@ -326,6 +326,8 @@ export interface WorkflowRunResponse {
   workflowVersion?: string | number | null;
   status: WorkflowRunStatus;
   mode?: string | null;
+  engineType?: 'claude' | 'openclaw';
+  engineModel?: string | null;
   startedAt: string;
   completedAt?: string | null;
   waitingNodeId?: string | null;

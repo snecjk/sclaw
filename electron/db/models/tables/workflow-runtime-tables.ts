@@ -25,6 +25,8 @@ export interface WfRunTable {
   updated_at: Ts;
   synced_at: TsNull;
   session_key: TsNull;
+  engine_type: string;
+  engine_model: TsNull;
   created_at: TsNull;
   deleted_at: TsNull;
 }

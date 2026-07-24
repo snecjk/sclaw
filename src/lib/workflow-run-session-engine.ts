@@ -11,12 +11,13 @@ import { useChatStore } from '@/stores/chat';
 import { useProviderStore } from '@/stores/providers';
 
 /**
- * Workflow chat runs always use Claude Agent. Prefer the highest visible
- * qwen3.x-plus catalog model; otherwise keep the session's normal fallback.
+ * The selected workflow engine is persisted onto the navigation-created chat
+ * session so the eventual local run uses the same engine choice.
  */
 export async function configureWorkflowRunSession(input: {
   sessionKey: string;
   agentId: string;
+  engineType: 'claude' | 'openclaw';
 }): Promise<string> {
   const sessionKey = input.sessionKey.trim();
   if (!sessionKey) throw new Error('缺少会话标识，无法启动工作流');
@@ -28,11 +29,11 @@ export async function configureWorkflowRunSession(input: {
   await awaitSessionSendReadiness(sessionKey);
 
   const { accounts } = useProviderStore.getState();
-  const qwenPlus = selectHighestQwenPlusModel(accounts);
+  const qwenPlus = input.engineType === 'claude' ? selectHighestQwenPlusModel(accounts) : undefined;
   const fallback = qwenPlus ?? resolveModelToPersistForSession({
     sessionKey,
     agentId: input.agentId,
-    engineType: 'claude',
+    engineType: input.engineType,
   });
   if (!fallback) throw new Error('未找到可用模型，无法启动工作流');
 
@@ -41,12 +42,12 @@ export async function configureWorkflowRunSession(input: {
     model: fallback.modelId,
     accountId: fallback.accountId,
     agentId: input.agentId,
-    engineType: 'claude',
+    engineType: input.engineType,
   });
 
   useChatStore.setState((state) => ({
     sessions: upsertSessionModel(state.sessions, sessionKey, persisted, {
-      engineType: 'claude',
+      engineType: input.engineType,
       agentId: input.agentId,
     }),
   }));

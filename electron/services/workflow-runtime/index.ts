@@ -42,6 +42,7 @@ export function registerWorkflowRuntimeHandlers(deps: EngineDeps): RuntimeHandle
       workflowId: a?.workflowId,
       versionId: a?.versionId,
       sessionKey: a?.sessionKey,
+      requestedExecEngine: a?.engineType,
     });
     void engine.startWorkflow(a).catch((error) => {
       workflowExecLog('error', 'ipc-start-failed', 'workflow runtime start failed', {

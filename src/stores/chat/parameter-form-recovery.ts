@@ -389,6 +389,9 @@ function registerWorkflowSubmitHandler(
         inputs: values,
         idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
         sessionKey: chatState.currentSessionKey,
+        // Recovery resumes a legacy form submission created before engine choice
+        // was persisted, so retain its historical engine explicitly.
+        engineType: 'claude',
       });
       const { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } = await import('@/lib/workflow-local-turn');
       const userText = buildWorkflowStartUserText(schema, values);

@@ -110,6 +110,8 @@ export interface InvokeArgs {
   permissionMode?: string;
   /** Passed to Claude Agent SDK outputFormat; the SDK, not prompt parsing, enforces the shape. */
   outputSchema?: Record<string, unknown>;
+  /** Durable workflow execution-engine label for operational logs. */
+  execEngine?: 'claude' | 'openclaw';
 }
 
 export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
@@ -151,6 +153,7 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
   const options: Record<string, unknown> = {
     cwd,
     additionalDirectories,
+    execEngine: args.execEngine ?? 'claude',
     env,
     permissionMode,
     allowDangerouslySkipPermissions: permissionMode === 'bypassPermissions',
@@ -177,6 +180,7 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
     model: effectiveModel,
     cwd,
     additionalDirectories,
+    execEngine: args.execEngine ?? 'claude',
   });
   const query = await sdk.query({ prompt, options });
   const key = `${ctx.runId}:${ctx.nodeId}`;
@@ -205,6 +209,7 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
         // outputLength: finalText.length,
         // usage: r.usage,
         error: r.error,
+        execEngine: args.execEngine ?? 'claude',
       });
       resolve({ ...r, rawText: finalText });
     };
@@ -250,6 +255,7 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
             workflowExecLog('debug', 'agent-stream_event', streamDeltaText, {
               runId: ctx.runId,
               nodeId: ctx.nodeId,
+              execEngine: args.execEngine ?? 'claude',
             });
             await emitStreamEvent(args.onStreamEvent, {
               type: 'agent.answer_delta',
@@ -285,6 +291,7 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
               runId: ctx.runId,
               nodeId: ctx.nodeId,
               source: 'assistant_message',
+              execEngine: args.execEngine ?? 'claude',
             });
             await emitStreamEvent(args.onStreamEvent, {
               type: 'agent.answer_delta',
