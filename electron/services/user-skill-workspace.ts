@@ -239,8 +239,6 @@ export async function syncMountPointToUser(userCode: string): Promise<void> {
   if (fs.existsSync(globalLockPath)) {
     fs.copyFileSync(globalLockPath, userLockPath);
   }
-
-  logger.info(`[UserSkillWorkspace] Synced mount point to user ${userCode}`);
 }
 
 /**
@@ -323,8 +321,6 @@ async function fetchCloudInstalledList(): Promise<string[]> {
     'Content-Type': 'application/json',
   };
   const url = `${baseUrl}/agent/v1/skills/plaza/installed`;
-  logger.info(`[UserSkillWorkspace] Fetching cloud installed list: ${url}`);
-
   const res = await fetch(url, { method: 'GET', headers });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -345,8 +341,6 @@ async function downloadSkillZip(slug: string, targetDir: string): Promise<void> 
 
   const headers = buildStoMemoryCenterAuthHeaders(token);
   const url = `${baseUrl}/agent/v1/skills/slug/${encodeURIComponent(slug)}/download?network=external`;
-  logger.info(`[UserSkillWorkspace] Downloading skill ${slug}: ${url}`);
-
   const res = await proxyAwareFetch(url, {
     method: 'GET',
     headers,
@@ -505,9 +499,7 @@ async function downloadMissingSkills(
       const mountDir = path.join(globalSkillsDir, slug);
       await copyDir(targetUserDir, mountDir);
 
-      downloaded.push(slug);
-      logger.info(`[UserSkillWorkspace] Downloaded and installed skill ${slug} for user ${userCode}`);
-    } catch (err) {
+      downloaded.push(slug);    } catch (err) {
       logger.error(`[UserSkillWorkspace] Failed to download skill ${slug}:`, err);
       failed.push(slug);
     }
@@ -594,8 +586,6 @@ async function migrateLegacySkillsToUser(userCode: string): Promise<void> {
   if (fs.existsSync(globalLockPath)) {
     fs.copyFileSync(globalLockPath, userLockPath);
   }
-
-  logger.info(`[UserSkillWorkspace] Migrated legacy skills to user ${userCode}, backup at ${backupDir}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -612,13 +602,13 @@ export interface ActivateWorkspaceResult {
 /**
  * Activate a user's skill workspace.
  *
- * Steps:
- * 1. If legacy global skills exist and users/ is empty, migrate to this user.
- * 2. If there is a previously active user, sync mount point back to that user.
- * 3. Clear mount point (preserve preinstalled skills).
- * 4. Copy new user's workspace to mount point.
- * 5. Fetch cloud installed list and download missing skills.
- * 6. Update current active user.
+ * After the neutral skills-store migration:
+ * 1. Persist active user code
+ * 2. Download any cloud-missing skills via SkillManager
+ * 3. Reconcile all engine projections for the active user
+ *
+ * Legacy mount-point copy is retained as a best-effort fallback when the
+ * skills store has not been migrated yet.
  */
 export async function activateUserWorkspace(userCode: string): Promise<ActivateWorkspaceResult> {
   const previousUserCode = await getCurrentActiveUserCode();
@@ -629,46 +619,71 @@ export async function activateUserWorkspace(userCode: string): Promise<ActivateW
     failed: [],
   };
 
-  // Save the current mount-point state back to whoever owns it before we clear it.
-  // This must also run on same-user re-login (previousUserCode === userCode) — e.g.
-  // after an app update forces re-auth — otherwise skills that only live on the
-  // global mount (such as ones generated via natural-language chat) would be wiped
-  // by clearMountPoint() below and never restored.
-  if (previousUserCode) {
-    await syncMountPointToUser(previousUserCode);
-    logger.info(`[UserSkillWorkspace] Saved mount point to user ${previousUserCode}`);
+  const { isSkillsStoreMigrated } = await import('./skills/migration');
+  const { getSkillManager } = await import('./skills/skill-manager');
+  const storeMigrated = isSkillsStoreMigrated();
+
+  if (!storeMigrated) {
+    // Legacy path: sync mount point ↔ user workspace directories.
+    if (previousUserCode) {
+      await syncMountPointToUser(previousUserCode);
+    }
+    if (detectLegacyGlobalSkills()) {
+      await migrateLegacySkillsToUser(userCode);
+      result.migrated = true;
+    }
+    await ensureUserWorkspace(userCode);
+    clearMountPoint();
+    await copyUserToMountPoint(userCode);
   }
+  // After skills-store migration, do not recreate openclaw/users — canonical
+  // user skills live under skills-store/users and OpenClaw only mirrors openclaw/skills.
 
-  // Migration
-  if (detectLegacyGlobalSkills()) {
-    await migrateLegacySkillsToUser(userCode);
-    result.migrated = true;
-  }
-
-  // Ensure user workspace exists
-  await ensureUserWorkspace(userCode);
-
-  // Clear mount point and copy new user data
-  clearMountPoint();
-  await copyUserToMountPoint(userCode);
-
-  // Fetch cloud installed list and download missing skills
   try {
     const cloudSlugs = await fetchCloudInstalledList();
-    const downloadResult = await downloadMissingSkills(userCode, cloudSlugs);
-    result.downloaded = downloadResult.downloaded;
-    result.failed = downloadResult.failed;
+    if (storeMigrated) {
+      const manager = getSkillManager();
+      const { getSkillEntry, resolvePackageDir } = await import('./skills/canonical-store');
+      for (const slug of cloudSlugs) {
+        try {
+          const existing =
+            (await getSkillEntry({ slug, scope: 'user', userCode }))
+            || (await getSkillEntry({ slug, scope: 'global' }));
+          const packageDir = existing
+            ? resolvePackageDir(existing)
+            : resolvePackageDir({ slug, scope: 'user', userCode });
+          if (existing && fs.existsSync(path.join(packageDir, 'SKILL.md'))) {
+            continue;
+          }
+          await manager.install({ slug, force: false });
+          result.downloaded.push(slug);
+        } catch (err) {
+          result.failed.push(slug);
+          logger.warn(`[UserSkillWorkspace] Failed to install cloud skill ${slug}:`, err);
+        }
+      }
+    } else {
+      const downloadResult = await downloadMissingSkills(userCode, cloudSlugs);
+      result.downloaded = downloadResult.downloaded;
+      result.failed = downloadResult.failed;
+    }
   } catch (err) {
     logger.warn('[UserSkillWorkspace] Failed to sync with cloud installed list:', err);
   }
 
-  // Save current user
   await setCurrentActiveUserCode(userCode);
 
-  logger.info(
-    `[UserSkillWorkspace] Activated workspace for user ${userCode}. ` +
-    `migrated=${result.migrated}, downloaded=${result.downloaded.length}, failed=${result.failed.length}`,
-  );
+  if (storeMigrated) {
+    await getSkillManager().reconcile({ userCode }).catch((err) => {
+      logger.warn('[UserSkillWorkspace] reconcile after activate failed:', err);
+    });
+    try {
+      const { scheduleOrphanSkillImport } = await import('./skills/orphan-skill-import');
+      scheduleOrphanSkillImport('activate-user-workspace');
+    } catch (err) {
+      logger.warn('[UserSkillWorkspace] schedule orphan skill import failed:', err);
+    }
+  }
 
   return result;
 }

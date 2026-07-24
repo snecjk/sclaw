@@ -8,6 +8,7 @@ import {
 } from './parameter-form-recovery';
 import { getMessageText } from './helpers';
 import {
+  dropSyntheticSkillSessionLabelUsers,
   isSameUserMessage,
   mergeOptimisticUserIntoHistory,
   normalizeUserMessageText,
@@ -185,6 +186,10 @@ export function applyLoadedHistorySnapshot(input: {
     targetSessionKey,
     gatewaySessionLabel,
   );
+  // Skill meta is applied after the merge/recover pipeline, so a synthetic
+  // session-label opener may have been inserted before the real skill turn was
+  // recognizable. Drop it now that the skill turn is tagged.
+  finalMessages = dropSyntheticSkillSessionLabelUsers(finalMessages);
   traceLoadHistoryUserReconciliation({
     sessionKey: targetSessionKey,
     userMessageAt: userMsgAt,

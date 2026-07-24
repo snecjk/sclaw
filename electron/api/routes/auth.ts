@@ -26,8 +26,25 @@ import {
   switchAccountViaMemoryCenter,
 } from '../../services/account-switch-service';
 import { resolveAuthMode } from '../../services/sto-auth-mode';
+import { getSclawHubClient } from '../../channels/hub-client';
+import { ensureSclawHubConnected } from '../../channels/startup';
 
 const ssoLoginManager = new SsoLoginManager();
+
+/** 登录/切号后恢复钉钉 Hub WS（失败不阻塞主流程） */
+function scheduleSclawHubReconnect(ctx: HostApiContext): void {
+  void ensureSclawHubConnected(ctx.gatewayManager).catch((err) => {
+    logger.warn('[auth] Sclaw Hub reconnect after login failed:', err);
+  });
+}
+
+function disconnectSclawHubOnLogout(): void {
+  try {
+    getSclawHubClient().disconnect();
+  } catch (err) {
+    logger.warn('[auth] Sclaw Hub disconnect on logout failed:', err);
+  }
+}
 
 const CLIENT_SITE_ACCESS_DENIED_MESSAGE = '您的所属组织无权使用 StoClaw';
 
@@ -239,6 +256,7 @@ export async function handleAuthRoutes(
       }
 
       stoSyncService.startPeriodicSync();
+      scheduleSclawHubReconnect(ctx);
       schedulePostLoginInitialization(user, ctx);
 
       sendJson(res, 200, {
@@ -259,15 +277,17 @@ export async function handleAuthRoutes(
 
   // POST /api/auth/logout — sign out
   if (url.pathname === '/api/auth/logout' && req.method === 'POST') {
-    // Persist the current mount-point skills back to the user's workspace BEFORE
-    // clearing auth. Skills that only live on the global mount (e.g. ones
-    // generated via natural-language chat) would otherwise be lost when the next
-    // login's clearMountPoint() runs. Best-effort: never block logout on this.
+    // Pre-skills-store only: persist mount-point skills back to openclaw/users.
+    // After migration, canonical state is skills-store — skip so logout does not
+    // resurrect the legacy users tree.
     try {
-      const activeUserCode = await getCurrentActiveUserCode();
-      if (activeUserCode) {
-        await syncMountPointToUser(activeUserCode);
-        logger.info(`[auth] Saved mount point to user ${activeUserCode} before logout`);
+      const { isSkillsStoreMigrated } = await import('../../services/skills/migration');
+      if (!isSkillsStoreMigrated()) {
+        const activeUserCode = await getCurrentActiveUserCode();
+        if (activeUserCode) {
+          await syncMountPointToUser(activeUserCode);
+          logger.info(`[auth] Saved mount point to user ${activeUserCode} before logout`);
+        }
       }
     } catch (err) {
       logger.warn('[auth] Failed to persist skills to user workspace on logout:', err);
@@ -292,6 +312,7 @@ export async function handleAuthRoutes(
 
       await clearAuthUser();
       clearInferenceRuntimeConfigCache();
+      disconnectSclawHubOnLogout();
       void removeSsoAuthFromOpenClaw();
       void removeStoDynamicRoutePluginFromOpenClaw().catch((err) =>
         logger.warn('STO dynamic route plugin cleanup on logout failed:', err),
@@ -309,6 +330,7 @@ export async function handleAuthRoutes(
       // Always clear local auth even if SSO signOut fails
       await clearAuthUser().catch(() => {});
       clearInferenceRuntimeConfigCache();
+      disconnectSclawHubOnLogout();
       void removeSsoAuthFromOpenClaw();
       void removeStoDynamicRoutePluginFromOpenClaw().catch(() => {});
 
@@ -397,6 +419,7 @@ export async function handleAuthRoutes(
       }
 
       schedulePostLoginBackgroundWork(body.user, ctx);
+      scheduleSclawHubReconnect(ctx);
 
       sendJson(res, 200, {
         success: true,
@@ -492,6 +515,7 @@ export async function handleAuthRoutes(
       }
 
       schedulePostLoginBackgroundWork(newUser, ctx);
+      scheduleSclawHubReconnect(ctx);
 
       sendJson(res, 200, {
         success: true,
@@ -539,6 +563,7 @@ export async function handleAuthRoutes(
       }
 
       schedulePostLoginBackgroundWork(origin, ctx);
+      scheduleSclawHubReconnect(ctx);
 
       sendJson(res, 200, {
         success: true,

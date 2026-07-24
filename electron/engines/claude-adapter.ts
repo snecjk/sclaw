@@ -23,6 +23,7 @@ import {
   appendArchivedClaudeSessionId,
   isMissingClaudeConversationError,
 } from './claude-session-recovery';
+import { mergeClaudeExecutionEntries, parseClaudeExecutionTurn, type ClaudeExecutionEntryBatch } from './claude-execution-snapshot';
 
 /**
  * Minimal event sink used to forward Claude streaming events to the renderer.
@@ -588,6 +589,28 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
   };
 }
 
+async function buildClaudeExecutionSnapshot(
+  entry: EngineSessionRegistryEntry,
+  limit: number,
+) {
+  const sessionIds = [
+    ...(entry.archivedClaudeSessionIds ?? []),
+    ...(entry.sessionId ? [entry.sessionId] : []),
+  ];
+  const batches: ClaudeExecutionEntryBatch[] = [];
+
+  for (const sessionId of sessionIds) {
+    const batch = await getClaudeSessionMessages(sessionId, entry.cwd ?? '');
+    batches.push({
+      sessionId,
+      entries: batch as unknown as Record<string, unknown>[],
+    });
+  }
+
+  const entries = mergeClaudeExecutionEntries(batches, limit);
+  return parseClaudeExecutionTurn(entries);
+}
+
 function shouldKeepClaudeWorkflowToolResult(messagePayload: unknown): boolean {
   return Boolean(extractWorkflowToolResult(messagePayload));
 }
@@ -625,6 +648,8 @@ export async function consumeClaudeQuery(
   // appending output. Reset on message_start and when the complete assistant
   // message is emitted as 'final'.
   let streamText = '';
+  let streamThinking = '';
+  let streamToolName = '';
 
   const emitEngineEvent = (event: NormalizedEngineEvent) => {
     if (!eventSink) return;
@@ -633,6 +658,27 @@ export async function consumeClaudeQuery(
   const emitAgentCompleted = () => {
     if (!eventSink) return;
     eventSink.emit('notification', { method: 'agent', params: { phase: 'completed', runId, sessionKey } });
+  };
+  const emitStreamingDelta = () => {
+    const content: Array<Record<string, unknown>> = [];
+    if (streamThinking) {
+      content.push({ type: 'thinking', thinking: streamThinking });
+    }
+    if (streamToolName) {
+      content.push({ type: 'tool_use', name: streamToolName, id: `stream-tool-${runId}` });
+    }
+    if (streamText) {
+      content.push({ type: 'text', text: streamText });
+    }
+    if (content.length === 0) return;
+    emitEngineEvent({
+      type: 'message.delta',
+      message: {
+        role: 'assistant',
+        id: runId,
+        content,
+      },
+    });
   };
 
   try {
@@ -646,17 +692,37 @@ export async function consumeClaudeQuery(
       const messageSessionId = typeof message.session_id === 'string' ? message.session_id : sessionId;
 
       // Partial streaming events (only yielded when includePartialMessages is on).
-      // Forward text deltas as live 'delta' chat events for token-by-token rendering.
-      // thinking_delta / input_json_delta are intentionally not streamed here; the
-      // complete assistant message (emitted as 'final' below) carries them.
+      // Forward text + thinking deltas as live 'delta' chat events (钉钉 progress/content).
       if (message.type === 'stream_event') {
         const event = (message as { event?: Record<string, unknown> }).event;
         if (event) {
           if (event.type === 'message_start') {
             // A new assistant message begins — reset the accumulator.
             streamText = '';
+            streamThinking = '';
+            streamToolName = '';
+          } else if (event.type === 'content_block_start') {
+            const block = event.content_block as { type?: string; name?: string } | undefined;
+            if (block?.type === 'tool_use' && typeof block.name === 'string' && block.name) {
+              streamToolName = block.name;
+              emitStreamingDelta();
+              eventSink?.emit('notification', {
+                method: 'agent',
+                params: {
+                  phase: 'tool_start',
+                  runId,
+                  sessionKey,
+                  name: block.name,
+                  data: { name: block.name },
+                },
+              });
+            }
           } else if (event.type === 'content_block_delta') {
-            const delta = event.delta as { type?: string; text?: string } | undefined;
+            const delta = event.delta as {
+              type?: string;
+              text?: string;
+              thinking?: string;
+            } | undefined;
             if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
               streamText += delta.text;
               emitEngineEvent({
@@ -667,6 +733,10 @@ export async function consumeClaudeQuery(
                   content: [{ type: 'text', text: streamText }],
                 },
               });
+              emitStreamingDelta();
+            } else if (delta?.type === 'thinking_delta' && typeof delta.thinking === 'string') {
+              streamThinking += delta.thinking;
+              emitStreamingDelta();
             }
           }
         }
@@ -853,17 +923,10 @@ async function startClaudeQuery(
       model: sharedRuntime.selection.model,
       provider: sharedRuntime.selection.provider ?? existing?.provider,
     };
-    const syncResult = await syncClaudeSkillsForAgent(agentId, cwd).catch((error) => {
+    await syncClaudeSkillsForAgent(agentId, cwd).catch((error) => {
       logger.warn('Failed to sync Claude skill bridge:', error);
       return null;
     });
-    if (syncResult) {
-      logger.info('Synced Claude skill bridge', {
-        agentId,
-        mirrored: syncResult.mirrored,
-        skippedConflicts: syncResult.skippedConflicts,
-      });
-    }
 
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();
@@ -1139,6 +1202,22 @@ export const claudeAdapter: EngineAdapter = {
         entry.cwd,
       );
       return { success: true, result };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  },
+
+  async getExecutionSnapshot(_ctx, params) {
+    const entry = await getEngineSessionRegistryEntry(params.sessionKey);
+    if (!entry?.cwd || (!entry.sessionId && !(entry.archivedClaudeSessionIds?.length))) {
+      return { success: true, result: null };
+    }
+
+    try {
+      return {
+        success: true,
+        result: await buildClaudeExecutionSnapshot(entry, params.limit),
+      };
     } catch (error) {
       return { success: false, error: String(error) };
     }

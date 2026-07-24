@@ -36,7 +36,8 @@ describe('SQLite legacy session catalog migration normalization', () => {
       { version: 5, name: 'workflow-runtime-cloud-primary-keys' },
       { version: 6, name: 'memory-capture-jobs' },
       { version: 7, name: 'session-catalog-schema' },
-      { version: 8, name: 'session-types-and-channels' },
+      { version: 8, name: 'session-types-and-channels' }, { version: 9, name: 'channel-plane-channel-connections' },
+
     ]);
 
     const memoryTable = db.prepare(

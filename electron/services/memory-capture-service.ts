@@ -3,10 +3,10 @@ import { getKyselyDatabase } from '../db';
 import { agentMemoryOrchestrator } from './agent-memory-orchestrator';
 import { logger } from '../utils/logger';
 import { getAdapterForSession } from '../engines/manager';
-import type { AgentEngineType } from '../engines/types';
-import { parseExecutionTurnFromHistory, type ExecutionSnapshot } from '../engines/execution-snapshot';
+import type { ExecutionSnapshot } from '../engines/execution-snapshot';
 import { extractDirectExecutionCommands, formatExecutionMemoryText, type ExecutionExperienceCandidateAssessment, type ExecutionExperienceSummary } from './claude-execution-summary-service';
 import { sanitizeMemoryCaptureUserMessage } from '../../shared/memory-capture-text';
+import { scheduleMemoryCaptureRetry } from './memory-capture-retry';
 
 type RefreshInput = {
   runId?: string | null;
@@ -85,7 +85,7 @@ class MemoryCaptureService {
       if (!plan.prepareConversation && !plan.prepareExecution) return;
 
       trace('info', 'capture.prepare.requested', { jobId: context.executionJobId, runId: context.sourceId, sessionKey: context.sessionKey, agentId: input.agentId ?? null, engineType: input.engineType ?? null, ...plan });
-      const snapshot = await this.loadTurnSnapshot(context, gateway);
+      const snapshot = await this.loadTurnSnapshot(context, gateway, plan.prepareExecution);
       if (!snapshot) throw new Error('execution_history_not_ready');
 
       if (plan.prepareConversation) await this.prepareConversationFromSnapshot(context, snapshot);
@@ -160,13 +160,30 @@ class MemoryCaptureService {
     } catch { return false; }
   }
 
-  private async loadTurnSnapshot(context: CaptureContext, gateway: GatewayManager): Promise<ExecutionSnapshot | null> {
+  private async loadTurnSnapshot(
+    context: CaptureContext,
+    gateway: GatewayManager,
+    requireCompleteTools: boolean,
+  ): Promise<ExecutionSnapshot | null> {
     await new Promise((resolve) => setTimeout(resolve, HISTORY_READY_DELAY_MS));
-    const preferredEngineType: AgentEngineType | undefined = context.engineType === 'claude' ? 'claude' : context.engineType === 'openclaw' ? 'openclaw' : undefined;
-    const adapter = await getAdapterForSession(context.sessionKey, preferredEngineType);
-    const historyResult = await adapter.getHistory({ gatewayManager: gateway }, { sessionKey: context.sessionKey, limit: 200 });
-    const snapshot = parseExecutionTurnFromHistory(historyResult.success ? historyResult.result : undefined);
+    const adapter = await getAdapterForSession(context.sessionKey, context.engineType);
+    const snapshotResult = await adapter.getExecutionSnapshot(
+      { gatewayManager: gateway },
+      { sessionKey: context.sessionKey, limit: 200 },
+    );
+    if (!snapshotResult.success) throw new Error(snapshotResult.error || 'execution_snapshot_failed');
+    const snapshot = snapshotResult.result;
     if (!snapshot) return null;
+    if (requireCompleteTools && snapshot.tools.some((tool) => tool.status === 'unknown')) {
+      const executionJob = await getKyselyDatabase()
+        .selectFrom('memory_capture_jobs')
+        .select('retry_count')
+        .where('id', '=', context.executionJobId)
+        .executeTakeFirst();
+      if ((executionJob?.retry_count ?? 0) < 2) {
+        throw new Error('execution_tool_results_not_ready');
+      }
+    }
     return {
       ...snapshot,
       userMessage: sanitizeMemoryCaptureUserMessage(snapshot.userMessage),
@@ -384,11 +401,30 @@ class MemoryCaptureService {
   }
 
   private async retry(id: string, error: unknown, retry: () => void): Promise<void> {
-    const db = getKyselyDatabase(); const job = await db.selectFrom('memory_capture_jobs').select(['retry_count']).where('id', '=', id).executeTakeFirst(); const count = (job?.retry_count || 0) + 1; const again = count < 3;
+    const db = getKyselyDatabase();
+    const job = await db.selectFrom('memory_capture_jobs').select(['retry_count']).where('id', '=', id).executeTakeFirst();
+    const count = (job?.retry_count || 0) + 1;
+    const again = count < 3;
     const retryInMs = count * RETRY_BASE_DELAY_MS;
     await db.updateTable('memory_capture_jobs').set({ status: again ? 'retry_wait' : 'failed', retry_count: count, error_message: String(error).slice(0, 500), next_retry_at: again ? new Date(Date.now() + retryInMs).toISOString() : null, completed_at: again ? null : now(), updated_at: now() }).where('id', '=', id).execute();
     trace('warn', again ? 'job.retry_wait' : 'job.failed', { jobId: id, retryCount: count, retryInMs: again ? retryInMs : null, error: String(error).slice(0, 500) });
-    if (again) { const timer = setTimeout(retry, retryInMs); timer.unref?.(); }
+    if (again) {
+      scheduleMemoryCaptureRetry(
+        retryInMs,
+        async () => {
+          await db.updateTable('memory_capture_jobs')
+            .set({ status: 'ready', next_retry_at: null, updated_at: now() })
+            .where('id', '=', id)
+            .where('status', '=', 'retry_wait')
+            .execute();
+        },
+        retry,
+        (resumeError) => trace('warn', 'job.retry_resume_failed', {
+          jobId: id,
+          error: String(resumeError).slice(0, 500),
+        }),
+      );
+    }
   }
 
   private pruneInjectedMemoryBindings(): void {

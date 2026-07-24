@@ -29,10 +29,6 @@ export function buildFirstTriggerPlaceholderSessionKey(
     const taskId = trimmed.slice('claude-task:'.length).trim();
     return taskId ? `claude-task:${taskId}:${date}` : null;
   }
-  if (trimmed.startsWith('st:')) {
-    const taskId = trimmed.slice('st:'.length).trim();
-    return taskId ? `agent:${agentId}:scheduled-task:${taskId}:${date}` : null;
-  }
 
   return null;
 }

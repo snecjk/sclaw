@@ -1,0 +1,187 @@
+---
+description: sto-claw 样式核心规则（设计稿优先 / light-dark / token / 响应式 / 交互状态）
+globs: "src/**/*.{ts,tsx,css}"
+alwaysApply: false
+---
+
+# sto-claw 样式核心规则
+
+本文件是自动加载的样式工作基线，只保留当前项目事实和高频决策。完整视觉表格、历史示例和待验证模式见 `references/02-styles-reference.md`。
+
+仅在任务确实涉及对应组件时按需读取参考文档：状态动画、Icon 尺寸、Input / Button / Tag 变体、对话气泡、代码块、工具调用卡、Modal / Drawer、Toast、图片 fallback。参考文档中的 🟡 内容仍需以当前代码和最新设计稿复核，不能直接当成硬规则。
+
+## 决策优先级
+
+1. 本次任务已确认的最新设计稿和补充说明。
+2. 当前页面已经验收、运行稳定的实现。
+3. 本文件中适用于当前组件的核心规则。
+4. `docs/sto-design.md` 中未与当前实现和最新设计冲突的共享建议。
+
+- 冲突时不要静默选择，实施前说明差异。
+- 单页面特例先留在 feature 内，不直接升级成全局规范。
+- 验收后确认具有复用价值，再反哺本文件。
+- 规则与代码事实冲突时以代码和人工确认结果为准。
+
+## 技术栈与主题事实
+
+- Tailwind CSS 3.4 + shadcn/Radix；业务动画使用 Framer Motion。
+- className 合并使用 `cn()`；图标沿用 Lucide 和项目现有业务图标资产。
+- 项目已支持亮色与暗色主题：Tailwind `darkMode: ['class']`，主题 tokens 位于 `src/styles/globals.css`。
+- 新增或修改可见组件时必须保留 light/dark 可读性；确认为单主题的独立 surface 需标明范围。
+- 优先使用语义 token；只有现有设计需要明确主题差异时才增加 `dark:`。
+
+## 样式写法
+
+- 新增样式优先 Tailwind utility classes。
+- 条件 className 使用 `cn()`，不用模板字符串手工拼接。
+- 重复且稳定的 className 可提取为文件级常量；跨 feature surface 放 `src/lib/surfaces.ts`。
+- 项目级结构和主题变量放 `src/styles/globals.css`。
+- 动态尺寸、坐标、CSS variable 注入、第三方画布等场景允许 inline style，并说明非显然原因。
+- 已有复杂 CSS surface 沿用当前文件；不要在局部任务中强制迁移成 Tailwind。
+- 不新增 CSS Modules、styled-components、SCSS 等第二套样式方案。
+
+## 品牌与语义颜色
+
+主品牌色以 `globals.css` 和 `docs/sto-design.md` 为准：
+
+```css
+:root {
+  --primary: 26 100% 50%;             /* #FF6F00 */
+  --primary-foreground: 0 0% 100%;
+  --ring: 26 100% 50%;
+  --sto-brand-6: #ff6f00;
+}
+```
+
+- 业务代码优先使用 `bg-primary`、`text-primary`、`border-primary`、`ring-ring`。
+- 不在业务组件中重复散落 `#FF6F00`；需要品牌色时使用语义 token。
+- `Info / link` 使用现有 `link` token，不默认等同 primary。
+- Error / Warning / Success 使用 `destructive`、`warning`、`success` 语义 token。
+- 中性色优先使用 `background`、`foreground`、`card`、`muted`、`muted-foreground`、`border`。
+- 已验收页面中的设计专色、pastel cover、状态点和 macOS 控件色可以保留，不因本规则机械替换。
+- 新设计出现未定义颜色时，先在 feature 内验证；复用两处以上再评估 token 化。
+
+当前浅色核心值用于核对，不要求在业务代码写 hex：
+
+| 语义 | 当前值 |
+| --- | --- |
+| primary | `#FF6F00` |
+| foreground | `#1D2129` |
+| background | `#F7F8FA` |
+| card | `#FFFFFF` |
+| muted foreground | 项目当前 HSL token |
+| border / input | `#E5E6EB` |
+| success | `#28C840` |
+| warning | `#FEBC2E` |
+
+暗色值全部从 `.dark` tokens 读取，不复制浅色 hex 到暗色 surface。
+
+## 字体与文本
+
+- 中文沿用系统 PingFang SC，英文/数字沿用系统 SF Pro / sans fallback，代码使用 `font-mono`。
+- 优先使用项目已有 Tailwind 字号和当前 feature 的已验收层级。
+- 正文默认 `font-normal`，强调使用 `font-medium` / `font-semibold`；标题按当前页面层级使用 semibold / bold。
+- 正文和说明文字保持可读行高；长文本不要用固定高度裁切。
+- 用户可见文案同时遵守 i18n，不在 JSX 新增裸字符串。
+
+## 间距、圆角、描边与阴影
+
+- 优先使用 Tailwind spacing scale；任意值只用于设计明确的结构尺寸。
+- 同类组件保持一致 padding / gap，不为接近截图增加大量 1px 特例。
+- 基础 `--radius` 当前为 8px；具体组件沿用 shadcn variant 或已验收 surface。
+- 卡片、Modal、输入框和 pill 的圆角按组件语义区分，不把单页面圆角升级成全局值。
+- 默认边框使用 `border-border`；focus 使用 `ring-ring` / `border-primary`。
+- 阴影优先复用 Tailwind token、`globals.css` 变量或当前 feature 已有 surface。
+- 不在多个文件复制相同长阴影或渐变；稳定后提取变量或 surface。
+
+## 布局与响应式
+
+- 这是 Electron 桌面应用，但窗口可缩放；必须考虑最小宽高、文本溢出和面板挤压。
+- 固定栏使用 `shrink-0`，可伸缩内容使用 `min-w-0` / `min-h-0`。
+- 可能增长的标题和路径提供 truncate、wrap 或滚动策略。
+- 主内容按当前页面使用 max-width；不要把聊天阅读宽度硬套到设置、表格或画布。
+- 侧栏宽度、header 高度、content padding、split 比例使用已有 `--sto-*` 结构变量。
+- 双栏、侧栏折叠、产物预览三栏沿用现有 MainLayout / split panel 能力，不在页面重建另一套布局状态。
+- 响应式视觉验证至少覆盖项目常用窗口、较窄窗口和大屏；涉及三栏时检查拖拽极值。
+- 结构尺寸或持久化变化不属于纯 Tier 1 样式修改，应重新分级。
+
+## 交互状态
+
+所有可交互控件必须覆盖适用的状态：
+
+- default、hover、active、disabled。
+- 键盘可操作控件必须有可见 focus。
+- 选择类控件覆盖 selected / checked。
+- 异步操作覆盖 loading，错误不能只靠颜色表达。
+
+状态实现原则：
+
+- 优先复用现有 Button、Input、Tabs、Dialog、Tooltip 等原件 variant。
+- hover 通常只调整背景、边框、文字或轻微阴影，不引发布局抖动。
+- active 可使用轻量 scale，但避免在密集列表和精确点击目标中过度动画。
+- disabled 同时使用原生 disabled / aria 状态和视觉反馈，不只降低透明度。
+- focus 使用 `focus-visible`，不要移除 outline 后不给替代样式。
+
+## 动画
+
+- 动画服务于状态变化和空间关系，不为静态装饰强加循环动效。
+- 简单 hover / fade 使用 CSS transition；复杂进入退出和布局动画使用 Framer Motion。
+- 优先沿用现有 120 / 200 / 300ms 档位和 feature 已有 easing。
+- 尊重 `prefers-reduced-motion`；非必要动画在 reduced motion 下关闭或缩短。
+- 流式内容避免每个 token 触发布局动画。
+
+## 图标
+
+- 默认使用 Lucide；已有 STO、渠道、文件类型和应用图标资产继续复用。
+- 图标尺寸跟随当前组件：紧凑控件通常 14–16px，普通控件通常 16–20px。
+- 同一控件组保持 strokeWidth 一致。
+- 纯装饰图标使用 `aria-hidden`；图标按钮必须有可读 `aria-label`。
+- 不用 emoji 替代产品 UI 图标，不新增第二套通用图标库。
+
+## 表单控件与按钮
+
+- Input、Select、Checkbox、Radio、Switch、Button 优先复用 `src/components/ui/` 原件。
+- 新样式通过现有 variant、size 和 className 组合，不复制一套原件。
+- 输入控件覆盖 default、hover、focus、disabled、error；placeholder 与正文层级明确。
+- 主操作使用 primary；次操作使用 secondary / outline / ghost，危险操作使用 destructive。
+- loading 按钮保留宽度并禁用重复提交。
+- 聊天输入框是业务复合组件，沿用现有 `ChatInput`，不按普通 Input 规则重建。
+
+## Tag、卡片与业务组件
+
+- Tag / badge 优先使用当前 feature 已有 variant；颜色表达与文字/图标语义同时存在。
+- 对话消息、代码块、工具调用卡、产物卡优先复用 `components/chat/` 和已有业务组件。
+- 不把参考文档中的 user / assistant 气泡、代码折叠行数或工具卡颜色当成全局硬事实。
+- 侧栏使用 `globals.css` 的 `--sto-sidebar-*` tokens 和 `src/lib/surfaces.ts` 已有 classes。
+- 修改共享 sidebar surface 前先搜索全部消费者，验证 expanded / collapsed、light / dark 和未读/运行态。
+
+## Loading / Empty / Error
+
+- 通用三态优先复用 `FeedbackState`、`LoadingSpinner` 或当前 feature 已有状态组件。
+- 列表结构稳定时可使用 feature Skeleton；不要创建不存在的 `LoadingState / EmptyState / ErrorState`。
+- `useMinLoading` 默认最短展示 500ms；只有明确场景才传入其他时长。
+- 空态提供清晰标题，是否需要 action 取决于用户是否有可执行下一步。
+- 错误态在能力允许时提供重试；权限、不可恢复错误按真实业务语义处理。
+- 操作级 loading 不升级成全屏遮罩。
+
+## Dialog、Toast 与图片
+
+- Dialog / Drawer 复用 Radix/shadcn，保留 focus trap、Esc、Overlay 和明确关闭入口。
+- 尺寸、圆角和阴影沿用当前 feature 已验收实现，不强制参考表中的单一数值。
+- Toast 用于短暂操作反馈；表单错误、区块错误和持续状态使用 inline UI。
+- 图片使用静态 import 或现有 preview/host 解析能力，提供 alt 或明确装饰语义。
+- 外部和本地路径不得绕过 Electron 安全边界；加载失败沿用 feature fallback。
+
+## 样式交付自检
+
+- [ ] 最新设计稿、当前实现和规则冲突已经说明并确认。
+- [ ] 主品牌色通过 primary token 使用，基准为 `#FF6F00`。
+- [ ] 修改区域在 light / dark 下都可读，没有删除既有暗色适配。
+- [ ] 新增颜色优先语义 token；设计专色范围清楚，没有无理由全局化。
+- [ ] className 条件使用 `cn()`，重复长样式已评估抽取。
+- [ ] 没有为局部任务迁移稳定 CSS、重写 shadcn 原件或扩大结构范围。
+- [ ] 窄窗口、文本溢出、侧栏折叠和三栏极值按影响范围验证。
+- [ ] hover / active / disabled / focus / selected / loading 状态完整。
+- [ ] focus、aria、reduced motion 和非颜色状态表达可用。
+- [ ] Loading / Empty / Error 复用了真实存在的组件或 feature 模式。
+- [ ] diff 只包含完成视觉目标所需的修改。

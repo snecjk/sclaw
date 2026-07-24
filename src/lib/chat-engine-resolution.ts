@@ -4,7 +4,6 @@ import {
   isClaudeScheduledTaskDatedSessionKey,
   isClaudeScheduledTaskRunSessionKey,
   isClaudeScheduledTaskSessionKey,
-  isScheduledTaskSessionKey,
 } from '@/stores/chat/cron-session-utils';
 
 export type ChatEngineType = 'openclaw' | 'claude';
@@ -50,7 +49,7 @@ export function resolveChatEngineType(input: {
   if (
     sessionKey
     && input.inferOpenClawTaskKeys
-    && (isAnyCronSessionKey(sessionKey) || isScheduledTaskSessionKey(sessionKey))
+    && isAnyCronSessionKey(sessionKey)
   ) {
     return 'openclaw';
   }

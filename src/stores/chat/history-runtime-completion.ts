@@ -48,10 +48,20 @@ export function reconcileHistoryRuntimeCompletion(input: {
     hasRecentAssistant: recentAssistantActivity.hasRecentAssistantOutput,
   });
 
-  if (shouldAutoCompleteFromHistory) {
+  const sessionRuntime = getSessionRuntimeState(get().runtimeBySessionKey, sessionKey);
+  const hasRunningTool = sessionRuntime.streamingTools.some((tool) => tool.status === 'running');
+  // OpenClaw 常不下发 turn.completed；已 pendingFinal 且 history/本地已有正文、无运行中工具时收尾。
+  const shouldAutoCompleteOpenClaw =
+    activeEngineType === 'openclaw'
+    && isSendingNow
+    && (pendingFinal || sessionRuntime.pendingFinal)
+    && recentAssistantActivity.hasRecentAssistantOutput
+    && !hasRunningTool;
+
+  if (shouldAutoCompleteFromHistory || shouldAutoCompleteOpenClaw) {
     clearHistoryPoll(sessionKey);
     useSessionUnreadStore.getState().markSessionRead(sessionKey);
-    const completionRunId = getSessionRuntimeState(get().runtimeBySessionKey, sessionKey).activeRunId ?? undefined;
+    const completionRunId = sessionRuntime.activeRunId ?? undefined;
     set((state) => applyRuntimePatch(state, sessionKey, buildTerminalRuntimePatch(null)));
     executeTurnEffects(buildTerminalTurnEffects({
       agentId: getAgentIdFromSessionKey(sessionKey),

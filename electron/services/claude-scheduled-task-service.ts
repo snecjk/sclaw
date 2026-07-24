@@ -104,18 +104,11 @@ function normalizePermissionProfile(
   return 'readonly-safe';
 }
 
-/** 含工作流任务的默认超时（秒）：工作流往往要跑数分钟，300s 会把 agent 卡死在轮询中。 */
-const WORKFLOW_DEFAULT_TIMEOUT_SEC = 1800;
-
-/** 根据提示词正文粗判是否为工作流任务（调用了 execute_workflow / get_workflow_status）。 */
-function isWorkflowPrompt(promptTemplate: string | undefined | null): boolean {
-  if (!promptTemplate) return false;
-  return /\b(execute_workflow|get_workflow_status)\b/.test(promptTemplate);
-}
+/** 默认执行超时（秒）：含技能/工作流等任务往往要跑数分钟，沿用 300s 会把 agent 卡死在轮询或执行中，统一放宽到 1800s。 */
+const DEFAULT_TIMEOUT_SEC = 2000;
 
 function buildDefinitionFromCreateInput(input: ClaudeScheduledTaskCreateInput): ClaudeScheduledTaskDefinition {
   const now = nowIso();
-  const isWorkflowTask = Boolean(input.workflowCode?.trim()) || isWorkflowPrompt(input.promptTemplate);
   return {
     id: randomUUID(),
     name: validateRequired(input.name, 'name'),
@@ -127,7 +120,7 @@ function buildDefinitionFromCreateInput(input: ClaudeScheduledTaskCreateInput): 
     providerAccountId: input.providerAccountId?.trim() || undefined,
     model: input.model?.trim() || undefined,
     permissionProfile: normalizePermissionProfile(input.permissionProfile),
-    timeoutSec: Math.max(1, input.timeoutSec ?? (isWorkflowTask ? WORKFLOW_DEFAULT_TIMEOUT_SEC : 300)),
+    timeoutSec: Math.max(1, input.timeoutSec ?? DEFAULT_TIMEOUT_SEC),
     workflowCode: input.workflowCode?.trim() || undefined,
     retryPolicy: {
       maxAttempts: Math.max(1, input.retryPolicy?.maxAttempts ?? 1),

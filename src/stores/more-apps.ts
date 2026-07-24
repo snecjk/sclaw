@@ -1,9 +1,26 @@
 /**
- * More Apps Store — UI state + Main-backed persistence (~/.stoclaw/more-apps)
+ * More Apps Store — server catalog + Main-backed local registry persistence.
+ * Aligned with the PRD demo (more-apps.js)
+ *
+ * Market tab (Banner / 分类 / APP) is driven by server catalog state fetched via the
+ * Main Host API proxy. The three blocks keep independent loading/error so one failure
+ * does not break the others; APP supports reset, append pagination and request-race
+ * protection. "我的应用"、收藏和外部应用 keep main's ~/.stoclaw/more-apps registry behavior.
  */
 import { create } from 'zustand';
-import type { AppItem, AppTone, MoreAppsTab, MoreAppsSortMode, MarketCategory } from '@/types/more-apps';
-import { VISIBLE_BUILTIN_APPS } from '@/components/more-apps/builtin-apps';
+import type {
+  AppItem,
+  AppPlazaBanner,
+  AppPlazaCategory,
+  MarketCategory,
+  MoreAppsSortMode,
+  MoreAppsTab,
+} from '@/types/more-apps';
+import {
+  fetchAppPlazaApps,
+  fetchAppPlazaBanners,
+  fetchAppPlazaCategories,
+} from '@/lib/app-plaza-api';
 import {
   fetchMoreAppsRegistry,
   migrateMoreAppsRegistry,
@@ -20,30 +37,39 @@ const STORAGE_KEY_EXTERNAL = 'stoclaw:more-apps:external';
 const STORAGE_KEY_INSTALLED = 'stoclaw:more-apps:installed';
 const STORAGE_KEY_FAVORITES = 'stoclaw:more-apps:favorites';
 
+const APP_PAGE_SIZE = 20;
+
+// Request-sequence guards — a stale slow response is discarded when a newer
+// reset/append has started, so the UI never shows out-of-order catalog results.
+let appsRequestSeq = 0;
+let bannersRequestSeq = 0;
+let categoriesRequestSeq = 0;
+
+function toError(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+// Read main's legacy renderer storage once, then migrate it into the durable registry.
 function readLegacyLocalStorage(): MoreAppsRegistry {
   const empty = createEmptyMoreAppsRegistry();
   try {
     const externalRaw = localStorage.getItem(STORAGE_KEY_EXTERNAL);
     const installedRaw = localStorage.getItem(STORAGE_KEY_INSTALLED);
     const favoritesRaw = localStorage.getItem(STORAGE_KEY_FAVORITES);
-    if (!externalRaw && !installedRaw && !favoritesRaw) {
-      return empty;
-    }
+    if (!externalRaw && !installedRaw && !favoritesRaw) return empty;
     const externalParsed = externalRaw ? JSON.parse(externalRaw) : [];
     const installedParsed = installedRaw ? JSON.parse(installedRaw) : [];
     const favoritesParsed = favoritesRaw ? JSON.parse(favoritesRaw) : [];
-    const externalApps = Array.isArray(externalParsed)
-      ? externalParsed.filter(
-          (a: unknown): a is AppItem =>
-            !!a &&
-            typeof a === 'object' &&
-            typeof (a as AppItem).id === 'string' &&
-            typeof (a as AppItem).url === 'string',
-        )
-      : [];
     return {
       version: MORE_APPS_REGISTRY_VERSION,
-      externalApps,
+      externalApps: Array.isArray(externalParsed)
+        ? externalParsed.filter(
+            (app: unknown): app is AppItem =>
+              !!app && typeof app === 'object' &&
+              typeof (app as AppItem).id === 'string' &&
+              typeof (app as AppItem).url === 'string',
+          )
+        : [],
       installedIds: Array.isArray(installedParsed)
         ? installedParsed.filter((id): id is string => typeof id === 'string')
         : [],
@@ -66,11 +92,7 @@ function clearLegacyLocalStorage(): void {
   }
 }
 
-function toRegistry(state: {
-  externalApps: AppItem[];
-  installedIds: string[];
-  favoriteIds: string[];
-}): MoreAppsRegistry {
+function toRegistry(state: Pick<MoreAppsState, 'externalApps' | 'installedIds' | 'favoriteIds'>): MoreAppsRegistry {
   return {
     version: MORE_APPS_REGISTRY_VERSION,
     externalApps: state.externalApps,
@@ -79,21 +101,21 @@ function toRegistry(state: {
   };
 }
 
-const APP_TONES = new Set<AppTone>(['blue', 'orange', 'green', 'purple', 'teal', 'gray']);
-
-function normalizeAppTone(tone: string | undefined): AppTone | undefined {
-  return tone && APP_TONES.has(tone as AppTone) ? tone as AppTone : undefined;
-}
-
 function asAppItems(apps: MoreAppsRegistry['externalApps']): AppItem[] {
   return apps.map((app) => ({
     ...app,
-    name: app.name,
-    url: app.url,
+    tone: ['blue', 'orange', 'green', 'purple', 'teal', 'gray'].includes(app.tone ?? '')
+      ? app.tone as AppItem['tone']
+      : 'gray',
     kind: app.kind === 'builtin' ? 'builtin' : 'external',
     external: app.external ?? true,
-    tone: normalizeAppTone(app.tone),
   }));
+}
+
+function mergeAppItems(current: AppItem[], incoming: AppItem[]): AppItem[] {
+  const merged = new Map(current.map((app) => [app.id, app]));
+  incoming.forEach((app) => merged.set(app.id, app));
+  return Array.from(merged.values());
 }
 
 // ── Store interface ────────────────────────────────────────────────
@@ -105,8 +127,30 @@ interface MoreAppsState {
   marketCategory: MarketCategory;
   heroSlideIndex: number;
 
-  // Data
-  builtinApps: AppItem[];
+  // Server catalog — Banner block (independent loading/error)
+  banners: AppPlazaBanner[];
+  bannersLoading: boolean;
+  bannersError: string | null;
+
+  // Server catalog — 分类 block (independent loading/error)
+  categories: AppPlazaCategory[];
+  categoryCounts: Record<string, number>;
+  categoriesLoading: boolean;
+  categoriesError: string | null;
+
+  // Server catalog — APP block (independent loading/error, with pagination + race guard)
+  apps: AppItem[];
+  /** Stable session catalog used by 我的应用; market filters never remove entries. */
+  catalogApps: AppItem[];
+  /** Unfiltered catalog total shown beside the 应用广场 tab. */
+  marketTotal: number;
+  total: number;
+  pageNum: number;
+  loading: boolean;
+  loadingMore: boolean;
+  error: string | null;
+
+  // Main-backed local registry (same behavior as main).
   externalApps: AppItem[];
   installedIds: string[];
   favoriteIds: string[];
@@ -117,8 +161,7 @@ interface MoreAppsState {
   addModalOpen: boolean;
   editingExternalAppId: string | null;
 
-  // Actions
-  hydrate: () => Promise<void>;
+  // Actions — UI
   setActiveTab: (tab: MoreAppsTab) => void;
   setSearchQuery: (q: string) => void;
   setSortMode: (mode: MoreAppsSortMode) => void;
@@ -127,6 +170,9 @@ interface MoreAppsState {
   openAddModal: () => void;
   openEditModal: (id: string) => void;
   closeAddModal: () => void;
+
+  // Actions — external / installed / favorites
+  hydrate: () => Promise<void>;
   addExternalApp: (app: { name: string; url: string; description?: string }) => void;
   updateExternalApp: (id: string, app: { name: string; url: string; description?: string }) => void;
   removeExternalApp: (id: string) => void;
@@ -135,6 +181,12 @@ interface MoreAppsState {
   isAppInstalled: (id: string) => boolean;
   toggleFavorite: (id: string) => void;
   isAppFavorite: (id: string) => boolean;
+
+  // Actions — server catalog
+  fetchBanners: () => Promise<void>;
+  fetchCategories: () => Promise<void>;
+  fetchApps: (opts?: { reset?: boolean }) => Promise<void>;
+  loadMoreApps: () => Promise<void>;
 }
 
 async function persistRegistry(get: () => MoreAppsState): Promise<void> {
@@ -154,7 +206,24 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
   marketCategory: 'featured',
   heroSlideIndex: 0,
 
-  builtinApps: VISIBLE_BUILTIN_APPS,
+  banners: [],
+  bannersLoading: false,
+  bannersError: null,
+
+  categories: [],
+  categoryCounts: {},
+  categoriesLoading: false,
+  categoriesError: null,
+
+  apps: [],
+  catalogApps: [],
+  marketTotal: 0,
+  total: 0,
+  pageNum: 0,
+  loading: false,
+  loadingMore: false,
+  error: null,
+
   externalApps: [],
   installedIds: [],
   favoriteIds: [],
@@ -173,11 +242,9 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
       const legacy = readLegacyLocalStorage();
       if (!isMoreAppsRegistryEmpty(legacy)) {
         try {
-          const migrateResult = await migrateMoreAppsRegistry(legacy);
-          registry = migrateResult.registry;
-          if (migrateResult.migrated || !isMoreAppsRegistryEmpty(registry)) {
-            clearLegacyLocalStorage();
-          }
+          const result = await migrateMoreAppsRegistry(legacy);
+          registry = result.registry;
+          if (result.migrated || !isMoreAppsRegistryEmpty(registry)) clearLegacyLocalStorage();
         } catch (error) {
           console.error('[more-apps] migrate failed', error);
         }
@@ -302,5 +369,118 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
 
   isAppFavorite: (id) => {
     return get().favoriteIds.indexOf(id) !== -1;
+  },
+
+  fetchBanners: async () => {
+    const seq = ++bannersRequestSeq;
+    set({ bannersLoading: true, bannersError: null });
+    try {
+      const banners = await fetchAppPlazaBanners();
+      if (seq !== bannersRequestSeq) return;
+      set({ banners, bannersLoading: false, bannersError: null });
+    } catch (err) {
+      if (seq !== bannersRequestSeq) return;
+      set({ bannersError: toError(err), bannersLoading: false });
+    }
+  },
+
+  fetchCategories: async () => {
+    const seq = ++categoriesRequestSeq;
+    set({ categoriesLoading: true, categoriesError: null });
+    try {
+      const categories = await fetchAppPlazaCategories();
+      if (seq !== categoriesRequestSeq) return;
+      set({ categories, categoriesLoading: false, categoriesError: null });
+
+      const countResults = await Promise.allSettled(
+        categories.map((category) =>
+          fetchAppPlazaApps({
+            pageNum: 1,
+            pageSize: 1,
+            categoryCode: category.id,
+          }),
+        ),
+      );
+      if (seq !== categoriesRequestSeq) return;
+      const categoryCounts = countResults.reduce<Record<string, number>>((counts, result, index) => {
+        const category = categories[index];
+        if (result.status === 'fulfilled' && category) {
+          counts[category.id] = result.value.total;
+        }
+        return counts;
+      }, {});
+      set({ categoryCounts });
+    } catch (err) {
+      if (seq !== categoriesRequestSeq) return;
+      set({ categoriesError: toError(err), categoriesLoading: false, categoryCounts: {} });
+    }
+  },
+
+  fetchApps: async (opts) => {
+    const reset = opts?.reset ?? false;
+    const seq = ++appsRequestSeq;
+    const {
+      searchQuery,
+      marketCategory,
+      pageNum: currPage,
+      apps: currApps,
+      catalogApps: currCatalogApps,
+    } = get();
+    const isUnfiltered = !searchQuery.trim() && marketCategory === 'featured';
+    const isUnfilteredCategory = !searchQuery.trim() && marketCategory !== 'featured';
+    const nextPage = reset ? 1 : currPage + 1;
+    if (reset) {
+      set({ loading: true, error: null, pageNum: 1, apps: [] });
+    } else {
+      set({ loadingMore: true });
+    }
+    try {
+      const result = await fetchAppPlazaApps({
+        pageNum: nextPage,
+        pageSize: APP_PAGE_SIZE,
+        keyword: searchQuery.trim() || undefined,
+        categoryCode: marketCategory === 'featured' ? undefined : marketCategory,
+      });
+      if (seq !== appsRequestSeq) return;
+      if (reset) {
+        set({
+          apps: result.items,
+          catalogApps: mergeAppItems(currCatalogApps, result.items),
+          ...(isUnfiltered ? { marketTotal: result.total } : {}),
+          ...(isUnfilteredCategory
+            ? { categoryCounts: { ...get().categoryCounts, [marketCategory]: result.total } }
+            : {}),
+          total: result.total,
+          pageNum: result.pageNum,
+          loading: false,
+          error: null,
+        });
+      } else {
+        const seen = new Set(currApps.map((a) => a.id));
+        const appended = result.items.filter((a) => !seen.has(a.id));
+        set({
+          apps: [...currApps, ...appended],
+          catalogApps: mergeAppItems(currCatalogApps, result.items),
+          ...(isUnfiltered ? { marketTotal: result.total } : {}),
+          ...(isUnfilteredCategory
+            ? { categoryCounts: { ...get().categoryCounts, [marketCategory]: result.total } }
+            : {}),
+          total: result.total,
+          pageNum: result.pageNum,
+          loadingMore: false,
+          error: null,
+        });
+      }
+    } catch (err) {
+      if (seq !== appsRequestSeq) return;
+      set({ error: toError(err), loading: false, loadingMore: false });
+    }
+  },
+
+  loadMoreApps: async () => {
+    const { apps, total, loading, loadingMore } = get();
+    if (loading || loadingMore) return;
+    if (apps.length >= total) return;
+    await get().fetchApps({ reset: false });
   },
 }));

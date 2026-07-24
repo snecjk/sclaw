@@ -37,6 +37,8 @@ import { createSendActions } from './send-actions';
 import { createForegroundEventActions } from './foreground-event-actions';
 import { buildTerminalRuntimePatch } from './turn-state-machine';
 import { buildTerminalTurnEffects, executeTurnEffects } from './turn-effects';
+// Ensure Vite HMR of run-completion also invalidates this store module.
+import './run-completion';
 import {
   clearErrorRecoveryTimer,
   clearHistoryPoll,

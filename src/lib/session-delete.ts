@@ -3,7 +3,6 @@ import {
   isClaudeScheduledTaskRunSessionKey,
   isClaudeScheduledTaskSessionKey,
   isAnyCronSessionKey,
-  parseScheduledTaskAgentSessionKey,
 } from '@/stores/chat/cron-session-utils';
 import { isHiddenStoTaskSubitemChatSessionKey, isStoTaskSessionKey } from '@/lib/sto-task-session';
 import { hostApiFetch } from '@/lib/host-api';
@@ -23,7 +22,6 @@ export function resolveSessionDeleteEngineType(
   agentEngineType?: string | null,
 ): SessionDeleteEngineType {
   if (isAnyCronSessionKey(sessionKey)) return 'openclaw';
-  if (parseScheduledTaskAgentSessionKey(sessionKey)) return 'openclaw';
   if (isStoTaskSessionKey(sessionKey) || isHiddenStoTaskSubitemChatSessionKey(sessionKey)) {
     return 'openclaw';
   }

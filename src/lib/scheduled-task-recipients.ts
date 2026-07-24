@@ -5,7 +5,13 @@ import {
   stripDingTalkMentionContextForDisplay,
 } from '@/lib/dingtalk-mention-context';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
-import type { ScheduledTask } from '@/types/scheduled-task';
+
+/** DingTalk recipient fields shared by local cron/claude task definitions. */
+interface ScheduledTaskDingTalkFields {
+  dingdingId?: string | null;
+  dingdingGroupId?: string | null;
+  dingdingGroupName?: string | null;
+}
 
 export function parseMentionsFromRecipientContext(message: string): DingTalkMention[] {
   if (!messageHasDingTalkRecipientContext(message)) return [];
@@ -52,7 +58,7 @@ export function parseMentionsFromRecipientContext(message: string): DingTalkMent
   }
 }
 
-export function scheduledTaskToMentions(task: Pick<ScheduledTask, 'dingdingId' | 'dingdingGroupId' | 'dingdingGroupName'>): DingTalkMention[] {
+export function scheduledTaskToMentions(task: Pick<ScheduledTaskDingTalkFields, 'dingdingId' | 'dingdingGroupId' | 'dingdingGroupName'>): DingTalkMention[] {
   const mentions: DingTalkMention[] = [];
   if (task.dingdingId) {
     mentions.push({
@@ -73,7 +79,7 @@ export function scheduledTaskToMentions(task: Pick<ScheduledTask, 'dingdingId' |
 
 export function resolveScheduledTaskMentions(
   message: string,
-  task?: Pick<ScheduledTask, 'dingdingId' | 'dingdingGroupId' | 'dingdingGroupName'> | null,
+  task?: Pick<ScheduledTaskDingTalkFields, 'dingdingId' | 'dingdingGroupId' | 'dingdingGroupName'> | null,
 ): DingTalkMention[] {
   const fromMessage = parseMentionsFromRecipientContext(message);
   if (fromMessage.length > 0) return fromMessage;

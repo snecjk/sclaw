@@ -15,11 +15,12 @@ import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ChatMessage } from './ChatMessage';
 import { AssistantTurnMessage } from './AssistantTurnMessage';
+import { collectSearchableChatMessages, findChatMessageSearchTarget, resolveChatMessageSearchKey } from './chat-message-search';
 import { useChatDisplay } from './use-chat-display';
 import { isAssistantRole, resolveActiveTurnStableKey } from './chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
-import { ChatContentHeaderActions } from './ChatSearchBar';
+import { ChatConversationHeaderActions, ChatPreviewToggleHeaderAction } from './ChatSearchBar';
 import { ChatPreviewHeaderTabs } from './ChatPreviewHeaderTabs';
 import { PendingQueuePanel } from './PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
@@ -38,11 +39,10 @@ import {
   stoChatScrollContentClass,
   stoSplitGridBodyChatClass,
   stoSplitGridBodyPreviewClass,
-  stoSplitGridBodyResizerClass,
-  stoSplitResizerActiveClass,
   stoSplitRowContentsClass,
 } from '@/lib/surfaces';
 import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
+import { SplitPanelResizeHandle } from '@/components/layout/split-panel-resize-handle';
 import { useSettingsStore } from '@/stores/settings';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
@@ -93,7 +93,7 @@ export function Chat() {
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
   const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
-  const { splitRowRef, previewPanelRef, startResize, isResizing } = useSplitPanelResize(
+  const { splitRowRef, previewPanelRef, startResize, adjustPreviewPercent, isResizing } = useSplitPanelResize(
     previewPanelPercent,
     setPreviewSplitPercent,
   );
@@ -103,7 +103,7 @@ export function Chat() {
     version: number;
   } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchableMessages, setSearchableMessages] = useState<Array<{ id: string; text: string }>>([]);
+  const [searchableMessages, setSearchableMessages] = useState<Array<{ key: string; text: string }>>([]);
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const deferredSearchQuery = useDeferredValue(searchQuery.trim());
@@ -248,6 +248,8 @@ export function Chat() {
   }, [messages.length, shouldRenderStreaming, pendingFinal, updateJumpToLatestVisibility]);
 
   useEffect(() => {
+    if (!isSearchOpen) return;
+
     const contentElement = contentRef.current;
     if (!contentElement) {
       setSearchableMessages([]);
@@ -255,20 +257,13 @@ export function Chat() {
     }
 
     const frameId = window.requestAnimationFrame(() => {
-      const nodes = Array.from(contentElement.querySelectorAll<HTMLElement>('[data-chat-message-id]'));
-      const nextSearchableMessages = nodes
-        .map((node) => ({
-          id: node.dataset.chatMessageId?.trim() ?? '',
-          text: (node.innerText || node.textContent || '').replace(/\s+/g, ' ').trim(),
-        }))
-        .filter((entry) => entry.id.length > 0 && entry.text.length > 0);
-      setSearchableMessages(nextSearchableMessages);
+      setSearchableMessages(collectSearchableChatMessages(contentElement));
     });
 
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [contentRef, currentSessionKey, streamContentKey, showThinking, staticItems, activeTurn]);
+  }, [isSearchOpen, contentRef, currentSessionKey, streamContentKey, showThinking, staticItems, activeTurn]);
 
   const searchMatches = useMemo(() => {
     if (!deferredSearchQuery) return [];
@@ -289,18 +284,17 @@ export function Chat() {
   }, [searchMatches]);
 
   const activeSearchMatch = searchMatches[activeSearchIndex] ?? null;
-  const matchedMessageIds = useMemo(
-    () => new Set(searchMatches.map((entry) => entry.id)),
+  const matchedMessageKeys = useMemo(
+    () => new Set(searchMatches.map((entry) => entry.key)),
     [searchMatches],
   );
 
-  const scrollToMessageMatch = useCallback((messageId: string, behavior: ScrollBehavior = 'smooth') => {
+  const scrollToMessageMatch = useCallback((searchKey: string, behavior: ScrollBehavior = 'smooth') => {
     const container = scrollRef.current;
     const contentElement = contentRef.current;
     if (!container || !contentElement) return;
 
-    const target = Array.from(contentElement.querySelectorAll<HTMLElement>('[data-chat-message-id]'))
-      .find((node) => node.dataset.chatMessageId === messageId);
+    const target = findChatMessageSearchTarget(contentElement, searchKey);
     if (!target) return;
 
     stopScroll();
@@ -310,7 +304,7 @@ export function Chat() {
 
   useEffect(() => {
     if (!activeSearchMatch || !deferredSearchQuery) return;
-    scrollToMessageMatch(activeSearchMatch.id, 'smooth');
+    scrollToMessageMatch(activeSearchMatch.key, 'smooth');
   }, [activeSearchMatch, deferredSearchQuery, scrollToMessageMatch]);
 
   const handleSearchNext = useCallback(() => {
@@ -441,15 +435,9 @@ export function Chat() {
     [currentSessionKey, currentSession?.displayName, currentSession?.label, sessionLabels, t],
   );
 
-  const headerActions = useMemo(
+  const conversationHeaderActions = useMemo(
     () => (
-      <ChatContentHeaderActions
-        canShowPreviewPanel={canShowPreviewPanel}
-        isPreviewPanelOpen={showPreviewPanel}
-        onTogglePreview={() => {
-          if (showPreviewPanel) closePreviewPanel();
-          else openPreviewPanel();
-        }}
+      <ChatConversationHeaderActions
         showThinking={showThinking}
         onToggleThinking={toggleThinking}
         loading={loading}
@@ -473,10 +461,6 @@ export function Chat() {
       />
     ),
     [
-      canShowPreviewPanel,
-      showPreviewPanel,
-      closePreviewPanel,
-      openPreviewPanel,
       showThinking,
       toggleThinking,
       loading,
@@ -490,6 +474,20 @@ export function Chat() {
       searchMatches.length,
       activeSearchIndex,
     ],
+  );
+
+  const previewToggleAction = useMemo(
+    () => (
+      <ChatPreviewToggleHeaderAction
+        canShowPreviewPanel={canShowPreviewPanel}
+        isPreviewPanelOpen={showPreviewPanel}
+        onTogglePreview={() => {
+          if (showPreviewPanel) closePreviewPanel();
+          else openPreviewPanel();
+        }}
+      />
+    ),
+    [canShowPreviewPanel, showPreviewPanel, closePreviewPanel, openPreviewPanel],
   );
 
   const previewHeaderTabs = useMemo(
@@ -515,7 +513,8 @@ export function Chat() {
   useContentHeader({
     title: sessionTitle,
     previewTabs: previewHeaderTabs,
-    actions: headerActions,
+    chatActions: conversationHeaderActions,
+    actions: previewToggleAction,
     isSplitLayout: canShowPreviewPanel && showPreviewPanel,
   });
 
@@ -572,22 +571,28 @@ export function Chat() {
                       turnMessages={item.messages}
                       turnToolResults={item.toolResults}
                       precedingUserMessage={item.precedingUserMessage}
+                      turnStableKey={item.key}
                       showThinking={showThinking}
-                      matchedMessageIds={matchedMessageIds}
-                      activeMessageId={activeSearchMatch?.id ?? null}
+                      matchedMessageKeys={matchedMessageKeys}
+                      activeMessageKey={activeSearchMatch?.key ?? null}
                       onPreviewFile={openArtifactPreview}
                       onCreateScheduledTask={openWorkflowCronTaskModal}
                       onEditMessage={handleEditMessage}
                     />
                   );
                 }
+                const searchMessageKey = resolveChatMessageSearchKey(
+                  item.message.id,
+                  `single:${item.key}`,
+                );
                 return (
                   <ChatMessage
                     key={item.key}
                     message={item.message}
                     showThinking={showThinking}
-                    isSearchMatch={!!item.message.id && matchedMessageIds.has(item.message.id)}
-                    isSearchActive={!!item.message.id && item.message.id === activeSearchMatch?.id}
+                    searchMessageKey={searchMessageKey}
+                    isSearchMatch={matchedMessageKeys.has(searchMessageKey)}
+                    isSearchActive={searchMessageKey === activeSearchMatch?.key}
                     onPreviewFile={openArtifactPreview}
                     onCreateScheduledTask={openWorkflowCronTaskModal}
                     onEditMessage={handleEditMessage}
@@ -602,9 +607,10 @@ export function Chat() {
                   turnMessages={activeTurn.turnMessages}
                   turnToolResults={activeTurn.turnToolResults}
                   precedingUserMessage={activeTurn.precedingUserMessage}
+                  turnStableKey={activeTurn.turnStableKey}
                   showThinking={showThinking}
-                  matchedMessageIds={matchedMessageIds}
-                  activeMessageId={activeSearchMatch?.id ?? null}
+                  matchedMessageKeys={matchedMessageKeys}
+                  activeMessageKey={activeSearchMatch?.key ?? null}
                   activeStream={activeTurn.activeStream}
                   onPreviewFile={openArtifactPreview}
                   onCreateScheduledTask={openWorkflowCronTaskModal}
@@ -706,18 +712,14 @@ export function Chat() {
         </div>
       )}
       </ChatConversationColumn>
-      {/* Resizer */}
+      {/* Resize handle — 0px track; hit + hint edge align preview left stroke */}
       {canShowPreviewPanel && showPreviewPanel && (
-        <div
-          onMouseDown={startResize}
-          className={cn(
-            stoSplitGridBodyResizerClass,
-            isResizing && stoSplitResizerActiveClass,
-          )}
-          style={{ cursor: isResizing ? 'col-resize' : undefined }}
-        >
-          <div className={cn('h-8 w-0.5 rounded-full', isResizing ? 'bg-primary' : 'bg-muted-foreground/30')} />
-        </div>
+        <SplitPanelResizeHandle
+          valuePercent={previewPanelPercent}
+          isResizing={isResizing}
+          onResizeStart={startResize}
+          onKeyboardAdjust={adjustPreviewPercent}
+        />
       )}
 
       {/* Right: Preview Panel */}

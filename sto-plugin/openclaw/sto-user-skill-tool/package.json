@@ -1,0 +1,11 @@
+{
+  "name": "sto-user-skill-tool",
+  "version": "1.0.1",
+  "type": "module",
+  "main": "index.ts",
+  "description": "StoClaw save_user_skill — persist agent-created skills to skills-store user scope",
+  "private": true,
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  }
+}

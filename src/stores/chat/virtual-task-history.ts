@@ -2,13 +2,11 @@ import { hostApiFetch } from '@/lib/host-api';
 import {
   buildClaudeScheduledTaskSessionHistoryPath,
   buildCronSessionHistoryPath,
-  buildScheduledTaskSessionHistoryPath,
   isClaudeScheduledTaskDatedSessionKey,
   isClaudeScheduledTaskRunSessionKey,
   isClaudeScheduledTaskSessionKey,
   isCronDatedSessionKey,
   isCronSessionKey,
-  isScheduledTaskSessionKey,
 } from './cron-session-utils';
 import type { RawMessage } from './types';
 
@@ -27,16 +25,10 @@ export async function loadClaudeScheduledTaskFallbackMessages(
   return loadFallback(buildClaudeScheduledTaskSessionHistoryPath(sessionKey, limit), 'claude scheduled task');
 }
 
-export async function loadScheduledTaskFallbackMessages(sessionKey: string, limit: number): Promise<RawMessage[]> {
-  if (!isScheduledTaskSessionKey(sessionKey)) return [];
-  return loadFallback(buildScheduledTaskSessionHistoryPath(sessionKey, limit), 'scheduled task');
-}
-
 export async function loadVirtualTaskFallbackMessages(sessionKey: string, limit: number): Promise<RawMessage[]> {
   if (isCronSessionKey(sessionKey) || isCronDatedSessionKey(sessionKey)) {
     return loadCronFallbackMessages(sessionKey, limit);
   }
-  if (isScheduledTaskSessionKey(sessionKey)) return loadScheduledTaskFallbackMessages(sessionKey, limit);
   if (isClaudeScheduledTaskSessionKey(sessionKey)
     || isClaudeScheduledTaskRunSessionKey(sessionKey)
     || isClaudeScheduledTaskDatedSessionKey(sessionKey)) {

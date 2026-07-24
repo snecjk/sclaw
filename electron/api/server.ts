@@ -35,14 +35,15 @@ import { handleLogRoutes } from './routes/logs';
 import { handleUsageRoutes } from './routes/usage';
 import { handleSkillRoutes } from './routes/skills';
 import { handleSkillPlazaRoutes } from './routes/skill-plaza';
+import { handleAppPlazaRoutes } from './routes/app-plaza';
 import { handleFileRoutes } from './routes/files';
 import { handleSessionRoutes } from './routes/sessions';
 import { handleSessionCatalogRoutes } from './routes/session-catalog';
 import { handleTaskGroupRoutes } from './routes/task-groups';
 import { handleCronRoutes } from './routes/cron';
-import { handleScheduledTaskRoutes } from './routes/scheduled-tasks';
 import { handleClaudeScheduledTaskRoutes } from './routes/claude-scheduled-tasks';
 import { handleDingTalkRoutes } from './routes/dingtalk';
+import { handleChannelHubRoutes } from './routes/channel-hub';
 import { handleStoSyncRoutes } from './routes/sto-sync';
 import { handleTokenQuotaRoutes } from './routes/token-quota';
 import { handleSubscriptionRoutes } from './routes/subscriptions';
@@ -77,15 +78,16 @@ const routeHandlers: RouteHandler[] = [
   handleTokenQuotaRoutes,
   handleSubscriptionRoutes,
   handleAgentRoutes,
+  handleChannelHubRoutes,
   handleChannelRoutes,
   handleSkillRoutes,
   handleSkillPlazaRoutes,
+  handleAppPlazaRoutes,
   handleFileRoutes,
   handleSessionRoutes,
   handleSessionCatalogRoutes,
   handleTaskGroupRoutes,
   handleCronRoutes,
-  handleScheduledTaskRoutes,
   handleDictionaryRoutes,
   handleWorkflowRoutes,
   handleSclawBrowserRoutes,

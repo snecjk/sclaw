@@ -1098,6 +1098,7 @@ export function ChatInput({
               <WorkflowPicker
                 ref={workflowPickerRef}
                 open={workflowPickerOpen}
+                anchorRef={workflowButtonRef}
                 onClose={() => setWorkflowPickerOpen(false)}
                 onSelect={async (id, name) => {
                   setWorkflowPickerOpen(false);
@@ -1106,7 +1107,6 @@ export function ChatInput({
                   mentionEditorRef.current?.insertWorkflow(id, name, 'mine');
                   mentionEditorRef.current?.focus();
                 }}
-                className="absolute left-4 right-4 bottom-full z-50 mb-2"
               />
             </div>
           ) : (
@@ -1203,6 +1203,7 @@ export function ChatInput({
             <WorkflowPicker
               ref={workflowPickerRef}
               open={workflowPickerOpen}
+              anchorRef={workflowButtonRef}
               onClose={() => setWorkflowPickerOpen(false)}
               onSelect={async (id, name) => {
                 setWorkflowPickerOpen(false);
@@ -1211,7 +1212,6 @@ export function ChatInput({
                 mentionEditorRef.current?.insertWorkflow(id, name, 'mine');
                 mentionEditorRef.current?.focus();
               }}
-              className="absolute left-4 right-4 bottom-full z-50 mb-2"
             />
 
             {/* When sending: show Send (to queue) if there's input, otherwise show Stop */}

@@ -18,9 +18,13 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const appEnv = env.VITE_APP_ENV || process.env.VITE_APP_ENV || (mode === 'development' ? 'development' : 'production');
   const stoMemoryCenterBaseUrl = (env.STO_MEMORY_CENTER_BASE_URL || process.env.STO_MEMORY_CENTER_BASE_URL || '').trim();
+  const stoSclawHubBaseUrl = (env.STO_SCLAW_HUB_BASE_URL || process.env.STO_SCLAW_HUB_BASE_URL || '').trim();
+  const stoWisdomStarBaseUrl = (env.STO_WISDOM_STAR_BASE_URL || process.env.STO_WISDOM_STAR_BASE_URL || '').trim();
   const envDefine = {
     'import.meta.env.VITE_APP_ENV': JSON.stringify(appEnv),
     'process.env.STO_MEMORY_CENTER_BASE_URL': JSON.stringify(stoMemoryCenterBaseUrl),
+    'process.env.STO_SCLAW_HUB_BASE_URL': JSON.stringify(stoSclawHubBaseUrl),
+    'process.env.STO_WISDOM_STAR_BASE_URL': JSON.stringify(stoWisdomStarBaseUrl),
   };
 
   return {
@@ -59,6 +63,7 @@ export default defineConfig(({ mode }) => {
                   // once under node_modules instead of duplicating them in this bundle.
                   'mem0ai/oss',
                   'ws',
+                  'node:sqlite',
                   /openclaw\/extensions\//,
                   /^node:/,
                 ],

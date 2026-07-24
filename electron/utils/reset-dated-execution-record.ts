@@ -170,14 +170,6 @@ async function resetCronDatedExecutionRecord(agentId: string, jobId: string, dat
   await resetAgentOpenClawSession(agentId, `agent:${agentId}:cron:${jobId}:${date}`);
 }
 
-async function resetScheduledTaskAgentDatedExecutionRecord(
-  agentId: string,
-  taskId: number,
-  date: string,
-): Promise<void> {
-  await resetAgentOpenClawSession(agentId, `agent:${agentId}:scheduled-task:${taskId}:${date}`);
-}
-
 async function resetClaudeTaskDatedExecutionRecord(taskId: string, date: string): Promise<void> {
   const { deleteClaudeScheduledTaskSummarySession } = await import('../services/claude-scheduled-task-session-store');
   await deleteClaudeScheduledTaskSummarySession(`claude-task:${taskId}:${date}`);
@@ -188,12 +180,6 @@ export async function resetDatedExecutionArtifacts(sessionKey: string): Promise<
   const cronDated = sessionKey.match(/^agent:([^:]+):cron:([^:]+):(\d{4}-\d{2}-\d{2})$/);
   if (cronDated) {
     await resetCronDatedExecutionRecord(cronDated[1], cronDated[2], cronDated[3]);
-    return;
-  }
-
-  const stoDated = sessionKey.match(/^agent:([^:]+):scheduled-task:(\d+):(\d{4}-\d{2}-\d{2})$/);
-  if (stoDated) {
-    await resetScheduledTaskAgentDatedExecutionRecord(stoDated[1], Number(stoDated[2]), stoDated[3]);
     return;
   }
 

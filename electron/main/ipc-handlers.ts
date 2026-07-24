@@ -15,7 +15,7 @@ import { ClawHubService, ClawHubSearchParams, ClawHubInstallParams, ClawHubUnins
 import {
   type ProviderConfig,
 } from '../utils/secure-storage';
-import { getOpenClawStatus, getOpenClawDir, getOpenClawConfigDir, getOpenClawSkillsDir, ensureDir } from '../utils/paths';
+import { getOpenClawStatus, getOpenClawDir, getOpenClawConfigDir, getSkillsStoreDir, ensureDir } from '../utils/paths';
 import { getOpenClawCliCommand } from '../utils/openclaw-cli';
 import { getAllSettings, getSetting, resetSettings, setSetting, type AppSettings } from '../utils/store';
 import { listAgentsSnapshot } from '../utils/agent-config';
@@ -1657,16 +1657,16 @@ function registerOpenClawHandlers(gatewayManager: GatewayManager): void {
     return getOpenClawConfigDir();
   });
 
-  // Get the OpenClaw skills directory (~/.stoclaw/openclaw/skills)
+  // Get the canonical skills-store directory (~/.stoclaw/skills-store)
   ipcMain.handle('openclaw:getSkillsDir', () => {
-    const dir = getOpenClawSkillsDir();
+    const dir = getSkillsStoreDir();
     ensureDir(dir);
     return dir;
   });
 
-  // Open the OpenClaw skills directory in the system file manager
+  // Open the canonical skills-store in the system file manager
   ipcMain.handle('open-skill-folder', async () => {
-    const dir = getOpenClawSkillsDir();
+    const dir = getSkillsStoreDir();
     ensureDir(dir);
     await shell.openPath(dir);
   });

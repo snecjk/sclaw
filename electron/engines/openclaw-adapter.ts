@@ -9,6 +9,7 @@ import {
   AGENT_MEMORY_CONTEXT_MARKER,
   appendAgentMemoryBlock,
 } from '../../shared/agent-memory-prompt';
+import { parseOpenClawExecutionTurn } from './openclaw-execution-snapshot';
 
 const VISION_MIME_TYPES = new Set([
   'image/png',
@@ -222,6 +223,21 @@ export const openClawAdapter: EngineAdapter = {
           thinkingLevel: typeof result.thinkingLevel === 'string' ? result.thinkingLevel : null,
         },
       };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  },
+
+  async getExecutionSnapshot(ctx: EngineAdapterContext, params: { sessionKey: string; limit: number }) {
+    try {
+      const result = await ctx.gatewayManager.rpc<Record<string, unknown>>('chat.history', {
+        sessionKey: params.sessionKey,
+        limit: params.limit,
+      });
+      const messages = Array.isArray(result.messages)
+        ? result.messages.filter((message): message is Record<string, unknown> => Boolean(message) && typeof message === 'object')
+        : [];
+      return { success: true, result: parseOpenClawExecutionTurn(messages) };
     } catch (error) {
       return { success: false, error: String(error) };
     }

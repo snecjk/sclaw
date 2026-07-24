@@ -34,6 +34,10 @@ const APP_CONV_SEPARATOR = '--';
  *   - claude-task:{taskId}... / claude-task-run:{taskId}...   -> claude_task
  *   - agent:{agentId}:session-embed-app-{appId}[--{conv}]     -> app
  *   - everything else                                         -> chat
+ *
+ * Channel sessions (dingtalk / wechat / …) are NOT inferred here.
+ * Catalog docs require the channel create entry to pass
+ * `sessionType: 'channel'` + channelType/channelId via upsertCatalogSession.
  */
 export function inferSessionCatalogMeta(sessionKey: string): InferredSessionMeta {
   const trimmedKey = sessionKey.trim();

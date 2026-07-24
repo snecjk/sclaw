@@ -53,6 +53,7 @@ describe('ClaudeScheduledTaskService', () => {
     });
 
     expect(created.id).toBeTruthy();
+    expect(created.timeoutSec).toBe(1800);
     expect((await service.listTasks())[0]?.name).toBe('Daily summary');
 
     const updated = await service.updateTask({

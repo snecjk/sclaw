@@ -1,8 +1,9 @@
 /**
  * SidebarProjectRowTrailing — 项目行尾：新建对话 (+) +「...」菜单。
  */
-import { Folder, MessageSquarePlus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Folder, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import sidebarProjectNewChatIcon from '@/assets/icons/sidebar-project-new-chat.svg';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,12 +70,17 @@ export function SidebarProjectRowTrailing({
             onNewChat();
           }}
           className={cn(
-            'flex h-7 w-7 items-center justify-center rounded-md',
+            'order-2 flex h-7 w-7 items-center justify-center rounded-md',
             sidebarTextIconClass,
             'hover:bg-black/[0.04]',
           )}
         >
-          <MessageSquarePlus className="h-4 w-4" aria-hidden />
+          <img
+            src={sidebarProjectNewChatIcon}
+            alt=""
+            className="h-4 w-4"
+            aria-hidden
+          />
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -83,7 +89,7 @@ export function SidebarProjectRowTrailing({
               aria-label={t('sidebar.projectRowMenu')}
               onClick={(e) => e.stopPropagation()}
               className={cn(
-                'flex h-7 w-7 items-center justify-center rounded-md',
+                'order-1 flex h-7 w-7 items-center justify-center rounded-md',
                 sidebarTextIconClass,
                 'hover:bg-black/[0.04]',
               )}
@@ -92,16 +98,6 @@ export function SidebarProjectRowTrailing({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className={sidebarRecentMenuContentClass}>
-            <DropdownMenuItem
-              className={sidebarRecentMenuItemClass}
-              onClick={(e) => {
-                e.stopPropagation();
-                onNewChat();
-              }}
-            >
-              <MessageSquarePlus className="h-4 w-4 shrink-0" aria-hidden />
-              {t('sidebar.newChatInProject')}
-            </DropdownMenuItem>
             <DropdownMenuItem
               className={sidebarRecentMenuItemClass}
               onClick={(e) => {

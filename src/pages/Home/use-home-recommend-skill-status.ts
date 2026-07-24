@@ -21,6 +21,7 @@ import type { RecommendItem } from '@/lib/recommend-api';
 
 export interface SkillStatusEntry {
   installed: boolean;
+  enabled?: boolean;
   updateAvailable: boolean;
   /** 云端 plaza 返回的最新版本号；安装/更新时用它写入 lock，避免推荐位未带版本而兜底为 1.0.0 */
   cloudVersion?: string;
@@ -154,6 +155,7 @@ export function useHomeRecommendSkillStatus(recommendItems: RecommendItem[]) {
         // installed: 云端后端对比结果为主（含 lock.json，目录名≠DB slug 也能识别已安装）；
         // 本地宽松匹配兜底（应对自建 skill 不在云端市场、cloudSkill 未命中的场景）
         const installed = Boolean(cloudSkill?.installed) || Boolean(installedSkill);
+        const enabled = installedSkill?.enabled ?? cloudSkill?.enabled;
 
         let updateAvailable = false;
         if (installed) {
@@ -186,6 +188,7 @@ export function useHomeRecommendSkillStatus(recommendItems: RecommendItem[]) {
             cloudUpdateAvailable: cloudSkill?.updateAvailable,
             localFound: Boolean(installedSkill),
             localSlug: installedSkill?.slug,
+            localEnabled: installedSkill?.enabled,
             localVersion_raw: installedSkill?.version,
             localInstalledVersion: installedSkill?.installedVersion,
             localUpdateAvailable: installedSkill?.updateAvailable,
@@ -194,12 +197,18 @@ export function useHomeRecommendSkillStatus(recommendItems: RecommendItem[]) {
             最终_localVersion: localVersion,
             前端判定_frontendVerdict: frontendVerdict,
             决定_installed: installed,
+            决定_enabled: enabled,
             决定_updateAvailable: updateAvailable,
           });
           // ===== DEBUG END =====
         }
 
-        map[s] = { installed, updateAvailable, cloudVersion: cloudSkill?.version ?? recommendVersionBySlug.get(s) };
+        map[s] = {
+          installed,
+          enabled,
+          updateAvailable,
+          cloudVersion: cloudSkill?.version ?? recommendVersionBySlug.get(s),
+        };
       }
 
       if (mountedRef.current && !controller.signal.aborted) {

@@ -110,6 +110,31 @@ export function replaceOpeningPhaseTextSegment(
   upsertPhaseTextSegment(segments, text, OPENING_PHASE_TEXT_KEY);
 }
 
+/**
+ * done rebuild 专用 phase-text key：
+ * - 回合首段（尚无 phase-text）→ {@link OPENING_PHASE_TEXT_KEY}
+ * - 否则 → `phase-text-after-${groupIndex - 1}`；若该 key 已被占用，
+ *   追加 `-seq-N`（与 {@link upsertPhaseTextSegment} 内部命名一致）兜底防重。
+ *
+ * rebuild 会因相邻 text 事件（`currentGroup` 为空 → `flushBatch` 不推进 `groupIndex`）
+ * 产生两条相同 `phase-text-after-N`；live 走 {@link upsertPhaseTextSegment} 自带防重，
+ * 此 helper 仅 done rebuild 调用。
+ */
+export function phaseTextKeyForRebuild(
+  segments: ThinkingTurnSegment[],
+  groupIndex: number,
+): string {
+  const hasOpeningPhaseText = segments.some((segment) => segment.kind === 'phase-text');
+  if (!hasOpeningPhaseText) return OPENING_PHASE_TEXT_KEY;
+  const stableKey = `phase-text-after-${groupIndex - 1}`;
+  const collided = segments.some(
+    (segment) => segment.kind === 'phase-text' && segment.key === stableKey,
+  );
+  if (!collided) return stableKey;
+  const seq = segments.filter((segment) => segment.kind === 'phase-text').length;
+  return `${stableKey}-seq-${seq}`;
+}
+
 /** 流式：判定当前仍 active 的 tool-group 下标（无则 -1） */
 function findActiveToolGroupIndex(segments: ThinkingTurnSegment[]): number {
   let lastGroupIndex = -1;

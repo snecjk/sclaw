@@ -48,5 +48,25 @@ describe('gateway agent event side effects', () => {
       },
     })).toBe(false);
   });
+
+  it('finalizes completed run when sending with pendingFinal but no activeRunId', () => {
+    const runtime = {
+      ...createIdleSessionRuntimeState(),
+      sending: true,
+      pendingFinal: true,
+      activeRunId: null,
+      sendAcceptance: null,
+    };
+    expect(shouldFinalizeCompletedRun({
+      runId: 'run-1',
+      resolvedSessionKey: 'agent:main',
+      state: {
+        activeRunId: null,
+        currentSessionKey: 'agent:main',
+        runtimeBySessionKey: { 'agent:main': runtime },
+        sending: true,
+      },
+    })).toBe(true);
+  });
 });
 

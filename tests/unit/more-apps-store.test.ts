@@ -1,124 +1,189 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
-import {
-  migrateMoreAppsRegistry,
-  normalizeMoreAppsRegistry,
-  readMoreAppsRegistry,
-  writeMoreAppsRegistry,
-} from '@electron/services/more-apps-store';
-import { createEmptyMoreAppsRegistry } from '../../shared/more-apps-registry';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-describe('more-apps-store', () => {
-  const tempDirs: string[] = [];
+const fetchAppsMock = vi.fn();
+const fetchCategoriesMock = vi.fn();
+const fetchBannersMock = vi.fn();
+const fetchRegistryMock = vi.fn();
+const saveRegistryMock = vi.fn();
+const migrateRegistryMock = vi.fn();
 
-  afterEach(() => {
-    for (const dir of tempDirs.splice(0)) {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
+vi.mock('@/lib/app-plaza-api', () => ({
+  fetchAppPlazaApps: (...args: unknown[]) => fetchAppsMock(...args),
+  fetchAppPlazaCategories: (...args: unknown[]) => fetchCategoriesMock(...args),
+  fetchAppPlazaBanners: (...args: unknown[]) => fetchBannersMock(...args),
+}));
 
-  function tempRegistryPath(): string {
-    const dir = mkdtempSync(join(tmpdir(), 'stoclaw-more-apps-'));
-    tempDirs.push(dir);
-    return join(dir, 'apps.json');
-  }
+vi.mock('@/lib/more-apps-api', () => ({
+  fetchMoreAppsRegistry: (...args: unknown[]) => fetchRegistryMock(...args),
+  saveMoreAppsRegistry: (...args: unknown[]) => saveRegistryMock(...args),
+  migrateMoreAppsRegistry: (...args: unknown[]) => migrateRegistryMock(...args),
+}));
 
-  it('normalizeMoreAppsRegistry drops invalid apps and dedupes ids', () => {
-    const normalized = normalizeMoreAppsRegistry({
+import { useMoreAppsStore } from '@/stores/more-apps';
+
+describe('more apps store', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    fetchAppsMock.mockReset().mockResolvedValue({ items: [], total: 0, pageNum: 1, pageSize: 20 });
+    fetchCategoriesMock.mockReset().mockResolvedValue([]);
+    fetchBannersMock.mockReset().mockResolvedValue([]);
+    fetchRegistryMock.mockReset().mockResolvedValue({
       version: 1,
-      externalApps: [
-        { id: 'a', name: 'A', url: 'https://a.example' },
-        { id: '', name: 'bad', url: 'https://x' },
-        { name: 'no-id', url: 'https://y' },
-        { id: 'b', url: 'https://b.example' },
-      ],
-      installedIds: ['a', 'a', ' ', 'b', 1],
-      favoriteIds: ['b', 'b'],
+      externalApps: [],
+      installedIds: [],
+      favoriteIds: [],
     });
-
-    expect(normalized.externalApps).toHaveLength(2);
-    expect(normalized.externalApps.map((a) => a.id)).toEqual(['a', 'b']);
-    expect(normalized.installedIds).toEqual(['a', 'b']);
-    expect(normalized.favoriteIds).toEqual(['b']);
+    saveRegistryMock.mockReset().mockImplementation(async (registry) => registry);
+    migrateRegistryMock.mockReset().mockImplementation(async (registry) => ({
+      migrated: true,
+      registry,
+    }));
+    useMoreAppsStore.setState({
+      activeTab: 'market',
+      searchQuery: '',
+      marketCategory: 'featured',
+      apps: [],
+      catalogApps: [],
+      categories: [],
+      categoryCounts: {},
+      banners: [],
+      externalApps: [],
+      favoriteIds: [],
+      installedIds: [],
+      hydrated: false,
+      hydrating: false,
+      marketTotal: 0,
+      total: 0,
+      pageNum: 0,
+      loading: false,
+      loadingMore: false,
+      error: null,
+    });
   });
 
-  it('write and read round-trip under custom path', () => {
-    const path = tempRegistryPath();
-    const written = writeMoreAppsRegistry(
-      {
-        version: 1,
-        externalApps: [
-          {
-            id: 'ext-1',
-            name: 'CRM',
-            url: 'https://crm.example',
-            kind: 'external',
-            external: true,
-          },
+  it('loads the server catalog and forwards filters', async () => {
+    await useMoreAppsStore.getState().hydrate();
+    useMoreAppsStore.getState().setSearchQuery('客户');
+    useMoreAppsStore.getState().setMarketCategory('org');
+    await useMoreAppsStore.getState().fetchApps({ reset: true });
+    expect(fetchAppsMock).toHaveBeenLastCalledWith({
+      pageNum: 1,
+      pageSize: 20,
+      keyword: '客户',
+      categoryCode: 'org',
+    });
+  });
+
+  it('appends pages by id without duplicating apps', async () => {
+    fetchAppsMock
+      .mockResolvedValueOnce({
+        items: [{ id: 'a', name: 'A', url: 'https://a.example', kind: 'builtin' }],
+        total: 2,
+        pageNum: 1,
+        pageSize: 20,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          { id: 'a', name: 'A', url: 'https://a.example', kind: 'builtin' },
+          { id: 'b', name: 'B', url: 'https://b.example', kind: 'builtin' },
         ],
-        installedIds: ['ext-1', 'builtin-x'],
-        favoriteIds: ['builtin-x'],
-      },
-      path,
-    );
-
-    expect(written.externalApps[0]?.name).toBe('CRM');
-    const raw = JSON.parse(readFileSync(path, 'utf-8'));
-    expect(raw.version).toBe(1);
-    expect(readMoreAppsRegistry(path)).toEqual(written);
+        total: 2,
+        pageNum: 2,
+        pageSize: 20,
+      });
+    await useMoreAppsStore.getState().fetchApps({ reset: true });
+    await useMoreAppsStore.getState().loadMoreApps();
+    expect(useMoreAppsStore.getState().apps.map((app) => app.id)).toEqual(['a', 'b']);
+    expect(fetchAppsMock).toHaveBeenLastCalledWith(expect.objectContaining({ pageNum: 2 }));
   });
 
-  it('migrate writes when disk is empty', () => {
-    const path = tempRegistryPath();
-    const result = migrateMoreAppsRegistry(
-      {
-        version: 1,
-        externalApps: [{ id: 'ext-legacy', name: 'Legacy', url: 'https://legacy.example' }],
-        installedIds: ['ext-legacy'],
-        favoriteIds: [],
-      },
-      path,
-    );
-
-    expect(result.migrated).toBe(true);
-    expect(result.registry.externalApps).toHaveLength(1);
-    expect(readMoreAppsRegistry(path).externalApps[0]?.id).toBe('ext-legacy');
+  it('keeps banner/category/app failures independent', async () => {
+    fetchBannersMock.mockRejectedValueOnce(new Error('banner unavailable'));
+    fetchCategoriesMock.mockResolvedValueOnce([{ id: 'org', name: '组织管理', order: 1 }]);
+    fetchAppsMock.mockResolvedValueOnce({
+      items: [{ id: 'a', name: 'A', url: 'https://a.example', kind: 'builtin' }],
+      total: 1,
+      pageNum: 1,
+      pageSize: 20,
+    });
+    await Promise.all([
+      useMoreAppsStore.getState().fetchBanners(),
+      useMoreAppsStore.getState().fetchCategories(),
+      useMoreAppsStore.getState().fetchApps({ reset: true }),
+    ]);
+    expect(useMoreAppsStore.getState().bannersError).toContain('banner unavailable');
+    expect(useMoreAppsStore.getState().categories).toEqual([
+      expect.objectContaining({ id: 'org' }),
+    ]);
+    expect(useMoreAppsStore.getState().apps).toEqual([
+      expect.objectContaining({ id: 'a' }),
+    ]);
+    expect(useMoreAppsStore.getState().error).toBeNull();
   });
 
-  it('migrate does not overwrite non-empty disk', () => {
-    const path = tempRegistryPath();
-    writeMoreAppsRegistry(
-      {
-        version: 1,
-        externalApps: [{ id: 'disk', name: 'Disk', url: 'https://disk.example' }],
-        installedIds: ['disk'],
-        favoriteIds: [],
-      },
-      path,
-    );
+  it('loads each category total without fetching the category app list', async () => {
+    fetchCategoriesMock.mockResolvedValueOnce([
+      { id: 'test', name: '测试专用', order: 1 },
+      { id: 'ops', name: '经营管理', order: 2 },
+    ]);
+    fetchAppsMock.mockImplementation(async (params: { categoryCode?: string; pageSize: number }) => ({
+      items: [],
+      total: params.categoryCode === 'test' ? 4 : 2,
+      pageNum: 1,
+      pageSize: params.pageSize,
+    }));
 
-    const result = migrateMoreAppsRegistry(
-      {
-        version: 1,
-        externalApps: [{ id: 'legacy', name: 'Legacy', url: 'https://legacy.example' }],
-        installedIds: ['legacy'],
-        favoriteIds: ['legacy'],
-      },
-      path,
-    );
+    await useMoreAppsStore.getState().fetchCategories();
 
-    expect(result.migrated).toBe(false);
-    expect(result.registry.externalApps[0]?.id).toBe('disk');
-    expect(readMoreAppsRegistry(path).externalApps[0]?.id).toBe('disk');
+    expect(useMoreAppsStore.getState().categoryCounts).toEqual({ test: 4, ops: 2 });
+    expect(fetchAppsMock).toHaveBeenCalledWith({
+      pageNum: 1,
+      pageSize: 1,
+      categoryCode: 'test',
+    });
   });
 
-  it('migrate with empty payload leaves empty disk untouched', () => {
-    const path = tempRegistryPath();
-    writeFileSync(path, JSON.stringify(createEmptyMoreAppsRegistry()), 'utf-8');
-    const result = migrateMoreAppsRegistry(createEmptyMoreAppsRegistry(), path);
-    expect(result.migrated).toBe(false);
-    expect(result.registry.externalApps).toEqual([]);
+  it('persists favorites through main-backed registry', async () => {
+    await useMoreAppsStore.getState().hydrate();
+    useMoreAppsStore.getState().toggleFavorite('app-a');
+    expect(useMoreAppsStore.getState().favoriteIds).toEqual(['app-a']);
+    expect(saveRegistryMock).toHaveBeenLastCalledWith({
+      version: 1,
+      externalApps: [],
+      installedIds: [],
+      favoriteIds: ['app-a'],
+    });
+  });
+
+  it('keeps the market badge total when a category query changes the list total', async () => {
+    fetchAppsMock
+      .mockResolvedValueOnce({ items: [], total: 8, pageNum: 1, pageSize: 20 })
+      .mockResolvedValueOnce({ items: [], total: 3, pageNum: 1, pageSize: 20 });
+
+    await useMoreAppsStore.getState().fetchApps({ reset: true });
+    expect(useMoreAppsStore.getState().marketTotal).toBe(8);
+
+    useMoreAppsStore.getState().setMarketCategory('org');
+    await useMoreAppsStore.getState().fetchApps({ reset: true });
+    expect(useMoreAppsStore.getState().total).toBe(3);
+    expect(useMoreAppsStore.getState().marketTotal).toBe(8);
+  });
+
+  it('keeps a stable catalog snapshot when category results replace the market list', async () => {
+    const featuredApp = { id: 'featured-app', name: 'Featured', url: 'https://featured.example', kind: 'builtin' as const };
+    const categoryApp = { id: 'category-app', name: 'Category', url: 'https://category.example', kind: 'builtin' as const };
+    fetchAppsMock
+      .mockResolvedValueOnce({ items: [featuredApp], total: 1, pageNum: 1, pageSize: 20 })
+      .mockResolvedValueOnce({ items: [categoryApp], total: 1, pageNum: 1, pageSize: 20 });
+
+    await useMoreAppsStore.getState().fetchApps({ reset: true });
+    useMoreAppsStore.getState().setMarketCategory('org');
+    await useMoreAppsStore.getState().fetchApps({ reset: true });
+
+    expect(useMoreAppsStore.getState().apps.map((app) => app.id)).toEqual(['category-app']);
+    expect(useMoreAppsStore.getState().catalogApps.map((app) => app.id)).toEqual([
+      'featured-app',
+      'category-app',
+    ]);
   });
 });
