@@ -13,7 +13,6 @@ import {
 } from '../../utils/openclaw-model';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
-import { deleteClaudeScheduledTaskSummarySession } from '../../services/claude-scheduled-task-session-store';
 import { markSessionDeleted, listDeletedSessionKeys } from '../../utils/scheduled-task-poller-store';
 import { isOpenClawHostedTaskExecutionSessionKey, isSessionModelSwitchKey } from '../../../shared/session-delete-routing';
 import { getProviderAccount } from '../../services/providers/provider-store';
@@ -213,17 +212,12 @@ export async function handleSessionRoutes(
         ? 'openclaw'
         : await resolveSessionEngineType(sessionKey, body.engineType);
       if (sessionEngineType === 'claude') {
-        if (sessionKey.startsWith('claude-task:')) {
-          await deleteClaudeScheduledTaskSummarySession(sessionKey);
-        } else if (sessionKey.startsWith('claude-task-run:')) {
-          await deleteClaudeSessionByKey(sessionKey);
-        } else {
-          await deleteClaudeSessionByKey(sessionKey);
-        }
+        // cutover 后 claude-task dated/summary 与普通 claude 会话同一套引擎删除。
+        await deleteClaudeSessionByKey(sessionKey);
         // Also clean up openclaw-format sessions.json entries that Claude path may skip
         // (scheduled-task sessions use store[sessionKey] = entry in agents/{agentId}/sessions/sessions.json)
         await cleanupAgentSessionsJson(sessionKey);
-        // Mark as deleted so virtual generators (e.g. listAllCronSessions) skip it on next refresh
+        // Mark as deleted so virtual generators skip it on next refresh
         await persistSessionDeletion(sessionKey);
         sendJson(res, 200, { success: true });
         return true;

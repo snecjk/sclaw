@@ -271,7 +271,7 @@ export class ScheduledTaskService {
       : `agent:${task.agentId}:cron:${task.id}:${ymd}`;
   }
 
-  /** 本地时区 YYYY-MM-DD。内联以避免拉 `ensure-dated-execution-session` 的 logger/paths 依赖。 */
+  /** 本地时区 YYYY-MM-DD（内联，避免额外 util 依赖）。 */
   private formatLocalYmd(date: Date): string {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');

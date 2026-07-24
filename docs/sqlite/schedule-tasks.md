@@ -4,7 +4,7 @@
 
 > **状态（2026-07-24）**：已 cutover 生产路径。启动期迁移读 `definitions.json` + `jobs.json` → 本表；迁后清 `jobs.json` 已迁 cron，**不清** `definitions.json`。进度见 `docs/定时任务重构-交接与执行计划.md`。
 
-> ⚠ **命名说明**：表名 `schedule_tasks`（无 d）。`catalog_sessions.session_type` 枚举仍可能为 `scheduled_task` / `cron` / `claude_task`（有 d 或历史值）——session_type 收敛仍待 Phase 5。
+> ⚠ **命名说明**：表名 `schedule_tasks`（无 d）。`catalog_sessions.session_type` 保留 `cron` / `claude_task` / `scheduled_task`（P2-C 已否决不收敛）；侧栏「任务」只展示 dated 的 `cron`/`claude_task`。
 
 ---
 

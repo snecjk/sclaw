@@ -171,8 +171,8 @@ async function resetCronDatedExecutionRecord(agentId: string, jobId: string, dat
 }
 
 async function resetClaudeTaskDatedExecutionRecord(taskId: string, date: string): Promise<void> {
-  const { deleteClaudeScheduledTaskSummarySession } = await import('../services/claude-scheduled-task-session-store');
-  await deleteClaudeScheduledTaskSummarySession(`claude-task:${taskId}:${date}`);
+  const { deleteClaudeSessionByKey } = await import('../engines/claude-adapter');
+  await deleteClaudeSessionByKey(`claude-task:${taskId}:${date}`);
 }
 
 /** Clear same-day execution artifacts so a revived record only contains the next run. */
