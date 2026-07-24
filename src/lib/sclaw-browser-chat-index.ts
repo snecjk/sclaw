@@ -181,6 +181,23 @@ function createFreshEmbedChatItem(appId: string, title = '对话 1'): EmbedChatI
  * Remove a conversation from the local index.
  * If none remain, seed a brand-new empty conversation (fresh key, not legacy).
  */
+/** Drop the entire local index for an app (ephemeral tab close). Does not seed a fresh item. */
+export function clearEmbedChatIndex(appId: string): void {
+  try {
+    localStorage.removeItem(storageKey(appId));
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Snapshot index without ensuring/seeding a conversation.
+ * Prefer this when purging ephemeral apps to avoid recreating keys.
+ */
+export function peekEmbedChatIndex(appId: string): EmbedChatIndex {
+  return readRaw(appId);
+}
+
 export function removeEmbedChatIndexItem(
   appId: string,
   sessionKey: string,

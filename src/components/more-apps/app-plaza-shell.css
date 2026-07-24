@@ -1,0 +1,357 @@
+/**
+ * App Plaza shell styles — Chrome-like tab strip + browser workspace.
+ * Uses semantic theme tokens for light/dark.
+ */
+.app-plaza-shell {
+  display: none;
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: hsl(var(--background));
+}
+
+.app-plaza-shell--visible {
+  display: flex;
+  pointer-events: auto;
+}
+
+.app-plaza-shell--hidden {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden;
+}
+
+.app-plaza-tabstrip {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 6px 8px 0;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--muted) / 0.45);
+  overflow-x: auto;
+}
+
+.app-plaza-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 180px;
+  min-width: 72px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.app-plaza-tab:hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+.app-plaza-tab--active {
+  background: hsl(var(--background));
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+  box-shadow: 0 -1px 0 hsl(var(--background));
+}
+
+.app-plaza-tab--suspended {
+  opacity: 0.7;
+  font-style: italic;
+}
+
+.app-plaza-tab__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-plaza-tab__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  color: hsl(var(--muted-foreground));
+  flex-shrink: 0;
+}
+
+.app-plaza-tab__close:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--foreground));
+}
+
+.app-plaza-tabstrip__add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 1px;
+  border-radius: 6px;
+  color: hsl(var(--muted-foreground));
+  flex-shrink: 0;
+}
+
+.app-plaza-tabstrip__add:hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+.app-plaza-shell__body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  isolation: isolate;
+}
+
+.app-plaza-shell__home,
+.app-plaza-shell__browser-stack {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Home paints above the stack and owns hit-testing while visible. */
+.app-plaza-shell__home {
+  z-index: 2;
+  pointer-events: auto;
+  /* Opaque fill — prevents “ghost” layers / click-through to browser-stack. */
+  background: hsl(var(--background));
+}
+
+.app-plaza-shell__home-scroll {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+}
+
+.app-plaza-shell__browser-stack {
+  z-index: 1;
+  pointer-events: none;
+  background: transparent;
+}
+
+/* While Home is selected, fully hide the stack (keeps children mounted for keep-alive). */
+.app-plaza-shell__browser-stack--behind-home {
+  visibility: hidden !important;
+  pointer-events: none !important;
+  z-index: 0;
+}
+
+.app-plaza-shell__browser-stack:not(.app-plaza-shell__browser-stack--behind-home) {
+  pointer-events: auto;
+}
+
+.app-plaza-shell__browser-stack > * {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.app-plaza-shell__browser-stack:not(.app-plaza-shell__browser-stack--behind-home) > *:not([hidden]) {
+  pointer-events: auto;
+  z-index: 1;
+}
+
+.app-plaza-shell__home[hidden],
+.app-plaza-shell__browser-pane[hidden],
+.app-plaza-blank[hidden],
+.app-plaza-suspended-placeholder[hidden] {
+  display: none !important;
+}
+
+.app-plaza-tab__favicon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  object-fit: contain;
+}
+
+.app-plaza-tab__icon-svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: hsl(var(--muted-foreground));
+}
+
+.app-plaza-tab--active .app-plaza-tab__icon-svg {
+  color: hsl(var(--foreground));
+}
+
+.app-plaza-browser-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  height: 44px;
+  padding: 0 12px;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+}
+
+.app-plaza-browser-address {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 4px 0 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--muted) / 0.35);
+}
+
+.app-plaza-browser-address--favorited {
+  border-color: #ff6700;
+  box-shadow: 0 0 0 1px rgba(255, 103, 0, 0.2);
+}
+
+.app-plaza-browser-toolbar__url {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: hsl(var(--foreground));
+  font-size: 13px;
+}
+
+.app-plaza-browser-toolbar__url:focus {
+  outline: none;
+}
+
+.app-plaza-browser-address:focus-within {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 1px;
+}
+
+.app-plaza-browser-address--favorited:focus-within {
+  outline-color: rgba(255, 103, 0, 0.55);
+}
+
+.app-plaza-browser-toolbar__fav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 2px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  flex-shrink: 0;
+}
+
+.app-plaza-browser-toolbar__fav:hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+.app-plaza-browser-toolbar__fav--on {
+  color: #e11d48;
+}
+
+.app-plaza-browser-toolbar__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.app-plaza-browser-toolbar__btn:hover {
+  background: hsl(var(--muted));
+}
+
+.app-plaza-browser-toolbar__btn--active {
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
+}
+
+.app-plaza-browser-pane__content {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-plaza-blank {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: hsl(var(--background));
+}
+
+.app-plaza-blank__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(560px, 100%);
+}
+
+.app-plaza-blank__hint {
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+  text-align: center;
+}
+
+.app-plaza-blank__input {
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  background: hsl(var(--muted) / 0.35);
+  color: hsl(var(--foreground));
+  font-size: 15px;
+}
+
+.app-plaza-blank__input:focus {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 1px;
+}
+
+.app-plaza-suspended-placeholder {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+  background: hsl(var(--background));
+}

@@ -16,6 +16,14 @@ const isElectron = Boolean(window.electron);
 interface SclawBrowserFrameProps {
   url: string;
   title: string;
+  /** When set, binds this runtime instead of the overlay store value. */
+  embedRuntimeId?: string | null;
+  /** When false, skip webview↔runtime bind (inactive live tab). Default true. */
+  active?: boolean;
+  /** Chrome-like: page-reported favicon URLs (first entry preferred). */
+  onPageFavicon?: (faviconUrl: string) => void;
+  /** Chrome-like: document title updates. */
+  onPageTitle?: (title: string) => void;
 }
 
 type EmbedWebviewElement = HTMLElement & {
@@ -49,13 +57,25 @@ function safeGetWebviewUrl(el: EmbedWebviewElement, fallback: string): string {
   }
 }
 
-export function SclawBrowserFrame({ url, title }: SclawBrowserFrameProps) {
+export function SclawBrowserFrame({
+  url,
+  title,
+  embedRuntimeId: embedRuntimeIdProp,
+  active = true,
+  onPageFavicon,
+  onPageTitle,
+}: SclawBrowserFrameProps) {
   const webviewRef = useRef<EmbedWebviewElement>(null);
-  const embedRuntimeId = useSclawBrowserOverlayStore((s) => s.embedRuntimeId);
+  const overlayRuntimeId = useSclawBrowserOverlayStore((s) => s.embedRuntimeId);
+  const embedRuntimeId = embedRuntimeIdProp !== undefined ? embedRuntimeIdProp : overlayRuntimeId;
+  const onPageFaviconRef = useRef(onPageFavicon);
+  const onPageTitleRef = useRef(onPageTitle);
+  onPageFaviconRef.current = onPageFavicon;
+  onPageTitleRef.current = onPageTitle;
 
   useEffect(() => {
     if (!isElectron || !embedRuntimeId) {
-      registerSclawBrowserWebview(null);
+      if (active) registerSclawBrowserWebview(null);
       return;
     }
 
@@ -65,6 +85,7 @@ export function SclawBrowserFrame({ url, title }: SclawBrowserFrameProps) {
     let domReady = false;
 
     const bindAfterDomReady = () => {
+      if (!active) return;
       const webContentsId = safeGetWebContentsId(el);
       if (!webContentsId) return;
 
@@ -81,14 +102,14 @@ export function SclawBrowserFrame({ url, title }: SclawBrowserFrameProps) {
     };
 
     const onNavigate = () => {
-      if (!domReady) return;
+      if (!active || !domReady) return;
       const pageUrl = safeGetWebviewUrl(el, url);
       markPolicyAuthedFromUrl(pageUrl);
       void updateSclawBrowserPageState({ runtimeId: embedRuntimeId, pageUrl });
     };
 
     const onFinishLoad = () => {
-      if (!domReady && safeGetWebContentsId(el)) {
+      if (!domReady && active && safeGetWebContentsId(el)) {
         bindAfterDomReady();
       }
       onNavigate();
@@ -106,29 +127,44 @@ export function SclawBrowserFrame({ url, title }: SclawBrowserFrameProps) {
       el.setAttribute('src', detail.url);
     };
 
+    const onFaviconUpdated = (event: Event) => {
+      const favicons = (event as Event & { favicons?: string[] }).favicons;
+      const first = favicons?.find((item) => typeof item === 'string' && item.trim());
+      if (first) onPageFaviconRef.current?.(first.trim());
+    };
+
+    const onTitleUpdated = (event: Event) => {
+      const nextTitle = (event as Event & { title?: string }).title?.trim();
+      if (nextTitle) onPageTitleRef.current?.(nextTitle);
+    };
+
     el.addEventListener('dom-ready', bindAfterDomReady);
     el.addEventListener('did-navigate', onNavigate);
     el.addEventListener('did-navigate-in-page', onNavigate);
     el.addEventListener('did-finish-load', onFinishLoad);
     el.addEventListener('new-window', onNewWindow);
+    // Always listen — same as Chrome: favicon/title arrive async after navigation.
+    el.addEventListener('page-favicon-updated', onFaviconUpdated);
+    el.addEventListener('page-title-updated', onTitleUpdated);
 
-    // dom-ready may have fired before listeners attached (e.g. delayed frame mount).
     window.requestAnimationFrame(() => {
-      if (!domReady && safeGetWebContentsId(el)) {
+      if (active && !domReady && safeGetWebContentsId(el)) {
         bindAfterDomReady();
       }
     });
 
     return () => {
       domReady = false;
-      registerSclawBrowserWebview(null);
+      if (active) registerSclawBrowserWebview(null);
       el.removeEventListener('dom-ready', bindAfterDomReady);
       el.removeEventListener('did-navigate', onNavigate);
       el.removeEventListener('did-navigate-in-page', onNavigate);
       el.removeEventListener('did-finish-load', onFinishLoad);
       el.removeEventListener('new-window', onNewWindow);
+      el.removeEventListener('page-favicon-updated', onFaviconUpdated);
+      el.removeEventListener('page-title-updated', onTitleUpdated);
     };
-  }, [embedRuntimeId, url]);
+  }, [embedRuntimeId, url, active]);
 
   if (isElectron) {
     return (

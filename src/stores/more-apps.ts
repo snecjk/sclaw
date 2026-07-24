@@ -173,7 +173,7 @@ interface MoreAppsState {
 
   // Actions — external / installed / favorites
   hydrate: () => Promise<void>;
-  addExternalApp: (app: { name: string; url: string; description?: string }) => void;
+  addExternalApp: (app: { name: string; url: string; description?: string; id?: string }) => string | null;
   updateExternalApp: (id: string, app: { name: string; url: string; description?: string }) => void;
   removeExternalApp: (id: string) => void;
   installApp: (id: string) => void;
@@ -272,9 +272,13 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
   openEditModal: (id) => set({ addModalOpen: true, editingExternalAppId: id }),
   closeAddModal: () => set({ addModalOpen: false, editingExternalAppId: null }),
 
-  addExternalApp: ({ name, url, description }) => {
-    if (!get().hydrated) return;
-    const id = `ext-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  addExternalApp: ({ name, url, description, id: preferredId }) => {
+    if (!get().hydrated) return null;
+    const id = preferredId?.trim()
+      || `ext-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    if (get().externalApps.some((app) => app.id === id)) {
+      return id;
+    }
     const newApp: AppItem = {
       id,
       name: name.trim(),
@@ -290,7 +294,9 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
       order: 999,
     };
     const updated = [...get().externalApps, newApp];
-    const updatedInstalled = [...get().installedIds, id];
+    const updatedInstalled = get().installedIds.includes(id)
+      ? get().installedIds
+      : [...get().installedIds, id];
     set({
       externalApps: updated,
       installedIds: updatedInstalled,
@@ -298,6 +304,7 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
       editingExternalAppId: null,
     });
     void persistRegistry(get);
+    return id;
   },
 
   updateExternalApp: (id, { name, url, description }) => {
