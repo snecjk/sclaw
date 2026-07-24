@@ -173,8 +173,17 @@ interface MoreAppsState {
 
   // Actions — external / installed / favorites
   hydrate: () => Promise<void>;
-  addExternalApp: (app: { name: string; url: string; description?: string; id?: string }) => string | null;
+  addExternalApp: (app: {
+    name: string;
+    url: string;
+    description?: string;
+    id?: string;
+    /** Page favicon after first visit (Chrome-like). */
+    iconUrl?: string;
+  }) => string | null;
   updateExternalApp: (id: string, app: { name: string; url: string; description?: string }) => void;
+  /** Persist page favicon onto an external app after first visit. */
+  updateExternalAppIcon: (id: string, iconUrl: string) => void;
   removeExternalApp: (id: string) => void;
   installApp: (id: string) => void;
   uninstallApp: (id: string) => void;
@@ -272,20 +281,27 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
   openEditModal: (id) => set({ addModalOpen: true, editingExternalAppId: id }),
   closeAddModal: () => set({ addModalOpen: false, editingExternalAppId: null }),
 
-  addExternalApp: ({ name, url, description, id: preferredId }) => {
+  addExternalApp: ({ name, url, description, id: preferredId, iconUrl }) => {
     if (!get().hydrated) return null;
     const id = preferredId?.trim()
       || `ext-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    if (get().externalApps.some((app) => app.id === id)) {
+    const existing = get().externalApps.find((app) => app.id === id);
+    if (existing) {
+      const nextIcon = iconUrl?.trim();
+      if (nextIcon && existing.iconUrl !== nextIcon) {
+        get().updateExternalAppIcon(id, nextIcon);
+      }
       return id;
     }
+    const trimmedIcon = iconUrl?.trim();
     const newApp: AppItem = {
       id,
       name: name.trim(),
       url: url.trim(),
       description: description?.trim() || '外部应用链接',
-      iconKey: 'external',
-      tone: 'gray',
+      // No generic "external" SVG — letter avatar until first visit provides favicon.
+      iconUrl: trimmedIcon || undefined,
+      tone: 'orange',
       category: '外部应用',
       kind: 'external',
       installed: true,
@@ -324,6 +340,26 @@ export const useMoreAppsStore = create<MoreAppsState>((set, get) => ({
       addModalOpen: false,
       editingExternalAppId: null,
     });
+    void persistRegistry(get);
+  },
+
+  updateExternalAppIcon: (id, iconUrl) => {
+    if (!get().hydrated) return;
+    const trimmed = iconUrl?.trim();
+    if (!trimmed) return;
+    const current = get().externalApps.find((app) => app.id === id);
+    if (!current || current.iconUrl === trimmed) return;
+    const updated = get().externalApps.map((app) =>
+      app.id === id
+        ? {
+            ...app,
+            iconUrl: trimmed,
+            // Drop ugly generic external glyph once we have a real favicon.
+            iconKey: app.iconKey === 'external' ? undefined : app.iconKey,
+          }
+        : app,
+    );
+    set({ externalApps: updated });
     void persistRegistry(get);
   },
 

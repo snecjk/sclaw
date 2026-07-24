@@ -11,7 +11,9 @@ import {
 /**
  * Resolve embed URL for the in-app browser.
  * - sto-sso-web entry → inject autoLogin + token when available
- * - useStoToken=1 → strip flag and append stotoken (any host; config URL as-is otherwise)
+ * - useStoToken=1 → strip flag and append `stotoken=<token>` (existing behavior)
+ * - useStoToken=<name> (any other non-empty value) → strip flag and append `<name>=<token>`
+ * - Preserves other existing search params on the URL
  */
 export function resolveSclawBrowserUrl(url: string): string {
   const trimmed = url?.trim();
@@ -35,14 +37,18 @@ export function resolveSclawBrowserUrl(url: string): string {
     const isAbsolute = /^https?:\/\//i.test(trimmed);
     const parsed = new URL(trimmed, isAbsolute ? undefined : 'https://stoclaw.local');
 
-    if (parsed.searchParams.get('useStoToken') !== '1') {
+    const useStoTokenFlag = parsed.searchParams.get('useStoToken');
+    if (useStoTokenFlag == null || useStoTokenFlag === '') {
       return trimmed;
     }
 
     parsed.searchParams.delete('useStoToken');
 
+    // useStoToken=1 → classic `stotoken`; otherwise the flag value is the query key.
+    const tokenParamName = useStoTokenFlag === '1' ? 'stotoken' : useStoTokenFlag;
+
     if (token) {
-      parsed.searchParams.set('stotoken', token);
+      parsed.searchParams.set(tokenParamName, token);
     }
 
     if (isAbsolute) {

@@ -91,6 +91,7 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
   const addExternalApp = useMoreAppsStore((s) => s.addExternalApp);
   const toggleFavorite = useMoreAppsStore((s) => s.toggleFavorite);
   const removeExternalApp = useMoreAppsStore((s) => s.removeExternalApp);
+  const updateExternalAppIcon = useMoreAppsStore((s) => s.updateExternalAppIcon);
   const hydrated = useMoreAppsStore((s) => s.hydrated);
 
   const [blankDraft, setBlankDraft] = useState('');
@@ -153,6 +154,8 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
       url: tab.url,
       description: t('moreApps.externalFromBrowser', { defaultValue: '从浏览器页签收藏' }),
       id: tab.appId || undefined,
+      // If this tab already loaded a page favicon, persist it immediately.
+      iconUrl: tab.pageFaviconUrl,
     });
 
     if (createdId) {
@@ -301,6 +304,11 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
               active={active}
               onPageFavicon={(faviconUrl) => {
                 updateTabPageMeta(tab.id, { pageFaviconUrl: faviconUrl });
+                // After first visit, use page favicon as 我的应用 card icon.
+                const registryId = tab.registryAppId || matchedExternal?.id;
+                if (registryId && useMoreAppsStore.getState().externalApps.some((app) => app.id === registryId)) {
+                  updateExternalAppIcon(registryId, faviconUrl);
+                }
               }}
               onPageTitle={(pageTitle) => {
                 updateTabPageMeta(tab.id, { title: pageTitle });
