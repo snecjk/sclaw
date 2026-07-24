@@ -284,4 +284,50 @@ export class ScheduleTaskRunRepository {
       .execute();
     return this.getRun(runId, { includeDeleted: true });
   }
+
+  /**
+   * 条件终态更新：仅当 run 仍为 `running` 时落终态（succeeded/failed/timed_out）。
+   *
+   * 双重 finalize 守卫——run watcher（onTerminal/onTimeout）与 scheduler reaper
+   * 都经此：先到者更新成功（返回更新行），后到者 run 已非 running → 返回 null、
+   * 退出不覆盖。避免 watcher 已 succeeded 后 reaper 又覆盖成 timed_out（或
+   * watcher 超时后迟到 terminal 又覆盖）。
+   *
+   * 不做 read-then-write（避免竞态窗）；仅 SET input 提供的字段 + updated_at/version+1，
+   * 未提供字段保持原值。status 须由 caller 显式给（终态语义）。
+   */
+  async finalizeRunIfRunning(
+    runId: string,
+    input: UpdateScheduleTaskRunInput,
+  ): Promise<ScheduleTaskRun | null> {
+    const db = getKyselyDatabase();
+    const timestamp = nowIso();
+    const set: Record<string, unknown> = {
+      updated_at: timestamp,
+      updated_by: input.actor ?? null,
+      version: sql<number>`version + 1`,
+    };
+    if (input.status !== undefined) set.status = input.status;
+    if (input.startedAt !== undefined) set.started_at = input.startedAt;
+    if (input.completedAt !== undefined) set.completed_at = input.completedAt;
+    if (input.sessionKey !== undefined) {
+      set.session_key = input.sessionKey == null ? null : String(input.sessionKey);
+    }
+    if (input.summary !== undefined) set.summary = input.summary;
+    if (input.error !== undefined) set.error = input.error;
+    if (input.runtimeResult !== undefined) {
+      set.runtime_result_json = stringifyJson(input.runtimeResult);
+    }
+
+    const result = await db
+      .updateTable('schedule_task_runs')
+      .set(set)
+      .where('run_id', '=', runId)
+      .where('status', '=', 'running')
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    const updated = Number(result.numUpdatedRows ?? 0n);
+    if (updated === 0) return null;
+    return this.getRun(runId, { includeDeleted: true });
+  }
 }

@@ -6,17 +6,18 @@ import { join } from 'node:path';
 import { setupInMemoryDb, type InMemoryDb } from './helpers';
 import { ScheduleTaskRepository } from '../../electron/db/repositories/schedule-task-repository';
 import type { GatewayManager } from '../../electron/gateway/manager';
-import type { ScheduledTaskService } from '../../electron/services/scheduled-task-service';
+import type { ScheduledTaskService } from '../../electron/scheduled-tasks/scheduled-task-service';
 
-// paths 桩：把 definitions.json / marker 引到临时目录，不触真实 home。
+// paths 桩：definitions / openclaw jobs / marker 都进临时目录。
 let claudeDir: string;
+let openclawDir: string;
 let homeDir: string;
 vi.mock('../../electron/utils/paths', () => ({
   getClaudeScheduledTasksDir: () => claudeDir,
+  getOpenClawConfigDir: () => openclawDir,
   getStoClawHomeDir: () => homeDir,
 }));
 
-// logger 桩：避免 node 环境日志依赖。
 vi.mock('../../electron/utils/logger', () => ({
   logger: {
     info: vi.fn(),
@@ -26,13 +27,14 @@ vi.mock('../../electron/utils/logger', () => ({
 }));
 
 /**
- * Step 4 数据迁移验收：claude definitions.json + openclaw cron.list → schedule_tasks；
- * id 保留、cron.remove 各调一次、marker 幂等、二次运行整体跳过。
+ * Step 4 数据迁移：claude definitions.json + openclaw jobs.json（直读，不经 Gateway）
+ * → schedule_tasks；迁成功后从 jobs.json 移除；marker 幂等 + 漏迁补洞。
  */
 describe('runScheduledTasksMigration (data)', () => {
   let env: InMemoryDb;
   let taskRepo: ScheduleTaskRepository;
   let markerPath: string;
+  let jobsPath: string;
 
   const claudeDefinitions = [
     {
@@ -78,13 +80,22 @@ describe('runScheduledTasksMigration (data)', () => {
     env = setupInMemoryDb();
     taskRepo = new ScheduleTaskRepository();
     claudeDir = mkdtempSync(join(tmpdir(), 'mig-claude-'));
+    openclawDir = mkdtempSync(join(tmpdir(), 'mig-oc-'));
     homeDir = mkdtempSync(join(tmpdir(), 'mig-home-'));
     markerPath = join(homeDir, 'scheduled-tasks-migration.done');
-    // 写 definitions.json fixture
+    jobsPath = join(openclawDir, 'cron', 'jobs.json');
+
     mkdirSync(claudeDir, { recursive: true });
     writeFileSync(
       join(claudeDir, 'definitions.json'),
       JSON.stringify({ definitions: claudeDefinitions }),
+      'utf8',
+    );
+
+    mkdirSync(join(openclawDir, 'cron'), { recursive: true });
+    writeFileSync(
+      jobsPath,
+      JSON.stringify({ version: 1, jobs: openclawJobs }, null, 2),
       'utf8',
     );
   });
@@ -92,14 +103,14 @@ describe('runScheduledTasksMigration (data)', () => {
   afterEach(() => {
     env.teardown();
     rmSync(claudeDir, { recursive: true, force: true });
+    rmSync(openclawDir, { recursive: true, force: true });
     rmSync(homeDir, { recursive: true, force: true });
   });
 
   function makeGm() {
-    const rpc = vi.fn(async (method: string) => {
-      if (method === 'cron.list') return { jobs: openclawJobs };
-      if (method === 'cron.remove') return undefined;
-      throw new Error(`unexpected rpc ${method}`);
+    // Gateway 在迁移期故意未连接；openclaw 不应再打 RPC。
+    const rpc = vi.fn(async () => {
+      throw new Error('Gateway not connected');
     });
     return { gm: { rpc } as unknown as GatewayManager, rpc };
   }
@@ -109,7 +120,14 @@ describe('runScheduledTasksMigration (data)', () => {
     return { service: { refreshSchedule } as unknown as ScheduledTaskService, refreshSchedule };
   }
 
-  it('migrates both engines, preserves ids, removes openclaw crons, writes marker', async () => {
+  function readJobsFile(): { version?: number; jobs: Array<{ id: string }> } {
+    return JSON.parse(readFileSync(jobsPath, 'utf8')) as {
+      version?: number;
+      jobs: Array<{ id: string }>;
+    };
+  }
+
+  it('migrates both engines from disk, preserves ids, strips jobs.json, writes marker', async () => {
     const { gm, rpc } = makeGm();
     const { service, refreshSchedule } = makeServiceStub();
     const { runScheduledTasksMigration } = await import('../../electron/scripts/migrate-scheduled-tasks');
@@ -122,7 +140,6 @@ describe('runScheduledTasksMigration (data)', () => {
     const ids = tasks.map((t) => t.id).sort();
     expect(ids).toEqual(['claude-1', 'openclaw-1', 'openclaw-disabled'].sort());
 
-    // claude 字段落对
     const claude = tasks.find((t) => t.id === 'claude-1')!;
     expect(claude.engineType).toBe('claude');
     expect(claude.prompt).toBe('claude prompt');
@@ -130,7 +147,6 @@ describe('runScheduledTasksMigration (data)', () => {
     expect(claude.permissionProfile).toBe('workspace-write');
     expect(claude.retryPolicy).toEqual({ maxAttempts: 2, backoffSec: 10 });
 
-    // openclaw 字段落对（prompt 原样保留烘焙块、recipients 空）
     const oc = tasks.find((t) => t.id === 'openclaw-1')!;
     expect(oc.engineType).toBe('openclaw');
     expect(oc.prompt).toBe('openclaw prompt');
@@ -139,46 +155,81 @@ describe('runScheduledTasksMigration (data)', () => {
     expect(oc.workflowCode).toBe('wf-oc');
     expect(oc.dingtalkRecipients).toBeNull();
 
-    // fallback text prompt
     const oc2 = tasks.find((t) => t.id === 'openclaw-disabled')!;
     expect(oc2.prompt).toBe('fallback text prompt');
     expect(oc2.enabled).toBe(false);
 
-    // 每条 openclaw cron 都 remove 一次
-    expect(rpc).toHaveBeenCalledWith('cron.list', { includeDisabled: true });
-    const removes = rpc.mock.calls.filter((c) => c[0] === 'cron.remove');
-    expect(removes).toHaveLength(2);
+    // 不依赖 Gateway RPC
+    expect(rpc).not.toHaveBeenCalled();
+
+    // 已迁 cron 从 jobs.json 移除
+    expect(readJobsFile().jobs).toEqual([]);
 
     expect(existsSync(markerPath)).toBe(true);
     expect(refreshSchedule).toHaveBeenCalledTimes(1);
   });
 
-  it('skips entirely when marker present (idempotent second run)', async () => {
+  it('skips claude when marker present; openclaw backfills leftovers without Gateway', async () => {
+    const { gm, rpc } = makeGm();
+    const { service, refreshSchedule } = makeServiceStub();
+    const { runScheduledTasksMigration } = await import('../../electron/scripts/migrate-scheduled-tasks');
+
+    // 模拟历史坏 marker：claude 已迁、openclaw 因 Gateway 未连为 0，jobs.json 仍在
+    await taskRepo.create({
+      id: 'claude-1',
+      name: 'claude daily',
+      cronExpr: '0 9 * * *',
+      engineType: 'claude',
+      prompt: 'claude prompt',
+      agentId: 'agent-claude',
+    });
+    writeFileSync(
+      markerPath,
+      JSON.stringify({
+        completedAt: '2026-07-23T13:31:46.756Z',
+        claude: { migrated: 6, skipped: 0 },
+        openclaw: { migrated: 0, skipped: 0, nonCron: 0 },
+      }),
+      'utf8',
+    );
+
+    await runScheduledTasksMigration(gm, service);
+
+    const tasks = await taskRepo.list({});
+    expect(tasks).toHaveLength(3);
+    expect(tasks.map((t) => t.engineType).sort()).toEqual(['claude', 'openclaw', 'openclaw']);
+    expect(readJobsFile().jobs).toEqual([]);
+    expect(rpc).not.toHaveBeenCalled();
+    expect(refreshSchedule).toHaveBeenCalledTimes(1);
+
+    const marker = JSON.parse(readFileSync(markerPath, 'utf8')) as {
+      claude: { migrated: number };
+      openclaw: { migrated: number };
+    };
+    expect(marker.claude.migrated).toBe(6); // 保留旧 claude 计数
+    expect(marker.openclaw.migrated).toBe(2);
+  });
+
+  it('second run with clean jobs.json is a no-op', async () => {
     const { gm, rpc } = makeGm();
     const { service, refreshSchedule } = makeServiceStub();
     const { runScheduledTasksMigration } = await import('../../electron/scripts/migrate-scheduled-tasks');
 
     await runScheduledTasksMigration(gm, service);
     const afterFirst = (await taskRepo.list({})).length;
-    const rpcAfterFirst = rpc.mock.calls.length;
 
-    // 写入 marker（真实脚本第一次已写，这里显式确认存在后二次调用）
-    expect(existsSync(markerPath)).toBe(true);
     await runScheduledTasksMigration(gm, service);
 
-    const afterSecond = (await taskRepo.list({})).length;
-    expect(afterSecond).toBe(afterFirst);
-    expect(rpc.mock.calls.length).toBe(rpcAfterFirst); // 二次无新 rpc
-    // 第二次因 marker 命中早返回，不刷新
+    expect((await taskRepo.list({})).length).toBe(afterFirst);
+    expect(rpc).not.toHaveBeenCalled();
     expect(refreshSchedule).toHaveBeenCalledTimes(1);
   });
 
   it('resumes on crash: re-running without marker skips existing rows', async () => {
-    const { gm, rpc } = makeGm();
+    const { gm } = makeGm();
     const { service } = makeServiceStub();
     const { runScheduledTasksMigration } = await import('../../electron/scripts/migrate-scheduled-tasks');
 
-    // 预先插入一条 claude（模拟上次崩溃前已写入）
     await taskRepo.create({
       id: 'claude-1',
       name: 'claude daily',
@@ -188,51 +239,43 @@ describe('runScheduledTasksMigration (data)', () => {
       agentId: 'agent-claude',
     });
 
-    // 删 marker 模拟崩溃未写
     await runScheduledTasksMigration(gm, service);
 
     const tasks = await taskRepo.list({});
-    expect(tasks).toHaveLength(3); // claude-1 复用 + openclaw-1 + openclaw-disabled
+    expect(tasks).toHaveLength(3);
     const claude = tasks.find((t) => t.id === 'claude-1')!;
-    // 已存在的行不被覆盖（prompt 仍为 partial，非 claude prompt）
     expect(claude.prompt).toBe('partial');
-    // openclaw 两条仍被迁移 + remove
-    const removes = rpc.mock.calls.filter((c) => c[0] === 'cron.remove');
-    expect(removes).toHaveLength(2);
+    expect(readJobsFile().jobs).toEqual([]);
   });
 
-  it('skips non-cron openclaw jobs without removing them', async () => {
-    const { gm, rpc } = makeGm();
+  it('skips non-cron openclaw jobs and leaves them in jobs.json', async () => {
+    writeFileSync(
+      jobsPath,
+      JSON.stringify({
+        version: 1,
+        jobs: [
+          {
+            id: 'interval-job',
+            name: 'every 5m',
+            enabled: true,
+            schedule: { kind: 'every', everyMs: 300000 },
+            payload: { message: 'boom' },
+          },
+        ],
+      }),
+      'utf8',
+    );
+
+    const { gm } = makeGm();
     const { service } = makeServiceStub();
     const { runScheduledTasksMigration } = await import('../../electron/scripts/migrate-scheduled-tasks');
 
-    // 覆盖 gm 让 cron.list 返回一条 everyMs（非 cron）
-    const gmEvery = {
-      rpc: vi.fn(async (method: string) => {
-        if (method === 'cron.list')
-          return {
-            jobs: [
-              {
-                id: 'interval-job',
-                name: 'every 5m',
-                enabled: true,
-                schedule: { kind: 'every', everyMs: 300000 },
-                payload: { message: 'boom' },
-              },
-            ],
-          };
-        if (method === 'cron.remove') return undefined;
-        throw new Error(`unexpected ${method}`);
-      }),
-    } as unknown as GatewayManager;
-
-    await runScheduledTasksMigration(gmEvery, service);
+    await runScheduledTasksMigration(gm, service);
 
     const tasks = await taskRepo.list({});
-    expect(tasks).toHaveLength(1); // 仅 claude
+    expect(tasks).toHaveLength(1);
     expect(tasks[0].id).toBe('claude-1');
-    // 非 cron 任务不 remove
-    const removes = rpc.mock.calls.filter((c) => c[0] === 'cron.remove');
-    expect(removes).toHaveLength(0);
+    expect(readJobsFile().jobs.map((j) => j.id)).toEqual(['interval-job']);
+    expect(existsSync(markerPath)).toBe(true);
   });
 });

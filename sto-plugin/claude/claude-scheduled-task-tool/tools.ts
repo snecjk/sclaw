@@ -1,7 +1,7 @@
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from '../zod-shim.js';
-import { getScheduledTaskService } from '../../../electron/services/scheduled-task-service';
+import { getScheduledTaskService } from '../../../electron/scheduled-tasks/scheduled-task-service';
 import type {
   CreateScheduleTaskInput,
   UpdateScheduleTaskInput,

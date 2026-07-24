@@ -195,7 +195,12 @@ export class ScheduledTaskScheduler {
       const deadlineMs = startedMs + task.timeoutSec * 1000;
       if (deadlineMs > now.getTime()) continue; // 仍在超时窗口内，不 reap
 
-      await this.runRepo.updateRun(run.runId, {
+      // 经 finalizeRunIfRunning：若 run watcher 已先 onTimeout 落了 timed_out
+      // （或 agent 终态落了 succeeded/failed），此处 status≠running→返回 null，
+      // reaper 不覆盖——双重 finalize 守卫。watcher 在进程内、setTimeout 精确，
+      // 正常先赢真超时并走执行器 retry/pause；reaper 是 watcher 丢失/未挂时的
+      // 30s tick 兜底，只落终态 + 释放单飞（不走执行器重试/pause）。
+      const finalized = await this.runRepo.finalizeRunIfRunning(run.runId, {
         status: 'timed_out',
         completedAt: now.toISOString(),
         error: `run exceeded timeout_sec=${task.timeoutSec} (stale lease reaped by scheduler)`,
@@ -205,6 +210,7 @@ export class ScheduledTaskScheduler {
           durationMs: now.getTime() - startedMs,
         },
       });
+      if (!finalized) continue;
       reaped++;
       logger.warn('[scheduled-task] reaped stale run (timeout)', {
         taskId: run.taskId,

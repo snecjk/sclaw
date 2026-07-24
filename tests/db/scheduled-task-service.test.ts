@@ -3,7 +3,7 @@ import { setupInMemoryDb, type InMemoryDb } from './helpers';
 import {
   ScheduledTaskService,
   DINGTALK_RECIPIENTS_MARKER,
-} from '../../electron/services/scheduled-task-service';
+} from '../../electron/scheduled-tasks/scheduled-task-service';
 import type { DingTalkMention } from '../../shared/dingtalk-mention';
 
 const baseCreateInput = {

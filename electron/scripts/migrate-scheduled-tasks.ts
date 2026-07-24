@@ -1,32 +1,34 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { GatewayManager } from '../gateway/manager';
-import type { ScheduledTaskService } from '../services/scheduled-task-service';
+import type { ScheduledTaskService } from '../scheduled-tasks/scheduled-task-service';
 import { ScheduleTaskRepository } from '../db/repositories/schedule-task-repository';
 import type { CreateScheduleTaskInput } from '../db/models/dto/schedule-task.dto';
-import { getClaudeScheduledTasksDir, getStoClawHomeDir } from '../utils/paths';
+import {
+  getClaudeScheduledTasksDir,
+  getOpenClawConfigDir,
+  getStoClawHomeDir,
+} from '../utils/paths';
 import { logger } from '../utils/logger';
 import { getAuthState } from '../utils/auth-store';
 
 /**
  * Step 4 数据迁移：把遗留本地 JSON 定时任务（claude `definitions.json` + openclaw
- * Gateway cron）一次性灌入统一 SQLite `schedule_tasks` 表，generic 调度器随即接管。
+ * `openclaw/cron/jobs.json`）一次性灌入统一 SQLite `schedule_tasks` 表。
  *
  * 幂等：marker 文件 + per-row `getById` 存在检查双闸——进程崩溃可重跑续传。
  *
+ * OpenClaw **不依赖 Gateway**：直读/改写 `jobs.json`（与
+ * `advance-openclaw-cron-next-runs.ts` 同路径约定）。启动早期即可跑，避免
+ * `cron.list` 在 Gateway 未连接时失败 → 仍写 marker → 永久漏迁。
+ *
  * 字段映射原则（两引擎对称）：
- *  - `dingtalkRecipients=null`、prompt **原样保留烘焙块**。执行器见 recipients 空则不
- *    再追加 system-append，钉钉仍由 prompt 内烘焙块触发——行为与旧路径完全一致，
- *    且规避 `stripDingTalkMentionContextForDisplay` 对非标准格式 `return ''` 的空
- *    prompt 数据丢失风险。recipients 列纯度让位于迁移安全；新任务正常填列。
- *  - `next_run_at` 不搬旧 `scheduler-state.json`，建表置 null，末尾 `refreshSchedule`
- *    统一重算（避免时区/陈旧 nextRunAt 坑）。
- *  - openclaw 非 cron-expr 任务（everyMs/at）无法映射到 `cronExpr`，跳过且**不**
- *    cron.remove（留 Gateway 运行）+ 告警，需人工处理。
+ *  - `dingtalkRecipients=null`、prompt **原样保留烘焙块**。
+ *  - `next_run_at` 不搬旧 state，建表置 null，末尾 `refreshSchedule` 重算。
+ *  - openclaw 非 cron-expr 任务（everyMs/at）跳过且**留在** jobs.json + 告警。
  */
 
-/** marker / definitions 路径在函数内现算，保证测试 vi.mock 换目录生效、且
- *  路径在模块加载后仍可被 paths 实现动态决定。 */
 const MARKER_FILENAME = 'scheduled-tasks-migration.done';
 const DEFINITIONS_FILENAME = 'definitions.json';
 
@@ -52,14 +54,28 @@ interface ClaudeDefinitionsDocument {
   definitions?: ClaudeScheduledTaskDefinition[];
 }
 
-/** openclaw Gateway cron 原始 job（`cron.list` 返回 shape 的最小子集）。 */
-interface GatewayCronJob {
+/** openclaw jobs.json 条目（与 Gateway cron job / 磁盘文件 shape 对齐的最小子集）。 */
+interface OpenclawCronJob {
   id: string;
   name?: string;
   enabled?: boolean;
   description?: string;
   schedule?: { kind?: string; expr?: string; everyMs?: number; at?: string };
   payload?: { message?: string; text?: string; model?: string };
+}
+
+interface OpenclawJobsDocument {
+  version?: number;
+  jobs?: OpenclawCronJob[];
+  [key: string]: unknown;
+}
+
+interface OpenclawMigrationResult {
+  migrated: number;
+  skipped: number;
+  nonCron: number;
+  /** false：解析失败 / 写回失败 / 有 create 失败未清出 —— 调用方不得 finalized marker */
+  complete: boolean;
 }
 
 function parseOpenclawDescription(description: unknown): {
@@ -90,6 +106,10 @@ async function fileExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function getOpenclawJobsPath(): string {
+  return join(getOpenClawConfigDir(), 'cron', 'jobs.json');
 }
 
 async function migrateClaudeDefinitions(
@@ -149,33 +169,47 @@ async function migrateClaudeDefinitions(
   return { migrated, skipped };
 }
 
+/**
+ * 直读 `openclaw/cron/jobs.json` → 写入 schedule_tasks → 从文件移除已落地 cron，
+ * 防 Gateway 随后启动双调度。不调用 cron.list / cron.remove。
+ */
 async function migrateOpenclawCronJobs(
-  gm: GatewayManager,
   taskRepo: ScheduleTaskRepository,
   actor: string | null,
-): Promise<{ migrated: number; skipped: number; nonCron: number }> {
-  let jobs: GatewayCronJob[] = [];
+): Promise<OpenclawMigrationResult> {
+  const jobsPath = getOpenclawJobsPath();
+  let raw: string;
   try {
-    const result = (await gm.rpc('cron.list', { includeDisabled: true })) as {
-      jobs?: GatewayCronJob[];
-    };
-    jobs = Array.isArray(result?.jobs) ? result.jobs : [];
-  } catch (error) {
-    logger.warn('[migration] cron.list failed — skipping openclaw', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return { migrated: 0, skipped: 0, nonCron: 0 };
+    raw = await readFile(jobsPath, 'utf8');
+  } catch {
+    logger.info('[migration] openclaw jobs.json not found — skipping openclaw');
+    return { migrated: 0, skipped: 0, nonCron: 0, complete: true };
   }
 
+  let data: OpenclawJobsDocument;
+  try {
+    data = JSON.parse(raw) as OpenclawJobsDocument;
+  } catch (error) {
+    logger.warn('[migration] openclaw jobs.json parse failed — not writing marker', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { migrated: 0, skipped: 0, nonCron: 0, complete: false };
+  }
+
+  const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+  const removeIds = new Set<string>();
   let migrated = 0;
   let skipped = 0;
   let nonCron = 0;
+  let createFailures = 0;
+
   for (const job of jobs) {
+    if (!job?.id) continue;
     const expr = job.schedule?.expr;
     const isCron = job.schedule?.kind === 'cron' || Boolean(expr);
     if (!isCron) {
       nonCron += 1;
-      logger.warn('[migration] openclaw job skipped (non-cron schedule, not removed)', {
+      logger.warn('[migration] openclaw job skipped (non-cron schedule, left in jobs.json)', {
         id: job.id,
         name: job.name,
         kind: job.schedule?.kind,
@@ -184,97 +218,162 @@ async function migrateOpenclawCronJobs(
     }
     if (!expr) {
       nonCron += 1;
-      logger.warn('[migration] openclaw job skipped (no cron expr)', { id: job.id });
+      logger.warn('[migration] openclaw job skipped (no cron expr, left in jobs.json)', {
+        id: job.id,
+      });
       continue;
     }
 
     const existing = await taskRepo.getById(job.id, { includeDeleted: true });
     if (existing) {
       skipped += 1;
-    } else {
-      const { agentId, workflowCode } = parseOpenclawDescription(job.description);
-      const prompt = job.payload?.message || job.payload?.text || '';
-      const input: CreateScheduleTaskInput = {
-        id: job.id,
-        name: job.name || job.id,
-        enabled: job.enabled !== false,
-        cronExpr: expr,
-        engineType: 'openclaw',
-        prompt,
-        agentId: agentId || 'main',
-        workflowCode,
-        model: job.payload?.model ?? null,
-        dingtalkRecipients: null,
-        permissionProfile: null,
-        timeoutSec: null,
-        accountId: null,
-        workspacePath: null,
-        retryPolicy: null,
-        failurePolicy: null,
-        actor,
-      };
-      try {
-        await taskRepo.create(input);
-        migrated += 1;
-      } catch (error) {
-        logger.warn('[migration] openclaw task create failed', {
-          id: job.id,
-          name: job.name,
-          error: error instanceof Error ? error.message : String(error),
-        });
-        // 创建失败也尝试 remove？否——保留 Gateway cron 以便人工排查。
-        continue;
-      }
+      removeIds.add(job.id);
+      continue;
     }
 
-    // 已迁移（或本次创建成功）的 cron 一律从 Gateway 清除，防双调度。
+    const { agentId, workflowCode } = parseOpenclawDescription(job.description);
+    const prompt = job.payload?.message || job.payload?.text || '';
+    const input: CreateScheduleTaskInput = {
+      id: job.id,
+      name: job.name || job.id,
+      enabled: job.enabled !== false,
+      cronExpr: expr,
+      engineType: 'openclaw',
+      prompt,
+      agentId: agentId || 'main',
+      workflowCode,
+      model: job.payload?.model ?? null,
+      dingtalkRecipients: null,
+      permissionProfile: null,
+      timeoutSec: null,
+      accountId: null,
+      workspacePath: null,
+      retryPolicy: null,
+      failurePolicy: null,
+      actor,
+    };
     try {
-      await gm.rpc('cron.remove', { id: job.id });
+      await taskRepo.create(input);
+      migrated += 1;
+      removeIds.add(job.id);
     } catch (error) {
-      logger.warn('[migration] cron.remove failed (Gateway cron may linger)', {
+      createFailures += 1;
+      logger.warn('[migration] openclaw task create failed (left in jobs.json)', {
         id: job.id,
+        name: job.name,
         error: error instanceof Error ? error.message : String(error),
       });
     }
   }
+
+  if (removeIds.size > 0) {
+    const remaining = jobs.filter((j) => !j?.id || !removeIds.has(j.id));
+    const nextDoc: OpenclawJobsDocument = { ...data, jobs: remaining };
+    try {
+      await mkdir(dirname(jobsPath), { recursive: true });
+      const tmpPath = `${jobsPath}.${randomUUID()}.tmp`;
+      await writeFile(tmpPath, JSON.stringify(nextDoc, null, 2), 'utf8');
+      await rename(tmpPath, jobsPath);
+      logger.info('[migration] openclaw jobs.json rewritten', {
+        removed: [...removeIds],
+        remaining: remaining.length,
+      });
+    } catch (error) {
+      logger.warn('[migration] openclaw jobs.json rewrite failed — not finalizing marker', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { migrated, skipped, nonCron, complete: false };
+    }
+  }
+
+  const complete = createFailures === 0;
   logger.info(
-    `[migration] openclaw: ${migrated} migrated, ${skipped} skipped, ${nonCron} non-cron skipped`,
+    `[migration] openclaw: ${migrated} migrated, ${skipped} skipped, ${nonCron} non-cron skipped` +
+      (complete ? '' : ` (${createFailures} create failures)`),
   );
-  return { migrated, skipped, nonCron };
+  return { migrated, skipped, nonCron, complete };
+}
+
+async function writeMarker(
+  markerFile: string,
+  claude: { migrated: number; skipped: number },
+  openclaw: OpenclawMigrationResult,
+): Promise<void> {
+  await mkdir(dirname(markerFile), { recursive: true });
+  const payload = {
+    completedAt: new Date().toISOString(),
+    claude,
+    openclaw: {
+      migrated: openclaw.migrated,
+      skipped: openclaw.skipped,
+      nonCron: openclaw.nonCron,
+    },
+  };
+  await writeFile(markerFile, JSON.stringify(payload, null, 2), 'utf8');
+  logger.info('[migration] marker written', { path: markerFile, payload });
 }
 
 /**
  * 一次性迁移入口。在 `setGatewayManager` 之后、`startScheduler` 之前调用。
- * marker 存在即整体跳过；否则迁两引擎 → 写 marker → refreshSchedule 重算 next_run_at。
+ * 不要求 Gateway 已连接。
+ *
+ * - marker 缺失：迁 claude + openclaw → 仅 openclaw complete 时写 marker → refresh。
+ * - marker 已在（含历史「openclaw 因 Gateway 未连漏迁」）：仍跑 openclaw 文件补迁；
+ *   有新写入则 refresh，并把 marker 更新为完整结果。
  */
 export async function runScheduledTasksMigration(
-  gm: GatewayManager,
+  _gm: GatewayManager,
   service: ScheduledTaskService,
 ): Promise<void> {
   const markerFile = join(getStoClawHomeDir(), MARKER_FILENAME);
-  if (await fileExists(markerFile)) {
-    logger.info('[migration] scheduled-tasks migration already done (marker present)');
-    return;
-  }
-
-  logger.info('[migration] scheduled-tasks migration starting');
+  const markerPresent = await fileExists(markerFile);
   const taskRepo = new ScheduleTaskRepository();
 
   const { user } = await getAuthState();
   const actor = user?.code ?? null;
 
-  const claudeResult = await migrateClaudeDefinitions(taskRepo, actor);
-  const openclawResult = await migrateOpenclawCronJobs(gm, taskRepo, actor);
+  let claudeResult = { migrated: 0, skipped: 0 };
+  if (!markerPresent) {
+    logger.info('[migration] scheduled-tasks migration starting');
+    claudeResult = await migrateClaudeDefinitions(taskRepo, actor);
+  } else {
+    logger.info(
+      '[migration] marker present — skipping claude; checking openclaw jobs.json for leftovers',
+    );
+  }
 
-  await mkdir(dirname(markerFile), { recursive: true });
-  const payload = {
-    completedAt: new Date().toISOString(),
-    claude: claudeResult,
-    openclaw: openclawResult,
-  };
-  await writeFile(markerFile, JSON.stringify(payload, null, 2), 'utf8');
-  logger.info('[migration] marker written', { path: markerFile, payload });
+  const openclawResult = await migrateOpenclawCronJobs(taskRepo, actor);
 
-  await service.refreshSchedule();
-  logger.info('[migration] refreshSchedule done — next_run_at recomputed');
+  if (!openclawResult.complete) {
+    logger.warn('[migration] openclaw incomplete — marker not finalized (will retry next launch)');
+    if (claudeResult.migrated > 0 || openclawResult.migrated > 0) {
+      await service.refreshSchedule();
+      logger.info('[migration] refreshSchedule done (partial)');
+    }
+    return;
+  }
+
+  // 首次跑，或补迁了 openclaw：写/更新 marker
+  if (!markerPresent || openclawResult.migrated > 0 || openclawResult.skipped > 0) {
+    // skipped>0 且改写了 jobs.json 时也刷新 marker，避免旧 payload 误导排障
+    let claudeForMarker = claudeResult;
+    if (markerPresent) {
+      try {
+        const prev = JSON.parse(await readFile(markerFile, 'utf8')) as {
+          claude?: { migrated: number; skipped: number };
+        };
+        if (prev.claude) claudeForMarker = prev.claude;
+      } catch {
+        // 读旧 marker 失败则用本次 claude 计数（多为 0）
+      }
+    }
+    await writeMarker(markerFile, claudeForMarker, openclawResult);
+  } else if (markerPresent) {
+    logger.info('[migration] openclaw jobs.json clean — nothing to backfill');
+  }
+
+  if (!markerPresent || openclawResult.migrated > 0) {
+    await service.refreshSchedule();
+    logger.info('[migration] refreshSchedule done — next_run_at recomputed');
+  }
 }

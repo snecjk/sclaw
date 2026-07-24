@@ -2,9 +2,9 @@
 
 定时任务**统一存储**表（Phase 1，migration `0006`）。定义 + 调度状态 + 运行记录，取代 `jobs.json` / `definitions.json` / 各自 `runs/*.jsonl`。
 
-> **本期不接生产**：表空、`jobs.json` / `definitions.json` 不动；Step 4 才迁移数据，Step 5 才把 `session_type` 收敛为 `scheduled_task`。
+> **状态（2026-07-24）**：已 cutover 生产路径。启动期迁移读 `definitions.json` + `jobs.json` → 本表；迁后清 `jobs.json` 已迁 cron，**不清** `definitions.json`。进度见 `docs/定时任务重构-交接与执行计划.md`。
 
-> ⚠ **命名说明**：表名按决策用 `schedule_tasks`（无 d、复数）。注意 `catalog_sessions.session_type` 枚举值为 `scheduled_task`（**有 d**，既有枚举）——该枚举 Step 5 才收敛，故本期表名与枚举拼写差一个 d，属临时状态。如需统一带 d，改表名/迁移/索引/模型文件名即可。
+> ⚠ **命名说明**：表名 `schedule_tasks`（无 d）。`catalog_sessions.session_type` 枚举仍可能为 `scheduled_task` / `cron` / `claude_task`（有 d 或历史值）——session_type 收敛仍待 Phase 5。
 
 ---
 

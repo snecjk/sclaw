@@ -5,7 +5,7 @@ import { ScheduleTaskRunRepository } from '../../electron/db/repositories/schedu
 import {
   ScheduledTaskScheduler,
   type ScheduledTaskDispatcher,
-} from '../../electron/services/scheduled-task-scheduler';
+} from '../../electron/scheduled-tasks/scheduled-task-scheduler';
 import { validateCronExpr } from '../../electron/utils/cron-math';
 import type { ScheduleTask, ScheduleTaskRun } from '../../electron/db/models/domain/schedule-task';
 
@@ -237,6 +237,45 @@ describe('ScheduledTaskScheduler', () => {
       await scheduler.tick(now);
 
       expect((await runRepo.getRun(run.runId))?.status).toBe('running');
+    });
+
+    it('finalizeRunIfRunning is a one-shot guard: second caller loses without overwriting', async () => {
+      // 双重 finalize 守卫：watcher(onTerminal/onTimeout) 与 reaper 都经
+      // finalizeRunIfRunning。先到者赢（status running→终态，返回更新行），后到者
+      // status≠running→返回 null 退出，不覆盖。防 watcher 已 succeeded 后 reaper
+      // 又覆盖成 timed_out（或反之）——cutover 后通用 executor 的关键不变式。
+      await taskRepo.create({ id: 'guard', name: 'G', enabled: true, ...baseTaskInput, timeoutSec: 60 });
+      const startedAt = '2024-01-01T00:00:00.000Z';
+      const run = await runRepo.createRun({
+        taskId: 'guard',
+        triggerSource: 'schedule',
+        scheduledFor: startedAt,
+        status: 'running',
+        startedAt,
+        idempotencyKey: 'guard:1',
+      });
+
+      // 先到者（watcher onTerminal）：succeeded。
+      const first = await runRepo.finalizeRunIfRunning(run.runId, {
+        status: 'succeeded',
+        completedAt: '2024-01-01T00:00:30.000Z',
+        runtimeResult: { stopReason: 'completed', isError: false, durationMs: 30_000 },
+      });
+      expect(first?.status).toBe('succeeded');
+
+      // 后到者（reaper 误以为 stale）：timed_out 落不进 status='running' → null，
+      // run 不被覆盖、completedAt 不被改。
+      const second = await runRepo.finalizeRunIfRunning(run.runId, {
+        status: 'timed_out',
+        completedAt: '2024-01-01T00:01:00.000Z',
+        error: 'reaper too late',
+        runtimeResult: { stopReason: 'timeout', isError: true, durationMs: 60_000 },
+      });
+      expect(second).toBeNull();
+
+      const after = await runRepo.getRun(run.runId);
+      expect(after?.status).toBe('succeeded');
+      expect(after?.completedAt).toBe('2024-01-01T00:00:30.000Z');
     });
   });
 

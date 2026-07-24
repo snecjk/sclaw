@@ -585,7 +585,7 @@ async function initialize(): Promise<void> {
   // setGatewayManager 注入 dispatcher + eventSink → 一次性迁移遗留 claude
   // definitions.json + openclaw Gateway cron → schedule_tasks → startScheduler
   // （discard→start）。迁移幂等（marker + per-row 存在检查，崩溃可重跑续传）。
-  const { getScheduledTaskService } = await import('../services/scheduled-task-service');
+  const { getScheduledTaskService } = await import('../scheduled-tasks/scheduled-task-service');
   const { runScheduledTasksMigration } = await import('../scripts/migrate-scheduled-tasks');
   const scheduledTaskService = getScheduledTaskService();
   scheduledTaskService.setGatewayManager(gm);

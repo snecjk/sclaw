@@ -9,8 +9,10 @@ import type {
 } from '../db/models/domain/schedule-task';
 import type { EngineAdapterContext } from '../engines/types';
 import { getAdapter } from '../engines/manager';
-import { runMainChatSend, type MainChatSendInput } from './chat-send-service';
+import { runMainChatSend, type MainChatSendInput } from '../services/chat-send-service';
 import { logger } from '../utils/logger';
+import { attachRunWatcher, type RunWatcherTerminalSignal } from './scheduled-task-run-watcher';
+import { sendScheduledTaskResultFallback } from './scheduled-task-dingtalk-fallback';
 
 /**
  * 引擎无关的执行期 dispatcher。把 `ScheduledTaskScheduler` 交出的 `{ task, run }`
@@ -124,27 +126,47 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
         return;
       }
 
-      const runtimeResult: ScheduleTaskRuntimeResult = {
-        stopReason: null,
-        isError: false,
-        durationMs: Date.now() - startedAtMs,
-      };
-      await this.deps.runRepo.updateRun(run.runId, {
-        status: 'succeeded',
-        completedAt: new Date().toISOString(),
-        runtimeResult,
-      });
-      logger.info('[scheduled-task] run succeeded', {
+      // §0: sendMessage resolve 只代表 run 启动（claude `startClaudeQuery` 里
+      // `void consumeWithMissingSessionRecovery()` fire-and-forget；openclaw
+      // `rpc('chat.send')` 返回 runId 后 gateway 异步推事件）。**不在此置
+      // succeeded**——挂 watcher 跟 gateway 事件终态，onTerminal/onTimeout 回调
+      // 里闭环 run 生命周期（补 cutover 6b37ec20 删 claude-task-workflow-watchdog
+      // 时漏搬进通用 executor 的那一半）。
+      logger.info('[scheduled-task] run started, awaiting terminal', {
         taskId: task.id,
         runId: run.runId,
         engineRunId: result.result?.runId,
       });
-      this.deps.getEventSink().emit('scheduled-task:run:succeeded', {
-        taskId: task.id,
-        runId: run.runId,
-        attempt: run.attempt,
+
+      const timeoutMs = task.timeoutSec != null ? task.timeoutSec * 1000 : null;
+      attachRunWatcher({
+        gatewayManager,
+        sessionKey,
+        engineType: adapter.type,
+        timeoutMs,
+        // claude 的 assistant final 全在 notification phase=completed 之前 emit，无尾丢→0；
+        // openclaw lifecycle end 常先于尾部 chat，需 150ms 缓冲窗等尾部。
+        finalizeDeferMs: adapter.type === 'openclaw' ? 150 : 0,
+        onTerminal: (signal) => {
+          void this.finalizeRunFromWatcher(task, run, startedAtMs, signal).catch((err) => {
+            logger.warn('[scheduled-task] watcher onTerminal handler failed', {
+              runId: run.runId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+        },
+        onTimeout: () => {
+          void this.handleTimeout(task, run, startedAtMs, sessionKey, adapter, ctx).catch((err) => {
+            logger.warn('[scheduled-task] watcher onTimeout handler failed', {
+              runId: run.runId,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+        },
       });
     } catch (error) {
+      // sendMessage 抛错 = launch 失败（claude prepareRuntime / openclaw rpc 前的同步异常）。
+      // run 未真正启动，走 markFailed + handleFailure，不挂 watcher。
       const message = error instanceof Error ? error.message : String(error);
       await this.markFailed(run, message, startedAtMs, sessionKey);
       await this.handleFailure(task, run, message);
@@ -186,6 +208,114 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
       return;
     }
     await this.applyFailurePolicy(task, run, error);
+  }
+
+  /**
+   * watcher `onTerminal` 回调：agent 终态（completed/error/aborted）闭环 run。
+   * 经 `finalizeRunIfRunning`（`WHERE status='running'`）防与 reaper 双终态——
+   * 若 run 已被 reaper reap 为 timed_out 或本 run 已终态，返回 null 退出不重复
+   * handle。成功路径末尾 fire-and-forget 兜底 dws-send（补 cutover 删 watchdog
+   * 漏搬的钉钉"指定即必发"模型不遵从时的"钉钉沉默"兜底）。
+   */
+  private async finalizeRunFromWatcher(
+    task: ScheduleTask,
+    run: ScheduleTaskRun,
+    startedAtMs: number,
+    signal: RunWatcherTerminalSignal,
+  ): Promise<void> {
+    const isError = signal.isError;
+    const status = isError ? 'failed' : 'succeeded';
+    const runtimeResult: ScheduleTaskRuntimeResult = {
+      stopReason: signal.stopReason,
+      isError,
+      durationMs: Date.now() - startedAtMs,
+    };
+    const updated = await this.deps.runRepo.finalizeRunIfRunning(run.runId, {
+      status,
+      completedAt: new Date().toISOString(),
+      runtimeResult,
+      ...(isError ? { error: `agent terminal: ${signal.stopReason}` } : {}),
+    });
+    if (!updated) {
+      // reaper 已先 reap（timed_out）或 run 已终态——不重复 handle。
+      logger.info('[scheduled-task] watcher terminal lost race (run not running)', {
+        runId: run.runId,
+      });
+      return;
+    }
+    if (isError) {
+      logger.warn('[scheduled-task] run failed (agent terminal)', {
+        runId: run.runId,
+        stopReason: signal.stopReason,
+      });
+      await this.handleFailure(task, run, `agent terminal: ${signal.stopReason}`);
+      return;
+    }
+    logger.info('[scheduled-task] run succeeded (agent terminal)', {
+      taskId: task.id,
+      runId: run.runId,
+      stopReason: signal.stopReason,
+    });
+    this.deps.getEventSink().emit('scheduled-task:run:succeeded', {
+      taskId: task.id,
+      runId: run.runId,
+      attempt: run.attempt,
+    });
+    // 兜底 dws-send（agent 未 self-send 时补发；非 timed_out）。永不抛错、不阻塞 run 闭环。
+    void sendScheduledTaskResultFallback({
+      task,
+      lastAssistantText: signal.lastAssistantText,
+    }).catch((err) => {
+      logger.warn('[scheduled-task] dws fallback failed', {
+        runId: run.runId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
+  /**
+   * watcher `onTimeout` 回调：timeoutMs 到点、agent 仍未终态。先 `abortRun` 停
+   * agent 流式，再 `finalizeRunIfRunning` 落 timed_out + `handleFailure`（retry/pause）。
+   * 真超时该走 retry/pause（区别于 reaper 的死跑兜底，后者只落终态不重试）。
+   */
+  private async handleTimeout(
+    task: ScheduleTask,
+    run: ScheduleTaskRun,
+    startedAtMs: number,
+    sessionKey: string,
+    adapter: ReturnType<typeof getAdapter>,
+    ctx: EngineAdapterContext,
+  ): Promise<void> {
+    // 先 abort agent（停流式），再落终态。
+    await adapter.abortRun(ctx, { sessionKey }).catch((err) => {
+      logger.warn('[scheduled-task] abortRun on timeout failed', {
+        runId: run.runId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+    const updated = await this.deps.runRepo.finalizeRunIfRunning(run.runId, {
+      status: 'timed_out',
+      completedAt: new Date().toISOString(),
+      error: `timeout after ${task.timeoutSec}s`,
+      runtimeResult: {
+        stopReason: 'timeout',
+        isError: true,
+        durationMs: Date.now() - startedAtMs,
+      },
+    });
+    if (!updated) {
+      // agent 在超时窗内已终态（onTerminal 先赢）或 reaper 已 reap——不重复 handle。
+      logger.info('[scheduled-task] watcher timeout lost race (run not running)', {
+        runId: run.runId,
+      });
+      return;
+    }
+    logger.warn('[scheduled-task] run timed out', {
+      taskId: task.id,
+      runId: run.runId,
+      timeoutSec: task.timeoutSec,
+    });
+    await this.handleFailure(task, run, `timeout after ${task.timeoutSec}s`);
   }
 
   /**

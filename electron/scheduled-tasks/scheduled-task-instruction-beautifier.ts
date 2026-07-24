@@ -1,12 +1,12 @@
-import { getProviderAccount } from './providers/provider-store';
+import { getProviderAccount } from '../services/providers/provider-store';
 import { getApiKey } from '../utils/secure-storage';
 import { getSsoEnvironment, getStoToken } from '../utils/auth-store';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { logger } from '../utils/logger';
 import { TIMEOUTS } from '../utils/config';
 import { normalizeScheduledTaskInstruction } from '../../shared/scheduled-task-instruction';
-import { StoModelSyncService } from './providers/sto-model-sync';
-import { STO_CANONICAL_ACCOUNT_ID } from './providers/sto-placeholder-utils';
+import { StoModelSyncService } from '../services/providers/sto-model-sync';
+import { STO_CANONICAL_ACCOUNT_ID } from '../services/providers/sto-placeholder-utils';
 
 const BEAUTIFY_TIMEOUT_MS = TIMEOUTS.BEAUTIFY_INSTRUCTION;
 const BEAUTIFY_MAX_TOKENS = 1_024;

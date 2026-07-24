@@ -1,11 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
-import { getScheduledTaskService } from '../../services/scheduled-task-service';
+import { getScheduledTaskService } from '../../scheduled-tasks/scheduled-task-service';
 import {
   beautifyScheduledTaskInstruction,
   type BeautifyScheduledTaskInstructionInput,
-} from '../../services/scheduled-task-instruction-beautifier';
+} from '../../scheduled-tasks/scheduled-task-instruction-beautifier';
 import type {
   CreateScheduleTaskInput,
   UpdateScheduleTaskInput,
