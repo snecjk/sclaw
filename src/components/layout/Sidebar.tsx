@@ -526,17 +526,6 @@ function SidebarScheduledTaskGroup({
   // Strip Gateway technical prefix only; keep user-defined names like「定时任务测试」intact.
   const displayName = name.replace(/^Cron:\s*/i, '');
 
-  // 按日期统计当天会话数量，用于决定用哪种日期格式
-  const dayCounts = new Map<string, number>();
-  for (const s of sessions) {
-    const ts = sessionLastActivity[s.key] ?? s.updatedAt ?? 0;
-    if (ts > 0) {
-      const d = new Date(ts);
-      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      dayCounts.set(dateKey, (dayCounts.get(dateKey) ?? 0) + 1);
-    }
-  }
-
   return (
     <div className="rounded-lg">
       <button
@@ -568,25 +557,25 @@ function SidebarScheduledTaskGroup({
       {isOpen && visibleSessions.length > 0 ? (
         <div className={SIDEBAR_TASK_SUBITEMS_CONTAINER_CLASS}>
           {visibleSessions.map((s) => {
-            const ts = sessionLastActivity[s.key] ?? s.updatedAt ?? 0;
+            // 按天聚合：标签用 dated key 的 YYYY-MM-DD（历史多行已在数据源滤掉）。
+            const dated =
+              parseCronSessionKey(s.key)?.date
+              ?? parseClaudeScheduledTaskSessionKey(s.key)?.date;
             let label: string;
-            if (ts > 0) {
-              const d = new Date(ts);
-              const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-              const hasMultiple = (dayCounts.get(dateKey) ?? 0) > 1;
-              const y = d.getFullYear();
-              const m = String(d.getMonth() + 1).padStart(2, '0');
-              const day = String(d.getDate()).padStart(2, '0');
-              if (hasMultiple) {
-                const h = String(d.getHours()).padStart(2, '0');
-                const min = String(d.getMinutes()).padStart(2, '0');
-                const sec = String(d.getSeconds()).padStart(2, '0');
-                label = `${y}年${m}月${day}日${h}时${min}分${sec}秒`; // 产品说：定时任务去掉【的材料】这3个字
-              } else {
-                label = `${y}年${m}月${day}日`; // 产品说：定时任务去掉【的材料】这3个字
-              }
+            if (dated) {
+              const [ys, ms, ds] = dated.split('-');
+              label = `${ys}年${ms}月${ds}日`;
             } else {
-              label = s.label || s.displayName || s.key;
+              const ts = sessionLastActivity[s.key] ?? s.updatedAt ?? 0;
+              if (ts > 0) {
+                const d = new Date(ts);
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                label = `${y}年${m}月${day}日`;
+              } else {
+                label = s.label || s.displayName || s.key;
+              }
             }
             const active = currentSessionKey === s.key;
             const runtime = runtimeBySessionKey[s.key];
@@ -780,6 +769,7 @@ export function Sidebar() {
     sidebarCollapsed,
   });
   const allCatalogByKey = useSessionCatalogStore((s) => s.allCatalogByKey);
+  const taskCatalogSessions = useSessionCatalogStore((s) => s.taskCatalogSessions);
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
   const patchSessionCatalog = useSessionCatalogStore((s) => s.patchSessionCatalog);
   const catalogBootstrap = useSessionCatalogStore((s) => s.bootstrap);
@@ -1160,15 +1150,27 @@ export function Sidebar() {
     [sessions],
   );
 
-  // Legacy cron + Claude task (base, dated, run) sessions — shown under "任务列表" grouped by task name
-  const taskListScheduledSessions = useMemo(
-    () => visibleSessions.filter((s) => (
-      isAnyCronSessionKey(s.key)
-      || parseClaudeScheduledTaskRunSessionKey(s.key)
-      || parseClaudeScheduledTaskSessionKey(s.key) != null  // covers base & dated
-    )),
-    [visibleSessions],
-  );
+  // 「任务」：catalog dated cron/claude_task（历史 run/base 已在 store 侧滤掉）。
+  const taskListScheduledSessions = useMemo(() => {
+    const byKey = new Map(visibleSessions.map((session) => [session.key, session]));
+    return taskCatalogSessions.map((row) => {
+      const existing = byKey.get(row.sessionKey);
+      const title = row.title?.trim() || undefined;
+      const activityMs = row.lastActivityAt ? Date.parse(row.lastActivityAt) : undefined;
+      return {
+        key: row.sessionKey,
+        label: existing?.label ?? title,
+        displayName: existing?.displayName ?? title,
+        updatedAt: existing?.updatedAt
+          ?? (typeof activityMs === 'number' && Number.isFinite(activityMs) ? activityMs : undefined),
+        engineType: existing?.engineType
+          ?? (row.sessionType === 'claude_task' ? 'claude' as const : 'openclaw' as const),
+        model: existing?.model,
+        thinkingLevel: existing?.thinkingLevel,
+        spawnedBy: existing?.spawnedBy,
+      };
+    });
+  }, [taskCatalogSessions, visibleSessions]);
 
   // Normal chat sessions — shown under time buckets (today / yesterday / ...)
   const normalSessions = useMemo(
@@ -1214,38 +1216,52 @@ export function Sidebar() {
 
   const sessionsOrderedForCollapse = recentSessionsSorted.slice(0, SIDEBAR_COLLAPSED_SESSION_LIMIT);
 
-  // Group scheduled-task sessions by task id; titles resolved from task definitions + session metadata.
+  // Group scheduled-task sessions by catalog session_type + task_id; titles from definitions + session meta.
   const scheduledTaskGroups = useMemo(() => {
     type GroupDraft = {
       key: string;
       kind: 'st' | 'cron' | 'claude';
       taskId: number | string;
-      sessions: typeof visibleSessions;
+      sessions: typeof taskListScheduledSessions;
     };
     const groups = new Map<string, GroupDraft>();
+    const rowByKey = new Map(taskCatalogSessions.map((row) => [row.sessionKey, row]));
 
     for (const session of taskListScheduledSessions) {
-      const cronParsed = parseCronSessionKey(session.key);
-      const claudeTaskRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
-      const claudeTaskDatedParsed = parseClaudeScheduledTaskSessionKey(session.key);
-
+      const catalogRow = rowByKey.get(session.key);
       let draft: GroupDraft | undefined;
-      if (cronParsed) {
-        draft = { key: `cron:${cronParsed.jobId}`, kind: 'cron', taskId: cronParsed.jobId, sessions: [] };
-      } else if (claudeTaskDatedParsed) {
+
+      if (catalogRow?.sessionType === 'cron' && catalogRow.taskId) {
+        draft = { key: `cron:${catalogRow.taskId}`, kind: 'cron', taskId: catalogRow.taskId, sessions: [] };
+      } else if (catalogRow?.sessionType === 'claude_task' && catalogRow.taskId) {
         draft = {
-          key: `claude-task:${claudeTaskDatedParsed.taskId}`,
+          key: `claude-task:${catalogRow.taskId}`,
           kind: 'claude',
-          taskId: claudeTaskDatedParsed.taskId,
+          taskId: catalogRow.taskId,
           sessions: [],
         };
-      } else if (claudeTaskRunParsed) {
-        draft = {
-          key: `claude-task:${claudeTaskRunParsed.taskId}`,
-          kind: 'claude',
-          taskId: claudeTaskRunParsed.taskId,
-          sessions: [],
-        };
+      } else {
+        // Fallback: key parse（catalog 缺 task_id 时）
+        const cronParsed = parseCronSessionKey(session.key);
+        const claudeTaskRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
+        const claudeTaskDatedParsed = parseClaudeScheduledTaskSessionKey(session.key);
+        if (cronParsed) {
+          draft = { key: `cron:${cronParsed.jobId}`, kind: 'cron', taskId: cronParsed.jobId, sessions: [] };
+        } else if (claudeTaskDatedParsed) {
+          draft = {
+            key: `claude-task:${claudeTaskDatedParsed.taskId}`,
+            kind: 'claude',
+            taskId: claudeTaskDatedParsed.taskId,
+            sessions: [],
+          };
+        } else if (claudeTaskRunParsed) {
+          draft = {
+            key: `claude-task:${claudeTaskRunParsed.taskId}`,
+            kind: 'claude',
+            taskId: claudeTaskRunParsed.taskId,
+            sessions: [],
+          };
+        }
       }
 
       if (!draft) continue;
@@ -1279,7 +1295,7 @@ export function Sidebar() {
     }
 
     return resolvedGroups;
-  }, [taskListScheduledSessions, sessionLastActivity, scheduledTaskNameMaps, runtimeBySessionKey, currentSessionKey, sending, activatingScheduledSessionAt, nowMs]);
+  }, [taskListScheduledSessions, taskCatalogSessions, sessionLastActivity, scheduledTaskNameMaps, runtimeBySessionKey, currentSessionKey, sending, activatingScheduledSessionAt, nowMs]);
 
   const taskListRenderPlan = useMemo(() => {
     type SortableTaskListEntry = {
