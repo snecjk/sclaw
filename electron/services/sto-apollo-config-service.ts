@@ -23,6 +23,9 @@ export interface ApolloConfigResponse {
 
 const DEFAULT_HQ_INFERENCE_PRODUCT_CODE = 'enterprise-Intelligence';
 
+/** 网点推理 product code 兜底（Apollo 未配置时使用） */
+const DEFAULT_SITE_INFERENCE_PRODUCT_CODE = 'enterprise-Intelligence';
+
 /** 非网点推理 portal 域名兜底（Apollo 未配置时按 SSO 环境选择） */
 export const DEFAULT_HQ_INFERENCE_PORTAL_DOMAINS = {
   prod: 'https://devops-llmgatewayportal.sto.cn',
@@ -114,6 +117,7 @@ export async function loadSiteDepartmentTypes(): Promise<Set<string>> {
 }
 
 let hqInferenceProductCode: string | null = null;
+let siteInferenceProductCode: string | null = null;
 let hqInferencePortalDomain: string | null = null;
 let siteInferencePortalDomain: string | null = null;
 
@@ -135,6 +139,26 @@ export function getHqInferenceProductCode(): string {
 
 export function hasHqInferenceProductCodeCached(): boolean {
   return hqInferenceProductCode !== null;
+}
+
+/**
+ * Load Site inference product code from Apollo config.
+ * Key: claw.site.inference.product.code
+ */
+export async function loadSiteInferenceProductCode(): Promise<void> {
+  const value = await fetchApolloConfigValue('claw.site.inference.product.code');
+  if (value?.trim()) {
+    siteInferenceProductCode = value.trim();
+    logger.info(`[ApolloConfig] Site inference product code loaded: ${siteInferenceProductCode}`);
+  }
+}
+
+export function getSiteInferenceProductCode(): string {
+  return siteInferenceProductCode ?? DEFAULT_SITE_INFERENCE_PRODUCT_CODE;
+}
+
+export function hasSiteInferenceProductCodeCached(): boolean {
+  return siteInferenceProductCode !== null;
 }
 
 /**
@@ -173,6 +197,7 @@ export async function loadSiteInferencePortalDomain(): Promise<void> {
 export async function loadClawInferenceRuntimeConfig(): Promise<void> {
   await Promise.all([
     loadHqInferenceProductCode(),
+    loadSiteInferenceProductCode(),
     loadHqInferencePortalDomain(),
     loadSiteInferencePortalDomain(),
   ]);
@@ -216,6 +241,7 @@ export function resolveSiteInferencePortalDomain(ssoEnv?: string | null): string
 /** 登出时清除推理运行时 Apollo 缓存，避免换用户复用旧配置。 */
 export function clearInferenceRuntimeConfigCache(): void {
   hqInferenceProductCode = null;
+  siteInferenceProductCode = null;
   hqInferencePortalDomain = null;
   siteInferencePortalDomain = null;
 }
