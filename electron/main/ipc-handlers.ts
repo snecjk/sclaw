@@ -2157,6 +2157,10 @@ function registerWindowHandlers(): void {
   ipcMain.handle('window:isMaximized', (event) => {
     return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false;
   });
+
+  ipcMain.handle('window:isFullScreen', (event) => {
+    return BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false;
+  });
 }
 
 /**
