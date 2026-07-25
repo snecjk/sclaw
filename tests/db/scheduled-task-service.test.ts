@@ -4,7 +4,7 @@ import {
   ScheduledTaskService,
   DINGTALK_RECIPIENTS_MARKER,
 } from '../../electron/scheduled-tasks/scheduled-task-service';
-import type { DingTalkMention } from '../../shared/dingtalk-mention';
+import type { DingTalkMention } from '../../shared/dingtalk-send/dingtalk-mention';
 
 const baseCreateInput = {
   name: 'Daily standup',
@@ -118,6 +118,33 @@ describe('ScheduledTaskService', () => {
       expect(append).toContain(DINGTALK_RECIPIENTS_MARKER);
       expect(append).toContain('指定即必发');
       expect(append).toContain('u-lei');
+    });
+
+    it('resolves recipients from prompt block when column is empty', async () => {
+      const { appendDingTalkMentionContext } = await import('../../shared/dingtalk-prompts/dingtalk-mention-context');
+      const prompt = appendDingTalkMentionContext('生成日报', [
+        { type: 'user', displayName: 'Lei', userId: 'u-from-prompt' },
+      ], { scenario: 'scheduled-task' });
+      const task = await svc.createTask({ ...baseCreateInput, prompt, dingtalkRecipients: null });
+      const append = svc.buildExecutionSystemPromptAppend(task);
+      expect(append).toContain('u-from-prompt');
+      expect(append).toContain('指定即必发');
+    });
+
+    it('uses workflow delegate when task prompt involves workflow and recipients are resolved', async () => {
+      const recipients: DingTalkMention[] = [
+        { type: 'user', displayName: 'Lei', userId: 'u-lei' },
+      ];
+      const task = await svc.createTask({
+        ...baseCreateInput,
+        prompt: '帮我执行 id 为：wf_daily 的工作流 【日报】',
+        dingtalkRecipients: recipients,
+      });
+      const append = svc.buildExecutionSystemPromptAppend(task);
+      expect(append).toContain('u-lei');
+      expect(append).toContain('系统自动发送');
+      expect(append).not.toContain('指定即必发');
+      expect(append).not.toContain('dws chat message send --user u-lei');
     });
   });
 

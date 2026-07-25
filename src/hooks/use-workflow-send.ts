@@ -26,6 +26,7 @@ import { buildWorkflowContextSummary, buildWorkflowFormId } from '@/lib/workflow
 import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
 import type { WorkflowSchemaField } from '@/types/workflow';
+import type { DingTalkMention } from '@/types/dingtalk-mention';
 
 export interface WorkflowSendContext {
   sessionKey: string;
@@ -41,6 +42,7 @@ export async function sendWithWorkflow(
   templateId: string,
   _context: WorkflowSendContext,
   sendMessage: (text: string, runId?: string | null, workflowId?: string | null, workflowContext?: unknown) => Promise<void>,
+  dingTalkMentions?: DingTalkMention[],
 ): Promise<boolean> {
   
   if (!canStartWorkflow()) {
@@ -66,6 +68,7 @@ export async function sendWithWorkflow(
         sendMessage,
         text,
         startup,
+        dingTalkMentions,
       );
     }
 
@@ -84,6 +87,7 @@ export async function sendWithWorkflow(
       schema,
       schemaHash,
       collectedInputs: {},
+      dingTalkMentions: dingTalkMentions?.length ? dingTalkMentions : undefined,
       frontendFormInserted: false,
       modelGuidanceSent: false,
     });
@@ -96,6 +100,7 @@ export async function sendWithWorkflow(
       schema,
       schemaHash,
       collectedInputs: {},
+      dingTalkMentions: dingTalkMentions?.length ? dingTalkMentions : undefined,
       frontendFormInserted: false,
       modelGuidanceSent: true,
     });
@@ -121,6 +126,7 @@ export async function createAndStartWorkflowDirect(
   _sendMessage: (text: string, runId?: string | null, workflowId?: string | null) => Promise<void>,
   _originalText: string,
   startupOverride?: Awaited<ReturnType<typeof getStartupSchema>>,
+  dingTalkMentions?: DingTalkMention[],
 ): Promise<boolean> {
   if (!canStartWorkflow()) {
     toast.error('当前会话已有过多执行中的工作流，请等待完成后再试');
@@ -217,6 +223,11 @@ export async function createAndStartWorkflowDirect(
       workflowId: created.workflowId,
       sessionKey: context.sessionKey,
       agentId: context.agentId,
+      dingtalkRecipients:
+        dingTalkMentions?.length
+          ? dingTalkMentions
+          : useChatStore.getState().pendingWorkflow?.dingTalkMentions,
+      workflowTitle: templateName,
     });
     beginWorkflowRunSseTrace(run.runId);
 

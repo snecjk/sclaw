@@ -24,7 +24,7 @@ import { migrateTurnDisplayCache } from '@/pages/Chat/thinking/segment-merge';
 import {
   extractDingTalkSentPreviews,
   stripEchoedDingTalkSentBodiesFromAssistantReply,
-} from '../../../shared/dingtalk-sent-display';
+} from '../../../shared/dingtalk-send/dingtalk-sent-display';
 import {
   extractAtMentionDisplayNames,
   extractRawMessageText,

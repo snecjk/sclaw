@@ -235,6 +235,8 @@ export interface ChatState {
     schemaHash: string;
     workflowId?: string;
     collectedInputs?: Record<string, unknown>;
+    /** 工作流启动前用户在输入框 @ 的钉钉收件人（终态程序发送用）。 */
+    dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[];
     /** Set to true when the frontend has already inserted a parameter_form inline.
      *  Prevents maybeAppendWorkflowParameterForm from double-injecting. */
     frontendFormInserted?: boolean;

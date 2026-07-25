@@ -1,10 +1,12 @@
 import {
   appendDingTalkMentionContext,
-  hasResolvedDingTalkMentions,
   messageHasDingTalkRecipientContext,
-  type DingTalkMention,
   type DingTalkMentionContextOptions,
-} from './dingtalk-mention-context';
+} from '../dingtalk-prompts/dingtalk-mention-context';
+import {
+  hasResolvedDingTalkMentions,
+  type DingTalkMention,
+} from './dingtalk-mention';
 
 /**
  * 对话 @、定时任务、本地 Cron 统一入口：

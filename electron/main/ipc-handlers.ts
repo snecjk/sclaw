@@ -2702,9 +2702,24 @@ function registerSessionHandlers(): void {
   });
 
   // ── Workflow Execution Tracker ──
-  ipcMain.handle('workflow:startTracking', async (_, { runId, sessionKey, agentId, workflowId }: { runId: string; sessionKey: string; agentId: string; workflowId: string }) => {
-    logger.info(`[workflow-trace] IPC workflow:startTracking runId=${runId} workflowId=${workflowId} sessionKey=${sessionKey}`);
-    getWorkflowExecutionTracker().startTracking(runId, sessionKey, agentId, workflowId);
+  ipcMain.handle('workflow:startTracking', async (_, payload: {
+    runId: string;
+    sessionKey: string;
+    agentId: string;
+    workflowId: string;
+    dingtalkRecipients?: import('../../shared/dingtalk-send/dingtalk-mention').DingTalkMention[] | null;
+    workflowTitle?: string | null;
+  }) => {
+    const { resolveWorkflowDingTalkRecipients } = await import('../services/resolve-workflow-dingtalk-recipients');
+    const recipients = await resolveWorkflowDingTalkRecipients(
+      payload.sessionKey,
+      payload.dingtalkRecipients,
+    );
+    logger.info(`[workflow-trace] IPC workflow:startTracking runId=${payload.runId} workflowId=${payload.workflowId} sessionKey=${payload.sessionKey} recipients=${recipients?.length ?? 0}`);
+    getWorkflowExecutionTracker().startTracking({
+      ...payload,
+      dingtalkRecipients: recipients,
+    });
   });
 
   ipcMain.handle('workflow:stopTracking', async (_, { runId }: { runId: string }) => {

@@ -12,6 +12,14 @@ export type CreateScheduledTaskRequest = {
 	agentId: string;
 	enabled?: boolean;
 	workflowCode?: string | null;
+	/** 与 DingTalkMention[] 同构；落 schedule_tasks.dingtalk_recipients_json */
+	dingtalkRecipients?: Array<{
+		type: 'user' | 'group';
+		displayName: string;
+		userId?: string;
+		openConversationId?: string;
+		corpId?: string;
+	}> | null;
 };
 
 export type CreateScheduledTaskResponse = {

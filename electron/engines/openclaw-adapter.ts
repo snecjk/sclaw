@@ -24,6 +24,22 @@ const VISION_MIME_TYPES = new Set([
 ]);
 const OPENCLAW_SESSION_STAT_CONCURRENCY = 32;
 
+/**
+ * Gateway `chat.send` schema（additionalProperties:false）不接受 `systemPromptAppend`。
+ * OpenClaw 侧将 append 前置合并进 user message，使定时任务钉钉必发等上下文对模型可见。
+ * 不把 append 放进 RPC 参数，避免 schema 拒收。
+ */
+export function mergeOpenClawSystemPromptAppend(
+  message: string,
+  systemPromptAppend?: string | null,
+): string {
+  const append = systemPromptAppend?.trim();
+  if (!append) return message;
+  const body = message.trim();
+  if (!body) return append;
+  return `${append}\n\n${body}`;
+}
+
 async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
   let nextIndex = 0;
   const workerCount = Math.min(Math.max(limit, 1), items.length);
@@ -250,9 +266,20 @@ export const openClawAdapter: EngineAdapter = {
       if (projectAgentResult.created || projectAgentResult.workspaceUpdated) {
         await ctx.gatewayManager.debouncedReload();
       }
+      const message = mergeOpenClawSystemPromptAppend(params.message, params.systemPromptAppend);
+      if (params.systemPromptAppend?.trim()) {
+        logger.info('[openclaw-adapter][prompt] final user message after prepend', {
+          sessionKey,
+          appendChars: params.systemPromptAppend.trim().length,
+          messageChars: message.length,
+          systemPromptAppend: params.systemPromptAppend,
+          userMessageBeforeMerge: params.message,
+          finalUserMessage: message,
+        });
+      }
       const rpcParams: Record<string, unknown> = {
         sessionKey,
-        message: params.message,
+        message,
         deliver: params.deliver,
         idempotencyKey: params.idempotencyKey,
       };
@@ -271,7 +298,17 @@ export const openClawAdapter: EngineAdapter = {
         await ctx.gatewayManager.debouncedReload();
       }
 
-      let message = params.message;
+      let message = mergeOpenClawSystemPromptAppend(params.message, params.systemPromptAppend);
+      if (params.systemPromptAppend?.trim()) {
+        logger.info('[openclaw-adapter][prompt] final user message after prepend (media)', {
+          sessionKey,
+          appendChars: params.systemPromptAppend.trim().length,
+          messageChars: message.length,
+          systemPromptAppend: params.systemPromptAppend,
+          userMessageBeforeMerge: params.message,
+          finalUserMessage: message,
+        });
+      }
       const imageAttachments: Array<Record<string, unknown>> = [];
       const fileReferences: string[] = [];
 

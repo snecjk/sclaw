@@ -9,6 +9,7 @@ import type {
 import type { ScheduleTask } from '../../../electron/db/models/domain/schedule-task';
 import { getEngineSessionRegistryEntry } from '../../../electron/engines/session-registry';
 import { getAgentWorkspacePath } from '../../../electron/utils/agent-config';
+import { normalizeDingTalkMentions } from '../../../shared/dingtalk-send/dingtalk-mention';
 
 export const CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT = [
   'Claude scheduled task tools:',
@@ -17,6 +18,8 @@ export const CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT = [
   '- Translate natural-language schedules into standard 5-field cronExpr values before calling create or update.',
   '- If the requested schedule is ambiguous, ask a concise follow-up question instead of guessing.',
   '- Default to the current Claude conversation agent and workspace unless the user explicitly requests another target.',
+  '- When the turn includes StoClaw DingTalk recipients JSON (user @ picks), pass them as optional `recipients` on create; never bake recipient rule blocks into promptTemplate.',
+  '- promptTemplate must stay a clean business instruction only.',
   '- Do not use Bash, exec, or manual filesystem edits to manage Claude scheduled tasks.',
 ].join('\n');
 
@@ -158,6 +161,7 @@ function toCreateInput(
     name: string;
     promptTemplate: string;
     providerAccountId?: string;
+    recipients?: unknown;
     timeoutSec?: number;
     workspacePath?: string;
   },
@@ -166,6 +170,8 @@ function toCreateInput(
   if (!workspacePath) {
     throw new Error('workspacePath is required and could not be inferred from the current conversation');
   }
+
+  const recipients = normalizeDingTalkMentions(input.recipients);
 
   return {
     engineType: 'claude',
@@ -179,6 +185,7 @@ function toCreateInput(
     accountId: input.providerAccountId?.trim() || defaults.accountId,
     timeoutSec: input.timeoutSec,
     workspacePath,
+    dingtalkRecipients: recipients.length > 0 ? recipients : null,
   };
 }
 
@@ -221,6 +228,8 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
       'Create a Claude local scheduled task immediately from confirmed user intent.',
       'Pass a standard 5-field cronExpr.',
       'If agentId or workspacePath is omitted, the current Claude conversation defaults will be used.',
+      'promptTemplate must be a clean business instruction (do not bake DingTalk recipient rule blocks).',
+      'When the user @-picked DingTalk recipients, pass them as recipients; they are stored in dingtalk_recipients_json.',
     ].join('\n'),
     {
       name: z.string().min(1).describe('User-facing task name'),
@@ -232,6 +241,18 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
       model: z.string().optional().describe('Optional model override'),
       timeoutSec: z.number().int().min(1).max(86_400).optional().describe('Optional timeout in seconds'),
       enabled: z.boolean().optional().describe('Whether the task should be enabled immediately; default true'),
+      recipients: z
+        .array(
+          z.object({
+            type: z.enum(['user', 'group']),
+            displayName: z.string().min(1),
+            userId: z.string().optional(),
+            openConversationId: z.string().optional(),
+            corpId: z.string().optional(),
+          }),
+        )
+        .optional()
+        .describe('Optional DingTalk recipients (DingTalkMention[]); required when user @-picked people/groups'),
     },
     async (input) => runScheduledTaskTool('claude_scheduled_task_created', async () => {
       const defaults = await resolveConversationDefaults(config.sessionKey);

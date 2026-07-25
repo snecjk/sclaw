@@ -17,12 +17,15 @@ import type {
   CreateScheduleTaskInput,
   UpdateScheduleTaskInput,
 } from '../db/models/dto/schedule-task.dto';
-import type { DingTalkMention } from '../../shared/dingtalk-mention';
 import {
   buildDingTalkMentionSystemContextForScheduledTask,
-  DINGTALK_RECIPIENTS_MARKER,
-  hasResolvedDingTalkMentions,
-} from '../../shared/dingtalk-mention-context';
+} from '../../shared/dingtalk-prompts/dingtalk-mention-context';
+import { buildScheduledTaskDingTalkPromptAppend } from '../../shared/dingtalk-prompts';
+import { promptInvolvesWorkflow } from '../../shared/dingtalk-prompts/scheduled-task/prompt-involves-workflow';
+import {
+  planDingTalkRecipientsLift,
+  resolveScheduledTaskDingTalkRecipients,
+} from '../../shared/dingtalk-send/scheduled-task-dingtalk-lift';
 import { ScheduledTaskScheduler } from './scheduled-task-scheduler';
 import { validateCronExpr } from '../utils/cron-math';
 import {
@@ -31,6 +34,7 @@ import {
   type ScheduledTaskEventSink,
 } from './scheduled-task-executor';
 import type { GatewayManager } from '../gateway/manager';
+import { logger } from '../utils/logger';
 
 /**
  * 引擎无关的定时报表层。在 `ScheduledTaskScheduler`（触发 + claim 单飞）之上，
@@ -195,16 +199,94 @@ export class ScheduledTaskService {
   }
 
   /**
-   * 构造定时任务执行期的 dingtalk 收件人系统提示追加段。无 resolved 收件人→null
-   * （执行器不追加任何上下文）；有→`buildDingTalkMentionSystemContextForScheduledTask`
-   * 烘焙的"指定即必发"块（含 `DINGTALK_RECIPIENTS_MARKER` + 收件人 userId/openConversationId）。
+   * 构造定时任务执行期的钉钉相关 systemPromptAppend。
+   * - 列优先；列空则解析 prompt 内历史 Recipients 块 → `buildDingTalkMentionSystemContextForScheduledTask`
+   * - 仍无 resolved 收件人，但 prompt 含块或 `dws chat message send` → 模块 C/A 条件拼接（不含 CORE）
+   * - 否则 null（执行器不追加；CORE 由引擎 hook 注入）
    */
   buildExecutionSystemPromptAppend(task: ScheduleTask): string | null {
-    const recipients = task.dingtalkRecipients;
-    if (!recipients || !hasResolvedDingTalkMentions(recipients)) {
-      return null;
+    const workflowProgramDelivery = promptInvolvesWorkflow(task.prompt);
+    const recipients = resolveScheduledTaskDingTalkRecipients(task);
+    if (recipients) {
+      return buildDingTalkMentionSystemContextForScheduledTask(recipients, {
+        workflowProgramDelivery,
+      });
     }
-    return buildDingTalkMentionSystemContextForScheduledTask(recipients);
+    return buildScheduledTaskDingTalkPromptAppend(task.prompt, { workflowProgramDelivery });
+  }
+
+  /**
+   * 可选一次性回填：列空且 prompt 含可解析收件人块 → 写入 `dingtalk_recipients_json`。
+   * 默认 dryRun；`stripPromptBlock` 为 true 时同步剥掉 prompt 内规则大块。
+   * 不改 package.json；由调用方（开发者 / 运维）显式触发。
+   */
+  async liftDingTalkRecipientsFromPrompts(options?: {
+    dryRun?: boolean;
+    stripPromptBlock?: boolean;
+  }): Promise<{
+    scanned: number;
+    lifted: number;
+    skipped: number;
+    dryRun: boolean;
+    details: Array<{ taskId: string; name: string; action: string; reason: string; stripped?: boolean }>;
+  }> {
+    const dryRun = options?.dryRun !== false;
+    const stripPromptBlock = options?.stripPromptBlock === true;
+    const tasks = await this.listTasks();
+    const details: Array<{
+      taskId: string;
+      name: string;
+      action: string;
+      reason: string;
+      stripped?: boolean;
+    }> = [];
+    let lifted = 0;
+    let skipped = 0;
+
+    for (const task of tasks) {
+      const plan = planDingTalkRecipientsLift(task, { stripPromptBlock });
+      if (plan.action === 'skip') {
+        skipped += 1;
+        details.push({
+          taskId: task.id,
+          name: task.name,
+          action: 'skip',
+          reason: plan.reason,
+        });
+        continue;
+      }
+
+      if (!dryRun) {
+        await this.updateTask(task.id, {
+          dingtalkRecipients: plan.dingtalkRecipients,
+          ...(plan.stripped ? { prompt: plan.prompt } : {}),
+        });
+      }
+      lifted += 1;
+      details.push({
+        taskId: task.id,
+        name: task.name,
+        action: dryRun ? 'would_lift' : 'lift',
+        reason: plan.reason,
+        stripped: plan.stripped,
+      });
+    }
+
+    logger.info('[scheduled-task] dingtalk recipients lift', {
+      dryRun,
+      scanned: tasks.length,
+      lifted,
+      skipped,
+      stripPromptBlock,
+    });
+
+    return {
+      scanned: tasks.length,
+      lifted,
+      skipped,
+      dryRun,
+      details,
+    };
   }
 
   // ---- 内部：校验 / 默认值 / session key ----
@@ -291,5 +373,8 @@ export function getScheduledTaskService(): ScheduledTaskService {
 }
 
 /** 执行器（Step 5）从本模块取 dingtalk 烘焙产物，统一引用入口。 */
-export { DINGTALK_RECIPIENTS_MARKER, hasResolvedDingTalkMentions };
-export type { DingTalkMention };
+export {
+  DINGTALK_RECIPIENTS_MARKER,
+  hasResolvedDingTalkMentions,
+} from '../../shared/dingtalk-send/dingtalk-mention';
+export type { DingTalkMention } from '../../shared/dingtalk-send/dingtalk-mention';

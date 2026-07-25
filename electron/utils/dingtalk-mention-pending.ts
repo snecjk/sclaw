@@ -1,8 +1,8 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { DingTalkAttachedFileHint } from '../../shared/dingtalk-file-send';
-import type { DingTalkMention } from '../../shared/dingtalk-mention';
+import type { DingTalkAttachedFileHint } from '../../shared/dingtalk-send/dingtalk-file-send';
+import type { DingTalkMention } from '../../shared/dingtalk-send/dingtalk-mention';
 
 const CACHE_DIR = join(homedir(), '.stoclaw', 'cache', 'dingtalk-mention-pending');
 const PENDING_TTL_MS = 5 * 60 * 1000;

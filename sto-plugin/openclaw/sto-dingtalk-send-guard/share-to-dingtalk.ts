@@ -4,7 +4,7 @@ import {
   assertDingTalkShareOpenUrl,
   buildDingTalkShareAppLinkUrl,
   type DingTalkShareContent,
-} from './shared/dingtalk-share';
+} from './shared/dingtalk-send/dingtalk-share';
 import { openExternalUrlInOs } from './open-external-url.js';
 
 const TAG = 'sto-dingtalk-send-guard';

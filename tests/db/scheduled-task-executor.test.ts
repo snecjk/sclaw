@@ -14,20 +14,14 @@ import type {
  * 执行器契约：DB 生命周期（queued→running→[watcher 终态]succeeded/failed/timed_out）
  * + MainChatSendInput 塑形 + run watcher 闭环。
  *
- * `chat-send-service.runMainChatSend` 与 `scheduled-task-dingtalk-fallback` 均用
- * vi.mock 替身——本测不验证引擎执行内部（adapter / runMainChatSend 各自测试职责），
- * 也不真发钉钉（fallback 单测覆盖），只锁执行器如何编排它们与 run 行：send 成功后
- * run 留 `running`、挂 watcher；gateway 事件驱动终态闭环。
+ * `chat-send-service.runMainChatSend` 用 vi.mock 替身——本测不验证引擎执行内部，
+ * 只锁执行器如何编排 run 行：send 成功后 run 留 `running`、挂 watcher；
+ * gateway 事件驱动终态闭环。
  */
 const runMainChatSendMock = vi.fn();
 vi.mock('../../electron/services/chat-send-service', () => ({
   runMainChatSend: (gm: unknown, input: unknown, prepare: unknown, dispatch: unknown) =>
     runMainChatSendMock(gm, input, prepare, dispatch),
-}));
-
-const fallbackMock = vi.fn();
-vi.mock('../../electron/scheduled-tasks/scheduled-task-dingtalk-fallback', () => ({
-  sendScheduledTaskResultFallback: (payload: unknown) => fallbackMock(payload),
 }));
 
 const baseTaskInput = {
@@ -84,7 +78,6 @@ describe('EngineScheduledTaskDispatcher', () => {
     taskRepo = new ScheduleTaskRepository();
     runRepo = new ScheduleTaskRunRepository();
     runMainChatSendMock.mockReset();
-    fallbackMock.mockReset();
     sink = buildCapturingSink();
   });
 
@@ -202,6 +195,33 @@ describe('EngineScheduledTaskDispatcher', () => {
       durationMs: expect.any(Number),
     });
     expect(sink.events.map((e) => e.event)).toContain('scheduled-task:run:succeeded');
+  });
+
+  it('passes task.prompt as message unchanged when dingtalkRecipients present', async () => {
+    const { task, run } = await seedRun({
+      prompt: '汇总后发给张三',
+      dingtalkRecipients: [
+        { type: 'user', displayName: '张三', userId: 'u-1' },
+        { type: 'group', displayName: '开发', openConversationId: 'cid-1' },
+      ],
+    });
+    runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-trailer' } });
+    const { dispatcher, gateway } = makeDispatcher();
+
+    await dispatcher.dispatch({ task, run });
+
+    const passedInput = runMainChatSendMock.mock.calls[0][1] as { message: string };
+    // 不再把列收件人并入 message；message 即库内 prompt
+    expect(passedInput.message).toBe('汇总后发给张三');
+    expect((await taskRepo.getById(task.id))?.prompt).toBe('汇总后发给张三');
+
+    emitAgentTerminal(gateway!, 'sched:t1:20240101', 'completed');
+    await vi.waitFor(
+      async () => {
+        expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');
+      },
+      { timeout: 2000, interval: 10 },
+    );
   });
 
   it('reuses existing run.sessionKey and omits systemPromptAppend when null', async () => {
@@ -412,9 +432,7 @@ describe('EngineScheduledTaskDispatcher', () => {
     }
   });
 
-  it('wires dws-send fallback on terminal success with accumulated lastAssistantText', async () => {
-    // 终态成功末尾 fire-and-forget 兜底 dws-send（agent 未 self-send 时补发）。
-    // 沿路累积 assistant final 正文 → 传给 fallback。fallback 整模块已 mock。
+  it('finalizes run succeeded on terminal without dws fallback', async () => {
     const { task, run } = await seedRun({
       dingtalkRecipients: [{ type: 'user', userId: 'u1', displayName: 'U1' }],
     });
@@ -422,25 +440,15 @@ describe('EngineScheduledTaskDispatcher', () => {
     const { dispatcher, gateway } = makeDispatcher();
 
     await dispatcher.dispatch({ task, run });
-    // 累积 assistant 正文（final 片段）。
     emitAssistantFinal(gateway!, 'sched:t1:20240101', '报告完成');
-    // 终态触发 finalize + 兜底 dws-send。
     emitAgentTerminal(gateway!, 'sched:t1:20240101', 'completed');
 
     await vi.waitFor(
-      () => {
-        expect(fallbackMock).toHaveBeenCalledWith(
-          expect.objectContaining({ lastAssistantText: '报告完成' }),
-        );
+      async () => {
+        expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');
       },
       { timeout: 2000, interval: 10 },
     );
-    // fallback 收到 task + 累积正文（sessionKey 不入参——fallback 自取 latest assistant）。
-    expect(fallbackMock).toHaveBeenCalledTimes(1);
-    const payload = fallbackMock.mock.calls[0][0] as { task: ScheduleTask; lastAssistantText: string };
-    expect(payload.task.id).toBe(task.id);
-    // run 亦闭环 succeeded。
-    expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');
   });
 
   it('double finalize guard: terminal after timeout does not overwrite', async () => {
@@ -466,7 +474,6 @@ describe('EngineScheduledTaskDispatcher', () => {
 
       const after = await runRepo.getRun(run.runId);
       expect(after?.status).toBe('timed_out'); // 未被 terminal 覆盖成 succeeded
-      expect(fallbackMock).not.toHaveBeenCalled(); // terminal 未走成功路径 → 不发 dws
     } finally {
       abortSpy?.mockRestore();
       vi.useRealTimers();

@@ -1,4 +1,4 @@
-import { ensureDingTalkAgentSendDisclaimerFormat } from './dingtalk-disclaimer';
+import { ensureDingTalkAgentSendDisclaimerFormat } from '../dingtalk-prompts/dingtalk-disclaimer';
 
 /**
  * Normalize `dws chat message send --text` payloads.
@@ -173,13 +173,17 @@ function shellQuoteDwsSendTextForShell(text: string, execShell: DwsSendExecShell
  * 它会把已存在的 `%` 再编成 `%25`（`%E4` → `%25E4`），即双重编码、链接失效。
  * 模型偶发地再 `encodeURIComponent` 一次也会造成同样后果。
  *
- * 本函数无论输入处于哪种状态——「原始中文 / 已编码 / 双重（多重）编码」——都收敛到
+ * 另：`decodeURI` **不会**解开保留字符的转义（`%2B`/`%2F`/`%3D` 等）。若查询参数
+ * 已是 `%2B` 形式，旧实现在最终 `encodeURI` 时会把 `%` 再编成 `%25`，把本来正确的
+ * 单次编码打成 `%252B`（下载密钥类链接因此失效）。故 `encodeURI` 之后必须把
+ * `%25HH` 塌回 `%HH`，避免「规范化」本身制造双重编码。
+ *
+ * 本函数无论输入处于哪种状态——「原始 / 已编码 / 双重（多重）编码」——都收敛到
  * 单次编码稳定态，且对任意合法输入幂等、重复调用安全：
  *  1. 反复 `decodeURI` 到稳定：把多层冗余编码逐层剥掉——双重编码 `%25E4` 先塌成
  *     `%E4`（`%25`→`%`），再塌成原始中文；非法 `%XX` 串 `decodeURI` 抛错时即停止
  *     （保留已剥到的中间态，不再继续）；
- *  2. 最终 `encodeURI` 一次：把残留的原始非 ASCII 统一编码成 `%XX`，此时串里已无
- *     残余 `%`（全被上一步剥成原始字符），故不会再产生 `%25`。
+ *  2. `encodeURI` 一次，再把因已有 `%HH` 产生的 `%25HH` 塌回 `%HH`，得到恰好一次编码。
  * 对不含 http(s) 的串是 no-op（仅作 URL 的探测后整体处理）。
  */
 export function normalizeArtifactUrl(url: string): string {
@@ -200,7 +204,8 @@ export function normalizeArtifactUrl(url: string): string {
     }
   } while (cur !== prev && ++guard < 8);
   try {
-    return encodeURI(cur);
+    // encodeURI 会把已有 `%HH` 中的 `%` 编成 `%25`；塌回以保持单次编码幂等。
+    return encodeURI(cur).replace(/%25([0-9A-Fa-f]{2})/gi, '%$1');
   } catch {
     return cur;
   }
@@ -229,6 +234,58 @@ const DWS_CHAT_MSG_SEND = /dws\s+chat\s+message\s+send\b/i;
 
 const DWS_SEND_TEXT_FLAG_RE =
   /--text\s+([\s\S]*?)(?=\s+--(?:format|uuid|dry-run|media|msg-type|dentry-id|space-id|file-name|file-type|file-path|file-size|open-dingtalk-id)\b|$)/gi;
+
+/** 常见产物扩展名：裸本地路径出现在 `--text` 时钉钉打不开。 */
+const LOCAL_ARTIFACT_EXT =
+  String.raw`html?|pdf|docx?|xlsx?|pptx?|csv|zip|md|json|png|jpe?g|gif|webp|txt|sql`;
+
+/**
+ * 正文是否含钉钉不可用的本地产物路径（`file://`、`.claw-output`、绝对路径+产物扩展名）。
+ * 在线 `http(s)` 不算。
+ */
+export function textContainsLocalArtifactPath(text: string): boolean {
+  if (!text) return false;
+  if (/\bfile:\/\//i.test(text)) return true;
+  if (/[/\\]\.claw-output[/\\]/i.test(text)) return true;
+  if (/(?:^|[\s"'`([:：])\.\/\.claw-output[/\\]/i.test(text)) return true;
+  const unixAbs = new RegExp(
+    String.raw`(?:^|[\s"'\`([:：])/(?:Users|home|tmp|var|opt|private)/[^\s"'<>\`)\]]+\.(?:${LOCAL_ARTIFACT_EXT})\b`,
+    'i',
+  );
+  if (unixAbs.test(text)) return true;
+  const winAbs = new RegExp(
+    String.raw`(?:^|[\s"'\`([:：])[A-Za-z]:[\\/][^\s"'<>\`)\]]+\.(?:${LOCAL_ARTIFACT_EXT})\b`,
+    'i',
+  );
+  return winAbs.test(text);
+}
+
+/** 从含 `dws chat message send` 的命令中抽出各段 `--text` 正文（已解引号）。 */
+export function extractDwsChatMessageSendTextBodies(commandText: string): string[] {
+  if (!DWS_CHAT_MSG_SEND.test(commandText) || !/--text\s+/i.test(commandText)) return [];
+  const bodies: string[] = [];
+  const re = new RegExp(DWS_SEND_TEXT_FLAG_RE.source, 'gi');
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(commandText)) != null) {
+    const parsed = parseDwsSendTextFlagSegment(match[1] ?? '');
+    if (parsed) bodies.push(parsed);
+  }
+  return bodies;
+}
+
+/**
+ * `dws chat message send` 的 `--text` 是否含本地产物路径。
+ * 只扫 `--text` 正文，避免把同命令链里 `drive upload --file <本地路径>` 误判为违规。
+ */
+export function dwsChatMessageSendTextContainsLocalArtifactPath(commandText: string): boolean {
+  if (!DWS_CHAT_MSG_SEND.test(commandText)) return false;
+  const bodies = extractDwsChatMessageSendTextBodies(commandText);
+  if (bodies.length > 0) {
+    return bodies.some((body) => textContainsLocalArtifactPath(body));
+  }
+  // 解析不出 `--text` 时回退：仅拦整段命令里的 `file://`（与历史行为一致）
+  return /\bfile:\/\//i.test(commandText);
+}
 
 function tokenizeShellLikeCommand(command: string): string[] {
   const tokens: string[] = [];

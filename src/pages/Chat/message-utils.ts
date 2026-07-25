@@ -44,7 +44,7 @@ import {
   urlPathHasFileExtension,
 } from '@/lib/preview-url';
 import { normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
-import { sanitizeLocalFileRefsForCopy } from '../../../shared/dingtalk-share-text';
+import { sanitizeLocalFileRefsForCopy } from '../../../shared/dingtalk-send/dingtalk-share-text';
 import type { WorkflowExecutionState } from '@/types/workflow';
 
 /** OpenClaw injects queued system events as `System: [timestamp] ...` lines before user text. */

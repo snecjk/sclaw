@@ -2,8 +2,8 @@ import {
   DINGTALK_AGENT_SEND_DISCLAIMER_MARKER,
   DINGTALK_AGENT_SEND_DISCLAIMER_PLAIN_TEXT,
   stripDingTalkAgentSendDisclaimerBody,
-} from './dingtalk-disclaimer';
-import { messageHasDingTalkRecipientContext } from './dingtalk-mention-context';
+} from '../dingtalk-prompts/dingtalk-disclaimer';
+import { messageHasDingTalkRecipientContext } from '../dingtalk-prompts/dingtalk-mention-context';
 import { parseDwsSendTextFlagSegment, unescapeLiteralDwsSendText } from './dws-send-text';
 
 export interface DingTalkSentDisplayMessage {

@@ -765,11 +765,9 @@ export async function consumeClaudeQuery(
       }
       if ((message.type === 'user' || message.type === 'assistant') && 'message' in message) {
         if (message.type === 'user' && shouldHideClaudeUserMessage(message, (message as { message?: unknown }).message)) {
-          // Hidden user messages carry tool_result blocks (e.g. the scheduled-task
-          // worker reads the dws send result here to set dingtalkAlreadySent). The
-          // `continue` below skips the tail onMessage call, so surface the message
-          // to observers first — otherwise the worker's dws-result detection is dead
-          // code and the workflow fallback re-sends dingtalk the agent already sent.
+          // Hidden user messages carry tool_result blocks. The `continue` below
+          // skips the tail onMessage path, so surface the message to observers
+          // first (UI / history / workflow tool_result indexing).
           await onMessage?.(message);
           const workflowToolResult = extractWorkflowToolResult((message as { message?: unknown }).message);
           if (workflowToolResult) {
@@ -951,6 +949,15 @@ async function startClaudeQuery(
       .filter(Boolean)
       .join('\n\n');
     logger.info(`[claude-adapter][prompt] final systemPromptAppend: sessionKey=${sessionKey}, systemPromptAppend=\n${systemPromptAppend || '(none)'}`);
+    const userPromptPreview =
+      typeof prompt === 'string'
+        ? prompt
+        : '(stream/non-string prompt)';
+    logger.info('[claude-adapter][prompt] user message', {
+      sessionKey,
+      userPromptChars: typeof prompt === 'string' ? prompt.length : null,
+      userPrompt: userPromptPreview,
+    });
     // 权限档位：定时任务带 permissionProfile 时按档映射（dangerous-bypass→bypass；
     // 其余→默认受约束）；交互式 chat（undefined）保留既有 bypass 默认，不改变行为。
     const permissionProfile = options?.permissionProfile;

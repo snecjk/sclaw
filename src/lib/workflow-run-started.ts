@@ -19,6 +19,8 @@ import {
 } from '@/stores/workflow-memory';
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
 
+import type { DingTalkMention } from '@/types/dingtalk-mention';
+
 export type WorkflowRunPresentation = 'local_turn' | 'patch_assistant';
 
 export interface ApplyWorkflowRunStartedOptions {
@@ -30,6 +32,8 @@ export interface ApplyWorkflowRunStartedOptions {
   inputs?: Record<string, unknown>;
   userText?: string;
   assistantText?: string;
+  /** 对话 @ 或任务配置的钉钉收件人；传入 tracker 供终态程序发送。 */
+  dingTalkMentions?: DingTalkMention[];
   /** patch_assistant: attach card to model reply; local_turn: client-only turn (form submit). */
   presentation?: WorkflowRunPresentation;
 }
@@ -47,6 +51,7 @@ export async function applyWorkflowRunStarted(
     inputs = {},
     userText,
     assistantText,
+    dingTalkMentions,
     presentation = 'local_turn',
   } = options;
 
@@ -144,6 +149,8 @@ export async function applyWorkflowRunStarted(
     workflowId,
     sessionKey,
     agentId,
+    dingtalkRecipients: dingTalkMentions?.length ? dingTalkMentions : undefined,
+    workflowTitle: templateName,
   });
   beginWorkflowRunSseTrace(runId);
 

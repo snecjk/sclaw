@@ -1,23 +1,12 @@
 /**
  * dws 钉钉发送去重（进程内单例）。
  *
- * 用途：拦截「同一收件人在短窗口内收到完全相同正文」的重复发送。典型场景是
- * agent 自身对同一群/用户连发两条一模一样的消息（已观察到 37s 间隔，逃过了
- * send-guard 的 20s 频率限制）。key = `recipientKey:contentHash`，仅匹配**完全
- * 相同**的正文——不同正文的合法多次发送不受影响。
- *
- * 作用域：进程内 Map。定时任务路径下，Claude SDK 的 send-guard hook 同处
- * electron 主进程，共享本单例。跨进程的 OpenClaw 交互会话不共享，但交互会话
- * 无兜底发送，无此问题。
- *
- * 与既有去重的关系：
- * - `dingtalkAlreadySent`（worker onMessage）：挡 agent-vs-兜底（正文不同，本模块不覆盖）。
- * - `activeFallbacks`（workflowRunIds 指纹）：挡兜底-vs-兜底。
- * - 本模块：挡 agent-vs-agent（相同正文）以及任何路径的相同正文重发。
+ * key = `recipientKey:contentHash`。挡 agent 连发两条完全相同的消息
+ * （Claude send-guard PreToolUse / PostToolUse 读写本 Map）。
  */
 import { createHash } from 'node:crypto';
 
-/** 去重窗口。覆盖观察到的 37s 间隔与典型租约续期窗口；大于此间隔的相同正文允许重发。 */
+/** 去重窗口。覆盖典型定时任务执行时长与观察到的 37s 连发间隔。 */
 export const DWS_SEND_DEDUP_TTL_MS = 5 * 60 * 1000;
 
 const recentSends = new Map<string, number>();
@@ -30,7 +19,7 @@ function fingerprintKey(recipientKey: string, text: string): string {
   return `${recipientKey}:${contentHash(text)}`;
 }
 
-/** 由收件人类型 + id 构造稳定 key（agent 解析的 --user/--group 与兜底的 recipient 共用此格式）。 */
+/** 由收件人类型 + id 构造稳定 key。 */
 export function dwsSendRecipientKey(
   type: 'user' | 'group',
   id: string | undefined | null,

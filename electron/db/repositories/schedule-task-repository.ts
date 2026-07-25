@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import { getKyselyDatabase } from '../connection';
-import type { DingTalkMention } from '../../../shared/dingtalk-mention';
+import type { DingTalkMention } from '../../../shared/dingtalk-send/dingtalk-mention';
 import type { ScheduleTask } from '../models/domain/schedule-task';
 import type {
   CreateScheduleTaskInput,

@@ -1,5 +1,5 @@
-import { migrateLegacyOpenClawWorkspacePath, stripFileUrlScheme } from './artifact-path';
-import { createFileUrlInTextRegex, localPathFromFileUrlCapture } from './preview-raw-path';
+import { migrateLegacyOpenClawWorkspacePath, stripFileUrlScheme } from '../artifact-path';
+import { createFileUrlInTextRegex, localPathFromFileUrlCapture } from '../preview-raw-path';
 
 /** Normalize local paths for share-time lookup (slashes, no trailing slash). */
 export function normalizeSharePathKey(path: string): string {

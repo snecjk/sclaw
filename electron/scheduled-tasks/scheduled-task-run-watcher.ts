@@ -37,7 +37,7 @@ export interface RunWatcherTerminalSignal {
    */
   stopReason: string;
   isError: boolean;
-  /** 沿路累积的 assistant 末条正文（已 trim）；兜底 dws-send 用。 */
+  /** 沿路累积的 assistant 末条正文（已 trim）；日志/诊断用。 */
   lastAssistantText: string;
 }
 
@@ -74,7 +74,6 @@ export function attachRunWatcher(input: AttachRunWatcherInput): () => void {
   let finalized = false;
   let deferTimer: NodeJS.Timeout | null = null;
   let timeoutTimer: NodeJS.Timeout | null = null;
-
   const cleanup = (): void => {
     if (finalized) return; // 幂等：onTerminal / onTimeout / 显式 detach 都可能进
     finalized = true;

@@ -5,13 +5,13 @@ import {
   DINGTALK_SHARE_MAX_URL_LENGTH,
   type DingTalkShareBuildResult,
   type DingTalkShareContent,
-} from '../../shared/dingtalk-share';
+} from '../../shared/dingtalk-send/dingtalk-share';
 import {
   buildSharePathToUrlMap,
   collectConversationFileRefsFromText,
   normalizeSharePathKey,
   replaceConversationFileRefsWithShareUrls,
-} from '../../shared/dingtalk-share-text';
+} from '../../shared/dingtalk-send/dingtalk-share-text';
 import { markdownToPlainText } from '../../shared/markdown-to-plain-text';
 import { hostApiFetch, uploadFileToTempOSS } from '@/lib/host-api';
 import { isHttpUrl } from '@/lib/preview-url';

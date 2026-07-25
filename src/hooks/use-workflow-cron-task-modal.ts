@@ -3,7 +3,6 @@ import { toast } from 'sonner';
 import { useCronStore } from '@/stores/cron';
 import { useAgentsStore } from '@/stores/agents';
 import { useMyTaskStore } from '@/pages/MyTask/store';
-import { prepareDingTalkAgentTurnMessage } from '@/lib/scheduled-task-recipients';
 import type { TaskCreateInputWithRun } from '@/pages/MyTask/components/TaskCreateModal';
 
 function resolvePreferredAgent(
@@ -43,35 +42,31 @@ export function useWorkflowCronTaskModal() {
     async (input: TaskCreateInputWithRun) => {
       const selectedAgent = resolvePreferredAgent(agents, defaultAgentId);
       try {
+        // 与 MyTask 对齐：prompt 干净；dingtalkRecipients 走列；执行期由 executor 烘焙。
+        const base = {
+          name: input.name,
+          cronExpr: input.schedule,
+          prompt: input.message,
+          dingtalkRecipients: input.dingTalkMentions ?? null,
+          workflowCode: input.workflowCode,
+        };
         if (input.engineType === 'claude') {
           if (!selectedAgent?.id) {
             throw new Error('所选 Claude 代理缺少工作区，无法创建本地定时任务');
           }
-          const promptTemplate = prepareDingTalkAgentTurnMessage(
-            input.message,
-            input.dingTalkMentions,
-            { scenario: 'scheduled-task' },
-          );
           await createJob({
+            ...base,
             engineType: 'claude',
-            name: input.name,
-            cronExpr: input.schedule,
-            prompt: promptTemplate,
             agentId: selectedAgent.id,
             workspacePath: input.claudeWorkspacePath || selectedAgent.workspace,
             permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
-            workflowCode: input.workflowCode,
           });
         } else {
           await createJob({
+            ...base,
             engineType: 'openclaw',
-            name: input.name,
-            cronExpr: input.schedule,
-            prompt: input.message,
             enabled: input.enabled,
             agentId: selectedAgent?.id || 'main',
-            dingtalkRecipients: input.dingTalkMentions,
-            workflowCode: input.workflowCode,
           });
         }
         toast.success('任务已创建');

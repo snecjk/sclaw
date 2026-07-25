@@ -12,7 +12,7 @@ import { getAdapter } from '../engines/manager';
 import { runMainChatSend, type MainChatSendInput } from '../services/chat-send-service';
 import { logger } from '../utils/logger';
 import { attachRunWatcher, type RunWatcherTerminalSignal } from './scheduled-task-run-watcher';
-import { sendScheduledTaskResultFallback } from './scheduled-task-dingtalk-fallback';
+import { resolveScheduledTaskDingTalkRecipients } from '../../shared/dingtalk-send/scheduled-task-dingtalk-lift';
 
 /**
  * 引擎无关的执行期 dispatcher。把 `ScheduledTaskScheduler` 交出的 `{ task, run }`
@@ -100,10 +100,31 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
     const adapter = getAdapter(task.engineType);
     const ctx: EngineAdapterContext = { gatewayManager };
     const systemPromptAppend = this.deps.buildSystemPromptAppend(task) ?? undefined;
+    // message 即库内 prompt（不再并入列收件人）；下列仅供调试对照。
+    const recipients = resolveScheduledTaskDingTalkRecipients(task);
+    const message = task.prompt;
+
+    logger.info('[scheduled-task] dingtalk message assembled', {
+      taskId: task.id,
+      runId: run.runId,
+      engineType: task.engineType,
+      promptChars: task.prompt.length,
+      messageChars: message.length,
+      recipientCount: recipients?.length ?? 0,
+      recipients: (recipients ?? []).map((r) => ({
+        type: r.type,
+        displayName: r.displayName,
+        userId: r.userId,
+        openConversationId: r.openConversationId,
+      })),
+      prompt: task.prompt,
+      message,
+      systemPromptAppend: systemPromptAppend ?? null,
+    });
 
     const input: MainChatSendInput = {
       sessionKey,
-      message: task.prompt,
+      message,
       deliver: true,
       idempotencyKey: run.idempotencyKey,
       systemPromptAppend,
@@ -148,7 +169,7 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
         // openclaw lifecycle end 常先于尾部 chat，需 150ms 缓冲窗等尾部。
         finalizeDeferMs: adapter.type === 'openclaw' ? 150 : 0,
         onTerminal: (signal) => {
-          void this.finalizeRunFromWatcher(task, run, startedAtMs, signal).catch((err) => {
+          void this.finalizeRunFromWatcher(task, run, startedAtMs, signal, sessionKey).catch((err) => {
             logger.warn('[scheduled-task] watcher onTerminal handler failed', {
               runId: run.runId,
               error: err instanceof Error ? err.message : String(err),
@@ -222,6 +243,7 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
     run: ScheduleTaskRun,
     startedAtMs: number,
     signal: RunWatcherTerminalSignal,
+    sessionKey: string,
   ): Promise<void> {
     const isError = signal.isError;
     const status = isError ? 'failed' : 'succeeded';
@@ -260,16 +282,6 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
       taskId: task.id,
       runId: run.runId,
       attempt: run.attempt,
-    });
-    // 兜底 dws-send（agent 未 self-send 时补发；非 timed_out）。永不抛错、不阻塞 run 闭环。
-    void sendScheduledTaskResultFallback({
-      task,
-      lastAssistantText: signal.lastAssistantText,
-    }).catch((err) => {
-      logger.warn('[scheduled-task] dws fallback failed', {
-        runId: run.runId,
-        error: err instanceof Error ? err.message : String(err),
-      });
     });
   }
 

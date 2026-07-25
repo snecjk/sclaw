@@ -5,13 +5,29 @@ import {
   buildDingTalkMentionSystemContext,
   buildDingTalkMentionSystemContextForScheduledTask,
   ensureChatSendMessageWithDingTalkMentions,
-  hasResolvedDingTalkMentions,
+  looksLikeDingTalkMentionSendIntent,
   parseDingTalkRecipientsFromText,
   stripDingTalkMentionContextForDisplay,
-} from '../../shared/dingtalk-mention-context';
+} from '../../shared/dingtalk-prompts/dingtalk-mention-context';
+import { hasResolvedDingTalkMentions } from '../../shared/dingtalk-send/dingtalk-mention';
+
+describe('looksLikeDingTalkMentionSendIntent', () => {
+  it('detects explicit send phrases', () => {
+    expect(looksLikeDingTalkMentionSendIntent('发给张三')).toBe(true);
+    expect(looksLikeDingTalkMentionSendIntent('把总结发给这个群')).toBe(true);
+    expect(looksLikeDingTalkMentionSendIntent('给他们发：你好')).toBe(true);
+  });
+
+  it('rejects summarize / read-only phrases', () => {
+    expect(looksLikeDingTalkMentionSendIntent('总结一下该群的聊天记录')).toBe(false);
+    expect(looksLikeDingTalkMentionSendIntent('分析一下这个群最近讨论')).toBe(false);
+    expect(looksLikeDingTalkMentionSendIntent('查看和李峥的聊天')).toBe(false);
+    expect(looksLikeDingTalkMentionSendIntent('告诉我群里说了什么')).toBe(false);
+  });
+});
 
 describe('dingtalk mention context', () => {
-  it('wraps user message with json recipients at the top', () => {
+  it('wraps send-intent user message with recipients + send rules', () => {
     const message = appendDingTalkMentionContext('给他们发：你好', [
       { type: 'user', displayName: '谷研硕', userId: 'uid-1' },
       { type: 'user', displayName: '李峥', userId: 'uid-2' },
@@ -22,36 +38,23 @@ describe('dingtalk mention context', () => {
     expect(message).toContain('"userId": "uid-2"');
     expect(message).toContain('dws chat message send --user uid-1');
     expect(message).toContain('dws chat message send --user uid-2');
-    expect(message).toContain('禁止');
-    // 规则4：明确发送意图（含"把总结发给他"等代词句式）须识别为要求发送；未要求时禁止追问是否发送。
-    expect(message).toContain('把总结发给他');
-    expect(message).toContain('也禁止追问');
-    // 规则5：已明确要求发送时直接发，不得回头问"需要我发送吗"。
+    expect(message).toContain('用户已明确要求发送');
     expect(message).toContain('不要回头追问');
-    expect(message).toContain('需要我发送吗');
-    // 规则4：单聊历史查询用 list-direct --user <userId>（无需 jq），并明确禁止 list-all+userId 过滤。
     expect(message).toContain('dws chat message list-direct --user <userId>');
-    expect(message).toContain('无需 jq 过滤');
-    expect(message).toContain('senderOpenDingTalkId');
-    expect(message).toContain('按 userId 过滤必然全空');
-    // 规则4 群聊 list 同样必填 --time（不传返空、误判无记录），时间固定取最近一个月、不得自由发挥，
-    // 且必须 --forward=true（forward=false 会取 --time 之前的老消息、必然返空），空结果禁止当总结发钉钉。
-    expect(message).toContain('--group <openConversationId> --time "<1个月前>" --forward=true --limit 50');
-    expect(message).toContain('固定取最近一个月');
-    expect(message).toContain('date -v-1m');
-    expect(message).toContain('勿用 `--forward=false`');
-    expect(message).toContain('不传 `--time` 也会返回空 `messages: []`');
-    expect(message).toContain('间隔几秒重试 1-2 次再判定');
-    expect(message).toContain('禁止把"无聊天记录/暂无记录/无权限"当总结发到钉钉');
-    // 单聊段同样有重试守则
-    expect(message).toMatch(/单聊读取.*偶发返空.*间隔几秒重试/);
-    // 规则11：限流改"发起即计"（失败也占窗口），并明确被挡后不得用 sh -c/heredoc/sai-cli 绕过。
     expect(message).toContain('发起即计');
-    expect(message).toContain('失败/重试也占窗口');
-    expect(message).toContain('被挡时禁止绕过');
-    expect(message).toContain('套壳照样命中');
-    expect(message).toContain('等满 20 秒再发');
-    expect(message).toContain('用户消息：\n给他们发：你好');
+  });
+
+  it('for summarize-only @ turns, injects read-only block without send examples', () => {
+    const message = appendDingTalkMentionContext('总结一下该群的聊天记录', [
+      { type: 'group', displayName: 'Claw客户端开发群', openConversationId: 'cid-dev' },
+    ]);
+
+    expect(message).toContain('本轮禁止发送');
+    expect(message).toContain('只在 StoClaw 对话中回复');
+    expect(message).toContain('dws chat message list --group');
+    expect(message).not.toContain('dws chat message send --group cid-dev');
+    expect(message).not.toContain('钉钉发送格式规则');
+    expect(message).not.toContain('发起即计');
   });
 
   it('skips wrapping when mentions lack ids', () => {
@@ -139,11 +142,19 @@ describe('dingtalk mention context', () => {
 describe('dingtalk mention context scenario split', () => {
   const mentions = [{ type: 'user' as const, displayName: '李峥', userId: 'uid-2' }];
 
-  it('chat builder keeps the "explicit intent required" rule and read-history guidance', () => {
+  it('chat builder defaults to read-only (no send intent)', () => {
     const ctx = buildDingTalkMentionSystemContext(mentions);
-    expect(ctx).toContain('不等于要求发送');
+    expect(ctx).toContain('本轮禁止发送');
     expect(ctx).toContain('dws chat message list-direct --user <userId>');
+    expect(ctx).not.toContain('钉钉发送格式规则');
+    expect(ctx).not.toContain('不要回头追问');
+  });
+
+  it('chat builder with explicitSendIntent includes send rules', () => {
+    const ctx = buildDingTalkMentionSystemContext(mentions, { explicitSendIntent: true });
+    expect(ctx).toContain('用户已明确要求发送');
     expect(ctx).toContain('不要回头追问');
+    expect(ctx).toContain('钉钉发送格式规则');
   });
 
   it('scheduled-task builder makes send mandatory and drops read-history guidance', () => {
@@ -151,6 +162,13 @@ describe('dingtalk mention context scenario split', () => {
     expect(ctx).toContain('必须发送');
     expect(ctx).toContain('发送不是可选项');
     expect(ctx).toContain('指定即必发');
+    expect(ctx).toContain('同一正文');
+    expect(ctx).toContain('禁止回执上钉钉');
+    expect(ctx).toContain('消息已发送至');
+    expect(ctx).toContain('仅语法参考，非完整收件人清单');
+    // 定时任务版规则 8（禁回执），不是对话版「成功后简短中文确认」
+    expect(ctx).toContain('`--text` 只能是业务结果正文');
+    expect(ctx).not.toContain('成功后简短中文确认即可');
     // 定时任务版去掉对话 @ 的"需明确意图"与"读历史/总结"段
     expect(ctx).not.toContain('不等于要求发送');
     expect(ctx).not.toContain('list-direct');
@@ -161,16 +179,29 @@ describe('dingtalk mention context scenario split', () => {
     expect(ctx).toContain('代发说明');
   });
 
+  it('scheduled-task builder with workflowProgramDelivery forbids agent send and omits dws examples', () => {
+    const ctx = buildDingTalkMentionSystemContextForScheduledTask(mentions, {
+      workflowProgramDelivery: true,
+    });
+    expect(ctx).toContain('StoClaw DingTalk Recipients');
+    expect(ctx).toContain('系统自动发送');
+    expect(ctx).toContain('禁止 Agent 调用 `dws chat message send`');
+    expect(ctx).not.toContain('指定即必发');
+    expect(ctx).not.toContain('dws chat message send --user uid-2');
+    expect(ctx).not.toContain('代发说明');
+  });
+
   it('appendDingTalkMentionContext selects builder by scenario', () => {
     const st = appendDingTalkMentionContext('执行工作流', mentions, { scenario: 'scheduled-task' });
     expect(st).toContain('指定即必发');
-    expect(st).not.toContain('不等于要求发送');
+    expect(st).not.toContain('本轮禁止发送');
     expect(st).toContain('用户消息：\n执行工作流');
 
-    // 默认（不传 scenario）走 chat 版
+    // 默认（不传 scenario）走 chat 版；无发送意图 → 只读
     const chat = appendDingTalkMentionContext('总结一下', mentions);
-    expect(chat).toContain('不等于要求发送');
+    expect(chat).toContain('本轮禁止发送');
     expect(chat).not.toContain('指定即必发');
+    expect(chat).not.toContain('钉钉发送格式规则');
   });
 
   it('scheduled-task scenario still wraps files workflow context', () => {

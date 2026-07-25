@@ -1,15 +1,14 @@
 /**
- * DingTalk share helpers (PC client employee picker).
- * @see https://developers.dingtalk.com/document/isvapp/applink-select-employee-to-send-message
- * @see https://developers.dingtalk.com/document/development/structure-of-applink
+ * Self-contained copy for Gateway extension install (~/.stoclaw/openclaw/extensions/...).
+ * Keep in sync with repository root `shared/dingtalk-send/dingtalk-share.ts`.
+ * Regenerate: `pnpm run sync:plugin-shared`
  */
-
 export const DINGTALK_SHARE_APPLINK_PATH = '/page/open_user_select';
 export const DINGTALK_SHARE_APPLINK_HOST = 'https://applink.dingtalk.com';
 /** Deep link mapped from AppLink path — opens DingTalk directly without browser. */
 export const DINGTALK_SHARE_DEEPLINK_ORIGIN = 'dingtalk://dingtalkclient';
 
-/** Windows shell.openExternal URL length limit (Electron). */
+/** Windows shell.openExternal URL length limit (Electron). Applies to share body character count. */
 export const DINGTALK_SHARE_MAX_URL_LENGTH = 2080;
 
 export type DingTalkShareContent = {
@@ -75,8 +74,21 @@ export function buildDingTalkShareDefaultMsg(content: DingTalkShareContent): {
   defaultMsg: string;
   warnings: string[];
 } {
+  const { textPart, suffixPart, warnings } = buildDingTalkShareMessageParts(content);
+  const defaultMsg = composeDingTalkShareDefaultMsg(textPart, suffixPart, false);
+  if (!defaultMsg) {
+    throw new Error('分享内容为空：请提供 text、url 或 imageUrls 至少一项');
+  }
+  return { defaultMsg, warnings };
+}
+
+export function buildDingTalkShareMessageParts(content: DingTalkShareContent): {
+  textPart: string;
+  suffixPart: string;
+  warnings: string[];
+} {
   const warnings: string[] = [];
-  const text = trimOptional(content.text);
+  const textPart = trimOptional(content.text) ?? '';
   const url = trimOptional(content.url);
   const { urls: imageUrls, warnings: imageWarnings } = normalizeImageUrls(content.imageUrls);
   warnings.push(...imageWarnings);
@@ -85,27 +97,34 @@ export function buildDingTalkShareDefaultMsg(content: DingTalkShareContent): {
     warnings.push(`链接不是有效的 HTTP(S) URL，已作为纯文本附带：${url}`);
   }
 
-  const parts: string[] = [];
-  if (text) parts.push(text);
-
+  const suffixLines: string[] = [];
   if (url) {
-    if (isHttpUrl(url)) {
-      parts.push(`[链接](${url})`);
-    } else {
-      parts.push(url);
-    }
+    suffixLines.push(isHttpUrl(url) ? `[链接](${url})` : url);
   }
-
   for (let i = 0; i < imageUrls.length; i += 1) {
-    parts.push(formatImageLine(imageUrls[i]!, i));
+    suffixLines.push(formatImageLine(imageUrls[i]!, i));
   }
 
-  const defaultMsg = parts.join('\n\n').trim();
-  if (!defaultMsg) {
-    throw new Error('分享内容为空：请提供 text、url 或 imageUrls 至少一项');
-  }
+  return {
+    textPart,
+    suffixPart: suffixLines.join('\n\n'),
+    warnings,
+  };
+}
 
-  return { defaultMsg, warnings };
+function composeDingTalkShareDefaultMsg(
+  textPart: string,
+  suffixPart: string,
+  textTruncated: boolean,
+): string {
+  const parts: string[] = [];
+  const trimmedText = textPart.trim();
+  if (trimmedText) {
+    parts.push(textTruncated ? `${trimmedText.trimEnd()}\n\n…（内容已截断）` : trimmedText);
+  }
+  const trimmedSuffix = suffixPart.trim();
+  if (trimmedSuffix) parts.push(trimmedSuffix);
+  return parts.join('\n\n').trim();
 }
 
 function buildShareQuery(wndCaption: string, defaultMsg: string): string {
@@ -122,28 +141,43 @@ function buildShareUrlPair(wndCaption: string, defaultMsg: string): { deepLink: 
 }
 
 function truncateDefaultMsgForUrl(
-  defaultMsg: string,
+  textPart: string,
+  suffixPart: string,
   wndCaption: string,
   maxUrlLength: number,
 ): { defaultMsg: string; truncated: boolean } {
   const buildOpenUrl = (msg: string) => buildShareUrlPair(wndCaption, msg).deepLink;
 
-  if (buildOpenUrl(defaultMsg).length <= maxUrlLength) {
-    return { defaultMsg, truncated: false };
+  const fullMsg = composeDingTalkShareDefaultMsg(textPart, suffixPart, false);
+  if (buildOpenUrl(fullMsg).length <= maxUrlLength) {
+    return { defaultMsg: fullMsg, truncated: false };
+  }
+
+  const suffixOnly = composeDingTalkShareDefaultMsg('', suffixPart, false);
+  if (suffixOnly && buildOpenUrl(suffixOnly).length > maxUrlLength) {
+    throw new Error('分享链接过长，无法生成钉钉分享链接');
+  }
+
+  if (!textPart.trim()) {
+    return { defaultMsg: suffixOnly, truncated: false };
   }
 
   let low = 0;
-  let high = defaultMsg.length;
+  let high = textPart.length;
   let best = '';
   while (low <= high) {
     const mid = Math.floor((low + high) / 2);
-    const candidate = `${defaultMsg.slice(0, mid).trimEnd()}\n\n…（内容已截断）`;
+    const candidate = composeDingTalkShareDefaultMsg(textPart.slice(0, mid), suffixPart, true);
     if (buildOpenUrl(candidate).length <= maxUrlLength) {
       best = candidate;
       low = mid + 1;
     } else {
       high = mid - 1;
     }
+  }
+
+  if (!best && suffixOnly) {
+    return { defaultMsg: suffixOnly, truncated: true };
   }
 
   if (!best) {
@@ -161,9 +195,28 @@ export function buildDingTalkShareAppLinkUrl(
   options?: { maxUrlLength?: number },
 ): DingTalkShareBuildResult {
   const wndCaption = trimOptional(content.title) ?? '分享';
-  const { defaultMsg: rawMsg, warnings } = buildDingTalkShareDefaultMsg(content);
+  const { textPart, suffixPart, warnings } = buildDingTalkShareMessageParts(content);
   const maxUrlLength = options?.maxUrlLength ?? DINGTALK_SHARE_MAX_URL_LENGTH;
-  const { defaultMsg, truncated } = truncateDefaultMsgForUrl(rawMsg, wndCaption, maxUrlLength);
+  const fullMsg = composeDingTalkShareDefaultMsg(textPart, suffixPart, false);
+
+  if (fullMsg.length <= maxUrlLength) {
+    const { deepLink, appLink } = buildShareUrlPair(wndCaption, fullMsg);
+    return {
+      url: deepLink,
+      appLinkUrl: appLink,
+      defaultMsg: fullMsg,
+      wndCaption,
+      truncated: false,
+      warnings,
+    };
+  }
+
+  const { defaultMsg, truncated } = truncateDefaultMsgForUrl(
+    textPart,
+    suffixPart,
+    wndCaption,
+    maxUrlLength,
+  );
   if (truncated) {
     warnings.push('分享正文过长，已自动截断以适配系统 URL 长度限制');
   }

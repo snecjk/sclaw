@@ -7,11 +7,11 @@ import { cn } from '@/lib/utils';
 import { DingTalkMentionTag } from '@/components/dingtalk/DingTalkMentionTag';
 import {
   DINGTALK_AGENT_SEND_DISCLAIMER_PLAIN_TEXT,
-} from '../../../shared/dingtalk-disclaimer';
+} from '../../../shared/dingtalk-prompts/dingtalk-disclaimer';
 import {
   splitDingTalkSentPreviewText,
   type DingTalkSentMessagePreview,
-} from '../../../shared/dingtalk-sent-display';
+} from '../../../shared/dingtalk-send/dingtalk-sent-display';
 import { maskDwsSensitiveIdsForDisplay } from './message-utils';
 
 interface DingTalkSentPreviewProps {

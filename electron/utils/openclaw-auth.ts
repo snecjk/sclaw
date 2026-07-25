@@ -1456,8 +1456,12 @@ function ensureDingTalkSendGuardPluginConfig(plugins: Record<string, unknown>): 
     modified = true;
   }
   const current = entries[DINGTALK_SEND_GUARD_PLUGIN_ID];
-  if (!current || current.enabled !== true) {
-    entries[DINGTALK_SEND_GUARD_PLUGIN_ID] = { enabled: true, config: {} };
+  const desiredDingTalkSendGuard = {
+    enabled: true,
+    config: {},
+  };
+  if (JSON.stringify(current) !== JSON.stringify(desiredDingTalkSendGuard)) {
+    entries[DINGTALK_SEND_GUARD_PLUGIN_ID] = desiredDingTalkSendGuard;
     modified = true;
   }
   if (modified) {

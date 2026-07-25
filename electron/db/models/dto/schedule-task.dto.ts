@@ -1,5 +1,5 @@
 import type { AgentEngineType } from '../../../engines/types';
-import type { DingTalkMention } from '../../../../shared/dingtalk-mention';
+import type { DingTalkMention } from '../../../../shared/dingtalk-send/dingtalk-mention';
 import type {
   ScheduleTaskFailurePolicy,
   ScheduleTaskPermissionProfile,
