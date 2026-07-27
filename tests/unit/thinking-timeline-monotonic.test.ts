@@ -16,6 +16,28 @@ describe('timelineBlockResetKey', () => {
 });
 
 describe('mergeTimelineMonotonic', () => {
+  it('replaces a growing Claude thinking snapshot instead of duplicating it', () => {
+    const cached: ThinkingTimelineItem[] = [
+      { type: 'thinking', content: 'The' },
+    ];
+    const incoming: ThinkingTimelineItem[] = [
+      { type: 'thinking', content: 'The user wants me to create a skill.' },
+    ];
+
+    expect(mergeTimelineMonotonic(cached, incoming)).toEqual(incoming);
+  });
+
+  it('keeps the longer thinking snapshot when an incoming parse temporarily shrinks', () => {
+    const cached: ThinkingTimelineItem[] = [
+      { type: 'thinking', content: 'The user wants me to create a skill.' },
+    ];
+    const incoming: ThinkingTimelineItem[] = [
+      { type: 'thinking', content: 'The user' },
+    ];
+
+    expect(mergeTimelineMonotonic(cached, incoming)).toEqual(cached);
+  });
+
   it('preserves cached order when incoming rebundles same items', () => {
     const thinkA: ThinkingTimelineItem = { type: 'thinking', content: 'alpha thinking block' };
     const toolA: ThinkingTimelineItem = {
