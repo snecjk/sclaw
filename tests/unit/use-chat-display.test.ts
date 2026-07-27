@@ -72,6 +72,36 @@ describe('useChatDisplay', () => {
     expect(result.current.activeTurn?.turnMessages).toEqual([]);
   });
 
+  it('anchors a follow-up send to the latest user instead of the previous assistant turn', () => {
+    mockLastUserMessageAt = 4_000;
+    const followUp: RawMessage = {
+      id: 'u2',
+      role: 'user',
+      content: '明天全天都可以的',
+      timestamp: 4_000,
+    };
+
+    const { result } = renderHook(() => useChatDisplay({
+      messages: [...assistantTurnMessages, followUp],
+      sending: true,
+      pendingFinal: false,
+      showThinking: true,
+      lastChatEventAt: Date.now(),
+      streamMsg: null,
+      streamText: '',
+      streamingTools: [{ id: 'tool-follow-up', name: 'search', status: 'running' }],
+    }));
+
+    expect(result.current.activeTurn?.turnStableKey).toBe('turn-user-u2');
+    expect(result.current.activeTurn?.precedingUserMessage).toBe(followUp);
+    expect(result.current.activeTurn?.turnMessages).toEqual([]);
+    expect(result.current.staticItems.some((item) => (
+      item.type === 'single'
+        ? item.message.id === 'a1'
+        : item.messages.some((message) => message.id === 'a1')
+    ))).toBe(true);
+  });
+
   it('sets isProcessing when pendingFinal and only completed streaming tools remain', () => {
     mockLastUserMessageAt = 900;
 

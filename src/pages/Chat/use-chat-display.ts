@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import {
+  buildTurnStableKey,
   buildChatDisplayItems,
   findLastUserMessage,
   isAssistantRole,
@@ -160,6 +161,27 @@ export function useChatDisplay(params: {
     // fresh activeTurn ensures the loading indicator appears as a new line
     // rather than overlaying the previous completed answer.
     const last = displayItems[displayItems.length - 1];
+    if (
+      lastUserMessageAt != null
+      && last?.type === 'single'
+      && last.message.role === 'user'
+    ) {
+      const userMessageIndex = messages.lastIndexOf(last.message);
+      return {
+        staticItems: displayItems,
+        activeTurn: {
+          turnStableKey: buildTurnStableKey(
+            last.message,
+            userMessageIndex >= 0 ? userMessageIndex : messages.length - 1,
+          ),
+          turnMessages: [],
+          turnToolResults: [],
+          precedingUserMessage: last.message,
+          activeStream,
+        },
+      };
+    }
+
     if (lastUserMessageAt != null && last?.type === 'assistant-turn') {
       return {
         staticItems: displayItems.slice(0, -1),
