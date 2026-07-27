@@ -11,6 +11,7 @@
     "gatewayWarning": "网关未运行。未启用网关时无法管理频道。",
     "availableChannels": "可用频道",
     "supportedChannels": "支持的频道",
+    "supportedMobile": "支持的移动端",
     "pluginBadge": "插件",
     "recommendedBadge": "推荐",
     "available": "可用频道",
@@ -434,12 +435,13 @@
             "unbindFailed": "解绑失败: {{error}}"
         },
         "mobile": {
-            "title": "企业 App（本地通道）",
+            "title": "SClaw 移动端（申懂懂）",
+            "cardDesc": "通过移动端操作本地 agent",
             "subtitle": "手机 App「本地」Tab → 本机 StoClaw 执行",
             "enabledHint": "已开启，手机「本地」页可连到本机",
             "disabledHint": "关闭时 App 无法路由到本机；打开后请保持 StoClaw 在线",
             "hubOfflineHint": "已开启，Hub 未连接时手机暂不可达",
-            "needDingTalkWs": "建议先完成钉钉 Hub 绑定，以便本机连上通道中枢",
+            "needDingTalkWs": "通道中枢未连接，请确认已登录且网络正常",
             "wsOnline": "Hub 在线",
             "wsOffline": "Hub 离线",
             "toggleLabel": "App 绑定",
@@ -450,7 +452,19 @@
             "disableSuccess": "已关闭 App 本地通道",
             "toggleFailed": "切换失败: {{error}}",
             "agentRequired": "请选择要绑定的 Agent",
-            "noAgentsForEngine": "该引擎下暂无 Agent，请先创建后再切换"
+            "noAgentsForEngine": "该引擎下暂无 Agent，请先创建后再切换",
+            "modal": {
+                "title": "配置移动端 SClaw（申懂懂）",
+                "subtitle": "通过同账号连接 SClaw 官方 App",
+                "howToConnect": "如何连接",
+                "enableConnect": "开启连接 App",
+                "confirm": "确认",
+                "step1": "扫描右侧二维码下载 App，并使用同一账号登录手机",
+                "step2": "在电脑端开启 SClaw 开关",
+                "step3": "连接成功后，手机 App 会显示绿色的「已连接电脑」",
+                "step4": "下次打开后，App 可自动连接电脑"
+            },
+            "configure": "配置"
         }
     },
     "viewDocs": "查看文档"

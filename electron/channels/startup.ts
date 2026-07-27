@@ -3,6 +3,7 @@ import { logger } from '../utils/logger';
 import {
   getChannelConnection,
   getLocalDeviceId,
+  resolveSharedHubRefreshToken,
   revokeDingTalkHubBind,
 } from './binding-service';
 import { hubBindStatus } from './hub-api';
@@ -97,8 +98,8 @@ function wireSclawBindReplacedListener(): void {
 }
 
 /**
- * 若已绑定钉钉 Hub：挂入站监听并用 refreshToken 确保 WS 在线。
- * 用于进程启动、登录成功、以及频道列表兜底重连。
+ * 若已绑定钉钉或已开启 App：挂入站监听并用共用 refreshToken 确保 Desktop Hub WS 在线。
+ * App / 钉钉共用一条 WS + 心跳（hub-client ping），不各起一套。
  */
 export async function ensureSclawHubConnected(
   gatewayManager?: GatewayManager | null,
@@ -121,17 +122,17 @@ export async function ensureSclawHubConnected(
       return;
     }
 
-    const conn = await getChannelConnection('dingtalk');
-    if (!conn || conn.bindStatus !== 'bound' || !conn.refreshToken) {
-      logger.info('[SclawHub] skip connect: dingtalk not bound');
+    const refreshToken = await resolveSharedHubRefreshToken();
+    if (!refreshToken) {
+      logger.info('[SclawHub] skip connect: no shared hub refreshToken (dingtalk/mobile)');
       return;
     }
     const status = getSclawHubClient().getStatus();
     if (status.connected) {
       return;
     }
-    await getSclawHubClient().connect(conn.refreshToken);
-    logger.info('[SclawHub] reconnect ok');
+    await getSclawHubClient().connect(refreshToken);
+    logger.info('[SclawHub] reconnect ok (shared heartbeat)');
   } catch (error) {
     logger.warn('[SclawHub] reconnect failed', error);
   }

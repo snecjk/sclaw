@@ -11,6 +11,7 @@
     "gatewayWarning": "Gateway service is not running. Channels cannot connect.",
     "availableChannels": "Available Channels",
     "supportedChannels": "Supported Channels",
+    "supportedMobile": "Supported Mobile",
     "available": "Available Channels",
     "availableDesc": "Connect a new channel",
     "configured": "Configured Channels",
@@ -434,12 +435,13 @@
             "unbindFailed": "Unbind failed: {{error}}"
         },
         "mobile": {
-            "title": "Enterprise App (local channel)",
+            "title": "SClaw Mobile (Shen Dongdong)",
+            "cardDesc": "Operate local agents from the mobile app",
             "subtitle": "App “Local” tab → this StoClaw desktop",
             "enabledHint": "On — App “Local” can reach this desktop",
             "disabledHint": "When off, the App cannot route here. Keep StoClaw online after enabling.",
             "hubOfflineHint": "On — Hub offline, App cannot reach this desktop yet",
-            "needDingTalkWs": "Bind DingTalk Hub first so this device can connect to the channel hub",
+            "needDingTalkWs": "Channel hub is offline. Check login and network.",
             "wsOnline": "Hub online",
             "wsOffline": "Hub offline",
             "toggleLabel": "App binding",
@@ -450,7 +452,19 @@
             "disableSuccess": "App local channel disabled",
             "toggleFailed": "Toggle failed: {{error}}",
             "agentRequired": "Please select an Agent",
-            "noAgentsForEngine": "No Agents for this engine. Create one first."
+            "noAgentsForEngine": "No Agents for this engine. Create one first.",
+            "modal": {
+                "title": "Configure SClaw Mobile (Shen Dongdong)",
+                "subtitle": "Connect the official SClaw app with the same account",
+                "howToConnect": "How to connect",
+                "enableConnect": "Enable App connection",
+                "confirm": "Confirm",
+                "step1": "Scan the QR code to download the app and sign in with the same account",
+                "step2": "Turn on the SClaw switch on this computer",
+                "step3": "When connected, the app shows a green “Connected to computer”",
+                "step4": "Next time the app can reconnect automatically"
+            },
+            "configure": "Configure"
         }
     },
     "viewDocs": "View Documentation"

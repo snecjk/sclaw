@@ -173,6 +173,18 @@ export async function hubClaimBind(ticket: string, deviceId?: string): Promise<{
   });
 }
 
+/** 无码登记：App 绑定开关等；与钉钉共用一条 sclaw_device_bind（ding_user_id 可空） */
+export async function hubRegisterDesktop(): Promise<{
+  refreshToken: string;
+  dingUserId?: string | null;
+  deviceId: string;
+  status: string;
+  workNo?: string;
+}> {
+  const deviceId = await getLocalDeviceId();
+  return hubFetch('POST', '/api/sclaw/desktop/bind/register', { deviceId });
+}
+
 export async function hubUnbindRemote(): Promise<void> {
   await hubFetch('POST', '/api/sclaw/desktop/bind/unbind', {});
 }

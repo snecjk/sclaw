@@ -7,6 +7,7 @@ import {
   getChannelConnection,
   getLocalDeviceId,
   revokeDingTalkHubBind,
+  syncSharedHubRefreshToken,
   updateDingTalkBindingAgent,
   updateMobileBindingAgent,
   upsertDingTalkHubBind,
@@ -16,6 +17,7 @@ import {
   hubClaimBind,
   hubCreateBind,
   hubPollBind,
+  hubRegisterDesktop,
   hubUnbindRemote,
 } from '../../channels/hub-api';
 import { getSclawHubClient } from '../../channels/hub-client';
@@ -100,6 +102,12 @@ export async function handleChannelHubRoutes(
         refreshToken: claimed.refreshToken,
         endpointBaseUrl: resolveSclawHubBaseUrl() || null,
       });
+      // 与 App 共用一条 Hub 绑定：同步 refreshToken 到 mobile 本地行
+      await syncSharedHubRefreshToken({
+        refreshToken: claimed.refreshToken,
+        dingUserId: claimed.dingUserId,
+        endpointBaseUrl: resolveSclawHubBaseUrl() || null,
+      });
       try {
         await getSclawHubClient().connect(claimed.refreshToken);
       } catch (error) {
@@ -160,31 +168,48 @@ export async function handleChannelHubRoutes(
       const local = await getChannelConnection('mobile');
       const dingTalk = await getChannelConnection('dingtalk');
       const client = getSclawHubClient().getStatus();
+      // App / 钉钉共用一条 Desktop Hub WS + 心跳（hub-client ping）；凭证取任一本地行即可
+      const sharedToken = local?.refreshToken || dingTalk?.refreshToken || null;
+      const canConnectWs = Boolean(sharedToken);
       sendJson(res, 200, {
         success: true,
         local,
         ws: client,
-        /** 与钉钉共用 Desktop Hub WS；无钉钉 refresh 时无法自连 */
-        canConnectWs: Boolean(dingTalk?.refreshToken && dingTalk.bindStatus === 'bound'),
+        canConnectWs,
         deviceId: await getLocalDeviceId(),
       });
       return true;
     }
 
     if (url.pathname === '/api/channels/hub/mobile/bind/enable' && req.method === 'POST') {
-      const conn = await enableMobileAppBind();
-      const dingTalk = await getChannelConnection('dingtalk');
       let wsError: string | null = null;
-      if (dingTalk?.refreshToken && dingTalk.bindStatus === 'bound') {
+      let refreshToken: string | null = null;
+      try {
+        const registered = await hubRegisterDesktop();
+        refreshToken = registered.refreshToken;
+        await enableMobileAppBind({ refreshToken });
+        await syncSharedHubRefreshToken({
+          refreshToken,
+          dingUserId: registered.dingUserId ?? null,
+          endpointBaseUrl: resolveSclawHubBaseUrl() || null,
+        });
         try {
-          if (!getSclawHubClient().getStatus().connected) {
-            await getSclawHubClient().connect(dingTalk.refreshToken);
+          // 共用一条 WS/心跳：已连接则用新 token 重连一次；未连接则新建（不另起第二套心跳）
+          const hub = getSclawHubClient();
+          if (hub.getStatus().connected) {
+            hub.disconnect();
           }
+          await hub.connect(refreshToken);
         } catch (error) {
           wsError = String(error);
           logger.warn('[ChannelHub] WS connect after mobile enable failed', error);
         }
+      } catch (error) {
+        logger.error('[ChannelHub] mobile hub register failed', error);
+        sendJson(res, 500, { success: false, error: String(error) });
+        return true;
       }
+      const conn = await getChannelConnection('mobile');
       sendJson(res, 200, {
         success: true,
         connection: conn,

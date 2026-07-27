@@ -10,6 +10,7 @@ import { hostApiFetch } from '@/lib/host-api';
 import { subscribeHostEvent } from '@/lib/host-events';
 import { ChannelConfigModal } from '@/components/channels/ChannelConfigModal';
 import { DingTalkHubBindModal } from '@/components/channels/DingTalkHubBindModal';
+import { MobileAppConfigModal } from '@/components/channels/MobileAppConfigModal';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { stoSettingsSectionCardClass } from '@/lib/surfaces';
@@ -36,6 +37,7 @@ import wechatIcon from '@/assets/channels/wechat.svg?raw';
 import dingtalkIcon from '@/assets/channels/dingtalk.svg?raw';
 import wecomIcon from '@/assets/channels/wecom.svg?raw';
 import qqIcon from '@/assets/channels/qq.svg?raw';
+import sclawAppLogo from '@/assets/logo.png';
 
 /** 各频道品牌色：绑定成功后图标点亮用 */
 const CHANNEL_BRAND_COLOR: Partial<Record<ChannelType, string>> = {
@@ -48,6 +50,9 @@ const CHANNEL_BRAND_COLOR: Partial<Record<ChannelType, string>> = {
   whatsapp: '#25D366',
 };
 
+/** 移动端 App 品牌色（小龙虾橙） */
+const MOBILE_APP_BRAND_COLOR = '#FF6A00';
+
 const CHANNEL_ICON_RAW: Partial<Record<ChannelType, string>> = {
   telegram: telegramIcon,
   discord: discordIcon,
@@ -57,9 +62,6 @@ const CHANNEL_ICON_RAW: Partial<Record<ChannelType, string>> = {
   wecom: wecomIcon,
   qqbot: qqIcon,
 };
-
-/** 企业 App 本地通道品牌色 */
-const MOBILE_APP_BRAND_COLOR = '#6366F1';
 
 function tintChannelSvg(raw: string, color: string): string {
   return raw
@@ -241,6 +243,8 @@ export function Channels() {
   } | null>(null);
   const [mobileBinding, setMobileBinding] = useState<{
     enabled: boolean;
+    /** 是否已完成过绑定确认（关闭开关后仍为 true，用于展示「配置」） */
+    configured: boolean;
     engineType: 'claude' | 'openclaw';
     agentId: string | null;
     wsConnected: boolean;
@@ -256,6 +260,7 @@ export function Channels() {
   );
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showDingTalkHubModal, setShowDingTalkHubModal] = useState(false);
+  const [showMobileConfigModal, setShowMobileConfigModal] = useState(false);
   const [selectedChannelType, setSelectedChannelType] = useState<ChannelType | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | undefined>(undefined);
   const [allowExistingConfigInModal, setAllowExistingConfigInModal] = useState(true);
@@ -348,13 +353,20 @@ export function Channels() {
       setPendingDingTalkEngine(null);
 
       const mobileLocal = mobileStatusRes?.success ? mobileStatusRes.local : null;
+      const mobileBound = mobileLocal?.bindStatus === 'bound';
       const mobileEnabled = Boolean(
-        mobileLocal
-        && mobileLocal.bindStatus === 'bound'
-        && mobileLocal.enabled !== false,
+        mobileBound && mobileLocal?.enabled !== false,
       );
+      const storedConfigured =
+        typeof localStorage !== 'undefined'
+        && localStorage.getItem('sclaw.mobile.configured') === '1';
+      const mobileConfigured = mobileBound || mobileEnabled || storedConfigured;
+      if (mobileConfigured && typeof localStorage !== 'undefined') {
+        localStorage.setItem('sclaw.mobile.configured', '1');
+      }
       setMobileBinding({
         enabled: mobileEnabled,
+        configured: mobileConfigured,
         engineType: mobileLocal?.engineType === 'openclaw' ? 'openclaw' : 'claude',
         agentId: mobileLocal?.agentId ?? 'main',
         wsConnected: Boolean(mobileStatusRes?.ws?.connected),
@@ -415,7 +427,6 @@ export function Channels() {
   }, [channelGroups]);
 
   type ChannelListItem =
-    | { kind: 'mobile' }
     | { kind: 'configured'; group: ChannelGroupItem; recommended?: boolean }
     | { kind: 'available'; type: ChannelType; recommended?: boolean };
 
@@ -442,8 +453,6 @@ export function Channels() {
         items.push({ kind: 'available', type, recommended: type === 'dingtalk' });
       }
     }
-
-    items.push({ kind: 'mobile' });
 
     for (const group of channelGroups) {
       if (used.has(group.channelType)) continue;
@@ -502,6 +511,9 @@ export function Channels() {
         ? '/api/channels/hub/mobile/bind/enable'
         : '/api/channels/hub/mobile/bind/disable';
       await hostApiFetch<{ success: boolean; error?: string }>(path, { method: 'POST' });
+      if (enabled && typeof localStorage !== 'undefined') {
+        localStorage.setItem('sclaw.mobile.configured', '1');
+      }
       await fetchPageData();
       toast.success(
         enabled
@@ -686,156 +698,167 @@ export function Channels() {
 
         <div className="flex flex-col gap-3">
           <h2 className="text-[16px] font-semibold tracking-tight text-[#1D2129] dark:text-foreground">
+            {t('supportedMobile', { defaultValue: '支持的移动端' })}
+          </h2>
+          <section className={stoSettingsSectionCardClass}>
+            {(() => {
+              const resolveAgentEngine = (agent: AgentItem): 'claude' | 'openclaw' =>
+                agent.engineType === 'claude' ? 'claude' : 'openclaw';
+              const mobileEngine = mobileBinding?.engineType === 'openclaw' ? 'openclaw' : 'claude';
+              const mainAgent = agents.find((agent) => agent.id === 'main');
+              const engineMatched = agents.filter(
+                (agent) => resolveAgentEngine(agent) === mobileEngine,
+              );
+              const mobileAgentOptions =
+                engineMatched.length > 0
+                  ? engineMatched
+                  : mobileEngine === 'claude' && mainAgent
+                    ? [mainAgent]
+                    : engineMatched;
+              const mobileSelectedAgentId = mobileAgentOptions.some(
+                (agent) => agent.id === mobileBinding?.agentId,
+              )
+                ? mobileBinding?.agentId || mobileAgentOptions[0]?.id
+                : mobileAgentOptions[0]?.id;
+              const mobileEnabled = Boolean(mobileBinding?.enabled);
+              const mobileConfigured = Boolean(mobileBinding?.configured);
+              const outlineBtnClass =
+                'h-8 shrink-0 rounded-md border-[#E5E6EB] bg-white px-3 text-[12px] font-medium text-[#1D2129] shadow-none hover:bg-[#F7F8FA] dark:border-border dark:bg-transparent dark:text-foreground dark:hover:bg-white/[0.04]';
+
+              return (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div
+                      className={cn(
+                        'flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border',
+                        mobileEnabled
+                          ? 'border-transparent'
+                          : 'border-[#E5E6EB] bg-[#F7F8FA] dark:border-border dark:bg-muted/40',
+                      )}
+                      style={
+                        mobileEnabled
+                          ? {
+                              backgroundColor: `${MOBILE_APP_BRAND_COLOR}1A`,
+                              borderColor: `${MOBILE_APP_BRAND_COLOR}40`,
+                            }
+                          : undefined
+                      }
+                    >
+                      <img
+                        src={sclawAppLogo}
+                        alt=""
+                        className={cn(
+                          'h-[22px] w-[22px] object-contain',
+                          !mobileEnabled && 'grayscale opacity-45',
+                        )}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground">
+                        {t('hub.mobile.title')}
+                      </h3>
+                      <p className="mt-0.5 truncate text-[12px] text-[#86909C] dark:text-muted-foreground">
+                        {t('hub.mobile.cardDesc', {
+                          defaultValue: '通过移动端操作本地 agent',
+                        })}
+                      </p>
+                      {mobileEnabled && !mobileBinding?.wsConnected ? (
+                        <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                          {t('hub.mobile.hubOfflineHint')}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-nowrap items-center gap-1.5">
+                    {mobileEnabled ? (
+                      <>
+                        <ChannelInlineSelect
+                          className="w-[120px]"
+                          value={mobileEngine}
+                          ariaLabel={t('hub.mobile.engineLabel')}
+                          options={[
+                            { value: 'claude', label: 'Claude' },
+                            { value: 'openclaw', label: 'OpenClaw' },
+                          ]}
+                          onChange={(nextValue) => {
+                            const nextEngine = nextValue === 'openclaw' ? 'openclaw' : 'claude';
+                            const matched = agents.filter(
+                              (agent) => resolveAgentEngine(agent) === nextEngine,
+                            );
+                            const fallbackMain =
+                              nextEngine === 'claude'
+                                ? agents.find((agent) => agent.id === 'main')
+                                : undefined;
+                            const options =
+                              matched.length > 0 ? matched : fallbackMain ? [fallbackMain] : [];
+                            const nextAgentId =
+                              options.find((agent) => agent.id === mobileBinding?.agentId)?.id
+                              || options[0]?.id
+                              || '';
+                            if (!nextAgentId) {
+                              toast.error(t('hub.mobile.noAgentsForEngine'));
+                              return;
+                            }
+                            void handleMobileBindingChange({
+                              engineType: nextEngine,
+                              agentId: nextAgentId,
+                            });
+                          }}
+                        />
+                        <ChannelInlineSelect
+                          className="w-[140px]"
+                          value={mobileSelectedAgentId || ''}
+                          ariaLabel={t('hub.mobile.agentLabel')}
+                          options={mobileAgentOptions.map((agent) => ({
+                            value: agent.id,
+                            label: agent.name,
+                          }))}
+                          onChange={(nextAgentId) => {
+                            if (!nextAgentId) return;
+                            void handleMobileBindingChange({
+                              engineType: mobileEngine,
+                              agentId: nextAgentId,
+                            });
+                          }}
+                        />
+                        <Switch
+                          size="compact"
+                          checked
+                          disabled={mobileToggleBusy || loading}
+                          onCheckedChange={(checked) => {
+                            if (!checked) {
+                              void handleMobileToggle(false);
+                            }
+                          }}
+                          aria-label={t('hub.mobile.toggleLabel')}
+                        />
+                      </>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className={outlineBtnClass}
+                        disabled={mobileToggleBusy || loading}
+                        onClick={() => setShowMobileConfigModal(true)}
+                      >
+                        {mobileConfigured
+                          ? t('hub.mobile.configure', { defaultValue: '配置' })
+                          : t('account.bind', { defaultValue: '绑定' })}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </section>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <h2 className="text-[16px] font-semibold tracking-tight text-[#1D2129] dark:text-foreground">
             {t('supportedChannels')}
           </h2>
           <div className="flex flex-col gap-3">
             {channelListItems.map((item) => {
-            if (item.kind === 'mobile') {
-
-                        const resolveAgentEngine = (agent: AgentItem): 'claude' | 'openclaw' =>
-                          agent.engineType === 'claude' ? 'claude' : 'openclaw';
-                        const mobileEngine = mobileBinding?.engineType === 'openclaw' ? 'openclaw' : 'claude';
-                        const mainAgent = agents.find((agent) => agent.id === 'main');
-                        const engineMatched = agents.filter(
-                          (agent) => resolveAgentEngine(agent) === mobileEngine,
-                        );
-                        const mobileAgentOptions =
-                          engineMatched.length > 0
-                            ? engineMatched
-                            : mobileEngine === 'claude' && mainAgent
-                              ? [mainAgent]
-                              : engineMatched;
-                        const mobileSelectedAgentId = mobileAgentOptions.some(
-                          (agent) => agent.id === mobileBinding?.agentId,
-                        )
-                          ? mobileBinding?.agentId || mobileAgentOptions[0]?.id
-                          : mobileAgentOptions[0]?.id;
-                        const mobileEnabled = Boolean(mobileBinding?.enabled);
-                        const subtitle = !mobileEnabled
-                          ? t('hub.mobile.disabledHint')
-                          : mobileBinding?.wsConnected
-                            ? t('hub.mobile.enabledHint')
-                            : t('hub.mobile.hubOfflineHint', {
-                                defaultValue: '已开启，Hub 未连接时手机暂不可达',
-                              });
-
-                        return (
-                          <section key="mobile-app" className={stoSettingsSectionCardClass}>
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex min-w-0 items-center gap-3">
-                                <div
-                                  className={cn(
-                                    'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-[13px] font-semibold',
-                                    mobileEnabled
-                                      ? 'border-transparent'
-                                      : 'border-[#E5E6EB] bg-[#F7F8FA] text-[#86909C] dark:border-border dark:bg-muted/40 dark:text-muted-foreground',
-                                  )}
-                                  style={
-                                    mobileEnabled
-                                      ? {
-                                          backgroundColor: `${MOBILE_APP_BRAND_COLOR}1A`,
-                                          borderColor: `${MOBILE_APP_BRAND_COLOR}40`,
-                                          color: MOBILE_APP_BRAND_COLOR,
-                                        }
-                                      : undefined
-                                  }
-                                >
-                                  App
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <h3 className="truncate text-[15px] font-semibold text-[#1D2129] dark:text-foreground">
-                                      {t('hub.mobile.title')}
-                                    </h3>
-                                    <div
-                                      className={channelStatusDotClass(
-                                        mobileEnabled && mobileBinding?.wsConnected
-                                          ? 'connected'
-                                          : mobileEnabled
-                                            ? 'connecting'
-                                            : 'disconnected',
-                                      )}
-                                    />
-                                  </div>
-                                  <p className="mt-0.5 truncate text-[12px] text-[#86909C] dark:text-muted-foreground">
-                                    {subtitle}
-                                  </p>
-                                  {mobileEnabled && !mobileBinding?.canConnectWs ? (
-                                    <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
-                                      {t('hub.mobile.needDingTalkWs')}
-                                    </p>
-                                  ) : null}
-                                </div>
-                              </div>
-                              <div className="flex shrink-0 flex-nowrap items-center gap-1.5">
-                                {mobileEnabled ? (
-                                  <>
-                                    <ChannelInlineSelect
-                                      className="w-[120px]"
-                                      value={mobileEngine}
-                                      ariaLabel={t('hub.mobile.engineLabel')}
-                                      options={[
-                                        { value: 'claude', label: 'Claude' },
-                                        { value: 'openclaw', label: 'OpenClaw' },
-                                      ]}
-                                      onChange={(nextValue) => {
-                                        const nextEngine = nextValue === 'openclaw' ? 'openclaw' : 'claude';
-                                        const matched = agents.filter(
-                                          (agent) => resolveAgentEngine(agent) === nextEngine,
-                                        );
-                                        const fallbackMain =
-                                          nextEngine === 'claude'
-                                            ? agents.find((agent) => agent.id === 'main')
-                                            : undefined;
-                                        const options =
-                                          matched.length > 0 ? matched : fallbackMain ? [fallbackMain] : [];
-                                        const nextAgentId =
-                                          options.find((agent) => agent.id === mobileBinding?.agentId)?.id
-                                          || options[0]?.id
-                                          || '';
-                                        if (!nextAgentId) {
-                                          toast.error(t('hub.mobile.noAgentsForEngine'));
-                                          return;
-                                        }
-                                        void handleMobileBindingChange({
-                                          engineType: nextEngine,
-                                          agentId: nextAgentId,
-                                        });
-                                      }}
-                                    />
-                                    <ChannelInlineSelect
-                                      className="w-[140px]"
-                                      value={mobileSelectedAgentId || ''}
-                                      ariaLabel={t('hub.mobile.agentLabel')}
-                                      options={mobileAgentOptions.map((agent) => ({
-                                        value: agent.id,
-                                        label: agent.name,
-                                      }))}
-                                      onChange={(nextAgentId) => {
-                                        if (!nextAgentId) return;
-                                        void handleMobileBindingChange({
-                                          engineType: mobileEngine,
-                                          agentId: nextAgentId,
-                                        });
-                                      }}
-                                    />
-                                  </>
-                                ) : null}
-                                <Switch
-                                  size="compact"
-                                  checked={mobileEnabled}
-                                  disabled={mobileToggleBusy || loading}
-                                  onCheckedChange={(checked) => {
-                                    void handleMobileToggle(checked);
-                                  }}
-                                  aria-label={t('hub.mobile.toggleLabel')}
-                                />
-                              </div>
-                            </div>
-                          </section>
-                        );
-            }
-
             if (item.kind === 'configured') {
               const group = item.group;
 
@@ -1347,6 +1370,17 @@ export function Channels() {
           onClose={() => setShowDingTalkHubModal(false)}
           onChanged={async () => {
             await fetchPageData();
+          }}
+        />
+      )}
+
+      {showMobileConfigModal && (
+        <MobileAppConfigModal
+          enabled={Boolean(mobileBinding?.enabled)}
+          busy={mobileToggleBusy || loading}
+          onClose={() => setShowMobileConfigModal(false)}
+          onToggle={async (nextEnabled) => {
+            await handleMobileToggle(nextEnabled);
           }}
         />
       )}

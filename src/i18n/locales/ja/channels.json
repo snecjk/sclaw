@@ -11,6 +11,7 @@
     "gatewayWarning": "ゲートウェイサービスが実行されていないため、チャンネルに接続できません。",
     "availableChannels": "利用可能なチャンネル",
     "supportedChannels": "サポートされているチャンネル",
+    "supportedMobile": "サポートされているモバイル",
     "available": "利用可能なチャンネル",
     "availableDesc": "新しいチャンネルを接続",
     "configured": "設定済みチャンネル",
@@ -433,12 +434,13 @@
             "unbindFailed": "解除に失敗: {{error}}"
         },
         "mobile": {
-            "title": "企業 App（ローカルチャネル）",
+            "title": "SClaw モバイル（申懂懂）",
+            "cardDesc": "モバイルからローカル agent を操作",
             "subtitle": "スマホ App「ローカル」→ 本機 StoClaw",
             "enabledHint": "ON — スマホ「ローカル」から本機に接続できます",
             "disabledHint": "OFF のとき App は本機に届きません。ON 後は StoClaw をオンラインに保ってください",
             "hubOfflineHint": "ON — Hub 未接続のためスマホはまだ届きません",
-            "needDingTalkWs": "先に DingTalk Hub を紐づけて、本機をチャネル中枢に接続してください",
+            "needDingTalkWs": "チャネル中枢に未接続です。ログインとネットワークを確認してください",
             "wsOnline": "Hub オンライン",
             "wsOffline": "Hub オフライン",
             "toggleLabel": "App バインド",
@@ -449,7 +451,19 @@
             "disableSuccess": "App ローカルチャネルを無効にしました",
             "toggleFailed": "切り替え失敗: {{error}}",
             "agentRequired": "Agent を選択してください",
-            "noAgentsForEngine": "このエンジンには Agent がありません。先に作成してください"
+            "noAgentsForEngine": "このエンジンには Agent がありません。先に作成してください",
+            "modal": {
+                "title": "モバイル SClaw（申懂懂）を設定",
+                "subtitle": "同じアカウントで公式 App に接続",
+                "howToConnect": "接続方法",
+                "enableConnect": "App 接続を有効化",
+                "confirm": "確認",
+                "step1": "右の QR をスキャンして App を入れ、同じアカウントでログイン",
+                "step2": "PC で SClaw スイッチをオンにする",
+                "step3": "接続成功後、App に緑の「パソコンに接続済み」が表示されます",
+                "step4": "次回起動時に自動で再接続できます"
+            },
+            "configure": "設定"
         }
     },
     "viewDocs": "ドキュメントを表示"

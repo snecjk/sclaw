@@ -8,6 +8,7 @@ import type {
 import { loadOrCreateDeviceIdentity } from '../utils/device-identity';
 import { app } from 'electron';
 import path from 'node:path';
+import { resolveSclawHubBaseUrl } from './hub-config';
 
 /**
  * App 本地通道在 DB `channel_connections.channel_type` 存 `sto-mobile`（设计 CHECK），
@@ -183,17 +184,38 @@ export async function revokeDingTalkHubBind(): Promise<void> {
 }
 
 export async function touchDingTalkOnline(): Promise<void> {
-  const existing = await getChannelConnection('dingtalk');
-  if (!existing || existing.bindStatus !== 'bound') return;
+  return touchSharedHubOnline();
+}
+
+/** App / 钉钉共用一条 Desktop Hub WS 心跳：续期所有已 bound 本地行的 last_online */
+export async function touchSharedHubOnline(): Promise<void> {
   const db = getKyselyDatabase();
-  await db
-    .updateTable('channel_connections')
-    .set({
-      last_online_at: nowIso(),
-      updated_at: nowIso(),
-    })
-    .where('id', '=', existing.id)
-    .execute();
+  const now = nowIso();
+  for (const channelType of ['dingtalk', 'mobile'] as const) {
+    const existing = await getChannelConnection(channelType);
+    if (!existing || existing.bindStatus !== 'bound') continue;
+    await db
+      .updateTable('channel_connections')
+      .set({
+        last_online_at: now,
+        updated_at: now,
+      })
+      .where('id', '=', existing.id)
+      .execute();
+  }
+}
+
+/** 解析共用 Hub 凭证：mobile 与 dingtalk 任一持有 refreshToken 即可 */
+export async function resolveSharedHubRefreshToken(): Promise<string | null> {
+  const mobile = await getChannelConnection('mobile');
+  if (mobile?.bindStatus === 'bound' && mobile.enabled && mobile.refreshToken) {
+    return mobile.refreshToken;
+  }
+  const dingTalk = await getChannelConnection('dingtalk');
+  if (dingTalk?.bindStatus === 'bound' && dingTalk.refreshToken) {
+    return dingTalk.refreshToken;
+  }
+  return mobile?.refreshToken || dingTalk?.refreshToken || null;
 }
 
 export async function updateDingTalkBindingAgent(input: {
@@ -218,14 +240,18 @@ export async function updateDingTalkBindingAgent(input: {
 }
 
 /**
- * 打开「App 绑定」：确保本机有 mobile 行且 bound。
- * 与钉钉共用 Desktop Hub WS；此处只维护 channel_connections。
+ * 打开「App 绑定」：本机 mobile 行 bound，并可写入 Hub 下发的 refreshToken（与钉钉共用一条设备绑定）。
  */
-export async function enableMobileAppBind(): Promise<ChannelConnection> {
+export async function enableMobileAppBind(input?: {
+  refreshToken?: string | null;
+}): Promise<ChannelConnection> {
   const db = getKyselyDatabase();
   const now = nowIso();
   const deviceId = await getLocalDeviceId();
   const existing = await getChannelConnection('mobile');
+  const refreshToken = input?.refreshToken === undefined
+    ? existing?.refreshToken ?? null
+    : input.refreshToken;
 
   if (!existing) {
     const id = randomUUID();
@@ -242,9 +268,9 @@ export async function enableMobileAppBind(): Promise<ChannelConnection> {
         bind_status: 'bound',
         bound_at: now,
         last_online_at: now,
-        refresh_token: null,
+        refresh_token: refreshToken,
         credential_token: null,
-        endpoint_base_url: null,
+        endpoint_base_url: resolveSclawHubBaseUrl() || null,
         engine_type: 'claude',
         agent_id: 'main',
         extras_json: null,
@@ -268,6 +294,12 @@ export async function enableMobileAppBind(): Promise<ChannelConnection> {
       updated_at: now,
       engine_type: existing.engineType ?? 'claude',
       agent_id: existing.agentId ?? 'main',
+      ...(input?.refreshToken !== undefined
+        ? {
+            refresh_token: refreshToken,
+            endpoint_base_url: resolveSclawHubBaseUrl() || existing.endpointBaseUrl,
+          }
+        : {}),
     })
     .where('id', '=', existing.id)
     .execute();
@@ -275,6 +307,49 @@ export async function enableMobileAppBind(): Promise<ChannelConnection> {
   const updated = await getChannelConnection('mobile');
   if (!updated) throw new Error('Failed to enable mobile channel connection');
   return updated;
+}
+
+/** 将 Hub refreshToken 同步到钉钉/移动端本地行（共用一条设备凭证） */
+export async function syncSharedHubRefreshToken(input: {
+  refreshToken: string;
+  endpointBaseUrl?: string | null;
+  dingUserId?: string | null;
+}): Promise<void> {
+  const db = getKyselyDatabase();
+  const now = nowIso();
+  const dingTalk = await getChannelConnection('dingtalk');
+  if (dingTalk) {
+    await db
+      .updateTable('channel_connections')
+      .set({
+        refresh_token: input.refreshToken,
+        ...(input.dingUserId
+          ? { external_user_id: input.dingUserId }
+          : {}),
+        ...(input.endpointBaseUrl !== undefined
+          ? { endpoint_base_url: input.endpointBaseUrl }
+          : {}),
+        updated_at: now,
+        last_online_at: now,
+      })
+      .where('id', '=', dingTalk.id)
+      .execute();
+  }
+  const mobile = await getChannelConnection('mobile');
+  if (mobile) {
+    await db
+      .updateTable('channel_connections')
+      .set({
+        refresh_token: input.refreshToken,
+        ...(input.endpointBaseUrl !== undefined
+          ? { endpoint_base_url: input.endpointBaseUrl }
+          : {}),
+        updated_at: now,
+        last_online_at: now,
+      })
+      .where('id', '=', mobile.id)
+      .execute();
+  }
 }
 
 /** 关闭「App 绑定」：revoked mobile 行；不改 dingtalk。 */
