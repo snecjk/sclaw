@@ -20,6 +20,7 @@ import {
   Workflow,
   Check,
   LayoutGrid,
+  Database,
 } from 'lucide-react';
 import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg';
 import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg';
@@ -177,6 +178,12 @@ const SIDEBAR_COLLAPSED_SESSION_LIMIT = 40;
 const SIDEBAR_TASK_LIST_INITIAL_ROW_LIMIT = 8;
 /** 旧版按日期分桶渲染（today/yesterday/…）— 保留逻辑，UI 已合并为「最近」单列表 */
 const USE_LEGACY_SESSION_DATE_BUCKETS = false;
+const DATA_CENTER_DEFAULT_SECTION = 'qa_artifact';
+const DATA_CENTER_SECTIONS = [
+  { id: 'qa_artifact', labelKey: 'dataCenterPage.sections.qaArtifact' },
+  { id: 'drive', labelKey: 'dataCenterPage.sections.drive' },
+  { id: 'data_source', labelKey: 'dataCenterPage.sections.dataSource' },
+] as const;
 
 /** 侧栏收起态：展开按钮 */
 const SIDEBAR_COLLAPSED_EXPAND_BTN_CLASS =
@@ -764,6 +771,7 @@ export function Sidebar() {
   const [recentOpen, setRecentOpen] = useState(true);
   const [projectsSectionOpen, setProjectsSectionOpen] = useState(true);
   const [workspaceSectionOpen, setWorkspaceSectionOpen] = useState(true);
+  const [dataCenterSectionOpen, setDataCenterSectionOpen] = useState(true);
   const [bucketOpen, setBucketOpen] = useState<Record<SessionBucketKey, boolean>>({
     today: true,
     yesterday: true,
@@ -1720,7 +1728,7 @@ export function Sidebar() {
       { to: '/workflow', icon: <Workflow className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.workflow') },
       { to: '/more-apps', icon: <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.moreApps') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
-      // { to: '/data-center', icon: <Database className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.dataCenter') },
+      { to: '/data-center', icon: <Database className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.dataCenter') },
     ];
     return all.filter((item) => isSidebarPrimaryNavItemVisible(item.to, {
       primaryMyData: sidebarVis.primaryMyData,
@@ -1882,27 +1890,80 @@ export function Sidebar() {
       }
     : undefined;
   
+  const dataCenterSection = new URLSearchParams(location.search).get('section') || DATA_CENTER_DEFAULT_SECTION;
+  const isDataCenterItem = item.to === '/data-center';
+  const itemActiveOverride = isDataCenterItem
+    ? false
+    : homeIsActiveOverride;
+
+  if (isDataCenterItem && !sidebarCollapsed) {
+    return (
+      <div key={item.to} className="min-w-0">
+        <button
+          type="button"
+          aria-expanded={dataCenterSectionOpen}
+          onClick={() => setDataCenterSectionOpen((open) => !open)}
+          className={cn(
+            'relative flex w-full shrink-0 items-center justify-start gap-[10px] text-left text-sm leading-5 transition-[color,background-color,border-radius] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
+            sidebarNavExpandedIdleClass,
+          )}
+        >
+          <span className="flex shrink-0 items-center justify-center">{item.icon}</span>
+          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+          <ChevronDown
+            className={cn(
+              'h-3.5 w-3.5 text-muted-foreground transition-transform',
+              !dataCenterSectionOpen && '-rotate-90',
+            )}
+          />
+        </button>
+        {dataCenterSectionOpen ? (
+          <div className="ml-[17px] mt-0.5 flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-2 dark:border-border">
+            {DATA_CENTER_SECTIONS.map((section) => {
+              const active = location.pathname === '/data-center' && dataCenterSection === section.id;
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => navigate(`/data-center?section=${section.id}`)}
+                  className={cn(
+                    'relative inline-flex h-8 w-full min-w-0 items-center overflow-hidden rounded-lg px-[10px] py-1.5 text-left transition-colors',
+                    active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
+                  )}
+                >
+                  <span className="min-w-0 flex-1 truncate">{t(`common:${section.labelKey}`)}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
-    <SidebarNavLink
-      key={item.to}
-      to={item.to}
-      end={item.end}
-      icon={item.icon}
-      label={item.label}
-      collapsed={sidebarCollapsed}
-      onClick={
-        item.to === '/'
-          ? () => handleHomeClick?.()
-          : item.to === '/data-center'
-            ? (e) => {
-                e.preventDefault();
-                navigate('/data-center');
-              }
-            : undefined
-      }
-      isActiveOverride={homeIsActiveOverride}
-      badge={item.badge}
-    />
+    <div key={item.to} className="min-w-0">
+      <SidebarNavLink
+        to={item.to}
+        end={item.end}
+        icon={item.icon}
+        label={item.label}
+        collapsed={sidebarCollapsed}
+        onClick={
+          item.to === '/'
+            ? () => handleHomeClick?.()
+            : isDataCenterItem
+              ? (e) => {
+                  e.preventDefault();
+                  setSidebarCollapsed(false);
+                  setDataCenterSectionOpen(true);
+                }
+              : undefined
+        }
+        isActiveOverride={itemActiveOverride}
+        badge={item.badge}
+      />
+    </div>
   );
 })}
         </div>

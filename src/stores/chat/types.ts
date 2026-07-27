@@ -1,4 +1,5 @@
 import type { WorkflowExecutionState } from '@/types/workflow';
+import type { DataCenterArtifactProvenance } from '@/types/data-center';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 
@@ -52,6 +53,8 @@ export interface AttachedFileMeta {
   filePath?: string;
   /** Download URL (workflow tempUrl). Falls back to filePath when absent. */
   downloadUrl?: string;
+  /** Data Center provenance used by the artifact-preview "保存产物" action. */
+  artifactProvenance?: DataCenterArtifactProvenance;
 }
 
 /** Raw message from OpenClaw chat.history */

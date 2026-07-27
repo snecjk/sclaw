@@ -121,6 +121,110 @@
     "dataCenterPage": {
         "title": "データセンター",
         "subtitle": "システムデータ表、アップロードファイル、ナレッジベースを一元管理します。",
+        "sections": {
+            "qaArtifact": "Q&A成果物",
+            "drive": "マイファイル",
+            "dataSource": "データソース"
+        },
+        "sectionDescriptions": {
+            "qaArtifact": "会話やワークフローの成果物プレビューから保存したファイルを管理し、追跡、ダウンロード、後続分析に利用できます。",
+            "drive": "拠点システムのデータ表、アップロードファイル、ナレッジベース素材をまとめて管理します。",
+            "dataSource": "データソース管理はバックエンド API 公開後に接続します。"
+        },
+        "tabs": {
+            "myArtifacts": "自分の成果物",
+            "sharedArtifacts": "拠点共有成果物",
+            "onlineFiles": "オンラインファイル",
+            "localFiles": "ローカルファイル",
+            "pendingAccess": "未接続"
+        },
+        "toolbar": {
+            "searchPlaceholder": "ファイルまたはフォルダを検索",
+            "workflowFilterAll": "関連ワークフロー：すべて",
+            "gridView": "グリッド表示",
+            "listView": "リスト表示",
+            "createFolder": "新規フォルダ",
+            "uploadFile": "ファイルをアップロード",
+            "usedQuota": "使用済み {{used}} / {{quota}}"
+        },
+        "feedback": {
+            "loadFailed": "読み込みに失敗しました",
+            "apiNotFound": "この環境ではデータセンター API が利用できません。memory-center のバージョンに /agent/v1/data-center が含まれているか確認してください。",
+            "loadingTitle": "読み込み中",
+            "loadingDescription": "データセンターのファイルを取得しています",
+            "noMatch": "一致するファイルがありません",
+            "empty": "まだファイルがありません",
+            "qaEmptyDescription": "成果物プレビュー右上の「成果物を保存」をクリックすると、ここに表示されます。",
+            "driveEmptyDescription": "ファイルをアップロードするか、フォルダを作成して管理を開始してください。",
+            "dataSourceTitle": "データソース機能は未接続です",
+            "dataSourceDescription": "現在のバックエンド API ドキュメントにはデータソース管理が含まれていないため、本フェーズではモックデータを使用しません。"
+        },
+        "table": {
+            "name": "名前",
+            "updatedAt": "更新日時",
+            "size": "サイズ",
+            "actions": "操作"
+        },
+        "entry": {
+            "folder": "フォルダ",
+            "tracePending": "ソース確認中",
+            "traceAvailable": "ソース追跡可",
+            "root": "ルート"
+        },
+        "dialogs": {
+            "createFolderTitle": "新規フォルダ",
+            "folderName": "フォルダ名",
+            "renameTitle": "名前を変更",
+            "newName": "新しい名前",
+            "deleteTitle": "項目を削除",
+            "deleteMessage": "「{{name}}」を削除しますか？フォルダは空の場合のみ削除できます。"
+        },
+        "preview": {
+            "unsupported": "プレビューはまだサポートされていません。ファイルをダウンロードできます。"
+        },
+        "toasts": {
+            "nameRequired": "名前を入力してください",
+            "artifactSaveFromPreview": "Q&A成果物は成果物プレビュー右上の「成果物を保存」から保存してください。",
+            "uploadedOne": "アップロードしました",
+            "uploadedMany": "{{count}} 件のファイルをアップロードしました",
+            "uploadFailed": "アップロードに失敗しました",
+            "downloadFailed": "ダウンロードに失敗しました",
+            "traceUnavailable": "ソース追跡は利用できません",
+            "traceFailed": "追跡に失敗しました",
+            "folderCreated": "フォルダを作成しました",
+            "renamed": "名前を変更しました",
+            "deleted": "削除しました",
+            "deleteFailed": "削除に失敗しました"
+        },
+        "menu": {
+            "preview": "プレビュー",
+            "download": "ダウンロード",
+            "uploadToShared": "拠点共有にアップロード",
+            "traceChat": "会話を追跡",
+            "rename": "名前を変更",
+            "delete": "削除"
+        },
+        "saveArtifact": {
+            "title": "成果物を保存",
+            "saveToDataCenterTitle": "データセンターに保存",
+            "description": "「{{name}}」をQ&A成果物に保存します",
+            "sharedTip": "拠点共有成果物に共有すると、SClaw デスクトップの「データセンター > Q&A成果物」と DingTalk モバイルの「拠点VIP」で確認できます。",
+            "sharedArtifacts": "拠点共有成果物",
+            "myArtifacts": "自分の成果物",
+            "sharedFoldersUnavailable": "拠点共有成果物フォルダ API は未接続です",
+            "missingProvenance": "この成果物にはソース情報がないため、Q&A成果物に保存できません。",
+            "temporarySession": "一時セッション",
+            "loading": "読み込み中",
+            "emptyFolders": "このフォルダにサブフォルダはありません",
+            "createFolderPlaceholder": "+ 新規フォルダ",
+            "create": "作成",
+            "folderNameRequired": "フォルダ名を入力してください",
+            "loadFoldersFailed": "フォルダの読み込みに失敗しました",
+            "createFolderFailed": "フォルダの作成に失敗しました",
+            "savedPendingTrace": "保存しました。ソース確認中です",
+            "saved": "成果物を保存しました",
+            "saveFailed": "成果物の保存に失敗しました"
+        },
         "onlineTab": "オンラインデータ",
         "localTab": "ローカルファイル",
         "dataAccessTab": "データ連携",

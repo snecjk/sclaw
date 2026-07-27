@@ -10,6 +10,7 @@ import {
   MonitorPlay,
   Eye,
   ExternalLink,
+  CloudUpload,
 } from 'lucide-react';
 import { ShareMessageIcon } from '@/components/icons/ShareMessageIcon';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +22,7 @@ import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { FilePreviewViewer } from '@/components/file-preview/FilePreviewViewer';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
+import { SaveArtifactDialog } from '@/components/file-preview/SaveArtifactDialog';
 import {
   buildArtifactShareDialogDraft,
   type DingTalkShareDialogDraft,
@@ -30,7 +32,7 @@ import {
   stoPreviewActionRowClass,
   stoPreviewContentShellClass,
 } from '@/lib/surfaces';
-import type { AttachedFileMeta } from '@/stores/chat';
+import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
 
 export interface ChatPreviewPanelProps {
   /** 当前可见的产物列表（已过滤 dismissed） */
@@ -51,10 +53,12 @@ export function ChatPreviewPanel({
   onEditWorkflow,
   className,
 }: ChatPreviewPanelProps) {
-  const { t } = useTranslation('chat');
+  const { t } = useTranslation(['chat', 'common']);
   const [refreshKey, setRefreshKey] = useState(0);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
+  const [saveArtifactOpen, setSaveArtifactOpen] = useState(false);
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
 
   const activeFile = useMemo(() => {
     if (!activeFilePath) return null;
@@ -72,6 +76,19 @@ export function ChatPreviewPanel({
     }
     return null;
   }, [files, activeFilePath]);
+
+  const saveableActiveFile = useMemo(() => {
+    if (!activeFile?.filePath) return activeFile;
+    if (activeFile.artifactProvenance) return activeFile;
+    return {
+      ...activeFile,
+      artifactProvenance: {
+        sourceType: 'chat_artifact',
+        sessionId: currentSessionKey,
+        artifactKey: activeFile.filePath,
+      },
+    } satisfies AttachedFileMeta;
+  }, [activeFile, currentSessionKey]);
 
   const handleOpenShareDialog = useCallback(() => {
     if (!activeFile?.filePath) return;
@@ -175,6 +192,9 @@ export function ChatPreviewPanel({
                 <PreviewActionButton onClick={handleOpenExternal} aria-label={t('preview.openExternal')}>
                   <ExternalLink className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>
+                <PreviewActionButton onClick={() => setSaveArtifactOpen(true)} aria-label={t('common:dataCenterPage.saveArtifact.saveToDataCenterTitle')}>
+                  <CloudUpload className="h-4 w-4" aria-hidden />
+                </PreviewActionButton>
                 {showEditWorkflow && workflowId ? (
                   <button
                     type="button"
@@ -220,6 +240,15 @@ export function ChatPreviewPanel({
           toast.error(error instanceof Error ? error.message : t('preview.shareDialog.failed'));
         }}
       />
+      {saveArtifactOpen ? (
+        <SaveArtifactDialog
+          file={saveableActiveFile}
+          onClose={() => setSaveArtifactOpen(false)}
+          onSaved={() => {
+            setSaveArtifactOpen(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

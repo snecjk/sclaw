@@ -1373,10 +1373,10 @@ export function useLocalPathExistence(paths: string[]): Record<string, boolean> 
  * - unresolvable → null (do not render a preview entry).
  */
 export function resolvePreviewCandidate(
-  file: { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null },
+  file: AttachedFileMeta & { filePath: string },
   exists: boolean | undefined,
   workflowCardStates?: Record<string, WorkflowExecutionState>,
-): { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null } | null {
+): (AttachedFileMeta & { filePath: string }) | null {
   if (isHttpUrl(file.filePath)) return file;
   if (exists === true) return file;
   if (exists === undefined) return null;
@@ -1402,12 +1402,13 @@ export function resolvePreviewCandidate(
 export function usePreviewableFiles(
   messages: Array<unknown & { _attachedFiles?: Array<{ mimeType: string; filePath?: string; fileName: string }>; content?: unknown; role?: string }>,
   workflowCardStates?: Record<string, WorkflowExecutionState>,
+  sessionKey?: string,
 ) {
   const candidates = useMemo(() => {
     const seen = new Set<string>();
-    const result: Array<{ mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }> = [];
+    const result: Array<AttachedFileMeta & { filePath: string }> = [];
 
-    function addItem(item: { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }) {
+    function addItem(item: AttachedFileMeta & { filePath: string }) {
       const key = normalizePreviewFileKey(item.filePath, item.fileName);
       if (!key || seen.has(key)) return;
       seen.add(key);
@@ -1428,6 +1429,14 @@ export function usePreviewableFiles(
             fileName: previewFile.fileName,
             fileSize: previewFile.fileSize,
             preview: previewFile.preview,
+            artifactProvenance: sessionKey ? {
+              sourceType: 'workflow_artifact',
+              sessionId: sessionKey,
+              artifactKey: artifact.id || previewFile.filePath,
+              runId: state.runId,
+              workflowTemplateId: state.workflowId,
+              workflowRunId: state.runId,
+            } : undefined,
           });
         }
       }
@@ -1447,6 +1456,12 @@ export function usePreviewableFiles(
             fileName: file.fileName,
             fileSize: (file as { fileSize?: number }).fileSize ?? 0,
             preview: (file as { preview?: string | null }).preview ?? null,
+            artifactProvenance: (file as AttachedFileMeta).artifactProvenance ?? (sessionKey ? {
+              sourceType: 'chat_artifact',
+              sessionId: sessionKey,
+              artifactKey: fp,
+              messageId: typeof (msg as { id?: unknown }).id === 'string' ? (msg as { id: string }).id : undefined,
+            } : undefined),
           });
         }
       }
@@ -1463,13 +1478,19 @@ export function usePreviewableFiles(
             fileName: ref.fileName,
             fileSize: 0,
             preview: null,
+            artifactProvenance: sessionKey ? {
+              sourceType: 'chat_artifact',
+              sessionId: sessionKey,
+              artifactKey: ref.filePath,
+              messageId: typeof (msg as { id?: unknown }).id === 'string' ? (msg as { id: string }).id : undefined,
+            } : undefined,
           });
         }
       }
     }
 
     return result;
-  }, [messages, workflowCardStates]);
+  }, [messages, workflowCardStates, sessionKey]);
 
   // Verify non-http candidates against the local filesystem; cloud-runtime paths
   // resolve to their artifact OSS URL or are dropped (never rendered as broken cards).

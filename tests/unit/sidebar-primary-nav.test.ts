@@ -13,6 +13,7 @@ describe('isSidebarPrimaryNavRoute', () => {
     expect(isSidebarPrimaryNavRoute('/workflow/edit/wf_abc')).toBe(true);
     expect(isSidebarPrimaryNavRoute('/more-apps')).toBe(true);
     expect(isSidebarPrimaryNavRoute('/models')).toBe(true);
+    expect(isSidebarPrimaryNavRoute('/data-center')).toBe(true);
   });
 
   it('does not match workspace or task routes', () => {
@@ -38,7 +39,7 @@ describe('isSidebarPrimaryNavItemVisible', () => {
     expect(isSidebarPrimaryNavItemVisible('/more-apps', nonSiteOptions)).toBe(true);
   });
 
-  it('keeps site-only navigation restricted', () => {
-    expect(isSidebarPrimaryNavItemVisible('/data-center', nonSiteOptions)).toBe(false);
+  it('keeps Data Center visible without site identity or site configuration', () => {
+    expect(isSidebarPrimaryNavItemVisible('/data-center', nonSiteOptions)).toBe(true);
   });
 });

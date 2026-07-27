@@ -126,6 +126,110 @@
     "dataCenterPage": {
         "title": "Data Center",
         "subtitle": "Manage system data tables, uploaded files, and knowledge bases for AI and business workflows.",
+        "sections": {
+            "qaArtifact": "Q&A artifacts",
+            "drive": "My files",
+            "dataSource": "Data sources"
+        },
+        "sectionDescriptions": {
+            "qaArtifact": "Manage files saved from conversation and workflow artifact previews for tracing, downloads, and later analysis.",
+            "drive": "Manage branch system data tables, uploaded files, and knowledge base materials in one place.",
+            "dataSource": "Data source management will be connected after the backend API is available."
+        },
+        "tabs": {
+            "myArtifacts": "My artifacts",
+            "sharedArtifacts": "Branch shared artifacts",
+            "onlineFiles": "Online files",
+            "localFiles": "Local files",
+            "pendingAccess": "Pending"
+        },
+        "toolbar": {
+            "searchPlaceholder": "Search files or folders",
+            "workflowFilterAll": "Workflow: All",
+            "gridView": "Grid view",
+            "listView": "List view",
+            "createFolder": "New folder",
+            "uploadFile": "Upload file",
+            "usedQuota": "Used {{used}} / {{quota}}"
+        },
+        "feedback": {
+            "loadFailed": "Failed to load",
+            "apiNotFound": "Data Center APIs are not available in this environment. Please confirm the memory-center version includes /agent/v1/data-center.",
+            "loadingTitle": "Loading",
+            "loadingDescription": "Fetching data center files",
+            "noMatch": "No matching files",
+            "empty": "No files yet",
+            "qaEmptyDescription": "Files appear here after you click Save artifact in the upper-right corner of an artifact preview.",
+            "driveEmptyDescription": "Upload files or create a folder to start managing content.",
+            "dataSourceTitle": "Data sources not connected yet",
+            "dataSourceDescription": "The current backend API docs do not include data source management, so this phase does not use mock data."
+        },
+        "table": {
+            "name": "Name",
+            "updatedAt": "Updated",
+            "size": "Size",
+            "actions": "Actions"
+        },
+        "entry": {
+            "folder": "Folder",
+            "tracePending": "Source verification pending",
+            "traceAvailable": "Source traceable",
+            "root": "Root"
+        },
+        "dialogs": {
+            "createFolderTitle": "New folder",
+            "folderName": "Folder name",
+            "renameTitle": "Rename",
+            "newName": "New name",
+            "deleteTitle": "Delete item",
+            "deleteMessage": "Delete \"{{name}}\"? Folders can only be deleted when empty."
+        },
+        "preview": {
+            "unsupported": "Preview is not supported yet. You can download the file."
+        },
+        "toasts": {
+            "nameRequired": "Name is required",
+            "artifactSaveFromPreview": "Save Q&A artifacts from the upper-right corner of the artifact preview.",
+            "uploadedOne": "Uploaded",
+            "uploadedMany": "Uploaded {{count}} files",
+            "uploadFailed": "Upload failed",
+            "downloadFailed": "Download failed",
+            "traceUnavailable": "Source tracing is unavailable",
+            "traceFailed": "Trace failed",
+            "folderCreated": "Folder created",
+            "renamed": "Renamed",
+            "deleted": "Deleted",
+            "deleteFailed": "Delete failed"
+        },
+        "menu": {
+            "preview": "Preview",
+            "download": "Download",
+            "uploadToShared": "Upload to branch sharing",
+            "traceChat": "Trace conversation",
+            "rename": "Rename",
+            "delete": "Delete"
+        },
+        "saveArtifact": {
+            "title": "Save artifact",
+            "saveToDataCenterTitle": "Save to Data Center",
+            "description": "Save \"{{name}}\" to Q&A artifacts",
+            "sharedTip": "After sharing to branch shared artifacts, it can be viewed in SClaw desktop Data Center > Q&A artifacts and in DingTalk mobile Branch VIP.",
+            "sharedArtifacts": "Branch shared artifacts",
+            "myArtifacts": "My artifacts",
+            "sharedFoldersUnavailable": "Branch shared artifact folder APIs are not connected yet",
+            "missingProvenance": "This artifact is missing source information and cannot be saved to Q&A artifacts.",
+            "temporarySession": "Temporary session",
+            "loading": "Loading",
+            "emptyFolders": "No subfolders in this folder",
+            "createFolderPlaceholder": "+ New folder",
+            "create": "Create",
+            "folderNameRequired": "Folder name is required",
+            "loadFoldersFailed": "Failed to load folders",
+            "createFolderFailed": "Failed to create folder",
+            "savedPendingTrace": "Saved. Source verification pending",
+            "saved": "Artifact saved",
+            "saveFailed": "Failed to save artifact"
+        },
         "onlineTab": "Online data",
         "localTab": "Local files",
         "dataAccessTab": "Data access",

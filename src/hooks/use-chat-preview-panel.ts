@@ -21,7 +21,7 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
     [allMessages, workflowCardStates],
   );
 
-  const previewableFiles = usePreviewableFiles(allMessages, sessionWorkflowCardStates);
+  const previewableFiles = usePreviewableFiles(allMessages, sessionWorkflowCardStates, sessionKey);
 
   const previewFiles = useMemo(() => {
     const byPath = new Map<string, AttachedFileMeta>();
