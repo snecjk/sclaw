@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -734,7 +734,48 @@ function EntryList(props: EntryRenderProps) {
   );
 }
 
+type GridContextMenuState = {
+  entry: DataCenterEntry;
+  x: number;
+  y: number;
+} | null;
+
 function EntryGrid(props: EntryRenderProps) {
+  const [contextMenu, setContextMenu] = useState<GridContextMenuState>(null);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu]);
+
+  const openContextMenu = (event: ReactMouseEvent, entry: DataCenterEntry) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const menuWidth = 132;
+    const menuHeight = entry.entryType === 'file' && entry.traceAvailable ? 180 : 140;
+    setContextMenu({
+      entry,
+      x: Math.min(event.clientX, window.innerWidth - menuWidth - 8),
+      y: Math.min(event.clientY, window.innerHeight - menuHeight - 8),
+    });
+  };
+
+  const runContextAction = (action: (entry: DataCenterEntry) => void, entry: DataCenterEntry) => {
+    setContextMenu(null);
+    action(entry);
+  };
+
   return (
     <div className="h-full overflow-auto">
       <div className="grid grid-cols-[repeat(auto-fill,72px)] justify-start gap-x-[16px] gap-y-[22px] py-1">
@@ -743,6 +784,7 @@ function EntryGrid(props: EntryRenderProps) {
             key={entry.entryId}
             type="button"
             onClick={() => entry.entryType === 'folder' ? props.onOpenFolder(entry) : props.onPreview(entry)}
+            onContextMenu={(event) => openContextMenu(event, entry)}
             className="flex w-[72px] flex-col items-center rounded-[8px] px-1 py-1 text-center transition-colors hover:bg-[#F2F3F5] dark:hover:bg-muted/40"
           >
             <span className="flex h-[46px] w-[46px] items-center justify-center">
@@ -754,7 +796,83 @@ function EntryGrid(props: EntryRenderProps) {
           </button>
         ))}
       </div>
+      {contextMenu ? (
+        <GridEntryContextMenu
+          entry={contextMenu.entry}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onDownload={(entry) => runContextAction(props.onDownload, entry)}
+          onShare={(entry) => runContextAction(props.onShare, entry)}
+          onRename={(entry) => runContextAction(props.onRename, entry)}
+          onDelete={(entry) => runContextAction(props.onDelete, entry)}
+          onTrace={(entry) => runContextAction(props.onTrace, entry)}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function GridEntryContextMenu({
+  entry,
+  x,
+  y,
+  onDownload,
+  onShare,
+  onRename,
+  onDelete,
+  onTrace,
+}: {
+  entry: DataCenterEntry;
+  x: number;
+  y: number;
+  onDownload: (entry: DataCenterEntry) => void;
+  onShare: (entry: DataCenterEntry) => void;
+  onRename: (entry: DataCenterEntry) => void;
+  onDelete: (entry: DataCenterEntry) => void;
+  onTrace: (entry: DataCenterEntry) => void;
+}) {
+  const { t } = useTranslation('common');
+  return (
+    <div
+      className="fixed z-[70] min-w-[128px] rounded-[10px] border border-[#E5E6EB] bg-white p-2 text-[#1D2129] shadow-[0_8px_24px_rgba(15,23,42,0.14)] dark:border-border dark:bg-popover dark:text-foreground"
+      style={{ left: x, top: y }}
+      role="menu"
+      onClick={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      {entry.entryType === 'file' ? (
+        <ContextMenuButton onClick={() => onDownload(entry)}>
+          {t('dataCenterPage.menu.download')}
+        </ContextMenuButton>
+      ) : null}
+      <ContextMenuButton onClick={() => onShare(entry)}>
+        {t('dataCenterPage.menu.share')}
+      </ContextMenuButton>
+      {entry.entryType === 'file' && entry.traceAvailable ? (
+        <ContextMenuButton onClick={() => onTrace(entry)}>
+          {t('dataCenterPage.menu.traceChat')}
+        </ContextMenuButton>
+      ) : null}
+      <ContextMenuButton onClick={() => onRename(entry)}>
+        {t('dataCenterPage.menu.rename')}
+      </ContextMenuButton>
+      <ContextMenuButton onClick={() => onDelete(entry)}>
+        {t('dataCenterPage.menu.delete')}
+      </ContextMenuButton>
+    </div>
+  );
+}
+
+function ContextMenuButton({ children, onClick }: { children: ReactNode; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      className="block h-9 w-full rounded-[6px] px-3 text-left text-[13px] leading-9 hover:bg-[#F2F3F5] dark:hover:bg-muted"
+    >
+      {children}
+    </button>
   );
 }
 
