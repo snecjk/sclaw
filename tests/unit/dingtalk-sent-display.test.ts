@@ -17,14 +17,14 @@ describe('parseDwsChatMessageSendCommand', () => {
     expect(parsed?.title).toBe('消息');
     expect(parsed?.recipientLabel).toBe('联系人');
     expect(parsed?.text).toContain('你好');
-    expect(parsed?.text).toContain('S Claw 代为发送');
+    expect(parsed?.text).toContain('SClaw 代为发送');
   });
 
   it('renders disclaimer footer as markdown quote in sent-success preview', () => {
     const text = appendDingTalkAgentSendDisclaimer('正文内容');
     const preview = formatDingTalkSentTextForChatPreview(text);
     expect(preview).toContain('正文内容');
-    expect(preview).not.toContain('S Claw 代为发送');
+    expect(preview).not.toContain('SClaw 代为发送');
     expect(preview).not.toContain('<font');
   });
 
@@ -34,11 +34,11 @@ describe('parseDwsChatMessageSendCommand', () => {
       '',
       '---',
       '',
-      `<font color="'#999999'">本消息由 S Claw 代为发送，非本人实时回复。</font>`,
+      `<font color="'#999999'">本消息由 SClaw 代为发送，非本人实时回复。</font>`,
     ].join('\n');
     const { body, disclaimer } = splitDingTalkSentPreviewText(malformed);
     expect(body).toBe('正文内容');
-    expect(disclaimer).toBe('本消息由 S Claw 代为发送，非本人实时回复。');
+    expect(disclaimer).toBe('本消息由 SClaw 代为发送，非本人实时回复。');
     expect(formatDingTalkSentTextForChatPreview(malformed)).toBe('正文内容');
   });
 });

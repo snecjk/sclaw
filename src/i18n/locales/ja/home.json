@@ -22,7 +22,7 @@
     "dataAnalysis": "データ分析",
     "workflow": "ワークフロー",
     "send": "送信",
-    "footerDisclaimer": "S Claw は AI 補助です。重要な情報は業務で確認のうえご利用ください。",
+    "footerDisclaimer": "SClaw は AI 補助です。重要な情報は業務で確認のうえご利用ください。",
     "gatewayRequired": "送信前にゲートウェイを接続してください。",
     "sendFailed": "送信に失敗しました。チャット画面で確認してください。"
   },

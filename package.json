@@ -25,9 +25,9 @@
             ]
         }
     },
-    "description": "S Claw - Graphical AI Assistant based on OpenClaw",
+    "description": "SClaw - Graphical AI Assistant based on OpenClaw",
     "main": "dist-electron/main/index.js",
-    "author": "S Claw Team",
+    "author": "SClaw Team",
     "license": "MIT",
     "private": true,
     "scripts": {

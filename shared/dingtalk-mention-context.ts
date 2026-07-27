@@ -43,9 +43,9 @@ export function stripDingTalkAgentSendDisclaimerForDisplay(text: string): string
   return text
     .replace(/\r\n/g, '\n')
     .replace(/\n*---\n*\s*<font color=['"]#999999['"]>[\s\S]*?<\/font>\s*/gi, '')
-    .replace(/\n*---\n*\s*>\s*\*?[^\n]*S Claw[^*\n]*代为发送[^\n]*\*?\s*/gi, '')
+    .replace(/\n*---\n*\s*>\s*\*?[^\n]*S\s*Claw[^*\n]*代为发送[^\n]*\*?\s*/gi, '')
     .replace(/<font color=['"]#999999['"]>[\s\S]*?<\/font>/gi, '')
-    .replace(/\n*>\s*\*?[^*\n]*S Claw[^*\n]*代为发送[^*\n]*\*?\s*/gi, '')
+    .replace(/\n*>\s*\*?[^*\n]*S\s*Claw[^*\n]*代为发送[^*\n]*\*?\s*/gi, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }

@@ -190,7 +190,7 @@ if (gotElectronLock) {
           );
         } else {
           console.info(
-            `[StoClaw] Another S Claw instance holds process lock (${fileLock.lockPath}, ${ownerDescriptor}); exiting duplicate process`,
+            `[StoClaw] Another SClaw instance holds process lock (${fileLock.lockPath}, ${ownerDescriptor}); exiting duplicate process`,
           );
           app.exit(0);
         }

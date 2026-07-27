@@ -54,7 +54,7 @@
         },
         "compactAccountMenu": "账户与设置",
         "supportGroup": {
-            "title": "S Claw产品咨询群",
+            "title": "SClaw产品咨询群",
             "hint": "钉钉扫一扫进群咨询问题",
             "helpAria": "查看产品咨询群二维码",
             "loadError": "二维码加载失败，请稍后重试"

@@ -23,7 +23,7 @@ describe('ensureDingTalkAgentSendDisclaimerFormat', () => {
   it('inserts divider when footer exists without --- (scheduled task case)', () => {
     const bodyOnlyFooter = `### 任务结果\n\n- 条目一\n\n${DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER}`;
     const result = ensureDingTalkAgentSendDisclaimerFormat(bodyOnlyFooter);
-    expect(result).toMatch(/条目一\n\n---\n\n> \*本消息由 S Claw 代为发送/);
+    expect(result).toMatch(/条目一\n\n---\n\n> \*本消息由 SClaw 代为发送/);
     expect(hasDingTalkDisclaimerDivider(result)).toBe(true);
   });
 
@@ -39,7 +39,7 @@ describe('normalizeDwsChatMessageSendText', () => {
     const script = `dws chat message send --user uid-1 --title "消息" --text "${body.replace(/\n/g, '\\n')}" --format json`;
     const fixed = fixDwsChatMessageSendShellScript(script);
     expect(fixed).toContain("---");
-    expect(fixed).toMatch(/\$'[\s\S]*---[\s\S]*S Claw 代为发送/);
+    expect(fixed).toMatch(/\$'[\s\S]*---[\s\S]*SClaw 代为发送/);
   });
 
   it('dedupes broken footer and keeps single disclaimer line', () => {
@@ -48,26 +48,32 @@ describe('normalizeDwsChatMessageSendText', () => {
       '',
       '---',
       '',
-      '本消息由 S Claw 代为发送，非本人实时回复。',
+      '本消息由 SClaw 代为发送，非本人实时回复。',
       '',
       '<font color=',
-      "#999999>本消息由 S Claw 代为发送，非本人实时回复。",
+      "#999999>本消息由 SClaw 代为发送，非本人实时回复。",
     ].join('\n');
     const result = ensureDingTalkAgentSendDisclaimerFormat(broken);
     expect(result).toBe(
       `请查看图片：https://example.com\n\n---\n\n${DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER}`,
     );
-    expect((result.match(/S Claw 代为发送/g) || []).length).toBe(1);
+    expect((result.match(/SClaw 代为发送/g) || []).length).toBe(1);
+  });
+
+  it('normalizes legacy spaced brand footer to SClaw', () => {
+    const legacy = '正文\n\n---\n\n> *本消息由 S Claw 代为发送，非本人实时回复。*';
+    const result = ensureDingTalkAgentSendDisclaimerFormat(legacy);
+    expect(result).toBe(`正文\n\n---\n\n${DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER}`);
   });
 
   it('fixes double-quoted shell --text with embedded HTML quotes', () => {
-    const body = `请查收图片\n\n---\n\n<font color="#999999">本消息由 S Claw 代为发送，非本人实时回复。</font>`;
+    const body = `请查收图片\n\n---\n\n<font color="#999999">本消息由 SClaw 代为发送，非本人实时回复。</font>`;
     const script =
       `dws chat message send --user uid-1 --title "消息" --text "${body.replace(/\n/g, '\\n')}" --format json`;
     const fixed = fixDwsChatMessageSendShellScript(script);
     expect(fixed).toContain("$'");
     expect(fixed).not.toContain('color="#999999"');
-    expect(fixed).toMatch(/---[\s\S]*S Claw 代为发送/);
+    expect(fixed).toMatch(/---[\s\S]*SClaw 代为发送/);
   });
 
   it('fixes argv missing disclaimer divider', () => {
@@ -110,7 +116,7 @@ describe('normalizeDwsChatMessageSendText', () => {
   });
 
   it('fixes OpenClaw mistyped dollar prefix with literal newlines in argv --text', () => {
-    const raw = '$你吃午饭了吗\\n\\n---\\n\\n> 本消息由 S Claw 代为发送，非本人实时回复。';
+    const raw = '$你吃午饭了吗\\n\\n---\\n\\n> 本消息由 SClaw 代为发送，非本人实时回复。';
     const args = fixDwsChatMessageSendArgv([
       'chat',
       'message',
@@ -124,7 +130,7 @@ describe('normalizeDwsChatMessageSendText', () => {
     expect(text.startsWith('$')).toBe(false);
     expect(text).toContain('你吃午饭了吗');
     expect(text).not.toContain('\\n');
-    expect(text).toContain('\n\n---\n\n> *本消息由 S Claw 代为发送，非本人实时回复。*');
+    expect(text).toContain('\n\n---\n\n> *本消息由 SClaw 代为发送，非本人实时回复。*');
   });
 
   it('unwraps bash $ quote in shell script --text', () => {
@@ -138,7 +144,7 @@ describe('normalizeDwsChatMessageSendText', () => {
 
   it('parses Windows shell command into dws argv and keeps --format out of --text', () => {
     const command =
-      'dws chat message send --user uid-1 --title "消息" --text "你好\\n\\n---\\n\\n> *本消息由 S Claw 代为发送，非本人实时回复。*" --format json';
+      'dws chat message send --user uid-1 --title "消息" --text "你好\\n\\n---\\n\\n> *本消息由 SClaw 代为发送，非本人实时回复。*" --format json';
     const args = parseDwsChatMessageSendShellCommandArgs(command);
     expect(args).toBeTruthy();
     expect(args?.[0]).toBe('chat');

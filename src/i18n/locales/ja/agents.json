@@ -23,7 +23,7 @@
     },
     "deleteDialog": {
         "title": "Agent を削除",
-        "message": "S Claw から「{{name}}」を削除しますか？この操作により Agent と、その S Claw 管理下のワークスペース、実行時ファイル、セッションファイルがディスクから完全に削除されます。"
+        "message": "SClaw から「{{name}}」を削除しますか？この操作により Agent と、その SClaw 管理下のワークスペース、実行時ファイル、セッションファイルがディスクから完全に削除されます。"
     },
     "settingsDialog": {
         "title": "{{name}} Settings",

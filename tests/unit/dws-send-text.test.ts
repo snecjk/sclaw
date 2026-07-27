@@ -20,10 +20,10 @@ import {
 } from '../../sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dws-send-text';
 
 const cmd =
-  'dws chat message send --user u1 --title "消息" --text "### 标题\\n\\n- **早上**：多云\\n\\n---\\n\\n> *本消息由 S Claw 代为发送，非本人实时回复。*" --format json';
+  'dws chat message send --user u1 --title "消息" --text "### 标题\\n\\n- **早上**：多云\\n\\n---\\n\\n> *本消息由 SClaw 代为发送，非本人实时回复。*" --format json';
 
 const weatherCmd =
-  'dws chat message send --user u1 --title "上海明日天气" --text "### ☀️ 上海明日天气预报（6月29日 周一）\\n\\n**🌡️ 气温：23°C ~ 27°C**\\n\\n**☁️ 天气概况：**\\n- 上午：晴到多云\\n\\n---\\n\\n> *本消息由 S Claw 代为发送，非本人实时回复。*" --format json';
+  'dws chat message send --user u1 --title "上海明日天气" --text "### ☀️ 上海明日天气预报（6月29日 周一）\\n\\n**🌡️ 气温：23°C ~ 27°C**\\n\\n**☁️ 天气概况：**\\n- 上午：晴到多云\\n\\n---\\n\\n> *本消息由 SClaw 代为发送，非本人实时回复。*" --format json';
 
 describe('dws-send-text normalization', () => {
   it('shared: converts shell script --text with literal \\n to bash $\'...\'', () => {

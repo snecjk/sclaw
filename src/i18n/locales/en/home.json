@@ -22,7 +22,7 @@
     "dataAnalysis": "Data analysis",
     "workflow": "Workflow",
     "send": "Send",
-    "footerDisclaimer": "S Claw is AI-assisted; verify important information with your team before acting.",
+    "footerDisclaimer": "SClaw is AI-assisted; verify important information with your team before acting.",
     "gatewayRequired": "Connect the gateway before sending.",
     "sendFailed": "Could not send. Open Chat for details."
   },

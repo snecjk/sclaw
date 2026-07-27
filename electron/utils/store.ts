@@ -27,7 +27,7 @@ export interface AppSettings {
   language: string;
   startMinimized: boolean;
   launchAtStartup: boolean;
-  /** When true, keep the system awake while S Claw is running. */
+  /** When true, keep the system awake while SClaw is running. */
   preventSystemSleep: boolean;
   telemetryEnabled: boolean;
   machineId: string;

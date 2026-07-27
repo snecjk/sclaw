@@ -50,7 +50,7 @@
     --link-foreground: 0 0% 100%;
     --link-muted: 228 100% 97%;
 
-    /* S Claw 壳层（归档设计稿对齐）：侧栏与 gutter 共用 #EDEDED */
+    /* SClaw 壳层（归档设计稿对齐）：侧栏与 gutter 共用 #EDEDED */
     --sto-page-bg: #ededed;
     --sto-sidebar-bg: #ededed;
     --sto-sidebar-border: #e8eaef;
