@@ -1,4 +1,9 @@
-import type { SqliteMigration } from '../types';
+import type { SqliteDatabase, SqliteMigration } from '../types';
+
+function hasColumn(db: SqliteDatabase, table: string, column: string): boolean {
+  return (db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>)
+    .some((entry) => entry.name === column);
+}
 
 /**
  * 0003 — 给 wf_run 加 session_key 列。
@@ -13,7 +18,11 @@ import type { SqliteMigration } from '../types';
 export const wfRunSessionKeyMigration: SqliteMigration = {
   version: 3,
   name: 'wf-run-session-key',
-  sql: `ALTER TABLE wf_run ADD COLUMN session_key TEXT`,
+  apply: (db) => {
+    if (!hasColumn(db, 'wf_run', 'session_key')) {
+      db.exec('ALTER TABLE wf_run ADD COLUMN session_key TEXT');
+    }
+  },
 };
 
 export default wfRunSessionKeyMigration;

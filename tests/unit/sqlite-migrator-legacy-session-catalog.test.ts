@@ -36,7 +36,11 @@ describe('SQLite legacy session catalog migration normalization', () => {
       { version: 5, name: 'workflow-runtime-cloud-primary-keys' },
       { version: 6, name: 'memory-capture-jobs' },
       { version: 7, name: 'session-catalog-schema' },
-      { version: 8, name: 'session-types-and-channels' }, { version: 9, name: 'channel-plane-channel-connections' },
+      { version: 8, name: 'session-types-and-channels' },
+      { version: 9, name: 'wf-run-workflow-version' },
+      { version: 10, name: 'wf-run-engine' },
+      { version: 11, name: 'channel-plane-channel-connections' },
+      { version: 12, name: 'workflow-runtime-canonical-schema-repair' },
 
     ]);
 
@@ -74,6 +78,10 @@ describe('SQLite legacy session catalog migration normalization', () => {
       'memory-capture-jobs',
       'session-catalog-schema',
       'session-types-and-channels',
+      'wf-run-workflow-version',
+      'wf-run-engine',
+      'channel-plane-channel-connections',
+      'workflow-runtime-canonical-schema-repair',
     ]);
   });
 });

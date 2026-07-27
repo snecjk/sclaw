@@ -84,7 +84,13 @@ export function runDatabaseMigrations(db: SqliteDatabase): void {
     logger.info(`[sqlite] applying migration v${migration.version} ${migration.name}`);
     db.exec('BEGIN IMMEDIATE;');
     try {
-      db.exec(migration.sql);
+      if (migration.apply) {
+        migration.apply(db);
+      } else if (migration.sql) {
+        db.exec(migration.sql);
+      } else {
+        throw new Error(`[sqlite] migration v${migration.version} has no operation`);
+      }
       db.prepare(
         'INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)',
       ).run(migration.version, migration.name, new Date().toISOString());

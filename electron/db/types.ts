@@ -22,7 +22,8 @@ import type { ChannelConnectionTable } from './models/tables/channel-connection-
 export interface SqliteMigration {
   version: number;
   name: string;
-  sql: string;
+  sql?: string;
+  apply?: (db: SqliteDatabase) => void;
 }
 
 export interface SqliteMigrationRecord {
