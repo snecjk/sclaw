@@ -16,7 +16,10 @@ const SKILL_INSTALL_PATHS = new Set([
   '/api/skill-plaza/upload',
 ]);
 
-function resolveHostApiTimeoutMs(path: string): number {
+export function resolveHostApiTimeoutMs(path: string): number {
+  if (path === '/api/chat/send') {
+    return TIMEOUTS.CHAT_SEND;
+  }
   if (path === '/api/auth/login') {
     return TIMEOUTS.AUTH_LOGIN;
   }
