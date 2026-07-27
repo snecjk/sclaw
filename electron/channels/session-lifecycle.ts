@@ -1,3 +1,4 @@
+import { getBaseAgentIdFromProjectAgentId } from '../../shared/project-agent';
 import { buildDingTalkSessionKey } from './session-key';
 
 const DINGTALK_SESSION_IDLE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -34,6 +35,23 @@ export function shouldStartNewDingTalkSession(input: {
   const lastActivityMs = Date.parse(input.lastActivityAt);
   if (!Number.isFinite(lastActivityMs)) return true;
   return input.nowMs - lastActivityMs >= DINGTALK_SESSION_IDLE_TTL_MS;
+}
+
+/**
+ * 策略 C：改选脑后不得复用旧 sessionKey，也不得用新引擎改写旧 registry。
+ * 仅当 registry 已登记引擎且与当前 Binding 不一致时强制新建。
+ */
+export function shouldForceNewDingTalkSessionForEngine(input: {
+  forceNew?: boolean;
+  boundEngineType: 'claude' | 'openclaw';
+  registeredEngineType?: 'claude' | 'openclaw' | null;
+}): boolean {
+  if (input.forceNew) return true;
+  const registered = input.registeredEngineType;
+  if (registered === 'claude' || registered === 'openclaw') {
+    return registered !== input.boundEngineType;
+  }
+  return false;
 }
 
 export function resolveDingTalkSessionKey(input: {
@@ -77,4 +95,13 @@ export function isDingTalkNewSessionCommand(text: string): boolean {
   // 中文指令不做 toLowerCase 语义变化，但仍用 normalized（去首尾标点）
   return NEW_SESSION_NATURAL_RE.test(normalized)
     || CLEAR_CONTEXT_NATURAL_RE.test(normalized);
+}
+
+/**
+ * Channel 会话只用 base agentId，避免 sessionKey 带上 proj-… 后
+ * 切会话时 currentAgentId 命中输入框「· 项目名」规则。
+ */
+export function resolveChannelBaseAgentId(rawAgentId: string | null | undefined): string {
+  const trimmed = (rawAgentId || 'main').trim().toLowerCase() || 'main';
+  return getBaseAgentIdFromProjectAgentId(trimmed) ?? trimmed;
 }

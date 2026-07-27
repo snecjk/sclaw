@@ -473,11 +473,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
             {errors.instructions && <p className="text-xs text-destructive">{errors.instructions}</p>}
             {workflowDisabled ? (
               <p className="text-xs text-muted-foreground">{t('myTask.createModal.workflowAutoHint')}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {t('myTask.createModal.instructionsHint')}
-              </p>
-            )}
+            ) : null}
           </div>
 
           <div className="flex flex-col gap-2">

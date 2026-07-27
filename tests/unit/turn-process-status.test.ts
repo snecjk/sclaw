@@ -60,6 +60,21 @@ describe('TurnProcessStatus', () => {
     expect(status).toBe('finalizing');
   });
 
+  it('hides organizing_tool_results when final reply is already visible', () => {
+    const status = resolveTurnProcessStatus({
+      isLiveStream: true,
+      isConnecting: false,
+      isProcessing: true,
+      isStillExecuting: false,
+      streamingTools: [],
+      hasProcessSegments: true,
+      hasFinalReplyStreaming: false,
+      hasVisibleFinalReply: true,
+    });
+    expect(status).toBe('idle');
+    expect(shouldShowProcessStatusLoading(status)).toBe(false);
+  });
+
   it('fallback still_executing prevents loading gap', () => {
     const status = resolveTurnProcessStatus({
       isLiveStream: true,

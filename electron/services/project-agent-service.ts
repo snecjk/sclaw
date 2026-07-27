@@ -3,9 +3,10 @@
  *
  * OpenClaw's workspace model is per-agent, not per-session. To make OpenClaw
  * respect a project workspace, each project maps to a dedicated "project agent"
- * whose `workspace` points at the project's rootPath. Sessions created under a
+ * whose `workspace` points at `<projectRoot>/.sclaw`. Sessions created under a
  * project use this project agent's ID, so OpenClaw's normal agent workspace
- * resolution naturally lands in the correct directory.
+ * resolution naturally lands in the hidden runtime directory (bootstrap files +
+ * `.claw-output`), while the user's project files stay at the project root.
  */
 
 import { cp, mkdir, readdir, stat } from 'fs/promises';
@@ -23,6 +24,7 @@ import { logger } from '../utils/logger';
 import { getWorkspaceRepository } from '../db/repositories/workspace-repository';
 import { getOpenClawAgentSkillsDir, ensureWorkspaceArtifactOutputDir } from '../utils/paths';
 import { safeRemoveDir } from '../utils/fs-retry';
+import { prepareProjectAgentWorkspace } from './project-agent-workspace';
 import {
   getBaseAgentIdFromProjectAgentId,
   getProjectIdFromProjectAgentId,
@@ -86,7 +88,7 @@ const ensureProjectAgentInflight = new Map<string, {
 
 /**
  * Ensure a project agent exists for the given project + base agent.
- * If it already exists but its workspace differs from rootPath, update it.
+ * If it already exists but its workspace differs from `<rootPath>/.sclaw`, update it.
  */
 export async function ensureProjectAgent(
   projectId: string,
@@ -94,8 +96,9 @@ export async function ensureProjectAgent(
   rootPath: string,
 ): Promise<EnsureProjectAgentResult> {
   const agentId = resolveProjectAgentId(projectId, baseAgentId);
+  const agentWorkspace = await prepareProjectAgentWorkspace(rootPath);
   const inflight = ensureProjectAgentInflight.get(agentId);
-  const normalizedRootPath = normalizeWorkspacePathForCompare(rootPath);
+  const normalizedRootPath = normalizeWorkspacePathForCompare(agentWorkspace);
   if (inflight) {
     if (inflight.normalizedRootPath === normalizedRootPath) return inflight.promise;
     // A concurrent path edit must not inherit the result for the previous path.
@@ -104,7 +107,7 @@ export async function ensureProjectAgent(
     return ensureProjectAgent(projectId, baseAgentId, rootPath);
   }
 
-  const promise = ensureProjectAgentUnlocked(projectId, baseAgentId, rootPath, agentId)
+  const promise = ensureProjectAgentUnlocked(projectId, baseAgentId, agentWorkspace, agentId)
     .finally(() => {
       if (ensureProjectAgentInflight.get(agentId)?.promise === promise) {
         ensureProjectAgentInflight.delete(agentId);
@@ -117,7 +120,7 @@ export async function ensureProjectAgent(
 async function ensureProjectAgentUnlocked(
   projectId: string,
   baseAgentId: string,
-  rootPath: string,
+  agentWorkspace: string,
   agentId: string,
 ): Promise<EnsureProjectAgentResult> {
   const allIds = await listConfiguredAgentIds();
@@ -126,23 +129,23 @@ async function ensureProjectAgentUnlocked(
   if (exists) {
     const currentWorkspace = await getAgentWorkspacePath(agentId);
     const normalizedCurrent = normalizeWorkspacePathForCompare(currentWorkspace);
-    const normalizedTarget = normalizeWorkspacePathForCompare(rootPath);
+    const normalizedTarget = normalizeWorkspacePathForCompare(agentWorkspace);
     if (normalizedCurrent && normalizedCurrent !== normalizedTarget) {
-      await updateAgentWorkspace(agentId, rootPath);
-      ensureWorkspaceArtifactOutputDir(rootPath);
+      await updateAgentWorkspace(agentId, agentWorkspace);
+      ensureWorkspaceArtifactOutputDir(agentWorkspace);
       return { agentId, created: false, workspaceUpdated: true };
     }
-    ensureWorkspaceArtifactOutputDir(rootPath);
+    ensureWorkspaceArtifactOutputDir(agentWorkspace);
     return { agentId, created: false, workspaceUpdated: false };
   }
 
   // Create new project agent inheriting bootstrap files from the main agent.
   // createAgentWithId is idempotent for config/disk races (heal orphans).
   await createAgentWithId(agentId, `Project ${projectId}`, {
-    workspace: rootPath,
+    workspace: agentWorkspace,
     inheritWorkspace: true,
   });
-  ensureWorkspaceArtifactOutputDir(rootPath);
+  ensureWorkspaceArtifactOutputDir(agentWorkspace);
   // Inherit engine type from base agent so OpenClaw/Claude choice is preserved.
   try {
     const baseEngineType = await getAgentEngineType(baseAgentId);
@@ -159,7 +162,7 @@ async function ensureProjectAgentUnlocked(
     logger.warn('[project-agent] failed to inherit agent-scoped skills', { agentId, baseAgentId, error: String(error) });
   }
 
-  logger.info('[project-agent] created', { agentId, projectId, baseAgentId, rootPath });
+  logger.info('[project-agent] created', { agentId, projectId, baseAgentId, agentWorkspace });
   return { agentId, created: true, workspaceUpdated: false };
 }
 

@@ -2,7 +2,10 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { acquireProcessInstanceFileLock } from '@electron/main/process-instance-lock';
+import {
+  acquireProcessInstanceFileLock,
+  shouldContinueWithElectronLock,
+} from '@electron/main/process-instance-lock';
 
 const tempDirs: string[] = [];
 
@@ -76,6 +79,64 @@ describe('process instance file lock', () => {
 
     expect(lock.acquired).toBe(true);
     expect(readFileSync(lockPath, 'utf8')).toBe('5555');
+    lock.release();
+  });
+
+  it('reclaims a live PID lock when the PID belongs to another executable', () => {
+    const userDataDir = createTempDir();
+    const lockPath = join(userDataDir, 'stoclaw.instance.lock');
+    writeFileSync(lockPath, '4444', 'utf8');
+
+    const lock = acquireProcessInstanceFileLock({
+      userDataDir,
+      lockName: 'stoclaw',
+      pid: 5555,
+      isPidAlive: () => true,
+      verifyOwnerExecutable: true,
+      currentExecutableName: 'S Claw.exe',
+      getProcessExecutableName: () => 'cmd.exe',
+    });
+
+    expect(lock.acquired).toBe(true);
+    expect(readFileSync(lockPath, 'utf8')).toBe('5555');
+    lock.release();
+  });
+
+  it('keeps a live lock owned by the same executable', () => {
+    const userDataDir = createTempDir();
+    const lockPath = join(userDataDir, 'stoclaw.instance.lock');
+    writeFileSync(lockPath, '4444', 'utf8');
+
+    const lock = acquireProcessInstanceFileLock({
+      userDataDir,
+      lockName: 'stoclaw',
+      pid: 5555,
+      isPidAlive: () => true,
+      verifyOwnerExecutable: true,
+      currentExecutableName: 'S Claw.exe',
+      getProcessExecutableName: () => 's claw.EXE',
+    });
+
+    expect(lock.acquired).toBe(false);
+    expect(lock.failureReason).toBe('active-owner');
+    expect(lock.ownerExecutableName).toBe('s claw.EXE');
+    expect(readFileSync(lockPath, 'utf8')).toBe('4444');
+  });
+
+  it('reclaims malformed lock content when recovery is enabled', () => {
+    const userDataDir = createTempDir();
+    const lockPath = join(userDataDir, 'stoclaw.instance.lock');
+    writeFileSync(lockPath, 'not-a-pid', 'utf8');
+
+    const lock = acquireProcessInstanceFileLock({
+      userDataDir,
+      lockName: 'stoclaw',
+      pid: 6666,
+      reclaimUnknownLock: true,
+    });
+
+    expect(lock.acquired).toBe(true);
+    expect(readFileSync(lockPath, 'utf8')).toBe('6666');
     lock.release();
   });
 
@@ -153,5 +214,28 @@ describe('process instance file lock', () => {
     expect(lock.ownerPid).toBeUndefined();
     expect(lock.ownerFormat).toBe('unknown');
     expect(readFileSync(lockPath, 'utf8')).toContain('future-lock-schema');
+  });
+
+  it('only lets Windows fall back for an unverified file lock', () => {
+    const unverifiedLock = {
+      acquired: false,
+      failureReason: 'unverified-owner' as const,
+    };
+    const activeLock = {
+      acquired: false,
+      failureReason: 'active-owner' as const,
+    };
+
+    expect(shouldContinueWithElectronLock(unverifiedLock, 'win32')).toBe(true);
+    expect(shouldContinueWithElectronLock(unverifiedLock, 'linux')).toBe(false);
+    expect(shouldContinueWithElectronLock(activeLock, 'win32')).toBe(false);
+    expect(shouldContinueWithElectronLock({
+      acquired: false,
+      failureReason: 'reclaim-failed',
+    }, 'win32')).toBe(true);
+    expect(shouldContinueWithElectronLock({
+      acquired: false,
+      failureReason: 'io-error',
+    }, 'linux')).toBe(true);
   });
 });

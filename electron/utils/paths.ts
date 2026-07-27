@@ -10,6 +10,7 @@ import { logger } from './logger';
 import {
   WORKSPACE_ARTIFACT_OUTPUT_DIRNAME,
   mergeWorkspaceArtifactOutputSection,
+  mergeProjectWorkspaceContextSection,
 } from '../../shared/workspace-paths';
 
 export {
@@ -279,7 +280,7 @@ export function ensureDir(dir: string): void {
 }
 
 /**
- * Upsert the durable `.claw-output` hard rule into AGENTS.md / CLAUDE.md when present.
+ * Upsert durable workspace rules into AGENTS.md / CLAUDE.md when present.
  * Best-effort: never creates bootstrap files that did not already exist.
  */
 function ensureWorkspaceArtifactOutputConstraintDocs(workspaceRoot: string): void {
@@ -287,9 +288,10 @@ function ensureWorkspaceArtifactOutputConstraintDocs(workspaceRoot: string): voi
     const filePath = join(workspaceRoot, fileName);
     if (!existsSync(filePath)) continue;
     try {
-      const existing = readFileSync(filePath, 'utf-8');
-      const merged = mergeWorkspaceArtifactOutputSection(existing, workspaceRoot);
-      if (merged !== existing) {
+      let content = readFileSync(filePath, 'utf-8');
+      const withProject = mergeProjectWorkspaceContextSection(content, workspaceRoot);
+      const merged = mergeWorkspaceArtifactOutputSection(withProject, workspaceRoot);
+      if (merged !== content) {
         writeFileSync(filePath, merged, 'utf-8');
       }
     } catch (error) {

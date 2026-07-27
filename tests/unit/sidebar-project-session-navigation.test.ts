@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canRenameSidebarSession,
   handleSidebarSessionDoubleClick,
+  resolveSidebarProjectFocus,
   sortProjectsByCreatedAt,
 } from '../../src/lib/sidebar-project-session-navigation';
 import { PROJECT_NEW_CHAT_DRAFT_KEY } from '../../src/stores/chat/types';
@@ -68,5 +69,30 @@ describe('sidebar project and session navigation', () => {
     handleSidebarSessionDoubleClick(PROJECT_NEW_CHAT_DRAFT_KEY, startRename);
 
     expect(renameCount).toBe(1);
+  });
+
+  it('reveals pending project draft before a session is materialized', () => {
+    expect(resolveSidebarProjectFocus({
+      currentSessionKey: 'agent:main:main',
+      pendingProjectId: 'project-222',
+      sessionWorkspaceByKey: {},
+      defaultWorkspaceId: 'default',
+      defaultSessionKey: 'agent:main:main',
+    })).toEqual({ projectId: 'project-222', sessionKey: null });
+  });
+
+  it('reveals the project folder for the current bound session', () => {
+    expect(resolveSidebarProjectFocus({
+      currentSessionKey: 'agent:proj-x--main:session-1',
+      pendingProjectId: null,
+      sessionWorkspaceByKey: {
+        'agent:proj-x--main:session-1': 'project-222',
+      },
+      defaultWorkspaceId: 'default',
+      defaultSessionKey: 'agent:main:main',
+    })).toEqual({
+      projectId: 'project-222',
+      sessionKey: 'agent:proj-x--main:session-1',
+    });
   });
 });

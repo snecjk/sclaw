@@ -134,7 +134,6 @@
       "instructionsPlaceholder": "What should S Claw do for you…",
       "instructionsRequired": "Please describe what S Claw should do",
       "workflowAutoHint": "Linked workflow — description auto-generated",
-      "instructionsHint": "Set the schedule above; click AI Beautify to refine the task description with the model.",
       "beautifyAria": "AI beautify task description",
       "beautifyButton": "AI Beautify",
       "beautifying": "Beautifying…",

@@ -1,15 +1,22 @@
 import { randomUUID } from 'node:crypto';
 import { getAdapter } from '../engines/manager';
 import { rememberSessionEngineType } from '../engines/session-engine';
+import { getEngineSessionRegistryEntry } from '../engines/session-registry';
 import type { AgentEngineType } from '../engines/types';
 import type { GatewayManager } from '../gateway/manager';
+import { DEFAULT_WORKSPACE_ID } from '../db/models/domain/session-catalog';
+import { runMainChatSend } from '../services/chat-send-service';
 import {
+  ensureCatalogSessionInDefaultWorkspace,
   getLatestChannelCatalogSession,
-  getSessionWorkspaceId,
   upsertCatalogSession,
 } from '../services/session-catalog-service';
 import { getChannelConnection } from './binding-service';
-import { resolveDingTalkSessionKey } from './session-lifecycle';
+import {
+  resolveChannelBaseAgentId,
+  resolveDingTalkSessionKey,
+  shouldForceNewDingTalkSessionForEngine,
+} from './session-lifecycle';
 import { logger } from '../utils/logger';
 
 export interface SessionFacadeCreateParams {
@@ -33,7 +40,8 @@ export interface SessionFacadeHandle {
 export async function createOrGetSession(
   params: SessionFacadeCreateParams,
 ): Promise<SessionFacadeHandle> {
-  const agentId = (params.agentId || 'main').trim() || 'main';
+  // Channel 会话只用 base agent，避免 sessionKey / currentAgentId 带上 proj-… 从而命中输入框项目名规则
+  const agentId = resolveChannelBaseAgentId(params.agentId);
   const engineType: AgentEngineType =
     params.engineType === 'openclaw' || params.engineType === 'claude'
       ? params.engineType
@@ -44,19 +52,29 @@ export async function createOrGetSession(
     channelId: params.peerId,
     agentId,
   });
+  // 改选脑（策略 C）：同 agentId 的旧 channel session 若已登记为另一引擎，强制新 key，
+  // 避免 rememberSessionEngineType 覆盖旧 key 导致 PC「当前会话」看不到原引擎历史。
+  let forceNew = !!params.forceNew;
+  if (!forceNew && latestSession?.sessionKey) {
+    const registered = await getEngineSessionRegistryEntry(latestSession.sessionKey);
+    forceNew = shouldForceNewDingTalkSessionForEngine({
+      boundEngineType: engineType,
+      registeredEngineType: registered?.engineType,
+    });
+  }
   const sessionKey = resolveDingTalkSessionKey({
     agentId,
     peerId: params.peerId,
     latestSession,
-    forceNew: params.forceNew,
+    forceNew,
     now,
   });
   await rememberSessionEngineType(sessionKey, engineType);
-  // 同一频道换新会话时继承原 workspace；首次创建才回落 default。
-  const workspaceId = latestSession?.workspaceId
-    ?? await getSessionWorkspaceId(sessionKey);
+  // Channel 会话固定挂 default（进「最近」），不继承侧栏项目 workspace，
+  // 否则会命中输入框 sessionWorkspaceByKey → 「Main Agent · 测试2」。
+  await ensureCatalogSessionInDefaultWorkspace(sessionKey);
   await upsertCatalogSession({
-    workspaceId,
+    workspaceId: DEFAULT_WORKSPACE_ID,
     sessionKey,
     sessionType: 'channel',
     channelType: params.channelType,
@@ -75,7 +93,7 @@ export async function resolveDingTalkBinding(): Promise<{
     throw new Error('DingTalk hub not bound');
   }
   return {
-    agentId: conn.agentId || 'main',
+    agentId: resolveChannelBaseAgentId(conn.agentId),
     engineType: conn.engineType === 'openclaw' ? 'openclaw' : 'claude',
   };
 }
@@ -88,26 +106,30 @@ export async function sendViaFacade(
 ): Promise<{ runId?: string }> {
   const adapter = getAdapter(handle.engineType);
   const hasMedia = !!media && media.length > 0;
-  const result = hasMedia
-    ? await adapter.sendMessageWithMedia(
-        { gatewayManager },
-        {
-          sessionKey: handle.sessionKey,
-          message: text,
-          media,
-          deliver: false,
-          idempotencyKey: randomUUID(),
-        },
-      )
-    : await adapter.sendMessage(
-        { gatewayManager },
-        {
-          sessionKey: handle.sessionKey,
-          message: text,
-          deliver: false,
-          idempotencyKey: randomUUID(),
-        },
-      );
+  const idempotencyKey = randomUUID();
+  // 与主聊 IPC/gateway 同路：记忆注入 + idempotent + memory turn 绑定
+  const result = await runMainChatSend(
+    gatewayManager,
+    {
+      sessionKey: handle.sessionKey,
+      message: text,
+      sourceText: text,
+      deliver: false,
+      idempotencyKey,
+      engineType: handle.engineType,
+    },
+    (params, memory) => adapter.prepareMemoryInjection(params, memory),
+    (prepared) =>
+      hasMedia
+        ? adapter.sendMessageWithMedia(
+            { gatewayManager },
+            {
+              ...prepared,
+              media,
+            },
+          )
+        : adapter.sendMessage({ gatewayManager }, prepared),
+  );
   if (!result.success) {
     logger.warn('[SessionFacade] send failed', result.error);
     throw new Error(result.error || 'sendViaFacade failed');

@@ -26,6 +26,12 @@
     "gatewayRequired": "Connect the gateway before sending.",
     "sendFailed": "Could not send. Open Chat for details."
   },
+  "projectWork": {
+    "enter": "Enter project work",
+    "createBlank": "New blank project",
+    "useExistingFolder": "Use existing folder",
+    "clearFolder": "Don't use a folder"
+  },
   "agentHub": {
     "conversationLabel": "Conversation target",
     "mainAgentDefault": "Main Agent (default)",

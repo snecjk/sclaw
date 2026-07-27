@@ -76,6 +76,7 @@ const electronAPI = {
         'window:maximize',
         'window:close',
         'window:isMaximized',
+        'window:isFullScreen',
         // Settings
         'settings:get',
         'settings:set',

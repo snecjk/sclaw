@@ -4,6 +4,7 @@ import {
   buildChatDisplayItems,
   findLastUserMessage,
   isAssistantRole,
+  resolveActiveTurnStableKey,
   type ChatDisplayItem,
 } from './chat-display';
 import type { ActiveTurnStream } from './AssistantTurnMessage';
@@ -196,7 +197,7 @@ export function useChatDisplay(params: {
     return {
       staticItems: displayItems,
       activeTurn: {
-        turnStableKey: 'active-turn',
+        turnStableKey: resolveActiveTurnStableKey(messages) ?? 'active-turn',
         turnMessages: [],
         turnToolResults: [],
         precedingUserMessage: null,

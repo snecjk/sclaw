@@ -134,7 +134,6 @@
       "instructionsPlaceholder": "S Clawに何をさせますか…",
       "instructionsRequired": "S Clawにさせる内容を説明してください",
       "workflowAutoHint": "関連ワークフロー — 説明は自動生成されます",
-      "instructionsHint": "スケジュールは上の「スケジュール」で設定してください。AI美化でモデルが実行内容を最適化します。",
       "beautifyAria": "AIでタスク説明を美化",
       "beautifyButton": "AI美化",
       "beautifying": "美化中…",

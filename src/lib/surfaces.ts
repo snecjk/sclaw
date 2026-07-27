@@ -60,6 +60,15 @@ export const userChatBubbleSurfaceClass = cn(
 );
 
 /**
+ * 首页新对话：输入框 + 项目条外层灰底壳（圆角 + 描边）。
+ * 使用位置：HomeComposer showProjectPicker。
+ */
+export const chatComposerHomeStackShellClass = cn(
+  'flex flex-col gap-2 overflow-visible rounded-[22px] bg-[#F5F5F5] p-0',
+  'dark:bg-muted/60',
+);
+
+/**
  * 首页/对话页 home 布局输入复合框壳（rounded-[22px]）。
  * 使用位置：ChatInput composerLayout=home。
  */
@@ -438,64 +447,65 @@ export const stoSplitHorizontalInsetsClass = stoSplitShellInsetsClass;
 export const stoSplitRowInsetsClass = cn('box-border py-2');
 
 /**
- * 三栏统一 grid（main）：2 行 × 3 列；--sto-split-preview-col 只写在 main。
- * header / body / split row 用 {@link stoSplitGridContentsClass} 参与同一网格。
+ * 三栏预览框相对 0px 逻辑分界的 inset（Header/Body padding 与 resize handle 共用，避免漂移）。
+ * 横向 10px = 预览框左描边；纵向 8px = body `py-2`。
+ */
+export const STO_SPLIT_PREVIEW_INSET_X = '10px';
+export const STO_SPLIT_PREVIEW_INSET_Y = '8px';
+
+/** 拖拽提示线规格（局部色值，不写入全局 primary / 品牌 token） */
+export const STO_SPLIT_RESIZE_EDGE_COLOR = '#FFD6BA';
+export const STO_SPLIT_RESIZE_EDGE_WIDTH = '2px';
+
+/**
+ * 三栏统一 grid（main）：2 行 × 3 列；中间列为 0px 逻辑边界（不占宽）。
+ * --sto-split-preview-col 只写在 main。Header 为真实连续 52px 子项；body 用 {@link stoSplitGridContentsClass} 进入第二行。
+ * 面板视觉间距由 `--sto-split-preview-inset-*` 控制，不用 gap 夹出 resizer 列。
  */
 export const stoSplitUnifiedMainClass = cn(
   'grid min-h-0 min-w-0 flex-1 overflow-hidden box-border',
+  '[--sto-split-preview-inset-x:10px] [--sto-split-preview-inset-y:8px]',
   'grid-rows-[var(--sto-content-header-h,52px)_minmax(0,1fr)]',
-  'grid-cols-[minmax(0,1fr)_4px_var(--sto-split-preview-col,50%)]',
-  'gap-x-2',
+  'grid-cols-[minmax(0,1fr)_0px_var(--sto-split-preview-col,50%)]',
 );
 
-/** 三栏：中间层 display:contents，子元素直接参与 main grid */
+/** 三栏：中间层 display:contents，子元素直接参与 main grid（仅 body / split row，不用在 Header） */
 export const stoSplitGridContentsClass = 'contents';
-
-/** @deprecated 三栏改用 {@link stoSplitRowContentsClass} + main {@link stoSplitUnifiedMainClass} */
-export const stoSplitRowClass = cn(
-  stoSplitRowInsetsClass,
-  'grid min-h-0 min-w-0 w-full flex-1 overflow-x-hidden',
-  'gap-x-2',
-  '[grid-template-columns:minmax(0,1fr)_4px_var(--sto-split-preview-col,50%)]',
-);
 
 /** 三栏 split row 外壳：display:contents，列定位由子项 grid class 承担 */
 export const stoSplitRowContentsClass = stoSplitGridContentsClass;
 
-/** 三栏 header 行 col1：会话 chip + 顶圆角左（外层 drag-region，内层 no-drag 见 ContentHeader） */
+/** MCP 对话/预览交界视觉间距约 20px → 左右各用 `--sto-split-preview-inset-x`（不是 resizer 列宽） */
+
+/** 三栏 Header 内嵌 grid 左列：会话 chip + 会话工具（拖动区由外层 Header 承担） */
 export const stoSplitGridHeaderChatClass = cn(
-  'drag-region col-start-1 row-start-1 self-stretch min-w-0',
-  'flex items-center',
-  'box-border h-[var(--sto-content-header-h,52px)] min-h-[var(--sto-content-header-h,52px)] max-h-[var(--sto-content-header-h,52px)]',
-  'rounded-tl-[var(--sto-main-card-radius)] bg-[var(--sto-main-card-bg)]',
+  'col-start-1 row-start-1',
+  'flex h-full w-full min-w-0 items-center',
+  'box-border pr-[var(--sto-split-preview-inset-x)]',
 );
 
-/** 三栏 header 行 col2：与 body 拖拽条同列对齐 */
-export const stoSplitGridHeaderResizerClass = cn(
-  'drag-region col-start-2 row-start-1 self-stretch',
-  'h-[var(--sto-content-header-h,52px)] min-h-[var(--sto-content-header-h,52px)] max-h-[var(--sto-content-header-h,52px)] w-1 shrink-0',
-  'bg-[var(--sto-main-card-bg)]',
-);
-
-/** 三栏 header 行 col3：☰ + tab + actions + 顶圆角右（外层 drag-region，内层 no-drag） */
+/** 三栏 Header 内嵌 grid 右列：产物 tab + 面板工具（拖动区由外层 Header 承担） */
 export const stoSplitGridHeaderPreviewClass = cn(
-  'drag-region col-start-3 row-start-1 self-stretch min-w-0',
-  'flex items-center',
-  'box-border h-[var(--sto-content-header-h,52px)] min-h-[var(--sto-content-header-h,52px)] max-h-[var(--sto-content-header-h,52px)]',
-  'rounded-tr-[var(--sto-main-card-radius)] bg-[var(--sto-main-card-bg)]',
+  'col-start-3 row-start-1',
+  'flex h-full w-full min-w-0 items-center',
+  'box-border pl-[var(--sto-split-preview-inset-x)]',
 );
 
 /** 三栏 body 行 col1：对话列 */
 export const stoSplitGridBodyChatClass = cn(
   'col-start-1 row-start-2 self-stretch',
-  'relative flex min-h-0 min-w-0 flex-col overflow-hidden py-2 box-border',
+  'relative flex min-h-0 min-w-0 flex-col overflow-hidden box-border',
+  'py-[var(--sto-split-preview-inset-y)]',
+  'pr-[var(--sto-split-preview-inset-x)]',
 );
 
 /** 三栏 body 行 col3：预览面板 */
 export const stoSplitGridBodyPreviewClass = cn(
   'col-start-3 row-start-2 self-stretch',
-  'flex min-h-0 min-w-0 flex-col overflow-hidden py-2 box-border',
+  'flex min-h-0 min-w-0 flex-col overflow-hidden box-border',
   '[contain:inline-size]',
+  'py-[var(--sto-split-preview-inset-y)]',
+  'pl-[var(--sto-split-preview-inset-x)]',
 );
 
 /** ParameterFormDock layout（与对话列 variant 一致） */
@@ -571,7 +581,7 @@ export const stoSplitPreviewCardClass = stoPreviewContentShellClass;
 /** 预览产物 tab pill（选中 #E5E6EB / 未选 #F5F6F7；暗色未选用 muted 底 + 次级字色） */
 export function stoPreviewArtifactTabClass(isActive: boolean): string {
   return cn(
-    'inline-flex h-8 max-w-[143px] shrink-0 items-center gap-1 rounded-[10px] px-2 text-sm leading-none transition-colors duration-fast',
+    'no-drag inline-flex h-8 max-w-[143px] shrink-0 items-center gap-1 rounded-[10px] px-2 text-sm leading-none transition-colors duration-fast',
     isActive
       ? 'bg-border text-foreground'
       : cn(
@@ -592,18 +602,30 @@ export const stoPreviewActionButtonClass = cn(
   'hover:bg-black/[0.04] hover:text-foreground',
 );
 
-/** 三栏拖拽分隔条 */
-export const stoSplitResizerClass = cn(
-  'relative z-20 flex h-full w-1 shrink-0 cursor-col-resize items-center justify-center bg-transparent transition-colors duration-fast',
-  'hover:bg-primary/20',
+/**
+ * 三栏拖拽热区壳：锚定在预览框左描边（逻辑分界 + inset-x），w-3 不扩展轨道；
+ * 壳层始终透明；提示线见 {@link stoSplitPanelResizeEdgeClass}。
+ * 使用 `group` + `data-resizing` 驱动提示线显隐（拖动中不能只靠 :hover）。
+ */
+export const stoSplitPanelResizeHandleClass = cn(
+  'group no-drag relative col-start-2 row-start-1 row-span-2',
+  'z-20 justify-self-center self-stretch',
+  'w-3 shrink-0 translate-x-[var(--sto-split-preview-inset-x)] cursor-col-resize bg-transparent',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
 
-export const stoSplitResizerActiveClass = 'bg-primary/40';
-
-/** 三栏 body 行 col2：拖拽条（须在 {@link stoSplitResizerClass} 之后定义） */
-export const stoSplitGridBodyResizerClass = cn(
-  'col-start-2 row-start-2 self-stretch',
-  stoSplitResizerClass,
+/**
+ * 拖拽提示线：对齐预览框左描边与上下 inset；#FFD6BA / 2px；
+ * 默认隐藏，handle hover / data-resizing / focus-visible 时显示。
+ * pointer-events-none。禁止短灰线胶囊或 bg-primary。
+ */
+export const stoSplitPanelResizeEdgeClass = cn(
+  'pointer-events-none absolute left-1/2 w-[2px] -translate-x-1/2 bg-[#FFD6BA]',
+  'top-[calc(var(--sto-content-header-h,52px)+var(--sto-split-preview-inset-y))]',
+  'bottom-[var(--sto-split-preview-inset-y)]',
+  'opacity-0 transition-opacity duration-fast',
+  'group-hover:opacity-100 group-focus-visible:opacity-100',
+  'group-data-[resizing=true]:opacity-100',
 );
 
 /** ContentHeader 预览列：☰ + tab 与右侧操作 icon 同一 52px 行内对齐 */
@@ -621,7 +643,7 @@ export const contentHeaderPreviewTabsWrapClass = cn(
 
 /** ContentHeader 预览列产物 tab 内按钮（去浏览器默认 padding，避免 pill 偏上） */
 export const contentHeaderPreviewArtifactTabBtnClass = cn(
-  'inline-flex min-w-0 items-center bg-transparent p-0 font-inherit text-inherit leading-none',
+  'no-drag inline-flex min-w-0 items-center bg-transparent p-0 font-inherit text-inherit leading-none',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
 
@@ -710,14 +732,14 @@ export const contentHeaderTitleGroupClass = cn(
   'flex min-w-[120px] max-w-[min(34vw,280px)] shrink-0 items-center gap-2 overflow-hidden',
 );
 
-/** 三栏 header 左区（对话列宽）：侧栏钮 + 会话 tab，可横滑 */
+/** 三栏 header 左区（对话列宽）：必须铺满第一列，title + flex-1 + 会话工具；空白属 drag-region */
 export const contentHeaderSplitChatZoneClass = cn(
-  'no-drag flex h-full min-w-0 items-center gap-2 overflow-x-auto overflow-y-hidden',
+  'flex h-full w-full min-w-0 flex-1 items-center gap-2 overflow-x-auto overflow-y-hidden',
 );
 
-/** 三栏 header 右区（预览列宽）：产物 tab + 操作 icon 同一行 */
+/** 三栏 header 右区（预览列宽）：产物 tab + 操作 icon 同一行；空白属 drag-region */
 export const contentHeaderSplitPreviewZoneClass = cn(
-  'no-drag flex h-full min-w-0 w-full items-center gap-1 overflow-hidden',
+  'flex h-full min-w-0 w-full items-center gap-1 overflow-hidden',
 );
 
 /** 三栏 grid 可用宽：main 内容区（统一 grid 唯一量宽基准） */
@@ -731,13 +753,26 @@ export function resolveSplitGridContainerWidth(anchorEl: HTMLElement | null): nu
   return Math.max(0, main.clientWidth - pl - pr);
 }
 
-/** @deprecated 三栏改用 main {@link stoSplitUnifiedMainClass} + {@link stoSplitGridContentsClass} */
+/**
+ * 三栏 Header：main grid 真实连续 52px 子项（横跨三列），内嵌同百分比三列 grid。
+ * 空白区为系统 drag-region；交互控件各自 no-drag。
+ */
 export const contentHeaderSplitBarClass = cn(
-  'drag-region box-border w-full min-w-0 shrink-0 overflow-hidden',
-  'h-[var(--sto-content-header-h,52px)] min-h-[var(--sto-content-header-h,52px)] max-h-[var(--sto-content-header-h,52px)]',
-  'rounded-t-[var(--sto-main-card-radius)] bg-[var(--sto-main-card-bg)]',
-  'grid items-center justify-normal gap-x-2',
-  '[grid-template-columns:minmax(0,1fr)_4px_var(--sto-split-preview-col,50%)]',
+  // 作为 main grid 的真实子项，横跨完整三列
+  'drag-region col-start-1 col-end-4 row-start-1',
+
+  // 内部嵌套 Grid，继续和 body 共用同一百分比变量
+  'grid w-full min-w-0 shrink-0 overflow-hidden select-none',
+  '[grid-template-columns:minmax(0,1fr)_0px_var(--sto-split-preview-col,50%)]',
+
+  // 固定 52px
+  'box-border h-[var(--sto-content-header-h,52px)]',
+  'min-h-[var(--sto-content-header-h,52px)]',
+  'max-h-[var(--sto-content-header-h,52px)]',
+
+  // 统一背景和顶部圆角
+  'rounded-t-[var(--sto-main-card-radius)]',
+  'bg-[var(--sto-main-card-bg)]',
 );
 
 /** 标题栏会话标题（纯文本 fallback） */

@@ -1,7 +1,12 @@
 /**
  * OpenClaw engine skill adapter: projects canonical store → openclaw runtime dirs.
+ *
+ * Enabled skills are mirrored under openclaw/skills. Disabled skills are removed
+ * from that directory (Claude-aligned); openclaw.json skills.entries.*.enabled
+ * is updated accordingly. Legacy skills-disabled/ projections are cleaned up
+ * but no longer used as an active disable target.
  */
-import { access, cp, mkdir, readdir, rename, rm } from 'node:fs/promises';
+import { access, cp, mkdir, readdir, rm } from 'node:fs/promises';
 import { constants, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -35,7 +40,8 @@ async function fileExists(targetPath: string): Promise<boolean> {
   }
 }
 
-function getDisabledDir(): string {
+/** Legacy StoClaw disable mirror; no longer written, only cleaned up. */
+function getLegacyDisabledDir(): string {
   return join(getOpenClawConfigDir(), 'skills-disabled');
 }
 
@@ -64,10 +70,18 @@ async function projectSkillToDir(pkg: SkillPackage, targetDir: string): Promise<
   await writeManagedMarker(targetDir, pkg.slug);
 }
 
+async function removeManagedDir(dir: string): Promise<void> {
+  if (!(await fileExists(dir))) return;
+  if (!(await isManagedProjection(dir))) return;
+  await safeRemoveDir(dir, { label: dir }).catch((error) => {
+    logger.warn(`[openclaw-skill-adapter] failed to remove ${dir}`, error);
+  });
+}
+
 async function removeSkillDirs(slug: string, agentId?: string): Promise<void> {
   const dirs = agentId
     ? [join(getOpenClawAgentSkillsDir(agentId), slug)]
-    : [join(getOpenClawSkillsDir(), slug), join(getDisabledDir(), slug)];
+    : [join(getOpenClawSkillsDir(), slug), join(getLegacyDisabledDir(), slug)];
 
   for (const dir of dirs) {
     if (await fileExists(dir)) {
@@ -76,6 +90,40 @@ async function removeSkillDirs(slug: string, agentId?: string): Promise<void> {
       });
     }
   }
+}
+
+/** Drop managed leftovers under the legacy skills-disabled tree. */
+async function purgeLegacyDisabledProjections(): Promise<string[]> {
+  const root = getLegacyDisabledDir();
+  const removed: string[] = [];
+  if (!(await fileExists(root))) return removed;
+
+  let entries: Array<import('node:fs').Dirent>;
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch {
+    return removed;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const targetDir = join(root, entry.name);
+    if (!(await isManagedProjection(targetDir))) continue;
+    await safeRemoveDir(targetDir, { label: targetDir }).catch(() => undefined);
+    removed.push(entry.name);
+  }
+
+  // Remove empty legacy root when nothing remains.
+  try {
+    const left = await readdir(root);
+    if (left.length === 0) {
+      await safeRemoveDir(root, { label: root }).catch(() => undefined);
+    }
+  } catch {
+    // ignore
+  }
+
+  return removed;
 }
 
 export class OpenClawSkillAdapter implements EngineSkillAdapter {
@@ -100,17 +148,17 @@ export class OpenClawSkillAdapter implements EngineSkillAdapter {
     }
 
     const activeDir = join(getOpenClawSkillsDir(), pkg.slug);
-    const disabledDir = join(getDisabledDir(), pkg.slug);
+    const legacyDisabledDir = join(getLegacyDisabledDir(), pkg.slug);
+
     if (pkg.enabled) {
-      if (await fileExists(disabledDir)) {
-        await safeRemoveDir(disabledDir, { label: disabledDir }).catch(() => undefined);
-      }
+      await removeManagedDir(legacyDisabledDir);
       await projectSkillToDir(pkg, activeDir);
     } else {
+      // Disabled: keep out of Gateway's skills scan (same idea as Claude).
       if (await fileExists(activeDir)) {
         await safeRemoveDir(activeDir, { label: activeDir }).catch(() => undefined);
       }
-      await projectSkillToDir(pkg, disabledDir);
+      await removeManagedDir(legacyDisabledDir);
     }
 
     await setSkillsEnabled([pkg.slug], pkg.enabled).catch((error) => {
@@ -147,22 +195,29 @@ export class OpenClawSkillAdapter implements EngineSkillAdapter {
 
   async applyEnabled(slug: string, enabled: boolean, ctx: EngineSkillContext): Promise<void> {
     if (ctx.agentId) {
-      // Agent-scoped skills do not use skills-disabled; enabled is config-only for now.
       await setSkillsEnabled([slug], enabled);
       return;
     }
 
     const activeDir = join(getOpenClawSkillsDir(), slug);
-    const disabledRoot = getDisabledDir();
-    const disabledDir = join(disabledRoot, slug);
-    await mkdir(disabledRoot, { recursive: true });
+    const legacyDisabledDir = join(getLegacyDisabledDir(), slug);
 
     if (enabled) {
-      if (await fileExists(disabledDir) && !(await fileExists(activeDir))) {
-        await rename(disabledDir, activeDir);
+      // Fresh projection comes from applyInstall (SkillManager fans out both).
+      // Clear any legacy skills-disabled copy so it cannot shadow later.
+      await removeManagedDir(legacyDisabledDir);
+    } else if (await fileExists(activeDir)) {
+      if (await isManagedProjection(activeDir)) {
+        await safeRemoveDir(activeDir, { label: activeDir }).catch((error) => {
+          logger.warn('[openclaw-skill-adapter] failed to remove disabled skill', {
+            slug,
+            error,
+          });
+        });
       }
-    } else if (await fileExists(activeDir) && !(await fileExists(disabledDir))) {
-      await rename(activeDir, disabledDir);
+      await removeManagedDir(legacyDisabledDir);
+    } else {
+      await removeManagedDir(legacyDisabledDir);
     }
 
     await setSkillsEnabled([slug], enabled);
@@ -174,7 +229,6 @@ export class OpenClawSkillAdapter implements EngineSkillAdapter {
     const skippedConflicts: string[] = [];
     const desiredBySlug = new Map(desired.map((pkg) => [pkg.slug, pkg]));
 
-    // Project agent-scoped and global/user packages appropriately.
     for (const pkg of desired) {
       try {
         if (pkg.scope === 'agent') {
@@ -190,12 +244,10 @@ export class OpenClawSkillAdapter implements EngineSkillAdapter {
 
         if (!(await fileExists(join(pkg.sourceDir, 'SKILL.md')))) continue;
         const activeDir = join(getOpenClawSkillsDir(), pkg.slug);
-        const disabledDir = join(getDisabledDir(), pkg.slug);
+        const legacyDisabledDir = join(getLegacyDisabledDir(), pkg.slug);
 
         if (pkg.enabled) {
-          if (await fileExists(disabledDir) && (await isManagedProjection(disabledDir))) {
-            await safeRemoveDir(disabledDir, { label: disabledDir }).catch(() => undefined);
-          }
+          await removeManagedDir(legacyDisabledDir);
           if (await fileExists(activeDir) && !(await isManagedProjection(activeDir))) {
             skippedConflicts.push(pkg.slug);
             continue;
@@ -204,12 +256,11 @@ export class OpenClawSkillAdapter implements EngineSkillAdapter {
         } else {
           if (await fileExists(activeDir) && (await isManagedProjection(activeDir))) {
             await safeRemoveDir(activeDir, { label: activeDir }).catch(() => undefined);
-          }
-          if (await fileExists(disabledDir) && !(await isManagedProjection(disabledDir))) {
+          } else if (await fileExists(activeDir) && !(await isManagedProjection(activeDir))) {
             skippedConflicts.push(pkg.slug);
             continue;
           }
-          await projectSkillToDir(pkg, disabledDir);
+          await removeManagedDir(legacyDisabledDir);
         }
         await setSkillsEnabled([pkg.slug], pkg.enabled).catch(() => undefined);
         mirrored.push(pkg.slug);
@@ -221,23 +272,30 @@ export class OpenClawSkillAdapter implements EngineSkillAdapter {
       }
     }
 
-    // Remove managed projections that are no longer desired (global mount only).
-    for (const root of [getOpenClawSkillsDir(), getDisabledDir()]) {
-      if (!(await fileExists(root))) continue;
+    // Remove managed projections under skills/ that are no longer desired,
+    // or remain desired but disabled (should not stay on the Gateway scan path).
+    const skillsRoot = getOpenClawSkillsDir();
+    if (await fileExists(skillsRoot)) {
       let entries: Array<import('node:fs').Dirent>;
       try {
-        entries = await readdir(root, { withFileTypes: true });
+        entries = await readdir(skillsRoot, { withFileTypes: true });
       } catch {
-        continue;
+        entries = [];
       }
       for (const entry of entries) {
         if (!entry.isDirectory()) continue;
-        if (desiredBySlug.has(entry.name)) continue;
-        const targetDir = join(root, entry.name);
+        const pkg = desiredBySlug.get(entry.name);
+        if (pkg?.enabled) continue;
+        const targetDir = join(skillsRoot, entry.name);
         if (!(await isManagedProjection(targetDir))) continue;
         await safeRemoveDir(targetDir, { label: targetDir }).catch(() => undefined);
         removed.push(entry.name);
       }
+    }
+
+    const purgedLegacy = await purgeLegacyDisabledProjections();
+    for (const slug of purgedLegacy) {
+      if (!removed.includes(slug)) removed.push(slug);
     }
 
     return { mirrored, removed, skippedConflicts };
@@ -248,7 +306,7 @@ export class OpenClawSkillAdapter implements EngineSkillAdapter {
   }
 
   async cleanupOrphanProjections(): Promise<void> {
-    for (const root of [getOpenClawSkillsDir(), getDisabledDir()]) {
+    for (const root of [getOpenClawSkillsDir(), getLegacyDisabledDir()]) {
       if (!(await fileExists(root))) continue;
       let entries: Array<import('node:fs').Dirent>;
       try {

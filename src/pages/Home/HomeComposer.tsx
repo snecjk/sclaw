@@ -12,7 +12,12 @@ import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
 import { useMessageQueueStore } from '@/stores/message-queue';
 import { cn } from '@/lib/utils';
-import { stoChatShellHomeClass, stoHeroInputShellClass, stoParameterFormDockLayout } from '@/lib/surfaces';
+import {
+  chatComposerHomeStackShellClass,
+  stoChatShellHomeClass,
+  stoHeroInputShellClass,
+  stoParameterFormDockLayout,
+} from '@/lib/surfaces';
 import { ChatInput, type FileAttachment } from '@/pages/Chat/ChatInput';
 import { PendingQueuePanel } from '@/pages/Chat/PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
@@ -24,6 +29,7 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import type { AgentSummary } from '@/types/agent';
 import { homeHubFooterDisclaimerClass } from './home-hub-surface-styles';
+import { HomeProjectWorkPicker } from './HomeProjectWorkPicker';
 
 export interface HomeComposerProps {
   /** 一次性填入输入框的种子文案 */
@@ -58,6 +64,8 @@ export interface HomeComposerProps {
   showDisclaimer?: boolean;
   /** 免责对齐（三首页统一居中） */
   footerAlign?: 'center' | 'right';
+  /** 新对话落地页：输入框下展示「进入项目工作」选择条 */
+  showProjectPicker?: boolean;
 }
 
 export function HomeComposer({
@@ -71,6 +79,7 @@ export function HomeComposer({
   engineType: engineTypeProp,
   showDisclaimer = true,
   footerAlign = 'center',
+  showProjectPicker = false,
 }: HomeComposerProps) {
   const { t } = useTranslation('home');
   const agents = useAgentsStore((s) => s.agents);
@@ -130,12 +139,24 @@ export function HomeComposer({
         className={cn(stoChatShellHomeClass, 'px-0')}
       />
       <section className="flex flex-col" aria-label={t('assistant.placeholder')}>
-        <ChatInput
-          {...inputProps}
-          composerLayout="home"
-          toolbarInlineSelectors={inlineToolbarSelectors}
-          engineType={resolvedEngineType}
-        />
+        {showProjectPicker ? (
+          <div className={chatComposerHomeStackShellClass}>
+            <ChatInput
+              {...inputProps}
+              composerLayout="home"
+              toolbarInlineSelectors={inlineToolbarSelectors}
+              engineType={resolvedEngineType}
+            />
+            <HomeProjectWorkPicker />
+          </div>
+        ) : (
+          <ChatInput
+            {...inputProps}
+            composerLayout="home"
+            toolbarInlineSelectors={inlineToolbarSelectors}
+            engineType={resolvedEngineType}
+          />
+        )}
         {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
       </section>
       {showDisclaimer ? (
