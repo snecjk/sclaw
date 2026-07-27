@@ -54,10 +54,11 @@ export function AppPlazaTabStrip() {
   const closeDevAppTab = useAppPlazaShellStore((s) => s.closeDevAppTab);
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
+  const isWin = window.electron?.platform === 'win32';
 
   return (
     <div
-      className="app-plaza-tabstrip"
+      className="app-plaza-tabstrip drag-region"
       role="tablist"
       aria-label={t('moreApps.browserTabs.aria', { defaultValue: '应用页签' })}
     >
@@ -67,6 +68,7 @@ export function AppPlazaTabStrip() {
           onToggle={() => setSidebarCollapsed(false)}
           collapseLabel={t('sidebar.toggleSidebarCollapse')}
           expandLabel={t('sidebar.toggleSidebarExpand')}
+          className="app-plaza-tabstrip__sidebar-toggle"
         />
       ) : null}
 
@@ -158,6 +160,10 @@ export function AppPlazaTabStrip() {
       >
         <Plus className="h-4 w-4" aria-hidden />
       </button>
+
+      {/* Empty chrome — window drag (same pattern as ContentHeader). */}
+      <div className="app-plaza-tabstrip__spacer" aria-hidden />
+      {isWin ? <div className="app-plaza-tabstrip__win-reserve no-drag" aria-hidden /> : null}
     </div>
   );
 }
