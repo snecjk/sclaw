@@ -27,7 +27,7 @@ vi.mock('../../electron/utils/logger', () => ({
 }));
 
 /**
- * Step 4 数据迁移：claude definitions.json + openclaw jobs.json（直读，不经 Gateway）
+ * 数据迁移：claude definitions.json + openclaw jobs.json（直读，不经 Gateway）
  * → schedule_tasks；迁成功后从 jobs.json 移除；marker 幂等 + 漏迁补洞。
  */
 describe('runScheduledTasksMigration (data)', () => {

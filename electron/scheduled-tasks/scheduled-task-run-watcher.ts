@@ -1,8 +1,7 @@
 /**
- * 定时任务 run 终态 watcher（抄 `channels/delivery.ts attachStreamingDelivery`
- * 骨架，去卡片推送）。补 cutover（6b37ec20）漏搬进通用 executor 的那一半：
- * adapter `sendMessage` 在 run 启动即 resolve（§0），executor 不能在 resolve 后
- * 立即置 succeeded——须靠 gateway 事件跟终态。
+ * 定时任务 run 终态 watcher（参考 `channels/delivery.ts` 的 streaming delivery
+ * 骨架，无卡片推送）。adapter `sendMessage` 在 run 启动即 resolve，executor 不能
+ * 在 resolve 后立即置 succeeded——须靠 gateway 事件跟终态。
  *
  * 订阅 `GatewayManager`（extends EventEmitter）的 `chat:message` / `notification`，
  * 按 sessionKey 过滤，沿路累积 lastAssistantText；终态/超时回调里闭环 run 生命周期。

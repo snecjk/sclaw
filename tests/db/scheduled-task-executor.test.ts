@@ -172,7 +172,7 @@ describe('EngineScheduledTaskDispatcher', () => {
     });
     expect(passedInput.message).toBe('[dingtalk recipients]\n\nrun report');
 
-    // §0：send resolve 只表 run 启动——run 仍 running，不在此置 succeeded。
+    // send resolve 只表 run 启动——run 仍 running，不在此置 succeeded。
     const mid = await runRepo.getRun(run.runId);
     expect(mid?.status).toBe('running');
     expect(mid?.sessionKey).toBe('sched:t1:20240101');

@@ -60,7 +60,7 @@ function mapRow(row: Record<string, unknown>): ScheduleTaskRun {
 /**
  * schedule_task_runs 表的 DB 访问层。
  * 幂等由唯一索引 idx_schedule_task_runs_idem 在 DB 层兜底；
- * find-then-create 的单飞编排归 Step 3 的 ScheduledTaskService。
+ * find-then-create 的单飞编排在 ScheduledTaskService / Scheduler。
  */
 export class ScheduleTaskRunRepository {
   async getRun(

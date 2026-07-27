@@ -1,6 +1,6 @@
 /**
  * 钉钉发送格式规则 — 全场景共用 SSOT（模块 A）。
- * 口头护栏子段见 `DINGTALK_ORAL_SEND_GUARD`（Step 4 接线对话 send-guard）。
+ * 口头护栏子段见 `DINGTALK_ORAL_SEND_GUARD`（对话 send-guard 注入）。
  * 定时任务对规则 8 使用 `DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK` 覆盖。
  *
  * 产物 / 钉盘相关文案常量亦供附件工作流、send-guard 拒因复用，避免多处各写一套。
@@ -81,7 +81,7 @@ export const DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK = [
 
 /**
  * 口头点名发送护栏（无输入框 @）— 模块 A 子段。
- * Step 4：对话 send-guard 常驻注入；定时任务执行 session 不注入。
+ * 对话 send-guard 常驻注入；定时任务执行 session 不注入。
  */
 export const DINGTALK_ORAL_SEND_GUARD = [
   '口头点名发送护栏（无 @ 触发器，自然语言口头发送）：',

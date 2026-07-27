@@ -18,13 +18,13 @@ import { prependSystemPromptAppend } from '../../shared/system-prompt-append';
 /**
  * 引擎无关的执行期 dispatcher。把 `ScheduledTaskScheduler` 交出的 `{ task, run }`
  * 落到真实引擎执行——走与交互式 chat 同构的 `runMainChatSend`（内存注入 + 幂等 +
- * 适配器 `sendMessage`），而非 claude 旧 worker 的底层 SDK `consumeClaudeQuery` 直连。
+ * 适配器 `sendMessage`）。
  *
- * 职责（Step 5.1）：当日占位会话 → run 置 running → send → run 置 succeeded/failed。
- * Step 5.2 在此闭环 run 生命周期：成功发 succeeded 事件；失败按 `retryPolicy`
- * 重试（`createRun(triggerSource='recovery')` + backoff 后自调度 dispatch），
- * 重试耗尽按 `failurePolicy.pauseAfterConsecutiveFailures` 置 task disabled 并发
- * paused 事件。app 启动接线归 Step 5.3，renderer IPC 路由归 Step 5.4。
+ * 职责：当日占位会话 → run 置 running → send；成功发 succeeded 事件；失败按
+ * `retryPolicy` 重试（`createRun(triggerSource='recovery')` + backoff 后自调度
+ * dispatch），重试耗尽按 `failurePolicy.pauseAfterConsecutiveFailures` 置 task
+ * disabled 并发 paused 事件。终态由 gateway 事件经 run watcher 闭环（sendMessage
+ * resolve 只代表 run 启动）。
  *
  * 依赖全部由 `ScheduledTaskService.setGatewayManager` 以闭包注入——执行器本身不 import
  * service，避免 service ↔ executor 循环；sessionKey 构造与 dingtalk 烘焙仍是 service
@@ -33,9 +33,8 @@ import { prependSystemPromptAppend } from '../../shared/system-prompt-append';
 
 /**
  * run 生命周期 / task pause 的事件频道。service 注入的 gateway sink 把事件 emit 到
- * `GatewayManager`（其 EventEmitter 经现有 IPC 桥把 `chat:message`/`notification` 透给
- * renderer）；renderer 侧 `scheduled-task:*` 的具体订阅归 Step 5.4。未注入时用
- * `loggingEventSink` 仅落日志，执行链路不受影响。
+ * `GatewayManager`（经现有 IPC 桥透给 renderer）。未注入时用 `loggingEventSink`
+ * 仅落日志，执行链路不受影响。
  */
 export type ScheduledTaskEvent =
   | 'scheduled-task:run:succeeded'
@@ -76,8 +75,7 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
 
     const gatewayManager = this.deps.getGatewayManager();
     if (!gatewayManager) {
-      // 设置期失败（gateway 未注册）——不走 retry/pause：setup 错误 ≠ task 错误。
-      // Step 5.3 保证 gateway ready 后才注册 dispatcher，此分支是安全兜底。
+      // gateway 未注册：setup 错误，不走 retry/pause。
       await this.markFailed(run, 'gateway manager not registered', undefined, run.sessionKey ?? undefined);
       return;
     }
@@ -153,12 +151,8 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
         return;
       }
 
-      // §0: sendMessage resolve 只代表 run 启动（claude `startClaudeQuery` 里
-      // `void consumeWithMissingSessionRecovery()` fire-and-forget；openclaw
-      // `rpc('chat.send')` 返回 runId 后 gateway 异步推事件）。**不在此置
-      // succeeded**——挂 watcher 跟 gateway 事件终态，onTerminal/onTimeout 回调
-      // 里闭环 run 生命周期（补 cutover 6b37ec20 删 claude-task-workflow-watchdog
-      // 时漏搬进通用 executor 的那一半）。
+      // sendMessage resolve 只代表 run 启动（claude / openclaw 均为异步推事件）。
+      // 不在此置 succeeded——挂 watcher 跟 gateway 事件终态。
       logger.info('[scheduled-task] run started, awaiting terminal', {
         taskId: task.id,
         runId: run.runId,
@@ -240,9 +234,7 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
   /**
    * watcher `onTerminal` 回调：agent 终态（completed/error/aborted）闭环 run。
    * 经 `finalizeRunIfRunning`（`WHERE status='running'`）防与 reaper 双终态——
-   * 若 run 已被 reaper reap 为 timed_out 或本 run 已终态，返回 null 退出不重复
-   * handle。成功路径末尾 fire-and-forget 兜底 dws-send（补 cutover 删 watchdog
-   * 漏搬的钉钉"指定即必发"模型不遵从时的"钉钉沉默"兜底）。
+   * 若 run 已被 reaper reap 为 timed_out 或本 run 已终态，返回 null 退出不重复 handle。
    */
   private async finalizeRunFromWatcher(
     task: ScheduleTask,

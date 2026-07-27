@@ -593,10 +593,9 @@ async function initialize(): Promise<void> {
   const { registerFormHandlers } = await import('./ipc/form-handlers');
   registerFormHandlers();
 
-  // 引擎无关通用定时任务（Step 4 起为唯一驱动；旧 claude 调度代码已退役）。
-  // setGatewayManager 注入 dispatcher + eventSink → 一次性迁移遗留 claude
-  // definitions.json + openclaw Gateway cron → schedule_tasks → startScheduler
-  // （discard→start）。迁移幂等（marker + per-row 存在检查，崩溃可重跑续传）。
+  // 引擎无关通用定时任务：setGatewayManager 注入 dispatcher + eventSink →
+  // 一次性迁移遗留 claude definitions.json + openclaw Gateway cron → schedule_tasks →
+  // startScheduler（discard→start）。迁移幂等（marker + per-row 存在检查，崩溃可重跑续传）。
   const { getScheduledTaskService } = await import('../scheduled-tasks/scheduled-task-service');
   const { runScheduledTasksMigration } = await import('../scripts/migrate-scheduled-tasks');
   const scheduledTaskService = getScheduledTaskService();

@@ -43,11 +43,6 @@ import { logger } from '../utils/logger';
  *
  * 生产路径：app 启动 `setGatewayManager` → 迁移 → `startScheduler`；
  * CRUD / trigger 经 `/api/scheduled-tasks/*`。
- *
- * 复用锚点：
- *  - 校验/默认值/refresh 模式：原 claude-scheduled-task-service（已退役）
- *  - dingtalk 烘焙：`buildDingTalkMentionSystemContextForScheduledTask`（scenario='scheduled-task'，"指定即必发"）
- *  - catalog 占位 upsert：`CatalogSessionRepository.upsert`（`inferSessionCatalogMeta` 推 session_type+task_id；P2-C 不收敛类型）
  */
 
 const PERMISSION_PROFILES: readonly ScheduleTaskPermissionProfile[] = [
@@ -66,13 +61,12 @@ export class ScheduledTaskService {
     private readonly catalogRepo: CatalogSessionRepository = getCatalogSessionRepository(),
   ) {}
 
-  /** Step 5 注入：未调 `setGatewayManager` 前为 null，执行器 dispatch 直接判失败。 */
+  /** 未调 `setGatewayManager` 前为 null，执行器 dispatch 直接判失败。 */
   private gatewayManager: GatewayManager | null = null;
 
   /**
-   * Step 5.2 事件下沉：setGatewayManager 前用 `loggingEventSink` 兜底，之后换为
-   * gateway 适配 sink——把 run 生命周期事件 emit 到 `GatewayManager` 的 EventEmitter，
-   * 经现有 IPC 桥透给 renderer（`scheduled-task:*` 的 renderer 订阅归 Step 5.4）。
+   * run 生命周期事件下沉：setGatewayManager 前用 `loggingEventSink` 兜底，之后换为
+   * gateway 适配 sink（emit 到 `GatewayManager`，经 IPC 透给 renderer）。
    */
   private eventSink: ScheduledTaskEventSink = loggingEventSink;
 
@@ -139,14 +133,12 @@ export class ScheduledTaskService {
   }
 
   /**
-   * Step 5.1：注入 gatewayManager 并把引擎无关执行器注册到 scheduler。
-   * 必须在 app 启动（Step 5.3）gateway ready 后调用——执行器靠它拿底层引擎运行时。
-   * 闭包注入避免 service ↔ executor 循环 import；sessionKey 构造与 dingtalk 烘焙
-   * 仍是本 service 的单一职责（executor 只消费产物）。
+   * 注入 gatewayManager 并把引擎无关执行器注册到 scheduler。
+   * 必须在 app 启动 gateway ready 后调用。闭包注入避免 service ↔ executor 循环
+   * import；sessionKey 构造与 dingtalk 烘焙仍是本 service 的单一职责。
    */
   setGatewayManager(gatewayManager: GatewayManager): void {
     this.gatewayManager = gatewayManager;
-    // gateway 适配 sink：事件直发 GatewayManager EventEmitter，renderer 订阅归 Step 5.4。
     this.eventSink = {
       emit: (event, payload) => {
         this.gatewayManager?.emit(event, payload);
@@ -168,7 +160,6 @@ export class ScheduledTaskService {
    * 启动调度器：先丢弃关机期间错过/崩溃中断的任务（推进 `nextRunAt` + 清 stale
    * lease），再启动 tick。`finally` 保证即使清扫抛异常调度器仍会启动。必须在
    * `setGatewayManager` 之后调用——否则 dispatcher 还是 noop，claim 的 run 停在 queued。
-   * （镜像 `ClaudeScheduledTaskService.startScheduler` 的「discard→start」原子序。）
    */
   startScheduler(): void {
     void this.scheduler.discardMissedOnStartup().finally(() => this.scheduler.start());
@@ -182,8 +173,6 @@ export class ScheduledTaskService {
    * 为定时任务烘焙当日占位会话（catalog 行）。session_key 携引擎前缀，使
    * `inferSessionCatalogMeta` 自动推出 `session_type`（openclaw→`cron`、
    * claude→`claude_task`）与 `task_id`。title 取任务名，保证历史面板可读。
-   *
-   * P2-C：**不**收敛 `session_type`（保留 `cron`/`claude_task`）。
    */
   async ensureDatedSessionPlaceholder(
     task: ScheduleTask,
@@ -372,7 +361,7 @@ export function getScheduledTaskService(): ScheduledTaskService {
   return scheduledTaskService;
 }
 
-/** 执行器（Step 5）从本模块取 dingtalk 烘焙产物，统一引用入口。 */
+/** dingtalk 收件人相关共享类型/常量的统一引用入口。 */
 export {
   DINGTALK_RECIPIENTS_MARKER,
   hasResolvedDingTalkMentions,

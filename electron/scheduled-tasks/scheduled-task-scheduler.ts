@@ -11,16 +11,13 @@ import type {
 /**
  * 统一定时任务调度器（引擎无关）。
  *
- * 泛化自 `ClaudeTaskScheduler`，但调度状态直接落在 `schedule_tasks` 行上
- * （`next_run_at` / `last_scheduled_for` / `last_recovered_at` /
- * `cron_expr_snapshot`），不再依赖独立的 scheduler-state JSON；lease 改用
- * `schedule_task_runs` 行的 `status`（active = queued/running），不再依赖
- * lease_until 表。执行（`runMainChatSend` 等）由 Step 5 注入的 `dispatcher`
- * 承接；本调度器只负责「何时触发 + claim 单飞」，不 await 执行。
+ * 调度状态落在 `schedule_tasks` 行上（`next_run_at` / `last_scheduled_for` /
+ * `last_recovered_at` / `cron_expr_snapshot`）；lease 用 `schedule_task_runs`
+ * 行的 `status`（active = queued/running）。执行由注入的 `dispatcher` 承接；
+ * 本调度器只负责「何时触发 + claim 单飞」，不 await 执行。
  *
- * cron 数学（`computeNextRunAt` / `validateCronExpr`）抽到
- * `electron/utils/cron-math.ts`（croner 包装）；行为与旧 claude 调度器一致
- * （5 字段强制、host-local 时区、Vixie OR、排他 nextRun 等价旧 roundUp+扫描）。
+ * cron 数学见 `electron/utils/cron-math.ts`（croner 包装：5 字段强制、host-local
+ * 时区、Vixie OR、排他 nextRun）。
  */
 
 const DEFAULT_TICK_INTERVAL_MS = 30_000;
@@ -31,8 +28,8 @@ export interface ScheduledTaskScheduleSnapshot {
 }
 
 /**
- * 执行器接口（Step 5 注入）。dispatch 收到一个**已 claim 的 `'queued'` run**，
- * 只负责 `queued → running → terminal` + 实际投递（`runMainChatSend` 等）。
+ * 执行器接口（由 service 在注入 GatewayManager 后注册）。dispatch 收到一个**已
+ * claim 的 `'queued'` run**，只负责 `queued → running → terminal` + 实际投递。
  * 调度器对 dispatch 采用 fire-and-forget：claim 成功即推进 `next_run_at`，
  * 不等待执行返回。
  */
@@ -61,7 +58,7 @@ export class ScheduledTaskScheduler {
 
   /**
    * 由 `ScheduledTaskService` 在注入 GatewayManager 后注册真实执行器。
-   * 允许 scheduler 在未接线时启动（Step 3），随后由 service 替换 dispatcher。
+   * 允许 scheduler 在未接线时先启动，随后由 service 替换 dispatcher。
    * 替换是幂等的；运行中的 dispatch 已 fire-and-forget，不受影响。
    */
   setDispatcher(dispatcher: ScheduledTaskDispatcher): void {

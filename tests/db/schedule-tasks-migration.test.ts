@@ -36,7 +36,7 @@ function indexNames(db: DatabaseSync): string[] {
 }
 
 /**
- * Step 2 验收：migration 0006 双场景 + 幂等 + 幂等键唯一索引。
+ * migration 0006：双场景 + 幂等 + 幂等键唯一索引。
  * 直接 apply 真实注册的 SQLITE_MIGRATIONS.sql（不触生产库、不依赖 migrator logger）。
  */
 describe('schedule-tasks migration (0006)', () => {

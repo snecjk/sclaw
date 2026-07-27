@@ -19,15 +19,13 @@ async function resolveActor(): Promise<string | null> {
 }
 
 /**
- * 引擎无关通用定时任务路由（Step 5.4）。镜像 `claude-scheduled-tasks.ts` 的结构，
- * 但收窄到 CRUD + setEnabled + triggerNow 六类（claude 家族的 sessions /
- * session-history / scheduler-status / 模型回灌是 claude 专属，通用 service 不暴露）。
+ * 引擎无关通用定时任务路由：CRUD + setEnabled + triggerNow。
  *
  * triggerTask 的 "already has an active run" 抛错在路由层转 409（单飞语义对 UI 友好）；
  * 其余校验错（cron 非法、profile 非法等）→ 400，服务端异常 → 500。
  *
  * 注：service 在 create/update/delete/setEnabled 后已自调 `refreshSchedule`，
- * 无需额外 `/refresh` 路由（与 claude 家族不同）。
+ * 无需额外 `/refresh` 路由。
  */
 export async function handleScheduledTaskRoutes(
   req: IncomingMessage,

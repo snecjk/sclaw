@@ -71,7 +71,7 @@ function mapRow(row: Record<string, unknown>): ScheduleTask {
 
 /**
  * schedule_tasks 表的 DB 访问层（CRUD + 调度状态）。
- * Step 2 仅落存储；业务编排（创建真相源 / cron 解析 / lease 单飞）在 Step 3 的 ScheduledTaskService。
+ * 业务编排（创建校验 / cron 解析 / lease 单飞）在 ScheduledTaskService。
  */
 export class ScheduleTaskRepository {
   async getById(

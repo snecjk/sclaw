@@ -14,7 +14,7 @@ import { logger } from '../utils/logger';
 import { getAuthState } from '../utils/auth-store';
 
 /**
- * Step 4 数据迁移：把遗留本地 JSON 定时任务（claude `definitions.json` + openclaw
+ * 数据迁移：把遗留本地 JSON 定时任务（claude `definitions.json` + openclaw
  * `openclaw/cron/jobs.json`）一次性灌入统一 SQLite `schedule_tasks` 表。
  *
  * 幂等：marker 文件 + per-row `getById` 存在检查双闸——进程崩溃可重跑续传。
@@ -32,7 +32,7 @@ import { getAuthState } from '../utils/auth-store';
 const MARKER_FILENAME = 'scheduled-tasks-migration.done';
 const DEFINITIONS_FILENAME = 'definitions.json';
 
-/** claude 旧定义（镜像 `claude-scheduled-task-store.ts` ClaudeScheduledTaskDefinition）。 */
+/** claude 旧定义形状（与历史 definitions.json 对齐）。 */
 interface ClaudeScheduledTaskDefinition {
   id: string;
   name: string;

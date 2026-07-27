@@ -79,7 +79,7 @@ export const DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK = [
 
 /**
  * 口头点名发送护栏（无输入框 @）— 模块 A 子段。
- * Step 4：对话 send-guard 常驻注入；定时任务执行 session 不注入。
+ * 对话 send-guard 常驻注入；定时任务执行 session 不注入。
  */
 export const DINGTALK_ORAL_SEND_GUARD = [
   '口头点名发送护栏（无 @ 触发器，自然语言口头发送）：',

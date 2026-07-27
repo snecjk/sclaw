@@ -57,7 +57,7 @@ const liveClaudeMessages = new Map<string, Array<{
 const claudeRuntimeResults = new Map<string, NonNullable<EngineHistoryResult['runtimeResult']>>();
 
 /**
- * Step 5 执行器读 Claude run 终态（isError / summary / durationMs）。run 完成时
+ * 执行器读 Claude run 终态（isError / summary / durationMs）。run 完成时
  * `consumeClaudeQuery` 已把 `result` 消息写入此 map；未运行 / 已清空 → null。
  */
 export function getClaudeRuntimeResult(sessionKey: string): NonNullable<EngineHistoryResult['runtimeResult']> | null {
