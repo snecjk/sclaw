@@ -18,6 +18,8 @@ interface WorkflowStatusPayload {
   startedAt?: string;
   completedAt?: string;
   progress?: number;
+  currentNodeId?: string;
+  attempt?: number;
   steps?: WorkflowExecutionState['steps'];
   workflowId?: string;
   /** 暂停态目标节点（waiting_approval/waiting_input）——gap2 emit 桥透传。 */
@@ -48,6 +50,7 @@ export function useWorkflowCompletion(sessionKey: string) {
         workflowId: data.workflowId ?? currentState?.workflowId ?? '',
         status: data.status,
         progress: data.progress ?? currentState?.progress ?? 0,
+        currentStep: data.currentNodeId ?? currentState?.currentStep,
         steps: data.steps ?? currentState?.steps ?? [],
         result: data.result ?? currentState?.result,
         error: data.error ?? currentState?.error,

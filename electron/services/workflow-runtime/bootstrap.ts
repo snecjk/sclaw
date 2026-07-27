@@ -151,15 +151,36 @@ export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager)
       const repo = getWorkflowRuntimeRepository();
       void (async () => {
         let sessionKey = '';
-        let runRow: { session_key?: string | null; workflow_id?: string; last_agent_raw_text?: string | null } | undefined;
+        let runRow: {
+          session_key?: string | null;
+          workflow_id?: string;
+          last_agent_raw_text?: string | null;
+          started_at?: string;
+          completed_at?: string | null;
+        } | undefined;
         try {
           runRow = await repo.getRun(runId);
           sessionKey = runRow?.session_key ?? '';
         } catch { /* run 行缺失时退化为无 sessionKey，renderer 侧按 sessionKey 过滤会自然丢弃 */ }
+        const nodeRuns = runRow ? await repo.listNodeRuns(runId).catch(() => []) : [];
+        const completedNodes = nodeRuns.filter((node: any) => ['SUCCEEDED', 'COMPLETED', 'SUCCESS'].includes(String(node.status).toUpperCase())).length;
+        const activeNode = nodeRuns.find((node: any) => String(node.status).toUpperCase() === 'RUNNING');
+        const totalNodes = Math.max(nodeRuns.length, 1);
         const payload: {
           runId: string; sessionKey: string; status: WorkflowRunStatus;
           waitingNodeId?: string; error?: string;
-        } = { runId, sessionKey, status };
+          progress?: number; currentNodeId?: string; attempt?: number;
+          startedAt?: string; completedAt?: string;
+        } = {
+          runId,
+          sessionKey,
+          status,
+          progress: status === 'completed' ? 100 : Math.min(99, Math.floor((completedNodes / totalNodes) * 100)),
+          currentNodeId: activeNode?.node_id,
+          attempt: activeNode?.attempt_count,
+          startedAt: runRow?.started_at,
+          completedAt: runRow?.completed_at ?? undefined,
+        };
         if (extra?.waitingNodeId) payload.waitingNodeId = extra.waitingNodeId;
         if (extra?.error) payload.error = extra.error;
         workflowExecLog('info', 'status-change', 'broadcast workflow status', {

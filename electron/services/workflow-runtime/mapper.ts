@@ -39,7 +39,7 @@ export interface WfNodeRunRow {
   output_json?: string | null;
   error?: string | null;
   last_completion_issue?: string | null;
-  attempt?: number | null;
+  attempt_count?: number | null;
 }
 
 export interface WfEventRow {
@@ -95,6 +95,7 @@ export function mapWfRunRowToResponse(
     startedAt: n.started_at ?? undefined,
     completedAt: n.completed_at ?? undefined,
     error: n.last_completion_issue ?? n.error ?? undefined,
+    attemptCount: n.attempt_count ?? 0,
     input: safeParse(n.input_json, undefined),
     output: safeParse(n.output_json, undefined),
   }));

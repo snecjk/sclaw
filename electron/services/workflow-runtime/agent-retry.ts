@@ -31,6 +31,37 @@ export interface AgentStreamEvent {
   isError?: boolean;
 }
 
+/** A safe, actionable description of the last failed tool/MCP call.
+ * It is persisted in the node's existing completion-issue field and added to
+ * the next attempt prompt, so retries react to the actual failure instead of
+ * a generic wrapper emitted by the agent runtime. */
+export interface RetryFailureContext {
+  source: 'tool' | 'mcp' | 'agent';
+  toolName?: string;
+  toolId?: string;
+  callId?: string;
+  error: string;
+}
+
+const RETRY_ERROR_LIMIT = 1_500;
+
+export function summarizeRetryFailure(value: unknown): string {
+  const text = typeof value === 'string' ? value : String(value ?? 'Unknown tool failure');
+  return text
+    // Credentials must not enter SQLite, sync payloads, or a retry prompt.
+    .replace(/\b(authorization|token|api[_-]?key|password|secret)\s*[:=]\s*[^\s,;]+/gi, '$1: [REDACTED]')
+    // Local absolute paths can reveal user names and workstation layout.
+    .replace(/[A-Za-z]:\\[^\s"']+|\/(?:Users|home)\/[^\s"']+/g, '[LOCAL_PATH]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, RETRY_ERROR_LIMIT);
+}
+
+function formatRetryFailure(context: RetryFailureContext): string {
+  const target = context.toolName ?? context.toolId ?? '工具/MCP 调用';
+  return `${context.source === 'mcp' ? 'MCP' : '工具'} ${target} 实际失败：${context.error}`;
+}
+
 /** invokeAgent 由引擎注入（绑好 sdk + env + 卡死保护）；agent-retry 不直接依赖具体运行器的 InvokeArgs。 */
 export type InvokeAgentFn = (args: {
   ctx: RunCtx;
@@ -75,6 +106,7 @@ export async function runAgentNodeWithRetry(
   // 最大重试次数
   const maxAttempts = Math.max(contract.maxAttempts ?? 2, 1);
   let lastError = '';
+  let lastFailure: RetryFailureContext | null = null;
   let lastOutput: any = null;
   let lastRaw = '';
 
@@ -90,7 +122,12 @@ export async function runAgentNodeWithRetry(
 
     // The client owns the prompt contract.  Never consume server-compiled prose
     // or recover JSON from the assistant's chat text.
-    const prompt = `${buildWorkflowNodePrompt(spec, node, ctx)}${lastError ? `\n\n上次结构化校验失败：${lastError}。请按 schema 重新生成完整结果。` : ''}`;
+    const retryContext = lastFailure
+      ? `\n\n上次执行的实际失败信息：${formatRetryFailure(lastFailure)}。请先针对该错误检查调用参数、前置条件或替代工具，再重新执行；不要重复已完成的副作用。`
+      : lastError
+        ? `\n\n上次结构化校验失败：${lastError}。请按 schema 重新生成完整结果。`
+        : '';
+    const prompt = `${buildWorkflowNodePrompt(spec, node, ctx)}${retryContext}`;
     // 与服务端智能节点执行口径一致：在实际调用 Agent 前固化本次 prompt。
     // 重试会覆盖为最新一次尝试的 prompt，便于排查最终生效的上下文。
     await ctx.repo.upsertNodeRun({
@@ -119,6 +156,7 @@ export async function runAgentNodeWithRetry(
     try {
       // 调用Agent
       let toolCalls = 0;
+      const toolNamesByCallId = new Map<string, { toolId?: string; toolName?: string }>();
       result = await invokeAgent({
         ctx,
         prompt,
@@ -135,7 +173,24 @@ export async function runAgentNodeWithRetry(
         requireSelectedPort: node.type === 'agent_condition',
       }),
         onStreamEvent: async (event) => {
-          if (event.type === 'agent.tool_start') toolCalls += 1;
+          if (event.type === 'agent.tool_start') {
+            toolCalls += 1;
+            if (event.callId) toolNamesByCallId.set(event.callId, { toolId: event.toolId, toolName: event.toolName });
+          }
+          if (event.type === 'agent.tool_end' && event.isError) {
+            const tool = event.callId ? toolNamesByCallId.get(event.callId) : undefined;
+            const toolName = tool?.toolName ?? event.toolName;
+            lastFailure = {
+              source: /mcp/i.test(toolName ?? event.toolId ?? '') ? 'mcp' : 'tool',
+              toolId: tool?.toolId ?? event.toolId,
+              toolName,
+              callId: event.callId,
+              error: summarizeRetryFailure(event.message),
+            };
+            // Persist the same safe summary that goes into the retry prompt;
+            // raw tool responses may contain credentials or local paths.
+            event = { ...event, message: lastFailure.error };
+          }
           await ctx.emit(event.type, event, node.id);
         },
       });
@@ -161,8 +216,14 @@ export async function runAgentNodeWithRetry(
     }
 
     if (result.status === 'failed') {
-      lastError = result.error ?? 'Agent execution failed.';
-      await ctx.emit('agent.attempt.failed', { attempt, error: lastError }, node.id);
+      lastError = lastFailure ? formatRetryFailure(lastFailure) : summarizeRetryFailure(result.error ?? 'Agent execution failed.');
+      if (!lastFailure) lastFailure = { source: 'agent', error: lastError };
+      await ctx.repo.upsertNodeRun({
+        run_id: ctx.runId, node_id: node.id, node_type: node.type, status: 'RUNNING',
+        last_completion_issue: lastError, prompt_text: prompt,
+      });
+      await ctx.emit('agent.attempt.failed', { attempt, error: lastError, failureContext: lastFailure }, node.id);
+      if (attempt < maxAttempts) await ctx.emit('completion.retry_scheduled', { attempt, reason: lastError, failureContext: lastFailure }, node.id);
       await sleep(backoff(attempt));
       continue;
     }

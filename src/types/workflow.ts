@@ -253,6 +253,7 @@ export interface WorkflowRunNodeRun {
   startedAt?: string;
   completedAt?: string;
   error?: string;
+  attemptCount?: number;
 }
 
 export interface WorkflowRunArtifact {
