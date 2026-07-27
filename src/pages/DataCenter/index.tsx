@@ -802,6 +802,7 @@ function EntryActions({
   entry,
   onDownload,
   onShare,
+  onRename,
   onDelete,
   onTrace,
   uploadToSharedLabel,
@@ -859,6 +860,9 @@ function EntryActions({
               {t('dataCenterPage.menu.traceChat')}
             </DropdownMenuItem>
           ) : null}
+          <DropdownMenuItem onSelect={() => onRename(entry)} className="text-[13px]">
+            {t('dataCenterPage.menu.rename')}
+          </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => onDelete(entry)} className="text-[13px]">
             {t('dataCenterPage.menu.delete')}
           </DropdownMenuItem>
