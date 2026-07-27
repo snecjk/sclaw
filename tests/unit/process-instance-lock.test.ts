@@ -93,7 +93,7 @@ describe('process instance file lock', () => {
       pid: 5555,
       isPidAlive: () => true,
       verifyOwnerExecutable: true,
-      currentExecutableName: 'S Claw.exe',
+      currentExecutableName: 'SClaw.exe',
       getProcessExecutableName: () => 'cmd.exe',
     });
 
@@ -113,7 +113,7 @@ describe('process instance file lock', () => {
       pid: 5555,
       isPidAlive: () => true,
       verifyOwnerExecutable: true,
-      currentExecutableName: 'S Claw.exe',
+      currentExecutableName: 'SClaw.exe',
       getProcessExecutableName: () => 's claw.EXE',
     });
 

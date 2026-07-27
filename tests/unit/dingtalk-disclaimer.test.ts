@@ -61,7 +61,7 @@ describe('normalizeDwsChatMessageSendText', () => {
   });
 
   it('normalizes legacy spaced brand footer to SClaw', () => {
-    const legacy = '正文\n\n---\n\n> *本消息由 S Claw 代为发送，非本人实时回复。*';
+    const legacy = '正文\n\n---\n\n> *本消息由 SClaw 代为发送，非本人实时回复。*';
     const result = ensureDingTalkAgentSendDisclaimerFormat(legacy);
     expect(result).toBe(`正文\n\n---\n\n${DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER}`);
   });

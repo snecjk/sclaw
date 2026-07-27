@@ -7,11 +7,11 @@ import {
 
 describe('cleanup-old-app-bundles', () => {
   it('parses macOS app bundle paths', () => {
-    const execPath = '/Applications/S Claw.app/Contents/MacOS/S Claw';
+    const execPath = '/Applications/SClaw.app/Contents/MacOS/SClaw';
     expect(getMacAppBundleInfo(execPath)).toEqual({
       installDir: '/Applications',
-      bundleName: 'S Claw.app',
-      bundlePath: '/Applications/S Claw.app',
+      bundleName: 'SClaw.app',
+      bundlePath: '/Applications/SClaw.app',
     });
   });
 
@@ -20,11 +20,11 @@ describe('cleanup-old-app-bundles', () => {
   });
 
   it('matches Squirrel .old backup names only', () => {
-    const bundle = 'S Claw.app';
-    expect(isOldAppBackupName(bundle, 'S Claw.app.old-1780371448851')).toBe(true);
-    expect(isOldAppBackupName(bundle, 'S Claw.app.old-999')).toBe(true);
-    expect(isOldAppBackupName(bundle, 'S Claw.app')).toBe(false);
-    expect(isOldAppBackupName(bundle, 'S Claw.app.old')).toBe(false);
+    const bundle = 'SClaw.app';
+    expect(isOldAppBackupName(bundle, 'SClaw.app.old-1780371448851')).toBe(true);
+    expect(isOldAppBackupName(bundle, 'SClaw.app.old-999')).toBe(true);
+    expect(isOldAppBackupName(bundle, 'SClaw.app')).toBe(false);
+    expect(isOldAppBackupName(bundle, 'SClaw.app.old')).toBe(false);
     expect(isOldAppBackupName(bundle, 'Other.app.old-123')).toBe(false);
   });
 
