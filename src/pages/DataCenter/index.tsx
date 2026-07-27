@@ -62,7 +62,7 @@ import type { DataCenterEntry, DataCenterTempUrl } from '@/types/data-center';
 
 const ROOT_ENTRY_ID = 'root';
 const FOLDER_NAME_MAX_LENGTH = 15;
-const SECTION_PARAM_VALUES: DataCenterSection[] = ['qa_artifact', 'drive', 'data_source'];
+const SECTION_PARAM_VALUES: DataCenterSection[] = ['qa_artifact', 'drive'];
 
 function normalizeSectionParam(value: string | null): DataCenterSection {
   return SECTION_PARAM_VALUES.includes(value as DataCenterSection)
@@ -302,8 +302,9 @@ export function DataCenter() {
     : store.error;
 
   useEffect(() => {
-    const section = normalizeSectionParam(searchParams.get('section'));
-    if (!searchParams.get('section')) {
+    const rawSection = searchParams.get('section');
+    const section = normalizeSectionParam(rawSection);
+    if (rawSection !== section) {
       setSearchParams({ section }, { replace: true });
       return;
     }

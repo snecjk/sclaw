@@ -182,7 +182,6 @@ const DATA_CENTER_DEFAULT_SECTION = 'qa_artifact';
 const DATA_CENTER_SECTIONS = [
   { id: 'qa_artifact', labelKey: 'dataCenterPage.sections.qaArtifact' },
   { id: 'drive', labelKey: 'dataCenterPage.sections.drive' },
-  { id: 'data_source', labelKey: 'dataCenterPage.sections.dataSource' },
 ] as const;
 
 /** 侧栏收起态：展开按钮 */
