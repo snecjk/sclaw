@@ -17,6 +17,7 @@ import {
   validateWorkflowPacket,
   workflowPacketJsonSchema,
 } from './workflow-packet';
+import { deriveWorkflowNodeSessionId } from './node-session';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const backoff = (a: number) => Math.min(30_000, 1000 * 2 ** (a - 1));
@@ -69,6 +70,8 @@ export type InvokeAgentFn = (args: {
   nodeId: string;
   /** Attempt-scoped identity used by transient workflow engines. */
   attempt?: number;
+  agentSessionId?: string;
+  resumeSession?: boolean;
   noProgressMs?: number;
   deadlineMs?: number;
   onStreamEvent?: (event: AgentStreamEvent) => void | Promise<void>;
@@ -117,6 +120,9 @@ export async function runAgentNodeWithRetry(
       return { status: 'failed', error: 'daily token quota exceeded' };
     }
 
+    const priorNodeRun = await ctx.repo.getNodeRun(ctx.runId, node.id);
+    const agentSessionId = priorNodeRun?.agent_session_id || deriveWorkflowNodeSessionId(ctx.runId, node.id);
+    const resumeSession = Boolean(priorNodeRun?.agent_session_id);
     await ctx.repo.incrementNodeAttempt(ctx.runId, node.id);
     await ctx.emit('agent.attempt.start', { attempt }, node.id);
 
@@ -135,6 +141,7 @@ export async function runAgentNodeWithRetry(
       node_id: node.id,
       node_type: node.type,
       status: 'RUNNING',
+      agent_session_id: agentSessionId,
       prompt_text: prompt,
     });
     const promptNode = await ctx.repo.getNodeRun(ctx.runId, node.id);
@@ -162,6 +169,8 @@ export async function runAgentNodeWithRetry(
         prompt,
         nodeId: node.id,
         attempt,
+        agentSessionId,
+        resumeSession,
         noProgressMs: spec.guardrails?.timeoutMs,
         deadlineMs: spec.guardrails?.timeoutMs ? Math.max(spec.guardrails.timeoutMs * 2, spec.guardrails.timeoutMs + 60_000) : undefined,
         allowedTools: spec.allowedTools,

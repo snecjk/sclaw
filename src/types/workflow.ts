@@ -254,6 +254,7 @@ export interface WorkflowRunNodeRun {
   completedAt?: string;
   error?: string;
   attemptCount?: number;
+  agentSessionId?: string;
 }
 
 export interface WorkflowRunArtifact {

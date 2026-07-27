@@ -103,6 +103,10 @@ export interface InvokeArgs {
   model?: string;
   /** Reserved for retry metadata; not consumed by the runner. */
   retryReason?: string;
+  /** Stable UUID shared by all attempts of this workflow node. */
+  agentSessionId?: string;
+  /** True for a retry or interrupted-run recovery, false for the first attempt. */
+  resumeSession?: boolean;
   /** Streams Claude SDK partial events into the workflow runtime event log. */
   onStreamEvent?: (event: AgentStreamEvent) => void | Promise<void>;
   allowedTools?: string[];
@@ -168,6 +172,8 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
     allowedTools: args.allowedTools?.length ? args.allowedTools : undefined,
     outputFormat: args.outputSchema ? { type: 'json_schema', schema: args.outputSchema } : undefined,
     skills: args.allowedSkills?.length ? args.allowedSkills : undefined,
+    sessionId: args.resumeSession ? undefined : args.agentSessionId,
+    resume: args.resumeSession ? args.agentSessionId : undefined,
     // Deliberately exclude all 5 chat runtime extensions for the workflow agent:
     // no mcpServers, hooks, plugins, or systemPrompt. Do not pass `skills` here:
     // the SDK supports values like `all`, but `none` is not a valid sentinel in
@@ -181,6 +187,8 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
     cwd,
     additionalDirectories,
     execEngine: args.execEngine ?? 'claude',
+    agentSessionId: args.agentSessionId,
+    resumeSession: args.resumeSession ?? false,
   });
   const query = await sdk.query({ prompt, options });
   const key = `${ctx.runId}:${ctx.nodeId}`;

@@ -17,7 +17,7 @@ import { buildStoMemoryCenterAuthHeaders } from '../../utils/sto-memory-api-auth
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { getStoTokenQuotaService } from '../sto-token-quota-service';
 import { invokeAgent as agentRunnerInvokeAgent } from './agent-runner-claude';
-import { invokeOpenClawWorkflowAgent } from './agent-runner-openclaw';
+import { invokeOpenClawWorkflowAgent, releaseOpenClawWorkflowAgentSession } from './agent-runner-openclaw';
 import { resolveWorkflowExecutionModel } from './workflow-model-selection';
 import type { GatewayManager } from '../../gateway/manager';
 import { getWorkflowRuntimeRepository } from '../../db';
@@ -91,8 +91,10 @@ export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager)
       });
       if (run?.engine_type === 'openclaw') {
         if (!gatewayManager) throw new Error('OpenClaw workflow gateway unavailable');
+        if (!args.agentSessionId) throw new Error('OpenClaw workflow node session is required');
         return invokeOpenClawWorkflowAgent({ gateway: gatewayManager, ctx: { ...args.ctx, nodeId: args.nodeId }, prompt: args.prompt,
           attempt: args.attempt, model: modelSelection.openClawModel,
+          agentSessionId: args.agentSessionId, resumeSession: args.resumeSession,
           noProgressMs: (args as any).noProgressMs, deadlineMs: (args as any).deadlineMs, onStreamEvent: args.onStreamEvent });
       }
       const sdk = await getSdk();
@@ -112,6 +114,8 @@ export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager)
         permissionMode: args.permissionMode,
         outputSchema: args.outputSchema,
         execEngine: 'claude',
+        agentSessionId: args.agentSessionId,
+        resumeSession: args.resumeSession,
       });
     },
     postSync: async (runId, entries) => {
@@ -132,6 +136,16 @@ export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager)
       if (data.allowed === false) return false;
       const remaining = typeof data.remaining === 'number' ? data.remaining : undefined;
       return result.success && (remaining === undefined || remaining > 0);
+    },
+    releaseAgentSession: async (runId, nodeSessionId) => {
+      if (!nodeSessionId) return;
+      const run = await getWorkflowRuntimeRepository().getRun(runId);
+      if (run?.engine_type === 'openclaw') {
+        await releaseOpenClawWorkflowAgentSession(nodeSessionId);
+        return;
+      }
+      const sdk = await getSdk();
+      if (typeof sdk.deleteSession === 'function') await sdk.deleteSession(nodeSessionId);
     },
     onRecover: (runs) => {
       for (const w of BrowserWindow.getAllWindows()) {

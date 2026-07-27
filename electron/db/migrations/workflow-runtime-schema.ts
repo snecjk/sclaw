@@ -7,6 +7,41 @@
  */
 import type { SqliteDatabase } from '../types';
 
+/**
+ * Single source of truth for wf_node_run.  Both fresh databases and legacy
+ * repairs consume these definitions, preventing a newly used column from
+ * being added in one migration but omitted from the canonical CREATE TABLE.
+ */
+const WF_NODE_RUN_COLUMNS = [
+  'id INTEGER PRIMARY KEY',
+  'run_id INTEGER NOT NULL REFERENCES wf_run(id)',
+  'node_id TEXT NOT NULL',
+  'node_type TEXT',
+  "status TEXT NOT NULL DEFAULT 'PENDING'",
+  'attempt_count INTEGER NOT NULL DEFAULT 0',
+  'agent_session_id TEXT',
+  'input_json TEXT',
+  'output_json TEXT',
+  'prompt_text TEXT',
+  'last_completion_issue TEXT',
+  'started_at TEXT',
+  'completed_at TEXT',
+  'created_at TEXT',
+  'updated_at TEXT',
+  'deleted_at TEXT',
+] as const;
+
+const WF_NODE_RUN_COLUMNS_BY_NAME = new Map(
+  WF_NODE_RUN_COLUMNS.map((definition) => [definition.split(' ', 1)[0], definition]),
+);
+
+const WF_NODE_RUN_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS wf_node_run (
+    ${WF_NODE_RUN_COLUMNS.join(',\n    ')},
+    UNIQUE(run_id, node_id)
+  );
+`;
+
 export const WORKFLOW_RUNTIME_TABLES_SQL = `
   CREATE TABLE IF NOT EXISTS wf_run (
     id INTEGER PRIMARY KEY,
@@ -35,24 +70,7 @@ export const WORKFLOW_RUNTIME_TABLES_SQL = `
     deleted_at TEXT
   );
 
-  CREATE TABLE IF NOT EXISTS wf_node_run (
-    id INTEGER PRIMARY KEY,
-    run_id INTEGER NOT NULL REFERENCES wf_run(id),
-    node_id TEXT NOT NULL,
-    node_type TEXT,
-    status TEXT NOT NULL,
-    attempt_count INTEGER NOT NULL DEFAULT 0,
-    input_json TEXT,
-    output_json TEXT,
-    prompt_text TEXT,
-    last_completion_issue TEXT,
-    started_at TEXT,
-    completed_at TEXT,
-    created_at TEXT,
-    updated_at TEXT,
-    deleted_at TEXT,
-    UNIQUE(run_id, node_id)
-  );
+  ${WF_NODE_RUN_TABLE_SQL}
 
   CREATE TABLE IF NOT EXISTS wf_event (
     id INTEGER PRIMARY KEY,
@@ -148,6 +166,24 @@ export const WORKFLOW_RUNTIME_TABLES_SQL = `
   CREATE INDEX IF NOT EXISTS idx_wf_outbox_pending
     ON wf_outbox(status, next_retry_at) WHERE status = 'pending';
 `;
+
+/**
+ * Idempotently repairs additive wf_node_run columns for databases that have
+ * already recorded a historical migration.  Key columns cannot be safely
+ * added to an existing table, so their absence is handled by the v12 rebuild;
+ * all runtime-owned non-key columns are repaired here from the same DDL list.
+ */
+export function ensureWorkflowNodeRunSchema(db: SqliteDatabase): void {
+  const existingColumns = new Set(
+    (db.prepare('PRAGMA table_info(wf_node_run)').all() as Array<{ name: string }>)
+      .map((column) => column.name),
+  );
+  for (const columnName of WF_NODE_RUN_COLUMNS_BY_NAME.keys()) {
+    if (['id', 'run_id', 'node_id'].includes(columnName) || existingColumns.has(columnName)) continue;
+    const definition = WF_NODE_RUN_COLUMNS_BY_NAME.get(columnName);
+    if (definition) db.exec(`ALTER TABLE wf_node_run ADD COLUMN ${definition}`);
+  }
+}
 
 /** Replaces the pre-cloud workflow schema, whose data was intentionally ephemeral. */
 export function rebuildWorkflowRuntimeTables(db: SqliteDatabase): void {

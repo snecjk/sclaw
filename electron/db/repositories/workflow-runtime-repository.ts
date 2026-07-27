@@ -346,7 +346,13 @@ export class WorkflowRuntimeRepository {
     } else if (entityType === 'user_input' && source.task_id) {
       stored = await db.selectFrom('wf_user_input_task').selectAll().where('task_id', '=', source.task_id).executeTakeFirst() as any;
     }
-    return { ...source, ...(stored ?? {}), run_id: runPk };
+    // agent_session_id is a local executor identity.  The v2 sync contract
+    // does not own or need an engine transcript identifier, so keep it out of
+    // cloud payloads while still persisting it in the local node-run row.
+    const { agent_session_id: _localAgentSessionId, ...cloudSource } = source;
+    const storedRecord = stored ?? {};
+    const { agent_session_id: _storedLocalAgentSessionId, ...cloudStored } = storedRecord;
+    return { ...cloudSource, ...cloudStored, run_id: runPk };
   }
 
   /**

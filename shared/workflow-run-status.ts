@@ -19,6 +19,7 @@ export interface WorkflowRunNodeRun {
   error?: string;
   /** Number of attempts recorded by the client runtime for this node. */
   attemptCount?: number;
+  agentSessionId?: string;
 }
 
 export interface WorkflowRunArtifact {
@@ -464,6 +465,7 @@ export function workflowRunResponseToExecutionState(run: WorkflowRunApiPayload):
         : undefined,
     error: n.error,
     attemptCount: n.attemptCount,
+    agentSessionId: n.agentSessionId,
     })),
     result: extractRunResultFromPayload(run, status, artifacts),
     error: run.error ?? undefined,

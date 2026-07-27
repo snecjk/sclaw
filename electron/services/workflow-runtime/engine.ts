@@ -17,6 +17,7 @@ import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { evaluateCondition as evaluateWorkflowCondition, executeLogicNode } from './logic-nodes';
 import { runAgentNodeWithRetry, type InvokeAgentFn } from './agent-retry';
+import { deriveWorkflowNodeSessionId } from './node-session';
 import { flushOnce, startFlushLoop, stopFlushLoop, type FlushDeps } from './outbox-flusher';
 import { recordArtifact as persistArtifact, type ArtifactRow } from './artifact-recorder';
 import { recoverOnLaunch, resumeRun } from './crash-recovery';
@@ -39,6 +40,8 @@ export interface EngineDeps {
   repo: WorkflowRuntimeRepository;
   invokeAgent: InvokeAgentFn;            // 引擎绑 sdk+env+卡死保护后注入
   quota?: () => Promise<boolean>;          // /api/token-quota/check
+  /** Release an engine-owned node session only after its node reaches a terminal state. */
+  releaseAgentSession?: (runId: string, nodeSessionId: string) => Promise<void>;
   postSync: FlushDeps['postSync'];        // POST /agent/v2/runs/{id}/sync
   onTokenExpired?: () => void;
   onRecover?: (runs: any[]) => void;
@@ -205,6 +208,14 @@ export function createEngine(deps: EngineDeps) {
         });
         const spec = compileLocalAgentSpec(cur, agentCtx, runSnapshotBase.version_id);
         const agentResult = await runAgentNodeWithRetry(agentCtx, cur, spec, { invokeAgent: deps.invokeAgent, quota: deps.quota });
+        const agentSessionId = deriveWorkflowNodeSessionId(runId, cur.id);
+        if (agentResult.status !== 'manual_review' && deps.releaseAgentSession) {
+          await deps.releaseAgentSession(runId, agentSessionId).catch((error) => {
+            workflowExecLog('warn', 'agent-session-release-failed', 'failed to release terminal node agent session', {
+              runId, nodeId: cur.id, error: error instanceof Error ? error.message : String(error),
+            });
+          });
+        }
         if (agentResult.status === 'succeeded') hasExecutedSmartNode = true;
         result = { action: agentResult.status === 'succeeded' ? 'continue' : 'pause', output: agentResult.output };
         if (agentResult.status === 'manual_review') {
@@ -412,6 +423,7 @@ export function createEngine(deps: EngineDeps) {
       const changed = await repo.updateRunIfActive(runId, { status: 'FAILED', error: message, completed_at: nowIso() }).catch(() => false);
       if (changed) {
         await finalizeUnfinishedNodeRuns(runId, 'failed').catch(() => undefined);
+        await releaseRunAgentSessions(runId);
         await repo.enqueueOutbox(runId, 'run', runId, {
           run_id: runId, workflow_id: meta?.workflowId ?? run?.workflow_id,
           version_id: meta?.versionId ?? run?.version_id, status: 'FAILED', error: message,
@@ -697,6 +709,7 @@ export function createEngine(deps: EngineDeps) {
       const changed = await repo.updateRunIfActive(runId, { status: 'CANCELLED', completed_at: nowIso() });
       if (!changed) return;
       await finalizeUnfinishedNodeRuns(runId, 'cancelled');
+      await releaseRunAgentSessions(runId);
       await repo.enqueueOutbox(runId, 'run', runId, {
         run_id: runId,
         workflow_id: run?.workflow_id,
@@ -793,6 +806,21 @@ export function createEngine(deps: EngineDeps) {
       await repo.upsertNodeRun(completed);
       await repo.enqueueOutbox(runId, 'node_run', `${runId}:${nodeRun.node_id}`, completed, 'progress');
     }
+  }
+
+  /** Clear all local engine transcripts only when the enclosing run is terminal. */
+  async function releaseRunAgentSessions(runId: string): Promise<void> {
+    if (!deps.releaseAgentSession) return;
+    const nodeRuns = await repo.listNodeRuns(runId).catch(() => []);
+    await Promise.all(nodeRuns
+      .filter((nodeRun) => Boolean(nodeRun.agent_session_id))
+      .map((nodeRun) => deps.releaseAgentSession!(runId, nodeRun.agent_session_id).catch((error) => {
+        workflowExecLog('warn', 'agent-session-release-failed', 'failed to release terminal node agent session', {
+          runId,
+          nodeId: nodeRun.node_id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      })));
   }
 
   async function enqueueArtifactsFromOutput(

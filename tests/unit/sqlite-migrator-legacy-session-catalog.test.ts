@@ -41,7 +41,8 @@ describe('SQLite legacy session catalog migration normalization', () => {
       { version: 10, name: 'wf-run-engine' },
       { version: 11, name: 'channel-plane-channel-connections' },
       { version: 12, name: 'workflow-runtime-canonical-schema-repair' },
-
+      { version: 13, name: 'workflow-node-agent-session' },
+      { version: 14, name: 'workflow-node-run-schema-consolidation' },
     ]);
 
     const memoryTable = db.prepare(
@@ -82,6 +83,8 @@ describe('SQLite legacy session catalog migration normalization', () => {
       'wf-run-engine',
       'channel-plane-channel-connections',
       'workflow-runtime-canonical-schema-repair',
+      'workflow-node-agent-session',
+      'workflow-node-run-schema-consolidation',
     ]);
   });
 });

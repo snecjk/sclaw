@@ -11,6 +11,8 @@ import wfRunWorkflowVersionMigration from './0009-wf-run-workflow-version';
 import channelPlaneMigration from './0011-channel-plane';
 import wfRunEngineMigration from './0010-wf-run-engine';
 import workflowRuntimeSchemaRepairMigration from './0012-workflow-runtime-schema-repair';
+import workflowNodeAgentSessionMigration from './0013-workflow-node-agent-session';
+import workflowNodeRunSchemaConsolidationMigration from './0014-workflow-node-run-schema-consolidation';
 
 // Keep migrations as explicit imports so Electron/Vite bundling can retain them
 // reliably in both dev and packaged builds.
@@ -28,4 +30,6 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
   wfRunEngineMigration,
   channelPlaneMigration,
   workflowRuntimeSchemaRepairMigration,
+  workflowNodeAgentSessionMigration,
+  workflowNodeRunSchemaConsolidationMigration,
 ].sort((left, right) => left.version - right.version);

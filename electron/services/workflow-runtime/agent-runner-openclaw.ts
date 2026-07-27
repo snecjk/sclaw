@@ -9,8 +9,9 @@ import { extractJsonFromText } from './agent-output';
 import type { AgentStreamEvent, InvokeResult } from './agent-runner-claude';
 import { workflowExecLog } from './logging';
 import { ensureWorkflowRuntimeTemplates, workflowRuntimeWorkspacePath } from './openclaw-workspace-template';
-import { cleanupStaleWorkflowOpenClawSessions, cleanupWorkflowOpenClawSession } from './openclaw-workflow-session-cleanup';
+import { cleanupWorkflowOpenClawSession } from './openclaw-workflow-session-cleanup';
 import { isWorkflowPacket } from './workflow-packet';
+import { workflowGatewaySessionKey } from './node-session';
 
 const AGENT_ID = 'workflow-runtime';
 const activeSessions = new Map<string, { gateway: GatewayManager; sessionKey: string; runId?: string }>();
@@ -19,12 +20,6 @@ const configuredGateways = new WeakSet<GatewayManager>();
 /** Ensure this agent uses only the versioned workflow-owned bootstrap files. */
 export async function ensureWorkflowOpenClawAgent(): Promise<void> {
   const workspace = workflowRuntimeWorkspacePath();
-  const staleSessionCount = await cleanupStaleWorkflowOpenClawSessions();
-  if (staleSessionCount > 0) {
-    workflowExecLog('info', 'openclaw-session-cleanup', 'removed stale workflow Gateway sessions', {
-      execEngine: 'openclaw', staleSessionCount,
-    });
-  }
   const prepared = await ensureWorkflowRuntimeTemplates(workspace);
   workflowExecLog('info', 'openclaw-workspace-template', 'workflow runtime templates prepared', {
     templateVersion: prepared.templateVersion,
@@ -66,6 +61,8 @@ export async function invokeOpenClawWorkflowAgent(args: {
   /** Explicit model selected by the shared workflow provider-catalog rule. */
   model: string;
   attempt?: number;
+  agentSessionId: string;
+  resumeSession?: boolean;
   noProgressMs?: number; deadlineMs?: number;
   onStreamEvent?: (event: AgentStreamEvent) => void | Promise<void>;
 }): Promise<InvokeResult> {
@@ -79,16 +76,18 @@ export async function invokeOpenClawWorkflowAgent(args: {
     // workflow-owned definitions before the first node prompt is sent.
     await ensureWorkflowOpenClawAgent();
   }
-  const sessionKey = `agent:${AGENT_ID}:workflow:${args.ctx.runId}:${args.ctx.nodeId}:attempt:${args.attempt ?? 1}`;
+  const sessionKey = workflowGatewaySessionKey(args.agentSessionId);
   const activeKey = `${args.ctx.runId}:${args.ctx.nodeId}`;
   const idempotencyKey = `workflow-${args.ctx.runId}-${args.ctx.nodeId}-${Date.now()}`;
-  // Gateway chat.send does not accept a model parameter. Create this unique,
-  // disposable session first and store the shared workflow selection on it.
-  await args.gateway.rpc('sessions.create', {
-    key: sessionKey,
-    agentId: AGENT_ID,
-    model: args.model,
-  }, 120_000);
+  // A retry/continuation reconnects the durable node session instead of
+  // creating a fresh transcript. Only the first attempt creates it.
+  if (!args.resumeSession) {
+    await args.gateway.rpc('sessions.create', {
+      key: sessionKey,
+      agentId: AGENT_ID,
+      model: args.model,
+    }, 120_000);
+  }
   workflowExecLog('debug', 'agent-input', args.prompt, {
     runId: args.ctx.runId, nodeId: args.ctx.nodeId, execEngine: 'openclaw', sessionKey, model: args.model,
   });
@@ -102,19 +101,10 @@ export async function invokeOpenClawWorkflowAgent(args: {
         runId: args.ctx.runId, nodeId: args.ctx.nodeId, execEngine: 'openclaw', model: args.model,
         status: result.status, error: result.error,
       });
-      void cleanupWorkflowOpenClawSession(sessionKey)
-        .then((cleanup) => workflowExecLog('info', 'openclaw-session-cleanup', 'workflow Gateway session removed', {
-          runId: args.ctx.runId, nodeId: args.ctx.nodeId, execEngine: 'openclaw', sessionKey,
-          removed: cleanup.removed, transcriptCount: cleanup.transcriptCount,
-        }))
-        .catch((error) => workflowExecLog('error', 'openclaw-session-cleanup-failed', 'failed to remove workflow Gateway session', {
-          runId: args.ctx.runId, nodeId: args.ctx.nodeId, execEngine: 'openclaw', sessionKey,
-          error: error instanceof Error ? error.message : String(error),
-        }))
-        // A cleanup failure is visible in logs but must not replace the actual
-        // workflow result. Resolve only after cleanup has been attempted so a
-        // retry never reuses a session while its previous transcript remains.
-        .finally(() => resolve(result));
+      // Keep the session until the retry coordinator reaches a node terminal
+      // state. This lets retries and interrupted-run recovery continue the
+      // exact same Gateway transcript.
+      resolve(result);
     };
     // OpenClaw Gateway can emit the complete assistant packet without a
     // following `turn.completed` event. This is intentionally distinct from
@@ -167,6 +157,14 @@ export async function invokeOpenClawWorkflowAgent(args: {
         activeSessions.set(activeKey, { gateway: args.gateway, sessionKey, runId });
       })
       .catch((error) => finish({ status: 'failed', rawText, error: error instanceof Error ? error.message : String(error) }));
+  });
+}
+
+export async function releaseOpenClawWorkflowAgentSession(nodeSessionId: string): Promise<void> {
+  const sessionKey = workflowGatewaySessionKey(nodeSessionId);
+  const cleanup = await cleanupWorkflowOpenClawSession(sessionKey);
+  workflowExecLog('info', 'openclaw-session-cleanup', 'workflow Gateway session removed', {
+    execEngine: 'openclaw', sessionKey, removed: cleanup.removed, transcriptCount: cleanup.transcriptCount,
   });
 }
 

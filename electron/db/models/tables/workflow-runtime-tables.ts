@@ -38,6 +38,7 @@ export interface WfNodeRunTable {
   node_type: TsNull;
   status: string;
   attempt_count: Int;
+  agent_session_id: TsNull;
   input_json: TsNull;
   output_json: TsNull;
   prompt_text: TsNull;
