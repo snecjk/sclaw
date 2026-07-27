@@ -25,6 +25,7 @@ import {
   toggleGroupExpanded,
 } from '@/lib/sidebar-section-group-expand';
 import { DEFAULT_WORKSPACE_ID, useSessionCatalogStore } from '@/stores/session-catalog';
+import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useChatStore } from '@/stores/chat';
 import { resolveSessionLabel } from '@/lib/session-label';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
@@ -81,6 +82,8 @@ export function SidebarProjectsSection({
   const isOnHome = location.pathname === '/';
 
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
+  const appDevWorkspaceIds = useAppDevCatalogStore((s) => s.workspaceIds);
+  const refreshAppDevCatalog = useAppDevCatalogStore((s) => s.refresh);
   const allCatalogByKey = useSessionCatalogStore((s) => s.allCatalogByKey);
   const selectProject = useSessionCatalogStore((s) => s.selectProject);
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
@@ -108,14 +111,25 @@ export function SidebarProjectsSection({
   const [editingProjectValue, setEditingProjectValue] = useState('');
   const sidebarProjectFocusTokenRef = useRef<string | null>(null);
   const focusSessionKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    void refreshAppDevCatalog();
+  }, [refreshAppDevCatalog, workspaces.length]);
+
+  // 开发应用不进侧栏「项目」——入口只在应用广场。
+  const visibleWorkspaces = useMemo(
+    () => workspaces.filter((workspace) => !appDevWorkspaceIds.includes(workspace.id)),
+    [workspaces, appDevWorkspaceIds],
+  );
+
   const sortedWorkspaces = useMemo(
-    () => sortProjectsByCreatedAt(workspaces),
-    [workspaces],
+    () => sortProjectsByCreatedAt(visibleWorkspaces),
+    [visibleWorkspaces],
   );
 
   const sessionsByProjectId = useMemo(() => {
     const map = new Map<string, ChatSession[]>();
-    for (const workspace of workspaces) {
+    for (const workspace of visibleWorkspaces) {
       const scoped = sessions.filter((session) => {
         if (isSidebarHiddenChatSessionKey(session.key)) return false;
         const workspaceId = sessionWorkspaceByKey[session.key] ?? DEFAULT_WORKSPACE_ID;
@@ -127,7 +141,7 @@ export function SidebarProjectsSection({
       );
     }
     return map;
-  }, [workspaces, sessions, sessionWorkspaceByKey, sessionLastActivity, allCatalogByKey]);
+  }, [visibleWorkspaces, sessions, sessionWorkspaceByKey, sessionLastActivity, allCatalogByKey]);
 
   const getSessionLabel = useCallback(
     (key: string, displayName?: string, label?: string) =>

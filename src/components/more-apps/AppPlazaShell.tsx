@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AppPlazaTabStrip } from './AppPlazaTabStrip';
 import { AppPlazaBrowserPane } from './AppPlazaBrowserPane';
+import { AppPlazaDevAppPane } from './AppPlazaDevAppPane';
 import { MoreAppsPage } from './MoreAppsPage';
 import {
   APP_PLAZA_HOME_TAB_ID,
@@ -22,6 +23,7 @@ export function AppPlazaShell() {
   const setRouteActive = useAppPlazaShellStore((s) => s.setRouteActive);
   const activeTabId = useAppPlazaShellStore((s) => s.activeTabId);
   const browserTabs = useAppPlazaShellStore((s) => s.browserTabs);
+  const devAppTabs = useAppPlazaShellStore((s) => s.devAppTabs);
   const toggleChatPanel = useAppPlazaShellStore((s) => s.toggleChatPanel);
 
   useEffect(() => {
@@ -39,6 +41,8 @@ export function AppPlazaShell() {
   }, [navigate]);
 
   const activeBrowser = browserTabs.find((t) => t.id === activeTabId);
+  const activeDevApp = devAppTabs.find((t) => t.id === activeTabId);
+  const isHomeActive = activeTabId === APP_PLAZA_HOME_TAB_ID;
   const chatShortcutEnabled = routeActive && activeBrowser?.status === 'live';
   useSclawBrowserChatShortcut(Boolean(chatShortcutEnabled), () => {
     if (activeBrowser) toggleChatPanel(activeBrowser.id);
@@ -65,12 +69,12 @@ export function AppPlazaShell() {
         {/* Browser stack first (under); stays mounted for keep-alive. */}
         <div
           className={
-            activeTabId === APP_PLAZA_HOME_TAB_ID
+            isHomeActive || activeDevApp
               ? 'app-plaza-shell__browser-stack app-plaza-shell__browser-stack--behind-home'
               : 'app-plaza-shell__browser-stack'
           }
-          aria-hidden={activeTabId === APP_PLAZA_HOME_TAB_ID}
-          inert={activeTabId === APP_PLAZA_HOME_TAB_ID ? true : undefined}
+          aria-hidden={Boolean(isHomeActive || activeDevApp)}
+          inert={isHomeActive || activeDevApp ? true : undefined}
         >
           {browserTabs.map((tab) => (
             <AppPlazaBrowserPane
@@ -81,11 +85,30 @@ export function AppPlazaShell() {
           ))}
         </div>
 
+        {/* Dev-app workbench stack — same keep-alive / layering as browser tabs. */}
+        <div
+          className={
+            activeDevApp
+              ? 'app-plaza-shell__dev-app-stack'
+              : 'app-plaza-shell__dev-app-stack app-plaza-shell__dev-app-stack--behind'
+          }
+          aria-hidden={!activeDevApp}
+          inert={!activeDevApp ? true : undefined}
+        >
+          {devAppTabs.map((tab) => (
+            <AppPlazaDevAppPane
+              key={tab.id}
+              tab={tab}
+              active={activeTabId === tab.id}
+            />
+          ))}
+        </div>
+
         {/* Home last so it wins paint + hit-testing when visible. */}
         <div
           className="app-plaza-shell__home"
-          hidden={activeTabId !== APP_PLAZA_HOME_TAB_ID}
-          aria-hidden={activeTabId !== APP_PLAZA_HOME_TAB_ID}
+          hidden={!isHomeActive}
+          aria-hidden={!isHomeActive}
         >
           <div className="app-plaza-shell__home-scroll">
             <MoreAppsPage />

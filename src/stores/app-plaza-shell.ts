@@ -34,6 +34,13 @@ export const APP_PLAZA_MAX_LIVE_BROWSER_TABS = 5;
 
 export type AppPlazaBrowserTabStatus = 'blank' | 'live' | 'suspended';
 
+/** Tab for an in-progress dev-app workbench (chat + preview). */
+export interface AppPlazaDevAppTab {
+  id: string;
+  workspaceId: string;
+  title: string;
+}
+
 export interface AppPlazaBrowserTab {
   id: string;
   url: string;
@@ -81,11 +88,15 @@ interface AppPlazaShellState {
   routeActive: boolean;
   activeTabId: string;
   browserTabs: AppPlazaBrowserTab[];
+  devAppTabs: AppPlazaDevAppTab[];
 
   setRouteActive: (active: boolean) => void;
   selectTab: (tabId: string) => void;
   addBlankTab: () => void;
   closeBrowserTab: (tabId: string) => void;
+  /** Open (or focus) a dev-app workbench tab. Returns the tab id. */
+  openOrFocusDevAppTab: (workspaceId: string, title: string) => string;
+  closeDevAppTab: (tabId: string) => void;
   submitBlankTabUrl: (tabId: string, rawUrl: string) => void;
   /** Navigate an existing live/suspended/blank tab to a manually entered URL. */
   navigateBrowserTabUrl: (tabId: string, rawUrl: string) => void;
@@ -224,6 +235,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
   routeActive: false,
   activeTabId: APP_PLAZA_HOME_TAB_ID,
   browserTabs: [],
+  devAppTabs: [],
 
   setRouteActive: (active) => set({ routeActive: active }),
 
@@ -231,6 +243,13 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
     const state = get();
     if (tabId === APP_PLAZA_HOME_TAB_ID) {
       set({ activeTabId: APP_PLAZA_HOME_TAB_ID });
+      return;
+    }
+
+    // Dev-app tab — simple focus, no webview lifecycle.
+    const devTab = state.devAppTabs.find((t) => t.id === tabId);
+    if (devTab) {
+      set({ activeTabId: tabId });
       return;
     }
 
@@ -304,6 +323,32 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
     // Drop unused cleared reference noise
     void cleared;
     set({ browserTabs: remaining, activeTabId: nextActive });
+  },
+
+  openOrFocusDevAppTab: (workspaceId, title) => {
+    const existing = get().devAppTabs.find((t) => t.workspaceId === workspaceId);
+    if (existing) {
+      set({ activeTabId: existing.id });
+      return existing.id;
+    }
+    const id = `devapp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const tab: AppPlazaDevAppTab = { id, workspaceId, title };
+    set((prev) => ({
+      devAppTabs: [...prev.devAppTabs, tab],
+      activeTabId: id,
+    }));
+    return id;
+  },
+
+  closeDevAppTab: (tabId) => {
+    const state = get();
+    const remaining = state.devAppTabs.filter((t) => t.id !== tabId);
+    let nextActive = state.activeTabId;
+    if (state.activeTabId === tabId) {
+      // Fall back to home
+      nextActive = APP_PLAZA_HOME_TAB_ID;
+    }
+    set({ devAppTabs: remaining, activeTabId: nextActive });
   },
 
   submitBlankTabUrl: (tabId, rawUrl) => {

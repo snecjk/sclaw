@@ -278,6 +278,33 @@
   background: var(--ma-add-button-fill-hover);
 }
 
+.page-more-apps .app-plaza-heading-actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.page-more-apps .more-apps-add-btn--primary {
+  background: var(--sto-brand-6, #ff6a00);
+  color: #fff;
+}
+
+.page-more-apps .more-apps-add-btn--primary:hover {
+  background: color-mix(in srgb, var(--sto-brand-6, #ff6a00) 88%, #000);
+}
+
+.page-more-apps .more-apps-add-btn--ghost {
+  background: transparent;
+  border: 1px solid var(--ma-border);
+  color: var(--ma-text-secondary);
+}
+
+.page-more-apps .more-apps-add-btn--ghost:hover {
+  background: var(--ma-surface-hover);
+  color: var(--ma-text);
+}
+
 .page-more-apps .more-apps-add-btn:focus-visible {
   outline: 2px solid var(--ma-focus);
   outline-offset: 2px;
@@ -1067,6 +1094,71 @@
   margin-top: 0;
 }
 
+.page-more-apps .more-apps-section__title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ma-text);
+}
+
+.page-more-apps .more-apps-card--dev {
+  cursor: pointer;
+}
+
+.page-more-apps .more-apps-card__icon--dev {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--sto-brand-6, #ff6a00) 12%, transparent);
+  color: var(--sto-brand-6, #ff6a00);
+  flex-shrink: 0;
+}
+
+.page-more-apps .more-apps-card__foot--dev {
+  justify-content: space-between;
+}
+
+.page-more-apps .more-apps-card__primary-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ma-orange);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ma-on-orange);
+  cursor: pointer;
+}
+
+.page-more-apps .more-apps-card__primary-action:hover {
+  background: var(--ma-orange-hover);
+}
+
+.page-more-apps .more-apps-card__more-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ma-icon-muted);
+  cursor: pointer;
+}
+
+.page-more-apps .more-apps-card__more-btn:hover,
+.page-more-apps .more-apps-card--menu-open .more-apps-card__more-btn {
+  background: var(--ma-surface-hover);
+  color: var(--ma-text);
+}
+
 .page-more-apps .app-plaza-recommended {
   margin-bottom: 16px;
   padding: 18px;
@@ -1771,7 +1863,7 @@
     flex-wrap: wrap;
   }
 
-  .page-more-apps .more-apps-add-btn {
+  .page-more-apps .app-plaza-heading-actions {
     margin-left: auto;
   }
 

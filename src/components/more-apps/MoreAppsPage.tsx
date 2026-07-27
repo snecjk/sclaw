@@ -18,12 +18,15 @@ import {
   stoPageTitleClass,
 } from '@/lib/surfaces';
 import { AppCard } from './AppCard';
+import { DevAppCard } from './DevAppCard';
 import { AddExternalAppModal } from './AddExternalAppModal';
+import { CreateAppDialog } from './CreateAppDialog';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AppIcon } from './AppIcon';
 import type { AppItem, AppPlazaBanner, MarketCategory } from '@/types/more-apps';
 import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
 import { formatAppBadges } from './format-app-badges';
+import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 
 const HERO_CAROUSEL_INTERVAL = 5000;
 
@@ -69,11 +72,31 @@ export function MoreAppsPage() {
   } = useMoreAppsStore();
 
   const [confirmDeleteApp, setConfirmDeleteApp] = useState<AppItem | null>(null);
+  const [createAppOpen, setCreateAppOpen] = useState(false);
   const [failedBannerImages, setFailedBannerImages] = useState<string[]>([]);
   const heroTimerRef = useRef<NodeJS.Timeout | null>(null);
   // Skip the search-debounce effect's first run on mount — the mount effect
   // already fetches the first APP page, so we don't double-fire on initial render.
   const searchMountedRef = useRef(false);
+
+  const devApps = useAppDevCatalogStore((s) => s.apps);
+  const refreshDevApps = useAppDevCatalogStore((s) => s.refresh);
+
+  useEffect(() => {
+    if (activeTab === 'installed' || createAppOpen) {
+      void refreshDevApps();
+    }
+  }, [activeTab, createAppOpen, refreshDevApps]);
+
+  const filteredDevApps = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return devApps;
+    return devApps.filter(
+      (app) =>
+        app.name.toLowerCase().includes(q)
+        || app.projectType.toLowerCase().includes(q),
+    );
+  }, [devApps, searchQuery]);
 
   // My apps use a stable session catalog so market category/search requests cannot
   // remove favorited apps from the installed view.
@@ -519,10 +542,42 @@ export function MoreAppsPage() {
 
   // ── Installed Tab View ───────────────────────────────────────
   const renderInstalledView = () => {
+    const hasInstalled = filteredInstalledApps.length > 0;
+    const hasDevApps = filteredDevApps.length > 0;
+    if (!hasInstalled && !hasDevApps) {
+      return (
+        <div className="more-apps-main">
+          <div className="more-apps-empty">
+            {searchQuery
+              ? t('moreApps.emptySearch', { defaultValue: '未找到匹配的应用，试试其他关键词' })
+              : t('moreApps.emptyInstalled', { defaultValue: '还没有收藏或安装应用，去应用广场看看' })}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="more-apps-main">
-        {filteredInstalledApps.length > 0 ? (
+        {hasDevApps ? (
           <section className="more-apps-section">
+            <h2 className="more-apps-section__title">
+              {t('moreApps.devAppsSection', { defaultValue: '开发应用' })}
+            </h2>
+            <div className="more-apps-grid">
+              {filteredDevApps.map((app) => (
+                <DevAppCard key={app.workspaceId} app={app} />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {hasInstalled ? (
+          <section className="more-apps-section">
+            {hasDevApps ? (
+              <h2 className="more-apps-section__title">
+                {t('moreApps.installedSection', { defaultValue: '已安装' })}
+              </h2>
+            ) : null}
             <div className="more-apps-grid">
               {filteredInstalledApps.map((app) => (
                 <AppCard
@@ -540,13 +595,7 @@ export function MoreAppsPage() {
               ))}
             </div>
           </section>
-        ) : (
-          <div className="more-apps-empty">
-            {searchQuery
-              ? t('moreApps.emptySearch', { defaultValue: '未找到匹配的应用，试试其他关键词' })
-              : t('moreApps.emptyInstalled', { defaultValue: '还没有收藏或安装应用，去应用广场看看' })}
-          </div>
-        )}
+        ) : null}
       </div>
     );
   };
@@ -565,15 +614,26 @@ export function MoreAppsPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="more-apps-add-btn"
-          id="more-apps-add-external-btn"
-          onClick={openAddModal}
-        >
-          <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
-          {t('moreApps.addExternal', { defaultValue: '安装外部应用' })}
-        </button>
+        <div className="app-plaza-heading-actions">
+          <button
+            type="button"
+            className="more-apps-add-btn more-apps-add-btn--primary"
+            id="more-apps-create-app-btn"
+            onClick={() => setCreateAppOpen(true)}
+          >
+            <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
+            {t('moreApps.createApp', { defaultValue: '创建应用' })}
+          </button>
+          <button
+            type="button"
+            className="more-apps-add-btn more-apps-add-btn--ghost"
+            id="more-apps-add-external-btn"
+            onClick={openAddModal}
+          >
+            <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
+            {t('moreApps.addExternal', { defaultValue: '安装外部应用' })}
+          </button>
+        </div>
       </div>
 
       {/* Toolbar row: tabs at left, search at right */}
@@ -619,6 +679,7 @@ export function MoreAppsPage() {
 
       {/* Modals */}
       <AddExternalAppModal />
+      <CreateAppDialog open={createAppOpen} onClose={() => setCreateAppOpen(false)} />
       <ConfirmDialog
         open={!!confirmDeleteApp}
         title={t('moreApps.deleteConfirmTitle', { defaultValue: '删除应用' })}

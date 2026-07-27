@@ -53,6 +53,7 @@ import { handleWorkflowRoutes } from './routes/workflows';
 import { handleAiMemoryAgentV1Routes } from './routes/ai-memory-agent-v1';
 import { handleSclawBrowserRoutes } from './routes/sclaw-browser';
 import { handleBrowserBridgeRoutes } from './routes/browser-bridge';
+import { handleAppDevRoutes } from './routes/app-dev';
 
 import { sendJson } from './route-utils';
 
@@ -92,6 +93,7 @@ const routeHandlers: RouteHandler[] = [
   handleWorkflowRoutes,
   handleSclawBrowserRoutes,
   handleBrowserBridgeRoutes,
+  handleAppDevRoutes,
   handleClaudeScheduledTaskRoutes,
   handleDingTalkRoutes,
   handleMyTasksRoutes,
