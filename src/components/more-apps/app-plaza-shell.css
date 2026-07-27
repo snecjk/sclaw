@@ -27,14 +27,28 @@
 
 .app-plaza-tabstrip {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   gap: 4px;
   flex-shrink: 0;
-  min-height: 36px;
-  padding: 6px 8px 0;
+  min-height: 40px;
+  /* Match ContentHeader: drag empty chrome; pad-start clears macOS traffic lights when sidebar collapsed. */
+  padding: 6px var(--sto-content-header-pad-end, 8px) 0 var(--sto-content-header-pad-start, 8px);
   border-bottom: 1px solid hsl(var(--border));
   background: hsl(var(--muted) / 0.45);
   overflow-x: auto;
+  user-select: none;
+}
+
+.app-plaza-tabstrip__spacer {
+  flex: 1 1 auto;
+  min-width: 24px;
+  align-self: stretch;
+}
+
+.app-plaza-tabstrip__win-reserve {
+  flex-shrink: 0;
+  align-self: stretch;
+  width: 7rem;
 }
 
 .app-plaza-tab {
@@ -53,6 +67,7 @@
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
+  -webkit-app-region: no-drag;
 }
 
 .app-plaza-tab:hover {
@@ -101,9 +116,14 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  margin-top: 1px;
   border-radius: 6px;
   color: hsl(var(--muted-foreground));
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.app-plaza-tabstrip__sidebar-toggle {
+  -webkit-app-region: no-drag;
   flex-shrink: 0;
 }
 
@@ -145,6 +165,9 @@
   min-height: 0;
   min-width: 0;
   overflow: auto;
+  /* Body overlay replaces ContentHeader + stoMainCardBody padding — restore page insets. */
+  padding: 16px var(--sto-content-pad-x) 20px;
+  box-sizing: border-box;
 }
 
 .app-plaza-shell__browser-stack {
