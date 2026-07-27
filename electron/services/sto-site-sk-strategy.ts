@@ -3,6 +3,7 @@
  *
  * Key 确保 / 额度扩容：经 memory-center 代理供应商 openapi 接口。
  * 模型推理域名：优先 Apollo `claw.site.inference.portal.domain`，登录后拉取；兜底为本地 SUPPLIER_DOMAINS。
+ * 推理 API Key：优先 Apollo `claw.site.inference.product.code`，格式 plainSk&&productCode。
  */
 
 import type { StoSkStrategy } from './sto-sk-strategy';
@@ -19,6 +20,9 @@ import {
   hasSiteInferencePortalDomainCached,
   loadSiteInferencePortalDomain,
   resolveSiteInferencePortalDomain,
+  getSiteInferenceProductCode,
+  hasSiteInferenceProductCodeCached,
+  loadSiteInferenceProductCode,
 } from './sto-apollo-config-service';
 
 export class SiteSkStrategy implements StoSkStrategy {
@@ -99,7 +103,13 @@ export class SiteSkStrategy implements StoSkStrategy {
   }
 
   async formatInferenceApiKey(_user: SsoUserInfo, plainSk: string): Promise<string> {
-    return plainSk;
+    if (!hasSiteInferenceProductCodeCached()) {
+      await loadSiteInferenceProductCode();
+    }
+    const productCode = getSiteInferenceProductCode();
+    const inferenceKey = `${plainSk}&&${productCode}`;
+    logger.info(`[site-sk] formatInferenceApiKey: productCode=${productCode}`);
+    return inferenceKey;
   }
 
   async getInferenceHeaders(user: SsoUserInfo): Promise<Record<string, string>> {

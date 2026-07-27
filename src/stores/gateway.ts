@@ -48,6 +48,29 @@ function shouldProcessGatewayEvent(event: Record<string, unknown>): boolean {
   return gatewayEventDeduper.shouldProcess(event);
 }
 
+export function shouldReconcileChatRunsAfterGatewayStatus(
+  previous: GatewayStatus['state'],
+  next: GatewayStatus['state'],
+): boolean {
+  return previous !== 'running' && next === 'running';
+}
+
+function reconcileActiveChatRunsAfterGatewayReconnect(): void {
+  void import('./chat')
+    .then(({ useChatStore }) => {
+      const chat = useChatStore.getState();
+      for (const [sessionKey, runtime] of Object.entries(chat.runtimeBySessionKey)) {
+        if (!runtime.sending && !runtime.pendingFinal && !runtime.activeRunId) continue;
+        void chat.loadHistory(true, true, sessionKey);
+      }
+    })
+    .catch((error) => {
+      console.warn('[chat-flow] gateway.reconnect.history-reconcile.failed', {
+        error: String(error),
+      });
+    });
+}
+
 function handleGatewayNotification(notification: { method?: string; params?: Record<string, unknown> } | undefined): void {
   const payload = notification;
   if (!payload || payload.method !== 'agent' || !payload.params || typeof payload.params !== 'object') {
@@ -141,7 +164,11 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
         if (!gatewayEventUnsubscribers) {
           const unsubscribers: Array<() => void> = [];
           unsubscribers.push(subscribeHostEvent<GatewayStatus>('gateway:status', (payload) => {
+            const previousState = get().status.state;
             set({ status: payload });
+            if (shouldReconcileChatRunsAfterGatewayStatus(previousState, payload.state)) {
+              reconcileActiveChatRunsAfterGatewayReconnect();
+            }
           }));
           unsubscribers.push(subscribeHostEvent<{ message?: string }>('gateway:error', (payload) => {
             set({ lastError: payload.message || 'Gateway error' });
