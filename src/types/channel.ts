@@ -101,19 +101,19 @@ export const CHANNEL_ICONS: Record<ChannelType, string> = {
  */
 export const CHANNEL_NAMES: Record<ChannelType, string> = {
   whatsapp: 'WhatsApp',
-  wechat: 'WeChat',
-  dingtalk: 'DingTalk',
+  wechat: '微信',
+  dingtalk: '钉钉',
   telegram: 'Telegram',
   discord: 'Discord',
   signal: 'Signal',
-  wecom: 'WeCom',
+  wecom: '企业微信',
   imessage: 'iMessage',
   matrix: 'Matrix',
   line: 'LINE',
   msteams: 'Microsoft Teams',
   googlechat: 'Google Chat',
   mattermost: 'Mattermost',
-  qqbot: 'QQ Bot',
+  qqbot: 'QQ 机器人',
 };
 
 /**
@@ -122,7 +122,7 @@ export const CHANNEL_NAMES: Record<ChannelType, string> = {
 export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
   qqbot: {
     id: 'qqbot',
-    name: 'QQ Bot',
+    name: 'QQ 机器人',
     icon: '🐧',
     description: 'channels:meta.qqbot.description',
     connectionType: 'token',
@@ -152,7 +152,7 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
   },
   dingtalk: {
     id: 'dingtalk',
-    name: 'DingTalk',
+    name: '钉钉',
     icon: '💬',
     description: 'channels:meta.dingtalk.description',
     connectionType: 'qr',
@@ -168,7 +168,7 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
   },
   wecom: {
     id: 'wecom',
-    name: 'WeCom',
+    name: '企业微信',
     icon: '💼',
     description: 'channels:meta.wecom.description',
     connectionType: 'token',
@@ -289,7 +289,7 @@ export const CHANNEL_META: Record<ChannelType, ChannelMeta> = {
   },
   wechat: {
     id: 'wechat',
-    name: 'WeChat',
+    name: '微信',
     icon: '💬',
     description: 'channels:meta.wechat.description',
     connectionType: 'qr',

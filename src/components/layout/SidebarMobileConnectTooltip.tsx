@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { MonitorSmartphone } from 'lucide-react';
+import { MonitorSmartphone, ChevronRight } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -137,37 +137,48 @@ export function SidebarMobileConnectTooltip({
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 px-0.5">
-            <Switch
-              size="compact"
-              checked={enabled}
-              disabled={busy}
-              onCheckedChange={(checked) => {
-                void handleToggle(checked);
-              }}
-              aria-label={t('hub.mobile.modal.enableConnect', {
-                defaultValue: '开启连接 App',
-              })}
-            />
-            <span className="min-w-0 flex-1 text-[12px] leading-snug text-[#4E5969] dark:text-muted-foreground">
-              {t('hub.mobile.footerConnectHint', {
-                defaultValue: '连接 app，确保同账号登录手机',
-              })}
-            </span>
-          </div>
+          <div className="flex flex-col gap-3 px-0.5">
+            <div className="flex items-center gap-2.5">
+              <span className="min-w-0 flex-1 text-[12px] leading-snug text-[#4E5969] dark:text-muted-foreground">
+                {t('hub.mobile.footerConnectHint', {
+                  defaultValue: '连接 app，确保同账号登录手机',
+                })}
+              </span>
+              <Switch
+                size="compact"
+                checked={enabled}
+                disabled={busy}
+                onCheckedChange={(checked) => {
+                  void handleToggle(checked);
+                }}
+                aria-label={t('hub.mobile.modal.enableConnect', {
+                  defaultValue: '开启连接 App',
+                })}
+              />
+            </div>
 
-          <button
-            type="button"
-            className="w-full py-1 text-center text-[12px] font-normal text-[#86909C] transition-colors hover:text-[#165DFF] dark:text-muted-foreground dark:hover:text-blue-400"
-            onClick={() => {
-              setOpen(false);
-              navigate('/settings/channels');
-            }}
-          >
-            {t('hub.mobile.footerMoreChannels', {
-              defaultValue: '点击绑定更多频道',
-            })}
-          </button>
+            <div className="h-px w-full bg-[#F2F3F5] dark:bg-border" aria-hidden />
+
+            <button
+              type="button"
+              className="group flex w-full items-center justify-start gap-1.5 text-left transition-colors"
+              onClick={() => {
+                setOpen(false);
+                navigate('/settings/channels');
+              }}
+            >
+              <span className="min-w-0 text-[12px] font-normal leading-snug text-[#86909C] transition-colors group-hover:text-[#FF6A00] dark:text-muted-foreground dark:group-hover:text-[#FF6A00]">
+                {t('hub.mobile.footerMoreChannels', {
+                  defaultValue: '点击绑定更多频道',
+                })}
+              </span>
+              <ChevronRight
+                className="h-3.5 w-3.5 shrink-0 text-[#86909C] transition-colors group-hover:text-[#FF6A00] dark:text-muted-foreground dark:group-hover:text-[#FF6A00]"
+                strokeWidth={1.75}
+                aria-hidden
+              />
+            </button>
+          </div>
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

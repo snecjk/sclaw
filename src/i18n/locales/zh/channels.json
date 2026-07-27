@@ -175,7 +175,7 @@
             ]
         },
         "wechat": {
-            "description": "通过腾讯官方 OpenClaw 插件扫码连接个人微信",
+            "description": "通过微信扫码连接助理，接收和回复消息。",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/GHYZwuPCriF0gWkXwkFcJ9zon3b",
             "instructions": [
                 "点击生成二维码，S Claw 会在 OpenClaw 中安装并启用官方微信插件",
@@ -185,7 +185,7 @@
             ]
         },
         "dingtalk": {
-            "description": "扫码绑定组织统一钉钉机器人，消息经 Hub 路由到本机 StoClaw",
+            "description": "注册钉钉机器人以接收和回复消息。",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/Y5eNwiSiZidkLskrwtJc1rUln0b#doxcnr8KfaA2mNPeQUeHO83eDPh",
             "fields": {
                 "clientId": {
@@ -242,7 +242,7 @@
             ]
         },
         "wecom": {
-            "description": "通过插件连接企业微信机器人",
+            "description": "注册企微助理以接收和回复消息。",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/JTGnwoV0RixKPtkr4w7c7gpAnDc",
             "fields": {
                 "botId": {
@@ -373,7 +373,7 @@
             ]
         },
         "qqbot": {
-            "description": "通过 @sliverp/qqbot 插件连接 QQ 机器人",
+            "description": "注册 QQ 机器人以接收和回复消息。",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/KPIJwlyiGiupMrkiS9ice39Zn2c",
             "fields": {
                 "appId": {
@@ -467,7 +467,7 @@
             "configure": "配置",
             "footerQrHint": "一键下载，把工作台装进口袋",
             "footerConnectHint": "连接 app，确保同账号登录手机",
-            "footerMoreChannels": "点击绑定更多频道（钉钉、微信）"
+            "footerMoreChannels": "点击绑定更多频道(钉钉、微信)"
         }
     },
     "viewDocs": "查看文档"
