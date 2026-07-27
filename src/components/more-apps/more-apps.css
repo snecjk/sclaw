@@ -653,14 +653,14 @@
 .page-more-apps .app-market__hero-banner {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 5;
+  aspect-ratio: 16 / 3;
   min-height: 120px;
   margin-bottom: 0;
   padding: 0;
   border-radius: 20px;
   border: 1px solid rgba(26, 115, 232, 0.14);
   background: linear-gradient(135deg, #d6e8ff 0%, #c8ddff 42%, #e0edff 100%);
-  box-shadow: 0 8px 24px rgba(26, 115, 232, 0.1);
+  box-shadow: none;
   overflow: hidden;
   text-align: left;
   font: inherit;
@@ -675,7 +675,7 @@
 }
 
 .page-more-apps .app-market__hero-banner--clickable:hover {
-  box-shadow: 0 10px 28px rgba(26, 115, 232, 0.14);
+  box-shadow: none;
 }
 
 .page-more-apps .app-market__hero-banner--clickable:focus-visible {
@@ -712,7 +712,7 @@
 /* Banner loading skeleton */
 .page-more-apps .app-market__hero-carousel--loading .app-market__hero-skeleton {
   width: 100%;
-  aspect-ratio: 16 / 5;
+  aspect-ratio: 16 / 3;
   min-height: 120px;
   border-radius: 20px;
   border: 1px solid rgba(26, 115, 232, 0.1);
@@ -737,7 +737,7 @@
   justify-content: center;
   gap: 12px;
   width: 100%;
-  aspect-ratio: 16 / 5;
+  aspect-ratio: 16 / 3;
   min-height: 120px;
   padding: 16px;
   border-radius: 20px;
