@@ -718,7 +718,7 @@ function EntryList(props: EntryRenderProps) {
             className="flex h-[56px] items-center rounded-[8px] bg-white px-3 shadow-[0_1px_2px_rgba(29,33,41,0.02)] transition-colors hover:bg-[#FAFBFC] dark:bg-card dark:hover:bg-muted/40"
           >
             <div className="min-w-0 flex-1">
-              <EntryName entry={entry} onOpenFolder={props.onOpenFolder} />
+              <EntryName entry={entry} onOpenFolder={props.onOpenFolder} onPreview={props.onPreview} />
             </div>
             <div className="w-[168px] shrink-0 text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">
               {formatDate(entry.updatedAt)}
@@ -802,6 +802,7 @@ function EntryGrid(props: EntryRenderProps) {
           x={contextMenu.x}
           y={contextMenu.y}
           onDownload={(entry) => runContextAction(props.onDownload, entry)}
+          onPreview={(entry) => runContextAction(props.onPreview, entry)}
           onShare={(entry) => runContextAction(props.onShare, entry)}
           onRename={(entry) => runContextAction(props.onRename, entry)}
           onDelete={(entry) => runContextAction(props.onDelete, entry)}
@@ -817,6 +818,7 @@ function GridEntryContextMenu({
   x,
   y,
   onDownload,
+  onPreview,
   onShare,
   onRename,
   onDelete,
@@ -826,6 +828,7 @@ function GridEntryContextMenu({
   x: number;
   y: number;
   onDownload: (entry: DataCenterEntry) => void;
+  onPreview: (entry: DataCenterEntry) => void;
   onShare: (entry: DataCenterEntry) => void;
   onRename: (entry: DataCenterEntry) => void;
   onDelete: (entry: DataCenterEntry) => void;
@@ -840,6 +843,11 @@ function GridEntryContextMenu({
       onClick={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.preventDefault()}
     >
+      {entry.entryType === 'file' ? (
+        <ContextMenuButton onClick={() => onPreview(entry)}>
+          {t('dataCenterPage.menu.preview')}
+        </ContextMenuButton>
+      ) : null}
       {entry.entryType === 'file' ? (
         <ContextMenuButton onClick={() => onDownload(entry)}>
           {t('dataCenterPage.menu.download')}
@@ -887,7 +895,15 @@ interface EntryRenderProps {
   onTrace: (entry: DataCenterEntry) => void;
 }
 
-function EntryName({ entry, onOpenFolder }: { entry: DataCenterEntry; onOpenFolder: (entry: DataCenterEntry) => void }) {
+function EntryName({
+  entry,
+  onOpenFolder,
+  onPreview,
+}: {
+  entry: DataCenterEntry;
+  onOpenFolder: (entry: DataCenterEntry) => void;
+  onPreview: (entry: DataCenterEntry) => void;
+}) {
   const { t } = useTranslation('common');
   const content = (
     <>
@@ -913,11 +929,16 @@ function EntryName({ entry, onOpenFolder }: { entry: DataCenterEntry; onOpenFold
       </button>
     );
   }
-  return <div className="flex min-w-0 items-center gap-3">{content}</div>;
+  return (
+    <button type="button" onClick={() => onPreview(entry)} className="flex min-w-0 items-center gap-3 text-left">
+      {content}
+    </button>
+  );
 }
 
 function EntryActions({
   entry,
+  onPreview,
   onDownload,
   onShare,
   onRename,
@@ -973,6 +994,11 @@ function EntryActions({
           </TooltipContent>
         </Tooltip>
         <DropdownMenuContent align="end" className="min-w-[128px] rounded-[10px] p-2">
+          {entry.entryType === 'file' ? (
+            <DropdownMenuItem onSelect={() => onPreview(entry)} className="text-[13px]">
+              {t('dataCenterPage.menu.preview')}
+            </DropdownMenuItem>
+          ) : null}
           {entry.entryType === 'file' && entry.traceAvailable ? (
             <DropdownMenuItem onSelect={() => onTrace(entry)} className="text-[13px]">
               {t('dataCenterPage.menu.traceChat')}
