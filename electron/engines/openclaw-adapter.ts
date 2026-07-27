@@ -10,6 +10,7 @@ import {
   appendAgentMemoryBlock,
 } from '../../shared/agent-memory-prompt';
 import { parseOpenClawExecutionTurn } from './openclaw-execution-snapshot';
+import { prependSystemPromptAppend } from '../../shared/system-prompt-append';
 
 const VISION_MIME_TYPES = new Set([
   'image/png',
@@ -29,16 +30,7 @@ const OPENCLAW_SESSION_STAT_CONCURRENCY = 32;
  * OpenClaw 侧将 append 前置合并进 user message，使定时任务钉钉必发等上下文对模型可见。
  * 不把 append 放进 RPC 参数，避免 schema 拒收。
  */
-export function mergeOpenClawSystemPromptAppend(
-  message: string,
-  systemPromptAppend?: string | null,
-): string {
-  const append = systemPromptAppend?.trim();
-  if (!append) return message;
-  const body = message.trim();
-  if (!body) return append;
-  return `${append}\n\n${body}`;
-}
+export const mergeOpenClawSystemPromptAppend = prependSystemPromptAppend;
 
 async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
   let nextIndex = 0;

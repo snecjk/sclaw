@@ -160,17 +160,17 @@ describe('EngineScheduledTaskDispatcher', () => {
 
     await dispatcher.dispatch({ task, run });
 
-    // send 被调一次；input 塑形正确（sessionKey、幂等键、权限档位、dingtalk 段）。
+    // send 被调一次；Claude + append → message prepend 收件人规则，systemPromptAppend 仍保留。
     expect(runMainChatSendMock).toHaveBeenCalledTimes(1);
     const passedInput = runMainChatSendMock.mock.calls[0][1];
     expect(passedInput).toMatchObject({
       sessionKey: 'sched:t1:20240101',
-      message: 'run report',
       deliver: true,
       idempotencyKey: 'idem-1',
       permissionProfile: 'workspace-write',
       systemPromptAppend: '[dingtalk recipients]',
     });
+    expect(passedInput.message).toBe('[dingtalk recipients]\n\nrun report');
 
     // §0：send resolve 只表 run 启动——run 仍 running，不在此置 succeeded。
     const mid = await runRepo.getRun(run.runId);
@@ -224,6 +224,26 @@ describe('EngineScheduledTaskDispatcher', () => {
     );
   });
 
+  it('openclaw keeps prompt as message; append stays for adapter merge (no double prepend)', async () => {
+    const { task, run } = await seedRun({ engineType: 'openclaw' });
+    runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-oc' } });
+    const { dispatcher, gateway } = makeDispatcher({ systemPromptAppend: '[dingtalk recipients]' });
+
+    await dispatcher.dispatch({ task, run });
+
+    const passedInput = runMainChatSendMock.mock.calls[0][1];
+    expect(passedInput.message).toBe('run report');
+    expect(passedInput.systemPromptAppend).toBe('[dingtalk recipients]');
+
+    emitAgentTerminal(gateway!, 'sched:t1:20240101', 'completed');
+    await vi.waitFor(
+      async () => {
+        expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');
+      },
+      { timeout: 2000, interval: 10 },
+    );
+  });
+
   it('reuses existing run.sessionKey and omits systemPromptAppend when null', async () => {
     // run 已带 sessionKey（恢复路径，例如重启后接续未完成 run）——ensureDatedSession 不该被调。
     const task = await taskRepo.create({ id: 't2', name: 'T2', enabled: true, ...baseTaskInput });
@@ -243,6 +263,7 @@ describe('EngineScheduledTaskDispatcher', () => {
     const passedInput = runMainChatSendMock.mock.calls[0][1];
     expect(passedInput.sessionKey).toBe('preexisting:session');
     expect(passedInput.systemPromptAppend).toBeUndefined();
+    expect(passedInput.message).toBe('run report');
     expect((await runRepo.getRun(run.runId))?.status).toBe('running');
 
     // watcher 终态（复用 sessionKey）：emit 用 preexisting:session。

@@ -13,6 +13,7 @@ import { runMainChatSend, type MainChatSendInput } from '../services/chat-send-s
 import { logger } from '../utils/logger';
 import { attachRunWatcher, type RunWatcherTerminalSignal } from './scheduled-task-run-watcher';
 import { resolveScheduledTaskDingTalkRecipients } from '../../shared/dingtalk-send/scheduled-task-dingtalk-lift';
+import { prependSystemPromptAppend } from '../../shared/system-prompt-append';
 
 /**
  * 引擎无关的执行期 dispatcher。把 `ScheduledTaskScheduler` 交出的 `{ task, run }`
@@ -100,9 +101,14 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
     const adapter = getAdapter(task.engineType);
     const ctx: EngineAdapterContext = { gatewayManager };
     const systemPromptAppend = this.deps.buildSystemPromptAppend(task) ?? undefined;
-    // message 即库内 prompt（不再并入列收件人）；下列仅供调试对照。
+    // message 默认即库内 prompt。Claude：有 append 时再 prepend 进 user message（对齐
+    // OpenClaw 可见性；system append 仍保留）。OpenClaw 由 adapter 自行 merge，此处不重复。
     const recipients = resolveScheduledTaskDingTalkRecipients(task);
-    const message = task.prompt;
+    const appendText = systemPromptAppend?.trim() || '';
+    const message =
+      adapter.type === 'claude' && appendText.length > 0
+        ? prependSystemPromptAppend(task.prompt, systemPromptAppend)
+        : task.prompt;
 
     logger.info('[scheduled-task] dingtalk message assembled', {
       taskId: task.id,
