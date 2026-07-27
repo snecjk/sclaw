@@ -3,23 +3,19 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   AlertCircle,
+  ArrowLeft,
   ChevronDown,
-  ChevronRight,
   CloudUpload,
   Database,
   Download,
-  Eye,
   Folder,
   FolderPlus,
   Grid2X2,
-  Link2,
   List,
   Loader2,
   MoreHorizontal,
-  Pencil,
   Search,
   Share2,
-  Trash2,
   Upload,
   X,
 } from 'lucide-react';
@@ -31,15 +27,20 @@ import htmlIcon from '@/assets/icons/html-icon.svg';
 import imgIcon from '@/assets/icons/img-icon.svg';
 import mdIcon from '@/assets/icons/md-icon.svg';
 import pptIcon from '@/assets/icons/ppt-icon.svg';
+import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import { FilePreviewViewer } from '@/components/file-preview/FilePreviewViewer';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { invokeIpc } from '@/lib/api-client';
 import {
   DATA_CENTER_API_NOT_FOUND,
@@ -49,6 +50,10 @@ import {
   getDataCenterTrace,
   uploadDriveFileFromPath,
 } from '@/lib/data-center-api';
+import {
+  buildArtifactShareDialogDraft,
+  type DingTalkShareDialogDraft,
+} from '@/lib/dingtalk-share';
 import {
   stoMainInnerShell,
   stoPageTitleClass,
@@ -63,6 +68,7 @@ import type { DataCenterEntry, DataCenterTempUrl } from '@/types/data-center';
 const ROOT_ENTRY_ID = 'root';
 const FOLDER_NAME_MAX_LENGTH = 15;
 const SECTION_PARAM_VALUES: DataCenterSection[] = ['qa_artifact', 'drive'];
+const actionTooltipClass = 'border-none bg-[#1D2129] px-2.5 py-1.5 text-[12px] font-medium leading-4 text-white shadow-none';
 
 function normalizeSectionParam(value: string | null): DataCenterSection {
   return SECTION_PARAM_VALUES.includes(value as DataCenterSection)
@@ -285,7 +291,7 @@ function PreviewModal({
 }
 
 export function DataCenter() {
-  const { t } = useTranslation('common');
+  const { t } = useTranslation(['common', 'chat']);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const authUser = useAuthStore((s) => s.user);
@@ -296,6 +302,8 @@ export function DataCenter() {
   const [renameEntry, setRenameEntry] = useState<DataCenterEntry | null>(null);
   const [deleteEntry, setDeleteEntry] = useState<DataCenterEntry | null>(null);
   const [previewState, setPreviewState] = useState<{ entry: DataCenterEntry; tempUrl: DataCenterTempUrl } | null>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
   const [uploading, setUploading] = useState(false);
   const errorDescription = store.error === DATA_CENTER_API_NOT_FOUND
     ? t('dataCenterPage.feedback.apiNotFound')
@@ -372,6 +380,25 @@ export function DataCenter() {
       window.electron.openExternal(tempUrl.tempUrl);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.downloadFailed'));
+    }
+  };
+
+  const handleShare = async (entry: DataCenterEntry) => {
+    if (entry.entryType !== 'file') {
+      toast.info(t('dataCenterPage.toasts.folderShareUnsupported'));
+      return;
+    }
+    try {
+      const tempUrl = await getDataCenterDownloadUrl(entry.entryId);
+      setShareDraft(buildArtifactShareDialogDraft({
+        fileName: entry.name,
+        filePath: tempUrl.tempUrl,
+        mimeType: tempUrl.mimeType || entry.mimeType || 'application/octet-stream',
+        fileSize: entry.fileSize,
+      }, (key) => t(`chat:${key}`)));
+      setShareDialogOpen(true);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('chat:preview.shareDialog.failed'));
     }
   };
 
@@ -463,9 +490,11 @@ export function DataCenter() {
         {store.section !== 'data_source' ? (
           <>
             {store.parentEntryId !== ROOT_ENTRY_ID ? (
-              <div className="mt-4 flex shrink-0 items-center justify-between gap-3">
-                <Breadcrumbs breadcrumbs={store.breadcrumbs} onOpen={store.openBreadcrumb} />
-              </div>
+              <FolderBreadcrumbBar
+                breadcrumbs={store.breadcrumbs}
+                onBack={() => store.openBreadcrumb(getParentBreadcrumbId(store.breadcrumbs))}
+                onOpen={store.openBreadcrumb}
+              />
             ) : null}
 
             <section className="mt-4 min-h-0 flex-1 overflow-hidden">
@@ -485,6 +514,7 @@ export function DataCenter() {
                   onOpenFolder={store.enterFolder}
                   onPreview={handlePreview}
                   onDownload={handleDownload}
+                  onShare={handleShare}
                   onRename={setRenameEntry}
                   onDelete={setDeleteEntry}
                   onTrace={handleTrace}
@@ -495,6 +525,7 @@ export function DataCenter() {
                   onOpenFolder={store.enterFolder}
                   onPreview={handlePreview}
                   onDownload={handleDownload}
+                  onShare={handleShare}
                   onRename={setRenameEntry}
                   onDelete={setDeleteEntry}
                   onTrace={handleTrace}
@@ -576,6 +607,23 @@ export function DataCenter() {
           onDownload={() => handleDownload(previewState.entry)}
         />
       ) : null}
+
+      <ArtifactShareDialog
+        open={shareDialogOpen}
+        draft={shareDraft}
+        onShared={() => {
+          toast.success(t('chat:preview.shareDialog.success'));
+          setShareDialogOpen(false);
+          setShareDraft(null);
+        }}
+        onCancel={() => {
+          setShareDialogOpen(false);
+          setShareDraft(null);
+        }}
+        onError={(error) => {
+          toast.error(error instanceof Error ? error.message : t('chat:preview.shareDialog.failed'));
+        }}
+      />
     </div>
   );
 }
@@ -612,23 +660,49 @@ function IconToggle({ active, label, children, onClick }: { active: boolean; lab
   );
 }
 
-function Breadcrumbs({ breadcrumbs, onOpen }: { breadcrumbs: Array<{ entryId: string; name: string }>; onOpen: (entryId: string) => void }) {
+function getParentBreadcrumbId(breadcrumbs: Array<{ entryId: string; name: string }>): string {
+  return breadcrumbs.length > 1 ? breadcrumbs[breadcrumbs.length - 2].entryId : ROOT_ENTRY_ID;
+}
+
+function FolderBreadcrumbBar({
+  breadcrumbs,
+  onBack,
+  onOpen,
+}: {
+  breadcrumbs: Array<{ entryId: string; name: string }>;
+  onBack: () => void;
+  onOpen: (entryId: string) => void;
+}) {
   const { t } = useTranslation('common');
   const items = breadcrumbs.length ? breadcrumbs : [{ entryId: ROOT_ENTRY_ID, name: t('dataCenterPage.entry.root') }];
   return (
-    <div className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
-      {items.map((item, index) => (
-        <div key={`${item.entryId}-${index}`} className="flex min-w-0 items-center gap-1">
-          {index > 0 ? <ChevronRight className="h-3.5 w-3.5 shrink-0" /> : null}
-          <button
-            type="button"
-            onClick={() => onOpen(item.entryId)}
-            className={cn('truncate rounded px-1 py-0.5 hover:bg-muted hover:text-foreground', index === items.length - 1 && 'text-foreground')}
-          >
-            {item.name}
-          </button>
-        </div>
-      ))}
+    <div className="mt-4 flex shrink-0 items-center overflow-hidden">
+      <button
+        type="button"
+        onClick={onBack}
+        className="mr-3 inline-flex shrink-0 items-center gap-1 text-[16px] font-semibold leading-6 text-[#FF6A00] hover:text-[#E95F00]"
+      >
+        <ArrowLeft className="h-5 w-5" />
+        {t('actions.back')}
+      </button>
+      <div className="flex min-w-0 items-center gap-3 text-[16px] font-semibold leading-6">
+        {items.map((item, index) => (
+          <div key={`${item.entryId}-${index}`} className="flex min-w-0 items-center gap-3">
+            {index > 0 ? <span className="shrink-0 text-[#E5E6EB]">/</span> : null}
+            <button
+              type="button"
+              onClick={() => onOpen(item.entryId)}
+              disabled={index === items.length - 1}
+              className={cn(
+                'truncate text-[#6B778C] transition-colors hover:text-[#1D2129] disabled:cursor-default disabled:hover:text-[#1D2129]',
+                index === items.length - 1 && 'text-[#1D2129] dark:text-foreground',
+              )}
+            >
+              {item.name}
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -689,6 +763,7 @@ interface EntryRenderProps {
   onOpenFolder: (entry: DataCenterEntry) => void;
   onPreview: (entry: DataCenterEntry) => void;
   onDownload: (entry: DataCenterEntry) => void;
+  onShare: (entry: DataCenterEntry) => void;
   onRename: (entry: DataCenterEntry) => void;
   onDelete: (entry: DataCenterEntry) => void;
   onTrace: (entry: DataCenterEntry) => void;
@@ -725,9 +800,8 @@ function EntryName({ entry, onOpenFolder }: { entry: DataCenterEntry; onOpenFold
 
 function EntryActions({
   entry,
-  onPreview,
   onDownload,
-  onRename,
+  onShare,
   onDelete,
   onTrace,
   uploadToSharedLabel,
@@ -735,65 +809,73 @@ function EntryActions({
   const { t } = useTranslation('common');
   return (
     <div className="flex w-[128px] shrink-0 items-center justify-end gap-1 text-[#6B778C]">
-      <button
-        type="button"
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
-        aria-label={uploadToSharedLabel}
-        title={uploadToSharedLabel}
-      >
-        <CloudUpload className="h-4 w-4" />
-      </button>
-      {entry.entryType === 'file' ? (
+      <ActionTooltip label={uploadToSharedLabel ?? ''}>
         <button
           type="button"
-          onClick={() => onDownload(entry)}
           className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
-          aria-label={t('dataCenterPage.menu.download')}
-          title={t('dataCenterPage.menu.download')}
+          aria-label={uploadToSharedLabel}
         >
-          <Download className="h-4 w-4" />
+          <CloudUpload className="h-4 w-4" />
         </button>
-      ) : null}
-      <button
-        type="button"
-        onClick={() => onTrace(entry)}
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
-        aria-label={t('dataCenterPage.menu.traceChat')}
-        title={t('dataCenterPage.menu.traceChat')}
-      >
-        <Share2 className="h-4 w-4" />
-      </button>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button type="button" className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]" aria-label={t('dataCenterPage.table.actions')}>
-            <MoreHorizontal className="h-4 w-4" />
+      </ActionTooltip>
+      {entry.entryType === 'file' ? (
+        <ActionTooltip label={t('dataCenterPage.menu.download')}>
+          <button
+            type="button"
+            onClick={() => onDownload(entry)}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
+            aria-label={t('dataCenterPage.menu.download')}
+          >
+            <Download className="h-4 w-4" />
           </button>
-        </DropdownMenuTrigger>
+        </ActionTooltip>
+      ) : null}
+      <ActionTooltip label={t('dataCenterPage.menu.share')}>
+        <button
+          type="button"
+          onClick={() => onShare(entry)}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
+          aria-label={t('dataCenterPage.menu.share')}
+        >
+          <Share2 className="h-4 w-4" />
+        </button>
+      </ActionTooltip>
+      <DropdownMenu>
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]" aria-label={t('dataCenterPage.menu.more')}>
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom" sideOffset={6} className={actionTooltipClass}>
+            {t('dataCenterPage.menu.more')}
+          </TooltipContent>
+        </Tooltip>
         <DropdownMenuContent align="end" className="min-w-[128px] rounded-[10px] p-2">
-          {entry.entryType === 'file' ? (
-            <DropdownMenuItem onSelect={() => onPreview(entry)}>
-              <Eye className="mr-2 h-4 w-4" />
-              {t('dataCenterPage.menu.preview')}
+          {entry.entryType === 'file' && entry.traceAvailable ? (
+            <DropdownMenuItem onSelect={() => onTrace(entry)} className="text-[13px]">
+              {t('dataCenterPage.menu.traceChat')}
             </DropdownMenuItem>
           ) : null}
-          {entry.traceAvailable ? (
-          <DropdownMenuItem onSelect={() => onTrace(entry)}>
-            <Link2 className="mr-2 h-4 w-4" />
-            {t('dataCenterPage.menu.traceChat')}
-          </DropdownMenuItem>
-          ) : null}
-          <DropdownMenuItem onSelect={() => onRename(entry)}>
-            <Pencil className="mr-2 h-4 w-4" />
-            {t('dataCenterPage.menu.rename')}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => onDelete(entry)} className="text-destructive focus:text-destructive">
-            <Trash2 className="mr-2 h-4 w-4" />
+          <DropdownMenuItem onSelect={() => onDelete(entry)} className="text-[13px]">
             {t('dataCenterPage.menu.delete')}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
+  );
+}
+
+function ActionTooltip({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Tooltip delayDuration={200}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={6} className={actionTooltipClass}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

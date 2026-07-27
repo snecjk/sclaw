@@ -200,12 +200,15 @@
             "folderCreated": "文件夹已创建",
             "renamed": "已重命名",
             "deleted": "已删除",
-            "deleteFailed": "删除失败"
+            "deleteFailed": "删除失败",
+            "folderShareUnsupported": "文件夹暂不支持分享"
         },
         "menu": {
             "preview": "预览",
             "download": "下载",
             "uploadToShared": "上传至网点共享",
+            "share": "转发",
+            "more": "更多",
             "traceChat": "追溯对话",
             "rename": "重命名",
             "delete": "删除"

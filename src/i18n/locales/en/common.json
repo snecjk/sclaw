@@ -199,12 +199,15 @@
             "folderCreated": "Folder created",
             "renamed": "Renamed",
             "deleted": "Deleted",
-            "deleteFailed": "Delete failed"
+            "deleteFailed": "Delete failed",
+            "folderShareUnsupported": "Folder sharing is not supported yet"
         },
         "menu": {
             "preview": "Preview",
             "download": "Download",
             "uploadToShared": "Upload to branch sharing",
+            "share": "Share",
+            "more": "More",
             "traceChat": "Trace conversation",
             "rename": "Rename",
             "delete": "Delete"

@@ -194,12 +194,15 @@
             "folderCreated": "フォルダを作成しました",
             "renamed": "名前を変更しました",
             "deleted": "削除しました",
-            "deleteFailed": "削除に失敗しました"
+            "deleteFailed": "削除に失敗しました",
+            "folderShareUnsupported": "フォルダ共有はまだサポートされていません"
         },
         "menu": {
             "preview": "プレビュー",
             "download": "ダウンロード",
             "uploadToShared": "拠点共有にアップロード",
+            "share": "転送",
+            "more": "その他",
             "traceChat": "会話を追跡",
             "rename": "名前を変更",
             "delete": "削除"
