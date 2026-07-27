@@ -580,18 +580,7 @@ export function Skills() {
 
   const handleOpenSkillsFolder = useCallback(async () => {
     try {
-      const skillsDir = await invokeIpc<string>('openclaw:getSkillsDir');
-      if (!skillsDir) {
-        throw new Error('Skills directory not available');
-      }
-      const result = await invokeIpc<string>('shell:openPath', skillsDir);
-      if (result) {
-        if (result.toLowerCase().includes('no such file') || result.toLowerCase().includes('not found') || result.toLowerCase().includes('failed to open')) {
-          toast.error(t('toast.failedFolderNotFound'));
-        } else {
-          throw new Error(result);
-        }
-      }
+      await invokeIpc('open-skill-folder');
     } catch (err) {
       toast.error(t('toast.failedOpenFolder') + ': ' + String(err));
     }
@@ -615,7 +604,7 @@ export function Skills() {
     }
   }, [t]);
 
-  const [skillsDirPath, setSkillsDirPath] = useState('~/.stoclaw/openclaw/skills');
+  const [skillsDirPath, setSkillsDirPath] = useState('~/.stoclaw/skills-store');
 
   useEffect(() => {
     invokeIpc<string>('openclaw:getSkillsDir')

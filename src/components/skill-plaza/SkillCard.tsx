@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, useEffect, useRef } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, Plus, ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner';
@@ -14,10 +14,10 @@ import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from '@/compone
 import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import fileIcon from '@/assets/icons/file.svg';
 import messageIcon from '@/assets/icons/message.svg';
 import loadingIcon from '@/assets/icons/loading.svg';
 import moreIcon from '@/assets/icons/more.svg';
+import { SkillIcon } from './SkillIcon';
 
 interface SkillCardProps {
   skill: SkillSummary;
@@ -63,6 +63,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
 
   const handleUse = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isDisabled) return;
     // Start a new session so the Gateway picks up any newly installed skills
     useChatStore.getState().newSession();
     navigate(`/?skill=${encodeURIComponent(skill.slug)}`);
@@ -73,7 +74,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
     e.stopPropagation();
     if (isInstalling) return;
     const isUpdate = skill.updateAvailable;
-    const { installSkill, fetchPlazaSkills } = useSkillPlazaStore.getState();
+    const { installSkill } = useSkillPlazaStore.getState();
     installSkill(skill.slug, {
       version: skill.version,
       force: skill.updateAvailable,
@@ -81,7 +82,6 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
       description: skill.description,
     })
       .then(() => {
-        fetchPlazaSkills({ reset: true });
         toast.success(
           isUpdate
             ? t('plaza.toast.updateSuccess', { defaultValue: '更新成功，正在生效' })
@@ -96,35 +96,6 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
           { description: String(err) },
         );
       });
-  };
-
-  // Normalize the inline SVG size once per icon change instead of on each render.
-  const iconHtml = useMemo(
-    () => (skill.icon
-      ? skill.icon.replace(/width="[^"]*"/, 'width="16"').replace(/height="[^"]*"/, 'height="16"')
-      : null),
-    [skill.icon],
-  );
-
-  const renderIcon = () => {
-    if (iconHtml) {
-      return (
-        <span
-          className="relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-foreground flex-shrink-0 border border-border"
-          style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}
-        >
-          <span dangerouslySetInnerHTML={{ __html: iconHtml }} />
-        </span>
-      );
-    }
-    return (
-      <span
-        className="relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-foreground flex-shrink-0 border border-border"
-        style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}
-      >
-        <img src={fileIcon} alt="" aria-hidden className="h-4 w-4 object-contain" />
-      </span>
-    );
   };
 
   const canUse = isMineTab
@@ -171,6 +142,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
             <button
               type="button"
               onClick={handleUse}
+              disabled={isDisabled}
               className={actionIconBtnClass}
             >
               <img src={messageIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain dark:invert" />
@@ -239,7 +211,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
     <div className="flex items-center gap-0.5 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
       <Tooltip delayDuration={200}>
         <TooltipTrigger asChild>
-          <button type="button" onClick={handleUse} className={actionIconBtnClass}>
+          <button type="button" onClick={handleUse} disabled={isDisabled} className={actionIconBtnClass}>
             <img src={messageIcon} alt="" aria-hidden className="h-3.5 w-3.5 object-contain dark:invert" />
           </button>
         </TooltipTrigger>
@@ -276,7 +248,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
               ? t('plaza.action.disable', { defaultValue: '禁用技能' })
               : t('plaza.action.enable', { defaultValue: '启用技能' })}
           </DropdownMenuItem>
-          {onDelete && (
+          {onDelete && skill.canUninstall !== false && (
             <DropdownMenuItem
               className="text-red-600 focus:text-red-600"
               onClick={() => onDelete(skill)}
@@ -298,7 +270,7 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
       <div className={cn('flex flex-col flex-1 min-h-0 no-underline text-inherit', isDisabled && 'opacity-50')}>
         {/* Top: icon + title + actions */}
         <div className="flex items-start gap-2.5 mb-3">
-          {renderIcon()}
+          <SkillIcon icon={skill.icon} disabled={isDisabled} />
           <div className="flex flex-col items-start gap-1 min-w-0 flex-1">
             <h2 className="m-0 w-full max-w-full text-sm font-bold tracking-tight text-[#1D2129] whitespace-nowrap overflow-hidden text-ellipsis dark:text-foreground">
               {skill.title}

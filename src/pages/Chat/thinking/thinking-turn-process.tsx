@@ -40,6 +40,8 @@ import {
   pruneDuplicateToolOnlyGroups,
   relocateInterruptPhaseBetweenAdjacentToolGroups,
 } from '@/pages/Chat/thinking/adjacent-group-phase';
+import { dedupePhaseTextsAgainstFinalReply } from '@/pages/Chat/thinking/classify-text';
+import { classifyTextOverlap } from '@/pages/Chat/thinking/text-ownership';
 import {
   mergeSegmentsMonotonic,
   mergeTurnSegmentMonotonic,
@@ -450,15 +452,35 @@ function useStableThinkingSegments(
   turnStableKey: string | undefined,
   segments: ThinkingTurnSegment[],
   isLiveStream: boolean,
+  finalReplyText: string | null = null,
 ): ThinkingTurnSegment[] {
   const cacheRef = useRef<ThinkingTurnSegment[]>([]);
 
   return useMemo(() => {
+    const finalize = (next: ThinkingTurnSegment[]): ThinkingTurnSegment[] => {
+      if (finalReplyText?.trim() && next.length > 0) {
+        const copy = [...next];
+        dedupePhaseTextsAgainstFinalReply(copy, finalReplyText);
+        cacheRef.current = copy;
+        writeGlobalStableSegments(turnStableKey, copy);
+        return copy;
+      }
+      cacheRef.current = next;
+      writeGlobalStableSegments(turnStableKey, next);
+      return next;
+    };
+
     const globalCached = readGlobalStableSegments(turnStableKey);
     const cached =
       globalCached.length >= cacheRef.current.length ? globalCached : cacheRef.current;
     if (segments.length === 0) {
-      return isLiveStream && cached.length > 0 ? cached : segments;
+      if (!isLiveStream) return segments;
+      // Incoming cleared (ownership moved text to final): do not resurrect phase-text cache.
+      if (finalReplyText?.trim()) {
+        const toolsOnly = cached.filter((segment) => segment.kind === 'tool-group');
+        return finalize(toolsOnly);
+      }
+      return cached.length > 0 ? cached : segments;
     }
 
     // 完成态以解析器 segment 结构为准，仅按 key 单调合并 timeline，避免流式双摘要缓存残留
@@ -471,9 +493,7 @@ function useStableThinkingSegments(
       relocateInterruptPhaseBetweenAdjacentToolGroups(reconciled);
       mergeAdjacentOrphanedThinkingAndToolGroups(reconciled);
       pruneDuplicateToolOnlyGroups(reconciled);
-      cacheRef.current = reconciled;
-      writeGlobalStableSegments(turnStableKey, reconciled);
-      return reconciled;
+      return finalize(reconciled);
     }
 
     // live：解析器产出交替结构时以 incoming 为准，避免 cache append 把 phase-text 堆到末尾
@@ -486,17 +506,13 @@ function useStableThinkingSegments(
       relocateInterruptPhaseBetweenAdjacentToolGroups(reconciled);
       mergeAdjacentOrphanedThinkingAndToolGroups(reconciled);
       pruneDuplicateToolOnlyGroups(reconciled);
-      cacheRef.current = reconciled;
-      writeGlobalStableSegments(turnStableKey, reconciled);
-      return reconciled;
+      return finalize(reconciled);
     }
 
     const merged =
       cached.length === 0 ? segments : mergeSegmentsMonotonic(cached, segments);
-    cacheRef.current = merged;
-    writeGlobalStableSegments(turnStableKey, merged);
-    return merged;
-  }, [turnStableKey, segments, isLiveStream]);
+    return finalize(merged);
+  }, [turnStableKey, segments, isLiveStream, finalReplyText]);
 }
 
 function ThinkingToolGroupPanel({
@@ -621,6 +637,8 @@ export interface ThinkingTurnProcessProps {
   isStillExecuting?: boolean;
   streamingTools?: StreamingTool[];
   hasFinalReply?: boolean;
+  /** 气泡侧正文；用于 sticky 缓存后去掉与正文重复的 phase-text */
+  finalReplyText?: string | null;
   connectingLabelKey?: ConnectingLabelKey;
   /** 统一过程 loading 状态（§4.3 TurnProcessStatus） */
   processStatus?: TurnProcessStatus;
@@ -637,6 +655,7 @@ export function ThinkingTurnProcess({
   isStillExecuting = false,
   streamingTools = [],
   hasFinalReply = false,
+  finalReplyText = null,
   connectingLabelKey = 'understandingQuestion',
   processStatus = 'idle',
   className,
@@ -649,7 +668,12 @@ export function ThinkingTurnProcess({
   const isLiveStream =
     isStreaming || isConnecting || isProcessing || isStillExecuting;
 
-  const displaySegments = useStableThinkingSegments(turnStableKey, segments, isLiveStream);
+  const displaySegments = useStableThinkingSegments(
+    turnStableKey,
+    segments,
+    isLiveStream,
+    finalReplyText,
+  );
 
   const activeGroupTimelineLength = useMemo(() => {
     const active = displaySegments.find(
@@ -718,6 +742,13 @@ export function ThinkingTurnProcess({
                 {t('streaming.interrupted')}
               </p>
             );
+          }
+          // 气泡已展示同一段正文时，思考区不再重复渲染（防 sticky 残留）
+          if (
+            finalReplyText?.trim()
+            && classifyTextOverlap(segment.text, finalReplyText) === 'same'
+          ) {
+            return null;
           }
           const isStreamingPhaseText = isLiveStream && index === lastSegmentIndex;
           return (

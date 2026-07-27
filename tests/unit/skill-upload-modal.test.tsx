@@ -324,6 +324,31 @@ describe('SkillUploadModal source selection', () => {
     expect(mocks.uploadSkill.mock.calls.map(([path]) => path)).toEqual(folders.slice(0, 2));
   });
 
+  it('closes the modal after a successful single-file upload', async () => {
+    const onClose = vi.fn();
+    const onUploadSuccess = vi.fn();
+    mocks.invokeIpc.mockImplementation((channel: string) => {
+      if (channel === 'dialog:open') {
+        return Promise.resolve({ canceled: false, filePaths: ['C:\\skills\\demo.zip'] });
+      }
+      if (channel === 'file:validateSkillUpload') return Promise.resolve({ valid: true });
+      return Promise.resolve(undefined);
+    });
+    mocks.uploadSkill.mockResolvedValue('demo');
+    render(<SkillUploadModal open onClose={onClose} onUploadSuccess={onUploadSuccess} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '选择技能文件' }));
+    await screen.findByRole('button', { name: '安装' });
+    fireEvent.click(screen.getByRole('button', { name: '安装' }));
+
+    await waitFor(() => {
+      expect(mocks.uploadSkill).toHaveBeenCalledWith('C:\\skills\\demo.zip');
+      expect(onUploadSuccess).toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
+    });
+    expect(screen.queryByRole('button', { name: '查看技能' })).not.toBeInTheDocument();
+  });
+
   it.each([
     ['C:\\skills\\broken.zip', '选择技能文件'],
     ['C:\\skills\\notes.md', '选择技能文件'],

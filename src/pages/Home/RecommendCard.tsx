@@ -25,7 +25,7 @@ export interface RecommendCardProps {
   item: RecommendItem;
   onClick: () => void;
   onSkillInstalled?: () => void;
-  skillStatus?: { installed: boolean; updateAvailable: boolean; cloudVersion?: string };
+  skillStatus?: { installed: boolean; enabled?: boolean; updateAvailable: boolean; cloudVersion?: string };
   /** 技能状态对比数据加载中，按钮显示 loading 避免状态突变 */
   skillStatusLoading?: boolean;
 }
@@ -46,6 +46,7 @@ export function RecommendCard({
   const isSkill = item.item_type === 'skill';
   const skillSlug = item.skill_slug || item.item_ref_id;
   const isSkillInstalled = skillStatus?.installed ?? item.skill_installed ?? false;
+  const isSkillDisabled = isSkillInstalled && skillStatus?.enabled === false;
   const isSkillUpdateAvailable = skillStatus?.updateAvailable ?? item.skill_update_available ?? false;
 
   const footerHintText = item.item_type === 'workflow_template'
@@ -92,12 +93,13 @@ export function RecommendCard({
   /** 技能使用处理（已安装技能）：与 Skills 页面「使用技能」一致，预填黄色技能 chip */
   const handleSkillUse = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    if (isSkillDisabled) return;
     // Start a new session so the Gateway picks up any newly installed skills
     useChatStore.getState().newSession();
     // 走 ?skill= 深链在输入框预填黄色技能 chip，由用户确认后发送；
     // 不用 ?q= 直接发送纯文本（那样不会出现技能标签）。
     navigate(`/?skill=${encodeURIComponent(skillSlug)}`);
-  }, [navigate, skillSlug]);
+  }, [isSkillDisabled, navigate, skillSlug]);
 
   return (
     <div className={cn(homeHubInteractiveCardShellClass, 'text-left')}>
@@ -125,7 +127,7 @@ export function RecommendCard({
             type="button"
             className="flex flex-1 justify-end shrink-0 items-center gap-0.5 text-[13px] font-medium text-[#4760FE] dark:text-blue-400 hover:underline disabled:opacity-50"
             onClick={isSkillUpdateAvailable ? handleSkillInstall : isSkillInstalled ? handleSkillUse : handleSkillInstall}
-            disabled={isInstalling || skillStatusLoading}
+            disabled={isInstalling || skillStatusLoading || (!isSkillUpdateAvailable && isSkillDisabled)}
           >
             {isInstalling || skillStatusLoading ? (
               <span className="animate-spin h-3.5 w-3.5 border-2 border-[#4760FE]/30 border-t-[#4760FE] rounded-full dark:border-blue-400/30 dark:border-t-blue-400" />

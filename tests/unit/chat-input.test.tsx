@@ -26,7 +26,7 @@ vi.mock('@/stores/agents', () => ({
     agents: Array<{ id?: string; name?: string }>,
     agentId: string | null | undefined,
     _projectName?: string | null,
-  ) => agents.find((agent) => agent.id === agentId) ?? null,
+  ) => agents.find((agent) => agent.id === agentId),
 }));
 
 vi.mock('@/stores/chat', () => ({

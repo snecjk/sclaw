@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Switch } from '@/components/ui/switch';
@@ -6,7 +6,7 @@ import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import type { SkillSummary } from '@/types/skill-plaza';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import fileIcon from '@/assets/icons/file.svg';
+import { SkillIcon } from './SkillIcon';
 
 interface SkillCardListProps {
   skill: SkillSummary;
@@ -20,45 +20,12 @@ function SkillCardListImpl({ skill, onOpenDetail, onDelete }: SkillCardListProps
   const localEnabled = pendingEnabled ?? skill.enabled ?? false;
   const isDisabled = skill.enabled === false;
 
-  // Normalize the inline SVG size once per icon change instead of on each render.
-  const iconHtml = useMemo(
-    () => (skill.icon
-      ? skill.icon.replace(/width="[^"]*"/, 'width="16"').replace(/height="[^"]*"/, 'height="16"')
-      : null),
-    [skill.icon],
-  );
-
-  const renderIcon = () => {
-    if (iconHtml) {
-      return (
-        <span
-          className={cn(
-            'relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-foreground flex-shrink-0 border border-border',
-            isDisabled && 'opacity-50',
-          )}
-          style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}
-        >
-          <span dangerouslySetInnerHTML={{ __html: iconHtml }} />
-        </span>
-      );
-    }
-    return (
-      <span className={cn(
-        'relative w-9 h-9 rounded-lg flex items-center justify-center bg-white text-foreground flex-shrink-0 border border-border',
-        isDisabled && 'opacity-50',
-      )}
-        style={{ boxShadow: '0 1px 4px rgba(15,23,42,0.05), 0 4px 12px rgba(15,23,42,0.04)' }}>
-        <img src={fileIcon} alt="" aria-hidden className="h-4 w-4 object-contain" />
-      </span>
-    );
-  };
-
   return (
     <div
       className="group flex items-center gap-3 px-5 py-4 border-b border-border last:border-b-0 transition-colors cursor-pointer"
       onClick={() => onOpenDetail?.(skill)}
     >
-      {renderIcon()}
+      <SkillIcon icon={skill.icon} disabled={isDisabled} />
 
       <div className={cn('flex-1 min-w-0 flex flex-col gap-0.5', isDisabled && 'opacity-50')}>
         <h3 className="text-sm font-semibold text-foreground whitespace-nowrap overflow-hidden text-ellipsis">
@@ -70,7 +37,7 @@ function SkillCardListImpl({ skill, onOpenDetail, onDelete }: SkillCardListProps
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
-        {onDelete && (
+        {onDelete && skill.canUninstall !== false && (
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(skill); }}
             className={cn(

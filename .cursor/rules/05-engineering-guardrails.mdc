@@ -1,0 +1,40 @@
+---
+description: sto-claw OpenSpec、工程配置、依赖与高风险操作安全红线
+alwaysApply: true
+---
+
+# 工程安全红线
+
+## OpenSpec
+
+- 新功能和 Tier 3 变更必须遵循 `proposal -> design -> specs -> tasks -> apply`。
+- 开始前读取 `openspec/config.yaml`、相关 `openspec/specs/` 和已有 change。
+- OpenSpec 负责描述需求、决策、契约和任务，不代替真实接口文档。
+- Tier 1 纯视觉修改和不改变行为的微调不强制新建 OpenSpec。
+- Tier 2 是否需要 OpenSpec，由影响范围决定；涉及新能力、接口或跨模块契约时必须使用。
+
+## AI 不得自动执行的操作
+
+- 不修改 `package.json` 的依赖、包管理器、engines 或 scripts。
+- 不运行安装、升级、移除依赖的命令，包括 `pnpm add/install/update/remove`、`pnpm dlx`、`npm install`、`yarn add` 等。
+- 不修改任何 lockfile。
+- 不修改构建、打包、工作区和测试框架配置，包括 `vite.config.ts`、`vitest.config.ts`、`electron-builder*`、`pnpm-workspace.yaml`、`.npmrc`。
+- 不修改 `scripts/` 中的 build、bundle、pack、release 脚本。
+- 不修改 CI/CD 和发布配置。
+
+遇到以上需求时，停止自动修改，输出原因、影响范围和建议步骤，交由工程负责人确认和执行。
+
+## 代码边界
+
+- Renderer 只通过 `src/lib/host-api.ts` 和 `src/lib/api-client.ts` 调用后端能力。
+- 页面和组件不得新增直接 `window.electron.ipcRenderer.invoke(...)`。
+- Renderer 不得直连 Gateway，也不得实现 WS、HTTP、IPC 的协议切换。
+- 新增 IPC 通道、Main 进程能力、权限、安全或通信链路属于高风险变更，必须技术评审。
+- AI 不得编造接口 URL、method、字段、枚举、错误结构或返回类型。
+
+## 修改边界
+
+- 不修改与当前任务无关的文件。
+- 不顺手重构、升级依赖、统一格式或清理历史代码。
+- 需要扩大范围时，先说明原因、拟修改文件和风险，获得确认后再继续。
+- 发现用户未提交改动时保留并与其协作，不覆盖、不回退。

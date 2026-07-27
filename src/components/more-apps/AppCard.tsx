@@ -38,6 +38,11 @@ function AppCardImpl({
   const isExternal = app.kind === 'external' || app.external;
   const installed = isInstalled ?? app.installed;
   const favorite = isFavorite ?? false;
+  const appMetaText = app.recent
+    ? `${t('moreApps.recent', { defaultValue: '最近使用' })}：${app.recent}`
+    : app.url
+      ? formatExternalAppDomain(app.url)
+      : t('moreApps.clickToInstall', { defaultValue: '点击安装后可用' });
 
   // Tags based on app properties
   const tags: { label: string; className: string }[] = [];
@@ -139,14 +144,7 @@ function AppCardImpl({
       {/* Footer: meta + actions */}
       <div className="more-apps-card__foot">
         <span className="more-apps-card__meta">
-          {isExternal
-            ? formatExternalAppDomain(app.url)
-            : installed && app.recent 
-              ? `${t('moreApps.recent', { defaultValue: '最近使用' })}：${app.recent}`
-              : app.recent
-                ? `${t('moreApps.recent', { defaultValue: '最近使用' })}：${app.recent}`
-                : t('moreApps.clickToInstall', { defaultValue: '点击安装后可用' })
-          }
+          {appMetaText}
         </span>
         <div className="more-apps-card__foot-actions">
           {!isExternal && onToggleFavorite && (

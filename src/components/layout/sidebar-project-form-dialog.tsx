@@ -1,5 +1,5 @@
 /**
- * ProjectFormDialog — 新建项目（名称 + 项目位置）。
+ * ProjectFormDialog — 新建项目（先选路径，默认用文件夹名作为项目名，可编辑）。
  * 项目创建后仅支持侧栏行内重命名，不支持改路径。
  */
 import { useState } from 'react';
@@ -19,6 +19,12 @@ export interface ProjectFormDialogProps {
   onCreated?: (workspace: WorkspaceDto) => void;
 }
 
+function folderNameFromPath(path: string): string {
+  const normalized = path.replace(/[/\\]+$/, '');
+  const parts = normalized.split(/[/\\]/);
+  return parts[parts.length - 1] || normalized;
+}
+
 export function ProjectFormDialog({
   open,
   onClose,
@@ -28,6 +34,7 @@ export function ProjectFormDialog({
   const createProject = useSessionCatalogStore((s) => s.createProject);
   const [name, setName] = useState('');
   const [rootPath, setRootPath] = useState('');
+  const [nameEdited, setNameEdited] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [picking, setPicking] = useState(false);
 
@@ -37,7 +44,11 @@ export function ProjectFormDialog({
     setPicking(true);
     try {
       const picked = await pickProjectFolder();
-      if (picked) setRootPath(picked);
+      if (!picked) return;
+      setRootPath(picked);
+      if (!nameEdited) {
+        setName(folderNameFromPath(picked));
+      }
     } catch (error) {
       toast.error(String(error));
     } finally {
@@ -75,20 +86,6 @@ export function ProjectFormDialog({
         </div>
 
         <label className="mb-2 block text-sm font-medium text-foreground">
-          {t('sidebar.projectNameLabel')}
-          <span className="ml-0.5 text-[var(--sto-functional-error)]">*</span>
-        </label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className={cn(
-            'mb-5 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground',
-            'placeholder:text-muted-foreground transition-colors',
-            formFieldFocusClass,
-          )}
-        />
-
-        <label className="mb-2 block text-sm font-medium text-foreground">
           {t('sidebar.projectLocationLabel')}
           <span className="ml-0.5 text-[var(--sto-functional-error)]">*</span>
         </label>
@@ -97,7 +94,7 @@ export function ProjectFormDialog({
           disabled={picking}
           onClick={() => void handlePick()}
           className={cn(
-            'mb-2 flex w-full items-center gap-2 rounded-xl border border-border',
+            'mb-5 flex w-full items-center gap-2 rounded-xl border border-border',
             'bg-muted/50 px-3 py-3 text-left transition-colors',
             'hover:bg-muted disabled:opacity-60',
           )}
@@ -113,6 +110,23 @@ export function ProjectFormDialog({
               : (rootPath || t('sidebar.projectLocationPlaceholder'))}
           </span>
         </button>
+
+        <label className="mb-2 block text-sm font-medium text-foreground">
+          {t('sidebar.projectNameLabel')}
+          <span className="ml-0.5 text-[var(--sto-functional-error)]">*</span>
+        </label>
+        <input
+          value={name}
+          onChange={(e) => {
+            setNameEdited(true);
+            setName(e.target.value);
+          }}
+          className={cn(
+            'mb-2 w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground',
+            'placeholder:text-muted-foreground transition-colors',
+            formFieldFocusClass,
+          )}
+        />
 
         <p className="mb-6 text-xs leading-relaxed text-muted-foreground">
           {t('sidebar.projectArtifactHint')}

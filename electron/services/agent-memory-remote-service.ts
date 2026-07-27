@@ -3,6 +3,7 @@ import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
 import { logger } from '../utils/logger';
+import { readOpenAiChatCompletionSse } from './openai-chat-completion-sse';
 
 export interface AgentMemoryBootstrap {
   enabled: boolean;
@@ -87,6 +88,18 @@ const AGENT_MEMORY_TOP_K_MAX = 20;
 const AGENT_MEMORY_TOP_K_DEFAULT = 8;
 const AGENT_MEMORY_KEYWORD_TOP_K_MAX = 200;
 const AGENT_MEMORY_KEYWORD_TOP_K_DEFAULT = 60;
+const CHAT_STREAM_HEADER_TIMEOUT_MS = 90_000;
+const CHAT_STREAM_IDLE_TIMEOUT_MS = 60_000;
+const CHAT_STREAM_TOTAL_TIMEOUT_MS = 300_000;
+const STREAM_UNSUPPORTED_STATUSES = new Set([400, 404, 405, 415, 422, 501]);
+
+function extractChatCompletionText(response: Record<string, unknown>): string {
+  const firstChoice = Array.isArray(response.choices)
+    ? response.choices[0] as Record<string, unknown> | undefined
+    : undefined;
+  const message = firstChoice?.message as Record<string, unknown> | undefined;
+  return typeof message?.content === 'string' ? message.content : '';
+}
 
 function clampTopK(topK?: number): number {
   if (!Number.isFinite(topK)) {
@@ -375,6 +388,114 @@ export class AgentMemoryRemoteService {
       choiceCount: Array.isArray(body.choices) ? body.choices.length : 0,
     });
     return body;
+  }
+
+  async createChatCompletionStream(payload: Record<string, unknown>): Promise<string> {
+    const baseUrl = await resolveStoBaseUrl();
+    const controller = new AbortController();
+    const startedAt = Date.now();
+    let totalTimedOut = false;
+    const totalTimer = setTimeout(() => {
+      totalTimedOut = true;
+      controller.abort();
+    }, CHAT_STREAM_TOTAL_TIMEOUT_MS);
+    const streamOptions = payload.stream_options && typeof payload.stream_options === 'object'
+      ? payload.stream_options as Record<string, unknown>
+      : {};
+    const streamPayload = {
+      ...payload,
+      stream: true,
+      stream_options: { ...streamOptions, include_usage: true },
+    };
+
+    logger.info('[mem0][remote] createChatCompletionStream start', {
+      model: payload.model,
+      messageCount: Array.isArray(payload.messages) ? payload.messages.length : 0,
+      payloadLength: JSON.stringify(streamPayload).length,
+      headerTimeoutMs: CHAT_STREAM_HEADER_TIMEOUT_MS,
+      idleTimeoutMs: CHAT_STREAM_IDLE_TIMEOUT_MS,
+      totalTimeoutMs: CHAT_STREAM_TOTAL_TIMEOUT_MS,
+    });
+
+    try {
+      const response = await proxyAwareFetch(`${baseUrl}${AGENT_MEMORY_CHAT_COMPLETIONS_PATH}`, {
+        method: 'POST',
+        timeoutMs: CHAT_STREAM_HEADER_TIMEOUT_MS,
+        signal: controller.signal,
+        headers: await getAuthHeaders(),
+        body: JSON.stringify(streamPayload),
+      });
+
+      const contentType = response.headers.get('content-type') ?? '';
+      logger.info('[mem0][remote] createChatCompletionStream headers', {
+        status: response.status,
+        contentType,
+        elapsedMs: Date.now() - startedAt,
+      });
+      if (!response.ok) {
+        const errorBody = await response.text();
+        if (STREAM_UNSUPPORTED_STATUSES.has(response.status)) {
+          logger.warn('[mem0][remote] chat stream unsupported, falling back', {
+            status: response.status,
+          });
+          const fallbackPayload = { ...payload };
+          delete fallbackPayload.stream;
+          delete fallbackPayload.stream_options;
+          return extractChatCompletionText(await this.createChatCompletion(fallbackPayload));
+        }
+        let detail = errorBody;
+        try {
+          const parsed = JSON.parse(errorBody) as { detail?: unknown };
+          detail = String(parsed.detail ?? errorBody);
+        } catch {
+          // Keep the original response text.
+        }
+        throw new Error(detail || `Chat completion stream failed: ${response.status}`);
+      }
+
+      if (!contentType.toLowerCase().includes('text/event-stream')) {
+        const body = await response.json() as Record<string, unknown>;
+        logger.warn('[mem0][remote] chat stream returned non-SSE response', { contentType });
+        return extractChatCompletionText(body);
+      }
+      if (!response.body) throw new Error('模型流式响应缺少响应体');
+
+      const elapsedMs = Date.now() - startedAt;
+      const assistantText = await readOpenAiChatCompletionSse(response.body, {
+        idleTimeoutMs: CHAT_STREAM_IDLE_TIMEOUT_MS,
+        totalTimeoutMs: Math.max(1, CHAT_STREAM_TOTAL_TIMEOUT_MS - elapsedMs),
+        onTimeout: () => controller.abort(),
+        onChunk: (progress) => logger.debug('[mem0][remote] chat stream chunk', progress),
+        onEvent: (progress) => logger.debug(
+          progress.done
+            ? '[mem0][remote] chat stream done'
+            : '[mem0][remote] chat stream event',
+          progress,
+        ),
+      });
+      logger.info('[mem0][remote] createChatCompletionStream success', {
+        status: response.status,
+        assistantTextLength: assistantText.length,
+        elapsedMs: Date.now() - startedAt,
+      });
+      return assistantText;
+    } catch (error) {
+      logger.warn('[mem0][remote] createChatCompletionStream failed', {
+        elapsedMs: Date.now() - startedAt,
+        totalTimedOut,
+        aborted: controller.signal.aborted,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      if (totalTimedOut) {
+        throw new Error(
+          `模型流式请求总时长超过 ${Math.round(CHAT_STREAM_TOTAL_TIMEOUT_MS / 1000)} 秒`,
+          { cause: error },
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(totalTimer);
+    }
   }
 }
 

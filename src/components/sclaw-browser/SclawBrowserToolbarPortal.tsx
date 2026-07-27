@@ -2,40 +2,94 @@
  * Toolbar portaled to document.body — escapes Electron iframe native layer + drag-region.
  */
 import { createPortal } from 'react-dom';
+import type { CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   closeSclawBrowser,
   openSclawBrowserInSystemBrowser,
 } from '@/lib/open-sclaw-browser';
+import { invokeIpc } from '@/lib/api-client';
+import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
+import { useSettingsStore } from '@/stores/settings';
 import { useSclawBrowserHostBounds } from './use-sclaw-browser-host-bounds';
 import { sclawBrowserEmbedChatShortcutLabel } from '../../../shared/sclaw-embed-browser-shortcut';
 import { cn } from '@/lib/utils';
 import './sclaw-browser-overlay.css';
+
+const MAC_TRAFFIC_LIGHT_SAFE_PAD = '5rem';
+type SclawBrowserToolbarStyle = CSSProperties & {
+  '--sclaw-browser-toolbar-pad-start'?: string;
+};
 
 export function SclawBrowserToolbarPortal() {
   const { t } = useTranslation('common');
   const session = useSclawBrowserOverlayStore((s) => s.session);
   const chatPanelOpen = useSclawBrowserOverlayStore((s) => s.chatPanelOpen);
   const toggleChatPanel = useSclawBrowserOverlayStore((s) => s.toggleChatPanel);
+  const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
+  const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
   const bounds = useSclawBrowserHostBounds(session !== null);
+  const [windowFullScreen, setWindowFullScreen] = useState(false);
+
+  useEffect(() => {
+    if (!session || window.electron?.platform !== 'darwin') {
+      return;
+    }
+
+    let disposed = false;
+    const refreshFullScreen = () => {
+      invokeIpc<boolean>('window:isFullScreen')
+        .then((value) => {
+          if (!disposed) setWindowFullScreen(Boolean(value));
+        })
+        .catch(() => {
+          if (!disposed) setWindowFullScreen(false);
+        });
+    };
+
+    refreshFullScreen();
+    window.addEventListener('resize', refreshFullScreen);
+    window.addEventListener('focus', refreshFullScreen);
+    return () => {
+      disposed = true;
+      window.removeEventListener('resize', refreshFullScreen);
+      window.removeEventListener('focus', refreshFullScreen);
+    };
+  }, [session]);
 
   if (!session || !bounds) return null;
 
   const shortcut = sclawBrowserEmbedChatShortcutLabel(window.electron?.platform ?? 'darwin');
+  const shouldAvoidMacTrafficLights =
+    window.electron?.platform === 'darwin' && !windowFullScreen && bounds.left < 80;
+  const toolbarStyle: SclawBrowserToolbarStyle = {
+    top: bounds.top,
+    left: bounds.left,
+    width: bounds.width,
+    '--sclaw-browser-toolbar-pad-start': shouldAvoidMacTrafficLights
+      ? MAC_TRAFFIC_LIGHT_SAFE_PAD
+      : undefined,
+  };
 
   return createPortal(
     <header
       className="sclaw-browser-toolbar sclaw-browser-toolbar--portal no-drag"
-      style={{
-        top: bounds.top,
-        left: bounds.left,
-        width: bounds.width,
-      }}
+      style={toolbarStyle}
       aria-label={session.title}
     >
       <div className="sclaw-browser-toolbar__start">
+        {sidebarCollapsed ? (
+          <SidebarHeaderToggle
+            isCollapsed
+            onToggle={() => setSidebarCollapsed(false)}
+            collapseLabel={t('sidebar.toggleSidebarCollapse')}
+            expandLabel={t('sidebar.toggleSidebarExpand')}
+            className="sclaw-browser-toolbar__sidebar-toggle"
+          />
+        ) : null}
         <button
           type="button"
           className="sclaw-browser-toolbar__back no-drag"

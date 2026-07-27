@@ -23,6 +23,7 @@ import {
   appendArchivedClaudeSessionId,
   isMissingClaudeConversationError,
 } from './claude-session-recovery';
+import { mergeClaudeExecutionEntries, parseClaudeExecutionTurn, type ClaudeExecutionEntryBatch } from './claude-execution-snapshot';
 
 /**
  * Minimal event sink used to forward Claude streaming events to the renderer.
@@ -588,6 +589,28 @@ async function buildHistory(sessionKey: string, sessionId: string, cwd: string):
   };
 }
 
+async function buildClaudeExecutionSnapshot(
+  entry: EngineSessionRegistryEntry,
+  limit: number,
+) {
+  const sessionIds = [
+    ...(entry.archivedClaudeSessionIds ?? []),
+    ...(entry.sessionId ? [entry.sessionId] : []),
+  ];
+  const batches: ClaudeExecutionEntryBatch[] = [];
+
+  for (const sessionId of sessionIds) {
+    const batch = await getClaudeSessionMessages(sessionId, entry.cwd ?? '');
+    batches.push({
+      sessionId,
+      entries: batch as unknown as Record<string, unknown>[],
+    });
+  }
+
+  const entries = mergeClaudeExecutionEntries(batches, limit);
+  return parseClaudeExecutionTurn(entries);
+}
+
 function shouldKeepClaudeWorkflowToolResult(messagePayload: unknown): boolean {
   return Boolean(extractWorkflowToolResult(messagePayload));
 }
@@ -900,17 +923,10 @@ async function startClaudeQuery(
       model: sharedRuntime.selection.model,
       provider: sharedRuntime.selection.provider ?? existing?.provider,
     };
-    const syncResult = await syncClaudeSkillsForAgent(agentId, cwd).catch((error) => {
+    await syncClaudeSkillsForAgent(agentId, cwd).catch((error) => {
       logger.warn('Failed to sync Claude skill bridge:', error);
       return null;
     });
-    if (syncResult) {
-      logger.info('Synced Claude skill bridge', {
-        agentId,
-        mirrored: syncResult.mirrored,
-        skippedConflicts: syncResult.skippedConflicts,
-      });
-    }
 
     const sessionId = existing?.sessionId || randomUUID();
     const runId = randomUUID();
@@ -1186,6 +1202,22 @@ export const claudeAdapter: EngineAdapter = {
         entry.cwd,
       );
       return { success: true, result };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  },
+
+  async getExecutionSnapshot(_ctx, params) {
+    const entry = await getEngineSessionRegistryEntry(params.sessionKey);
+    if (!entry?.cwd || (!entry.sessionId && !(entry.archivedClaudeSessionIds?.length))) {
+      return { success: true, result: null };
+    }
+
+    try {
+      return {
+        success: true,
+        result: await buildClaudeExecutionSnapshot(entry, params.limit),
+      };
     } catch (error) {
       return { success: false, error: String(error) };
     }

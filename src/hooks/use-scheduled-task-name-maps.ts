@@ -34,15 +34,6 @@ async function loadScheduledTaskNameMaps(): Promise<ScheduledTaskNameMaps> {
   }
 
   try {
-    const tasks = await hostApiFetch<Array<{ id: number; name: string }>>('/api/scheduled-tasks');
-    for (const task of tasks) {
-      if (task.id && task.name?.trim()) sto.set(task.id, task.name.trim());
-    }
-  } catch {
-    // Cloud API may return 401 when logged out.
-  }
-
-  try {
     const tasks = await hostApiFetch<Array<{ id: string; name: string }>>('/api/claude-scheduled-tasks');
     for (const task of tasks) {
       if (task.id && task.name?.trim()) claude.set(task.id, task.name.trim());

@@ -44,7 +44,10 @@ import {
   requestQuitLifecycleAction,
 } from './quit-lifecycle';
 import { createSignalQuitHandler } from './signal-quit';
-import { acquireProcessInstanceFileLock } from './process-instance-lock';
+import {
+  acquireProcessInstanceFileLock,
+  shouldContinueWithElectronLock,
+} from './process-instance-lock';
 import { getSetting } from '../utils/store';
 import { getCurrentEnvConfig } from '../../shared/env-config';
 import { getSqliteDatabaseInfo, initializeSqliteDatabase } from '../db';
@@ -169,19 +172,28 @@ if (gotElectronLock) {
       const fileLock = acquireProcessInstanceFileLock({
         userDataDir: app.getPath('userData'),
         lockName: 'stoclaw',
+        verifyOwnerExecutable: process.platform === 'win32',
+        reclaimUnknownLock: process.platform === 'win32',
       });
       gotFileLock = fileLock.acquired;
       releaseProcessInstanceFileLock = fileLock.release;
       if (!fileLock.acquired) {
         const ownerDescriptor = fileLock.ownerPid
-          ? `${fileLock.ownerFormat ?? 'legacy'} pid=${fileLock.ownerPid}`
+          ? `${fileLock.ownerFormat ?? 'legacy'} pid=${fileLock.ownerPid}${fileLock.ownerExecutableName ? ` executable=${fileLock.ownerExecutableName}` : ''}`
           : fileLock.ownerFormat === 'unknown'
             ? 'unknown lock format/content'
             : 'unknown owner';
-        console.info(
-          `[StoClaw] Another instance already holds process lock (${fileLock.lockPath}, ${ownerDescriptor}); exiting duplicate process`,
-        );
-        app.exit(0);
+        if (shouldContinueWithElectronLock(fileLock)) {
+          gotFileLock = true;
+          console.warn(
+            `[StoClaw] Unable to verify or reclaim process lock (${fileLock.lockPath}, ${ownerDescriptor}, reason=${fileLock.failureReason}); continuing with Electron single-instance lock only`,
+          );
+        } else {
+          console.info(
+            `[StoClaw] Another S Claw instance holds process lock (${fileLock.lockPath}, ${ownerDescriptor}); exiting duplicate process`,
+          );
+          app.exit(0);
+        }
       }
     } catch (error) {
       console.warn('[StoClaw] Failed to acquire process instance file lock; continuing with Electron single-instance lock only', error);
@@ -517,6 +529,11 @@ async function initialize(): Promise<void> {
   // clawHubService instance is passed directly to startHostApiServer below.
   hostEventBus = heb;
 
+  // Wire Gateway reload into OpenClaw skill adapter batches.
+  void import('../services/skills/adapters/engine-skill-adapter').then(({ setGatewayReloaderForSkills }) => {
+    setGatewayReloaderForSkills(gm);
+  }).catch(() => undefined);
+
   // Initialize Telemetry (non-blocking)
   // Note: Telemetry is disabled by default for faster cold starts
   void initTelemetry().catch((error) => {
@@ -576,15 +593,6 @@ async function initialize(): Promise<void> {
   const { registerFormHandlers } = await import('./ipc/form-handlers');
   registerFormHandlers();
 
-  // Start scheduled task result poller
-  const { getScheduledTaskResultPoller } = await import('../services/scheduled-task-result-poller');
-  const scheduledTaskPoller = getScheduledTaskResultPoller();
-  scheduledTaskPoller.attachMainWindow(window);
-  scheduledTaskPoller.start();
-  app.on('before-quit', () => {
-    scheduledTaskPoller.stop();
-  });
-
   const { getClaudeScheduledTaskService } = await import('../services/claude-scheduled-task-service');
   const claudeScheduledTaskService = getClaudeScheduledTaskService();
   // Inject the gateway event sink before the scheduler starts ticking so that
@@ -635,6 +643,20 @@ async function initialize(): Promise<void> {
     await cleanupRetiredSkillsAndPlugins({ skipPluginDirs: true }).catch((error) => {
       logger.warn('Failed to cleanup retired skills/plugins:', error);
     });
+
+    // One-time migration into neutral skills-store, then full-engine reconcile.
+    try {
+      const { migrateSkillsStoreIfNeeded } = await import('../services/skills/migration');
+      const migration = await migrateSkillsStoreIfNeeded();
+      if (migration.migrated) {
+        logger.info('Migrated skills into neutral skills-store');
+      }
+      if (migration.deduped) {
+        logger.info('Deduped skills-store global/user duplicates');
+      }
+    } catch (error) {
+      logger.warn('Failed to migrate skills store:', error);
+    }
 
     await ensureBuiltinSkillsInstalled().catch((error) => {
       logger.warn('Failed to install built-in skills:', error);

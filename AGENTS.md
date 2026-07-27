@@ -50,7 +50,7 @@ Standard dev commands are in `package.json` scripts and `README.md`. Key ones:
 - **Comms-change checklist**: If your change touches communication paths (gateway events, runtime send/receive, delivery, or fallback), run `pnpm run comms:replay` and `pnpm run comms:compare` before pushing.
 - **Doc sync rule**: After any functional or architecture change, review `README.md`, `README.zh-CN.md`, and `README.ja-JP.md` for required updates; if behavior/flows/interfaces changed, update docs in the same PR/commit.
 - **OpenSpec workflow**: This project uses OpenSpec (spec-driven schema) for change management. New features MUST follow the OpenSpec artifact workflow: proposal → design → specs → tasks → apply. See `openspec/config.yaml` for project-specific rules and `openspec/specs/` for capability standards. Example workflow available at `openspec/examples/example-chat-typing-indicator/`.
-- **STO UI theme constitution**: Page and shell theming (brand, functional, neutral colors, semantic tokens) MUST follow `docs/sto-design.md`. OpenSpec artifacts that affect visible UI SHOULD cite it; Cursor applies `.cursor/rules/sto-ui-theme-constitution.mdc` when working under `openspec/**`, `src/pages/**`, `src/components/**`, and `src/styles/**`.
+- **Current UI design strategy**: During the current exploration phase, implementation follows the latest approved design for the task. `.cursor/rules/02-styles.mdc` is a working asset that absorbs validated, reusable patterns; it is not yet the final constitution. `docs/sto-design.md` remains a reference for non-conflicting shared tokens. Once the company design specification is complete, tokens, rules, and historical pages will be normalized together.
 
 ### Engineering Guardrails（工程化操作安全红线）
 

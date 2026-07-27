@@ -93,4 +93,19 @@ describe('subagent session label helpers', () => {
     expect(normalizeDerivedSessionLabel('[STOCLAW:DINGTALK_RECIPIENTS:v1]')).toBeUndefined();
     expect(normalizeDerivedSessionLabel('@赵志坚 今晚记得学习哦')).toBe('@赵志坚 今晚记得学习哦');
   });
+
+  it('strips the SClaw-Skill transcript marker from derived titles', () => {
+    const withMarker = '网点面单报价\n<!-- SClaw-Skill {"slug":"site-waybill-fee","title":"网点面单报价"} -->';
+    expect(deriveSessionLabelFromUserText(withMarker)).toBe('网点面单报价');
+    const label = deriveSessionLabelFromHistory(
+      [{ role: 'user', content: withMarker }],
+      (content) => String(content ?? ''),
+    );
+    expect(label).toBe('网点面单报价');
+  });
+
+  it('treats persisted SClaw-Skill marker titles as corrupted so they get re-derived', () => {
+    expect(isCorruptedSessionLabel('网点面单报价 <!-- SClaw-Skill {"slug":"si…')).toBe(true);
+    expect(normalizeDerivedSessionLabel('网点面单报价 <!-- SClaw-Skill {"slug":"si…')).toBeUndefined();
+  });
 });

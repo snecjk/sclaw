@@ -203,6 +203,7 @@
     },
     "preview": {
         "collapsePanel": "プレビューを閉じる",
+        "resizeSeparator": "プレビュー幅を調整",
         "overflowMenu": "すべての成果物",
         "fullscreen": "全画面",
         "refresh": "更新",

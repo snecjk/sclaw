@@ -1,37 +1,55 @@
 /**
  * SidebarProjectsSection — 项目树：标题行 + 项目文件夹 + 嵌套会话。
- * 项目仅支持行内重命名（不支持改路径）；项目草稿「新对话」也可行内改名。
+ * 项目仅支持行内重命名（不支持改路径）。项目内「新建」跳转首页并带上项目，不插侧栏草稿行。
+ * 当前会话或首页草稿绑定项目时，自动展开对应项目并滚到会话行。
  */
-import { useCallback, useMemo, useState } from 'react';
-import { ChevronDown, Folder, FolderPlus } from 'lucide-react';
+import type { RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, Folder } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg';
+import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg';
+import sidebarNewProjectIcon from '@/assets/icons/sidebar-new-project.svg';
 import { cn } from '@/lib/utils';
 import {
   sidebarListItemTextClass,
-  sidebarSectionLabelClass,
   sidebarSubitemTextIdleClass,
+  sidebarTextIconClass,
 } from '@/lib/surfaces';
+import {
+  areAllExpandableGroupsExpanded,
+  collapseAllGroups,
+  expandAllGroups,
+  toggleGroupExpanded,
+} from '@/lib/sidebar-section-group-expand';
 import { DEFAULT_WORKSPACE_ID, useSessionCatalogStore } from '@/stores/session-catalog';
 import { useChatStore } from '@/stores/chat';
 import { resolveSessionLabel } from '@/lib/session-label';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import {
   DEFAULT_SESSION_KEY,
-  PROJECT_NEW_CHAT_DRAFT_KEY,
-  isProjectNewChatDraftKey,
   type ChatSession,
 } from '@/stores/chat/types';
 import { isSidebarHiddenChatSessionKey } from '@/lib/sto-task-session';
 import { sortSessionsWithCatalogPin } from '@/lib/sidebar-recent-order';
-import { sortProjectsByCreatedAt } from '@/lib/sidebar-project-session-navigation';
+import {
+  resolveSidebarProjectFocus,
+  sortProjectsByCreatedAt,
+} from '@/lib/sidebar-project-session-navigation';
 import { resolveSidebarChannelSource } from '@/lib/session-channel-source';
 import { ProjectFormDialog } from '@/components/layout/sidebar-project-form-dialog';
+import { SidebarCollapsibleSectionLabel } from '@/components/layout/sidebar-collapsible-section-label';
 import { SidebarProjectRowTrailing } from '@/components/layout/sidebar-project-row-trailing';
 import { SidebarProjectSessionRow } from '@/components/layout/sidebar-project-session-row';
 import { useSidebarDeleteConfirmStore } from '@/stores/sidebar-delete-confirm';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { invokeIpc } from '@/lib/api-client';
 import type { WorkspaceDto } from '@/lib/session-catalog-api';
 
@@ -39,9 +57,24 @@ interface SidebarProjectsSectionProps {
   collapsed: boolean;
   open: boolean;
   onToggle: () => void;
+  /** sticky 外壳 ref（三级吸顶 / 滚动收起） */
+  shellRef?: RefObject<HTMLDivElement | null>;
+  /** sticky top class（项目层 top-0） */
+  stickyTopClass?: string;
+  /** 需要自动展开项目区时调用（例如首页发送后定位到项目会话） */
+  onEnsureOpen?: () => void;
+  scrollContainerRef?: RefObject<HTMLDivElement | null>;
 }
 
-export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarProjectsSectionProps) {
+export function SidebarProjectsSection({
+  collapsed,
+  open,
+  onToggle,
+  shellRef,
+  stickyTopClass,
+  onEnsureOpen,
+  scrollContainerRef,
+}: SidebarProjectsSectionProps) {
   const { t } = useTranslation('common');
   const navigate = useNavigate();
   const location = useLocation();
@@ -63,7 +96,6 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
   const switchSession = useChatStore((s) => s.switchSession);
   const renameSession = useChatStore((s) => s.renameSession);
   const newSession = useChatStore((s) => s.newSession);
-  const setPendingProjectId = useChatStore((s) => s.setPendingProjectId);
 
   const requestSessionDelete = useSidebarDeleteConfirmStore((s) => s.requestSessionDelete);
 
@@ -74,6 +106,8 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
   const [editingValue, setEditingValue] = useState('');
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [editingProjectValue, setEditingProjectValue] = useState('');
+  const sidebarProjectFocusTokenRef = useRef<string | null>(null);
+  const focusSessionKeyRef = useRef<string | null>(null);
   const sortedWorkspaces = useMemo(
     () => sortProjectsByCreatedAt(workspaces),
     [workspaces],
@@ -87,20 +121,13 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
         const workspaceId = sessionWorkspaceByKey[session.key] ?? DEFAULT_WORKSPACE_ID;
         return workspaceId === workspace.id;
       });
-      const sorted = sortSessionsWithCatalogPin(scoped, sessionLastActivity, allCatalogByKey);
-      // UI-only draft row: show under the pending project, never persisted to catalog/session.
-      if (pendingProjectId === workspace.id) {
-        const draftSession: ChatSession = {
-          key: PROJECT_NEW_CHAT_DRAFT_KEY,
-          label: t('sidebar.newChat'),
-        };
-        map.set(workspace.id, [draftSession, ...sorted]);
-      } else {
-        map.set(workspace.id, sorted);
-      }
+      map.set(
+        workspace.id,
+        sortSessionsWithCatalogPin(scoped, sessionLastActivity, allCatalogByKey),
+      );
     }
     return map;
-  }, [workspaces, sessions, sessionWorkspaceByKey, sessionLastActivity, allCatalogByKey, pendingProjectId, t]);
+  }, [workspaces, sessions, sessionWorkspaceByKey, sessionLastActivity, allCatalogByKey]);
 
   const getSessionLabel = useCallback(
     (key: string, displayName?: string, label?: string) =>
@@ -109,8 +136,28 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
   );
 
   const toggleProjectExpand = useCallback((projectId: string) => {
-    setExpandedProjectIds((prev) => ({ ...prev, [projectId]: !(prev[projectId] ?? false) }));
+    setExpandedProjectIds((prev) => toggleGroupExpanded(prev, projectId));
   }, []);
+
+  const expandableProjectIds = useMemo(() => {
+    return sortedWorkspaces
+      .filter((workspace) => (sessionsByProjectId.get(workspace.id) ?? []).length > 0)
+      .map((workspace) => workspace.id);
+  }, [sortedWorkspaces, sessionsByProjectId]);
+
+  // 全部已展开 → 下次收起全部；否则（含部分展开）→ 展开全部
+  const projectGroupsAllExpanded = areAllExpandableGroupsExpanded(
+    expandedProjectIds,
+    expandableProjectIds,
+  );
+
+  const handleProjectBatchExpandOrCollapse = () => {
+    if (projectGroupsAllExpanded) {
+      setExpandedProjectIds(collapseAllGroups(expandableProjectIds));
+      return;
+    }
+    setExpandedProjectIds(expandAllGroups(expandableProjectIds));
+  };
 
   const startProjectRename = useCallback((workspace: WorkspaceDto) => {
     setEditingSessionKey(null);
@@ -150,7 +197,7 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
     }
   }, []);
 
-  /** 在指定项目下新建对话：进入项目草稿并创建/关联 project agent；首条消息发出时才真正创建 session。 */
+  /** 在指定项目下新建对话：跳转首页并带上项目（pendingProjectId + project agent），不在侧栏插「新对话」草稿行。 */
   const handleNewChatInProject = useCallback(async (projectId: string) => {
     try {
       await selectProject(projectId);
@@ -167,10 +214,7 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
     for (const workspaceId of Object.values(sessionWorkspaceByKey)) {
       if (workspaceId === projectId) count += 1;
     }
-    // 侧栏可见真实会话也算关联；临时草稿不计入删除确认数量
-    const visible = (sessionsByProjectId.get(projectId) ?? [])
-      .filter((session) => !isProjectNewChatDraftKey(session.key))
-      .length;
+    const visible = (sessionsByProjectId.get(projectId) ?? []).length;
     return Math.max(count, visible);
   }, [sessionWorkspaceByKey, sessionsByProjectId]);
 
@@ -190,43 +234,177 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
     }
   }, [deleteProject, deleteTarget, t]);
 
+  useEffect(() => {
+    if (collapsed) return;
+
+    const focus = resolveSidebarProjectFocus({
+      currentSessionKey,
+      pendingProjectId,
+      sessionWorkspaceByKey,
+      defaultWorkspaceId: DEFAULT_WORKSPACE_ID,
+      defaultSessionKey: DEFAULT_SESSION_KEY,
+    });
+    if (!focus) {
+      sidebarProjectFocusTokenRef.current = null;
+      focusSessionKeyRef.current = null;
+      return;
+    }
+
+    const activity = focus.sessionKey ? (sessionLastActivity[focus.sessionKey] ?? 0) : 0;
+    const focusToken = `${focus.projectId}:${focus.sessionKey ?? 'draft'}:${activity}:${pendingProjectId ?? ''}`;
+    focusSessionKeyRef.current = focus.sessionKey;
+    if (sidebarProjectFocusTokenRef.current === focusToken) return;
+    sidebarProjectFocusTokenRef.current = focusToken;
+
+    onEnsureOpen?.();
+    setExpandedProjectIds((prev) => ({ ...prev, [focus.projectId]: true }));
+  }, [
+    collapsed,
+    currentSessionKey,
+    pendingProjectId,
+    sessionWorkspaceByKey,
+    sessionLastActivity,
+    onEnsureOpen,
+  ]);
+
+  useLayoutEffect(() => {
+    if (collapsed || !open) return;
+    const focusSessionKey = focusSessionKeyRef.current;
+    if (!focusSessionKey || focusSessionKey === DEFAULT_SESSION_KEY) return;
+    const projectId = sessionWorkspaceByKey[focusSessionKey] ?? pendingProjectId;
+    if (!projectId || !(expandedProjectIds[projectId] ?? false)) return;
+
+    let cancelled = false;
+    const rafId = requestAnimationFrame(() => {
+      if (cancelled) return;
+      const container = scrollContainerRef?.current;
+      const el = container?.querySelector(
+        `[data-sidebar-project-session="${CSS.escape(focusSessionKey)}"]`,
+      );
+      if (el instanceof HTMLElement) {
+        el.scrollIntoView({ block: 'nearest' });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+    };
+  }, [
+    collapsed,
+    open,
+    expandedProjectIds,
+    sessionWorkspaceByKey,
+    pendingProjectId,
+    currentSessionKey,
+    sessionLastActivity,
+    scrollContainerRef,
+  ]);
+
   if (collapsed) {
     return <div className="mx-auto mt-2 h-px w-8 bg-[var(--sto-sidebar-border)]" aria-hidden />;
   }
 
   return (
     <>
-      <div className="mt-4 flex h-[30px] w-full items-center justify-between px-[10px]">
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={onToggle}
-          className={cn(
-            'inline-flex min-w-0 items-center gap-1 text-left transition-colors',
-            sidebarSectionLabelClass,
-          )}
-        >
-          <span className="truncate">{t('sidebar.projects')}</span>
-          <ChevronDown
-            className={cn('h-3.5 w-3.5 shrink-0 transition-transform', !open && '-rotate-90')}
-            aria-hidden
-          />
-        </button>
-        <button
-          type="button"
-          aria-label={t('sidebar.newProject')}
-          onClick={() => setCreateOpen(true)}
-          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)]"
-        >
-          <FolderPlus className="h-4 w-4" />
-        </button>
-      </div>
+      <SidebarCollapsibleSectionLabel
+        className="mt-4"
+        open={open}
+        onToggle={onToggle}
+        label={t('sidebar.projects')}
+        toggleAriaLabel={t('sidebar.toggleProjectsSection')}
+        shellRef={shellRef}
+        stickyTopClass={stickyTopClass}
+        actions={
+          <>
+            {open && expandableProjectIds.length > 0 ? (
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={
+                      projectGroupsAllExpanded
+                        ? t('sidebar.collapseAllGroups')
+                        : t('sidebar.expandAllGroups')
+                    }
+                    onClick={handleProjectBatchExpandOrCollapse}
+                    className={cn(
+                      'flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+                      sidebarTextIconClass,
+                    )}
+                  >
+                    {/* MasterGo：已展开显示折叠 icon；有未展开项显示展开 icon */}
+                    {projectGroupsAllExpanded ? (
+                      <img
+                        src={sidebarCollapseAllGroupsIcon}
+                        alt=""
+                        className="h-[18px] w-[18px]"
+                        aria-hidden
+                      />
+                    ) : (
+                      <img
+                        src={sidebarExpandAllGroupsIcon}
+                        alt=""
+                        className="h-[18px] w-[18px]"
+                        aria-hidden
+                      />
+                    )}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="text-xs">
+                  {projectGroupsAllExpanded
+                    ? t('sidebar.collapseAllGroups')
+                    : t('sidebar.expandAllGroups')}
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={t('sidebar.newProject')}
+                  onClick={() => setCreateOpen(true)}
+                  className={cn(
+                    'flex h-7 w-7 items-center justify-center rounded-md transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)]',
+                    sidebarTextIconClass,
+                  )}
+                >
+                  <img
+                    src={sidebarNewProjectIcon}
+                    alt=""
+                    className="h-[18px] w-[18px]"
+                    aria-hidden
+                  />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="text-xs">
+                {t('sidebar.newProject')}
+              </TooltipContent>
+            </Tooltip>
+          </>
+        }
+      />
 
       {open ? (
         <div className="mt-0.5 flex flex-col gap-0.5 pb-1">
-          {sortedWorkspaces.map((workspace) => {
-            const isExpanded = expandedProjectIds[workspace.id] ?? false;
+          {sortedWorkspaces.length === 0 ? (
+            <div className="flex h-9 min-w-0 items-center gap-2 px-[10px]">
+              <Folder className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+              <p
+                className={cn(
+                  'min-w-0 truncate',
+                  sidebarListItemTextClass,
+                  'text-[#86909C]', // Grey-8，覆盖 sidebarListItemTextClass 默认正文色
+                )}
+              >
+                {t('sidebar.projectsEmpty')}
+              </p>
+            </div>
+          ) : (
+            sortedWorkspaces.map((workspace) => {
+            const isExpanded = expandedProjectIds[workspace.id] === true;
             const projectSessions = sessionsByProjectId.get(workspace.id) ?? [];
+            const canExpand = projectSessions.length > 0;
             const isEditingProject = editingProjectId === workspace.id;
 
             return (
@@ -253,7 +431,10 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                       <button
                         type="button"
                         title={`${workspace.name}\n${workspace.rootPath}`}
-                        onClick={() => toggleProjectExpand(workspace.id)}
+                        aria-expanded={canExpand ? isExpanded : undefined}
+                        onClick={() => {
+                          if (canExpand) toggleProjectExpand(workspace.id);
+                        }}
                         onDoubleClick={(e) => {
                           e.preventDefault();
                           startProjectRename(workspace);
@@ -263,9 +444,22 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                           sidebarSubitemTextIdleClass,
                         )}
                       >
-                        <Folder className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                        <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>
-                          {workspace.name}
+                        <Folder className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                        <span className="inline-flex min-w-0 flex-1 items-center gap-0.5">
+                          <span className={cn('min-w-0 truncate', sidebarListItemTextClass)}>
+                            {workspace.name}
+                          </span>
+                          {canExpand ? (
+                            <ChevronDown
+                              className={cn(
+                                'h-4 w-4 shrink-0 transition-transform',
+                                sidebarTextIconClass,
+                                isExpanded ? 'rotate-180' : '',
+                              )}
+                              strokeWidth={2}
+                              aria-hidden
+                            />
+                          ) : null}
                         </span>
                       </button>
                       <SidebarProjectRowTrailing
@@ -285,76 +479,59 @@ export function SidebarProjectsSection({ collapsed, open, onToggle }: SidebarPro
                 {isExpanded && projectSessions.length > 0 ? (
                   <div className="mb-0.5 flex flex-col gap-0.5">
                     {projectSessions.map((session) => {
-                      const isDraft = isProjectNewChatDraftKey(session.key);
-                      const label = isDraft
-                        ? t('sidebar.newChat')
-                        : getSessionLabel(session.key, session.displayName, session.label);
-                      const isActive = isDraft
-                        ? isOnHome
-                          && pendingProjectId === workspace.id
-                          && currentSessionKey === DEFAULT_SESSION_KEY
-                        : isOnHome
-                          && currentSessionKey === session.key
-                          && currentSessionKey !== DEFAULT_SESSION_KEY;
-                      const isPinned = !isDraft && allCatalogByKey[session.key]?.pinRank != null;
-                      const channelSource = isDraft
-                        ? null
-                        : resolveSidebarChannelSource(session.key, allCatalogByKey[session.key]?.channelType);
+                      const label = getSessionLabel(session.key, session.displayName, session.label);
+                      const isActive = isOnHome
+                        && currentSessionKey === session.key
+                        && currentSessionKey !== DEFAULT_SESSION_KEY;
+                      const isPinned = allCatalogByKey[session.key]?.pinRank != null;
+                      const channelSource = resolveSidebarChannelSource(
+                        session.key,
+                        allCatalogByKey[session.key]?.channelType,
+                      );
                       return (
-                        <SidebarProjectSessionRow
+                        <div
                           key={session.key}
-                          session={session}
-                          label={label}
-                          isActive={isActive}
-                          isPinned={isPinned}
-                          channelSource={channelSource}
-                          isEditing={!isDraft && editingSessionKey === session.key}
-                          editingValue={editingValue}
-                          onOpen={() => {
-                            if (isDraft) {
-                              void handleNewChatInProject(workspace.id);
-                              return;
-                            }
-                            void selectProject(workspace.id);
-                            navigateToMainChatHome(navigate, location.pathname, () => switchSession(session.key));
-                          }}
-                          onPin={() => {
-                            if (isDraft) return;
-                            void handlePinInProject(session.key);
-                          }}
-                          onStartRename={() => {
-                            if (isDraft) return;
-                            setEditingProjectId(null);
-                            setEditingSessionKey(session.key);
-                            setEditingValue(label);
-                          }}
-                          onEditingValueChange={setEditingValue}
-                          onCommitRename={() => {
-                            if (isDraft) return;
-                            renameSession(session.key, editingValue);
-                            setEditingSessionKey(null);
-                          }}
-                          onCancelRename={() => setEditingSessionKey(null)}
-                          onDelete={() => {
-                            if (isDraft) {
-                              setPendingProjectId(null);
-                              useChatStore.setState({
-                                currentSessionKey: DEFAULT_SESSION_KEY,
-                                currentAgentId: 'main',
-                                messages: [],
-                              });
-                              return;
-                            }
-                            requestSessionDelete({ key: session.key, label });
-                          }}
-                        />
+                          data-sidebar-project-session={session.key}
+                        >
+                          <SidebarProjectSessionRow
+                            session={session}
+                            label={label}
+                            isActive={isActive}
+                            isPinned={isPinned}
+                            channelSource={channelSource}
+                            isEditing={editingSessionKey === session.key}
+                            editingValue={editingValue}
+                            onOpen={() => {
+                              void selectProject(workspace.id);
+                              navigateToMainChatHome(navigate, location.pathname, () => switchSession(session.key));
+                            }}
+                            onPin={() => {
+                              void handlePinInProject(session.key);
+                            }}
+                            onStartRename={() => {
+                              setEditingProjectId(null);
+                              setEditingSessionKey(session.key);
+                              setEditingValue(label);
+                            }}
+                            onEditingValueChange={setEditingValue}
+                            onCommitRename={() => {
+                              renameSession(session.key, editingValue);
+                              setEditingSessionKey(null);
+                            }}
+                            onCancelRename={() => setEditingSessionKey(null)}
+                            onDelete={() => {
+                              requestSessionDelete({ key: session.key, label });
+                            }}
+                          />
+                        </div>
                       );
                     })}
                   </div>
                 ) : null}
               </div>
             );
-          })}
+          })
+          )}
         </div>
       ) : null}
 

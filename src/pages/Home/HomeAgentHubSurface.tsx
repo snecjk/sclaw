@@ -21,6 +21,7 @@ import { navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
 import { useLatestWorkflowsByTemplates } from '@/hooks/use-latest-workflows-by-templates';
 import {
   homeHubCardGridClass,
+  homeHubCardScrollClass,
   homeHubFooterShellClass,
   homeHubMainScrollClass,
   homeHubMainScrollHostClass,
@@ -129,30 +130,32 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
         ) : (
           <div className={homeHubMainScrollHostClass}>
             <div className={homeHubMainScrollClass}>
-              <HomeHero />
+              <HomeHero className="shrink-0" />
 
-              <div className={homeHubCardGridClass}>
-                {recommendLoading || latestLoading ? (
-                  <RecommendCardSkeletonGrid />
-                ) : recommendItems.length > 0 ? (
-                  displayItems.map(({ key, item }) => {
-                    const skillSlug = item.skill_slug || item.item_ref_id;
-                    return (
-                      <RecommendCard
-                        key={key}
-                        item={item}
-                        onClick={() => handleRecommendClick(item)}
-                        onSkillInstalled={() => {
-                          handleSkillStatusRefresh(skillSlug);
-                        }}
-                        skillStatus={item.item_type === 'skill' ? skillStatusMap[skillSlug] : undefined}
-                        skillStatusLoading={item.item_type === 'skill' ? (skillStatusLoading || refreshingSlugs.has(skillSlug)) : false}
-                      />
-                    );
-                  })
-                ) : (
-                  <StaticFallbackCards />
-                )}
+              <div className={homeHubCardScrollClass}>
+                <div className={homeHubCardGridClass}>
+                  {recommendLoading || latestLoading ? (
+                    <RecommendCardSkeletonGrid />
+                  ) : recommendItems.length > 0 ? (
+                    displayItems.map(({ key, item }) => {
+                      const skillSlug = item.skill_slug || item.item_ref_id;
+                      return (
+                        <RecommendCard
+                          key={key}
+                          item={item}
+                          onClick={() => handleRecommendClick(item)}
+                          onSkillInstalled={() => {
+                            handleSkillStatusRefresh(skillSlug);
+                          }}
+                          skillStatus={item.item_type === 'skill' ? skillStatusMap[skillSlug] : undefined}
+                          skillStatusLoading={item.item_type === 'skill' ? (skillStatusLoading || refreshingSlugs.has(skillSlug)) : false}
+                        />
+                      );
+                    })
+                  ) : (
+                    <StaticFallbackCards />
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -166,6 +169,7 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
             seedSkillSlug={seedSkillSlug}
             onSend={handleHubSend}
             onQueue={handleHubQueue}
+            showProjectPicker
           />
         </div>
       ) : null}

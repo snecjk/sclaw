@@ -46,7 +46,7 @@ export function WorkflowComposerInput({
     }
   }, [disabled]);
 
-  // Auto-resize textarea height (mirrors DingTalkMentionEditor behavior)
+  // Auto-resize textarea height (mirrors DingTalkMentionEditor CSS bounds)
   const resizeTextarea = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;

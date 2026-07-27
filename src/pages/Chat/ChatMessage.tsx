@@ -110,6 +110,8 @@ const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
 interface ChatMessageProps {
   message: RawMessage;
   showThinking: boolean;
+  /** 搜索稳定键：写入 data-chat-search-key，供索引/高亮/滚动定位 */
+  searchMessageKey?: string;
   isSearchMatch?: boolean;
   isSearchActive?: boolean;
   isStreaming?: boolean;
@@ -152,6 +154,7 @@ function imageSrc(img: ExtractedImage): string | null {
 export const ChatMessage = memo(function ChatMessage({
   message,
   showThinking,
+  searchMessageKey,
   isSearchMatch = false,
   isSearchActive = false,
   isStreaming = false,
@@ -359,9 +362,6 @@ export const ChatMessage = memo(function ChatMessage({
   // Previewable file cards (merged from _attachedFiles + text-extracted refs, deduped once)
   const hasRenderableFiles = previewFiles.length > 0;
 
-  // Never render tool result messages in chat UI
-  if (isToolResult) return null;
-
   const hasStreamingToolStatus = isStreaming && streamingTools.length > 0;
   const isWorkflowThinkingContext =
     pendingWorkflow !== null || parameterForm !== null || workflowCard !== null;
@@ -514,22 +514,6 @@ export const ChatMessage = memo(function ChatMessage({
     && !showUserParamsFold
     && !(isLastUserInTurn && currentUserTurnIncomplete);
 
-  if (
-    !hasText
-    && !skillMeta
-    && !showThinkingPanel
-    && images.length === 0
-    && visibleTools.length === 0
-    && !hasRenderableFiles
-    && extractedRefs.length === 0
-    && !hasStreamingToolStatus
-    && !parameterForm
-    && !workflowCard
-    && !showAssistantParamsFold
-    && !showAssistantParamsPanel
-  ) {
-    return null;
-  }
   const showRenderDebugPanel = !isUser && isFilePreviewDebugEnabled();
   const debugMarkdownSource = useMemo(
     () => (onPreviewFile ? preprocessTextForPreviewLinks(text) : text),
@@ -575,13 +559,31 @@ export const ChatMessage = memo(function ChatMessage({
       assistantCopyShareContent.files,
     ));
     setShareDialogOpen(true);
-  }, [assistantCopyShareContent]);
+  }, [assistantCopyShareContent, setShareDialogOpen, setShareDraft]);
 
   const handleShareCompleted = useCallback(() => {
     toast.success(t('preview.shareDialog.success'));
     setShareDialogOpen(false);
     setShareDraft(null);
-  }, [t]);
+  }, [setShareDialogOpen, setShareDraft, t]);
+
+  // Never render tool result messages in chat UI
+  if (isToolResult || (
+    !hasText
+    && !skillMeta
+    && !showThinkingPanel
+    && images.length === 0
+    && visibleTools.length === 0
+    && !hasRenderableFiles
+    && extractedRefs.length === 0
+    && !hasStreamingToolStatus
+    && !parameterForm
+    && !workflowCard
+    && !showAssistantParamsFold
+    && !showAssistantParamsPanel
+  )) {
+    return null;
+  }
 
   if (isSystem) {
     const compactText = text.replace(/\s+/g, ' ').trim();
@@ -592,6 +594,7 @@ export const ChatMessage = memo(function ChatMessage({
       <div
         data-chat-message-role="system"
         data-chat-message-id={message.id ?? undefined}
+        data-chat-search-key={searchMessageKey}
         className={cn(
           'mx-auto w-full max-w-4xl rounded-2xl transition-all duration-200',
           isSearchMatch && 'ring-1 ring-amber-300/70 ring-offset-2 ring-offset-background',
@@ -645,6 +648,7 @@ export const ChatMessage = memo(function ChatMessage({
     <div
       data-chat-message-role={isUser ? 'user' : 'assistant'}
       data-chat-message-id={message.id ?? undefined}
+      data-chat-search-key={searchMessageKey}
       className={cn(
         'rounded-[1.6rem] transition-all duration-200',
         isSearchMatch && 'ring-1 ring-primary/25 ring-offset-2 ring-offset-background',

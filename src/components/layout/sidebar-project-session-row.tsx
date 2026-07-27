@@ -78,7 +78,12 @@ export function SidebarProjectSessionRow({
 
   if (isEditing) {
     return (
-      <div className="relative flex w-full min-w-0 items-center pl-5">
+      <div className="relative flex w-full min-w-0 items-center pl-6">
+        {/* 编辑态同样保留层级竖线，避免二级行左右跳动 */}
+        <span
+          className="pointer-events-none absolute bottom-0 left-[17px] top-0 w-px bg-[#DCDCDC] dark:bg-border"
+          aria-hidden
+        />
         <input
           type="text"
           autoFocus
@@ -90,17 +95,22 @@ export function SidebarProjectSessionRow({
             else if (e.key === 'Escape') onCancelRename();
           }}
           onBlur={onCommitRename}
-          className="w-full rounded-[8px] border border-[var(--sto-brand-6)] bg-card px-[10px] py-[6px] pr-16 text-left text-sm leading-5 text-foreground outline-none"
+          className="h-8 w-full rounded-[8px] border border-[var(--sto-brand-6)] bg-card px-[10px] py-[5px] pr-16 text-left text-sm leading-5 text-foreground outline-none"
         />
       </div>
     );
   }
 
   return (
-    <div className="relative flex w-full min-w-0 items-center pl-5">
+    <div className="relative flex w-full min-w-0 items-center pl-6">
+      {/* MasterGo 项目二级：左侧层级竖线 #DCDCDC，对齐一级 folder 中心 */}
+      <span
+        className="pointer-events-none absolute bottom-0 left-[17px] top-0 w-px bg-[#DCDCDC] dark:bg-border"
+        aria-hidden
+      />
       <div
         className={cn(
-          'group relative flex h-9 w-full items-center rounded-lg transition-colors',
+          'group relative flex h-8 w-full items-center rounded-lg transition-colors',
           isActive
             ? cn(sidebarRecentSessionActiveClass, 'hover:bg-[var(--sto-sidebar-row-hover-bg)]')
             : sidebarSubitemTextIdleClass,
@@ -111,7 +121,7 @@ export function SidebarProjectSessionRow({
           onClick={onOpen}
           onDoubleClick={() => handleSidebarSessionDoubleClick(session.key, onStartRename)}
           title={label}
-          className="flex h-9 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-2 pr-12 text-left"
+          className="flex h-8 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-1.5 pr-12 text-left"
         >
           <span className="flex min-w-0 flex-1 items-center gap-0">
             <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass, isActive && 'font-medium')}>

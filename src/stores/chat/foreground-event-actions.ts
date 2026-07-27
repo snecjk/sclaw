@@ -164,18 +164,6 @@ export function createForegroundEventActions(
 
       touchLastChatEventAt(set);
 
-      // Only pause the history poll when we receive actual streaming data.
-      // The gateway sends "agent" events with { phase, startedAt } that carry
-      // no message — these must NOT kill the poll, since the poll is our only
-      // way to track progress when the gateway doesn't stream intermediate turns.
-      const hasUsefulData = resolvedState === 'delta' || resolvedState === 'final'
-        || resolvedState === 'error' || resolvedState === 'aborted';
-      if (hasUsefulData) {
-        if (resolvedState !== 'final') {
-          clearHistoryPoll(currentSessionKey);
-        }
-      }
-
       switch (resolvedState) {
         case 'started': {
           // Run just started (e.g. from console); show loading immediately.

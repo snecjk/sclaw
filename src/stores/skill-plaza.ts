@@ -74,8 +74,8 @@ interface SkillPlazaState {
   setPage: (page: number) => void;
 
   fetchCategories: () => Promise<void>;
-  fetchPlazaSkills: (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => Promise<void>;
-  fetchLocalSkills: (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => Promise<void>;
+  fetchPlazaSkills: (opts?: { reset?: boolean; skipCategoryCounts?: boolean; forceRefresh?: boolean }) => Promise<void>;
+  fetchLocalSkills: (opts?: { reset?: boolean; skipCategoryCounts?: boolean; forceRefresh?: boolean }) => Promise<void>;
   syncUserSkills: () => Promise<void>;
 
   installSkill: (slug: string, options?: InstallPlazaSkillOptions) => Promise<void>;
@@ -135,6 +135,8 @@ function dedupeRequest(key: string, run: () => Promise<void>): Promise<void> {
 // a newer query's result (e.g. fast typing in search).
 let plazaRequestSeq = 0;
 let mineRequestSeq = 0;
+let plazaForceRefreshSeq = 0;
+let mineForceRefreshSeq = 0;
 
 // When a fetch reports the STO token is not ready yet, we keep the UI in a
 // loading state and retry with a bounded backoff until the token arrives.
@@ -281,17 +283,18 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
   },
 
   fetchPlazaSkills: async (opts) => {
-    const { reset, skipCategoryCounts } = opts || {};
+    const { reset, skipCategoryCounts, forceRefresh } = opts || {};
     const page = reset ? 1 : get().page;
     if (reset) set({ page: 1 });
 
-    const key = plazaRequestKey({
+    const baseKey = plazaRequestKey({
       searchQuery: get().searchQuery,
       activeCategory: get().activeCategory,
       sortMode: get().sortMode,
       page,
       pageSize: get().pageSize,
     });
+    const key = forceRefresh ? `${baseKey}|force:${++plazaForceRefreshSeq}` : baseKey;
 
     return dedupeRequest(key, async () => {
       const seq = ++plazaRequestSeq;
@@ -319,6 +322,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
           metaMap[skill.slug] = {
             title: skill.title,
             description: skill.description,
+            icon: skill.icon,
             category: skill.category,
             categoryCode: skill.categoryCode,
             categoryCodes: skill.categoryCodes,
@@ -366,10 +370,11 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     });
   },
 
-  fetchLocalSkills: async (opts?: { reset?: boolean; skipCategoryCounts?: boolean }) => {
-    const { skipCategoryCounts } = opts || {};
+  fetchLocalSkills: async (opts?: { reset?: boolean; skipCategoryCounts?: boolean; forceRefresh?: boolean }) => {
+    const { skipCategoryCounts, forceRefresh } = opts || {};
+    const key = forceRefresh ? `local-skills|force:${++mineForceRefreshSeq}` : 'local-skills';
 
-    return dedupeRequest('local-skills', async () => {
+    return dedupeRequest(key, async () => {
     const seq = ++mineRequestSeq;
     const hasData = get().mySkills.length > 0;
     set(hasData
@@ -396,6 +401,11 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
             merged.description = plazaSkill.description;
           } else if (meta?.description) {
             merged.description = meta.description;
+          }
+          if (plazaSkill?.icon) {
+            merged.icon = plazaSkill.icon;
+          } else if (meta?.icon) {
+            merged.icon = meta.icon;
           }
           if (plazaSkill?.installCount != null) {
             merged.installCount = plazaSkill.installCount;
@@ -476,30 +486,41 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
     try {
       await installPlazaSkill(slug, options);
       set({ plazaStale: true, mineStale: true });
-      // Optimistic update: increment installCount locally
+      // Optimistic update: reflect the installed/updated state immediately,
+      // then replace it with fresh remote + local data below.
       set((state) => {
         const nextMetaMap = { ...state.plazaSkillMetaMap };
         if (nextMetaMap[slug]) {
           nextMetaMap[slug] = {
             ...nextMetaMap[slug],
-            installCount: (nextMetaMap[slug].installCount || 0) + 1,
+            installCount: options?.force
+              ? nextMetaMap[slug].installCount
+              : (nextMetaMap[slug].installCount || 0) + 1,
           };
         }
         savePlazaMetaCache(nextMetaMap);
+        const patchSkill = (s: SkillSummary): SkillSummary => {
+          if (s.slug !== slug) return s;
+          const nextInstallCount = options?.force
+            ? s.installCount
+            : (s.installCount || 0) + 1;
+          return {
+            ...s,
+            installed: true,
+            installedVersion: options?.version ?? s.version ?? s.installedVersion,
+            updateAvailable: false,
+            forceUpdate: false,
+            installCount: nextInstallCount,
+          };
+        };
         return {
           plazaSkillMetaMap: nextMetaMap,
-          plazaSkills: state.plazaSkills.map((s) =>
-            s.slug === slug
-              ? { ...s, installed: true, installCount: (s.installCount || 0) + 1 }
-              : s
-          ),
-          mySkills: state.mySkills.map((s) =>
-            s.slug === slug
-              ? { ...s, installed: true, installCount: (s.installCount || 0) + 1 }
-              : s
-          ),
+          plazaSkills: state.plazaSkills.map(patchSkill),
+          mySkills: state.mySkills.map(patchSkill),
         };
       });
+      await get().fetchPlazaSkills({ reset: true, forceRefresh: true });
+      await get().fetchLocalSkills({ reset: true, forceRefresh: true });
     } finally {
       set((state) => {
         const next = { ...state.installing };
@@ -570,15 +591,26 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
   },
 
   toggleSkill: async (slug, enabled) => {
+    const previousMySkills = get().mySkills;
+    const previousPlazaSkills = get().plazaSkills;
+    set((state) => ({
+      mySkills: state.mySkills.map((s) =>
+        s.slug === slug ? { ...s, enabled } : s
+      ),
+      plazaSkills: state.plazaSkills.map((s) =>
+        s.slug === slug ? { ...s, enabled } : s
+      ),
+    }));
+
     try {
       await toggleSkillEnabled(slug, enabled);
-      set((state) => ({
-        mySkills: state.mySkills.map((s) =>
-          s.slug === slug ? { ...s, enabled } : s
-        ),
-      }));
     } catch (err) {
-      set({ error: String(err) });
+      set({
+        error: String(err),
+        mySkills: previousMySkills,
+        plazaSkills: previousPlazaSkills,
+      });
+      throw err;
     }
   },
 
