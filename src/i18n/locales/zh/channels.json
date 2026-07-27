@@ -467,7 +467,7 @@
             "configure": "配置",
             "footerQrHint": "一键下载，把工作台装进口袋",
             "footerConnectHint": "连接 app，确保同账号登录手机",
-            "footerMoreChannels": "点击绑定更多频道(钉钉、微信)"
+            "footerMoreChannels": "点击绑定更多机器人助理(钉钉、微信)"
         }
     },
     "viewDocs": "查看文档"
