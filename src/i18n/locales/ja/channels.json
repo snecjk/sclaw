@@ -463,7 +463,10 @@
                 "step3": "接続成功後、App に緑の「パソコンに接続済み」が表示されます",
                 "step4": "次回起動時に自動で再接続できます"
             },
-            "configure": "設定"
+            "configure": "設定",
+            "footerQrHint": "ワンクリックでダウンロード、仕事をポケットに",
+            "footerConnectHint": "同じアカウントでスマホにログインして接続",
+            "footerMoreChannels": "クリックして他のチャンネルを紐づける"
         }
     },
     "viewDocs": "ドキュメントを表示"

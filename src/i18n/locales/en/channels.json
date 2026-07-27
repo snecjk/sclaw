@@ -464,7 +464,10 @@
                 "step3": "When connected, the app shows a green “Connected to computer”",
                 "step4": "Next time the app can reconnect automatically"
             },
-            "configure": "Configure"
+            "configure": "Configure",
+            "footerQrHint": "Download once — take your workspace with you",
+            "footerConnectHint": "Connect the app with the same account on your phone",
+            "footerMoreChannels": "Click to bind more channels"
         }
     },
     "viewDocs": "View Documentation"

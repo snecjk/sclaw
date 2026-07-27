@@ -464,7 +464,10 @@
                 "step3": "连接成功后，手机 App 会显示绿色的「已连接电脑」",
                 "step4": "下次打开后，App 可自动连接电脑"
             },
-            "configure": "配置"
+            "configure": "配置",
+            "footerQrHint": "一键下载，把工作台装进口袋",
+            "footerConnectHint": "连接 app，确保同账号登录手机",
+            "footerMoreChannels": "点击绑定更多频道（钉钉、微信）"
         }
     },
     "viewDocs": "查看文档"

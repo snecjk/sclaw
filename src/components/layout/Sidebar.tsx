@@ -47,6 +47,7 @@ import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unrea
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
 import { SidebarSupportQrTooltip } from '@/components/layout/SidebarSupportQrTooltip';
+import { SidebarMobileConnectTooltip } from '@/components/layout/SidebarMobileConnectTooltip';
 import { SidebarCollapsibleSectionLabel } from '@/components/layout/sidebar-collapsible-section-label';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { SidebarRecentSessionRow } from '@/components/layout/sidebar-recent-session-row';
@@ -1075,6 +1076,7 @@ export function Sidebar() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [supportQrOpen, setSupportQrOpen] = useState(false);
+  const [mobileConnectOpen, setMobileConnectOpen] = useState(false);
 
   const catalogByKey = allCatalogByKey;
 
@@ -2206,12 +2208,13 @@ export function Sidebar() {
               setAccountMenuOpen(open);
               if (open) {
                 setSupportQrOpen(false);
+                setMobileConnectOpen(false);
               }
             }}
           >
             {accountFooterMode === 'expanded-hotzone' ? (
               <div className="flex w-full min-w-0 items-center gap-3">
-                {/* 展开态：整块账号信息为菜单热区，无齿轮；问号独立（MasterGo 39:35844） */}
+                {/* 展开态：整块账号信息为菜单热区，无齿轮；PC/手机联通与问号独立 */}
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
@@ -2222,8 +2225,14 @@ export function Sidebar() {
                         ? t('common:status.connected')
                         : t('common:status.disconnected')
                     }
-                    onPointerEnter={() => setSupportQrOpen(false)}
-                    onPointerDown={() => setSupportQrOpen(false)}
+                    onPointerEnter={() => {
+                      setSupportQrOpen(false);
+                      setMobileConnectOpen(false);
+                    }}
+                    onPointerDown={() => {
+                      setSupportQrOpen(false);
+                      setMobileConnectOpen(false);
+                    }}
                   >
                     <span className={sidebarFooterNameClass}>
                       {authUser.realName?.trim() || authUser.userName}
@@ -2235,12 +2244,24 @@ export function Sidebar() {
                     ) : null}
                   </button>
                 </DropdownMenuTrigger>
+                <SidebarMobileConnectTooltip
+                  className={sidebarAccountHelpTriggerClass}
+                  open={mobileConnectOpen}
+                  onOpenChange={(open) => {
+                    setMobileConnectOpen(open);
+                    if (open) {
+                      setSupportQrOpen(false);
+                      setAccountMenuOpen(false);
+                    }
+                  }}
+                />
                 <SidebarSupportQrTooltip
                   className={sidebarAccountHelpTriggerClass}
                   open={supportQrOpen}
                   onOpenChange={(open) => {
                     setSupportQrOpen(open);
                     if (open) {
+                      setMobileConnectOpen(false);
                       setAccountMenuOpen(false);
                     }
                   }}
@@ -2259,8 +2280,14 @@ export function Sidebar() {
                           SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS,
                         ),
                   )}
-                  onPointerEnter={() => setSupportQrOpen(false)}
-                  onPointerDown={() => setSupportQrOpen(false)}
+                  onPointerEnter={() => {
+                    setSupportQrOpen(false);
+                    setMobileConnectOpen(false);
+                  }}
+                  onPointerDown={() => {
+                    setSupportQrOpen(false);
+                    setMobileConnectOpen(false);
+                  }}
                   title={
                     accountFooterMode === 'collapsed-avatar'
                       ? isGatewayRunning
@@ -2394,15 +2421,28 @@ export function Sidebar() {
             </DropdownMenuContent>
           </DropdownMenu>
           {accountFooterMode !== 'expanded-hotzone' ? (
-            <SidebarSupportQrTooltip
-              open={supportQrOpen}
-              onOpenChange={(open) => {
-                setSupportQrOpen(open);
-                if (open) {
-                  setAccountMenuOpen(false);
-                }
-              }}
-            />
+            <>
+              <SidebarMobileConnectTooltip
+                open={mobileConnectOpen}
+                onOpenChange={(open) => {
+                  setMobileConnectOpen(open);
+                  if (open) {
+                    setSupportQrOpen(false);
+                    setAccountMenuOpen(false);
+                  }
+                }}
+              />
+              <SidebarSupportQrTooltip
+                open={supportQrOpen}
+                onOpenChange={(open) => {
+                  setSupportQrOpen(open);
+                  if (open) {
+                    setMobileConnectOpen(false);
+                    setAccountMenuOpen(false);
+                  }
+                }}
+              />
+            </>
           ) : null}
           </div>
         </div>
