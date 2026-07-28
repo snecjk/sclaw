@@ -1,6 +1,6 @@
 export type DataCenterSpaceType = 'drive' | 'qa_artifact' | 'site_shared_artifact';
 export type DataCenterEntryType = 'file' | 'folder';
-export type DataCenterSourceType = 'local_upload' | 'chat_artifact' | 'workflow_artifact';
+export type DataCenterSourceType = 'local_upload' | 'chat_artifact' | 'workflow_artifact' | 'scheduled_task_artifact';
 export type DataCenterViewMode = 'list' | 'grid';
 export type DataCenterSortField = 'name' | 'updatedAt' | 'fileSize' | 'createdAt';
 export type DataCenterSortOrder = 'asc' | 'desc';
@@ -96,7 +96,7 @@ export interface DataCenterTempUrl {
 }
 
 export interface DataCenterArtifactProvenance {
-  sourceType: 'chat_artifact' | 'workflow_artifact';
+  sourceType: 'chat_artifact' | 'workflow_artifact' | 'scheduled_task_artifact';
   sessionId: string;
   artifactKey: string;
   messageId?: string;

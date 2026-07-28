@@ -22,6 +22,7 @@ import {
   stripDingTalkMentionContextForDisplay,
 } from '@/lib/dingtalk-mention-context';
 import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
+import { isVirtualTaskSessionKey } from '@/stores/chat/cron-session-utils';
 import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay, WORKFLOW_COMPLETE_TAG } from '@/lib/workflow-context';
 import { stripSclawBrowserEmbedContextForDisplay } from '@/lib/sclaw-browser-embed-context';
 import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
@@ -45,6 +46,7 @@ import {
 } from '@/lib/preview-url';
 import { normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
 import { sanitizeLocalFileRefsForCopy } from '../../../shared/dingtalk-share-text';
+import type { DataCenterArtifactProvenance } from '@/types/data-center';
 import type { WorkflowExecutionState } from '@/types/workflow';
 
 /** OpenClaw injects queued system events as `System: [timestamp] ...` lines before user text. */
@@ -52,6 +54,14 @@ const GATEWAY_SYSTEM_EVENT_LINE =
   /^\s*System:\s*(?:\[[^\]]+\]\s*)?[^\n]*(?:\n|$)/gim;
 
 const AT_MENTION_DISPLAY_NAME_PATTERN = /@([^\s@\n]+)/g;
+
+function resolveArtifactSourceType(sessionKey: string): DataCenterArtifactProvenance['sourceType'] {
+  return isVirtualTaskSessionKey(sessionKey) ? 'scheduled_task_artifact' : 'chat_artifact';
+}
+
+function resolveWorkflowArtifactSourceType(sessionKey: string): DataCenterArtifactProvenance['sourceType'] {
+  return isVirtualTaskSessionKey(sessionKey) ? 'scheduled_task_artifact' : 'workflow_artifact';
+}
 
 /**
  * Clean Gateway metadata from user message text for display.
@@ -1430,7 +1440,7 @@ export function usePreviewableFiles(
             fileSize: previewFile.fileSize,
             preview: previewFile.preview,
             artifactProvenance: sessionKey ? {
-              sourceType: 'workflow_artifact',
+              sourceType: resolveWorkflowArtifactSourceType(sessionKey),
               sessionId: sessionKey,
               artifactKey: artifact.id || previewFile.filePath,
               runId: state.runId,
@@ -1457,7 +1467,7 @@ export function usePreviewableFiles(
             fileSize: (file as { fileSize?: number }).fileSize ?? 0,
             preview: (file as { preview?: string | null }).preview ?? null,
             artifactProvenance: (file as AttachedFileMeta).artifactProvenance ?? (sessionKey ? {
-              sourceType: 'chat_artifact',
+              sourceType: resolveArtifactSourceType(sessionKey),
               sessionId: sessionKey,
               artifactKey: fp,
               messageId: typeof (msg as { id?: unknown }).id === 'string' ? (msg as { id: string }).id : undefined,
@@ -1479,7 +1489,7 @@ export function usePreviewableFiles(
             fileSize: 0,
             preview: null,
             artifactProvenance: sessionKey ? {
-              sourceType: 'chat_artifact',
+              sourceType: resolveArtifactSourceType(sessionKey),
               sessionId: sessionKey,
               artifactKey: ref.filePath,
               messageId: typeof (msg as { id?: unknown }).id === 'string' ? (msg as { id: string }).id : undefined,

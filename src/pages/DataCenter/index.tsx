@@ -426,7 +426,6 @@ export function DataCenter() {
                       className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground"
                     />
                   </div>
-                  <AssociationFilterDropdown value={associationFilter} onChange={setAssociationFilter} />
                 </div>
               </div>
 

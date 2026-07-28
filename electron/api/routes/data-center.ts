@@ -11,6 +11,8 @@ import { resolveWorkspaceFilePath } from '../../utils/artifact-path';
 import { logger } from '../../utils/logger';
 
 const MAX_DATA_CENTER_FILE_BYTES = 200 * 1024 * 1024;
+const ARTIFACT_SOURCE_TYPES = ['chat_artifact', 'workflow_artifact', 'scheduled_task_artifact'] as const;
+type ArtifactSourceType = typeof ARTIFACT_SOURCE_TYPES[number];
 
 const EXT_MIME_MAP: Record<string, string> = {
   '.png': 'image/png',
@@ -41,7 +43,7 @@ interface UploadDriveBody {
 }
 
 interface UploadArtifactBody extends UploadDriveBody {
-  sourceType?: 'chat_artifact' | 'workflow_artifact';
+  sourceType?: ArtifactSourceType;
   sessionId?: string;
   artifactKey?: string;
   messageId?: string;
@@ -60,6 +62,10 @@ function appendOptional(form: FormData, key: string, value: unknown): void {
   if (typeof value !== 'string') return;
   const trimmed = value.trim();
   if (trimmed) form.append(key, trimmed);
+}
+
+function isArtifactSourceType(value: unknown): value is ArtifactSourceType {
+  return typeof value === 'string' && ARTIFACT_SOURCE_TYPES.includes(value as ArtifactSourceType);
 }
 
 async function buildUploadForm(body: UploadDriveBody): Promise<{ form: FormData; fileName: string; size: number }> {
@@ -164,7 +170,7 @@ export async function handleDataCenterRoutes(
   if (url.pathname === '/api/data-center/artifacts/upload' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<UploadArtifactBody>(req);
-      if (body.sourceType !== 'chat_artifact' && body.sourceType !== 'workflow_artifact') {
+      if (!isArtifactSourceType(body.sourceType)) {
         throw Object.assign(new Error('Missing sourceType'), { statusCode: 400 });
       }
       if (!body.sessionId?.trim()) throw Object.assign(new Error('Missing sessionId'), { statusCode: 400 });

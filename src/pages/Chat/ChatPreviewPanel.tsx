@@ -27,6 +27,7 @@ import {
   buildArtifactShareDialogDraft,
   type DingTalkShareDialogDraft,
 } from '@/lib/dingtalk-share';
+import { isVirtualTaskSessionKey } from '@/stores/chat/cron-session-utils';
 import {
   stoPreviewActionButtonClass,
   stoPreviewActionRowClass,
@@ -80,10 +81,11 @@ export function ChatPreviewPanel({
   const saveableActiveFile = useMemo(() => {
     if (!activeFile?.filePath) return activeFile;
     if (activeFile.artifactProvenance) return activeFile;
+    const sourceType = isVirtualTaskSessionKey(currentSessionKey) ? 'scheduled_task_artifact' : 'chat_artifact';
     return {
       ...activeFile,
       artifactProvenance: {
-        sourceType: 'chat_artifact',
+        sourceType,
         sessionId: currentSessionKey,
         artifactKey: activeFile.filePath,
       },
