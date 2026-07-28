@@ -128,7 +128,7 @@
         },
         "sectionDescriptions": {
             "qaArtifact": "会話やワークフローの成果物プレビューから保存したファイルを管理し、追跡、ダウンロード、後続分析に利用できます。",
-            "drive": "拠点システムのデータ表、アップロードファイル、ナレッジベース素材をまとめて管理します。",
+            "drive": "許可済みのローカルファイルとオンラインデータ資産を管理し、AI とワークフローで参照できます。",
             "dataSource": "データソース管理はバックエンド API 公開後に接続します。"
         },
         "tabs": {
@@ -136,6 +136,7 @@
             "sharedArtifacts": "拠点共有成果物",
             "onlineFiles": "オンラインファイル",
             "localFiles": "ローカルファイル",
+            "uploadFiles": "アップロードファイル",
             "pendingAccess": "未接続"
         },
         "toolbar": {
@@ -145,7 +146,12 @@
             "listView": "リスト表示",
             "createFolder": "新規フォルダ",
             "uploadFile": "ファイルをアップロード",
+            "authorizeLocalFile": "ローカルファイルを許可",
             "usedQuota": "使用済み {{used}} / {{quota}}"
+        },
+        "drive": {
+            "authorizedCount": "{{count}} 件のファイルを許可済み",
+            "localSummary": "ローカルフォルダ {{folders}} 個、未分類ファイル {{files}} 個"
         },
         "feedback": {
             "loadFailed": "読み込みに失敗しました",
@@ -155,7 +161,7 @@
             "noMatch": "一致するファイルがありません",
             "empty": "まだファイルがありません",
             "qaEmptyDescription": "成果物プレビュー右上の「成果物を保存」をクリックすると、ここに表示されます。",
-            "driveEmptyDescription": "ファイルをアップロードするか、フォルダを作成して管理を開始してください。",
+            "driveEmptyDescription": "ローカルファイルを許可して管理を開始してください。",
             "dataSourceTitle": "データソース機能は未接続です",
             "dataSourceDescription": "現在のバックエンド API ドキュメントにはデータソース管理が含まれていないため、本フェーズではモックデータを使用しません。"
         },
@@ -187,6 +193,7 @@
             "artifactSaveFromPreview": "Q&A成果物は成果物プレビュー右上の「成果物を保存」から保存してください。",
             "uploadedOne": "アップロードしました",
             "uploadedMany": "{{count}} 件のファイルをアップロードしました",
+            "localAuthorized": "ローカルファイルを許可しました",
             "uploadFailed": "アップロードに失敗しました",
             "downloadFailed": "ダウンロードに失敗しました",
             "traceUnavailable": "ソース追跡は利用できません",
@@ -205,6 +212,7 @@
             "more": "その他",
             "traceChat": "会話を追跡",
             "rename": "名前を変更",
+            "removeAuthorization": "許可を解除",
             "delete": "削除"
         },
         "saveArtifact": {

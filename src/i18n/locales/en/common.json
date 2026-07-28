@@ -133,7 +133,7 @@
         },
         "sectionDescriptions": {
             "qaArtifact": "Manage files saved from conversation and workflow artifact previews for tracing, downloads, and later analysis.",
-            "drive": "Manage branch system data tables, uploaded files, and knowledge base materials in one place.",
+            "drive": "Manage authorized local files and online data assets for AI and workflow references.",
             "dataSource": "Data source management will be connected after the backend API is available."
         },
         "tabs": {
@@ -141,6 +141,7 @@
             "sharedArtifacts": "Branch shared artifacts",
             "onlineFiles": "Online files",
             "localFiles": "Local files",
+            "uploadFiles": "Uploaded files",
             "pendingAccess": "Pending"
         },
         "toolbar": {
@@ -150,7 +151,12 @@
             "listView": "List view",
             "createFolder": "New folder",
             "uploadFile": "Upload file",
+            "authorizeLocalFile": "Authorize local files",
             "usedQuota": "Used {{used}} / {{quota}}"
+        },
+        "drive": {
+            "authorizedCount": "{{count}} authorized files",
+            "localSummary": "{{folders}} local folders, {{files}} uncategorized files"
         },
         "feedback": {
             "loadFailed": "Failed to load",
@@ -160,7 +166,7 @@
             "noMatch": "No matching files",
             "empty": "No files yet",
             "qaEmptyDescription": "Files appear here after you click Save artifact in the upper-right corner of an artifact preview.",
-            "driveEmptyDescription": "Upload files or create a folder to start managing content.",
+            "driveEmptyDescription": "Authorize local files to start managing content.",
             "dataSourceTitle": "Data sources not connected yet",
             "dataSourceDescription": "The current backend API docs do not include data source management, so this phase does not use mock data."
         },
@@ -192,6 +198,7 @@
             "artifactSaveFromPreview": "Save Q&A artifacts from the upper-right corner of the artifact preview.",
             "uploadedOne": "Uploaded",
             "uploadedMany": "Uploaded {{count}} files",
+            "localAuthorized": "Local files authorized",
             "uploadFailed": "Upload failed",
             "downloadFailed": "Download failed",
             "traceUnavailable": "Source tracing is unavailable",
@@ -210,6 +217,7 @@
             "more": "More",
             "traceChat": "Trace conversation",
             "rename": "Rename",
+            "removeAuthorization": "Remove authorization",
             "delete": "Delete"
         },
         "saveArtifact": {

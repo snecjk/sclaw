@@ -134,7 +134,7 @@
         },
         "sectionDescriptions": {
             "qaArtifact": "管理个人对话产物与网点协作产物，供技能、工作流与 AI 分析引用",
-            "drive": "集中管理网点系统数据表、本地上传文件与知识库等内容",
+            "drive": "统一管理本地授权文件与在线数据资产，供 AI 与工作流关联引用。",
             "dataSource": "数据源管理能力待后端接口开放后接入"
         },
         "tabs": {
@@ -142,6 +142,7 @@
             "sharedArtifacts": "网点共享产物",
             "onlineFiles": "线上文件",
             "localFiles": "本地文件",
+            "uploadFiles": "上传文件",
             "pendingAccess": "待接入"
         },
         "toolbar": {
@@ -151,7 +152,12 @@
             "listView": "列表视图",
             "createFolder": "新建文件夹",
             "uploadFile": "上传文件",
+            "authorizeLocalFile": "授权本地文件",
             "usedQuota": "已用 {{used}} / {{quota}}"
+        },
+        "drive": {
+            "authorizedCount": "共授权 {{count}} 个文件",
+            "localSummary": "共{{folders}}个本地文件夹，{{files}}个未分类文件"
         },
         "feedback": {
             "loadFailed": "加载失败",
@@ -161,7 +167,7 @@
             "noMatch": "未找到匹配文件",
             "empty": "这里还没有文件",
             "qaEmptyDescription": "在产物预览右上角点击“保存产物”后，会出现在这里",
-            "driveEmptyDescription": "点击上传文件或新建文件夹开始管理",
+            "driveEmptyDescription": "点击授权本地文件开始管理",
             "dataSourceTitle": "数据源能力待接入",
             "dataSourceDescription": "当前后端接口文档尚未包含数据源管理，本期不做假数据。"
         },
@@ -193,6 +199,7 @@
             "artifactSaveFromPreview": "问答产物请从产物预览右上角点击“保存产物”",
             "uploadedOne": "上传成功",
             "uploadedMany": "已上传 {{count}} 个文件",
+            "localAuthorized": "本地文件已授权",
             "uploadFailed": "上传失败",
             "downloadFailed": "下载失败",
             "traceUnavailable": "来源暂不可追溯",
@@ -211,6 +218,7 @@
             "more": "更多",
             "traceChat": "追溯对话",
             "rename": "重命名",
+            "removeAuthorization": "移除授权",
             "delete": "删除"
         },
         "saveArtifact": {

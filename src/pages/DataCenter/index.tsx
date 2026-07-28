@@ -16,7 +16,7 @@ import {
   MoreHorizontal,
   Search,
   Share2,
-  Upload,
+  ShieldCheck,
   X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -41,14 +41,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { invokeIpc } from '@/lib/api-client';
 import {
   DATA_CENTER_API_NOT_FOUND,
-  createDataCenterIdempotencyKey,
   getDataCenterDownloadUrl,
   getDataCenterPreviewUrl,
   getDataCenterTrace,
-  uploadDriveFileFromPath,
 } from '@/lib/data-center-api';
 import {
   buildArtifactShareDialogDraft,
@@ -61,14 +58,22 @@ import {
 } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
 import { useDataCenterStore, type DataCenterSection } from '@/stores/data-center';
+import { useLocalAuthorizedFilesStore } from '@/stores/local-authorized-files';
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import type { DataCenterEntry, DataCenterTempUrl } from '@/types/data-center';
+import type { LocalAuthorizedFileEntry } from '@/types/local-authorized-file';
 
 const ROOT_ENTRY_ID = 'root';
 const FOLDER_NAME_MAX_LENGTH = 15;
 const SECTION_PARAM_VALUES: DataCenterSection[] = ['qa_artifact', 'drive'];
 const actionTooltipClass = 'border-none bg-[#1D2129] px-2.5 py-1.5 text-[12px] font-medium leading-4 text-white shadow-none';
+
+type DataCenterUiEntry = DataCenterEntry & {
+  localAuthorized?: boolean;
+  localPath?: string;
+  missing?: boolean;
+};
 
 function normalizeSectionParam(value: string | null): DataCenterSection {
   return SECTION_PARAM_VALUES.includes(value as DataCenterSection)
@@ -110,6 +115,28 @@ function getEntryIconSrc(entry: DataCenterEntry): string {
   if (['md', 'markdown'].includes(ext)) return mdIcon;
   if (['ppt', 'pptx'].includes(ext)) return pptIcon;
   return docIcon;
+}
+
+function localEntryToUiEntry(entry: LocalAuthorizedFileEntry): DataCenterUiEntry {
+  return {
+    entryId: entry.entryId,
+    spaceType: 'drive',
+    entryType: entry.entryType,
+    parentEntryId: entry.parentEntryId,
+    name: entry.name,
+    mimeType: entry.mimeType,
+    fileExt: entry.fileExt,
+    fileSize: entry.fileSize,
+    sourceType: 'local_upload',
+    traceStatus: 'none',
+    traceAvailable: false,
+    status: entry.missing ? 'missing' : 'active',
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+    localAuthorized: true,
+    localPath: entry.path,
+    missing: entry.missing,
+  };
 }
 
 function getEntryIcon(entry: DataCenterEntry, className = 'h-5 w-5'): ReactNode {
@@ -298,16 +325,30 @@ export function DataCenter() {
   const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
   const isSite = siteDepartmentTypes !== null && isSiteUser(authUser?.categoryCode);
   const store = useDataCenterStore();
+  const localStore = useLocalAuthorizedFilesStore();
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
-  const [renameEntry, setRenameEntry] = useState<DataCenterEntry | null>(null);
-  const [deleteEntry, setDeleteEntry] = useState<DataCenterEntry | null>(null);
-  const [previewState, setPreviewState] = useState<{ entry: DataCenterEntry; tempUrl: DataCenterTempUrl } | null>(null);
+  const [renameEntry, setRenameEntry] = useState<DataCenterUiEntry | null>(null);
+  const [deleteEntry, setDeleteEntry] = useState<DataCenterUiEntry | null>(null);
+  const [previewState, setPreviewState] = useState<{ entry: DataCenterUiEntry; tempUrl: DataCenterTempUrl } | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
   const [uploading, setUploading] = useState(false);
-  const errorDescription = store.error === DATA_CENTER_API_NOT_FOUND
+  const isDriveSection = store.section === 'drive';
+  const visibleItems: DataCenterUiEntry[] = isDriveSection
+    ? localStore.items.map(localEntryToUiEntry)
+    : store.items;
+  const currentViewMode = isDriveSection ? localStore.viewMode : store.viewMode;
+  const currentKeyword = isDriveSection ? localStore.keyword : store.keyword;
+  const currentLoading = isDriveSection ? localStore.loading : store.loading;
+  const currentError = isDriveSection ? localStore.error : store.error;
+  const currentParentEntryId = isDriveSection ? localStore.parentEntryId : store.parentEntryId;
+  const currentBreadcrumbs = isDriveSection ? localStore.breadcrumbs : store.breadcrumbs;
+  const folderCount = isDriveSection ? localStore.stats.folderCount : store.items.filter((item) => item.entryType === 'folder').length;
+  const fileCount = isDriveSection ? localStore.stats.uncategorizedFileCount : store.items.filter((item) => item.entryType === 'file').length;
+  const authorizedCount = isDriveSection ? localStore.stats.authorizedCount : store.total;
+  const errorDescription = currentError === DATA_CENTER_API_NOT_FOUND
     ? t('dataCenterPage.feedback.apiNotFound')
-    : store.error;
+    : currentError;
 
   useEffect(() => {
     const rawSection = searchParams.get('section');
@@ -324,38 +365,28 @@ export function DataCenter() {
 
   useEffect(() => {
     if (store.section === 'data_source') return;
+    if (store.section === 'drive') {
+      void localStore.load();
+      return;
+    }
     void store.load({ resetPage: true });
     void store.refreshQuota();
     // Zustand action refs are stable enough here; listing the whole store object
     // would reload after every state update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.section, store.spaceType, store.parentEntryId, store.keyword, store.sortField, store.sortOrder]);
+  }, [store.section, store.spaceType, store.parentEntryId, store.keyword, store.sortField, store.sortOrder, localStore.parentEntryId, localStore.keyword]);
 
   const handleUpload = async () => {
     if (store.section !== 'drive') {
       toast.info(t('dataCenterPage.toasts.artifactSaveFromPreview'));
       return;
     }
-    const result = await invokeIpc<{ canceled: boolean; filePaths?: string[] }>('dialog:open', {
-      properties: ['openFile', 'multiSelections'],
-    });
-    const filePaths = result.filePaths ?? [];
-    if (result.canceled || filePaths.length === 0) return;
-
     setUploading(true);
     try {
-      for (const filePath of filePaths) {
-        await uploadDriveFileFromPath({
-          filePath,
-          parentEntryId: store.parentEntryId,
-          idempotencyKey: createDataCenterIdempotencyKey('drive', filePath.split(/[\\/]/).pop()),
-        });
+      const authorized = await localStore.authorize();
+      if (authorized) {
+        toast.success(t('dataCenterPage.toasts.localAuthorized'));
       }
-      toast.success(filePaths.length > 1
-        ? t('dataCenterPage.toasts.uploadedMany', { count: filePaths.length })
-        : t('dataCenterPage.toasts.uploadedOne'));
-      await store.load();
-      await store.refreshQuota();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.uploadFailed'));
     } finally {
@@ -363,8 +394,22 @@ export function DataCenter() {
     }
   };
 
-  const handlePreview = async (entry: DataCenterEntry) => {
+  const handlePreview = async (entry: DataCenterUiEntry) => {
     if (entry.entryType !== 'file') return;
+    if (entry.localAuthorized) {
+      if (!entry.localPath) return;
+      setPreviewState({
+        entry,
+        tempUrl: {
+          entryId: entry.entryId,
+          fileName: entry.name,
+          mimeType: entry.mimeType,
+          tempUrl: entry.localPath,
+          expiresAt: '',
+        },
+      });
+      return;
+    }
     try {
       const tempUrl = await getDataCenterPreviewUrl(entry.entryId);
       setPreviewState({ entry, tempUrl });
@@ -373,8 +418,14 @@ export function DataCenter() {
     }
   };
 
-  const handleDownload = async (entry: DataCenterEntry) => {
+  const handleDownload = async (entry: DataCenterUiEntry) => {
     if (entry.entryType !== 'file') return;
+    if (entry.localAuthorized) {
+      if (entry.localPath) {
+        await window.electron.openExternal(entry.localPath);
+      }
+      return;
+    }
     try {
       const tempUrl = await getDataCenterDownloadUrl(entry.entryId);
       window.electron.openExternal(tempUrl.tempUrl);
@@ -383,17 +434,19 @@ export function DataCenter() {
     }
   };
 
-  const handleShare = async (entry: DataCenterEntry) => {
+  const handleShare = async (entry: DataCenterUiEntry) => {
     if (entry.entryType !== 'file') {
       toast.info(t('dataCenterPage.toasts.folderShareUnsupported'));
       return;
     }
     try {
-      const tempUrl = await getDataCenterDownloadUrl(entry.entryId);
+      const filePath = entry.localAuthorized && entry.localPath
+        ? entry.localPath
+        : (await getDataCenterDownloadUrl(entry.entryId)).tempUrl;
       setShareDraft(buildArtifactShareDialogDraft({
         fileName: entry.name,
-        filePath: tempUrl.tempUrl,
-        mimeType: tempUrl.mimeType || entry.mimeType || 'application/octet-stream',
+        filePath,
+        mimeType: entry.mimeType || 'application/octet-stream',
         fileSize: entry.fileSize,
       }, (key) => t(`chat:${key}`)));
       setShareDialogOpen(true);
@@ -402,7 +455,11 @@ export function DataCenter() {
     }
   };
 
-  const handleTrace = async (entry: DataCenterEntry) => {
+  const handleTrace = async (entry: DataCenterUiEntry) => {
+    if (entry.localAuthorized) {
+      toast.info(t('dataCenterPage.toasts.traceUnavailable'));
+      return;
+    }
     try {
       const trace = await getDataCenterTrace(entry.entryId);
       if (!trace.traceAvailable || !trace.sessionId) {
@@ -414,6 +471,43 @@ export function DataCenter() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.traceFailed'));
     }
+  };
+
+  const handleRenameEntry = async (entryId: string, name: string) => {
+    if (isDriveSection) {
+      return;
+    }
+    await store.renameEntry(entryId, name);
+  };
+
+  const handleDeleteEntry = async (entryId: string) => {
+    if (isDriveSection) {
+      await localStore.deleteEntry(entryId);
+      return;
+    }
+    await store.deleteEntry(entryId);
+    await store.refreshQuota();
+  };
+
+  const handleOpenFolder = (entry: DataCenterUiEntry) => {
+    if (isDriveSection) {
+      void localStore.enterFolder({
+        entryId: entry.entryId,
+        entryType: entry.entryType,
+        parentEntryId: entry.parentEntryId,
+        name: entry.name,
+        path: entry.localPath ?? '',
+        mimeType: entry.mimeType,
+        fileExt: entry.fileExt,
+        fileSize: entry.fileSize,
+        createdAt: entry.createdAt,
+        updatedAt: entry.updatedAt,
+        authorizedAt: entry.createdAt ?? entry.updatedAt ?? new Date().toISOString(),
+        missing: entry.missing,
+      });
+      return;
+    }
+    void store.enterFolder(entry);
   };
 
   return (
@@ -433,85 +527,127 @@ export function DataCenter() {
             </p>
           </header>
 
-          <div className={cn(workflowListToolbarClass, 'mb-[26px] shrink-0')}>
-            <div className="flex h-9 items-center gap-6">
-              {store.section === 'qa_artifact' ? (
-                <>
-                  <TabButton active>{t('dataCenterPage.tabs.myArtifacts')}</TabButton>
-                  {isSite ? <TabButton disabled>{t('dataCenterPage.tabs.sharedArtifacts')}</TabButton> : null}
-                </>
-              ) : store.section === 'drive' ? (
-                <>
-                  <TabButton active>{t('dataCenterPage.tabs.onlineFiles')}</TabButton>
-                  <TabButton disabled>{t('dataCenterPage.tabs.localFiles')}</TabButton>
-                </>
-              ) : (
-                <TabButton disabled>{t('dataCenterPage.tabs.pendingAccess')}</TabButton>
-              )}
-            </div>
-
-            {store.section !== 'data_source' ? (
-              <div className="flex min-w-0 items-center gap-2">
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A8B0BD]" />
-                  <input
-                    value={store.keyword}
-                    onChange={(event) => store.setKeyword(event.target.value)}
-                    placeholder={t('dataCenterPage.toolbar.searchPlaceholder')}
-                    className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground"
-                  />
+          {store.section === 'drive' ? (
+            <div className="mb-[26px] shrink-0">
+              <div className="flex min-w-0 items-center justify-between gap-4">
+                <div className="flex h-9 items-center gap-8">
+                  <TabButton active>{t('dataCenterPage.tabs.localFiles')}</TabButton>
+                  <TabButton disabled>{t('dataCenterPage.tabs.uploadFiles')}</TabButton>
                 </div>
-                <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-[#E5E6EB] bg-white px-3 text-[13px] font-normal text-[#4E5969] shadow-none dark:border-border dark:bg-background dark:text-muted-foreground" disabled>
-                  {t('dataCenterPage.toolbar.workflowFilterAll')}
-                  <ChevronDown className="ml-1 h-3.5 w-3.5" />
-                </Button>
-                <div className="flex h-[34px] items-center rounded-[10px] bg-[#F2F3F5] p-1 dark:bg-muted">
-                  <IconToggle active={store.viewMode === 'grid'} label={t('dataCenterPage.toolbar.gridView')} onClick={() => store.setViewMode('grid')}>
-                    <Grid2X2 className="h-4 w-4" />
-                  </IconToggle>
-                  <IconToggle active={store.viewMode === 'list'} label={t('dataCenterPage.toolbar.listView')} onClick={() => store.setViewMode('list')}>
-                    <List className="h-4 w-4" />
-                  </IconToggle>
-                </div>
-                <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={() => setCreateFolderOpen(true)}>
-                  <FolderPlus className="mr-2 h-4 w-4" />
-                  {t('dataCenterPage.toolbar.createFolder')}
-                </Button>
-                {store.section === 'drive' ? (
-                  <Button type="button" className="h-[34px]" onClick={handleUpload} disabled={uploading}>
-                    {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                    {t('dataCenterPage.toolbar.uploadFile')}
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A8B0BD]" />
+                    <input
+                      value={currentKeyword}
+                      onChange={(event) => localStore.setKeyword(event.target.value)}
+                      placeholder={t('dataCenterPage.toolbar.searchPlaceholder')}
+                      className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground"
+                    />
+                  </div>
+                  <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-[#E5E6EB] bg-white px-3 text-[13px] font-normal text-[#4E5969] shadow-none dark:border-border dark:bg-background dark:text-muted-foreground" disabled>
+                    {t('dataCenterPage.toolbar.workflowFilterAll')}
+                    <ChevronDown className="ml-1 h-3.5 w-3.5" />
                   </Button>
-                ) : null}
+                </div>
               </div>
-            ) : null}
-          </div>
+
+              <div className="mt-4 flex min-w-0 items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[14px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">
+                    {t('dataCenterPage.drive.authorizedCount', { count: authorizedCount })}
+                  </p>
+                  <p className="mt-1 text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">
+                    {t('dataCenterPage.drive.localSummary', { folders: folderCount, files: fileCount })}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex h-[34px] items-center rounded-[10px] bg-[#F2F3F5] p-1 dark:bg-muted">
+                    <IconToggle active={currentViewMode === 'grid'} label={t('dataCenterPage.toolbar.gridView')} onClick={() => localStore.setViewMode('grid')}>
+                      <Grid2X2 className="h-4 w-4" />
+                    </IconToggle>
+                    <IconToggle active={currentViewMode === 'list'} label={t('dataCenterPage.toolbar.listView')} onClick={() => localStore.setViewMode('list')}>
+                      <List className="h-4 w-4" />
+                    </IconToggle>
+                  </div>
+                  <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={handleUpload} disabled={uploading}>
+                    {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                    {t('dataCenterPage.toolbar.authorizeLocalFile')}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className={cn(workflowListToolbarClass, 'mb-[26px] shrink-0')}>
+              <div className="flex h-9 items-center gap-6">
+                {store.section === 'qa_artifact' ? (
+                  <>
+                    <TabButton active>{t('dataCenterPage.tabs.myArtifacts')}</TabButton>
+                    {isSite ? <TabButton disabled>{t('dataCenterPage.tabs.sharedArtifacts')}</TabButton> : null}
+                  </>
+                ) : (
+                  <TabButton disabled>{t('dataCenterPage.tabs.pendingAccess')}</TabButton>
+                )}
+              </div>
+
+              {store.section !== 'data_source' ? (
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A8B0BD]" />
+                    <input
+                      value={store.keyword}
+                      onChange={(event) => store.setKeyword(event.target.value)}
+                      placeholder={t('dataCenterPage.toolbar.searchPlaceholder')}
+                      className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground"
+                    />
+                  </div>
+                  <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-[#E5E6EB] bg-white px-3 text-[13px] font-normal text-[#4E5969] shadow-none dark:border-border dark:bg-background dark:text-muted-foreground" disabled>
+                    {t('dataCenterPage.toolbar.workflowFilterAll')}
+                    <ChevronDown className="ml-1 h-3.5 w-3.5" />
+                  </Button>
+                  <div className="flex h-[34px] items-center rounded-[10px] bg-[#F2F3F5] p-1 dark:bg-muted">
+                    <IconToggle active={store.viewMode === 'grid'} label={t('dataCenterPage.toolbar.gridView')} onClick={() => store.setViewMode('grid')}>
+                      <Grid2X2 className="h-4 w-4" />
+                    </IconToggle>
+                    <IconToggle active={store.viewMode === 'list'} label={t('dataCenterPage.toolbar.listView')} onClick={() => store.setViewMode('list')}>
+                      <List className="h-4 w-4" />
+                    </IconToggle>
+                  </div>
+                  <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={() => setCreateFolderOpen(true)}>
+                    <FolderPlus className="mr-2 h-4 w-4" />
+                    {t('dataCenterPage.toolbar.createFolder')}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          )}
 
         {store.section !== 'data_source' ? (
           <>
-            {store.parentEntryId !== ROOT_ENTRY_ID ? (
+            {currentParentEntryId !== ROOT_ENTRY_ID ? (
               <FolderBreadcrumbBar
-                breadcrumbs={store.breadcrumbs}
-                onBack={() => store.openBreadcrumb(getParentBreadcrumbId(store.breadcrumbs))}
-                onOpen={store.openBreadcrumb}
+                breadcrumbs={currentBreadcrumbs}
+                onBack={() => isDriveSection
+                  ? localStore.openBreadcrumb(getParentBreadcrumbId(currentBreadcrumbs))
+                  : store.openBreadcrumb(getParentBreadcrumbId(currentBreadcrumbs))}
+                onOpen={(entryId) => isDriveSection ? localStore.openBreadcrumb(entryId) : store.openBreadcrumb(entryId)}
               />
             ) : null}
 
             <section className="mt-4 min-h-0 flex-1 overflow-hidden">
-              {store.error ? (
+              {currentError ? (
                 <FeedbackState icon={<AlertCircle className="h-8 w-8" />} title={t('dataCenterPage.feedback.loadFailed')} description={errorDescription ?? ''} />
-              ) : store.loading ? (
+              ) : currentLoading ? (
                 <FeedbackState icon={<Loader2 className="h-8 w-8 animate-spin" />} title={t('dataCenterPage.feedback.loadingTitle')} description={t('dataCenterPage.feedback.loadingDescription')} />
-              ) : store.items.length === 0 ? (
+              ) : visibleItems.length === 0 ? (
                 <FeedbackState
                   icon={<Folder className="h-8 w-8" />}
-                  title={store.keyword ? t('dataCenterPage.feedback.noMatch') : t('dataCenterPage.feedback.empty')}
+                  title={currentKeyword ? t('dataCenterPage.feedback.noMatch') : t('dataCenterPage.feedback.empty')}
                   description={store.section === 'qa_artifact' ? t('dataCenterPage.feedback.qaEmptyDescription') : t('dataCenterPage.feedback.driveEmptyDescription')}
                 />
-              ) : store.viewMode === 'grid' ? (
+              ) : currentViewMode === 'grid' ? (
                 <EntryGrid
-                  items={store.items}
-                  onOpenFolder={store.enterFolder}
+                  items={visibleItems}
+                  onOpenFolder={handleOpenFolder}
                   onPreview={handlePreview}
                   onDownload={handleDownload}
                   onShare={handleShare}
@@ -521,8 +657,8 @@ export function DataCenter() {
                 />
               ) : (
                 <EntryList
-                  items={store.items}
-                  onOpenFolder={store.enterFolder}
+                  items={visibleItems}
+                  onOpenFolder={handleOpenFolder}
                   onPreview={handlePreview}
                   onDownload={handleDownload}
                   onShare={handleShare}
@@ -561,7 +697,7 @@ export function DataCenter() {
           initialValue={getRenameInputValue(renameEntry)}
           onCancel={() => setRenameEntry(null)}
           onConfirm={async (name) => {
-            await store.renameEntry(renameEntry.entryId, buildRenamedEntryName(renameEntry, name));
+            await handleRenameEntry(renameEntry.entryId, buildRenamedEntryName(renameEntry, name));
             setRenameEntry(null);
             toast.success(t('dataCenterPage.toasts.renamed'));
           }}
@@ -580,7 +716,7 @@ export function DataCenter() {
                 variant="destructive"
                 onClick={async () => {
                   try {
-                    await store.deleteEntry(deleteEntry.entryId);
+                    await handleDeleteEntry(deleteEntry.entryId);
                     setDeleteEntry(null);
                     toast.success(t('dataCenterPage.toasts.deleted'));
                   } catch (error) {
@@ -735,7 +871,7 @@ function EntryList(props: EntryRenderProps) {
 }
 
 type GridContextMenuState = {
-  entry: DataCenterEntry;
+  entry: DataCenterUiEntry;
   x: number;
   y: number;
 } | null;
@@ -759,7 +895,7 @@ function EntryGrid(props: EntryRenderProps) {
     };
   }, [contextMenu]);
 
-  const openContextMenu = (event: ReactMouseEvent, entry: DataCenterEntry) => {
+  const openContextMenu = (event: ReactMouseEvent, entry: DataCenterUiEntry) => {
     event.preventDefault();
     event.stopPropagation();
     const menuWidth = 132;
@@ -771,7 +907,7 @@ function EntryGrid(props: EntryRenderProps) {
     });
   };
 
-  const runContextAction = (action: (entry: DataCenterEntry) => void, entry: DataCenterEntry) => {
+  const runContextAction = (action: (entry: DataCenterUiEntry) => void, entry: DataCenterUiEntry) => {
     setContextMenu(null);
     action(entry);
   };
@@ -824,15 +960,15 @@ function GridEntryContextMenu({
   onDelete,
   onTrace,
 }: {
-  entry: DataCenterEntry;
+  entry: DataCenterUiEntry;
   x: number;
   y: number;
-  onDownload: (entry: DataCenterEntry) => void;
-  onPreview: (entry: DataCenterEntry) => void;
-  onShare: (entry: DataCenterEntry) => void;
-  onRename: (entry: DataCenterEntry) => void;
-  onDelete: (entry: DataCenterEntry) => void;
-  onTrace: (entry: DataCenterEntry) => void;
+  onDownload: (entry: DataCenterUiEntry) => void;
+  onPreview: (entry: DataCenterUiEntry) => void;
+  onShare: (entry: DataCenterUiEntry) => void;
+  onRename: (entry: DataCenterUiEntry) => void;
+  onDelete: (entry: DataCenterUiEntry) => void;
+  onTrace: (entry: DataCenterUiEntry) => void;
 }) {
   const { t } = useTranslation('common');
   return (
@@ -861,12 +997,16 @@ function GridEntryContextMenu({
           {t('dataCenterPage.menu.traceChat')}
         </ContextMenuButton>
       ) : null}
-      <ContextMenuButton onClick={() => onRename(entry)}>
-        {t('dataCenterPage.menu.rename')}
-      </ContextMenuButton>
-      <ContextMenuButton onClick={() => onDelete(entry)}>
-        {t('dataCenterPage.menu.delete')}
-      </ContextMenuButton>
+      {!entry.localAuthorized ? (
+        <ContextMenuButton onClick={() => onRename(entry)}>
+          {t('dataCenterPage.menu.rename')}
+        </ContextMenuButton>
+      ) : null}
+      {!entry.localAuthorized || entry.parentEntryId === ROOT_ENTRY_ID ? (
+        <ContextMenuButton onClick={() => onDelete(entry)}>
+          {entry.localAuthorized ? t('dataCenterPage.menu.removeAuthorization') : t('dataCenterPage.menu.delete')}
+        </ContextMenuButton>
+      ) : null}
     </div>
   );
 }
@@ -885,14 +1025,14 @@ function ContextMenuButton({ children, onClick }: { children: ReactNode; onClick
 }
 
 interface EntryRenderProps {
-  items: DataCenterEntry[];
-  onOpenFolder: (entry: DataCenterEntry) => void;
-  onPreview: (entry: DataCenterEntry) => void;
-  onDownload: (entry: DataCenterEntry) => void;
-  onShare: (entry: DataCenterEntry) => void;
-  onRename: (entry: DataCenterEntry) => void;
-  onDelete: (entry: DataCenterEntry) => void;
-  onTrace: (entry: DataCenterEntry) => void;
+  items: DataCenterUiEntry[];
+  onOpenFolder: (entry: DataCenterUiEntry) => void;
+  onPreview: (entry: DataCenterUiEntry) => void;
+  onDownload: (entry: DataCenterUiEntry) => void;
+  onShare: (entry: DataCenterUiEntry) => void;
+  onRename: (entry: DataCenterUiEntry) => void;
+  onDelete: (entry: DataCenterUiEntry) => void;
+  onTrace: (entry: DataCenterUiEntry) => void;
 }
 
 function EntryName({
@@ -900,9 +1040,9 @@ function EntryName({
   onOpenFolder,
   onPreview,
 }: {
-  entry: DataCenterEntry;
-  onOpenFolder: (entry: DataCenterEntry) => void;
-  onPreview: (entry: DataCenterEntry) => void;
+  entry: DataCenterUiEntry;
+  onOpenFolder: (entry: DataCenterUiEntry) => void;
+  onPreview: (entry: DataCenterUiEntry) => void;
 }) {
   const { t } = useTranslation('common');
   const content = (
@@ -945,7 +1085,7 @@ function EntryActions({
   onDelete,
   onTrace,
   uploadToSharedLabel,
-}: EntryRenderProps & { entry: DataCenterEntry; uploadToSharedLabel?: string }) {
+}: EntryRenderProps & { entry: DataCenterUiEntry; uploadToSharedLabel?: string }) {
   const { t } = useTranslation('common');
   return (
     <div className="flex w-[128px] shrink-0 items-center justify-end gap-1 text-[#6B778C]">
@@ -1004,12 +1144,16 @@ function EntryActions({
               {t('dataCenterPage.menu.traceChat')}
             </DropdownMenuItem>
           ) : null}
-          <DropdownMenuItem onSelect={() => onRename(entry)} className="text-[13px]">
-            {t('dataCenterPage.menu.rename')}
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => onDelete(entry)} className="text-[13px]">
-            {t('dataCenterPage.menu.delete')}
-          </DropdownMenuItem>
+          {!entry.localAuthorized ? (
+            <DropdownMenuItem onSelect={() => onRename(entry)} className="text-[13px]">
+              {t('dataCenterPage.menu.rename')}
+            </DropdownMenuItem>
+          ) : null}
+          {!entry.localAuthorized || entry.parentEntryId === ROOT_ENTRY_ID ? (
+            <DropdownMenuItem onSelect={() => onDelete(entry)} className="text-[13px]">
+              {entry.localAuthorized ? t('dataCenterPage.menu.removeAuthorization') : t('dataCenterPage.menu.delete')}
+            </DropdownMenuItem>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

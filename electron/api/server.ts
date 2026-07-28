@@ -54,6 +54,7 @@ import { handleAiMemoryAgentV1Routes } from './routes/ai-memory-agent-v1';
 import { handleSclawBrowserRoutes } from './routes/sclaw-browser';
 import { handleBrowserBridgeRoutes } from './routes/browser-bridge';
 import { handleDataCenterRoutes } from './routes/data-center';
+import { handleLocalAuthorizedFileRoutes } from './routes/local-authorized-files';
 
 import { sendJson } from './route-utils';
 
@@ -92,6 +93,7 @@ const routeHandlers: RouteHandler[] = [
   handleDictionaryRoutes,
   handleWorkflowRoutes,
   handleDataCenterRoutes,
+  handleLocalAuthorizedFileRoutes,
   handleSclawBrowserRoutes,
   handleBrowserBridgeRoutes,
   handleClaudeScheduledTaskRoutes,
