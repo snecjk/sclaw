@@ -193,6 +193,9 @@ export function MoreAppsPage() {
           appId: app.id,
           sourceUrl: app.url,
           systemCode,
+          iconUrl: app.iconUrl,
+          iconKey: app.iconKey,
+          tone: app.tone,
         });
         return;
       } catch (error) {
@@ -210,6 +213,9 @@ export function MoreAppsPage() {
         appId: app.id,
         sourceUrl: app.url,
         systemCode,
+        iconUrl: app.iconUrl,
+        iconKey: app.iconKey,
+        tone: app.tone,
       });
     }
   }, [installApp, isAppInstalled]);

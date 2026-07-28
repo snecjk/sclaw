@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { resolveChatThinkingIcon } from '@/lib/chat-process-icons';
@@ -159,7 +159,7 @@ function ThinkingBlockBody({
         chatProcessBlockBodyClass,
       )}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={chatRemarkPlugins}>{content}</ReactMarkdown>
     </div>
   );
 }

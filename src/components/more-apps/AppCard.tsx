@@ -95,7 +95,14 @@ function AppCardImpl({
     >
       {/* Top row: icon + title + actions */}
       <div className="more-apps-card__top">
-        <AppIcon iconKey={app.iconKey} iconUrl={app.iconUrl} tone={app.tone} size="md" />
+        <AppIcon
+          iconKey={app.iconKey}
+          iconUrl={app.iconUrl}
+          name={app.name}
+          letterFallback={Boolean(isExternal)}
+          tone={app.tone}
+          size="md"
+        />
         <div className="more-apps-card__head">
           <h3 className="more-apps-card__title">{app.name}</h3>
           {isMineTab && isExternal && (

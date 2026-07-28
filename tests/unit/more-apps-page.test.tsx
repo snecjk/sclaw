@@ -146,6 +146,11 @@ describe('MoreAppsPage server catalog', () => {
       url: 'https://example.com/org',
       title: '客户关系',
       appId: 'org-relation',
+      sourceUrl: 'https://example.com/org',
+      systemCode: undefined,
+      iconKey: 'org-relation',
+      iconUrl: 'https://cdn.example.com/org-relation.png',
+      tone: 'blue',
     });
 
     openInSclawBrowserMock.mockClear();
@@ -192,6 +197,11 @@ describe('MoreAppsPage server catalog', () => {
       url: 'https://example.com/org',
       title: '客户关系',
       appId: 'org-relation',
+      sourceUrl: 'https://example.com/org',
+      systemCode: undefined,
+      iconKey: 'org-relation',
+      iconUrl: 'https://cdn.example.com/org-relation.png',
+      tone: 'blue',
     });
   });
 
