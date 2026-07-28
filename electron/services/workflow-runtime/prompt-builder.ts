@@ -3,9 +3,14 @@ import { WORKFLOW_PACKET_VERSION } from './workflow-packet';
 import { WORKFLOW_PACKET_ARTIFACTS_KEY, type UpstreamWorkflowArtifact } from './input-resolver';
 
 /** Builds the client-owned prompt. Cloud compiled prompts are deliberately ignored. */
-export function buildWorkflowNodePrompt(spec: AgentRunSpec, node: any, ctx: RunCtx): string {
+export function buildWorkflowNodePrompt(
+  spec: AgentRunSpec,
+  node: any,
+  ctx: RunCtx,
+  options: { execEngine?: 'claude' | 'openclaw'; attempt?: number } = {},
+): string {
   if (node?.type === 'agent_data_fetch') {
-    return buildDataFetchPrompt(spec, node, ctx);
+    return buildDataFetchPrompt(spec, node, ctx, options);
   }
 
   // spec is the normalized runtime contract.  It may deliberately tighten a
@@ -24,22 +29,7 @@ export function buildWorkflowNodePrompt(spec: AgentRunSpec, node: any, ctx: RunC
     producer: { runId: ctx.runId, nodeId: 'runtime-input', nodeType: 'input', attempt: 0 },
     payload: inputPayload, artifacts: inputArtifacts, control: { selectedPort: null }, diagnostics: { warnings: [], errors: [] },
   };
-  const resultTemplate = {
-    protocolVersion: WORKFLOW_PACKET_VERSION,
-    status: 'succeeded',
-    producer: { runId: ctx.runId, nodeId: node?.id, nodeType: node?.type, attempt: '<当前尝试次数>' },
-    payload: '<必须符合 payloadSchema>', artifacts: [],
-    control: { selectedPort: node?.type === 'agent_condition' ? '<必须从允许端口选择>' : null },
-    diagnostics: { warnings: [], errors: [] },
-  };
-  const failureTemplate = {
-    protocolVersion: WORKFLOW_PACKET_VERSION,
-    status: 'failed',
-    producer: { runId: ctx.runId, nodeId: node?.id, nodeType: node?.type, attempt: '<当前尝试次数>' },
-    payload: { reason: '<可选：简短业务上下文，不能伪装成成功结果>' }, artifacts: [],
-    control: { selectedPort: null },
-    diagnostics: { warnings: [], errors: [{ code: '<稳定错误码>', category: '<错误分类>', message: '<面向用户的明确失败原因>', retryable: false, attemptsUsed: '<当前尝试次数>' }] },
-  };
+  const resultTemplates = workflowPacketTemplates(node, ctx, options.attempt);
   const taskGoal = spec.task?.goal ?? node?.config?.goal ?? node?.config?.instruction ?? '';
   const instruction = spec.task?.instruction ?? '';
   const nodeWorkspace = typeof spec.runtimeContext?.workspacePath === 'string'
@@ -67,10 +57,10 @@ export function buildWorkflowNodePrompt(spec: AgentRunSpec, node: any, ctx: RunC
         ? '最终 HTML 由客户端转换为 OUTPUT 产物；除此之外，任何要交给下游且 UTF-8 编码超过 1024 字节的文本，都必须写入当前节点工作区的 processFiles/ 文件，并以 INTERMEDIATE artifact 引用传递。'
         : largeTextArtifactRule(),
       failureOutputRule(),
-      'SDK 已启用 JSON Schema 结构化输出。最终回答必须直接产生该结构化结果；不要写 node-result.json，不要输出 Markdown、代码块或额外文本。',
+      outputProtocolInstruction(options.execEngine),
       'artifacts 不得包含 checksum。',
     ].join('\n\n')),
-    promptSection('结果模板', `成功时使用成功包；任务无法完成时使用失败包。替换 payload、artifacts、selectedPort 与 attempt，禁止新增或删减根字段。\n\n成功包：\n\`\`\`json\n${JSON.stringify(resultTemplate, null, 2)}\n\`\`\`\n\n失败包：\n\`\`\`json\n${JSON.stringify(failureTemplate, null, 2)}\n\`\`\``),
+    workflowPacketTemplateSection(resultTemplates),
   ].filter(Boolean).join('\n\n');
 }
 
@@ -79,7 +69,12 @@ export function buildWorkflowNodePrompt(spec: AgentRunSpec, node: any, ctx: RunC
  * download/audit metadata. Keep that private metadata in wf_node_run while
  * exposing one small, protocol-shaped artifact manifest to the model.
  */
-function buildDataFetchPrompt(spec: AgentRunSpec, node: any, ctx: RunCtx): string {
+function buildDataFetchPrompt(
+  spec: AgentRunSpec,
+  node: any,
+  ctx: RunCtx,
+  options: { execEngine?: 'claude' | 'openclaw'; attempt?: number },
+): string {
   const schema = spec.completionContract?.dataJsonSchema
     ?? node?.config?.outputContract?.schema
     ?? spec.completionContract?.outputJsonSchema
@@ -100,8 +95,9 @@ function buildDataFetchPrompt(spec: AgentRunSpec, node: any, ctx: RunCtx): strin
       '输入文件只能通过 artifacts[].resourceId 读取；它是当前节点工作目录下的相对路径。不得使用、输出或臆造绝对路径、file:// 路径、OSS 地址或临时下载链接。',
       largeTextArtifactRule(),
       failureOutputRule(),
-      'SDK 已强制结果 schema。最终只返回符合 WorkflowPacket 的 JSON，不要 Markdown、代码块、解释性文字或 node-result.json。',
+      outputProtocolInstruction(options.execEngine),
     ].join('\n\n')),
+    workflowPacketTemplateSection(workflowPacketTemplates(node, ctx, options.attempt)),
   ].filter(Boolean).join('\n\n');
 }
 
@@ -115,6 +111,39 @@ function largeTextArtifactRule(): string {
 
 function failureOutputRule(): string {
   return '失败输出规则：如果当前任务明确无法完成，必须返回 status="failed" 的完整 WorkflowPacket，失败原因必须写入 diagnostics.errors[0].message。不得把 result="failed"、reason 或错误文字仅放在 payload 后仍返回 status="succeeded"。技能不存在、权限不足、必需参数/数据不可用且无法继续属于确定性失败，retryable 必须为 false；仅网络抖动、上游服务暂不可用等瞬态问题才可设为 true。失败包的 selectedPort 必须为 null，失败不会传给下游节点。';
+}
+
+function outputProtocolInstruction(execEngine?: 'claude' | 'openclaw'): string {
+  if (execEngine === 'openclaw') {
+    return '当前使用 OpenClaw 文本输出通道，没有 StructuredOutput 工具。最终文本的唯一结果必须是完整 WorkflowPacket 顶层 JSON；不要只输出 payload、不要用包装对象嵌套 WorkflowPacket、不要提及、调用或等待 StructuredOutput。可以使用 JSON 代码块，但不要输出解释性文字、node-result.json 或其他内容。payload 必须是符合动态 schema 的 JSON 对象值，禁止 JSON.stringify 或把 JSON 对象放进字符串。';
+  }
+  return 'SDK 已启用 JSON Schema 结构化输出。必须调用 StructuredOutput 工具完成当前节点；该工具的唯一顶层输入必须是完整 WorkflowPacket，只有该工具调用的结果会被工作流接收。payload 必须是符合动态 schema 的 JSON 对象值。禁止只提交 payload、禁止把完整 WorkflowPacket 嵌入 payload、禁止 JSON.stringify，也禁止把 JSON 对象放进字符串或 Markdown 代码块。不要写 node-result.json，也不要输出 Markdown、代码块或额外文本。';
+}
+
+function workflowPacketTemplates(node: any, ctx: RunCtx, attempt?: number): { succeeded: Record<string, unknown>; failed: Record<string, unknown> } {
+  const currentAttempt = Math.max(1, Math.floor(attempt ?? 1));
+  return {
+    succeeded: {
+      protocolVersion: WORKFLOW_PACKET_VERSION,
+      status: 'succeeded',
+      producer: { runId: ctx.runId, nodeId: node?.id, nodeType: node?.type, attempt: currentAttempt },
+      payload: {}, artifacts: [],
+      control: { selectedPort: node?.type === 'agent_condition' ? '<必须从允许端口选择>' : null },
+      diagnostics: { warnings: [], errors: [] },
+    },
+    failed: {
+      protocolVersion: WORKFLOW_PACKET_VERSION,
+      status: 'failed',
+      producer: { runId: ctx.runId, nodeId: node?.id, nodeType: node?.type, attempt: currentAttempt },
+      payload: { reason: '<可选：简短业务上下文，不能伪装成成功结果>' }, artifacts: [],
+      control: { selectedPort: null },
+      diagnostics: { warnings: [], errors: [{ code: '<稳定错误码>', category: '<错误分类>', message: '<面向用户的明确失败原因>', retryable: false, attemptsUsed: currentAttempt }] },
+    },
+  };
+}
+
+function workflowPacketTemplateSection(templates: { succeeded: Record<string, unknown>; failed: Record<string, unknown> }): string {
+  return promptSection('结果模板', `成功时使用成功包；任务无法完成时使用失败包。替换 payload、artifacts、selectedPort 与 attempt，禁止新增或删减根字段。成功包中 payload 的 {} 仅表示对象位置，必须替换为符合 payloadSchema 的实际 JSON 对象，不能替换为字符串。\n\n成功包：\n\`\`\`json\n${JSON.stringify(templates.succeeded, null, 2)}\n\`\`\`\n\n失败包：\n\`\`\`json\n${JSON.stringify(templates.failed, null, 2)}\n\`\`\``);
 }
 
 function createDataFetchInputPacket(ctx: RunCtx): Record<string, unknown> {

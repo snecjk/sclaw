@@ -121,6 +121,27 @@ export function packetPayload(value: unknown): unknown {
   return isWorkflowPacket(value) ? value.payload : value;
 }
 
+/**
+ * Repairs the only compatibility issue accepted at the SDK boundary: some
+ * models submit an otherwise valid successful payload as a JSON string. The
+ * workflow contract remains object-first because the repaired value is still
+ * validated against the node's business schema before it can cross a node
+ * boundary. Text, arrays and failed packets are intentionally left untouched.
+ */
+export function normalizeStructuredOutputPacket(value: unknown): { packet: unknown; normalized: boolean } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { packet: value, normalized: false };
+  const packet = value as Record<string, unknown>;
+  if (packet.status !== 'succeeded' || typeof packet.payload !== 'string') return { packet: value, normalized: false };
+
+  try {
+    const payload = JSON.parse(packet.payload);
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { packet: value, normalized: false };
+    return { packet: { ...packet, payload }, normalized: true };
+  } catch {
+    return { packet: value, normalized: false };
+  }
+}
+
 /** SDK-native JSON schema. This is passed to Claude Agent SDK outputFormat, not parsed from prose. */
 export function workflowPacketJsonSchema(payloadSchema: any, opts: { runId: string; nodeId: string; nodeType: string; allowedPorts?: string[]; requireSelectedPort?: boolean }): Record<string, unknown> {
   // Both terminal outcomes share the same root shape. A failed condition node
@@ -146,7 +167,24 @@ export function workflowPacketJsonSchema(payloadSchema: any, opts: { runId: stri
       diagnostics: { type: 'object', additionalProperties: false, required: ['warnings', 'errors'], properties: { warnings: { type: 'array', items: { type: 'string' } }, errors: { type: 'array', items: diagnosticJsonSchema() } } },
     },
     anyOf: [
-      { properties: { status: { const: 'succeeded' }, payload: payloadSchema ?? { type: 'object' }, diagnostics: { properties: { errors: { maxItems: 0 } } } } },
+      {
+        properties: {
+          status: { const: 'succeeded' },
+          // The string branch is transport compatibility only. It lets the
+          // client recover a JSON-stringified object and apply the strict
+          // business schema locally before accepting the packet.
+          payload: {
+            anyOf: [
+              payloadSchema ?? { type: 'object' },
+              {
+                type: 'string',
+                description: 'Compatibility transport only: a JSON-stringified object. The client parses it and validates the resulting object against the business payload schema; do not use this form intentionally.',
+              },
+            ],
+          },
+          diagnostics: { properties: { errors: { maxItems: 0 } } },
+        },
+      },
       { properties: { status: { const: 'failed' }, control: { properties: { selectedPort: { const: null } } }, diagnostics: { properties: { errors: { minItems: 1 } } } } },
     ],
   };

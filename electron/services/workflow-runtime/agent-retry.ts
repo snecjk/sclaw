@@ -14,6 +14,7 @@ import {
   createFailurePacket,
   getWorkflowPacketFailureMessage,
   isRetryableWorkflowPacketFailure,
+  normalizeStructuredOutputPacket,
   validateWorkflowPacket,
   workflowPacketJsonSchema,
 } from './workflow-packet';
@@ -45,6 +46,7 @@ export interface RetryFailureContext {
 }
 
 const RETRY_ERROR_LIMIT = 1_500;
+const PACKET_OUTPUT_MISSING = '完整 WorkflowPacket 输出缺失';
 
 export function summarizeRetryFailure(value: unknown): string {
   const text = typeof value === 'string' ? value : String(value ?? 'Unknown tool failure');
@@ -86,6 +88,19 @@ export type InvokeAgentFn = (args: {
 export interface RetryDeps {
   invokeAgent: InvokeAgentFn;  // required：引擎绑 sdk 注入；测试注入 mock
   quota?: () => Promise<boolean>;  // 生产注入：调 /api/token-quota/check，超额度返 false
+  execEngine?: 'claude' | 'openclaw';
+}
+
+function isWorkflowPacketProtocolFailure(context: RetryFailureContext | null, error: string): boolean {
+  const detail = `${context?.error ?? ''} ${error}`;
+  return /StructuredOutput[\s\S]{0,300}(root|required property)|完整\s*WorkflowPacket|未返回 SDK 结构化结果|WorkflowPacket[\s\S]{0,120}(root|顶层|缺少)/i.test(detail);
+}
+
+function protocolRetryInstruction(execEngine?: 'claude' | 'openclaw'): string {
+  if (execEngine === 'openclaw') {
+    return '上次结果不是完整 WorkflowPacket。不要试探 schema，也不要只输出 payload、包装对象或解释文字；请直接按当前模板输出一个完整的 WorkflowPacket 顶层 JSON。';
+  }
+  return '上次 StructuredOutput 调用没有提交完整 WorkflowPacket。不要试探 schema，也不要只提交 payload、嵌套 WorkflowPacket 或字符串化 JSON；请一次调用 StructuredOutput，并将当前模板的完整 WorkflowPacket 作为唯一顶层输入。';
 }
 
 /**
@@ -128,12 +143,14 @@ export async function runAgentNodeWithRetry(
 
     // The client owns the prompt contract.  Never consume server-compiled prose
     // or recover JSON from the assistant's chat text.
-    const retryContext = lastFailure
+    const retryContext = isWorkflowPacketProtocolFailure(lastFailure, lastError)
+      ? `\n\n上次执行失败：${PACKET_OUTPUT_MISSING}。${protocolRetryInstruction(deps.execEngine)}`
+      : lastFailure
       ? `\n\n上次执行的实际失败信息：${formatRetryFailure(lastFailure)}。请先针对该错误检查调用参数、前置条件或替代工具，再重新执行；不要重复已完成的副作用。`
       : lastError
         ? `\n\n上次结构化校验失败：${lastError}。请按 schema 重新生成完整结果。`
         : '';
-    const prompt = `${buildWorkflowNodePrompt(spec, node, ctx)}${retryContext}`;
+    const prompt = `${buildWorkflowNodePrompt(spec, node, ctx, { execEngine: deps.execEngine, attempt })}${retryContext}`;
     // 与服务端智能节点执行口径一致：在实际调用 Agent 前固化本次 prompt。
     // 重试会覆盖为最新一次尝试的 prompt，便于排查最终生效的上下文。
     await ctx.repo.upsertNodeRun({
@@ -225,26 +242,42 @@ export async function runAgentNodeWithRetry(
     }
 
     if (result.status === 'failed') {
-      lastError = lastFailure ? formatRetryFailure(lastFailure) : summarizeRetryFailure(result.error ?? 'Agent execution failed.');
-      if (!lastFailure) lastFailure = { source: 'agent', error: lastError };
+      const failedProtocol = isWorkflowPacketProtocolFailure(lastFailure, result.error ?? '');
+      const agentError = lastFailure ? formatRetryFailure(lastFailure) : summarizeRetryFailure(result.error ?? 'Agent execution failed.');
+      lastError = failedProtocol ? `${PACKET_OUTPUT_MISSING}：${agentError}` : agentError;
+      if (failedProtocol) {
+        lastFailure = { source: 'agent', error: lastError };
+        lastOutput = createFailurePacket({
+          runId: ctx.runId, nodeId: node.id, nodeType: node.type, attempt,
+          code: 'RESULT_WORKFLOW_PACKET_MISSING', category: 'output_validation', message: lastError, retryable: attempt < maxAttempts,
+        });
+        lastRaw = result.rawText ?? '';
+      } else if (!lastFailure) {
+        lastFailure = { source: 'agent', error: lastError };
+      }
       await ctx.repo.upsertNodeRun({
         run_id: ctx.runId, node_id: node.id, node_type: node.type, status: 'RUNNING',
         last_completion_issue: lastError, prompt_text: prompt,
       });
-      await ctx.emit('agent.attempt.failed', { attempt, error: lastError, failureContext: lastFailure }, node.id);
-      if (attempt < maxAttempts) await ctx.emit('completion.retry_scheduled', { attempt, reason: lastError, failureContext: lastFailure }, node.id);
+      await ctx.emit('agent.attempt.failed', { attempt, error: lastError, failureContext: lastFailure, ...(failedProtocol ? { code: 'RESULT_WORKFLOW_PACKET_MISSING', protocol: 'workflow_packet' } : {}) }, node.id);
+      if (attempt < maxAttempts) await ctx.emit('completion.retry_scheduled', { attempt, reason: lastError, failureContext: lastFailure, ...(failedProtocol ? { code: 'RESULT_WORKFLOW_PACKET_MISSING', protocol: 'workflow_packet' } : {}) }, node.id);
       await sleep(backoff(attempt));
       continue;
     }
 
-    const packet = result.output;
+    const structuredOutput = normalizeStructuredOutputPacket(result.output);
+    const packet = structuredOutput.packet;
     if (!packet) {
-      lastError = '模型未返回 SDK 结构化结果';
-      lastOutput = createFailurePacket({ runId: ctx.runId, nodeId: node.id, nodeType: node.type, attempt, code: 'RESULT_STRUCTURED_OUTPUT_MISSING', category: 'output_validation', message: lastError, retryable: attempt < maxAttempts });
+      lastError = `${PACKET_OUTPUT_MISSING}：模型未返回 SDK 结构化结果`;
+      lastFailure = { source: 'agent', error: lastError };
+      lastOutput = createFailurePacket({ runId: ctx.runId, nodeId: node.id, nodeType: node.type, attempt, code: 'RESULT_WORKFLOW_PACKET_MISSING', category: 'output_validation', message: lastError, retryable: attempt < maxAttempts });
       lastRaw = result.rawText ?? '';
-      await ctx.emit('completion.retry_scheduled', { attempt, reason: lastError, code: 'RESULT_STRUCTURED_OUTPUT_MISSING' }, node.id);
+      await ctx.emit('completion.retry_scheduled', { attempt, reason: lastError, code: 'RESULT_WORKFLOW_PACKET_MISSING', protocol: 'workflow_packet' }, node.id);
       await sleep(backoff(attempt));
       continue;
+    }
+    if (structuredOutput.normalized) {
+      await ctx.emit('completion.output_normalized', { attempt, reason: 'payload_json_string_normalized' }, node.id);
     }
     const ports = Array.isArray(node.config?.branches)
       ? node.config.branches.map((branch: any) => branch?.branchKey ?? branch?.key).filter(Boolean)

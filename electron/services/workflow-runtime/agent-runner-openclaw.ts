@@ -16,6 +16,9 @@ import { workflowGatewaySessionKey } from './node-session';
 const AGENT_ID = 'workflow-runtime';
 const activeSessions = new Map<string, { gateway: GatewayManager; sessionKey: string; runId?: string }>();
 const configuredGateways = new WeakSet<GatewayManager>();
+const REPEATED_OUTPUT_MIN_CHARS = 32;
+const REPEATED_OUTPUT_MAX_PERIOD = 512;
+const REPEATED_OUTPUT_COUNT = 4;
 
 /** Ensure this agent uses only the versioned workflow-owned bootstrap files. */
 export async function ensureWorkflowOpenClawAgent(): Promise<void> {
@@ -54,6 +57,24 @@ function messageText(value: unknown): string {
 /** Gateway chat deltas are cumulative snapshots for some OpenClaw engines. */
 function mergeOpenClawStreamText(previous: string, next: string): string {
   return previous && next.startsWith(previous) ? next : previous + next;
+}
+
+/** Detect a repeated tail such as a model endlessly repeating the same tool instruction. */
+export function findRepeatedOpenClawOutputPeriod(value: string): number | undefined {
+  const text = value.replace(/\s+/g, ' ').trim();
+  const maxPeriod = Math.min(REPEATED_OUTPUT_MAX_PERIOD, Math.floor(text.length / REPEATED_OUTPUT_COUNT));
+  for (let period = REPEATED_OUTPUT_MIN_CHARS; period <= maxPeriod; period++) {
+    const chunk = text.slice(-period);
+    let repeated = true;
+    for (let offset = 2; offset <= REPEATED_OUTPUT_COUNT; offset++) {
+      if (text.slice(-period * offset, -period * (offset - 1)) !== chunk) {
+        repeated = false;
+        break;
+      }
+    }
+    if (repeated) return period;
+  }
+  return undefined;
 }
 
 export async function invokeOpenClawWorkflowAgent(args: {
@@ -107,19 +128,32 @@ export async function invokeOpenClawWorkflowAgent(args: {
       resolve(result);
     };
     // OpenClaw Gateway can emit the complete assistant packet without a
-    // following `turn.completed` event. This is intentionally distinct from
-    // the Claude SDK path, whose async iterator has a reliable completion
-    // signal. A complete workflow packet is itself a terminal protocol value;
-    // settle immediately instead of waiting for the no-progress watchdog.
-    const finishSucceeded = (terminalSignal: 'workflow-packet' | 'message.final' | 'turn.completed') => {
+    // following `turn.completed` event. A complete workflow packet is the only
+    // successful terminal value; plain final text must be retried, not treated
+    // as a successful result with an absent output.
+    const finishPacket = () => {
       const output = extractJsonFromText(rawText);
+      if (!isWorkflowPacket(output)) return false;
       workflowExecLog('info', 'agent-terminal', 'OpenClaw smart node reached terminal state', {
+        runId: args.ctx.runId,
+        nodeId: args.ctx.nodeId,
+        execEngine: 'openclaw',
+        terminalSignal: 'workflow-packet',
+      });
+      finish({ status: 'succeeded', rawText, output });
+      return true;
+    };
+    const finishMissingPacket = (terminalSignal: 'message.final' | 'turn.completed' | 'repeated-output') => {
+      const error = terminalSignal === 'repeated-output'
+        ? 'OpenClaw 检测到重复输出且未返回完整 WorkflowPacket JSON'
+        : 'OpenClaw 节点已结束但未返回完整 WorkflowPacket JSON';
+      workflowExecLog('warn', 'agent-terminal-invalid', error, {
         runId: args.ctx.runId,
         nodeId: args.ctx.nodeId,
         execEngine: 'openclaw',
         terminalSignal,
       });
-      finish({ status: 'succeeded', rawText, output });
+      finish({ status: 'failed', rawText, error });
     };
     const onMessage = (payload: unknown) => {
       const data = payload as { message?: Record<string, unknown>; engineEvent?: { sessionKey?: string; runId?: string; type?: string; errorMessage?: string } };
@@ -131,13 +165,17 @@ export async function invokeOpenClawWorkflowAgent(args: {
         rawText = mergeOpenClawStreamText(rawText, text);
         workflowExecLog('debug', 'agent-stream-event', text, { runId: args.ctx.runId, nodeId: args.ctx.nodeId, execEngine: 'openclaw' });
         void args.onStreamEvent?.({ type: 'agent.answer_delta', message: text, rawText });
-        if (isWorkflowPacket(extractJsonFromText(rawText))) finishSucceeded('workflow-packet');
+        if (finishPacket()) return;
+        if (findRepeatedOpenClawOutputPeriod(rawText)) {
+          void args.gateway.rpc('chat.abort', { sessionKey, ...(runId ? { runId } : {}) }).catch(() => undefined);
+          finishMissingPacket('repeated-output');
+        }
       } else if (event.type === 'message.final') {
         if (text) rawText = text;
-        finishSucceeded('message.final');
+        if (!finishPacket()) finishMissingPacket('message.final');
       } else if (event.type === 'turn.failed') finish({ status: 'failed', rawText, error: event.errorMessage ?? 'OpenClaw 执行失败' });
       else if (event.type === 'turn.aborted') finish({ status: 'failed', rawText, error: '节点执行已取消' });
-      else if (event.type === 'turn.completed') finishSucceeded('turn.completed');
+      else if (event.type === 'turn.completed' && !finishPacket()) finishMissingPacket('turn.completed');
     };
     const watchdog = setInterval(() => {
       if (Date.now() - lastProgress > (args.noProgressMs ?? 300_000)) {

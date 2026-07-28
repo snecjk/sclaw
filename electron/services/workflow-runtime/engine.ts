@@ -207,7 +207,11 @@ export function createEngine(deps: EngineDeps) {
           versionId: runSnapshotBase.version_id,
         });
         const spec = compileLocalAgentSpec(cur, agentCtx, runSnapshotBase.version_id);
-        const agentResult = await runAgentNodeWithRetry(agentCtx, cur, spec, { invokeAgent: deps.invokeAgent, quota: deps.quota });
+        const agentResult = await runAgentNodeWithRetry(agentCtx, cur, spec, {
+          invokeAgent: deps.invokeAgent,
+          quota: deps.quota,
+          execEngine,
+        });
         const agentSessionId = deriveWorkflowNodeSessionId(runId, cur.id);
         if (agentResult.status !== 'manual_review' && deps.releaseAgentSession) {
           await deps.releaseAgentSession(runId, agentSessionId).catch((error) => {
