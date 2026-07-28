@@ -45,7 +45,6 @@
     "modeMulti": "Multi-assistant collaboration",
     "headline": "What can I do for you?",
     "subline": "Chat, call tools, collaborate, and keep work moving forward in one place.",
-    "functionTag": "Feature",
     "cardTasksTitle": "Handle tasks",
     "cardTasksDesc": "Work through task-oriented requests.",
     "cardExecTitle": "Keep executing",
