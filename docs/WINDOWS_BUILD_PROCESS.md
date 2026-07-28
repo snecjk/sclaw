@@ -30,9 +30,9 @@ StoClaw 是一个基于 Electron + React + Vite 的跨平台桌面应用，为 O
 pnpm run package:win
 
 # 手动分步执行
-pnpm run prep:win-binaries    # 下载 Windows 二进制文件
+pnpm run prep:win-binaries    # 下载 Windows x64 二进制文件
 pnpm run package              # 前端构建 + OpenClaw 打包
-pnpm electron-builder --win --publish never  # electron-builder 打包
+pnpm electron-builder --win nsis zip --x64 --publish never  # electron-builder 打包
 ```
 
 ### 2.2 命令执行顺序
@@ -40,14 +40,15 @@ pnpm electron-builder --win --publish never  # electron-builder 打包
 ```
 package:win
 ├── prep:win-binaries
-│   ├── uv:download:win       # 下载 uv (x64 + arm64)
-│   └── node:download:win     # 下载 Node.js (x64 + arm64)
+│   ├── prep:win-deps         # 仅安装 Windows x64 可选依赖
+│   ├── uv:download:win       # 仅下载 uv x64
+│   └── node:download:win     # 仅下载 Node.js x64
 ├── package
 │   ├── vite build            # 前端构建
 │   ├── bundle-openclaw.mjs   # 打包 OpenClaw 运行时
 │   ├── bundle-openclaw-plugins.mjs  # 打包插件
 │   └── bundle-preinstalled-skills.mjs  # 打包预装技能
-└── electron-builder --win --publish never
+└── electron-builder --win nsis zip --x64 --publish never
 ```
 
 ---
@@ -180,9 +181,7 @@ SKIP_PREINSTALLED_SKILLS=1  # 跳过技能打包
 **下载目标**:
 ```
 resources/bin/
-├── win32-x64/
-│   └── uv.exe
-└── win32-arm64/
+└── win32-x64/
     └── uv.exe
 ```
 
@@ -197,9 +196,7 @@ resources/bin/
 **下载目标**:
 ```
 resources/bin/
-├── win32-x64/
-│   └── node.exe
-└── win32-arm64/
+└── win32-x64/
     └── node.exe
 ```
 
@@ -225,8 +222,8 @@ win:
   target:
     - target: nsis
       arch: x64
-    - target: nsis
-      arch: arm64
+    - target: zip
+      arch: x64
 ```
 
 #### 3.6.2 NSIS 安装器配置
@@ -291,7 +288,7 @@ build/openclaw/node_modules/ -> resources/app.asar.unpacked/openclaw/node_module
 ```
 koffi/build/koffi/
 ├── win32_x64/   <- 保留 (x64 构建)
-├── win32_arm64/ <- 保留 (arm64 构建)
+├── win32_arm64/ <- 删除
 ├── darwin_x64/  <- 删除
 └── linux_x64/   <- 删除
 ```
@@ -338,26 +335,24 @@ koffi/build/koffi/
 release/
 ├── StoClaw-{version}-win-x64.exe        # x64 安装器
 ├── StoClaw-{version}-win-x64.exe.blockmap
-├── StoClaw-{version}-win-arm64.exe      # arm64 安装器
-├── StoClaw-{version}-win-arm64.exe.blockmap
-├── win-unpacked/                       # x64 解压版
-│   ├── StoClaw.exe
-│   └── resources/
-│       ├── app.asar
-│       ├── app.asar.unpacked/
-│       ├── bin/
-│       │   ├── uv.exe
-│       │   └── node.exe
-│       ├── cli/
-│       ├── openclaw/
-│       │   └── node_modules/
-│       ├── openclaw-plugins/
-│       │   ├── dingtalk/
-│       │   ├── wecom/
-│       │   └── ...
-│       └── resources/
-│           └── preinstalled-skills/
-└── win-arm64-unpacked/                 # arm64 解压版
+├── StoClaw-{version}-win-x64.zip        # x64 便携压缩包
+└── win-unpacked/                        # x64 解压版
+    ├── StoClaw.exe
+    └── resources/
+        ├── app.asar
+        ├── app.asar.unpacked/
+        ├── bin/
+        │   ├── uv.exe
+        │   └── node.exe
+        ├── cli/
+        ├── openclaw/
+        │   └── node_modules/
+        ├── openclaw-plugins/
+        │   ├── dingtalk/
+        │   ├── wecom/
+        │   └── ...
+        └── resources/
+            └── preinstalled-skills/
 ```
 
 ### 4.2 ASAR 打包

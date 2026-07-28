@@ -40,7 +40,7 @@ const TARGETS = {
 };
 
 const PLATFORM_GROUPS = {
-  win: ['win32-x64', 'win32-arm64'],
+  win: ['win32-x64'],
 };
 
 async function setupTarget(id) {

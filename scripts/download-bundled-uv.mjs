@@ -68,7 +68,7 @@ const TARGETS = {
 // Platform groups for building multi-arch packages
 const PLATFORM_GROUPS = {
   'mac': ['darwin-x64', 'darwin-arm64'],
-  'win': ['win32-x64', 'win32-arm64'],
+  'win': ['win32-x64'],
   'linux': ['linux-x64', 'linux-arm64']
 };
 
