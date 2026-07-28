@@ -17,6 +17,11 @@ export interface AppItem {
   description?: string;
   /** URL to open in iframe / external browser */
   url: string;
+  /**
+   * Target subsystem code for skip-login ticket exchange.
+   * Empty / unset → open app.url directly without skip-login exchange.
+   */
+  systemCode?: string;
   /** Icon key (for builtin) or icon SVG string (for external) */
   iconKey?: string;
   /** Remote icon URL — takes precedence over iconKey when set */

@@ -6,7 +6,7 @@ import { ArrowLeft, ExternalLink, Heart, MessageCircle, RotateCw } from 'lucide-
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { openExternalUrl } from '@/lib/preview-url';
+import { openSclawBrowserTabInSystemBrowser } from '@/lib/open-sclaw-browser';
 import { normalizeAppPlazaTabUrl } from '@/lib/app-plaza-tab-url';
 import { sclawBrowserEmbedChatShortcutLabel } from '../../../shared/sclaw-embed-browser-shortcut';
 import {
@@ -294,7 +294,9 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
         <button
           type="button"
           className="app-plaza-browser-toolbar__btn"
-          onClick={() => openExternalUrl(tab.url)}
+          onClick={() => {
+            void openSclawBrowserTabInSystemBrowser(tab);
+          }}
         >
           {t('moreApps.openInSystemBrowser', { defaultValue: '在系统浏览器打开' })}
           <ExternalLink className="h-3.5 w-3.5" aria-hidden />

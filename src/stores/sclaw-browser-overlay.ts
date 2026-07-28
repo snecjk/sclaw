@@ -23,6 +23,10 @@ export interface SclawBrowserOverlaySession {
   appId: string;
   url: string;
   title: string;
+  /** Original target URL before any skip-login exchange. */
+  sourceUrl?: string;
+  /** Target subsystem code for re-exchanging skip-login links. */
+  systemCode?: string;
 }
 
 interface SclawBrowserOverlayState {
