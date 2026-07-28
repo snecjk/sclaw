@@ -1,14 +1,22 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, CircleAlert, Download, Loader2, X } from 'lucide-react';
+import { ChevronDown, CircleAlert, Loader2, RefreshCw, X } from 'lucide-react';
 import { toast } from 'sonner';
 import directoryIcon from '@/assets/icons/directory.svg';
+import downloadIcon from '@/assets/icons/download-icon.svg';
+import shareIcon from '@/assets/icons/share-icon.svg';
+import uploadIcon from '@/assets/icons/upload-icon.svg';
 import { FilePreviewViewer } from '@/components/file-preview/FilePreviewViewer';
 import { Button } from '@/components/ui/button';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { listDataCenterEntries } from '@/lib/data-center-api';
 import { cn } from '@/lib/utils';
 import type { DataCenterEntry, DataCenterTempUrl } from '@/types/data-center';
-import { FOLDER_NAME_MAX_LENGTH, ROOT_ENTRY_ID } from '../constants';
+import { actionTooltipClass, FOLDER_NAME_MAX_LENGTH, ROOT_ENTRY_ID } from '../constants';
 import type { DataCenterUiEntry } from '../types';
 
 export function DataCenterModal({
@@ -171,40 +179,122 @@ export function PreviewModal({
   entry,
   tempUrl,
   onClose,
+  onRefresh,
   onDownload,
+  onShare,
+  onUploadToShared,
 }: {
   entry: DataCenterUiEntry;
   tempUrl: DataCenterTempUrl;
   onClose: () => void;
+  onRefresh: () => Promise<void> | void;
   onDownload: () => void;
+  onShare?: () => void;
+  onUploadToShared?: () => void;
 }) {
   const { t } = useTranslation('common');
+  const [refreshing, setRefreshing] = useState(false);
+  const canDownload = !entry.localAuthorized;
+  const canUploadToShared = entry.entryType === 'file' && entry.spaceType === 'qa_artifact' && !entry.localAuthorized;
+
+  const refreshPreview = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
-    <DataCenterModal
-      title={entry.name}
-      onClose={onClose}
-      wide
-      footer={(
-        <>
-          {!entry.localAuthorized ? (
-            <Button type="button" variant="outline" onClick={onDownload}>
-              <Download className="mr-2 h-4 w-4" />
-              {t('dataCenterPage.menu.download')}
-            </Button>
-          ) : null}
-          <Button type="button" variant="outline" onClick={onClose}>{t('actions.close')}</Button>
-        </>
-      )}
-    >
-      <div className="h-[68vh] overflow-hidden rounded-lg border border-border bg-card">
-        <FilePreviewViewer
-          filePath={tempUrl.tempUrl}
-          fileName={tempUrl.fileName || entry.name}
-          mimeType={tempUrl.mimeType || entry.mimeType || 'application/octet-stream'}
-          className="h-full w-full"
-        />
+    <div className="no-drag fixed inset-0 z-50 flex items-center justify-center overflow-auto bg-black/45 px-6 py-[30px]">
+      <div className="no-drag flex h-[calc(100vh-60px)] max-h-[calc(100vh-60px)] w-[80vw] min-w-[500px] max-w-[min(1000px,calc(100vw-48px))] flex-col overflow-hidden rounded-[6px] bg-white shadow-[0_18px_48px_rgba(15,23,42,0.24)] dark:bg-background">
+        <div className="no-drag relative z-10 flex h-[46px] shrink-0 items-center border-b border-[#E5E6EB] bg-white px-3 dark:border-border dark:bg-background">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[12px] font-semibold leading-4 text-[#1D2129] dark:text-foreground">
+              {entry.name}
+            </p>
+          </div>
+          <div className="no-drag flex shrink-0 items-center gap-1 self-stretch pl-3">
+            <PreviewHeaderActionButton onClick={() => void refreshPreview()} ariaLabel={t('actions.refresh')} disabled={refreshing}>
+              {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <RefreshCw className="h-3.5 w-3.5" aria-hidden />}
+            </PreviewHeaderActionButton>
+            {canDownload ? (
+              <PreviewHeaderActionButton onClick={onDownload} ariaLabel={t('dataCenterPage.menu.download')}>
+                <img src={downloadIcon} alt="" aria-hidden="true" className="h-3.5 w-3.5" />
+              </PreviewHeaderActionButton>
+            ) : null}
+            {onShare ? (
+              <PreviewHeaderActionButton onClick={onShare} ariaLabel={t('dataCenterPage.menu.share')}>
+                <img src={shareIcon} alt="" aria-hidden="true" className="h-3.5 w-3.5" />
+              </PreviewHeaderActionButton>
+            ) : null}
+            {canUploadToShared && onUploadToShared ? (
+              <PreviewHeaderActionButton onClick={onUploadToShared} ariaLabel={t('dataCenterPage.menu.uploadToShared')}>
+                <img src={uploadIcon} alt="" aria-hidden="true" className="h-3.5 w-3.5" />
+              </PreviewHeaderActionButton>
+            ) : null}
+            <button
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onClose();
+              }}
+              className="no-drag ml-1 flex h-6 w-6 items-center justify-center rounded text-[#1D2129] transition-colors hover:bg-[#F2F3F5] dark:text-foreground dark:hover:bg-muted"
+              aria-label={t('actions.close')}
+              title={t('actions.close')}
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={2} />
+            </button>
+          </div>
+        </div>
+        <div className="no-drag min-h-0 flex-1 overflow-hidden bg-white dark:bg-background">
+          <FilePreviewViewer
+            filePath={tempUrl.tempUrl}
+            fileName={tempUrl.fileName || entry.name}
+            mimeType={tempUrl.mimeType || entry.mimeType || 'application/octet-stream'}
+            className="h-full w-full"
+          />
+        </div>
       </div>
-    </DataCenterModal>
+    </div>
+  );
+}
+
+function PreviewHeaderActionButton({
+  children,
+  ariaLabel,
+  onClick,
+  disabled = false,
+}: {
+  children: ReactNode;
+  ariaLabel: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Tooltip delayDuration={200}>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={(event: ReactMouseEvent<HTMLButtonElement>) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onClick();
+          }}
+          className="no-drag flex h-6 w-6 items-center justify-center rounded text-[#4E5969] transition-colors hover:bg-[#F2F3F5] hover:text-[#1D2129] disabled:cursor-wait disabled:opacity-60 dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
+          disabled={disabled}
+          aria-label={ariaLabel}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={6} className={actionTooltipClass}>
+        {ariaLabel}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

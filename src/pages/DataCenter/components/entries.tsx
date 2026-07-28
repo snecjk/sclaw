@@ -1,6 +1,9 @@
 import { useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CloudUpload, Download, MoreHorizontal, Share2 } from 'lucide-react';
+import { MoreHorizontal } from 'lucide-react';
+import downloadIcon from '@/assets/icons/download-icon.svg';
+import shareIcon from '@/assets/icons/share-icon.svg';
+import uploadIcon from '@/assets/icons/upload-icon.svg';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,15 +27,15 @@ export function EntryList(props: EntryRenderProps) {
         {props.items.map((entry) => (
           <div
             key={entry.entryId}
-            className="flex h-[56px] items-center rounded-[8px] bg-white px-3 shadow-[0_1px_2px_rgba(29,33,41,0.02)] transition-colors hover:bg-[#FAFBFC] dark:bg-card dark:hover:bg-muted/40"
+            className="grid h-[56px] grid-cols-[minmax(0,1fr)_128px] items-center rounded-[8px] bg-white px-3 shadow-[0_1px_2px_rgba(29,33,41,0.02)] transition-colors hover:bg-[#FAFBFC] min-[720px]:grid-cols-[minmax(0,1fr)_140px_64px_128px] min-[900px]:grid-cols-[minmax(0,1fr)_168px_74px_128px] dark:bg-card dark:hover:bg-muted/40"
           >
             <div className="min-w-0 flex-1">
               <EntryName entry={entry} onOpenFolder={props.onOpenFolder} onPreview={props.onPreview} />
             </div>
-            <div className="w-[168px] shrink-0 text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">
+            <div className="hidden min-[720px]:block text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">
               {formatDate(entry.updatedAt)}
             </div>
-            <div className="w-[74px] shrink-0 text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">
+            <div className="hidden min-[720px]:block text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">
               {entry.entryType === 'folder' ? '-' : formatBytes(entry.fileSize)}
             </div>
             <EntryActions entry={entry} {...props} uploadToSharedLabel={t('dataCenterPage.menu.uploadToShared')} />
@@ -224,13 +227,13 @@ function EntryName({
   );
   if (entry.entryType === 'folder') {
     return (
-      <button type="button" onClick={() => onOpenFolder(entry)} className="flex min-w-0 items-center gap-3 text-left">
+      <button type="button" onClick={() => onOpenFolder(entry)} className="flex w-full min-w-0 items-center gap-3 text-left">
         {content}
       </button>
     );
   }
   return (
-    <button type="button" onClick={() => onPreview(entry)} className="flex min-w-0 items-center gap-3 text-left">
+    <button type="button" onClick={() => onPreview(entry)} className="flex w-full min-w-0 items-center gap-3 text-left">
       {content}
     </button>
   );
@@ -265,7 +268,7 @@ function EntryActions({
             className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
             aria-label={uploadToSharedLabel}
           >
-            <CloudUpload className="h-4 w-4" />
+            <img src={uploadIcon} alt="" aria-hidden="true" className="h-4 w-4" />
           </button>
         </ActionTooltip>
       ) : null}
@@ -277,7 +280,7 @@ function EntryActions({
             className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
             aria-label={t('dataCenterPage.menu.download')}
           >
-            <Download className="h-4 w-4" />
+            <img src={downloadIcon} alt="" aria-hidden="true" className="h-4 w-4" />
           </button>
         </ActionTooltip>
       ) : null}
@@ -289,7 +292,7 @@ function EntryActions({
             className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
             aria-label={t('dataCenterPage.menu.share')}
           >
-            <Share2 className="h-4 w-4" />
+            <img src={shareIcon} alt="" aria-hidden="true" className="h-4 w-4" />
           </button>
         </ActionTooltip>
       ) : null}

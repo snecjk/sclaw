@@ -229,6 +229,19 @@ export function DataCenter() {
     }
   };
 
+  const handleRefreshPreview = async (entry: DataCenterUiEntry) => {
+    if (entry.entryType !== 'file' || entry.localAuthorized) return;
+    try {
+      const tempUrl = await getDataCenterPreviewUrl(entry.entryId);
+      setPreviewState((current) => {
+        if (!current || current.entry.entryId !== entry.entryId) return current;
+        return { ...current, tempUrl };
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('dataCenterPage.preview.unsupported'));
+    }
+  };
+
   const handleDownload = async (entry: DataCenterUiEntry) => {
     if (entry.entryType !== 'file') return;
     if (entry.localAuthorized) return;
@@ -658,7 +671,10 @@ export function DataCenter() {
           entry={previewState.entry}
           tempUrl={previewState.tempUrl}
           onClose={() => setPreviewState(null)}
+          onRefresh={() => handleRefreshPreview(previewState.entry)}
           onDownload={() => handleDownload(previewState.entry)}
+          onShare={() => handleShare(previewState.entry)}
+          onUploadToShared={() => handleUploadToShared(previewState.entry)}
         />
       ) : null}
 

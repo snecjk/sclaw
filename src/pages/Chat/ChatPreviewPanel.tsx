@@ -10,9 +10,9 @@ import {
   MonitorPlay,
   Eye,
   ExternalLink,
-  CloudUpload,
 } from 'lucide-react';
 import { ShareMessageIcon } from '@/components/icons/ShareMessageIcon';
+import uploadIcon from '@/assets/icons/upload-icon.svg';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -193,7 +193,7 @@ export function ChatPreviewPanel({
                   <ExternalLink className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>
                 <PreviewActionButton onClick={() => setSaveArtifactOpen(true)} aria-label={t('common:dataCenterPage.saveArtifact.saveToDataCenterTitle')}>
-                  <CloudUpload className="h-4 w-4" aria-hidden />
+                  <img src={uploadIcon} alt="" aria-hidden="true" className="h-4 w-4" />
                 </PreviewActionButton>
                 {showEditWorkflow && workflowId ? (
                   <button
