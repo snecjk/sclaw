@@ -39,6 +39,12 @@ export async function handleAppPlazaRoutes(
       sendJson(res, 200, await service.listBanners());
       return true;
     }
+
+    if (url.pathname === '/api/app-plaza/skip-login-link' && req.method === 'GET') {
+      const systemCode = url.searchParams.get('systemCode') || '';
+      sendJson(res, 200, await service.getSkipLoginLink(systemCode));
+      return true;
+    }
   } catch (error) {
     logger.error('[app-plaza] request failed:', error);
     sendJson(res, errorStatus(error), {

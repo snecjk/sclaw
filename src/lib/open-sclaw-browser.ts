@@ -2,6 +2,11 @@
  * Public API — open URLs in the App Plaza multi-tab browser (preferred)
  * or legacy single-session drawer when explicitly requested.
  */
+import { toast } from 'sonner';
+import {
+  appendSkipLoginReturnUrl,
+  fetchAppPlazaSkipLoginLink,
+} from '@/lib/app-plaza-api';
 import { openExternalUrl } from '@/lib/preview-url';
 import { appNavigate } from '@/lib/app-navigate';
 import { resolveSclawBrowserUrl } from '@/lib/resolve-sclaw-browser-url';
@@ -21,6 +26,40 @@ export interface OpenSclawBrowserOptions {
   iconUrl?: string;
   iconKey?: string;
   tone?: AppTone;
+  /** Original target URL before auth rewrites / ticket exchange. */
+  sourceUrl?: string;
+  /** Subsystem code used to exchange skip-login URLs. */
+  systemCode?: string;
+  /** Only App Plaza catalog apps may exchange skip-login URLs. */
+  skipLoginEligible?: boolean;
+}
+
+async function openUrlWithOptionalSkipLogin(opts: {
+  url: string;
+  sourceUrl?: string;
+  systemCode?: string;
+  skipLoginEligible?: boolean;
+}): Promise<void> {
+  const systemCode = opts.systemCode?.trim();
+  if (!opts.skipLoginEligible) {
+    openExternalUrl(opts.url);
+    return;
+  }
+  // 空编码 / sto-policy：不换免登，直接外开（sto-policy 走页内二次登录 / useStoToken）。
+  if (!systemCode || systemCode === 'sto-policy') {
+    openExternalUrl(opts.url);
+    return;
+  }
+
+  try {
+    const skipLoginUrl = await fetchAppPlazaSkipLoginLink(systemCode);
+    const targetUrl = appendSkipLoginReturnUrl(skipLoginUrl, opts.sourceUrl || opts.url);
+    openExternalUrl(targetUrl);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    toast.error(message || '免登链接获取失败');
+    openExternalUrl(opts.url);
+  }
 }
 
 /** Open a URL in the App Plaza multi-tab shell. No-op when url is empty. */
@@ -32,6 +71,9 @@ export function openInSclawBrowser({
   iconUrl,
   iconKey,
   tone,
+  sourceUrl,
+  systemCode,
+  skipLoginEligible,
 }: OpenSclawBrowserOptions): void {
   const trimmed = url?.trim();
   if (!trimmed) return;
@@ -44,6 +86,9 @@ export function openInSclawBrowser({
     iconUrl,
     iconKey,
     tone,
+    sourceUrl,
+    systemCode,
+    skipLoginEligible,
   });
 
   if (!useAppPlazaShellStore.getState().routeActive) {
@@ -72,15 +117,33 @@ export function isSclawBrowserOpen(): boolean {
   return useSclawBrowserOverlayStore.getState().session !== null;
 }
 
+/** Open a specific App Plaza tab URL in the system browser (per-tab systemCode). */
+export async function openSclawBrowserTabInSystemBrowser(tab: {
+  url: string;
+  sourceUrl?: string;
+  systemCode?: string;
+  skipLoginEligible?: boolean;
+}): Promise<void> {
+  if (!tab.url?.trim()) return;
+  await openUrlWithOptionalSkipLogin({
+    url: tab.url,
+    sourceUrl: tab.sourceUrl,
+    systemCode: tab.systemCode,
+    skipLoginEligible: tab.skipLoginEligible,
+  });
+}
+
 /** Open the active App Plaza tab (or legacy drawer) URL in the system browser. */
-export function openSclawBrowserInSystemBrowser(): void {
+export async function openSclawBrowserInSystemBrowser(): Promise<void> {
   const shell = useAppPlazaShellStore.getState();
   const active = shell.browserTabs.find((t) => t.id === shell.activeTabId);
   if (active?.url) {
-    openExternalUrl(active.url);
+    // Per-tab isolation: always use this tab's own systemCode / sourceUrl.
+    await openSclawBrowserTabInSystemBrowser(active);
     return;
   }
+
   const session = useSclawBrowserOverlayStore.getState().session;
   if (!session?.url) return;
-  openExternalUrl(session.url);
+  await openSclawBrowserTabInSystemBrowser(session);
 }

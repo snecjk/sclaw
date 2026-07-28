@@ -3025,6 +3025,18 @@ function registerSessionHandlers(): void {
     return { ok: true };
   });
 
+  ipcMain.handle('sclaw-browser:hasStoPolicyAuth', async () => {
+    const { hasStoPolicyAuthInEmbedSession } = await import('./services/sclaw-embed-browser-session');
+    const authenticated = await hasStoPolicyAuthInEmbedSession();
+    return { ok: true, authenticated };
+  });
+
+  ipcMain.handle('sclaw-browser:hasTeambitionAuth', async () => {
+    const { hasTeambitionAuthInEmbedSession } = await import('./services/sclaw-embed-browser-session');
+    const authenticated = await hasTeambitionAuthInEmbedSession();
+    return { ok: true, authenticated };
+  });
+
   ipcMain.handle('sclaw-browser:registerRuntime', async (_, payload: {
     runtimeId?: string;
     appTitle?: string;

@@ -10,9 +10,11 @@ import {
   adaptAppPlazaApp,
   adaptAppPlazaBanner,
   adaptAppPlazaCategory,
+  appendSkipLoginReturnUrl,
   fetchAppPlazaApps,
   fetchAppPlazaBanners,
   fetchAppPlazaCategories,
+  fetchAppPlazaSkipLoginLink,
   safeWebUrl,
 } from '@/lib/app-plaza-api';
 
@@ -33,6 +35,7 @@ describe('app plaza renderer API adapter', () => {
       id: 'app-a',
       name: 'App A',
       url: 'https://example.com/app',
+      systemCode: 'JIUTIAN',
       tone: 'unknown',
       kind: 'unexpected',
       categoryCode: 'ops',
@@ -41,6 +44,7 @@ describe('app plaza renderer API adapter', () => {
       tone: 'gray',
       kind: 'builtin',
       categoryCode: 'ops',
+      systemCode: 'JIUTIAN',
     });
   });
 
@@ -58,6 +62,18 @@ describe('app plaza renderer API adapter', () => {
       targetType: 'URL',
       targetUrl: 'data:text/html,bad',
     })).toMatchObject({ targetType: 'URL', targetUrl: '' });
+  });
+
+  it('appends returnUrl onto skip-login ticket URLs', () => {
+    expect(appendSkipLoginReturnUrl(
+      'https://sso.example.com/Authenticate/Login?systemCode=JIUTIAN&code=abc',
+      'https://jiutian.example.com/home',
+    )).toBe(
+      'https://sso.example.com/Authenticate/Login?systemCode=JIUTIAN&code=abc&returnUrl=https%3A%2F%2Fjiutian.example.com%2Fhome',
+    );
+    expect(appendSkipLoginReturnUrl('https://sso.example.com/Login', 'javascript:alert(1)')).toBe(
+      'https://sso.example.com/Login',
+    );
   });
 
   it('maps category id/name and preserves server ordering', async () => {
@@ -110,6 +126,19 @@ describe('app plaza renderer API adapter', () => {
     await fetchAppPlazaApps({ pageNum: 2, pageSize: 20, keyword: '客户', categoryCode: 'org' });
     expect(hostApiFetchMock).toHaveBeenCalledWith(
       '/api/app-plaza/apps?pageNum=2&pageSize=20&keyword=%E5%AE%A2%E6%88%B7&categoryCode=org',
+    );
+  });
+
+  it('fetches skip-login link by systemCode', async () => {
+    hostApiFetchMock.mockResolvedValue({
+      success: true,
+      data: 'https://sso.example.com/Authenticate/Login?code=xyz',
+    });
+    await expect(fetchAppPlazaSkipLoginLink('JIUTIAN')).resolves.toBe(
+      'https://sso.example.com/Authenticate/Login?code=xyz',
+    );
+    expect(hostApiFetchMock).toHaveBeenCalledWith(
+      '/api/app-plaza/skip-login-link?systemCode=JIUTIAN',
     );
   });
 });
