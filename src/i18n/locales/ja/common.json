@@ -176,8 +176,6 @@
         },
         "entry": {
             "folder": "フォルダ",
-            "tracePending": "ソース確認中",
-            "traceAvailable": "ソース追跡可",
             "root": "ルート"
         },
         "dialogs": {
@@ -188,7 +186,9 @@
             "deleteTitle": "項目を削除",
             "deleteMessage": "「{{name}}」を削除しますか？フォルダは空の場合のみ削除できます。",
             "uploadToSharedTitle": "拠点共有へアップロード",
-            "uploadToSharedMessage": "「{{name}}」のアップロード先となる拠点共有成果物フォルダを選択してください。"
+            "uploadToSharedMessage": "「{{name}}」のアップロード先となる拠点共有成果物フォルダを選択してください。",
+            "traceMissingTitle": "会話の追跡に失敗しました",
+            "traceMissingMessage": "会話が削除されているため、追跡できません。"
         },
         "preview": {
             "unsupported": "プレビューはまだサポートされていません。ファイルをダウンロードできます。"
@@ -241,7 +241,6 @@
             "folderNameRequired": "フォルダ名を入力してください",
             "loadFoldersFailed": "フォルダの読み込みに失敗しました",
             "createFolderFailed": "フォルダの作成に失敗しました",
-            "savedPendingTrace": "保存しました。ソース確認中です",
             "saved": "成果物を保存しました",
             "saveFailed": "成果物の保存に失敗しました"
         },
@@ -265,6 +264,7 @@
         "copy": "コピー",
         "search": "検索",
         "confirm": "確認",
+        "gotIt": "わかりました",
         "dismiss": "閉じる",
         "load": "読み込み",
         "install": "インストール",

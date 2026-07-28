@@ -76,8 +76,6 @@ export function localEntryToUiEntry(entry: LocalAuthorizedFileEntry): DataCenter
     fileExt: entry.fileExt,
     fileSize: entry.fileSize,
     sourceType: 'local_upload',
-    traceStatus: 'none',
-    traceAvailable: false,
     status: entry.missing ? 'missing' : 'active',
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, Download, Loader2, X } from 'lucide-react';
+import { ChevronDown, CircleAlert, Download, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import directoryIcon from '@/assets/icons/directory.svg';
 import { FilePreviewViewer } from '@/components/file-preview/FilePreviewViewer';
@@ -44,6 +44,44 @@ export function DataCenterModal({
         </div>
         <div className="min-h-0 flex-1 overflow-auto px-5 py-4">{children}</div>
         {footer ? <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-4">{footer}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+export function TraceChatMissingDialog({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation('common');
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+      <div className="w-full max-w-[337px] overflow-hidden rounded-[4px] border-t-[3px] border-[#F59A23] bg-white shadow-[0_16px_48px_rgba(15,23,42,0.18)] dark:bg-background">
+        <div className="flex items-start gap-3 px-4 pb-4 pt-[17px]">
+          <CircleAlert className="mt-0.5 h-5 w-5 shrink-0 fill-[#FFB21A] text-white" />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[16px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">
+              {t('dataCenterPage.dialogs.traceMissingTitle')}
+            </h2>
+            <p className="mt-2 text-[13px] leading-5 text-[#6B778C] dark:text-muted-foreground">
+              {t('dataCenterPage.dialogs.traceMissingMessage')}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="-mr-1 -mt-1 rounded-md p-1 text-[#4E5969] hover:bg-[#F2F3F5] hover:text-[#1D2129]"
+            aria-label={t('actions.close')}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex justify-end px-4 pb-4">
+          <Button
+            type="button"
+            onClick={onClose}
+            className="h-8 rounded-[10px] bg-[#1D2129] px-4 text-[13px] font-medium text-white shadow-none hover:bg-[#343A45]"
+          >
+            {t('actions.gotIt')}
+          </Button>
+        </div>
       </div>
     </div>
   );

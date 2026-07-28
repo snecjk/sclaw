@@ -165,7 +165,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
       if (selectedTarget.space === 'shared' && !targetSpaceId) {
         throw new Error(t('dataCenterPage.toasts.sharedSpaceUnavailable'));
       }
-      const entry = await uploadArtifactFromPath({
+      await uploadArtifactFromPath({
         ...provenance,
         filePath: file.filePath,
         fileName: file.fileName,
@@ -174,9 +174,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
         targetParentEntryId: selectedTarget.space === 'shared' ? selectedTarget.parentEntryId : undefined,
         idempotencyKey: createArtifactUploadIdempotencyKey(provenance, selectedTarget, targetSpaceId),
       });
-      toast.success(entry.traceStatus === 'pending'
-        ? t('dataCenterPage.saveArtifact.savedPendingTrace')
-        : t('dataCenterPage.saveArtifact.saved'));
+      toast.success(t('dataCenterPage.saveArtifact.saved'));
       onSaved();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('dataCenterPage.saveArtifact.saveFailed'));

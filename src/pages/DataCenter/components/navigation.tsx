@@ -56,8 +56,7 @@ export function FolderBreadcrumbBar({
   onOpen: (entryId: string) => void;
 }) {
   const { t } = useTranslation('common');
-  const rootEntryId = 'root';
-  const items = breadcrumbs.length ? breadcrumbs : [{ entryId: rootEntryId, name: t('dataCenterPage.entry.root') }];
+  const items = breadcrumbs.slice(1);
   return (
     <div className="mt-4 flex shrink-0 items-center overflow-hidden">
       <button
@@ -68,24 +67,26 @@ export function FolderBreadcrumbBar({
         <ArrowLeft className="h-5 w-5" />
         {t('actions.back')}
       </button>
-      <div className="flex min-w-0 items-center gap-3 text-[16px] font-semibold leading-6">
-        {items.map((item, index) => (
-          <div key={`${item.entryId}-${index}`} className="flex min-w-0 items-center gap-3">
-            {index > 0 ? <span className="shrink-0 text-[#E5E6EB]">/</span> : null}
-            <button
-              type="button"
-              onClick={() => onOpen(item.entryId)}
-              disabled={index === items.length - 1}
-              className={cn(
-                'truncate text-[#6B778C] transition-colors hover:text-[#1D2129] disabled:cursor-default disabled:hover:text-[#1D2129]',
-                index === items.length - 1 && 'text-[#1D2129] dark:text-foreground',
-              )}
-            >
-              {item.name}
-            </button>
-          </div>
-        ))}
-      </div>
+      {items.length ? (
+        <div className="flex min-w-0 items-center gap-3 text-[16px] font-semibold leading-6">
+          {items.map((item, index) => (
+            <div key={`${item.entryId}-${index}`} className="flex min-w-0 items-center gap-3">
+              {index > 0 ? <span className="shrink-0 text-[#E5E6EB]">/</span> : null}
+              <button
+                type="button"
+                onClick={() => onOpen(item.entryId)}
+                disabled={index === items.length - 1}
+                className={cn(
+                  'truncate text-[#6B778C] transition-colors hover:text-[#1D2129] disabled:cursor-default disabled:hover:text-[#1D2129]',
+                  index === items.length - 1 && 'text-[#1D2129] dark:text-foreground',
+                )}
+              >
+                {item.name}
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

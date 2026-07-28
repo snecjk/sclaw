@@ -72,7 +72,7 @@ export function EntryGrid(props: EntryRenderProps) {
     event.preventDefault();
     event.stopPropagation();
     const menuWidth = 132;
-    const menuHeight = entry.entryType === 'file' && entry.traceAvailable ? 180 : 140;
+    const menuHeight = canTraceChat(entry) ? 180 : 140;
     setContextMenu({
       entry,
       x: Math.min(event.clientX, window.innerWidth - menuWidth - 8),
@@ -149,6 +149,7 @@ function GridEntryContextMenu({
     ? entry.parentEntryId === ROOT_ENTRY_ID
     : entry.spaceType !== 'site_shared_artifact' || entry.canManage === true;
   const canDownloadEntry = entry.entryType === 'file' && !entry.localAuthorized;
+  const canTraceEntry = canTraceChat(entry);
   return (
     <div
       className="fixed z-[70] min-w-[128px] rounded-[10px] border border-[#E5E6EB] bg-white p-2 text-[#1D2129] shadow-[0_8px_24px_rgba(15,23,42,0.14)] dark:border-border dark:bg-popover dark:text-foreground"
@@ -172,7 +173,7 @@ function GridEntryContextMenu({
           {t('dataCenterPage.menu.share')}
         </ContextMenuButton>
       ) : null}
-      {entry.entryType === 'file' && entry.traceAvailable ? (
+      {canTraceEntry ? (
         <ContextMenuButton onClick={() => onTrace(entry)}>
           {t('dataCenterPage.menu.traceChat')}
         </ContextMenuButton>
@@ -213,21 +214,11 @@ function EntryName({
   onOpenFolder: (entry: DataCenterUiEntry) => void;
   onPreview: (entry: DataCenterUiEntry) => void;
 }) {
-  const { t } = useTranslation('common');
   const content = (
     <>
       <span className="flex h-9 w-9 shrink-0 items-center justify-center">{getEntryIcon(entry, entry.entryType === 'folder' ? 'h-8 w-8' : 'h-7 w-7')}</span>
       <span className="min-w-0 py-1">
         <span className="block truncate text-[13px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">{entry.name}</span>
-        {entry.traceStatus === 'pending' ? (
-          <span className="inline-flex h-4 items-center rounded bg-[#EEF3FF] px-1.5 text-[11px] leading-4 text-[#4E7FFF]">
-            {t('dataCenterPage.entry.tracePending')}
-          </span>
-        ) : entry.traceAvailable ? (
-          <span className="inline-flex h-4 items-center rounded bg-[#F2F3F5] px-1.5 text-[11px] leading-4 text-[#6B778C]">
-            {t('dataCenterPage.entry.traceAvailable')}
-          </span>
-        ) : null}
       </span>
     </>
   );
@@ -263,6 +254,7 @@ function EntryActions({
     ? entry.parentEntryId === ROOT_ENTRY_ID
     : entry.spaceType !== 'site_shared_artifact' || entry.canManage === true;
   const canDownloadEntry = entry.entryType === 'file' && !entry.localAuthorized;
+  const canTraceEntry = canTraceChat(entry);
   return (
     <div className="flex w-[128px] shrink-0 items-center justify-end gap-1 text-[#6B778C]">
       {canUploadToShared ? (
@@ -320,7 +312,7 @@ function EntryActions({
               {t('dataCenterPage.menu.preview')}
             </DropdownMenuItem>
           ) : null}
-          {entry.entryType === 'file' && entry.traceAvailable ? (
+          {canTraceEntry ? (
             <DropdownMenuItem onSelect={() => onTrace(entry)} className="text-[13px]">
               {t('dataCenterPage.menu.traceChat')}
             </DropdownMenuItem>
@@ -339,6 +331,10 @@ function EntryActions({
       </DropdownMenu>
     </div>
   );
+}
+
+function canTraceChat(entry: DataCenterUiEntry): boolean {
+  return entry.entryType === 'file' && !entry.localAuthorized && Boolean(entry.sessionId);
 }
 
 function ActionTooltip({ label, children }: { label: string; children: ReactNode }) {

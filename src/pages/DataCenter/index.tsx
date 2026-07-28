@@ -23,7 +23,6 @@ import {
   deleteDataCenterSharedEntry,
   getDataCenterDownloadUrl,
   getDataCenterPreviewUrl,
-  getDataCenterTrace,
   shareDataCenterEntries,
   uploadDriveFileFromPath,
 } from '@/lib/data-center-api';
@@ -44,7 +43,7 @@ import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import type { DataCenterTempUrl } from '@/types/data-center';
 import { EntryGrid, EntryList, FeedbackState } from './components/entries';
-import { DataCenterModal, PreviewModal, TextPromptModal, UploadToSharedFolderDialog } from './components/modals';
+import { DataCenterModal, PreviewModal, TextPromptModal, TraceChatMissingDialog, UploadToSharedFolderDialog } from './components/modals';
 import { FolderBreadcrumbBar, IconToggle, TabButton } from './components/navigation';
 import { ROOT_ENTRY_ID } from './constants';
 import type { DataCenterUiEntry, DriveTab, UploadToSharedTarget } from './types';
@@ -75,6 +74,7 @@ export function DataCenter() {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
   const [uploadToSharedTarget, setUploadToSharedTarget] = useState<UploadToSharedTarget | null>(null);
+  const [traceMissingOpen, setTraceMissingOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [driveTab, setDriveTab] = useState<DriveTab>('local');
   const isDriveSection = store.section === 'drive';
@@ -310,21 +310,21 @@ export function DataCenter() {
   };
 
   const handleTrace = async (entry: DataCenterUiEntry) => {
-    if (entry.localAuthorized) {
+    if (entry.localAuthorized || !entry.sessionId) {
       toast.info(t('dataCenterPage.toasts.traceUnavailable'));
       return;
     }
-    try {
-      const trace = await getDataCenterTrace(entry.entryId);
-      if (!trace.traceAvailable || !trace.sessionId) {
-        toast.info(t('dataCenterPage.toasts.traceUnavailable'));
-        return;
-      }
-      useChatStore.getState().switchSession(trace.sessionId);
-      navigate('/');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.traceFailed'));
+    let targetSession = useChatStore.getState().sessions.find((session) => session.key === entry.sessionId);
+    if (!targetSession) {
+      await useChatStore.getState().loadSessions();
+      targetSession = useChatStore.getState().sessions.find((session) => session.key === entry.sessionId);
     }
+    if (!targetSession) {
+      setTraceMissingOpen(true);
+      return;
+    }
+    useChatStore.getState().switchSession(entry.sessionId);
+    navigate('/');
   };
 
   const handleRenameEntry = async (entryId: string, name: string) => {
@@ -669,6 +669,10 @@ export function DataCenter() {
           onClose={() => setUploadToSharedTarget(null)}
           onConfirm={(targetParentEntryId) => handleConfirmUploadToShared(uploadToSharedTarget, targetParentEntryId)}
         />
+      ) : null}
+
+      {traceMissingOpen ? (
+        <TraceChatMissingDialog onClose={() => setTraceMissingOpen(false)} />
       ) : null}
 
       <ArtifactShareDialog

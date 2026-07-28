@@ -181,8 +181,6 @@
         },
         "entry": {
             "folder": "Folder",
-            "tracePending": "Source verification pending",
-            "traceAvailable": "Source traceable",
             "root": "Root"
         },
         "dialogs": {
@@ -193,7 +191,9 @@
             "deleteTitle": "Delete item",
             "deleteMessage": "Delete \"{{name}}\"? Folders can only be deleted when empty.",
             "uploadToSharedTitle": "Upload to branch sharing",
-            "uploadToSharedMessage": "Select the branch shared artifact folder to upload \"{{name}}\" to."
+            "uploadToSharedMessage": "Select the branch shared artifact folder to upload \"{{name}}\" to.",
+            "traceMissingTitle": "Failed to trace conversation",
+            "traceMissingMessage": "The conversation has been deleted, so tracing cannot be completed."
         },
         "preview": {
             "unsupported": "Preview is not supported yet. You can download the file."
@@ -246,7 +246,6 @@
             "folderNameRequired": "Folder name is required",
             "loadFoldersFailed": "Failed to load folders",
             "createFolderFailed": "Failed to create folder",
-            "savedPendingTrace": "Saved. Source verification pending",
             "saved": "Artifact saved",
             "saveFailed": "Failed to save artifact"
         },
@@ -270,6 +269,7 @@
         "copy": "Copy",
         "search": "Search",
         "confirm": "Confirm",
+        "gotIt": "Got it",
         "dismiss": "Dismiss",
         "load": "Load",
         "install": "Install",

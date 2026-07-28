@@ -1,6 +1,5 @@
 export type DataCenterSpaceType = 'drive' | 'qa_artifact' | 'site_shared_artifact';
 export type DataCenterEntryType = 'file' | 'folder';
-export type DataCenterTraceStatus = 'none' | 'pending' | 'verified' | 'missing';
 export type DataCenterSourceType = 'local_upload' | 'chat_artifact' | 'workflow_artifact';
 export type DataCenterViewMode = 'list' | 'grid';
 export type DataCenterSortField = 'name' | 'updatedAt' | 'fileSize' | 'createdAt';
@@ -30,11 +29,15 @@ export interface DataCenterEntry {
   fileExt: string | null;
   fileSize: number;
   sourceType: DataCenterSourceType;
-  traceStatus: DataCenterTraceStatus | null;
-  traceAvailable: boolean;
   status: string;
   createdAt: string | null;
   updatedAt: string | null;
+  sessionId?: string | null;
+  messageId?: string | null;
+  runId?: string | null;
+  artifactKey?: string | null;
+  workflowTemplateId?: string | null;
+  workflowRunId?: string | null;
   replayed?: boolean;
   shared?: boolean;
   shareId?: string | null;
@@ -90,16 +93,6 @@ export interface DataCenterTempUrl {
   mimeType: string | null;
   tempUrl: string;
   expiresAt: string;
-}
-
-export interface DataCenterTrace {
-  traceAvailable: boolean;
-  traceStatus: DataCenterTraceStatus;
-  sessionId: string | null;
-  messageId: string | null;
-  runId: string | null;
-  workflowTemplateId: string | null;
-  workflowRunId: string | null;
 }
 
 export interface DataCenterArtifactProvenance {

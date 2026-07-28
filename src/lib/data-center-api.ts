@@ -14,7 +14,6 @@ import type {
   DataCenterSpaceType,
   DataCenterSpacesResult,
   DataCenterTempUrl,
-  DataCenterTrace,
   DataCenterUploadArtifactParams,
   DataCenterUploadDriveFileParams,
 } from '@/types/data-center';
@@ -139,12 +138,6 @@ export async function getDataCenterPreviewUrl(entryId: string): Promise<DataCent
   return unwrapDataCenter(hostApiFetch<DataCenterApiResponse<DataCenterTempUrl>>(
     `${DATA_CENTER_BASE}/entries/${encodeURIComponent(entryId)}/preview-url`,
     { method: 'POST' },
-  ));
-}
-
-export async function getDataCenterTrace(entryId: string): Promise<DataCenterTrace> {
-  return unwrapDataCenter(hostApiFetch<DataCenterApiResponse<DataCenterTrace>>(
-    `${DATA_CENTER_BASE}/entries/${encodeURIComponent(entryId)}/trace`,
   ));
 }
 
