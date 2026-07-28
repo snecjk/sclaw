@@ -159,4 +159,37 @@ describe('resolveSclawBrowserUrl', () => {
       'https://sso.example.com/Authenticate/Login?old=1',
     );
   });
+
+  it('exchanges skip-login for a specific tab systemCode (e.g. SITE_KEEPER)', async () => {
+    fetchAppPlazaSkipLoginLinkMock.mockResolvedValue(
+      'https://sso.example.com/Authenticate/Login?code=keeper',
+    );
+    appendSkipLoginReturnUrlMock.mockReturnValue(
+      'https://sso.example.com/Authenticate/Login?code=keeper&returnUrl=https%3A%2F%2Fwangdian.sto.cn',
+    );
+
+    const { openSclawBrowserTabInSystemBrowser } = await import('@/lib/open-sclaw-browser');
+    await openSclawBrowserTabInSystemBrowser({
+      url: 'https://wangdian.sto.cn/home',
+      sourceUrl: 'https://wangdian.sto.cn',
+      systemCode: 'SITE_KEEPER',
+    });
+
+    expect(fetchAppPlazaSkipLoginLinkMock).toHaveBeenCalledWith('SITE_KEEPER');
+    expect(openExternalUrlMock).toHaveBeenCalledWith(
+      'https://sso.example.com/Authenticate/Login?code=keeper&returnUrl=https%3A%2F%2Fwangdian.sto.cn',
+    );
+  });
+
+  it('skips skip-login exchange when tab systemCode is empty', async () => {
+    const { openSclawBrowserTabInSystemBrowser } = await import('@/lib/open-sclaw-browser');
+    await openSclawBrowserTabInSystemBrowser({
+      url: 'https://example.com/plain',
+      sourceUrl: 'https://example.com/plain',
+      systemCode: '',
+    });
+
+    expect(fetchAppPlazaSkipLoginLinkMock).not.toHaveBeenCalled();
+    expect(openExternalUrlMock).toHaveBeenCalledWith('https://example.com/plain');
+  });
 });

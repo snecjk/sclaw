@@ -19,7 +19,7 @@ export interface AppItem {
   url: string;
   /**
    * Target subsystem code for skip-login ticket exchange.
-   * When set, open flow calls memory-center skip-login-link before embedding.
+   * Empty / unset → open app.url directly without skip-login exchange.
    */
   systemCode?: string;
   /** Icon key (for builtin) or icon SVG string (for external) */

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const fetchAppsMock = vi.fn();
 const fetchCategoriesMock = vi.fn();
 const fetchBannersMock = vi.fn();
+const fetchSkipLoginLinkMock = vi.fn();
 const openInSclawBrowserMock = vi.fn();
 const fetchRegistryMock = vi.fn();
 
@@ -11,6 +12,11 @@ vi.mock('@/lib/app-plaza-api', () => ({
   fetchAppPlazaApps: (...args: unknown[]) => fetchAppsMock(...args),
   fetchAppPlazaCategories: (...args: unknown[]) => fetchCategoriesMock(...args),
   fetchAppPlazaBanners: (...args: unknown[]) => fetchBannersMock(...args),
+  fetchAppPlazaSkipLoginLink: (...args: unknown[]) => fetchSkipLoginLinkMock(...args),
+  appendSkipLoginReturnUrl: (skipLoginUrl: string, returnUrl: string) => {
+    if (!returnUrl) return skipLoginUrl;
+    return `${skipLoginUrl}&returnUrl=${encodeURIComponent(returnUrl)}`;
+  },
 }));
 
 vi.mock('@/lib/open-sclaw-browser', () => ({
@@ -74,6 +80,7 @@ describe('MoreAppsPage server catalog', () => {
     localStorage.clear();
     resetStore();
     openInSclawBrowserMock.mockReset();
+    fetchSkipLoginLinkMock.mockReset();
     fetchBannersMock.mockReset().mockResolvedValue([]);
     fetchCategoriesMock.mockReset().mockResolvedValue([]);
     fetchAppsMock.mockReset().mockResolvedValue({
@@ -157,6 +164,73 @@ describe('MoreAppsPage server catalog', () => {
     fireEvent.click(screen.getByRole('button', { name: '收藏' }));
     expect(openInSclawBrowserMock).not.toHaveBeenCalled();
     expect(useMoreAppsStore.getState().favoriteIds).toContain('org-relation');
+  });
+
+  it('asks for confirmation before opening sto-policy apps', async () => {
+    fetchAppsMock.mockResolvedValueOnce({
+      items: [{
+        ...serverApp,
+        id: 'policy-app',
+        name: '制度中心',
+        systemCode: 'sto-policy',
+        url: 'https://zc.sto.cn/',
+      }],
+      total: 1,
+      pageNum: 1,
+      pageSize: 20,
+    });
+    fetchSkipLoginLinkMock.mockResolvedValue(
+      'https://sso.example.com/Authenticate/Login?systemCode=sto-policy&code=abc',
+    );
+
+    render(<MoreAppsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: '打开制度中心' }));
+
+    expect(openInSclawBrowserMock).not.toHaveBeenCalled();
+    expect(await screen.findByText('需要二次登录')).toBeInTheDocument();
+    expect(screen.getByText('该系统需要二次登录，确认后将继续打开。')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '确定' }));
+    await waitFor(() => {
+      expect(fetchSkipLoginLinkMock).toHaveBeenCalledWith('sto-policy');
+      expect(openInSclawBrowserMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appId: 'policy-app',
+          systemCode: 'sto-policy',
+          sourceUrl: 'https://zc.sto.cn/',
+        }),
+      );
+    });
+  });
+
+  it('skips skip-login exchange when systemCode is empty', async () => {
+    fetchAppsMock.mockResolvedValueOnce({
+      items: [{
+        ...serverApp,
+        id: 'plain-app',
+        name: '普通应用',
+        systemCode: '',
+        url: 'https://example.com/plain',
+      }],
+      total: 1,
+      pageNum: 1,
+      pageSize: 20,
+    });
+
+    render(<MoreAppsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: '打开普通应用' }));
+
+    await waitFor(() => {
+      expect(fetchSkipLoginLinkMock).not.toHaveBeenCalled();
+      expect(openInSclawBrowserMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://example.com/plain',
+          appId: 'plain-app',
+          systemCode: undefined,
+        }),
+      );
+    });
+    expect(screen.queryByText('需要二次登录')).not.toBeInTheDocument();
   });
 
   it('renders a whole-image URL banner and opens its configured link', async () => {

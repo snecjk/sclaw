@@ -30,6 +30,8 @@ import {
 import { formatAppBadges } from './format-app-badges';
 
 const HERO_CAROUSEL_INTERVAL = 5000;
+/** 制度中心等 sto-policy 系统需二次登录确认后再免登打开 */
+const STO_POLICY_SYSTEM_CODE = 'sto-policy';
 
 export function MoreAppsPage() {
   const { t } = useTranslation('common');
@@ -73,6 +75,7 @@ export function MoreAppsPage() {
   } = useMoreAppsStore();
 
   const [confirmDeleteApp, setConfirmDeleteApp] = useState<AppItem | null>(null);
+  const [pendingStoPolicyApp, setPendingStoPolicyApp] = useState<AppItem | null>(null);
   const [failedBannerImages, setFailedBannerImages] = useState<string[]>([]);
   const heroTimerRef = useRef<NodeJS.Timeout | null>(null);
   // Skip the search-debounce effect's first run on mount — the mount effect
@@ -174,8 +177,9 @@ export function MoreAppsPage() {
     };
   }, [activeTab, heroSlideIndex, setHeroSlideIndex, banners]);
 
-  const handleOpenApp = useCallback(async (app: AppItem) => {
-    const systemCode = app.systemCode?.trim();
+  const openAppWithSkipLogin = useCallback(async (app: AppItem) => {
+    // 空 systemCode：不换票，直接打开应用 URL。
+    const systemCode = app.systemCode?.trim() || '';
     const hasUrl = !!app.url?.trim();
     if (!systemCode && !hasUrl) return;
 
@@ -212,13 +216,33 @@ export function MoreAppsPage() {
         title: app.name,
         appId: app.id,
         sourceUrl: app.url,
-        systemCode,
+        systemCode: systemCode || undefined,
         iconUrl: app.iconUrl,
         iconKey: app.iconKey,
         tone: app.tone,
       });
     }
   }, [installApp, isAppInstalled]);
+
+  const handleOpenApp = useCallback((app: AppItem) => {
+    const systemCode = app.systemCode?.trim() || '';
+    const hasUrl = !!app.url?.trim();
+    if (!systemCode && !hasUrl) return;
+
+    if (systemCode === STO_POLICY_SYSTEM_CODE) {
+      setPendingStoPolicyApp(app);
+      return;
+    }
+
+    void openAppWithSkipLogin(app);
+  }, [openAppWithSkipLogin]);
+
+  const confirmStoPolicyOpen = useCallback(async () => {
+    const app = pendingStoPolicyApp;
+    setPendingStoPolicyApp(null);
+    if (!app) return;
+    await openAppWithSkipLogin(app);
+  }, [pendingStoPolicyApp, openAppWithSkipLogin]);
 
   // Resolve a banner's click target against the currently loaded APP set.
   // APP-type is only clickable when targetAppId resolves to a loaded app's url;
@@ -657,6 +681,17 @@ export function MoreAppsPage() {
 
       {/* Modals */}
       <AddExternalAppModal />
+      <ConfirmDialog
+        open={!!pendingStoPolicyApp}
+        title={t('moreApps.stoPolicyLoginTitle', { defaultValue: '需要二次登录' })}
+        message={t('moreApps.stoPolicyLoginDesc', {
+          defaultValue: '该系统需要二次登录，确认后将继续打开。',
+        })}
+        confirmLabel={t('common.confirm', { defaultValue: '确定' })}
+        cancelLabel={t('common.cancel', { defaultValue: '取消' })}
+        onConfirm={confirmStoPolicyOpen}
+        onCancel={() => setPendingStoPolicyApp(null)}
+      />
       <ConfirmDialog
         open={!!confirmDeleteApp}
         title={t('moreApps.deleteConfirmTitle', { defaultValue: '删除应用' })}
