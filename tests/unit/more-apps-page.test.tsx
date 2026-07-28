@@ -166,7 +166,7 @@ describe('MoreAppsPage server catalog', () => {
     expect(useMoreAppsStore.getState().favoriteIds).toContain('org-relation');
   });
 
-  it('asks for confirmation before opening sto-policy apps', async () => {
+  it('asks for confirmation before opening sto-policy apps without skip-login exchange', async () => {
     fetchAppsMock.mockResolvedValueOnce({
       items: [{
         ...serverApp,
@@ -179,9 +179,6 @@ describe('MoreAppsPage server catalog', () => {
       pageNum: 1,
       pageSize: 20,
     });
-    fetchSkipLoginLinkMock.mockResolvedValue(
-      'https://sso.example.com/Authenticate/Login?systemCode=sto-policy&code=abc',
-    );
 
     render(<MoreAppsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '打开制度中心' }));
@@ -192,9 +189,10 @@ describe('MoreAppsPage server catalog', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '确定' }));
     await waitFor(() => {
-      expect(fetchSkipLoginLinkMock).toHaveBeenCalledWith('sto-policy');
+      expect(fetchSkipLoginLinkMock).not.toHaveBeenCalled();
       expect(openInSclawBrowserMock).toHaveBeenCalledWith(
         expect.objectContaining({
+          url: 'https://zc.sto.cn/',
           appId: 'policy-app',
           systemCode: 'sto-policy',
           sourceUrl: 'https://zc.sto.cn/',

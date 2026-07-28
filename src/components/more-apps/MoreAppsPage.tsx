@@ -178,7 +178,7 @@ export function MoreAppsPage() {
   }, [activeTab, heroSlideIndex, setHeroSlideIndex, banners]);
 
   const openAppWithSkipLogin = useCallback(async (app: AppItem) => {
-    // 空 systemCode：不换票，直接打开应用 URL。
+    // 空 / sto-policy：不换票，直接打开应用 URL（后者靠页内二次登录 / useStoToken）。
     const systemCode = app.systemCode?.trim() || '';
     const hasUrl = !!app.url?.trim();
     if (!systemCode && !hasUrl) return;
@@ -187,7 +187,10 @@ export function MoreAppsPage() {
       installApp(app.id);
     }
 
-    if (systemCode) {
+    const shouldExchangeSkipLogin =
+      !!systemCode && systemCode !== STO_POLICY_SYSTEM_CODE;
+
+    if (shouldExchangeSkipLogin) {
       try {
         const skipLoginUrl = await fetchAppPlazaSkipLoginLink(systemCode);
         const openUrl = appendSkipLoginReturnUrl(skipLoginUrl, app.url);

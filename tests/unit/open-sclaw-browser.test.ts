@@ -192,4 +192,16 @@ describe('resolveSclawBrowserUrl', () => {
     expect(fetchAppPlazaSkipLoginLinkMock).not.toHaveBeenCalled();
     expect(openExternalUrlMock).toHaveBeenCalledWith('https://example.com/plain');
   });
+
+  it('skips skip-login exchange when tab systemCode is sto-policy', async () => {
+    const { openSclawBrowserTabInSystemBrowser } = await import('@/lib/open-sclaw-browser');
+    await openSclawBrowserTabInSystemBrowser({
+      url: 'https://zc.sto.cn/',
+      sourceUrl: 'https://zc.sto.cn/',
+      systemCode: 'sto-policy',
+    });
+
+    expect(fetchAppPlazaSkipLoginLinkMock).not.toHaveBeenCalled();
+    expect(openExternalUrlMock).toHaveBeenCalledWith('https://zc.sto.cn/');
+  });
 });

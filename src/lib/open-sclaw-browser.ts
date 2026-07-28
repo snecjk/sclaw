@@ -38,7 +38,8 @@ async function openUrlWithOptionalSkipLogin(opts: {
   systemCode?: string;
 }): Promise<void> {
   const systemCode = opts.systemCode?.trim();
-  if (!systemCode) {
+  // 空编码 / sto-policy：不换免登，直接外开（sto-policy 走页内二次登录 / useStoToken）。
+  if (!systemCode || systemCode === 'sto-policy') {
     openExternalUrl(opts.url);
     return;
   }
