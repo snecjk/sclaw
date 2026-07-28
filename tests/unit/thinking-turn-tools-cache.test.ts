@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   appendTurnToolResultCache,
+  migrateTurnToolsCache,
   readTurnStreamingToolsCache,
   readTurnToolResultsCache,
   writeTurnStreamingToolsCache,
@@ -51,6 +52,38 @@ describe('thinking-turn-tools-cache', () => {
     const tools = readTurnStreamingToolsCache(key);
     expect(tools).toHaveLength(1);
     expect(tools[0]?.input).toEqual({ command: 'pwd' });
+  });
+
+  it('moves transient active-turn tools without leaking them to the next turn', () => {
+    const sourceKey = 'active-turn-test-tools';
+    const targetKey = 'turn-user-test-tools';
+    writeTurnStreamingToolsCache(sourceKey, [
+      { toolCallId: 'jiangsu-tool', name: 'exec', status: 'completed' },
+    ]);
+    appendTurnToolResultCache(sourceKey, {
+      role: 'toolresult',
+      toolCallId: 'jiangsu-tool',
+      toolName: 'exec',
+      content: 'done',
+    });
+
+    migrateTurnToolsCache(sourceKey, targetKey);
+
+    expect(readTurnStreamingToolsCache(targetKey)).toHaveLength(1);
+    expect(readTurnToolResultsCache(targetKey)).toHaveLength(1);
+    expect(readTurnStreamingToolsCache(sourceKey)).toEqual([]);
+    expect(readTurnToolResultsCache(sourceKey)).toEqual([]);
+  });
+
+  it('keeps identical fallback turn keys isolated when they belong to different sessions', () => {
+    const sessionAKey = 'session-a::turn-0-0';
+    const sessionBKey = 'session-b::turn-0-0';
+    writeTurnStreamingToolsCache(sessionAKey, [
+      { toolCallId: 'jiangsu-tool', name: 'exec', status: 'completed' },
+    ]);
+
+    expect(readTurnStreamingToolsCache(sessionAKey)).toHaveLength(1);
+    expect(readTurnStreamingToolsCache(sessionBKey)).toEqual([]);
   });
 });
 
