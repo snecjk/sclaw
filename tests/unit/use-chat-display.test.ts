@@ -70,6 +70,7 @@ describe('useChatDisplay', () => {
       (item) => item.type === 'single' && item.message.id === 'a1',
     )).toBe(true);
     expect(result.current.activeTurn?.turnMessages).toEqual([]);
+    expect(result.current.activeTurn?.turnStableKey).toBe('active-turn');
   });
 
   it('anchors a follow-up send to the latest user instead of the previous assistant turn', () => {
