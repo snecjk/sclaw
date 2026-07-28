@@ -3,10 +3,11 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
 
-function renderMarkdown(markdown: string): string {
+function renderMarkdown(markdown: string, plugins: unknown[] = [remarkGfm]): string {
   return renderToStaticMarkup(
-    React.createElement(ReactMarkdown, { remarkPlugins: [remarkGfm] }, markdown),
+    React.createElement(ReactMarkdown, { remarkPlugins: plugins as never }, markdown),
   );
 }
 
@@ -15,6 +16,9 @@ const hyphenRange =
 
 const tildeRange = hyphenRange.replace(/20-50/g, '20~50');
 
+const weatherOverview =
+  '苏南高温：26~29℃，无锡、常州、南通达29℃；苏中西部有阵风（21~23 km/h）。';
+
 describe('range notation vs GFM strikethrough', () => {
   it('hyphen ranges (20-50) do not produce <del>', () => {
     const html = renderMarkdown(hyphenRange);
@@ -22,13 +26,26 @@ describe('range notation vs GFM strikethrough', () => {
     expect(html).toContain('20-50');
   });
 
-  it('tilde ranges (20~50) can produce <del> when paired across the paragraph', () => {
+  it('default GFM: tilde ranges (20~50) can produce <del> when paired across the paragraph', () => {
     const html = renderMarkdown(tildeRange);
     expect(html).toContain('<del>');
   });
 
-  it('explicit ~~ still produces strikethrough', () => {
-    const html = renderMarkdown('~~deleted~~');
+  it('chat remark plugins: tilde ranges do not produce <del>', () => {
+    const html = renderMarkdown(tildeRange, chatRemarkPlugins);
+    expect(html).not.toContain('<del>');
+    expect(html).toContain('20~50');
+  });
+
+  it('chat remark plugins: weather-style ranges stay intact', () => {
+    const html = renderMarkdown(weatherOverview, chatRemarkPlugins);
+    expect(html).not.toContain('<del>');
+    expect(html).toContain('26~29℃');
+    expect(html).toContain('21~23 km/h');
+  });
+
+  it('explicit ~~ still produces strikethrough with chat plugins', () => {
+    const html = renderMarkdown('~~deleted~~', chatRemarkPlugins);
     expect(html).toContain('<del>deleted</del>');
   });
 });
