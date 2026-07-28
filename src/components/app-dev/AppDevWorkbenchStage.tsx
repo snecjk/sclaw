@@ -1,12 +1,14 @@
 /**
- * Right-stage for app-dev workbench: 预览 (default) / 代码 (tree + search + Monaco).
+ * Right-stage for app-dev workbench: 预览 / 代码 / Git / 云服务.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
+  Cloud,
   Eye,
   FileCode2,
   FolderTree,
+  GitBranch,
   Loader2,
   RotateCw,
   Save,
@@ -15,7 +17,9 @@ import {
   Wand2,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { AppDevCloudPanel } from '@/components/app-dev/AppDevCloudPanel';
 import { AppDevFileTree } from '@/components/app-dev/AppDevFileTree';
+import { AppDevGitPanel } from '@/components/app-dev/AppDevGitPanel';
 import { AppDevMonacoEditor } from '@/components/app-dev/AppDevMonacoEditor';
 import { SclawBrowserFrame } from '@/components/sclaw-browser/SclawBrowserFrame';
 import { Button } from '@/components/ui/button';
@@ -32,7 +36,7 @@ import {
 } from '@/lib/app-dev-api';
 import { cn } from '@/lib/utils';
 
-export type AppDevStageMode = 'preview' | 'code';
+export type AppDevStageMode = 'preview' | 'code' | 'git' | 'cloud';
 type CodeSidebar = 'files' | 'search';
 
 const DEFAULT_ENTRY = 'frontend/src/App.tsx';
@@ -230,6 +234,8 @@ export function AppDevWorkbenchStage({
           [
             { id: 'preview', label: '预览', icon: Eye },
             { id: 'code', label: '代码', icon: FileCode2 },
+            { id: 'git', label: 'Git 代码管理', icon: GitBranch },
+            { id: 'cloud', label: '云服务', icon: Cloud },
           ] as const
         ).map((tab) => {
           const Icon = tab.icon;
@@ -325,6 +331,12 @@ export function AppDevWorkbenchStage({
             </div>
           </div>
         )
+      ) : null}
+
+      {mode === 'git' ? <AppDevGitPanel workspaceId={workspaceId} /> : null}
+
+      {mode === 'cloud' ? (
+        <AppDevCloudPanel workspaceId={workspaceId} appName={appName} />
       ) : null}
 
       {mode === 'code' ? (
