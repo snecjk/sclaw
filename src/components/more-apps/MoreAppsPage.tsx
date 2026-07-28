@@ -27,6 +27,11 @@ import {
   appendSkipLoginReturnUrl,
   fetchAppPlazaSkipLoginLink,
 } from '@/lib/app-plaza-api';
+import {
+  hasStoPolicyAuthInEmbedSession,
+  hasTeambitionAuthInEmbedSession,
+  isTeambitionAppUrl,
+} from '@/lib/embed-site-auth';
 import { formatAppBadges } from './format-app-badges';
 
 const HERO_CAROUSEL_INTERVAL = 5000;
@@ -87,6 +92,10 @@ export function MoreAppsPage() {
   const allApps = useMemo(() => {
     return [...catalogApps, ...externalApps].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }, [catalogApps, externalApps]);
+
+  const isCatalogApp = useCallback((app: AppItem) => {
+    return catalogApps.some((candidate) => candidate.id === app.id);
+  }, [catalogApps]);
 
   // Server categories with a fixed "精选" entry first; while loading or on error
   // only "精选" is shown (分类失败时保留精选 — independent degradation).
@@ -178,9 +187,10 @@ export function MoreAppsPage() {
   }, [activeTab, heroSlideIndex, setHeroSlideIndex, banners]);
 
   const openAppWithSkipLogin = useCallback(async (app: AppItem) => {
-    // 空 / sto-policy：不换票，直接打开应用 URL（后者靠页内二次登录 / useStoToken）。
+    // 免登仅针对应用广场目录应用；外部/我的应用自定义项始终直接打开 URL。
     const systemCode = app.systemCode?.trim() || '';
     const hasUrl = !!app.url?.trim();
+    const skipLoginEligible = isCatalogApp(app);
     if (!systemCode && !hasUrl) return;
 
     if (!isAppInstalled(app.id)) {
@@ -188,7 +198,7 @@ export function MoreAppsPage() {
     }
 
     const shouldExchangeSkipLogin =
-      !!systemCode && systemCode !== STO_POLICY_SYSTEM_CODE;
+      skipLoginEligible && !!systemCode && systemCode !== STO_POLICY_SYSTEM_CODE;
 
     if (shouldExchangeSkipLogin) {
       try {
@@ -200,6 +210,7 @@ export function MoreAppsPage() {
           appId: app.id,
           sourceUrl: app.url,
           systemCode,
+          skipLoginEligible,
           iconUrl: app.iconUrl,
           iconKey: app.iconKey,
           tone: app.tone,
@@ -220,26 +231,44 @@ export function MoreAppsPage() {
         appId: app.id,
         sourceUrl: app.url,
         systemCode: systemCode || undefined,
+        skipLoginEligible,
         iconUrl: app.iconUrl,
         iconKey: app.iconKey,
         tone: app.tone,
       });
     }
-  }, [installApp, isAppInstalled]);
+  }, [installApp, isAppInstalled, isCatalogApp]);
 
-  const handleOpenApp = useCallback((app: AppItem) => {
+  const handleOpenApp = useCallback(async (app: AppItem) => {
     const systemCode = app.systemCode?.trim() || '';
     const hasUrl = !!app.url?.trim();
+    const skipLoginEligible = isCatalogApp(app);
     if (!systemCode && !hasUrl) return;
 
-    // 空编码：无法换取免登地址；sto-policy：需二次登录。两者都先确认再打开。
-    if (!systemCode || systemCode === STO_POLICY_SYSTEM_CODE) {
+    // 只有应用广场目录应用才需要二次登录确认 / 免登判断。
+    // sto-policy：有未过期 stoToken/Authorization cookie 则直接打开。
+    // Teambition（空 systemCode）：有未过期 TEAMBITION_SESSIONID 则直接打开。
+    if (skipLoginEligible && !systemCode) {
+      if (isTeambitionAppUrl(app.url)) {
+        const authed = await hasTeambitionAuthInEmbedSession();
+        if (authed) {
+          void openAppWithSkipLogin(app);
+          return;
+        }
+      }
       setPendingStoPolicyApp(app);
       return;
     }
+    if (skipLoginEligible && systemCode === STO_POLICY_SYSTEM_CODE) {
+      const authed = await hasStoPolicyAuthInEmbedSession();
+      if (!authed) {
+        setPendingStoPolicyApp(app);
+        return;
+      }
+    }
 
     void openAppWithSkipLogin(app);
-  }, [openAppWithSkipLogin]);
+  }, [isCatalogApp, openAppWithSkipLogin]);
 
   const confirmStoPolicyOpen = useCallback(async () => {
     const app = pendingStoPolicyApp;

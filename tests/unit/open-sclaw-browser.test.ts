@@ -125,6 +125,7 @@ describe('resolveSclawBrowserUrl', () => {
         url: 'https://sso.example.com/Authenticate/Login?old=1',
         sourceUrl: 'https://target.example.com',
         systemCode: 'JIUTIAN',
+        skipLoginEligible: true,
       },
     });
 
@@ -149,6 +150,7 @@ describe('resolveSclawBrowserUrl', () => {
         url: 'https://sso.example.com/Authenticate/Login?old=1',
         sourceUrl: 'https://target.example.com',
         systemCode: 'JIUTIAN',
+        skipLoginEligible: true,
       },
     });
 
@@ -173,6 +175,7 @@ describe('resolveSclawBrowserUrl', () => {
       url: 'https://wangdian.sto.cn/home',
       sourceUrl: 'https://wangdian.sto.cn',
       systemCode: 'SITE_KEEPER',
+      skipLoginEligible: true,
     });
 
     expect(fetchAppPlazaSkipLoginLinkMock).toHaveBeenCalledWith('SITE_KEEPER');
@@ -187,6 +190,7 @@ describe('resolveSclawBrowserUrl', () => {
       url: 'https://example.com/plain',
       sourceUrl: 'https://example.com/plain',
       systemCode: '',
+      skipLoginEligible: true,
     });
 
     expect(fetchAppPlazaSkipLoginLinkMock).not.toHaveBeenCalled();
@@ -199,9 +203,23 @@ describe('resolveSclawBrowserUrl', () => {
       url: 'https://zc.sto.cn/',
       sourceUrl: 'https://zc.sto.cn/',
       systemCode: 'sto-policy',
+      skipLoginEligible: true,
     });
 
     expect(fetchAppPlazaSkipLoginLinkMock).not.toHaveBeenCalled();
     expect(openExternalUrlMock).toHaveBeenCalledWith('https://zc.sto.cn/');
+  });
+
+  it('never exchanges skip-login for non-App-Plaza tabs even when systemCode exists', async () => {
+    const { openSclawBrowserTabInSystemBrowser } = await import('@/lib/open-sclaw-browser');
+    await openSclawBrowserTabInSystemBrowser({
+      url: 'https://example.com/custom',
+      sourceUrl: 'https://example.com/custom',
+      systemCode: 'SITE_KEEPER',
+      skipLoginEligible: false,
+    });
+
+    expect(fetchAppPlazaSkipLoginLinkMock).not.toHaveBeenCalled();
+    expect(openExternalUrlMock).toHaveBeenCalledWith('https://example.com/custom');
   });
 });

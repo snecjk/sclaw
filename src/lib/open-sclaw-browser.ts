@@ -30,14 +30,21 @@ export interface OpenSclawBrowserOptions {
   sourceUrl?: string;
   /** Subsystem code used to exchange skip-login URLs. */
   systemCode?: string;
+  /** Only App Plaza catalog apps may exchange skip-login URLs. */
+  skipLoginEligible?: boolean;
 }
 
 async function openUrlWithOptionalSkipLogin(opts: {
   url: string;
   sourceUrl?: string;
   systemCode?: string;
+  skipLoginEligible?: boolean;
 }): Promise<void> {
   const systemCode = opts.systemCode?.trim();
+  if (!opts.skipLoginEligible) {
+    openExternalUrl(opts.url);
+    return;
+  }
   // 空编码 / sto-policy：不换免登，直接外开（sto-policy 走页内二次登录 / useStoToken）。
   if (!systemCode || systemCode === 'sto-policy') {
     openExternalUrl(opts.url);
@@ -66,6 +73,7 @@ export function openInSclawBrowser({
   tone,
   sourceUrl,
   systemCode,
+  skipLoginEligible,
 }: OpenSclawBrowserOptions): void {
   const trimmed = url?.trim();
   if (!trimmed) return;
@@ -80,6 +88,7 @@ export function openInSclawBrowser({
     tone,
     sourceUrl,
     systemCode,
+    skipLoginEligible,
   });
 
   if (!useAppPlazaShellStore.getState().routeActive) {
@@ -113,12 +122,14 @@ export async function openSclawBrowserTabInSystemBrowser(tab: {
   url: string;
   sourceUrl?: string;
   systemCode?: string;
+  skipLoginEligible?: boolean;
 }): Promise<void> {
   if (!tab.url?.trim()) return;
   await openUrlWithOptionalSkipLogin({
     url: tab.url,
     sourceUrl: tab.sourceUrl,
     systemCode: tab.systemCode,
+    skipLoginEligible: tab.skipLoginEligible,
   });
 }
 

@@ -67,6 +67,8 @@ export interface AppPlazaBrowserTab {
   sourceUrl?: string;
   /** Subsystem code used to exchange skip-login URLs. */
   systemCode?: string;
+  /** Only App Plaza catalog apps may exchange skip-login URLs. */
+  skipLoginEligible?: boolean;
 }
 
 interface OpenOrFocusBrowserTabInput {
@@ -82,6 +84,8 @@ interface OpenOrFocusBrowserTabInput {
   sourceUrl?: string;
   /** Subsystem code used to exchange skip-login URLs. */
   systemCode?: string;
+  /** Only App Plaza catalog apps may exchange skip-login URLs. */
+  skipLoginEligible?: boolean;
 }
 
 interface AppPlazaShellState {
@@ -252,6 +256,7 @@ function makeLiveTab(
     registryAppId?: string;
     sourceUrl?: string;
     systemCode?: string;
+    skipLoginEligible?: boolean;
   },
 ): AppPlazaBrowserTab {
   const embedRuntimeId = createSclawBrowserEmbedRuntimeId();
@@ -279,6 +284,7 @@ function makeLiveTab(
     iconUrl,
     sourceUrl: icons?.sourceUrl?.trim() || tab.sourceUrl,
     systemCode: icons?.systemCode?.trim() || tab.systemCode,
+    skipLoginEligible: icons?.skipLoginEligible ?? tab.skipLoginEligible,
     iconKey: icons?.iconKey ?? tab.iconKey,
     tone: icons?.tone ?? tab.tone,
     // Reset until the page reports its own favicon (same as Chrome).
@@ -332,6 +338,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
               registryAppId: current.registryAppId,
               sourceUrl: current.sourceUrl,
               systemCode: current.systemCode,
+              skipLoginEligible: current.skipLoginEligible,
             },
           );
           tabs[idx] = revived;
@@ -474,6 +481,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
           url: resolvedUrl,
           registryAppId: tab.registryAppId,
           systemCode: tab.systemCode,
+          skipLoginEligible: tab.skipLoginEligible,
           excludeTabId: tabId,
         });
         if (existing) {
@@ -501,6 +509,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
           registryAppId: current.registryAppId,
           sourceUrl: current.sourceUrl,
           systemCode: current.systemCode,
+          skipLoginEligible: current.skipLoginEligible,
         });
         return { browserTabs: tabs, activeTabId: tabId };
       });
@@ -535,6 +544,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
       registryAppId: input.appId?.trim() || undefined,
       sourceUrl: input.sourceUrl?.trim() || undefined,
       systemCode: input.systemCode?.trim() || undefined,
+      skipLoginEligible: input.skipLoginEligible ?? false,
     };
 
     void (async () => {
@@ -572,6 +582,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
               // Keep each tab's system identity stable; never inherit another system's code.
               sourceUrl: icons.sourceUrl || current.sourceUrl,
               systemCode: icons.systemCode || current.systemCode,
+              skipLoginEligible: icons.skipLoginEligible ?? current.skipLoginEligible,
             });
             return { browserTabs: tabs, activeTabId: existing.id };
           });
@@ -594,6 +605,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
                   registryAppId: icons.registryAppId || t.registryAppId,
                   sourceUrl: icons.sourceUrl || t.sourceUrl,
                   systemCode: icons.systemCode || t.systemCode,
+                  skipLoginEligible: icons.skipLoginEligible ?? t.skipLoginEligible,
                 }
               : t,
           ),

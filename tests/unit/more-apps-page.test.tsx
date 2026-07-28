@@ -7,6 +7,8 @@ const fetchBannersMock = vi.fn();
 const fetchSkipLoginLinkMock = vi.fn();
 const openInSclawBrowserMock = vi.fn();
 const fetchRegistryMock = vi.fn();
+const hasStoPolicyAuthInEmbedSessionMock = vi.fn();
+const hasTeambitionAuthInEmbedSessionMock = vi.fn();
 
 vi.mock('@/lib/app-plaza-api', () => ({
   fetchAppPlazaApps: (...args: unknown[]) => fetchAppsMock(...args),
@@ -21,6 +23,19 @@ vi.mock('@/lib/app-plaza-api', () => ({
 
 vi.mock('@/lib/open-sclaw-browser', () => ({
   openInSclawBrowser: (...args: unknown[]) => openInSclawBrowserMock(...args),
+}));
+
+vi.mock('@/lib/embed-site-auth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/embed-site-auth')>();
+  return {
+    ...actual,
+    hasStoPolicyAuthInEmbedSession: (...args: unknown[]) => hasStoPolicyAuthInEmbedSessionMock(...args),
+    hasTeambitionAuthInEmbedSession: (...args: unknown[]) => hasTeambitionAuthInEmbedSessionMock(...args),
+  };
+});
+
+vi.mock('@/lib/sto-policy-web-url', () => ({
+  hasStoPolicyAuthInEmbedSession: (...args: unknown[]) => hasStoPolicyAuthInEmbedSessionMock(...args),
 }));
 
 vi.mock('@/lib/more-apps-api', () => ({
@@ -81,6 +96,8 @@ describe('MoreAppsPage server catalog', () => {
     resetStore();
     openInSclawBrowserMock.mockReset();
     fetchSkipLoginLinkMock.mockReset();
+    hasStoPolicyAuthInEmbedSessionMock.mockReset().mockResolvedValue(false);
+    hasTeambitionAuthInEmbedSessionMock.mockReset().mockResolvedValue(false);
     fetchBannersMock.mockReset().mockResolvedValue([]);
     fetchCategoriesMock.mockReset().mockResolvedValue([]);
     fetchAppsMock.mockReset().mockResolvedValue({
@@ -149,15 +166,20 @@ describe('MoreAppsPage server catalog', () => {
     const card = await screen.findByRole('button', { name: '打开客户关系' });
 
     fireEvent.keyDown(card, { key: 'Enter' });
-    expect(openInSclawBrowserMock).toHaveBeenCalledWith({
-      url: 'https://example.com/org',
-      title: '客户关系',
-      appId: 'org-relation',
-      sourceUrl: 'https://example.com/org',
-      systemCode: undefined,
-      iconKey: 'org-relation',
-      iconUrl: 'https://cdn.example.com/org-relation.png',
-      tone: 'blue',
+    expect(await screen.findByText('需要二次登录')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确定' }));
+    await waitFor(() => {
+      expect(openInSclawBrowserMock).toHaveBeenCalledWith({
+        url: 'https://example.com/org',
+        title: '客户关系',
+        appId: 'org-relation',
+        sourceUrl: 'https://example.com/org',
+        skipLoginEligible: true,
+        systemCode: undefined,
+        iconKey: 'org-relation',
+        iconUrl: 'https://cdn.example.com/org-relation.png',
+        tone: 'blue',
+      });
     });
 
     openInSclawBrowserMock.mockClear();
@@ -194,11 +216,119 @@ describe('MoreAppsPage server catalog', () => {
         expect.objectContaining({
           url: 'https://zc.sto.cn/',
           appId: 'policy-app',
+          skipLoginEligible: true,
           systemCode: 'sto-policy',
           sourceUrl: 'https://zc.sto.cn/',
         }),
       );
     });
+  });
+
+  it('does not ask again for sto-policy when embed cookies still have a valid auth token', async () => {
+    hasStoPolicyAuthInEmbedSessionMock.mockResolvedValue(true);
+    fetchAppsMock.mockResolvedValueOnce({
+      items: [{
+        ...serverApp,
+        id: 'policy-app',
+        name: '制度中心',
+        systemCode: 'sto-policy',
+        url: 'https://zc.sto.cn/',
+      }],
+      total: 1,
+      pageNum: 1,
+      pageSize: 20,
+    });
+
+    render(<MoreAppsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: '打开制度中心' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('需要二次登录')).not.toBeInTheDocument();
+      expect(fetchSkipLoginLinkMock).not.toHaveBeenCalled();
+      expect(openInSclawBrowserMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://zc.sto.cn/',
+          appId: 'policy-app',
+          skipLoginEligible: true,
+          systemCode: 'sto-policy',
+        }),
+      );
+    });
+  });
+
+  it('asks for confirmation when sto-policy auth cookie is expired or missing', async () => {
+    hasStoPolicyAuthInEmbedSessionMock.mockResolvedValue(false);
+    fetchAppsMock.mockResolvedValueOnce({
+      items: [{
+        ...serverApp,
+        id: 'policy-app',
+        name: '制度中心',
+        systemCode: 'sto-policy',
+        url: 'https://zc.sto.cn/',
+      }],
+      total: 1,
+      pageNum: 1,
+      pageSize: 20,
+    });
+
+    render(<MoreAppsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: '打开制度中心' }));
+
+    expect(await screen.findByText('需要二次登录')).toBeInTheDocument();
+    expect(openInSclawBrowserMock).not.toHaveBeenCalled();
+  });
+
+  it('skips confirmation for Teambition when TEAMBITION_SESSIONID is still valid', async () => {
+    hasTeambitionAuthInEmbedSessionMock.mockResolvedValue(true);
+    fetchAppsMock.mockResolvedValueOnce({
+      items: [{
+        ...serverApp,
+        id: 'teambition-app',
+        name: 'Teambition',
+        systemCode: '',
+        url: 'https://www.teambition.com/project',
+      }],
+      total: 1,
+      pageNum: 1,
+      pageSize: 20,
+    });
+
+    render(<MoreAppsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: '打开Teambition' }));
+
+    await waitFor(() => {
+      expect(screen.queryByText('需要二次登录')).not.toBeInTheDocument();
+      expect(fetchSkipLoginLinkMock).not.toHaveBeenCalled();
+      expect(openInSclawBrowserMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://www.teambition.com/project',
+          appId: 'teambition-app',
+          skipLoginEligible: true,
+        }),
+      );
+    });
+  });
+
+  it('asks for confirmation for Teambition when TEAMBITION_SESSIONID is missing', async () => {
+    hasTeambitionAuthInEmbedSessionMock.mockResolvedValue(false);
+    fetchAppsMock.mockResolvedValueOnce({
+      items: [{
+        ...serverApp,
+        id: 'teambition-app',
+        name: 'Teambition',
+        systemCode: '',
+        url: 'https://www.teambition.com/project',
+      }],
+      total: 1,
+      pageNum: 1,
+      pageSize: 20,
+    });
+
+    render(<MoreAppsPage />);
+    fireEvent.click(await screen.findByRole('button', { name: '打开Teambition' }));
+
+    expect(await screen.findByText('需要二次登录')).toBeInTheDocument();
+    expect(openInSclawBrowserMock).not.toHaveBeenCalled();
   });
 
   it('asks for confirmation when systemCode is empty (no skip-login exchange)', async () => {
@@ -229,10 +359,43 @@ describe('MoreAppsPage server catalog', () => {
         expect.objectContaining({
           url: 'https://example.com/plain',
           appId: 'plain-app',
+          skipLoginEligible: true,
           systemCode: undefined,
         }),
       );
     });
+  });
+
+  it('does not use skip-login or confirmation for external apps in 我的应用', async () => {
+    fetchRegistryMock.mockResolvedValueOnce({
+      version: 1,
+      externalApps: [{
+        id: 'ext-app',
+        name: '外部应用',
+        description: '自定义链接',
+        url: 'https://example.com/external',
+        systemCode: 'SITE_KEEPER',
+        external: true,
+        kind: 'external',
+      }],
+      installedIds: [],
+      favoriteIds: [],
+    });
+
+    render(<MoreAppsPage />);
+    fireEvent.click(await screen.findByRole('tab', { name: '我的应用' }));
+    fireEvent.click(screen.getByText('打开链接'));
+
+    expect(screen.queryByText('需要二次登录')).not.toBeInTheDocument();
+    expect(fetchSkipLoginLinkMock).not.toHaveBeenCalled();
+    expect(openInSclawBrowserMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: 'https://example.com/external',
+        appId: 'ext-app',
+        skipLoginEligible: false,
+        systemCode: 'SITE_KEEPER',
+      }),
+    );
   });
 
   it('renders a whole-image URL banner and opens its configured link', async () => {
@@ -269,15 +432,20 @@ describe('MoreAppsPage server catalog', () => {
     }]);
     render(<MoreAppsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '客户关系管理升级' }));
-    expect(openInSclawBrowserMock).toHaveBeenCalledWith({
-      url: 'https://example.com/org',
-      title: '客户关系',
-      appId: 'org-relation',
-      sourceUrl: 'https://example.com/org',
-      systemCode: undefined,
-      iconKey: 'org-relation',
-      iconUrl: 'https://cdn.example.com/org-relation.png',
-      tone: 'blue',
+    expect(await screen.findByText('需要二次登录')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '确定' }));
+    await waitFor(() => {
+      expect(openInSclawBrowserMock).toHaveBeenCalledWith({
+        url: 'https://example.com/org',
+        title: '客户关系',
+        appId: 'org-relation',
+        sourceUrl: 'https://example.com/org',
+        skipLoginEligible: true,
+        systemCode: undefined,
+        iconKey: 'org-relation',
+        iconUrl: 'https://cdn.example.com/org-relation.png',
+        tone: 'blue',
+      });
     });
   });
 
