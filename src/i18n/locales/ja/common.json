@@ -186,7 +186,9 @@
             "renameTitle": "名前を変更",
             "newName": "新しい名前",
             "deleteTitle": "項目を削除",
-            "deleteMessage": "「{{name}}」を削除しますか？フォルダは空の場合のみ削除できます。"
+            "deleteMessage": "「{{name}}」を削除しますか？フォルダは空の場合のみ削除できます。",
+            "uploadToSharedTitle": "拠点共有へアップロード",
+            "uploadToSharedMessage": "「{{name}}」のアップロード先となる拠点共有成果物フォルダを選択してください。"
         },
         "preview": {
             "unsupported": "プレビューはまだサポートされていません。ファイルをダウンロードできます。"

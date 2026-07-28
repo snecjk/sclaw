@@ -49,6 +49,7 @@ import {
   getDataCenterDownloadUrl,
   getDataCenterPreviewUrl,
   getDataCenterTrace,
+  listDataCenterEntries,
   shareDataCenterEntries,
   uploadDriveFileFromPath,
 } from '@/lib/data-center-api';
@@ -81,6 +82,7 @@ type DataCenterUiEntry = DataCenterEntry & {
   missing?: boolean;
 };
 type DriveTab = 'local' | 'upload';
+type UploadToSharedTarget = { entry: DataCenterUiEntry; targetSpaceId: string };
 
 function normalizeSectionParam(value: string | null): DataCenterSection {
   return SECTION_PARAM_VALUES.includes(value as DataCenterSection)
@@ -98,6 +100,16 @@ function formatBytes(bytes: number): string {
     unit += 1;
   }
   return `${size >= 10 || unit === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
+}
+
+function formatUsagePercent(percent: number): string {
+  if (!Number.isFinite(percent)) return '0';
+  return percent.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function formatUsageProgressWidth(percent: number): string {
+  if (!Number.isFinite(percent) || percent <= 0) return '0%';
+  return `${Math.min(100, Math.max(4, percent))}%`;
 }
 
 function formatDate(value: string | null): string {
@@ -326,6 +338,198 @@ function PreviewModal({
   );
 }
 
+type SharedFolderMap = Record<string, DataCenterEntry[]>;
+type SharedFolderLoadingMap = Record<string, boolean>;
+type SharedFolderOpenMap = Record<string, boolean>;
+
+function UploadToSharedFolderDialog({
+  entry,
+  targetSpaceId,
+  onClose,
+  onConfirm,
+}: {
+  entry: DataCenterUiEntry;
+  targetSpaceId: string;
+  onClose: () => void;
+  onConfirm: (targetParentEntryId: string) => Promise<void>;
+}) {
+  const { t } = useTranslation('common');
+  const [selectedEntryId, setSelectedEntryId] = useState(ROOT_ENTRY_ID);
+  const [folderMap, setFolderMap] = useState<SharedFolderMap>({});
+  const [loadingMap, setLoadingMap] = useState<SharedFolderLoadingMap>({});
+  const [openMap, setOpenMap] = useState<SharedFolderOpenMap>({ [ROOT_ENTRY_ID]: true });
+  const [saving, setSaving] = useState(false);
+
+  const loadFolders = async (parentEntryId: string) => {
+    setLoadingMap((prev) => ({ ...prev, [parentEntryId]: true }));
+    try {
+      const result = await listDataCenterEntries({
+        spaceType: 'site_shared_artifact',
+        spaceId: targetSpaceId,
+        parentEntryId,
+        entryType: 'folder',
+        pageSize: 200,
+        sortField: 'name',
+        sortOrder: 'asc',
+      });
+      setFolderMap((prev) => ({
+        ...prev,
+        [parentEntryId]: result.items.filter((item) => item.entryType === 'folder'),
+      }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('dataCenterPage.saveArtifact.loadFoldersFailed'));
+      setFolderMap((prev) => ({ ...prev, [parentEntryId]: [] }));
+    } finally {
+      setLoadingMap((prev) => ({ ...prev, [parentEntryId]: false }));
+    }
+  };
+
+  const toggleFolder = async (folderId: string) => {
+    const nextOpen = !openMap[folderId];
+    setOpenMap((prev) => ({ ...prev, [folderId]: nextOpen }));
+    if (nextOpen && folderMap[folderId] === undefined) {
+      await loadFolders(folderId);
+    }
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadFolders(ROOT_ENTRY_ID);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetSpaceId]);
+
+  const submit = async () => {
+    setSaving(true);
+    try {
+      await onConfirm(selectedEntryId);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <DataCenterModal
+      title={t('dataCenterPage.dialogs.uploadToSharedTitle')}
+      onClose={onClose}
+      footer={(
+        <>
+          <Button type="button" variant="outline" onClick={onClose}>{t('actions.cancel')}</Button>
+          <Button type="button" onClick={submit} disabled={saving}>
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            {t('actions.confirm')}
+          </Button>
+        </>
+      )}
+    >
+      <div className="space-y-3">
+        <p className="text-[13px] leading-5 text-[#4E5969] dark:text-muted-foreground">
+          {t('dataCenterPage.dialogs.uploadToSharedMessage', { name: entry.name })}
+        </p>
+        <div className="rounded-[14px] bg-[#F7F8FA] p-2 dark:bg-muted/40">
+          <div className="rounded-[10px] bg-white p-2.5 dark:bg-card">
+            <SharedFolderPickerRow
+              folderId={ROOT_ENTRY_ID}
+              label={t('dataCenterPage.saveArtifact.sharedArtifacts')}
+              selectedEntryId={selectedEntryId}
+              open={openMap[ROOT_ENTRY_ID] ?? true}
+              loading={loadingMap[ROOT_ENTRY_ID] ?? false}
+              childrenFolders={folderMap[ROOT_ENTRY_ID] ?? []}
+              folderMap={folderMap}
+              loadingMap={loadingMap}
+              openMap={openMap}
+              onSelect={setSelectedEntryId}
+              onToggle={toggleFolder}
+            />
+          </div>
+        </div>
+      </div>
+    </DataCenterModal>
+  );
+}
+
+function SharedFolderPickerRow({
+  folderId,
+  label,
+  selectedEntryId,
+  open,
+  loading,
+  childrenFolders,
+  folderMap,
+  loadingMap,
+  openMap,
+  onSelect,
+  onToggle,
+}: {
+  folderId: string;
+  label: string;
+  selectedEntryId: string;
+  open: boolean;
+  loading: boolean;
+  childrenFolders: DataCenterEntry[];
+  folderMap: SharedFolderMap;
+  loadingMap: SharedFolderLoadingMap;
+  openMap: SharedFolderOpenMap;
+  onSelect: (entryId: string) => void;
+  onToggle: (entryId: string) => void;
+}) {
+  const { t } = useTranslation('common');
+  const selected = selectedEntryId === folderId;
+  return (
+    <div>
+      <div className={cn('flex h-8 items-center gap-2 rounded-[8px] px-1.5', selected && 'bg-[#F2F3F5] dark:bg-muted')}>
+        <input
+          type="checkbox"
+          className="h-4 w-4 rounded border-[#C9CDD4]"
+          checked={selected}
+          onChange={() => onSelect(folderId)}
+          aria-label={label}
+        />
+        <button
+          type="button"
+          className="flex h-5 w-5 items-center justify-center rounded hover:bg-[#F2F3F5] dark:hover:bg-muted"
+          onClick={() => onToggle(folderId)}
+          aria-label={open ? t('actions.collapse') : t('actions.expand')}
+        >
+          <ChevronDown className={cn('h-3.5 w-3.5 text-[#4E5969] transition-transform', !open && '-rotate-90')} />
+        </button>
+        <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => onSelect(folderId)}>
+          <img src={directoryIcon} alt="" aria-hidden="true" className="h-5 w-5 shrink-0" />
+          <span className="truncate text-[13px] font-semibold text-[#1D2129] dark:text-foreground">{label}</span>
+        </button>
+      </div>
+      {open ? (
+        <div className="mt-1 space-y-1 pl-8">
+          {loading ? (
+            <div className="flex h-8 items-center gap-2 text-[12px] text-[#86909C]">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              {t('dataCenterPage.saveArtifact.loading')}
+            </div>
+          ) : childrenFolders.length === 0 ? (
+            <div className="flex h-8 items-center text-[12px] text-[#86909C]">{t('dataCenterPage.saveArtifact.emptyFolders')}</div>
+          ) : (
+            childrenFolders.map((folder) => (
+              <SharedFolderPickerRow
+                key={folder.entryId}
+                folderId={folder.entryId}
+                label={folder.name}
+                selectedEntryId={selectedEntryId}
+                open={Boolean(openMap[folder.entryId])}
+                loading={Boolean(loadingMap[folder.entryId])}
+                childrenFolders={folderMap[folder.entryId] ?? []}
+                folderMap={folderMap}
+                loadingMap={loadingMap}
+                openMap={openMap}
+                onSelect={onSelect}
+                onToggle={onToggle}
+              />
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function DataCenter() {
   const { t } = useTranslation(['common', 'chat']);
   const navigate = useNavigate();
@@ -341,6 +545,7 @@ export function DataCenter() {
   const [previewState, setPreviewState] = useState<{ entry: DataCenterUiEntry; tempUrl: DataCenterTempUrl } | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
+  const [uploadToSharedTarget, setUploadToSharedTarget] = useState<UploadToSharedTarget | null>(null);
   const [uploading, setUploading] = useState(false);
   const [driveTab, setDriveTab] = useState<DriveTab>('local');
   const isDriveSection = store.section === 'drive';
@@ -551,14 +756,23 @@ export function DataCenter() {
         toast.info(t('dataCenterPage.toasts.sharedSpaceUnavailable'));
         return;
       }
+      setUploadToSharedTarget({ entry, targetSpaceId });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.sharedSpaceLoadFailed'));
+    }
+  };
+
+  const handleConfirmUploadToShared = async (target: UploadToSharedTarget, targetParentEntryId: string) => {
+    try {
       await shareDataCenterEntries({
-        sourceEntryIds: [entry.entryId],
-        targetSpaceId,
-        targetParentEntryId: 'root',
-        idempotencyKey: createDataCenterIdempotencyKey('share', entry.entryId),
+        sourceEntryIds: [target.entry.entryId],
+        targetSpaceId: target.targetSpaceId,
+        targetParentEntryId,
+        idempotencyKey: createDataCenterIdempotencyKey('share', `${target.entry.entryId}-${target.targetSpaceId}-${targetParentEntryId}`),
       });
       toast.success(t('dataCenterPage.toasts.sharedToSite'));
-      if (isSharedArtifactSpace && store.spaceId === targetSpaceId) {
+      setUploadToSharedTarget(null);
+      if (isSharedArtifactSpace && store.spaceId === target.targetSpaceId) {
         await store.load({ resetPage: true });
       }
     } catch (error) {
@@ -675,11 +889,11 @@ export function DataCenter() {
                       <div className="h-2 w-[86px] overflow-hidden rounded-full bg-[#D8DDE6] dark:bg-muted">
                         <div
                           className="h-full rounded-full bg-[#1D2129] dark:bg-foreground"
-                          style={{ width: `${Math.min(100, Math.max(0, quotaUsedPercent))}%` }}
+                          style={{ width: formatUsageProgressWidth(quotaUsedPercent) }}
                         />
                       </div>
                       <p className="mt-2 text-[13px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">
-                        {t('dataCenterPage.drive.usedPercent', { percent: Math.round(quotaUsedPercent) })}
+                        {t('dataCenterPage.drive.usedPercent', { percent: formatUsagePercent(quotaUsedPercent) })}
                       </p>
                       <p className="mt-1 text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">{quotaUsedText}</p>
                     </>
@@ -916,6 +1130,15 @@ export function DataCenter() {
           tempUrl={previewState.tempUrl}
           onClose={() => setPreviewState(null)}
           onDownload={() => handleDownload(previewState.entry)}
+        />
+      ) : null}
+
+      {uploadToSharedTarget ? (
+        <UploadToSharedFolderDialog
+          entry={uploadToSharedTarget.entry}
+          targetSpaceId={uploadToSharedTarget.targetSpaceId}
+          onClose={() => setUploadToSharedTarget(null)}
+          onConfirm={(targetParentEntryId) => handleConfirmUploadToShared(uploadToSharedTarget, targetParentEntryId)}
         />
       ) : null}
 

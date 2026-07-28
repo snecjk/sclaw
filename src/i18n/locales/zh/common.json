@@ -192,7 +192,9 @@
             "renameTitle": "重命名",
             "newName": "新名称",
             "deleteTitle": "删除条目",
-            "deleteMessage": "确认删除「{{name}}」？文件夹只能在为空时删除。"
+            "deleteMessage": "确认删除「{{name}}」？文件夹只能在为空时删除。",
+            "uploadToSharedTitle": "上传至网点共享",
+            "uploadToSharedMessage": "请选择「{{name}}」要上传到的网点共享产物文件夹。"
         },
         "preview": {
             "unsupported": "暂不支持预览，可下载文件"

@@ -191,7 +191,9 @@
             "renameTitle": "Rename",
             "newName": "New name",
             "deleteTitle": "Delete item",
-            "deleteMessage": "Delete \"{{name}}\"? Folders can only be deleted when empty."
+            "deleteMessage": "Delete \"{{name}}\"? Folders can only be deleted when empty.",
+            "uploadToSharedTitle": "Upload to branch sharing",
+            "uploadToSharedMessage": "Select the branch shared artifact folder to upload \"{{name}}\" to."
         },
         "preview": {
             "unsupported": "Preview is not supported yet. You can download the file."
