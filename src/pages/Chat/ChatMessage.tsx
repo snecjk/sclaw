@@ -6,7 +6,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
 import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, CircleCheck } from 'lucide-react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -1279,7 +1279,7 @@ function MessageBubble({
           aria-busy={useReplyTypewriter && enableReplyTypewriter ? true : undefined}
         >
           <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
+            remarkPlugins={chatRemarkPlugins}
             urlTransform={previewUrlTransform}
             components={{
               p({ children }) {
