@@ -17,14 +17,18 @@ function shouldIgnoreShortcutTarget(target: EventTarget | null): boolean {
   return false;
 }
 
-export function useSclawBrowserChatShortcut(active: boolean): void {
-  const toggleChatPanel = useSclawBrowserOverlayStore((s) => s.toggleChatPanel);
+export function useSclawBrowserChatShortcut(
+  active: boolean,
+  onToggle?: () => void,
+): void {
+  const overlayToggle = useSclawBrowserOverlayStore((s) => s.toggleChatPanel);
 
   useEffect(() => {
     if (!active) return;
 
     const handleToggle = () => {
-      toggleChatPanel();
+      if (onToggle) onToggle();
+      else overlayToggle();
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -47,5 +51,5 @@ export function useSclawBrowserChatShortcut(active: boolean): void {
       window.removeEventListener('keydown', onKeyDown, true);
       unsubscribeIpc?.();
     };
-  }, [active, toggleChatPanel]);
+  }, [active, onToggle, overlayToggle]);
 }

@@ -175,7 +175,14 @@ export function MoreAppsPage() {
     if (!isAppInstalled(app.id)) {
       installApp(app.id);
     }
-    openInSclawBrowser({ url: app.url, title: app.name, appId: app.id });
+    openInSclawBrowser({
+      url: app.url,
+      title: app.name,
+      appId: app.id,
+      iconUrl: app.iconUrl,
+      iconKey: app.iconKey,
+      tone: app.tone,
+    });
   }, [installApp, isAppInstalled]);
 
   // Resolve a banner's click target against the currently loaded APP set.

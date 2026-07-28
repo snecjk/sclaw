@@ -38,9 +38,16 @@ describe('resolveSclawBrowserUrl', () => {
     );
   });
 
-  it('leaves url unchanged when useStoToken is not 1', () => {
+  it('uses custom param name when useStoToken is not 1', () => {
     mockedGetWorkflowStoToken.mockReturnValue('tok-local-abc');
-    const url = 'https://example.com/app?useStoToken=0&stotoken=keep';
+    expect(
+      resolveSclawBrowserUrl('https://example.com/app?foo=bar&useStoToken=stoTokenxxx'),
+    ).toBe('https://example.com/app?foo=bar&stoTokenxxx=tok-local-abc');
+  });
+
+  it('leaves url unchanged when useStoToken is absent', () => {
+    mockedGetWorkflowStoToken.mockReturnValue('tok-local-abc');
+    const url = 'https://example.com/app?stotoken=keep';
     expect(resolveSclawBrowserUrl(url)).toBe(url);
   });
 
@@ -48,6 +55,13 @@ describe('resolveSclawBrowserUrl', () => {
     mockedGetWorkflowStoToken.mockReturnValue('tok-relative');
     expect(resolveSclawBrowserUrl('customer-quote.html?useStoToken=1')).toBe(
       'customer-quote.html?stotoken=tok-relative',
+    );
+  });
+
+  it('supports relative urls with custom useStoToken param name', () => {
+    mockedGetWorkflowStoToken.mockReturnValue('tok-relative');
+    expect(resolveSclawBrowserUrl('customer-quote.html?a=1&useStoToken=myToken')).toBe(
+      'customer-quote.html?a=1&myToken=tok-relative',
     );
   });
 
