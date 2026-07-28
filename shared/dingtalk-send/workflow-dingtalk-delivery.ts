@@ -12,11 +12,28 @@ import {
   resolveWorkflowArtifactUrl,
   type WorkflowExecutionState,
 } from '../workflow-run-status';
+import { normalizeArtifactUrl } from './dws-send-text';
 import { type DingTalkMention } from './dingtalk-mention';
 
 export function isHttpArtifactUrl(url: string | undefined | null): boolean {
   const trimmed = url?.trim();
   return Boolean(trimmed && /^https?:\/\//i.test(trimmed));
+}
+
+/** 钉钉 IM Markdown 标题（`###`，与模块 A 发送格式规则 2 一致）。 */
+function formatWorkflowDingTalkHeading(title: string | undefined, suffix?: string): string {
+  const label = title || '工作流';
+  return suffix ? `### ${label}${suffix}` : `### ${label}`;
+}
+
+/**
+ * 工作流产物单行：程序发送路径下 URL 经 normalize，可安全使用 Markdown 链接
+ * （与对话分享 `buildConversationShareHttpFileLinks` 口径一致）。
+ */
+function formatWorkflowDingTalkArtifactLine(name: string, url: string): string {
+  const label = name.trim() || '文件';
+  const normalizedUrl = normalizeArtifactUrl(url.trim());
+  return `- [${label}](${normalizedUrl})`;
 }
 
 /** 从工作流终态拼钉钉 `--text` 正文（含代发说明底栏）。无可发内容时返回 null。 */
@@ -30,32 +47,38 @@ export function formatWorkflowDingTalkBody(options: {
 
   if (status === 'failed' || status === 'timeout') {
     const err = state.error?.trim() || (status === 'timeout' ? '工作流执行超时' : '工作流执行失败');
-    const head = title ? `【${title}】执行失败` : '工作流执行失败';
+    const head = formatWorkflowDingTalkHeading(title, ' · 执行失败');
     return appendDingTalkAgentSendDisclaimer(`${head}\n\n${err}`);
   }
 
   if (status !== 'completed') return null;
 
-  const lines: string[] = [];
-  if (title) lines.push(`【${title}】`);
+  const lines: string[] = [formatWorkflowDingTalkHeading(title)];
 
   const summary = state.result?.summary?.trim();
   if (summary) {
-    if (lines.length > 0) lines.push('');
+    lines.push('');
     lines.push(summary);
   }
 
+  const artifactLines: string[] = [];
   for (const artifact of state.result?.artifacts ?? []) {
     const url = resolveWorkflowArtifactUrl(artifact);
     if (!isHttpArtifactUrl(url)) continue;
-    if (lines.length > 0 && lines[lines.length - 1] !== '') lines.push('');
-    lines.push(`${artifact.name}：${url}`);
+    artifactLines.push(formatWorkflowDingTalkArtifactLine(artifact.name, url));
+  }
+
+  if (artifactLines.length > 0) {
+    lines.push('');
+    lines.push(...artifactLines);
   }
 
   const body = lines.join('\n').trim();
-  if (!body) {
+  if (!summary && artifactLines.length === 0) {
     if (title) {
-      return appendDingTalkAgentSendDisclaimer(`【${title}】\n\n工作流已执行完成。`);
+      return appendDingTalkAgentSendDisclaimer(
+        `${formatWorkflowDingTalkHeading(title)}\n\n工作流已执行完成。`,
+      );
     }
     return null;
   }

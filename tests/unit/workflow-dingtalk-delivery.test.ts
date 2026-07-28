@@ -25,9 +25,9 @@ describe('formatWorkflowDingTalkBody', () => {
         },
       },
     });
-    expect(body).toContain('【客户异常监控】');
+    expect(body).toContain('### 客户异常监控');
     expect(body).toContain('发现 14 个异常客户');
-    expect(body).toContain('报告.html：https://oss.example.com/r.html');
+    expect(body).toContain('[报告.html](https://oss.example.com/r.html)');
     expect(body).toContain(DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER);
   });
 
@@ -39,7 +39,7 @@ describe('formatWorkflowDingTalkBody', () => {
         error: '节点执行超时',
       },
     });
-    expect(body).toContain('【日报】执行失败');
+    expect(body).toContain('### 日报 · 执行失败');
     expect(body).toContain('节点执行超时');
   });
 
@@ -47,8 +47,33 @@ describe('formatWorkflowDingTalkBody', () => {
     const body = formatWorkflowDingTalkBody({
       state: { status: 'timeout' },
     });
-    expect(body).toContain('工作流执行失败');
+    expect(body).toContain('### 工作流 · 执行失败');
     expect(body).toContain('工作流执行超时');
+  });
+
+  it('formats completed run with markdown heading, summary and artifact link', () => {
+    const previewUrl =
+      'https://baseinfo-chatbotapi.sto.cn/api/agentrun/artifact/preview?filePath=agentRun/2155885403/outputs/tang_poem_formatted.txt&sign=abc';
+    const body = formatWorkflowDingTalkBody({
+      workflowTitle: '工作流',
+      state: {
+        status: 'completed',
+        result: {
+          summary: '已将王维《山居秋暝》按标题、作者、正文格式整理输出。',
+          artifacts: [
+            {
+              id: 'a1',
+              name: 'tang_poem_formatted.txt',
+              type: 'text/plain',
+              url: previewUrl,
+            },
+          ],
+        },
+      },
+    });
+    expect(body).toMatch(/### 工作流\n\n已将王维/);
+    expect(body).toContain('[tang_poem_formatted.txt](');
+    expect(body).toContain(previewUrl);
   });
 });
 
