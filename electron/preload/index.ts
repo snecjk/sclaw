@@ -257,6 +257,7 @@ const electronAPI = {
         'workflow:stream:event',
         'workflow:stream:error',
         'sclaw-browser:toggle-chat',
+        'sclaw-browser:open-url',
       ];
 
       if (validChannels.includes(channel)) {

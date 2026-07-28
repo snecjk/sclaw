@@ -9,6 +9,7 @@ import {
   bindSclawBrowserWebContents,
   updateSclawBrowserPageState,
 } from '@/lib/sclaw-browser-host-api';
+import { resolveSclawEmbedWindowOpenAction } from '../../../shared/sclaw-embed-browser-window-open';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 
 const isElectron = Boolean(window.electron);
@@ -32,6 +33,11 @@ interface SclawBrowserFrameProps {
   onPageTitle?: (title: string) => void;
   /** Fired when history back availability changes. */
   onNavStateChange?: (state: { canGoBack: boolean }) => void;
+  /**
+   * Fallback for legacy webview `new-window` DOM events.
+   * Prefer Main setWindowOpenHandler → sclaw-browser:open-url for Electron 40+.
+   */
+  onOpenWindow?: (url: string) => void;
 }
 
 type EmbedWebviewElement = HTMLElement & {
@@ -86,6 +92,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       onPageFavicon,
       onPageTitle,
       onNavStateChange,
+      onOpenWindow,
     },
     ref,
   ) {
@@ -96,9 +103,11 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
     const onPageFaviconRef = useRef(onPageFavicon);
     const onPageTitleRef = useRef(onPageTitle);
     const onNavStateChangeRef = useRef(onNavStateChange);
+    const onOpenWindowRef = useRef(onOpenWindow);
     onPageFaviconRef.current = onPageFavicon;
     onPageTitleRef.current = onPageTitle;
     onNavStateChangeRef.current = onNavStateChange;
+    onOpenWindowRef.current = onOpenWindow;
 
     const publishNavState = () => {
       const canGoBack = safeCanGoBack(webviewRef.current);
@@ -145,6 +154,9 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       const el = webviewRef.current;
       if (!el) return;
 
+      // Electron requires the allowpopups *attribute*; React booleans can miss it.
+      el.setAttribute('allowpopups', 'true');
+
       let domReady = false;
 
       const bindAfterDomReady = () => {
@@ -183,12 +195,20 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       const onNewWindow = (event: Event) => {
         const detail = event as Event & { url?: string; preventDefault?: () => void };
         detail.preventDefault?.();
-        if (!detail.url) return;
-        if (typeof el.loadURL === 'function') {
-          void el.loadURL(detail.url);
+        const rawUrl = typeof detail.url === 'string' ? detail.url.trim() : '';
+        if (!rawUrl) return;
+        const action = resolveSclawEmbedWindowOpenAction(rawUrl);
+        if (action.kind !== 'open-tab') return;
+        if (onOpenWindowRef.current) {
+          onOpenWindowRef.current(action.url);
           return;
         }
-        el.setAttribute('src', detail.url);
+        // No host callback — stay in-frame as last resort.
+        if (typeof el.loadURL === 'function') {
+          void el.loadURL(action.url);
+          return;
+        }
+        el.setAttribute('src', action.url);
       };
 
       const onFaviconUpdated = (event: Event) => {
@@ -237,7 +257,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
           ref={webviewRef as React.RefObject<HTMLElement>}
           src={url}
           partition={SCLAW_EMBED_BROWSER_PARTITION}
-          allowpopups
+          allowpopups="true"
           className="sclaw-browser-drawer__frame sclaw-browser-drawer__frame--webview"
         />
       );
