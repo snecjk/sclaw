@@ -1,4 +1,4 @@
-export type DataCenterSpaceType = 'drive' | 'qa_artifact';
+export type DataCenterSpaceType = 'drive' | 'qa_artifact' | 'site_shared_artifact';
 export type DataCenterEntryType = 'file' | 'folder';
 export type DataCenterTraceStatus = 'none' | 'pending' | 'verified' | 'missing';
 export type DataCenterSourceType = 'local_upload' | 'chat_artifact' | 'workflow_artifact';
@@ -22,6 +22,7 @@ export interface DataCenterBreadcrumb {
 export interface DataCenterEntry {
   entryId: string;
   spaceType: DataCenterSpaceType;
+  spaceId?: string | null;
   entryType: DataCenterEntryType;
   parentEntryId: string;
   name: string;
@@ -35,6 +36,12 @@ export interface DataCenterEntry {
   createdAt: string | null;
   updatedAt: string | null;
   replayed?: boolean;
+  shared?: boolean;
+  shareId?: string | null;
+  sourceEntryId?: string | null;
+  sharedByName?: string | null;
+  sharedAt?: string | null;
+  canManage?: boolean;
 }
 
 export interface DataCenterEntryDetail extends DataCenterEntry {
@@ -55,6 +62,26 @@ export interface DataCenterEntriesResult {
   pageNo: number;
   pageSize: number;
   breadcrumbs: DataCenterBreadcrumb[];
+}
+
+export interface DataCenterSpace {
+  spaceId: string;
+  spaceType: DataCenterSpaceType;
+  displayName: string;
+  scopeType?: string | null;
+  scopeName?: string | null;
+  capabilities?: {
+    canView?: boolean;
+    canShare?: boolean;
+    canCreateFolder?: boolean;
+    canRead?: boolean;
+    canWrite?: boolean;
+    canManage?: boolean;
+  } | null;
+}
+
+export interface DataCenterSpacesResult {
+  spaces: DataCenterSpace[];
 }
 
 export interface DataCenterTempUrl {
@@ -89,6 +116,8 @@ export interface DataCenterUploadArtifactParams extends DataCenterArtifactProven
   filePath: string;
   fileName?: string;
   parentEntryId?: string;
+  targetSpaceId?: string;
+  targetParentEntryId?: string;
   idempotencyKey: string;
 }
 
@@ -97,6 +126,36 @@ export interface DataCenterUploadDriveFileParams {
   fileName?: string;
   parentEntryId?: string;
   idempotencyKey: string;
+}
+
+export interface DataCenterShareEntriesParams {
+  sourceEntryIds: string[];
+  targetSpaceId: string;
+  targetParentEntryId?: string;
+  idempotencyKey: string;
+}
+
+export interface DataCenterShareEntriesResult {
+  shareId: string;
+  targetSpaceId: string;
+  sharedRoots: Array<{
+    entryId: string;
+    sourceEntryId: string;
+    entryType: DataCenterEntryType;
+    name: string;
+  }>;
+}
+
+export interface DataCenterEntryShareStatus {
+  shared: boolean;
+  shares?: Array<{
+    shareId: string;
+    sharedEntryId?: string;
+    targetSpaceId?: string;
+    sharedByName?: string | null;
+    sharedAt?: string | null;
+    canManage?: boolean;
+  }>;
 }
 
 export class DataCenterApiError extends Error {

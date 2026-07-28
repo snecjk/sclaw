@@ -44,6 +44,18 @@ function isHtmlFileType(mimeType: string, fileName: string, filePath?: string): 
   return false;
 }
 
+async function fetchRemotePreviewText(filePath: string): Promise<string> {
+  const result = await previewBridgeHttpFetch({
+    url: filePath,
+    allowedOrigin: new URL(filePath).origin,
+  });
+  if (!result.ok || !result.bodyBase64) {
+    throw new Error(result.error || `HTTP ${result.status ?? 'error'}`);
+  }
+  const bytes = Uint8Array.from(atob(result.bodyBase64), (char) => char.charCodeAt(0));
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
 /** Map file extension to highlight.js language name. */
 function extToHljsLang(ext: string): string | undefined {
   const map: Record<string, string> = {
@@ -295,9 +307,7 @@ export function FilePreviewViewer({
 
     void (async () => {
       try {
-        const response = await fetch(filePath);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const content = await response.text();
+        const content = await fetchRemotePreviewText(filePath);
         if (cancelled) return;
         setHtmlContent(content);
       } catch {
@@ -333,9 +343,7 @@ export function FilePreviewViewer({
 
     void (async () => {
       try {
-        const response = await fetch(filePath);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const content = await response.text();
+        const content = await fetchRemotePreviewText(filePath);
         if (cancelled) return;
         setTextContent(content);
       } catch (e) {

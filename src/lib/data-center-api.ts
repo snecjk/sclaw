@@ -2,12 +2,17 @@ import { hostApiFetch } from '@/lib/host-api';
 import type {
   DataCenterApiResponse,
   DataCenterEntriesResult,
+  DataCenterEntryShareStatus,
   DataCenterEntry,
   DataCenterEntryDetail,
   DataCenterQuota,
+  DataCenterShareEntriesParams,
+  DataCenterShareEntriesResult,
   DataCenterSortField,
   DataCenterSortOrder,
+  DataCenterSpace,
   DataCenterSpaceType,
+  DataCenterSpacesResult,
   DataCenterTempUrl,
   DataCenterTrace,
   DataCenterUploadArtifactParams,
@@ -58,6 +63,7 @@ export async function getDataCenterQuota(): Promise<DataCenterQuota> {
 
 export interface ListDataCenterEntriesParams {
   spaceType: DataCenterSpaceType;
+  spaceId?: string;
   parentEntryId?: string;
   keyword?: string;
   entryType?: 'file' | 'folder';
@@ -70,6 +76,7 @@ export interface ListDataCenterEntriesParams {
 export async function listDataCenterEntries(params: ListDataCenterEntriesParams): Promise<DataCenterEntriesResult> {
   const query = buildQuery({
     spaceType: params.spaceType,
+    spaceId: params.spaceId,
     parentEntryId: params.parentEntryId ?? 'root',
     keyword: params.keyword?.trim(),
     entryType: params.entryType,
@@ -89,6 +96,7 @@ export async function getDataCenterEntry(entryId: string): Promise<DataCenterEnt
 
 export async function createDataCenterFolder(params: {
   spaceType: DataCenterSpaceType;
+  spaceId?: string;
   parentEntryId?: string;
   name: string;
 }): Promise<DataCenterEntry> {
@@ -96,6 +104,7 @@ export async function createDataCenterFolder(params: {
     method: 'POST',
     body: JSON.stringify({
       spaceType: params.spaceType,
+      spaceId: params.spaceId,
       parentEntryId: params.parentEntryId ?? 'root',
       name: params.name,
     }),
@@ -136,6 +145,64 @@ export async function getDataCenterPreviewUrl(entryId: string): Promise<DataCent
 export async function getDataCenterTrace(entryId: string): Promise<DataCenterTrace> {
   return unwrapDataCenter(hostApiFetch<DataCenterApiResponse<DataCenterTrace>>(
     `${DATA_CENTER_BASE}/entries/${encodeURIComponent(entryId)}/trace`,
+  ));
+}
+
+type DataCenterSpacesPayload =
+  | DataCenterSpacesResult
+  | DataCenterSpace[]
+  | { items?: DataCenterSpace[]; records?: DataCenterSpace[] };
+
+function normalizeDataCenterSpacesResult(payload: DataCenterSpacesPayload): DataCenterSpacesResult {
+  if (Array.isArray(payload)) {
+    return { spaces: payload };
+  }
+  if ('spaces' in payload && Array.isArray(payload.spaces)) {
+    return { spaces: payload.spaces };
+  }
+  if ('items' in payload && Array.isArray(payload.items)) {
+    return { spaces: payload.items };
+  }
+  if ('records' in payload && Array.isArray(payload.records)) {
+    return { spaces: payload.records };
+  }
+  return { spaces: [] };
+}
+
+export async function getDataCenterSpaces(): Promise<DataCenterSpacesResult> {
+  const payload = await unwrapDataCenter(hostApiFetch<DataCenterApiResponse<DataCenterSpacesPayload>>(`${DATA_CENTER_BASE}/spaces`));
+  return normalizeDataCenterSpacesResult(payload);
+}
+
+export async function shareDataCenterEntries(params: DataCenterShareEntriesParams): Promise<DataCenterShareEntriesResult> {
+  return unwrapDataCenter(hostApiFetch<DataCenterApiResponse<DataCenterShareEntriesResult>>(`${DATA_CENTER_BASE}/entries/share`, {
+    method: 'POST',
+    body: JSON.stringify({
+      sourceEntryIds: params.sourceEntryIds,
+      targetSpaceId: params.targetSpaceId,
+      targetParentEntryId: params.targetParentEntryId ?? 'root',
+      idempotencyKey: params.idempotencyKey,
+    }),
+  }));
+}
+
+export async function deleteDataCenterSharedEntry(sharedEntryId: string): Promise<{ sharedEntryId: string; deleted: boolean }> {
+  return unwrapDataCenter(hostApiFetch<DataCenterApiResponse<{ sharedEntryId: string; deleted: boolean }>>(
+    `${DATA_CENTER_BASE}/shared-entries/${encodeURIComponent(sharedEntryId)}`,
+    { method: 'DELETE' },
+  ));
+}
+
+export async function deleteDataCenterShare(shareId: string): Promise<{ shareId: string; deleted: boolean }> {
+  return unwrapDataCenter(hostApiFetch<DataCenterApiResponse<{ shareId: string; deleted: boolean }>>(
+    `${DATA_CENTER_BASE}/shares/${encodeURIComponent(shareId)}`,
+    { method: 'DELETE' },
+  ));
+}
+
+export async function getDataCenterEntryShares(sourceEntryId: string): Promise<DataCenterEntryShareStatus> {
+  return unwrapDataCenter(hostApiFetch<DataCenterApiResponse<DataCenterEntryShareStatus>>(
+    `${DATA_CENTER_BASE}/entries/${encodeURIComponent(sourceEntryId)}/shares`,
   ));
 }
 

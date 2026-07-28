@@ -48,6 +48,8 @@ interface UploadArtifactBody extends UploadDriveBody {
   runId?: string;
   workflowTemplateId?: string;
   workflowRunId?: string;
+  targetSpaceId?: string;
+  targetParentEntryId?: string;
 }
 
 function inferMimeType(fileName: string): string {
@@ -176,6 +178,8 @@ export async function handleDataCenterRoutes(
       appendOptional(form, 'runId', body.runId);
       appendOptional(form, 'workflowTemplateId', body.workflowTemplateId);
       appendOptional(form, 'workflowRunId', body.workflowRunId);
+      appendOptional(form, 'targetSpaceId', body.targetSpaceId);
+      appendOptional(form, 'targetParentEntryId', body.targetParentEntryId);
 
       logger.info(`[data-center] upload artifact file name=${fileName} size=${size} sourceType=${body.sourceType}`);
       const result = await forwardDataCenterUpload('/artifacts/upload', form);

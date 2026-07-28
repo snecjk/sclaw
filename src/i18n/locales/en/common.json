@@ -150,13 +150,15 @@
             "gridView": "Grid view",
             "listView": "List view",
             "createFolder": "New folder",
+            "downloadTemplate": "Download template",
             "uploadFile": "Upload file",
             "authorizeLocalFile": "Authorize local files",
             "usedQuota": "Used {{used}} / {{quota}}"
         },
         "drive": {
             "authorizedCount": "{{count}} authorized files",
-            "localSummary": "{{folders}} local folders, {{files}} uncategorized files"
+            "localSummary": "{{folders}} local folders, {{files}} uncategorized files",
+            "usedPercent": "{{percent}}% used"
         },
         "feedback": {
             "loadFailed": "Failed to load",
@@ -166,7 +168,9 @@
             "noMatch": "No matching files",
             "empty": "No files yet",
             "qaEmptyDescription": "Files appear here after you click Save artifact in the upper-right corner of an artifact preview.",
+            "sharedQaEmptyDescription": "No branch shared artifacts yet.",
             "driveEmptyDescription": "Authorize local files to start managing content.",
+            "uploadDriveEmptyDescription": "Upload files to save online data assets here.",
             "dataSourceTitle": "Data sources not connected yet",
             "dataSourceDescription": "The current backend API docs do not include data source management, so this phase does not use mock data."
         },
@@ -200,6 +204,10 @@
             "uploadedMany": "Uploaded {{count}} files",
             "localAuthorized": "Local files authorized",
             "uploadFailed": "Upload failed",
+            "sharedSpaceUnavailable": "No branch shared artifact space is available for this account. Check whether the account is mapped to a branch shared space.",
+            "sharedSpaceLoadFailed": "Failed to load branch shared artifact space",
+            "sharedToSite": "Uploaded to branch sharing",
+            "shareToSiteFailed": "Failed to upload to branch sharing",
             "downloadFailed": "Download failed",
             "traceUnavailable": "Source tracing is unavailable",
             "traceFailed": "Trace failed",
@@ -207,7 +215,8 @@
             "renamed": "Renamed",
             "deleted": "Deleted",
             "deleteFailed": "Delete failed",
-            "folderShareUnsupported": "Folder sharing is not supported yet"
+            "folderShareUnsupported": "Folder sharing is not supported yet",
+            "templateUnavailable": "Download template is not connected yet"
         },
         "menu": {
             "preview": "Preview",

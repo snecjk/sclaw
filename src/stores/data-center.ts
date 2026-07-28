@@ -3,6 +3,7 @@ import {
   createDataCenterFolder,
   deleteDataCenterEntry,
   getDataCenterQuota,
+  getDataCenterSpaces,
   listDataCenterEntries,
   renameDataCenterEntry,
 } from '@/lib/data-center-api';
@@ -12,6 +13,7 @@ import type {
   DataCenterQuota,
   DataCenterSortField,
   DataCenterSortOrder,
+  DataCenterSpace,
   DataCenterSpaceType,
   DataCenterViewMode,
 } from '@/types/data-center';
@@ -21,6 +23,9 @@ export type DataCenterSection = 'qa_artifact' | 'drive' | 'data_source';
 interface DataCenterStoreState {
   section: DataCenterSection;
   spaceType: DataCenterSpaceType;
+  spaceId: string | null;
+  sharedSpaces: DataCenterSpace[];
+  sharedSpacesLoading: boolean;
   parentEntryId: string;
   breadcrumbs: DataCenterBreadcrumb[];
   items: DataCenterEntry[];
@@ -36,10 +41,12 @@ interface DataCenterStoreState {
   mutating: boolean;
   error: string | null;
   setSection: (section: DataCenterSection) => void;
+  setQaArtifactSpace: (spaceType: 'qa_artifact' | 'site_shared_artifact', spaceId?: string | null) => void;
   setViewMode: (viewMode: DataCenterViewMode) => void;
   setKeyword: (keyword: string) => void;
   setSort: (sortField: DataCenterSortField, sortOrder: DataCenterSortOrder) => void;
   load: (options?: { resetPage?: boolean }) => Promise<void>;
+  loadSharedSpaces: () => Promise<DataCenterSpace[]>;
   refreshQuota: () => Promise<void>;
   enterFolder: (entry: DataCenterEntry) => Promise<void>;
   openBreadcrumb: (entryId: string) => Promise<void>;
@@ -52,9 +59,19 @@ function sectionToSpace(section: DataCenterSection): DataCenterSpaceType {
   return section === 'drive' ? 'drive' : 'qa_artifact';
 }
 
+function isSiteSharedArtifactSpace(space: DataCenterSpace): boolean {
+  const rawSpaceType = (space as { spaceType?: string }).spaceType;
+  return rawSpaceType === 'site_shared_artifact'
+    || space.scopeType === 'site'
+    || space.displayName.includes('网点共享产物');
+}
+
 export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
   section: 'qa_artifact',
   spaceType: 'qa_artifact',
+  spaceId: null,
+  sharedSpaces: [],
+  sharedSpacesLoading: false,
   parentEntryId: 'root',
   breadcrumbs: [],
   items: [],
@@ -74,6 +91,22 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
     set({
       section,
       spaceType: sectionToSpace(section),
+      spaceId: null,
+      parentEntryId: 'root',
+      breadcrumbs: [],
+      items: [],
+      total: 0,
+      pageNo: 1,
+      keyword: '',
+      error: null,
+    });
+  },
+
+  setQaArtifactSpace: (spaceType, spaceId = null) => {
+    set({
+      section: 'qa_artifact',
+      spaceType,
+      spaceId: spaceType === 'site_shared_artifact' ? spaceId : null,
       parentEntryId: 'root',
       breadcrumbs: [],
       items: [],
@@ -91,11 +124,23 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
   load: async (options) => {
     const state = get();
     if (state.section === 'data_source') return;
+    if (state.spaceType === 'site_shared_artifact' && !state.spaceId) {
+      set({
+        items: [],
+        total: 0,
+        pageNo: 1,
+        breadcrumbs: [],
+        loading: false,
+        error: null,
+      });
+      return;
+    }
     const pageNo = options?.resetPage ? 1 : state.pageNo;
     set({ loading: true, error: null, pageNo });
     try {
       const result = await listDataCenterEntries({
         spaceType: state.spaceType,
+        spaceId: state.spaceId ?? undefined,
         parentEntryId: state.parentEntryId,
         keyword: state.keyword,
         pageNo,
@@ -113,6 +158,25 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
       });
     } catch (error) {
       set({ loading: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  },
+
+  loadSharedSpaces: async () => {
+    set({ sharedSpacesLoading: true });
+    try {
+      const result = await getDataCenterSpaces();
+      const spaces = (result.spaces ?? []).filter(isSiteSharedArtifactSpace);
+      set((state) => ({
+        sharedSpaces: spaces,
+        sharedSpacesLoading: false,
+        spaceId: state.spaceType === 'site_shared_artifact'
+          ? state.spaceId ?? spaces[0]?.spaceId ?? null
+          : state.spaceId,
+      }));
+      return spaces;
+    } catch (error) {
+      set({ sharedSpacesLoading: false });
+      throw error;
     }
   },
 
@@ -142,6 +206,7 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
     try {
       await createDataCenterFolder({
         spaceType: state.spaceType,
+        spaceId: state.spaceId ?? undefined,
         parentEntryId: state.parentEntryId,
         name,
       });

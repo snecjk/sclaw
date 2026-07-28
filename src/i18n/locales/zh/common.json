@@ -151,13 +151,15 @@
             "gridView": "网格视图",
             "listView": "列表视图",
             "createFolder": "新建文件夹",
+            "downloadTemplate": "下载模板",
             "uploadFile": "上传文件",
             "authorizeLocalFile": "授权本地文件",
             "usedQuota": "已用 {{used}} / {{quota}}"
         },
         "drive": {
             "authorizedCount": "共授权 {{count}} 个文件",
-            "localSummary": "共{{folders}}个本地文件夹，{{files}}个未分类文件"
+            "localSummary": "共{{folders}}个本地文件夹，{{files}}个未分类文件",
+            "usedPercent": "已使用 {{percent}}%"
         },
         "feedback": {
             "loadFailed": "加载失败",
@@ -167,7 +169,9 @@
             "noMatch": "未找到匹配文件",
             "empty": "这里还没有文件",
             "qaEmptyDescription": "在产物预览右上角点击“保存产物”后，会出现在这里",
+            "sharedQaEmptyDescription": "当前网点还没有共享产物",
             "driveEmptyDescription": "点击授权本地文件开始管理",
+            "uploadDriveEmptyDescription": "点击上传文件，将在线数据资产保存到这里",
             "dataSourceTitle": "数据源能力待接入",
             "dataSourceDescription": "当前后端接口文档尚未包含数据源管理，本期不做假数据。"
         },
@@ -201,6 +205,10 @@
             "uploadedMany": "已上传 {{count}} 个文件",
             "localAuthorized": "本地文件已授权",
             "uploadFailed": "上传失败",
+            "sharedSpaceUnavailable": "当前账号暂无可访问的网点共享产物空间，请确认账号已匹配网点共享空间",
+            "sharedSpaceLoadFailed": "网点共享产物空间加载失败",
+            "sharedToSite": "已上传至网点共享",
+            "shareToSiteFailed": "上传至网点共享失败",
             "downloadFailed": "下载失败",
             "traceUnavailable": "来源暂不可追溯",
             "traceFailed": "追溯失败",
@@ -208,7 +216,8 @@
             "renamed": "已重命名",
             "deleted": "已删除",
             "deleteFailed": "删除失败",
-            "folderShareUnsupported": "文件夹暂不支持分享"
+            "folderShareUnsupported": "文件夹暂不支持分享",
+            "templateUnavailable": "下载模板功能待接入"
         },
         "menu": {
             "preview": "预览",

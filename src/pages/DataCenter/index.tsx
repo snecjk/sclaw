@@ -14,6 +14,7 @@ import {
   List,
   Loader2,
   MoreHorizontal,
+  Plus,
   Search,
   Share2,
   ShieldCheck,
@@ -43,10 +44,15 @@ import {
 } from '@/components/ui/tooltip';
 import {
   DATA_CENTER_API_NOT_FOUND,
+  createDataCenterIdempotencyKey,
+  deleteDataCenterSharedEntry,
   getDataCenterDownloadUrl,
   getDataCenterPreviewUrl,
   getDataCenterTrace,
+  shareDataCenterEntries,
+  uploadDriveFileFromPath,
 } from '@/lib/data-center-api';
+import { invokeIpc } from '@/lib/api-client';
 import {
   buildArtifactShareDialogDraft,
   type DingTalkShareDialogDraft,
@@ -74,6 +80,7 @@ type DataCenterUiEntry = DataCenterEntry & {
   localPath?: string;
   missing?: boolean;
 };
+type DriveTab = 'local' | 'upload';
 
 function normalizeSectionParam(value: string | null): DataCenterSection {
   return SECTION_PARAM_VALUES.includes(value as DataCenterSection)
@@ -333,19 +340,32 @@ export function DataCenter() {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [driveTab, setDriveTab] = useState<DriveTab>('local');
   const isDriveSection = store.section === 'drive';
-  const visibleItems: DataCenterUiEntry[] = isDriveSection
+  const isLocalDriveTab = isDriveSection && driveTab === 'local';
+  const isUploadDriveTab = isDriveSection && driveTab === 'upload';
+  const isSharedArtifactSpace = store.section === 'qa_artifact' && store.spaceType === 'site_shared_artifact';
+  const isMyArtifactSpace = store.section === 'qa_artifact' && store.spaceType === 'qa_artifact';
+  const canCreateFolder = isUploadDriveTab || (!isDriveSection && (!isSharedArtifactSpace || Boolean(store.spaceId)));
+  const visibleItems: DataCenterUiEntry[] = isLocalDriveTab
     ? localStore.items.map(localEntryToUiEntry)
     : store.items;
-  const currentViewMode = isDriveSection ? localStore.viewMode : store.viewMode;
-  const currentKeyword = isDriveSection ? localStore.keyword : store.keyword;
-  const currentLoading = isDriveSection ? localStore.loading : store.loading;
-  const currentError = isDriveSection ? localStore.error : store.error;
-  const currentParentEntryId = isDriveSection ? localStore.parentEntryId : store.parentEntryId;
-  const currentBreadcrumbs = isDriveSection ? localStore.breadcrumbs : store.breadcrumbs;
-  const folderCount = isDriveSection ? localStore.stats.folderCount : store.items.filter((item) => item.entryType === 'folder').length;
-  const fileCount = isDriveSection ? localStore.stats.uncategorizedFileCount : store.items.filter((item) => item.entryType === 'file').length;
-  const authorizedCount = isDriveSection ? localStore.stats.authorizedCount : store.total;
+  const currentViewMode = isLocalDriveTab ? localStore.viewMode : store.viewMode;
+  const currentKeyword = isLocalDriveTab ? localStore.keyword : store.keyword;
+  const currentLoading = isLocalDriveTab ? localStore.loading : store.loading;
+  const currentError = isLocalDriveTab ? localStore.error : store.error;
+  const currentParentEntryId = isLocalDriveTab ? localStore.parentEntryId : store.parentEntryId;
+  const currentBreadcrumbs = isLocalDriveTab ? localStore.breadcrumbs : store.breadcrumbs;
+  const folderCount = isLocalDriveTab ? localStore.stats.folderCount : store.items.filter((item) => item.entryType === 'folder').length;
+  const fileCount = isLocalDriveTab ? localStore.stats.uncategorizedFileCount : store.items.filter((item) => item.entryType === 'file').length;
+  const authorizedCount = isLocalDriveTab ? localStore.stats.authorizedCount : store.total;
+  const quotaUsedPercent = store.quota?.usagePercent ?? 0;
+  const quotaUsedText = store.quota
+    ? t('dataCenterPage.toolbar.usedQuota', {
+      used: formatBytes(store.quota.usedBytes),
+      quota: formatBytes(store.quota.quotaBytes),
+    })
+    : t('dataCenterPage.toolbar.usedQuota', { used: formatBytes(0), quota: '-' });
   const errorDescription = currentError === DATA_CENTER_API_NOT_FOUND
     ? t('dataCenterPage.feedback.apiNotFound')
     : currentError;
@@ -366,7 +386,25 @@ export function DataCenter() {
   useEffect(() => {
     if (store.section === 'data_source') return;
     if (store.section === 'drive') {
-      void localStore.load();
+      if (driveTab === 'local') {
+        void localStore.load();
+      } else {
+        void store.load({ resetPage: true });
+        void store.refreshQuota();
+      }
+      return;
+    }
+    if (store.section === 'qa_artifact' && store.spaceType === 'site_shared_artifact' && !store.spaceId) {
+      void store.loadSharedSpaces()
+        .then((spaces) => {
+          const spaceId = spaces[0]?.spaceId;
+          if (spaceId) {
+            store.setQaArtifactSpace('site_shared_artifact', spaceId);
+          }
+        })
+        .catch((error) => {
+          toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.sharedSpaceLoadFailed'));
+        });
       return;
     }
     void store.load({ resetPage: true });
@@ -374,13 +412,15 @@ export function DataCenter() {
     // Zustand action refs are stable enough here; listing the whole store object
     // would reload after every state update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store.section, store.spaceType, store.parentEntryId, store.keyword, store.sortField, store.sortOrder, localStore.parentEntryId, localStore.keyword]);
+  }, [store.section, store.spaceType, store.spaceId, store.parentEntryId, store.keyword, store.sortField, store.sortOrder, localStore.parentEntryId, localStore.keyword, driveTab]);
 
-  const handleUpload = async () => {
-    if (store.section !== 'drive') {
-      toast.info(t('dataCenterPage.toasts.artifactSaveFromPreview'));
-      return;
-    }
+  useEffect(() => {
+    if (!isSite || store.section !== 'qa_artifact') return;
+    void store.loadSharedSpaces().catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSite, store.section]);
+
+  const handleAuthorizeLocal = async () => {
     setUploading(true);
     try {
       const authorized = await localStore.authorize();
@@ -392,6 +432,45 @@ export function DataCenter() {
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleUploadFiles = async () => {
+    if (!isUploadDriveTab) {
+      toast.info(t('dataCenterPage.toasts.artifactSaveFromPreview'));
+      return;
+    }
+    try {
+      const result = await invokeIpc<{ canceled: boolean; filePaths?: string[] }>('dialog:open', {
+        properties: ['openFile', 'multiSelections'],
+      });
+      if (result.canceled || !result.filePaths?.length) return;
+
+      setUploading(true);
+      let uploadedCount = 0;
+      for (const filePath of result.filePaths) {
+        const fileName = filePath.split(/[\\/]/).pop() || undefined;
+        await uploadDriveFileFromPath({
+          filePath,
+          fileName,
+          parentEntryId: store.parentEntryId,
+          idempotencyKey: createDataCenterIdempotencyKey('drive', `${store.parentEntryId}-${fileName ?? filePath}`),
+        });
+        uploadedCount += 1;
+      }
+      toast.success(uploadedCount === 1
+        ? t('dataCenterPage.toasts.uploadedOne')
+        : t('dataCenterPage.toasts.uploadedMany', { count: uploadedCount }));
+      await store.load({ resetPage: true });
+      await store.refreshQuota();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.uploadFailed'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    toast.info(t('dataCenterPage.toasts.templateUnavailable'));
   };
 
   const handlePreview = async (entry: DataCenterUiEntry) => {
@@ -455,6 +534,45 @@ export function DataCenter() {
     }
   };
 
+  const handleSwitchSharedArtifacts = async () => {
+    if (!isSite) return;
+    try {
+      const spaces = store.sharedSpaces.length ? store.sharedSpaces : await store.loadSharedSpaces();
+      const spaceId = spaces[0]?.spaceId;
+      store.setQaArtifactSpace('site_shared_artifact', spaceId ?? null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.sharedSpaceLoadFailed'));
+    }
+  };
+
+  const handleSwitchMyArtifacts = () => {
+    store.setQaArtifactSpace('qa_artifact');
+  };
+
+  const handleUploadToShared = async (entry: DataCenterUiEntry) => {
+    if (entry.entryType !== 'file' || entry.spaceType !== 'qa_artifact') return;
+    try {
+      const spaces = store.sharedSpaces.length ? store.sharedSpaces : await store.loadSharedSpaces();
+      const targetSpaceId = spaces[0]?.spaceId;
+      if (!targetSpaceId) {
+        toast.info(t('dataCenterPage.toasts.sharedSpaceUnavailable'));
+        return;
+      }
+      await shareDataCenterEntries({
+        sourceEntryIds: [entry.entryId],
+        targetSpaceId,
+        targetParentEntryId: 'root',
+        idempotencyKey: createDataCenterIdempotencyKey('share', entry.entryId),
+      });
+      toast.success(t('dataCenterPage.toasts.sharedToSite'));
+      if (isSharedArtifactSpace && store.spaceId === targetSpaceId) {
+        await store.load({ resetPage: true });
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.shareToSiteFailed'));
+    }
+  };
+
   const handleTrace = async (entry: DataCenterUiEntry) => {
     if (entry.localAuthorized) {
       toast.info(t('dataCenterPage.toasts.traceUnavailable'));
@@ -474,15 +592,21 @@ export function DataCenter() {
   };
 
   const handleRenameEntry = async (entryId: string, name: string) => {
-    if (isDriveSection) {
+    if (isLocalDriveTab) {
+      await localStore.renameEntry(entryId, name);
       return;
     }
     await store.renameEntry(entryId, name);
   };
 
   const handleDeleteEntry = async (entryId: string) => {
-    if (isDriveSection) {
+    if (isLocalDriveTab) {
       await localStore.deleteEntry(entryId);
+      return;
+    }
+    if (isSharedArtifactSpace && deleteEntry?.shared && deleteEntry.canManage) {
+      await deleteDataCenterSharedEntry(entryId);
+      await store.load();
       return;
     }
     await store.deleteEntry(entryId);
@@ -490,7 +614,7 @@ export function DataCenter() {
   };
 
   const handleOpenFolder = (entry: DataCenterUiEntry) => {
-    if (isDriveSection) {
+    if (isLocalDriveTab) {
       void localStore.enterFolder({
         entryId: entry.entryId,
         entryType: entry.entryType,
@@ -531,15 +655,15 @@ export function DataCenter() {
             <div className="mb-[26px] shrink-0">
               <div className="flex min-w-0 items-center justify-between gap-4">
                 <div className="flex h-9 items-center gap-8">
-                  <TabButton active>{t('dataCenterPage.tabs.localFiles')}</TabButton>
-                  <TabButton disabled>{t('dataCenterPage.tabs.uploadFiles')}</TabButton>
+                  <TabButton active={driveTab === 'local'} onClick={() => setDriveTab('local')}>{t('dataCenterPage.tabs.localFiles')}</TabButton>
+                  <TabButton active={driveTab === 'upload'} onClick={() => setDriveTab('upload')}>{t('dataCenterPage.tabs.uploadFiles')}</TabButton>
                 </div>
                 <div className="flex min-w-0 items-center gap-2">
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A8B0BD]" />
                     <input
                       value={currentKeyword}
-                      onChange={(event) => localStore.setKeyword(event.target.value)}
+                      onChange={(event) => isLocalDriveTab ? localStore.setKeyword(event.target.value) : store.setKeyword(event.target.value)}
                       placeholder={t('dataCenterPage.toolbar.searchPlaceholder')}
                       className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground"
                     />
@@ -553,26 +677,60 @@ export function DataCenter() {
 
               <div className="mt-4 flex min-w-0 items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="text-[14px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">
-                    {t('dataCenterPage.drive.authorizedCount', { count: authorizedCount })}
-                  </p>
-                  <p className="mt-1 text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">
-                    {t('dataCenterPage.drive.localSummary', { folders: folderCount, files: fileCount })}
-                  </p>
+                  {isUploadDriveTab ? (
+                    <>
+                      <div className="h-2 w-[86px] overflow-hidden rounded-full bg-[#D8DDE6] dark:bg-muted">
+                        <div
+                          className="h-full rounded-full bg-[#1D2129] dark:bg-foreground"
+                          style={{ width: `${Math.min(100, Math.max(0, quotaUsedPercent))}%` }}
+                        />
+                      </div>
+                      <p className="mt-2 text-[13px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">
+                        {t('dataCenterPage.drive.usedPercent', { percent: Math.round(quotaUsedPercent) })}
+                      </p>
+                      <p className="mt-1 text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">{quotaUsedText}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-[14px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">
+                        {t('dataCenterPage.drive.authorizedCount', { count: authorizedCount })}
+                      </p>
+                      <p className="mt-1 text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">
+                        {t('dataCenterPage.drive.localSummary', { folders: folderCount, files: fileCount })}
+                      </p>
+                    </>
+                  )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <div className="flex h-[34px] items-center rounded-[10px] bg-[#F2F3F5] p-1 dark:bg-muted">
-                    <IconToggle active={currentViewMode === 'grid'} label={t('dataCenterPage.toolbar.gridView')} onClick={() => localStore.setViewMode('grid')}>
+                    <IconToggle active={currentViewMode === 'grid'} label={t('dataCenterPage.toolbar.gridView')} onClick={() => isLocalDriveTab ? localStore.setViewMode('grid') : store.setViewMode('grid')}>
                       <Grid2X2 className="h-4 w-4" />
                     </IconToggle>
-                    <IconToggle active={currentViewMode === 'list'} label={t('dataCenterPage.toolbar.listView')} onClick={() => localStore.setViewMode('list')}>
+                    <IconToggle active={currentViewMode === 'list'} label={t('dataCenterPage.toolbar.listView')} onClick={() => isLocalDriveTab ? localStore.setViewMode('list') : store.setViewMode('list')}>
                       <List className="h-4 w-4" />
                     </IconToggle>
                   </div>
-                  <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={handleUpload} disabled={uploading}>
-                    {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                    {t('dataCenterPage.toolbar.authorizeLocalFile')}
-                  </Button>
+                  {isUploadDriveTab ? (
+                    <>
+                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={() => setCreateFolderOpen(true)}>
+                        <FolderPlus className="mr-2 h-4 w-4" />
+                        {t('dataCenterPage.toolbar.createFolder')}
+                      </Button>
+                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={handleDownloadTemplate}>
+                        <Download className="mr-2 h-4 w-4" />
+                        {t('dataCenterPage.toolbar.downloadTemplate')}
+                      </Button>
+                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={handleUploadFiles} disabled={uploading}>
+                        {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                        {t('dataCenterPage.toolbar.uploadFile')}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={handleAuthorizeLocal} disabled={uploading}>
+                      {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                      {t('dataCenterPage.toolbar.authorizeLocalFile')}
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -581,8 +739,12 @@ export function DataCenter() {
               <div className="flex h-9 items-center gap-6">
                 {store.section === 'qa_artifact' ? (
                   <>
-                    <TabButton active>{t('dataCenterPage.tabs.myArtifacts')}</TabButton>
-                    {isSite ? <TabButton disabled>{t('dataCenterPage.tabs.sharedArtifacts')}</TabButton> : null}
+                    <TabButton active={isMyArtifactSpace} onClick={handleSwitchMyArtifacts}>{t('dataCenterPage.tabs.myArtifacts')}</TabButton>
+                    {isSite ? (
+                      <TabButton active={isSharedArtifactSpace} onClick={handleSwitchSharedArtifacts}>
+                        {t('dataCenterPage.tabs.sharedArtifacts')}
+                      </TabButton>
+                    ) : null}
                   </>
                 ) : (
                   <TabButton disabled>{t('dataCenterPage.tabs.pendingAccess')}</TabButton>
@@ -612,7 +774,13 @@ export function DataCenter() {
                       <List className="h-4 w-4" />
                     </IconToggle>
                   </div>
-                  <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={() => setCreateFolderOpen(true)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-muted dark:text-foreground"
+                    onClick={() => setCreateFolderOpen(true)}
+                    disabled={!canCreateFolder}
+                  >
                     <FolderPlus className="mr-2 h-4 w-4" />
                     {t('dataCenterPage.toolbar.createFolder')}
                   </Button>
@@ -627,9 +795,15 @@ export function DataCenter() {
               <FolderBreadcrumbBar
                 breadcrumbs={currentBreadcrumbs}
                 onBack={() => isDriveSection
-                  ? localStore.openBreadcrumb(getParentBreadcrumbId(currentBreadcrumbs))
+                  ? isLocalDriveTab
+                    ? localStore.openBreadcrumb(getParentBreadcrumbId(currentBreadcrumbs))
+                    : store.openBreadcrumb(getParentBreadcrumbId(currentBreadcrumbs))
                   : store.openBreadcrumb(getParentBreadcrumbId(currentBreadcrumbs))}
-                onOpen={(entryId) => isDriveSection ? localStore.openBreadcrumb(entryId) : store.openBreadcrumb(entryId)}
+                onOpen={(entryId) => isDriveSection
+                  ? isLocalDriveTab
+                    ? localStore.openBreadcrumb(entryId)
+                    : store.openBreadcrumb(entryId)
+                  : store.openBreadcrumb(entryId)}
               />
             ) : null}
 
@@ -642,7 +816,13 @@ export function DataCenter() {
                 <FeedbackState
                   icon={<Folder className="h-8 w-8" />}
                   title={currentKeyword ? t('dataCenterPage.feedback.noMatch') : t('dataCenterPage.feedback.empty')}
-                  description={store.section === 'qa_artifact' ? t('dataCenterPage.feedback.qaEmptyDescription') : t('dataCenterPage.feedback.driveEmptyDescription')}
+                  description={isSharedArtifactSpace
+                    ? t('dataCenterPage.feedback.sharedQaEmptyDescription')
+                    : store.section === 'qa_artifact'
+                      ? t('dataCenterPage.feedback.qaEmptyDescription')
+                      : isUploadDriveTab
+                        ? t('dataCenterPage.feedback.uploadDriveEmptyDescription')
+                        : t('dataCenterPage.feedback.driveEmptyDescription')}
                 />
               ) : currentViewMode === 'grid' ? (
                 <EntryGrid
@@ -651,6 +831,7 @@ export function DataCenter() {
                   onPreview={handlePreview}
                   onDownload={handleDownload}
                   onShare={handleShare}
+                  onUploadToShared={handleUploadToShared}
                   onRename={setRenameEntry}
                   onDelete={setDeleteEntry}
                   onTrace={handleTrace}
@@ -662,6 +843,7 @@ export function DataCenter() {
                   onPreview={handlePreview}
                   onDownload={handleDownload}
                   onShare={handleShare}
+                  onUploadToShared={handleUploadToShared}
                   onRename={setRenameEntry}
                   onDelete={setDeleteEntry}
                   onTrace={handleTrace}
@@ -683,6 +865,10 @@ export function DataCenter() {
           label={t('dataCenterPage.dialogs.folderName')}
           onCancel={() => setCreateFolderOpen(false)}
           onConfirm={async (name) => {
+            if (!canCreateFolder) {
+              setCreateFolderOpen(false);
+              return;
+            }
             await store.createFolder(name);
             setCreateFolderOpen(false);
             toast.success(t('dataCenterPage.toasts.folderCreated'));
@@ -764,11 +950,22 @@ export function DataCenter() {
   );
 }
 
-function TabButton({ active = false, disabled = false, children }: { active?: boolean; disabled?: boolean; children: ReactNode }) {
+function TabButton({
+  active = false,
+  disabled = false,
+  children,
+  onClick,
+}: {
+  active?: boolean;
+  disabled?: boolean;
+  children: ReactNode;
+  onClick?: () => void;
+}) {
   return (
     <button
       type="button"
       disabled={disabled}
+      onClick={onClick}
       className={cn(
         'relative h-9 px-0 text-[16px] font-semibold transition-colors',
         active ? 'text-[#1D2129] dark:text-foreground' : 'text-[#86909C] dark:text-muted-foreground',
@@ -971,6 +1168,10 @@ function GridEntryContextMenu({
   onTrace: (entry: DataCenterUiEntry) => void;
 }) {
   const { t } = useTranslation('common');
+  const canRenameEntry = !entry.localAuthorized && (entry.spaceType !== 'site_shared_artifact' || entry.canManage === true);
+  const canDeleteEntry = entry.localAuthorized
+    ? entry.parentEntryId === ROOT_ENTRY_ID
+    : entry.spaceType !== 'site_shared_artifact' || entry.canManage === true;
   return (
     <div
       className="fixed z-[70] min-w-[128px] rounded-[10px] border border-[#E5E6EB] bg-white p-2 text-[#1D2129] shadow-[0_8px_24px_rgba(15,23,42,0.14)] dark:border-border dark:bg-popover dark:text-foreground"
@@ -989,20 +1190,22 @@ function GridEntryContextMenu({
           {t('dataCenterPage.menu.download')}
         </ContextMenuButton>
       ) : null}
-      <ContextMenuButton onClick={() => onShare(entry)}>
-        {t('dataCenterPage.menu.share')}
-      </ContextMenuButton>
+      {entry.entryType === 'file' ? (
+        <ContextMenuButton onClick={() => onShare(entry)}>
+          {t('dataCenterPage.menu.share')}
+        </ContextMenuButton>
+      ) : null}
       {entry.entryType === 'file' && entry.traceAvailable ? (
         <ContextMenuButton onClick={() => onTrace(entry)}>
           {t('dataCenterPage.menu.traceChat')}
         </ContextMenuButton>
       ) : null}
-      {!entry.localAuthorized ? (
+      {canRenameEntry ? (
         <ContextMenuButton onClick={() => onRename(entry)}>
           {t('dataCenterPage.menu.rename')}
         </ContextMenuButton>
       ) : null}
-      {!entry.localAuthorized || entry.parentEntryId === ROOT_ENTRY_ID ? (
+      {canDeleteEntry ? (
         <ContextMenuButton onClick={() => onDelete(entry)}>
           {entry.localAuthorized ? t('dataCenterPage.menu.removeAuthorization') : t('dataCenterPage.menu.delete')}
         </ContextMenuButton>
@@ -1030,6 +1233,7 @@ interface EntryRenderProps {
   onPreview: (entry: DataCenterUiEntry) => void;
   onDownload: (entry: DataCenterUiEntry) => void;
   onShare: (entry: DataCenterUiEntry) => void;
+  onUploadToShared: (entry: DataCenterUiEntry) => void;
   onRename: (entry: DataCenterUiEntry) => void;
   onDelete: (entry: DataCenterUiEntry) => void;
   onTrace: (entry: DataCenterUiEntry) => void;
@@ -1081,23 +1285,32 @@ function EntryActions({
   onPreview,
   onDownload,
   onShare,
+  onUploadToShared,
   onRename,
   onDelete,
   onTrace,
   uploadToSharedLabel,
 }: EntryRenderProps & { entry: DataCenterUiEntry; uploadToSharedLabel?: string }) {
   const { t } = useTranslation('common');
+  const canUploadToShared = entry.entryType === 'file' && entry.spaceType === 'qa_artifact' && !entry.localAuthorized;
+  const canRenameEntry = !entry.localAuthorized && (entry.spaceType !== 'site_shared_artifact' || entry.canManage === true);
+  const canDeleteEntry = entry.localAuthorized
+    ? entry.parentEntryId === ROOT_ENTRY_ID
+    : entry.spaceType !== 'site_shared_artifact' || entry.canManage === true;
   return (
     <div className="flex w-[128px] shrink-0 items-center justify-end gap-1 text-[#6B778C]">
-      <ActionTooltip label={uploadToSharedLabel ?? ''}>
-        <button
-          type="button"
-          className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
-          aria-label={uploadToSharedLabel}
-        >
-          <CloudUpload className="h-4 w-4" />
-        </button>
-      </ActionTooltip>
+      {canUploadToShared ? (
+        <ActionTooltip label={uploadToSharedLabel ?? ''}>
+          <button
+            type="button"
+            onClick={() => onUploadToShared(entry)}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
+            aria-label={uploadToSharedLabel}
+          >
+            <CloudUpload className="h-4 w-4" />
+          </button>
+        </ActionTooltip>
+      ) : null}
       {entry.entryType === 'file' ? (
         <ActionTooltip label={t('dataCenterPage.menu.download')}>
           <button
@@ -1110,16 +1323,18 @@ function EntryActions({
           </button>
         </ActionTooltip>
       ) : null}
-      <ActionTooltip label={t('dataCenterPage.menu.share')}>
-        <button
-          type="button"
-          onClick={() => onShare(entry)}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
-          aria-label={t('dataCenterPage.menu.share')}
-        >
-          <Share2 className="h-4 w-4" />
-        </button>
-      </ActionTooltip>
+      {entry.entryType === 'file' ? (
+        <ActionTooltip label={t('dataCenterPage.menu.share')}>
+          <button
+            type="button"
+            onClick={() => onShare(entry)}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
+            aria-label={t('dataCenterPage.menu.share')}
+          >
+            <Share2 className="h-4 w-4" />
+          </button>
+        </ActionTooltip>
+      ) : null}
       <DropdownMenu>
         <Tooltip delayDuration={200}>
           <TooltipTrigger asChild>
@@ -1144,12 +1359,12 @@ function EntryActions({
               {t('dataCenterPage.menu.traceChat')}
             </DropdownMenuItem>
           ) : null}
-          {!entry.localAuthorized ? (
+          {canRenameEntry ? (
             <DropdownMenuItem onSelect={() => onRename(entry)} className="text-[13px]">
               {t('dataCenterPage.menu.rename')}
             </DropdownMenuItem>
           ) : null}
-          {!entry.localAuthorized || entry.parentEntryId === ROOT_ENTRY_ID ? (
+          {canDeleteEntry ? (
             <DropdownMenuItem onSelect={() => onDelete(entry)} className="text-[13px]">
               {entry.localAuthorized ? t('dataCenterPage.menu.removeAuthorization') : t('dataCenterPage.menu.delete')}
             </DropdownMenuItem>

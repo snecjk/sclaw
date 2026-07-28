@@ -145,13 +145,15 @@
             "gridView": "グリッド表示",
             "listView": "リスト表示",
             "createFolder": "新規フォルダ",
+            "downloadTemplate": "テンプレートをダウンロード",
             "uploadFile": "ファイルをアップロード",
             "authorizeLocalFile": "ローカルファイルを許可",
             "usedQuota": "使用済み {{used}} / {{quota}}"
         },
         "drive": {
             "authorizedCount": "{{count}} 件のファイルを許可済み",
-            "localSummary": "ローカルフォルダ {{folders}} 個、未分類ファイル {{files}} 個"
+            "localSummary": "ローカルフォルダ {{folders}} 個、未分類ファイル {{files}} 個",
+            "usedPercent": "{{percent}}% 使用済み"
         },
         "feedback": {
             "loadFailed": "読み込みに失敗しました",
@@ -161,7 +163,9 @@
             "noMatch": "一致するファイルがありません",
             "empty": "まだファイルがありません",
             "qaEmptyDescription": "成果物プレビュー右上の「成果物を保存」をクリックすると、ここに表示されます。",
+            "sharedQaEmptyDescription": "拠点共有成果物はまだありません。",
             "driveEmptyDescription": "ローカルファイルを許可して管理を開始してください。",
+            "uploadDriveEmptyDescription": "ファイルをアップロードしてオンラインデータ資産を保存します。",
             "dataSourceTitle": "データソース機能は未接続です",
             "dataSourceDescription": "現在のバックエンド API ドキュメントにはデータソース管理が含まれていないため、本フェーズではモックデータを使用しません。"
         },
@@ -195,6 +199,10 @@
             "uploadedMany": "{{count}} 件のファイルをアップロードしました",
             "localAuthorized": "ローカルファイルを許可しました",
             "uploadFailed": "アップロードに失敗しました",
+            "sharedSpaceUnavailable": "このアカウントで利用できる拠点共有成果物スペースがありません。アカウントが拠点共有スペースに紐付いているか確認してください。",
+            "sharedSpaceLoadFailed": "拠点共有成果物スペースの読み込みに失敗しました",
+            "sharedToSite": "拠点共有にアップロードしました",
+            "shareToSiteFailed": "拠点共有へのアップロードに失敗しました",
             "downloadFailed": "ダウンロードに失敗しました",
             "traceUnavailable": "ソース追跡は利用できません",
             "traceFailed": "追跡に失敗しました",
@@ -202,7 +210,8 @@
             "renamed": "名前を変更しました",
             "deleted": "削除しました",
             "deleteFailed": "削除に失敗しました",
-            "folderShareUnsupported": "フォルダ共有はまだサポートされていません"
+            "folderShareUnsupported": "フォルダ共有はまだサポートされていません",
+            "templateUnavailable": "テンプレートのダウンロードは未接続です"
         },
         "menu": {
             "preview": "プレビュー",

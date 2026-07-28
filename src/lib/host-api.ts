@@ -89,9 +89,14 @@ function parseUnifiedProxyResponse<T>(
   if (httpStatus === 204) return undefined as T;
   if (httpStatus >= 400 || data.ok === false) {
     const json = data.json as Record<string, unknown> | undefined;
+    const errCode = json && typeof json.errCode === 'string' ? json.errCode : '';
+    const errMessage = json && typeof json.errMessage === 'string' ? json.errMessage : '';
     const message =
       (json && typeof json.error === 'string' && json.error) ||
       (json && typeof json.message === 'string' && json.message) ||
+      (errCode && errMessage ? `${errCode}: ${errMessage}` : '') ||
+      errMessage ||
+      errCode ||
       `HTTP ${httpStatus}`;
     throw normalizeAppError(new Error(message), {
       source: 'ipc-proxy',

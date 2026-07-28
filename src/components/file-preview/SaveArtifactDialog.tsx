@@ -5,14 +5,14 @@ import { toast } from 'sonner';
 import directoryIcon from '@/assets/icons/directory.svg';
 import { Button } from '@/components/ui/button';
 import {
-  createDataCenterIdempotencyKey,
+  getDataCenterSpaces,
   listDataCenterEntries,
   uploadArtifactFromPath,
 } from '@/lib/data-center-api';
 import { cn } from '@/lib/utils';
 import { isSiteUser, useAuthStore } from '@/stores/auth';
 import type { AttachedFileMeta } from '@/stores/chat';
-import type { DataCenterEntry } from '@/types/data-center';
+import type { DataCenterArtifactProvenance, DataCenterEntry } from '@/types/data-center';
 
 interface SaveArtifactDialogProps {
   file: AttachedFileMeta | null;
@@ -24,13 +24,60 @@ const ROOT_ENTRY_ID = 'root';
 type FolderMap = Record<string, DataCenterEntry[]>;
 type LoadingMap = Record<string, boolean>;
 type OpenMap = Record<string, boolean>;
+type FolderSpace = 'my' | 'shared';
+
+interface SaveTarget {
+  space: FolderSpace;
+  parentEntryId: string;
+}
+
+function folderKey(space: FolderSpace, entryId: string): string {
+  return `${space}:${entryId}`;
+}
+
+function isSiteSharedArtifactSpace(space: { spaceType?: string; scopeType?: string | null; displayName?: string }): boolean {
+  return space.spaceType === 'site_shared_artifact'
+    || space.scopeType === 'site'
+    || space.displayName?.includes('网点共享产物') === true;
+}
+
+function hashStableKey(value: string): string {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    h1 = Math.imul(h1 ^ code, 2654435761);
+    h2 = Math.imul(h2 ^ code, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return `${(h1 >>> 0).toString(36)}${(h2 >>> 0).toString(36)}`;
+}
+
+function createArtifactUploadIdempotencyKey(
+  provenance: DataCenterArtifactProvenance,
+  target: SaveTarget,
+  targetSpaceId: string | null,
+): string {
+  const stableSource = [
+    provenance.sourceType,
+    provenance.sessionId,
+    provenance.artifactKey,
+    target.space,
+    targetSpaceId ?? 'my',
+    target.parentEntryId,
+  ].join(':');
+  return `artifact-${hashStableKey(stableSource)}`;
+}
 
 export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialogProps) {
   const { t } = useTranslation('common');
   const authUser = useAuthStore((s) => s.user);
   const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
   const isSite = siteDepartmentTypes !== null && isSiteUser(authUser?.categoryCode);
-  const [parentEntryId, setParentEntryId] = useState(ROOT_ENTRY_ID);
+  const [selectedTarget, setSelectedTarget] = useState<SaveTarget>({ space: 'my', parentEntryId: ROOT_ENTRY_ID });
+  const [sharedSpaceId, setSharedSpaceId] = useState<string | null>(null);
+  const [sharedSpaceLoading, setSharedSpaceLoading] = useState(false);
   const [folderMap, setFolderMap] = useState<FolderMap>({});
   const [loadingMap, setLoadingMap] = useState<LoadingMap>({});
   const [openMap, setOpenMap] = useState<OpenMap>({});
@@ -38,11 +85,35 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
   const [sharedOpen, setSharedOpen] = useState(true);
   const [mineOpen, setMineOpen] = useState(true);
 
-  const loadFolders = async (entryId = ROOT_ENTRY_ID) => {
-    setLoadingMap((prev) => ({ ...prev, [entryId]: true }));
+  const loadSharedSpace = async (): Promise<string | null> => {
+    if (sharedSpaceId) return sharedSpaceId;
+    setSharedSpaceLoading(true);
     try {
+      const result = await getDataCenterSpaces();
+      const space = (result.spaces ?? []).find(isSiteSharedArtifactSpace);
+      const nextSpaceId = space?.spaceId ?? null;
+      setSharedSpaceId(nextSpaceId);
+      return nextSpaceId;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.sharedSpaceLoadFailed'));
+      return null;
+    } finally {
+      setSharedSpaceLoading(false);
+    }
+  };
+
+  const loadFolders = async (space: FolderSpace, entryId = ROOT_ENTRY_ID) => {
+    const key = folderKey(space, entryId);
+    setLoadingMap((prev) => ({ ...prev, [key]: true }));
+    try {
+      const spaceId = space === 'shared' ? await loadSharedSpace() : null;
+      if (space === 'shared' && !spaceId) {
+        setFolderMap((prev) => ({ ...prev, [key]: [] }));
+        return;
+      }
       const result = await listDataCenterEntries({
-        spaceType: 'qa_artifact',
+        spaceType: space === 'shared' ? 'site_shared_artifact' : 'qa_artifact',
+        spaceId: spaceId ?? undefined,
         parentEntryId: entryId,
         entryType: 'folder',
         pageSize: 200,
@@ -51,29 +122,33 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
       });
       setFolderMap((prev) => ({
         ...prev,
-        [entryId]: result.items.filter((item) => item.entryType === 'folder'),
+        [key]: result.items.filter((item) => item.entryType === 'folder'),
       }));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('dataCenterPage.saveArtifact.loadFoldersFailed'));
     } finally {
-      setLoadingMap((prev) => ({ ...prev, [entryId]: false }));
+      setLoadingMap((prev) => ({ ...prev, [key]: false }));
     }
   };
 
-  const toggleFolderOpen = async (entryId: string) => {
-    const nextOpen = !openMap[entryId];
-    setOpenMap((prev) => ({ ...prev, [entryId]: nextOpen }));
-    if (nextOpen && folderMap[entryId] === undefined) {
-      await loadFolders(entryId);
+  const toggleFolderOpen = async (space: FolderSpace, entryId: string) => {
+    const key = folderKey(space, entryId);
+    const nextOpen = !openMap[key];
+    setOpenMap((prev) => ({ ...prev, [key]: nextOpen }));
+    if (nextOpen && folderMap[key] === undefined) {
+      await loadFolders(space, entryId);
     }
   };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadFolders(ROOT_ENTRY_ID);
+    void loadFolders('my', ROOT_ENTRY_ID);
+    if (isSite) {
+      void loadFolders('shared', ROOT_ENTRY_ID);
+    }
     // The dialog is mounted only while open; initial state already points at root.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isSite]);
 
   if (!file) return null;
 
@@ -84,12 +159,20 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
     if (!file.filePath || !provenance) return;
     setSaving(true);
     try {
+      const targetSpaceId = selectedTarget.space === 'shared'
+        ? sharedSpaceId ?? await loadSharedSpace()
+        : null;
+      if (selectedTarget.space === 'shared' && !targetSpaceId) {
+        throw new Error(t('dataCenterPage.toasts.sharedSpaceUnavailable'));
+      }
       const entry = await uploadArtifactFromPath({
         ...provenance,
         filePath: file.filePath,
         fileName: file.fileName,
-        parentEntryId,
-        idempotencyKey: createDataCenterIdempotencyKey('artifact', provenance.artifactKey),
+        parentEntryId: selectedTarget.space === 'my' ? selectedTarget.parentEntryId : ROOT_ENTRY_ID,
+        targetSpaceId: targetSpaceId ?? undefined,
+        targetParentEntryId: selectedTarget.space === 'shared' ? selectedTarget.parentEntryId : undefined,
+        idempotencyKey: createArtifactUploadIdempotencyKey(provenance, selectedTarget, targetSpaceId),
       });
       toast.success(entry.traceStatus === 'pending'
         ? t('dataCenterPage.saveArtifact.savedPendingTrace')
@@ -138,14 +221,42 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
             {isSite ? (
               <div className="rounded-[10px] bg-white p-2.5 dark:bg-card">
                 <TreeHeader
-                  checked={false}
+                  checked={selectedTarget.space === 'shared' && selectedTarget.parentEntryId === ROOT_ENTRY_ID}
                   open={sharedOpen}
                   onToggle={() => setSharedOpen((open) => !open)}
+                  onCheck={() => setSelectedTarget({ space: 'shared', parentEntryId: ROOT_ENTRY_ID })}
+                  onSelect={() => setSelectedTarget({ space: 'shared', parentEntryId: ROOT_ENTRY_ID })}
                   label={t('dataCenterPage.saveArtifact.sharedArtifacts')}
                 />
                 {sharedOpen ? (
                   <div className="mt-2 space-y-2 pl-5">
-                    <div className="px-1 py-2 text-[12px] text-[#86909C]">{t('dataCenterPage.saveArtifact.sharedFoldersUnavailable')}</div>
+                    {sharedSpaceLoading || loadingMap[folderKey('shared', ROOT_ENTRY_ID)] ? (
+                      <div className="flex items-center gap-2 px-1 py-2 text-[12px] text-[#86909C]">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        {t('dataCenterPage.saveArtifact.loading')}
+                      </div>
+                    ) : (folderMap[folderKey('shared', ROOT_ENTRY_ID)] ?? []).length === 0 ? (
+                      <div className="px-1 py-2 text-[12px] text-[#86909C]">{t('dataCenterPage.saveArtifact.emptyFolders')}</div>
+                    ) : (
+                      (folderMap[folderKey('shared', ROOT_ENTRY_ID)] ?? []).map((folder) => (
+                        <TreeFolderRow
+                          key={folder.entryId}
+                          space="shared"
+                          folder={folder}
+                          checked={selectedTarget.space === 'shared' && selectedTarget.parentEntryId === folder.entryId}
+                          depth={0}
+                          open={Boolean(openMap[folderKey('shared', folder.entryId)])}
+                          loading={Boolean(loadingMap[folderKey('shared', folder.entryId)])}
+                          childrenFolders={folderMap[folderKey('shared', folder.entryId)] ?? []}
+                          openMap={openMap}
+                          loadingMap={loadingMap}
+                          folderMap={folderMap}
+                          selectedTarget={selectedTarget}
+                          onSelect={(parentEntryId) => setSelectedTarget({ space: 'shared', parentEntryId })}
+                          onToggleOpen={toggleFolderOpen}
+                        />
+                      ))
+                    )}
                   </div>
                 ) : null}
               </div>
@@ -153,37 +264,38 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
 
             <div className={cn('rounded-[10px] bg-white p-2.5 dark:bg-card', isSite && 'mt-2')}>
               <TreeHeader
-                checked={parentEntryId === ROOT_ENTRY_ID}
+                checked={selectedTarget.space === 'my' && selectedTarget.parentEntryId === ROOT_ENTRY_ID}
                 open={mineOpen}
                 onToggle={() => setMineOpen((open) => !open)}
-                onCheck={() => setParentEntryId(ROOT_ENTRY_ID)}
-                onSelect={() => setParentEntryId(ROOT_ENTRY_ID)}
+                onCheck={() => setSelectedTarget({ space: 'my', parentEntryId: ROOT_ENTRY_ID })}
+                onSelect={() => setSelectedTarget({ space: 'my', parentEntryId: ROOT_ENTRY_ID })}
                 label={t('dataCenterPage.saveArtifact.myArtifacts')}
               />
               {mineOpen ? (
                 <div className="mt-2 space-y-2 pl-5">
-                  {loadingMap[ROOT_ENTRY_ID] ? (
+                  {loadingMap[folderKey('my', ROOT_ENTRY_ID)] ? (
                     <div className="flex items-center gap-2 px-1 py-2 text-[12px] text-[#86909C]">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       {t('dataCenterPage.saveArtifact.loading')}
                     </div>
-                  ) : (folderMap[ROOT_ENTRY_ID] ?? []).length === 0 ? (
+                  ) : (folderMap[folderKey('my', ROOT_ENTRY_ID)] ?? []).length === 0 ? (
                     <div className="px-1 py-2 text-[12px] text-[#86909C]">{t('dataCenterPage.saveArtifact.emptyFolders')}</div>
                   ) : (
-                    (folderMap[ROOT_ENTRY_ID] ?? []).map((folder) => (
+                    (folderMap[folderKey('my', ROOT_ENTRY_ID)] ?? []).map((folder) => (
                       <TreeFolderRow
                         key={folder.entryId}
+                        space="my"
                         folder={folder}
-                        checked={parentEntryId === folder.entryId}
+                        checked={selectedTarget.space === 'my' && selectedTarget.parentEntryId === folder.entryId}
                         depth={0}
-                        open={Boolean(openMap[folder.entryId])}
-                        loading={Boolean(loadingMap[folder.entryId])}
-                        childrenFolders={folderMap[folder.entryId] ?? []}
+                        open={Boolean(openMap[folderKey('my', folder.entryId)])}
+                        loading={Boolean(loadingMap[folderKey('my', folder.entryId)])}
+                        childrenFolders={folderMap[folderKey('my', folder.entryId)] ?? []}
                         openMap={openMap}
                         loadingMap={loadingMap}
                         folderMap={folderMap}
-                        selectedEntryId={parentEntryId}
-                        onSelect={setParentEntryId}
+                        selectedTarget={selectedTarget}
+                        onSelect={(parentEntryId) => setSelectedTarget({ space: 'my', parentEntryId })}
                         onToggleOpen={toggleFolderOpen}
                       />
                     ))
@@ -267,6 +379,7 @@ function TreeHeader({
 }
 
 function TreeFolderRow({
+  space,
   folder,
   checked,
   depth,
@@ -276,10 +389,11 @@ function TreeFolderRow({
   openMap,
   loadingMap,
   folderMap,
-  selectedEntryId,
+  selectedTarget,
   onSelect,
   onToggleOpen,
 }: {
+  space: FolderSpace;
   folder: DataCenterEntry;
   checked?: boolean;
   depth: number;
@@ -289,11 +403,12 @@ function TreeFolderRow({
   openMap: OpenMap;
   loadingMap: LoadingMap;
   folderMap: FolderMap;
-  selectedEntryId: string;
+  selectedTarget: SaveTarget;
   onSelect: (entryId: string) => void;
-  onToggleOpen: (entryId: string) => Promise<void>;
+  onToggleOpen: (space: FolderSpace, entryId: string) => Promise<void>;
 }) {
-  const childrenLoaded = folderMap[folder.entryId] !== undefined;
+  const currentKey = folderKey(space, folder.entryId);
+  const childrenLoaded = folderMap[currentKey] !== undefined;
   const hasChildren = childrenFolders.length > 0;
   const showToggle = loading || !childrenLoaded || hasChildren;
 
@@ -307,7 +422,7 @@ function TreeFolderRow({
         {showToggle ? (
           <button
             type="button"
-            onClick={() => { void onToggleOpen(folder.entryId); }}
+            onClick={() => { void onToggleOpen(space, folder.entryId); }}
             className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#4E5969] hover:bg-[#F2F3F5]"
             aria-label={folder.name}
           >
@@ -330,16 +445,17 @@ function TreeFolderRow({
           {childrenFolders.map((child) => (
             <TreeFolderRow
               key={child.entryId}
+              space={space}
               folder={child}
-              checked={selectedEntryId === child.entryId}
+              checked={selectedTarget.space === space && selectedTarget.parentEntryId === child.entryId}
               depth={depth + 1}
-              open={Boolean(openMap[child.entryId])}
-              loading={Boolean(loadingMap[child.entryId])}
-              childrenFolders={folderMap[child.entryId] ?? []}
+              open={Boolean(openMap[folderKey(space, child.entryId)])}
+              loading={Boolean(loadingMap[folderKey(space, child.entryId)])}
+              childrenFolders={folderMap[folderKey(space, child.entryId)] ?? []}
               openMap={openMap}
               loadingMap={loadingMap}
               folderMap={folderMap}
-              selectedEntryId={selectedEntryId}
+              selectedTarget={selectedTarget}
               onSelect={onSelect}
               onToggleOpen={onToggleOpen}
             />
