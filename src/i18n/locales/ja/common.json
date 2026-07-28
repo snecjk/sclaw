@@ -142,6 +142,9 @@
         "toolbar": {
             "searchPlaceholder": "ファイルまたはフォルダを検索",
             "workflowFilterAll": "関連ワークフロー：すべて",
+            "associationLabel": "関連：{{value}}",
+            "associationAll": "すべて",
+            "associationTask": "タスク",
             "gridView": "グリッド表示",
             "listView": "リスト表示",
             "createFolder": "新規フォルダ",

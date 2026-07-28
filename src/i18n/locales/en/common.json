@@ -147,6 +147,9 @@
         "toolbar": {
             "searchPlaceholder": "Search files or folders",
             "workflowFilterAll": "Workflow: All",
+            "associationLabel": "Association: {{value}}",
+            "associationAll": "All",
+            "associationTask": "Task",
             "gridView": "Grid view",
             "listView": "List view",
             "createFolder": "New folder",

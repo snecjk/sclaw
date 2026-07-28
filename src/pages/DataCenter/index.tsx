@@ -18,6 +18,12 @@ import { toast } from 'sonner';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import { Button } from '@/components/ui/button';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   DATA_CENTER_API_NOT_FOUND,
   createDataCenterIdempotencyKey,
   deleteDataCenterSharedEntry,
@@ -58,6 +64,8 @@ import {
   normalizeSectionParam,
 } from './utils';
 
+type AssociationFilter = 'all' | 'task';
+
 export function DataCenter() {
   const { t } = useTranslation(['common', 'chat']);
   const navigate = useNavigate();
@@ -77,6 +85,7 @@ export function DataCenter() {
   const [traceMissingOpen, setTraceMissingOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [driveTab, setDriveTab] = useState<DriveTab>('local');
+  const [associationFilter, setAssociationFilter] = useState<AssociationFilter>('all');
   const isDriveSection = store.section === 'drive';
   const isLocalDriveTab = isDriveSection && driveTab === 'local';
   const isUploadDriveTab = isDriveSection && driveTab === 'upload';
@@ -401,7 +410,7 @@ export function DataCenter() {
           </header>
 
           {store.section === 'drive' ? (
-            <div className="mb-[26px] shrink-0">
+            <div className="mb-[18px] shrink-0">
               <div className="flex min-w-0 items-center justify-between gap-4">
                 <div className="flex h-9 items-center gap-8">
                   <TabButton active={driveTab === 'local'} onClick={() => setDriveTab('local')}>{t('dataCenterPage.tabs.localFiles')}</TabButton>
@@ -417,10 +426,7 @@ export function DataCenter() {
                       className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground"
                     />
                   </div>
-                  <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-[#E5E6EB] bg-white px-3 text-[13px] font-normal text-[#4E5969] shadow-none dark:border-border dark:bg-background dark:text-muted-foreground" disabled>
-                    {t('dataCenterPage.toolbar.workflowFilterAll')}
-                    <ChevronDown className="ml-1 h-3.5 w-3.5" />
-                  </Button>
+                  <AssociationFilterDropdown value={associationFilter} onChange={setAssociationFilter} />
                 </div>
               </div>
 
@@ -480,7 +486,7 @@ export function DataCenter() {
               </div>
             </div>
           ) : (
-            <div className={cn(workflowListToolbarClass, 'mb-[26px] shrink-0')}>
+            <div className={cn(workflowListToolbarClass, 'mb-[18px] shrink-0')}>
               <div className="flex h-9 items-center gap-6">
                 {store.section === 'qa_artifact' ? (
                   <>
@@ -507,10 +513,7 @@ export function DataCenter() {
                       className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground"
                     />
                   </div>
-                  <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-[#E5E6EB] bg-white px-3 text-[13px] font-normal text-[#4E5969] shadow-none dark:border-border dark:bg-background dark:text-muted-foreground" disabled>
-                    {t('dataCenterPage.toolbar.workflowFilterAll')}
-                    <ChevronDown className="ml-1 h-3.5 w-3.5" />
-                  </Button>
+                  <AssociationFilterDropdown value={associationFilter} onChange={setAssociationFilter} />
                   <div className="flex h-[34px] items-center rounded-[10px] bg-[#F2F3F5] p-1 dark:bg-muted">
                     <IconToggle active={store.viewMode === 'grid'} label={t('dataCenterPage.toolbar.gridView')} onClick={() => store.setViewMode('grid')}>
                       <Grid2X2 className="h-4 w-4" />
@@ -552,7 +555,7 @@ export function DataCenter() {
               />
             ) : null}
 
-            <section className="mt-4 min-h-0 flex-1 overflow-hidden">
+            <section className="min-h-0 flex-1 overflow-hidden">
               {currentError ? (
                 <FeedbackState icon={<AlertCircle className="h-8 w-8" />} title={t('dataCenterPage.feedback.loadFailed')} description={errorDescription ?? ''} />
               ) : currentLoading ? (
@@ -708,5 +711,40 @@ export function DataCenter() {
         }}
       />
     </div>
+  );
+}
+
+function AssociationFilterDropdown({
+  value,
+  onChange,
+}: {
+  value: AssociationFilter;
+  onChange: (value: AssociationFilter) => void;
+}) {
+  const { t } = useTranslation('common');
+  const label = value === 'task'
+    ? t('dataCenterPage.toolbar.associationTask')
+    : t('dataCenterPage.toolbar.associationAll');
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex h-[34px] items-center justify-center rounded-[10px] border border-[#E5E6EB] bg-white px-3 text-[13px] font-normal text-[#4E5969] shadow-none outline-none ring-0 transition-colors hover:bg-white focus:border-[#E5E6EB] focus:outline-none focus:ring-0 focus-visible:border-[#E5E6EB] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-[#E5E6EB] dark:border-border dark:bg-background dark:text-muted-foreground"
+        >
+          {t('dataCenterPage.toolbar.associationLabel', { value: label })}
+          <ChevronDown className="ml-1 h-3.5 w-3.5" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-[104px] rounded-[10px] p-2">
+        <DropdownMenuItem onSelect={() => onChange('all')} className="text-[13px]">
+          {t('dataCenterPage.toolbar.associationAll')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onChange('task')} className="text-[13px]">
+          {t('dataCenterPage.toolbar.associationTask')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

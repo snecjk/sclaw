@@ -148,6 +148,9 @@
         "toolbar": {
             "searchPlaceholder": "搜索文件或文件夹",
             "workflowFilterAll": "关联工作流：全部",
+            "associationLabel": "关联：{{value}}",
+            "associationAll": "全部",
+            "associationTask": "任务",
             "gridView": "网格视图",
             "listView": "列表视图",
             "createFolder": "新建文件夹",
