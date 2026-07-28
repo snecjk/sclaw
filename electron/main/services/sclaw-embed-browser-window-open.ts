@@ -95,7 +95,7 @@ export function installSclawEmbedBrowserWindowOpenHook(): void {
     };
 
     // Type/partition are usually ready immediately; also retry on dom-ready.
-    queue Promise.resolve().then(tryAttach);
+    void Promise.resolve().then(tryAttach);
     wc.once('dom-ready', tryAttach);
   });
 }
