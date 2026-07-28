@@ -151,7 +151,6 @@
             "gridView": "网格视图",
             "listView": "列表视图",
             "createFolder": "新建文件夹",
-            "downloadTemplate": "下载模板",
             "uploadFile": "上传文件",
             "authorizeLocalFile": "授权本地文件",
             "usedQuota": "已用 {{used}} / {{quota}}"
@@ -216,8 +215,7 @@
             "renamed": "已重命名",
             "deleted": "已删除",
             "deleteFailed": "删除失败",
-            "folderShareUnsupported": "文件夹暂不支持分享",
-            "templateUnavailable": "下载模板功能待接入"
+            "folderShareUnsupported": "文件夹暂不支持分享"
         },
         "menu": {
             "preview": "预览",

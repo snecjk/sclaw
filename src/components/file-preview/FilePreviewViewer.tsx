@@ -44,6 +44,10 @@ function isHtmlFileType(mimeType: string, fileName: string, filePath?: string): 
   return false;
 }
 
+function isImageFileType(mimeType: string): boolean {
+  return mimeType.startsWith('image/');
+}
+
 async function fetchRemotePreviewText(filePath: string): Promise<string> {
   const result = await previewBridgeHttpFetch({
     url: filePath,
@@ -606,6 +610,10 @@ img{max-width:100%}
         );
       }
 
+      if (isImageFileType(effectiveMime)) {
+        return <ImagePreview src={filePath} fileName={fileName} className={className} />;
+      }
+
       if (effectiveMime === 'application/pdf') {
         return (
           <iframe
@@ -673,6 +681,10 @@ img{max-width:100%}
           <OpenExternalButton filePath={filePath} />
         </div>
       );
+    }
+
+    if (isImageFileType(effectiveMime)) {
+      return <ImagePreview src={toServeUrl(filePath)} fileName={fileName} className={className} />;
     }
 
     if (effectiveMime === 'application/pdf') {
@@ -832,6 +844,19 @@ img{max-width:100%}
       >
         {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
       </button>
+    </div>
+  );
+}
+
+function ImagePreview({ src, fileName, className }: { src: string; fileName: string; className?: string }) {
+  return (
+    <div className={cn('flex h-full w-full items-center justify-center overflow-auto bg-white p-6 dark:bg-[#0d1117]', className)}>
+      <img
+        src={src}
+        alt={fileName}
+        className="max-h-full max-w-full object-contain"
+        draggable={false}
+      />
     </div>
   );
 }

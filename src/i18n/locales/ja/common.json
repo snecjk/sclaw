@@ -145,7 +145,6 @@
             "gridView": "グリッド表示",
             "listView": "リスト表示",
             "createFolder": "新規フォルダ",
-            "downloadTemplate": "テンプレートをダウンロード",
             "uploadFile": "ファイルをアップロード",
             "authorizeLocalFile": "ローカルファイルを許可",
             "usedQuota": "使用済み {{used}} / {{quota}}"
@@ -210,8 +209,7 @@
             "renamed": "名前を変更しました",
             "deleted": "削除しました",
             "deleteFailed": "削除に失敗しました",
-            "folderShareUnsupported": "フォルダ共有はまだサポートされていません",
-            "templateUnavailable": "テンプレートのダウンロードは未接続です"
+            "folderShareUnsupported": "フォルダ共有はまだサポートされていません"
         },
         "menu": {
             "preview": "プレビュー",

@@ -150,7 +150,6 @@
             "gridView": "Grid view",
             "listView": "List view",
             "createFolder": "New folder",
-            "downloadTemplate": "Download template",
             "uploadFile": "Upload file",
             "authorizeLocalFile": "Authorize local files",
             "usedQuota": "Used {{used}} / {{quota}}"
@@ -215,8 +214,7 @@
             "renamed": "Renamed",
             "deleted": "Deleted",
             "deleteFailed": "Delete failed",
-            "folderShareUnsupported": "Folder sharing is not supported yet",
-            "templateUnavailable": "Download template is not connected yet"
+            "folderShareUnsupported": "Folder sharing is not supported yet"
         },
         "menu": {
             "preview": "Preview",

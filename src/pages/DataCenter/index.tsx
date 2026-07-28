@@ -291,7 +291,7 @@ function PreviewModal({
   onClose,
   onDownload,
 }: {
-  entry: DataCenterEntry;
+  entry: DataCenterUiEntry;
   tempUrl: DataCenterTempUrl;
   onClose: () => void;
   onDownload: () => void;
@@ -304,10 +304,12 @@ function PreviewModal({
       wide
       footer={(
         <>
-          <Button type="button" variant="outline" onClick={onDownload}>
-            <Download className="mr-2 h-4 w-4" />
-            {t('dataCenterPage.menu.download')}
-          </Button>
+          {!entry.localAuthorized ? (
+            <Button type="button" variant="outline" onClick={onDownload}>
+              <Download className="mr-2 h-4 w-4" />
+              {t('dataCenterPage.menu.download')}
+            </Button>
+          ) : null}
           <Button type="button" variant="outline" onClick={onClose}>{t('actions.close')}</Button>
         </>
       )}
@@ -469,10 +471,6 @@ export function DataCenter() {
     }
   };
 
-  const handleDownloadTemplate = () => {
-    toast.info(t('dataCenterPage.toasts.templateUnavailable'));
-  };
-
   const handlePreview = async (entry: DataCenterUiEntry) => {
     if (entry.entryType !== 'file') return;
     if (entry.localAuthorized) {
@@ -499,12 +497,7 @@ export function DataCenter() {
 
   const handleDownload = async (entry: DataCenterUiEntry) => {
     if (entry.entryType !== 'file') return;
-    if (entry.localAuthorized) {
-      if (entry.localPath) {
-        await window.electron.openExternal(entry.localPath);
-      }
-      return;
-    }
+    if (entry.localAuthorized) return;
     try {
       const tempUrl = await getDataCenterDownloadUrl(entry.entryId);
       window.electron.openExternal(tempUrl.tempUrl);
@@ -715,10 +708,6 @@ export function DataCenter() {
                       <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={() => setCreateFolderOpen(true)}>
                         <FolderPlus className="mr-2 h-4 w-4" />
                         {t('dataCenterPage.toolbar.createFolder')}
-                      </Button>
-                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={handleDownloadTemplate}>
-                        <Download className="mr-2 h-4 w-4" />
-                        {t('dataCenterPage.toolbar.downloadTemplate')}
                       </Button>
                       <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={handleUploadFiles} disabled={uploading}>
                         {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
@@ -1172,6 +1161,7 @@ function GridEntryContextMenu({
   const canDeleteEntry = entry.localAuthorized
     ? entry.parentEntryId === ROOT_ENTRY_ID
     : entry.spaceType !== 'site_shared_artifact' || entry.canManage === true;
+  const canDownloadEntry = entry.entryType === 'file' && !entry.localAuthorized;
   return (
     <div
       className="fixed z-[70] min-w-[128px] rounded-[10px] border border-[#E5E6EB] bg-white p-2 text-[#1D2129] shadow-[0_8px_24px_rgba(15,23,42,0.14)] dark:border-border dark:bg-popover dark:text-foreground"
@@ -1185,7 +1175,7 @@ function GridEntryContextMenu({
           {t('dataCenterPage.menu.preview')}
         </ContextMenuButton>
       ) : null}
-      {entry.entryType === 'file' ? (
+      {canDownloadEntry ? (
         <ContextMenuButton onClick={() => onDownload(entry)}>
           {t('dataCenterPage.menu.download')}
         </ContextMenuButton>
@@ -1297,6 +1287,7 @@ function EntryActions({
   const canDeleteEntry = entry.localAuthorized
     ? entry.parentEntryId === ROOT_ENTRY_ID
     : entry.spaceType !== 'site_shared_artifact' || entry.canManage === true;
+  const canDownloadEntry = entry.entryType === 'file' && !entry.localAuthorized;
   return (
     <div className="flex w-[128px] shrink-0 items-center justify-end gap-1 text-[#6B778C]">
       {canUploadToShared ? (
@@ -1311,7 +1302,7 @@ function EntryActions({
           </button>
         </ActionTooltip>
       ) : null}
-      {entry.entryType === 'file' ? (
+      {canDownloadEntry ? (
         <ActionTooltip label={t('dataCenterPage.menu.download')}>
           <button
             type="button"
