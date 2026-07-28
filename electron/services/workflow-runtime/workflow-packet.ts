@@ -142,6 +142,42 @@ export function normalizeStructuredOutputPacket(value: unknown): { packet: unkno
   }
 }
 
+/**
+ * Claude Agent SDK exposes json_schema output through a StructuredOutput tool
+ * whose sole argument is a JSON string named `payload`. Keep that transport
+ * envelope separate from the workflow protocol: only the parsed object is a
+ * candidate WorkflowPacket and is still validated below by the caller.
+ */
+export function claudeStructuredOutputEnvelopeJsonSchema(): Record<string, unknown> {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['payload'],
+    properties: {
+      payload: {
+        type: 'string',
+        minLength: 1,
+        description: 'A compact JSON string whose complete value is one WorkflowPacket object. This is the Claude SDK StructuredOutput transport envelope.',
+      },
+    },
+  };
+}
+
+export function unwrapClaudeStructuredOutputEnvelope(value: unknown): { packet: unknown; unwrapped: boolean } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { packet: value, unwrapped: false };
+  const envelope = value as Record<string, unknown>;
+  if (Object.keys(envelope).length !== 1 || typeof envelope.payload !== 'string' || !envelope.payload) {
+    return { packet: value, unwrapped: false };
+  }
+  try {
+    const packet = JSON.parse(envelope.payload);
+    if (!packet || typeof packet !== 'object' || Array.isArray(packet)) return { packet: value, unwrapped: false };
+    return { packet, unwrapped: true };
+  } catch {
+    return { packet: value, unwrapped: false };
+  }
+}
+
 /** SDK-native JSON schema. This is passed to Claude Agent SDK outputFormat, not parsed from prose. */
 export function workflowPacketJsonSchema(payloadSchema: any, opts: { runId: string; nodeId: string; nodeType: string; allowedPorts?: string[]; requireSelectedPort?: boolean }): Record<string, unknown> {
   // Both terminal outcomes share the same root shape. A failed condition node

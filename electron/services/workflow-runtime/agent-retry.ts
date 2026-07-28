@@ -12,9 +12,11 @@ import { validateOutputAgainstSchema } from './agent-output';
 import { buildWorkflowNodePrompt } from './prompt-builder';
 import {
   createFailurePacket,
+  claudeStructuredOutputEnvelopeJsonSchema,
   getWorkflowPacketFailureMessage,
   isRetryableWorkflowPacketFailure,
   normalizeStructuredOutputPacket,
+  unwrapClaudeStructuredOutputEnvelope,
   validateWorkflowPacket,
   workflowPacketJsonSchema,
 } from './workflow-packet';
@@ -194,10 +196,12 @@ export async function runAgentNodeWithRetry(
         allowedSkills: spec.allowedSkills,
       permissionMode: spec.permissionPolicy?.mode,
       model: spec.target.model,
-      outputSchema: workflowPacketJsonSchema(contract.dataJsonSchema ?? node.config?.outputContract?.schema, {
+      outputSchema: deps.execEngine === 'openclaw'
+        ? workflowPacketJsonSchema(contract.dataJsonSchema ?? node.config?.outputContract?.schema, {
         runId: ctx.runId, nodeId: node.id, nodeType: node.type, allowedPorts: Array.isArray(node.config?.branches) ? node.config.branches.map((branch: any) => branch?.branchKey ?? branch?.key).filter(Boolean) : undefined,
         requireSelectedPort: node.type === 'agent_condition',
-      }),
+        })
+        : claudeStructuredOutputEnvelopeJsonSchema(),
         onStreamEvent: async (event) => {
           if (event.type === 'agent.tool_start') {
             toolCalls += 1;
@@ -265,7 +269,10 @@ export async function runAgentNodeWithRetry(
       continue;
     }
 
-    const structuredOutput = normalizeStructuredOutputPacket(result.output);
+    const claudeEnvelope = deps.execEngine === 'openclaw'
+      ? { packet: result.output, unwrapped: false }
+      : unwrapClaudeStructuredOutputEnvelope(result.output);
+    const structuredOutput = normalizeStructuredOutputPacket(claudeEnvelope.packet);
     const packet = structuredOutput.packet;
     if (!packet) {
       lastError = `${PACKET_OUTPUT_MISSING}：模型未返回 SDK 结构化结果`;

@@ -117,7 +117,7 @@ function outputProtocolInstruction(execEngine?: 'claude' | 'openclaw'): string {
   if (execEngine === 'openclaw') {
     return '当前使用 OpenClaw 文本输出通道，没有 StructuredOutput 工具。最终文本的唯一结果必须是完整 WorkflowPacket 顶层 JSON；不要只输出 payload、不要用包装对象嵌套 WorkflowPacket、不要提及、调用或等待 StructuredOutput。可以使用 JSON 代码块，但不要输出解释性文字、node-result.json 或其他内容。payload 必须是符合动态 schema 的 JSON 对象值，禁止 JSON.stringify 或把 JSON 对象放进字符串。';
   }
-  return 'SDK 已启用 JSON Schema 结构化输出。必须调用 StructuredOutput 工具完成当前节点；该工具的唯一顶层输入必须是完整 WorkflowPacket，只有该工具调用的结果会被工作流接收。payload 必须是符合动态 schema 的 JSON 对象值。禁止只提交 payload、禁止把完整 WorkflowPacket 嵌入 payload、禁止 JSON.stringify，也禁止把 JSON 对象放进字符串或 Markdown 代码块。不要写 node-result.json，也不要输出 Markdown、代码块或额外文本。';
+  return 'SDK 已启用 JSON Schema 结构化输出。必须调用 StructuredOutput 工具完成当前节点；该工具唯一参数为 payload，且 payload 必须是一个紧凑 JSON 字符串，字符串完整内容必须是一个 WorkflowPacket。WorkflowPacket 内部的 payload 必须是符合动态 schema 的 JSON 对象值。禁止只把业务 payload 放入工具参数、禁止嵌套包装对象、禁止 Markdown 或额外文本。不要写 node-result.json。';
 }
 
 function workflowPacketTemplates(node: any, ctx: RunCtx, attempt?: number): { succeeded: Record<string, unknown>; failed: Record<string, unknown> } {
