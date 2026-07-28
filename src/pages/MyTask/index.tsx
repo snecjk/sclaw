@@ -302,6 +302,12 @@ export default function MyTask() {
           const d = String(today.getDate()).padStart(2, '0');
           forgetOptimisticDeletedSessionKey(`agent:main:cron:${task.id}:${y}-${m}-${d}`);
         }
+        // 固定停留，给 gateway started/bindRun 一点时间写入 runtime，再进对话页，
+        // 避免改 chat store 做乐观 sending。
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 2000);
+        });
+
         navigateToMainChatHome(navigate, location.pathname, () => {
           useChatStore.getState().switchSession(targetSessionKey);
         });
