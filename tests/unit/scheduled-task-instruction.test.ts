@@ -84,6 +84,9 @@ describe('scheduled-task-instruction', () => {
     expect(prompt).toBe(SCHEDULED_TASK_CORE_PROMPT);
     expect(prompt).not.toContain(SCHEDULED_TASK_DINGTALK_RULES);
     expect(prompt).not.toContain(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
+    // CORE 不得暗示「系统代发」，避免非工作流任务被当成工作流程序发送
+    expect(prompt).not.toContain('钉钉由系统在终态自动发送');
+    expect(prompt).not.toContain('Agent 无需发送');
   });
 
   it('injects CORE + format when prompt has dws send but no recipients block', () => {
@@ -102,6 +105,8 @@ describe('scheduled-task-instruction', () => {
     expect(prompt).toContain(SCHEDULED_TASK_CORE_PROMPT);
     expect(prompt).toContain(SCHEDULED_TASK_DINGTALK_RULES);
     expect(prompt).toContain(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
+    expect(prompt).toContain('不要假设「系统会在终态自动发送」');
+    expect(prompt).not.toContain('定时任务钉钉（工作流 · 程序发送）');
   });
 
   it('injects workflow delegate instead of module C when prompt involves workflow + recipients', () => {

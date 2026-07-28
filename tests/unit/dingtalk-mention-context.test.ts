@@ -162,6 +162,7 @@ describe('dingtalk mention context scenario split', () => {
     expect(ctx).toContain('必须发送');
     expect(ctx).toContain('发送不是可选项');
     expect(ctx).toContain('指定即必发');
+    expect(ctx).toContain('不要假设系统会自动发');
     expect(ctx).toContain('同一正文');
     expect(ctx).toContain('禁止回执上钉钉');
     expect(ctx).toContain('消息已发送至');

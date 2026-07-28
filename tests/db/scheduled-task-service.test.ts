@@ -117,7 +117,9 @@ describe('ScheduledTaskService', () => {
       expect(append).not.toBeNull();
       expect(append).toContain(DINGTALK_RECIPIENTS_MARKER);
       expect(append).toContain('指定即必发');
+      expect(append).toContain('不要假设系统会自动发');
       expect(append).toContain('u-lei');
+      expect(append).not.toContain('系统自动发送');
     });
 
     it('resolves recipients from prompt block when column is empty', async () => {

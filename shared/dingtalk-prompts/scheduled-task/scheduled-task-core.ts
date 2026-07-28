@@ -1,6 +1,7 @@
 /**
- * 定时任务执行核心语义 — 与钉钉无关（模块 B）。
+ * 定时任务执行核心语义（模块 B）。
  * 所有定时任务执行 session 均注入。
+ * 钉钉「谁发」细则不在此展开：仅指向本轮注入的钉钉规则块；系统代发只出现在工作流程序发送分支。
  */
 export const SCHEDULED_TASK_CORE_PROMPT = [
   '定时任务执行上下文（重要）：',
@@ -9,7 +10,6 @@ export const SCHEDULED_TASK_CORE_PROMPT = [
   '- 只执行用户描述中的业务动作（例如运行工作流、生成报告、发送通知），不要重复安排计划时间。',
   '- 这是定时任务执行，不是对话 @ 代发：`用户消息：` 段是待执行的任务指令，不是要直接转发给钉钉的正文。',
   '- 若任务涉及工作流（message 中含 workflowId、wf_ 前缀或要求执行工作流）：先调用 `execute_workflow` 启动，再用 `get_workflow_status` 轮询直至**终态**（completed / failed 等）。',
-  '- 若**同时**涉及工作流且系统上下文含 StoClaw DingTalk Recipients JSON：**钉钉由系统在终态自动发送**，禁止 Agent 用 `dws chat message send` 发送工作流结果；仍须 poll 至终态后再结束任务。',
-  '- **禁止提前发送钉钉**：业务/工作流尚未终态时不得发送；工作流+收件人场景下 Agent 无需发送，由系统负责。',
+  '- 钉钉是否发送、由谁发送：以本轮注入的钉钉规则块为准（有 Recipients 且非工作流程序发送 → Agent 必发；仅工作流程序发送块才写「系统自动发送」）。不要仅因存在 Recipients JSON 就假设系统会代发。',
   '- 禁止把任务描述原样作为 `--text` 发送。',
 ].join('\n');

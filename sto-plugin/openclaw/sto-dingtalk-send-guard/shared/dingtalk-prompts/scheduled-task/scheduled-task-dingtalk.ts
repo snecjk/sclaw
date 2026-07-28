@@ -8,6 +8,7 @@ import { DINGTALK_ARTIFACT_RULES_POINTER } from '../dingtalk-send-rules';
 export const SCHEDULED_TASK_DINGTALK_RULES = [
   '定时任务钉钉发送规则：',
   '- **【P0 强制】若 message / 系统上下文含 StoClaw DingTalk Recipients JSON，块内收件人必须发送**，发送不是可选项——无论任务描述是否提及"发送钉钉"',
+  '- **【P0】本任务非工作流程序发送**：不要假设「系统会在终态自动发送」；须由你调用 `dws chat message send` 完成必发',
   '- 禁止在发送前询问"是否需要发送"、"是否确认发送"等——定时任务无交互用户；不要使用 `--dry-run` 来请示',
   '- 先完成业务动作，**任务完成或失败之后**再将结果通过 `dws chat message send` 发给 JSON 中所有收件人；多收件人逐个发送；**禁止提前发送**',
   '- **【P0 同一正文】** 发给 JSON 收件人与任务描述自然语言点名的额外收件人时，`--text` 必须是**同一份业务结果**；每位收件人只发 1 次',
