@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/preview-url';
 import { normalizeAppPlazaTabUrl } from '@/lib/app-plaza-tab-url';
+import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
 import { sclawBrowserEmbedChatShortcutLabel } from '../../../shared/sclaw-embed-browser-shortcut';
 import {
   SclawBrowserFrame,
@@ -333,6 +334,7 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
               title={tab.title}
               embedRuntimeId={tab.embedRuntimeId}
               active={active}
+              onOpenWindow={(nextUrl) => openInSclawBrowser({ url: nextUrl })}
               onNavStateChange={({ canGoBack: next }) => setCanGoBack(next)}
               onPageFavicon={(faviconUrl) => {
                 updateTabPageMeta(tab.id, { pageFaviconUrl: faviconUrl });

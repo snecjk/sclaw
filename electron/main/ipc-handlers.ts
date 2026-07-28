@@ -94,6 +94,11 @@ export function registerIpcHandlers(
   getFloatIconWindow?: () => BrowserWindow | null,
   getMainWindow?: () => BrowserWindow | null,
 ): void {
+  // Catch embed webview window.open as early as guest WebContents are created.
+  void import('./services/sclaw-embed-browser-window-open').then(({ installSclawEmbedBrowserWindowOpenHook }) => {
+    installSclawEmbedBrowserWindowOpenHook();
+  });
+
   // Unified request protocol (non-breaking: legacy channels remain available)
   registerUnifiedRequestHandlers(gatewayManager);
 
