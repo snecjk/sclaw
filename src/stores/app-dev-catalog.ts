@@ -12,6 +12,8 @@ interface AppDevCatalogState {
   refresh: () => Promise<void>;
   /** Optimistically hide a workspace from the sidebar (before / if list API lags). */
   registerWorkspaceId: (workspaceId: string) => void;
+  /** Remove a workspace after delete. */
+  unregisterWorkspaceId: (workspaceId: string) => void;
   isAppDevWorkspace: (workspaceId: string) => boolean;
 }
 
@@ -38,6 +40,14 @@ export const useAppDevCatalogStore = create<AppDevCatalogState>((set, get) => ({
     const current = get().workspaceIds;
     if (current.includes(id)) return;
     set({ workspaceIds: [...current, id] });
+  },
+  unregisterWorkspaceId: (workspaceId) => {
+    const id = workspaceId.trim();
+    if (!id) return;
+    set({
+      workspaceIds: get().workspaceIds.filter((item) => item !== id),
+      apps: get().apps.filter((app) => app.workspaceId !== id),
+    });
   },
   isAppDevWorkspace: (workspaceId) => get().workspaceIds.includes(workspaceId),
 }));

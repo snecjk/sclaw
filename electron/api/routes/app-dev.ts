@@ -12,6 +12,7 @@ import {
   DEFAULT_APPS_PARENT_DIR,
   createCheckpoint,
   createUserApp,
+  importUserApp,
   ensureAppDevContext,
   getAppDevStatus,
   isGitAvailable,
@@ -25,11 +26,22 @@ import {
   searchAppSourceFiles,
   stopApp,
   writeAppSourceFile,
+  installNpmPackage,
+  installPipPackage,
+  listAppDevAssistSkills,
+  installAppDevAssistSkill,
+  deleteDevApp,
   type CreateUserAppInput,
 } from '../../services/app-dev-service';
 import { getDevServerLogs, drainDevServerErrors } from '../../services/app-dev-server-manager';
 import { getWorkspaceRootPath } from '../../services/session-catalog-service';
 import { logger } from '../../utils/logger';
+import {
+  continueStoAppMerge,
+  getStoAppStatus,
+  pullStoApp,
+  pushStoApp,
+} from '../../services/sto-app-service';
 
 async function resolveAppPath(workspaceId: string): Promise<string> {
   const rootPath = await getWorkspaceRootPath(workspaceId);
@@ -41,7 +53,7 @@ export async function handleAppDevRoutes(
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
-  _ctx: HostApiContext,
+  ctx: HostApiContext,
 ): Promise<boolean> {
   if (!url.pathname.startsWith('/api/app-dev/')) return false;
 
@@ -81,6 +93,27 @@ export async function handleAppDevRoutes(
     if (url.pathname === '/api/app-dev/apps' && req.method === 'POST') {
       const body = await parseJsonBody<CreateUserAppInput>(req);
       const result = await createUserApp(body);
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/apps/import' && req.method === 'POST') {
+      const body = await parseJsonBody<{ appPath: string; name?: string }>(req);
+      const result = await importUserApp({
+        appPath: body.appPath ?? '',
+        name: body.name,
+      });
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/apps/delete' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string; deleteFiles?: boolean }>(req);
+      const result = await deleteDevApp(
+        body.workspaceId ?? '',
+        { deleteFiles: body.deleteFiles === true },
+        ctx.gatewayManager,
+      );
       sendJson(res, 200, { success: true, ...result });
       return true;
     }
@@ -181,6 +214,71 @@ export async function handleAppDevRoutes(
       const appPath = await resolveAppPath(body.workspaceId);
       const hits = await searchAppSourceFiles(appPath, body.query ?? '');
       sendJson(res, 200, { success: true, hits });
+      return true;
+    }
+
+    // --- Community skill package install ---
+    if (url.pathname === '/api/app-dev/packages/npm' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string; packageName: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const result = await installNpmPackage(appPath, body.packageName ?? '');
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/packages/pip' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string; packageName: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const result = await installPipPackage(appPath, body.packageName ?? '');
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    // --- Community 开发辅助：install into app openspec/skills ---
+    if (url.pathname === '/api/app-dev/dev-skills' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      sendJson(res, 200, { success: true, skills: await listAppDevAssistSkills(appPath) });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/dev-skills/install' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string; skillId: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const result = await installAppDevAssistSkill(appPath, body.skillId ?? '');
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    // --- sto-app collaboration wrapper ---
+    if (url.pathname === '/api/app-dev/sto-app/status' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      sendJson(res, 200, { success: true, status: await getStoAppStatus(appPath) });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/sto-app/push' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string; message?: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const result = await pushStoApp(appPath, body.message ?? '更新应用');
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/sto-app/pull' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const result = await pullStoApp(appPath);
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/sto-app/merge-continue' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string; revisionId: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const result = await continueStoAppMerge(appPath, body.revisionId ?? '');
+      sendJson(res, 200, { success: true, ...result });
       return true;
     }
 

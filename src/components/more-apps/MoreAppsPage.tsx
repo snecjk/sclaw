@@ -7,7 +7,7 @@
  * - Installed tab: Card grid layout
  */
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { Search, Plus, Heart } from 'lucide-react';
+import { Search, Plus, Heart, FolderInput } from 'lucide-react';
 import './more-apps.css';
 import { toast } from 'sonner';
 import { useMoreAppsStore } from '@/stores/more-apps';
@@ -27,6 +27,10 @@ import type { AppItem, AppPlazaBanner, MarketCategory } from '@/types/more-apps'
 import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
 import { formatAppBadges } from './format-app-badges';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
+import { pickProjectFolder } from '@/lib/session-catalog-api';
+import { importUserApp } from '@/lib/app-dev-api';
+import { useSessionCatalogStore } from '@/stores/session-catalog';
+import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 
 const HERO_CAROUSEL_INTERVAL = 5000;
 
@@ -73,6 +77,7 @@ export function MoreAppsPage() {
 
   const [confirmDeleteApp, setConfirmDeleteApp] = useState<AppItem | null>(null);
   const [createAppOpen, setCreateAppOpen] = useState(false);
+  const [importingApp, setImportingApp] = useState(false);
   const [failedBannerImages, setFailedBannerImages] = useState<string[]>([]);
   const heroTimerRef = useRef<NodeJS.Timeout | null>(null);
   // Skip the search-debounce effect's first run on mount — the mount effect
@@ -97,6 +102,28 @@ export function MoreAppsPage() {
         || app.projectType.toLowerCase().includes(q),
     );
   }, [devApps, searchQuery]);
+
+  const handleImportApp = useCallback(async () => {
+    if (importingApp) return;
+    setImportingApp(true);
+    try {
+      const picked = await pickProjectFolder();
+      if (!picked) return;
+      const result = await importUserApp({ appPath: picked });
+      useAppDevCatalogStore.getState().registerWorkspaceId(result.workspaceId);
+      await useSessionCatalogStore.getState().refreshWorkspaces().catch(() => undefined);
+      await useAppDevCatalogStore.getState().refresh().catch(() => undefined);
+      useAppPlazaShellStore.getState().openOrFocusDevAppTab(
+        result.workspaceId,
+        result.workspaceName,
+      );
+      toast.success(`已导入「${result.workspaceName}」`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setImportingApp(false);
+    }
+  }, [importingApp]);
 
   // My apps use a stable session catalog so market category/search requests cannot
   // remove favorited apps from the installed view.
@@ -623,6 +650,18 @@ export function MoreAppsPage() {
           >
             <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
             {t('moreApps.createApp', { defaultValue: '创建应用' })}
+          </button>
+          <button
+            type="button"
+            className="more-apps-add-btn more-apps-add-btn--ghost"
+            id="more-apps-import-app-btn"
+            disabled={importingApp}
+            onClick={() => void handleImportApp()}
+          >
+            <FolderInput className="more-apps-add-btn__icon" aria-hidden="true" />
+            {importingApp
+              ? t('moreApps.importingApp', { defaultValue: '导入中…' })
+              : t('moreApps.importApp', { defaultValue: '导入应用' })}
           </button>
           <button
             type="button"

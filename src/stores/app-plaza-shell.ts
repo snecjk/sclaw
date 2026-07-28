@@ -97,6 +97,7 @@ interface AppPlazaShellState {
   /** Open (or focus) a dev-app workbench tab. Returns the tab id. */
   openOrFocusDevAppTab: (workspaceId: string, title: string) => string;
   closeDevAppTab: (tabId: string) => void;
+  closeDevAppTabsByWorkspaceId: (workspaceId: string) => void;
   submitBlankTabUrl: (tabId: string, rawUrl: string) => void;
   /** Navigate an existing live/suspended/blank tab to a manually entered URL. */
   navigateBrowserTabUrl: (tabId: string, rawUrl: string) => void;
@@ -349,6 +350,19 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
       nextActive = APP_PLAZA_HOME_TAB_ID;
     }
     set({ devAppTabs: remaining, activeTabId: nextActive });
+  },
+
+  closeDevAppTabsByWorkspaceId: (workspaceId) => {
+    const state = get();
+    const remaining = state.devAppTabs.filter((t) => t.workspaceId !== workspaceId);
+    if (remaining.length === state.devAppTabs.length) return;
+    const closedActive = state.devAppTabs.some(
+      (t) => t.workspaceId === workspaceId && t.id === state.activeTabId,
+    );
+    set({
+      devAppTabs: remaining,
+      activeTabId: closedActive ? APP_PLAZA_HOME_TAB_ID : state.activeTabId,
+    });
   },
 
   submitBlankTabUrl: (tabId, rawUrl) => {

@@ -8,7 +8,7 @@
 import { app } from 'electron';
 import { spawn } from 'child_process';
 import { existsSync, statSync } from 'fs';
-import { cp, mkdir, readdir, readFile, stat, writeFile } from 'fs/promises';
+import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises';
 import { homedir } from 'os';
 import { extname, dirname, join, relative, resolve, sep } from 'path';
 import {
@@ -20,9 +20,14 @@ import {
   type AppDevPhase,
 } from '../utils/app-dev-info';
 import { getNodeRuntimeStatus, getNodeSpawnEnv, isNodeRuntimeReady, setupManagedNode, getManagedNodePaths } from '../utils/node-runtime';
-import { createWorkspace, listUserWorkspaces } from './session-catalog-service';
+import { getUvMirrorEnv } from '../utils/uv-env';
+import { resolveUvBin, setupManagedPython } from '../utils/uv-setup';
+import { needsWinShell, quoteForCmd } from '../utils/paths';
+import { createWorkspace, deleteWorkspace, listUserWorkspaces } from './session-catalog-service';
 import { startDevServer, stopDevServer, getDevServer } from './app-dev-server-manager';
 import { logger } from '../utils/logger';
+import type { GatewayManager } from '../gateway/manager';
+import { createStoApp } from './sto-app-service';
 
 export interface AppDevStatus {
   workspaceId: string;
@@ -102,11 +107,13 @@ async function writeAppDevBootstrap(
 - \`frontend/\`：React + Vite 前端（用户主要看到和修改的页面）
 - \`backend/\`：后端预留目录
 - \`docs/api/\`：公司接口文档（Markdown），调用接口前先阅读这里
+- \`openspec/\`：本应用的 OpenSpec（规格驱动开发）与已安装开发技能；**不是** SClaw 客户端仓库
 
 ## 工作方式
 - 用户是业务人员，用自然语言描述需求；不要要求他们写代码或看终端日志
 - 优先修改 \`frontend/src/\` 下的页面与样式，改完后右侧预览会自动刷新
 - 优先使用公司接口文档与组件；不确定时先查 \`docs/api/\`
+- 新功能或跨模块改动：先读 \`openspec/skills/\` 中相关技能，再按 OpenSpec（proposal → design → specs → tasks → apply）推进
 - 保持页面简洁可用；改动后用简短中文说明「改了什么、用户会看到什么」
 - 不要提交密钥到代码里；鉴权方式以接口文档为准
 <!-- /sclaw-app-dev-context -->
@@ -263,6 +270,11 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
     throw new Error(`应用模板缺失: ${template}`);
   }
 
+  logger.info(
+    `[app-dev] createUserApp start name=${name} appPath=${appPath} ` +
+    `projectType=${input.projectType ?? 'frontend'}`,
+  );
+
   await copyTemplate(template, appPath, {
     appName: sanitizePackageName(name),
     appTitle: name,
@@ -272,6 +284,29 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
     name,
     projectType: input.projectType ?? 'frontend',
   });
+
+  try {
+    await createStoApp(appPath, {
+      name,
+      description: `${name} 应用`,
+      message: `Initial commit: ${name}`,
+    });
+    logger.info(`[app-dev] sto-app create linked name=${name} appPath=${appPath}`);
+  } catch (err) {
+    logger.warn(`[app-dev] sto-app create skipped name=${name} appPath=${appPath}:`, err);
+  }
+
+  // Ensure openspec exists even if an older template missed it; bake OpenSpec skill.
+  try {
+    await ensureAppOpenspecScaffold(appPath);
+    if (!existsSync(join(appPath, 'openspec', 'skills', 'openspec', 'SKILL.md'))) {
+      await installAppDevAssistSkill(appPath, 'openspec');
+    } else {
+      await syncOpenspecSkillsIntoAgents(appPath);
+    }
+  } catch (err) {
+    logger.warn('[app-dev] openspec scaffold skipped:', err);
+  }
 
   // Local checkpoint baseline (best-effort; app creation must not depend on git).
   if (await isGitAvailable()) {
@@ -285,6 +320,8 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
   const workspace = await createWorkspace({ name, rootPath: appPath });
   const workspaceId: string = workspace.id;
 
+  logger.info(`[app-dev] createUserApp workspaceReady workspaceId=${workspaceId} appPath=${appPath}`);
+
   setStatus(workspaceId, { appPath, phase: 'created', progress: 0 });
 
   // Fire the background pipeline; errors land in status, never thrown to the wizard.
@@ -293,6 +330,79 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
   });
 
   return { workspaceId, appPath, workspaceName: workspace.name ?? name };
+}
+
+/**
+ * Import an existing local app folder (换机恢复 / 重新纳入广场).
+ * Requires frontend/package.json or an existing .sclaw/app-dev.json marker.
+ */
+export async function importUserApp(input: {
+  appPath: string;
+  name?: string;
+}): Promise<CreateUserAppResult> {
+  const appPath = resolve(input.appPath.trim());
+  if (!appPath || !existsSync(appPath) || !statSync(appPath).isDirectory()) {
+    throw new Error('请选择有效的应用文件夹');
+  }
+
+  const hasFrontend = existsSync(join(appPath, 'frontend', 'package.json'));
+  const hasMarker = isAppDevWorkspaceRoot(appPath);
+  if (!hasFrontend && !hasMarker) {
+    throw new Error('所选文件夹不是可导入的开发应用（需包含 frontend/package.json）');
+  }
+
+  let projectType = 'frontend';
+  let name = input.name?.trim() || '';
+  if (hasMarker) {
+    try {
+      const raw = JSON.parse(await readFile(appDevMarkerPath(appPath), 'utf8')) as Partial<AppDevMarker>;
+      if (typeof raw.projectType === 'string' && raw.projectType.trim()) projectType = raw.projectType.trim();
+      if (!name && typeof raw.name === 'string' && raw.name.trim()) name = raw.name.trim();
+    } catch {
+      // ignore
+    }
+  }
+  if (!name) {
+    name = appPath.split(/[/\\]/).filter(Boolean).pop() || '导入应用';
+  }
+
+  logger.info(`[app-dev] importUserApp start name=${name} appPath=${appPath}`);
+
+  const existing = (await listUserWorkspaces()).find((w) => resolve(w.rootPath) === appPath);
+  const workspaceName = (existing?.name?.trim() || name);
+
+  await writeAppDevBootstrap(appPath, {
+    name: workspaceName,
+    projectType,
+  });
+  try {
+    await ensureAppOpenspecScaffold(appPath);
+    if (!existsSync(join(appPath, 'openspec', 'skills', 'openspec', 'SKILL.md'))) {
+      await installAppDevAssistSkill(appPath, 'openspec');
+    } else {
+      await syncOpenspecSkillsIntoAgents(appPath);
+    }
+  } catch (err) {
+    logger.warn(`[app-dev] openspec scaffold on import skipped appPath=${appPath}:`, err);
+  }
+
+  const workspace = existing ?? await createWorkspace({
+    name: workspaceName,
+    rootPath: appPath,
+  });
+  const workspaceId: string = workspace.id;
+
+  logger.info(
+    `[app-dev] importUserApp workspaceReady workspaceId=${workspaceId} appPath=${appPath} ` +
+    `reused=${Boolean(existing)}`,
+  );
+
+  setStatus(workspaceId, { appPath, phase: 'created', progress: 0 });
+  void runSetupPipeline(workspaceId, appPath).catch((err) => {
+    logger.error('[app-dev] setup pipeline failed after import:', err);
+  });
+
+  return { workspaceId, appPath, workspaceName: workspace.name ?? workspaceName };
 }
 
 /** List session-catalog workspaces that are marked as SClaw 开发应用. */
@@ -327,6 +437,53 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
 export async function listDevAppWorkspaceIds(): Promise<string[]> {
   const apps = await listDevApps();
   return apps.map((app) => app.workspaceId);
+}
+
+/**
+ * Remove a 开发应用 from the catalog. Optionally delete the project directory on disk.
+ * Files are only removed when the path still has the app-dev marker (safety).
+ */
+export async function deleteDevApp(
+  workspaceId: string,
+  options: { deleteFiles?: boolean } = {},
+  gatewayManager?: GatewayManager | null,
+): Promise<{ deletedFiles: boolean; appPath: string }> {
+  const id = workspaceId.trim();
+  if (!id) throw new Error('缺少 workspaceId');
+
+  const { getWorkspaceRootPath } = await import('./session-catalog-service');
+  const appPath = await getWorkspaceRootPath(id);
+  if (!appPath) throw new Error(`Workspace not found: ${id}`);
+  if (!isAppDevWorkspaceRoot(appPath)) {
+    throw new Error('不是开发应用，无法从此处删除');
+  }
+
+  stopApp(id);
+  statuses.delete(id);
+
+  await deleteWorkspace(id, gatewayManager);
+
+  let deletedFiles = false;
+  if (options.deleteFiles) {
+    const resolved = resolve(appPath);
+    const forbidden = new Set([
+      resolve('/'),
+      resolve(homedir()),
+      resolve(DEFAULT_APPS_PARENT_DIR),
+    ]);
+    if (forbidden.has(resolved) || resolved.length < 12) {
+      throw new Error('拒绝删除危险路径；应用记录已移除，文件请手动处理');
+    }
+    // Marker must still be present — avoids wiping a path that was swapped out.
+    if (!isAppDevWorkspaceRoot(resolved)) {
+      throw new Error('应用目录标记已不存在，已跳过删文件以免误删');
+    }
+    await rm(resolved, { recursive: true, force: true });
+    deletedFiles = true;
+    logger.info(`[app-dev] deleted app files at ${resolved}`);
+  }
+
+  return { deletedFiles, appPath };
 }
 
 async function runNpmInstall(workspaceId: string, appPath: string): Promise<void> {
@@ -628,3 +785,275 @@ export async function searchAppSourceFiles(
   }
   return hits;
 }
+
+// ── Community skill package install ─────────────────────────────────────────
+
+const NPM_PACKAGE_RE =
+  /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*(?:@[\w.^~*|<>=-]+)?$/i;
+const PIP_PACKAGE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*(?:[<>=!~]=?[A-Za-z0-9._*-]+)?$/;
+
+function assertNpmPackageName(raw: string): string {
+  const name = raw.trim();
+  if (!name || name.length > 180 || !NPM_PACKAGE_RE.test(name)) {
+    throw new Error(`非法的 npm 包名: ${raw}`);
+  }
+  return name;
+}
+
+function assertPipPackageName(raw: string): string {
+  const name = raw.trim();
+  if (!name || name.length > 120 || !PIP_PACKAGE_RE.test(name)) {
+    throw new Error(`非法的 Python 包名: ${raw}`);
+  }
+  return name;
+}
+
+function collectSpawnOutput(
+  command: string,
+  args: string[],
+  options: { cwd: string; env?: NodeJS.ProcessEnv; shell?: boolean },
+): Promise<{ ok: boolean; output: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env,
+      shell: options.shell ?? false,
+      windowsHide: true,
+    });
+    const chunks: string[] = [];
+    const onData = (chunk: unknown) => {
+      chunks.push(String(chunk));
+      if (chunks.length > 80) chunks.shift();
+    };
+    child.stdout?.on('data', onData);
+    child.stderr?.on('data', onData);
+    child.on('error', reject);
+    child.on('close', (code) => {
+      resolve({ ok: code === 0, output: chunks.join('').trim() });
+    });
+  });
+}
+
+async function ensureRequirementsLine(requirementsPath: string, packageName: string): Promise<void> {
+  const baseName = packageName.split(/[<>=!~]/)[0]?.trim() || packageName;
+  let existing = '';
+  if (existsSync(requirementsPath)) {
+    existing = await readFile(requirementsPath, 'utf8');
+  }
+  const lines = existing.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const already = lines.some((line) => {
+    const name = line.split(/[<>=!~]/)[0]?.trim().toLowerCase();
+    return name === baseName.toLowerCase();
+  });
+  if (already) return;
+  const next = `${lines.concat(packageName).join('\n')}\n`;
+  await mkdir(dirname(requirementsPath), { recursive: true });
+  await writeFile(requirementsPath, next, 'utf8');
+}
+
+/** Install a frontend npm package into `frontend/` with `--save`. */
+export async function installNpmPackage(
+  appPath: string,
+  packageNameRaw: string,
+): Promise<{ packageName: string; output: string }> {
+  const packageName = assertNpmPackageName(packageNameRaw);
+  const frontendDir = join(appPath, 'frontend');
+  if (!existsSync(join(frontendDir, 'package.json'))) {
+    throw new Error('未找到 frontend/package.json，无法安装前端组件包');
+  }
+
+  if (!isNodeRuntimeReady()) {
+    await setupManagedNode();
+  }
+
+  const { npmBin } = getManagedNodePaths();
+  const result = await collectSpawnOutput(
+    npmBin,
+    ['install', packageName, '--save', '--no-audit', '--no-fund'],
+    { cwd: frontendDir, env: getNodeSpawnEnv() as NodeJS.ProcessEnv },
+  );
+  if (!result.ok) {
+    throw new Error(`npm install ${packageName} 失败\n${result.output}`);
+  }
+  return { packageName, output: result.output };
+}
+
+/**
+ * Install a Python package into `backend/` via bundled uv:
+ * create `.venv` if needed, `uv pip install`, and append to requirements.txt.
+ */
+export async function installPipPackage(
+  appPath: string,
+  packageNameRaw: string,
+): Promise<{ packageName: string; output: string }> {
+  const packageName = assertPipPackageName(packageNameRaw);
+  const backendDir = join(appPath, 'backend');
+  await mkdir(backendDir, { recursive: true });
+
+  await setupManagedPython();
+  const { bin: uvBin } = resolveUvBin();
+  const useShell = needsWinShell(uvBin);
+  const uvCmd = useShell ? quoteForCmd(uvBin) : uvBin;
+  const mirrorEnv = await getUvMirrorEnv();
+  const env = { ...process.env, ...mirrorEnv } as NodeJS.ProcessEnv;
+
+  const venvDir = join(backendDir, '.venv');
+  if (!existsSync(venvDir)) {
+    const venv = await collectSpawnOutput(uvCmd, ['venv', '.venv', '--python', '3.12'], {
+      cwd: backendDir,
+      env,
+      shell: useShell,
+    });
+    if (!venv.ok) {
+      throw new Error(`创建 Python 虚拟环境失败\n${venv.output}`);
+    }
+  }
+
+  const install = await collectSpawnOutput(
+    uvCmd,
+    ['pip', 'install', packageName, '--python', '.venv'],
+    { cwd: backendDir, env, shell: useShell },
+  );
+  if (!install.ok) {
+    throw new Error(`pip install ${packageName} 失败\n${install.output}`);
+  }
+
+  await ensureRequirementsLine(join(backendDir, 'requirements.txt'), packageName);
+  return { packageName, output: install.output };
+}
+
+// ── OpenSpec / 开发辅助 skills（来自工程模板，不单独挂在 SClaw 仓库）──
+
+const OPENSPEC_SKILL_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
+
+export interface AppDevAssistSkill {
+  id: string;
+  name: string;
+  description: string;
+  installed: boolean;
+}
+
+/** Skill catalog lives in the user-app engineering template (and is copied into each app). */
+function appOpenspecCatalogRoot(appPath: string): string {
+  const inApp = join(appPath, 'openspec', 'skill-catalog');
+  if (existsSync(join(inApp, 'manifest.json'))) return inApp;
+  return join(templateDir(), 'openspec', 'skill-catalog');
+}
+
+function assertOpenspecSkillId(raw: string): string {
+  const id = raw.trim().toLowerCase();
+  if (!OPENSPEC_SKILL_ID_RE.test(id) || id.startsWith('_')) {
+    throw new Error(`非法的开发技能标识: ${raw}`);
+  }
+  return id;
+}
+
+async function ensureAppOpenspecScaffold(appPath: string): Promise<void> {
+  const openspecDir = join(appPath, 'openspec');
+  const templateOpenspec = join(templateDir(), 'openspec');
+  await mkdir(join(openspecDir, 'skills'), { recursive: true });
+  await mkdir(join(openspecDir, 'changes'), { recursive: true });
+  await mkdir(join(openspecDir, 'specs'), { recursive: true });
+
+  for (const name of ['README.md', 'config.yaml'] as const) {
+    const dest = join(openspecDir, name);
+    const src = join(templateOpenspec, name);
+    if (!existsSync(dest) && existsSync(src)) {
+      await cp(src, dest);
+    }
+  }
+
+  // Older apps may lack skill-catalog; copy from engineering template once.
+  const catalogDest = join(openspecDir, 'skill-catalog');
+  const catalogSrc = join(templateOpenspec, 'skill-catalog');
+  if (!existsSync(join(catalogDest, 'manifest.json')) && existsSync(join(catalogSrc, 'manifest.json'))) {
+    await cp(catalogSrc, catalogDest, { recursive: true });
+  }
+}
+
+async function syncOpenspecSkillsIntoAgents(appPath: string): Promise<void> {
+  const skillsDir = join(appPath, 'openspec', 'skills');
+  const agentsPath = join(appPath, '.sclaw', 'AGENTS.md');
+  if (!existsSync(agentsPath) || !existsSync(skillsDir)) return;
+
+  let installed: string[] = [];
+  try {
+    const entries = await readdir(skillsDir, { withFileTypes: true });
+    installed = entries
+      .filter((e) => e.isDirectory() && existsSync(join(skillsDir, e.name, 'SKILL.md')))
+      .map((e) => e.name)
+      .sort();
+  } catch {
+    return;
+  }
+
+  const blockStart = '<!-- sclaw-openspec-skills -->';
+  const blockEnd = '<!-- /sclaw-openspec-skills -->';
+  const block = installed.length === 0
+    ? `${blockStart}\n<!-- 暂无已安装的 openspec 开发技能 -->\n${blockEnd}`
+    : [
+      blockStart,
+      '## 已安装的 OpenSpec 开发技能',
+      ...installed.map((id) => `- \`openspec/skills/${id}/SKILL.md\``),
+      '开发新功能或跨模块改动时，请先阅读上述技能，并按 OpenSpec 流程推进。',
+      blockEnd,
+    ].join('\n');
+
+  let content = await readFile(agentsPath, 'utf8');
+  const start = content.indexOf(blockStart);
+  const end = content.indexOf(blockEnd);
+  if (start >= 0 && end > start) {
+    content = `${content.slice(0, start)}${block}${content.slice(end + blockEnd.length)}`;
+  } else {
+    content = `${content.trimEnd()}\n\n${block}\n`;
+  }
+  await writeFile(agentsPath, content.endsWith('\n') ? content : `${content}\n`, 'utf8');
+}
+
+export async function listAppDevAssistSkills(appPath: string): Promise<AppDevAssistSkill[]> {
+  const catalogRoot = appOpenspecCatalogRoot(appPath);
+  const manifestPath = join(catalogRoot, 'manifest.json');
+  if (!existsSync(manifestPath)) return [];
+
+  const raw = JSON.parse(await readFile(manifestPath, 'utf8')) as {
+    skills?: Array<{ id?: string; name?: string; description?: string }>;
+  };
+  const catalog = Array.isArray(raw.skills) ? raw.skills : [];
+  const installedDir = join(appPath, 'openspec', 'skills');
+
+  return catalog
+    .filter((item) => typeof item.id === 'string' && item.id.trim())
+    .map((item) => {
+      const id = String(item.id).trim();
+      return {
+        id,
+        name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : id,
+        description: typeof item.description === 'string' ? item.description : '',
+        installed: existsSync(join(installedDir, id, 'SKILL.md')),
+      };
+    });
+}
+
+/** Enable a catalog skill into the app's openspec/skills/<id> (same app tree). */
+export async function installAppDevAssistSkill(
+  appPath: string,
+  skillIdRaw: string,
+): Promise<{ skillId: string; targetPath: string }> {
+  const skillId = assertOpenspecSkillId(skillIdRaw);
+  await ensureAppOpenspecScaffold(appPath);
+
+  const sourceDir = join(appOpenspecCatalogRoot(appPath), skillId);
+  const skillMd = join(sourceDir, 'SKILL.md');
+  if (!existsSync(skillMd)) {
+    throw new Error(`工程模板中未找到开发技能: ${skillId}`);
+  }
+
+  const targetDir = join(appPath, 'openspec', 'skills', skillId);
+  await mkdir(targetDir, { recursive: true });
+  await cp(sourceDir, targetDir, { recursive: true });
+  await syncOpenspecSkillsIntoAgents(appPath);
+
+  return { skillId, targetPath: join('openspec', 'skills', skillId) };
+}
+
+

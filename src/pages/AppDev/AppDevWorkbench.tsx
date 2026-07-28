@@ -23,6 +23,7 @@ import { extractText } from '@/pages/Chat/message-utils';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
 import { AppDevWorkbenchStage } from '@/components/app-dev/AppDevWorkbenchStage';
+import { StoAppCommitDialog } from '@/components/app-dev/StoAppCommitDialog';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { cn } from '@/lib/utils';
@@ -39,6 +40,9 @@ import {
   ensureAppDevContext,
   getAppDevEnvironment,
   getAppStatus,
+  getStoAppStatus,
+  pushStoApp,
+  type StoAppStatus,
   restoreAppCheckpoint,
   startApp,
   type AppDevStatus,
@@ -155,6 +159,8 @@ export default function AppDevWorkbench() {
   const [pendingErrors, setPendingErrors] = useState<string[]>([]);
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [gitAvailable, setGitAvailable] = useState(false);
+  const [stoStatus, setStoStatus] = useState<StoAppStatus | null>(null);
+  const [commitOpen, setCommitOpen] = useState(false);
   const sending = useChatStore((s) => s.sending);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const prevSendingRef = useRef(false);
@@ -196,6 +202,13 @@ export default function AppDevWorkbench() {
       .then((env) => setGitAvailable(env.gitAvailable))
       .catch(() => setGitAvailable(false));
   }, []);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    void getStoAppStatus(workspaceId)
+      .then((res) => setStoStatus(res))
+      .catch(() => setStoStatus(null));
+  }, [workspaceId]);
 
   // 状态轮询：未运行时自动拉起流水线；ready 后降频探测崩溃。
   useEffect(() => {
@@ -254,9 +267,30 @@ export default function AppDevWorkbench() {
     openExternalUrl(status.previewUrl);
   };
 
+  const handleSubmit = async (message: string) => {
+    try {
+      await pushStoApp(workspaceId, message);
+      const nextStatus = await getStoAppStatus(workspaceId).catch(() => null);
+      if (nextStatus) setStoStatus(nextStatus);
+      toast.success('已提交到 STO 应用');
+      setCommitOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '提交失败');
+    }
+  };
+
   const phase = status?.phase ?? 'created';
   const isRunning = phase === 'ready' && Boolean(status?.previewUrl);
   const isWorking = phase === 'created' || phase === 'preparing-env' || phase === 'installing' || phase === 'starting';
+  const stoStatusTone = stoStatus?.available && stoStatus.bound
+    ? stoStatus.syncState === 'merge-required'
+      ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300'
+      : stoStatus.syncState === 'remote-ahead'
+        ? 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-300'
+        : stoStatus.syncState === 'local-changes'
+          ? 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-300'
+          : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
+    : 'border-border bg-muted/50 text-muted-foreground';
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -287,6 +321,64 @@ export default function AppDevWorkbench() {
           />
           {PHASE_LABELS[phase] ?? phase}
         </span>
+
+        <span
+          className={cn(
+            'inline-flex h-7 items-center rounded-md border px-2 text-[11px]',
+            stoStatusTone,
+          )}
+          title={
+            stoStatus?.bound
+              ? `${stoStatus.syncLabel}${stoStatus.applicationId ? ` · ${stoStatus.applicationId}` : ''}`
+              : '未绑定 STO 应用'
+          }
+        >
+          {stoStatus?.bound ? `STO ${stoStatus.syncLabel}` : 'STO 未绑定'}
+        </span>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs"
+          disabled={!stoStatus?.available || !stoStatus?.bound}
+          onClick={() => setCommitOpen(true)}
+        >
+          提交
+        </Button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs"
+          disabled
+          title="发布 CLI 暂未提供"
+        >
+          发布
+        </Button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs"
+          disabled={!stoReady || stoSubmitting}
+          onClick={() => void handleSubmit()}
+        >
+          {stoSubmitting ? '提交中…' : '提交'}
+        </Button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1 px-2 text-xs"
+          disabled
+          title="发布 CLI 暂未提供"
+        >
+          发布
+        </Button>
 
         <Button
           type="button"
@@ -344,6 +436,13 @@ export default function AppDevWorkbench() {
           setConfirmRestore(false);
         }}
         onCancel={() => setConfirmRestore(false)}
+      />
+      <StoAppCommitDialog
+        open={commitOpen}
+        appName={appName}
+        initialMessage={`更新应用: ${appName}`}
+        onCancel={() => setCommitOpen(false)}
+        onConfirm={handleSubmit}
       />
     </div>
   );

@@ -61,6 +61,20 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
   return res.apps ?? [];
 }
 
+export async function deleteDevApp(
+  workspaceId: string,
+  options: { deleteFiles?: boolean } = {},
+): Promise<{ deletedFiles: boolean; appPath: string }> {
+  return hostApiFetch('/api/app-dev/apps/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workspaceId,
+      deleteFiles: options.deleteFiles === true,
+    }),
+  });
+}
+
 export async function listDevAppWorkspaceIds(): Promise<string[]> {
   const res = await hostApiFetch<{ ids: string[] }>('/api/app-dev/apps/ids');
   return res.ids ?? [];
@@ -81,6 +95,17 @@ export async function createUserApp(input: {
   projectType?: string;
 }): Promise<{ workspaceId: string; appPath: string; workspaceName: string }> {
   return hostApiFetch('/api/app-dev/apps', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function importUserApp(input: {
+  appPath: string;
+  name?: string;
+}): Promise<{ workspaceId: string; appPath: string; workspaceName: string }> {
+  return hostApiFetch('/api/app-dev/apps/import', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
@@ -197,4 +222,105 @@ export async function searchAppSourceFiles(
     body: JSON.stringify({ workspaceId, query }),
   });
   return res.hits ?? [];
+}
+
+export async function installAppNpmPackage(
+  workspaceId: string,
+  packageName: string,
+): Promise<{ packageName: string; output: string }> {
+  return hostApiFetch('/api/app-dev/packages/npm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, packageName }),
+  });
+}
+
+export async function installAppPipPackage(
+  workspaceId: string,
+  packageName: string,
+): Promise<{ packageName: string; output: string }> {
+  return hostApiFetch('/api/app-dev/packages/pip', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, packageName }),
+  });
+}
+
+export interface AppDevAssistSkill {
+  id: string;
+  name: string;
+  description: string;
+  installed: boolean;
+}
+
+export async function listAppDevAssistSkills(
+  workspaceId: string,
+): Promise<AppDevAssistSkill[]> {
+  const res = await hostApiFetch<{ skills: AppDevAssistSkill[] }>(
+    `/api/app-dev/dev-skills?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return res.skills ?? [];
+}
+
+export async function installAppDevAssistSkill(
+  workspaceId: string,
+  skillId: string,
+): Promise<{ skillId: string; targetPath: string }> {
+  return hostApiFetch('/api/app-dev/dev-skills/install', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, skillId }),
+  });
+}
+
+export interface StoAppStatus {
+  available: boolean;
+  executable: string | null;
+  bound: boolean;
+  syncState: 'unbound' | 'synced' | 'local-changes' | 'remote-ahead' | 'merge-required' | 'unknown';
+  syncLabel: string;
+  applicationId?: string;
+  applicationName?: string;
+  revisionId?: string;
+  devCommitSha?: string;
+  raw?: unknown;
+}
+
+export async function getStoAppStatus(workspaceId: string): Promise<StoAppStatus> {
+  const res = await hostApiFetch<{ status: StoAppStatus }>(
+    `/api/app-dev/sto-app/status?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return res.status;
+}
+
+export async function pushStoApp(
+  workspaceId: string,
+  message: string,
+): Promise<{ ok: boolean; output: string; json?: unknown }> {
+  return hostApiFetch('/api/app-dev/sto-app/push', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, message }),
+  });
+}
+
+export async function pullStoApp(
+  workspaceId: string,
+): Promise<{ ok: boolean; output: string; json?: unknown }> {
+  return hostApiFetch('/api/app-dev/sto-app/pull', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+  });
+}
+
+export async function continueStoAppMerge(
+  workspaceId: string,
+  revisionId: string,
+): Promise<{ ok: boolean; output: string; json?: unknown }> {
+  return hostApiFetch('/api/app-dev/sto-app/merge-continue', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, revisionId }),
+  });
 }

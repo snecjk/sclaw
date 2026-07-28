@@ -50,6 +50,7 @@ export function sanitizePackageName(appName: string): string {
 /** Text file extensions that go through template variable substitution. */
 const TEXT_EXTENSIONS = new Set([
   '.json', '.html', '.md', '.ts', '.tsx', '.css', '.js', '.jsx', '.txt', '.npmrc', '.gitignore',
+  '.yaml', '.yml',
 ]);
 
 export function isTemplateTextFile(fileName: string): boolean {

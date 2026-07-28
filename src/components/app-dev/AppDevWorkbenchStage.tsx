@@ -1,5 +1,5 @@
 /**
- * Right-stage for app-dev workbench: 预览 / 代码 / Git / 云服务.
+ * Right-stage for app-dev workbench: 预览 / 代码 / Git / 云服务 / 社区.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -13,11 +13,13 @@ import {
   RotateCw,
   Save,
   Search,
+  Users,
   X,
   Wand2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { AppDevCloudPanel } from '@/components/app-dev/AppDevCloudPanel';
+import { AppDevCommunityPanel } from '@/components/app-dev/AppDevCommunityPanel';
 import { AppDevFileTree } from '@/components/app-dev/AppDevFileTree';
 import { AppDevGitPanel } from '@/components/app-dev/AppDevGitPanel';
 import { AppDevMonacoEditor } from '@/components/app-dev/AppDevMonacoEditor';
@@ -36,7 +38,7 @@ import {
 } from '@/lib/app-dev-api';
 import { cn } from '@/lib/utils';
 
-export type AppDevStageMode = 'preview' | 'code' | 'git' | 'cloud';
+export type AppDevStageMode = 'preview' | 'code' | 'git' | 'cloud' | 'community';
 type CodeSidebar = 'files' | 'search';
 
 const DEFAULT_ENTRY = 'frontend/src/App.tsx';
@@ -236,6 +238,7 @@ export function AppDevWorkbenchStage({
             { id: 'code', label: '代码', icon: FileCode2 },
             { id: 'git', label: 'Git 代码管理', icon: GitBranch },
             { id: 'cloud', label: '云服务', icon: Cloud },
+            { id: 'community', label: '社区', icon: Users },
           ] as const
         ).map((tab) => {
           const Icon = tab.icon;
@@ -338,6 +341,8 @@ export function AppDevWorkbenchStage({
       {mode === 'cloud' ? (
         <AppDevCloudPanel workspaceId={workspaceId} appName={appName} />
       ) : null}
+
+      {mode === 'community' ? <AppDevCommunityPanel workspaceId={workspaceId} /> : null}
 
       {mode === 'code' ? (
         <div className="flex min-h-0 flex-1">
