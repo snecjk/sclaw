@@ -251,6 +251,8 @@ function EntryActions({
   uploadToSharedLabel,
 }: EntryRenderProps & { entry: DataCenterUiEntry; uploadToSharedLabel?: string }) {
   const { t } = useTranslation('common');
+  const [moreTooltipOpen, setMoreTooltipOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const canUploadToShared = entry.entryType === 'file' && entry.spaceType === 'qa_artifact' && !entry.localAuthorized;
   const canRenameEntry = !entry.localAuthorized && (entry.spaceType !== 'site_shared_artifact' || entry.canManage === true);
   const canDeleteEntry = entry.localAuthorized
@@ -296,11 +298,28 @@ function EntryActions({
           </button>
         </ActionTooltip>
       ) : null}
-      <DropdownMenu>
-        <Tooltip delayDuration={200}>
+      <DropdownMenu
+        open={moreMenuOpen}
+        onOpenChange={(open) => {
+          setMoreMenuOpen(open);
+          setMoreTooltipOpen(false);
+        }}
+      >
+        <Tooltip open={moreTooltipOpen && !moreMenuOpen} delayDuration={200}>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
-              <button type="button" className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]" aria-label={t('dataCenterPage.menu.more')}>
+              <button
+                type="button"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
+                aria-label={t('dataCenterPage.menu.more')}
+                onMouseEnter={() => setMoreTooltipOpen(true)}
+                onMouseLeave={() => setMoreTooltipOpen(false)}
+                onFocus={() => setMoreTooltipOpen(false)}
+                onClick={(event) => {
+                  setMoreTooltipOpen(false);
+                  event.currentTarget.blur();
+                }}
+              >
                 <MoreHorizontal className="h-4 w-4" />
               </button>
             </DropdownMenuTrigger>
