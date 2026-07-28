@@ -26,9 +26,13 @@ vi.mock('../../electron/utils/logger', () => ({
   },
 }));
 
+vi.mock('../../electron/utils/auth-store', () => ({
+  getAuthState: async () => ({ user: { code: 'test-actor' } }),
+}));
+
 /**
  * 数据迁移：claude definitions.json + openclaw jobs.json（直读，不经 Gateway）
- * → schedule_tasks；迁成功后从 jobs.json 移除；marker 幂等 + 漏迁补洞。
+ * → schedule_tasks；源文件只读保留；marker 幂等 + 漏迁补洞。
  */
 describe('runScheduledTasksMigration (data)', () => {
   let env: InMemoryDb;
@@ -127,7 +131,7 @@ describe('runScheduledTasksMigration (data)', () => {
     };
   }
 
-  it('migrates both engines from disk, preserves ids, strips jobs.json, writes marker', async () => {
+  it('migrates both engines from disk, preserves ids, keeps jobs.json, writes marker', async () => {
     const { gm, rpc } = makeGm();
     const { service, refreshSchedule } = makeServiceStub();
     const { runScheduledTasksMigration } = await import('../../electron/scripts/migrate-scheduled-tasks');
@@ -162,8 +166,11 @@ describe('runScheduledTasksMigration (data)', () => {
     // 不依赖 Gateway RPC
     expect(rpc).not.toHaveBeenCalled();
 
-    // 已迁 cron 从 jobs.json 移除
-    expect(readJobsFile().jobs).toEqual([]);
+    // 源文件只读保留：已迁 cron 仍留在 jobs.json
+    expect(readJobsFile().jobs.map((j) => j.id).sort()).toEqual(
+      ['openclaw-1', 'openclaw-disabled'].sort(),
+    );
+    expect(existsSync(join(claudeDir, 'definitions.json'))).toBe(true);
 
     expect(existsSync(markerPath)).toBe(true);
     expect(refreshSchedule).toHaveBeenCalledTimes(1);
@@ -198,7 +205,9 @@ describe('runScheduledTasksMigration (data)', () => {
     const tasks = await taskRepo.list({});
     expect(tasks).toHaveLength(3);
     expect(tasks.map((t) => t.engineType).sort()).toEqual(['claude', 'openclaw', 'openclaw']);
-    expect(readJobsFile().jobs).toEqual([]);
+    expect(readJobsFile().jobs.map((j) => j.id).sort()).toEqual(
+      ['openclaw-1', 'openclaw-disabled'].sort(),
+    );
     expect(rpc).not.toHaveBeenCalled();
     expect(refreshSchedule).toHaveBeenCalledTimes(1);
 
@@ -245,7 +254,9 @@ describe('runScheduledTasksMigration (data)', () => {
     expect(tasks).toHaveLength(3);
     const claude = tasks.find((t) => t.id === 'claude-1')!;
     expect(claude.prompt).toBe('partial');
-    expect(readJobsFile().jobs).toEqual([]);
+    expect(readJobsFile().jobs.map((j) => j.id).sort()).toEqual(
+      ['openclaw-1', 'openclaw-disabled'].sort(),
+    );
   });
 
   it('skips non-cron openclaw jobs and leaves them in jobs.json', async () => {

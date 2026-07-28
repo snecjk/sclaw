@@ -48,6 +48,12 @@ function mapRow(row: Record<string, unknown>): ScheduleTask {
     provider: row.provider == null ? null : String(row.provider),
     accountId: row.account_id == null ? null : String(row.account_id),
     workspacePath: row.workspace_path == null ? null : String(row.workspace_path),
+    myArtifactFolderPath:
+      row.my_artifact_folder_path == null ? null : String(row.my_artifact_folder_path),
+    sharedArtifactFolderPath:
+      row.shared_artifact_folder_path == null
+        ? null
+        : String(row.shared_artifact_folder_path),
     permissionProfile:
       row.permission_profile == null
         ? null
@@ -131,6 +137,8 @@ export class ScheduleTaskRepository {
         provider: input.provider ?? null,
         account_id: input.accountId ?? null,
         workspace_path: input.workspacePath ?? null,
+        my_artifact_folder_path: input.myArtifactFolderPath ?? null,
+        shared_artifact_folder_path: input.sharedArtifactFolderPath ?? null,
         permission_profile: input.permissionProfile ?? null,
         timeout_sec: input.timeoutSec ?? null,
         retry_policy_json: stringifyJson(input.retryPolicy),
@@ -183,6 +191,14 @@ export class ScheduleTaskRepository {
         account_id: input.accountId !== undefined ? input.accountId : existing.accountId,
         workspace_path:
           input.workspacePath !== undefined ? input.workspacePath : existing.workspacePath,
+        my_artifact_folder_path:
+          input.myArtifactFolderPath !== undefined
+            ? input.myArtifactFolderPath
+            : existing.myArtifactFolderPath,
+        shared_artifact_folder_path:
+          input.sharedArtifactFolderPath !== undefined
+            ? input.sharedArtifactFolderPath
+            : existing.sharedArtifactFolderPath,
         permission_profile:
           input.permissionProfile !== undefined
             ? input.permissionProfile

@@ -22,6 +22,10 @@ export interface ScheduleTasksTable {
   provider: string | null;
   account_id: string | null;
   workspace_path: string | null;
+  /** 【我的产物】目录路径 */
+  my_artifact_folder_path: string | null;
+  /** 【网点共享产物】目录路径 */
+  shared_artifact_folder_path: string | null;
   permission_profile: string | null;
   timeout_sec: number | null;
   retry_policy_json: string | null;

@@ -50,6 +50,10 @@ export interface ScheduleTask {
   provider: string | null;
   accountId: string | null;
   workspacePath: string | null;
+  /** 【我的产物】目录路径 */
+  myArtifactFolderPath: string | null;
+  /** 【网点共享产物】目录路径 */
+  sharedArtifactFolderPath: string | null;
   permissionProfile: ScheduleTaskPermissionProfile | null;
   timeoutSec: number | null;
   retryPolicy: ScheduleTaskRetryPolicy | null;

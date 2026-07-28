@@ -1,5 +1,4 @@
-import { randomUUID } from 'node:crypto';
-import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { GatewayManager } from '../gateway/manager';
 import type { ScheduledTaskService } from '../scheduled-tasks/scheduled-task-service';
@@ -19,14 +18,15 @@ import { getAuthState } from '../utils/auth-store';
  *
  * 幂等：marker 文件 + per-row `getById` 存在检查双闸——进程崩溃可重跑续传。
  *
- * OpenClaw **不依赖 Gateway**：直读/改写 `jobs.json`（路径：
- * `openclaw/cron/jobs.json`）。启动早期即可跑，避免 `cron.list` 在 Gateway
- * 未连接时失败 → 仍写 marker → 永久漏迁。
+ * OpenClaw **不依赖 Gateway**：直读 `jobs.json`（路径：`openclaw/cron/jobs.json`）。
+ * 启动早期即可跑，避免 `cron.list` 在 Gateway 未连接时失败 → 仍写 marker → 永久漏迁。
+ *
+ * 源文件只读保留：不清 `definitions.json`，也不改写/清空 `jobs.json`。
  *
  * 字段映射原则（两引擎对称）：
  *  - `dingtalkRecipients=null`、prompt **原样保留烘焙块**。
  *  - `next_run_at` 不搬旧 state，建表置 null，末尾 `refreshSchedule` 重算。
- *  - openclaw 非 cron-expr 任务（everyMs/at）跳过且**留在** jobs.json + 告警。
+ *  - openclaw 非 cron-expr 任务（everyMs/at）跳过且留在 jobs.json + 告警。
  */
 
 const MARKER_FILENAME = 'scheduled-tasks-migration.done';
@@ -74,7 +74,7 @@ interface OpenclawMigrationResult {
   migrated: number;
   skipped: number;
   nonCron: number;
-  /** false：解析失败 / 写回失败 / 有 create 失败未清出 —— 调用方不得 finalized marker */
+  /** false：解析失败 / 有 create 失败 —— 调用方不得 finalized marker */
   complete: boolean;
 }
 
@@ -170,8 +170,8 @@ async function migrateClaudeDefinitions(
 }
 
 /**
- * 直读 `openclaw/cron/jobs.json` → 写入 schedule_tasks → 从文件移除已落地 cron，
- * 防 Gateway 随后启动双调度。不调用 cron.list / cron.remove。
+ * 直读 `openclaw/cron/jobs.json` → 写入 schedule_tasks。
+ * 只读源文件，不改写 / 不清空 jobs.json。不调用 cron.list / cron.remove。
  */
 async function migrateOpenclawCronJobs(
   taskRepo: ScheduleTaskRepository,
@@ -197,7 +197,6 @@ async function migrateOpenclawCronJobs(
   }
 
   const jobs = Array.isArray(data.jobs) ? data.jobs : [];
-  const removeIds = new Set<string>();
   let migrated = 0;
   let skipped = 0;
   let nonCron = 0;
@@ -227,7 +226,6 @@ async function migrateOpenclawCronJobs(
     const existing = await taskRepo.getById(job.id, { includeDeleted: true });
     if (existing) {
       skipped += 1;
-      removeIds.add(job.id);
       continue;
     }
 
@@ -255,7 +253,6 @@ async function migrateOpenclawCronJobs(
     try {
       await taskRepo.create(input);
       migrated += 1;
-      removeIds.add(job.id);
     } catch (error) {
       createFailures += 1;
       logger.warn('[migration] openclaw task create failed (left in jobs.json)', {
@@ -263,26 +260,6 @@ async function migrateOpenclawCronJobs(
         name: job.name,
         error: error instanceof Error ? error.message : String(error),
       });
-    }
-  }
-
-  if (removeIds.size > 0) {
-    const remaining = jobs.filter((j) => !j?.id || !removeIds.has(j.id));
-    const nextDoc: OpenclawJobsDocument = { ...data, jobs: remaining };
-    try {
-      await mkdir(dirname(jobsPath), { recursive: true });
-      const tmpPath = `${jobsPath}.${randomUUID()}.tmp`;
-      await writeFile(tmpPath, JSON.stringify(nextDoc, null, 2), 'utf8');
-      await rename(tmpPath, jobsPath);
-      logger.info('[migration] openclaw jobs.json rewritten', {
-        removed: [...removeIds],
-        remaining: remaining.length,
-      });
-    } catch (error) {
-      logger.warn('[migration] openclaw jobs.json rewrite failed — not finalizing marker', {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return { migrated, skipped, nonCron, complete: false };
     }
   }
 
@@ -353,9 +330,8 @@ export async function runScheduledTasksMigration(
     return;
   }
 
-  // 首次跑，或补迁了 openclaw：写/更新 marker
-  if (!markerPresent || openclawResult.migrated > 0 || openclawResult.skipped > 0) {
-    // skipped>0 且改写了 jobs.json 时也刷新 marker，避免旧 payload 误导排障
+  // 首次跑，或补迁了 openclaw：写/更新 marker（源文件保留，skipped 不再触发改写）
+  if (!markerPresent || openclawResult.migrated > 0) {
     let claudeForMarker = claudeResult;
     if (markerPresent) {
       try {
@@ -369,7 +345,7 @@ export async function runScheduledTasksMigration(
     }
     await writeMarker(markerFile, claudeForMarker, openclawResult);
   } else if (markerPresent) {
-    logger.info('[migration] openclaw jobs.json clean — nothing to backfill');
+    logger.info('[migration] openclaw — nothing new to migrate');
   }
 
   if (!markerPresent || openclawResult.migrated > 0) {
