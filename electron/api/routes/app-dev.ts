@@ -15,12 +15,16 @@ import {
   ensureAppDevContext,
   getAppDevStatus,
   isGitAvailable,
+  listAppSourceFiles,
   listCheckpoints,
   listDevAppWorkspaceIds,
   listDevApps,
+  readAppSourceFile,
   restoreCheckpoint,
   runSetupPipeline,
+  searchAppSourceFiles,
   stopApp,
+  writeAppSourceFile,
   type CreateUserAppInput,
 } from '../../services/app-dev-service';
 import { getDevServerLogs, drainDevServerErrors } from '../../services/app-dev-server-manager';
@@ -144,6 +148,39 @@ export async function handleAppDevRoutes(
       const appPath = await resolveAppPath(body.workspaceId);
       const result = await restoreCheckpoint(appPath, body.hash);
       sendJson(res, 200, { success: result.restored, ...result });
+      return true;
+    }
+
+    // --- Source files for Monaco workbench ---
+    if (url.pathname === '/api/app-dev/files' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      const files = await listAppSourceFiles(appPath);
+      sendJson(res, 200, { success: true, files });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/files/read' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string; path: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const file = await readAppSourceFile(appPath, body.path ?? '');
+      sendJson(res, 200, { success: true, ...file });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/files/write' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string; path: string; content: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const result = await writeAppSourceFile(appPath, body.path ?? '', body.content ?? '');
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/files/search' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string; query: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      const hits = await searchAppSourceFiles(appPath, body.query ?? '');
+      sendJson(res, 200, { success: true, hits });
       return true;
     }
 

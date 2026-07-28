@@ -1,15 +1,18 @@
 /**
  * Single browser tab workspace: editable address bar + fav highlight + webview (+ AI chat).
  */
-import { useEffect, useState } from 'react';
-import { ExternalLink, Heart, MessageCircle } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, ExternalLink, Heart, MessageCircle, RotateCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { openExternalUrl } from '@/lib/preview-url';
 import { normalizeAppPlazaTabUrl } from '@/lib/app-plaza-tab-url';
 import { sclawBrowserEmbedChatShortcutLabel } from '../../../shared/sclaw-embed-browser-shortcut';
-import { SclawBrowserFrame } from '@/components/sclaw-browser/SclawBrowserFrame';
+import {
+  SclawBrowserFrame,
+  type SclawBrowserFrameHandle,
+} from '@/components/sclaw-browser/SclawBrowserFrame';
 import { SclawBrowserEmbedChat } from '@/components/sclaw-browser/SclawBrowserEmbedChat';
 import { useSclawBrowserSplitResize } from '@/components/sclaw-browser/use-sclaw-browser-split-resize';
 import {
@@ -96,10 +99,16 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
 
   const [blankDraft, setBlankDraft] = useState('');
   const [addressDraft, setAddressDraft] = useState(tab.url);
+  const [canGoBack, setCanGoBack] = useState(false);
+  const frameRef = useRef<SclawBrowserFrameHandle>(null);
 
   useEffect(() => {
     setAddressDraft(tab.url);
   }, [tab.url, tab.id]);
+
+  useEffect(() => {
+    setCanGoBack(false);
+  }, [tab.id]);
 
   const { splitRef, startResize, isResizing } = useSclawBrowserSplitResize(
     tab.chatSplitPercent,
@@ -209,6 +218,27 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
   return (
     <div className="app-plaza-shell__browser-pane flex h-full min-h-0 flex-col" hidden={!active}>
       <header className="app-plaza-browser-toolbar">
+        <div className="app-plaza-browser-toolbar__nav">
+          <button
+            type="button"
+            className="app-plaza-browser-toolbar__nav-btn"
+            disabled={!canGoBack}
+            onClick={() => frameRef.current?.goBack()}
+            title={t('moreApps.browserTabs.back', { defaultValue: '返回上一页' })}
+            aria-label={t('moreApps.browserTabs.back', { defaultValue: '返回上一页' })}
+          >
+            <ArrowLeft className="h-4 w-4" aria-hidden />
+          </button>
+          <button
+            type="button"
+            className="app-plaza-browser-toolbar__nav-btn"
+            onClick={() => frameRef.current?.reload()}
+            title={t('moreApps.browserTabs.reload', { defaultValue: '刷新' })}
+            aria-label={t('moreApps.browserTabs.reload', { defaultValue: '刷新' })}
+          >
+            <RotateCw className="h-4 w-4" aria-hidden />
+          </button>
+        </div>
         <form
           className={cn(
             'app-plaza-browser-address',
@@ -297,11 +327,13 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
         <div className="sclaw-browser-split__browser">
           {tab.embedRuntimeId ? (
             <SclawBrowserFrame
+              ref={frameRef}
               key={`${tab.id}:${tab.url}`}
               url={tab.url}
               title={tab.title}
               embedRuntimeId={tab.embedRuntimeId}
               active={active}
+              onNavStateChange={({ canGoBack: next }) => setCanGoBack(next)}
               onPageFavicon={(faviconUrl) => {
                 updateTabPageMeta(tab.id, { pageFaviconUrl: faviconUrl });
                 // After first visit, use page favicon as 我的应用 card icon.

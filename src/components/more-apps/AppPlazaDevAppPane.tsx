@@ -1,17 +1,15 @@
 /**
- * AppPlazaDevAppPane — dev-app workbench embedded as a tab pane in AppPlazaShell.
- * Left: project agent chat; Right: live preview (collapsible).
+ * AppPlazaDevAppPane — full-window app-dev workbench overlay.
+ * Left: preview / Monaco code / file search; Right: project agent chat.
+ * Portaled over the entire app shell (including sidebar) while active.
  */
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AlertCircle,
-  Code2,
+  ArrowLeft,
   ExternalLink,
   History,
-  Loader2,
-  PanelRightOpen,
-  RotateCw,
-  Wand2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
@@ -24,10 +22,8 @@ import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
-import { SclawBrowserFrame } from '@/components/sclaw-browser/SclawBrowserFrame';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import {
   stoChatColumnContentTrackClass,
@@ -35,6 +31,7 @@ import {
   stoChatScrollPaneClass,
 } from '@/lib/surfaces';
 import { openExternalUrl } from '@/lib/preview-url';
+import { AppDevWorkbenchStage } from '@/components/app-dev/AppDevWorkbenchStage';
 import {
   createAppCheckpoint,
   drainAppErrors,
@@ -45,17 +42,19 @@ import {
   startApp,
   type AppDevStatus,
 } from '@/lib/app-dev-api';
-import type { AppPlazaDevAppTab } from '@/stores/app-plaza-shell';
-import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
+import {
+  type AppPlazaDevAppTab,
+  useAppPlazaShellStore,
+} from '@/stores/app-plaza-shell';
 
 const PHASE_LABELS: Record<string, string> = {
-  'created': '正在准备运行环境…',
+  created: '正在准备运行环境…',
   'preparing-env': '正在准备运行环境…',
-  'installing': '正在安装应用组件…',
-  'starting': '正在启动应用…',
-  'ready': '运行中',
-  'stopped': '已停止',
-  'error': '出了点问题',
+  installing: '正在安装应用组件…',
+  starting: '正在启动应用…',
+  ready: '运行中',
+  stopped: '已停止',
+  error: '出了点问题',
 };
 
 function WorkbenchChatPane({ sessionKey, appName }: { sessionKey: string; appName: string }) {
@@ -163,14 +162,13 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const [pendingErrors, setPendingErrors] = useState<string[]>([]);
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [gitAvailable, setGitAvailable] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(true);
   const sending = useChatStore((s) => s.sending);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const prevSendingRef = useRef(false);
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
   const appName = workspaces.find((w) => w.id === workspaceId)?.name ?? tab.title;
+  const closeDevAppTab = useAppPlazaShellStore((s) => s.closeDevAppTab);
 
-  // Init: hide from sidebar, ensure agent + context, reuse existing session.
   useEffect(() => {
     if (!workspaceId) return;
     useAppDevCatalogStore.getState().registerWorkspaceId(workspaceId);
@@ -205,7 +203,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       .catch(() => setGitAvailable(false));
   }, []);
 
-  // Status polling: auto-start pipeline; reduce frequency once ready.
   useEffect(() => {
     if (!workspaceId) return;
     let cancelled = false;
@@ -227,7 +224,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     };
   }, [workspaceId]);
 
-  // After each chat turn: checkpoint + collect errors.
   useEffect(() => {
     if (prevSendingRef.current && !sending && workspaceId) {
       void (async () => {
@@ -240,7 +236,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   }, [sending, workspaceId]);
 
   const handleFixErrors = () => {
-    const text = `右侧预览出现了以下报错，请帮我修复：\n\n${pendingErrors.slice(-10).join('\n')}`;
+    const text = `预览出现了以下报错，请帮我修复：\n\n${pendingErrors.slice(-10).join('\n')}`;
     setPendingErrors([]);
     void useChatStore.getState().sendMessage({ text });
   };
@@ -260,21 +256,42 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       return;
     }
     openExternalUrl(status.previewUrl);
-    setPreviewOpen(false);
+  };
+
+  const handleBack = () => {
+    closeDevAppTab(tab.id);
   };
 
   const phase = status?.phase ?? 'created';
   const isRunning = phase === 'ready' && Boolean(status?.previewUrl);
   const isWorking = phase === 'created' || phase === 'preparing-env' || phase === 'installing' || phase === 'starting';
 
-  return (
-    <div className="app-plaza-dev-app-pane flex h-full min-h-0 flex-col bg-background" hidden={!active}>
-      <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-2.5">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Code2 className="h-4 w-4" aria-hidden />
-        </div>
+  const isMac = window.electron?.platform === 'darwin';
+
+  const overlay = (
+    <div
+      className="flex h-full min-h-0 w-full flex-col bg-background"
+      data-app-dev-overlay={active ? 'active' : 'inactive'}
+    >
+      <header
+        className={cn(
+          'flex shrink-0 items-center gap-3 border-b border-border drag-region',
+          isMac
+            ? 'h-[var(--sto-header-h)] pl-20 pr-4'
+            : 'px-4 py-2.5',
+        )}
+      >
+        <button
+          type="button"
+          onClick={handleBack}
+          className="no-drag inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" aria-hidden />
+          返回
+        </button>
+        <div className="h-4 w-px bg-border" aria-hidden />
         <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{appName}</h1>
-        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="no-drag flex items-center gap-1.5 text-xs text-muted-foreground">
           <span
             className={cn(
               'inline-block h-2 w-2 rounded-full',
@@ -288,115 +305,50 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           {PHASE_LABELS[phase] ?? phase}
         </span>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1 px-2 text-xs"
-          title="在系统浏览器中打开预览"
-          disabled={!isRunning}
-          onClick={handleOpenInSystemBrowser}
-        >
-          <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-          系统浏览器预览
-        </Button>
-
-        {!previewOpen ? (
+        <div className="no-drag flex items-center gap-1">
           <Button
             type="button"
             variant="ghost"
             size="sm"
             className="h-7 gap-1 px-2 text-xs"
-            title="重新打开右侧预览"
-            onClick={() => setPreviewOpen(true)}
+            title="在系统浏览器中打开预览"
+            disabled={!isRunning}
+            onClick={handleOpenInSystemBrowser}
           >
-            <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
-            打开预览
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+            系统浏览器预览
           </Button>
-        ) : null}
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={cn('gap-1 text-xs', !gitAvailable && 'hidden')}
-          disabled={!gitAvailable}
-          onClick={() => setConfirmRestore(true)}
-        >
-          <History className="h-3.5 w-3.5" aria-hidden />
-          恢复上一版
-        </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={cn('gap-1 text-xs', !gitAvailable && 'hidden')}
+            disabled={!gitAvailable}
+            onClick={() => setConfirmRestore(true)}
+          >
+            <History className="h-3.5 w-3.5" aria-hidden />
+            恢复上一版
+          </Button>
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <section
-          className={cn(
-            'flex min-w-0 flex-col',
-            previewOpen ? 'w-[400px] min-w-[340px] shrink-0 border-r border-border' : 'flex-1',
-          )}
-        >
+        <AppDevWorkbenchStage
+          workspaceId={workspaceId}
+          appName={appName}
+          status={status}
+          pendingErrors={pendingErrors}
+          onFixErrors={handleFixErrors}
+          onDismissErrors={() => setPendingErrors([])}
+          onRetryStart={() => void startApp(workspaceId).catch(() => undefined)}
+        />
+
+        <section className="flex w-[400px] min-w-[340px] shrink-0 flex-col border-l border-border">
           {currentSessionKey
             ? <WorkbenchChatPane sessionKey={currentSessionKey} appName={appName} />
             : null}
         </section>
-
-        {previewOpen ? (
-          <section className="relative flex min-w-0 flex-1 flex-col bg-muted/30">
-            {pendingErrors.length > 0 ? (
-              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-[var(--sto-functional-warning)]/10 px-4 py-2">
-                <p className="flex min-w-0 items-center gap-2 text-sm text-foreground">
-                  <AlertCircle className="h-4 w-4 shrink-0 text-[var(--sto-functional-warning)]" aria-hidden />
-                  <span className="truncate">页面运行出现了一点问题</span>
-                </p>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Button type="button" size="sm" className="gap-1 text-xs" onClick={handleFixErrors}>
-                    <Wand2 className="h-3.5 w-3.5" aria-hidden />
-                    让 AI 修复
-                  </Button>
-                  <button type="button" className="text-xs text-muted-foreground underline" onClick={() => setPendingErrors([])}>
-                    忽略
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            {isRunning && status?.previewUrl ? (
-              <SclawBrowserFrame url={status.previewUrl} title={appName} embedRuntimeId={null} />
-            ) : (
-              <div className="flex flex-1 items-center justify-center p-8">
-                <div className="w-full max-w-sm text-center">
-                  {phase === 'error' ? (
-                    <>
-                      <AlertCircle className="mx-auto mb-4 h-10 w-10 text-[var(--sto-functional-error)]" aria-hidden />
-                      <p className="mb-2 text-sm font-medium text-foreground">应用启动遇到了问题</p>
-                      <p className="mb-6 text-xs leading-relaxed text-muted-foreground">
-                        可以重试一次；如果仍然失败，可在左侧告诉 AI「应用启动失败了，帮我看看」。
-                      </p>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="gap-1"
-                        onClick={() => void startApp(workspaceId).catch(() => undefined)}
-                      >
-                        <RotateCw className="h-3.5 w-3.5" aria-hidden />
-                        重试
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
-                      <p className="mb-4 text-sm font-medium text-foreground">{PHASE_LABELS[phase]}</p>
-                      <Progress value={status?.progress ?? 0} className="mb-3" />
-                      <p className="text-xs leading-relaxed text-muted-foreground">
-                        首次创建需要准备运行环境，通常在一两分钟内完成。你可以先在左侧描述想做的功能。
-                      </p>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
-        ) : null}
       </div>
 
       <ConfirmDialog
@@ -413,5 +365,19 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         onCancel={() => setConfirmRestore(false)}
       />
     </div>
+  );
+
+  return createPortal(
+    <div
+      className={cn(
+        'fixed inset-0 flex flex-col bg-background',
+        !active && 'pointer-events-none invisible',
+      )}
+      style={{ zIndex: active ? 240 : -1 }}
+      aria-hidden={!active}
+    >
+      {overlay}
+    </div>,
+    document.body,
   );
 }

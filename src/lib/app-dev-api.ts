@@ -144,3 +144,57 @@ export async function restoreAppCheckpoint(
     body: JSON.stringify({ workspaceId, hash }),
   });
 }
+
+export interface AppSourceFileEntry {
+  path: string;
+  size: number;
+}
+
+export async function listAppSourceFiles(workspaceId: string): Promise<AppSourceFileEntry[]> {
+  const res = await hostApiFetch<{ files: AppSourceFileEntry[] }>(
+    `/api/app-dev/files?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return res.files ?? [];
+}
+
+export async function readAppSourceFile(
+  workspaceId: string,
+  path: string,
+): Promise<{ path: string; content: string }> {
+  return hostApiFetch('/api/app-dev/files/read', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, path }),
+  });
+}
+
+export async function writeAppSourceFile(
+  workspaceId: string,
+  path: string,
+  content: string,
+): Promise<{ path: string; bytes: number }> {
+  return hostApiFetch('/api/app-dev/files/write', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, path, content }),
+  });
+}
+
+export interface AppSourceSearchHit {
+  path: string;
+  line: number;
+  column: number;
+  preview: string;
+}
+
+export async function searchAppSourceFiles(
+  workspaceId: string,
+  query: string,
+): Promise<AppSourceSearchHit[]> {
+  const res = await hostApiFetch<{ hits: AppSourceSearchHit[] }>('/api/app-dev/files/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId, query }),
+  });
+  return res.hits ?? [];
+}

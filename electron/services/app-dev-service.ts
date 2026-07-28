@@ -7,10 +7,10 @@
 
 import { app } from 'electron';
 import { spawn } from 'child_process';
-import { existsSync } from 'fs';
-import { cp, mkdir, readdir, readFile, writeFile } from 'fs/promises';
+import { existsSync, statSync } from 'fs';
+import { cp, mkdir, readdir, readFile, stat, writeFile } from 'fs/promises';
 import { homedir } from 'os';
-import { join } from 'path';
+import { extname, dirname, join, relative, resolve, sep } from 'path';
 import {
   creepRatio,
   isTemplateTextFile,
@@ -447,4 +447,184 @@ export async function restoreCheckpoint(appPath: string, hash?: string): Promise
     return { restored: false, backupRef };
   }
   return { restored: true, backupRef };
+}
+
+// ── Source file browsing / edit (workbench Monaco) ──────────────────────────
+
+const SOURCE_SKIP_DIR_NAMES = new Set([
+  'node_modules',
+  '.git',
+  'dist',
+  'dist-electron',
+  'coverage',
+  '.next',
+  '.turbo',
+  '.cache',
+]);
+
+const SOURCE_MAX_BYTES = 1_000_000;
+const SOURCE_MAX_FILES = 400;
+
+const SOURCE_TEXT_EXTS = new Set([
+  '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+  '.json', '.css', '.scss', '.less',
+  '.html', '.htm', '.md', '.mdx',
+  '.txt', '.svg', '.yml', '.yaml', '.toml',
+  '.env', '.gitignore', '.npmrc',
+]);
+
+export interface AppSourceFileEntry {
+  path: string;
+  size: number;
+}
+
+function assertPathInsideApp(appPath: string, relativePath: string): string {
+  const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+/, '').trim();
+  if (!normalized || normalized.includes('\0') || normalized.split('/').includes('..')) {
+    throw new Error('非法文件路径');
+  }
+  const appRoot = resolve(appPath);
+  const full = resolve(appRoot, normalized);
+  const prefix = appRoot.endsWith(sep) ? appRoot : `${appRoot}${sep}`;
+  if (full !== appRoot && !full.startsWith(prefix)) {
+    throw new Error('文件路径超出应用目录');
+  }
+  return full;
+}
+
+function isEditableSourceFile(fileName: string): boolean {
+  const base = fileName.split(/[/\\]/).pop() ?? fileName;
+  const lower = base.toLowerCase();
+  if (lower === '.env' || lower.startsWith('.env.')) return true;
+  if (lower === 'dockerfile' || lower === 'makefile') return true;
+  return SOURCE_TEXT_EXTS.has(extname(lower));
+}
+
+async function walkSourceFiles(
+  dir: string,
+  appRoot: string,
+  out: AppSourceFileEntry[],
+): Promise<void> {
+  if (out.length >= SOURCE_MAX_FILES) return;
+  const entries = await readdir(dir, { withFileTypes: true });
+  entries.sort((a, b) => a.name.localeCompare(b.name));
+  for (const entry of entries) {
+    if (out.length >= SOURCE_MAX_FILES) return;
+    if (entry.name === '.' || entry.name === '..') continue;
+    if (entry.name.startsWith('.') && entry.name !== '.npmrc' && entry.name !== '.gitignore' && !entry.name.startsWith('.env')) {
+      // Keep common config; skip other dotdirs like .sclaw from the editor tree.
+      if (entry.isDirectory()) continue;
+      if (!isEditableSourceFile(entry.name)) continue;
+    }
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (SOURCE_SKIP_DIR_NAMES.has(entry.name)) continue;
+      await walkSourceFiles(full, appRoot, out);
+      continue;
+    }
+    if (!entry.isFile() || !isEditableSourceFile(entry.name)) continue;
+    try {
+      const info = await stat(full);
+      if (info.size > SOURCE_MAX_BYTES) continue;
+      out.push({
+        path: relative(appRoot, full).replace(/\\/g, '/'),
+        size: info.size,
+      });
+    } catch {
+      // skip unreadable
+    }
+  }
+}
+
+export async function listAppSourceFiles(appPath: string): Promise<AppSourceFileEntry[]> {
+  if (!existsSync(appPath) || !statSync(appPath).isDirectory()) {
+    throw new Error('应用目录不存在');
+  }
+  const out: AppSourceFileEntry[] = [];
+  await walkSourceFiles(appPath, resolve(appPath), out);
+  return out;
+}
+
+export async function readAppSourceFile(
+  appPath: string,
+  relativePath: string,
+): Promise<{ path: string; content: string }> {
+  const full = assertPathInsideApp(appPath, relativePath);
+  if (!existsSync(full) || !statSync(full).isFile()) {
+    throw new Error('文件不存在');
+  }
+  const info = await stat(full);
+  if (info.size > SOURCE_MAX_BYTES) {
+    throw new Error('文件过大，无法在编辑器中打开');
+  }
+  const content = await readFile(full, 'utf8');
+  return { path: relativePath.replace(/\\/g, '/').replace(/^\/+/, ''), content };
+}
+
+export async function writeAppSourceFile(
+  appPath: string,
+  relativePath: string,
+  content: string,
+): Promise<{ path: string; bytes: number }> {
+  if (typeof content !== 'string') throw new Error('内容无效');
+  if (Buffer.byteLength(content, 'utf8') > SOURCE_MAX_BYTES) {
+    throw new Error('内容过大，无法保存');
+  }
+  const full = assertPathInsideApp(appPath, relativePath);
+  if (!isEditableSourceFile(full)) {
+    throw new Error('不支持编辑该类型文件');
+  }
+  await mkdir(dirname(full), { recursive: true });
+  await writeFile(full, content, 'utf8');
+  return {
+    path: relativePath.replace(/\\/g, '/').replace(/^\/+/, ''),
+    bytes: Buffer.byteLength(content, 'utf8'),
+  };
+}
+
+export interface AppSourceSearchHit {
+  path: string;
+  line: number;
+  column: number;
+  preview: string;
+}
+
+const SOURCE_SEARCH_MAX_HITS = 200;
+
+export async function searchAppSourceFiles(
+  appPath: string,
+  query: string,
+): Promise<AppSourceSearchHit[]> {
+  const needle = query.trim();
+  if (!needle) return [];
+  if (needle.length > 200) throw new Error('搜索词过长');
+
+  const files = await listAppSourceFiles(appPath);
+  const hits: AppSourceSearchHit[] = [];
+  const lowerNeedle = needle.toLowerCase();
+
+  for (const file of files) {
+    if (hits.length >= SOURCE_SEARCH_MAX_HITS) break;
+    let content = '';
+    try {
+      const full = assertPathInsideApp(appPath, file.path);
+      content = await readFile(full, 'utf8');
+    } catch {
+      continue;
+    }
+    const lines = content.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i++) {
+      if (hits.length >= SOURCE_SEARCH_MAX_HITS) break;
+      const lineText = lines[i] ?? '';
+      const idx = lineText.toLowerCase().indexOf(lowerNeedle);
+      if (idx < 0) continue;
+      hits.push({
+        path: file.path,
+        line: i + 1,
+        column: idx + 1,
+        preview: lineText.trim().slice(0, 200),
+      });
+    }
+  }
+  return hits;
 }

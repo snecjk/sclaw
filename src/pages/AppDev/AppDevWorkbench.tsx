@@ -10,10 +10,6 @@ import {
   ArrowLeft,
   ExternalLink,
   History,
-  Loader2,
-  PanelRightOpen,
-  RotateCw,
-  Wand2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
@@ -26,10 +22,9 @@ import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
-import { SclawBrowserFrame } from '@/components/sclaw-browser/SclawBrowserFrame';
+import { AppDevWorkbenchStage } from '@/components/app-dev/AppDevWorkbenchStage';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import {
   stoChatColumnContentTrackClass,
@@ -160,7 +155,6 @@ export default function AppDevWorkbench() {
   const [pendingErrors, setPendingErrors] = useState<string[]>([]);
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [gitAvailable, setGitAvailable] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(true);
   const sending = useChatStore((s) => s.sending);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const prevSendingRef = useRef(false);
@@ -258,7 +252,6 @@ export default function AppDevWorkbench() {
       return;
     }
     openExternalUrl(status.previewUrl);
-    setPreviewOpen(false);
   };
 
   const phase = status?.phase ?? 'created';
@@ -308,20 +301,6 @@ export default function AppDevWorkbench() {
           系统浏览器预览
         </Button>
 
-        {!previewOpen ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs"
-            title="重新打开右侧预览"
-            onClick={() => setPreviewOpen(true)}
-          >
-            <PanelRightOpen className="h-3.5 w-3.5" aria-hidden />
-            打开预览
-          </Button>
-        ) : null}
-
         <Button
           type="button"
           variant="ghost"
@@ -336,83 +315,21 @@ export default function AppDevWorkbench() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <section
-          className={cn(
-            'flex min-w-0 flex-col',
-            previewOpen ? 'w-[400px] min-w-[340px] shrink-0 border-r border-border' : 'flex-1',
-          )}
-        >
+        <AppDevWorkbenchStage
+          workspaceId={workspaceId}
+          appName={appName}
+          status={status}
+          pendingErrors={pendingErrors}
+          onFixErrors={handleFixErrors}
+          onDismissErrors={() => setPendingErrors([])}
+          onRetryStart={() => void startApp(workspaceId).catch(() => undefined)}
+        />
+
+        <section className="flex w-[400px] min-w-[340px] shrink-0 flex-col border-l border-border">
           {currentSessionKey
             ? <WorkbenchChatPane sessionKey={currentSessionKey} appName={appName} />
             : null}
         </section>
-
-        {previewOpen ? (
-          <section className="relative flex min-w-0 flex-1 flex-col bg-muted/30">
-            {pendingErrors.length > 0 ? (
-              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-[var(--sto-functional-warning)]/10 px-4 py-2">
-                <p className="flex min-w-0 items-center gap-2 text-sm text-foreground">
-                  <AlertCircle className="h-4 w-4 shrink-0 text-[var(--sto-functional-warning)]" aria-hidden />
-                  <span className="truncate">页面运行出现了一点问题</span>
-                </p>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="gap-1 text-xs"
-                    onClick={handleFixErrors}
-                  >
-                    <Wand2 className="h-3.5 w-3.5" aria-hidden />
-                    让 AI 修复
-                  </Button>
-                  <button
-                    type="button"
-                    className="text-xs text-muted-foreground underline"
-                    onClick={() => setPendingErrors([])}
-                  >
-                    忽略
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            {isRunning && status?.previewUrl ? (
-              <SclawBrowserFrame url={status.previewUrl} title={appName} embedRuntimeId={null} />
-            ) : (
-              <div className="flex flex-1 items-center justify-center p-8">
-                <div className="w-full max-w-sm text-center">
-                  {phase === 'error' ? (
-                    <>
-                      <AlertCircle className="mx-auto mb-4 h-10 w-10 text-[var(--sto-functional-error)]" aria-hidden />
-                      <p className="mb-2 text-sm font-medium text-foreground">应用启动遇到了问题</p>
-                      <p className="mb-6 text-xs leading-relaxed text-muted-foreground">
-                        可以重试一次；如果仍然失败，可在左侧告诉 AI「应用启动失败了，帮我看看」。
-                      </p>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="gap-1"
-                        onClick={() => void startApp(workspaceId).catch(() => undefined)}
-                      >
-                        <RotateCw className="h-3.5 w-3.5" aria-hidden />
-                        重试
-                      </Button>
-                    </>
-                  ) : (
-                    <>
-                      <Loader2 className="mx-auto mb-4 h-8 w-8 animate-spin text-muted-foreground" aria-hidden />
-                      <p className="mb-4 text-sm font-medium text-foreground">{PHASE_LABELS[phase]}</p>
-                      <Progress value={status?.progress ?? 0} className="mb-3" />
-                      <p className="text-xs leading-relaxed text-muted-foreground">
-                        首次创建需要准备运行环境，通常在一两分钟内完成。你可以先在左侧描述想做的功能。
-                      </p>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
-        ) : null}
       </div>
 
       <ConfirmDialog
