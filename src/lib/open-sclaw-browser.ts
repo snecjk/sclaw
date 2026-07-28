@@ -2,6 +2,11 @@
  * Public API — open URLs in the SClaw in-app browser overlay (iframe).
  * Use instead of window.open / shell.openExternal when embedded browsing is desired.
  */
+import { toast } from 'sonner';
+import {
+  appendSkipLoginReturnUrl,
+  fetchAppPlazaSkipLoginLink,
+} from '@/lib/app-plaza-api';
 import { getWorkflowStoToken } from '@/lib/workflow-api';
 import { invokeIpc } from '@/lib/api-client';
 import { openExternalUrl } from '@/lib/preview-url';
@@ -19,6 +24,10 @@ export interface OpenSclawBrowserOptions {
   title?: string;
   /** Stable app id — chat history is persisted per appId. */
   appId?: string;
+  /** Original target URL before auth rewrites / ticket exchange. */
+  sourceUrl?: string;
+  /** Subsystem code used to exchange skip-login URLs. */
+  systemCode?: string;
 }
 
 /**
@@ -70,7 +79,7 @@ export function resolveSclawBrowserUrl(url: string): string {
 }
 
 /** Open a URL in the SClaw browser drawer. No-op when url is empty. */
-export function openInSclawBrowser({ url, title, appId }: OpenSclawBrowserOptions): void {
+export function openInSclawBrowser({ url, title, appId, sourceUrl, systemCode }: OpenSclawBrowserOptions): void {
   const trimmed = url?.trim();
   if (!trimmed) return;
   const resolvedUrl = resolveSclawBrowserUrl(trimmed);
@@ -83,6 +92,8 @@ export function openInSclawBrowser({ url, title, appId }: OpenSclawBrowserOption
       appId: resolvedAppId,
       url: resolvedUrl,
       title: resolvedTitle,
+      sourceUrl: sourceUrl?.trim() || trimmed,
+      systemCode: systemCode?.trim() || undefined,
     });
   };
 
@@ -111,8 +122,22 @@ export function isSclawBrowserOpen(): boolean {
 }
 
 /** Open the current overlay URL in the system default browser. */
-export function openSclawBrowserInSystemBrowser(): void {
+export async function openSclawBrowserInSystemBrowser(): Promise<void> {
   const session = useSclawBrowserOverlayStore.getState().session;
   if (!session?.url) return;
-  openExternalUrl(session.url);
+  const systemCode = session.systemCode?.trim();
+  if (!systemCode) {
+    openExternalUrl(session.url);
+    return;
+  }
+
+  try {
+    const skipLoginUrl = await fetchAppPlazaSkipLoginLink(systemCode);
+    const targetUrl = appendSkipLoginReturnUrl(skipLoginUrl, session.sourceUrl || session.url);
+    openExternalUrl(targetUrl);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    toast.error(message || '免登链接获取失败');
+    openExternalUrl(session.url);
+  }
 }

@@ -17,6 +17,11 @@ export interface AppItem {
   description?: string;
   /** URL to open in iframe / external browser */
   url: string;
+  /**
+   * Target subsystem code for skip-login ticket exchange.
+   * When set, open flow calls memory-center skip-login-link before embedding.
+   */
+  systemCode?: string;
   /** Icon key (for builtin) or icon SVG string (for external) */
   iconKey?: string;
   /** Remote icon URL — takes precedence over iconKey when set */

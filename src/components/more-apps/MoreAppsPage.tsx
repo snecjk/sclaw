@@ -23,6 +23,10 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AppIcon } from './AppIcon';
 import type { AppItem, AppPlazaBanner, MarketCategory } from '@/types/more-apps';
 import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
+import {
+  appendSkipLoginReturnUrl,
+  fetchAppPlazaSkipLoginLink,
+} from '@/lib/app-plaza-api';
 import { formatAppBadges } from './format-app-badges';
 
 const HERO_CAROUSEL_INTERVAL = 5000;
@@ -170,12 +174,44 @@ export function MoreAppsPage() {
     };
   }, [activeTab, heroSlideIndex, setHeroSlideIndex, banners]);
 
-  const handleOpenApp = useCallback((app: AppItem) => {
-    if (!app.url?.trim()) return;
+  const handleOpenApp = useCallback(async (app: AppItem) => {
+    const systemCode = app.systemCode?.trim();
+    const hasUrl = !!app.url?.trim();
+    if (!systemCode && !hasUrl) return;
+
     if (!isAppInstalled(app.id)) {
       installApp(app.id);
     }
-    openInSclawBrowser({ url: app.url, title: app.name, appId: app.id });
+
+    if (systemCode) {
+      try {
+        const skipLoginUrl = await fetchAppPlazaSkipLoginLink(systemCode);
+        const openUrl = appendSkipLoginReturnUrl(skipLoginUrl, app.url);
+        openInSclawBrowser({
+          url: openUrl,
+          title: app.name,
+          appId: app.id,
+          sourceUrl: app.url,
+          systemCode,
+        });
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        toast.error(message || '免登链接获取失败');
+        if (!hasUrl) return;
+        // Fall back to catalog URL (useStoToken / sto-sso-web injection still applies).
+      }
+    }
+
+    if (hasUrl) {
+      openInSclawBrowser({
+        url: app.url,
+        title: app.name,
+        appId: app.id,
+        sourceUrl: app.url,
+        systemCode,
+      });
+    }
   }, [installApp, isAppInstalled]);
 
   // Resolve a banner's click target against the currently loaded APP set.
@@ -185,7 +221,10 @@ export function MoreAppsPage() {
     (banner: AppPlazaBanner) => {
       if (banner.targetType === 'URL' && banner.targetUrl) return true;
       if (banner.targetType === 'APP' && banner.targetAppId) {
-        return bannerAppLookup.some((a) => a.id === banner.targetAppId && !!a.url?.trim());
+        return bannerAppLookup.some((a) => {
+          if (a.id !== banner.targetAppId) return false;
+          return !!a.url?.trim() || !!a.systemCode?.trim();
+        });
       }
       return false;
     },
@@ -203,8 +242,8 @@ export function MoreAppsPage() {
       }
       if (banner.targetType === 'APP' && banner.targetAppId) {
         const app = bannerAppLookup.find((a) => a.id === banner.targetAppId);
-        if (app?.url?.trim()) {
-          handleOpenApp(app);
+        if (app && (app.url?.trim() || app.systemCode?.trim())) {
+          void handleOpenApp(app);
         }
         // Unresolvable APP target: keep showing the image but do not click — never guess the URL.
       }
