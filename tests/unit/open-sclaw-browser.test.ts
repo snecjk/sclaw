@@ -37,6 +37,7 @@ vi.mock('@/lib/sto-policy-web-url', async (importOriginal) => {
 import { getWorkflowStoToken } from '@/lib/workflow-api';
 import { injectStoSsoWebAutoLogin } from '@/lib/sto-policy-web-url';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
+import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 import {
   openSclawBrowserInSystemBrowser,
   resolveSclawBrowserUrl,
@@ -53,6 +54,7 @@ describe('resolveSclawBrowserUrl', () => {
     openExternalUrlMock.mockReset();
     toastErrorMock.mockReset();
     useSclawBrowserOverlayStore.setState({ session: null });
+    useAppPlazaShellStore.setState({ browserTabs: [], activeTabId: 'home' });
   });
 
   it('replaces useStoToken=1 with stotoken when local token exists', () => {
