@@ -30,7 +30,7 @@ import {
 import { formatAppBadges } from './format-app-badges';
 
 const HERO_CAROUSEL_INTERVAL = 5000;
-/** 制度中心等 sto-policy 系统需二次登录确认后再免登打开 */
+/** 空 systemCode（无法换免登）或 sto-policy 需二次登录确认后再打开 */
 const STO_POLICY_SYSTEM_CODE = 'sto-policy';
 
 export function MoreAppsPage() {
@@ -229,7 +229,8 @@ export function MoreAppsPage() {
     const hasUrl = !!app.url?.trim();
     if (!systemCode && !hasUrl) return;
 
-    if (systemCode === STO_POLICY_SYSTEM_CODE) {
+    // 空编码：无法换取免登地址；sto-policy：需二次登录。两者都先确认再打开。
+    if (!systemCode || systemCode === STO_POLICY_SYSTEM_CODE) {
       setPendingStoPolicyApp(app);
       return;
     }

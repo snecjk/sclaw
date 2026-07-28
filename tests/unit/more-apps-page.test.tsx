@@ -203,7 +203,7 @@ describe('MoreAppsPage server catalog', () => {
     });
   });
 
-  it('skips skip-login exchange when systemCode is empty', async () => {
+  it('asks for confirmation when systemCode is empty (no skip-login exchange)', async () => {
     fetchAppsMock.mockResolvedValueOnce({
       items: [{
         ...serverApp,
@@ -220,6 +220,11 @@ describe('MoreAppsPage server catalog', () => {
     render(<MoreAppsPage />);
     fireEvent.click(await screen.findByRole('button', { name: '打开普通应用' }));
 
+    expect(openInSclawBrowserMock).not.toHaveBeenCalled();
+    expect(fetchSkipLoginLinkMock).not.toHaveBeenCalled();
+    expect(await screen.findByText('需要二次登录')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '确定' }));
     await waitFor(() => {
       expect(fetchSkipLoginLinkMock).not.toHaveBeenCalled();
       expect(openInSclawBrowserMock).toHaveBeenCalledWith(
@@ -230,7 +235,6 @@ describe('MoreAppsPage server catalog', () => {
         }),
       );
     });
-    expect(screen.queryByText('需要二次登录')).not.toBeInTheDocument();
   });
 
   it('renders a whole-image URL banner and opens its configured link', async () => {
