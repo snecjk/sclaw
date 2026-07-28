@@ -102,6 +102,23 @@ describe('MoreAppsPage server catalog', () => {
     expect(screen.queryByText('维护客户归属关系')).not.toBeInTheDocument();
   });
 
+  it('portals the external-app modal outside the page stacking context', () => {
+    const { container } = render(
+      <div data-app-shell="provincial">
+        <MoreAppsPage />
+      </div>,
+    );
+    const appShell = container.querySelector('[data-app-shell]');
+    const page = container.querySelector('.page-more-apps');
+
+    fireEvent.click(screen.getByRole('button', { name: '安装外部应用' }));
+
+    const modal = document.querySelector<HTMLElement>('.more-apps-modal');
+    expect(modal).not.toBeNull();
+    expect(modal?.parentElement).toBe(appShell);
+    expect(page?.contains(modal)).toBe(false);
+  });
+
   it('shows the uploaded app image and falls back to the configured icon when it fails', async () => {
     render(<MoreAppsPage />);
     const image = await waitFor(() => {
