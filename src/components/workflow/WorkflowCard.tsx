@@ -250,7 +250,7 @@ export function WorkflowCard({
   const durationLabel = useDurationLabel(display.startedAt, display.completedAt, isRunning);
   const showProgress = isRunning;
   const userFacingArtifacts = (display.status === 'completed' ? display.result?.artifacts ?? [] : []).filter(
-    (artifact) => isUserFacingArtifactUrl(artifact.url),
+    (artifact) => isUserFacingArtifactUrl(artifact.filePath || artifact.url),
   );
   const showWorkflowActions = isTerminal
     && !!display.workflowId
@@ -343,8 +343,8 @@ export function WorkflowCard({
       {userFacingArtifacts.length > 0 ? (
         <div className="space-y-2">
           {userFacingArtifacts.map((artifact) => {
-            const previewable = shouldPreviewInSidePanel(artifact.url);
             const previewFile = artifactToPreviewFile(artifact);
+            const previewable = shouldPreviewInSidePanel(previewFile.filePath || artifact.url);
             return (
               <ArtifactProductCard
                 key={artifact.id || artifact.url || artifact.name}

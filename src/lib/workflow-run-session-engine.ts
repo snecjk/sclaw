@@ -1,14 +1,10 @@
-import {
-  selectHighestQwenPlusModel,
-  upsertSessionModel,
-} from '@/lib/chat-model-options';
+import { upsertSessionModel } from '@/lib/chat-model-options';
 import {
   persistSessionModelToGateway,
   resolveModelToPersistForSession,
 } from '@/lib/sync-workspace-default-to-chat';
 import { awaitSessionSendReadiness } from '@/lib/session-send-readiness';
 import { useChatStore } from '@/stores/chat';
-import { useProviderStore } from '@/stores/providers';
 
 /**
  * The selected workflow engine is persisted onto the navigation-created chat
@@ -28,9 +24,7 @@ export async function configureWorkflowRunSession(input: {
   // to the default engine/model.
   await awaitSessionSendReadiness(sessionKey);
 
-  const { accounts } = useProviderStore.getState();
-  const qwenPlus = input.engineType === 'claude' ? selectHighestQwenPlusModel(accounts) : undefined;
-  const fallback = qwenPlus ?? resolveModelToPersistForSession({
+  const fallback = resolveModelToPersistForSession({
     sessionKey,
     agentId: input.agentId,
     engineType: input.engineType,

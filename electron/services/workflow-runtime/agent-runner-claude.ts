@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import { getDataDir } from '../../utils/paths';
+import { runWorkspacePath } from './workspace-paths';
 import { prepareClaudeRuntime } from '../../engines/claude-sdk-runtime';
 import { getDefaultProviderAccountId } from '../../services/providers/provider-store';
 import { workflowExecLog } from './logging';
@@ -102,6 +102,8 @@ export interface InvokeArgs {
   accountId?: string;
   /** Explicit model id selected from the locally configured runtime catalog. */
   model?: string;
+  /** Called after the Claude runtime resolves the exact model passed to the SDK. */
+  onModelResolved?: (model: string) => void | Promise<void>;
   /** Reserved for retry metadata; not consumed by the runner. */
   retryReason?: string;
   /** Stable UUID shared by all attempts of this workflow node. */
@@ -126,7 +128,7 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
   // Only computed when the caller (tests included) doesn't inject a cwd, so the
   // electron-backed getDataDir() is never called in tests.
   const cwd =
-    args.cwd ?? path.join(getDataDir(), 'workflow-runtime', 'workspaces', ctx.runId);
+    args.cwd ?? runWorkspacePath(ctx.runId);
 
   // Both cwd and additional directories are the run workspace, not $HOME.
   const additionalDirectories = args.additionalDirectories ?? [cwd];
@@ -144,6 +146,19 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
   // sent to the SDK.  Passing args.model here used to bypass that normalization
   // and caused provider/model-format 400 errors for workflow-only runs.
   const effectiveModel = preparedRuntime?.selection.model ?? args.model;
+  if (effectiveModel) {
+    try {
+      await args.onModelResolved?.(effectiveModel);
+    } catch (error) {
+      // Model telemetry must not prevent an otherwise valid workflow node run.
+      workflowExecLog('warn', 'agent-model-record', 'failed to persist resolved model', {
+        runId: ctx.runId,
+        nodeId: ctx.nodeId,
+        model: effectiveModel,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
   const noProgressMs = args.noProgressMs ?? 300_000;
   const deadlineMs = args.deadlineMs ?? 960_000;
 

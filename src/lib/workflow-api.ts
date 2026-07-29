@@ -5,6 +5,7 @@
  * All endpoints return { success, data, traceId } and require stoToken header.
  */
 import { invokeIpc } from '@/lib/api-client';
+import { useChatStore } from '@/stores/chat';
 import { hostApiFetch } from '@/lib/host-api';
 import { useAuthStore } from '@/stores/auth';
 import type {
@@ -296,6 +297,8 @@ export interface StartWorkflowLocalParams {
   workflowVersionId?: string | number;
   /** Fixed for the entire local run and persisted before dispatch. */
   engineType: 'claude' | 'openclaw';
+  /** Explicit chat model to pin for this run, when the caller has one. */
+  engineModel?: string;
 }
 
 export interface StartWorkflowLocalResult {
@@ -317,6 +320,10 @@ export async function startWorkflowLocal(
   params: StartWorkflowLocalParams
 ): Promise<StartWorkflowLocalResult> {
   const startedAt = formatShanghaiIso();
+  const chat = useChatStore.getState();
+  const sessionModel = chat.sessions.find((session) => session.key === params.sessionKey)?.model
+    ?? chat.sessions.find((session) => session.key === chat.currentSessionKey)?.model;
+  const engineModel = params.engineModel?.trim() || sessionModel?.trim() || undefined;
 
   // 常规会话工作流仍需在服务端注册，以保持既有运行记录关联行为。
   let data: StartWorkflowLocalResponse | undefined;
@@ -365,6 +372,7 @@ export async function startWorkflowLocal(
     startedAt,
     sessionKey: params.sessionKey,
     engineType: params.engineType,
+    engineModel,
   });
 
   return {

@@ -9,7 +9,7 @@ import type { Dirent } from 'node:fs';
 import { readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { getDataDir } from '../../utils/paths';
+import { workspacePath } from './workspace-paths';
 
 const JSON_FENCE_RE = /```json\s*([\s\S]*?)```/i;
 
@@ -37,7 +37,7 @@ export function extractJsonFromText(text: string): any | null {
 
 export function createProcessFileWriter(runId: string, nodeId: string): (value: any, serialized: string) => any {
   return (_value, serialized) => {
-    const directory = path.join(getDataDir(), 'workflow-runtime', 'workspaces', runId, nodeId, 'processFiles');
+    const directory = path.join(workspacePath(runId, nodeId), 'processFiles');
     fs.mkdirSync(directory, { recursive: true });
     const filePath = path.join(directory, `result-${Date.now()}.json`);
     fs.writeFileSync(filePath, serialized, 'utf8');

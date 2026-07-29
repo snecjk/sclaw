@@ -19,8 +19,10 @@ export function WorkflowCompletionActions({
   const state = useChatStore((s) => s.workflowCardStates[runId]);
   if (!state || state.status !== 'completed') return null;
 
-  const artifacts = (state.result?.artifacts ?? []).filter((a) => isUserFacingArtifactUrl(a.url));
-  const primaryArtifact = artifacts.find((a) => shouldPreviewInSidePanel(a.url)) ?? null;
+  const artifacts = (state.result?.artifacts ?? []).filter((a) => isUserFacingArtifactUrl(a.filePath || a.url));
+  const primaryArtifact = artifacts.find((a) => shouldPreviewInSidePanel(
+    artifactToPreviewFile(a).filePath || a.url,
+  )) ?? null;
 
   if (!primaryArtifact || !onPreviewArtifact) return null;
 

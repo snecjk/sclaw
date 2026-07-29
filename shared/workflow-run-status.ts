@@ -31,6 +31,8 @@ export interface WorkflowRunArtifact {
   previewUrl?: string;
   /** Signed OSS download URL (Content-Disposition: attachment). */
   tempUrl?: string;
+  /** Local absolute path for client-executed artifacts. */
+  filePath?: string;
   size?: number;
   nodeId?: string;
   kind?: string;
@@ -51,6 +53,7 @@ export interface WorkflowExecutionResult {
     url: string;
     previewUrl?: string;
     tempUrl?: string;
+    filePath?: string;
     size?: number;
   }>;
 }
@@ -233,6 +236,7 @@ export function normalizeRunArtifacts(
         url: resolveWorkflowArtifactUrl(a) || previewUrl,
         previewUrl,
         tempUrl,
+        filePath: a.filePath?.trim() || undefined,
         size: a.size,
         nodeId: a.nodeId,
         kind: a.kind,
@@ -357,6 +361,7 @@ function mapArtifacts(artifacts: WorkflowRunArtifact[]) {
     url: a.url,
     previewUrl: a.previewUrl,
     tempUrl: a.tempUrl,
+    filePath: a.filePath,
     size: a.size,
   }));
 }

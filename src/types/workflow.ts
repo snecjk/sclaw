@@ -372,6 +372,7 @@ export interface WorkflowExecutionResult {
     url: string;
     previewUrl?: string;
     tempUrl?: string;
+    filePath?: string;
     size?: number;
   }>;
 }

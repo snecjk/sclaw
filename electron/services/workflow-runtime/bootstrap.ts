@@ -18,7 +18,6 @@ import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { getStoTokenQuotaService } from '../sto-token-quota-service';
 import { invokeAgent as agentRunnerInvokeAgent } from './agent-runner-claude';
 import { invokeOpenClawWorkflowAgent, releaseOpenClawWorkflowAgentSession } from './agent-runner-openclaw';
-import { resolveWorkflowExecutionModel } from './workflow-model-selection';
 import type { GatewayManager } from '../../gateway/manager';
 import { getWorkflowRuntimeRepository } from '../../db';
 import type { EngineDeps } from './engine';
@@ -73,27 +72,28 @@ export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager)
     repo: getWorkflowRuntimeRepository(),
     invokeAgent: async (args) => {
       const run = await getWorkflowRuntimeRepository().getRun(args.ctx.runId);
-      const modelSelection = await resolveWorkflowExecutionModel(args.model);
-      const execEngine = run?.engine_type === 'openclaw' ? 'openclaw' : 'claude';
-      const effectiveModel = execEngine === 'openclaw'
-        ? modelSelection.openClawModel
-        : modelSelection.claudeModel;
-      if (!run?.engine_model) {
-        await getWorkflowRuntimeRepository().updateRunIfActive(args.ctx.runId, { engine_model: effectiveModel });
+      // Chat persists its selected model on the session before a workflow starts.
+      // Prefer that pinned run model; only non-chat runs may use the DSL model.
+      const effectiveModel = run?.engine_model?.trim() || args.model?.trim();
+      if (!effectiveModel) {
+        throw new Error('Workflow execution model is missing');
       }
-      workflowExecLog('info', 'agent-model-selected', 'smart node model selected from shared provider catalog', {
-        runId: args.ctx.runId,
-        nodeId: args.nodeId,
-        execEngine,
-        model: effectiveModel,
-        providerAccountId: modelSelection.accountId,
-        fallbackApplied: modelSelection.fallbackApplied,
-      });
+      const execEngine = run?.engine_type === 'openclaw' ? 'openclaw' : 'claude';
+      const persistActualModel = async (model: string): Promise<void> => {
+        await getWorkflowRuntimeRepository().updateRunIfActive(args.ctx.runId, { engine_model: model });
+        workflowExecLog('info', 'agent-model-selected', 'workflow agent model resolved', {
+          runId: args.ctx.runId,
+          nodeId: args.nodeId,
+          execEngine,
+          model,
+        });
+      };
       if (run?.engine_type === 'openclaw') {
         if (!gatewayManager) throw new Error('OpenClaw workflow gateway unavailable');
         if (!args.agentSessionId) throw new Error('OpenClaw workflow node session is required');
+        await persistActualModel(effectiveModel);
         return invokeOpenClawWorkflowAgent({ gateway: gatewayManager, ctx: { ...args.ctx, nodeId: args.nodeId }, prompt: args.prompt,
-          attempt: args.attempt, model: modelSelection.openClawModel,
+          attempt: args.attempt, model: effectiveModel,
           agentSessionId: args.agentSessionId, resumeSession: args.resumeSession,
           noProgressMs: (args as any).noProgressMs, deadlineMs: (args as any).deadlineMs, onStreamEvent: args.onStreamEvent });
       }
@@ -106,8 +106,8 @@ export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager)
         additionalDirectories: [runWorkspacePath(args.ctx.runId)],
         noProgressMs: (args as any).noProgressMs,
         deadlineMs: (args as any).deadlineMs,
-        accountId: modelSelection.accountId,
-        model: modelSelection.claudeModel,
+        model: effectiveModel,
+        onModelResolved: persistActualModel,
         onStreamEvent: args.onStreamEvent,
         allowedTools: args.allowedTools,
         permissionMode: args.permissionMode,

@@ -376,9 +376,11 @@ export function artifactToPreviewFile(artifact: {
   url: string;
   previewUrl?: string;
   tempUrl?: string;
+  filePath?: string;
 }): AttachedFileMeta {
   const previewUrl = artifact.previewUrl?.trim() || artifact.url;
   const downloadUrl = artifact.tempUrl?.trim() || artifact.url;
+  const localFilePath = artifact.filePath?.trim();
   const mimeType = resolvePreviewMimeType(
     inferMimeTypeFromUrl(previewUrl, artifact.type),
     previewUrl,
@@ -387,7 +389,10 @@ export function artifactToPreviewFile(artifact: {
   const fileName = resolveArtifactPreviewFileName(artifact.name, previewUrl, mimeType);
 
   return {
-    filePath: previewUrl,
+    // Workflow artifacts may include both an in-app/OSS preview URL and a
+    // local output path. Keep the latter for native actions such as “show in
+    // folder”; preview components can render the local file directly.
+    filePath: localFilePath || previewUrl,
     downloadUrl: downloadUrl !== previewUrl ? downloadUrl : undefined,
     fileName,
     mimeType,

@@ -5,7 +5,7 @@
  */
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { getDataDir } from '../../utils/paths';
+import { workflowRuntimeWorkspacePath } from './workspace-paths';
 
 export const WORKFLOW_RUNTIME_TEMPLATE_VERSION = '3';
 const TEMPLATE_MARKER = `<!-- stoclaw:workflow-runtime-template:v${WORKFLOW_RUNTIME_TEMPLATE_VERSION} -->`;
@@ -32,9 +32,7 @@ export interface WorkflowRuntimeTemplateResult {
   removedFiles: string[];
 }
 
-export function workflowRuntimeWorkspacePath(): string {
-  return path.join(getDataDir(), 'workflow-runtime', 'workspaces');
-}
+export { workflowRuntimeWorkspacePath } from './workspace-paths';
 
 export function workflowRuntimeTemplateContent(
   fileName: keyof typeof MANAGED_TEMPLATES,
