@@ -16,7 +16,10 @@ export async function prepareWorkflowSkills(
     const userCode = await getCurrentActiveUserCode();
     // Intentionally omit agentId: this resolves global + active-user packages
     // only, exactly the skill scope shared by normal chat.
-    await getSkillManager().reconcile({ userCode }, engines);
+    // The caller performs the one required Gateway reload after the first
+    // workflow projection. Letting the shared skill adapter schedule another
+    // delayed reload can interrupt a subsequent workflow node on Windows.
+    await getSkillManager().reconcile({ userCode }, engines, { notifyAfterBatch: false });
   } catch (error) {
     // Skill projection is best-effort in chat too.  A transient projection
     // failure must not prevent a workflow node from executing.

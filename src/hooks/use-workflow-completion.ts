@@ -29,9 +29,11 @@ interface WorkflowStatusPayload {
 export function shouldAcceptWorkflowStatusUpdate(
   payloadSessionKey: string,
   currentSessionKey: string,
-  sessionOwnsRun: boolean,
+  hasSessionExecution: boolean,
+  hasRenderedRunCard: boolean,
 ): boolean {
-  return payloadSessionKey === currentSessionKey || (payloadSessionKey === '' && sessionOwnsRun);
+  return payloadSessionKey === currentSessionKey
+    || (payloadSessionKey === '' && (hasSessionExecution || hasRenderedRunCard));
 }
 
 export function useWorkflowCompletion(sessionKey: string) {
@@ -42,9 +44,15 @@ export function useWorkflowCompletion(sessionKey: string) {
       const currentState = chatState.workflowCardStates[data.runId];
       const exec = getExecutionByRunId(data.runId, sessionKey);
       // Legacy tool starts go through the local host route without a renderer
-      // sessionKey. Accept an empty-key broadcast only when this session already
-      // owns the runId; never let it update unrelated conversation cards.
-      if (!shouldAcceptWorkflowStatusUpdate(data.sessionKey, sessionKey, Boolean(exec))) return;
+      // sessionKey. The current page can prove ownership either through its
+      // persisted execution record or through the already rendered run card.
+      // Never accept an empty-key event without one of those run-specific ties.
+      if (!shouldAcceptWorkflowStatusUpdate(
+        data.sessionKey,
+        sessionKey,
+        Boolean(exec),
+        Boolean(currentState),
+      )) return;
       const incoming: WorkflowExecutionState = {
         runId: data.runId,
         workflowId: data.workflowId ?? currentState?.workflowId ?? '',
