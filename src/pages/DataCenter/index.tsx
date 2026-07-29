@@ -95,9 +95,12 @@ export function DataCenter() {
   const isSharedArtifactSpace = store.section === 'qa_artifact' && store.spaceType === 'site_shared_artifact';
   const isMyArtifactSpace = store.section === 'qa_artifact' && store.spaceType === 'qa_artifact';
   const canCreateFolder = isUploadDriveTab || (!isDriveSection && (!isSharedArtifactSpace || Boolean(store.spaceId)));
-  const visibleItems: DataCenterUiEntry[] = isLocalDriveTab
+  const baseVisibleItems: DataCenterUiEntry[] = isLocalDriveTab
     ? localStore.items.map(localEntryToUiEntry)
     : store.items;
+  const visibleItems: DataCenterUiEntry[] = store.section === 'qa_artifact' && associationFilter === 'task'
+    ? baseVisibleItems.filter((item) => item.sourceType === 'scheduled_task_artifact')
+    : baseVisibleItems;
   const currentViewMode = isLocalDriveTab ? localStore.viewMode : store.viewMode;
   const currentKeyword = isLocalDriveTab ? localStore.keyword : store.keyword;
   const currentLoading = isLocalDriveTab ? localStore.loading : store.loading;
