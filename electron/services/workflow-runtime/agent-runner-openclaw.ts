@@ -17,15 +17,18 @@ import { prepareWorkflowSkills } from './skill-loader';
 const AGENT_ID = 'workflow-runtime';
 const activeSessions = new Map<string, { gateway: GatewayManager; sessionKey: string; runId?: string }>();
 const configuredGateways = new WeakSet<GatewayManager>();
+const gatewaySetupInFlight = new WeakMap<GatewayManager, Promise<void>>();
 const REPEATED_OUTPUT_MIN_CHARS = 32;
 const REPEATED_OUTPUT_MAX_PERIOD = 512;
 const REPEATED_OUTPUT_COUNT = 4;
 
 /** Ensure this agent uses only the versioned workflow-owned bootstrap files. */
-export async function ensureWorkflowOpenClawAgent(): Promise<void> {
+export async function ensureWorkflowOpenClawAgent(options?: { syncSkills?: boolean }): Promise<void> {
   // Must happen before Gateway reload so its skill scan sees the same global
   // and active-user packages that ordinary OpenClaw chat sees.
-  await prepareWorkflowSkills(['openclaw']);
+  if (options?.syncSkills !== false) {
+    await prepareWorkflowSkills(['openclaw']);
+  }
   const workspace = workflowRuntimeWorkspacePath();
   const prepared = await ensureWorkflowRuntimeTemplates(workspace);
   workflowExecLog('info', 'openclaw-workspace-template', 'workflow runtime templates prepared', {
@@ -34,8 +37,9 @@ export async function ensureWorkflowOpenClawAgent(): Promise<void> {
     updatedFiles: prepared.updatedFiles,
     removedFiles: prepared.removedFiles,
   });
-  // skipBootstrap prevents Gateway from creating its default definitions.
-  await createAgentWithId(AGENT_ID, 'Workflow Runtime', { workspace, skipBootstrap: true });
+  // The versioned template is reapplied below, so no unsupported OpenClaw
+  // config flags are needed to keep this service workspace workflow-owned.
+  await createAgentWithId(AGENT_ID, 'Workflow Runtime', { workspace });
   const verified = await ensureWorkflowRuntimeTemplates(workspace);
   if (verified.createdFiles.length || verified.updatedFiles.length || verified.removedFiles.length) {
     workflowExecLog('warn', 'openclaw-workspace-template', 'workflow runtime templates changed during agent registration and were repaired', {
@@ -44,6 +48,36 @@ export async function ensureWorkflowOpenClawAgent(): Promise<void> {
       updatedFiles: verified.updatedFiles,
       removedFiles: verified.removedFiles,
     });
+  }
+}
+
+/**
+ * Configure the dedicated workflow agent once per Gateway process lifetime.
+ * A workflow node must never schedule a Gateway reload merely to re-check
+ * skills that are already shared with ordinary OpenClaw chat.
+ */
+async function ensureWorkflowGatewayConfigured(gateway: GatewayManager): Promise<void> {
+  if (configuredGateways.has(gateway)) return;
+
+  const existing = gatewaySetupInFlight.get(gateway);
+  if (existing) return existing;
+
+  const setup = (async () => {
+    await ensureWorkflowOpenClawAgent();
+    await gateway.reload();
+    if (!gateway.isConnected()) {
+      throw new Error('OpenClaw 网关重载后未就绪');
+    }
+    // Reapply only workflow-owned templates after Gateway startup. Skills were
+    // already reconciled above and must not trigger another reload.
+    await ensureWorkflowOpenClawAgent({ syncSkills: false });
+    configuredGateways.add(gateway);
+  })();
+  gatewaySetupInFlight.set(gateway, setup);
+  try {
+    await setup;
+  } finally {
+    gatewaySetupInFlight.delete(gateway);
   }
 }
 
@@ -92,14 +126,10 @@ export async function invokeOpenClawWorkflowAgent(args: {
   onStreamEvent?: (event: AgentStreamEvent) => void | Promise<void>;
 }): Promise<InvokeResult> {
   if (!args.gateway.isConnected()) return { status: 'failed', rawText: '', error: 'OpenClaw 网关未就绪' };
-  await ensureWorkflowOpenClawAgent();
-  if (!configuredGateways.has(args.gateway)) {
-    await args.gateway.reload();
-    configuredGateways.add(args.gateway);
-    if (!args.gateway.isConnected()) return { status: 'failed', rawText: '', error: 'OpenClaw 网关重载后未就绪' };
-    // Validate again after Gateway startup so its defaults cannot replace the
-    // workflow-owned definitions before the first node prompt is sent.
-    await ensureWorkflowOpenClawAgent();
+  try {
+    await ensureWorkflowGatewayConfigured(args.gateway);
+  } catch (error) {
+    return { status: 'failed', rawText: '', error: error instanceof Error ? error.message : 'OpenClaw 网关重载后未就绪' };
   }
   const sessionKey = workflowGatewaySessionKey(args.agentSessionId);
   const activeKey = `${args.ctx.runId}:${args.ctx.nodeId}`;

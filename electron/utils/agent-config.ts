@@ -94,7 +94,6 @@ interface AgentListEntry extends Record<string, unknown> {
   agentDir?: string;
   model?: string | AgentModelConfig;
   fileTransformByOSS?: boolean;
-  skipBootstrap?: boolean;
 }
 
 interface AgentsConfig extends Record<string, unknown> {
@@ -573,7 +572,7 @@ export async function ensureChineseThinkingConstraint(_workspacePath: string): P
 async function provisionAgentFilesystem(
   config: AgentConfigDocument,
   agent: AgentListEntry,
-  options?: { inheritWorkspace?: boolean; skipBootstrap?: boolean },
+  options?: { inheritWorkspace?: boolean },
 ): Promise<void> {
   const { entries } = normalizeAgentsConfig(config);
   const mainEntry = entries.find((entry) => entry.id === MAIN_AGENT_ID) ?? createImplicitMainEntry(config);
@@ -586,10 +585,6 @@ async function provisionAgentFilesystem(
   await ensureDir(targetWorkspace);
   await ensureDir(targetAgentDir);
   await ensureDir(targetSessionsDir);
-
-  // Service agents with skipBootstrap must keep their workspace wholly empty:
-  // no copied bootstrap files and no AGENTS.md constraint injection.
-  if (options?.skipBootstrap) return;
 
   // When inheritWorkspace is true, copy the main agent's workspace bootstrap
   // files (SOUL.md, AGENTS.md, etc.) so the new agent inherits the same
@@ -810,7 +805,7 @@ export async function createAgent(
 export async function createAgentWithId(
   id: string,
   name: string,
-  options?: { inheritWorkspace?: boolean; fileTransformByOSS?: boolean; workspace?: string; skipBootstrap?: boolean },
+  options?: { inheritWorkspace?: boolean; fileTransformByOSS?: boolean; workspace?: string },
 ): Promise<AgentsSnapshot> {
   if (!id || !id.trim()) throw new Error('Agent ID must not be empty');
   if (id === MAIN_AGENT_ID) throw new Error('Cannot create agent with reserved ID "main"');
@@ -824,14 +819,16 @@ export async function createAgentWithId(
     const existsOnDisk = diskIds.has(id);
 
     if (existsInConfig) {
-      // Workflow runtime is a service agent: callers may need to repair its
-      // workspace/bootstrap policy after upgrading from an older build.
-      if (options?.workspace || options?.skipBootstrap) {
+      // `skipBootstrap` was written by older StoClaw versions but is not part
+      // of the current OpenClaw agent schema. Remove it while repairing the
+      // entry so a Gateway reload can start successfully.
+      const existingAgent = entries.find((entry) => entry.id === id)!;
+      const { skipBootstrap: _legacySkipBootstrap, ...agentWithoutLegacyBootstrap } = existingAgent;
+      if (options?.workspace || _legacySkipBootstrap !== undefined) {
         const index = entries.findIndex((entry) => entry.id === id);
         entries[index] = {
-          ...entries[index],
+          ...agentWithoutLegacyBootstrap,
           ...(options.workspace ? { workspace: options.workspace.trim() } : {}),
-          ...(options.skipBootstrap ? { skipBootstrap: true } : {}),
         };
         config.agents = { ...agentsConfig, list: entries };
         await writeOpenClawConfig(config);
@@ -851,7 +848,6 @@ export async function createAgentWithId(
       name: normalizedName,
       workspace: options?.workspace?.trim() || getAgentWorkspaceTildePath(id),
       agentDir: getDefaultAgentDirPath(id),
-      ...(options?.skipBootstrap ? { skipBootstrap: true } : {}),
     };
 
     if (!nextEntries.some((entry) => entry.id === MAIN_AGENT_ID) && syntheticMain) {
@@ -866,7 +862,6 @@ export async function createAgentWithId(
 
     await provisionAgentFilesystem(config, newAgent, {
       inheritWorkspace: options?.inheritWorkspace,
-      skipBootstrap: options?.skipBootstrap,
     });
     await writeOpenClawConfig(config);
 
