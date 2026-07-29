@@ -217,11 +217,22 @@ function EntryName({
   onOpenFolder: (entry: DataCenterUiEntry) => void;
   onPreview: (entry: DataCenterUiEntry) => void;
 }) {
+  const { t } = useTranslation('common');
+  const sourceLabel = entry.sourceType === 'scheduled_task_artifact'
+    ? t('dataCenterPage.entry.scheduledTask')
+    : null;
   const content = (
     <>
       <span className="flex h-9 w-9 shrink-0 items-center justify-center">{getEntryIcon(entry, entry.entryType === 'folder' ? 'h-8 w-8' : 'h-7 w-7')}</span>
       <span className="min-w-0 py-1">
-        <span className="block truncate text-[13px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">{entry.name}</span>
+        <span className="flex min-w-0 items-center gap-1">
+          <span className="truncate text-[13px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">{entry.name}</span>
+          {sourceLabel ? (
+            <span className="shrink-0 rounded-[4px] bg-[#EEF3FF] px-1.5 py-0.5 text-[11px] font-medium leading-[14px] text-[#4E7FFF]">
+              {sourceLabel}
+            </span>
+          ) : null}
+        </span>
       </span>
     </>
   );

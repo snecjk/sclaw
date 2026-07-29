@@ -179,7 +179,8 @@
         },
         "entry": {
             "folder": "フォルダ",
-            "root": "ルート"
+            "root": "ルート",
+            "scheduledTask": "定時タスク"
         },
         "dialogs": {
             "createFolderTitle": "新規フォルダ",

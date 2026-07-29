@@ -185,7 +185,8 @@
         },
         "entry": {
             "folder": "文件夹",
-            "root": "根目录"
+            "root": "根目录",
+            "scheduledTask": "定时任务"
         },
         "dialogs": {
             "createFolderTitle": "新建文件夹",

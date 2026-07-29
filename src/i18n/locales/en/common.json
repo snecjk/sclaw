@@ -184,7 +184,8 @@
         },
         "entry": {
             "folder": "Folder",
-            "root": "Root"
+            "root": "Root",
+            "scheduledTask": "Scheduled task"
         },
         "dialogs": {
             "createFolderTitle": "New folder",
