@@ -380,6 +380,15 @@ export function DataCenter() {
     await store.refreshQuota();
   };
 
+  const handleMoveToFolder = async (entry: DataCenterUiEntry, targetFolder: DataCenterUiEntry) => {
+    try {
+      await handleMoveEntry(entry, targetFolder.entryId);
+      toast.success(t('dataCenterPage.toasts.moved'));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.moveFailed'));
+    }
+  };
+
   const handleOpenFolder = (entry: DataCenterUiEntry) => {
     if (isLocalDriveTab) {
       void localStore.enterFolder({
@@ -589,6 +598,7 @@ export function DataCenter() {
                   onShare={handleShare}
                   onUploadToShared={handleUploadToShared}
                   onMove={setMoveEntry}
+                  onMoveToFolder={handleMoveToFolder}
                   onRename={setRenameEntry}
                   onDelete={setDeleteEntry}
                   onTrace={handleTrace}
@@ -602,6 +612,7 @@ export function DataCenter() {
                   onShare={handleShare}
                   onUploadToShared={handleUploadToShared}
                   onMove={setMoveEntry}
+                  onMoveToFolder={handleMoveToFolder}
                   onRename={setRenameEntry}
                   onDelete={setDeleteEntry}
                   onTrace={handleTrace}

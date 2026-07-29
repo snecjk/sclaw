@@ -18,6 +18,7 @@ export interface EntryRenderProps {
   onShare: (entry: DataCenterUiEntry) => void;
   onUploadToShared: (entry: DataCenterUiEntry) => void;
   onMove: (entry: DataCenterUiEntry) => void;
+  onMoveToFolder: (entry: DataCenterUiEntry, targetFolder: DataCenterUiEntry) => void;
   onRename: (entry: DataCenterUiEntry) => void;
   onDelete: (entry: DataCenterUiEntry) => void;
   onTrace: (entry: DataCenterUiEntry) => void;

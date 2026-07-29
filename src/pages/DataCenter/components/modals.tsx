@@ -340,7 +340,7 @@ export function MoveEntryDialog({
   const rootLabel = entry.spaceType === 'site_shared_artifact'
     ? t('dataCenterPage.saveArtifact.sharedArtifacts')
     : entry.spaceType === 'drive'
-      ? t('dataCenterPage.sections.drive')
+      ? t('dataCenterPage.tabs.uploadFiles')
       : t('dataCenterPage.saveArtifact.myArtifacts');
   const disabledEntryIds = entry.entryType === 'folder' ? new Set([entry.entryId]) : undefined;
   return (
