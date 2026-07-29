@@ -1,5 +1,6 @@
 import { hostApiFetch } from '@/lib/host-api';
 import type {
+  LocalAuthorizeSelectionType,
   LocalAuthorizedFileEntry,
   LocalAuthorizedFilesResult,
 } from '@/types/local-authorized-file';
@@ -26,10 +27,10 @@ export async function listLocalAuthorizedFiles(params: {
   })}`);
 }
 
-export async function authorizeLocalFiles(): Promise<LocalAuthorizedFilesResult> {
+export async function authorizeLocalFiles(selectionType: LocalAuthorizeSelectionType): Promise<LocalAuthorizedFilesResult> {
   return hostApiFetch<LocalAuthorizedFilesResult>(`${LOCAL_AUTHORIZED_FILES_BASE}/authorize`, {
     method: 'POST',
-    body: JSON.stringify({}),
+    body: JSON.stringify({ selectionType }),
   });
 }
 

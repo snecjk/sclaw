@@ -155,6 +155,8 @@
             "createFolder": "New folder",
             "uploadFile": "Upload file",
             "authorizeLocalFile": "Authorize local files",
+            "authorizeLocalFileOption": "Authorize files",
+            "authorizeLocalFolderOption": "Authorize folder",
             "usedQuota": "Used {{used}} / {{quota}}"
         },
         "drive": {

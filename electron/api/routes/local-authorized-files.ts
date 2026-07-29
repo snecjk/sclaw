@@ -46,9 +46,13 @@ export async function handleLocalAuthorizedFileRoutes(
 
   if (url.pathname === '/api/local-authorized-files/authorize' && req.method === 'POST') {
     try {
+      const body = await parseJsonBody<{ selectionType?: 'file' | 'folder' }>(req);
+      const selectionType = body.selectionType === 'folder' ? 'folder' : 'file';
       const options: Electron.OpenDialogOptions = {
-        title: '授权本地文件',
-        properties: ['openFile', 'openDirectory', 'multiSelections'],
+        title: selectionType === 'folder' ? '授权本地文件夹' : '授权本地文件',
+        properties: selectionType === 'folder'
+          ? ['openDirectory', 'multiSelections']
+          : ['openFile', 'multiSelections'],
       };
       const result = ctx.mainWindow
         ? await dialog.showOpenDialog(ctx.mainWindow, options)

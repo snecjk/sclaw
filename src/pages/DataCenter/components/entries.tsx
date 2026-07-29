@@ -546,12 +546,14 @@ function ActionTooltip({ label, children }: { label: string; children: ReactNode
   );
 }
 
-export function FeedbackState({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
+export function FeedbackState({ icon, title, description }: { icon: ReactNode; title: string; description?: string }) {
   return (
     <div className="flex h-full min-h-[360px] flex-col items-center justify-center rounded-xl border border-dashed border-border bg-background text-center">
       <div className="text-muted-foreground">{icon}</div>
       <h2 className="mt-4 text-base font-semibold text-foreground">{title}</h2>
-      <p className="mt-2 max-w-md text-sm text-muted-foreground">{description}</p>
+      {description ? (
+        <p className="mt-2 max-w-md text-sm text-muted-foreground">{description}</p>
+      ) : null}
     </div>
   );
 }

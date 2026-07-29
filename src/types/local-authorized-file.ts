@@ -1,3 +1,5 @@
+export type LocalAuthorizeSelectionType = 'file' | 'folder';
+
 export interface LocalAuthorizedFileEntry {
   entryId: string;
   entryType: 'file' | 'folder';

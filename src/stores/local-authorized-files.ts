@@ -9,6 +9,7 @@ import type {
   LocalAuthorizedFileBreadcrumb,
   LocalAuthorizedFileEntry,
   LocalAuthorizedFileStats,
+  LocalAuthorizeSelectionType,
 } from '@/types/local-authorized-file';
 import type { DataCenterViewMode } from '@/types/data-center';
 
@@ -26,7 +27,7 @@ interface LocalAuthorizedFilesStoreState {
   setViewMode: (viewMode: DataCenterViewMode) => void;
   setKeyword: (keyword: string) => void;
   load: (options?: { resetRoot?: boolean }) => Promise<void>;
-  authorize: () => Promise<boolean>;
+  authorize: (selectionType: LocalAuthorizeSelectionType) => Promise<boolean>;
   enterFolder: (entry: LocalAuthorizedFileEntry) => Promise<void>;
   openBreadcrumb: (entryId: string) => Promise<void>;
   renameEntry: (entryId: string, name: string) => Promise<void>;
@@ -77,10 +78,10 @@ export const useLocalAuthorizedFilesStore = create<LocalAuthorizedFilesStoreStat
     }
   },
 
-  authorize: async () => {
+  authorize: async (selectionType) => {
     set({ mutating: true, error: null });
     try {
-      const result = await authorizeLocalFiles();
+      const result = await authorizeLocalFiles(selectionType);
       if (result.canceled) {
         set({ mutating: false });
         return false;

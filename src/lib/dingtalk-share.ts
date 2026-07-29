@@ -25,6 +25,9 @@ export type { DingTalkShareBuildResult, DingTalkShareContent };
 export { DINGTALK_SHARE_MAX_URL_LENGTH };
 export { markdownToPlainText } from '../../shared/markdown-to-plain-text';
 
+const DINGTALK_SHARE_MAX_LOCAL_FILE_BYTES = 30 * 1024 * 1024;
+const DINGTALK_SHARE_FILE_TOO_LARGE_MESSAGE = '当前文件过大，暂不支持直接分享';
+
 export type DingTalkSharePrepared =
   | { status: 'ready'; content: DingTalkShareContent }
   | { status: 'too_long'; content: DingTalkShareContent; defaultMsg: string; title: string };
@@ -35,6 +38,25 @@ export function getDingTalkShareDefaultMsg(content: DingTalkShareContent): strin
 
 export function isDingTalkShareContentTooLong(content: DingTalkShareContent): boolean {
   return getDingTalkShareDefaultMsg(content).length > DINGTALK_SHARE_MAX_URL_LENGTH;
+}
+
+async function assertDingTalkShareLocalFileSize(filePath: string, fileName: string): Promise<void> {
+  const stat = await hostApiFetch<{ exists: Record<string, boolean>; sizes?: Record<string, number> }>('/api/files/stat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paths: [filePath] }),
+  });
+  const fileSize = stat.sizes?.[filePath] ?? 0;
+  logDingTalkShare('local-file-size-check', {
+    filePath,
+    fileName,
+    exists: stat.exists[filePath] === true,
+    fileSize,
+    maxFileSize: DINGTALK_SHARE_MAX_LOCAL_FILE_BYTES,
+  });
+  if (fileSize > DINGTALK_SHARE_MAX_LOCAL_FILE_BYTES) {
+    throw new Error(DINGTALK_SHARE_FILE_TOO_LARGE_MESSAGE);
+  }
 }
 
 async function buildShareContentFromDraft(draft: DingTalkShareDialogDraft): Promise<DingTalkShareContent> {
@@ -309,6 +331,7 @@ export async function resolveDingTalkShareUrl(filePath: string, fileName: string
     logDingTalkShare('resolve-url', { filePath: trimmed, fileName, source: 'http-direct' });
     return trimmed;
   }
+  await assertDingTalkShareLocalFileSize(trimmed, fileName);
   logDingTalkShare('resolve-url-start', { filePath: trimmed, fileName, source: 'oss-upload' });
   try {
     const uploaded = await uploadFileToTempOSS(trimmed, fileName.trim() || 'file', {

@@ -49,6 +49,7 @@ import { useLocalAuthorizedFilesStore } from '@/stores/local-authorized-files';
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import type { DataCenterTempUrl } from '@/types/data-center';
+import type { LocalAuthorizeSelectionType } from '@/types/local-authorized-file';
 import { EntryGrid, EntryList, FeedbackState } from './components/entries';
 import { DataCenterModal, MoveEntryDialog, PreviewModal, TextPromptModal, TraceChatMissingDialog, UploadToSharedFolderDialog } from './components/modals';
 import { FolderBreadcrumbBar, IconToggle, TabButton } from './components/navigation';
@@ -116,6 +117,13 @@ export function DataCenter() {
   const errorDescription = currentError === DATA_CENTER_API_NOT_FOUND
     ? t('dataCenterPage.feedback.apiNotFound')
     : currentError;
+  const emptyFeedbackDescription = (() => {
+    if (isLocalDriveTab && currentParentEntryId !== ROOT_ENTRY_ID) return '';
+    if (isSharedArtifactSpace) return t('dataCenterPage.feedback.sharedQaEmptyDescription');
+    if (store.section === 'qa_artifact') return t('dataCenterPage.feedback.qaEmptyDescription');
+    if (isUploadDriveTab) return t('dataCenterPage.feedback.uploadDriveEmptyDescription');
+    return t('dataCenterPage.feedback.driveEmptyDescription');
+  })();
 
   useEffect(() => {
     const rawSection = searchParams.get('section');
@@ -167,10 +175,10 @@ export function DataCenter() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSite, store.section]);
 
-  const handleAuthorizeLocal = async () => {
+  const handleAuthorizeLocal = async (selectionType: LocalAuthorizeSelectionType) => {
     setUploading(true);
     try {
-      const authorized = await localStore.authorize();
+      const authorized = await localStore.authorize(selectionType);
       if (authorized) {
         toast.success(t('dataCenterPage.toasts.localAuthorized'));
       }
@@ -509,10 +517,23 @@ export function DataCenter() {
                       </Button>
                     </>
                   ) : (
-                    <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={handleAuthorizeLocal} disabled={uploading}>
-                      {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                      {t('dataCenterPage.toolbar.authorizeLocalFile')}
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" disabled={uploading}>
+                          {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                          {t('dataCenterPage.toolbar.authorizeLocalFile')}
+                          <ChevronDown className="ml-2 h-3.5 w-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-[132px] rounded-[10px] p-2">
+                        <DropdownMenuItem onSelect={() => { void handleAuthorizeLocal('file'); }} className="text-[13px]">
+                          {t('dataCenterPage.toolbar.authorizeLocalFileOption')}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => { void handleAuthorizeLocal('folder'); }} className="text-[13px]">
+                          {t('dataCenterPage.toolbar.authorizeLocalFolderOption')}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                 </div>
               </div>
@@ -596,13 +617,7 @@ export function DataCenter() {
                 <FeedbackState
                   icon={<Folder className="h-8 w-8" />}
                   title={currentKeyword ? t('dataCenterPage.feedback.noMatch') : t('dataCenterPage.feedback.empty')}
-                  description={isSharedArtifactSpace
-                    ? t('dataCenterPage.feedback.sharedQaEmptyDescription')
-                    : store.section === 'qa_artifact'
-                      ? t('dataCenterPage.feedback.qaEmptyDescription')
-                      : isUploadDriveTab
-                        ? t('dataCenterPage.feedback.uploadDriveEmptyDescription')
-                        : t('dataCenterPage.feedback.driveEmptyDescription')}
+                  description={emptyFeedbackDescription}
                 />
               ) : currentViewMode === 'grid' ? (
                 <EntryGrid

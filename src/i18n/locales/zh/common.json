@@ -156,6 +156,8 @@
             "createFolder": "新建文件夹",
             "uploadFile": "上传文件",
             "authorizeLocalFile": "授权本地文件",
+            "authorizeLocalFileOption": "授权文件",
+            "authorizeLocalFolderOption": "授权文件夹",
             "usedQuota": "已用 {{used}} / {{quota}}"
         },
         "drive": {

@@ -150,6 +150,8 @@
             "createFolder": "新規フォルダ",
             "uploadFile": "ファイルをアップロード",
             "authorizeLocalFile": "ローカルファイルを許可",
+            "authorizeLocalFileOption": "ファイルを許可",
+            "authorizeLocalFolderOption": "フォルダを許可",
             "usedQuota": "使用済み {{used}} / {{quota}}"
         },
         "drive": {
