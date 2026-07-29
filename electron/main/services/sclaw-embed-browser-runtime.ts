@@ -20,6 +20,10 @@ import {
   attachSclawEmbedBrowserShortcutHandler,
   detachSclawEmbedBrowserShortcutHandler,
 } from './sclaw-embed-browser-shortcuts';
+import {
+  attachSclawEmbedBrowserWindowOpenHandler,
+  detachSclawEmbedBrowserWindowOpenHandler,
+} from './sclaw-embed-browser-window-open';
 
 interface RuntimeEntry extends SclawEmbedBrowserRuntimeMeta {
   networkLog: SclawEmbedBrowserNetworkEvent[];
@@ -144,6 +148,7 @@ export function bindSclawEmbedBrowserWebContents(input: {
     title: entry.pageTitle || entry.appTitle,
   });
   attachSclawEmbedBrowserShortcutHandler(input.webContentsId);
+  attachSclawEmbedBrowserWindowOpenHandler(input.webContentsId, input.runtimeId);
   return { ...entry };
 }
 
@@ -168,6 +173,7 @@ export function unregisterSclawEmbedBrowserRuntime(runtimeId: string): void {
   if (!entry) return;
   setSclawEmbedBrowserPointerPassthrough(runtimeId, false);
   detachSclawEmbedBrowserShortcutHandler(entry.webContentsId);
+  detachSclawEmbedBrowserWindowOpenHandler(entry.webContentsId);
   disconnectSclawEmbedBridge(runtimeId);
   if (entry.chatSessionKey) {
     chatSessionIndex.delete(entry.chatSessionKey);

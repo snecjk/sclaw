@@ -24,6 +24,8 @@ export const PORTS = {
 export const TIMEOUTS = {
   /** Default proxyAwareFetch timeout */
   DEFAULT_FETCH: 15_000,
+  /** Chat send acknowledgement may include engine/runtime initialization. */
+  CHAT_SEND: 60_000,
   /** Skill ZIP download + extract (plaza / sto-skills / clawhub install) */
   SKILL_INSTALL: 180_000,
   /** DingTalk dws CLI download + skill zip + gateway restart prompt */

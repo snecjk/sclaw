@@ -1,5 +1,5 @@
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
 import { cn } from '@/lib/utils';
 
 /**
@@ -33,7 +33,7 @@ export function PhaseTextBlock({
       {isStreaming ? (
         <p className="m-0 whitespace-pre-wrap text-sm leading-5 text-foreground">{text}</p>
       ) : (
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={chatRemarkPlugins}>{text}</ReactMarkdown>
       )}
     </div>
   );

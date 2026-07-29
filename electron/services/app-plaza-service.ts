@@ -17,6 +17,8 @@ export interface AppPlazaAppClientItem {
   name: string;
   description: string;
   url: string;
+  /** Subsystem code for GetRedirectLogonUrl skip-login exchange */
+  systemCode?: string | null;
   iconKey: string;
   iconUrl: string;
   category: string;
@@ -101,6 +103,23 @@ export class AppPlazaService {
   async listBanners(): Promise<AppPlazaEnvelope<AppPlazaBannerClientItem[]>> {
     const value = await memoryCenterFetchForSession('/agent/v1/app-plaza/banners', { method: 'POST' });
     return assertEnvelope<AppPlazaBannerClientItem[]>(value, '应用广场 Banner');
+  }
+
+  /**
+   * Exchange stoToken → skip-login URL for a target subsystem.
+   * Proxies memory-center `POST /agent/v1/app-plaza/skip-login-link`.
+   */
+  async getSkipLoginLink(systemCode: string): Promise<AppPlazaEnvelope<string>> {
+    const code = systemCode.trim();
+    if (!code) {
+      throw new StoMemoryApiError('systemCode 不能为空', 422);
+    }
+    const query = new URLSearchParams({ systemCode: code });
+    const value = await memoryCenterFetchForSession(
+      `/agent/v1/app-plaza/skip-login-link?${query.toString()}`,
+      { method: 'POST' },
+    );
+    return assertEnvelope<string>(value, '应用广场免登链接');
   }
 }
 

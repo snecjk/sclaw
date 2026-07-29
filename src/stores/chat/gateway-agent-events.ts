@@ -1,15 +1,12 @@
-import { markSessionUnreadAfterSuccessfulRun } from '@/lib/session-unread-notify';
 import { buildChatEventFromEngineEvent } from './gateway-event-normalization';
-import { applyRuntimePatch } from './runtime-controller';
 import { mapEventSessionKey } from './session-event-routing';
-import { buildTerminalRuntimePatch } from './turn-state-machine';
 import type { ChatState } from './types';
 import { getSessionRuntimeState } from './session-runtime';
 import { isTerminalRun } from './run-lifecycle';
 
 const LOAD_SESSIONS_MIN_INTERVAL_MS = 1_200;
 const LOAD_HISTORY_MIN_INTERVAL_MS = 800;
-const COMPLETION_HISTORY_RELOAD_DELAYS_MS = [1_000, 3_000, 7_000];
+const COMPLETION_HISTORY_RELOAD_DELAYS_MS = [500, 2_000, 5_000, 10_000];
 
 let lastLoadSessionsAt = 0;
 const lastLoadHistoryAtBySession = new Map<string, number>();
@@ -82,61 +79,31 @@ export function shouldFinalizeCompletedRun(input: {
   );
 }
 
-function scheduleCompletedRunHistoryReload(runId: unknown, sessionKey: unknown): void {
+export function scheduleCompletedRunHistoryReload(runId: unknown, sessionKey: unknown): void {
   const completionRunId = eventString(runId);
   const completionSessionKey = eventString(sessionKey);
 
-  for (const [index, delayMs] of COMPLETION_HISTORY_RELOAD_DELAYS_MS.entries()) {
+  for (const delayMs of COMPLETION_HISTORY_RELOAD_DELAYS_MS) {
     setTimeout(() => {
       import('./store')
-        .then(async ({ useChatStore }) => {
+        .then(({ useChatStore }) => {
           const state = useChatStore.getState();
           const targetSessionKey = completionSessionKey ?? state.currentSessionKey;
-          if (!shouldFinalizeCompletedRun({ runId: completionRunId, resolvedSessionKey: targetSessionKey, state })) return;
-          const matchesCurrentSession = targetSessionKey === state.currentSessionKey;
-          const matchesActiveRun = completionRunId != null && state.activeRunId != null && completionRunId === state.activeRunId;
-
-          if (matchesCurrentSession || matchesActiveRun) {
-            await state.loadHistory(true, true, targetSessionKey);
-          }
-
-          if (index !== COMPLETION_HISTORY_RELOAD_DELAYS_MS.length - 1) return;
-
-          const latest = useChatStore.getState();
-          if (!shouldFinalizeCompletedRun({
-            runId: completionRunId,
-            resolvedSessionKey: targetSessionKey,
-            state: latest,
-          })) return;
-          const stillMatchesCurrentSession = completionSessionKey == null || completionSessionKey === latest.currentSessionKey;
-          const stillMatchesActiveRun = completionRunId != null && latest.activeRunId != null && completionRunId === latest.activeRunId;
-          if (stillMatchesCurrentSession || stillMatchesActiveRun) {
-            if (!latest.sending) return;
-            if (latest.streamingMessage || latest.streamingText) return;
-
-            useChatStore.setState((prev) => applyRuntimePatch(
-              prev,
-              targetSessionKey,
-              buildTerminalRuntimePatch(null),
-            ));
-            return;
-          }
-
-          const sessionRuntime = latest.runtimeBySessionKey[targetSessionKey];
-          if (!sessionRuntime?.sending) return;
-          if (sessionRuntime.streamingMessage || sessionRuntime.streamingText) return;
-
-          useChatStore.setState((prev) => applyRuntimePatch(prev, targetSessionKey, buildTerminalRuntimePatch(null)));
-          markSessionUnreadAfterSuccessfulRun(targetSessionKey, latest.currentSessionKey, {
-            runId: completionRunId,
-          });
+          return state.loadHistory(true, true, targetSessionKey);
         })
-        .catch(() => {});
+        .catch((error) => {
+          console.warn('[chat-flow] completed.history-retry.failed', {
+            sessionKey: completionSessionKey,
+            runId: completionRunId,
+            delayMs,
+            error: String(error),
+          });
+        });
     }, delayMs);
   }
 }
 
-async function completeRunAfterAgentCompleted(
+export async function completeRunAfterAgentCompleted(
   runId: unknown,
   sessionKey: string | null,
 ): Promise<void> {
@@ -145,16 +112,6 @@ async function completeRunAfterAgentCompleted(
   const before = useChatStore.getState();
   const targetSessionKey = sessionKey ?? before.currentSessionKey;
   if (!shouldFinalizeCompletedRun({ runId: completionRunId, resolvedSessionKey: targetSessionKey, state: before })) return;
-  const matchesCurrentSession = targetSessionKey === before.currentSessionKey;
-  const matchesActiveRun = completionRunId != null && before.activeRunId != null && completionRunId === before.activeRunId;
-
-  if (matchesCurrentSession || matchesActiveRun) {
-    await before.loadHistory(true, true, targetSessionKey);
-  }
-
-  const after = useChatStore.getState();
-  if (!shouldFinalizeCompletedRun({ runId: completionRunId, resolvedSessionKey: targetSessionKey, state: after })) return;
-
   finalizeOpenClawRunAfterAgentCompleted(targetSessionKey, completionRunId);
 }
 

@@ -191,6 +191,7 @@ const SIDEBAR_TASK_GROUP_ROW_CLASS =
 /** 三级子项容器 — 竖线与项目二级对齐；w-[calc(100%-17px)] 避免 ml+w-full 右侧溢出被裁切 */
 const SIDEBAR_TASK_SUBITEMS_CONTAINER_CLASS =
   'ml-[17px] flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-4 dark:border-border';
+const SCLAW_BROWSER_SIDEBAR_PRESERVE_SELECTOR = '[data-sclaw-browser-sidebar-preserve="true"]';
 
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
   if (!activityMs || activityMs <= 0) return 'older';
@@ -736,7 +737,13 @@ export function Sidebar() {
   const navigate = useNavigate();
   const isOnHome = location.pathname === '/';
 
-  const handleSidebarPointerDownCapture = useCallback(() => {
+  const handleSidebarPointerDownCapture = useCallback((event: MouseEvent<HTMLElement>) => {
+    if (
+      event.target instanceof Element
+      && event.target.closest(SCLAW_BROWSER_SIDEBAR_PRESERVE_SELECTOR)
+    ) {
+      return;
+    }
     if (isSclawBrowserOpen()) {
       closeSclawBrowser();
     }
@@ -1752,6 +1759,7 @@ export function Sidebar() {
             aria-expanded={false}
             aria-label={t('common:sidebar.toggleSidebarExpand')}
             title={t('common:sidebar.toggleSidebarExpand')}
+            data-sclaw-browser-sidebar-preserve="true"
             onClick={() => setSidebarCollapsed(false)}
             className={SIDEBAR_COLLAPSED_EXPAND_BTN_CLASS}
           >

@@ -44,7 +44,10 @@ import {
   requestQuitLifecycleAction,
 } from './quit-lifecycle';
 import { createSignalQuitHandler } from './signal-quit';
-import { acquireProcessInstanceFileLock } from './process-instance-lock';
+import {
+  acquireProcessInstanceFileLock,
+  shouldContinueWithElectronLock,
+} from './process-instance-lock';
 import { getSetting } from '../utils/store';
 import { getCurrentEnvConfig } from '../../shared/env-config';
 import { getSqliteDatabaseInfo, initializeSqliteDatabase } from '../db';
@@ -169,19 +172,28 @@ if (gotElectronLock) {
       const fileLock = acquireProcessInstanceFileLock({
         userDataDir: app.getPath('userData'),
         lockName: 'stoclaw',
+        verifyOwnerExecutable: process.platform === 'win32',
+        reclaimUnknownLock: process.platform === 'win32',
       });
       gotFileLock = fileLock.acquired;
       releaseProcessInstanceFileLock = fileLock.release;
       if (!fileLock.acquired) {
         const ownerDescriptor = fileLock.ownerPid
-          ? `${fileLock.ownerFormat ?? 'legacy'} pid=${fileLock.ownerPid}`
+          ? `${fileLock.ownerFormat ?? 'legacy'} pid=${fileLock.ownerPid}${fileLock.ownerExecutableName ? ` executable=${fileLock.ownerExecutableName}` : ''}`
           : fileLock.ownerFormat === 'unknown'
             ? 'unknown lock format/content'
             : 'unknown owner';
-        console.info(
-          `[StoClaw] Another instance already holds process lock (${fileLock.lockPath}, ${ownerDescriptor}); exiting duplicate process`,
-        );
-        app.exit(0);
+        if (shouldContinueWithElectronLock(fileLock)) {
+          gotFileLock = true;
+          console.warn(
+            `[StoClaw] Unable to verify or reclaim process lock (${fileLock.lockPath}, ${ownerDescriptor}, reason=${fileLock.failureReason}); continuing with Electron single-instance lock only`,
+          );
+        } else {
+          console.info(
+            `[StoClaw] Another S Claw instance holds process lock (${fileLock.lockPath}, ${ownerDescriptor}); exiting duplicate process`,
+          );
+          app.exit(0);
+        }
       }
     } catch (error) {
       console.warn('[StoClaw] Failed to acquire process instance file lock; continuing with Electron single-instance lock only', error);

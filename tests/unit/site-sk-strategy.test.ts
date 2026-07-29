@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
   getApiKey: vi.fn(),
   storeApiKey: vi.fn(),
   deleteApiKey: vi.fn(),
+  getSiteInferenceProductCode: vi.fn().mockReturnValue('site-product-code'),
+  hasSiteInferenceProductCodeCached: vi.fn().mockReturnValue(true),
+  loadSiteInferenceProductCode: vi.fn().mockResolvedValue(undefined),
   hasSiteInferencePortalDomainCached: vi.fn().mockReturnValue(true),
   loadSiteInferencePortalDomain: vi.fn().mockResolvedValue(undefined),
   resolveSiteInferencePortalDomain: vi.fn(
@@ -34,6 +37,9 @@ vi.mock('@electron/utils/auth-store', () => ({
 }));
 
 vi.mock('@electron/services/sto-apollo-config-service', () => ({
+  getSiteInferenceProductCode: mocks.getSiteInferenceProductCode,
+  hasSiteInferenceProductCodeCached: mocks.hasSiteInferenceProductCodeCached,
+  loadSiteInferenceProductCode: mocks.loadSiteInferenceProductCode,
   hasSiteInferencePortalDomainCached: mocks.hasSiteInferencePortalDomainCached,
   loadSiteInferencePortalDomain: mocks.loadSiteInferencePortalDomain,
   resolveSiteInferencePortalDomain: mocks.resolveSiteInferencePortalDomain,
@@ -119,10 +125,9 @@ describe('SiteSkStrategy', () => {
     await expect(strategy.getDecryptKey()).rejects.toThrow('memory-center');
   });
 
-  it('formatInferenceApiKey returns plain sk unchanged', async () => {
-    await expect(strategy.formatInferenceApiKey(siteUser, 'site-sk-plain')).resolves.toBe(
-      'site-sk-plain',
-    );
+  it('formatInferenceApiKey appends product code with &&', async () => {
+    const inferenceKey = await strategy.formatInferenceApiKey(siteUser, 'site-sk-plain');
+    expect(inferenceKey).toBe('site-sk-plain&&site-product-code');
   });
 
   it('getInferenceHeaders returns md5 secret for user code', async () => {

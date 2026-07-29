@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildTurnDisplayCacheKey,
+  migrateTurnDisplayCache,
   mergeSegmentsMonotonic,
   mergeTurnSegmentMonotonic,
+  readGlobalStableSegments,
+  readGlobalStableTimeline,
+  shouldPromoteActiveTurnCache,
+  writeGlobalStableSegments,
+  writeGlobalStableTimeline,
 } from '../../src/pages/Chat/thinking/segment-merge';
 import type { ThinkingTimelineItem } from '../../src/pages/Chat/message-utils';
 
@@ -128,5 +135,52 @@ describe('mergeSegmentsMonotonic', () => {
       'phase-text-after-0',
       'tool-group-batch-1',
     ]);
+  });
+});
+
+describe('active-turn cache promotion', () => {
+  it('only promotes when the same mounted turn transitions from active to stable', () => {
+    expect(shouldPromoteActiveTurnCache(undefined, 'turn-user-new')).toBe(false);
+    expect(shouldPromoteActiveTurnCache('turn-user-old', 'turn-user-new')).toBe(false);
+    expect(shouldPromoteActiveTurnCache('active-turn', 'turn-user-new')).toBe(true);
+  });
+
+  it('isolates identical fallback turn keys by session', () => {
+    const sessionAKey = buildTurnDisplayCacheKey('session-a', 'turn-0-0');
+    const sessionBKey = buildTurnDisplayCacheKey('session-b', 'turn-0-0');
+    expect(sessionAKey).toBe('session-a::turn-0-0');
+    expect(sessionBKey).toBe('session-b::turn-0-0');
+    expect(sessionAKey).not.toBe(sessionBKey);
+
+    const segment = {
+      kind: 'tool-group' as const,
+      key: 'tool-group-session-a',
+      timeline: fullTimeline,
+      state: 'completed' as const,
+    };
+    writeGlobalStableSegments(sessionAKey, [segment]);
+
+    expect(readGlobalStableSegments(sessionAKey)).toEqual([segment]);
+    expect(readGlobalStableSegments(sessionBKey)).toEqual([]);
+  });
+
+  it('moves cached segments and timeline instead of leaving them for the next turn', () => {
+    const sourceKey = 'active-turn-test-move';
+    const targetKey = 'turn-user-test-move';
+    const segment = {
+      kind: 'tool-group' as const,
+      key: 'tool-group-batch-0',
+      timeline: fullTimeline,
+      state: 'completed' as const,
+    };
+    writeGlobalStableSegments(sourceKey, [segment]);
+    writeGlobalStableTimeline(sourceKey, segment.key, fullTimeline);
+
+    migrateTurnDisplayCache(sourceKey, targetKey);
+
+    expect(readGlobalStableSegments(targetKey)).toEqual([segment]);
+    expect(readGlobalStableTimeline(targetKey, segment.key)).toEqual(fullTimeline);
+    expect(readGlobalStableSegments(sourceKey)).toEqual([]);
+    expect(readGlobalStableTimeline(sourceKey, segment.key)).toEqual([]);
   });
 });

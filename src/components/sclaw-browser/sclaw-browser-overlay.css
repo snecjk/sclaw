@@ -108,7 +108,7 @@ html[data-sclaw-browser-open] .drag-region {
   gap: 12px;
   flex-shrink: 0;
   min-height: var(--sclaw-browser-toolbar-h);
-  padding: 8px var(--sto-content-pad-x, 16px);
+  padding: 8px var(--sto-content-pad-x, 16px) 8px var(--sclaw-browser-toolbar-pad-start, var(--sto-content-pad-x, 16px));
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   background: #fff;
   pointer-events: auto;
@@ -121,6 +121,12 @@ html[data-sclaw-browser-open] .drag-region {
   gap: 12px;
   min-width: 0;
   flex: 1;
+}
+
+.sclaw-browser-toolbar__sidebar-toggle {
+  width: 28px;
+  height: 28px;
+  color: #64748b;
 }
 
 .sclaw-browser-toolbar__back {

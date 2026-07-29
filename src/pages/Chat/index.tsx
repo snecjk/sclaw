@@ -603,7 +603,7 @@ export function Chat() {
 
               {activeTurn ? (
                 <AssistantTurnMessage
-                  key="active-turn"
+                  key={`active-turn:${currentSessionKey}`}
                   turnMessages={activeTurn.turnMessages}
                   turnToolResults={activeTurn.turnToolResults}
                   precedingUserMessage={activeTurn.precedingUserMessage}

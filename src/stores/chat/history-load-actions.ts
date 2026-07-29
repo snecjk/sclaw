@@ -1,4 +1,3 @@
-import { toast } from 'sonner';
 import { useGatewayStore } from '../gateway';
 import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
 import {
@@ -170,13 +169,6 @@ export function createHistoryLoadActions(
           if (get().currentSessionKey !== targetSessionKey) return;
           if (data.thinkingLevel) {
             thinkingLevel = String(data.thinkingLevel);
-          }
-
-          if (allMessages.length >= CHAT_HISTORY_LENGTH_MAX_LIMIT) {
-            toast.info('会话消息已达上限', {
-              description: '当前会话历史记录较多，建议开启新会话以获得更好的体验。',
-              duration: 5000,
-            });
           }
 
           const rawMessages = await mergeFallbackHistoryIfNeeded(targetSessionKey, allMessages);
