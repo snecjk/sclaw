@@ -84,7 +84,7 @@ describe('scheduled-task-instruction', () => {
     expect(prompt).toBe(SCHEDULED_TASK_CORE_PROMPT);
     expect(prompt).not.toContain(SCHEDULED_TASK_DINGTALK_RULES);
     expect(prompt).not.toContain(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
-    // CORE 不得暗示「系统代发」，避免非工作流任务被当成工作流程序发送
+    // CORE 不得暗示「系统代发」
     expect(prompt).not.toContain('钉钉由系统在终态自动发送');
     expect(prompt).not.toContain('Agent 无需发送');
   });
@@ -106,26 +106,25 @@ describe('scheduled-task-instruction', () => {
     expect(prompt).toContain(SCHEDULED_TASK_DINGTALK_RULES);
     expect(prompt).toContain(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
     expect(prompt).toContain('不要假设「系统会在终态自动发送」');
-    expect(prompt).not.toContain('定时任务钉钉（工作流 · 程序发送）');
   });
 
-  it('injects workflow delegate instead of module C when prompt involves workflow + recipients', () => {
+  it('injects module C for workflow + recipients (agent send, no program delegate)', () => {
     const prompt = buildScheduledTaskExecutionSystemPrompt({
       prompt: `${DINGTALK_RECIPIENTS_MARKER}\n帮我执行 id 为：wf_123 的工作流 【日报】`,
     });
     expect(prompt).toContain(SCHEDULED_TASK_CORE_PROMPT);
-    expect(prompt).toContain('程序发送');
-    expect(prompt).not.toContain(SCHEDULED_TASK_DINGTALK_RULES);
-    expect(prompt).not.toContain(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
+    expect(prompt).toContain(SCHEDULED_TASK_DINGTALK_RULES);
+    expect(prompt).toContain(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
+    expect(prompt).not.toContain('程序发送');
   });
 
-  it('buildScheduledTaskDingTalkPromptAppend uses workflow delegate for workflow + recipients block', () => {
+  it('buildScheduledTaskDingTalkPromptAppend uses module C for workflow + recipients block', () => {
     const withBlock = buildScheduledTaskDingTalkPromptAppend(
       `${DINGTALK_RECIPIENTS_MARKER}\nexecute_workflow wf_1`,
     );
-    expect(withBlock).toContain('程序发送');
-    expect(withBlock).not.toContain(SCHEDULED_TASK_DINGTALK_RULES);
-    expect(withBlock).not.toContain(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
+    expect(withBlock).toContain(SCHEDULED_TASK_DINGTALK_RULES);
+    expect(withBlock).toContain(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
+    expect(withBlock).not.toContain('程序发送');
   });
 
   it('buildScheduledTaskDingTalkPromptAppend omits CORE', () => {

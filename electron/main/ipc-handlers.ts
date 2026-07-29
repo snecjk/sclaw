@@ -2712,19 +2712,9 @@ function registerSessionHandlers(): void {
     sessionKey: string;
     agentId: string;
     workflowId: string;
-    dingtalkRecipients?: import('../../shared/dingtalk-send/dingtalk-mention').DingTalkMention[] | null;
-    workflowTitle?: string | null;
   }) => {
-    const { resolveWorkflowDingTalkRecipients } = await import('../services/resolve-workflow-dingtalk-recipients');
-    const recipients = await resolveWorkflowDingTalkRecipients(
-      payload.sessionKey,
-      payload.dingtalkRecipients,
-    );
-    logger.info(`[workflow-trace] IPC workflow:startTracking runId=${payload.runId} workflowId=${payload.workflowId} sessionKey=${payload.sessionKey} recipients=${recipients?.length ?? 0}`);
-    getWorkflowExecutionTracker().startTracking({
-      ...payload,
-      dingtalkRecipients: recipients,
-    });
+    logger.info(`[workflow-trace] IPC workflow:startTracking runId=${payload.runId} workflowId=${payload.workflowId} sessionKey=${payload.sessionKey}`);
+    getWorkflowExecutionTracker().startTracking(payload);
   });
 
   ipcMain.handle('workflow:stopTracking', async (_, { runId }: { runId: string }) => {

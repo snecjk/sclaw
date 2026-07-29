@@ -111,9 +111,6 @@ export default definePluginEntry({
     api.on(
       'before_tool_call',
       async (event, ctx) => {
-        // TODO(workflow-dingtalk-guard): 工作流 run 跟踪期间可在此拦截 `dws chat message send`，
-        // 避免 Agent 自发与 WorkflowExecutionTracker 程序发送双发（见 workflow-dingtalk-delivery.ts）。
-
         const decision = evaluateDingTalkSendGuard({
           toolName: event.toolName,
           params: event.params,

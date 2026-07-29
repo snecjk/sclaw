@@ -15,8 +15,6 @@ import {
   type WorkflowRunApiPayload,
 } from '../../../shared/workflow-run-status';
 import { appendWorkflowSessionRecord } from '../../services/workflow-session-writer';
-import { deliverWorkflowDingTalkIfNeeded } from '../../services/workflow-dingtalk-delivery';
-import type { DingTalkMention } from '../../../shared/dingtalk-send/dingtalk-mention';
 
 const POLL_INTERVAL_MS = 2_000;
 const MAX_TRACKED_EXECUTIONS = 50;
@@ -48,11 +46,6 @@ interface ExecutionSession {
   stopRequested: boolean;
   pollCount: number;
   pollInFlight: boolean;
-  /** 本 run 配置的钉钉收件人（startTracking 时收集）。 */
-  dingtalkRecipients: DingTalkMention[] | null;
-  workflowTitle: string | null;
-  /** 本 run 是否已程序发送钉钉（防 completed 重复触发）。 */
-  dingtalkDeliveryDone: boolean;
 }
 
 const USER_FRIENDLY_ERRORS: Array<{ pattern: RegExp; message: string }> = [
@@ -87,28 +80,18 @@ class WorkflowExecutionTracker {
     sessionKey: string;
     agentId: string;
     workflowId: string;
-    dingtalkRecipients?: DingTalkMention[] | null;
-    workflowTitle?: string | null;
   }) {
     const {
       runId,
       sessionKey,
       agentId,
       workflowId,
-      dingtalkRecipients = null,
-      workflowTitle = null,
     } = input;
     const existing = this.sessions.get(runId);
     if (existing) {
       // Resume polling when session exists but timer was cleared (e.g. after HMR / terminal edge cases).
       const isActive = existing.state.status === 'pending' || existing.state.status === 'running';
       if (isActive && !existing.pollTimer && !existing.stopRequested) {
-        if (dingtalkRecipients?.length && !existing.dingtalkRecipients?.length) {
-          existing.dingtalkRecipients = dingtalkRecipients;
-        }
-        if (workflowTitle?.trim() && !existing.workflowTitle?.trim()) {
-          existing.workflowTitle = workflowTitle.trim();
-        }
         logger.info(`[workflow-trace] resume polling runId=${runId} status=${existing.state.status}`);
         void this.bootstrapTracking(existing);
         return;
@@ -143,13 +126,10 @@ class WorkflowExecutionTracker {
       stopRequested: false,
       pollCount: 0,
       pollInFlight: false,
-      dingtalkRecipients: dingtalkRecipients?.length ? dingtalkRecipients : null,
-      workflowTitle: workflowTitle?.trim() || null,
-      dingtalkDeliveryDone: false,
     };
 
     this.sessions.set(runId, session);
-    logger.info(`[workflow-trace] workflow:startTracking runId=${runId} workflowId=${workflowId} sessionKey=${sessionKey} dingtalkRecipients=${session.dingtalkRecipients?.length ?? 0}`);
+    logger.info(`[workflow-trace] workflow:startTracking runId=${runId} workflowId=${workflowId} sessionKey=${sessionKey}`);
     logger.info(`[Tracker] Started tracking run ${runId}`);
     void this.bootstrapTracking(session);
   }
@@ -377,29 +357,6 @@ class WorkflowExecutionTracker {
       }).catch((err) => {
         logger.warn(`[WorkflowSessionWriter] terminal append failed runId=${session.runId}: ${String(err)}`);
       });
-
-      // 工作流钉钉：有收件人则在 completed / failed / timeout 由程序统一发送。
-      // TODO(workflow-dingtalk-guard): 若 Agent 自发与程序发送双发，在此前的 send-guard /
-      // 工作流 hook 提示词处禁止 run 期间的 `dws chat message send`（见 workflow-dingtalk-delivery.ts）。
-      if (
-        !session.dingtalkDeliveryDone
-        && session.dingtalkRecipients?.length
-        && (newState.status === 'completed' || newState.status === 'failed' || newState.status === 'timeout')
-      ) {
-        session.dingtalkDeliveryDone = true;
-        void deliverWorkflowDingTalkIfNeeded({
-          runId: session.runId,
-          sessionKey: session.sessionKey,
-          state: newState,
-          recipients: session.dingtalkRecipients,
-          workflowTitle: session.workflowTitle,
-        }).catch((err) => {
-          logger.warn('[workflow-dingtalk] delivery failed', {
-            runId: session.runId,
-            error: err instanceof Error ? err.message : String(err),
-          });
-        });
-      }
     }
   }
 

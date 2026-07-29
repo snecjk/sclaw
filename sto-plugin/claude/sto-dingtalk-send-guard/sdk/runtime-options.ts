@@ -173,8 +173,6 @@ const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
           hooks: [
             async (input) => {
               if (input.hook_event_name !== 'PreToolUse') return {};
-              // TODO(workflow-dingtalk-guard): 工作流 run 跟踪期间可在此拦截 dws send，避免与
-              // WorkflowExecutionTracker 程序发送双发（见 shared/dingtalk-send/workflow-dingtalk-delivery.ts）。
 
               const params = asRecord(input.tool_input);
               const formatProblem = resolveDingTalkSendFormatProblem(readCommand(params));

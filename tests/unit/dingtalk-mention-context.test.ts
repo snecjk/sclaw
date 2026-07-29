@@ -180,18 +180,6 @@ describe('dingtalk mention context scenario split', () => {
     expect(ctx).toContain('代发说明');
   });
 
-  it('scheduled-task builder with workflowProgramDelivery forbids agent send and omits dws examples', () => {
-    const ctx = buildDingTalkMentionSystemContextForScheduledTask(mentions, {
-      workflowProgramDelivery: true,
-    });
-    expect(ctx).toContain('StoClaw DingTalk Recipients');
-    expect(ctx).toContain('系统自动发送');
-    expect(ctx).toContain('禁止 Agent 调用 `dws chat message send`');
-    expect(ctx).not.toContain('指定即必发');
-    expect(ctx).not.toContain('dws chat message send --user uid-2');
-    expect(ctx).not.toContain('代发说明');
-  });
-
   it('appendDingTalkMentionContext selects builder by scenario', () => {
     const st = appendDingTalkMentionContext('执行工作流', mentions, { scenario: 'scheduled-task' });
     expect(st).toContain('指定即必发');

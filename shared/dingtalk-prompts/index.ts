@@ -13,9 +13,7 @@ export {
 export { SCHEDULED_TASK_CORE_PROMPT } from './scheduled-task/scheduled-task-core';
 export {
   SCHEDULED_TASK_DINGTALK_RULES,
-  SCHEDULED_TASK_DINGTALK_WORKFLOW_DELEGATE,
 } from './scheduled-task/scheduled-task-dingtalk';
-export { promptInvolvesWorkflow } from './scheduled-task/prompt-involves-workflow';
 export {
   DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER,
   DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER_LEGACY,
@@ -47,30 +45,15 @@ export {
 export type { DingTalkMentionContextOptions } from './dingtalk-mention-context';
 
 import {
-  DINGTALK_SEND_FORMAT_RULES,
   DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK,
 } from './dingtalk-send-rules';
 import { SCHEDULED_TASK_CORE_PROMPT } from './scheduled-task/scheduled-task-core';
 import {
   SCHEDULED_TASK_DINGTALK_RULES,
-  SCHEDULED_TASK_DINGTALK_WORKFLOW_DELEGATE,
 } from './scheduled-task/scheduled-task-dingtalk';
-import { promptInvolvesWorkflow } from './scheduled-task/prompt-involves-workflow';
 import { messageHasDingTalkRecipientContext } from './dingtalk-mention-context';
 
 const DWS_SEND_RE = /dws\s+chat\s+message\s+send\b/i;
-
-export interface ScheduledTaskDingTalkPromptOptions {
-  /** 有收件人 + 工作流：注入程序发送 delegate，跳过模块 C / 发送格式。 */
-  workflowProgramDelivery?: boolean;
-}
-
-function resolveWorkflowProgramDelivery(
-  prompt: string | undefined | null,
-  options?: ScheduledTaskDingTalkPromptOptions,
-): boolean {
-  return options?.workflowProgramDelivery ?? promptInvolvesWorkflow(prompt);
-}
 
 /** 指令/上下文是否暗示需要钉钉发送格式（含收件人块或内嵌 send 命令）。 */
 export function promptNeedsDingTalkSendFormat(prompt: string | undefined | null): boolean {
@@ -87,24 +70,17 @@ export function promptNeedsScheduledTaskDingTalkRules(prompt: string | undefined
 /**
  * 按条件拼接定时任务执行期系统提示。
  * - 始终：模块 B CORE
- * - 含 Recipients 块 + 工作流：+ delegate（程序发送，无 C/A）
- * - 含 Recipients 块 + 非工作流：+ 模块 C 必发 + 定时任务版模块 A（禁回执）
+ * - 含 Recipients 块：+ 模块 C 必发 + 定时任务版模块 A（禁回执）
  * - 无块但含 `dws chat message send`：+ 定时任务版模块 A（不注 C）
  */
 export function buildScheduledTaskExecutionSystemPrompt(options?: {
   prompt?: string | null;
-  workflowProgramDelivery?: boolean;
 }): string {
   const prompt = options?.prompt ?? '';
-  const workflowDelivery = resolveWorkflowProgramDelivery(prompt, options);
   const parts = [SCHEDULED_TASK_CORE_PROMPT];
   if (promptNeedsScheduledTaskDingTalkRules(prompt)) {
-    if (workflowDelivery) {
-      parts.push(SCHEDULED_TASK_DINGTALK_WORKFLOW_DELEGATE);
-    } else {
-      parts.push(SCHEDULED_TASK_DINGTALK_RULES);
-      parts.push(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
-    }
+    parts.push(SCHEDULED_TASK_DINGTALK_RULES);
+    parts.push(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
   } else if (promptNeedsDingTalkSendFormat(prompt)) {
     parts.push(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
   }
@@ -113,20 +89,14 @@ export function buildScheduledTaskExecutionSystemPrompt(options?: {
 
 /**
  * 执行器 `systemPromptAppend` 用：只含钉钉相关模块（不含 CORE，CORE 由引擎 hook 注入）。
- * - 含 Recipients 块 + 工作流：delegate
- * - 含 Recipients 块 + 非工作流：C + 定时任务版 A
+ * - 含 Recipients 块：C + 定时任务版 A
  * - 无块但含 send 命令：仅定时任务版 A
  * - 否则 null
  */
 export function buildScheduledTaskDingTalkPromptAppend(
   prompt: string | undefined | null,
-  options?: ScheduledTaskDingTalkPromptOptions,
 ): string | null {
-  const workflowDelivery = resolveWorkflowProgramDelivery(prompt, options);
   if (promptNeedsScheduledTaskDingTalkRules(prompt)) {
-    if (workflowDelivery) {
-      return SCHEDULED_TASK_DINGTALK_WORKFLOW_DELEGATE;
-    }
     return [SCHEDULED_TASK_DINGTALK_RULES, DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK].join(
       '\n\n',
     );

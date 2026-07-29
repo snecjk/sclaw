@@ -21,7 +21,6 @@ import {
   buildDingTalkMentionSystemContextForScheduledTask,
 } from '../../shared/dingtalk-prompts/dingtalk-mention-context';
 import { buildScheduledTaskDingTalkPromptAppend } from '../../shared/dingtalk-prompts';
-import { promptInvolvesWorkflow } from '../../shared/dingtalk-prompts/scheduled-task/prompt-involves-workflow';
 import {
   planDingTalkRecipientsLift,
   resolveScheduledTaskDingTalkRecipients,
@@ -194,14 +193,11 @@ export class ScheduledTaskService {
    * - 否则 null（执行器不追加；CORE 由引擎 hook 注入）
    */
   buildExecutionSystemPromptAppend(task: ScheduleTask): string | null {
-    const workflowProgramDelivery = promptInvolvesWorkflow(task.prompt);
     const recipients = resolveScheduledTaskDingTalkRecipients(task);
     if (recipients) {
-      return buildDingTalkMentionSystemContextForScheduledTask(recipients, {
-        workflowProgramDelivery,
-      });
+      return buildDingTalkMentionSystemContextForScheduledTask(recipients);
     }
-    return buildScheduledTaskDingTalkPromptAppend(task.prompt, { workflowProgramDelivery });
+    return buildScheduledTaskDingTalkPromptAppend(task.prompt);
   }
 
   /**

@@ -36,10 +36,6 @@ export const PLUGIN_SHARED_VENDOR_PAIRS = [
     vendorRel: 'sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-prompts/scheduled-task/scheduled-task-dingtalk.ts',
   },
   {
-    rootRel: 'shared/dingtalk-prompts/scheduled-task/prompt-involves-workflow.ts',
-    vendorRel: 'sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-prompts/scheduled-task/prompt-involves-workflow.ts',
-  },
-  {
     rootRel: 'shared/dingtalk-prompts/dingtalk-mention-context.ts',
     vendorRel: 'sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-prompts/dingtalk-mention-context.ts',
   },

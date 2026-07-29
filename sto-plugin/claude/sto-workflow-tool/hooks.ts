@@ -1,9 +1,5 @@
 /**
  * Claude Agent SDK hooks for STO workflow tools.
- *
- * TODO(workflow-dingtalk-guard): 工作流终态钉钉已改由 Main `WorkflowExecutionTracker`
- * 程序发送（见 shared/dingtalk-send/workflow-dingtalk-delivery.ts）。若 Agent 自发 dws
- * 与程序发送双发，可在此追加提示词或在 send-guard 拦截 run 期间的 dws send。
  */
 import type {
   HookCallback,

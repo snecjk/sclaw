@@ -11,12 +11,6 @@ export {
   normalizeDingTalkMentions,
 } from './dingtalk-mention';
 export {
-  buildWorkflowDingTalkDwsArgs,
-  dedupeDingTalkRecipients,
-  formatWorkflowDingTalkBody,
-  isHttpArtifactUrl,
-} from './workflow-dingtalk-delivery';
-export {
   resolveScheduledTaskDingTalkRecipients,
   planDingTalkRecipientsLift,
 } from './scheduled-task-dingtalk-lift';

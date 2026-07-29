@@ -137,10 +137,6 @@ export interface DingTalkMentionContextOptions {
    * 定时任务场景忽略本字段。
    */
   explicitSendIntent?: boolean;
-  /**
-   * 定时任务 + 工作流：钉钉由 WorkflowExecutionTracker 程序发送，不注入 Agent 必发 / dws 示例。
-   */
-  workflowProgramDelivery?: boolean;
 }
 
 /**
@@ -302,16 +298,9 @@ export function buildDingTalkMentionSystemContextForScheduledTask(
   mentions: DingTalkMention[],
   options?: DingTalkMentionContextOptions,
 ): string {
-  if (options?.workflowProgramDelivery) {
-    return [
-      ...buildRecipientHeader(mentions, 'scheduled-task'),
-      '4. **工作流 + 钉钉收件人：终态（completed / failed / timeout）后由系统自动发送**，禁止 Agent 调用 `dws chat message send` 发送工作流结果、产物或失败说明。',
-      '5. 仍须先完成 `execute_workflow` 并 poll 至工作流终态；确认只留在 StoClaw 对话。',
-    ].join('\n');
-  }
   return [
     ...buildRecipientHeader(mentions, 'scheduled-task'),
-    '4. **定时任务：以上 JSON 内收件人必须发送，发送不是可选项（指定即必发）**——无需意图词；用块内 `userId` / `openConversationId` 逐个 `dws chat message send`；须等业务**完成或失败后再发**，禁止提前发送。**本任务非工作流程序发送，不要假设系统会自动发。**',
+    '4. **定时任务：以上 JSON 内收件人必须发送，发送不是可选项（指定即必发）**——无需意图词；用块内 `userId` / `openConversationId` 逐个 `dws chat message send`；须等业务**完成或失败后再发**，禁止提前发送。**不要假设系统会自动发。**',
     '5. **【P0 收件人并集 + 同一正文】** JSON 为列配置结构化 id；若任务描述还自然语言点名了其他人（如「发给我自己 / 用户工号」），须一并发送。所有收件人的 `--text` 必须是**同一份业务结果**；每位只发 1 次。',
     '6. **【P0 禁止回执上钉钉】** `--text` 禁止写「任务完成」「消息已发送至」「执行成功」等会话确认或回执清单；确认只留在 StoClaw 对话。正文由任务结果直接组织；`--dry-run` 仅自检；**禁止原样执行**下方命令示例。',
     ...buildScheduledTaskSendFormatRules(),

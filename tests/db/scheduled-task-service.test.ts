@@ -133,7 +133,7 @@ describe('ScheduledTaskService', () => {
       expect(append).toContain('指定即必发');
     });
 
-    it('uses workflow delegate when task prompt involves workflow and recipients are resolved', async () => {
+    it('uses agent 必发 rules when task prompt involves workflow and recipients are resolved', async () => {
       const recipients: DingTalkMention[] = [
         { type: 'user', displayName: 'Lei', userId: 'u-lei' },
       ];
@@ -144,9 +144,10 @@ describe('ScheduledTaskService', () => {
       });
       const append = svc.buildExecutionSystemPromptAppend(task);
       expect(append).toContain('u-lei');
-      expect(append).toContain('系统自动发送');
-      expect(append).not.toContain('指定即必发');
-      expect(append).not.toContain('dws chat message send --user u-lei');
+      expect(append).toContain('指定即必发');
+      expect(append).toContain('不要假设系统会自动发');
+      expect(append).not.toContain('系统自动发送');
+      expect(append).toContain('dws chat message send --user u-lei');
     });
   });
 
