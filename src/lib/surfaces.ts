@@ -406,6 +406,7 @@ export function stoChatColumnContentTrackClass(
  * 对话消息列表滚动区：铺满内容列宽，滚动条贴列右缘。
  */
 export const stoChatScrollPaneClass = cn(
+  'sto-thin-scrollbar',
   'relative z-10 min-h-0 flex-1 w-full py-4',
   'overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
 );
@@ -1361,11 +1362,11 @@ export const workflowMcEditorShell = cn(
  * 规范见 `.cursor/rules/02-styles.mdc` §侧栏文字色。
  */
 
-/** 侧栏正文 14/20 Regular — MCP font_4:0587 / font_4:0607 / font_8:35114（默认态） */
-export const sidebarBodyTextClass = 'text-sm font-normal leading-5';
+/** 侧栏正文 13/20 Regular — MCP font_4:0587 / font_4:0607 / font_8:35114（默认态） */
+export const sidebarBodyTextClass = 'text-[13px] font-normal leading-5';
 
-/** 侧栏正文 14/20 Medium — 仅设计稿明确标注 font_8:34896 的场景（当前侧栏默认不用，保留供后续态） */
-export const sidebarBodyTextMediumClass = 'text-sm font-medium leading-5';
+/** 侧栏正文 13/20 Medium — 仅设计稿明确标注 font_8:34896 的场景（当前侧栏默认不用，保留供后续态） */
+export const sidebarBodyTextMediumClass = 'text-[13px] font-medium leading-5';
 
 /** 一级正文色 Grey-10 #1D2129 — MCP paint_4:0441「文字/文本-默认」 */
 export const sidebarTextDefaultClass = 'text-[var(--sto-sidebar-text-default)]';
@@ -1430,13 +1431,13 @@ export const sidebarScrollListClass = 'relative z-0';
 
 /** 侧栏中部滚动区（classic 滚动条见 globals.css `html[data-scrollbar-layout=classic]`） */
 export const sidebarScrollContainerClass = cn(
-  'sidebar-scroll-container',
+  'sidebar-scroll-container sto-thin-scrollbar',
   'flex min-h-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto overscroll-y-contain',
 );
 
 /** 展开侧栏主导航 idle — 正文 Grey-10 + 图标 Grey-9 */
 export const sidebarNavExpandedIdleClass = cn(
-  'h-9 min-h-9 rounded-[8px] px-[10px] font-normal leading-5',
+  'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5',
   sidebarTextDefaultClass,
   '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
@@ -1444,7 +1445,7 @@ export const sidebarNavExpandedIdleClass = cn(
 
 /** 展开侧栏主导航 active — 底 #DCDCDC + Regular（选中仅靠底色，字重与 idle 一致） */
 export const sidebarNavExpandedActiveClass = cn(
-  'h-9 min-h-9 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
+  'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
   'bg-[var(--sto-sidebar-nav-active-bg)]',
   sidebarTextDefaultClass,
   '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
@@ -1474,9 +1475,9 @@ export const sidebarMetaLinkClass = cn(
   'transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] hover:text-[var(--sto-sidebar-text-default)]',
 );
 
-/** 侧栏底部账号名 — MCP 8:46481 / 14px Regular（视觉与列表项一致） */
+/** 侧栏底部账号名 — MCP 8:46481 / 13px Regular（视觉与列表项一致） */
 export const sidebarFooterNameClass =
-  'truncate text-sm font-normal leading-[18px] text-[var(--sto-sidebar-footer-name)]';
+  'truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-name)]';
 
 /** 侧栏底部账号元信息 — MCP 8:46481 #8B9099 Grey-6 / 13px Regular */
 export const sidebarFooterMetaClass =
@@ -1515,7 +1516,7 @@ export const sidebarRecentMenuContentClass =
 
 /** 最近会话/分组下拉项 — MCP 132×34；hover 走 muted，light/dark 自适应 */
 export const sidebarRecentMenuItemClass = cn(
-  'flex h-[34px] cursor-pointer select-none items-center gap-1 rounded-md px-2 text-sm leading-[18px] text-foreground outline-none',
+  'flex h-[34px] cursor-pointer select-none items-center gap-1 rounded-md px-2 text-[13px] leading-[18px] text-foreground outline-none',
   'focus:bg-muted data-[highlighted]:bg-muted data-[state=open]:bg-muted',
 );
 

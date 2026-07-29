@@ -95,7 +95,7 @@ export function SidebarProjectSessionRow({
             else if (e.key === 'Escape') onCancelRename();
           }}
           onBlur={onCommitRename}
-          className="h-8 w-full rounded-[8px] border border-[var(--sto-brand-6)] bg-card px-[10px] py-[5px] pr-16 text-left text-sm leading-5 text-foreground outline-none"
+          className="h-8 w-full rounded-[8px] border border-[var(--sto-brand-6)] bg-card px-[10px] py-[5px] pr-16 text-left text-[13px] leading-5 text-foreground outline-none"
         />
       </div>
     );

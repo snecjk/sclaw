@@ -33,7 +33,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { SidebarUpdateNotice } from '@/components/layout/sidebar-update-notice';
 import { useSettingsStore } from '@/stores/settings';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
@@ -134,6 +134,7 @@ import {
   sidebarScrollContainerClass,
 } from '@/lib/surfaces';
 import { useSidebarSectionScrollCollapse } from '@/hooks/use-sidebar-section-scroll-collapse';
+import { useNativeScrollbarActivity } from '@/hooks/use-native-scrollbar-activity';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
 
 type SessionBucketKey =
@@ -149,8 +150,12 @@ type SessionBucketKey =
 const INITIAL_NOW_MS = Date.now();
 
 /** Collapsed rail: offset from narrow bar + opaque popover so glass tooltips do not show main content through them. */
-const SIDEBAR_COLLAPSED_TOOLTIP_SURFACE =
-  '!bg-popover text-popover-foreground shadow-md backdrop-blur-none border-border';
+const SIDEBAR_TOOLTIP_CLASS = cn(
+  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
+  'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
+  'dark:bg-[#2E3038] dark:text-white dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)]',
+);
+const SIDEBAR_TOOLTIP_ARROW_CLASS = 'fill-[#1D2129] dark:fill-[#2E3038]';
 
 /** Footer account dropdown — MasterGo: 160×186 卡片 + 34px 行高菜单项 */
 const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS =
@@ -158,9 +163,9 @@ const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS =
 const SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS =
   'min-w-[160px] rounded-[12px] border border-[#E5E6EB] bg-white p-1 shadow-lg dark:border-border dark:bg-card';
 const SIDEBAR_ACCOUNT_MENU_ITEM_CLASS =
-  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[14px] leading-[18px] text-[#1D2129] dark:text-foreground';
+  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[13px] leading-[18px] text-[#1D2129] dark:text-foreground';
 const SIDEBAR_ACCOUNT_MENU_LOGOUT_CLASS =
-  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[14px] font-bold leading-[18px] text-[#1D2129] dark:text-foreground';
+  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[13px] font-bold leading-[18px] text-[#1D2129] dark:text-foreground';
 const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
   'hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7] dark:hover:bg-muted dark:focus:bg-muted dark:data-[highlighted]:bg-muted dark:data-[state=open]:bg-muted';
 const SIDEBAR_ACCOUNT_MENU_DIVIDER_CLASS = 'mx-6 my-0 h-px bg-[#E5E6EB] dark:bg-border';
@@ -187,10 +192,10 @@ const SIDEBAR_SHOW_TASK_GROUP_CHEVRON = true;
 
 /** 任务组二级行 — 不用 justify-between，短标题时 Chevron 紧跟标题（对齐项目一级行） */
 const SIDEBAR_TASK_GROUP_ROW_CLASS =
-  'flex h-9 w-full items-center gap-1.5 rounded-lg px-[10px] py-2 text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring';
+  'flex h-8 w-full items-center gap-1.5 rounded-lg px-[10px] py-1.5 text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring';
 /** 三级子项容器 — 竖线与项目二级对齐；w-[calc(100%-17px)] 避免 ml+w-full 右侧溢出被裁切 */
 const SIDEBAR_TASK_SUBITEMS_CONTAINER_CLASS =
-  'ml-[17px] flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-4 dark:border-border';
+  'ml-[17px] flex w-[calc(100%-17px)] flex-col gap-0 border-l border-[#DCDCDC] pl-4 dark:border-border';
 const SCLAW_BROWSER_SIDEBAR_PRESERVE_SELECTOR = '[data-sclaw-browser-sidebar-preserve="true"]';
 
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
@@ -669,7 +674,7 @@ function SidebarNavLink({
             : 'text-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]',
         )
       : cn(
-          'shrink-0 gap-[10px] text-sm leading-5',
+          'shrink-0 gap-[10px] text-[13px] leading-5',
           isActive ? sidebarNavExpandedActiveClass : sidebarNavExpandedIdleClass,
         ),
   );
@@ -692,9 +697,10 @@ function SidebarNavLink({
           side="right"
           sideOffset={12}
           collisionPadding={12}
-          className={cn('max-w-[14rem]', SIDEBAR_COLLAPSED_TOOLTIP_SURFACE)}
+          className={cn('max-w-[14rem]', SIDEBAR_TOOLTIP_CLASS)}
         >
           {label}
+          <TooltipArrow className={SIDEBAR_TOOLTIP_ARROW_CLASS} />
         </TooltipContent>
       </Tooltip>
     );
@@ -874,6 +880,8 @@ export function Sidebar() {
     onCollapseProjectsSection: handleCollapseProjectsSectionFromScroll,
     onCollapseTaskSection: handleCollapseTaskSectionFromScroll,
   });
+
+  useNativeScrollbarActivity(scrollContainerRef);
 
   // 用户手动展开项目：按分区锚点揭示内容，并暂缓下一次自动收起
   useLayoutEffect(() => {
@@ -1777,13 +1785,13 @@ export function Sidebar() {
 
       <nav
         className={cn(
-          'flex shrink-0 flex-col gap-0.5 overflow-x-hidden pb-2',
+          'flex shrink-0 flex-col gap-0 overflow-x-hidden pb-2',
           sidebarCollapsed ? 'px-0 pt-2' : 'px-2 pt-0',
         )}
       >
         {/* 固定区：新对话、定时任务、技能广场、工作区等 */}
-        <div className="flex shrink-0 flex-col gap-0.5">
-        <div className={cn('flex flex-col gap-0.5', sidebarCollapsed && 'mt-2')}>
+        <div className="flex shrink-0 flex-col gap-0">
+        <div className={cn('flex flex-col gap-0', sidebarCollapsed && 'mt-2')}>
 {primaryNav.map((item) => {
   // 当有选中非默认会话，或处于项目新对话草稿时，顶部「新对话」不高亮
   const shouldDimHome = Boolean(
@@ -1998,10 +2006,11 @@ export function Sidebar() {
                       )}
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="right" className="text-xs">
+                  <TooltipContent side="right" className={SIDEBAR_TOOLTIP_CLASS}>
                     {taskGroupsAllExpanded
                       ? t('common:sidebar.collapseAllGroups')
                       : t('common:sidebar.expandAllGroups')}
+                    <TooltipArrow className={SIDEBAR_TOOLTIP_ARROW_CLASS} />
                   </TooltipContent>
                 </Tooltip>
               ) : null
@@ -2009,7 +2018,7 @@ export function Sidebar() {
           />
         ) : null}
         {!sidebarCollapsed && taskListSectionOpen ? (
-          <div className={cn('relative z-0 mt-1 flex flex-col gap-0.5', sidebarScrollListClass)}>
+          <div className={cn('relative z-0 mt-1 flex flex-col gap-0', sidebarScrollListClass)}>
             {taskListRenderPlan.items.map((item) =>
               item.kind === 'sto' ? (
                 <SidebarTaskGroup
@@ -2104,11 +2113,12 @@ export function Sidebar() {
                       sideOffset={12}
                       collisionPadding={12}
                       className={cn(
-                        SIDEBAR_COLLAPSED_TOOLTIP_SURFACE,
+                        SIDEBAR_TOOLTIP_CLASS,
                         'max-w-[min(24rem,calc(100vw-3rem))] whitespace-normal break-words px-3 py-2 text-left leading-snug',
                       )}
                     >
                       {full}
+                      <TooltipArrow className={SIDEBAR_TOOLTIP_ARROW_CLASS} />
                     </TooltipContent>
                   </Tooltip>
                 );
@@ -2117,7 +2127,7 @@ export function Sidebar() {
           ) : null}
           {!sidebarCollapsed &&
             (recentSessionsSorted.length === 0 ? (
-              <p className={cn('px-2 pt-2 text-center text-sm leading-5 opacity-80', sidebarTextSectionClass)}>
+              <p className={cn('px-2 pt-2 text-center text-[13px] leading-5 opacity-80', sidebarTextSectionClass)}>
                 {t('common:sidebar.emptyChatHistory')}
               </p>
             ) : recentOpen ? (
