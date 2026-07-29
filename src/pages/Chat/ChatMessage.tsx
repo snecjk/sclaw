@@ -58,9 +58,10 @@ import {
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
 import { RUN_ID_IN_TEXT, sessionHasParamsConfirmedWorkflowForRun } from '@/lib/workflow-card-injection';
 import { getExecutionByRunId } from '@/stores/workflow-memory';
-import { listLocalWorkflowRuns } from '@/lib/workflow-api';
+import { getRunViaIpc, listLocalWorkflowRuns } from '@/lib/workflow-api';
 import { applyWorkflowRunStarted } from '@/lib/workflow-run-started';
 import { selectWorkflowRunForCard } from '@/lib/workflow-card-recovery';
+import { getLastWorkflowRunIdMention, workflowRunMatchesMention } from '@/lib/workflow-plugin-run-recovery';
 import {
   artifactToPreviewFile,
   inferMimeTypeFromUrl,
@@ -240,17 +241,49 @@ export const ChatMessage = memo(function ChatMessage({
     return null;
   }, [isUser, message, text, workflowCardStates, sessionKey, sessionMessages]);
   const workflowIdMention = useMemo(() => text.match(/\b(wf_[\w-]+)\b/i)?.[1], [text]);
+  const workflowRunIdMention = useMemo(() => getLastWorkflowRunIdMention(text), [text]);
 
-  // OpenClaw may finish the reply with only a workflowId, omitting the runId
-  // returned by execute_workflow. Recover the newest local run for that ID and
-  // attach the normal WorkflowCard so its active polling can start immediately.
+  // OpenClaw plugins do not always expose their structured tool_result to the
+  // renderer. Recover a visible runId first, so the standard start handler can
+  // bind the local run to this chat before a terminal push arrives.
   useEffect(() => {
-    if (isUser || workflowCard || !workflowIdMention) return undefined;
+    if (isUser) return undefined;
     if (!isLastAssistantAfterUserTurn(message, sessionMessages)) return undefined;
 
     let disposed = false;
     void (async () => {
       try {
+        if (workflowRunIdMention) {
+          const chatState = useChatStore.getState();
+          const alreadyTracked = Boolean(
+            getExecutionByRunId(workflowRunIdMention, sessionKey)
+            || chatState.workflowCardStates[workflowRunIdMention],
+          );
+          if (alreadyTracked) return;
+
+          const run = await getRunViaIpc(workflowRunIdMention);
+          if (
+            !run
+            || disposed
+            || useChatStore.getState().currentSessionKey !== sessionKey
+            || !workflowRunMatchesMention(run, workflowIdMention)
+          ) return;
+
+          await applyWorkflowRunStarted({
+            sessionKey,
+            agentId,
+            workflowId: run.workflowId,
+            runId: run.id,
+            templateName: '工作流',
+            presentation: 'patch_assistant',
+            versionId: run.versionId ?? undefined,
+          });
+          return;
+        }
+
+        // Some OpenClaw replies name only workflowId. Retain the existing
+        // newest-local-run fallback for that legacy text shape.
+        if (workflowCard || !workflowIdMention) return;
         const run = selectWorkflowRunForCard(await listLocalWorkflowRuns(workflowIdMention));
         if (!run || disposed || useChatStore.getState().currentSessionKey !== sessionKey) return;
         await applyWorkflowRunStarted({
@@ -272,7 +305,7 @@ export const ChatMessage = memo(function ChatMessage({
     return () => {
       disposed = true;
     };
-  }, [agentId, isUser, message, sessionKey, sessionMessages, workflowCard, workflowIdMention]);
+  }, [agentId, isUser, message, sessionKey, sessionMessages, workflowCard, workflowIdMention, workflowRunIdMention]);
   const isWorkflowCompletionMessage = !isUser
     && workflowCard !== null
     && isWorkflowCompletionTranscript(text);
