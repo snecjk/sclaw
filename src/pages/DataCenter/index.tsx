@@ -410,6 +410,21 @@ export function DataCenter() {
     void store.enterFolder(entry);
   };
 
+  const deleteDialogTitle = deleteEntry?.localAuthorized
+    ? t('dataCenterPage.dialogs.removeAuthorizationTitle')
+    : t('dataCenterPage.dialogs.deleteTitle');
+  const deleteDialogMessage = deleteEntry?.localAuthorized
+    ? deleteEntry.parentEntryId === ROOT_ENTRY_ID
+      ? t('dataCenterPage.dialogs.removeAuthorizationRootMessage', { name: deleteEntry.name })
+      : t('dataCenterPage.dialogs.removeAuthorizationChildMessage', { name: deleteEntry.name })
+    : t('dataCenterPage.dialogs.deleteMessage', { name: deleteEntry?.name ?? '' });
+  const deleteConfirmLabel = deleteEntry?.localAuthorized
+    ? t('dataCenterPage.menu.removeAuthorization')
+    : t('actions.delete');
+  const deleteSuccessMessage = deleteEntry?.localAuthorized
+    ? t('dataCenterPage.toasts.authorizationRemoved')
+    : t('dataCenterPage.toasts.deleted');
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--sto-main-bg)]">
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-6 [scrollbar-gutter:stable]">
@@ -661,7 +676,7 @@ export function DataCenter() {
 
       {deleteEntry ? (
         <DataCenterModal
-          title={t('dataCenterPage.dialogs.deleteTitle')}
+          title={deleteDialogTitle}
           onClose={() => setDeleteEntry(null)}
           footer={(
             <>
@@ -673,19 +688,19 @@ export function DataCenter() {
                   try {
                     await handleDeleteEntry(deleteEntry.entryId);
                     setDeleteEntry(null);
-                    toast.success(t('dataCenterPage.toasts.deleted'));
+                    toast.success(deleteSuccessMessage);
                   } catch (error) {
                     toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.deleteFailed'));
                   }
                 }}
               >
-                {t('actions.delete')}
+                {deleteConfirmLabel}
               </Button>
             </>
           )}
         >
           <p className="text-sm text-muted-foreground">
-            {t('dataCenterPage.dialogs.deleteMessage', { name: deleteEntry.name })}
+            {deleteDialogMessage}
           </p>
         </DataCenterModal>
       ) : null}

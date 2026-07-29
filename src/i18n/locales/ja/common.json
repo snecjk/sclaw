@@ -189,6 +189,9 @@
             "newName": "新しい名前",
             "deleteTitle": "項目を削除",
             "deleteMessage": "「{{name}}」を削除しますか？フォルダは空の場合のみ削除できます。",
+            "removeAuthorizationTitle": "許可を解除",
+            "removeAuthorizationRootMessage": "「{{name}}」のローカルファイル許可を解除しますか？この許可済みフォルダは表示されなくなります。",
+            "removeAuthorizationChildMessage": "この許可済みフォルダから「{{name}}」を除外しますか？このファイルまたはフォルダは表示されなくなります。",
             "moveToTitle": "移動先",
             "moveToMessage": "「{{name}}」の移動先フォルダを選択してください。",
             "uploadToSharedTitle": "拠点共有へアップロード",
@@ -217,6 +220,7 @@
             "renamed": "名前を変更しました",
             "moved": "移動しました",
             "moveFailed": "移動に失敗しました",
+            "authorizationRemoved": "許可を解除しました",
             "deleted": "削除しました",
             "deleteFailed": "削除に失敗しました",
             "folderShareUnsupported": "フォルダ共有はまだサポートされていません"

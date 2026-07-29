@@ -194,6 +194,9 @@
             "newName": "New name",
             "deleteTitle": "Delete item",
             "deleteMessage": "Delete \"{{name}}\"? Folders can only be deleted when empty.",
+            "removeAuthorizationTitle": "Remove authorization",
+            "removeAuthorizationRootMessage": "Remove local file authorization for \"{{name}}\"? This authorized folder will no longer be shown.",
+            "removeAuthorizationChildMessage": "Remove \"{{name}}\" from this authorized folder? This file or folder will no longer be shown.",
             "moveToTitle": "Move to",
             "moveToMessage": "Select the destination folder for \"{{name}}\".",
             "uploadToSharedTitle": "Upload to branch sharing",
@@ -222,6 +225,7 @@
             "renamed": "Renamed",
             "moved": "Moved",
             "moveFailed": "Move failed",
+            "authorizationRemoved": "Authorization removed",
             "deleted": "Deleted",
             "deleteFailed": "Delete failed",
             "folderShareUnsupported": "Folder sharing is not supported yet"

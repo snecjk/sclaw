@@ -16,7 +16,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { actionTooltipClass, ROOT_ENTRY_ID } from '../constants';
+import { actionTooltipClass } from '../constants';
 import type { DataCenterUiEntry, EntryRenderProps } from '../types';
 import { formatBytes, formatDate, getEntryIcon } from '../utils';
 
@@ -509,7 +509,7 @@ function canRename(entry: DataCenterUiEntry): boolean {
 
 function canDelete(entry: DataCenterUiEntry): boolean {
   return entry.localAuthorized
-    ? entry.parentEntryId === ROOT_ENTRY_ID
+    ? true
     : entry.spaceType !== 'site_shared_artifact' || entry.canManage === true;
 }
 

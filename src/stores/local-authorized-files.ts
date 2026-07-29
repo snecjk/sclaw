@@ -126,15 +126,21 @@ export const useLocalAuthorizedFilesStore = create<LocalAuthorizedFilesStoreStat
   deleteEntry: async (entryId) => {
     set({ mutating: true, error: null });
     try {
+      const target = get().items.find((item) => item.entryId === entryId);
       const result = await removeLocalAuthorizedEntry(entryId);
-      set({
-        mutating: false,
-        parentEntryId: 'root',
-        breadcrumbs: [],
-        items: result.items,
-        total: result.total,
-        stats: result.stats,
-      });
+      if (!target || target.parentEntryId === 'root') {
+        set({
+          mutating: false,
+          parentEntryId: 'root',
+          breadcrumbs: [],
+          items: result.items,
+          total: result.total,
+          stats: result.stats,
+        });
+        return;
+      }
+      set({ mutating: false });
+      await get().load();
     } catch (error) {
       set({ mutating: false, error: error instanceof Error ? error.message : String(error) });
       throw error;

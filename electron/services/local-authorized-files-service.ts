@@ -5,6 +5,7 @@ import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 
 export interface LocalAuthorizedFileRecord {
   path: string;
   authorizedAt: string;
+  excludedPaths?: string[];
 }
 
 export interface LocalAuthorizedFileEntry {
@@ -110,10 +111,56 @@ function isPathInside(parent: string, child: string): boolean {
   return rel === '' || (!!rel && !rel.startsWith('..') && !isAbsolute(rel));
 }
 
+function normalizeRelativePath(value: string): string {
+  return value.trim().split(/[\\/]/).filter(Boolean).join('/');
+}
+
+function getRelativePath(rootPath: string, filePath: string): string {
+  return normalizeRelativePath(relative(rootPath, filePath));
+}
+
+function normalizeExcludedPaths(paths: string[] | undefined): string[] {
+  return [...new Set((paths ?? []).map(normalizeRelativePath).filter(Boolean))];
+}
+
+function isExcludedRelativePath(relativePath: string, excludedPaths: string[] | undefined): boolean {
+  const normalized = normalizeRelativePath(relativePath);
+  if (!normalized) return false;
+  return normalizeExcludedPaths(excludedPaths).some((excludedPath) => (
+    normalized === excludedPath || normalized.startsWith(`${excludedPath}/`)
+  ));
+}
+
+function addExcludedPath(excludedPaths: string[] | undefined, relativePath: string): string[] {
+  const normalized = normalizeRelativePath(relativePath);
+  if (!normalized) return normalizeExcludedPaths(excludedPaths);
+  const next = normalizeExcludedPaths(excludedPaths)
+    .filter((excludedPath) => !(excludedPath === normalized || excludedPath.startsWith(`${normalized}/`)));
+  if (next.some((excludedPath) => normalized.startsWith(`${excludedPath}/`))) return next;
+  return [...next, normalized];
+}
+
+function updateExcludedPathsAfterRename(
+  excludedPaths: string[] | undefined,
+  oldRelativePath: string,
+  newRelativePath: string,
+): string[] {
+  const oldPath = normalizeRelativePath(oldRelativePath);
+  const newPath = normalizeRelativePath(newRelativePath);
+  if (!oldPath || !newPath) return normalizeExcludedPaths(excludedPaths);
+  return normalizeExcludedPaths(excludedPaths).map((excludedPath) => {
+    if (excludedPath === oldPath) return newPath;
+    if (excludedPath.startsWith(`${oldPath}/`)) return `${newPath}/${excludedPath.slice(oldPath.length + 1)}`;
+    return excludedPath;
+  });
+}
+
 async function readRoots(): Promise<LocalAuthorizedFileRecord[]> {
   const store = await getStore();
   const roots = store.get('roots');
-  return Array.isArray(roots) ? roots : [];
+  return Array.isArray(roots)
+    ? roots.map((root) => ({ ...root, excludedPaths: normalizeExcludedPaths(root.excludedPaths) }))
+    : [];
 }
 
 async function writeRoots(roots: LocalAuthorizedFileRecord[]): Promise<void> {
@@ -135,18 +182,34 @@ async function getAccessibleRoots(): Promise<LocalAuthorizedFileRecord[]> {
   return accessible;
 }
 
-async function assertAuthorizedPath(filePath: string): Promise<string> {
+async function resolveAuthorizedPath(filePath: string): Promise<{
+  normalizedPath: string;
+  root: LocalAuthorizedFileRecord;
+  relativePath: string;
+}> {
   const normalized = await normalizeExistingPath(filePath);
   const roots = await getAccessibleRoots();
-  for (const root of roots) {
+  const sortedRoots = [...roots].sort((a, b) => b.path.length - a.path.length);
+  for (const root of sortedRoots) {
     try {
       const rootPath = await normalizeExistingPath(root.path);
-      if (isPathInside(rootPath, normalized)) return normalized;
+      if (!isPathInside(rootPath, normalized)) continue;
+      const relativePath = getRelativePath(rootPath, normalized);
+      if (isExcludedRelativePath(relativePath, root.excludedPaths)) continue;
+      return {
+        normalizedPath: normalized,
+        root: { ...root, path: rootPath },
+        relativePath,
+      };
     } catch {
       // Missing roots are kept as records but cannot authorize child access.
     }
   }
   throw Object.assign(new Error('Path is not inside authorized local folders'), { statusCode: 403 });
+}
+
+async function assertAuthorizedPath(filePath: string): Promise<string> {
+  return (await resolveAuthorizedPath(filePath)).normalizedPath;
 }
 
 async function buildEntry(
@@ -261,7 +324,8 @@ export async function listLocalAuthorizedFiles(params: {
     const roots = await readRoots();
     items = await Promise.all(roots.map((root) => buildEntry(root.path, ROOT_ENTRY_ID, root.authorizedAt)));
   } else {
-    const parentPath = await assertAuthorizedPath(decodePathId(parentEntryId));
+    const authorizedPath = await resolveAuthorizedPath(decodePathId(parentEntryId));
+    const parentPath = authorizedPath.normalizedPath;
     const info = await stat(parentPath);
     if (!info.isDirectory()) {
       throw Object.assign(new Error('Entry is not a folder'), { statusCode: 400 });
@@ -270,6 +334,10 @@ export async function listLocalAuthorizedFiles(params: {
     const now = new Date().toISOString();
     items = await Promise.all(children
       .filter((child) => !child.name.startsWith('.'))
+      .filter((child) => !isExcludedRelativePath(
+        getRelativePath(authorizedPath.root.path, join(parentPath, child.name)),
+        authorizedPath.root.excludedPaths,
+      ))
       .map((child) => buildEntry(join(parentPath, child.name), parentEntryId, now)));
   }
   const filtered = sortItems(filterItems(items, params.keyword ?? ''));
@@ -292,6 +360,7 @@ export async function addLocalAuthorizedPaths(filePaths: string[]): Promise<Loca
       byPath.set(normalized, {
         path: normalized,
         authorizedAt: byPath.get(normalized)?.authorizedAt ?? now,
+        excludedPaths: byPath.get(normalized)?.excludedPaths,
       });
     } catch {
       // Skip inaccessible selections.
@@ -302,14 +371,37 @@ export async function addLocalAuthorizedPaths(filePaths: string[]): Promise<Loca
 }
 
 export async function removeLocalAuthorizedEntry(entryId: string): Promise<LocalAuthorizedFilesResult> {
-  const targetPath = decodePathId(entryId);
+  const decodedPath = decodePathId(entryId);
+  if (!decodedPath) {
+    throw Object.assign(new Error('Invalid local authorized entry id'), { statusCode: 400 });
+  }
+  let targetPath = decodedPath;
+  try {
+    targetPath = await normalizeExistingPath(decodedPath);
+  } catch {
+    // Missing root records can still be removed from the authorization list.
+  }
   const roots = await readRoots();
-  await writeRoots(roots.filter((root) => root.path !== targetPath));
+  const rootIndex = roots.findIndex((root) => root.path === targetPath || root.path === decodedPath);
+  if (rootIndex >= 0) {
+    await writeRoots(roots.filter((_, index) => index !== rootIndex));
+    return listLocalAuthorizedFiles({ parentEntryId: ROOT_ENTRY_ID });
+  }
+  const authorizedPath = await resolveAuthorizedPath(targetPath);
+  const targetRelativePath = getRelativePath(authorizedPath.root.path, targetPath);
+  if (!targetRelativePath) {
+    await writeRoots(roots.filter((root) => root.path !== authorizedPath.root.path));
+    return listLocalAuthorizedFiles({ parentEntryId: ROOT_ENTRY_ID });
+  }
+  await writeRoots(roots.map((root) => root.path === authorizedPath.root.path
+    ? { ...root, excludedPaths: addExcludedPath(root.excludedPaths, targetRelativePath) }
+    : root));
   return listLocalAuthorizedFiles({ parentEntryId: ROOT_ENTRY_ID });
 }
 
 export async function renameLocalAuthorizedEntry(entryId: string, name: string): Promise<LocalAuthorizedFileEntry> {
-  const sourcePath = await assertAuthorizedPath(decodePathId(entryId));
+  const authorizedPath = await resolveAuthorizedPath(decodePathId(entryId));
+  const sourcePath = authorizedPath.normalizedPath;
   const cleanName = name.trim();
   if (!cleanName || cleanName.includes('/') || cleanName.includes('\\')) {
     throw Object.assign(new Error('Invalid file name'), { statusCode: 400 });
@@ -317,7 +409,18 @@ export async function renameLocalAuthorizedEntry(entryId: string, name: string):
   const targetPath = join(dirname(sourcePath), cleanName);
   await rename(sourcePath, targetPath);
   const roots = await readRoots();
-  const nextRoots = roots.map((root) => root.path === sourcePath ? { ...root, path: targetPath } : root);
+  const nextRoots = roots.map((root) => {
+    if (root.path === sourcePath) return { ...root, path: targetPath };
+    if (root.path !== authorizedPath.root.path) return root;
+    return {
+      ...root,
+      excludedPaths: updateExcludedPathsAfterRename(
+        root.excludedPaths,
+        authorizedPath.relativePath,
+        getRelativePath(authorizedPath.root.path, targetPath),
+      ),
+    };
+  });
   await writeRoots(nextRoots);
   return buildEntry(targetPath, encodePathId(dirname(targetPath)), new Date().toISOString());
 }
