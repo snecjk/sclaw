@@ -4,15 +4,16 @@ import { getDataDir } from '../../utils/paths';
 import { prepareClaudeRuntime } from '../../engines/claude-sdk-runtime';
 import { getDefaultProviderAccountId } from '../../services/providers/provider-store';
 import { workflowExecLog } from './logging';
+import { prepareWorkflowSkills } from './skill-loader';
 
 /**
  * agent-runner — a slim workflow-node runner that calls the Claude Agent SDK's
  * `query()` directly (no chat EngineAdapter), reusing the shared Claude SDK
  * runtime preparation for provider auth and the bundled native binary path.
  *
- * Excludes ALL 5 chat runtime extensions (no mcpServers / hooks / plugins /
- * systemPrompt / skills) so workflow nodes run with only the SDK's built-in
- * tools under `bypassPermissions`. Reads and writes are limited by the SDK to
+ * Excludes chat runtime extensions (no mcpServers / hooks / plugins /
+ * systemPrompt), while loading the same globally and user-scoped skills as
+ * ordinary chat. Reads and writes are limited by the SDK to
  * the current workflow run workspace (NOT $HOME), so nodes can share artifacts
  * without gaining access to arbitrary user directories.
  *
@@ -110,7 +111,6 @@ export interface InvokeArgs {
   /** Streams Claude SDK partial events into the workflow runtime event log. */
   onStreamEvent?: (event: AgentStreamEvent) => void | Promise<void>;
   allowedTools?: string[];
-  allowedSkills?: string[];
   permissionMode?: string;
   /** Passed to Claude Agent SDK outputFormat; the SDK, not prompt parsing, enforces the shape. */
   outputSchema?: Record<string, unknown>;
@@ -149,6 +149,7 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
 
   await ensureDirectory(cwd);
   await Promise.all(additionalDirectories.map(ensureDirectory));
+  await prepareWorkflowSkills(['claude']);
 
   // Desktop workflow runs do not have an interactive SDK approval bridge.
   // workspace_write therefore skips SDK confirmation only inside the already
@@ -162,7 +163,10 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
     permissionMode,
     allowDangerouslySkipPermissions: permissionMode === 'bypassPermissions',
     pathToClaudeCodeExecutable: args.pathToClaudeCodeExecutable ?? preparedRuntime?.pathToClaudeCodeExecutable,
-    settingSources: [],
+    // Claude discovers the managed ~/.stoclaw/.claude/skills projection through
+    // the user settings source. Keep this aligned with chat while the workflow
+    // explicitly excludes chat MCP/hooks/plugins/system prompt below.
+    settingSources: ['user' as const],
     // Workflow definitions can carry cloud-only model aliases such as "sonnet".
     // The local executor must instead use the model selected in the local
     // provider catalog, otherwise the SDK falls back to an unavailable Claude
@@ -171,13 +175,13 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
     includePartialMessages: true,
     allowedTools: args.allowedTools?.length ? args.allowedTools : undefined,
     outputFormat: args.outputSchema ? { type: 'json_schema', schema: args.outputSchema } : undefined,
-    skills: args.allowedSkills?.length ? args.allowedSkills : undefined,
+    // Match the chat Claude adapter: all currently enabled global/user skills
+    // are projected before this query and made available to the SDK.
+    skills: 'all' as const,
     sessionId: args.resumeSession ? undefined : args.agentSessionId,
     resume: args.resumeSession ? args.agentSessionId : undefined,
-    // Deliberately exclude all 5 chat runtime extensions for the workflow agent:
-    // no mcpServers, hooks, plugins, or systemPrompt. Do not pass `skills` here:
-    // the SDK supports values like `all`, but `none` is not a valid sentinel in
-    // current builds and causes an internal `*.map is not a function` failure.
+    // Deliberately exclude chat runtime extensions for the workflow agent:
+    // no mcpServers, hooks, plugins, or systemPrompt.
   };
 
   workflowExecLog('debug', 'agent-input', prompt, {

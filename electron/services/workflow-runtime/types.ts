@@ -32,6 +32,7 @@ export interface AgentRunSpec {
     options?: Record<string, unknown>;
   };
   inputs: any;
+  /** @deprecated Workflow execution always loads all enabled global/user skills. */
   allowedSkills: string[];
   allowedTools: string[];
   outputSchema: string;

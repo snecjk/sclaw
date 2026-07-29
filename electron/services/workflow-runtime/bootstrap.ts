@@ -110,7 +110,6 @@ export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager)
         model: modelSelection.claudeModel,
         onStreamEvent: args.onStreamEvent,
         allowedTools: args.allowedTools,
-        allowedSkills: args.allowedSkills,
         permissionMode: args.permissionMode,
         outputSchema: args.outputSchema,
         execEngine: 'claude',

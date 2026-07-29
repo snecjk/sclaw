@@ -12,6 +12,7 @@ import { ensureWorkflowRuntimeTemplates, workflowRuntimeWorkspacePath } from './
 import { cleanupWorkflowOpenClawSession } from './openclaw-workflow-session-cleanup';
 import { isWorkflowPacket } from './workflow-packet';
 import { workflowGatewaySessionKey } from './node-session';
+import { prepareWorkflowSkills } from './skill-loader';
 
 const AGENT_ID = 'workflow-runtime';
 const activeSessions = new Map<string, { gateway: GatewayManager; sessionKey: string; runId?: string }>();
@@ -22,6 +23,9 @@ const REPEATED_OUTPUT_COUNT = 4;
 
 /** Ensure this agent uses only the versioned workflow-owned bootstrap files. */
 export async function ensureWorkflowOpenClawAgent(): Promise<void> {
+  // Must happen before Gateway reload so its skill scan sees the same global
+  // and active-user packages that ordinary OpenClaw chat sees.
+  await prepareWorkflowSkills(['openclaw']);
   const workspace = workflowRuntimeWorkspacePath();
   const prepared = await ensureWorkflowRuntimeTemplates(workspace);
   workflowExecLog('info', 'openclaw-workspace-template', 'workflow runtime templates prepared', {

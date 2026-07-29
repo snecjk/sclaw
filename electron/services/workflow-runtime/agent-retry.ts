@@ -80,7 +80,6 @@ export type InvokeAgentFn = (args: {
   deadlineMs?: number;
   onStreamEvent?: (event: AgentStreamEvent) => void | Promise<void>;
   allowedTools?: string[];
-  allowedSkills?: string[];
   permissionMode?: string;
   model?: string;
   outputSchema?: Record<string, unknown>;
@@ -193,7 +192,6 @@ export async function runAgentNodeWithRetry(
         noProgressMs: spec.guardrails?.timeoutMs,
         deadlineMs: spec.guardrails?.timeoutMs ? Math.max(spec.guardrails.timeoutMs * 2, spec.guardrails.timeoutMs + 60_000) : undefined,
         allowedTools: spec.allowedTools,
-        allowedSkills: spec.allowedSkills,
       permissionMode: spec.permissionPolicy?.mode,
       model: spec.target.model,
       outputSchema: deps.execEngine === 'openclaw'
