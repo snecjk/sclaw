@@ -94,6 +94,11 @@ export function registerIpcHandlers(
   getFloatIconWindow?: () => BrowserWindow | null,
   getMainWindow?: () => BrowserWindow | null,
 ): void {
+  // Catch embed webview window.open as early as guest WebContents are created.
+  void import('./services/sclaw-embed-browser-window-open').then(({ installSclawEmbedBrowserWindowOpenHook }) => {
+    installSclawEmbedBrowserWindowOpenHook();
+  });
+
   // Unified request protocol (non-breaking: legacy channels remain available)
   registerUnifiedRequestHandlers(gatewayManager);
 
@@ -3023,6 +3028,18 @@ function registerSessionHandlers(): void {
     const { prepareSclawEmbedBrowserSession } = await import('./services/sclaw-embed-browser-session');
     await prepareSclawEmbedBrowserSession(url);
     return { ok: true };
+  });
+
+  ipcMain.handle('sclaw-browser:hasStoPolicyAuth', async () => {
+    const { hasStoPolicyAuthInEmbedSession } = await import('./services/sclaw-embed-browser-session');
+    const authenticated = await hasStoPolicyAuthInEmbedSession();
+    return { ok: true, authenticated };
+  });
+
+  ipcMain.handle('sclaw-browser:hasTeambitionAuth', async () => {
+    const { hasTeambitionAuthInEmbedSession } = await import('./services/sclaw-embed-browser-session');
+    const authenticated = await hasTeambitionAuthInEmbedSession();
+    return { ok: true, authenticated };
   });
 
   ipcMain.handle('sclaw-browser:registerRuntime', async (_, payload: {

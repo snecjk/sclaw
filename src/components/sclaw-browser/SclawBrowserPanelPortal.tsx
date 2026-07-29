@@ -8,6 +8,7 @@ import { useSclawBrowserHostBounds } from './use-sclaw-browser-host-bounds';
 import { SclawBrowserFrame } from './SclawBrowserFrame';
 import { SclawBrowserEmbedChat } from './SclawBrowserEmbedChat';
 import { useSclawBrowserSplitResize } from './use-sclaw-browser-split-resize';
+import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
 import './sclaw-browser-overlay.css';
 
 import { SCLAW_BROWSER_DRAWER_ANIM_MS, SCLAW_BROWSER_TOOLBAR_H } from './constants';
@@ -64,7 +65,11 @@ export function SclawBrowserPanelPortal() {
       >
         <div className="sclaw-browser-split__browser">
           {readySession === session ? (
-            <SclawBrowserFrame url={session.url} title={session.title} />
+            <SclawBrowserFrame
+              url={session.url}
+              title={session.title}
+              onOpenWindow={(nextUrl) => openInSclawBrowser({ url: nextUrl })}
+            />
           ) : null}
         </div>
         {chatPanelOpen && chatSessionKey ? (

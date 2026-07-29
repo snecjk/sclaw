@@ -132,6 +132,17 @@ export function timelineBlockResetKey(
   return `thinking-${index}`;
 }
 
+function isGrowingThinkingSnapshot(
+  cached: ThinkingTimelineItem,
+  incoming: ThinkingTimelineItem,
+): boolean {
+  if (cached.type !== 'thinking' || incoming.type !== 'thinking') return false;
+  const cachedText = cached.content.trim();
+  const incomingText = incoming.content.trim();
+  if (!cachedText || !incomingText) return false;
+  return incomingText.startsWith(cachedText) || cachedText.startsWith(incomingText);
+}
+
 /**
  * 流式展示单调合并：解析器 rebundle 后条数不变但 index/key 可能变，保留用户已看到的顺序。
  */
@@ -143,6 +154,30 @@ export function mergeTimelineMonotonic(
   if (cached.length === 0) return incoming;
   if (incoming.length > cached.length) return incoming;
   if (incoming.length < cached.length) return cached;
+
+  // Claude thinking deltas are emitted as a growing snapshot ("The" →
+  // "The user wants..."). Their content-derived reset key changes while the
+  // first 64 characters grow, but they are still the same logical block.
+  // Reconcile a positionally identical timeline before key-based monotonic
+  // merging so the old prefix is not retained as a second panel. Prefer the
+  // longer thinking snapshot in case a later parse temporarily shrinks.
+  const positionallyCompatible = cached.every((item, index) => {
+    const next = incoming[index];
+    if (!next) return false;
+    return isGrowingThinkingSnapshot(item, next)
+      || timelineBlockResetKey(item, index) === timelineBlockResetKey(next, index);
+  });
+  if (positionallyCompatible) {
+    return incoming.map((item, index) => {
+      const previous = cached[index];
+      if (
+        previous?.type !== 'thinking'
+        || item.type !== 'thinking'
+        || !isGrowingThinkingSnapshot(previous, item)
+      ) return item;
+      return item.content.trim().length >= previous.content.trim().length ? item : previous;
+    });
+  }
 
   const cachedKeys = cached.map((item, index) => timelineBlockResetKey(item, index));
   const incomingKeys = incoming.map((item, index) => timelineBlockResetKey(item, index));

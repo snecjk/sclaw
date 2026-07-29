@@ -14,6 +14,7 @@ import {
 import { bindAppNavigate, unbindAppNavigate } from '@/lib/app-navigate';
 import { closeSclawBrowser } from '@/lib/open-sclaw-browser';
 import { useSclawBrowserChatShortcut } from '@/components/sclaw-browser/use-sclaw-browser-chat-shortcut';
+import { useSclawBrowserOpenUrl } from '@/components/sclaw-browser/use-sclaw-browser-open-url';
 import './app-plaza-shell.css';
 
 export function AppPlazaShell() {
@@ -40,6 +41,10 @@ export function AppPlazaShell() {
     return () => unbindAppNavigate(navigate);
   }, [navigate]);
 
+  // Keep listening while shell is mounted (including hidden keep-alive) so
+  // guest window.open still opens plaza tabs when the shell is not visible.
+  useSclawBrowserOpenUrl(true);
+
   const activeBrowser = browserTabs.find((t) => t.id === activeTabId);
   const activeDevApp = devAppTabs.find((t) => t.id === activeTabId);
   const isHomeActive = activeTabId === APP_PLAZA_HOME_TAB_ID;
@@ -47,7 +52,6 @@ export function AppPlazaShell() {
   useSclawBrowserChatShortcut(Boolean(chatShortcutEnabled), () => {
     if (activeBrowser) toggleChatPanel(activeBrowser.id);
   });
-
   // Blur focus when hiding so keys don't hit hidden webviews
   useEffect(() => {
     if (!routeActive && document.activeElement instanceof HTMLElement) {

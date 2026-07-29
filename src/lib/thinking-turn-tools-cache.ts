@@ -99,3 +99,34 @@ export function readTurnToolResultsCache(
   }
   return [];
 }
+
+/** Move the transient active-turn tool cache to its stable turn key exactly once. */
+export function migrateTurnToolsCache(
+  fromKey: string | undefined,
+  toKey: string | undefined,
+): void {
+  if (!fromKey || !toKey || fromKey === toKey) return;
+  const source = turnToolsCache.get(fromKey);
+  if (!source) return;
+
+  const existing = turnToolsCache.get(toKey) ?? emptyEntry();
+  const streamingTools = mergeStreamingToolRecords(
+    existing.streamingTools,
+    source.streamingTools,
+  );
+  const toolResults = [...existing.toolResults];
+  for (const message of source.toolResults) {
+    const toolCallId = typeof message.toolCallId === 'string' ? message.toolCallId : null;
+    const already = toolResults.some((item) => (
+      (toolCallId && item.toolCallId === toolCallId) || item === message
+    ));
+    if (!already) toolResults.push(message);
+  }
+
+  turnToolsCache.set(toKey, {
+    streamingTools,
+    toolResults,
+    updatedAt: Math.max(existing.updatedAt, source.updatedAt),
+  });
+  turnToolsCache.delete(fromKey);
+}

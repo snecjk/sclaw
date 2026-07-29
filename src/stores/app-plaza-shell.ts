@@ -70,6 +70,12 @@ export interface AppPlazaBrowserTab {
   iconUrl?: string;
   iconKey?: string;
   tone?: AppTone;
+  /** Original target URL before auth rewrites / ticket exchange. */
+  sourceUrl?: string;
+  /** Subsystem code used to exchange skip-login URLs. */
+  systemCode?: string;
+  /** Only App Plaza catalog apps may exchange skip-login URLs. */
+  skipLoginEligible?: boolean;
 }
 
 interface OpenOrFocusBrowserTabInput {
@@ -81,6 +87,12 @@ interface OpenOrFocusBrowserTabInput {
   iconUrl?: string;
   iconKey?: string;
   tone?: AppTone;
+  /** Original target URL before auth rewrites / ticket exchange. */
+  sourceUrl?: string;
+  /** Subsystem code used to exchange skip-login URLs. */
+  systemCode?: string;
+  /** Only App Plaza catalog apps may exchange skip-login URLs. */
+  skipLoginEligible?: boolean;
 }
 
 interface AppPlazaShellState {
@@ -145,6 +157,60 @@ function countLive(tabs: AppPlazaBrowserTab[]): number {
   return tabs.filter((t) => t.status === 'live').length;
 }
 
+/**
+ * Find a reusable browser tab with system isolation.
+ * - Catalog apps: prefer registryAppId (stable across one-time skip-login tickets)
+ * - With systemCode: never reuse a tab from another system
+ * - Without systemCode: only reuse among tabs that also lack systemCode
+ */
+function findReusableBrowserTab(
+  tabs: AppPlazaBrowserTab[],
+  opts: {
+    url: string;
+    registryAppId?: string;
+    systemCode?: string;
+    excludeTabId?: string;
+  },
+): AppPlazaBrowserTab | undefined {
+  const registryAppId = opts.registryAppId?.trim() || '';
+  const systemCode = opts.systemCode?.trim() || '';
+  const candidates = opts.excludeTabId
+    ? tabs.filter((t) => t.id !== opts.excludeTabId)
+    : tabs;
+
+  if (registryAppId) {
+    const byRegistry = candidates.find(
+      (t) => (t.registryAppId?.trim() || '') === registryAppId,
+    );
+    if (byRegistry) {
+      const existingCode = byRegistry.systemCode?.trim() || '';
+      // Hard isolation: same registry id must not cross systemCode.
+      if (existingCode && systemCode && existingCode !== systemCode) {
+        return undefined;
+      }
+      return byRegistry;
+    }
+  }
+
+  if (!opts.url?.trim()) return undefined;
+
+  if (systemCode) {
+    return candidates.find(
+      (t) =>
+        (t.systemCode?.trim() || '') === systemCode
+        && Boolean(t.url)
+        && appPlazaTabUrlsMatch(t.url, opts.url),
+    );
+  }
+
+  return candidates.find(
+    (t) =>
+      !(t.systemCode?.trim())
+      && Boolean(t.url)
+      && appPlazaTabUrlsMatch(t.url, opts.url),
+  );
+}
+
 function pickLruSuspendCandidate(
   tabs: AppPlazaBrowserTab[],
   protectId: string,
@@ -200,6 +266,9 @@ function makeLiveTab(
     iconKey?: string;
     tone?: AppTone;
     registryAppId?: string;
+    sourceUrl?: string;
+    systemCode?: string;
+    skipLoginEligible?: boolean;
   },
 ): AppPlazaBrowserTab {
   const embedRuntimeId = createSclawBrowserEmbedRuntimeId();
@@ -225,6 +294,9 @@ function makeLiveTab(
     savedMainSessionKey: null,
     chatSessions: listSclawBrowserEmbedChatSessions(appId),
     iconUrl,
+    sourceUrl: icons?.sourceUrl?.trim() || tab.sourceUrl,
+    systemCode: icons?.systemCode?.trim() || tab.systemCode,
+    skipLoginEligible: icons?.skipLoginEligible ?? tab.skipLoginEligible,
     iconKey: icons?.iconKey ?? tab.iconKey,
     tone: icons?.tone ?? tab.tone,
     // Reset until the page reports its own favicon (same as Chrome).
@@ -279,6 +351,15 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
             current.title || current.url,
             current.appId || deriveSclawBrowserAppId({ url: current.url }),
             current.bound,
+            {
+              iconUrl: current.iconUrl,
+              iconKey: current.iconKey,
+              tone: current.tone,
+              registryAppId: current.registryAppId,
+              sourceUrl: current.sourceUrl,
+              systemCode: current.systemCode,
+              skipLoginEligible: current.skipLoginEligible,
+            },
           );
           tabs[idx] = revived;
           return { browserTabs: tabs, activeTabId: tabId };
@@ -385,10 +466,11 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
         const idx = tabs.findIndex((t) => t.id === tabId);
         if (idx < 0) return prev;
 
-        // Reuse existing tab with same URL
-        const existing = tabs.find(
-          (t) => t.id !== tabId && t.url && appPlazaTabUrlsMatch(t.url, resolvedUrl),
-        );
+        // Reuse existing tab with same URL only within the same system isolation boundary
+        const existing = findReusableBrowserTab(tabs, {
+          url: resolvedUrl,
+          excludeTabId: tabId,
+        });
         if (existing) {
           // Close the blank tab without purge (no appId chat yet)
           tabs = tabs.filter((t) => t.id !== tabId);
@@ -409,9 +491,7 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
       });
       // After reuse path, also select existing if suspended
       const after = get();
-      const focus = after.browserTabs.find((t) =>
-        t.url && appPlazaTabUrlsMatch(t.url, resolvedUrl),
-      );
+      const focus = findReusableBrowserTab(after.browserTabs, { url: resolvedUrl });
       if (focus && focus.status === 'suspended') {
         get().selectTab(focus.id);
       } else if (focus) {
@@ -456,9 +536,13 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
         const idx = tabs.findIndex((t) => t.id === tabId);
         if (idx < 0) return prev;
 
-        const existing = tabs.find(
-          (t) => t.id !== tabId && t.url && appPlazaTabUrlsMatch(t.url, resolvedUrl),
-        );
+        const existing = findReusableBrowserTab(tabs, {
+          url: resolvedUrl,
+          registryAppId: tab.registryAppId,
+          systemCode: tab.systemCode,
+          skipLoginEligible: tab.skipLoginEligible,
+          excludeTabId: tabId,
+        });
         if (existing) {
           const closing = tabs[idx]!;
           const cleared = tearDownTabRuntime(closing);
@@ -482,12 +566,18 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
           iconKey: current.iconKey,
           tone: current.tone,
           registryAppId: current.registryAppId,
+          sourceUrl: current.sourceUrl,
+          systemCode: current.systemCode,
+          skipLoginEligible: current.skipLoginEligible,
         });
         return { browserTabs: tabs, activeTabId: tabId };
       });
 
       const focus = get().browserTabs.find((t) =>
-        t.url && appPlazaTabUrlsMatch(t.url, resolvedUrl),
+        t.url && appPlazaTabUrlsMatch(t.url, resolvedUrl) && (
+          !tab.systemCode?.trim()
+          || (t.systemCode?.trim() || '') === (tab.systemCode?.trim() || '')
+        ),
       );
       if (focus?.status === 'suspended') get().selectTab(focus.id);
     })();
@@ -511,37 +601,74 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
       iconKey: input.iconKey,
       tone: input.tone,
       registryAppId: input.appId?.trim() || undefined,
+      sourceUrl: input.sourceUrl?.trim() || undefined,
+      systemCode: input.systemCode?.trim() || undefined,
+      skipLoginEligible: input.skipLoginEligible ?? false,
     };
 
     void (async () => {
       await prepareStoSessionIfNeeded(resolvedUrl);
 
-      const existing = get().browserTabs.find(
-        (t) => t.url && appPlazaTabUrlsMatch(t.url, resolvedUrl),
-      );
+      const existing = findReusableBrowserTab(get().browserTabs, {
+        url: resolvedUrl,
+        registryAppId: icons.registryAppId,
+        systemCode: icons.systemCode,
+      });
       if (existing) {
-        if (existing.status === 'suspended') {
-          get().selectTab(existing.id);
-        } else {
-          set({
-            activeTabId: existing.id,
-            browserTabs: get().browserTabs.map((t) =>
-              t.id === existing.id
-                ? {
-                    ...t,
-                    title: title || t.title,
-                    bound: t.bound || bound,
-                    appId: bound ? appId : t.appId,
-                    lastActiveAt: Date.now(),
-                    iconUrl: icons.iconUrl || t.iconUrl,
-                    iconKey: icons.iconKey || t.iconKey,
-                    tone: icons.tone || t.tone,
-                    registryAppId: icons.registryAppId || t.registryAppId,
-                  }
-                : t,
-            ),
+        const urlChanged = !existing.url || !appPlazaTabUrlsMatch(existing.url, resolvedUrl);
+        const shouldRemount = existing.status === 'suspended' || urlChanged;
+
+        if (shouldRemount) {
+          set((prev) => {
+            let tabs = [...prev.browserTabs];
+            const idx = tabs.findIndex((t) => t.id === existing.id);
+            if (idx < 0) return prev;
+
+            while (countLive(tabs) >= APP_PLAZA_MAX_LIVE_BROWSER_TABS) {
+              const victim = pickLruSuspendCandidate(tabs, existing.id);
+              if (!victim) break;
+              tabs = tabs.map((t) => (t.id === victim.id ? suspendTab(t) : t));
+            }
+
+            const current = tearDownTabRuntime(tabs[idx]!);
+            const nextBound = current.bound || bound;
+            const nextAppId = nextBound ? appId : (current.appId || appId);
+            tabs[idx] = makeLiveTab(current, resolvedUrl, title || current.title, nextAppId, nextBound, {
+              iconUrl: icons.iconUrl || current.iconUrl,
+              iconKey: icons.iconKey || current.iconKey,
+              tone: icons.tone || current.tone,
+              registryAppId: icons.registryAppId || current.registryAppId,
+              // Keep each tab's system identity stable; never inherit another system's code.
+              sourceUrl: icons.sourceUrl || current.sourceUrl,
+              systemCode: icons.systemCode || current.systemCode,
+              skipLoginEligible: icons.skipLoginEligible ?? current.skipLoginEligible,
+            });
+            return { browserTabs: tabs, activeTabId: existing.id };
           });
+          return;
         }
+
+        set({
+          activeTabId: existing.id,
+          browserTabs: get().browserTabs.map((t) =>
+            t.id === existing.id
+              ? {
+                  ...t,
+                  title: title || t.title,
+                  bound: t.bound || bound,
+                  appId: bound ? appId : t.appId,
+                  lastActiveAt: Date.now(),
+                  iconUrl: icons.iconUrl || t.iconUrl,
+                  iconKey: icons.iconKey || t.iconKey,
+                  tone: icons.tone || t.tone,
+                  registryAppId: icons.registryAppId || t.registryAppId,
+                  sourceUrl: icons.sourceUrl || t.sourceUrl,
+                  systemCode: icons.systemCode || t.systemCode,
+                  skipLoginEligible: icons.skipLoginEligible ?? t.skipLoginEligible,
+                }
+              : t,
+          ),
+        });
         return;
       }
 
