@@ -4,9 +4,7 @@ export const scheduleTasksMigration: SqliteMigration = {
   // version=11 避开存量库 v6 占位：部分开发库经历过并行 workflow-runtime 分支的
   // version 体系（库里 v6=memory-capture-jobs）。migrator 只比 version 不比 name，
   // v6 被占会静默 skip → schedule_tasks 永不建表 → 数据迁移炸在 getById。
-  // 0006 是本分支全新 migration，无任何库以 name=schedule-tasks 应用过，
   // CREATE TABLE IF NOT EXISTS 幂等，改号后所有库重启 migrator 会正确应用。
-  // 文件名保留 0006（历史序号），version 字段才是 migrator 判定依据。
   version: 11,
   name: 'schedule-tasks',
   sql: `

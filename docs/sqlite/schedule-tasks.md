@@ -1,6 +1,6 @@
 # schedule_tasks / schedule_task_runs
 
-定时任务**统一存储**表（Phase 1，migration `0006`）。定义 + 调度状态 + 运行记录，取代 `jobs.json` / `definitions.json` / 各自 `runs/*.jsonl`。
+定时任务**统一存储**表（Phase 1，migration `0011`）。定义 + 调度状态 + 运行记录，取代 `jobs.json` / `definitions.json` / 各自 `runs/*.jsonl`。
 
 > **状态（2026-07-24）**：已 cutover 生产路径。启动期迁移读 `definitions.json` + `jobs.json` → 本表；迁后清 `jobs.json` 已迁 cron，**不清** `definitions.json`。进度见 `docs/定时任务重构-交接与执行计划.md`。
 
@@ -20,7 +20,7 @@
 ## DDL
 
 ```sql
--- migration 0006: schedule-tasks
+-- migration 0011: schedule-tasks
 CREATE TABLE IF NOT EXISTS schedule_tasks (
   id                    TEXT PRIMARY KEY,
   name                  TEXT NOT NULL,
@@ -243,7 +243,7 @@ LIMIT 20;
 
 ## 相关源码（Step 2 计划，本期落地）
 
-- Migration: `electron/db/migrations/0006-schedule-tasks.ts`
+- Migration: `electron/db/migrations/0011-schedule-tasks.ts`
 - 表类型: `electron/db/models/tables/schedule-task-tables.ts`
 - 领域模型: `electron/db/models/domain/schedule-task.ts`
 - Repository: `electron/db/repositories/schedule-task-repository.ts` / `schedule-task-run-repository.ts`
