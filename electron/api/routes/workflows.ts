@@ -9,6 +9,7 @@ import { installWorkflowRuntime, workflowV2BackendFetch } from '../../services/w
 import { workflowExecLog } from '../../services/workflow-runtime/logging';
 import { takeWorkflowDatabaseId } from '../../services/workflow-runtime/id-pool';
 import type { AgentEngineType } from '../../engines/types';
+import { getOpenClawProvidersConfig } from '../../utils/openclaw-auth';
 
 type WorkflowStartBody = {
   runDatabaseId?: number;
@@ -214,14 +215,30 @@ function makeWorkflowStartIdempotencyKey(workflowId: string): string {
   return `start-wf-${workflowId}-${Date.now()}`;
 }
 
-function startLocalWorkflowRuntime(
+/**
+ * Tool-originated workflow starts bypass the renderer's model resolver. Pin
+ * OpenClaw runs to the Gateway's configured chat default before the runtime
+ * can fall back to a workflow DSL alias such as `sonnet`.
+ */
+export async function resolveWorkflowStartModel(engineType: AgentEngineType): Promise<string | undefined> {
+  if (engineType !== 'openclaw') return undefined;
+
+  const defaultModel = (await getOpenClawProvidersConfig()).defaultModel?.trim();
+  if (!defaultModel || !defaultModel.includes('/')) {
+    throw new Error('OpenClaw 聊天默认模型未配置或格式无效，无法启动工作流');
+  }
+  return defaultModel;
+}
+
+async function startLocalWorkflowRuntime(
   workflowId: string,
   registered: WorkflowV2StartResponse,
   body: WorkflowStartBody,
-): void {
+): Promise<void> {
   const versionId = registered.workflowVersionId;
   const startedAt = registered.startedAt ?? new Date().toISOString();
   const resolvedEngine = resolveWorkflowStartEngine(body.engineType);
+  const engineModel = await resolveWorkflowStartModel(resolvedEngine.engineType);
   workflowExecLog('info', 'host-runtime-start', 'starting local workflow runtime from host route', {
     runId: registered.runId,
     workflowId,
@@ -230,6 +247,7 @@ function startLocalWorkflowRuntime(
     requestedExecEngine: body.engineType ?? null,
     execEngine: resolvedEngine.engineType,
     engineSource: resolvedEngine.source,
+    engineModel: engineModel ?? null,
   });
   void installWorkflowRuntime().startWorkflow({
     runId: registered.runId,
@@ -241,6 +259,7 @@ function startLocalWorkflowRuntime(
     startedAt,
     sessionKey: body.sessionKey ?? '',
     engineType: resolvedEngine.engineType,
+    engineModel,
   }).catch((error) => {
     workflowExecLog('error', 'host-runtime-start-failed', 'local workflow runtime failed', {
       runId: registered.runId,
@@ -313,7 +332,7 @@ async function registerAndStartLocalWorkflow(
   stoToken?: string,
 ): Promise<WorkflowV2StartResponse> {
   const registered = await registerLocalWorkflowRun(workflowId, body, stoToken);
-  startLocalWorkflowRuntime(workflowId, registered, body);
+  await startLocalWorkflowRuntime(workflowId, registered, body);
   return registered;
 }
 

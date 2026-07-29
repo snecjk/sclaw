@@ -8,6 +8,7 @@ import { invokeIpc } from '@/lib/api-client';
 import { useChatStore } from '@/stores/chat';
 import { hostApiFetch } from '@/lib/host-api';
 import { useAuthStore } from '@/stores/auth';
+import { resolveModelToPersistForSession } from '@/lib/sync-workspace-default-to-chat';
 import type {
   ApiResponse,
   WorkflowTemplateSearchResponse,
@@ -312,6 +313,36 @@ export interface StartWorkflowLocalResult {
 }
 
 /**
+ * OpenClaw workflow nodes run in dedicated Gateway sessions, so an inherited
+ * Claude session model must never be pinned onto `wf_run`.  Resolve from the
+ * same workspace-default source as a new OpenClaw chat instead.
+ */
+export function resolveWorkflowRunEngineModel(params: {
+  engineType: StartWorkflowLocalParams['engineType'];
+  engineModel?: string;
+  sessionKey: string;
+}): string | undefined {
+  const chat = useChatStore.getState();
+  if (params.engineType === 'openclaw') {
+    const workspaceDefault = resolveModelToPersistForSession({
+      sessionKey: params.sessionKey,
+      agentId: chat.currentAgentId,
+      engineType: 'openclaw',
+      preferSessionModel: false,
+      preferPendingModel: false,
+    });
+    if (!workspaceDefault) {
+      throw new Error('未找到 OpenClaw 聊天默认模型，无法启动工作流');
+    }
+    return workspaceDefault.modelId;
+  }
+
+  const sessionModel = chat.sessions.find((session) => session.key === params.sessionKey)?.model
+    ?? chat.sessions.find((session) => session.key === chat.currentSessionKey)?.model;
+  return params.engineModel?.trim() || sessionModel?.trim() || undefined;
+}
+
+/**
  * v2 本地执行下沉入口：
  * 常规会话工作流：POST /agent/v2/workflows/{id}/createRunLog 注册后启动。
  * 画布试运行同样先保存到云端版本；客户端只按版本 ID 拉取执行 DSL。
@@ -320,10 +351,7 @@ export async function startWorkflowLocal(
   params: StartWorkflowLocalParams
 ): Promise<StartWorkflowLocalResult> {
   const startedAt = formatShanghaiIso();
-  const chat = useChatStore.getState();
-  const sessionModel = chat.sessions.find((session) => session.key === params.sessionKey)?.model
-    ?? chat.sessions.find((session) => session.key === chat.currentSessionKey)?.model;
-  const engineModel = params.engineModel?.trim() || sessionModel?.trim() || undefined;
+  const engineModel = resolveWorkflowRunEngineModel(params);
 
   // 常规会话工作流仍需在服务端注册，以保持既有运行记录关联行为。
   let data: StartWorkflowLocalResponse | undefined;

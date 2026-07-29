@@ -28,6 +28,11 @@ export async function configureWorkflowRunSession(input: {
     sessionKey,
     agentId: input.agentId,
     engineType: input.engineType,
+    // `newSession()` can inherit the previous conversation's model before this
+    // selected engine is applied. For OpenClaw that value may be a Claude model
+    // (for example Sonnet), so use the chat workspace default instead.
+    preferSessionModel: input.engineType !== 'openclaw',
+    preferPendingModel: input.engineType !== 'openclaw',
   });
   if (!fallback) throw new Error('未找到可用模型，无法启动工作流');
 

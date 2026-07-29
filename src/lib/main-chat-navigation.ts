@@ -2,6 +2,7 @@ import { flushSync } from 'react-dom';
 import type { NavigateFunction, To } from 'react-router-dom';
 import { useChatStore } from '@/stores/chat';
 import { findSessionKeyByTitle } from '@/lib/session-label';
+import type { WorkflowExecutionEngine } from '@/lib/workflow-session';
 
 export function isMainChatHomePath(pathname: string): boolean {
   return pathname === '/';
@@ -19,7 +20,13 @@ export interface NavigateToSessionWithPromptOptions {
   /** Mark this auto-send as a workflow run so Home can choose its execution engine. */
   workflowRun?: boolean;
   /** Explicit workflow execution engine selected before navigating to chat. */
-  workflowEngine?: 'claude' | 'openclaw';
+  workflowEngine?: WorkflowExecutionEngine;
+  /** Workflow execution metadata. Every start creates a fresh chat session. */
+  workflowSession?: {
+    workflowId: string;
+    engineType: WorkflowExecutionEngine;
+    sessionTitle: string;
+  };
 }
 
 /**
@@ -68,6 +75,16 @@ function prepareSessionForPrompt(options: NavigateToSessionWithPromptOptions): v
     renameSession,
   } = useChatStore.getState();
 
+  const workflowSession = options.workflowSession;
+  if (workflowSession?.workflowId.trim()) {
+    if (createIfMissing) {
+      newSession();
+      const createdSessionKey = useChatStore.getState().currentSessionKey;
+      renameSession(createdSessionKey, workflowSession.sessionTitle.trim());
+      return;
+    }
+  }
+
   const trimmedKey = sessionKey?.trim();
   if (trimmedKey) {
     const existsLocally = sessions.some((session) => session.key === trimmedKey);
@@ -112,7 +129,8 @@ function normalizePromptNavigationOptions(
     && !('createIfMissing' in options)
     && !('extraSearchParams' in options)
     && !('workflowRun' in options)
-    && !('workflowEngine' in options);
+    && !('workflowEngine' in options)
+    && !('workflowSession' in options);
   if (isLegacyExtraSearchParamsOnly) {
     return { ...defaults, extraSearchParams: options as Record<string, string> };
   }

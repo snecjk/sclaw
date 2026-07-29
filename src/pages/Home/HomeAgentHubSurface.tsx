@@ -18,6 +18,7 @@ import { StaticFallbackCards } from './agent-hub-static-cards';
 import { useRecommendItems } from '@/hooks/use-recommend-items';
 import { RECOMMEND_POSITION_KEYS, type RecommendItem } from '@/lib/recommend-api';
 import { navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
+import { workflowSessionTitle } from '@/lib/workflow-session';
 import { useLatestWorkflowsByTemplates } from '@/hooks/use-latest-workflows-by-templates';
 import {
   homeHubCardGridClass,
@@ -94,7 +95,15 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
           navigate,
           '/home',
           `帮我执行 id 为：${item.item_ref_id} 的工作流 【${item.title}】`,
-          { sessionTitle: `执行${item.title}工作流`, workflowRun: true },
+          {
+            workflowRun: true,
+            workflowEngine: 'claude',
+            workflowSession: {
+              workflowId: item.item_ref_id,
+              engineType: 'claude',
+              sessionTitle: workflowSessionTitle(item.title, 'claude'),
+            },
+          },
         );
       } else if (item.item_type === 'workflow_template') {
         // 工作流模版：安装（参考官方推荐模版的安装逻辑）

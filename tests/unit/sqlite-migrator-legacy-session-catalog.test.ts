@@ -30,19 +30,11 @@ describe('SQLite legacy session catalog migration normalization', () => {
     ).all() as Array<{ version: number; name: string }>;
     expect(rows).toEqual([
       { version: 1, name: 'initial-local-sqlite-demo-schema' },
-      { version: 2, name: 'workflow-runtime-7-tables' },
-      { version: 3, name: 'wf-run-session-key' },
-      { version: 4, name: 'workflow-runtime-shanghai-time' },
-      { version: 5, name: 'workflow-runtime-cloud-primary-keys' },
       { version: 6, name: 'memory-capture-jobs' },
       { version: 7, name: 'session-catalog-schema' },
       { version: 8, name: 'session-types-and-channels' },
-      { version: 9, name: 'wf-run-workflow-version' },
-      { version: 10, name: 'wf-run-engine' },
       { version: 11, name: 'channel-plane-channel-connections' },
-      { version: 12, name: 'workflow-runtime-canonical-schema-repair' },
-      { version: 13, name: 'workflow-node-agent-session' },
-      { version: 14, name: 'workflow-node-run-schema-consolidation' },
+      { version: 12, name: 'workflow-runtime-schema' },
     ]);
 
     const memoryTable = db.prepare(
@@ -72,19 +64,11 @@ describe('SQLite legacy session catalog migration normalization', () => {
     ).all() as Array<{ version: number; name: string }>;
     expect(rows.map((row) => row.name)).toEqual([
       'initial-local-sqlite-demo-schema',
-      'workflow-runtime-7-tables',
-      'wf-run-session-key',
-      'workflow-runtime-shanghai-time',
-      'workflow-runtime-cloud-primary-keys',
       'memory-capture-jobs',
       'session-catalog-schema',
       'session-types-and-channels',
-      'wf-run-workflow-version',
-      'wf-run-engine',
       'channel-plane-channel-connections',
-      'workflow-runtime-canonical-schema-repair',
-      'workflow-node-agent-session',
-      'workflow-node-run-schema-consolidation',
+      'workflow-runtime-schema',
     ]);
   });
 });

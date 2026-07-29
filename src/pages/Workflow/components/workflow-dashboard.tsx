@@ -47,6 +47,7 @@ import { Button } from '@/components/ui/button';
 import { useWorkflowList } from '@/pages/Workflow/use-workflow-list';
 import { renameWorkflow, deleteWorkflow } from '@/lib/workflow-api';
 import { navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
+import { workflowSessionTitle } from '@/lib/workflow-session';
 import { WorkflowComposer } from '@/pages/Workflow/components/workflow-composer';
 import { useRecommendItems } from '@/hooks/use-recommend-items';
 import { RECOMMEND_POSITION_KEYS } from '@/lib/recommend-api';
@@ -170,7 +171,15 @@ export function WorkflowDashboard({
         navigate,
         location.pathname,
         `帮我执行 id 为：${card.id} 的工作流 【${card.name}】`,
-        { sessionTitle: `执行${card.name}工作流`, workflowRun: true, workflowEngine: engineType }
+        {
+          workflowRun: true,
+          workflowEngine: engineType,
+          workflowSession: {
+            workflowId: card.id,
+            engineType,
+            sessionTitle: workflowSessionTitle(card.name, engineType),
+          },
+        }
       );
     },
     [navigate, location.pathname]
