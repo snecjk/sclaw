@@ -20,7 +20,10 @@ import type {
 import {
   buildDingTalkMentionSystemContextForScheduledTask,
 } from '../../shared/dingtalk-prompts/dingtalk-mention-context';
-import { buildScheduledTaskDingTalkPromptAppend } from '../../shared/dingtalk-prompts';
+import {
+  buildScheduledTaskDingTalkPromptAppend,
+  SCHEDULED_TASK_DINGTALK_RULES,
+} from '../../shared/dingtalk-prompts';
 import {
   planDingTalkRecipientsLift,
   resolveScheduledTaskDingTalkRecipients,
@@ -188,14 +191,18 @@ export class ScheduledTaskService {
 
   /**
    * 构造定时任务执行期的钉钉相关 systemPromptAppend。
-   * - 列优先；列空则解析 prompt 内历史 Recipients 块 → `buildDingTalkMentionSystemContextForScheduledTask`
+   * - 列优先：收件人块 + 模块 C（禁询问 / 指定即必发；格式细则已在收件人块内，不重复模块 A）
+   * - 列空则解析 prompt 内历史 Recipients 块 → 同上
    * - 仍无 resolved 收件人，但 prompt 含块或 `dws chat message send` → 模块 C/A 条件拼接（不含 CORE）
    * - 否则 null（执行器不追加；CORE 由引擎 hook 注入）
    */
   buildExecutionSystemPromptAppend(task: ScheduleTask): string | null {
     const recipients = resolveScheduledTaskDingTalkRecipients(task);
     if (recipients) {
-      return buildDingTalkMentionSystemContextForScheduledTask(recipients);
+      return [
+        buildDingTalkMentionSystemContextForScheduledTask(recipients),
+        SCHEDULED_TASK_DINGTALK_RULES,
+      ].join('\n\n');
     }
     return buildScheduledTaskDingTalkPromptAppend(task.prompt);
   }
