@@ -191,7 +191,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1 text-[#4E5969] hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:hover:bg-muted"
+            className="rounded-md p-1 text-[#4E5969] hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
             aria-label={t('actions.close')}
           >
             <X className="h-4 w-4" />
@@ -200,7 +200,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
 
         <div className="px-3 pb-3">
           {isSite ? (
-            <div className="flex min-h-[34px] items-start gap-2 rounded-[8px] border border-[#DCE7FF] bg-[#F2F6FF] px-2.5 py-2 text-[11px] leading-[17px] text-[#86909C] dark:border-blue-900/50 dark:bg-blue-950/25">
+            <div className="flex min-h-[34px] items-start gap-2 rounded-[8px] border border-[#DCE7FF] bg-[#F2F6FF] px-2.5 py-2 text-[11px] leading-[17px] text-[#86909C] dark:border-blue-900/50 dark:bg-blue-950/25 dark:text-blue-100/80">
               <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#4E7FFF]" />
               <span>{t('dataCenterPage.saveArtifact.sharedTip')}</span>
             </div>
@@ -229,12 +229,12 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                 {sharedOpen ? (
                   <div className="mt-2 space-y-2 pl-5">
                     {sharedSpaceLoading || loadingMap[folderKey('shared', ROOT_ENTRY_ID)] ? (
-                      <div className="flex items-center gap-2 px-1 py-2 text-[12px] text-[#86909C]">
+                      <div className="flex items-center gap-2 px-1 py-2 text-[12px] text-[#86909C] dark:text-muted-foreground">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         {t('dataCenterPage.saveArtifact.loading')}
                       </div>
                     ) : (folderMap[folderKey('shared', ROOT_ENTRY_ID)] ?? []).length === 0 ? (
-                      <div className="px-1 py-2 text-[12px] text-[#86909C]">{t('dataCenterPage.saveArtifact.emptyFolders')}</div>
+                      <div className="px-1 py-2 text-[12px] text-[#86909C] dark:text-muted-foreground">{t('dataCenterPage.saveArtifact.emptyFolders')}</div>
                     ) : (
                       (folderMap[folderKey('shared', ROOT_ENTRY_ID)] ?? []).map((folder) => (
                         <TreeFolderRow
@@ -272,12 +272,12 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
               {mineOpen ? (
                 <div className="mt-2 space-y-2 pl-5">
                   {loadingMap[folderKey('my', ROOT_ENTRY_ID)] ? (
-                    <div className="flex items-center gap-2 px-1 py-2 text-[12px] text-[#86909C]">
+                    <div className="flex items-center gap-2 px-1 py-2 text-[12px] text-[#86909C] dark:text-muted-foreground">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       {t('dataCenterPage.saveArtifact.loading')}
                     </div>
                   ) : (folderMap[folderKey('my', ROOT_ENTRY_ID)] ?? []).length === 0 ? (
-                    <div className="px-1 py-2 text-[12px] text-[#86909C]">{t('dataCenterPage.saveArtifact.emptyFolders')}</div>
+                    <div className="px-1 py-2 text-[12px] text-[#86909C] dark:text-muted-foreground">{t('dataCenterPage.saveArtifact.emptyFolders')}</div>
                   ) : (
                     (folderMap[folderKey('my', ROOT_ENTRY_ID)] ?? []).map((folder) => (
                       <TreeFolderRow
@@ -306,7 +306,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
 
         <div className="flex h-[48px] justify-end gap-2 border-t border-[#E5E6EB] px-3 py-2 dark:border-border">
           <Button type="button" variant="outline" className="h-8 rounded-[8px] px-4 text-[12px] font-normal" onClick={onClose}>{t('actions.cancel')}</Button>
-          <Button type="button" className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969]" onClick={save} disabled={!canSave || saving}>
+          <Button type="button" className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90" onClick={save} disabled={!canSave || saving}>
             {saving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
             {t('actions.confirm')}
           </Button>
@@ -328,8 +328,8 @@ function TreeCheckbox({ checked, disabled = false, onClick }: { checked?: boolea
       className={cn(
         'flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border text-white transition-colors',
         checked
-          ? 'border-[#1D2129] bg-[#1D2129]'
-          : 'border-[#D7DBE2] bg-white',
+          ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary'
+          : 'border-[#D7DBE2] bg-white dark:border-border dark:bg-background',
         disabled && 'cursor-not-allowed opacity-45',
       )}
       aria-pressed={Boolean(checked)}
@@ -360,7 +360,7 @@ function TreeHeader({
       <button
         type="button"
         onClick={onToggle}
-        className="flex h-5 w-5 items-center justify-center rounded text-[#4E5969] hover:bg-[#F2F3F5]"
+        className="flex h-5 w-5 items-center justify-center rounded text-[#4E5969] hover:bg-[#F2F3F5] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
       >
         {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
       </button>
@@ -369,7 +369,7 @@ function TreeHeader({
         onClick={onSelect}
         className="flex min-w-0 flex-1 items-center gap-2 rounded-[6px] text-left"
       >
-        <img src={directoryIcon} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 object-contain" />
+        <img src={directoryIcon} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 object-contain dark:brightness-110" />
         <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#1D2129] dark:text-foreground">{label}</span>
       </button>
     </div>
@@ -413,7 +413,7 @@ function TreeFolderRow({
   return (
     <div className="space-y-1">
       <div
-        className="flex h-7 w-full items-center gap-2 rounded-[6px] text-left hover:bg-[#F7F8FA]"
+        className="flex h-7 w-full items-center gap-2 rounded-[6px] text-left hover:bg-[#F7F8FA] dark:hover:bg-muted/50"
         style={{ paddingLeft: depth * 18 }}
       >
         <TreeCheckbox checked={checked} onClick={() => onSelect(folder.entryId)} />
@@ -421,7 +421,7 @@ function TreeFolderRow({
           <button
             type="button"
             onClick={() => { void onToggleOpen(space, folder.entryId); }}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#4E5969] hover:bg-[#F2F3F5]"
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#4E5969] hover:bg-[#F2F3F5] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
             aria-label={folder.name}
           >
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
@@ -434,7 +434,7 @@ function TreeFolderRow({
           onClick={() => onSelect(folder.entryId)}
           className="flex min-w-0 flex-1 items-center gap-2 rounded-[6px] text-left"
         >
-          <img src={directoryIcon} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 object-contain" />
+          <img src={directoryIcon} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 object-contain dark:brightness-110" />
           <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[#1D2129] dark:text-foreground">{folder.name}</span>
         </button>
       </div>

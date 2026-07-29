@@ -83,7 +83,7 @@ export function EntryList(props: EntryRenderProps) {
                 props.onMoveToFolder(source, entry);
               }}
               className={cn(
-                'grid h-[56px] grid-cols-[minmax(0,1fr)_128px] items-center rounded-[8px] bg-white px-3 shadow-[0_1px_2px_rgba(29,33,41,0.02)] transition-colors hover:bg-[#FAFBFC] min-[720px]:grid-cols-[minmax(0,1fr)_140px_64px_128px] min-[900px]:grid-cols-[minmax(0,1fr)_168px_74px_128px] dark:bg-card dark:hover:bg-muted/40',
+                'grid h-[56px] grid-cols-[minmax(0,1fr)_128px] items-center rounded-[8px] bg-white px-3 shadow-[0_1px_2px_rgba(29,33,41,0.02)] transition-colors hover:bg-[#FAFBFC] min-[720px]:grid-cols-[minmax(0,1fr)_140px_64px_128px] min-[900px]:grid-cols-[minmax(0,1fr)_168px_74px_128px] dark:border dark:border-border/60 dark:bg-card dark:shadow-none dark:hover:bg-muted/40',
                 draggingEntryId === entry.entryId && 'opacity-60',
                 dropActive && 'bg-[#EAF3FF] ring-1 ring-[#4E7FFF] dark:bg-primary/10',
               )}
@@ -353,7 +353,7 @@ function EntryName({
         <span className="flex min-w-0 items-center gap-1">
           <span className="truncate text-[13px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">{entry.name}</span>
           {sourceLabel ? (
-            <span className="shrink-0 rounded-[4px] bg-[#EEF3FF] px-1.5 py-0.5 text-[11px] font-medium leading-[14px] text-[#4E7FFF]">
+            <span className="shrink-0 rounded-[4px] bg-[#EEF3FF] px-1.5 py-0.5 text-[11px] font-medium leading-[14px] text-[#4E7FFF] dark:bg-primary/15 dark:text-primary">
               {sourceLabel}
             </span>
           ) : null}
@@ -398,16 +398,16 @@ function EntryActions({
   const canTraceEntry = canTraceChat(entry);
   const canShowMore = hasMoreMenuActions(entry);
   return (
-    <div className="flex w-[128px] shrink-0 items-center justify-end gap-1 text-[#6B778C]">
+    <div className="flex w-[128px] shrink-0 items-center justify-end gap-1 text-[#6B778C] dark:text-muted-foreground">
       {canUploadToShared ? (
         <ActionTooltip label={uploadToSharedLabel ?? ''}>
           <button
             type="button"
             onClick={() => onUploadToShared(entry)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:hover:bg-muted dark:hover:text-foreground"
             aria-label={uploadToSharedLabel}
           >
-            <img src={uploadIcon} alt="" aria-hidden="true" className="h-4 w-4" />
+            <img src={uploadIcon} alt="" aria-hidden="true" className="h-4 w-4 dark:invert" />
           </button>
         </ActionTooltip>
       ) : null}
@@ -416,10 +416,10 @@ function EntryActions({
           <button
             type="button"
             onClick={() => onDownload(entry)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:hover:bg-muted dark:hover:text-foreground"
             aria-label={t('dataCenterPage.menu.download')}
           >
-            <img src={downloadIcon} alt="" aria-hidden="true" className="h-4 w-4" />
+            <img src={downloadIcon} alt="" aria-hidden="true" className="h-4 w-4 dark:invert" />
           </button>
         </ActionTooltip>
       ) : null}
@@ -428,10 +428,10 @@ function EntryActions({
           <button
             type="button"
             onClick={() => onShare(entry)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:hover:bg-muted dark:hover:text-foreground"
             aria-label={t('dataCenterPage.menu.share')}
           >
-            <img src={shareIcon} alt="" aria-hidden="true" className="h-4 w-4" />
+            <img src={shareIcon} alt="" aria-hidden="true" className="h-4 w-4 dark:invert" />
           </button>
         </ActionTooltip>
       ) : null}
@@ -448,7 +448,7 @@ function EntryActions({
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129]"
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:hover:bg-muted dark:hover:text-foreground"
                   aria-label={t('dataCenterPage.menu.more')}
                   onMouseEnter={() => setMoreTooltipOpen(true)}
                   onMouseLeave={() => setMoreTooltipOpen(false)}
@@ -548,7 +548,7 @@ function ActionTooltip({ label, children }: { label: string; children: ReactNode
 
 export function FeedbackState({ icon, title, description }: { icon: ReactNode; title: string; description?: string }) {
   return (
-    <div className="flex h-full min-h-[360px] flex-col items-center justify-center rounded-xl border border-dashed border-border bg-background text-center">
+    <div className="flex h-full min-h-[360px] flex-col items-center justify-center rounded-xl border border-dashed border-border bg-background text-center dark:bg-card/40">
       <div className="text-muted-foreground">{icon}</div>
       <h2 className="mt-4 text-base font-semibold text-foreground">{title}</h2>
       {description ? (

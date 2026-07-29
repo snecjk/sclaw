@@ -473,7 +473,7 @@ export function DataCenter() {
                       value={currentKeyword}
                       onChange={(event) => isLocalDriveTab ? localStore.setKeyword(event.target.value) : store.setKeyword(event.target.value)}
                       placeholder={t('dataCenterPage.toolbar.searchPlaceholder')}
-                      className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground"
+                      className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground"
                     />
                   </div>
                 </div>
@@ -516,11 +516,11 @@ export function DataCenter() {
                   </div>
                   {isUploadDriveTab ? (
                     <>
-                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={() => setCreateFolderOpen(true)}>
+                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" onClick={() => setCreateFolderOpen(true)}>
                         <FolderPlus className="mr-2 h-4 w-4" />
                         {t('dataCenterPage.toolbar.createFolder')}
                       </Button>
-                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={handleUploadFiles} disabled={uploading}>
+                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" onClick={handleUploadFiles} disabled={uploading}>
                         {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                         {t('dataCenterPage.toolbar.uploadFile')}
                       </Button>
@@ -528,7 +528,7 @@ export function DataCenter() {
                   ) : (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" disabled={uploading}>
+                        <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" disabled={uploading}>
                           {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
                           {t('dataCenterPage.toolbar.authorizeLocalFile')}
                           <ChevronDown className="ml-2 h-3.5 w-3.5" />
@@ -572,7 +572,7 @@ export function DataCenter() {
                       value={store.keyword}
                       onChange={(event) => store.setKeyword(event.target.value)}
                       placeholder={t('dataCenterPage.toolbar.searchPlaceholder')}
-                      className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground"
+                      className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground"
                     />
                   </div>
                   <AssociationFilterDropdown value={associationFilter} onChange={setAssociationFilter} />
@@ -587,7 +587,7 @@ export function DataCenter() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-muted dark:text-foreground"
+                    className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-muted dark:text-foreground dark:hover:bg-muted/70"
                     onClick={() => setCreateFolderOpen(true)}
                     disabled={!canCreateFolder}
                   >
@@ -811,7 +811,7 @@ function AssociationFilterDropdown({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="inline-flex h-[34px] items-center justify-center rounded-[10px] border border-[#E5E6EB] bg-white px-3 text-[13px] font-normal text-[#4E5969] shadow-none outline-none ring-0 transition-colors hover:bg-white focus:border-[#E5E6EB] focus:outline-none focus:ring-0 focus-visible:border-[#E5E6EB] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-[#E5E6EB] dark:border-border dark:bg-background dark:text-muted-foreground"
+          className="inline-flex h-[34px] items-center justify-center rounded-[10px] border border-[#E5E6EB] bg-white px-3 text-[13px] font-normal text-[#4E5969] shadow-none outline-none ring-0 transition-colors hover:bg-[#F7F8FA] focus:border-[#E5E6EB] focus:outline-none focus:ring-0 focus-visible:border-[#E5E6EB] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-[#E5E6EB] dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-muted/50"
         >
           {t('dataCenterPage.toolbar.associationLabel', { value: label })}
           <ChevronDown className="ml-1 h-3.5 w-3.5" />
