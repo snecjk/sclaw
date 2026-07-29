@@ -4,6 +4,7 @@ export type DataCenterUiEntry = DataCenterEntry & {
   localAuthorized?: boolean;
   localPath?: string;
   missing?: boolean;
+  permissionDenied?: boolean;
 };
 
 export type DriveTab = 'local' | 'upload';
@@ -17,6 +18,8 @@ export interface EntryRenderProps {
   onDownload: (entry: DataCenterUiEntry) => void;
   onShare: (entry: DataCenterUiEntry) => void;
   onUploadToShared: (entry: DataCenterUiEntry) => void;
+  onMove: (entry: DataCenterUiEntry) => void;
+  onMoveToFolder: (entry: DataCenterUiEntry, targetFolder: DataCenterUiEntry) => void;
   onRename: (entry: DataCenterUiEntry) => void;
   onDelete: (entry: DataCenterUiEntry) => void;
   onTrace: (entry: DataCenterUiEntry) => void;

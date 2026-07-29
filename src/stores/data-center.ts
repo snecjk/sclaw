@@ -213,7 +213,7 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
       set({ mutating: false });
       await get().load();
     } catch (error) {
-      set({ mutating: false, error: error instanceof Error ? error.message : String(error) });
+      set({ mutating: false });
       throw error;
     }
   },
@@ -225,7 +225,7 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
       set({ mutating: false });
       await get().load();
     } catch (error) {
-      set({ mutating: false, error: error instanceof Error ? error.message : String(error) });
+      set({ mutating: false });
       throw error;
     }
   },

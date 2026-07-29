@@ -29,6 +29,7 @@ import {
   deleteDataCenterSharedEntry,
   getDataCenterDownloadUrl,
   getDataCenterPreviewUrl,
+  moveDataCenterEntry,
   shareDataCenterEntries,
   uploadDriveFileFromPath,
 } from '@/lib/data-center-api';
@@ -48,8 +49,9 @@ import { useLocalAuthorizedFilesStore } from '@/stores/local-authorized-files';
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import type { DataCenterTempUrl } from '@/types/data-center';
+import type { LocalAuthorizeSelectionType } from '@/types/local-authorized-file';
 import { EntryGrid, EntryList, FeedbackState } from './components/entries';
-import { DataCenterModal, PreviewModal, TextPromptModal, TraceChatMissingDialog, UploadToSharedFolderDialog } from './components/modals';
+import { DataCenterModal, MoveEntryDialog, PreviewModal, TextPromptModal, TraceChatMissingDialog, UploadToSharedFolderDialog } from './components/modals';
 import { FolderBreadcrumbBar, IconToggle, TabButton } from './components/navigation';
 import { ROOT_ENTRY_ID } from './constants';
 import type { DataCenterUiEntry, DriveTab, UploadToSharedTarget } from './types';
@@ -78,6 +80,7 @@ export function DataCenter() {
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [renameEntry, setRenameEntry] = useState<DataCenterUiEntry | null>(null);
   const [deleteEntry, setDeleteEntry] = useState<DataCenterUiEntry | null>(null);
+  const [moveEntry, setMoveEntry] = useState<DataCenterUiEntry | null>(null);
   const [previewState, setPreviewState] = useState<{ entry: DataCenterUiEntry; tempUrl: DataCenterTempUrl } | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
@@ -92,13 +95,17 @@ export function DataCenter() {
   const isSharedArtifactSpace = store.section === 'qa_artifact' && store.spaceType === 'site_shared_artifact';
   const isMyArtifactSpace = store.section === 'qa_artifact' && store.spaceType === 'qa_artifact';
   const canCreateFolder = isUploadDriveTab || (!isDriveSection && (!isSharedArtifactSpace || Boolean(store.spaceId)));
-  const visibleItems: DataCenterUiEntry[] = isLocalDriveTab
+  const baseVisibleItems: DataCenterUiEntry[] = isLocalDriveTab
     ? localStore.items.map(localEntryToUiEntry)
     : store.items;
+  const visibleItems: DataCenterUiEntry[] = store.section === 'qa_artifact' && associationFilter === 'task'
+    ? baseVisibleItems.filter((item) => item.sourceType === 'scheduled_task_artifact')
+    : baseVisibleItems;
   const currentViewMode = isLocalDriveTab ? localStore.viewMode : store.viewMode;
   const currentKeyword = isLocalDriveTab ? localStore.keyword : store.keyword;
   const currentLoading = isLocalDriveTab ? localStore.loading : store.loading;
   const currentError = isLocalDriveTab ? localStore.error : store.error;
+  const localPermissionDenied = isLocalDriveTab ? localStore.permissionDenied : null;
   const currentParentEntryId = isLocalDriveTab ? localStore.parentEntryId : store.parentEntryId;
   const currentBreadcrumbs = isLocalDriveTab ? localStore.breadcrumbs : store.breadcrumbs;
   const folderCount = isLocalDriveTab ? localStore.stats.folderCount : store.items.filter((item) => item.entryType === 'folder').length;
@@ -114,6 +121,13 @@ export function DataCenter() {
   const errorDescription = currentError === DATA_CENTER_API_NOT_FOUND
     ? t('dataCenterPage.feedback.apiNotFound')
     : currentError;
+  const emptyFeedbackDescription = (() => {
+    if (isLocalDriveTab && currentParentEntryId !== ROOT_ENTRY_ID) return '';
+    if (isSharedArtifactSpace) return t('dataCenterPage.feedback.sharedQaEmptyDescription');
+    if (store.section === 'qa_artifact') return t('dataCenterPage.feedback.qaEmptyDescription');
+    if (isUploadDriveTab) return t('dataCenterPage.feedback.uploadDriveEmptyDescription');
+    return t('dataCenterPage.feedback.driveEmptyDescription');
+  })();
 
   useEffect(() => {
     const rawSection = searchParams.get('section');
@@ -165,12 +179,15 @@ export function DataCenter() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSite, store.section]);
 
-  const handleAuthorizeLocal = async () => {
+  const handleAuthorizeLocal = async (selectionType: LocalAuthorizeSelectionType) => {
     setUploading(true);
     try {
-      const authorized = await localStore.authorize();
-      if (authorized) {
+      const result = await localStore.authorize(selectionType);
+      if (result.acceptedCount > 0) {
         toast.success(t('dataCenterPage.toasts.localAuthorized'));
+      }
+      if (result.skippedCount > 0) {
+        toast.warning(t('dataCenterPage.toasts.localAuthorizationSkipped', { count: result.skippedCount }));
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.uploadFailed'));
@@ -371,7 +388,27 @@ export function DataCenter() {
     await store.refreshQuota();
   };
 
+  const handleMoveEntry = async (entry: DataCenterUiEntry, targetParentEntryId: string) => {
+    if (entry.localAuthorized) return;
+    await moveDataCenterEntry(entry.entryId, targetParentEntryId);
+    await store.load();
+    await store.refreshQuota();
+  };
+
+  const handleMoveToFolder = async (entry: DataCenterUiEntry, targetFolder: DataCenterUiEntry) => {
+    try {
+      await handleMoveEntry(entry, targetFolder.entryId);
+      toast.success(t('dataCenterPage.toasts.moved'));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.moveFailed'));
+    }
+  };
+
   const handleOpenFolder = (entry: DataCenterUiEntry) => {
+    if (entry.permissionDenied) {
+      toast.error(t('dataCenterPage.toasts.localPermissionDenied', { name: entry.name }));
+      return;
+    }
     if (isLocalDriveTab) {
       void localStore.enterFolder({
         entryId: entry.entryId,
@@ -386,11 +423,27 @@ export function DataCenter() {
         updatedAt: entry.updatedAt,
         authorizedAt: entry.createdAt ?? entry.updatedAt ?? new Date().toISOString(),
         missing: entry.missing,
+        permissionDenied: entry.permissionDenied,
       });
       return;
     }
     void store.enterFolder(entry);
   };
+
+  const deleteDialogTitle = deleteEntry?.localAuthorized
+    ? t('dataCenterPage.dialogs.removeAuthorizationTitle')
+    : t('dataCenterPage.dialogs.deleteTitle');
+  const deleteDialogMessage = deleteEntry?.localAuthorized
+    ? deleteEntry.parentEntryId === ROOT_ENTRY_ID
+      ? t('dataCenterPage.dialogs.removeAuthorizationRootMessage', { name: deleteEntry.name })
+      : t('dataCenterPage.dialogs.removeAuthorizationChildMessage', { name: deleteEntry.name })
+    : t('dataCenterPage.dialogs.deleteMessage', { name: deleteEntry?.name ?? '' });
+  const deleteConfirmLabel = deleteEntry?.localAuthorized
+    ? t('dataCenterPage.menu.removeAuthorization')
+    : t('actions.delete');
+  const deleteSuccessMessage = deleteEntry?.localAuthorized
+    ? t('dataCenterPage.toasts.authorizationRemoved')
+    : t('dataCenterPage.toasts.deleted');
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--sto-main-bg)]">
@@ -423,7 +476,7 @@ export function DataCenter() {
                       value={currentKeyword}
                       onChange={(event) => isLocalDriveTab ? localStore.setKeyword(event.target.value) : store.setKeyword(event.target.value)}
                       placeholder={t('dataCenterPage.toolbar.searchPlaceholder')}
-                      className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground"
+                      className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground"
                     />
                   </div>
                 </div>
@@ -466,20 +519,33 @@ export function DataCenter() {
                   </div>
                   {isUploadDriveTab ? (
                     <>
-                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={() => setCreateFolderOpen(true)}>
+                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" onClick={() => setCreateFolderOpen(true)}>
                         <FolderPlus className="mr-2 h-4 w-4" />
                         {t('dataCenterPage.toolbar.createFolder')}
                       </Button>
-                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={handleUploadFiles} disabled={uploading}>
+                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" onClick={handleUploadFiles} disabled={uploading}>
                         {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                         {t('dataCenterPage.toolbar.uploadFile')}
                       </Button>
                     </>
                   ) : (
-                    <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground" onClick={handleAuthorizeLocal} disabled={uploading}>
-                      {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                      {t('dataCenterPage.toolbar.authorizeLocalFile')}
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" disabled={uploading}>
+                          {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                          {t('dataCenterPage.toolbar.authorizeLocalFile')}
+                          <ChevronDown className="ml-2 h-3.5 w-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-[132px] rounded-[10px] p-2">
+                        <DropdownMenuItem onSelect={() => { void handleAuthorizeLocal('file'); }} className="text-[13px]">
+                          {t('dataCenterPage.toolbar.authorizeLocalFileOption')}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => { void handleAuthorizeLocal('folder'); }} className="text-[13px]">
+                          {t('dataCenterPage.toolbar.authorizeLocalFolderOption')}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                 </div>
               </div>
@@ -509,7 +575,7 @@ export function DataCenter() {
                       value={store.keyword}
                       onChange={(event) => store.setKeyword(event.target.value)}
                       placeholder={t('dataCenterPage.toolbar.searchPlaceholder')}
-                      className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground"
+                      className="h-[34px] w-[300px] rounded-[10px] border border-[#E5E6EB] bg-white pl-9 pr-3 text-[13px] text-[#1D2129] outline-none placeholder:text-[#A8B0BD] focus:border-[#C9CDD4] focus:ring-0 dark:border-border dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground"
                     />
                   </div>
                   <AssociationFilterDropdown value={associationFilter} onChange={setAssociationFilter} />
@@ -524,7 +590,7 @@ export function DataCenter() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-muted dark:text-foreground"
+                    className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-muted dark:text-foreground dark:hover:bg-muted/70"
                     onClick={() => setCreateFolderOpen(true)}
                     disabled={!canCreateFolder}
                   >
@@ -562,14 +628,12 @@ export function DataCenter() {
               ) : visibleItems.length === 0 ? (
                 <FeedbackState
                   icon={<Folder className="h-8 w-8" />}
-                  title={currentKeyword ? t('dataCenterPage.feedback.noMatch') : t('dataCenterPage.feedback.empty')}
-                  description={isSharedArtifactSpace
-                    ? t('dataCenterPage.feedback.sharedQaEmptyDescription')
-                    : store.section === 'qa_artifact'
-                      ? t('dataCenterPage.feedback.qaEmptyDescription')
-                      : isUploadDriveTab
-                        ? t('dataCenterPage.feedback.uploadDriveEmptyDescription')
-                        : t('dataCenterPage.feedback.driveEmptyDescription')}
+                  title={localPermissionDenied
+                    ? t('dataCenterPage.feedback.localPermissionDeniedTitle')
+                    : currentKeyword ? t('dataCenterPage.feedback.noMatch') : t('dataCenterPage.feedback.empty')}
+                  description={localPermissionDenied
+                    ? t('dataCenterPage.feedback.localPermissionDeniedDescription', { name: localPermissionDenied.name })
+                    : emptyFeedbackDescription}
                 />
               ) : currentViewMode === 'grid' ? (
                 <EntryGrid
@@ -579,6 +643,8 @@ export function DataCenter() {
                   onDownload={handleDownload}
                   onShare={handleShare}
                   onUploadToShared={handleUploadToShared}
+                  onMove={setMoveEntry}
+                  onMoveToFolder={handleMoveToFolder}
                   onRename={setRenameEntry}
                   onDelete={setDeleteEntry}
                   onTrace={handleTrace}
@@ -591,6 +657,8 @@ export function DataCenter() {
                   onDownload={handleDownload}
                   onShare={handleShare}
                   onUploadToShared={handleUploadToShared}
+                  onMove={setMoveEntry}
+                  onMoveToFolder={handleMoveToFolder}
                   onRename={setRenameEntry}
                   onDelete={setDeleteEntry}
                   onTrace={handleTrace}
@@ -639,7 +707,7 @@ export function DataCenter() {
 
       {deleteEntry ? (
         <DataCenterModal
-          title={t('dataCenterPage.dialogs.deleteTitle')}
+          title={deleteDialogTitle}
           onClose={() => setDeleteEntry(null)}
           footer={(
             <>
@@ -651,21 +719,37 @@ export function DataCenter() {
                   try {
                     await handleDeleteEntry(deleteEntry.entryId);
                     setDeleteEntry(null);
-                    toast.success(t('dataCenterPage.toasts.deleted'));
+                    toast.success(deleteSuccessMessage);
                   } catch (error) {
                     toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.deleteFailed'));
                   }
                 }}
               >
-                {t('actions.delete')}
+                {deleteConfirmLabel}
               </Button>
             </>
           )}
         >
           <p className="text-sm text-muted-foreground">
-            {t('dataCenterPage.dialogs.deleteMessage', { name: deleteEntry.name })}
+            {deleteDialogMessage}
           </p>
         </DataCenterModal>
+      ) : null}
+
+      {moveEntry ? (
+        <MoveEntryDialog
+          entry={moveEntry}
+          onClose={() => setMoveEntry(null)}
+          onConfirm={async (targetParentEntryId) => {
+            try {
+              await handleMoveEntry(moveEntry, targetParentEntryId);
+              setMoveEntry(null);
+              toast.success(t('dataCenterPage.toasts.moved'));
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.moveFailed'));
+            }
+          }}
+        />
       ) : null}
 
       {previewState ? (
@@ -730,7 +814,7 @@ function AssociationFilterDropdown({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="inline-flex h-[34px] items-center justify-center rounded-[10px] border border-[#E5E6EB] bg-white px-3 text-[13px] font-normal text-[#4E5969] shadow-none outline-none ring-0 transition-colors hover:bg-white focus:border-[#E5E6EB] focus:outline-none focus:ring-0 focus-visible:border-[#E5E6EB] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-[#E5E6EB] dark:border-border dark:bg-background dark:text-muted-foreground"
+          className="inline-flex h-[34px] items-center justify-center rounded-[10px] border border-[#E5E6EB] bg-white px-3 text-[13px] font-normal text-[#4E5969] shadow-none outline-none ring-0 transition-colors hover:bg-[#F7F8FA] focus:border-[#E5E6EB] focus:outline-none focus:ring-0 focus-visible:border-[#E5E6EB] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-[#E5E6EB] dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-muted/50"
         >
           {t('dataCenterPage.toolbar.associationLabel', { value: label })}
           <ChevronDown className="ml-1 h-3.5 w-3.5" />

@@ -9,6 +9,7 @@ import type {
   LocalAuthorizedFileBreadcrumb,
   LocalAuthorizedFileEntry,
   LocalAuthorizedFileStats,
+  LocalAuthorizeSelectionType,
 } from '@/types/local-authorized-file';
 import type { DataCenterViewMode } from '@/types/data-center';
 
@@ -20,13 +21,14 @@ interface LocalAuthorizedFilesStoreState {
   keyword: string;
   viewMode: DataCenterViewMode;
   stats: LocalAuthorizedFileStats;
+  permissionDenied: { path: string; name: string } | null;
   loading: boolean;
   mutating: boolean;
   error: string | null;
   setViewMode: (viewMode: DataCenterViewMode) => void;
   setKeyword: (keyword: string) => void;
   load: (options?: { resetRoot?: boolean }) => Promise<void>;
-  authorize: () => Promise<boolean>;
+  authorize: (selectionType: LocalAuthorizeSelectionType) => Promise<{ authorized: boolean; acceptedCount: number; skippedCount: number }>;
   enterFolder: (entry: LocalAuthorizedFileEntry) => Promise<void>;
   openBreadcrumb: (entryId: string) => Promise<void>;
   renameEntry: (entryId: string, name: string) => Promise<void>;
@@ -47,6 +49,7 @@ export const useLocalAuthorizedFilesStore = create<LocalAuthorizedFilesStoreStat
   keyword: '',
   viewMode: 'list',
   stats: emptyStats,
+  permissionDenied: null,
   loading: false,
   mutating: false,
   error: null,
@@ -59,7 +62,7 @@ export const useLocalAuthorizedFilesStore = create<LocalAuthorizedFilesStoreStat
     if (options?.resetRoot) {
       set({ parentEntryId, breadcrumbs: [] });
     }
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, permissionDenied: null });
     try {
       const result = await listLocalAuthorizedFiles({
         parentEntryId,
@@ -70,6 +73,7 @@ export const useLocalAuthorizedFilesStore = create<LocalAuthorizedFilesStoreStat
         total: result.total,
         breadcrumbs: result.breadcrumbs,
         stats: result.stats,
+        permissionDenied: result.permissionDenied ?? null,
         loading: false,
       });
     } catch (error) {
@@ -77,13 +81,13 @@ export const useLocalAuthorizedFilesStore = create<LocalAuthorizedFilesStoreStat
     }
   },
 
-  authorize: async () => {
+  authorize: async (selectionType) => {
     set({ mutating: true, error: null });
     try {
-      const result = await authorizeLocalFiles();
+      const result = await authorizeLocalFiles(selectionType);
       if (result.canceled) {
         set({ mutating: false });
-        return false;
+        return { authorized: false, acceptedCount: 0, skippedCount: 0 };
       }
       set({
         mutating: false,
@@ -92,8 +96,13 @@ export const useLocalAuthorizedFilesStore = create<LocalAuthorizedFilesStoreStat
         items: result.items,
         total: result.total,
         stats: result.stats,
+        permissionDenied: result.permissionDenied ?? null,
       });
-      return true;
+      return {
+        authorized: true,
+        acceptedCount: result.authorizationSummary?.acceptedCount ?? result.items.length,
+        skippedCount: result.authorizationSummary?.skipped.length ?? 0,
+      };
     } catch (error) {
       set({ mutating: false, error: error instanceof Error ? error.message : String(error) });
       throw error;
@@ -126,15 +135,22 @@ export const useLocalAuthorizedFilesStore = create<LocalAuthorizedFilesStoreStat
   deleteEntry: async (entryId) => {
     set({ mutating: true, error: null });
     try {
+      const target = get().items.find((item) => item.entryId === entryId);
       const result = await removeLocalAuthorizedEntry(entryId);
-      set({
-        mutating: false,
-        parentEntryId: 'root',
-        breadcrumbs: [],
-        items: result.items,
-        total: result.total,
-        stats: result.stats,
-      });
+      if (!target || target.parentEntryId === 'root') {
+        set({
+          mutating: false,
+          parentEntryId: 'root',
+          breadcrumbs: [],
+          items: result.items,
+          total: result.total,
+          stats: result.stats,
+          permissionDenied: result.permissionDenied ?? null,
+        });
+        return;
+      }
+      set({ mutating: false });
+      await get().load();
     } catch (error) {
       set({ mutating: false, error: error instanceof Error ? error.message : String(error) });
       throw error;
