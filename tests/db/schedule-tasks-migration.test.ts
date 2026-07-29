@@ -12,9 +12,9 @@ function applyMigrations(db: DatabaseSync, predicate: (version: number) => boole
   }
 }
 
-// 按名而非 version 取迁移：0006-schedule-tasks 的 version 字段是反碰撞可变数
-// （现 =11，避开被 memory-capture-jobs 占用的 v6；详见 migration 文件头注释），
-// 文件名/名才是稳定标识。写死 version 会让测试在改号后静默失效。
+// 按名而非 version 取迁移：0011-schedule-tasks 的 version=11 是为避开
+// memory-capture-jobs 占用的 v6（详见 migration 文件头注释）。
+// 写死 version 会让测试在改号后静默失效，故按 name 查找。
 function migrationByName(name: string) {
   const m = SQLITE_MIGRATIONS.find((x) => x.name === name);
   if (!m) throw new Error(`migration "${name}" not found`);
@@ -36,10 +36,10 @@ function indexNames(db: DatabaseSync): string[] {
 }
 
 /**
- * migration 0006：双场景 + 幂等 + 幂等键唯一索引。
+ * migration 0011：双场景 + 幂等 + 幂等键唯一索引。
  * 直接 apply 真实注册的 SQLITE_MIGRATIONS.sql（不触生产库、不依赖 migrator logger）。
  */
-describe('schedule-tasks migration (0006)', () => {
+describe('schedule-tasks migration (0011)', () => {
   it('fresh DB: all migrations apply; schedule_tasks + schedule_task_runs + indexes present', () => {
     const db = new DatabaseSync(':memory:');
     applyMigrations(db, () => true);

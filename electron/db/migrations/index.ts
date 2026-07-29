@@ -9,7 +9,7 @@ import sessionCatalogSchemaMigration from './0007-session-catalog-schema';
 import sessionTypesAndChannelsMigration from './0008-session-types-and-channels';
 import wfRunWorkflowVersionMigration from './0009-wf-run-workflow-version';
 import channelPlaneMigration from './0010-channel-plane';
-import scheduleTasksMigration from './0006-schedule-tasks';
+import scheduleTasksMigration from './0011-schedule-tasks';
 
 
 // Keep migrations as explicit imports so Electron/Vite bundling can retain them
