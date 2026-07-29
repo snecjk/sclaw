@@ -113,6 +113,15 @@ function getMimeType(filePath: string): string | null {
   return EXT_MIME_MAP[ext] || null;
 }
 
+function getPathDisplayName(filePath: string): string {
+  const trimmedPath = filePath.trim();
+  const windowsDriveMatch = trimmedPath.match(/^([a-zA-Z]):[\\/]*$/);
+  if (windowsDriveMatch) return `${windowsDriveMatch[1].toUpperCase()}盘`;
+  const baseName = basename(trimmedPath);
+  if (baseName) return baseName;
+  return trimmedPath || filePath;
+}
+
 function isPermissionError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null || !('code' in error)) return false;
   return (error as NodeJS.ErrnoException).code === 'EPERM' || (error as NodeJS.ErrnoException).code === 'EACCES';
@@ -249,7 +258,7 @@ async function buildEntry(
       entryId: encodePathId(filePath),
       entryType,
       parentEntryId,
-      name: basename(filePath),
+      name: getPathDisplayName(filePath),
       path: filePath,
       mimeType: entryType === 'folder' ? null : getMimeType(filePath),
       fileExt: entryType === 'folder' ? null : ext.replace(/^\./, ''),
@@ -265,7 +274,7 @@ async function buildEntry(
       entryId: encodePathId(filePath),
       entryType: 'file',
       parentEntryId,
-      name: basename(filePath),
+      name: getPathDisplayName(filePath),
       path: filePath,
       mimeType: getMimeType(filePath),
       fileExt: ext.replace(/^\./, '') || null,
@@ -339,7 +348,7 @@ async function buildBreadcrumbs(parentEntryId: string): Promise<Array<{ entryId:
   if (!matchedRoot) return [];
   const items = [{ entryId: ROOT_ENTRY_ID, name: '我的文件' }];
   const rootPath = matchedRoot.path;
-  items.push({ entryId: encodePathId(rootPath), name: basename(rootPath) });
+  items.push({ entryId: encodePathId(rootPath), name: getPathDisplayName(rootPath) });
   const rel = relative(rootPath, currentPath);
   if (rel) {
     let cursor = rootPath;
@@ -374,7 +383,7 @@ export async function listLocalAuthorizedFiles(params: {
       children = await readdir(parentPath, { withFileTypes: true });
     } catch (error) {
       if (!isPermissionError(error)) throw error;
-      permissionDenied = { path: parentPath, name: basename(parentPath) };
+      permissionDenied = { path: parentPath, name: getPathDisplayName(parentPath) };
       children = [];
     }
     const now = new Date().toISOString();
@@ -412,7 +421,7 @@ export async function addLocalAuthorizedPaths(filePaths: string[]): Promise<Loca
       });
       acceptedCount += 1;
     } catch {
-      skipped.push({ path: filePath, name: basename(filePath) });
+      skipped.push({ path: filePath, name: getPathDisplayName(filePath) });
     }
   }
   await writeRoots([...byPath.values()]);
