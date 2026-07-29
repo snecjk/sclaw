@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
+import type { EmbedChatIndexItem } from '@/lib/sclaw-browser-chat-index';
 
 function formatSessionTime(ts: number): string {
   if (!ts) return '';
@@ -29,14 +30,30 @@ function formatSessionTime(ts: number): string {
   }
 }
 
-export function SclawBrowserEmbedChatSessions() {
+export interface SclawBrowserEmbedChatSessionsProps {
+  chatSessionKey?: string | null;
+  chatSessions?: EmbedChatIndexItem[];
+  createChatSession?: () => void;
+  switchChatSession?: (sessionKey: string) => void;
+  deleteChatSession?: (sessionKey: string) => void | Promise<void>;
+  refreshChatSessions?: () => void;
+}
+
+export function SclawBrowserEmbedChatSessions(props: SclawBrowserEmbedChatSessionsProps = {}) {
   const { t } = useTranslation('common');
-  const chatSessionKey = useSclawBrowserOverlayStore((s) => s.chatSessionKey);
-  const chatSessions = useSclawBrowserOverlayStore((s) => s.chatSessions);
-  const createChatSession = useSclawBrowserOverlayStore((s) => s.createChatSession);
-  const switchChatSession = useSclawBrowserOverlayStore((s) => s.switchChatSession);
-  const deleteChatSession = useSclawBrowserOverlayStore((s) => s.deleteChatSession);
-  const refreshChatSessions = useSclawBrowserOverlayStore((s) => s.refreshChatSessions);
+  const overlayChatSessionKey = useSclawBrowserOverlayStore((s) => s.chatSessionKey);
+  const overlayChatSessions = useSclawBrowserOverlayStore((s) => s.chatSessions);
+  const overlayCreate = useSclawBrowserOverlayStore((s) => s.createChatSession);
+  const overlaySwitch = useSclawBrowserOverlayStore((s) => s.switchChatSession);
+  const overlayDelete = useSclawBrowserOverlayStore((s) => s.deleteChatSession);
+  const overlayRefresh = useSclawBrowserOverlayStore((s) => s.refreshChatSessions);
+
+  const chatSessionKey = props.chatSessionKey !== undefined ? props.chatSessionKey : overlayChatSessionKey;
+  const chatSessions = props.chatSessions ?? overlayChatSessions;
+  const createChatSession = props.createChatSession ?? overlayCreate;
+  const switchChatSession = props.switchChatSession ?? overlaySwitch;
+  const deleteChatSession = props.deleteChatSession ?? overlayDelete;
+  const refreshChatSessions = props.refreshChatSessions ?? overlayRefresh;
   const [open, setOpen] = useState(false);
 
   return (

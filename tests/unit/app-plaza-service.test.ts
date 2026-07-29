@@ -40,4 +40,20 @@ describe('AppPlazaService', () => {
     await service[method]();
     expect(memoryCenterFetchForSessionMock).toHaveBeenCalledWith(path, { method: 'POST' });
   });
+
+  it('exchanges skip-login link by systemCode', async () => {
+    memoryCenterFetchForSessionMock.mockResolvedValue({
+      success: true,
+      data: 'https://sso.example.com/Authenticate/Login?code=abc',
+    });
+    const service = new AppPlazaService();
+    await expect(service.getSkipLoginLink('JIUTIAN')).resolves.toEqual({
+      success: true,
+      data: 'https://sso.example.com/Authenticate/Login?code=abc',
+    });
+    expect(memoryCenterFetchForSessionMock).toHaveBeenCalledWith(
+      '/agent/v1/app-plaza/skip-login-link?systemCode=JIUTIAN',
+      { method: 'POST' },
+    );
+  });
 });

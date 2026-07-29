@@ -13,7 +13,7 @@ import { Models } from './pages/Models';
 import { Agents } from './pages/Agents';
 import { Channels } from './pages/Channels';
 import { SkillPlazaPage } from './components/skill-plaza/SkillPlazaPage';
-import { MoreAppsPage } from './components/more-apps/MoreAppsPage';
+import { AppPlazaRouteSlot } from './components/more-apps/AppPlazaShell';
 import { Subscriptions } from './pages/Subscriptions';
 import MyTask from './pages/MyTask';
 import { Home } from './pages/Home';
@@ -326,7 +326,7 @@ function App() {
             <Route path="/agents" element={<Agents />} />
             <Route path="/channels" element={<Channels />} />
             <Route path="/skills" element={<SkillPlazaPage />} />
-            <Route path="/more-apps" element={<MoreAppsPage />} />
+            <Route path="/more-apps" element={<AppPlazaRouteSlot />} />
             <Route path="/subscriptions" element={<Subscriptions />} />
             <Route path="/my-tasks" element={<MyTask />} />
             <Route path="/data-center" element={<DataCenter />} />

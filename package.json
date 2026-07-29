@@ -1,6 +1,6 @@
 {
     "name": "stoclaw",
-    "version": "2026.7.24-GA.1",
+    "version": "2026.7.28-GA.1",
     "pnpm": {
         "onlyBuiltDependencies": [
             "@discordjs/opus",
@@ -58,7 +58,7 @@
         "uv:download:all": "cross-env NODE_OPTIONS=\"--import ./.node-preload.mjs\" zx scripts/download-bundled-uv.mjs --all",
         "dws:manifest": "zx scripts/download-dws-manifest.mjs",
         "node:download:win": "cross-env NODE_OPTIONS=\"--import ./.node-preload.mjs\" zx scripts/download-bundled-node.mjs --platform=win",
-        "prep:win-deps": "pnpm install --config.supportedArchitectures.os[]=current --config.supportedArchitectures.os[]=win32",
+        "prep:win-deps": "pnpm install --config.supportedArchitectures.os[]=current --config.supportedArchitectures.os[]=win32 --config.supportedArchitectures.cpu[]=x64",
         "prep:win-binaries": "pnpm run prep:win-deps && cross-env NODE_OPTIONS=\"--import ./.node-preload.mjs\" pnpm run uv:download:win && pnpm run node:download:win",
         "icons": "zx scripts/generate-icons.mjs",
         "package": "pnpm run rebuild:native:electron && pnpm run dws:manifest && pnpm run bundle:gateway-preload && pnpm run sync:plugin-shared && vite build && pnpm run typecheck:chat-ui && zx scripts/bundle-openclaw.mjs && zx scripts/bundle-openclaw-plugins.mjs && zx scripts/bundle-preinstalled-skills.mjs",
@@ -70,9 +70,9 @@
         "package:mac:local": "pnpm run uv:download:mac && SKIP_PREINSTALLED_SKILLS=1 pnpm run package && electron-builder --mac --publish never --config electron-builder.config.js",
         "gen:win-installer-env": "zx scripts/generate-windows-installer-env.mjs",
         "preflight:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/preflight-windows.ps1",
-        "package:win": "pnpm run gen:win-installer-env && pnpm run prep:win-binaries && pnpm run package && electron-builder --win --publish never --config electron-builder.config.js",
-        "package:win:test": "cross-env BUILD_ENV=test pnpm run gen:win-installer-env && pnpm run prep:win-binaries && pnpm run package:test && cross-env BUILD_ENV=test electron-builder --win --publish never --config electron-builder.config.js",
-        "package:win:staging": "cross-env BUILD_ENV=staging pnpm run gen:win-installer-env && pnpm run prep:win-binaries && pnpm run package:staging && cross-env BUILD_ENV=staging electron-builder --win --publish never --config electron-builder.config.js",
+        "package:win": "pnpm run gen:win-installer-env && pnpm run prep:win-binaries && pnpm run package && electron-builder --win nsis zip --x64 --publish never --config electron-builder.config.js",
+        "package:win:test": "cross-env BUILD_ENV=test pnpm run gen:win-installer-env && pnpm run prep:win-binaries && pnpm run package:test && cross-env BUILD_ENV=test electron-builder --win nsis zip --x64 --publish never --config electron-builder.config.js",
+        "package:win:staging": "cross-env BUILD_ENV=staging pnpm run gen:win-installer-env && pnpm run prep:win-binaries && pnpm run package:staging && cross-env BUILD_ENV=staging electron-builder --win nsis zip --x64 --publish never --config electron-builder.config.js",
         "package:all": "zx scripts/package-all.mjs",
         "package:all:test": "cross-env BUILD_ENV=test zx scripts/package-all.mjs --test",
         "package:linux": "pnpm run uv:download:linux && pnpm run package && electron-builder --linux --publish never --config electron-builder.config.js",

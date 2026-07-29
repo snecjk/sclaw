@@ -25,6 +25,7 @@ import { useChatStore } from '@/stores/chat';
 import { useSettingsStore } from '@/stores/settings';
 import { SidebarDeleteConfirmPortal } from '@/components/layout/sidebar-delete-confirm-portal';
 import { SclawBrowserHost } from '@/components/sclaw-browser/SclawBrowserHost';
+import { AppPlazaShell } from '@/components/more-apps/AppPlazaShell';
 import { Sidebar } from './Sidebar';
 import { TitleBar } from './TitleBar';
 
@@ -70,6 +71,7 @@ function ProvincialMainCard({ hideContentHeader }: { hideContentHeader: boolean 
     >
       {!hideContentHeader ? <ContentHeader /> : null}
       <MainCardBody hideContentHeader={hideContentHeader} />
+      <AppPlazaShell />
       <SclawBrowserHost />
     </main>
   );
@@ -127,6 +129,7 @@ export function MainLayout() {
           <ContentHeaderProvider>
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               <Outlet />
+              <AppPlazaShell />
               <SclawBrowserHost />
             </div>
           </ContentHeaderProvider>
@@ -169,6 +172,7 @@ export function MainLayout() {
           )}
         >
           <Outlet />
+          <AppPlazaShell />
           <SclawBrowserHost />
         </main>
       </div>

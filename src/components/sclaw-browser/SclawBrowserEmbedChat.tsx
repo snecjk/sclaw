@@ -19,14 +19,21 @@ import {
   stoChatScrollPaneClass,
 } from '@/lib/surfaces';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
-import { SclawBrowserEmbedChatSessions } from './SclawBrowserEmbedChatSessions';
+import { SclawBrowserEmbedChatSessions, type SclawBrowserEmbedChatSessionsProps } from './SclawBrowserEmbedChatSessions';
 
 interface SclawBrowserEmbedChatProps {
   sessionKey: string;
   appTitle: string;
+  onClose?: () => void;
+  sessionsProps?: SclawBrowserEmbedChatSessionsProps;
 }
 
-export function SclawBrowserEmbedChat({ sessionKey, appTitle }: SclawBrowserEmbedChatProps) {
+export function SclawBrowserEmbedChat({
+  sessionKey,
+  appTitle,
+  onClose,
+  sessionsProps,
+}: SclawBrowserEmbedChatProps) {
   const { t } = useTranslation(['chat', 'common']);
   const closeChatPanel = useSclawBrowserOverlayStore((s) => s.closeChatPanel);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
@@ -77,8 +84,9 @@ export function SclawBrowserEmbedChat({ sessionKey, appTitle }: SclawBrowserEmbe
   );
 
   const handleClose = useCallback(() => {
-    closeChatPanel();
-  }, [closeChatPanel]);
+    if (onClose) onClose();
+    else closeChatPanel();
+  }, [onClose, closeChatPanel]);
 
   if (currentSessionKey !== sessionKey) {
     return (
@@ -97,7 +105,7 @@ export function SclawBrowserEmbedChat({ sessionKey, appTitle }: SclawBrowserEmbe
           </h2>
           <p className="sclaw-browser-embed-chat__subtitle truncate">{appTitle}</p>
         </div>
-        <SclawBrowserEmbedChatSessions />
+        <SclawBrowserEmbedChatSessions {...sessionsProps} />
         <button
           type="button"
           className="sclaw-browser-embed-chat__close"

@@ -14,6 +14,13 @@ import {
 const globalStableSegmentsByTurn = new Map<string, ThinkingTurnSegment[]>();
 const globalStableTimelineByTurn = new Map<string, ThinkingTimelineItem[]>();
 
+export function buildTurnDisplayCacheKey(
+  sessionKey: string,
+  turnStableKey: string | undefined,
+): string | undefined {
+  return turnStableKey ? `${sessionKey}::${turnStableKey}` : undefined;
+}
+
 export function readGlobalStableSegments(turnStableKey: string | undefined): ThinkingTurnSegment[] {
   if (!turnStableKey) return [];
   return globalStableSegmentsByTurn.get(turnStableKey) ?? [];
@@ -44,7 +51,16 @@ export function writeGlobalStableTimeline(
   globalStableTimelineByTurn.set(`${turnStableKey}::${segmentKey}`, timeline);
 }
 
-/** active-turn → turn-user-* remount 时复制 global 缓存，避免展开后 timeline 空白 */
+export function shouldPromoteActiveTurnCache(
+  previousTurnStableKey: string | undefined,
+  nextTurnStableKey: string | undefined,
+): boolean {
+  return previousTurnStableKey === 'active-turn'
+    && Boolean(nextTurnStableKey)
+    && nextTurnStableKey !== 'active-turn';
+}
+
+/** active-turn → turn-user-* 时一次性迁移 global 缓存，避免展开后 timeline 空白。 */
 export function migrateTurnDisplayCache(fromKey: string | undefined, toKey: string | undefined): void {
   if (!fromKey || !toKey || fromKey === toKey) return;
 
@@ -66,6 +82,15 @@ export function migrateTurnDisplayCache(fromKey: string | undefined, toKey: stri
     const merged = mergeTimelineMonotonic(existing, timeline);
     if (merged.length > 0) {
       globalStableTimelineByTurn.set(destKey, merged);
+    }
+  }
+
+  // `active-turn` is a transient hand-off key. Leaving it populated makes the
+  // next conversation inherit the previous run's thinking/tool timeline.
+  globalStableSegmentsByTurn.delete(fromKey);
+  for (const cacheKey of [...globalStableTimelineByTurn.keys()]) {
+    if (cacheKey.startsWith(fromPrefix)) {
+      globalStableTimelineByTurn.delete(cacheKey);
     }
   }
 }

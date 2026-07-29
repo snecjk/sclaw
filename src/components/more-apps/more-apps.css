@@ -371,6 +371,26 @@
   object-fit: cover;
 }
 
+.page-more-apps .app-icon--letter {
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.page-more-apps .app-icon__letter {
+  font-size: 18px;
+  line-height: 1;
+  color: inherit;
+  user-select: none;
+}
+
+.page-more-apps .app-icon--sm .app-icon__letter {
+  font-size: 14px;
+}
+
+.page-more-apps .app-icon--lg .app-icon__letter {
+  font-size: 20px;
+}
+
 .page-more-apps .app-icon--sm svg {
   width: 18px;
   height: 18px;
