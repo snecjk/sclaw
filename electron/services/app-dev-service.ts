@@ -7,10 +7,12 @@
 
 import { app } from 'electron';
 import { spawn } from 'child_process';
-import { existsSync, statSync } from 'fs';
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'fs/promises';
-import { homedir } from 'os';
+import { createWriteStream, existsSync, statSync } from 'fs';
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'fs/promises';
+import { homedir, tmpdir } from 'os';
 import { extname, dirname, join, relative, resolve, sep } from 'path';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import {
   creepRatio,
   isTemplateTextFile,
@@ -23,11 +25,17 @@ import { getNodeRuntimeStatus, getNodeSpawnEnv, isNodeRuntimeReady, setupManaged
 import { getUvMirrorEnv } from '../utils/uv-env';
 import { resolveUvBin, setupManagedPython } from '../utils/uv-setup';
 import { needsWinShell, quoteForCmd } from '../utils/paths';
+import { proxyAwareFetch } from '../utils/proxy-fetch';
+import { extractZip } from '../utils/zip-extract';
 import { createWorkspace, deleteWorkspace, listUserWorkspaces } from './session-catalog-service';
 import { startDevServer, stopDevServer, getDevServer } from './app-dev-server-manager';
 import { logger } from '../utils/logger';
 import type { GatewayManager } from '../gateway/manager';
 import { createStoApp } from './sto-app-service';
+
+/** Remote React engineering template (OSS). Packaged builds no longer require bundled app-templates. */
+const REACT_TEMPLATE_ZIP_URL =
+  'http://ali-sto-tps.oss-cn-shanghai.aliyuncs.com/6BB155FE-CAE2-4B-react-template.zip';
 
 export interface AppDevStatus {
   workspaceId: string;
@@ -162,10 +170,127 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
   await writeAppDevBootstrap(appPath, { name, projectType });
 }
 
+function bundledTemplateDir(): string | null {
+  // Local checkout only — packaged builds must not rely on bundled app-templates.
+  if (app.isPackaged) return null;
+  return join(process.cwd(), 'resources', 'app-templates', 'react-template');
+}
+
+function cachedTemplateDir(): string {
+  return join(app.getPath('userData'), 'app-templates', 'react-template');
+}
+
+function isValidReactTemplate(dir: string): boolean {
+  return existsSync(join(dir, 'frontend', 'package.json'));
+}
+
+function templateMetaPath(dir: string): string {
+  return join(dir, '.sclaw-template-meta.json');
+}
+
+/** Sync path for OpenSpec helpers: prefer OSS cache, then local checkout (dev only). */
 function templateDir(): string {
-  return app.isPackaged
-    ? join(process.resourcesPath, 'app-templates', 'react-vite')
-    : join(process.cwd(), 'resources', 'app-templates', 'react-vite');
+  const cached = cachedTemplateDir();
+  if (isValidReactTemplate(cached)) return cached;
+  const bundled = bundledTemplateDir();
+  if (bundled && isValidReactTemplate(bundled)) return bundled;
+  return cached;
+}
+
+let ensureTemplatePromise: Promise<string> | null = null;
+
+async function downloadReactTemplateZip(zipPath: string): Promise<void> {
+  logger.info(`[app-dev] downloading react template zip url=${REACT_TEMPLATE_ZIP_URL}`);
+  const response = await proxyAwareFetch(REACT_TEMPLATE_ZIP_URL, {
+    method: 'GET',
+    timeoutMs: 180_000,
+  });
+  if (!response.ok) {
+    throw new Error(`下载应用模板失败: HTTP ${response.status}`);
+  }
+  const body = response.body;
+  if (!body) throw new Error('下载应用模板失败: 响应为空');
+  await pipeline(
+    Readable.fromWeb(body as Parameters<typeof Readable.fromWeb>[0]),
+    createWriteStream(zipPath),
+  );
+}
+
+/**
+ * Ensure the React engineering template is available locally.
+ * Primary: download + extract OSS zip into userData cache.
+ * Fallback: local resources/app-templates in unpackaged/dev only (never packaged).
+ */
+async function ensureReactTemplateDir(): Promise<string> {
+  if (ensureTemplatePromise) return ensureTemplatePromise;
+
+  ensureTemplatePromise = (async () => {
+    const cacheDir = cachedTemplateDir();
+    const metaPath = templateMetaPath(cacheDir);
+
+    if (isValidReactTemplate(cacheDir)) {
+      try {
+        const meta = JSON.parse(await readFile(metaPath, 'utf8')) as { sourceUrl?: string };
+        if (meta.sourceUrl === REACT_TEMPLATE_ZIP_URL) {
+          logger.info(`[app-dev] using cached react template dir=${cacheDir}`);
+          return cacheDir;
+        }
+        logger.info('[app-dev] cached react template URL changed, refreshing');
+      } catch {
+        logger.info(`[app-dev] using cached react template dir=${cacheDir}`);
+        return cacheDir;
+      }
+    }
+
+    const stagingRoot = await mkdtemp(join(tmpdir(), 'sclaw-react-template-'));
+    const zipPath = join(stagingRoot, 'react-template.zip');
+    const extractDir = join(stagingRoot, 'extract');
+
+    try {
+      await mkdir(extractDir, { recursive: true });
+      await downloadReactTemplateZip(zipPath);
+      await extractZip(zipPath, extractDir);
+
+      if (!isValidReactTemplate(extractDir)) {
+        throw new Error('应用模板解压后缺少 frontend/package.json');
+      }
+
+      await rm(cacheDir, { recursive: true, force: true }).catch(() => undefined);
+      await mkdir(dirname(cacheDir), { recursive: true });
+      await cp(extractDir, cacheDir, { recursive: true });
+      await writeFile(
+        metaPath,
+        `${JSON.stringify({
+          sourceUrl: REACT_TEMPLATE_ZIP_URL,
+          fetchedAt: new Date().toISOString(),
+        }, null, 2)}\n`,
+        'utf8',
+      );
+
+      logger.info(`[app-dev] react template ready from OSS cacheDir=${cacheDir}`);
+      return cacheDir;
+    } catch (error) {
+      const bundled = bundledTemplateDir();
+      if (bundled && isValidReactTemplate(bundled)) {
+        logger.warn(
+          `[app-dev] OSS template download failed, falling back to local checkout template: ${bundled}`,
+          error,
+        );
+        return bundled;
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`应用模板准备失败（OSS 下载）: ${message}`);
+    } finally {
+      await rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined);
+    }
+  })();
+
+  try {
+    return await ensureTemplatePromise;
+  } catch (error) {
+    ensureTemplatePromise = null;
+    throw error;
+  }
 }
 
 function setStatus(workspaceId: string, patch: Partial<AppDevStatus>): AppDevStatus {
@@ -265,14 +390,14 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
     }
   }
 
-  const template = templateDir();
-  if (!existsSync(template)) {
+  const template = await ensureReactTemplateDir();
+  if (!isValidReactTemplate(template)) {
     throw new Error(`应用模板缺失: ${template}`);
   }
 
   logger.info(
     `[app-dev] createUserApp start name=${name} appPath=${appPath} ` +
-    `projectType=${input.projectType ?? 'frontend'}`,
+    `projectType=${input.projectType ?? 'frontend'} template=${template}`,
   );
 
   await copyTemplate(template, appPath, {

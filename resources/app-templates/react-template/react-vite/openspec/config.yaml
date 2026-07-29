@@ -1,0 +1,16 @@
+schema: spec-driven
+
+context: |
+  这是一个 SClaw 用户应用仓库（React + Vite 前端，backend 预留）。
+  业务人员通过自然语言描述需求；Agent 优先改 frontend/src，并阅读 docs/api。
+  已安装的开发技能位于 openspec/skills/*/SKILL.md。
+
+rules:
+  proposal:
+    - 保持简短，聚焦 WHY 与能力范围
+  design:
+    - 关键决策必须有理由与备选
+  specs:
+    - 需求使用 SHALL/MUST，并包含 #### Scenario:（WHEN/THEN）
+  tasks:
+    - 每项任务可独立验证，并引用对应 Requirement
