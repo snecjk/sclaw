@@ -13,6 +13,7 @@ export interface LocalAuthorizedFileEntry {
   updatedAt: string | null;
   authorizedAt: string;
   missing?: boolean;
+  permissionDenied?: boolean;
 }
 
 export interface LocalAuthorizedFileBreadcrumb {
@@ -31,5 +32,16 @@ export interface LocalAuthorizedFilesResult {
   total: number;
   breadcrumbs: LocalAuthorizedFileBreadcrumb[];
   stats: LocalAuthorizedFileStats;
+  permissionDenied?: {
+    path: string;
+    name: string;
+  };
+  authorizationSummary?: {
+    acceptedCount: number;
+    skipped: Array<{
+      path: string;
+      name: string;
+    }>;
+  };
   canceled?: boolean;
 }

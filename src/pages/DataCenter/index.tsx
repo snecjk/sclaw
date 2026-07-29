@@ -102,6 +102,7 @@ export function DataCenter() {
   const currentKeyword = isLocalDriveTab ? localStore.keyword : store.keyword;
   const currentLoading = isLocalDriveTab ? localStore.loading : store.loading;
   const currentError = isLocalDriveTab ? localStore.error : store.error;
+  const localPermissionDenied = isLocalDriveTab ? localStore.permissionDenied : null;
   const currentParentEntryId = isLocalDriveTab ? localStore.parentEntryId : store.parentEntryId;
   const currentBreadcrumbs = isLocalDriveTab ? localStore.breadcrumbs : store.breadcrumbs;
   const folderCount = isLocalDriveTab ? localStore.stats.folderCount : store.items.filter((item) => item.entryType === 'folder').length;
@@ -178,9 +179,12 @@ export function DataCenter() {
   const handleAuthorizeLocal = async (selectionType: LocalAuthorizeSelectionType) => {
     setUploading(true);
     try {
-      const authorized = await localStore.authorize(selectionType);
-      if (authorized) {
+      const result = await localStore.authorize(selectionType);
+      if (result.acceptedCount > 0) {
         toast.success(t('dataCenterPage.toasts.localAuthorized'));
+      }
+      if (result.skippedCount > 0) {
+        toast.warning(t('dataCenterPage.toasts.localAuthorizationSkipped', { count: result.skippedCount }));
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.uploadFailed'));
@@ -398,6 +402,10 @@ export function DataCenter() {
   };
 
   const handleOpenFolder = (entry: DataCenterUiEntry) => {
+    if (entry.permissionDenied) {
+      toast.error(t('dataCenterPage.toasts.localPermissionDenied', { name: entry.name }));
+      return;
+    }
     if (isLocalDriveTab) {
       void localStore.enterFolder({
         entryId: entry.entryId,
@@ -412,6 +420,7 @@ export function DataCenter() {
         updatedAt: entry.updatedAt,
         authorizedAt: entry.createdAt ?? entry.updatedAt ?? new Date().toISOString(),
         missing: entry.missing,
+        permissionDenied: entry.permissionDenied,
       });
       return;
     }
@@ -616,8 +625,12 @@ export function DataCenter() {
               ) : visibleItems.length === 0 ? (
                 <FeedbackState
                   icon={<Folder className="h-8 w-8" />}
-                  title={currentKeyword ? t('dataCenterPage.feedback.noMatch') : t('dataCenterPage.feedback.empty')}
-                  description={emptyFeedbackDescription}
+                  title={localPermissionDenied
+                    ? t('dataCenterPage.feedback.localPermissionDeniedTitle')
+                    : currentKeyword ? t('dataCenterPage.feedback.noMatch') : t('dataCenterPage.feedback.empty')}
+                  description={localPermissionDenied
+                    ? t('dataCenterPage.feedback.localPermissionDeniedDescription', { name: localPermissionDenied.name })
+                    : emptyFeedbackDescription}
                 />
               ) : currentViewMode === 'grid' ? (
                 <EntryGrid

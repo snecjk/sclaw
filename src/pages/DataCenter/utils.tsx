@@ -76,12 +76,13 @@ export function localEntryToUiEntry(entry: LocalAuthorizedFileEntry): DataCenter
     fileExt: entry.fileExt,
     fileSize: entry.fileSize,
     sourceType: 'local_upload',
-    status: entry.missing ? 'missing' : 'active',
+    status: entry.missing ? 'missing' : entry.permissionDenied ? 'permission_denied' : 'active',
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
     localAuthorized: true,
     localPath: entry.path,
     missing: entry.missing,
+    permissionDenied: entry.permissionDenied,
   };
 }
 

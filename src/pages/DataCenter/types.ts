@@ -4,6 +4,7 @@ export type DataCenterUiEntry = DataCenterEntry & {
   localAuthorized?: boolean;
   localPath?: string;
   missing?: boolean;
+  permissionDenied?: boolean;
 };
 
 export type DriveTab = 'local' | 'upload';

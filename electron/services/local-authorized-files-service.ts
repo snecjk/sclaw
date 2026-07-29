@@ -1,4 +1,4 @@
-import { constants } from 'node:fs';
+import { constants, type Dirent } from 'node:fs';
 import { access, readdir, realpath, rename, stat } from 'node:fs/promises';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 
@@ -21,6 +21,7 @@ export interface LocalAuthorizedFileEntry {
   updatedAt: string | null;
   authorizedAt: string;
   missing?: boolean;
+  permissionDenied?: boolean;
 }
 
 export interface LocalAuthorizedFilesResult {
@@ -31,6 +32,17 @@ export interface LocalAuthorizedFilesResult {
     authorizedCount: number;
     folderCount: number;
     uncategorizedFileCount: number;
+  };
+  permissionDenied?: {
+    path: string;
+    name: string;
+  };
+  authorizationSummary?: {
+    acceptedCount: number;
+    skipped: Array<{
+      path: string;
+      name: string;
+    }>;
   };
 }
 
@@ -99,6 +111,11 @@ function decodePathId(entryId: string): string {
 function getMimeType(filePath: string): string | null {
   const ext = extname(filePath).toLowerCase();
   return EXT_MIME_MAP[ext] || null;
+}
+
+function isPermissionError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return false;
+  return (error as NodeJS.ErrnoException).code === 'EPERM' || (error as NodeJS.ErrnoException).code === 'EACCES';
 }
 
 async function normalizeExistingPath(filePath: string): Promise<string> {
@@ -220,20 +237,30 @@ async function buildEntry(
   const ext = extname(filePath).toLowerCase();
   try {
     const info = await stat(filePath);
+    const entryType = info.isDirectory() ? 'folder' : 'file';
+    let permissionDenied = false;
+    try {
+      await access(filePath, constants.R_OK);
+    } catch (error) {
+      if (!isPermissionError(error)) throw error;
+      permissionDenied = true;
+    }
     return {
       entryId: encodePathId(filePath),
-      entryType: info.isDirectory() ? 'folder' : 'file',
+      entryType,
       parentEntryId,
       name: basename(filePath),
       path: filePath,
-      mimeType: info.isDirectory() ? null : getMimeType(filePath),
-      fileExt: info.isDirectory() ? null : ext.replace(/^\./, ''),
-      fileSize: info.isDirectory() ? 0 : info.size,
+      mimeType: entryType === 'folder' ? null : getMimeType(filePath),
+      fileExt: entryType === 'folder' ? null : ext.replace(/^\./, ''),
+      fileSize: entryType === 'folder' ? 0 : info.size,
       createdAt: toIso(info.birthtime),
       updatedAt: toIso(info.mtime),
       authorizedAt,
+      permissionDenied,
     };
-  } catch {
+  } catch (error) {
+    const permissionDenied = isPermissionError(error);
     return {
       entryId: encodePathId(filePath),
       entryType: 'file',
@@ -246,9 +273,20 @@ async function buildEntry(
       createdAt: null,
       updatedAt: null,
       authorizedAt,
-      missing: true,
+      missing: !permissionDenied,
+      permissionDenied,
     };
   }
+}
+
+async function assertSelectableAuthorizedRoot(filePath: string): Promise<string> {
+  const normalized = await normalizeExistingPath(filePath);
+  await access(normalized, constants.R_OK);
+  const info = await stat(normalized);
+  if (info.isDirectory()) {
+    await readdir(normalized, { withFileTypes: true });
+  }
+  return normalized;
 }
 
 async function getStats(): Promise<LocalAuthorizedFilesResult['stats']> {
@@ -320,6 +358,7 @@ export async function listLocalAuthorizedFiles(params: {
   const parentEntryId = params.parentEntryId || ROOT_ENTRY_ID;
   const stats = await getStats();
   let items: LocalAuthorizedFileEntry[];
+  let permissionDenied: LocalAuthorizedFilesResult['permissionDenied'];
   if (parentEntryId === ROOT_ENTRY_ID) {
     const roots = await readRoots();
     items = await Promise.all(roots.map((root) => buildEntry(root.path, ROOT_ENTRY_ID, root.authorizedAt)));
@@ -330,7 +369,14 @@ export async function listLocalAuthorizedFiles(params: {
     if (!info.isDirectory()) {
       throw Object.assign(new Error('Entry is not a folder'), { statusCode: 400 });
     }
-    const children = await readdir(parentPath, { withFileTypes: true });
+    let children: Dirent[];
+    try {
+      children = await readdir(parentPath, { withFileTypes: true });
+    } catch (error) {
+      if (!isPermissionError(error)) throw error;
+      permissionDenied = { path: parentPath, name: basename(parentPath) };
+      children = [];
+    }
     const now = new Date().toISOString();
     items = await Promise.all(children
       .filter((child) => !child.name.startsWith('.'))
@@ -346,6 +392,7 @@ export async function listLocalAuthorizedFiles(params: {
     total: filtered.length,
     breadcrumbs: await buildBreadcrumbs(parentEntryId),
     stats,
+    permissionDenied,
   };
 }
 
@@ -353,21 +400,26 @@ export async function addLocalAuthorizedPaths(filePaths: string[]): Promise<Loca
   const roots = await readRoots();
   const byPath = new Map(roots.map((root) => [root.path, root]));
   const now = new Date().toISOString();
+  const skipped: NonNullable<LocalAuthorizedFilesResult['authorizationSummary']>['skipped'] = [];
+  let acceptedCount = 0;
   for (const filePath of filePaths) {
     try {
-      const normalized = await normalizeExistingPath(filePath);
-      await access(normalized, constants.R_OK);
+      const normalized = await assertSelectableAuthorizedRoot(filePath);
       byPath.set(normalized, {
         path: normalized,
         authorizedAt: byPath.get(normalized)?.authorizedAt ?? now,
         excludedPaths: byPath.get(normalized)?.excludedPaths,
       });
+      acceptedCount += 1;
     } catch {
-      // Skip inaccessible selections.
+      skipped.push({ path: filePath, name: basename(filePath) });
     }
   }
   await writeRoots([...byPath.values()]);
-  return listLocalAuthorizedFiles({ parentEntryId: ROOT_ENTRY_ID });
+  return {
+    ...await listLocalAuthorizedFiles({ parentEntryId: ROOT_ENTRY_ID }),
+    authorizationSummary: { acceptedCount, skipped },
+  };
 }
 
 export async function removeLocalAuthorizedEntry(entryId: string): Promise<LocalAuthorizedFilesResult> {
