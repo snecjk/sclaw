@@ -32,7 +32,7 @@
 ## 关键代码
 
 - `resources/context/AGENTS.stoclaw.md` / `CLAUDE.md` / `TOOLS.stoclaw.md`：删除钉钉常驻段  
-- `shared/dingtalk-oral-send-prompt.ts` + plugin 副本：口头发送意图与注入文案  
+- `shared/dingtalk-prompts/dingtalk-oral-send-prompt.ts` + plugin 副本：口头发送意图与注入文案  
 - `sto-plugin/openclaw/sto-dingtalk-send-guard/index.ts`：@ / 口头 dws / share 按需  
 - `sto-plugin/claude/.../runtime-options.ts` + `claude-adapter`：Claude 路径传入 userPrompt  
 - `share-to-dingtalk.ts`：`looksLikeDingTalkShareIntent`  

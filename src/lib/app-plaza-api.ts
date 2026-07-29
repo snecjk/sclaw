@@ -69,11 +69,13 @@ export function adaptAppPlazaApp(value: unknown): AppItem | null {
   const url = text(raw.url);
   if (!id || !name) return null;
   const tone = text(raw.tone) as AppTone;
+  const systemCode = text(raw.systemCode) || undefined;
   return {
     id,
     name,
     description: text(raw.description),
     url,
+    systemCode,
     iconKey: text(raw.iconKey),
     iconUrl: safeWebUrl(raw.iconUrl),
     tone: APP_TONES.has(tone) ? tone : 'gray',
@@ -87,6 +89,21 @@ export function adaptAppPlazaApp(value: unknown): AppItem | null {
     hidden: raw.hidden === true,
     recent: formatAppPlazaRecent(raw.recent),
   };
+}
+
+/** Append returnUrl onto a skip-login ticket URL (portal product-map behavior). */
+export function appendSkipLoginReturnUrl(skipLoginUrl: string, returnUrl: string): string {
+  const ticket = text(skipLoginUrl);
+  const target = safeWebUrl(returnUrl);
+  if (!ticket || !target) return ticket;
+  try {
+    const parsed = new URL(ticket);
+    parsed.searchParams.set('returnUrl', target);
+    return parsed.toString();
+  } catch {
+    const sep = ticket.includes('?') ? '&' : '?';
+    return `${ticket}${sep}returnUrl=${encodeURIComponent(target)}`;
+  }
 }
 
 export function adaptAppPlazaCategory(value: unknown): AppPlazaCategory | null {
@@ -167,4 +184,22 @@ export async function fetchAppPlazaBanners(): Promise<AppPlazaBanner[]> {
     .map(adaptAppPlazaBanner)
     .filter((item): item is AppPlazaBanner => item !== null)
     .sort((a, b) => a.order - b.order);
+}
+
+/** Fetch skip-login URL for a subsystem code via Host → memory-center. */
+export async function fetchAppPlazaSkipLoginLink(systemCode: string): Promise<string> {
+  const code = systemCode.trim();
+  if (!code) {
+    throw new Error('systemCode 不能为空');
+  }
+  const query = new URLSearchParams({ systemCode: code });
+  const response = await hostApiFetch<ApiEnvelope<string>>(
+    `/api/app-plaza/skip-login-link?${query.toString()}`,
+  );
+  const link = unwrap(response, '免登链接获取失败');
+  const url = text(link);
+  if (!url) {
+    throw new Error('免登链接为空');
+  }
+  return url;
 }

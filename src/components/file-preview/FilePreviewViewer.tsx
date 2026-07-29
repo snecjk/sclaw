@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { ExternalLink, FileText, RefreshCw, Maximize, Minimize, Table, FileSpreadsheet, Presentation } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
 import { cn } from '@/lib/utils';
 import { hostApiFetch, getHostApiBase } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
@@ -914,7 +914,7 @@ function MarkdownPreviewPane({ content, className }: { content: string; classNam
     <div className={cn('h-full overflow-auto bg-white px-6 py-5 dark:bg-[#0d1117]', className)}>
       <article className="prose prose-sm max-w-none text-foreground dark:prose-invert">
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
+          remarkPlugins={chatRemarkPlugins}
           components={{
             code({ className: codeClassName, children, ...props }) {
               const match = /language-(\w+)/.exec(codeClassName || '');

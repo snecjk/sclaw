@@ -1,14 +1,15 @@
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from '../zod-shim.js';
-import {
-  getClaudeScheduledTaskService,
-  type ClaudeScheduledTaskCreateInput,
-  type ClaudeScheduledTaskSummary,
-  type ClaudeScheduledTaskUpdateInput,
-} from '../../../electron/services/claude-scheduled-task-service';
+import { getScheduledTaskService } from '../../../electron/scheduled-tasks/scheduled-task-service';
+import type {
+  CreateScheduleTaskInput,
+  UpdateScheduleTaskInput,
+} from '../../../electron/db/models/dto/schedule-task.dto';
+import type { ScheduleTask } from '../../../electron/db/models/domain/schedule-task';
 import { getEngineSessionRegistryEntry } from '../../../electron/engines/session-registry';
 import { getAgentWorkspacePath } from '../../../electron/utils/agent-config';
+import { normalizeDingTalkMentions } from '../../../shared/dingtalk-send/dingtalk-mention';
 
 export const CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT = [
   'Claude scheduled task tools:',
@@ -17,6 +18,8 @@ export const CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT = [
   '- Translate natural-language schedules into standard 5-field cronExpr values before calling create or update.',
   '- If the requested schedule is ambiguous, ask a concise follow-up question instead of guessing.',
   '- Default to the current Claude conversation agent and workspace unless the user explicitly requests another target.',
+  '- When the turn includes StoClaw DingTalk recipients JSON (user @ picks), pass them as optional `recipients` on create; never bake recipient rule blocks into promptTemplate.',
+  '- promptTemplate must stay a clean business instruction only.',
   '- Do not use Bash, exec, or manual filesystem edits to manage Claude scheduled tasks.',
 ].join('\n');
 
@@ -114,8 +117,8 @@ function requireNonEmpty(value: string | undefined, field: string): string {
 async function resolveTaskByIdentity(input: {
   taskId?: string;
   taskName?: string;
-}): Promise<ClaudeScheduledTaskSummary> {
-  const service = getClaudeScheduledTaskService();
+}): Promise<ScheduleTask> {
+  const service = getScheduledTaskService();
   const tasks = await service.listTasks();
 
   const taskId = input.taskId?.trim();
@@ -143,8 +146,8 @@ async function resolveTaskByIdentity(input: {
   throw new Error(`Claude scheduled task "${taskName}" not found`);
 }
 
-async function resolveTaskSummary(taskId: string): Promise<ClaudeScheduledTaskSummary | null> {
-  const tasks = await getClaudeScheduledTaskService().listTasks();
+async function resolveTaskSummary(taskId: string): Promise<ScheduleTask | null> {
+  const tasks = await getScheduledTaskService().listTasks();
   return tasks.find((task) => task.id === taskId) ?? null;
 }
 
@@ -158,31 +161,35 @@ function toCreateInput(
     name: string;
     promptTemplate: string;
     providerAccountId?: string;
+    recipients?: unknown;
     timeoutSec?: number;
     workspacePath?: string;
   },
-): ClaudeScheduledTaskCreateInput {
+): CreateScheduleTaskInput {
   const workspacePath = input.workspacePath?.trim() || defaults.workspacePath;
   if (!workspacePath) {
     throw new Error('workspacePath is required and could not be inferred from the current conversation');
   }
 
+  const recipients = normalizeDingTalkMentions(input.recipients);
+
   return {
+    engineType: 'claude',
     agentId: input.agentId?.trim() || defaults.agentId,
     cronExpr: requireNonEmpty(input.cronExpr, 'cronExpr'),
     enabled: input.enabled,
     model: input.model?.trim() || defaults.model,
     name: requireNonEmpty(input.name, 'name'),
     permissionProfile: 'dangerous-bypass',
-    promptTemplate: requireNonEmpty(input.promptTemplate, 'promptTemplate'),
-    providerAccountId: input.providerAccountId?.trim() || defaults.accountId,
+    prompt: requireNonEmpty(input.promptTemplate, 'promptTemplate'),
+    accountId: input.providerAccountId?.trim() || defaults.accountId,
     timeoutSec: input.timeoutSec,
     workspacePath,
+    dingtalkRecipients: recipients.length > 0 ? recipients : null,
   };
 }
 
 function toUpdateInput(
-  taskId: string,
   defaults: Awaited<ReturnType<typeof resolveConversationDefaults>>,
   input: {
     agentId?: string;
@@ -195,18 +202,17 @@ function toUpdateInput(
     timeoutSec?: number;
     workspacePath?: string;
   },
-): ClaudeScheduledTaskUpdateInput {
+): UpdateScheduleTaskInput {
   return {
-    id: taskId,
     ...(input.agentId?.trim() ? { agentId: input.agentId.trim() } : {}),
     ...(input.cronExpr?.trim() ? { cronExpr: input.cronExpr.trim() } : {}),
     ...(typeof input.enabled === 'boolean' ? { enabled: input.enabled } : {}),
     ...(input.model !== undefined ? { model: input.model?.trim() || defaults.model } : {}),
     ...(input.name?.trim() ? { name: input.name.trim() } : {}),
     permissionProfile: 'dangerous-bypass',
-    ...(input.promptTemplate?.trim() ? { promptTemplate: input.promptTemplate.trim() } : {}),
+    ...(input.promptTemplate?.trim() ? { prompt: input.promptTemplate.trim() } : {}),
     ...(input.providerAccountId !== undefined
-      ? { providerAccountId: input.providerAccountId?.trim() || defaults.accountId }
+      ? { accountId: input.providerAccountId?.trim() || defaults.accountId }
       : {}),
     ...(input.timeoutSec !== undefined ? { timeoutSec: input.timeoutSec } : {}),
     ...(input.workspacePath !== undefined
@@ -222,6 +228,8 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
       'Create a Claude local scheduled task immediately from confirmed user intent.',
       'Pass a standard 5-field cronExpr.',
       'If agentId or workspacePath is omitted, the current Claude conversation defaults will be used.',
+      'promptTemplate must be a clean business instruction (do not bake DingTalk recipient rule blocks).',
+      'When the user @-picked DingTalk recipients, pass them as recipients; they are stored in dingtalk_recipients_json.',
     ].join('\n'),
     {
       name: z.string().min(1).describe('User-facing task name'),
@@ -233,10 +241,22 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
       model: z.string().optional().describe('Optional model override'),
       timeoutSec: z.number().int().min(1).max(86_400).optional().describe('Optional timeout in seconds'),
       enabled: z.boolean().optional().describe('Whether the task should be enabled immediately; default true'),
+      recipients: z
+        .array(
+          z.object({
+            type: z.enum(['user', 'group']),
+            displayName: z.string().min(1),
+            userId: z.string().optional(),
+            openConversationId: z.string().optional(),
+            corpId: z.string().optional(),
+          }),
+        )
+        .optional()
+        .describe('Optional DingTalk recipients (DingTalkMention[]); required when user @-picked people/groups'),
     },
     async (input) => runScheduledTaskTool('claude_scheduled_task_created', async () => {
       const defaults = await resolveConversationDefaults(config.sessionKey);
-      const created = await getClaudeScheduledTaskService().createTask(toCreateInput(defaults, input));
+      const created = await getScheduledTaskService().createTask(toCreateInput(defaults, input));
       const summary = await resolveTaskSummary(created.id);
       return {
         task: summary ?? created,
@@ -255,7 +275,7 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
       enabledOnly: z.boolean().optional().describe('If true, return only enabled tasks'),
     },
     async ({ enabledOnly }) => runScheduledTaskTool('claude_scheduled_task_list', async () => {
-      const tasks = await getClaudeScheduledTaskService().listTasks();
+      const tasks = await getScheduledTaskService().listTasks();
       return {
         tasks: enabledOnly ? tasks.filter((task) => task.enabled) : tasks,
       };
@@ -299,10 +319,11 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
     async ({ taskId, taskName, ...patch }) => runScheduledTaskTool('claude_scheduled_task_updated', async () => {
       const existing = await resolveTaskByIdentity({ taskId, taskName });
       const defaults = await resolveConversationDefaults(config.sessionKey);
-      const updated = await getClaudeScheduledTaskService().updateTask(
-        toUpdateInput(existing.id, defaults, patch),
+      const updated = await getScheduledTaskService().updateTask(
+        existing.id,
+        toUpdateInput(defaults, patch),
       );
-      const summary = await resolveTaskSummary(updated.id);
+      const summary = await resolveTaskSummary(existing.id);
       return {
         task: summary ?? updated,
       };
@@ -318,7 +339,7 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
     },
     async ({ taskId, taskName }) => runScheduledTaskTool('claude_scheduled_task_deleted', async () => {
       const task = await resolveTaskByIdentity({ taskId, taskName });
-      await getClaudeScheduledTaskService().deleteTask(task.id);
+      await getScheduledTaskService().deleteTask(task.id);
       return {
         deletedTask: {
           id: task.id,
@@ -337,7 +358,7 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
     },
     async ({ taskId, taskName }) => runScheduledTaskTool('claude_scheduled_task_triggered', async () => {
       const task = await resolveTaskByIdentity({ taskId, taskName });
-      const run = await getClaudeScheduledTaskService().triggerTask(task.id);
+      const run = await getScheduledTaskService().triggerTask(task.id);
       return {
         task: {
           id: task.id,

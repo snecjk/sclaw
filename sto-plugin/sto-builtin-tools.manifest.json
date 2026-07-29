@@ -18,7 +18,7 @@
       "id": "sto-scheduled-task-tool",
       "localDir": "sto-scheduled-task-tool",
       "enabled": false,
-      "tools": ["create_scheduled_task"]
+      "tools": []
     }
   ]
 }

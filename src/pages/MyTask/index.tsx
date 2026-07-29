@@ -24,7 +24,6 @@ import { useAgentsStore } from '@/stores/agents';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import {
   stripInstructionFromTaskMessage,
-  prepareDingTalkAgentTurnMessage,
 } from '@/lib/scheduled-task-recipients';
 import { useShallow } from 'zustand/react/shallow';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -59,44 +58,20 @@ import { TaskRunGuardBar } from './components/TaskRunGuardBar';
 
 // ──── 工具函数 ────
 
-/** 将 ManagedLocalTask 转换为页面 TaskViewModel */
+/** 将 ScheduleTask 转换为页面 TaskViewModel */
 function managedTaskToViewModel(task: ManagedLocalTask): TaskViewModel {
-  if (task.engineType === 'claude') {
-    return {
-      id: task.id,
-      name: task.name,
-      description: stripInstructionFromTaskMessage(task.promptTemplate || ''),
-      cronExpr: task.cronExpr,
-      enabled: task.enabled,
-      nextRunAt: task.nextRunAt ?? null,
-      workflowCode: task.workflowCode || undefined,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt,
-      agentId: task.agentId,
-      engineType: 'claude',
-    };
-  }
-
-  // openclaw (CronJob)
-  const cronExpr =
-    typeof task.schedule === 'string'
-      ? task.schedule
-      : typeof task.schedule === 'object' && task.schedule.kind === 'cron'
-        ? task.schedule.expr
-        : '';
-
   return {
     id: task.id,
     name: task.name,
-    description: stripInstructionFromTaskMessage(task.message || ''),
-    cronExpr,
+    description: stripInstructionFromTaskMessage(task.prompt || ''),
+    cronExpr: task.cronExpr,
     enabled: task.enabled,
-    nextRunAt: task.nextRun ?? null,
+    nextRunAt: task.nextRunAt ?? null,
     workflowCode: task.workflowCode || undefined,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     agentId: task.agentId,
-    engineType: 'openclaw',
+    engineType: task.engineType,
   };
 }
 
@@ -268,7 +243,7 @@ export default function MyTask() {
   const handleToggle = useCallback(
     async (task: TaskViewModel, newEnabled: boolean) => {
       try {
-        await toggleJob(task.id, newEnabled, task.engineType);
+        await toggleJob(task.id, newEnabled);
         toast.success(newEnabled ? t('myTask.toast.enabled') : t('myTask.toast.paused'));
       } catch (err) {
         toast.error(String(err));
@@ -300,7 +275,7 @@ export default function MyTask() {
         }
       });
       try {
-        const result = await triggerJob(task.id, task.engineType);
+        const result = await triggerJob(task.id);
         if (groupKey) {
           void ensureTaskGroupFirstTriggeredOnRun(groupKey, triggeredAt);
         }
@@ -327,6 +302,12 @@ export default function MyTask() {
           const d = String(today.getDate()).padStart(2, '0');
           forgetOptimisticDeletedSessionKey(`agent:main:cron:${task.id}:${y}-${m}-${d}`);
         }
+        // 固定停留，给 gateway started/bindRun 一点时间写入 runtime，再进对话页，
+        // 避免改 chat store 做乐观 sending。
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 2000);
+        });
+
         navigateToMainChatHome(navigate, location.pathname, () => {
           useChatStore.getState().switchSession(targetSessionKey);
         });
@@ -345,81 +326,43 @@ export default function MyTask() {
   const handleSave = useCallback(
     async (input: TaskCreateInputWithRun) => {
       const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, input.engineType);
+      const isClaude = input.engineType === 'claude';
       try {
-        if (editingJob) {
-          if (editingJob.engineType === 'claude') {
-            if (!selectedAgent?.id) {
-              throw new Error(t('myTask.error.claudeAgentNoWorkspaceUpdate'));
+        if (isClaude && !selectedAgent?.id) {
+          throw new Error(
+            editingJob
+              ? t('myTask.error.claudeAgentNoWorkspaceUpdate')
+              : t('myTask.error.claudeAgentNoWorkspaceCreate'),
+          );
+        }
+        // 统一模型：prompt 干净（执行期由 executor 烘焙 dingtalk），dingtalkRecipients 走列。
+        const base = {
+          name: input.name,
+          cronExpr: input.schedule,
+          prompt: input.message,
+          dingtalkRecipients: input.dingTalkMentions ?? null,
+          workflowCode: input.workflowCode ?? null,
+        };
+        const claudeFields = isClaude
+          ? {
+              workspacePath: input.claudeWorkspacePath || selectedAgent?.workspace || null,
+              permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
             }
-            const promptTemplate = prepareDingTalkAgentTurnMessage(
-              input.message,
-              input.dingTalkMentions,
-              { scenario: 'scheduled-task' },
-            );
-            await updateJob(editingJob.id, {
-              engineType: 'claude',
-              payload: {
-                id: editingJob.id,
-                name: input.name,
-                enabled: editingJob.enabled,
-                cronExpr: input.schedule,
-                promptTemplate,
-                agentId: selectedAgent.id,
-                workspacePath: input.claudeWorkspacePath || selectedAgent.workspace,
-                permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
-                workflowCode: input.workflowCode,
-              },
-            });
-          } else {
-            await updateJob(editingJob.id, {
-              engineType: 'openclaw',
-              payload: {
-                name: input.name,
-                message: input.message,
-                schedule: input.schedule,
-                enabled: input.enabled,
-                dingTalkMentions: input.dingTalkMentions,
-                agentId: editingJob.agentId ?? undefined,
-                workflowCode: input.workflowCode,
-              },
-            });
-          }
+          : {};
+        if (editingJob) {
+          await updateJob(editingJob.id, {
+            ...base,
+            ...claudeFields,
+          });
           toast.success(t('myTask.toast.updated'));
         } else {
-          if (input.engineType === 'claude') {
-            if (!selectedAgent?.id) {
-              throw new Error(t('myTask.error.claudeAgentNoWorkspaceCreate'));
-            }
-            const promptTemplate = prepareDingTalkAgentTurnMessage(
-              input.message,
-              input.dingTalkMentions,
-              { scenario: 'scheduled-task' },
-            );
-            await createJob({
-              engineType: 'claude',
-              payload: {
-                name: input.name,
-                cronExpr: input.schedule,
-                promptTemplate,
-                agentId: selectedAgent.id,
-                workspacePath: input.claudeWorkspacePath || selectedAgent.workspace,
-                permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
-                workflowCode: input.workflowCode,
-              },
-            });
-          } else {
-            await createJob({
-              engineType: 'openclaw',
-              payload: {
-                name: input.name,
-                message: input.message,
-                schedule: input.schedule,
-                enabled: input.enabled,
-                dingTalkMentions: input.dingTalkMentions,
-                workflowCode: input.workflowCode,
-              },
-            });
-          }
+          await createJob({
+            ...base,
+            enabled: input.enabled,
+            engineType: input.engineType,
+            agentId: selectedAgent?.id || 'main',
+            ...claudeFields,
+          });
           toast.success(t('myTask.toast.created'));
         }
         await fetchJobs().catch(() => {});
@@ -450,7 +393,7 @@ export default function MyTask() {
     setDeleteTarget(null);
     void (async () => {
       try {
-        await deleteJob(target.id, target.engineType);
+        await deleteJob(target.id);
         toast.success(t('myTask.toast.deleted'));
       } catch (err) {
         toast.error(String(err));

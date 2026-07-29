@@ -8,6 +8,13 @@ import {
   SCLAW_EMBED_COOKIE_DOMAIN_SUFFIXES,
   isStoEmbedBrowserUrl,
 } from '../../../shared/sclaw-embed-browser';
+import { getStoPolicyReportApiHost } from '../../../shared/env-config';
+import {
+  STO_POLICY_AUTH_COOKIE_NAMES,
+  TEAMBITION_AUTH_COOKIE_NAMES,
+  hasValidStoPolicyAuthCookie,
+  hasValidTeambitionAuthCookie,
+} from '../../../shared/sto-policy-auth-cookie';
 import { logger } from '../../utils/logger';
 
 /** Prefer Chinese for DingTalk / STO SSO widgets that key off Accept-Language. */
@@ -80,4 +87,75 @@ export async function prepareSclawEmbedBrowserSession(url: string): Promise<void
   if (copied > 0) {
     logger.info(`[SclawEmbedBrowser] synced ${copied} cookie(s) into ${SCLAW_EMBED_BROWSER_PARTITION}`);
   }
+}
+
+function stoPolicyCookieHosts(): string[] {
+  const primary = getStoPolicyReportApiHost();
+  const hosts = new Set<string>([primary, 'zc.sto.cn', 'pre-zc.sto.cn', 'zc-test.sto.cn']);
+  return Array.from(hosts);
+}
+
+async function collectStoPolicyAuthCookies(targetSession: Electron.Session): Promise<Cookie[]> {
+  const collected: Cookie[] = [];
+  for (const host of stoPolicyCookieHosts()) {
+    try {
+      const cookies = await targetSession.cookies.get({ url: `https://${host}/` });
+      for (const cookie of cookies) {
+        if ((STO_POLICY_AUTH_COOKIE_NAMES as readonly string[]).includes(cookie.name)) {
+          collected.push(cookie);
+        }
+      }
+    } catch {
+      // ignore per-host failures
+    }
+  }
+  return collected;
+}
+
+/**
+ * Whether the embed (or default) session already has a non-expired sto-policy auth cookie.
+ * Prefers stoToken, falls back to Authorization; JWT exp is checked when present.
+ */
+export async function hasStoPolicyAuthInEmbedSession(): Promise<boolean> {
+  const embedSession = session.fromPartition(SCLAW_EMBED_BROWSER_PARTITION);
+  const embedCookies = await collectStoPolicyAuthCookies(embedSession);
+  if (hasValidStoPolicyAuthCookie(embedCookies)) return true;
+
+  // Cookies may still only live on defaultSession before the next prepareSession sync.
+  const defaultCookies = await collectStoPolicyAuthCookies(session.defaultSession);
+  return hasValidStoPolicyAuthCookie(defaultCookies);
+}
+
+function teambitionCookieHosts(): string[] {
+  return ['www.teambition.com', 'teambition.com'];
+}
+
+async function collectTeambitionAuthCookies(targetSession: Electron.Session): Promise<Cookie[]> {
+  const collected: Cookie[] = [];
+  for (const host of teambitionCookieHosts()) {
+    try {
+      const cookies = await targetSession.cookies.get({ url: `https://${host}/` });
+      for (const cookie of cookies) {
+        if ((TEAMBITION_AUTH_COOKIE_NAMES as readonly string[]).includes(cookie.name)) {
+          collected.push(cookie);
+        }
+      }
+    } catch {
+      // ignore per-host failures
+    }
+  }
+  return collected;
+}
+
+/**
+ * Whether the embed (or default) session already has a non-expired Teambition session cookie.
+ * Uses TEAMBITION_SESSIONID; cookie expirationDate / JWT exp are checked when present.
+ */
+export async function hasTeambitionAuthInEmbedSession(): Promise<boolean> {
+  const embedSession = session.fromPartition(SCLAW_EMBED_BROWSER_PARTITION);
+  const embedCookies = await collectTeambitionAuthCookies(embedSession);
+  if (hasValidTeambitionAuthCookie(embedCookies)) return true;
+
+  const defaultCookies = await collectTeambitionAuthCookies(session.defaultSession);
+  return hasValidTeambitionAuthCookie(defaultCookies);
 }

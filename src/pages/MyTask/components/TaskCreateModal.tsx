@@ -71,22 +71,12 @@ function computeInitialValues(
 ) {
 
   if (job) {
-    if (job.engineType === 'claude') {
-      return {
-        name: job.name || '',
-        instructions: stripInstructionFromTaskMessage(job.promptTemplate || ''),
-        schedule: cronToScheduleValue(job.cronExpr),
-        recipients: resolveScheduledTaskMentions(job.promptTemplate || ''),
-        engineType: 'claude' as TaskEngineType,
-        selectedWorkflow: job.workflowCode || '',
-      };
-    }
     return {
       name: job.name || '',
-      instructions: stripInstructionFromTaskMessage(job.message || ''),
-      schedule: cronToScheduleValue(job.schedule),
-      recipients: resolveScheduledTaskMentions(job.message || ''),
-      engineType: 'openclaw' as TaskEngineType,
+      instructions: stripInstructionFromTaskMessage(job.prompt || ''),
+      schedule: cronToScheduleValue(job.cronExpr),
+      recipients: job.dingtalkRecipients ?? resolveScheduledTaskMentions(job.prompt || ''),
+      engineType: job.engineType,
       selectedWorkflow: job.workflowCode || '',
     };
   }
@@ -205,7 +195,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
         changed: boolean;
         source: 'model' | 'rules-fallback';
         model?: string;
-      }>('/api/cron/beautify-instruction', {
+      }>('/api/scheduled-tasks/beautify-instruction', {
         method: 'POST',
         body: JSON.stringify({
           instruction: trimmed,

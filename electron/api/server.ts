@@ -40,8 +40,7 @@ import { handleFileRoutes } from './routes/files';
 import { handleSessionRoutes } from './routes/sessions';
 import { handleSessionCatalogRoutes } from './routes/session-catalog';
 import { handleTaskGroupRoutes } from './routes/task-groups';
-import { handleCronRoutes } from './routes/cron';
-import { handleClaudeScheduledTaskRoutes } from './routes/claude-scheduled-tasks';
+import { handleScheduledTaskRoutes } from './routes/scheduled-tasks';
 import { handleDingTalkRoutes } from './routes/dingtalk';
 import { handleChannelHubRoutes } from './routes/channel-hub';
 import { handleStoSyncRoutes } from './routes/sto-sync';
@@ -89,14 +88,13 @@ const routeHandlers: RouteHandler[] = [
   handleSessionRoutes,
   handleSessionCatalogRoutes,
   handleTaskGroupRoutes,
-  handleCronRoutes,
   handleDictionaryRoutes,
   handleWorkflowRoutes,
   handleDataCenterRoutes,
   handleLocalAuthorizedFileRoutes,
   handleSclawBrowserRoutes,
   handleBrowserBridgeRoutes,
-  handleClaudeScheduledTaskRoutes,
+  handleScheduledTaskRoutes,
   handleDingTalkRoutes,
   handleMyTasksRoutes,
   handleLogRoutes,

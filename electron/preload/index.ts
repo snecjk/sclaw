@@ -194,6 +194,8 @@ const electronAPI = {
         'workflow:stream:unsubscribe',
         // SClaw embed browser runtime
         'sclaw-browser:prepareSession',
+        'sclaw-browser:hasStoPolicyAuth',
+        'sclaw-browser:hasTeambitionAuth',
         'sclaw-browser:registerRuntime',
         'sclaw-browser:linkChatSession',
         'sclaw-browser:bindWebContents',
@@ -259,6 +261,7 @@ const electronAPI = {
         'workflow:stream:event',
         'workflow:stream:error',
         'sclaw-browser:toggle-chat',
+        'sclaw-browser:open-url',
       ];
 
       if (validChannels.includes(channel)) {

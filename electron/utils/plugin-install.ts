@@ -379,26 +379,14 @@ function removeLegacyStoToolkitExtensionSibling(): void {
 
 const STO_WORKFLOW_DEV_SYNC_FILES = ['index.ts', 'api.ts', 'openclaw-sdk.ts', 'typebox-shim.ts', 'workflow-params.ts', 'workflow-search.ts', 'openclaw.plugin.json', 'package.json'] as const;
 
-const STO_DINGTALK_SEND_GUARD_DEV_SYNC_FILES = [
-  'index.ts',
-  'dingtalk-send-guard.ts',
-  'share-to-dingtalk.ts',
-  'dingtalk-mention-pending.ts',
-  'openclaw.plugin.json',
-  'package.json',
-  'shared/dws-send-text.ts',
-  'shared/dingtalk-disclaimer.ts',
-  'shared/dingtalk-mention-context.ts',
-  'shared/dingtalk-file-send.ts',
-  'shared/dingtalk-mention.ts',
-] as const;
-
 /** Reinstall bundled plugin when these files differ even if package.json version is unchanged. */
 const PLUGIN_CONTENT_SYNC_FILES: Record<string, readonly string[]> = {
   'sto-dingtalk-send-guard': [
-    'shared/dws-send-text.ts',
+    'shared/dingtalk-send/dws-send-text.ts',
+    'shared/dingtalk-prompts/dingtalk-mention-context.ts',
     'index.ts',
     'dingtalk-send-guard.ts',
+    'openclaw.plugin.json',
   ],
   'sto-dynamic-agent-route': [
     'index.ts',
@@ -743,21 +731,25 @@ function ensurePluginRuntimeDeps(pluginDirName: string): void {
   copyPluginRuntimeDeps(pluginDirName, targetDir);
 }
 
-/** Dev-only: keep ~/.stoclaw extension in sync with sto-plugin sources without a version bump. */
-function syncStoDingTalkSendGuardDevSources(candidateSources: string[]): void {
+/** Dev-only: 整目录同步 sto-plugin → ~/.stoclaw/extensions（避免 build 镜像半迁移布局）。 */
+function syncStoDingTalkSendGuardDevSources(_candidateSources: string[]): void {
   if (app.isPackaged) return;
-  const sourceDir = pickPluginSourceDir('sto-dingtalk-send-guard', candidateSources);
+
+  const sourceDir = getLocalPluginSourceCandidates('sto-dingtalk-send-guard').find((dir) =>
+    existsSync(fsPath(join(dir, 'openclaw.plugin.json'))),
+  );
   if (!sourceDir) return;
 
   const targetDir = join(getOpenClawConfigDir(), 'extensions', 'sto-dingtalk-send-guard');
   if (!existsSync(fsPath(join(targetDir, 'openclaw.plugin.json')))) return;
 
-  for (const file of STO_DINGTALK_SEND_GUARD_DEV_SYNC_FILES) {
-    const src = join(sourceDir, file);
-    if (!existsSync(fsPath(src))) continue;
-    cpSync(fsPath(src), fsPath(join(targetDir, file)), { force: true });
+  for (const entry of readdirSync(fsPath(sourceDir), { withFileTypes: true })) {
+    if (entry.name === 'node_modules') continue;
+    const src = join(sourceDir, entry.name);
+    const dest = join(targetDir, entry.name);
+    cpSync(fsPath(src), fsPath(dest), { recursive: true, force: true });
   }
-  logger.info(`[plugin] Synced sto-dingtalk-send-guard dev sources from ${sourceDir}`);
+  logger.info(`[plugin] Synced sto-dingtalk-send-guard dev sources (full) from ${sourceDir}`);
 }
 
 /** Dev-only: keep ~/.stoclaw extension in sync with sto-plugin sources without a version bump. */
@@ -957,7 +949,16 @@ function comparePluginVersions(a: string, b: string): number {
   return 0;
 }
 
-/** 在 bundled / build / sto-plugin 等候选源中选版本最高且可用的目录。 */
+/** Dev 模式下 sto-plugin/openclaw 本地源（优先于 build/openclaw-plugins 镜像）。 */
+function isLocalStoOpenClawPluginSourceDir(pluginDirName: string, dir: string): boolean {
+  const normalized = fsPath(dir);
+  for (const localDir of getLocalPluginSourceCandidates(LOCAL_PLUGIN_DIRS[pluginDirName] ?? pluginDirName)) {
+    if (normalized === fsPath(localDir)) return true;
+  }
+  return false;
+}
+
+/** 在 bundled / build / sto-plugin 等候选源中选版本最高且可用的目录。Dev 下同版本优先 sto-plugin。 */
 function pickPluginSourceDir(
   pluginDirName: string,
   candidateSources: string[],
@@ -983,7 +984,17 @@ function pickPluginSourceDir(
   }
 
   if (ranked.length === 0) return undefined;
-  ranked.sort((left, right) => comparePluginVersions(right.version, left.version));
+  ranked.sort((left, right) => {
+    const byVersion = comparePluginVersions(right.version, left.version);
+    if (byVersion !== 0) return byVersion;
+    // build/openclaw-plugins 镜像常滞后于 sto-plugin；同版本时 dev 优先本地源码。
+    if (!app.isPackaged) {
+      const leftLocal = isLocalStoOpenClawPluginSourceDir(pluginDirName, left.dir);
+      const rightLocal = isLocalStoOpenClawPluginSourceDir(pluginDirName, right.dir);
+      if (leftLocal !== rightLocal) return leftLocal ? -1 : 1;
+    }
+    return 0;
+  });
   return ranked[0].dir;
 }
 

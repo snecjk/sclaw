@@ -107,9 +107,9 @@ export function RecommendCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className={cn(homeHubCardTitleClass, 'truncate')}>{item.title}</h3>
-            {item.item_type ? (
+            {item.category ? (
               <span className={cn('shrink-0', homeHubCardTagClass)}>
-                {t('agentHub.functionTag')}
+                {item.category}
               </span>
             ) : null}
           </div>

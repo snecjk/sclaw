@@ -6,9 +6,10 @@
  */
 
 import 'zx/globals';
-import { access, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PLUGIN_SHARED_VENDOR_PAIRS } from './plugin-shared-vendor-pairs.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -18,22 +19,12 @@ const VENDOR_HEADER = (rootRel) =>
     '/**',
     ' * Self-contained copy for Gateway extension install (~/.stoclaw/openclaw/extensions/...).',
     ` * Keep in sync with repository root \`${rootRel}\`.`,
+    ' * Regenerate: `pnpm run sync:plugin-shared`',
     ' */',
     '',
   ].join('\n');
 
-const VENDOR_SYNC_PAIRS = [
-  {
-    rootRel: 'shared/retired-skills.ts',
-    vendorRel: 'sto-plugin/openclaw/sto-dynamic-agent-route/shared/retired-skills.ts',
-  },
-  {
-    rootRel: 'shared/workspace-paths.ts',
-    vendorRel: 'sto-plugin/openclaw/sto-dynamic-agent-route/shared/workspace-paths.ts',
-  },
-];
-
-function stripLeadingBlockComment(source) {
+export function stripLeadingBlockComment(source) {
   let result = source;
   let prev;
   do {
@@ -57,22 +48,15 @@ async function syncVendorFromRoot({ rootRel, vendorRel }) {
   }
 
   if (currentVendor !== nextVendor) {
+    await mkdir(path.dirname(vendorPath), { recursive: true });
     await writeFile(vendorPath, nextVendor, 'utf8');
     echo`Synced vendor copy: ${vendorRel}`;
   }
 }
 
-const REQUIRED_PLUGIN_FILES = [
-  'sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-mention.ts',
-  'sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-disclaimer.ts',
-  'sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dws-send-text.ts',
-  'sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-file-send.ts',
-  'sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-mention-context.ts',
-  'sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-oral-send-prompt.ts',
-  ...VENDOR_SYNC_PAIRS.map((pair) => pair.vendorRel),
-];
+const REQUIRED_PLUGIN_FILES = PLUGIN_SHARED_VENDOR_PAIRS.map((pair) => pair.vendorRel);
 
-for (const pair of VENDOR_SYNC_PAIRS) {
+for (const pair of PLUGIN_SHARED_VENDOR_PAIRS) {
   await syncVendorFromRoot(pair);
 }
 
@@ -84,7 +68,7 @@ for (const relPath of REQUIRED_PLUGIN_FILES) {
   });
 }
 
-for (const pair of VENDOR_SYNC_PAIRS) {
+for (const pair of PLUGIN_SHARED_VENDOR_PAIRS) {
   const rootBody = stripLeadingBlockComment(await readFile(path.join(ROOT, pair.rootRel), 'utf8'));
   const vendorBody = stripLeadingBlockComment(
     await readFile(path.join(ROOT, pair.vendorRel), 'utf8'),

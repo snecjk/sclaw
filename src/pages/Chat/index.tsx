@@ -47,13 +47,11 @@ import { useSettingsStore } from '@/stores/settings';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
-import { useBuiltinToolListener } from '@/hooks/use-builtin-tool-listener';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
 import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
 export function Chat() {
-  useBuiltinToolListener();
   const navigate = useNavigate();
   const { t } = useTranslation('chat');
   const gatewayStatus = useGatewayStore((s) => s.status);
@@ -603,7 +601,7 @@ export function Chat() {
 
               {activeTurn ? (
                 <AssistantTurnMessage
-                  key="active-turn"
+                  key={`active-turn:${currentSessionKey}`}
                   turnMessages={activeTurn.turnMessages}
                   turnToolResults={activeTurn.turnToolResults}
                   precedingUserMessage={activeTurn.precedingUserMessage}

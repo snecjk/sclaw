@@ -1,3 +1,6 @@
+import { DINGTALK_LOCAL_ARTIFACT_IN_TEXT_BLOCK_REASON } from './shared/dingtalk-prompts/dingtalk-send-rules.js';
+import { dwsChatMessageSendTextContainsLocalArtifactPath } from './shared/dingtalk-send/dws-send-text.js';
+
 const DWS_CHAT_MESSAGE_SEND = /dws\s+chat\s+message\s+send\b/i;
 const DWS_SEND_DRY_RUN = /--dry-run\b/i;
 const SHELL_LOOP_KEYWORD = /\b(?:for|while|until|seq|xargs)\b/i;
@@ -119,23 +122,15 @@ export function resolveDwsChatMessageSendTextFormatProblem(commandText: string):
   ].join('');
 }
 
-const DWS_SEND_FILE_PROTOCOL = /\bfile:\/\//i;
-
 /**
- * 钉钉正文禁止含 `file://` 本地路径（钉钉打不开）。
- * 不豁免 `--dry-run`：file:// 是内容问题，dry-run 预览也应被挡，提示 agent 先上钉盘。
- * 详见 `shared/scheduled-task-instruction.ts` 的【P0 本地产物上钉盘】流程。
+ * 钉钉正文禁止含本地产物路径（`file://`、裸绝对路径、`.claw-output` 等，钉钉打不开）。
+ * 只检查 `--text` 正文，避免同命令链里 `drive upload --file` 误拦。
+ * 不豁免 `--dry-run`：内容问题，预览也应被挡。拒因文案见模块 A 常量。
  */
 export function resolveDwsChatMessageSendFileProtocolInText(commandText: string): string | null {
   if (!containsDwsChatMessageSend(commandText)) return null;
-  if (!DWS_SEND_FILE_PROTOCOL.test(commandText)) return null;
-
-  return [
-    '[StoClaw 安全策略] 钉钉正文禁止含 `file://` 本地路径（钉钉打不开，定时任务【P0 本地产物上钉盘】已要求先上钉盘）。',
-    '请先用 `dws drive upload --file <本地路径（去掉 file:// 前缀）> -y --format json` 上传钉盘（不需要 `--space-id`，直接使用发送人默认钉盘空间），',
-    '从返回 JSON 取 `docUrl`，用「文件名：docUrl」裸 URL 替换正文中的 `file://` 链接（**直接使用 docUrl 原始值，禁止对 URL 做任何编码**）后再 `dws chat message send`；',
-    '若上传失败则移除该产物链接，只发纯文字总结。',
-  ].join('');
+  if (!dwsChatMessageSendTextContainsLocalArtifactPath(commandText)) return null;
+  return DINGTALK_LOCAL_ARTIFACT_IN_TEXT_BLOCK_REASON;
 }
 
 const lastSuccessAtByScope = new Map<string, number>();
@@ -152,13 +147,15 @@ export function resetDingTalkSendRateLimitForTests(): void {
 }
 
 /**
- * 定时任务执行 session key 识别（与 `shared/scheduled-task-instruction.ts`
- * 的 `isScheduledTaskExecutionSessionKey` 保持一致）。定时任务为一次性有意执行，
- * 合法地可能向多名收件人发送，豁免 20s/条限流，避免并集发送被挡。
+ * 定时任务执行 session key 识别（须与 `shared/scheduled-task-instruction.ts`
+ * 的 `isScheduledTaskExecutionSessionKey` 保持一致；本插件独立打包，不能裸 import shared）。
+ * 定时任务为一次性有意执行，合法地可能向多名收件人发送，豁免 20s/条限流，避免并集发送被挡。
  */
-function isScheduledTaskSessionKey(key: string | undefined): boolean {
+export function isScheduledTaskSessionKey(key: string | undefined): boolean {
   const k = key?.trim();
   if (!k) return false;
+  // Claude dated / base：`claude-task:{taskId}:{YYYY-MM-DD}` 或 `claude-task:{taskId}`
+  if (k.startsWith('claude-task:')) return true;
   if (k.startsWith('claude-task-run:')) return true;
   if (k.startsWith('scheduled-task:')) return true;
   if (k.startsWith('agent:')) {
@@ -295,7 +292,7 @@ export function evaluateDingTalkSendGuard(input: {
     };
   }
 
-  // file:// 本地路径钉钉打不开，必须先上钉盘；不豁免 --dry-run（内容问题，预览也挡）。
+  // 本地产物路径（file:// / 裸绝对路径 / .claw-output）钉钉打不开，必须先上钉盘或改用在线 URL；不豁免 --dry-run。
   const fileProtocolProblem = resolveDwsChatMessageSendFileProtocolInText(commandText);
   if (fileProtocolProblem) {
     return {

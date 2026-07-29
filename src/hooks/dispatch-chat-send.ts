@@ -84,7 +84,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     const ok = await sendWithWorkflow(text, workflowId, {
       sessionKey: chatState.currentSessionKey,
       agentId: chatState.currentAgentId,
-    }, sendWithWorkflowContext);
+    }, sendWithWorkflowContext, dingTalkMentions);
     if (!ok) return;
     return;
   }

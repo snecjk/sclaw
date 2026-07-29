@@ -1,13 +1,13 @@
 /**
  * Gateway child_process preload — bundled to gateway-fetch-preload.cjs.
- * DWS 发送规范化逻辑与 shared/dws-send-text.ts 同源，避免在 process-launcher 内重复维护。
+ * DWS 发送规范化逻辑与 shared/dingtalk-send/dws-send-text.ts 同源，避免在 process-launcher 内重复维护。
  */
 import {
   fixDwsChatMessageSendArgv,
   fixDwsChatMessageSendShellScript,
   parseDwsChatMessageSendShellCommandArgs,
   rewriteDwsSendSpawnInvocation,
-} from '../../shared/dws-send-text';
+} from '../../shared/dingtalk-send/dws-send-text';
 
 /** Must match electron/utils/sai-client-id.ts — keep inline to avoid pulling Electron utils into preload. */
 const SAI_CLIENT_ID_VALUE = 'sto-claw';
