@@ -31,4 +31,13 @@ describe('app plaza banner layout', () => {
       rule('.page-more-apps .app-market__hero-banner--clickable:hover'),
     ).toMatch(/box-shadow:\s*none\s*;/);
   });
+
+  it('does not add a border but keeps a keyboard focus outline', () => {
+    expect(rule('.page-more-apps .app-market__hero-banner')).toMatch(
+      /border:\s*none\s*;/,
+    );
+    expect(
+      rule('.page-more-apps .app-market__hero-banner--clickable:focus-visible'),
+    ).toMatch(/outline:\s*2px solid rgba\(255,\s*103,\s*0,\s*0\.65\)\s*;/);
+  });
 });

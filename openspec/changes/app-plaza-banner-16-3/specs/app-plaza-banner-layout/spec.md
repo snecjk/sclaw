@@ -1,11 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: 应用广场 Banner 使用统一 16:3 比例
-StoClaw 应用广场的正常 Banner、加载骨架和错误占位 MUST 使用 16:3 的展示比例；正常 Banner 的默认及悬停状态 MUST NOT 展示蓝色阴影。
+StoClaw 应用广场的正常 Banner、加载骨架和错误占位 MUST 使用 16:3 的展示比例；正常 Banner 的默认及悬停状态 MUST NOT 展示蓝色阴影或蓝色边框。
 
 #### Scenario: 正常 Banner 展示
 - **WHEN** 应用广场成功获取并展示 Banner
-- **THEN** Banner 容器以 16:3 比例展示，且容器外没有蓝色阴影
+- **THEN** Banner 容器以 16:3 比例展示，且没有蓝色阴影或蓝色边框
 
 #### Scenario: Banner 加载状态
 - **WHEN** 应用广场正在加载 Banner 数据
@@ -17,7 +17,11 @@ StoClaw 应用广场的正常 Banner、加载骨架和错误占位 MUST 使用 1
 
 #### Scenario: 暗色模式
 - **WHEN** 用户在暗色模式查看应用广场 Banner
-- **THEN** Banner 仍以 16:3 比例展示，沿用现有暗色主题背景和边框，且没有蓝色阴影
+- **THEN** Banner 仍以 16:3 比例展示，沿用现有暗色主题背景，且没有蓝色阴影或蓝色边框
+
+#### Scenario: 键盘聚焦 Banner
+- **WHEN** 用户使用键盘将焦点移动到可点击 Banner
+- **THEN** Banner MUST 保留清晰的非蓝色聚焦轮廓
 
 ### Requirement: 管理端裁剪框匹配客户端 Banner
 `memory-center-web` 的 Banner 裁剪框 MUST 使用 StoClaw Banner 的 862px 最大展示宽度和 20px 圆角，并 MUST 保持 16:3 比例。
