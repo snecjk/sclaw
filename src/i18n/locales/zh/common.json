@@ -195,6 +195,8 @@
             "newName": "新名称",
             "deleteTitle": "删除条目",
             "deleteMessage": "确认删除「{{name}}」？文件夹只能在为空时删除。",
+            "moveToTitle": "移动到",
+            "moveToMessage": "请选择「{{name}}」要移动到的目标文件夹。",
             "uploadToSharedTitle": "上传至网点共享",
             "uploadToSharedMessage": "请选择「{{name}}」要上传到的网点共享产物文件夹。",
             "traceMissingTitle": "追溯对话失败",
@@ -219,6 +221,8 @@
             "traceFailed": "追溯失败",
             "folderCreated": "文件夹已创建",
             "renamed": "已重命名",
+            "moved": "已移动",
+            "moveFailed": "移动失败",
             "deleted": "已删除",
             "deleteFailed": "删除失败",
             "folderShareUnsupported": "文件夹暂不支持分享"
@@ -230,6 +234,7 @@
             "share": "转发",
             "more": "更多",
             "traceChat": "追溯对话",
+            "moveTo": "移动到",
             "rename": "重命名",
             "removeAuthorization": "移除授权",
             "delete": "删除"

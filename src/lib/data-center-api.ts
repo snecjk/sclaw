@@ -120,6 +120,16 @@ export async function renameDataCenterEntry(entryId: string, name: string): Prom
   ));
 }
 
+export async function moveDataCenterEntry(entryId: string, targetParentEntryId: string): Promise<DataCenterEntry> {
+  return unwrapDataCenter(hostApiFetch<DataCenterApiResponse<DataCenterEntry>>(
+    `${DATA_CENTER_BASE}/entries/${encodeURIComponent(entryId)}/move`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ targetParentEntryId: targetParentEntryId || 'root' }),
+    },
+  ));
+}
+
 export async function deleteDataCenterEntry(entryId: string): Promise<{ entryId: string; deleted: boolean }> {
   return unwrapDataCenter(hostApiFetch<DataCenterApiResponse<{ entryId: string; deleted: boolean }>>(
     `${DATA_CENTER_BASE}/entries/${encodeURIComponent(entryId)}`,

@@ -29,6 +29,7 @@ import {
   deleteDataCenterSharedEntry,
   getDataCenterDownloadUrl,
   getDataCenterPreviewUrl,
+  moveDataCenterEntry,
   shareDataCenterEntries,
   uploadDriveFileFromPath,
 } from '@/lib/data-center-api';
@@ -49,7 +50,7 @@ import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import type { DataCenterTempUrl } from '@/types/data-center';
 import { EntryGrid, EntryList, FeedbackState } from './components/entries';
-import { DataCenterModal, PreviewModal, TextPromptModal, TraceChatMissingDialog, UploadToSharedFolderDialog } from './components/modals';
+import { DataCenterModal, MoveEntryDialog, PreviewModal, TextPromptModal, TraceChatMissingDialog, UploadToSharedFolderDialog } from './components/modals';
 import { FolderBreadcrumbBar, IconToggle, TabButton } from './components/navigation';
 import { ROOT_ENTRY_ID } from './constants';
 import type { DataCenterUiEntry, DriveTab, UploadToSharedTarget } from './types';
@@ -78,6 +79,7 @@ export function DataCenter() {
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [renameEntry, setRenameEntry] = useState<DataCenterUiEntry | null>(null);
   const [deleteEntry, setDeleteEntry] = useState<DataCenterUiEntry | null>(null);
+  const [moveEntry, setMoveEntry] = useState<DataCenterUiEntry | null>(null);
   const [previewState, setPreviewState] = useState<{ entry: DataCenterUiEntry; tempUrl: DataCenterTempUrl } | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
@@ -371,6 +373,13 @@ export function DataCenter() {
     await store.refreshQuota();
   };
 
+  const handleMoveEntry = async (entry: DataCenterUiEntry, targetParentEntryId: string) => {
+    if (entry.localAuthorized) return;
+    await moveDataCenterEntry(entry.entryId, targetParentEntryId);
+    await store.load();
+    await store.refreshQuota();
+  };
+
   const handleOpenFolder = (entry: DataCenterUiEntry) => {
     if (isLocalDriveTab) {
       void localStore.enterFolder({
@@ -579,6 +588,7 @@ export function DataCenter() {
                   onDownload={handleDownload}
                   onShare={handleShare}
                   onUploadToShared={handleUploadToShared}
+                  onMove={setMoveEntry}
                   onRename={setRenameEntry}
                   onDelete={setDeleteEntry}
                   onTrace={handleTrace}
@@ -591,6 +601,7 @@ export function DataCenter() {
                   onDownload={handleDownload}
                   onShare={handleShare}
                   onUploadToShared={handleUploadToShared}
+                  onMove={setMoveEntry}
                   onRename={setRenameEntry}
                   onDelete={setDeleteEntry}
                   onTrace={handleTrace}
@@ -666,6 +677,22 @@ export function DataCenter() {
             {t('dataCenterPage.dialogs.deleteMessage', { name: deleteEntry.name })}
           </p>
         </DataCenterModal>
+      ) : null}
+
+      {moveEntry ? (
+        <MoveEntryDialog
+          entry={moveEntry}
+          onClose={() => setMoveEntry(null)}
+          onConfirm={async (targetParentEntryId) => {
+            try {
+              await handleMoveEntry(moveEntry, targetParentEntryId);
+              setMoveEntry(null);
+              toast.success(t('dataCenterPage.toasts.moved'));
+            } catch (error) {
+              toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.moveFailed'));
+            }
+          }}
+        />
       ) : null}
 
       {previewState ? (

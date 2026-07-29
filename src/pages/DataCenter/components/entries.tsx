@@ -75,7 +75,7 @@ export function EntryGrid(props: EntryRenderProps) {
     event.preventDefault();
     event.stopPropagation();
     const menuWidth = 132;
-    const menuHeight = canTraceChat(entry) ? 180 : 140;
+    const menuHeight = canTraceChat(entry) ? 216 : 176;
     setContextMenu({
       entry,
       x: Math.min(event.clientX, window.innerWidth - menuWidth - 8),
@@ -116,6 +116,7 @@ export function EntryGrid(props: EntryRenderProps) {
           onDownload={(entry) => runContextAction(props.onDownload, entry)}
           onPreview={(entry) => runContextAction(props.onPreview, entry)}
           onShare={(entry) => runContextAction(props.onShare, entry)}
+          onMove={(entry) => runContextAction(props.onMove, entry)}
           onRename={(entry) => runContextAction(props.onRename, entry)}
           onDelete={(entry) => runContextAction(props.onDelete, entry)}
           onTrace={(entry) => runContextAction(props.onTrace, entry)}
@@ -132,6 +133,7 @@ function GridEntryContextMenu({
   onDownload,
   onPreview,
   onShare,
+  onMove,
   onRename,
   onDelete,
   onTrace,
@@ -142,11 +144,13 @@ function GridEntryContextMenu({
   onDownload: (entry: DataCenterUiEntry) => void;
   onPreview: (entry: DataCenterUiEntry) => void;
   onShare: (entry: DataCenterUiEntry) => void;
+  onMove: (entry: DataCenterUiEntry) => void;
   onRename: (entry: DataCenterUiEntry) => void;
   onDelete: (entry: DataCenterUiEntry) => void;
   onTrace: (entry: DataCenterUiEntry) => void;
 }) {
   const { t } = useTranslation('common');
+  const canMoveEntry = !entry.localAuthorized;
   const canRenameEntry = !entry.localAuthorized && (entry.spaceType !== 'site_shared_artifact' || entry.canManage === true);
   const canDeleteEntry = entry.localAuthorized
     ? entry.parentEntryId === ROOT_ENTRY_ID
@@ -179,6 +183,11 @@ function GridEntryContextMenu({
       {canTraceEntry ? (
         <ContextMenuButton onClick={() => onTrace(entry)}>
           {t('dataCenterPage.menu.traceChat')}
+        </ContextMenuButton>
+      ) : null}
+      {canMoveEntry ? (
+        <ContextMenuButton onClick={() => onMove(entry)}>
+          {t('dataCenterPage.menu.moveTo')}
         </ContextMenuButton>
       ) : null}
       {canRenameEntry ? (
@@ -256,6 +265,7 @@ function EntryActions({
   onDownload,
   onShare,
   onUploadToShared,
+  onMove,
   onRename,
   onDelete,
   onTrace,
@@ -265,6 +275,7 @@ function EntryActions({
   const [moreTooltipOpen, setMoreTooltipOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const canUploadToShared = entry.entryType === 'file' && entry.spaceType === 'qa_artifact' && !entry.localAuthorized;
+  const canMoveEntry = !entry.localAuthorized;
   const canRenameEntry = !entry.localAuthorized && (entry.spaceType !== 'site_shared_artifact' || entry.canManage === true);
   const canDeleteEntry = entry.localAuthorized
     ? entry.parentEntryId === ROOT_ENTRY_ID
@@ -348,6 +359,11 @@ function EntryActions({
           {canTraceEntry ? (
             <DropdownMenuItem onSelect={() => onTrace(entry)} className="text-[13px]">
               {t('dataCenterPage.menu.traceChat')}
+            </DropdownMenuItem>
+          ) : null}
+          {canMoveEntry ? (
+            <DropdownMenuItem onSelect={() => onMove(entry)} className="text-[13px]">
+              {t('dataCenterPage.menu.moveTo')}
             </DropdownMenuItem>
           ) : null}
           {canRenameEntry ? (

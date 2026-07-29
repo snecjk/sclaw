@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/tooltip';
 import { listDataCenterEntries } from '@/lib/data-center-api';
 import { cn } from '@/lib/utils';
-import type { DataCenterEntry, DataCenterTempUrl } from '@/types/data-center';
+import type { DataCenterEntry, DataCenterSpaceType, DataCenterTempUrl } from '@/types/data-center';
 import { actionTooltipClass, FOLDER_NAME_MAX_LENGTH, ROOT_ENTRY_ID } from '../constants';
 import type { DataCenterUiEntry } from '../types';
 
@@ -314,6 +314,72 @@ export function UploadToSharedFolderDialog({
   onConfirm: (targetParentEntryId: string) => Promise<void>;
 }) {
   const { t } = useTranslation('common');
+  return (
+    <FolderPickerDialog
+      title={t('dataCenterPage.dialogs.uploadToSharedTitle')}
+      message={t('dataCenterPage.dialogs.uploadToSharedMessage', { name: entry.name })}
+      rootLabel={t('dataCenterPage.saveArtifact.sharedArtifacts')}
+      spaceType="site_shared_artifact"
+      spaceId={targetSpaceId}
+      onClose={onClose}
+      onConfirm={onConfirm}
+    />
+  );
+}
+
+export function MoveEntryDialog({
+  entry,
+  onClose,
+  onConfirm,
+}: {
+  entry: DataCenterUiEntry;
+  onClose: () => void;
+  onConfirm: (targetParentEntryId: string) => Promise<void>;
+}) {
+  const { t } = useTranslation('common');
+  const rootLabel = entry.spaceType === 'site_shared_artifact'
+    ? t('dataCenterPage.saveArtifact.sharedArtifacts')
+    : entry.spaceType === 'drive'
+      ? t('dataCenterPage.sections.drive')
+      : t('dataCenterPage.saveArtifact.myArtifacts');
+  const disabledEntryIds = entry.entryType === 'folder' ? new Set([entry.entryId]) : undefined;
+  return (
+    <FolderPickerDialog
+      title={t('dataCenterPage.dialogs.moveToTitle')}
+      message={t('dataCenterPage.dialogs.moveToMessage', { name: entry.name })}
+      rootLabel={rootLabel}
+      spaceType={entry.spaceType}
+      spaceId={entry.spaceId ?? undefined}
+      disableSharedFolders
+      disabledEntryIds={disabledEntryIds}
+      onClose={onClose}
+      onConfirm={onConfirm}
+    />
+  );
+}
+
+function FolderPickerDialog({
+  title,
+  message,
+  rootLabel,
+  spaceType,
+  spaceId,
+  disableSharedFolders = false,
+  disabledEntryIds,
+  onClose,
+  onConfirm,
+}: {
+  title: string;
+  message: string;
+  rootLabel: string;
+  spaceType: DataCenterSpaceType;
+  spaceId?: string;
+  disableSharedFolders?: boolean;
+  disabledEntryIds?: Set<string>;
+  onClose: () => void;
+  onConfirm: (targetParentEntryId: string) => Promise<void>;
+}) {
+  const { t } = useTranslation('common');
   const [selectedEntryId, setSelectedEntryId] = useState(ROOT_ENTRY_ID);
   const [folderMap, setFolderMap] = useState<SharedFolderMap>({});
   const [loadingMap, setLoadingMap] = useState<SharedFolderLoadingMap>({});
@@ -324,8 +390,8 @@ export function UploadToSharedFolderDialog({
     setLoadingMap((prev) => ({ ...prev, [parentEntryId]: true }));
     try {
       const result = await listDataCenterEntries({
-        spaceType: 'site_shared_artifact',
-        spaceId: targetSpaceId,
+        spaceType,
+        spaceId,
         parentEntryId,
         entryType: 'folder',
         pageSize: 200,
@@ -356,7 +422,7 @@ export function UploadToSharedFolderDialog({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadFolders(ROOT_ENTRY_ID);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetSpaceId]);
+  }, [spaceType, spaceId]);
 
   const submit = async () => {
     setSaving(true);
@@ -369,7 +435,7 @@ export function UploadToSharedFolderDialog({
 
   return (
     <DataCenterModal
-      title={t('dataCenterPage.dialogs.uploadToSharedTitle')}
+      title={title}
       onClose={onClose}
       footer={(
         <>
@@ -383,13 +449,13 @@ export function UploadToSharedFolderDialog({
     >
       <div className="space-y-3">
         <p className="text-[13px] leading-5 text-[#4E5969] dark:text-muted-foreground">
-          {t('dataCenterPage.dialogs.uploadToSharedMessage', { name: entry.name })}
+          {message}
         </p>
         <div className="rounded-[14px] bg-[#F7F8FA] p-2 dark:bg-muted/40">
           <div className="rounded-[10px] bg-white p-2.5 dark:bg-card">
             <SharedFolderPickerRow
               folderId={ROOT_ENTRY_ID}
-              label={t('dataCenterPage.saveArtifact.sharedArtifacts')}
+              label={rootLabel}
               selectedEntryId={selectedEntryId}
               open={openMap[ROOT_ENTRY_ID] ?? true}
               loading={loadingMap[ROOT_ENTRY_ID] ?? false}
@@ -397,6 +463,9 @@ export function UploadToSharedFolderDialog({
               folderMap={folderMap}
               loadingMap={loadingMap}
               openMap={openMap}
+              disabled={false}
+              disableSharedFolders={disableSharedFolders}
+              disabledEntryIds={disabledEntryIds}
               onSelect={setSelectedEntryId}
               onToggle={toggleFolder}
             />
@@ -417,6 +486,9 @@ function SharedFolderPickerRow({
   folderMap,
   loadingMap,
   openMap,
+  disabled,
+  disableSharedFolders,
+  disabledEntryIds,
   onSelect,
   onToggle,
 }: {
@@ -429,19 +501,26 @@ function SharedFolderPickerRow({
   folderMap: SharedFolderMap;
   loadingMap: SharedFolderLoadingMap;
   openMap: SharedFolderOpenMap;
+  disabled?: boolean;
+  disableSharedFolders?: boolean;
+  disabledEntryIds?: Set<string>;
   onSelect: (entryId: string) => void;
   onToggle: (entryId: string) => void;
 }) {
   const { t } = useTranslation('common');
   const selected = selectedEntryId === folderId;
+  const rowDisabled = disabled || disabledEntryIds?.has(folderId) || false;
   return (
     <div>
-      <div className={cn('flex h-8 items-center gap-2 rounded-[8px] px-1.5', selected && 'bg-[#F2F3F5] dark:bg-muted')}>
+      <div className={cn('flex h-8 items-center gap-2 rounded-[8px] px-1.5', selected && 'bg-[#F2F3F5] dark:bg-muted', rowDisabled && 'opacity-50')}>
         <input
           type="checkbox"
           className="h-4 w-4 rounded border-[#C9CDD4]"
           checked={selected}
-          onChange={() => onSelect(folderId)}
+          onChange={() => {
+            if (!rowDisabled) onSelect(folderId);
+          }}
+          disabled={rowDisabled}
           aria-label={label}
         />
         <button
@@ -452,7 +531,14 @@ function SharedFolderPickerRow({
         >
           <ChevronDown className={cn('h-3.5 w-3.5 text-[#4E5969] transition-transform', !open && '-rotate-90')} />
         </button>
-        <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => onSelect(folderId)}>
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-not-allowed"
+          onClick={() => {
+            if (!rowDisabled) onSelect(folderId);
+          }}
+          disabled={rowDisabled}
+        >
           <img src={directoryIcon} alt="" aria-hidden="true" className="h-5 w-5 shrink-0" />
           <span className="truncate text-[13px] font-semibold text-[#1D2129] dark:text-foreground">{label}</span>
         </button>
@@ -479,6 +565,9 @@ function SharedFolderPickerRow({
                 folderMap={folderMap}
                 loadingMap={loadingMap}
                 openMap={openMap}
+                disabled={disableSharedFolders && folder.shared === true}
+                disableSharedFolders={disableSharedFolders}
+                disabledEntryIds={disabledEntryIds}
                 onSelect={onSelect}
                 onToggle={onToggle}
               />

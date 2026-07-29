@@ -189,6 +189,8 @@
             "newName": "新しい名前",
             "deleteTitle": "項目を削除",
             "deleteMessage": "「{{name}}」を削除しますか？フォルダは空の場合のみ削除できます。",
+            "moveToTitle": "移動先",
+            "moveToMessage": "「{{name}}」の移動先フォルダを選択してください。",
             "uploadToSharedTitle": "拠点共有へアップロード",
             "uploadToSharedMessage": "「{{name}}」のアップロード先となる拠点共有成果物フォルダを選択してください。",
             "traceMissingTitle": "会話の追跡に失敗しました",
@@ -213,6 +215,8 @@
             "traceFailed": "追跡に失敗しました",
             "folderCreated": "フォルダを作成しました",
             "renamed": "名前を変更しました",
+            "moved": "移動しました",
+            "moveFailed": "移動に失敗しました",
             "deleted": "削除しました",
             "deleteFailed": "削除に失敗しました",
             "folderShareUnsupported": "フォルダ共有はまだサポートされていません"
@@ -224,6 +228,7 @@
             "share": "転送",
             "more": "その他",
             "traceChat": "会話を追跡",
+            "moveTo": "移動先",
             "rename": "名前を変更",
             "removeAuthorization": "許可を解除",
             "delete": "削除"

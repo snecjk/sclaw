@@ -194,6 +194,8 @@
             "newName": "New name",
             "deleteTitle": "Delete item",
             "deleteMessage": "Delete \"{{name}}\"? Folders can only be deleted when empty.",
+            "moveToTitle": "Move to",
+            "moveToMessage": "Select the destination folder for \"{{name}}\".",
             "uploadToSharedTitle": "Upload to branch sharing",
             "uploadToSharedMessage": "Select the branch shared artifact folder to upload \"{{name}}\" to.",
             "traceMissingTitle": "Failed to trace conversation",
@@ -218,6 +220,8 @@
             "traceFailed": "Trace failed",
             "folderCreated": "Folder created",
             "renamed": "Renamed",
+            "moved": "Moved",
+            "moveFailed": "Move failed",
             "deleted": "Deleted",
             "deleteFailed": "Delete failed",
             "folderShareUnsupported": "Folder sharing is not supported yet"
@@ -229,6 +233,7 @@
             "share": "Share",
             "more": "More",
             "traceChat": "Trace conversation",
+            "moveTo": "Move to",
             "rename": "Rename",
             "removeAuthorization": "Remove authorization",
             "delete": "Delete"
