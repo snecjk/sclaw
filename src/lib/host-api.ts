@@ -94,7 +94,6 @@ function parseUnifiedProxyResponse<T>(
     const message =
       (json && typeof json.error === 'string' && json.error) ||
       (json && typeof json.message === 'string' && json.message) ||
-      (errCode && errMessage ? `${errCode}: ${errMessage}` : '') ||
       errMessage ||
       errCode ||
       `HTTP ${httpStatus}`;

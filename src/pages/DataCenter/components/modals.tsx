@@ -124,6 +124,8 @@ export function TextPromptModal({
     setSaving(true);
     try {
       await onConfirm(trimmed);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);
     }
