@@ -1,19 +1,30 @@
 /**
- * 总部演示 — 可切换网点时右下角浮动入口（登录后拉取一次 options，不重复请求）。
+ * 总部演示 — 账号切换入口（侧栏用户菜单：网点切回总部 / 总部级联选网点）。
+ * 可见条件与原先右下角 FAB 一致；登录后拉取一次 options。
  */
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeftRight, Check } from 'lucide-react';
+import { Check, ChevronRight } from 'lucide-react';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 
-export function AccountSwitchFab() {
+export interface AccountSwitchMenuItemsProps {
+  itemClassName: string;
+  itemHoverClassName: string;
+  subContentClassName: string;
+}
+
+export function AccountSwitchMenuItems({
+  itemClassName,
+  itemHoverClassName,
+  subContentClassName,
+}: AccountSwitchMenuItemsProps) {
   const { t } = useTranslation('auth');
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
@@ -51,8 +62,7 @@ export function AccountSwitchFab() {
 
   if (showSwitchBack) {
     return (
-      <button
-        type="button"
+      <DropdownMenuItem
         disabled={switching}
         onClick={() => {
           setSwitching(true);
@@ -60,27 +70,23 @@ export function AccountSwitchFab() {
             .catch(() => {})
             .finally(() => setSwitching(false));
         }}
-        className="no-drag fixed bottom-4 right-4 z-[99998] flex items-center gap-2 rounded-lg border border-[var(--sto-brand-6)]/30 bg-white px-3 py-2 text-xs font-medium text-[var(--sto-brand-6)] shadow-lg transition-colors hover:bg-[var(--sto-brand-6)]/5 disabled:cursor-wait disabled:opacity-70 dark:bg-card"
+        className={cn(itemClassName, itemHoverClassName)}
       >
-        <ArrowLeftRight className="h-4 w-4 shrink-0" strokeWidth={2} />
         {switching ? '切换中…' : t('accountSwitch.backToHq')}
-      </button>
+      </DropdownMenuItem>
     );
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          disabled={switching}
-          className="no-drag fixed bottom-4 right-4 z-[99998] flex items-center gap-2 rounded-lg border border-[var(--sto-brand-6)]/30 bg-white px-3 py-2 text-xs font-medium text-[var(--sto-brand-6)] shadow-lg transition-colors hover:bg-[var(--sto-brand-6)]/5 disabled:cursor-wait disabled:opacity-70 dark:bg-card"
-        >
-          <ArrowLeftRight className="h-4 w-4 shrink-0" strokeWidth={2} />
-          {switching ? '切换中…' : t('accountSwitch.menu')}
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" side="top" sideOffset={8} className="min-w-[12rem]">
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger
+        disabled={switching}
+        className={cn(itemClassName, itemHoverClassName, 'gap-2')}
+      >
+        <span className="flex-1">{switching ? '切换中…' : t('accountSwitch.menu')}</span>
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C]" strokeWidth={2} />
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent sideOffset={4} className={subContentClassName}>
         {accountSwitchOptions.map((option) => (
           <DropdownMenuItem
             key={option.code}
@@ -91,7 +97,7 @@ export function AccountSwitchFab() {
                 .catch(() => {})
                 .finally(() => setSwitching(false));
             }}
-            className={cn('gap-2')}
+            className={cn(itemClassName, itemHoverClassName, 'gap-2')}
           >
             {user?.code === option.code ? (
               <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
@@ -101,7 +107,7 @@ export function AccountSwitchFab() {
             <span className="truncate">{option.label || option.code}</span>
           </DropdownMenuItem>
         ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }

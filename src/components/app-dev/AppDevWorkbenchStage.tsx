@@ -22,7 +22,7 @@ import { AppDevCloudPanel } from '@/components/app-dev/AppDevCloudPanel';
 import { AppDevCommunityPanel } from '@/components/app-dev/AppDevCommunityPanel';
 import { AppDevFileTree } from '@/components/app-dev/AppDevFileTree';
 import { AppDevGitPanel } from '@/components/app-dev/AppDevGitPanel';
-import { AppDevMonacoEditor } from '@/components/app-dev/AppDevMonacoEditor';
+import { AppDevMonacoEditor, formatAppDevDiagnosticsPrompt } from '@/components/app-dev/AppDevMonacoEditor';
 import { SclawBrowserFrame } from '@/components/sclaw-browser/SclawBrowserFrame';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -67,6 +67,8 @@ interface AppDevWorkbenchStageProps {
   onFixErrors: () => void;
   onDismissErrors: () => void;
   onRetryStart: () => void;
+  /** Monaco diagnostics → fill chat composer (no auto-send). */
+  onFillComposerFromDiagnostics?: (text: string) => void;
 }
 
 function fileName(path: string): string {
@@ -81,6 +83,7 @@ export function AppDevWorkbenchStage({
   onFixErrors,
   onDismissErrors,
   onRetryStart,
+  onFillComposerFromDiagnostics,
 }: AppDevWorkbenchStageProps) {
   const [mode, setMode] = useState<AppDevStageMode>('preview');
   const [sidebar, setSidebar] = useState<CodeSidebar>('files');
@@ -517,6 +520,15 @@ export function AppDevWorkbenchStage({
                   value={activeTab.draft}
                   onChange={updateDraft}
                   className="flex-1"
+                  onFixWithAgent={
+                    onFillComposerFromDiagnostics
+                      ? (diagnostics, path) => {
+                          onFillComposerFromDiagnostics(
+                            formatAppDevDiagnosticsPrompt(path, diagnostics),
+                          );
+                        }
+                      : undefined
+                  }
                 />
               ) : (
                 <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">

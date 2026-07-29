@@ -32,7 +32,6 @@ import { useProviderStore } from './stores/providers';
 import { useAgentsStore } from './stores/agents';
 import { useChatStore } from './stores/chat';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
-import { AccountSwitchFab } from './components/layout/AccountSwitchFab';
 
 /**
  * Error Boundary to catch and display React rendering errors
@@ -338,9 +337,6 @@ function App() {
         {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
         {location.pathname !== '/float-icon' ? (
           <Toaster position="bottom-center" richColors closeButton style={{ zIndex: 99999 }} />
-        ) : null}
-        {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
-          <AccountSwitchFab />
         ) : null}
       </TooltipProvider>
     </ErrorBoundary>

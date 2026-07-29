@@ -48,6 +48,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
 import { SidebarSupportQrTooltip } from '@/components/layout/SidebarSupportQrTooltip';
 import { SidebarCollapsibleSectionLabel } from '@/components/layout/sidebar-collapsible-section-label';
+import { AccountSwitchMenuItems } from '@/components/layout/AccountSwitchMenuItems';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { SidebarRecentSessionRow } from '@/components/layout/sidebar-recent-session-row';
 import { SidebarProjectsSection } from '@/components/layout/sidebar-projects-section';
@@ -2382,6 +2383,12 @@ export function Sidebar() {
                   ))}
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
+
+              <AccountSwitchMenuItems
+                itemClassName={SIDEBAR_ACCOUNT_MENU_ITEM_CLASS}
+                itemHoverClassName={SIDEBAR_ACCOUNT_MENU_ITEM_HOVER}
+                subContentClassName={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}
+              />
 
               <div className={SIDEBAR_ACCOUNT_MENU_DIVIDER_CLASS} aria-hidden="true" />
 

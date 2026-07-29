@@ -58,7 +58,15 @@ const PHASE_LABELS: Record<string, string> = {
   'error': '出了点问题',
 };
 
-function WorkbenchChatPane({ sessionKey, appName }: { sessionKey: string; appName: string }) {
+function WorkbenchChatPane({
+  sessionKey,
+  appName,
+  composerSeed,
+}: {
+  sessionKey: string;
+  appName: string;
+  composerSeed?: { text: string; version: number } | null;
+}) {
   const messages = useChatStore((s) => s.messages);
   const sending = useChatStore((s) => s.sending);
   const showThinking = useChatStore((s) => s.showThinking);
@@ -146,7 +154,12 @@ function WorkbenchChatPane({ sessionKey, appName }: { sessionKey: string; appNam
       ) : null}
 
       <div className="border-t border-border px-3 py-3">
-        <HomeComposer showDisclaimer={false} footerAlign="center" />
+        <HomeComposer
+          key={composerSeed ? `seed-${composerSeed.version}` : 'composer'}
+          seedText={composerSeed?.text}
+          showDisclaimer={false}
+          footerAlign="center"
+        />
       </div>
     </div>
   );
@@ -157,6 +170,7 @@ export default function AppDevWorkbench() {
   const navigate = useNavigate();
   const [status, setStatus] = useState<AppDevStatus | null>(null);
   const [pendingErrors, setPendingErrors] = useState<string[]>([]);
+  const [composerSeed, setComposerSeed] = useState<{ text: string; version: number } | null>(null);
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [gitAvailable, setGitAvailable] = useState(false);
   const [stoStatus, setStoStatus] = useState<StoAppStatus | null>(null);
@@ -247,7 +261,13 @@ export default function AppDevWorkbench() {
   const handleFixErrors = () => {
     const text = `右侧预览出现了以下报错，请帮我修复：\n\n${pendingErrors.slice(-10).join('\n')}`;
     setPendingErrors([]);
-    void useChatStore.getState().sendMessage({ text });
+    setComposerSeed((prev) => ({ text, version: (prev?.version ?? 0) + 1 }));
+  };
+
+  const handleFillComposerFromDiagnostics = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setComposerSeed((prev) => ({ text: trimmed, version: (prev?.version ?? 0) + 1 }));
   };
 
   const handleRestore = async () => {
@@ -415,11 +435,18 @@ export default function AppDevWorkbench() {
           onFixErrors={handleFixErrors}
           onDismissErrors={() => setPendingErrors([])}
           onRetryStart={() => void startApp(workspaceId).catch(() => undefined)}
+          onFillComposerFromDiagnostics={handleFillComposerFromDiagnostics}
         />
 
         <section className="flex w-[400px] min-w-[340px] shrink-0 flex-col border-l border-border">
           {currentSessionKey
-            ? <WorkbenchChatPane sessionKey={currentSessionKey} appName={appName} />
+            ? (
+              <WorkbenchChatPane
+                sessionKey={currentSessionKey}
+                appName={appName}
+                composerSeed={composerSeed}
+              />
+            )
             : null}
         </section>
       </div>
