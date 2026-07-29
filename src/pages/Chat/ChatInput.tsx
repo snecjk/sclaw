@@ -44,7 +44,6 @@ import { useTranslation } from 'react-i18next';
 import { DingTalkMentionEditor, type DingTalkMentionEditorHandle } from '@/components/dingtalk/DingTalkMentionEditor';
 import { DingTalkMentionPopover } from '@/components/dingtalk/DingTalkMentionPopover';
 import { WorkflowPicker } from '@/components/workflow/WorkflowPicker';
-import { WorkflowComposerProgress } from '@/components/workflow/WorkflowComposerProgress';
 import { SkillPicker } from '@/components/skill-plaza/SkillPicker';
 
 import { useDingTalkMention } from '@/hooks/useDingTalkMention';
@@ -220,7 +219,6 @@ export function ChatInput({
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
-  const workflowCardStates = useChatStore((s) => s.workflowCardStates);
   const pendingProjectId = useChatStore((s) => s.pendingProjectId);
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
@@ -1256,7 +1254,6 @@ export function ChatInput({
           </div>
           )}
         </div>
-        <WorkflowComposerProgress sessionKey={currentSessionKey} states={workflowCardStates} />
         {!isEmbedded ? (
           <div className="mt-2.5 flex items-center justify-between gap-2 px-4 text-[11px] text-muted-foreground/60">
             {engineType === 'openclaw' ? (
