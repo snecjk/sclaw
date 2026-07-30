@@ -40,6 +40,9 @@ export function resolveNodeInput(node: any, ctx: RuntimeInputs): any {
     value = unwrapEnvelope(value);
     if (port && port !== 'default') value = resolvePath(value, port);
     if (value === undefined && binding?.required) {
+      if (isLegacyInlineArtifactBinding(port)) {
+        throw new Error(`RESULT_LEGACY_PAYLOAD_HTML_BINDING: 节点 ${node.id} 仍绑定 payload.html；artifact-first 工作流必须改为消费上游 artifacts`);
+      }
       throw new Error(`节点 ${node.id} 缺少必填输入绑定 ${target}`);
     }
     if (value !== undefined) fields[target] = value;
@@ -91,11 +94,34 @@ export function buildConditionContext(ctx: RuntimeInputs): Record<string, unknow
 }
 
 function resolveBindingSource(source: any, ctx: RuntimeInputs): unknown {
-  if (typeof source === 'string') return resolveTemplatePath(source, ctx);
+  if (typeof source === 'string') {
+    const resolved = resolveTemplatePath(source, ctx);
+    if (resolved === undefined && isLegacyInlineArtifactBinding(source)) {
+      throw new Error('RESULT_LEGACY_PAYLOAD_HTML_BINDING: payload.html 已停用；请消费上游 artifacts');
+    }
+    return resolved;
+  }
   if (!source || typeof source !== 'object') return source;
-  if (source.nodeId) return resolvePath(unwrapEnvelope(ctx.upstream[source.nodeId]), source.path || source.port);
-  if (source.path) return resolveTemplatePath(source.path, ctx);
+  if (source.nodeId) {
+    const bindingPath = source.path || source.port;
+    const resolved = resolvePath(unwrapEnvelope(ctx.upstream[source.nodeId]), bindingPath);
+    if (resolved === undefined && isLegacyInlineArtifactBinding(bindingPath)) {
+      throw new Error('RESULT_LEGACY_PAYLOAD_HTML_BINDING: payload.html 已停用；请消费上游 artifacts');
+    }
+    return resolved;
+  }
+  if (source.path) {
+    const resolved = resolveTemplatePath(source.path, ctx);
+    if (resolved === undefined && isLegacyInlineArtifactBinding(source.path)) {
+      throw new Error('RESULT_LEGACY_PAYLOAD_HTML_BINDING: payload.html 已停用；请消费上游 artifacts');
+    }
+    return resolved;
+  }
   return source.value;
+}
+
+function isLegacyInlineArtifactBinding(value: unknown): boolean {
+  return typeof value === 'string' && /(^|\.)html$/i.test(value.trim().replace(/^\{\{\s*|\s*\}\}$/g, ''));
 }
 
 function resolveTemplatePath(raw: string, ctx: RuntimeInputs): unknown {

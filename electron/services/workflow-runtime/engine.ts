@@ -11,9 +11,6 @@
  */
 import type { WorkflowRuntimeRepository } from '../../db/repositories/workflow-runtime-repository';
 import type { AgentRunSpec, RunCtx } from './types';
-import { createHash } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { evaluateCondition as evaluateWorkflowCondition, executeLogicNode } from './logic-nodes';
 import { runAgentNodeWithRetry, type InvokeAgentFn } from './agent-retry';
@@ -31,6 +28,7 @@ import { formatShanghaiIso } from '../../../shared/workflow-timestamp';
 import { hydrateNodeInputFiles } from './node-input-files';
 import { createFailurePacket, createWorkflowPacket, getWorkflowPacketFailureMessage, isWorkflowPacket } from './workflow-packet';
 import { normalizeRuntimeDefinition } from './runtime-definition';
+import { normalizeArtifactFirstPayloadSchema, promoteCarriedOutputArtifacts } from './artifact-output';
 
 const SMART_TYPES = new Set(['agent_task', 'agent_data_fetch', 'agent_data_process', 'agent_condition', 'agent_output']);
 const nowIso = () => formatShanghaiIso();
@@ -268,8 +266,8 @@ export function createEngine(deps: EngineDeps) {
           deps.onStatusChange?.(runId, 'failed', { error: failureMessage });
           return;
         }
-        result.output = await materializeAgentOutputArtifact(runId, cur, agentResult.output);
-        const lastAgentOutputJson = stringifyJson(agentResult.output ?? {});
+        result.output = agentResult.output;
+        const lastAgentOutputJson = stringifyJson(result.output ?? {});
         await repo.upsertRun({
           run_id: runId,
           last_agent_output_json: lastAgentOutputJson,
@@ -351,7 +349,7 @@ export function createEngine(deps: EngineDeps) {
         });
       }
       if (!(await isRunActive(runId))) return;
-      if (cur.type === 'output') result.output = await materializeOutput(runId, cur, result.output);
+      if (cur.type === 'output') result.output = materializeOutput(result.output);
       upstream[cur.id] = result.output ?? {};
       await enqueueArtifactsFromOutput(
         runId,
@@ -444,38 +442,9 @@ export function createEngine(deps: EngineDeps) {
     return Boolean(row && row.status === 'RUNNING');
   }
 
-  async function materializeOutput(runId: string, node: any, output: any): Promise<any> {
-    // An agent_output HTML delivery has already been materialized and uploaded
-    // in its own workspace.  The terminal node must promote that exact file,
-    // not stringify the whole upstream map into a second result.json.
-    const htmlDelivery = findHtmlDelivery(output?.payload ?? output);
-    if (htmlDelivery) {
-      const existing = (await repo.listArtifacts(runId)).find((artifact: any) =>
-        artifact?.content_type === 'text/html' && artifact?.node_id !== node.id,
-      );
-      if (existing) {
-        const finalArtifact = { ...existing, kind: 'OUTPUT', summary: existing.summary ?? htmlDelivery.fileName ?? 'result.html' };
-        await repo.upsertArtifact(finalArtifact);
-        await repo.enqueueOutbox(runId, 'artifact', existing.artifact_id, finalArtifact, 'progress');
-        return output;
-      }
-    }
-    const format = node.config?.format ?? 'structured_json';
-    const ext = format === 'html' ? 'html' : format === 'markdown' ? 'md' : format === 'text' ? 'txt' : 'json';
-    const contentType = ext === 'html' ? 'text/html' : ext === 'md' ? 'text/markdown' : ext === 'txt' ? 'text/plain' : 'application/json';
-    const content = ext === 'json'
-      ? JSON.stringify(output ?? {}, null, 2)
-      : typeof output === 'string' ? output : JSON.stringify(output ?? {}, null, 2);
-    const directory = workspacePath(runId, node.id);
-    const filePath = path.join(directory, `result.${ext}`);
-    await mkdir(directory, { recursive: true });
-    await writeFile(filePath, content, 'utf8');
-    const idHash = createHash('sha1').update(`${runId}:${node.id}:${filePath}`).digest('hex').slice(0, 16);
-    await persistArtifact(repo, {
-      artifact_id: `${runId}:${node.id}:${idHash}`, run_id: runId, node_id: node.id,
-      kind: 'OUTPUT', file_path: filePath, content_type: contentType, summary: node.name ?? `result.${ext}`, created_at: nowIso(),
-    });
-    return output;
+  function materializeOutput(output: any): any {
+    if (!isWorkflowPacket(output)) return output;
+    return promoteCarriedOutputArtifacts(output);
   }
 
   function compileLocalAgentSpec(node: any, ctx: RunCtx, versionId: unknown): AgentRunSpec {
@@ -490,10 +459,8 @@ export function createEngine(deps: EngineDeps) {
     const guardrails = agent.guardrails ?? config.guardrails ?? {};
     const completionContract = guardrails.completionContract ?? config.completionContract ?? {};
     const inputConfig = agent.inputs ?? config.inputs ?? config.input ?? {};
-    const configuredSchema = config.outputContract?.schema ?? completionContract.dataJsonSchema;
-    const dataJsonSchema = requiresHtmlArtifact(node, task, config) && isUnconstrainedObjectSchema(configuredSchema)
-      ? htmlArtifactPayloadSchema()
-      : (configuredSchema ?? { type: 'object' });
+    const configuredSchema = config.outputContract?.schema ?? completionContract.dataJsonSchema ?? { type: 'object' };
+    const dataJsonSchema = normalizeArtifactFirstPayloadSchema(configuredSchema);
     return {
       schemaVersion: 'agent-run-spec/v1', workflowId: ctx.workflowId, workflowVersion: String(versionId ?? ''), runId: ctx.runId, nodeId: node.id,
       task: { name: task.name ?? node.name ?? node.id, goal: task.goal ?? config.goal ?? config.instruction ?? '', instruction: task.instruction ?? '', outputSchema: task.outputSchema },
@@ -511,74 +478,6 @@ export function createEngine(deps: EngineDeps) {
         onIncomplete: completionContract.onIncomplete ?? 'retry',
       },
       guardrails: { timeoutMs: guardrails.timeoutMs }, prompt: '',
-    };
-  }
-
-  /**
-   * HTML is a delivery format, not a suggestion hidden in a task sentence.
-   * New DSLs should set businessConfig.formatPreference='html'; the goal text
-   * fallback keeps already published DSLs such as "生成Html并输出最终结果" safe.
-   */
-  function requiresHtmlArtifact(node: any, task: any, config: any): boolean {
-    if (node?.type !== 'agent_output') return false;
-    const declaredFormat = [
-      config?.businessConfig?.formatPreference,
-      config?.formatPreference,
-      config?.outputFormat,
-      task?.outputFormat,
-    ].filter((value) => typeof value === 'string').join(' ').toLowerCase();
-    if (declaredFormat.includes('html')) return true;
-    const legacyIntent = [task?.goal, task?.instruction, config?.businessConfig?.goal, config?.goal, config?.instruction]
-      .filter((value) => typeof value === 'string').join(' ');
-    return /html/i.test(legacyIntent);
-  }
-
-  function htmlArtifactPayloadSchema(): Record<string, unknown> {
-    return {
-      type: 'object', additionalProperties: false, required: ['html'],
-      properties: {
-        html: { type: 'string', minLength: 15, description: '完整 HTML 文档内容' },
-        fileName: { type: 'string', pattern: '^[^\\\\/:*?"<>|]+\\.html?$', description: '可选的 HTML 文件名' },
-      },
-    };
-  }
-
-  function isUnconstrainedObjectSchema(schema: unknown): boolean {
-    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return true;
-    const value = schema as Record<string, unknown>;
-    return value.type === 'object'
-      && !Array.isArray(value.required)
-      && (!value.properties || (typeof value.properties === 'object' && Object.keys(value.properties as object).length === 0));
-  }
-
-  async function materializeAgentOutputArtifact(runId: string, node: any, output: unknown): Promise<unknown> {
-    const config = node?.config ?? {};
-    const agent = config.agentConfig ?? {};
-    const task = agent.task ?? config.task ?? {};
-    if (!requiresHtmlArtifact(node, task, config) || !isWorkflowPacket(output)) return output;
-    const payload = output.payload;
-    const html = payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as any).html : undefined;
-    if (typeof html !== 'string' || html.trim().length < 15) {
-      throw new Error(`HTML 输出节点 ${node.name ?? node.id} 未返回有效 payload.html`);
-    }
-    const requestedName = typeof (payload as any).fileName === 'string' ? (payload as any).fileName.trim() : '';
-    const fileName = /^[^\\/:*?"<>|]+\.html?$/i.test(requestedName) ? requestedName : 'result.html';
-    const directory = workspacePath(runId, node.id);
-    const filePath = path.join(directory, fileName);
-    await mkdir(directory, { recursive: true });
-    await writeFile(filePath, html, 'utf8');
-    const info = await stat(filePath);
-    const idHash = createHash('sha1').update(`${runId}:${node.id}:${filePath}`).digest('hex').slice(0, 16);
-    const artifactId = `${runId}:${node.id}:${idHash}`;
-    const artifacts = output.artifacts.filter((artifact) => artifact.artifactId !== artifactId);
-    return {
-      ...output,
-      artifacts: [...artifacts, {
-        artifactId, kind: 'OUTPUT', name: fileName, contentType: 'text/html',
-        // Keep a local, node-relative reference so a later output node can
-        // consume this HTML without depending on OSS upload completion.
-        resourceId: fileName, uri: `artifact://${runId}/${node.id}/${artifactId}`, size: info.size,
-      }],
     };
   }
 
@@ -833,68 +732,26 @@ export function createEngine(deps: EngineDeps) {
     output: unknown,
     kind: 'OUTPUT' | 'INTERMEDIATE',
   ): Promise<void> {
-    const declaredPaths = collectFilePaths(output);
-    const discoveredPaths = await listWorkspaceFiles(workspacePath(runId, nodeId));
-    const paths = [...new Set([...declaredPaths, ...discoveredPaths])];
     const declaredArtifacts = isWorkflowPacket(output) ? output.artifacts : [];
-    await Promise.all(paths.map(async (filePath) => {
-      const idHash = createHash('sha1').update(`${runId}:${nodeId}:${filePath}`).digest('hex').slice(0, 16);
-      const artifactId = `${runId}:${nodeId}:${idHash}`;
-      // A packet-declared HTML delivery is OUTPUT even though it is produced by
-      // an agent node before the terminal `output` node. Do not overwrite that
-      // classification with the generic INTERMEDIATE default during recording.
-      const declared = declaredArtifacts.find((artifact) => artifact.artifactId === artifactId);
+    const ownedArtifacts = declaredArtifacts.filter((artifact) =>
+      artifact.artifactId.startsWith(`${runId}:${nodeId}:`)
+      && typeof artifact.resourceId === 'string'
+      && artifact.resourceId,
+    );
+    await Promise.all(ownedArtifacts.map(async (declared) => {
+      const filePath = path.resolve(workspacePath(runId, nodeId), declared.resourceId!);
       await persistArtifact(repo, {
-        artifact_id: artifactId,
+        artifact_id: declared.artifactId,
         run_id: runId,
         node_id: nodeId,
-        kind: declared?.kind ?? kind,
+        kind: declared.kind ?? kind,
         file_path: filePath,
-        content_type: declared?.contentType ?? contentTypeForPath(filePath),
-        summary: declared?.name ?? path.basename(filePath),
+        content_type: declared.contentType,
+        summary: declared.name,
         created_at: nowIso(),
       });
     }));
   }
-}
-
-function findHtmlDelivery(value: unknown, depth = 0): { html: string; fileName?: string } | null {
-  if (depth > 4 || !value || typeof value !== 'object') return null;
-  if (!Array.isArray(value)) {
-    const record = value as Record<string, unknown>;
-    if (typeof record.html === 'string' && record.html.trim().length >= 15) {
-      return { html: record.html, fileName: typeof record.fileName === 'string' ? record.fileName : undefined };
-    }
-    for (const nested of Object.values(record)) {
-      const match = findHtmlDelivery(nested, depth + 1);
-      if (match) return match;
-    }
-  }
-  return null;
-}
-
-async function listWorkspaceFiles(directory: string): Promise<string[]> {
-  try {
-    const entries = await readdir(directory, { withFileTypes: true });
-    const nested = await Promise.all(entries.map(async (entry) => {
-      const target = path.join(directory, entry.name);
-      if (entry.isDirectory()) return listWorkspaceFiles(target);
-      if (!entry.isFile()) return [];
-      const info = await stat(target);
-      return info.size > 0 ? [target] : [];
-    }));
-    return nested.flat();
-  } catch {
-    return [];
-  }
-}
-
-function contentTypeForPath(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase();
-  return ({ '.html': 'text/html', '.htm': 'text/html', '.md': 'text/markdown', '.txt': 'text/plain',
-    '.json': 'application/json', '.csv': 'text/csv', '.pdf': 'application/pdf', '.png': 'image/png',
-    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } as Record<string, string>)[ext]
-    ?? 'application/octet-stream';
 }
 
 /** 选下一节点：优先按分支端口匹配，未命中时走无条件默认边。 */
@@ -968,46 +825,8 @@ function stringifyJson(value: unknown): string {
   });
 }
 
-function collectFilePaths(value: unknown): string[] {
-  const out = new Set<string>();
-  const seen = new WeakSet<object>();
-  const visit = (current: unknown): void => {
-    if (typeof current === 'string') {
-      const path = parseFilePath(current);
-      if (path) out.add(path);
-      return;
-    }
-    if (!current || typeof current !== 'object') return;
-    if (seen.has(current)) return;
-    seen.add(current);
-    if (Array.isArray(current)) {
-      for (const item of current) visit(item);
-      return;
-    }
-    for (const [key, item] of Object.entries(current as Record<string, unknown>)) {
-      if (['filePath', 'file_path', 'path', 'uri', 'url'].includes(key)) {
-        const path = typeof item === 'string' ? parseFilePath(item) : undefined;
-        if (path) out.add(path);
-      }
-      visit(item);
-    }
-  };
-  visit(value);
-  return [...out];
-}
-
 function containsArtifact(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   if ((value as any).kind === 'artifact' || (value as any).filePath || String((value as any).uri ?? '').startsWith('file:')) return true;
   return Object.values(value as Record<string, unknown>).some(containsArtifact);
-}
-
-function parseFilePath(value: string): string | undefined {
-  const trimmed = value.trim();
-  if (!trimmed.startsWith('file://')) return undefined;
-  try {
-    return fileURLToPath(trimmed);
-  } catch {
-    return trimmed.replace(/^file:\/\//, '');
-  }
 }

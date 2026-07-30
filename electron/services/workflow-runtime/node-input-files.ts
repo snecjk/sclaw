@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { copyFile, mkdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, realpath, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
@@ -129,9 +129,15 @@ async function hydrateUpstreamWorkflowArtifacts(nodeInput: unknown, runId: strin
     const targetName = `${String(index + 1).padStart(2, '0')}-${safeFileName(artifact.name)}`;
     const targetPath = path.join(targetDirectory, targetName);
     try {
-      await copyFile(sourcePath, targetPath);
-    } catch {
-      throw new Error(`上游节点产物不存在，无法传递给节点 ${targetNodeId}: ${artifact.name}`);
+      const [sourceDirectoryRealPath, sourceRealPath] = await Promise.all([realpath(sourceDirectory), realpath(sourcePath)]);
+      const realRelative = path.relative(sourceDirectoryRealPath, sourceRealPath);
+      if (realRelative.startsWith('..') || path.isAbsolute(realRelative)) {
+        throw new Error(`上游节点产物通过符号链接逃逸工作区: ${artifact.name}`);
+      }
+      await copyFile(sourceRealPath, targetPath);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('符号链接逃逸')) throw error;
+      throw new Error(`上游节点产物不存在，无法传递给节点 ${targetNodeId}: ${artifact.name}`, { cause: error });
     }
     return {
       ...entry,
@@ -146,7 +152,10 @@ async function hydrateUpstreamWorkflowArtifacts(nodeInput: unknown, runId: strin
 }
 
 function safeFileName(name: string): string {
-  const cleaned = path.basename(name).replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim();
+  const cleaned = [...path.basename(name).replace(/[<>:"/\\|?*]/g, '_')]
+    .map((character) => character.charCodeAt(0) < 32 ? '_' : character)
+    .join('')
+    .trim();
   return cleaned || 'input-file';
 }
 

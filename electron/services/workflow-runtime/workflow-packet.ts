@@ -13,6 +13,14 @@ export interface WorkflowArtifactRef {
   size?: number;
 }
 
+/** Model-facing artifact declaration. Host-owned identity and file metadata are added after validation. */
+export interface WorkflowArtifactDraft {
+  resourceId: string;
+  kind?: 'OUTPUT' | 'INTERMEDIATE';
+  name?: string;
+  contentType?: string;
+}
+
 export interface WorkflowPacket {
   protocolVersion: typeof WORKFLOW_PACKET_VERSION;
   status: WorkflowPacketStatus;
@@ -75,6 +83,7 @@ export function isWorkflowPacket(value: unknown): value is WorkflowPacket {
 
 export function validateWorkflowPacket(value: unknown, opts: {
   runId: string; nodeId: string; nodeType: string; allowedPorts?: string[]; requireSelectedPort?: boolean;
+  artifactMode?: 'canonical' | 'draft';
 }): WorkflowPacketValidation {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, code: 'RESULT_PACKET_INVALID', message: 'node-result.json 必须是对象' };
   const packet = value as Record<string, any>;
@@ -99,7 +108,19 @@ export function validateWorkflowPacket(value: unknown, opts: {
     }
   }
   for (const artifact of packet.artifacts) {
-    if (!artifact || typeof artifact !== 'object' || !artifact.artifactId || !artifact.kind || !artifact.name || !artifact.contentType) {
+    if (!artifact || typeof artifact !== 'object') {
+      return { ok: false, code: 'ARTIFACT_INVALID', message: '产物声明必须是对象' };
+    }
+    if (opts.artifactMode === 'draft') {
+      const keys = new Set(['resourceId', 'kind', 'name', 'contentType']);
+      if (typeof artifact.resourceId !== 'string' || !artifact.resourceId.trim()
+        || (artifact.kind !== undefined && !['OUTPUT', 'INTERMEDIATE'].includes(artifact.kind))
+        || (artifact.name !== undefined && typeof artifact.name !== 'string')
+        || (artifact.contentType !== undefined && typeof artifact.contentType !== 'string')
+        || Object.keys(artifact).some((key) => !keys.has(key))) {
+        return { ok: false, code: 'ARTIFACT_DRAFT_INVALID', message: '产物草稿只允许 resourceId、kind、name、contentType，且 resourceId 必填' };
+      }
+    } else if (!artifact.artifactId || !artifact.kind || !artifact.name || !artifact.contentType) {
       return { ok: false, code: 'ARTIFACT_INVALID', message: '产物引用缺少必要元数据' };
     }
     if ('checksum' in artifact) return { ok: false, code: 'ARTIFACT_INVALID', message: 'WorkflowPacket v1 不支持 checksum' };
@@ -196,8 +217,8 @@ export function workflowPacketJsonSchema(payloadSchema: any, opts: { runId: stri
       // satisfy the successful business payload schema. The success branch
       // below applies that schema only to successful results.
       payload: {},
-      artifacts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['artifactId', 'kind', 'name', 'contentType'], properties: {
-        artifactId: { type: 'string' }, kind: { enum: ['INPUT', 'OUTPUT', 'INTERMEDIATE'] }, name: { type: 'string' }, contentType: { type: 'string' }, uri: { type: 'string' }, resourceId: { type: ['string', 'null'] }, size: { type: 'integer', minimum: 0 },
+      artifacts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['resourceId'], properties: {
+        resourceId: { type: 'string', minLength: 1 }, kind: { enum: ['OUTPUT', 'INTERMEDIATE'] }, name: { type: 'string' }, contentType: { type: 'string' },
       } } },
       control: { type: 'object', additionalProperties: false, required: ['selectedPort'], properties: { selectedPort } },
       diagnostics: { type: 'object', additionalProperties: false, required: ['warnings', 'errors'], properties: { warnings: { type: 'array', items: { type: 'string' } }, errors: { type: 'array', items: diagnosticJsonSchema() } } },

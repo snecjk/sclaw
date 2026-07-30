@@ -21,6 +21,8 @@ import {
   workflowPacketJsonSchema,
 } from './workflow-packet';
 import { deriveWorkflowNodeSessionId } from './node-session';
+import { canonicalizeWorkflowArtifacts, validateInlinePayload } from './artifact-output';
+import { workflowExecLog } from './logging';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const backoff = (a: number) => Math.min(30_000, 1000 * 2 ** (a - 1));
@@ -152,6 +154,12 @@ export async function runAgentNodeWithRetry(
         ? `\n\n上次结构化校验失败：${lastError}。请按 schema 重新生成完整结果。`
         : '';
     const prompt = `${buildWorkflowNodePrompt(spec, node, ctx, { execEngine: deps.execEngine, attempt })}${retryContext}`;
+    workflowExecLog('debug', 'agent-prompt-metrics', 'workflow node prompt prepared', {
+      runId: ctx.runId,
+      nodeId: node.id,
+      attempt,
+      promptBytes: Buffer.byteLength(prompt, 'utf8'),
+    });
     // 与服务端智能节点执行口径一致：在实际调用 Agent 前固化本次 prompt。
     // 重试会覆盖为最新一次尝试的 prompt，便于排查最终生效的上下文。
     await ctx.repo.upsertNodeRun({
@@ -290,6 +298,7 @@ export async function runAgentNodeWithRetry(
     const packetValidation = validateWorkflowPacket(packet, {
       runId: ctx.runId, nodeId: node.id, nodeType: node.type, allowedPorts: ports,
       requireSelectedPort: node.type === 'agent_condition',
+      artifactMode: 'draft',
     });
     if (packetValidation.ok && packetValidation.outcome === 'failed') {
       lastOutput = packetValidation.packet;
@@ -310,20 +319,60 @@ export async function runAgentNodeWithRetry(
     const v = packetValidation.ok
       ? validateOutputAgainstSchema(contract.dataJsonSchema ?? node.config?.outputContract?.schema ?? { type: 'object' }, packetValidation.packet.payload)
       : { ok: false, reason: packetValidation.message };
-    if (v.ok && packetValidation.ok) {
+    const inlineValidation = v.ok && packetValidation.ok
+      ? validateInlinePayload(packetValidation.packet.payload)
+      : undefined;
+    const artifactValidation = v.ok && packetValidation.ok && inlineValidation?.ok
+      ? await canonicalizeWorkflowArtifacts(packetValidation.packet, {
+        runId: ctx.runId,
+        nodeId: node.id,
+        workspace: spec.runtimeContext.workspacePath ?? '',
+        defaultKind: node.type === 'agent_output' ? 'OUTPUT' : 'INTERMEDIATE',
+      })
+      : undefined;
+    const canonicalValidation = artifactValidation?.ok
+      ? validateWorkflowPacket(artifactValidation.value, {
+        runId: ctx.runId, nodeId: node.id, nodeType: node.type, allowedPorts: ports,
+        requireSelectedPort: node.type === 'agent_condition',
+      })
+      : undefined;
+    if (v.ok && packetValidation.ok && inlineValidation?.ok && artifactValidation?.ok && canonicalValidation?.ok) {
+      const canonicalPacket = canonicalValidation.packet;
+      const structuredOutputBytes = Buffer.byteLength(JSON.stringify(result.output ?? {}), 'utf8');
+      const canonicalPacketBytes = Buffer.byteLength(JSON.stringify(canonicalPacket), 'utf8');
+      const artifactBytes = canonicalPacket.artifacts.reduce((sum, artifact) => sum + (artifact.size ?? 0), 0);
+      workflowExecLog('info', 'agent-output-metrics', 'workflow node output canonicalized', {
+        runId: ctx.runId,
+        nodeId: node.id,
+        attempt,
+        structuredOutputBytes,
+        inlinePayloadBytes: inlineValidation.value.bytes,
+        artifactCount: canonicalPacket.artifacts.length,
+        artifactBytes,
+        canonicalPacketBytes,
+      });
       await ctx.repo.upsertNodeRun({
         run_id: ctx.runId, node_id: node.id, node_type: node.type,
         status: 'RUNNING', prompt_text: prompt, last_completion_issue: null,
       });
       await ctx.emit('agent.attempt.succeeded', { attempt }, node.id);
-      return { status: 'succeeded', output: packetValidation.packet, rawText: result.rawText, usage: result.usage };
+      return { status: 'succeeded', output: canonicalPacket, rawText: '', usage: result.usage };
     }
 
     // 校验失败 → 记 last_completion_issue + 重试
-    lastError = v.reason ?? 'Agent output validation failed.';
+    const validationFailure = !v.ok
+      ? { code: packetValidation.ok ? 'RESULT_SCHEMA_INVALID' : packetValidation.code, message: v.reason }
+      : inlineValidation && !inlineValidation.ok
+        ? inlineValidation
+        : artifactValidation && !artifactValidation.ok
+          ? artifactValidation
+          : canonicalValidation && !canonicalValidation.ok
+            ? canonicalValidation
+            : { code: 'RESULT_SCHEMA_INVALID', message: 'Agent output validation failed.' };
+    lastError = validationFailure.message ?? 'Agent output validation failed.';
     lastOutput = createFailurePacket({
       runId: ctx.runId, nodeId: node.id, nodeType: node.type, attempt,
-      code: packetValidation.ok ? 'RESULT_SCHEMA_INVALID' : packetValidation.code,
+      code: validationFailure.code,
       category: 'output_validation', message: lastError, retryable: attempt < maxAttempts,
     });
     lastRaw = result.rawText ?? '';

@@ -214,6 +214,8 @@ Integrate AI into your development workflow. Use agents to review code, generate
 ### 🔄 Workflow Automation
 Chain multiple skills together to create sophisticated automation pipelines. Process data, transform content, and trigger actions—all orchestrated visually.
 
+Workflow agents use an artifact-first delivery contract. A task may return small structured data directly or create one or more files in any task-appropriate format. Files are declared by node-relative resource paths; the desktop runtime validates the workspace boundary, records canonical artifact metadata, and passes only compact references downstream. Individual payload strings larger than 1 KiB must be delivered as files so generated content is not duplicated in workflow records or later model prompts.
+
 ---
 
 ## Development
