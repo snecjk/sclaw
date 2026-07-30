@@ -123,7 +123,7 @@ export function useDesignerTryRun({
 
   const hydrateRun = useCallback(async (id: string) => {
     try {
-      const run = await getRunViaIpc(id);
+      const run = await getRunViaIpc(id, 'detail');
       if (run) {
         setRun(run);
         setExecutionState(runToExecutionState(run));
@@ -300,7 +300,7 @@ export function useDesignerTryRun({
   }, [hasStartupInputs, launch, runtimeUploadNodes.length]);
 
   const openExistingRun = useCallback(async (id: string): Promise<boolean> => {
-    const existingRun = await getRunViaIpc(id);
+    const existingRun = await getRunViaIpc(id, 'detail');
     if (!existingRun) return false;
     setRunId(id);
     runIdRef.current = id;

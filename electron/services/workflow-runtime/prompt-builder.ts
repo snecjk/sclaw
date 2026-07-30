@@ -162,8 +162,14 @@ function splitWorkflowInput(value: unknown): { payload: Record<string, unknown>;
 function toUpstreamArtifacts(value: unknown): Array<Record<string, unknown>> {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry: unknown) => {
-    const artifact = (entry as UpstreamWorkflowArtifact | undefined)?.artifact;
-    return artifact ? [{ ...artifact }] : [];
+    const upstream = entry as UpstreamWorkflowArtifact | undefined;
+    const artifact = upstream?.artifact;
+    return artifact ? [{
+      ...artifact,
+      // Agents read from the consumer workspace, while the carried canonical
+      // reference continues to point at the producer workspace.
+      resourceId: upstream?.mountedResourceId ?? artifact.resourceId,
+    }] : [];
   });
 }
 

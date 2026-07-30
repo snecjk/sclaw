@@ -428,13 +428,16 @@ export async function getWorkflowRun(runId: string): Promise<WorkflowRunResponse
 // ── 6b. Get run via client-local runtime IPC (gap3 hydration) ────
 //   Client-local executions live in the renderer-side DB (wf_run / wf_node_run).
 //   The workflow-runtime:getRun IPC reads from that local store and returns the
-//   full WorkflowRunResponse (or null when the run row is absent — e.g. a run
-//   owned by another site or not yet persisted). Used by card hydration on
+//   compact status response by default (or null when the run row is absent).
+//   Designer timelines explicitly request detail; raw packets require diagnostic. Used by card hydration on
 //   session switch / app init, where the authoritative source is the local DB
 //   rather than the backend HTTP route above.
 
-export async function getRunViaIpc(runId: string): Promise<WorkflowRunResponse | null> {
-  return invokeIpc<WorkflowRunResponse | null>('workflow-runtime:getRun', runId);
+export async function getRunViaIpc(
+  runId: string,
+  view: 'status' | 'detail' | 'diagnostic' = 'status',
+): Promise<WorkflowRunResponse | null> {
+  return invokeIpc<WorkflowRunResponse | null>('workflow-runtime:getRun', { runId, view });
 }
 
 /** Lightweight local-run list for the canvas history dialog. */

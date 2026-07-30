@@ -7,6 +7,8 @@ export const WORKFLOW_PACKET_ARTIFACTS_KEY = '__workflowPacketArtifacts';
 export interface UpstreamWorkflowArtifact {
   sourceNodeId: string;
   artifact: WorkflowArtifactRef;
+  /** Consumer-workspace path used only while prompting the current node. */
+  mountedResourceId?: string;
 }
 
 export interface RuntimeInputs {

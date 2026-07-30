@@ -334,18 +334,20 @@ export interface WorkflowRunResponse {
   completedAt?: string | null;
   waitingNodeId?: string | null;
   nodeRuns: WorkflowRunNodeRun[];
-  events: unknown[];
-  approvalTasks: unknown[];
-  userInputTasks: unknown[];
+  /** Detail view only. */
+  events?: unknown[];
+  approvalTasks?: unknown[];
+  userInputTasks?: unknown[];
   artifacts: WorkflowRunArtifact[];
-  toolInvocations: unknown[];
-  input: WorkflowRunInput;
+  /** Diagnostic view only; status/detail do not duplicate tool events. */
+  toolInvocations?: unknown[];
+  input?: WorkflowRunInput;
   /** Client result view (preferred over legacy `output`). */
   result?: WorkflowRunClientResult | null;
   output: unknown | null;
-  startup: WorkflowRunStartupInfo;
+  startup?: WorkflowRunStartupInfo;
   lastAgentRawText?: string | null;
-  error: string | null;
+  error?: string | null;
 }
 
 // ── Legacy / UI-friendly execution state ────────────────────────

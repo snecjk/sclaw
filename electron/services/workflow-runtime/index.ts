@@ -15,9 +15,8 @@ export interface RuntimeHandlers {
   /** 端到端发起：拉 DSL → generatePlan 落本地计划 → dispatch。供 IPC `workflow-runtime:start`
    * 及主进程内同进程调用（loopback HTTP 本地路由 /agent/v2/workflows/:id/createRunLog）使用。 */
   startWorkflow: (a: StartWorkflowArgs) => Promise<void>;
-  /** 本地 DB 权威读：wf_run + wf_node_run → WorkflowRunResponse。供 IPC `workflow-runtime:getRun`
-   * 及主进程内同进程调用（loopback HTTP 本地路由 /agent/v2/runs/:runId）使用。 */
-  getRun: (runId: string) => Promise<any | null>;
+  /** 本地 DB 权威读；默认 status 视图，detail/diagnostic 必须显式请求。 */
+  getRun: (runId: string, options?: { view?: WorkflowRunView }) => Promise<any | null>;
   resume: (runId: string) => Promise<void>;
   cancel: (runId: string, nodeId: string) => Promise<void>;
   resumeInput: (runId: string, nodeId: string, submittedData: any) => Promise<void>;
@@ -27,9 +26,30 @@ export interface RuntimeHandlers {
   retrySync: (runId?: string) => Promise<void>;
 }
 
+export type WorkflowRunView = 'status' | 'detail' | 'diagnostic';
+
 export function registerWorkflowRuntimeHandlers(deps: EngineDeps): RuntimeHandlers {
   const engine = createEngine(deps);
   const repo = deps.repo;
+  const loadRun = async (runId: string, options: { view?: WorkflowRunView } = {}) => {
+    const view = options.view ?? 'status';
+    const diagnostic = view === 'diagnostic';
+    const row = diagnostic
+      ? await repo.getRun(runId)
+      : await repo.getRunSummary(runId, { includeTimelineText: view === 'detail' });
+    if (!row) return null;
+    const includeTimeline = view === 'detail' || diagnostic;
+    const waitingApproval = String(row.status).toUpperCase() === 'WAITING_APPROVAL';
+    const waitingInput = String(row.status).toUpperCase() === 'WAITING_INPUT';
+    const [nodeRuns, events, approvalTasks, userInputTasks, artifacts] = await Promise.all([
+      diagnostic ? repo.listNodeRuns(runId) : repo.listNodeRunSummaries(runId),
+      includeTimeline ? repo.listEvents(runId) : Promise.resolve([]),
+      diagnostic || waitingApproval ? repo.listApprovalTasks(runId) : Promise.resolve([]),
+      diagnostic || waitingInput ? repo.listUserInputTasks(runId) : Promise.resolve([]),
+      repo.listArtifacts(runId),
+    ]);
+    return mapWfRunRowToResponse(row, { view, nodeRuns, events, approvalTasks, userInputTasks, artifacts });
+  };
   /**
    * renderer → main 的本地工作流启动 IPC。
    *
@@ -70,17 +90,12 @@ export function registerWorkflowRuntimeHandlers(deps: EngineDeps): RuntimeHandle
     workflowExecLog('info', 'ipc-input-resume', 'received workflow input resume ipc', { runId, nodeId, submittedKeys: Object.keys(submittedData ?? {}).join(',') });
     await engine.resumeInput(runId, nodeId, submittedData);
   });
-  // gap3 hydration：renderer 重载后据此取回本地执行体状态（wf_run + wf_node_run）。
-  ipcMain.handle('workflow-runtime:getRun', async (_e, runId: string) => {
-    workflowExecLog('debug', 'ipc-get-run', 'received workflow getRun ipc', { runId });
-    const row = await repo.getRun(runId);
-    if (!row) return null;
-    const nodeRuns = await repo.listNodeRuns(runId);
-    const events = await repo.listEvents(runId);
-    const [approvalTasks, userInputTasks, artifacts] = await Promise.all([
-      repo.listApprovalTasks(runId), repo.listUserInputTasks(runId), repo.listArtifacts(runId),
-    ]);
-    return mapWfRunRowToResponse(row, { nodeRuns, events, approvalTasks, userInputTasks, artifacts });
+  // Renderer hydration defaults to compact status; Designer explicitly asks for detail.
+  ipcMain.handle('workflow-runtime:getRun', async (_e, arg: string | { runId: string; view?: WorkflowRunView }) => {
+    const runId = typeof arg === 'string' ? arg : arg.runId;
+    const view = typeof arg === 'string' ? 'status' : (arg.view ?? 'status');
+    workflowExecLog('debug', 'ipc-get-run', 'received workflow getRun ipc', { runId, view });
+    return loadRun(runId, { view });
   });
   /**
    * 查询当前工作流保存在本机的运行摘要，供画布「本地运行记录」弹窗使用。
@@ -106,16 +121,7 @@ export function registerWorkflowRuntimeHandlers(deps: EngineDeps): RuntimeHandle
   return {
     start: (a) => engine.startRun(a),
     startWorkflow: (a) => engine.startWorkflow(a),
-    getRun: async (runId) => {
-      const row = await repo.getRun(runId);
-      if (!row) return null;
-      const nodeRuns = await repo.listNodeRuns(runId);
-      const events = await repo.listEvents(runId);
-      const [approvalTasks, userInputTasks, artifacts] = await Promise.all([
-        repo.listApprovalTasks(runId), repo.listUserInputTasks(runId), repo.listArtifacts(runId),
-      ]);
-      return mapWfRunRowToResponse(row, { nodeRuns, events, approvalTasks, userInputTasks, artifacts });
-    },
+    getRun: loadRun,
     resume: (runId) => engine.resumeRun(runId),
     cancel: (runId, nodeId) => engine.cancel(runId, nodeId),
     resumeInput: (runId, nodeId, submittedData) => engine.resumeInput(runId, nodeId, submittedData),

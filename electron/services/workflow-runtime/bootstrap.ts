@@ -234,6 +234,11 @@ export function installWorkflowRuntime(gatewayManager?: GatewayManager): Runtime
   return _handlers;
 }
 
+/** Read the installed singleton without allowing a status request to initialize it early. */
+export function getInstalledWorkflowRuntime(): RuntimeHandlers | null {
+  return _handlers;
+}
+
 /** 在主进程 ready + SQLite 初始化后调用：收口在途 run + 起 outbox flushLoop。 */
 export function startWorkflowRuntimeOnLaunch(): void {
   if (!_handlers) return;

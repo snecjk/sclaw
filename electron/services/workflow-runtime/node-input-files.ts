@@ -26,7 +26,12 @@ export async function hydrateNodeInputFiles(
   runId: string,
   fetchImpl: FetchLike = proxyAwareFetch,
 ): Promise<{ input: unknown; files: HydratedNodeFile[] }> {
-  const upstreamInput = await hydrateUpstreamWorkflowArtifacts(nodeInput, runId, node?.id);
+  // A terminal output node only promotes upstream OUTPUT references. It never
+  // reads their contents, so copying them into end_node/inputs both wastes I/O
+  // and risks mistaking a consumer mount path for the producer resourceId.
+  const upstreamInput = node?.type === 'output'
+    ? nodeInput
+    : await hydrateUpstreamWorkflowArtifacts(nodeInput, runId, node?.id);
   if (node?.type !== 'agent_data_fetch') return { input: upstreamInput, files: [] };
   const business = node?.config?.businessConfig ?? {};
   if (business.sourceType && business.sourceType !== 'local_upload') return { input: nodeInput, files: [] };
@@ -126,7 +131,10 @@ async function hydrateUpstreamWorkflowArtifacts(nodeInput: unknown, runId: strin
     if (relative.startsWith('..') || path.isAbsolute(relative)) {
       throw new Error(`上游节点产物 resourceId 非法: ${artifact.resourceId}`);
     }
-    const targetName = `${String(index + 1).padStart(2, '0')}-${safeFileName(artifact.name)}`;
+    // resourceId is the actual file identity. A display name may omit the
+    // extension (for example "上海青浦室内活动规划" for an HTML file), so using
+    // artifact.name here would make the mounted file format ambiguous.
+    const targetName = `${String(index + 1).padStart(2, '0')}-${safeFileName(path.basename(artifact.resourceId))}`;
     const targetPath = path.join(targetDirectory, targetName);
     try {
       const [sourceDirectoryRealPath, sourceRealPath] = await Promise.all([realpath(sourceDirectory), realpath(sourcePath)]);
@@ -141,11 +149,9 @@ async function hydrateUpstreamWorkflowArtifacts(nodeInput: unknown, runId: strin
     }
     return {
       ...entry,
-      artifact: {
-        ...artifact,
-        // resourceId is intentionally relative to the consumer workspace.
-        resourceId: `inputs/${targetName}`,
-      },
+      // Keep artifact.resourceId canonical (relative to sourceNodeId). The
+      // consumer-only path must not leak into persisted/final artifact refs.
+      mountedResourceId: `inputs/${targetName}`,
     };
   }));
   return { ...base, [WORKFLOW_PACKET_ARTIFACTS_KEY]: hydrated };

@@ -67,6 +67,22 @@ export class WorkflowRuntimeRepository {
       .executeTakeFirst();
   }
 
+  /** Status/detail projection; excludes definition, startup input, and agent-result bodies. */
+  async getRunSummary(run_id: string, options: { includeTimelineText?: boolean } = {}): Promise<any> {
+    const db = getKyselyDatabase();
+    const base = db
+      .selectFrom('wf_run')
+      .where('run_id', '=', run_id);
+    const columns = [
+        'run_id', 'workflow_id', 'status', 'waiting_node_id', 'output_json',
+        'error', 'started_at', 'completed_at',
+      ] as const;
+    if (options.includeTimelineText) {
+      return base.select([...columns, 'last_agent_raw_text']).executeTakeFirst();
+    }
+    return base.select(columns).executeTakeFirst();
+  }
+
   /** Update a run only while it is non-terminal. Returns whether a row changed. */
   async updateRunIfActive(run_id: string, patch: any): Promise<boolean> {
     const db = getKyselyDatabase();
@@ -155,6 +171,23 @@ export class WorkflowRuntimeRepository {
     const rows = await db
       .selectFrom('wf_node_run')
       .selectAll()
+      .where('run_id', '=', runPk)
+      .orderBy('started_at', 'asc')
+      .orderBy('node_id', 'asc')
+      .execute();
+    return rows.map((row) => ({ ...row, run_id }));
+  }
+
+  /** Compact projection for status cards/polling; excludes prompt and packet bodies. */
+  async listNodeRunSummaries(run_id: string): Promise<any[]> {
+    const db = getKyselyDatabase();
+    const runPk = await this.runDatabaseId(run_id);
+    const rows = await db
+      .selectFrom('wf_node_run')
+      .select([
+        'run_id', 'node_id', 'node_type', 'status', 'started_at', 'completed_at',
+        'last_completion_issue',
+      ])
       .where('run_id', '=', runPk)
       .orderBy('started_at', 'asc')
       .orderBy('node_id', 'asc')

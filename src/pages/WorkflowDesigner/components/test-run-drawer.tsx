@@ -331,7 +331,7 @@ export function TestRunDrawer(props: TestRunDrawerProps) {
   const artifacts = useMemo(() => collectDisplayArtifacts(props.run, props.executionState), [props.run, props.executionState]);
   const activeRunId = props.run?.id ?? props.runId;
   const startedAt = props.run?.startedAt ?? props.executionState?.startedAt;
-  const eventCount = props.run?.events.length ?? timeline.length;
+  const eventCount = props.run?.events?.length ?? timeline.length;
   // `versionId` is the local persistence record ID (for example 827), not a
   // workflow version. Prefer the version captured when this run was started,
   // then the version returned by the persisted run after it finishes.

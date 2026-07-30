@@ -5,7 +5,7 @@ import { getStoToken } from '../../utils/auth-store';
 import { logger } from '../../utils/logger';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
-import { installWorkflowRuntime, workflowV2BackendFetch } from '../../services/workflow-runtime/bootstrap';
+import { getInstalledWorkflowRuntime, installWorkflowRuntime, workflowV2BackendFetch } from '../../services/workflow-runtime/bootstrap';
 import { workflowExecLog } from '../../services/workflow-runtime/logging';
 import { takeWorkflowDatabaseId } from '../../services/workflow-runtime/id-pool';
 import type { AgentEngineType } from '../../engines/types';
@@ -630,6 +630,19 @@ export async function handleWorkflowRoutes(
   const runMatch = pathname.match(/^\/agent\/v1\/runs\/([^/]+)$/);
   if (runMatch && req.method === 'GET') {
     try {
+      const runId = decodeURIComponent(runMatch[1]);
+      // Tool-originated runs are executed by the desktop runtime. Prefer its
+      // authoritative SQLite view so get_workflow_status receives local
+      // artifact filePath/file:// preview references from the runtime mapper.
+      // The persisted WorkflowPacket remains canonical and path-independent.
+      const localRun = await getInstalledWorkflowRuntime()?.getRun(runId, { view: 'status' });
+      if (localRun) {
+        logger.info('[workflow-trace] GET %s local-runtime runId=%s artifacts=%d',
+          pathname, runId, Array.isArray(localRun.artifacts) ? localRun.artifacts.length : 0);
+        sendJson(res, 200, { success: true, data: localRun });
+        return true;
+      }
+      logger.info('[workflow-trace] GET %s local-runtime-miss runId=%s; falling back to backend', pathname, runId);
       await proxyWorkflowRequest(req, res, pathname);
     } catch (error) {
       logger.error('[WorkflowRoutes] get run failed:', error);
