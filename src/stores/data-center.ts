@@ -7,6 +7,7 @@ import {
   listDataCenterEntries,
   renameDataCenterEntry,
 } from '@/lib/data-center-api';
+import { hostApiFetch } from '@/lib/host-api';
 import type {
   DataCenterBreadcrumb,
   DataCenterEntry,
@@ -64,6 +65,45 @@ function isSiteSharedArtifactSpace(space: DataCenterSpace): boolean {
   return rawSpaceType === 'site_shared_artifact'
     || space.scopeType === 'site'
     || space.displayName.includes('网点共享产物');
+}
+
+interface ArtifactSaveRecord {
+  sourceType: string;
+  sourceTitle: string | null;
+  runId: string | null;
+  artifactName: string;
+  dataCenterEntryId: string | null;
+}
+
+async function enrichScheduledTaskEntryTitles(items: DataCenterEntry[]): Promise<DataCenterEntry[]> {
+  const scheduledItems = items.filter((item) => item.sourceType === 'scheduled_task_artifact' && !item.sourceTitle?.trim());
+  if (scheduledItems.length === 0) return items;
+
+  try {
+    const records = await hostApiFetch<ArtifactSaveRecord[]>('/api/artifact-save-records?sourceType=scheduled_task_artifact&limit=500');
+    const byEntryId = new Map<string, ArtifactSaveRecord>();
+    const byRunAndName = new Map<string, ArtifactSaveRecord>();
+
+    for (const record of records) {
+      if (!record.sourceTitle?.trim()) continue;
+      if (record.dataCenterEntryId) {
+        byEntryId.set(record.dataCenterEntryId, record);
+      }
+      if (record.runId && record.artifactName) {
+        byRunAndName.set(`${record.runId}:${record.artifactName}`, record);
+      }
+    }
+
+    return items.map((item) => {
+      if (item.sourceType !== 'scheduled_task_artifact' || item.sourceTitle?.trim()) return item;
+      const record = byEntryId.get(item.entryId)
+        ?? (item.runId ? byRunAndName.get(`${item.runId}:${item.name}`) : undefined);
+      const sourceTitle = record?.sourceTitle?.trim();
+      return sourceTitle ? { ...item, sourceTitle } : item;
+    });
+  } catch {
+    return items;
+  }
 }
 
 export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
@@ -161,8 +201,9 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
         sortField: state.sortField,
         sortOrder: state.sortOrder,
       });
+      const items = await enrichScheduledTaskEntryTitles(result.items);
       set({
-        items: result.items,
+        items,
         total: result.total,
         pageNo: result.pageNo,
         pageSize: result.pageSize,
