@@ -197,6 +197,7 @@
             "renameTitle": "Rename",
             "newName": "New name",
             "deleteTitle": "Delete item",
+            "deleteFileMessage": "Delete \"{{name}}\"?",
             "deleteMessage": "Delete \"{{name}}\"? Folders can only be deleted when empty.",
             "removeAuthorizationTitle": "Remove authorization",
             "removeAuthorizationRootMessage": "Remove local file authorization for \"{{name}}\"? This authorized folder will no longer be shown.",

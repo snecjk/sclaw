@@ -13,6 +13,7 @@ export type UploadToSharedTarget = { entry: DataCenterUiEntry; targetSpaceId: st
 
 export interface EntryRenderProps {
   items: DataCenterUiEntry[];
+  allowUploadToShared: boolean;
   onOpenFolder: (entry: DataCenterUiEntry) => void;
   onPreview: (entry: DataCenterUiEntry) => void;
   onDownload: (entry: DataCenterUiEntry) => void;

@@ -316,6 +316,7 @@ export function DataCenter() {
   };
 
   const handleUploadToShared = async (entry: DataCenterUiEntry) => {
+    if (!isSite) return;
     if (entry.entryType !== 'file' || entry.spaceType !== 'qa_artifact') return;
     try {
       const spaces = store.sharedSpaces.length ? store.sharedSpaces : await store.loadSharedSpaces();
@@ -437,7 +438,12 @@ export function DataCenter() {
     ? deleteEntry.parentEntryId === ROOT_ENTRY_ID
       ? t('dataCenterPage.dialogs.removeAuthorizationRootMessage', { name: deleteEntry.name })
       : t('dataCenterPage.dialogs.removeAuthorizationChildMessage', { name: deleteEntry.name })
-    : t('dataCenterPage.dialogs.deleteMessage', { name: deleteEntry?.name ?? '' });
+    : t(
+      deleteEntry?.entryType === 'file'
+        ? 'dataCenterPage.dialogs.deleteFileMessage'
+        : 'dataCenterPage.dialogs.deleteMessage',
+      { name: deleteEntry?.name ?? '' },
+    );
   const deleteConfirmLabel = deleteEntry?.localAuthorized
     ? t('dataCenterPage.menu.removeAuthorization')
     : t('actions.delete');
@@ -447,8 +453,8 @@ export function DataCenter() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--sto-main-bg)]">
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-6 [scrollbar-gutter:stable]">
-        <main className={cn(stoMainInnerShell, 'flex min-h-0 flex-1 flex-col')}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-x-auto overflow-y-auto px-6 py-6 [scrollbar-gutter:stable]">
+        <main className={cn(stoMainInnerShell, 'flex min-h-0 min-w-[620px] flex-1 flex-col')}>
           <header className="mb-6 shrink-0">
             <h1 className={stoPageTitleClass}>
               {store.section === 'qa_artifact' ? t('dataCenterPage.sections.qaArtifact') : store.section === 'drive' ? t('dataCenterPage.sections.drive') : t('dataCenterPage.sections.dataSource')}
@@ -638,6 +644,7 @@ export function DataCenter() {
               ) : currentViewMode === 'grid' ? (
                 <EntryGrid
                   items={visibleItems}
+                  allowUploadToShared={isSite}
                   onOpenFolder={handleOpenFolder}
                   onPreview={handlePreview}
                   onDownload={handleDownload}
@@ -652,6 +659,7 @@ export function DataCenter() {
               ) : (
                 <EntryList
                   items={visibleItems}
+                  allowUploadToShared={isSite}
                   onOpenFolder={handleOpenFolder}
                   onPreview={handlePreview}
                   onDownload={handleDownload}
@@ -761,6 +769,7 @@ export function DataCenter() {
           onDownload={() => handleDownload(previewState.entry)}
           onShare={() => handleShare(previewState.entry)}
           onUploadToShared={() => handleUploadToShared(previewState.entry)}
+          allowUploadToShared={isSite}
         />
       ) : null}
 

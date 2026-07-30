@@ -91,7 +91,7 @@ export function EntryList(props: EntryRenderProps) {
               <div className="min-w-0 flex-1">
                 <EntryName entry={entry} onOpenFolder={props.onOpenFolder} onPreview={props.onPreview} />
               </div>
-              <div className="hidden min-[720px]:block text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">
+              <div className="hidden pl-5 text-[12px] leading-5 text-[#6B778C] min-[720px]:block dark:text-muted-foreground">
                 {formatDate(entry.updatedAt)}
               </div>
               <div className="hidden min-[720px]:block text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">
@@ -219,9 +219,11 @@ export function EntryGrid(props: EntryRenderProps) {
               <span className="flex h-[46px] w-[46px] items-center justify-center">
                 {getEntryIcon(entry, 'h-[42px] w-[42px]')}
               </span>
-              <span className="mt-1 line-clamp-2 min-h-[34px] w-full break-all text-[13px] font-semibold leading-[17px] text-[#1D2129] dark:text-foreground">
-                {entry.name}
-              </span>
+              <ActionTooltip label={entry.name}>
+                <span className="mt-1 line-clamp-2 min-h-[34px] w-full break-all text-[13px] font-semibold leading-[17px] text-[#1D2129] dark:text-foreground">
+                  {entry.name}
+                </span>
+              </ActionTooltip>
             </button>
           );
         })}
@@ -354,7 +356,9 @@ function EntryName({
       <span className="flex h-9 w-9 shrink-0 items-center justify-center">{getEntryIcon(entry, entry.entryType === 'folder' ? 'h-8 w-8' : 'h-7 w-7')}</span>
       <span className="min-w-0 py-1">
         <span className="flex min-w-0 items-center gap-1">
-          <span className="truncate text-[13px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">{entry.name}</span>
+          <ActionTooltip label={entry.name}>
+            <span className="truncate text-[13px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">{entry.name}</span>
+          </ActionTooltip>
           {sourceLabel ? (
             <span className="shrink-0 rounded-[4px] bg-[#EEF3FF] px-1.5 py-0.5 text-[11px] font-medium leading-[14px] text-[#4E7FFF] dark:bg-primary/15 dark:text-primary">
               {sourceLabel}
@@ -362,7 +366,7 @@ function EntryName({
           ) : null}
         </span>
         {sourceTitle ? (
-          <span className="mt-0.5 block truncate text-[11px] leading-4 text-[#86909C] dark:text-muted-foreground">
+          <span className="mt-0.5 inline-block max-w-full truncate rounded-[6px] bg-[#F0F2F5] px-1 py-0.5 text-[11px] leading-4 text-[#6B778C] dark:bg-muted dark:text-muted-foreground">
             关联任务：{sourceTitle}
           </span>
         ) : null}
@@ -371,13 +375,13 @@ function EntryName({
   );
   if (entry.entryType === 'folder') {
     return (
-      <button type="button" onClick={() => onOpenFolder(entry)} className="flex w-full min-w-0 items-center gap-3 text-left">
+      <button type="button" onClick={() => onOpenFolder(entry)} className="flex w-full min-w-0 items-center gap-2 text-left">
         {content}
       </button>
     );
   }
   return (
-    <button type="button" onClick={() => onPreview(entry)} className="flex w-full min-w-0 items-center gap-3 text-left">
+    <button type="button" onClick={() => onPreview(entry)} className="flex w-full min-w-0 items-center gap-2 text-left">
       {content}
     </button>
   );
@@ -393,12 +397,13 @@ function EntryActions({
   onRename,
   onDelete,
   onTrace,
+  allowUploadToShared,
   uploadToSharedLabel,
 }: EntryRenderProps & { entry: DataCenterUiEntry; uploadToSharedLabel?: string }) {
   const { t } = useTranslation('common');
   const [moreTooltipOpen, setMoreTooltipOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const canUploadToShared = entry.entryType === 'file' && entry.spaceType === 'qa_artifact' && !entry.localAuthorized;
+  const canUploadToShared = allowUploadToShared && entry.entryType === 'file' && entry.spaceType === 'qa_artifact' && !entry.localAuthorized;
   const canMoveEntry = canMove(entry);
   const canRenameEntry = canRename(entry);
   const canDeleteEntry = canDelete(entry);

@@ -192,6 +192,7 @@
             "renameTitle": "名前を変更",
             "newName": "新しい名前",
             "deleteTitle": "項目を削除",
+            "deleteFileMessage": "「{{name}}」を削除しますか？",
             "deleteMessage": "「{{name}}」を削除しますか？フォルダは空の場合のみ削除できます。",
             "removeAuthorizationTitle": "許可を解除",
             "removeAuthorizationRootMessage": "「{{name}}」のローカルファイル許可を解除しますか？この許可済みフォルダは表示されなくなります。",

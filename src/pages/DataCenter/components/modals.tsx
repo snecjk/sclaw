@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, CircleAlert, Loader2, RefreshCw, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, CircleAlert, Loader2, RefreshCw, X } from 'lucide-react';
 import { toast } from 'sonner';
 import directoryIcon from '@/assets/icons/directory.svg';
 import downloadIcon from '@/assets/icons/download-icon.svg';
@@ -16,7 +16,7 @@ import {
 import { listDataCenterEntries } from '@/lib/data-center-api';
 import { cn } from '@/lib/utils';
 import type { DataCenterEntry, DataCenterSpaceType, DataCenterTempUrl } from '@/types/data-center';
-import { actionTooltipClass, FOLDER_NAME_MAX_LENGTH, ROOT_ENTRY_ID } from '../constants';
+import { actionTooltipClass, ROOT_ENTRY_ID } from '../constants';
 import type { DataCenterUiEntry } from '../types';
 
 export function DataCenterModal({
@@ -151,15 +151,11 @@ export function TextPromptModal({
           <div className="relative">
             <textarea
               value={value}
-              maxLength={FOLDER_NAME_MAX_LENGTH}
               onChange={(event) => setValue(event.target.value)}
               placeholder={label}
-              className="h-[68px] w-full resize-none rounded-[6px] border border-[#C9CDD4] bg-white px-2 py-2 pr-12 text-[14px] font-medium leading-5 text-[#1D2129] outline-none placeholder:text-[#C9CDD4] focus:border-[#A8B0BD] dark:border-border dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground"
+              className="h-[68px] w-full resize-none rounded-[6px] border border-[#C9CDD4] bg-white px-2 py-2 text-[14px] font-medium leading-5 text-[#1D2129] outline-none placeholder:text-[#C9CDD4] focus:border-[#A8B0BD] dark:border-border dark:bg-background dark:text-foreground dark:placeholder:text-muted-foreground"
               autoFocus
             />
-            <span className="pointer-events-none absolute bottom-2 right-2 text-[12px] leading-4 text-[#C9CDD4] dark:text-muted-foreground">
-              {value.length}/{FOLDER_NAME_MAX_LENGTH}
-            </span>
           </div>
         </div>
 
@@ -185,6 +181,7 @@ export function PreviewModal({
   onDownload,
   onShare,
   onUploadToShared,
+  allowUploadToShared = true,
 }: {
   entry: DataCenterUiEntry;
   tempUrl: DataCenterTempUrl;
@@ -193,11 +190,12 @@ export function PreviewModal({
   onDownload: () => void;
   onShare?: () => void;
   onUploadToShared?: () => void;
+  allowUploadToShared?: boolean;
 }) {
   const { t } = useTranslation('common');
   const [refreshing, setRefreshing] = useState(false);
   const canDownload = !entry.localAuthorized;
-  const canUploadToShared = entry.entryType === 'file' && entry.spaceType === 'qa_artifact' && !entry.localAuthorized;
+  const canUploadToShared = allowUploadToShared && entry.entryType === 'file' && entry.spaceType === 'qa_artifact' && !entry.localAuthorized;
 
   const refreshPreview = async () => {
     if (refreshing) return;
@@ -352,7 +350,6 @@ export function MoveEntryDialog({
       rootLabel={rootLabel}
       spaceType={entry.spaceType}
       spaceId={entry.spaceId ?? undefined}
-      disableSharedFolders
       disabledEntryIds={disabledEntryIds}
       onClose={onClose}
       onConfirm={onConfirm}
@@ -388,22 +385,53 @@ function FolderPickerDialog({
   const [openMap, setOpenMap] = useState<SharedFolderOpenMap>({ [ROOT_ENTRY_ID]: true });
   const [saving, setSaving] = useState(false);
 
-  const loadFolders = async (parentEntryId: string) => {
+  const fetchFolders = async (parentEntryId: string) => {
+    const result = await listDataCenterEntries({
+      spaceType,
+      spaceId,
+      parentEntryId,
+      entryType: 'folder',
+      pageSize: 200,
+      sortField: 'name',
+      sortOrder: 'asc',
+    });
+    return result.items.filter((item) => item.entryType === 'folder');
+  };
+
+  const loadFolders = async (parentEntryId: string, options: { preloadChildFolders?: boolean } = {}) => {
     setLoadingMap((prev) => ({ ...prev, [parentEntryId]: true }));
     try {
-      const result = await listDataCenterEntries({
-        spaceType,
-        spaceId,
-        parentEntryId,
-        entryType: 'folder',
-        pageSize: 200,
-        sortField: 'name',
-        sortOrder: 'asc',
-      });
+      const folders = await fetchFolders(parentEntryId);
       setFolderMap((prev) => ({
         ...prev,
-        [parentEntryId]: result.items.filter((item) => item.entryType === 'folder'),
+        [parentEntryId]: folders,
       }));
+      if (options.preloadChildFolders && folders.length > 0) {
+        setLoadingMap((prev) => ({
+          ...prev,
+          ...Object.fromEntries(folders.map((folder) => [folder.entryId, true])),
+        }));
+        const childResults = await Promise.all(
+          folders.map(async (folder) => {
+            try {
+              return { entryId: folder.entryId, folders: await fetchFolders(folder.entryId) };
+            } catch {
+              return { entryId: folder.entryId, folders: null };
+            }
+          }),
+        );
+        setFolderMap((prev) => {
+          const next = { ...prev };
+          for (const childResult of childResults) {
+            if (childResult.folders !== null) next[childResult.entryId] = childResult.folders;
+          }
+          return next;
+        });
+        setLoadingMap((prev) => ({
+          ...prev,
+          ...Object.fromEntries(folders.map((folder) => [folder.entryId, false])),
+        }));
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('dataCenterPage.saveArtifact.loadFoldersFailed'));
       setFolderMap((prev) => ({ ...prev, [parentEntryId]: [] }));
@@ -415,14 +443,17 @@ function FolderPickerDialog({
   const toggleFolder = async (folderId: string) => {
     const nextOpen = !openMap[folderId];
     setOpenMap((prev) => ({ ...prev, [folderId]: nextOpen }));
-    if (nextOpen && folderMap[folderId] === undefined) {
-      await loadFolders(folderId);
+    const childFolders = folderMap[folderId];
+    const needsChildPreload = childFolders === undefined
+      || childFolders.some((folder) => folderMap[folder.entryId] === undefined);
+    if (nextOpen && needsChildPreload) {
+      await loadFolders(folderId, { preloadChildFolders: true });
     }
   };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadFolders(ROOT_ENTRY_ID);
+    void loadFolders(ROOT_ENTRY_ID, { preloadChildFolders: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spaceType, spaceId]);
 
@@ -435,50 +466,92 @@ function FolderPickerDialog({
     }
   };
 
+  const rootFolders = folderMap[ROOT_ENTRY_ID] ?? [];
+  const rootLoading = Boolean(loadingMap[ROOT_ENTRY_ID]);
+
   return (
-    <DataCenterModal
-      title={title}
-      onClose={onClose}
-      footer={(
-        <>
-          <Button type="button" variant="outline" onClick={onClose}>{t('actions.cancel')}</Button>
-          <Button type="button" onClick={submit} disabled={saving}>
-            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-            {t('actions.confirm')}
-          </Button>
-        </>
-      )}
-    >
-      <div className="space-y-3">
-        <p className="text-[13px] leading-5 text-[#4E5969] dark:text-muted-foreground">
-          {message}
-        </p>
-        <div className="rounded-[14px] bg-[#F7F8FA] p-2 dark:bg-muted/40">
-          <div className="rounded-[10px] bg-white p-2.5 dark:bg-card">
-            <SharedFolderPickerRow
-              folderId={ROOT_ENTRY_ID}
-              label={rootLabel}
-              selectedEntryId={selectedEntryId}
-              open={openMap[ROOT_ENTRY_ID] ?? true}
-              loading={loadingMap[ROOT_ENTRY_ID] ?? false}
-              childrenFolders={folderMap[ROOT_ENTRY_ID] ?? []}
-              folderMap={folderMap}
-              loadingMap={loadingMap}
-              openMap={openMap}
-              disabled={false}
-              disableSharedFolders={disableSharedFolders}
-              disabledEntryIds={disabledEntryIds}
-              onSelect={setSelectedEntryId}
-              onToggle={toggleFolder}
-            />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4">
+      <div className="w-full max-w-[414px] overflow-hidden rounded-[14px] border border-[#E5E6EB] bg-white shadow-2xl dark:border-border dark:bg-background">
+        <div className="flex h-11 items-center justify-between px-4">
+          <h2 className="text-[13px] font-semibold text-[#1D2129] dark:text-foreground">{title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1 text-[#4E5969] hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
+            aria-label={t('actions.close')}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-3 pb-3">
+          <p className="text-[13px] leading-5 text-[#4E5969] dark:text-muted-foreground">{message}</p>
+          <div className="mt-3 rounded-[14px] bg-[#F7F8FA] p-2 dark:bg-muted/40">
+            <div className="rounded-[10px] bg-white p-2.5 dark:bg-card">
+              <FolderPickerRow
+                folderId={ROOT_ENTRY_ID}
+                label={rootLabel}
+                selectedEntryId={selectedEntryId}
+                open={openMap[ROOT_ENTRY_ID] ?? true}
+                loading={rootLoading}
+                childrenFolders={rootFolders}
+                folderMap={folderMap}
+                loadingMap={loadingMap}
+                openMap={openMap}
+                disableSharedFolders={disableSharedFolders}
+                disabledEntryIds={disabledEntryIds}
+                onSelect={setSelectedEntryId}
+                onToggle={toggleFolder}
+                root
+              />
+            </div>
           </div>
         </div>
+
+        <div className="flex h-[48px] justify-end gap-2 border-t border-[#E5E6EB] px-3 py-2 dark:border-border">
+          <Button type="button" variant="outline" className="h-8 rounded-[8px] px-4 text-[12px] font-normal" onClick={onClose}>{t('actions.cancel')}</Button>
+          <Button type="button" className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90" onClick={submit} disabled={saving}>
+            {saving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+            {t('actions.confirm')}
+          </Button>
+        </div>
       </div>
-    </DataCenterModal>
+    </div>
   );
 }
 
-function SharedFolderPickerRow({
+function FolderPickerCheckbox({
+  checked,
+  disabled = false,
+  onClick,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
+      className={cn(
+        'flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border text-white transition-colors',
+        checked
+          ? 'border-[#1D2129] bg-[#1D2129] dark:border-primary dark:bg-primary'
+          : 'border-[#D7DBE2] bg-white dark:border-border dark:bg-background',
+        disabled && 'cursor-not-allowed opacity-45',
+      )}
+      aria-pressed={checked}
+    >
+      {checked ? <Check className="h-3 w-3" strokeWidth={3} /> : null}
+    </button>
+  );
+}
+
+function FolderPickerRow({
   folderId,
   label,
   selectedEntryId,
@@ -493,6 +566,8 @@ function SharedFolderPickerRow({
   disabledEntryIds,
   onSelect,
   onToggle,
+  depth = 0,
+  root = false,
 }: {
   folderId: string;
   label: string;
@@ -508,73 +583,65 @@ function SharedFolderPickerRow({
   disabledEntryIds?: Set<string>;
   onSelect: (entryId: string) => void;
   onToggle: (entryId: string) => void;
+  depth?: number;
+  root?: boolean;
 }) {
-  const { t } = useTranslation('common');
   const selected = selectedEntryId === folderId;
   const rowDisabled = disabled || disabledEntryIds?.has(folderId) || false;
+  const childrenLoaded = folderMap[folderId] !== undefined;
+  const showToggle = loading || !childrenLoaded || childrenFolders.length > 0;
   return (
-    <div>
-      <div className={cn('flex h-8 items-center gap-2 rounded-[8px] px-1.5', selected && 'bg-[#F2F3F5] dark:bg-muted', rowDisabled && 'opacity-50')}>
-        <input
-          type="checkbox"
-          className="h-4 w-4 rounded border-[#C9CDD4] dark:border-border dark:bg-background"
-          checked={selected}
-          onChange={() => {
-            if (!rowDisabled) onSelect(folderId);
-          }}
-          disabled={rowDisabled}
-          aria-label={label}
-        />
+    <div className="space-y-1">
+      <div
+        className={cn(
+          'flex h-7 w-full items-center gap-[10px] rounded-[6px] text-left hover:bg-[#F7F8FA] dark:hover:bg-muted/50',
+          rowDisabled && 'opacity-50',
+        )}
+        style={root ? undefined : { paddingLeft: depth * 27 }}
+      >
+        <FolderPickerCheckbox checked={selected} disabled={rowDisabled} onClick={() => onSelect(folderId)} />
+        {showToggle ? (
+          <button
+            type="button"
+            onClick={() => onToggle(folderId)}
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[#4E5969] hover:bg-[#F2F3F5] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
+            aria-label={label}
+          >
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          </button>
+        ) : null}
         <button
           type="button"
-          className="flex h-5 w-5 items-center justify-center rounded hover:bg-[#F2F3F5] dark:hover:bg-muted"
-          onClick={() => onToggle(folderId)}
-          aria-label={open ? t('actions.collapse') : t('actions.expand')}
-        >
-          <ChevronDown className={cn('h-3.5 w-3.5 text-[#4E5969] transition-transform dark:text-muted-foreground', !open && '-rotate-90')} />
-        </button>
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-not-allowed"
-          onClick={() => {
-            if (!rowDisabled) onSelect(folderId);
-          }}
+          className="flex min-w-0 flex-1 items-center gap-[10px] rounded-[6px] text-left disabled:cursor-not-allowed"
+          onClick={() => onSelect(folderId)}
           disabled={rowDisabled}
         >
-          <img src={directoryIcon} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 dark:brightness-110" />
-          <span className="truncate text-[13px] font-semibold text-[#1D2129] dark:text-foreground">{label}</span>
+          <img src={directoryIcon} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 object-contain dark:brightness-110" />
+          <span className={cn('min-w-0 flex-1 truncate font-semibold text-[#1D2129] dark:text-foreground', root ? 'text-[13px]' : 'text-[12px]')}>{label}</span>
         </button>
       </div>
-      {open ? (
-        <div className="mt-1 space-y-1 pl-8">
-          {loading ? (
-            <div className="flex h-8 items-center gap-2 text-[12px] text-[#86909C] dark:text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {t('dataCenterPage.saveArtifact.loading')}
-            </div>
-          ) : childrenFolders.length === 0 ? (
-            <div className="flex h-8 items-center text-[12px] text-[#86909C] dark:text-muted-foreground">{t('dataCenterPage.saveArtifact.emptyFolders')}</div>
-          ) : (
-            childrenFolders.map((folder) => (
-              <SharedFolderPickerRow
-                key={folder.entryId}
-                folderId={folder.entryId}
-                label={folder.name}
-                selectedEntryId={selectedEntryId}
-                open={Boolean(openMap[folder.entryId])}
-                loading={Boolean(loadingMap[folder.entryId])}
-                childrenFolders={folderMap[folder.entryId] ?? []}
-                folderMap={folderMap}
-                loadingMap={loadingMap}
-                openMap={openMap}
-                disabled={disableSharedFolders && folder.shared === true}
-                disableSharedFolders={disableSharedFolders}
-                disabledEntryIds={disabledEntryIds}
-                onSelect={onSelect}
-                onToggle={onToggle}
-              />
-            ))
-          )}
+      {open && childrenFolders.length > 0 ? (
+        <div className={cn('space-y-1', root && 'pl-[27px]')}>
+          {childrenFolders.map((folder) => (
+            <FolderPickerRow
+              key={folder.entryId}
+              folderId={folder.entryId}
+              label={folder.name}
+              selectedEntryId={selectedEntryId}
+              open={Boolean(openMap[folder.entryId])}
+              loading={Boolean(loadingMap[folder.entryId])}
+              childrenFolders={folderMap[folder.entryId] ?? []}
+              folderMap={folderMap}
+              loadingMap={loadingMap}
+              openMap={openMap}
+              disabled={rowDisabled || (disableSharedFolders && folder.shared === true)}
+              disableSharedFolders={disableSharedFolders}
+              disabledEntryIds={disabledEntryIds}
+              onSelect={onSelect}
+              onToggle={onToggle}
+              depth={root ? 0 : depth + 1}
+            />
+          ))}
         </div>
       ) : null}
     </div>

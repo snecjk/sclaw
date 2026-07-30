@@ -103,7 +103,20 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
     }
   };
 
-  const loadFolders = async (space: FolderSpace, entryId = ROOT_ENTRY_ID) => {
+  const fetchFolders = async (space: FolderSpace, entryId: string, spaceId: string | null) => {
+    const result = await listDataCenterEntries({
+      spaceType: space === 'shared' ? 'site_shared_artifact' : 'qa_artifact',
+      spaceId: spaceId ?? undefined,
+      parentEntryId: entryId,
+      entryType: 'folder',
+      pageSize: 200,
+      sortField: 'name',
+      sortOrder: 'asc',
+    });
+    return result.items.filter((item) => item.entryType === 'folder');
+  };
+
+  const loadFolders = async (space: FolderSpace, entryId = ROOT_ENTRY_ID, options: { preloadChildFolders?: boolean } = {}) => {
     const key = folderKey(space, entryId);
     setLoadingMap((prev) => ({ ...prev, [key]: true }));
     try {
@@ -112,19 +125,44 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
         setFolderMap((prev) => ({ ...prev, [key]: [] }));
         return;
       }
-      const result = await listDataCenterEntries({
-        spaceType: space === 'shared' ? 'site_shared_artifact' : 'qa_artifact',
-        spaceId: spaceId ?? undefined,
-        parentEntryId: entryId,
-        entryType: 'folder',
-        pageSize: 200,
-        sortField: 'name',
-        sortOrder: 'asc',
-      });
+      const folders = await fetchFolders(space, entryId, spaceId);
       setFolderMap((prev) => ({
         ...prev,
-        [key]: result.items.filter((item) => item.entryType === 'folder'),
+        [key]: folders,
       }));
+      if (options.preloadChildFolders && folders.length > 0) {
+        const childKeys = folders.map((folder) => folderKey(space, folder.entryId));
+        setLoadingMap((prev) => {
+          const next = { ...prev };
+          for (const childKey of childKeys) next[childKey] = true;
+          return next;
+        });
+        const childResults = await Promise.all(
+          folders.map(async (folder) => {
+            try {
+              return {
+                key: folderKey(space, folder.entryId),
+                folders: await fetchFolders(space, folder.entryId, spaceId),
+              };
+            } catch {
+              return { key: folderKey(space, folder.entryId), folders: null };
+            }
+          }),
+        );
+        setFolderMap((prev) => {
+          const next = { ...prev };
+          for (const childResult of childResults) {
+            if (childResult.folders === null) continue;
+            next[childResult.key] = childResult.folders;
+          }
+          return next;
+        });
+        setLoadingMap((prev) => {
+          const next = { ...prev };
+          for (const childKey of childKeys) next[childKey] = false;
+          return next;
+        });
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('dataCenterPage.saveArtifact.loadFoldersFailed'));
     } finally {
@@ -136,16 +174,19 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
     const key = folderKey(space, entryId);
     const nextOpen = !openMap[key];
     setOpenMap((prev) => ({ ...prev, [key]: nextOpen }));
-    if (nextOpen && folderMap[key] === undefined) {
-      await loadFolders(space, entryId);
+    const childFolders = folderMap[key];
+    const needsChildPreload = childFolders === undefined
+      || childFolders.some((folder) => folderMap[folderKey(space, folder.entryId)] === undefined);
+    if (nextOpen && needsChildPreload) {
+      await loadFolders(space, entryId, { preloadChildFolders: true });
     }
   };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadFolders('my', ROOT_ENTRY_ID);
+    void loadFolders('my', ROOT_ENTRY_ID, { preloadChildFolders: true });
     if (isSite) {
-      void loadFolders('shared', ROOT_ENTRY_ID);
+      void loadFolders('shared', ROOT_ENTRY_ID, { preloadChildFolders: true });
     }
     // The dialog is mounted only while open; initial state already points at root.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -155,6 +196,12 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
 
   const provenance = file.artifactProvenance;
   const canSave = Boolean(file.filePath && provenance?.sessionId && provenance.artifactKey);
+  const sharedRootKey = folderKey('shared', ROOT_ENTRY_ID);
+  const myRootKey = folderKey('my', ROOT_ENTRY_ID);
+  const sharedRootFolders = folderMap[sharedRootKey] ?? [];
+  const myRootFolders = folderMap[myRootKey] ?? [];
+  const sharedRootLoading = sharedSpaceLoading || Boolean(loadingMap[sharedRootKey]);
+  const myRootLoading = Boolean(loadingMap[myRootKey]);
 
   const save = async () => {
     if (!file.filePath || !provenance) return;
@@ -223,22 +270,21 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                 <TreeHeader
                   checked={selectedTarget.space === 'shared' && selectedTarget.parentEntryId === ROOT_ENTRY_ID}
                   open={sharedOpen}
+                  showToggle={sharedRootLoading || sharedRootFolders.length > 0}
                   onToggle={() => setSharedOpen((open) => !open)}
                   onCheck={() => setSelectedTarget({ space: 'shared', parentEntryId: ROOT_ENTRY_ID })}
                   onSelect={() => setSelectedTarget({ space: 'shared', parentEntryId: ROOT_ENTRY_ID })}
                   label={t('dataCenterPage.saveArtifact.sharedArtifacts')}
                 />
                 {sharedOpen ? (
-                  <div className="mt-2 space-y-2 pl-5">
-                    {sharedSpaceLoading || loadingMap[folderKey('shared', ROOT_ENTRY_ID)] ? (
+                  <div className="mt-1.5 space-y-1 pl-[27px]">
+                    {sharedRootLoading ? (
                       <div className="flex items-center gap-2 px-1 py-2 text-[12px] text-[#86909C] dark:text-muted-foreground">
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         {t('dataCenterPage.saveArtifact.loading')}
                       </div>
-                    ) : (folderMap[folderKey('shared', ROOT_ENTRY_ID)] ?? []).length === 0 ? (
-                      <div className="px-1 py-2 text-[12px] text-[#86909C] dark:text-muted-foreground">{t('dataCenterPage.saveArtifact.emptyFolders')}</div>
-                    ) : (
-                      (folderMap[folderKey('shared', ROOT_ENTRY_ID)] ?? []).map((folder) => (
+                    ) : sharedRootFolders.length > 0 ? (
+                      sharedRootFolders.map((folder) => (
                         <TreeFolderRow
                           key={folder.entryId}
                           space="shared"
@@ -256,7 +302,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                           onToggleOpen={toggleFolderOpen}
                         />
                       ))
-                    )}
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -266,22 +312,21 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
               <TreeHeader
                 checked={selectedTarget.space === 'my' && selectedTarget.parentEntryId === ROOT_ENTRY_ID}
                 open={mineOpen}
+                showToggle={myRootLoading || myRootFolders.length > 0}
                 onToggle={() => setMineOpen((open) => !open)}
                 onCheck={() => setSelectedTarget({ space: 'my', parentEntryId: ROOT_ENTRY_ID })}
                 onSelect={() => setSelectedTarget({ space: 'my', parentEntryId: ROOT_ENTRY_ID })}
                 label={t('dataCenterPage.saveArtifact.myArtifacts')}
               />
               {mineOpen ? (
-                <div className="mt-2 space-y-2 pl-5">
-                  {loadingMap[folderKey('my', ROOT_ENTRY_ID)] ? (
+                <div className="mt-1.5 space-y-1 pl-[27px]">
+                  {myRootLoading ? (
                     <div className="flex items-center gap-2 px-1 py-2 text-[12px] text-[#86909C] dark:text-muted-foreground">
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       {t('dataCenterPage.saveArtifact.loading')}
                     </div>
-                  ) : (folderMap[folderKey('my', ROOT_ENTRY_ID)] ?? []).length === 0 ? (
-                    <div className="px-1 py-2 text-[12px] text-[#86909C] dark:text-muted-foreground">{t('dataCenterPage.saveArtifact.emptyFolders')}</div>
-                  ) : (
-                    (folderMap[folderKey('my', ROOT_ENTRY_ID)] ?? []).map((folder) => (
+                  ) : myRootFolders.length > 0 ? (
+                    myRootFolders.map((folder) => (
                       <TreeFolderRow
                         key={folder.entryId}
                         space="my"
@@ -299,7 +344,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                         onToggleOpen={toggleFolderOpen}
                       />
                     ))
-                  )}
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -344,6 +389,7 @@ function TreeCheckbox({ checked, disabled = false, onClick }: { checked?: boolea
 function TreeHeader({
   checked,
   open,
+  showToggle,
   label,
   onToggle,
   onCheck,
@@ -351,25 +397,28 @@ function TreeHeader({
 }: {
   checked?: boolean;
   open: boolean;
+  showToggle: boolean;
   label: string;
   onToggle: () => void;
   onCheck?: () => void;
   onSelect?: () => void;
 }) {
   return (
-    <div className="flex h-7 items-center gap-2">
+    <div className="flex h-7 items-center gap-[10px]">
       <TreeCheckbox checked={checked} onClick={onCheck} />
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex h-5 w-5 items-center justify-center rounded text-[#4E5969] hover:bg-[#F2F3F5] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
-      >
-        {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
-      </button>
+      {showToggle ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex h-4 w-4 items-center justify-center rounded text-[#4E5969] hover:bg-[#F2F3F5] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
+        >
+          {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={onSelect}
-        className="flex min-w-0 flex-1 items-center gap-2 rounded-[6px] text-left"
+        className="flex min-w-0 flex-1 items-center gap-[10px] rounded-[6px] text-left"
       >
         <img src={directoryIcon} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 object-contain dark:brightness-110" />
         <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#1D2129] dark:text-foreground">{label}</span>
@@ -415,26 +464,24 @@ function TreeFolderRow({
   return (
     <div className="space-y-1">
       <div
-        className="flex h-7 w-full items-center gap-2 rounded-[6px] text-left hover:bg-[#F7F8FA] dark:hover:bg-muted/50"
-        style={{ paddingLeft: depth * 18 }}
+        className="flex h-7 w-full items-center gap-[10px] rounded-[6px] text-left hover:bg-[#F7F8FA] dark:hover:bg-muted/50"
+        style={{ paddingLeft: depth * 27 }}
       >
         <TreeCheckbox checked={checked} onClick={() => onSelect(folder.entryId)} />
         {showToggle ? (
           <button
             type="button"
             onClick={() => { void onToggleOpen(space, folder.entryId); }}
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#4E5969] hover:bg-[#F2F3F5] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-[#4E5969] hover:bg-[#F2F3F5] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
             aria-label={folder.name}
           >
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
           </button>
-        ) : (
-          <span className="h-5 w-5 shrink-0" aria-hidden="true" />
-        )}
+        ) : null}
         <button
           type="button"
           onClick={() => onSelect(folder.entryId)}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-[6px] text-left"
+          className="flex min-w-0 flex-1 items-center gap-[10px] rounded-[6px] text-left"
         >
           <img src={directoryIcon} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 object-contain dark:brightness-110" />
           <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[#1D2129] dark:text-foreground">{folder.name}</span>
