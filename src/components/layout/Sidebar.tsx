@@ -202,11 +202,12 @@ const SIDEBAR_TASK_GROUP_ROW_CLASS =
 /**
  * 任务二级子项容器 — 与项目二级水平对齐：
  * 层级竖线 25px（滚动区 8 + ml 17）；选中背景起点 32px（17 + 1px 边框 + pl-1.5）；
- * 文字起点 42px（32 + 行内 px-[10px]）；同级 gap-0.5 → 28+2=30px 节拍；
+ * 一级行到底一个二级行外框间距 2px（mt-0.5）；文字起点 42px（32 + 行内 px-[10px]）；
+ * 同级 gap-0.5 → 28+2=30px 节拍；
  * w-[calc(100%-17px)] 避免 ml+w-full 右侧溢出。
  */
 const SIDEBAR_TASK_SUBITEMS_CONTAINER_CLASS =
-  'ml-[17px] flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-1.5 dark:border-border';
+  'mt-0.5 ml-[17px] flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-1.5 dark:border-border';
 const SCLAW_BROWSER_SIDEBAR_PRESERVE_SELECTOR = '[data-sclaw-browser-sidebar-preserve="true"]';
 
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
@@ -2099,7 +2100,7 @@ export function Sidebar() {
           />
         ) : null}
         {!sidebarCollapsed && taskListSectionOpen ? (
-          <div className={cn('relative z-0 mt-1 flex flex-col gap-0.5', sidebarScrollListClass)}>
+          <div className={cn('relative z-0 mt-0.5 mb-1 flex flex-col gap-0.5', sidebarScrollListClass)}>
             {taskListRenderPlan.items.map((item) =>
               item.kind === 'sto' ? (
                 <SidebarTaskGroup
@@ -2139,7 +2140,7 @@ export function Sidebar() {
         {!sidebarCollapsed ? (
           <div
             ref={recentSectionSentinelRef}
-            className="pointer-events-none -mb-1 h-0 w-full shrink-0 overflow-hidden opacity-0"
+            className="pointer-events-none h-0 w-full shrink-0 overflow-hidden opacity-0"
             aria-hidden
           />
         ) : null}
@@ -2158,7 +2159,7 @@ export function Sidebar() {
           className={cn(
             sidebarScrollListClass,
             'space-y-0.5 pb-2',
-            sidebarCollapsed ? 'pt-1' : recentOpen ? 'pt-1' : 'pt-0',
+            sidebarCollapsed ? 'pt-1' : recentOpen ? 'pt-0.5' : 'pt-0',
           )}
         >
           {sidebarCollapsed && sessionsOrderedForCollapse.length > 0 ? (

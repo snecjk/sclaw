@@ -1432,7 +1432,7 @@ export const sidebarScrollListClass = 'relative z-0';
 /** 侧栏中部滚动区（classic 滚动条见 globals.css `html[data-scrollbar-layout=classic]`） */
 export const sidebarScrollContainerClass = cn(
   'sidebar-scroll-container sto-thin-scrollbar',
-  'flex min-h-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto overscroll-y-contain',
+  'flex min-h-0 flex-1 flex-col gap-0 overflow-x-hidden overflow-y-auto overscroll-y-contain',
 );
 
 /** 展开侧栏主导航 idle — 正文 Grey-10 + 图标 Grey-9；行高 28px（h-7） */
