@@ -8,6 +8,7 @@ import {
   renameDataCenterEntry,
 } from '@/lib/data-center-api';
 import { hostApiFetch } from '@/lib/host-api';
+import { getScheduledTaskIdFromSessionKey } from '@/lib/scheduled-task-artifact-provenance';
 import type {
   DataCenterBreadcrumb,
   DataCenterEntry,
@@ -18,6 +19,7 @@ import type {
   DataCenterSpaceType,
   DataCenterViewMode,
 } from '@/types/data-center';
+import type { ScheduleTask } from '@/types/scheduled-task';
 
 export type DataCenterSection = 'qa_artifact' | 'drive' | 'data_source';
 
@@ -83,6 +85,8 @@ async function enrichScheduledTaskEntryTitles(items: DataCenterEntry[]): Promise
     const records = await hostApiFetch<ArtifactSaveRecord[]>('/api/artifact-save-records?sourceType=scheduled_task_artifact&limit=500');
     const byEntryId = new Map<string, ArtifactSaveRecord>();
     const byRunAndName = new Map<string, ArtifactSaveRecord>();
+    const tasks = await hostApiFetch<ScheduleTask[]>('/api/scheduled-tasks').catch(() => [] as ScheduleTask[]);
+    const titleByTaskId = new Map(tasks.map((task) => [task.id, task.name]));
 
     for (const record of records) {
       if (!record.sourceTitle?.trim()) continue;
@@ -98,7 +102,8 @@ async function enrichScheduledTaskEntryTitles(items: DataCenterEntry[]): Promise
       if (item.sourceType !== 'scheduled_task_artifact' || item.sourceTitle?.trim()) return item;
       const record = byEntryId.get(item.entryId)
         ?? (item.runId ? byRunAndName.get(`${item.runId}:${item.name}`) : undefined);
-      const sourceTitle = record?.sourceTitle?.trim();
+      const taskId = item.sourceId?.trim() || (item.sessionId ? getScheduledTaskIdFromSessionKey(item.sessionId) : null);
+      const sourceTitle = record?.sourceTitle?.trim() || (taskId ? titleByTaskId.get(taskId)?.trim() : undefined);
       return sourceTitle ? { ...item, sourceTitle } : item;
     });
   } catch {
@@ -292,7 +297,7 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
       await get().load();
       await get().refreshQuota();
     } catch (error) {
-      set({ mutating: false, error: error instanceof Error ? error.message : String(error) });
+      set({ mutating: false });
       throw error;
     }
   },

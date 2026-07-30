@@ -23,6 +23,7 @@ import {
 } from '@/lib/dingtalk-mention-context';
 import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
 import { isVirtualTaskSessionKey } from '@/stores/chat/cron-session-utils';
+import { enrichScheduledTaskArtifactProvenance } from '@/lib/scheduled-task-artifact-provenance';
 import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay, WORKFLOW_COMPLETE_TAG } from '@/lib/workflow-context';
 import { stripSclawBrowserEmbedContextForDisplay } from '@/lib/sclaw-browser-embed-context';
 import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
@@ -61,6 +62,12 @@ function resolveArtifactSourceType(sessionKey: string): DataCenterArtifactProven
 
 function resolveWorkflowArtifactSourceType(sessionKey: string): DataCenterArtifactProvenance['sourceType'] {
   return isVirtualTaskSessionKey(sessionKey) ? 'scheduled_task_artifact' : 'workflow_artifact';
+}
+
+function buildArtifactProvenance(
+  provenance: DataCenterArtifactProvenance,
+): DataCenterArtifactProvenance {
+  return enrichScheduledTaskArtifactProvenance(provenance);
 }
 
 /**
@@ -1439,14 +1446,14 @@ export function usePreviewableFiles(
             fileName: previewFile.fileName,
             fileSize: previewFile.fileSize,
             preview: previewFile.preview,
-            artifactProvenance: sessionKey ? {
+            artifactProvenance: sessionKey ? buildArtifactProvenance({
               sourceType: resolveWorkflowArtifactSourceType(sessionKey),
               sessionId: sessionKey,
               artifactKey: artifact.id || previewFile.filePath,
               runId: state.runId,
               workflowTemplateId: state.workflowId,
               workflowRunId: state.runId,
-            } : undefined,
+            }) : undefined,
           });
         }
       }
@@ -1466,12 +1473,12 @@ export function usePreviewableFiles(
             fileName: file.fileName,
             fileSize: (file as { fileSize?: number }).fileSize ?? 0,
             preview: (file as { preview?: string | null }).preview ?? null,
-            artifactProvenance: (file as AttachedFileMeta).artifactProvenance ?? (sessionKey ? {
+            artifactProvenance: (file as AttachedFileMeta).artifactProvenance ?? (sessionKey ? buildArtifactProvenance({
               sourceType: resolveArtifactSourceType(sessionKey),
               sessionId: sessionKey,
               artifactKey: fp,
               messageId: typeof (msg as { id?: unknown }).id === 'string' ? (msg as { id: string }).id : undefined,
-            } : undefined),
+            }) : undefined),
           });
         }
       }
@@ -1488,12 +1495,12 @@ export function usePreviewableFiles(
             fileName: ref.fileName,
             fileSize: 0,
             preview: null,
-            artifactProvenance: sessionKey ? {
+            artifactProvenance: sessionKey ? buildArtifactProvenance({
               sourceType: resolveArtifactSourceType(sessionKey),
               sessionId: sessionKey,
               artifactKey: ref.filePath,
               messageId: typeof (msg as { id?: unknown }).id === 'string' ? (msg as { id: string }).id : undefined,
-            } : undefined,
+            }) : undefined,
           });
         }
       }

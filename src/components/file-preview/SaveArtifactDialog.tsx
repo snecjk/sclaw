@@ -9,6 +9,7 @@ import {
   listDataCenterEntries,
   uploadArtifactFromPath,
 } from '@/lib/data-center-api';
+import { resolveScheduledTaskArtifactProvenance } from '@/lib/scheduled-task-artifact-provenance';
 import { cn } from '@/lib/utils';
 import { isSiteUser, useAuthStore } from '@/stores/auth';
 import type { AttachedFileMeta } from '@/stores/chat';
@@ -165,14 +166,15 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
       if (selectedTarget.space === 'shared' && !targetSpaceId) {
         throw new Error(t('dataCenterPage.toasts.sharedSpaceUnavailable'));
       }
+      const uploadProvenance = await resolveScheduledTaskArtifactProvenance(provenance);
       await uploadArtifactFromPath({
-        ...provenance,
+        ...uploadProvenance,
         filePath: file.filePath,
         fileName: file.fileName,
         parentEntryId: selectedTarget.space === 'my' ? selectedTarget.parentEntryId : ROOT_ENTRY_ID,
         targetSpaceId: targetSpaceId ?? undefined,
         targetParentEntryId: selectedTarget.space === 'shared' ? selectedTarget.parentEntryId : undefined,
-        idempotencyKey: createArtifactUploadIdempotencyKey(provenance, selectedTarget, targetSpaceId),
+        idempotencyKey: createArtifactUploadIdempotencyKey(uploadProvenance, selectedTarget, targetSpaceId),
       });
       toast.success(t('dataCenterPage.saveArtifact.saved'));
       onSaved();

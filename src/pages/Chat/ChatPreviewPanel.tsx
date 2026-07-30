@@ -29,6 +29,7 @@ import {
   type DingTalkShareDialogDraft,
 } from '@/lib/dingtalk-share';
 import { isVirtualTaskSessionKey } from '@/stores/chat/cron-session-utils';
+import { enrichScheduledTaskArtifactProvenance } from '@/lib/scheduled-task-artifact-provenance';
 import {
   stoPreviewActionButtonClass,
   stoPreviewActionRowClass,
@@ -87,11 +88,11 @@ export function ChatPreviewPanel({
     const sourceType = isVirtualTaskSessionKey(currentSessionKey) ? 'scheduled_task_artifact' : 'chat_artifact';
     return {
       ...activeFile,
-      artifactProvenance: {
+      artifactProvenance: enrichScheduledTaskArtifactProvenance({
         sourceType,
         sessionId: currentSessionKey,
         artifactKey: activeFile.filePath,
-      },
+      }),
     } satisfies AttachedFileMeta;
   }, [activeFile, currentSessionKey]);
 
