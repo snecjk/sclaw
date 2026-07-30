@@ -1,4 +1,5 @@
-import { basename } from 'node:path';
+import { createHash } from 'node:crypto';
+import { basename, normalize } from 'node:path';
 import { stat } from 'node:fs/promises';
 import type { ArtifactSaveItem } from './types';
 import { resolveWorkspaceFilePath } from '../../utils/artifact-path';
@@ -15,23 +16,25 @@ function cleanPath(value: string): string {
   const trimmed = value.trim().replace(/^preview:\/\//, '');
   const filePath = stripFileUrlScheme(trimmed);
   if (!filePath || /^https?:\/\//i.test(filePath) || filePath.startsWith('artifact://')) return filePath;
-  if (filePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(filePath)) return filePath;
+  if (filePath.startsWith('/')) return normalize(filePath);
+  if (/^[A-Za-z]:[\\/]/.test(filePath)) return filePath;
   return resolveWorkspaceFilePath(filePath);
 }
 
-function makeKey(filePath: string, index: number): string {
-  return `${index + 1}:${basename(filePath) || filePath}`;
+function makeKey(filePath: string): string {
+  const digest = createHash('sha256').update(filePath).digest('base64url').slice(0, 16);
+  return `${digest}:${basename(filePath) || filePath}`;
 }
 
-async function toArtifact(filePath: string, name: string | undefined, contentType: string | undefined, index: number): Promise<ArtifactSaveItem | null> {
+async function toArtifact(filePath: string, name: string | undefined, contentType: string | undefined): Promise<ArtifactSaveItem | null> {
   const cleaned = cleanPath(filePath);
   if (!cleaned || /^https?:\/\//i.test(cleaned)) return null;
   try {
     const info = await stat(cleaned);
     if (!info.isFile()) return null;
     return {
-      artifactKey: makeKey(cleaned, index),
-      name: name?.trim() || basename(cleaned) || `artifact-${index + 1}`,
+      artifactKey: makeKey(cleaned),
+      name: name?.trim() || basename(cleaned) || 'artifact',
       filePath: cleaned,
       contentType: contentType?.trim() || null,
       size: info.size,
@@ -116,7 +119,7 @@ export async function collectArtifactsFromAssistantText(text: string): Promise<A
     const cleaned = cleanPath(candidate.filePath);
     if (seen.has(cleaned)) continue;
     seen.add(cleaned);
-    const artifact = await toArtifact(cleaned, candidate.name, candidate.contentType, artifacts.length);
+    const artifact = await toArtifact(cleaned, candidate.name, candidate.contentType);
     if (artifact) artifacts.push(artifact);
   }
   return artifacts;
@@ -159,7 +162,7 @@ export async function collectArtifactsFromAssistantMessages(messages: unknown[],
     const cleaned = cleanPath(candidate.filePath);
     if (seen.has(cleaned)) continue;
     seen.add(cleaned);
-    const artifact = await toArtifact(cleaned, candidate.name, candidate.contentType, artifacts.length);
+    const artifact = await toArtifact(cleaned, candidate.name, candidate.contentType);
     if (artifact) artifacts.push(artifact);
   }
   return artifacts;
