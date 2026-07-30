@@ -7,7 +7,7 @@ import { logger } from '../utils/logger';
 import {
   AGENT_EXECUTION_MEMORY_CONTEXT_MARKER,
   AGENT_MEMORY_CONTEXT_MARKER,
-  appendAgentMemoryBlock,
+  prependAgentMemoryBlock,
 } from '../../shared/agent-memory-prompt';
 import { parseOpenClawExecutionTurn } from './openclaw-execution-snapshot';
 import { prependSystemPromptAppend } from '../../shared/system-prompt-append';
@@ -170,8 +170,10 @@ export const openClawAdapter: EngineAdapter = {
   type: 'openclaw',
 
   prepareMemoryInjection(params, memory) {
-    let message = appendAgentMemoryBlock(params.message, memory.preference, AGENT_MEMORY_CONTEXT_MARKER);
-    message = appendAgentMemoryBlock(message, memory.execution, AGENT_EXECUTION_MEMORY_CONTEXT_MARKER);
+    // Keep the real user request last so skill matching is anchored to it instead of
+    // to tool names or commands that may appear in recalled execution experience.
+    let message = prependAgentMemoryBlock(params.message, memory.execution, AGENT_EXECUTION_MEMORY_CONTEXT_MARKER);
+    message = prependAgentMemoryBlock(message, memory.preference, AGENT_MEMORY_CONTEXT_MARKER);
     if (memory.preference || memory.execution) {
       logger.info(`[agent-memory][openclaw] message after memory injection:\n${message}`);
     }

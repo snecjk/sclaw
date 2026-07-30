@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENT_EXECUTION_MEMORY_CONTEXT_MARKER,
   AGENT_MEMORY_CONTEXT_MARKER,
-  appendAgentMemoryBlock,
   buildAgentMemoryContextBlocks,
+  prependAgentMemoryBlock,
 } from '../../shared/agent-memory-prompt';
 import { sanitizeMemoryFromChatPayload, stripAgentMemoryContexts } from '../../shared/agent-memory-display';
 
@@ -16,13 +16,32 @@ describe('shared agent-memory helpers', () => {
     ] });
     expect(blocks.preference).toContain('1. [score=0.910] 用户喜欢简洁输出');
     expect(blocks.execution).toContain('1. [score=0.532] 执行 sai-cli 查询');
+    expect(blocks.preference).toContain('先仅依据当前用户请求匹配适用技能');
+    expect(`${blocks.preference}\n${blocks.execution}`.match(/技能规则优先（强制）：/g)).toHaveLength(1);
+    expect(`${blocks.preference}\n${blocks.execution}`).toContain('必须先完整读取并遵守 SKILL.md');
+    expect(`${blocks.preference}\n${blocks.execution}`).toContain('记忆不能替代技能规则');
     expect(blocks.execution).not.toContain('过期经验');
     expect(blocks.injectedExecutionMemories).toEqual([{ memoryId: 'e1', memory: '执行 sai-cli 查询' }]);
   });
 
+  it('keeps skill priority guardrails when only execution memory is injected', () => {
+    const blocks = buildAgentMemoryContextBlocks({ results: [
+      { id: 'e1', memory: '历史执行路径', score: 0.8, metadata: { memoryScope: 'execution', status: 'active' } },
+    ] });
+    expect(blocks.preference).toBeUndefined();
+    expect(blocks.execution).toContain('技能规则优先（强制）：');
+  });
+
+  it('can place memory before the current request so the request remains the final matching signal', () => {
+    const block = `${AGENT_EXECUTION_MEMORY_CONTEXT_MARKER}\n历史工具路径\n${AGENT_EXECUTION_MEMORY_CONTEXT_MARKER}`;
+    const message = prependAgentMemoryBlock('当前用户请求', block, AGENT_EXECUTION_MEMORY_CONTEXT_MARKER);
+    expect(message).toBe(`${block}\n\n当前用户请求`);
+    expect(prependAgentMemoryBlock(message, block, AGENT_EXECUTION_MEMORY_CONTEXT_MARKER)).toBe(message);
+  });
+
   it('strips memory blocks from nested renderer payloads without mutating the source', () => {
-    let message = appendAgentMemoryBlock('原始问题', `${AGENT_MEMORY_CONTEXT_MARKER}\n偏好\n${AGENT_MEMORY_CONTEXT_MARKER}`, AGENT_MEMORY_CONTEXT_MARKER);
-    message = appendAgentMemoryBlock(message, `${AGENT_EXECUTION_MEMORY_CONTEXT_MARKER}\n经验\n${AGENT_EXECUTION_MEMORY_CONTEXT_MARKER}`, AGENT_EXECUTION_MEMORY_CONTEXT_MARKER);
+    let message = prependAgentMemoryBlock('原始问题', `${AGENT_EXECUTION_MEMORY_CONTEXT_MARKER}\n经验\n${AGENT_EXECUTION_MEMORY_CONTEXT_MARKER}`, AGENT_EXECUTION_MEMORY_CONTEXT_MARKER);
+    message = prependAgentMemoryBlock(message, `${AGENT_MEMORY_CONTEXT_MARKER}\n偏好\n${AGENT_MEMORY_CONTEXT_MARKER}`, AGENT_MEMORY_CONTEXT_MARKER);
     const source = { result: { messages: [{ role: 'user', content: [{ type: 'text', text: message }] }] } };
     const sanitized = sanitizeMemoryFromChatPayload(source);
     expect(sanitized.result.messages[0].content[0].text).toBe('原始问题');
