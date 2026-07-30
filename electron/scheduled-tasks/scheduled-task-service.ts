@@ -29,7 +29,7 @@ import {
   resolveScheduledTaskDingTalkRecipients,
 } from '../../shared/dingtalk-send/scheduled-task-dingtalk-lift';
 import { ScheduledTaskScheduler } from './scheduled-task-scheduler';
-import { validateCronExpr } from '../utils/cron-math';
+import { validateCronExpr } from './cron-math';
 import {
   EngineScheduledTaskDispatcher,
   loggingEventSink,

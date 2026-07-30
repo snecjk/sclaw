@@ -1,5 +1,5 @@
 import { logger } from '../utils/logger';
-import { computeNextRunAt } from '../utils/cron-math';
+import { computeNextRunAt } from './cron-math';
 import { ScheduleTaskRepository } from '../db/repositories/schedule-task-repository';
 import { ScheduleTaskRunRepository } from '../db/repositories/schedule-task-run-repository';
 import type {
@@ -16,7 +16,7 @@ import type {
  * 行的 `status`（active = queued/running）。执行由注入的 `dispatcher` 承接；
  * 本调度器只负责「何时触发 + claim 单飞」，不 await 执行。
  *
- * cron 数学见 `electron/utils/cron-math.ts`（croner 包装：5 字段强制、host-local
+ * cron 数学见 `./cron-math.ts`（croner 包装：5 字段强制、host-local
  * 时区、Vixie OR、排他 nextRun）。
  */
 
