@@ -29,7 +29,7 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { ClaudeTaskPermissionProfile } from '@/types/scheduled-task';
 import type { ManagedLocalTask } from '@/stores/cron';
 import { hostApiFetch } from '@/lib/host-api';
-import { getDataCenterSpaces, listDataCenterEntries } from '@/lib/data-center-api';
+import { getDataCenterEntry, getDataCenterSpaces, listDataCenterEntries } from '@/lib/data-center-api';
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import type { DataCenterEntry, DataCenterSpace, DataCenterSpaceType } from '@/types/data-center';
 import { toast } from 'sonner';
@@ -147,10 +147,38 @@ function parseDataCenterTargetUri(uri: string | null | undefined): { spaceType: 
   return { spaceType: '', spaceId: null, parentEntryId: 'root' };
 }
 
-function buildPathLabel(rootLabel: string, breadcrumbs: Array<{ name: string }> = []): string {
+function normalizePathBreadcrumbs(rootLabel: string, breadcrumbs: Array<{ name: string }> = []): string[] {
+  const rootAliases = new Set([rootLabel, '问答产物', '我的产物', '网点共享产物']);
   const names = breadcrumbs.map((item) => item.name).filter(Boolean);
+  if (names.length > 0 && rootAliases.has(names[0])) {
+    return names.slice(1);
+  }
+  return names;
+}
+
+function buildPathLabel(rootLabel: string, breadcrumbs: Array<{ name: string }> = []): string {
+  const names = normalizePathBreadcrumbs(rootLabel, breadcrumbs);
   if (names.length === 0) return `${rootLabel} / 根目录`;
   return [rootLabel, ...names].join(' / ');
+}
+
+async function resolvePathLabelFromTargetUri(uri: string | null | undefined, rootLabel: string): Promise<string> {
+  const parsed = parseDataCenterTargetUri(uri);
+  if (!parsed.parentEntryId || parsed.parentEntryId === 'root') return `${rootLabel} / 根目录`;
+  try {
+    const entry = await getDataCenterEntry(parsed.parentEntryId);
+    if (entry.breadcrumbs?.length) {
+      const breadcrumbs = [...entry.breadcrumbs];
+      const last = breadcrumbs[breadcrumbs.length - 1];
+      if (last?.entryId !== entry.entryId && entry.name) {
+        breadcrumbs.push({ entryId: entry.entryId, name: entry.name });
+      }
+      return buildPathLabel(rootLabel, breadcrumbs);
+    }
+    return `${rootLabel} / ${entry.name || parsed.parentEntryId}`;
+  } catch {
+    return `${rootLabel} / ${parsed.parentEntryId}`;
+  }
 }
 
 function isSiteSharedArtifactSpace(space: DataCenterSpace): boolean {
@@ -396,6 +424,27 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   const workflowRef = useRef<HTMLDivElement>(null);
 
   const workflowDisabled = !!selectedWorkflow;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (myArtifactFolderPath) {
+      resolvePathLabelFromTargetUri(myArtifactFolderPath, '我的产物')
+        .then((label) => {
+          if (!cancelled) setMyArtifactPathLabel(label);
+        })
+        .catch(() => {});
+    }
+    if (sharedArtifactFolderPath) {
+      resolvePathLabelFromTargetUri(sharedArtifactFolderPath, '网点共享产物')
+        .then((label) => {
+          if (!cancelled) setSharedArtifactPathLabel(label);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [myArtifactFolderPath, sharedArtifactFolderPath]);
 
   useEffect(() => {
     if (!isSite || !saveToDataCenter || !saveToSharedArtifact) return;

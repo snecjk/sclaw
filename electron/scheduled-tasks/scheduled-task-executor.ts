@@ -14,7 +14,7 @@ import { logger } from '../utils/logger';
 import { attachRunWatcher, type RunWatcherTerminalSignal } from './scheduled-task-run-watcher';
 import { resolveScheduledTaskDingTalkRecipients } from '../../shared/dingtalk-send/scheduled-task-dingtalk-lift';
 import { prependSystemPromptAppend } from '../../shared/system-prompt-append';
-import { collectArtifactsFromAssistantText } from '../services/data-center-artifact-sync/artifact-collector';
+import { collectArtifactsFromAssistantMessages } from '../services/data-center-artifact-sync/artifact-collector';
 import {
   resolveDataCenterTargetsFromUris,
   syncArtifactsToDataCenter,
@@ -282,7 +282,7 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
       runId: run.runId,
       stopReason: signal.stopReason,
     });
-    void this.saveArtifactsToDataCenter(task, run, sessionKey, signal.lastAssistantText).catch((error) => {
+    void this.saveArtifactsToDataCenter(task, run, sessionKey, signal.lastAssistantText, signal.assistantMessages, startedAtMs).catch((error) => {
       logger.warn('[scheduled-task] data center artifact save failed', {
         taskId: task.id,
         runId: run.runId,
@@ -301,6 +301,8 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
     run: ScheduleTaskRun,
     sessionKey: string,
     assistantText: string,
+    assistantMessages: unknown[],
+    runStartedAtMs: number,
   ): Promise<void> {
     const targets = resolveDataCenterTargetsFromUris([
       { uri: task.myArtifactFolderPath, label: '我的产物' },
@@ -308,7 +310,26 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
     ]);
     if (targets.length === 0) return;
 
-    const artifacts = await collectArtifactsFromAssistantText(assistantText);
+    const historyMessages = await this.loadHistoryMessagesForArtifactSave(task, sessionKey);
+    const collectedArtifacts = await collectArtifactsFromAssistantMessages(
+      [...assistantMessages, ...historyMessages],
+      assistantText,
+    );
+    const minArtifactMtimeMs = runStartedAtMs - 5_000;
+    const artifacts = collectedArtifacts.filter((artifact) => {
+      if (typeof artifact.mtimeMs !== 'number') return true;
+      return artifact.mtimeMs >= minArtifactMtimeMs;
+    });
+    logger.info('[scheduled-task] data center artifact candidates', {
+      taskId: task.id,
+      runId: run.runId,
+      targetCount: targets.length,
+      assistantMessageCount: assistantMessages.length,
+      historyMessageCount: historyMessages.length,
+      collectedArtifactCount: collectedArtifacts.length,
+      artifactCount: artifacts.length,
+      artifacts: artifacts.map((artifact) => ({ name: artifact.name, filePath: artifact.filePath, mtimeMs: artifact.mtimeMs ?? null })),
+    });
     const summary = await syncArtifactsToDataCenter({
       sourceType: 'scheduled_task_artifact',
       sourceId: task.id,
@@ -329,6 +350,38 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
       failedCount: summary.failedCount,
       records: summary.records,
     });
+  }
+
+  private async loadHistoryMessagesForArtifactSave(
+    task: ScheduleTask,
+    sessionKey: string,
+  ): Promise<unknown[]> {
+    const gatewayManager = this.deps.getGatewayManager();
+    if (!gatewayManager) return [];
+
+    // Give the adapter/history writer a short window to flush file-card/tool-result metadata.
+    await new Promise<void>((resolve) => setTimeout(resolve, 600));
+    try {
+      const adapter = getAdapter(task.engineType);
+      const result = await adapter.getHistory({ gatewayManager }, { sessionKey, limit: 1000 });
+      if (!result.success) {
+        logger.warn('[scheduled-task] artifact history load failed', {
+          taskId: task.id,
+          sessionKey,
+          error: result.error,
+        });
+        return [];
+      }
+      const messages = (result.result as { messages?: unknown[] })?.messages;
+      return Array.isArray(messages) ? messages : [];
+    } catch (error) {
+      logger.warn('[scheduled-task] artifact history load threw', {
+        taskId: task.id,
+        sessionKey,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return [];
+    }
   }
 
   /**

@@ -19,6 +19,7 @@ export interface ArtifactSaveItem {
   filePath: string;
   contentType?: string | null;
   size?: number | null;
+  mtimeMs?: number | null;
 }
 
 export interface ArtifactSaveRecord {

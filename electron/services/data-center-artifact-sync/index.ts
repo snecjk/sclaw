@@ -84,7 +84,9 @@ async function uploadArtifact(params: {
   const blob = new Blob([buffer], { type: params.artifact.contentType || inferMimeType(fileName) });
   const form = new FormData();
   form.append('file', blob, fileName);
-  form.append('parentEntryId', 'root');
+  form.append('parentEntryId', params.target.spaceType === 'qa_artifact'
+    ? params.target.parentEntryId || 'root'
+    : 'root');
   form.append('idempotencyKey', params.idempotencyKey);
   form.append('sourceType', params.sourceType);
   form.append('sessionId', params.sessionId?.trim() || params.runId?.trim() || params.sourceId);
@@ -92,9 +94,11 @@ async function uploadArtifact(params: {
   form.append('sourceId', params.sourceId);
   appendOptional(form, 'sourceTitle', params.sourceTitle ?? undefined);
   appendOptional(form, 'runId', params.runId ?? undefined);
-  appendOptional(form, 'targetSpaceType', params.target.spaceType);
-  appendOptional(form, 'targetSpaceId', params.target.spaceId ?? undefined);
-  form.append('targetParentEntryId', params.target.parentEntryId || 'root');
+  if (params.target.spaceType !== 'qa_artifact') {
+    appendOptional(form, 'targetSpaceType', params.target.spaceType);
+    appendOptional(form, 'targetSpaceId', params.target.spaceId ?? undefined);
+    form.append('targetParentEntryId', params.target.parentEntryId || 'root');
+  }
 
   const baseUrl = await resolveStoBaseUrl();
   const response = await fetch(`${baseUrl}/agent/v1/data-center/artifacts/upload`, {

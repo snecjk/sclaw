@@ -38,6 +38,8 @@ export interface RunWatcherTerminalSignal {
   isError: boolean;
   /** 沿路累积的 assistant 末条正文（已 trim）；日志/诊断用。 */
   lastAssistantText: string;
+  /** Assistant 原始消息片段；用于收集结构化附件/产物路径。 */
+  assistantMessages: unknown[];
 }
 
 export interface RunWatcherCallbacks {
@@ -70,6 +72,7 @@ export function attachRunWatcher(input: AttachRunWatcherInput): () => void {
   const finalizeDeferMs = input.finalizeDeferMs ?? 150;
 
   let lastAnswer = '';
+  const assistantMessages: unknown[] = [];
   let finalized = false;
   let deferTimer: NodeJS.Timeout | null = null;
   let timeoutTimer: NodeJS.Timeout | null = null;
@@ -91,7 +94,7 @@ export function attachRunWatcher(input: AttachRunWatcherInput): () => void {
   const fireTerminal = (signal: { stopReason: string; isError: boolean }): void => {
     if (finalized) return;
     cleanup();
-    onTerminal({ ...signal, lastAssistantText: lastAnswer.trim() });
+    onTerminal({ ...signal, lastAssistantText: lastAnswer.trim(), assistantMessages: [...assistantMessages] });
   };
 
   // 抄 delivery.ts scheduleFinalize：clear+reschedule，等尾部 chat / 同 tick 紧随事件。
@@ -110,6 +113,10 @@ export function attachRunWatcher(input: AttachRunWatcherInput): () => void {
     const classified = classifyChatMessage(data?.message, sessionKey);
     if (!classified) return;
     if (classified.kind === 'fragment') {
+      if (data?.message && typeof data.message === 'object') {
+        const rawMessage = (data.message as { message?: unknown }).message;
+        if (rawMessage) assistantMessages.push(rawMessage);
+      }
       // 沿路累积末条 assistant 正文（delta 增量 + final 整条覆盖）。lastAnswer 取
       // 最新非空——final 整条覆盖、delta 也是「至今累积文本」由 renderer 端拼好。
       if (classified.answer) lastAnswer = classified.answer;
