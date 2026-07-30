@@ -110,40 +110,88 @@ function isSiteSharedArtifactSpace(space: DataCenterSpace): boolean {
 
 interface ArtifactSaveRecord {
   sourceType: string;
+  sourceId: string;
   sourceTitle: string | null;
   runId: string | null;
+  sessionId: string | null;
   artifactName: string;
+  targetUri: string;
   dataCenterEntryId: string | null;
 }
 
-async function enrichScheduledTaskEntryTitles(items: DataCenterEntry[]): Promise<DataCenterEntry[]> {
-  const scheduledItems = items.filter((item) => item.sourceType === 'scheduled_task_artifact' && !item.sourceTitle?.trim());
-  if (scheduledItems.length === 0) return items;
+function buildDataCenterTargetUri(entry: DataCenterEntry): string {
+  const spaceType = encodeURIComponent(entry.spaceType);
+  const parentEntryId = encodeURIComponent(entry.parentEntryId || 'root');
+  return entry.spaceId
+    ? `data-center://${spaceType}/${encodeURIComponent(entry.spaceId)}/${parentEntryId}`
+    : `data-center://${spaceType}/${parentEntryId}`;
+}
+
+function buildRecordTargetNameKey(targetUri: string | null | undefined, artifactName: string | null | undefined): string | null {
+  const uri = targetUri?.trim();
+  const name = artifactName?.trim();
+  if (!uri || !name) return null;
+  return `${uri}\0${name}`;
+}
+
+function findScheduledTaskRecord(
+  item: DataCenterEntry,
+  byEntryId: Map<string, ArtifactSaveRecord>,
+  byRunAndName: Map<string, ArtifactSaveRecord>,
+  byTargetAndName: Map<string, ArtifactSaveRecord>,
+): ArtifactSaveRecord | undefined {
+  return byEntryId.get(item.entryId)
+    ?? (item.sourceEntryId ? byEntryId.get(item.sourceEntryId) : undefined)
+    ?? (item.runId ? byRunAndName.get(`${item.runId}:${item.name}`) : undefined)
+    ?? byTargetAndName.get(buildRecordTargetNameKey(buildDataCenterTargetUri(item), item.name) ?? '');
+}
+
+async function enrichScheduledTaskEntries(items: DataCenterEntry[]): Promise<DataCenterEntry[]> {
+  const candidates = items.filter((item) => (
+    item.sourceType === 'scheduled_task_artifact'
+    || (item.spaceType === 'site_shared_artifact' && item.entryType === 'file')
+  ) && !item.sourceTitle?.trim());
+  if (candidates.length === 0) return items;
 
   try {
     const records = await hostApiFetch<ArtifactSaveRecord[]>('/api/artifact-save-records?sourceType=scheduled_task_artifact&limit=500');
     const byEntryId = new Map<string, ArtifactSaveRecord>();
     const byRunAndName = new Map<string, ArtifactSaveRecord>();
+    const byTargetAndName = new Map<string, ArtifactSaveRecord>();
     const tasks = await hostApiFetch<ScheduleTask[]>('/api/scheduled-tasks').catch(() => [] as ScheduleTask[]);
     const titleByTaskId = new Map(tasks.map((task) => [task.id, task.name]));
 
     for (const record of records) {
-      if (!record.sourceTitle?.trim()) continue;
       if (record.dataCenterEntryId) {
         byEntryId.set(record.dataCenterEntryId, record);
       }
       if (record.runId && record.artifactName) {
         byRunAndName.set(`${record.runId}:${record.artifactName}`, record);
       }
+      const targetNameKey = buildRecordTargetNameKey(record.targetUri, record.artifactName);
+      if (targetNameKey) {
+        byTargetAndName.set(targetNameKey, record);
+      }
     }
 
     return items.map((item) => {
-      if (item.sourceType !== 'scheduled_task_artifact' || item.sourceTitle?.trim()) return item;
-      const record = byEntryId.get(item.entryId)
-        ?? (item.runId ? byRunAndName.get(`${item.runId}:${item.name}`) : undefined);
-      const taskId = item.sourceId?.trim() || (item.sessionId ? getScheduledTaskIdFromSessionKey(item.sessionId) : null);
+      if (item.sourceTitle?.trim()) return item;
+      const record = findScheduledTaskRecord(item, byEntryId, byRunAndName, byTargetAndName);
+      if (item.sourceType !== 'scheduled_task_artifact' && !record) return item;
+      const taskId = item.sourceId?.trim()
+        || record?.sourceId?.trim()
+        || (item.sessionId ? getScheduledTaskIdFromSessionKey(item.sessionId) : null)
+        || (record?.sessionId ? getScheduledTaskIdFromSessionKey(record.sessionId) : null);
       const sourceTitle = record?.sourceTitle?.trim() || (taskId ? titleByTaskId.get(taskId)?.trim() : undefined);
-      return sourceTitle ? { ...item, sourceTitle } : item;
+      if (!sourceTitle && item.sourceType === 'scheduled_task_artifact') return item;
+      return {
+        ...item,
+        sourceType: 'scheduled_task_artifact',
+        sourceId: item.sourceId ?? record?.sourceId ?? taskId,
+        sourceTitle: sourceTitle ?? item.sourceTitle,
+        sessionId: item.sessionId ?? record?.sessionId ?? null,
+        runId: item.runId ?? record?.runId ?? null,
+      };
     });
   } catch {
     return items;
@@ -254,7 +302,7 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
         sortOrder: state.sortOrder,
       });
       const spaceItems = result.items.filter((item) => belongsToRequestedSpace(item, state));
-      const items = await enrichScheduledTaskEntryTitles(spaceItems);
+      const items = await enrichScheduledTaskEntries(spaceItems);
       if (!isSameLoadTarget(get(), state, pageNo)) return;
       set({
         items,
@@ -293,7 +341,7 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
         sortOrder: state.sortOrder,
       });
       const spaceItems = result.items.filter((item) => belongsToRequestedSpace(item, state));
-      const items = await enrichScheduledTaskEntryTitles(spaceItems);
+      const items = await enrichScheduledTaskEntries(spaceItems);
       if (!isSameListTarget(get(), state)) {
         set({ loadingMore: false });
         return;

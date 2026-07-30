@@ -408,7 +408,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
     const parsed = parseDataCenterTargetUri(init.sharedArtifactFolderPath);
     return parsed.parentEntryId === 'root' ? '网点共享产物 / 根目录' : `网点共享产物 / ${parsed.parentEntryId}`;
   });
-  const [sharedSpaces, setSharedSpaces] = useState<DataCenterSpace[]>([]);
   const [selectedSharedSpaceId, setSelectedSharedSpaceId] = useState<string>('');
   const [folderPicker, setFolderPicker] = useState<null | {
     kind: 'my' | 'shared';
@@ -453,7 +452,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
       .then((result) => {
         if (cancelled) return;
         const spaces = (result.spaces ?? []).filter(isSiteSharedArtifactSpace);
-        setSharedSpaces(spaces);
         const existingSpaceId = sharedArtifactFolderPath?.replace(/^data-center:\/\/site_shared_artifact\//, '').split('/')[0] || '';
         const nextSpaceId = existingSpaceId || spaces[0]?.spaceId || '';
         setSelectedSharedSpaceId(nextSpaceId);
@@ -463,7 +461,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
         }
       })
       .catch(() => {
-        setSharedSpaces([]);
+        setSelectedSharedSpaceId('');
       });
     return () => {
       cancelled = true;
@@ -876,48 +874,26 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                     <span className="min-w-0 flex-1">
                       <span className="block font-medium">网点共享产物</span>
                       {saveToSharedArtifact ? (
-                        <span className="mt-1 flex flex-col gap-1">
-                          <select
-                            value={selectedSharedSpaceId}
-                            onChange={(event) => {
-                              const spaceId = event.target.value;
-                              setSelectedSharedSpaceId(spaceId);
-                              setSharedArtifactFolderPath(spaceId ? buildDataCenterTargetUri('site_shared_artifact', spaceId) : null);
-                              setSharedArtifactPathLabel('网点共享产物 / 根目录');
+                        <span className="mt-1 flex flex-wrap items-center gap-2">
+                          <span className="min-w-0 truncate text-xs text-muted-foreground">保存路径：{sharedArtifactPathLabel}</span>
+                          <button
+                            type="button"
+                            disabled={!selectedSharedSpaceId}
+                            onClick={() => {
+                              const parsed = parseDataCenterTargetUri(sharedArtifactFolderPath);
+                              setFolderPicker({
+                                kind: 'shared',
+                                title: '选择网点共享产物目录',
+                                rootLabel: '网点共享产物',
+                                spaceType: 'site_shared_artifact',
+                                spaceId: selectedSharedSpaceId,
+                                initialParentEntryId: parsed.parentEntryId,
+                              });
                             }}
-                            className={cn(
-                              'h-8 max-w-[280px] rounded-[8px] border border-border bg-background px-2 text-xs',
-                              formFieldFocusClass,
-                            )}
+                            className="h-7 rounded-lg border border-border bg-background px-2 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            {sharedSpaces.length === 0 ? (
-                              <option value="">暂无可用共享空间</option>
-                            ) : null}
-                            {sharedSpaces.map((space) => (
-                              <option key={space.spaceId} value={space.spaceId}>{space.displayName}</option>
-                            ))}
-                          </select>
-                          <span className="flex flex-wrap items-center gap-2">
-                            <span className="min-w-0 truncate text-xs text-muted-foreground">保存路径：{sharedArtifactPathLabel}</span>
-                            <button
-                              type="button"
-                              disabled={!selectedSharedSpaceId}
-                              onClick={() => {
-                                const parsed = parseDataCenterTargetUri(sharedArtifactFolderPath);
-                                setFolderPicker({
-                                  kind: 'shared',
-                                  title: '选择网点共享产物目录',
-                                  rootLabel: '网点共享产物',
-                                  spaceType: 'site_shared_artifact',
-                                  spaceId: selectedSharedSpaceId,
-                                  initialParentEntryId: parsed.parentEntryId,
-                                });
-                              }}
-                              className="h-7 rounded-lg border border-border bg-background px-2 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                              选择目录
-                            </button>
-                          </span>
+                            选择目录
+                          </button>
                         </span>
                       ) : null}
                     </span>
