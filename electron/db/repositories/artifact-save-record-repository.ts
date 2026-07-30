@@ -42,6 +42,9 @@ export class ArtifactSaveRecordRepository {
     const existing = await this.findExisting(input);
     if (existing) {
       return this.update(existing.id, {
+        artifactName: input.artifactName,
+        localPath: input.localPath,
+        targetLabel: input.targetLabel,
         status: input.status,
         dataCenterEntryId: input.dataCenterEntryId,
         dataCenterPathLabel: input.dataCenterPathLabel,
@@ -117,6 +120,9 @@ export class ArtifactSaveRecordRepository {
     await db
       .updateTable('artifact_save_records')
       .set({
+        artifact_name: input.artifactName ?? existing.artifactName,
+        local_path: input.localPath !== undefined ? input.localPath : existing.localPath,
+        target_label: input.targetLabel !== undefined ? input.targetLabel : existing.targetLabel,
         status: input.status ?? existing.status,
         data_center_entry_id:
           input.dataCenterEntryId !== undefined ? input.dataCenterEntryId : existing.dataCenterEntryId,
