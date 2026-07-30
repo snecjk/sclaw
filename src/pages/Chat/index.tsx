@@ -46,6 +46,7 @@ import { SplitPanelResizeHandle } from '@/components/layout/split-panel-resize-h
 import { useSettingsStore } from '@/stores/settings';
 import { useChatScrollFollow } from '@/hooks/use-chat-scroll-follow';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
+import { useNativeScrollbarActivity } from '@/hooks/use-native-scrollbar-activity';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
 import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
@@ -107,6 +108,7 @@ export function Chat() {
   const deferredSearchQuery = useDeferredValue(searchQuery.trim());
   const minLoading = useMinLoading(loading && messages.length > 0);
   const { contentRef, scrollRef, scrollToBottom, stopScroll } = useStickToBottomInstant(currentSessionKey);
+  useNativeScrollbarActivity(scrollRef);
   const currentSession = useMemo(
     () => sessions.find((session) => session.key === currentSessionKey),
     [sessions, currentSessionKey],
@@ -553,7 +555,7 @@ export function Chat() {
           'relative z-10 min-h-0 flex-1 py-4',
           isSplitChatLayout
             ? stoSplitChatScrollClass
-            : 'overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
+            : 'sto-thin-scrollbar overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
         )}
       >
         <div ref={contentRef} className={stoChatScrollContentClass}>
