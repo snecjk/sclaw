@@ -396,9 +396,9 @@ export function SidebarProjectsSection({
       />
 
       {open ? (
-        <div className="mt-0.5 flex flex-col gap-0 pb-1">
+        <div className="mt-0.5 flex flex-col gap-0.5 pb-1">
           {sortedWorkspaces.length === 0 ? (
-            <div className="flex h-8 min-w-0 items-center gap-2 px-[10px]">
+            <div className="flex h-7 min-w-0 items-center gap-2 px-[10px]">
               <Folder className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
               <p
                 className={cn(
@@ -434,7 +434,7 @@ export function SidebarProjectsSection({
                       onBlur={() => {
                         void commitProjectRename();
                       }}
-                      className="w-full rounded-[8px] border border-[var(--sto-brand-6)] bg-card px-[10px] py-[6px] pr-16 text-left text-[13px] leading-5 text-foreground outline-none"
+                      className="h-7 w-full rounded-[8px] border border-[var(--sto-brand-6)] bg-card px-[10px] py-[3px] pr-16 text-left text-[13px] leading-5 text-foreground outline-none"
                     />
                   ) : (
                     <>
@@ -450,7 +450,7 @@ export function SidebarProjectsSection({
                           startProjectRename(workspace);
                         }}
                         className={cn(
-                          'flex h-8 min-w-0 w-full flex-1 items-center gap-2 rounded-lg px-[10px] py-1.5 pr-16 text-left transition-colors',
+                          'flex h-7 min-w-0 w-full flex-1 items-center gap-2 rounded-lg px-[10px] py-1 pr-16 text-left transition-colors',
                           sidebarSubitemTextIdleClass,
                         )}
                       >
@@ -487,7 +487,7 @@ export function SidebarProjectsSection({
                 </div>
 
                 {isExpanded && projectSessions.length > 0 ? (
-                  <div className="mb-0.5 flex flex-col gap-0">
+                  <div className="mb-0.5 flex flex-col gap-0.5">
                     {projectSessions.map((session) => {
                       const label = getSessionLabel(session.key, session.displayName, session.label);
                       const isActive = isOnHome

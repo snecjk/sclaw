@@ -1435,17 +1435,17 @@ export const sidebarScrollContainerClass = cn(
   'flex min-h-0 flex-1 flex-col gap-1 overflow-x-hidden overflow-y-auto overscroll-y-contain',
 );
 
-/** 展开侧栏主导航 idle — 正文 Grey-10 + 图标 Grey-9 */
+/** 展开侧栏主导航 idle — 正文 Grey-10 + 图标 Grey-9；行高 28px（h-7） */
 export const sidebarNavExpandedIdleClass = cn(
-  'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5',
+  'h-7 min-h-7 rounded-[8px] px-[10px] font-normal leading-5',
   sidebarTextDefaultClass,
   '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
-/** 展开侧栏主导航 active — 底 #DCDCDC + Regular（选中仅靠底色，字重与 idle 一致） */
+/** 展开侧栏主导航 active — 底 #DCDCDC + Regular（选中仅靠底色，字重与 idle 一致）；行高 28px（h-7） */
 export const sidebarNavExpandedActiveClass = cn(
-  'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
+  'h-7 min-h-7 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
   'bg-[var(--sto-sidebar-nav-active-bg)]',
   sidebarTextDefaultClass,
   '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',

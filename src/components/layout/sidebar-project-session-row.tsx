@@ -95,7 +95,7 @@ export function SidebarProjectSessionRow({
             else if (e.key === 'Escape') onCancelRename();
           }}
           onBlur={onCommitRename}
-          className="h-8 w-full rounded-[8px] border border-[var(--sto-brand-6)] bg-card px-[10px] py-[5px] pr-16 text-left text-[13px] leading-5 text-foreground outline-none"
+          className="h-7 w-full rounded-[8px] border border-[var(--sto-brand-6)] bg-card px-[10px] py-[3px] pr-16 text-left text-[13px] leading-5 text-foreground outline-none"
         />
       </div>
     );
@@ -110,7 +110,7 @@ export function SidebarProjectSessionRow({
       />
       <div
         className={cn(
-          'group relative flex h-8 w-full items-center rounded-lg transition-colors',
+          'group relative flex h-7 w-full items-center rounded-lg transition-colors',
           isActive
             ? cn(sidebarRecentSessionActiveClass, 'hover:bg-[var(--sto-sidebar-row-hover-bg)]')
             : sidebarSubitemTextIdleClass,
@@ -121,7 +121,7 @@ export function SidebarProjectSessionRow({
           onClick={onOpen}
           onDoubleClick={() => handleSidebarSessionDoubleClick(session.key, onStartRename)}
           title={label}
-          className="flex h-8 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-1.5 pr-12 text-left"
+          className="flex h-7 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-1 pr-12 text-left"
         >
           <span className="flex min-w-0 flex-1 items-center gap-0">
             <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass, isActive && 'font-medium')}>

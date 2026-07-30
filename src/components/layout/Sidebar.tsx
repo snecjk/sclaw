@@ -192,10 +192,15 @@ const SIDEBAR_SHOW_TASK_GROUP_CHEVRON = true;
 
 /** 任务组二级行 — 不用 justify-between，短标题时 Chevron 紧跟标题（对齐项目一级行） */
 const SIDEBAR_TASK_GROUP_ROW_CLASS =
-  'flex h-8 w-full items-center gap-1.5 rounded-lg px-[10px] py-1.5 text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring';
-/** 三级子项容器 — 竖线与项目二级对齐；w-[calc(100%-17px)] 避免 ml+w-full 右侧溢出被裁切 */
+  'flex h-7 w-full items-center gap-1.5 rounded-lg px-[10px] py-1 text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring';
+/**
+ * 任务二级子项容器 — 与项目二级水平对齐：
+ * 层级竖线 25px（滚动区 8 + ml 17）；选中背景起点 32px（17 + 1px 边框 + pl-1.5）；
+ * 文字起点 42px（32 + 行内 px-[10px]）；同级 gap-0.5 → 28+2=30px 节拍；
+ * w-[calc(100%-17px)] 避免 ml+w-full 右侧溢出。
+ */
 const SIDEBAR_TASK_SUBITEMS_CONTAINER_CLASS =
-  'ml-[17px] flex w-[calc(100%-17px)] flex-col gap-0 border-l border-[#DCDCDC] pl-4 dark:border-border';
+  'ml-[17px] flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-1.5 dark:border-border';
 const SCLAW_BROWSER_SIDEBAR_PRESERVE_SELECTOR = '[data-sclaw-browser-sidebar-preserve="true"]';
 
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
@@ -345,7 +350,7 @@ function SidebarTaskDateLinks({
                 openSubitemSession(entryId, sk, label);
               }}
               className={cn(
-                'relative z-[1] inline-flex h-8 w-full min-w-0 max-w-full items-center overflow-hidden rounded-lg px-[10px] py-1.5 text-left transition-colors',
+                'relative z-[1] inline-flex h-7 w-full min-w-0 max-w-full items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
                 SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
                 active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
               )}
@@ -616,7 +621,7 @@ function SidebarScheduledTaskGroup({
                   }}
                   title={label}
                   className={cn(
-                    'h-8 w-full min-w-0 overflow-hidden rounded-lg px-[10px] py-1.5 text-left transition-colors',
+                    'h-7 w-full min-w-0 overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
                     SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
                     active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
                   )}
@@ -1791,7 +1796,7 @@ export function Sidebar() {
       >
         {/* 固定区：新对话、定时任务、技能广场、工作区等 */}
         <div className="flex shrink-0 flex-col gap-0">
-        <div className={cn('flex flex-col gap-0', sidebarCollapsed && 'mt-2')}>
+        <div className={cn('flex flex-col gap-0.5', sidebarCollapsed && 'mt-2')}>
 {primaryNav.map((item) => {
   // 当有选中非默认会话，或处于项目新对话草稿时，顶部「新对话」不高亮
   const shouldDimHome = Boolean(
@@ -2018,7 +2023,7 @@ export function Sidebar() {
           />
         ) : null}
         {!sidebarCollapsed && taskListSectionOpen ? (
-          <div className={cn('relative z-0 mt-1 flex flex-col gap-0', sidebarScrollListClass)}>
+          <div className={cn('relative z-0 mt-1 flex flex-col gap-0.5', sidebarScrollListClass)}>
             {taskListRenderPlan.items.map((item) =>
               item.kind === 'sto' ? (
                 <SidebarTaskGroup
@@ -2076,7 +2081,7 @@ export function Sidebar() {
         <div
           className={cn(
             sidebarScrollListClass,
-            'space-y-1 pb-2',
+            'space-y-0.5 pb-2',
             sidebarCollapsed ? 'pt-1' : recentOpen ? 'pt-1' : 'pt-0',
           )}
         >
