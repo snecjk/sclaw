@@ -124,6 +124,46 @@ describe('data center artifact collector', () => {
     }
   });
 
+  it('dedupes Windows drive paths with forward and back slashes', async () => {
+    const originalCwd = process.cwd();
+    const dir = await mkdtemp(join(tmpdir(), 'artifact-collector-windows-dedupe-'));
+    const windowsPath = 'C:/Users/admin/.stoclaw/workspace/.claw-output/wulu_poem_mountain_life.txt';
+    const posixTestPath = join(dir, 'C:', 'Users', 'admin', '.stoclaw', 'workspace', '.claw-output', 'wulu_poem_mountain_life.txt');
+    await mkdir(join(dir, 'C:', 'Users', 'admin', '.stoclaw', 'workspace', '.claw-output'), { recursive: true });
+    await writeFile(posixTestPath, 'fake-poem');
+
+    try {
+      process.chdir(dir);
+      const artifacts = await collectArtifactsFromAssistantMessages([
+        {
+          role: 'assistant',
+          content: '已生成文件',
+          _attachedFiles: [
+            {
+              fileName: 'wulu_poem_mountain_life.txt',
+              filePath: windowsPath,
+            },
+            {
+              fileName: 'wulu_poem_mountain_life.txt',
+              filePath: 'C:\\Users\\admin\\.stoclaw\\workspace\\.claw-output\\wulu_poem_mountain_life.txt',
+            },
+          ],
+        },
+      ]);
+
+      expect(artifacts).toHaveLength(1);
+      expect(artifacts[0]).toMatchObject({
+        name: 'wulu_poem_mountain_life.txt',
+        filePath: windowsPath,
+        size: 9,
+      });
+      expect(artifacts[0]?.artifactKey).toContain(':wulu_poem_mountain_life.txt');
+    } finally {
+      process.chdir(originalCwd);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('collects relative preview links from scheduled-task assistant text', async () => {
     mockedRoot = await mkdtemp(join(tmpdir(), 'artifact-collector-workspace-'));
     const home = join(mockedRoot, 'home');

@@ -26,7 +26,10 @@ export function parseDataCenterTargetUri(uri: string, label?: string | null): Da
 
   if (parts.length === 2) {
     return {
-      uri: trimmed,
+      uri: buildDataCenterTargetUri({
+        spaceType,
+        parentEntryId: parts[1] || 'root',
+      }),
       spaceType,
       parentEntryId: parts[1] || 'root',
       label: label ?? null,
@@ -34,7 +37,11 @@ export function parseDataCenterTargetUri(uri: string, label?: string | null): Da
   }
 
   return {
-    uri: trimmed,
+    uri: buildDataCenterTargetUri({
+      spaceType,
+      spaceId: parts[1] || null,
+      parentEntryId: parts.slice(2).join('/') || 'root',
+    }),
     spaceType,
     spaceId: parts[1] || null,
     parentEntryId: parts.slice(2).join('/') || 'root',

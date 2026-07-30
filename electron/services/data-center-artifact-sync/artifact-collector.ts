@@ -3,7 +3,7 @@ import { basename, normalize } from 'node:path';
 import { stat } from 'node:fs/promises';
 import type { ArtifactSaveItem } from './types';
 import { resolveWorkspaceFilePath } from '../../utils/artifact-path';
-import { PREVIEWABLE_FILE_EXT_PATTERN, stripFileUrlScheme } from '../../../shared/artifact-path';
+import { isWindowsDrivePath, PREVIEWABLE_FILE_EXT_PATTERN, stripFileUrlScheme } from '../../../shared/artifact-path';
 
 const MEDIA_ATTACHED_REGEX = /\[media attached:\s*([^\n\r(]+?)\s*\(([^)]+)\)\s*\|\s*([^\]]*)\]/g;
 const MARKDOWN_LINK_REGEX = /\[([^\]\n]+)\]\(([^)\n\r]+)\)/g;
@@ -17,7 +17,7 @@ function cleanPath(value: string): string {
   const filePath = stripFileUrlScheme(trimmed);
   if (!filePath || /^https?:\/\//i.test(filePath) || filePath.startsWith('artifact://')) return filePath;
   if (filePath.startsWith('/')) return normalize(filePath);
-  if (/^[A-Za-z]:[\\/]/.test(filePath)) return filePath;
+  if (isWindowsDrivePath(filePath)) return filePath.replace(/\\/g, '/');
   return resolveWorkspaceFilePath(filePath);
 }
 

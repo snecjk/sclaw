@@ -26,6 +26,16 @@ describe('data center artifact target uri', () => {
     });
   });
 
+  it('canonicalizes equivalent target URIs when parsing', () => {
+    const target = parseDataCenterTargetUri('  data-center://qa_artifact//%72oot  ');
+
+    expect(target).toMatchObject({
+      uri: 'data-center://qa_artifact/root',
+      spaceType: 'qa_artifact',
+      parentEntryId: 'root',
+    });
+  });
+
   it('builds future scoped target uri without changing parser', () => {
     const uri = buildDataCenterTargetUri({
       spaceType: 'project_artifact',
