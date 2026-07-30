@@ -367,7 +367,7 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
         name,
       });
       set({ mutating: false });
-      await get().load();
+      await get().load({ resetPage: true });
     } catch (error) {
       set({ mutating: false });
       throw error;
@@ -379,7 +379,7 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
     try {
       await renameDataCenterEntry(entryId, name);
       set({ mutating: false });
-      await get().load();
+      await get().load({ resetPage: true });
     } catch (error) {
       set({ mutating: false });
       throw error;
@@ -391,7 +391,7 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
     try {
       await deleteDataCenterEntry(entryId);
       set({ mutating: false });
-      await get().load();
+      await get().load({ resetPage: true });
       await get().refreshQuota();
     } catch (error) {
       set({ mutating: false });
