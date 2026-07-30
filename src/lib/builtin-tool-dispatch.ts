@@ -139,7 +139,7 @@ export async function dispatchBuiltinToolResult(
   }
 
   if (envelope?.type === 'dingtalk_share_picker_opened' && envelope.success) {
-    toast.success(envelope.message ?? '已唤起钉钉选人发送页面');
+    toast.success(envelope.message ?? '已请求打开钉钉；如未登录，请先完成登录后继续选择发送对象');
     return true;
   }
 

@@ -97,7 +97,7 @@ export function registerShareToDingTalkTool(api: OpenClawPluginApi): void {
           type: 'dingtalk_share_picker_opened',
           success: true,
           domain: 'dingtalk',
-          message: '已唤起钉钉选人发送页面',
+          message: '已请求打开钉钉；如未登录，请先完成登录后继续选择发送对象',
           data,
         };
         return {
