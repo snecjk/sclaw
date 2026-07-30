@@ -18,6 +18,7 @@ import { parseDataCenterTargetUri, targetLabel } from './target-uri';
 const MAX_DATA_CENTER_FILE_BYTES = 200 * 1024 * 1024;
 const DATA_CENTER_PAGE_SIZE = 200;
 const MAX_UNIQUE_NAME_ATTEMPTS = 50;
+const inFlightArtifactSaves = new Map<string, Promise<ArtifactSaveRecord>>();
 
 const EXT_MIME_MAP: Record<string, string> = {
   '.png': 'image/png',
@@ -91,6 +92,20 @@ export function buildArtifactSyncIdempotencyKey(parts: string[]): string {
   const stable = parts.join('\0');
   const digest = createHash('sha256').update(stable).digest('base64url').slice(0, 32);
   return `artifact-${digest}`;
+}
+
+function buildLocalSaveKey(input: {
+  sourceType: ArtifactSaveSourceType;
+  runId?: string | null;
+  artifactKey: string;
+  targetUri: string;
+}): string {
+  return [
+    input.sourceType,
+    input.runId?.trim() || '',
+    input.artifactKey,
+    input.targetUri,
+  ].join('\0');
 }
 
 function buildDataCenterEntriesUrl(baseUrl: string, target: DataCenterArtifactTarget, pageNo: number): string {
@@ -253,7 +268,18 @@ export function resolveDataCenterTargetsFromUris(uris: Array<{ uri?: string | nu
     seen.add(target.uri);
     targets.push(target);
   }
-  return targets;
+  const hasSharedTarget = targets.some((target) => target.spaceType !== 'qa_artifact');
+  if (!hasSharedTarget) return targets;
+
+  return targets.filter((target) => {
+    const isQaRootTarget = target.spaceType === 'qa_artifact' && (target.parentEntryId || 'root') === 'root';
+    if (!isQaRootTarget) return true;
+    logger.info('[data-center-artifact-sync] skip qa root target mirrored by shared target', {
+      targetUri: target.uri,
+      targetLabel: target.label,
+    });
+    return false;
+  });
 }
 
 export async function syncArtifactsToDataCenter(input: SyncArtifactsToDataCenterInput): Promise<ArtifactSaveSummary> {
@@ -270,100 +296,138 @@ export async function syncArtifactsToDataCenter(input: SyncArtifactsToDataCenter
   for (const artifact of input.artifacts) {
     for (const target of input.targets) {
       const label = targetLabel(target);
-      let usedNames = targetNameSets.get(target.uri);
-      if (!usedNames) {
-        try {
-          usedNames = await fetchExistingTargetNames(target);
-        } catch (error) {
-          usedNames = new Set<string>();
-          logger.warn('[data-center-artifact-sync] existing names load failed', {
-            sourceType: input.sourceType,
-            sourceId: input.sourceId,
-            runId: input.runId,
-            targetUri: target.uri,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-        targetNameSets.set(target.uri, usedNames);
-      }
-      const requestedName = artifact.name || basename(artifact.filePath) || 'file';
-      let uploadName = reserveUniqueFileName(requestedName, usedNames);
       const idempotencyKey = buildArtifactSyncIdempotencyKey([
         input.idempotencyScope,
         artifact.artifactKey,
         target.uri,
       ]);
-      let record = await repo.createOrUpdate({
+      const localSaveKey = buildLocalSaveKey({
         sourceType: input.sourceType,
-        sourceId: input.sourceId,
-        sourceTitle: input.sourceTitle ?? null,
-        runId: input.runId ?? null,
-        sessionId: input.sessionId ?? null,
+        runId: input.runId,
         artifactKey: artifact.artifactKey,
-        artifactName: uploadName,
-        localPath: artifact.filePath,
         targetUri: target.uri,
-        targetLabel: label,
-        status: 'uploading',
       });
-      try {
-        let result: Awaited<ReturnType<typeof uploadArtifact>> | null = null;
-        for (let attempt = 1; attempt <= MAX_UNIQUE_NAME_ATTEMPTS; attempt += 1) {
-          try {
-            result = await uploadArtifact({
-              sourceType: input.sourceType,
-              sourceId: input.sourceId,
-              sourceTitle: input.sourceTitle,
-              sessionId: input.sessionId,
-              runId: input.runId,
-              artifact: { ...artifact, name: uploadName },
-              target,
-              idempotencyKey,
-            });
-            break;
-          } catch (error) {
-            if (!isDuplicateNameError(error) || attempt >= MAX_UNIQUE_NAME_ATTEMPTS) throw error;
-            uploadName = reserveUniqueFileName(requestedName, usedNames);
-            record = await repo.createOrUpdate({
-              sourceType: input.sourceType,
-              sourceId: input.sourceId,
-              sourceTitle: input.sourceTitle ?? null,
-              runId: input.runId ?? null,
-              sessionId: input.sessionId ?? null,
-              artifactKey: artifact.artifactKey,
-              artifactName: uploadName,
-              localPath: artifact.filePath,
-              targetUri: target.uri,
-              targetLabel: label,
-              status: 'uploading',
-            });
+
+      let savePromise = inFlightArtifactSaves.get(localSaveKey);
+      if (!savePromise) {
+        savePromise = (async () => {
+          let usedNames = targetNameSets.get(target.uri);
+          if (!usedNames) {
+            try {
+              usedNames = await fetchExistingTargetNames(target);
+            } catch (error) {
+              usedNames = new Set<string>();
+              logger.warn('[data-center-artifact-sync] existing names load failed', {
+                sourceType: input.sourceType,
+                sourceId: input.sourceId,
+                runId: input.runId,
+                targetUri: target.uri,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+            targetNameSets.set(target.uri, usedNames);
           }
-        }
-        if (!result) throw new Error('产物上传失败');
-        record = await repo.update(record.id, {
-          status: 'succeeded',
-          dataCenterEntryId: result.entryId ?? null,
-          dataCenterPathLabel: result.pathLabel ?? label,
-          errorCode: null,
-          errorMessage: null,
-        });
-      } catch (error) {
-        const err = error as { errCode?: string; message?: string };
-        record = await repo.update(record.id, {
-          status: 'failed',
-          errorCode: err.errCode ?? null,
-          errorMessage: err.message ?? String(error),
-        });
-        logger.warn('[data-center-artifact-sync] upload failed', {
-          sourceType: input.sourceType,
-          sourceId: input.sourceId,
-          runId: input.runId,
-          artifactKey: artifact.artifactKey,
-          targetUri: target.uri,
-          error: err.message ?? String(error),
-        });
+
+          const existing = await repo.findExisting({
+            sourceType: input.sourceType,
+            runId: input.runId ?? null,
+            artifactKey: artifact.artifactKey,
+            targetUri: target.uri,
+          });
+          if (existing?.status === 'succeeded') {
+            logger.info('[data-center-artifact-sync] skip already saved artifact', {
+              sourceType: input.sourceType,
+              sourceId: input.sourceId,
+              runId: input.runId,
+              artifactKey: artifact.artifactKey,
+              targetUri: target.uri,
+              recordId: existing.id,
+            });
+            return existing;
+          }
+
+          const requestedName = artifact.name || basename(artifact.filePath) || 'file';
+          let uploadName = reserveUniqueFileName(requestedName, usedNames);
+          let record = await repo.createOrUpdate({
+            sourceType: input.sourceType,
+            sourceId: input.sourceId,
+            sourceTitle: input.sourceTitle ?? null,
+            runId: input.runId ?? null,
+            sessionId: input.sessionId ?? null,
+            artifactKey: artifact.artifactKey,
+            artifactName: uploadName,
+            localPath: artifact.filePath,
+            targetUri: target.uri,
+            targetLabel: label,
+            status: 'uploading',
+          });
+          try {
+            let result: Awaited<ReturnType<typeof uploadArtifact>> | null = null;
+            for (let attempt = 1; attempt <= MAX_UNIQUE_NAME_ATTEMPTS; attempt += 1) {
+              try {
+                result = await uploadArtifact({
+                  sourceType: input.sourceType,
+                  sourceId: input.sourceId,
+                  sourceTitle: input.sourceTitle,
+                  sessionId: input.sessionId,
+                  runId: input.runId,
+                  artifact: { ...artifact, name: uploadName },
+                  target,
+                  idempotencyKey,
+                });
+                break;
+              } catch (error) {
+                if (!isDuplicateNameError(error) || attempt >= MAX_UNIQUE_NAME_ATTEMPTS) throw error;
+                uploadName = reserveUniqueFileName(requestedName, usedNames);
+                record = await repo.createOrUpdate({
+                  sourceType: input.sourceType,
+                  sourceId: input.sourceId,
+                  sourceTitle: input.sourceTitle ?? null,
+                  runId: input.runId ?? null,
+                  sessionId: input.sessionId ?? null,
+                  artifactKey: artifact.artifactKey,
+                  artifactName: uploadName,
+                  localPath: artifact.filePath,
+                  targetUri: target.uri,
+                  targetLabel: label,
+                  status: 'uploading',
+                });
+              }
+            }
+            if (!result) throw new Error('产物上传失败');
+            return repo.update(record.id, {
+              status: 'succeeded',
+              dataCenterEntryId: result.entryId ?? null,
+              dataCenterPathLabel: result.pathLabel ?? label,
+              errorCode: null,
+              errorMessage: null,
+            });
+          } catch (error) {
+            const err = error as { errCode?: string; message?: string };
+            record = await repo.update(record.id, {
+              status: 'failed',
+              errorCode: err.errCode ?? null,
+              errorMessage: err.message ?? String(error),
+            });
+            logger.warn('[data-center-artifact-sync] upload failed', {
+              sourceType: input.sourceType,
+              sourceId: input.sourceId,
+              runId: input.runId,
+              artifactKey: artifact.artifactKey,
+              targetUri: target.uri,
+              error: err.message ?? String(error),
+            });
+            return record;
+          }
+        })();
+        inFlightArtifactSaves.set(localSaveKey, savePromise);
+        savePromise.finally(() => {
+          if (inFlightArtifactSaves.get(localSaveKey) === savePromise) {
+            inFlightArtifactSaves.delete(localSaveKey);
+          }
+        }).catch(() => undefined);
       }
-      records.push(record);
+      records.push(await savePromise);
     }
   }
 
