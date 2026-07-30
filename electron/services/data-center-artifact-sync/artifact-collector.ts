@@ -2,7 +2,7 @@ import { basename } from 'node:path';
 import { stat } from 'node:fs/promises';
 import type { ArtifactSaveItem } from './types';
 import { resolveWorkspaceFilePath } from '../../utils/artifact-path';
-import { PREVIEWABLE_FILE_EXT_PATTERN } from '../../../shared/artifact-path';
+import { PREVIEWABLE_FILE_EXT_PATTERN, stripFileUrlScheme } from '../../../shared/artifact-path';
 
 const MEDIA_ATTACHED_REGEX = /\[media attached:\s*([^\n\r(]+?)\s*\(([^)]+)\)\s*\|\s*([^\]]*)\]/g;
 const MARKDOWN_LINK_REGEX = /\[([^\]\n]+)\]\(([^)\n\r]+)\)/g;
@@ -12,10 +12,11 @@ const PREVIEW_PATH_REGEX = new RegExp(
 );
 
 function cleanPath(value: string): string {
-  const trimmed = value.trim().replace(/^preview:\/\//, '').replace(/^file:\/\//, '');
-  if (!trimmed || /^https?:\/\//i.test(trimmed) || trimmed.startsWith('artifact://')) return trimmed;
-  if (trimmed.startsWith('/') || /^[A-Za-z]:[\\/]/.test(trimmed)) return trimmed;
-  return resolveWorkspaceFilePath(trimmed);
+  const trimmed = value.trim().replace(/^preview:\/\//, '');
+  const filePath = stripFileUrlScheme(trimmed);
+  if (!filePath || /^https?:\/\//i.test(filePath) || filePath.startsWith('artifact://')) return filePath;
+  if (filePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(filePath)) return filePath;
+  return resolveWorkspaceFilePath(filePath);
 }
 
 function makeKey(filePath: string, index: number): string {
