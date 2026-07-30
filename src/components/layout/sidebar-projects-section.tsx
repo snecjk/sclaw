@@ -316,7 +316,6 @@ export function SidebarProjectsSection({
   return (
     <>
       <SidebarCollapsibleSectionLabel
-        className="mt-4"
         open={open}
         onToggle={onToggle}
         label={t('sidebar.projects')}
@@ -396,7 +395,7 @@ export function SidebarProjectsSection({
       />
 
       {open ? (
-        <div className="mt-0.5 flex flex-col gap-0.5 pb-1">
+        <div className="mt-0.5 flex flex-col gap-0.5 pb-2">
           {sortedWorkspaces.length === 0 ? (
             <div className="flex h-7 min-w-0 items-center gap-2 px-[10px]">
               <Folder className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -487,7 +486,7 @@ export function SidebarProjectsSection({
                 </div>
 
                 {isExpanded && projectSessions.length > 0 ? (
-                  <div className="mb-0.5 flex flex-col gap-0.5">
+                  <div className="mt-0.5 mb-0.5 flex flex-col gap-0.5">
                     {projectSessions.map((session) => {
                       const label = getSessionLabel(session.key, session.displayName, session.label);
                       const isActive = isOnHome
