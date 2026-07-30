@@ -62,6 +62,33 @@ describe('data center artifact collector', () => {
     });
   });
 
+  it('dedupes macOS absolute paths with redundant leading slashes', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'artifact-collector-macos-'));
+    const filePath = join(dir, '五言律诗_雪夜访友.txt');
+    const redundantSlashPath = `//${filePath}`;
+    await writeFile(filePath, 'fake-poem');
+
+    const artifacts = await collectArtifactsFromAssistantMessages([
+      {
+        role: 'assistant',
+        content: `已生成文件：[五言律诗_雪夜访友.txt](file://${redundantSlashPath})`,
+        _attachedFiles: [
+          {
+            fileName: '五言律诗_雪夜访友.txt',
+            filePath,
+          },
+        ],
+      },
+    ]);
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]).toMatchObject({
+      name: '五言律诗_雪夜访友.txt',
+      filePath,
+      size: 9,
+    });
+  });
+
   it('normalizes Windows file URI drive paths before checking files', async () => {
     const originalCwd = process.cwd();
     const dir = await mkdtemp(join(tmpdir(), 'artifact-collector-windows-'));
