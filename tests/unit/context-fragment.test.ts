@@ -119,6 +119,11 @@ describe('expandContextIncludes', () => {
     expect(claude).not.toContain('### 钉钉');
     expect(tools).not.toContain('share_to_dingtalk');
     expect(tools).not.toContain('每 20 秒');
+    for (const context of [agents, claude]) {
+      expect(context).toContain('默认直接在聊天中回答（硬性规则）');
+      expect(context).toContain('不构成创建文件的授权或要求');
+      expect(context).toContain('本节仅规定**已经满足上述写文件条件后**的保存位置');
+    }
 
     const expandedAgents = await expandContextIncludes(agents, root);
     const expandedClaude = await expandContextIncludes(claude, root);

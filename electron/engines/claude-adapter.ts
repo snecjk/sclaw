@@ -1177,7 +1177,9 @@ export const claudeAdapter: EngineAdapter = {
 
   prepareMemoryInjection(params, memory) {
     const memorySystemPrompt = [memory.preference, memory.execution].filter(Boolean).join('\n\n');
-    const systemPromptAppend = [params.systemPromptAppend?.trim(), memorySystemPrompt]
+    // Memory is advisory. Put task-specific system context after it so recalled
+    // experience cannot override the current task's rules or workflow contract.
+    const systemPromptAppend = [memorySystemPrompt, params.systemPromptAppend?.trim()]
       .filter(Boolean)
       .join('\n\n') || undefined;
     if (memorySystemPrompt) {
