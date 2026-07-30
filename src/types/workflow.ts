@@ -397,6 +397,23 @@ export interface WorkflowExecutionState {
   userInputTasks?: unknown[];
 }
 
+export interface ChatWorkflowCardRef {
+  runId: string;
+  sessionKey: string;
+  anchorUserMessageId: string | null;
+  title: string;
+  paramsSummary?: string | null;
+  startedAt: string;
+}
+
+export interface RegisterChatWorkflowCardInput {
+  runId: string;
+  sessionKey: string;
+  anchorUserMessageId?: string | null;
+  title?: string | null;
+  paramsSummary?: string | null;
+}
+
 // ── Content Block ───────────────────────────────────────────────
 
 /** Workflow execution card reference in message content */

@@ -354,7 +354,7 @@ export function createWorkflowTools(config: WorkflowConfig) {
         {
           method: "POST",
           // This MCP server is only mounted for Claude Agent SDK sessions.
-          body: buildClaudeWorkflowStartBody(inputs ?? {}, idempotencyKey, sessionKey),
+          body: buildClaudeWorkflowStartBody(inputs ?? {}, idempotencyKey, sessionKey, templateName),
         },
       );
 

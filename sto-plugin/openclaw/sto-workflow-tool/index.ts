@@ -150,6 +150,10 @@ export default definePluginEntry({
 							inputs: params.inputs ?? {},
 							idempotencyKey,
 							sessionKey,
+							chatCardTitle: params.templateName,
+							chatParamsSummary: Object.keys(params.inputs ?? {}).length
+								? JSON.stringify(params.inputs)
+								: undefined,
 							// This plugin is invoked only by the OpenClaw chat runtime.
 							// The host bridge persists this onto the workflow run snapshot.
 							engineType: "openclaw",

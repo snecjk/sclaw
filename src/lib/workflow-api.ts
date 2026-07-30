@@ -22,6 +22,8 @@ import type {
   StartWorkflowResponse,
   WorkflowRunResponse,
   WorkflowExecutionState,
+  ChatWorkflowCardRef,
+  RegisterChatWorkflowCardInput,
 } from '@/types/workflow';
 import { workflowRunResponseToExecutionState } from '@/lib/workflow-run-status';
 import { formatShanghaiIso } from '../../shared/workflow-timestamp';
@@ -438,6 +440,22 @@ export async function getRunViaIpc(
   view: 'status' | 'detail' | 'diagnostic' = 'status',
 ): Promise<WorkflowRunResponse | null> {
   return invokeIpc<WorkflowRunResponse | null>('workflow-runtime:getRun', { runId, view });
+}
+
+export async function registerChatWorkflowCard(
+  input: RegisterChatWorkflowCardInput,
+): Promise<boolean> {
+  const result = await invokeIpc<{ registered: boolean }>('workflow-runtime:registerChatCard', input);
+  return result.registered;
+}
+
+export async function listChatWorkflowCards(sessionKey: string): Promise<ChatWorkflowCardRef[]> {
+  return invokeIpc<ChatWorkflowCardRef[]>('workflow-runtime:listChatCards', sessionKey);
+}
+
+export async function getChatWorkflowCard(runId: string): Promise<WorkflowExecutionState | null> {
+  const run = await invokeIpc<WorkflowRunResponse | null>('workflow-runtime:getChatCard', runId);
+  return run ? workflowRunResponseToExecutionState(run) : null;
 }
 
 /** Lightweight local-run list for the canvas history dialog. */

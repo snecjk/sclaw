@@ -25,6 +25,10 @@ export interface WfRunTable {
   updated_at: Ts;
   synced_at: TsNull;
   session_key: TsNull;
+  chat_card_visible: Int;
+  chat_anchor_user_message_id: TsNull;
+  chat_card_title: TsNull;
+  chat_params_summary: TsNull;
   engine_type: string;
   engine_model: TsNull;
   created_at: TsNull;

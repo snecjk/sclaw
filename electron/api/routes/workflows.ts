@@ -9,6 +9,7 @@ import { getInstalledWorkflowRuntime, installWorkflowRuntime, workflowV2BackendF
 import { workflowExecLog } from '../../services/workflow-runtime/logging';
 import { takeWorkflowDatabaseId } from '../../services/workflow-runtime/id-pool';
 import type { AgentEngineType } from '../../engines/types';
+import type { StartWorkflowArgs } from '../../services/workflow-runtime/engine';
 import { getOpenClawProvidersConfig } from '../../utils/openclaw-auth';
 
 type WorkflowStartBody = {
@@ -20,7 +21,38 @@ type WorkflowStartBody = {
   workflowVersionId?: string | number;
   /** The chat workflow tool's selected execution engine. */
   engineType?: AgentEngineType;
+  /** Optional display metadata supplied by the chat workflow tool. */
+  chatCardTitle?: string;
+  chatParamsSummary?: string;
 };
+
+const CHAT_CARD_TEXT_MAX = 2_000;
+
+function normalizeChatCardText(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  return normalized ? normalized.slice(0, CHAT_CARD_TEXT_MAX) : null;
+}
+
+export function summarizeWorkflowChatInputs(inputs: Record<string, unknown> | undefined): string | null {
+  if (!inputs || Object.keys(inputs).length === 0) return null;
+  try {
+    return JSON.stringify(inputs).slice(0, CHAT_CARD_TEXT_MAX);
+  } catch {
+    return null;
+  }
+}
+
+export function buildWorkflowStartChatCard(
+  workflowId: string,
+  body: Pick<WorkflowStartBody, 'inputs' | 'chatCardTitle' | 'chatParamsSummary'>,
+): NonNullable<StartWorkflowArgs['chatCard']> {
+  return {
+    title: normalizeChatCardText(body.chatCardTitle) ?? workflowId,
+    paramsSummary: normalizeChatCardText(body.chatParamsSummary)
+      ?? summarizeWorkflowChatInputs(body.inputs),
+  };
+}
 
 type WorkflowV2StartResponse = {
   runId: string;
@@ -256,7 +288,8 @@ async function startLocalWorkflowRuntime(
     engineSource: resolvedEngine.source,
     engineModel: engineModel ?? null,
   });
-  void installWorkflowRuntime().startWorkflow({
+  const runtime = installWorkflowRuntime();
+  const execution = runtime.startWorkflow({
     runId: registered.runId,
     runDatabaseId: registered.runDatabaseId,
     workflowId,
@@ -267,7 +300,12 @@ async function startLocalWorkflowRuntime(
     sessionKey: body.sessionKey ?? '',
     engineType: resolvedEngine.engineType,
     engineModel,
-  }).catch((error) => {
+    // This host route is exclusively the chat tool's v1 start bridge. Store
+    // the card marker in the same first SQLite write as the run itself so a
+    // missing/delayed renderer tool-result can never suppress the card.
+    chatCard: buildWorkflowStartChatCard(workflowId, body),
+  });
+  void execution.catch((error) => {
     workflowExecLog('error', 'host-runtime-start-failed', 'local workflow runtime failed', {
       runId: registered.runId,
       workflowId,
@@ -281,6 +319,19 @@ async function startLocalWorkflowRuntime(
       error,
     );
   });
+
+  // Do not acknowledge the tool start until the first atomic wf_run upsert is
+  // observable. The renderer refreshes the session card-reference list when
+  // the chat turn finishes, so this closes the final-result/SQLite race without
+  // waiting for the workflow execution itself.
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    if (await runtime.getRun(registered.runId)) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  logger.warn(
+    '[workflow-trace] wf_run persistence was not observable before start acknowledgement runId=%s',
+    registered.runId,
+  );
 }
 
 async function registerLocalWorkflowRun(

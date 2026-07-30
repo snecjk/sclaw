@@ -4,11 +4,6 @@ import type { ChatState } from './types';
 /** Workflow state mutations and draft persistence. */
 export function createWorkflowActions(set: ChatSet, get: ChatGet): WorkflowActions {
   return {
-    setWorkflowCardState: (runId, state) => {
-      set((current) => ({
-        workflowCardStates: { ...current.workflowCardStates, [runId]: state },
-      }));
-    },
     setPendingWorkflow: (pending: ChatState['pendingWorkflow']) => {
       set({ pendingWorkflow: pending });
       if (!pending) return;

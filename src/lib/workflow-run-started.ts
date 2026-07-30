@@ -2,12 +2,6 @@
  * Shared post-start UI for workflow runs (frontend API path or builtin tool result).
  */
 import { toast } from 'sonner';
-import {
-  ensureWorkflowCardsInMessages,
-  getAssistantMessageText,
-  patchLastAssistantWithWorkflowCard,
-} from '@/lib/workflow-card-injection';
-import { appendWorkflowStartedLocalTurn } from '@/lib/workflow-local-turn';
 import { canStartWorkflow } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
 import {
@@ -16,9 +10,7 @@ import {
   updateWorkflowRunMetadata,
 } from '@/stores/workflow-memory';
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
-import { consumeBufferedWorkflowStatusUpdate } from '@/lib/workflow-status-buffer';
-import { mergeWorkflowCardState } from '@/lib/workflow-card-state-merge';
-import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
+import { registerStartedWorkflowChatCard } from '@/lib/workflow-chat-card-registration';
 
 export type WorkflowRunPresentation = 'local_turn' | 'patch_assistant';
 
@@ -48,7 +40,6 @@ export async function applyWorkflowRunStarted(
     templateName,
     inputs = {},
     userText,
-    assistantText,
     presentation = 'local_turn',
     versionId,
   } = options;
@@ -70,49 +61,19 @@ export async function applyWorkflowRunStarted(
   }
 
   const startedAtMs = Date.now();
-  const startedAtIso = new Date(startedAtMs).toISOString();
-
-  if (presentation === 'local_turn') {
-    appendWorkflowStartedLocalTurn({
-      userText: resolvedUserText,
-      templateId: wfRecord?.templateId,
-      templateName,
-      runId,
-      workflowId,
-      assistantText:
-        assistantText
-        ?? `正在启动工作流「${templateName}」（工作流 ID: ${workflowId}）…`,
-    });
-  } else if (presentation === 'patch_assistant') {
-    const chatState = useChatStore.getState();
-    if (chatState.currentSessionKey === sessionKey) {
-      useChatStore.setState((s) => {
-        let next = patchLastAssistantWithWorkflowCard(
-          s.messages,
-          runId,
-          templateName,
-          getAssistantMessageText,
-        );
-        next = ensureWorkflowCardsInMessages(next, sessionKey, getAssistantMessageText);
-        return next === s.messages ? s : { messages: next };
-      });
-    }
-  }
 
   updateWorkflowRunMetadata(sessionKey, workflowId, {
     lastRunId: runId,
     lastStatus: 'running',
   });
 
-  const bufferedStatus = consumeBufferedWorkflowStatusUpdate(runId);
-  const initialStatus = bufferedStatus?.status ?? 'running';
   saveWorkflowExecution({
     sessionKey,
     workflowId,
     runId,
     templateId: wfRecord?.templateId ?? '',
     templateName,
-    status: initialStatus,
+    status: 'running',
     createdAt: startedAtMs,
     updatedAt: startedAtMs,
     collectedInputs: inputs,
@@ -134,25 +95,13 @@ export async function applyWorkflowRunStarted(
     });
   }
 
-  const chatStore = useChatStore.getState();
-  const initialCardState = {
+  await registerStartedWorkflowChatCard({
     runId,
-    workflowId,
-    status: initialStatus,
-    progress: 0,
-    steps: [],
-    startedAt: startedAtIso,
-  };
-  const existingCardState = chatStore.workflowCardStates[runId];
-  chatStore.setWorkflowCardState(
-    runId,
-    bufferedStatus
-      ? mergeWorkflowCardState(initialCardState, bufferedStatus, { localStartedAtMs: startedAtMs })
-      : existingCardState && isTerminalWorkflowRunStatus(existingCardState.status)
-        ? existingCardState
-        : initialCardState,
-  );
-  chatStore.clearPendingWorkflow();
+    sessionKey,
+    title: templateName,
+    paramsSummary: resolvedUserText,
+  });
+  useChatStore.getState().clearPendingWorkflow();
 
   return true;
 }

@@ -34,6 +34,10 @@ export const workflowRuntimeSchemaMigration: SqliteMigration = {
       session_key TEXT,
       engine_type TEXT NOT NULL DEFAULT 'claude',
       engine_model TEXT,
+      chat_card_visible INTEGER NOT NULL DEFAULT 0,
+      chat_anchor_user_message_id TEXT,
+      chat_card_title TEXT,
+      chat_params_summary TEXT,
       created_at TEXT,
       deleted_at TEXT
     );
@@ -151,6 +155,8 @@ export const workflowRuntimeSchemaMigration: SqliteMigration = {
     CREATE INDEX IF NOT EXISTS idx_wf_input_run_status ON wf_user_input_task(run_id, status);
     CREATE INDEX IF NOT EXISTS idx_wf_outbox_pending
       ON wf_outbox(status, next_retry_at) WHERE status = 'pending';
+    CREATE INDEX IF NOT EXISTS idx_wf_run_chat_session_started
+      ON wf_run(session_key, chat_card_visible, started_at);
   `,
 };
 

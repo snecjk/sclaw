@@ -205,6 +205,7 @@ describe("sto-workflow-tool plugin", () => {
 		const result = await execTool.execute("call_exec", {
 			workflowId: "wf_816b0847",
 			templateName: "客户异常监控",
+			inputs: { city: "上海" },
 		});
 		const envelope = JSON.parse(result.content[0].text);
 		expect(envelope.type).toBe("workflow_execution_started");
@@ -218,6 +219,8 @@ describe("sto-workflow-tool plugin", () => {
 		);
 		const requestBody = JSON.parse(fetchJsonMock.mock.calls[0]?.[1]?.body as string);
 		expect(requestBody.sessionKey).toBe("agent:main:main");
+		expect(requestBody.chatCardTitle).toBe("客户异常监控");
+		expect(requestBody.chatParamsSummary).toBe('{"city":"上海"}');
 	});
 
 	it("execute_workflow refuses to start without a sessionKey", async () => {

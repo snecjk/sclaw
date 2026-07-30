@@ -8,7 +8,6 @@ const applyWorkflowSchemaReady = vi.fn();
 const ensureWorkflowParameterFormInjected = vi.fn(() => false);
 const saveWorkflowExecution = vi.fn();
 const updateExecutionStatus = vi.fn();
-const setWorkflowCardState = vi.fn();
 
 vi.mock('@/stores/chat/parameter-form-recovery', () => ({
   applyWorkflowSchemaReady: (...args: unknown[]) => applyWorkflowSchemaReady(...args),
@@ -29,8 +28,6 @@ vi.mock('@/stores/chat', () => ({
       currentSessionKey: 'agent:main:main',
       currentAgentId: 'main',
       messages: [],
-      workflowCardStates: {},
-      setWorkflowCardState,
     }),
     setState: vi.fn(),
   },
@@ -115,7 +112,7 @@ describe('dispatchBuiltinToolResult', () => {
     expect(applyWorkflowSchemaReady).toHaveBeenCalledTimes(1);
   });
 
-  it('turns a workflow_run_status result into a tracked card state', async () => {
+  it('keeps workflow_run_status as a normal tool result without creating a card', async () => {
     const handled = await dispatchBuiltinToolResult({
       id: 'tool-status-1',
       content: JSON.stringify({
@@ -136,18 +133,8 @@ describe('dispatchBuiltinToolResult', () => {
     });
 
     expect(handled).toBe(true);
-    expect(saveWorkflowExecution).toHaveBeenCalledWith(expect.objectContaining({
-      runId: 'run_status_1',
-      workflowId: 'wf_status_1',
-      status: 'running',
-    }));
-    expect(setWorkflowCardState).toHaveBeenCalledWith(
-      'run_status_1',
-      expect.objectContaining({
-        status: 'running',
-        progress: 50,
-        currentStep: 'report',
-      }),
-    );
+    expect(saveWorkflowExecution).not.toHaveBeenCalled();
+    expect(updateExecutionStatus).not.toHaveBeenCalled();
+    expect(applyWorkflowRunStarted).not.toHaveBeenCalled();
   });
 });

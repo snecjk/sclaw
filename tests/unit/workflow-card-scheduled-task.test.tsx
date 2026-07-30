@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
 
-const { chatState } = vi.hoisted(() => ({
+const { chatState, getChatWorkflowCard } = vi.hoisted(() => ({
   chatState: {
     currentSessionKey: 'agent:main:main',
     currentAgentId: 'main',
@@ -14,18 +14,15 @@ const { chatState } = vi.hoisted(() => ({
       steps: [];
     }>,
   },
+  getChatWorkflowCard: vi.fn(),
 }));
 
 vi.mock('@/stores/chat', () => ({
   useChatStore: (selector: (state: typeof chatState) => unknown) => selector(chatState),
 }));
 
-vi.mock('@/lib/workflow-run-hydration', () => ({
-  hydrateWorkflowRun: vi.fn(),
-}));
-
-vi.mock('@/stores/workflow-memory', () => ({
-  getExecutionByRunId: vi.fn(() => null),
+vi.mock('@/lib/workflow-api', () => ({
+  getChatWorkflowCard: (runId: string) => getChatWorkflowCard(runId),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -43,9 +40,12 @@ vi.mock('react-i18next', () => ({
 describe('WorkflowCard scheduled task action', () => {
   beforeEach(() => {
     chatState.workflowCardStates = {};
+    getChatWorkflowCard.mockImplementation(async (runId: string) => (
+      chatState.workflowCardStates[runId] ?? null
+    ));
   });
 
-  it('shows create scheduled task action for completed workflow with workflow id', () => {
+  it('shows create scheduled task action for completed workflow with workflow id', async () => {
     chatState.workflowCardStates.run_123 = {
       runId: 'run_123',
       workflowId: 'wf_abc',
@@ -62,11 +62,11 @@ describe('WorkflowCard scheduled task action', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: '创建定时任务' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: '创建定时任务' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: '查看工作流' })).toBeNull();
   });
 
-  it('shows workflow id title when template name is a template id', () => {
+  it('shows workflow id title when template name is a template id', async () => {
     chatState.workflowCardStates.run_123 = {
       runId: 'run_123',
       workflowId: 'wf_2496580c',
@@ -82,7 +82,7 @@ describe('WorkflowCard scheduled task action', () => {
       />,
     );
 
-    expect(screen.getByText('工作流后台执行中（工作流 ID: wf_2496580c）')).toBeTruthy();
+    expect(await screen.findByText('工作流后台执行中（工作流 ID: wf_2496580c）')).toBeTruthy();
   });
 
   it('hides create scheduled task action while workflow is running', () => {
@@ -105,7 +105,7 @@ describe('WorkflowCard scheduled task action', () => {
     expect(screen.queryByRole('button', { name: '创建定时任务' })).toBeNull();
   });
 
-  it('invokes onCreateScheduledTask with workflow id', () => {
+  it('invokes onCreateScheduledTask with workflow id', async () => {
     chatState.workflowCardStates.run_123 = {
       runId: 'run_123',
       workflowId: 'wf_abc',
@@ -123,11 +123,11 @@ describe('WorkflowCard scheduled task action', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '创建定时任务' }));
+    fireEvent.click(await screen.findByRole('button', { name: '创建定时任务' }));
     expect(onCreateScheduledTask).toHaveBeenCalledWith('wf_abc');
   });
 
-  it('renders every completed workflow artifact as a product card', () => {
+  it('renders every completed workflow artifact as a product card', async () => {
     chatState.workflowCardStates.run_123 = {
       runId: 'run_123',
       workflowId: 'wf_abc',
@@ -144,7 +144,36 @@ describe('WorkflowCard scheduled task action', () => {
 
     render(<WorkflowCard runId="run_123" templateName="测试工作流" />);
 
-    expect(screen.getByText('出行报告.html')).toBeTruthy();
+    expect(await screen.findByText('出行报告.html')).toBeTruthy();
     expect(screen.getByText('天气数据.json')).toBeTruthy();
+  });
+
+  it('polls active runs at three seconds and stops after a terminal snapshot', async () => {
+    vi.useFakeTimers();
+    chatState.workflowCardStates.run_123 = {
+      runId: 'run_123',
+      workflowId: 'wf_abc',
+      status: 'running',
+      progress: 40,
+      steps: [],
+    };
+    getChatWorkflowCard
+      .mockResolvedValueOnce(chatState.workflowCardStates.run_123)
+      .mockResolvedValueOnce({
+        ...chatState.workflowCardStates.run_123,
+        status: 'completed',
+        progress: 100,
+      });
+
+    render(<WorkflowCard runId="run_123" templateName="测试工作流" />);
+    await act(async () => { await Promise.resolve(); });
+    expect(getChatWorkflowCard).toHaveBeenCalledTimes(1);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(3_000); });
+    expect(getChatWorkflowCard).toHaveBeenCalledTimes(2);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(getChatWorkflowCard).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
   });
 });

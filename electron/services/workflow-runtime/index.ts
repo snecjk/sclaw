@@ -97,6 +97,50 @@ export function registerWorkflowRuntimeHandlers(deps: EngineDeps): RuntimeHandle
     workflowExecLog('debug', 'ipc-get-run', 'received workflow getRun ipc', { runId, view });
     return loadRun(runId, { view });
   });
+  ipcMain.handle('workflow-runtime:registerChatCard', async (_e, arg: {
+    runId?: string;
+    sessionKey?: string;
+    anchorUserMessageId?: string | null;
+    title?: string | null;
+    paramsSummary?: string | null;
+  }) => {
+    if (!arg?.runId || !arg?.sessionKey) return { registered: false };
+    // startWorkflow acknowledges before its asynchronous DSL fetch creates
+    // wf_run. Wait at the SQLite boundary so slow plan generation cannot make
+    // a successfully started card disappear.
+    let registered = false;
+    for (let attempt = 0; attempt <= 120; attempt += 1) {
+      const run = await repo.getRun(arg.runId);
+      if (run) {
+        registered = await repo.registerChatRunCard(arg.runId, {
+          sessionKey: arg.sessionKey,
+          anchorUserMessageId: arg.anchorUserMessageId,
+          title: arg.title,
+          paramsSummary: arg.paramsSummary,
+        });
+        break;
+      }
+      if (attempt < 120) await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return { registered };
+  });
+  ipcMain.handle('workflow-runtime:listChatCards', async (_e, sessionKey: unknown) => {
+    if (typeof sessionKey !== 'string' || !sessionKey.trim()) return [];
+    const rows = await repo.listChatRunCardRefsBySession(sessionKey);
+    return rows.map((row) => ({
+      runId: row.run_id,
+      sessionKey: row.session_key,
+      anchorUserMessageId: row.chat_anchor_user_message_id ?? null,
+      title: row.chat_card_title ?? row.workflow_id ?? '工作流',
+      paramsSummary: row.chat_params_summary ?? null,
+      startedAt: row.started_at,
+    }));
+  });
+  ipcMain.handle('workflow-runtime:getChatCard', async (_e, runId: unknown) => {
+    if (typeof runId !== 'string' || !runId.trim()) return null;
+    if (!(await repo.isChatRunCardVisible(runId))) return null;
+    return loadRun(runId, { view: 'status' });
+  });
   /**
    * 查询当前工作流保存在本机的运行摘要，供画布「本地运行记录」弹窗使用。
    * 详情仍必须通过 getRun 按 runId 单独读取，避免一次 IPC 传输所有事件和产物。

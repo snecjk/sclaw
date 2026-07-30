@@ -19,12 +19,12 @@ import {
 } from '@/lib/workflow-api';
 import { canStartWorkflow, useWorkflowsStore } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
-import { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } from '@/lib/workflow-local-turn';
+import { buildWorkflowStartUserText } from '@/lib/workflow-local-turn';
+import { registerStartedWorkflowChatCard } from '@/lib/workflow-chat-card-registration';
 import { buildWorkflowContextSummary, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
-import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
-import type { WorkflowExecutionState, WorkflowSchemaField } from '@/types/workflow';
+import type { WorkflowSchemaField } from '@/types/workflow';
 
 export interface WorkflowSendContext {
   sessionKey: string;
@@ -171,14 +171,6 @@ export async function createAndStartWorkflowDirect(
     });
 
     const userText = buildWorkflowStartUserText(schema, inputs);
-    const startedAtIso = run.startedAt;
-    appendWorkflowStartedLocalTurn({
-      userText,
-      templateId,
-      templateName,
-      runId: run.runId,
-      workflowId: created.workflowId,
-    });
 
     updateWorkflowRunMetadata(context.sessionKey, created.workflowId, {
       lastRunId: run.runId,
@@ -216,26 +208,12 @@ export async function createAndStartWorkflowDirect(
     );
     dismissWorkflowParameterFormsForTemplate(templateId);
 
-    const initialCardState = {
+    await registerStartedWorkflowChatCard({
       runId: run.runId,
-      workflowId: created.workflowId,
-      status: 'running',
-      progress: 0,
-      steps: [],
-      startedAt: startedAtIso,
-    } satisfies WorkflowExecutionState;
-    // workflow-runtime:start 仅确认接收，流程可在这段初始化期间已经完成并先行
-    // 广播终态；不可再用初始 running 状态覆盖已到达的 completed/failed 状态。
-    const existingCardState = useChatStore.getState().workflowCardStates[run.runId];
-    useChatStore.getState().setWorkflowCardState(
-      run.runId,
-      existingCardState && isTerminalWorkflowRunStatus(existingCardState.status)
-        ? existingCardState
-        : initialCardState,
-    );
-
-    // 客户端本地执行：startWorkflowLocal 已 fire-and-forget 触发 engine，
-    // 状态经 'workflow:status-update' 广播桥回流，无需 startTracking/SSE trace。
+      sessionKey: context.sessionKey,
+      title: templateName,
+      paramsSummary: userText,
+    });
 
     // Clear pending state
     useChatStore.getState().clearPendingWorkflow();

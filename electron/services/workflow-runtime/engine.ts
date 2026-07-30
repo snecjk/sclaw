@@ -67,6 +67,16 @@ export interface StartWorkflowArgs {
   sessionKey?: string;
   engineType: 'claude' | 'openclaw';
   engineModel?: string;
+  /**
+   * Present only for a workflow started from a chat launch tool. Persisting
+   * this with the first wf_run upsert makes card discovery independent from
+   * renderer tool-result/event delivery.
+   */
+  chatCard?: {
+    title?: string | null;
+    paramsSummary?: string | null;
+    anchorUserMessageId?: string | null;
+  };
 }
 
 export function createEngine(deps: EngineDeps) {
@@ -513,6 +523,29 @@ export function createEngine(deps: EngineDeps) {
         throw new Error('workflow execution engine is required');
       }
       try {
+        // Persist the run identity before the remote DSL fetch. Chat-card
+        // registration and compact status reads can now bind immediately even
+        // when plan generation is slow; generatePlan enriches this same row.
+        await repo.upsertRun({
+          id: args.runDatabaseId,
+          run_id: args.runId,
+          workflow_id: args.workflowId,
+          version_id: args.versionId,
+          workflow_version: args.workflowVersion ?? null,
+          status: 'RUNNING',
+          mode: 'CLIENT_LOCAL',
+          source: 'client',
+          input_json: stringifyJson(args.input ?? {}),
+          definition_json: '{}',
+          started_at: args.startedAt,
+          session_key: args.sessionKey,
+          engine_type: args.engineType,
+          engine_model: args.engineModel ?? null,
+          chat_card_visible: args.chatCard ? 1 : 0,
+          chat_anchor_user_message_id: args.chatCard?.anchorUserMessageId ?? null,
+          chat_card_title: args.chatCard?.title ?? null,
+          chat_params_summary: args.chatCard?.paramsSummary ?? null,
+        });
         await generatePlan({ repo, dslClient: deps.dslClient, workflowId: args.workflowId,
           versionId: args.versionId, runId: args.runId, input: args.input, startedAt: args.startedAt,
           sessionKey: args.sessionKey, workflowVersion: args.workflowVersion, runDatabaseId: args.runDatabaseId,

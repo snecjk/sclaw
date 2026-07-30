@@ -13,21 +13,21 @@ import {
   openExternalUrl,
 } from '@/lib/preview-url';
 import { shouldPreviewInSidePanel } from '@/lib/preview-href';
-import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
+import type { AttachedFileMeta } from '@/stores/chat';
 import {
   ArtifactProductCard,
   buildArtifactMetaLine,
 } from '@/components/chat/artifact-product-card';
 import { buildArtifactCardMenuItems } from '@/lib/artifact-card-menu';
-import { getExecutionByRunId } from '@/stores/workflow-memory';
-import { hydrateWorkflowRun } from '@/lib/workflow-run-hydration';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import { getWorkflowProgressDetails } from '@/lib/workflow-card-progress';
+import { getChatWorkflowCard } from '@/lib/workflow-api';
 import type { WorkflowExecutionState, WorkflowRunStatus } from '@/types/workflow';
 
 interface WorkflowCardProps {
   runId: string;
   templateName: string;
+  paramsSummary?: string | null;
   /** default：对话流独立块（与消息气泡/输入框同宽，仅 mt-3 间距）；inline：嵌在参数已确认展开区内（外层 pl-5 竖线区） */
   layout?: 'default' | 'inline';
   /**
@@ -181,23 +181,22 @@ function useDurationLabel(
 export function WorkflowCard({
   runId,
   templateName,
+  paramsSummary,
   layout = 'default',
   section = 'full',
   onPreviewArtifact,
   onCreateScheduledTask,
 }: WorkflowCardProps) {
   const { t } = useTranslation('chat');
-  const sessionKey = useChatStore((s) => s.currentSessionKey);
-  const agentId = useChatStore((s) => s.currentAgentId);
-  const state = useChatStore((s) => s.workflowCardStates[runId]);
+  const [state, setState] = useState<WorkflowExecutionState | null>(null);
+  const [queryError, setQueryError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
 
-  const resolvedName = useMemo(() => {
-    const exec = getExecutionByRunId(runId, sessionKey);
-    const fromMemory = exec?.templateName?.trim();
-    if (fromMemory && !isTemplateIdLabel(fromMemory)) return fromMemory;
+  const resolvedName = (() => {
     if (templateName && !isTemplateIdLabel(templateName)) return templateName;
 
-    const workflowId = state?.workflowId || exec?.workflowId;
+    const workflowId = state?.workflowId;
     const isActive = !state || state.status === 'running' || state.status === 'pending';
     if (workflowId && isActive) {
       return t('workflow.backgroundRunningWithId', { workflowId });
@@ -206,27 +205,62 @@ export function WorkflowCard({
       return t('workflow.withId', { workflowId });
     }
 
-    return fromMemory || templateName || t('workflow.defaultName');
-  }, [runId, sessionKey, templateName, state?.workflowId, state?.status, t]);
+    return templateName || t('workflow.defaultName');
+  })();
 
   useEffect(() => {
-    const needsHydrate = !state
-      || !isTerminalWorkflowRunStatus(state.status)
-      || (!state.result?.summary && !(state.result?.artifacts?.length));
-    if (!needsHydrate) return;
-    void hydrateWorkflowRun(runId, { sessionKey, agentId });
-  }, [runId, sessionKey, agentId, state?.status, state?.result?.summary, state?.result?.artifacts]);
+    let disposed = false;
+    let timer: number | undefined;
+    let inFlight = false;
+    let failures = 0;
+    const backoff = [3_000, 6_000, 12_000, 30_000];
 
-  useEffect(() => {
-    if (state && isTerminalWorkflowRunStatus(state.status)) return undefined;
-    // A legacy tool start has no renderer session key, so its terminal push can
-    // precede card registration or be filtered by an older client. Polling the
-    // local runtime while active closes that gap and stops immediately at a terminal state.
-    const timer = window.setInterval(() => {
-      void hydrateWorkflowRun(runId, { sessionKey, agentId });
-    }, 3_000);
-    return () => window.clearInterval(timer);
-  }, [runId, sessionKey, agentId, state?.status]);
+    const schedule = (delay: number) => {
+      if (disposed) return;
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = window.setTimeout(() => void poll(), delay);
+    };
+    const poll = async () => {
+      if (disposed || inFlight || document.visibilityState === 'hidden') return;
+      inFlight = true;
+      try {
+        const snapshot = await getChatWorkflowCard(runId);
+        if (disposed) return;
+        if (!snapshot) {
+          setNotFound(true);
+          setQueryError(null);
+          return;
+        }
+        failures = 0;
+        setNotFound(false);
+        setQueryError(null);
+        setState(snapshot);
+        if (!isTerminalWorkflowRunStatus(snapshot.status)) {
+          schedule(snapshot.status === 'waiting_approval' || snapshot.status === 'waiting_input' ? 5_000 : 3_000);
+        }
+      } catch (error) {
+        if (disposed) return;
+        setQueryError(error instanceof Error ? error.message : String(error));
+        const delay = backoff[Math.min(failures, backoff.length - 1)];
+        failures += 1;
+        schedule(delay);
+      } finally {
+        inFlight = false;
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void poll();
+      else if (timer !== undefined) window.clearTimeout(timer);
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    void poll();
+    return () => {
+      disposed = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [runId, retryNonce]);
 
   const display = useMemo<WorkflowExecutionState>(() => {
     if (!state) {
@@ -296,6 +330,12 @@ export function WorkflowCard({
         </div>
       </div>
 
+      {paramsSummary ? (
+        <p className="mt-1 truncate text-[12px] leading-4 text-muted-foreground" title={paramsSummary}>
+          {paramsSummary}
+        </p>
+      ) : null}
+
       {showProgress ? (
         <div className="mt-2.5">
           <div className="h-1 overflow-hidden rounded-full bg-muted" aria-label={t('workflow.progressLabel')}>
@@ -328,6 +368,18 @@ export function WorkflowCard({
 
       {display.error ? (
         <p className="mt-2 text-[13px] leading-5 text-destructive">{display.error}</p>
+      ) : null}
+      {notFound || queryError ? (
+        <div className="mt-2 flex items-center justify-between gap-3 text-[13px] leading-5 text-destructive">
+          <span>{notFound ? t('workflow.runUnavailable') : queryError}</span>
+          <button
+            type="button"
+            className="shrink-0 text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => setRetryNonce((value) => value + 1)}
+          >
+            {t('workflow.retryQuery')}
+          </button>
+        </div>
       ) : null}
     </div>
   ) : null;

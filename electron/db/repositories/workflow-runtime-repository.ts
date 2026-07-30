@@ -67,6 +67,62 @@ export class WorkflowRuntimeRepository {
       .executeTakeFirst();
   }
 
+  async registerChatRunCard(run_id: string, metadata: {
+    sessionKey: string;
+    anchorUserMessageId?: string | null;
+    title?: string | null;
+    paramsSummary?: string | null;
+  }): Promise<boolean> {
+    const db = getKyselyDatabase();
+    const existing = await db
+      .selectFrom('wf_run')
+      .select(['session_key', 'chat_anchor_user_message_id', 'chat_card_title', 'chat_params_summary'])
+      .where('run_id', '=', run_id)
+      .executeTakeFirst();
+    if (!existing) return false;
+    if (existing.session_key && existing.session_key !== metadata.sessionKey) return false;
+
+    const result = await db
+      .updateTable('wf_run')
+      .set({
+        session_key: existing.session_key ?? metadata.sessionKey,
+        chat_card_visible: 1,
+        chat_anchor_user_message_id: metadata.anchorUserMessageId ?? existing.chat_anchor_user_message_id,
+        chat_card_title: metadata.title ?? existing.chat_card_title,
+        chat_params_summary: metadata.paramsSummary ?? existing.chat_params_summary,
+        updated_at: nowIso(),
+      })
+      .where('run_id', '=', run_id)
+      .executeTakeFirst();
+    return Number(result.numUpdatedRows ?? 0) > 0;
+  }
+
+  async listChatRunCardRefsBySession(session_key: string): Promise<any[]> {
+    return getKyselyDatabase()
+      .selectFrom('wf_run')
+      .select([
+        'run_id', 'workflow_id', 'session_key', 'chat_anchor_user_message_id', 'chat_card_title',
+        'chat_params_summary', 'started_at',
+      ])
+      .where('session_key', '=', session_key)
+      .where('chat_card_visible', '=', 1)
+      .where('deleted_at', 'is', null)
+      .orderBy('started_at', 'asc')
+      .orderBy('run_id', 'asc')
+      .execute();
+  }
+
+  async isChatRunCardVisible(run_id: string): Promise<boolean> {
+    const row = await getKyselyDatabase()
+      .selectFrom('wf_run')
+      .select('run_id')
+      .where('run_id', '=', run_id)
+      .where('chat_card_visible', '=', 1)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return Boolean(row);
+  }
+
   /** Status/detail projection; excludes definition, startup input, and agent-result bodies. */
   async getRunSummary(run_id: string, options: { includeTimelineText?: boolean } = {}): Promise<any> {
     const db = getKyselyDatabase();

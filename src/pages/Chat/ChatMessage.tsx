@@ -4,7 +4,7 @@
  * with markdown, thinking sections, images, and tool cards.
  */
 import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
-import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, CircleCheck } from 'lucide-react';
+import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
 import { createPortal } from 'react-dom';
@@ -15,8 +15,7 @@ import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
 import { ChatProcessLoadingEllipsis } from '@/components/chat/chat-process-loading-ellipsis';
 import { useTypewriterReveal } from '@/hooks/use-typewriter-reveal';
 import { cn } from '@/lib/utils';
-import { assistantChatCardBg, chatProcessTitleRowClass, chatToolCallShellClass, userChatBubbleSurfaceClass, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
-import { ChatProcessContentRail } from '@/components/chat/chat-process-block';
+import { assistantChatCardBg, userChatBubbleSurfaceClass, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
 import {
   isCurrentUserTurnIncomplete,
   isLastUserMessage,
@@ -38,13 +37,11 @@ import {
   extractDisplayFileNameHints,
   isPreviewableFile,
   PREVIEWABLE_FILE_EXTS,
-  extractWorkflowCard,
   useLocalPathExistence,
   resolvePreviewCandidate,
   unwrapPreviewablePathMarkdown,
   findWorkflowParamsSummaryAfterIntro,
   isWorkflowStartAssistantBoilerplate,
-  isWorkflowCompletionTranscript,
   resolveAssistantCopyShareContent,
   resolveUserBubbleActionText,
 } from './message-utils';
@@ -55,13 +52,6 @@ import {
   isLastAssistantAfterUserTurn,
   resolveParameterFormForAssistantMessage,
 } from '@/stores/chat/parameter-form-recovery';
-import { WorkflowCard } from '@/components/workflow/WorkflowCard';
-import { RUN_ID_IN_TEXT, sessionHasParamsConfirmedWorkflowForRun } from '@/lib/workflow-card-injection';
-import { getExecutionByRunId } from '@/stores/workflow-memory';
-import { getRunViaIpc, listLocalWorkflowRuns } from '@/lib/workflow-api';
-import { applyWorkflowRunStarted } from '@/lib/workflow-run-started';
-import { selectWorkflowRunForCard } from '@/lib/workflow-card-recovery';
-import { getLastWorkflowRunIdMention, workflowRunMatchesMention } from '@/lib/workflow-plugin-run-recovery';
 import {
   artifactToPreviewFile,
   inferMimeTypeFromUrl,
@@ -71,6 +61,9 @@ import {
   resolvePreviewLinkTarget,
   toMarkdownPreviewPath,
 } from '@/lib/preview-url';
+import type { WorkflowExecutionState } from '@/types/workflow';
+
+const EMPTY_WORKFLOW_CARD_STATES: Record<string, WorkflowExecutionState> = {};
 import {
   coerceHrefForMarkdownTransform,
   resolvePreviewHrefAction,
@@ -165,7 +158,6 @@ export const ChatMessage = memo(function ChatMessage({
   isStreaming = false,
   streamingTools = [],
   onPreviewFile,
-  onCreateScheduledTask,
   onEditMessage,
   hideThinkingPanel = false,
   suppressToolCards = false,
@@ -216,99 +208,9 @@ export const ChatMessage = memo(function ChatMessage({
   const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
   const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
   const sessionKey = useChatStore((s) => s.currentSessionKey);
-  const agentId = useChatStore((s) => s.currentAgentId);
-  const workflowCardStates = useChatStore((s) => s.workflowCardStates);
-  const workflowCard = useMemo(() => {
-    if (isUser) return null;
-    const fromBlock = extractWorkflowCard(message);
-    const resolveCard = (card: { runId: string; templateName: string }) => {
-      if (
-        !/参数已确认/.test(text)
-        && sessionHasParamsConfirmedWorkflowForRun(sessionMessages, card.runId, message.id)
-      ) {
-        return null;
-      }
-      return card;
-    };
-    if (fromBlock) return resolveCard(fromBlock);
-    const runIds = [...text.matchAll(RUN_ID_IN_TEXT)].map((m) => m[1]).filter(Boolean);
-    for (let i = runIds.length - 1; i >= 0; i -= 1) {
-      const runId = runIds[i]!;
-      const exec = getExecutionByRunId(runId, sessionKey);
-      const card = { runId, templateName: exec?.templateName ?? '工作流' };
-      return resolveCard(card);
-    }
-    return null;
-  }, [isUser, message, text, workflowCardStates, sessionKey, sessionMessages]);
-  const workflowIdMention = useMemo(() => text.match(/\b(wf_[\w-]+)\b/i)?.[1], [text]);
-  const workflowRunIdMention = useMemo(() => getLastWorkflowRunIdMention(text), [text]);
-
-  // OpenClaw plugins do not always expose their structured tool_result to the
-  // renderer. Recover a visible runId first, so the standard start handler can
-  // bind the local run to this chat before a terminal push arrives.
-  useEffect(() => {
-    if (isUser) return undefined;
-    if (!isLastAssistantAfterUserTurn(message, sessionMessages)) return undefined;
-
-    let disposed = false;
-    void (async () => {
-      try {
-        if (workflowRunIdMention) {
-          const chatState = useChatStore.getState();
-          const alreadyTracked = Boolean(
-            getExecutionByRunId(workflowRunIdMention, sessionKey)
-            || chatState.workflowCardStates[workflowRunIdMention],
-          );
-          if (alreadyTracked) return;
-
-          const run = await getRunViaIpc(workflowRunIdMention);
-          if (
-            !run
-            || disposed
-            || useChatStore.getState().currentSessionKey !== sessionKey
-            || !workflowRunMatchesMention(run, workflowIdMention)
-          ) return;
-
-          await applyWorkflowRunStarted({
-            sessionKey,
-            agentId,
-            workflowId: run.workflowId,
-            runId: run.id,
-            templateName: '工作流',
-            presentation: 'patch_assistant',
-            versionId: run.versionId ?? undefined,
-          });
-          return;
-        }
-
-        // Some OpenClaw replies name only workflowId. Retain the existing
-        // newest-local-run fallback for that legacy text shape.
-        if (workflowCard || !workflowIdMention) return;
-        const run = selectWorkflowRunForCard(await listLocalWorkflowRuns(workflowIdMention));
-        if (!run || disposed || useChatStore.getState().currentSessionKey !== sessionKey) return;
-        await applyWorkflowRunStarted({
-          sessionKey,
-          agentId,
-          workflowId: workflowIdMention,
-          runId: run.runId,
-          templateName: '工作流',
-          presentation: 'patch_assistant',
-          versionId: run.versionId,
-        });
-      } catch (error) {
-        console.warn('[workflow-trace] workflow card recovery failed', {
-          workflowId: workflowIdMention,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    })();
-    return () => {
-      disposed = true;
-    };
-  }, [agentId, isUser, message, sessionKey, sessionMessages, workflowCard, workflowIdMention, workflowRunIdMention]);
-  const isWorkflowCompletionMessage = !isUser
-    && workflowCard !== null
-    && isWorkflowCompletionTranscript(text);
+  const workflowCardStates = EMPTY_WORKFLOW_CARD_STATES;
+  const workflowCard = null;
+  const isWorkflowCompletionMessage = false;
   const parameterForm = useMemo(() => {
     if (isUser) return null;
     return resolveParameterFormForAssistantMessage(message, {
@@ -870,27 +772,6 @@ export const ChatMessage = memo(function ChatMessage({
           ) : null
         ) : null}
 
-        {/* B4：助手侧「参数已确认」折叠块（图一：标题 + 左竖线文案 + 工作流卡） */}
-        {showAssistantParamsFold && workflowCard ? (
-          <ParamsConfirmedFoldRow
-            statusMessage={text.trim()}
-            runId={workflowCard.runId}
-            templateName={workflowCard.templateName}
-            onPreviewArtifact={onPreviewFile}
-            onCreateScheduledTask={onCreateScheduledTask}
-          />
-        ) : null}
-
-        {/* Workflow execution card（非参数已确认场景单独展示） */}
-        {workflowCard && !showAssistantParamsFold ? (
-          <WorkflowCard
-            runId={workflowCard.runId}
-            templateName={workflowCard.templateName}
-            onPreviewArtifact={onPreviewFile}
-            onCreateScheduledTask={onCreateScheduledTask}
-          />
-        ) : null}
-
         {/* B3：表单待提交等待指示；工作流已提交/执行后不再展示 */}
         {parameterForm && workflowCard === null && !showAssistantParamsFold ? (
           <AwaitingReplyIndicator className="px-0.5" />
@@ -1294,7 +1175,7 @@ function MessageBubble({
     isReplyStream && (enableReplyTypewriter || isReplyTypewriterAnimating);
   const bubbleText = useReplyTypewriter ? typewriterText : text;
 
-  const workflowCardStates = useChatStore((s) => s.workflowCardStates);
+  const workflowCardStates = EMPTY_WORKFLOW_CARD_STATES;
   const markdownSource = useMemo(
     () => (onPreviewFile ? preprocessTextForPreviewLinks(bubbleText) : bubbleText),
     [bubbleText, onPreviewFile],
@@ -1803,42 +1684,6 @@ function ImageLightbox({
 
 // ── 参数已确认折叠面板（图二：按步骤分组、无白底、与对话流同宽）──
 
-interface ParamsConfirmedHeaderProps {
-  /** i18n 标题，默认「参数已确认」 */
-  label: string;
-  expanded: boolean;
-  onToggle: () => void;
-}
-
-/** 与深度思考 ChatProcessBlock 标题行对齐：16px icon + 13px 文案 + chevron */
-function ParamsConfirmedHeader({
-  label,
-  expanded,
-  onToggle,
-}: ParamsConfirmedHeaderProps) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        chatProcessTitleRowClass,
-        'w-full text-left transition-colors duration-150 hover:text-foreground',
-      )}
-      onClick={onToggle}
-      aria-expanded={expanded}
-    >
-      <CircleCheck className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      <ChevronDown
-        className={cn(
-          'h-3.5 w-3.5 shrink-0 opacity-70 transition-transform duration-200 ease-[ease]',
-          expanded ? 'rotate-180' : '-rotate-90',
-        )}
-        aria-hidden
-      />
-    </button>
-  );
-}
-
 interface ParamsConfirmedGroupedBodyProps {
   groups: Array<{ title: string; content: string }>;
   fallbackText: string;
@@ -1880,63 +1725,6 @@ function ParamsConfirmedGroupedBody({
           ) : null}
         </div>
       ))}
-    </div>
-  );
-}
-
-interface ParamsConfirmedFoldRowProps {
-  /** 助手 boilerplate 全文（工作流已在后台启动…） */
-  statusMessage: string;
-  runId: string;
-  templateName: string;
-  onPreviewArtifact?: (file: AttachedFileMeta) => void;
-  onCreateScheduledTask?: (workflowId: string) => void;
-}
-
-/**
- * B4：助手侧「参数已确认」折叠块（MasterGo 148:049849）
- * 折叠区内：左竖线 + 启动说明 + 状态行；摘要/产物/操作与折叠块平级（无左竖线缩进）。
- */
-function ParamsConfirmedFoldRow({
-  statusMessage,
-  runId,
-  templateName,
-  onPreviewArtifact,
-  onCreateScheduledTask,
-}: ParamsConfirmedFoldRowProps) {
-  const { t } = useTranslation('chat');
-  const [expanded, setExpanded] = useState(true);
-  const showStatusLine =
-    statusMessage.length > 0
-    && (isWorkflowStartAssistantBoilerplate(statusMessage)
-      || !/^参数已确认$/.test(statusMessage.trim()));
-
-  const workflowCardProps = {
-    runId,
-    templateName,
-    layout: 'inline' as const,
-    onPreviewArtifact,
-    onCreateScheduledTask,
-  };
-
-  return (
-    <div className={cn(chatToolCallShellClass, 'text-[13px] leading-5')}>
-      <ParamsConfirmedHeader
-        label={t('streaming.paramsConfirmedLabel')}
-        expanded={expanded}
-        onToggle={() => setExpanded((v) => !v)}
-      />
-      {expanded ? (
-        <ChatProcessContentRail>
-          <div className="flex flex-col gap-2">
-            {showStatusLine ? (
-              <p className="font-normal text-muted-foreground">{statusMessage}</p>
-            ) : null}
-            <WorkflowCard {...workflowCardProps} section="status" />
-          </div>
-        </ChatProcessContentRail>
-      ) : null}
-      <WorkflowCard {...workflowCardProps} section="results" />
     </div>
   );
 }

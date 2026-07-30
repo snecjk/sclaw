@@ -173,6 +173,8 @@
         "statusWaitingApproval": "Waiting for approval",
         "statusWaitingInput": "Waiting for input",
         "statusUnknown": "Unknown",
+        "runUnavailable": "Run record unavailable",
+        "retryQuery": "Retry",
         "progressLabel": "Workflow execution progress",
         "preparingProgress": "Preparing to run…",
         "stepProgress": "{{completed}}/{{total}} completed, current: {{current}}",
