@@ -22,10 +22,45 @@ import { formatBytes, formatDate, getEntryIcon } from '../utils';
 
 const DRAG_ENTRY_MIME = 'application/x-sclaw-data-center-entry';
 
+type EntryContextMenuState = {
+  entry: DataCenterUiEntry;
+  x: number;
+  y: number;
+} | null;
+
 export function EntryList(props: EntryRenderProps) {
   const { t } = useTranslation('common');
+  const [contextMenu, setContextMenu] = useState<EntryContextMenuState>(null);
   const [draggingEntryId, setDraggingEntryId] = useState<string | null>(null);
   const [dragOverEntryId, setDragOverEntryId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu]);
+
+  const openContextMenu = (event: ReactMouseEvent, entry: DataCenterUiEntry) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!hasContextMenuActions(entry)) return;
+    setContextMenu(getContextMenuState(event, entry));
+  };
+
+  const runContextAction = (action: (entry: DataCenterUiEntry) => void, entry: DataCenterUiEntry) => {
+    setContextMenu(null);
+    action(entry);
+  };
 
   const getDraggedEntry = (event: ReactDragEvent): DataCenterUiEntry | null => {
     const entryId = event.dataTransfer.getData(DRAG_ENTRY_MIME) || draggingEntryId;
@@ -44,6 +79,7 @@ export function EntryList(props: EntryRenderProps) {
       event.preventDefault();
       return;
     }
+    setContextMenu(null);
     setDraggingEntryId(entry.entryId);
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData(DRAG_ENTRY_MIME, entry.entryId);
@@ -82,6 +118,7 @@ export function EntryList(props: EntryRenderProps) {
                 event.preventDefault();
                 props.onMoveToFolder(source, entry);
               }}
+              onContextMenu={(event) => openContextMenu(event, entry)}
               className={cn(
                 'grid h-[56px] grid-cols-[minmax(0,1fr)_128px] items-center rounded-[8px] bg-white px-3 shadow-[0_1px_2px_rgba(29,33,41,0.02)] transition-colors hover:bg-[#FAFBFC] min-[720px]:grid-cols-[minmax(0,1fr)_140px_64px_128px] min-[900px]:grid-cols-[minmax(0,1fr)_168px_74px_128px] dark:border dark:border-border/60 dark:bg-card dark:shadow-none dark:hover:bg-muted/40',
                 draggingEntryId === entry.entryId && 'opacity-60',
@@ -102,18 +139,26 @@ export function EntryList(props: EntryRenderProps) {
           );
         })}
       </div>
+      {contextMenu ? (
+        <EntryContextMenu
+          entry={contextMenu.entry}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onDownload={(entry) => runContextAction(props.onDownload, entry)}
+          onPreview={(entry) => runContextAction(props.onPreview, entry)}
+          onShare={(entry) => runContextAction(props.onShare, entry)}
+          onMove={(entry) => runContextAction(props.onMove, entry)}
+          onRename={(entry) => runContextAction(props.onRename, entry)}
+          onDelete={(entry) => runContextAction(props.onDelete, entry)}
+          onTrace={(entry) => runContextAction(props.onTrace, entry)}
+        />
+      ) : null}
     </div>
   );
 }
 
-type GridContextMenuState = {
-  entry: DataCenterUiEntry;
-  x: number;
-  y: number;
-} | null;
-
 export function EntryGrid(props: EntryRenderProps) {
-  const [contextMenu, setContextMenu] = useState<GridContextMenuState>(null);
+  const [contextMenu, setContextMenu] = useState<EntryContextMenuState>(null);
   const [draggingEntryId, setDraggingEntryId] = useState<string | null>(null);
   const [dragOverEntryId, setDragOverEntryId] = useState<string | null>(null);
 
@@ -137,13 +182,7 @@ export function EntryGrid(props: EntryRenderProps) {
     event.preventDefault();
     event.stopPropagation();
     if (!hasContextMenuActions(entry)) return;
-    const menuWidth = 132;
-    const menuHeight = canTraceChat(entry) ? 216 : 176;
-    setContextMenu({
-      entry,
-      x: Math.min(event.clientX, window.innerWidth - menuWidth - 8),
-      y: Math.min(event.clientY, window.innerHeight - menuHeight - 8),
-    });
+    setContextMenu(getContextMenuState(event, entry));
   };
 
   const runContextAction = (action: (entry: DataCenterUiEntry) => void, entry: DataCenterUiEntry) => {
@@ -229,7 +268,7 @@ export function EntryGrid(props: EntryRenderProps) {
         })}
       </div>
       {contextMenu ? (
-        <GridEntryContextMenu
+        <EntryContextMenu
           entry={contextMenu.entry}
           x={contextMenu.x}
           y={contextMenu.y}
@@ -246,7 +285,17 @@ export function EntryGrid(props: EntryRenderProps) {
   );
 }
 
-function GridEntryContextMenu({
+function getContextMenuState(event: ReactMouseEvent, entry: DataCenterUiEntry): NonNullable<EntryContextMenuState> {
+  const menuWidth = 132;
+  const menuHeight = canTraceChat(entry) ? 216 : 176;
+  return {
+    entry,
+    x: Math.min(event.clientX, window.innerWidth - menuWidth - 8),
+    y: Math.min(event.clientY, window.innerHeight - menuHeight - 8),
+  };
+}
+
+function EntryContextMenu({
   entry,
   x,
   y,
