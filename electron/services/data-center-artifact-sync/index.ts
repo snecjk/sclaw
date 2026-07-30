@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { basename, extname } from 'node:path';
 import { readFile, stat } from 'node:fs/promises';
 import { ArtifactSaveRecordRepository } from '../../db/repositories/artifact-save-record-repository';
@@ -15,6 +16,8 @@ import type {
 import { parseDataCenterTargetUri, targetLabel } from './target-uri';
 
 const MAX_DATA_CENTER_FILE_BYTES = 200 * 1024 * 1024;
+const DATA_CENTER_PAGE_SIZE = 200;
+const MAX_UNIQUE_NAME_ATTEMPTS = 50;
 
 const EXT_MIME_MAP: Record<string, string> = {
   '.png': 'image/png',
@@ -48,8 +51,112 @@ export interface SyncArtifactsToDataCenterInput {
   idempotencyScope: string;
 }
 
+interface DataCenterEntryListPayload {
+  items?: Array<{ name?: unknown }>;
+  records?: Array<{ name?: unknown }>;
+  total?: number;
+}
+
+function asObject(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
+}
+
 function inferMimeType(fileName: string): string {
   return EXT_MIME_MAP[extname(fileName).toLowerCase()] || 'application/octet-stream';
+}
+
+function normalizeNameKey(name: string): string {
+  return name.trim().toLocaleLowerCase();
+}
+
+function buildNumberedFileName(fileName: string, index: number): string {
+  const ext = extname(fileName);
+  const stem = ext ? fileName.slice(0, -ext.length) : fileName;
+  return `${stem} ${index}${ext}`;
+}
+
+function reserveUniqueFileName(requestedName: string, usedNames: Set<string>): string {
+  const baseName = requestedName.trim() || 'file';
+  let candidate = baseName;
+  let index = 2;
+  while (usedNames.has(normalizeNameKey(candidate))) {
+    candidate = buildNumberedFileName(baseName, index);
+    index += 1;
+  }
+  usedNames.add(normalizeNameKey(candidate));
+  return candidate;
+}
+
+export function buildArtifactSyncIdempotencyKey(parts: string[]): string {
+  const stable = parts.join('\0');
+  const digest = createHash('sha256').update(stable).digest('base64url').slice(0, 32);
+  return `artifact-${digest}`;
+}
+
+function buildDataCenterEntriesUrl(baseUrl: string, target: DataCenterArtifactTarget, pageNo: number): string {
+  const query = new URLSearchParams({
+    spaceType: target.spaceType,
+    parentEntryId: target.parentEntryId || 'root',
+    pageNo: String(pageNo),
+    pageSize: String(DATA_CENTER_PAGE_SIZE),
+  });
+  if (target.spaceId) query.set('spaceId', target.spaceId);
+  return `${baseUrl}/agent/v1/data-center/entries?${query.toString()}`;
+}
+
+function extractEntryNames(payload: unknown): string[] {
+  const payloadObject = asObject(payload);
+  const data = asObject(payloadObject.data ?? payload) as DataCenterEntryListPayload;
+  const entries = Array.isArray(data.items)
+    ? data.items
+    : Array.isArray(data.records)
+      ? data.records
+      : [];
+  return entries
+    .map((entry) => typeof entry.name === 'string' ? entry.name.trim() : '')
+    .filter(Boolean);
+}
+
+async function fetchExistingTargetNames(target: DataCenterArtifactTarget): Promise<Set<string>> {
+  const token = await getStoToken();
+  if (!token) throw Object.assign(new Error('未登录或 stoToken 已过期，请重新登录'), { statusCode: 401, errCode: 'UNAUTHORIZED' });
+
+  const baseUrl = await resolveStoBaseUrl();
+  const names = new Set<string>();
+  for (let pageNo = 1; pageNo <= MAX_UNIQUE_NAME_ATTEMPTS; pageNo += 1) {
+    const response = await fetch(buildDataCenterEntriesUrl(baseUrl, target, pageNo), {
+      method: 'GET',
+      headers: buildStoMemoryCenterAuthHeaders(token),
+    });
+    const text = await response.text();
+    let payload: unknown;
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch {
+      payload = { success: false, errMessage: text || `HTTP ${response.status}` };
+    }
+    const payloadObject = asObject(payload);
+    if (!response.ok || payloadObject.success === false) {
+      const errMessage = String(payloadObject.errMessage || payloadObject.error || `HTTP ${response.status}`);
+      throw Object.assign(new Error(errMessage), {
+        statusCode: response.status,
+        errCode: typeof payloadObject.errCode === 'string' ? payloadObject.errCode : undefined,
+      });
+    }
+
+    const pageNames = extractEntryNames(payload);
+    for (const name of pageNames) {
+      names.add(normalizeNameKey(name));
+    }
+    if (pageNames.length < DATA_CENTER_PAGE_SIZE) break;
+  }
+  return names;
+}
+
+function isDuplicateNameError(error: unknown): boolean {
+  const err = error as { errCode?: string; message?: string };
+  const text = `${err.errCode ?? ''} ${err.message ?? ''}`.toLocaleLowerCase();
+  return /duplicate|conflict|already|exists|重复|已存在|同名|名称/.test(text);
 }
 
 function appendOptional(form: FormData, key: string, value: unknown): void {
@@ -107,23 +214,32 @@ async function uploadArtifact(params: {
     body: form,
   });
   const text = await response.text();
-  let payload: any = null;
+  let payload: unknown;
   try {
     payload = text ? JSON.parse(text) : null;
   } catch {
     payload = { success: false, errMessage: text || `HTTP ${response.status}` };
   }
-  if (!response.ok || payload?.success === false) {
-    const errMessage = payload?.errMessage || payload?.error || `HTTP ${response.status}`;
+  const payloadObject = asObject(payload);
+  if (!response.ok || payloadObject.success === false) {
+    const errMessage = String(payloadObject.errMessage || payloadObject.error || `HTTP ${response.status}`);
     throw Object.assign(new Error(errMessage), {
       statusCode: response.status,
-      errCode: payload?.errCode,
+      errCode: typeof payloadObject.errCode === 'string' ? payloadObject.errCode : undefined,
     });
   }
-  const data = payload?.data ?? payload;
+  const data = asObject(payloadObject.data ?? payload);
   return {
-    entryId: data?.entryId ?? data?.id ?? null,
-    pathLabel: data?.pathLabel ?? data?.fullPath ?? null,
+    entryId: typeof data.entryId === 'string'
+      ? data.entryId
+      : typeof data.id === 'string'
+        ? data.id
+        : null,
+    pathLabel: typeof data.pathLabel === 'string'
+      ? data.pathLabel
+      : typeof data.fullPath === 'string'
+        ? data.fullPath
+        : null,
   };
 }
 
@@ -150,14 +266,33 @@ export async function syncArtifactsToDataCenter(input: SyncArtifactsToDataCenter
 
   const repo = new ArtifactSaveRecordRepository();
   const records: ArtifactSaveRecord[] = [];
+  const targetNameSets = new Map<string, Set<string>>();
   for (const artifact of input.artifacts) {
     for (const target of input.targets) {
       const label = targetLabel(target);
-      const idempotencyKey = [
+      let usedNames = targetNameSets.get(target.uri);
+      if (!usedNames) {
+        try {
+          usedNames = await fetchExistingTargetNames(target);
+        } catch (error) {
+          usedNames = new Set<string>();
+          logger.warn('[data-center-artifact-sync] existing names load failed', {
+            sourceType: input.sourceType,
+            sourceId: input.sourceId,
+            runId: input.runId,
+            targetUri: target.uri,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+        targetNameSets.set(target.uri, usedNames);
+      }
+      const requestedName = artifact.name || basename(artifact.filePath) || 'file';
+      let uploadName = reserveUniqueFileName(requestedName, usedNames);
+      const idempotencyKey = buildArtifactSyncIdempotencyKey([
         input.idempotencyScope,
         artifact.artifactKey,
         target.uri,
-      ].join(':').replace(/\s+/g, '-').slice(0, 128);
+      ]);
       let record = await repo.createOrUpdate({
         sourceType: input.sourceType,
         sourceId: input.sourceId,
@@ -165,23 +300,46 @@ export async function syncArtifactsToDataCenter(input: SyncArtifactsToDataCenter
         runId: input.runId ?? null,
         sessionId: input.sessionId ?? null,
         artifactKey: artifact.artifactKey,
-        artifactName: artifact.name,
+        artifactName: uploadName,
         localPath: artifact.filePath,
         targetUri: target.uri,
         targetLabel: label,
         status: 'uploading',
       });
       try {
-        const result = await uploadArtifact({
-          sourceType: input.sourceType,
-          sourceId: input.sourceId,
-          sourceTitle: input.sourceTitle,
-          sessionId: input.sessionId,
-          runId: input.runId,
-          artifact,
-          target,
-          idempotencyKey,
-        });
+        let result: Awaited<ReturnType<typeof uploadArtifact>> | null = null;
+        for (let attempt = 1; attempt <= MAX_UNIQUE_NAME_ATTEMPTS; attempt += 1) {
+          try {
+            result = await uploadArtifact({
+              sourceType: input.sourceType,
+              sourceId: input.sourceId,
+              sourceTitle: input.sourceTitle,
+              sessionId: input.sessionId,
+              runId: input.runId,
+              artifact: { ...artifact, name: uploadName },
+              target,
+              idempotencyKey,
+            });
+            break;
+          } catch (error) {
+            if (!isDuplicateNameError(error) || attempt >= MAX_UNIQUE_NAME_ATTEMPTS) throw error;
+            uploadName = reserveUniqueFileName(requestedName, usedNames);
+            record = await repo.createOrUpdate({
+              sourceType: input.sourceType,
+              sourceId: input.sourceId,
+              sourceTitle: input.sourceTitle ?? null,
+              runId: input.runId ?? null,
+              sessionId: input.sessionId ?? null,
+              artifactKey: artifact.artifactKey,
+              artifactName: uploadName,
+              localPath: artifact.filePath,
+              targetUri: target.uri,
+              targetLabel: label,
+              status: 'uploading',
+            });
+          }
+        }
+        if (!result) throw new Error('产物上传失败');
         record = await repo.update(record.id, {
           status: 'succeeded',
           dataCenterEntryId: result.entryId ?? null,

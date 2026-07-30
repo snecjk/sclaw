@@ -180,6 +180,11 @@
             "dataSourceTitle": "Data sources not connected yet",
             "dataSourceDescription": "The current backend API docs do not include data source management, so this phase does not use mock data."
         },
+        "pagination": {
+            "loadedSummary": "Showing {{loaded}} / {{total}}",
+            "loadMore": "Load more",
+            "loadingMore": "Loading"
+        },
         "table": {
             "name": "Name",
             "updatedAt": "Updated",
@@ -266,6 +271,11 @@
             "folderNameRequired": "Folder name is required",
             "loadFoldersFailed": "Failed to load folders",
             "createFolderFailed": "Failed to create folder",
+            "conflictTitle": "Duplicate file",
+            "conflictDescription": "A file with the same name already exists here. Choose an action.",
+            "conflictSkip": "Skip",
+            "conflictReplace": "Replace",
+            "conflictKeepBoth": "Keep both",
             "saved": "Artifact saved",
             "saveFailed": "Failed to save artifact"
         },

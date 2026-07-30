@@ -33,6 +33,7 @@ interface DataCenterStoreState {
   breadcrumbs: DataCenterBreadcrumb[];
   items: DataCenterEntry[];
   total: number;
+  hasMore: boolean;
   pageNo: number;
   pageSize: number;
   keyword: string;
@@ -41,6 +42,7 @@ interface DataCenterStoreState {
   viewMode: DataCenterViewMode;
   quota: DataCenterQuota | null;
   loading: boolean;
+  loadingMore: boolean;
   mutating: boolean;
   error: string | null;
   setSection: (section: DataCenterSection) => void;
@@ -49,6 +51,7 @@ interface DataCenterStoreState {
   setKeyword: (keyword: string) => void;
   setSort: (sortField: DataCenterSortField, sortOrder: DataCenterSortOrder) => void;
   load: (options?: { resetPage?: boolean }) => Promise<void>;
+  loadMore: () => Promise<void>;
   loadSharedSpaces: () => Promise<DataCenterSpace[]>;
   refreshQuota: () => Promise<void>;
   enterFolder: (entry: DataCenterEntry) => Promise<void>;
@@ -69,6 +72,20 @@ function isSameLoadTarget(
     && current.parentEntryId === requested.parentEntryId
     && current.keyword === requested.keyword
     && current.pageNo === requestedPageNo
+    && current.pageSize === requested.pageSize
+    && current.sortField === requested.sortField
+    && current.sortOrder === requested.sortOrder;
+}
+
+function isSameListTarget(
+  current: DataCenterStoreState,
+  requested: DataCenterStoreState,
+): boolean {
+  return current.section === requested.section
+    && current.spaceType === requested.spaceType
+    && current.spaceId === requested.spaceId
+    && current.parentEntryId === requested.parentEntryId
+    && current.keyword === requested.keyword
     && current.pageSize === requested.pageSize
     && current.sortField === requested.sortField
     && current.sortOrder === requested.sortOrder;
@@ -143,6 +160,7 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
   breadcrumbs: [],
   items: [],
   total: 0,
+  hasMore: false,
   pageNo: 1,
   pageSize: 50,
   keyword: '',
@@ -151,6 +169,7 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
   viewMode: 'list',
   quota: null,
   loading: false,
+  loadingMore: false,
   mutating: false,
   error: null,
 
@@ -163,8 +182,10 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
       breadcrumbs: [],
       items: [],
       total: 0,
+      hasMore: false,
       pageNo: 1,
       keyword: '',
+      loadingMore: false,
       error: null,
     });
   },
@@ -190,8 +211,10 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
         breadcrumbs: [],
         items: [],
         total: 0,
+        hasMore: false,
         pageNo: 1,
         keyword: '',
+        loadingMore: false,
         error: null,
       };
     });
@@ -208,15 +231,17 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
       set({
         items: [],
         total: 0,
+        hasMore: false,
         pageNo: 1,
         breadcrumbs: [],
         loading: false,
+        loadingMore: false,
         error: null,
       });
       return;
     }
     const pageNo = options?.resetPage ? 1 : state.pageNo;
-    set({ loading: true, error: null, pageNo });
+    set({ loading: true, loadingMore: false, error: null, pageNo });
     try {
       const result = await listDataCenterEntries({
         spaceType: state.spaceType,
@@ -234,14 +259,61 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
       set({
         items,
         total: result.total,
+        hasMore: result.items.length > 0 && result.pageNo * result.pageSize < result.total,
         pageNo: result.pageNo,
         pageSize: result.pageSize,
         breadcrumbs: result.breadcrumbs ?? [],
         loading: false,
+        loadingMore: false,
       });
     } catch (error) {
       if (!isSameLoadTarget(get(), state, pageNo)) return;
-      set({ loading: false, error: error instanceof Error ? error.message : String(error) });
+      set({ loading: false, loadingMore: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  },
+
+  loadMore: async () => {
+    const state = get();
+    if (state.section === 'data_source') return;
+    if (state.loading || state.loadingMore) return;
+    if (state.spaceType === 'site_shared_artifact' && !state.spaceId) return;
+    if (!state.hasMore) return;
+
+    const nextPageNo = state.pageNo + 1;
+    set({ loadingMore: true, error: null });
+    try {
+      const result = await listDataCenterEntries({
+        spaceType: state.spaceType,
+        spaceId: state.spaceId ?? undefined,
+        parentEntryId: state.parentEntryId,
+        keyword: state.keyword,
+        pageNo: nextPageNo,
+        pageSize: state.pageSize,
+        sortField: state.sortField,
+        sortOrder: state.sortOrder,
+      });
+      const spaceItems = result.items.filter((item) => belongsToRequestedSpace(item, state));
+      const items = await enrichScheduledTaskEntryTitles(spaceItems);
+      if (!isSameListTarget(get(), state)) {
+        set({ loadingMore: false });
+        return;
+      }
+      set((current) => ({
+        items: [...current.items, ...items],
+        total: result.total,
+        hasMore: result.items.length > 0 && result.pageNo * result.pageSize < result.total,
+        pageNo: result.pageNo,
+        pageSize: result.pageSize,
+        breadcrumbs: result.breadcrumbs ?? current.breadcrumbs,
+        loadingMore: false,
+      }));
+    } catch (error) {
+      if (!isSameListTarget(get(), state)) {
+        set({ loadingMore: false });
+        return;
+      }
+      set({ loadingMore: false });
+      throw error;
     }
   },
 

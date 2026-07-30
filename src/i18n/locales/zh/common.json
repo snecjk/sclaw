@@ -181,6 +181,11 @@
             "dataSourceTitle": "数据源能力待接入",
             "dataSourceDescription": "当前后端接口文档尚未包含数据源管理，本期不做假数据。"
         },
+        "pagination": {
+            "loadedSummary": "已显示 {{loaded}} / {{total}}",
+            "loadMore": "加载更多",
+            "loadingMore": "正在加载"
+        },
         "table": {
             "name": "名称",
             "updatedAt": "更新时间",
@@ -267,6 +272,11 @@
             "folderNameRequired": "文件夹名称不能为空",
             "loadFoldersFailed": "加载文件夹失败",
             "createFolderFailed": "创建文件夹失败",
+            "conflictTitle": "同名文件",
+            "conflictDescription": "此位置存在以下同名文件，请选择操作",
+            "conflictSkip": "跳过",
+            "conflictReplace": "替换",
+            "conflictKeepBoth": "保留两者",
             "saved": "产物已保存",
             "saveFailed": "保存产物失败"
         },

@@ -393,7 +393,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   const [saving, setSaving] = useState(false);
   const [beautifying, setBeautifying] = useState(false);
   const [recipients, setRecipients] = useState<DingTalkMention[]>(init.recipients);
-  const [errors, setErrors] = useState<{ name?: string; instructions?: string }>({});
+  const [errors, setErrors] = useState<{ name?: string; instructions?: string; dataCenterTarget?: string }>({});
   const [engineType, setEngineType] = useState<TaskEngineType>(init.engineType);
   const [saveToDataCenter, setSaveToDataCenter] = useState(init.saveToDataCenter);
   const [saveToMyArtifact, setSaveToMyArtifact] = useState(init.saveToMyArtifact);
@@ -544,7 +544,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
     if (!instructions.trim()) newErrors.instructions = t('myTask.createModal.instructionsRequired');
     const shouldSaveToSharedArtifact = isSite && saveToSharedArtifact;
     if (saveToDataCenter && !saveToMyArtifact && !shouldSaveToSharedArtifact) {
-      newErrors.instructions = '请选择至少一个数据中心保存位置';
+      newErrors.dataCenterTarget = '请选择至少一个数据中心保存位置';
     }
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -793,7 +793,14 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
             <DingTalkRecipientField value={recipients} onChange={setRecipients} />
           </div>
 
-          <div className="flex flex-col gap-3 rounded-[10px] border border-border bg-muted/20 p-3">
+          <div
+            className={cn(
+              'flex flex-col gap-3 rounded-[10px] border bg-muted/20 p-3',
+              errors.dataCenterTarget
+                ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]'
+                : 'border-border',
+            )}
+          >
             <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
               <input
                 type="checkbox"
@@ -806,6 +813,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                     setSaveToSharedArtifact(false);
                     setMyArtifactFolderPath(null);
                     setSharedArtifactFolderPath(null);
+                    if (errors.dataCenterTarget) setErrors((p) => ({ ...p, dataCenterTarget: undefined }));
                   }
                 }}
                 className="h-4 w-4 rounded border-border"
@@ -823,6 +831,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                       setSaveToMyArtifact(checked);
                       setMyArtifactFolderPath(checked ? buildDataCenterTargetUri('qa_artifact', null) : null);
                       if (checked) setMyArtifactPathLabel('我的产物 / 根目录');
+                      if (checked && errors.dataCenterTarget) setErrors((p) => ({ ...p, dataCenterTarget: undefined }));
                     }}
                     className="mt-0.5 h-4 w-4 rounded border-border"
                   />
@@ -860,6 +869,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                         const checked = event.target.checked;
                         setSaveToSharedArtifact(checked);
                         if (!checked) setSharedArtifactFolderPath(null);
+                        if (checked && errors.dataCenterTarget) setErrors((p) => ({ ...p, dataCenterTarget: undefined }));
                       }}
                       className="mt-0.5 h-4 w-4 rounded border-border"
                     />
@@ -917,6 +927,9 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
               </div>
             ) : null}
           </div>
+          {errors.dataCenterTarget ? (
+            <p className="-mt-1 text-xs text-destructive">{errors.dataCenterTarget}</p>
+          ) : null}
         </div>
 
         <div className="flex justify-end gap-3 px-[18px] py-4 border-t border-border bg-muted/20 rounded-b-[22px] flex-shrink-0">

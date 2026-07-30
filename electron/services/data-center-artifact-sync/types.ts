@@ -65,6 +65,9 @@ export interface CreateArtifactSaveRecordInput {
 }
 
 export interface UpdateArtifactSaveRecordInput {
+  artifactName?: string;
+  localPath?: string | null;
+  targetLabel?: string | null;
   status?: ArtifactSaveStatus;
   dataCenterEntryId?: string | null;
   dataCenterPathLabel?: string | null;

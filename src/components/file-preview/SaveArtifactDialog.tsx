@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronDown, ChevronRight, Info, Loader2, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, ChevronRight, FileText, Info, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import directoryIcon from '@/assets/icons/directory.svg';
 import { Button } from '@/components/ui/button';
 import {
+  createDataCenterIdempotencyKey,
+  deleteDataCenterEntry,
+  deleteDataCenterSharedEntry,
   getDataCenterSpaces,
   listDataCenterEntries,
   uploadArtifactFromPath,
@@ -26,10 +29,17 @@ type FolderMap = Record<string, DataCenterEntry[]>;
 type LoadingMap = Record<string, boolean>;
 type OpenMap = Record<string, boolean>;
 type FolderSpace = 'my' | 'shared';
+type ConflictAction = 'replace' | 'keep_both';
 
 interface SaveTarget {
   space: FolderSpace;
   parentEntryId: string;
+}
+
+interface FileNameConflict {
+  fileName: string;
+  existingEntry: DataCenterEntry;
+  existingNames: Set<string>;
 }
 
 function folderKey(space: FolderSpace, entryId: string): string {
@@ -42,33 +52,26 @@ function isSiteSharedArtifactSpace(space: { spaceType?: string; scopeType?: stri
     || space.displayName?.includes('网点共享产物') === true;
 }
 
-function hashStableKey(value: string): string {
-  let h1 = 0xdeadbeef;
-  let h2 = 0x41c6ce57;
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index);
-    h1 = Math.imul(h1 ^ code, 2654435761);
-    h2 = Math.imul(h2 ^ code, 1597334677);
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  return `${(h1 >>> 0).toString(36)}${(h2 >>> 0).toString(36)}`;
+function normalizeFileNameKey(name: string): string {
+  return name.trim().toLocaleLowerCase();
 }
 
-function createArtifactUploadIdempotencyKey(
-  provenance: DataCenterArtifactProvenance,
-  target: SaveTarget,
-  targetSpaceId: string | null,
-): string {
-  const stableSource = [
-    provenance.sourceType,
-    provenance.sessionId,
-    provenance.artifactKey,
-    target.space,
-    targetSpaceId ?? 'my',
-    target.parentEntryId,
-  ].join(':');
-  return `artifact-${hashStableKey(stableSource)}`;
+function reserveUniqueFileName(requestedName: string, usedNames: Set<string>): string {
+  const fallbackName = requestedName.trim() || 'file';
+  const dotIndex = fallbackName.lastIndexOf('.');
+  const hasExt = dotIndex > 0;
+  const stem = hasExt ? fallbackName.slice(0, dotIndex) : fallbackName;
+  const ext = hasExt ? fallbackName.slice(dotIndex) : '';
+  for (let index = 1; index < 1000; index += 1) {
+    const candidate = `${stem} (${index})${ext}`;
+    if (!usedNames.has(normalizeFileNameKey(candidate))) {
+      usedNames.add(normalizeFileNameKey(candidate));
+      return candidate;
+    }
+  }
+  const candidate = `${stem}-${Date.now()}${ext}`;
+  usedNames.add(normalizeFileNameKey(candidate));
+  return candidate;
 }
 
 export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialogProps) {
@@ -83,6 +86,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
   const [loadingMap, setLoadingMap] = useState<LoadingMap>({});
   const [openMap, setOpenMap] = useState<OpenMap>({});
   const [saving, setSaving] = useState(false);
+  const [conflict, setConflict] = useState<FileNameConflict | null>(null);
   const [sharedOpen, setSharedOpen] = useState(true);
   const [mineOpen, setMineOpen] = useState(true);
 
@@ -203,28 +207,124 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
   const sharedRootLoading = sharedSpaceLoading || Boolean(loadingMap[sharedRootKey]);
   const myRootLoading = Boolean(loadingMap[myRootKey]);
 
+  const resolveTargetSpaceId = async (): Promise<string | null> => {
+    if (selectedTarget.space !== 'shared') return null;
+    const targetSpaceId = sharedSpaceId ?? await loadSharedSpace();
+    if (!targetSpaceId) {
+      throw new Error(t('dataCenterPage.toasts.sharedSpaceUnavailable'));
+    }
+    return targetSpaceId;
+  };
+
+  const findFileNameConflict = async (
+    fileName: string,
+    targetSpaceId: string | null,
+  ): Promise<FileNameConflict | null> => {
+    const existingNames = new Set<string>();
+    let existingEntry: DataCenterEntry | null = null;
+    const requestedKey = normalizeFileNameKey(fileName);
+    const pageSize = 200;
+    for (let pageNo = 1; pageNo <= 50; pageNo += 1) {
+      const result = await listDataCenterEntries({
+        spaceType: selectedTarget.space === 'shared' ? 'site_shared_artifact' : 'qa_artifact',
+        spaceId: targetSpaceId ?? undefined,
+        parentEntryId: selectedTarget.parentEntryId,
+        entryType: 'file',
+        pageNo,
+        pageSize,
+        sortField: 'name',
+        sortOrder: 'asc',
+      });
+      for (const item of result.items) {
+        if (item.entryType !== 'file') continue;
+        const key = normalizeFileNameKey(item.name);
+        existingNames.add(key);
+        if (key === requestedKey) existingEntry = item;
+      }
+      if (result.items.length < pageSize || result.pageNo * result.pageSize >= result.total) break;
+    }
+    return existingEntry ? { fileName, existingEntry, existingNames } : null;
+  };
+
+  const upload = async (
+    uploadProvenance: DataCenterArtifactProvenance,
+    targetSpaceId: string | null,
+    fileName: string,
+    idempotencyKey: string,
+  ) => {
+    if (!file.filePath) return;
+    await uploadArtifactFromPath({
+      ...uploadProvenance,
+      filePath: file.filePath,
+      fileName,
+      parentEntryId: selectedTarget.space === 'my' ? selectedTarget.parentEntryId : ROOT_ENTRY_ID,
+      targetSpaceId: targetSpaceId ?? undefined,
+      targetParentEntryId: selectedTarget.space === 'shared' ? selectedTarget.parentEntryId : undefined,
+      idempotencyKey,
+    });
+  };
+
+  const completeSave = () => {
+    toast.success(t('dataCenterPage.saveArtifact.saved'));
+    onSaved();
+  };
+
+  const saveWithConflictAction = async (action: ConflictAction, currentConflict: FileNameConflict) => {
+    if (!file.filePath || !provenance) return;
+    setSaving(true);
+    try {
+      const targetSpaceId = await resolveTargetSpaceId();
+      const uploadProvenance = await resolveScheduledTaskArtifactProvenance(provenance);
+      if (action === 'replace') {
+        if (selectedTarget.space === 'shared' && currentConflict.existingEntry.shared && currentConflict.existingEntry.canManage) {
+          await deleteDataCenterSharedEntry(currentConflict.existingEntry.entryId);
+        } else {
+          await deleteDataCenterEntry(currentConflict.existingEntry.entryId);
+        }
+        await upload(
+          uploadProvenance,
+          targetSpaceId,
+          currentConflict.fileName,
+          createDataCenterIdempotencyKey('artifact-replace', `${uploadProvenance.artifactKey}:${currentConflict.fileName}`),
+        );
+      } else {
+        const nextName = reserveUniqueFileName(currentConflict.fileName, new Set(currentConflict.existingNames));
+        await upload(
+          uploadProvenance,
+          targetSpaceId,
+          nextName,
+          createDataCenterIdempotencyKey('artifact', `${uploadProvenance.artifactKey}:${nextName}`),
+        );
+      }
+      setConflict(null);
+      completeSave();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('dataCenterPage.saveArtifact.saveFailed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const save = async () => {
     if (!file.filePath || !provenance) return;
     setSaving(true);
     try {
-      const targetSpaceId = selectedTarget.space === 'shared'
-        ? sharedSpaceId ?? await loadSharedSpace()
-        : null;
-      if (selectedTarget.space === 'shared' && !targetSpaceId) {
-        throw new Error(t('dataCenterPage.toasts.sharedSpaceUnavailable'));
+      const fileName = file.fileName?.trim() || 'file';
+      const targetSpaceId = await resolveTargetSpaceId();
+      const nameConflict = await findFileNameConflict(fileName, targetSpaceId);
+      if (nameConflict) {
+        setConflict(nameConflict);
+        setSaving(false);
+        return;
       }
       const uploadProvenance = await resolveScheduledTaskArtifactProvenance(provenance);
-      await uploadArtifactFromPath({
-        ...uploadProvenance,
-        filePath: file.filePath,
-        fileName: file.fileName,
-        parentEntryId: selectedTarget.space === 'my' ? selectedTarget.parentEntryId : ROOT_ENTRY_ID,
-        targetSpaceId: targetSpaceId ?? undefined,
-        targetParentEntryId: selectedTarget.space === 'shared' ? selectedTarget.parentEntryId : undefined,
-        idempotencyKey: createArtifactUploadIdempotencyKey(uploadProvenance, selectedTarget, targetSpaceId),
-      });
-      toast.success(t('dataCenterPage.saveArtifact.saved'));
-      onSaved();
+      await upload(
+        uploadProvenance,
+        targetSpaceId,
+        fileName,
+        createDataCenterIdempotencyKey('artifact', `${uploadProvenance.artifactKey}:${fileName}`),
+      );
+      completeSave();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('dataCenterPage.saveArtifact.saveFailed'));
     } finally {
@@ -359,6 +459,76 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
           </Button>
         </div>
       </div>
+      {conflict ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 px-4">
+          <div className="w-full max-w-[414px] overflow-hidden rounded-[14px] border border-[#E5E6EB] bg-white shadow-2xl dark:border-border dark:bg-background">
+            <div className="flex h-11 items-center justify-between px-4">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#FF4D4F] text-white">
+                  <AlertCircle className="h-3.5 w-3.5" strokeWidth={2.8} />
+                </span>
+                <h3 className="truncate text-[13px] font-semibold text-[#1D2129] dark:text-foreground">
+                  {t('dataCenterPage.saveArtifact.conflictTitle')}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConflict(null)}
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[#4E5969] hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
+                aria-label={t('actions.close')}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="px-3 pb-3">
+              <p className="text-[12px] leading-[18px] text-[#4E5969] dark:text-muted-foreground">
+                {t('dataCenterPage.saveArtifact.conflictDescription')}
+              </p>
+              <div className="mt-3 flex min-h-[44px] items-center gap-3 rounded-[10px] bg-[#F7F8FA] px-3 dark:bg-muted/40">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#3BAFB8] text-white">
+                  <FileText className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[#1D2129] dark:text-foreground">
+                  {conflict.fileName}
+                </span>
+              </div>
+            </div>
+            <div className="flex h-[48px] items-center justify-between gap-2 border-t border-[#E5E6EB] px-3 py-2 dark:border-border">
+              <button
+                type="button"
+                className="h-8 rounded-[8px] px-3 text-[12px] font-normal text-[#1D2129] hover:bg-[#F2F3F5] dark:text-foreground dark:hover:bg-muted"
+                onClick={() => {
+                  setConflict(null);
+                  onClose();
+                }}
+              >
+                {t('dataCenterPage.saveArtifact.conflictSkip')}
+              </button>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-8 rounded-[8px] bg-[#E5E6EB] px-4 text-[12px] font-normal text-[#1D2129] hover:bg-[#D7DBE2] dark:bg-muted dark:text-foreground dark:hover:bg-muted/80"
+                  disabled={saving}
+                  onClick={() => { void saveWithConflictAction('replace', conflict); }}
+                >
+                  {saving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                  {t('dataCenterPage.saveArtifact.conflictReplace')}
+                </Button>
+                <Button
+                  type="button"
+                  className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
+                  disabled={saving}
+                  onClick={() => { void saveWithConflictAction('keep_both', conflict); }}
+                >
+                  {saving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                  {t('dataCenterPage.saveArtifact.conflictKeepBoth')}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
