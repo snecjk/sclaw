@@ -16,7 +16,7 @@ import { DEFAULT_WORKSPACE_ID } from '../db/models/domain/session-catalog';
 import { getCatalogSessionRepository } from '../db/repositories/catalog-session-repository';
 import { getSessionEngineBindingRepository } from '../db/repositories/session-engine-binding-repository';
 import { logger } from '../utils/logger';
-import { isWorkflowOpenClawSessionKey } from './workflow-runtime/openclaw-workflow-session-cleanup';
+import { isWorkflowOpenClawSessionKey } from '../../shared/workflow-openclaw-session';
 
 const SYNCED_FLAG = 'syncedToSQLite';
 

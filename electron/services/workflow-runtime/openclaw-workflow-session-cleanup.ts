@@ -2,12 +2,7 @@
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { getOpenClawConfigDir } from '../../utils/paths';
-
-export const WORKFLOW_OPENCLAW_SESSION_PREFIX = 'agent:workflow-runtime:workflow:';
-
-export function isWorkflowOpenClawSessionKey(sessionKey: string): boolean {
-  return sessionKey.startsWith(WORKFLOW_OPENCLAW_SESSION_PREFIX);
-}
+import { isWorkflowOpenClawSessionKey } from '../../../shared/workflow-openclaw-session';
 
 function sessionFiles(value: unknown): string[] {
   if (!value || typeof value !== 'object') return [];

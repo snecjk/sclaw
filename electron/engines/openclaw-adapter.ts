@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { getOpenClawConfigDir } from '../utils/paths';
 import type { EngineAdapter, EngineAdapterContext, EngineSendWithMediaParams, EngineSessionSummary } from './types';
 import { ensureProjectAgentForSessionKey } from '../services/project-agent-service';
-import { isWorkflowOpenClawSessionKey } from '../services/workflow-runtime/openclaw-workflow-session-cleanup';
+import { isWorkflowOpenClawSessionKey } from '../../shared/workflow-openclaw-session';
 import { logger } from '../utils/logger';
 import {
   AGENT_EXECUTION_MEMORY_CONTEXT_MARKER,

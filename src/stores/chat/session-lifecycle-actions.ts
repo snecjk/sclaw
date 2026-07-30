@@ -67,6 +67,7 @@ import {
   transferSessionSendReadiness,
 } from '@/lib/session-send-readiness';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
+import { isWorkflowOpenClawSessionKey } from '../../../shared/workflow-openclaw-session';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 const SESSION_LOAD_MIN_INTERVAL_MS = 1_200;
@@ -116,7 +117,12 @@ export function createSessionLifecycleActions(
           const data = await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.list', {});
           let rawSessions: Record<string, unknown>[] = [];
           if (data && Array.isArray(data.sessions)) {
-            rawSessions = data.sessions;
+            rawSessions = data.sessions.filter((session) => {
+              const key = session && typeof session === 'object'
+                ? String((session as Record<string, unknown>).key ?? '')
+                : '';
+              return !isWorkflowOpenClawSessionKey(key);
+            });
           }
 
           // ── Merge local filesystem sessions (dated cron + claude task runs) ──
