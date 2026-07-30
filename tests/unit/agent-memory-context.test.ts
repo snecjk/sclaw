@@ -16,7 +16,9 @@ vi.mock('../../electron/services/agent-memory-orchestrator', () => ({
 
 import {
   AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS,
+  AGENT_MEMORY_MIN_RELEVANCE_SCORE,
   AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS,
+  AGENT_MEMORY_SEARCH_TOP_K,
   AgentMemoryContextService,
 } from '../../electron/services/agent-memory-context-service';
 
@@ -127,9 +129,37 @@ describe('AgentMemoryContextService', () => {
       { id: 'exec-1', memory: '先查询再汇总', score: 0.8, metadata: { memoryScope: 'execution', status: 'active', confidence: 0.9 } },
     ] });
     const result = await new AgentMemoryContextService().prepare('请查询最近一周的订单情况');
-    expect(searchMemoriesMock).toHaveBeenCalledWith('请查询最近一周的订单情况', { userId: 'user-1', topK: 12 });
+    expect(searchMemoriesMock).toHaveBeenCalledWith('请查询最近一周的订单情况', {
+      userId: 'user-1',
+      topK: AGENT_MEMORY_SEARCH_TOP_K,
+    });
     expect(result.preference).toContain('用户偏好简洁回答');
     expect(result.execution).toContain('先查询再汇总');
     expect(result.injectedExecutionMemories).toEqual([{ memoryId: 'exec-1', memory: '先查询再汇总' }]);
+  });
+
+  it('does not inject weak memory matches that could override current tool routing', async () => {
+    searchMemoriesMock.mockResolvedValue({ results: [
+      {
+        id: 'exec-weak',
+        memory: '改用历史工具查询',
+        score: AGENT_MEMORY_MIN_RELEVANCE_SCORE - 0.01,
+        metadata: { memoryScope: 'execution', status: 'active', confidence: 0.9 },
+      },
+      {
+        id: 'exec-relevant',
+        memory: '校验当前查询参数',
+        score: AGENT_MEMORY_MIN_RELEVANCE_SCORE,
+        metadata: { memoryScope: 'execution', status: 'active', confidence: 0.9 },
+      },
+    ] });
+
+    const result = await new AgentMemoryContextService().prepare('请使用当前技能查询订单');
+
+    expect(result.execution).not.toContain('改用历史工具查询');
+    expect(result.execution).toContain('校验当前查询参数');
+    expect(result.injectedExecutionMemories).toEqual([
+      { memoryId: 'exec-relevant', memory: '校验当前查询参数' },
+    ]);
   });
 });
