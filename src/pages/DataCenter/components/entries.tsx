@@ -1,6 +1,6 @@
-import { useEffect, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type UIEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MoreHorizontal } from 'lucide-react';
+import { Loader2, MoreHorizontal } from 'lucide-react';
 import downloadIcon from '@/assets/icons/download-icon.svg';
 import shareIcon from '@/assets/icons/share-icon.svg';
 import uploadIcon from '@/assets/icons/upload-icon.svg';
@@ -21,6 +21,7 @@ import type { DataCenterUiEntry, EntryRenderProps } from '../types';
 import { formatBytes, formatDate, getEntryIcon } from '../utils';
 
 const DRAG_ENTRY_MIME = 'application/x-sclaw-data-center-entry';
+const LIST_LOAD_MORE_THRESHOLD_PX = 96;
 
 type EntryContextMenuState = {
   entry: DataCenterUiEntry;
@@ -30,6 +31,9 @@ type EntryContextMenuState = {
 
 export function EntryList(props: EntryRenderProps) {
   const { t } = useTranslation('common');
+  const { canLoadMore = false, loadingMore = false, onLoadMore, items } = props;
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const loadMoreInFlightRef = useRef(false);
   const [contextMenu, setContextMenu] = useState<EntryContextMenuState>(null);
   const [draggingEntryId, setDraggingEntryId] = useState<string | null>(null);
   const [dragOverEntryId, setDragOverEntryId] = useState<string | null>(null);
@@ -64,7 +68,7 @@ export function EntryList(props: EntryRenderProps) {
 
   const getDraggedEntry = (event: ReactDragEvent): DataCenterUiEntry | null => {
     const entryId = event.dataTransfer.getData(DRAG_ENTRY_MIME) || draggingEntryId;
-    return props.items.find((item) => item.entryId === entryId) ?? null;
+    return items.find((item) => item.entryId === entryId) ?? null;
   };
 
   const canDropOnFolder = (source: DataCenterUiEntry | null, target: DataCenterUiEntry): source is DataCenterUiEntry => {
@@ -91,10 +95,38 @@ export function EntryList(props: EntryRenderProps) {
     setDragOverEntryId(null);
   };
 
+  const requestNextPage = async () => {
+    if (!canLoadMore || loadingMore || !onLoadMore || loadMoreInFlightRef.current) return;
+    loadMoreInFlightRef.current = true;
+    try {
+      await onLoadMore();
+    } finally {
+      loadMoreInFlightRef.current = false;
+    }
+  };
+
+  const handleScroll = (event: UIEvent<HTMLDivElement>) => {
+    const target = event.currentTarget;
+    const distanceToBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+    if (distanceToBottom > LIST_LOAD_MORE_THRESHOLD_PX) return;
+    void requestNextPage();
+  };
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || !canLoadMore || loadingMore || !onLoadMore || loadMoreInFlightRef.current) return;
+    if (list.scrollHeight - list.clientHeight > LIST_LOAD_MORE_THRESHOLD_PX) return;
+    loadMoreInFlightRef.current = true;
+    void onLoadMore().finally(() => {
+      loadMoreInFlightRef.current = false;
+    });
+    // Recheck when the list grows so short pages can still reach a scrollable state.
+  }, [items.length, canLoadMore, loadingMore, onLoadMore]);
+
   return (
-    <div className="h-full overflow-auto pr-1">
+    <div ref={listRef} className="h-full overflow-auto pr-1" onScroll={handleScroll}>
       <div className="flex flex-col gap-2">
-        {props.items.map((entry) => {
+        {items.map((entry) => {
           const dropActive = dragOverEntryId === entry.entryId;
           return (
             <div
@@ -139,6 +171,12 @@ export function EntryList(props: EntryRenderProps) {
           );
         })}
       </div>
+      {loadingMore ? (
+        <div className="flex h-11 items-center justify-center gap-2 text-[12px] text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          {t('dataCenterPage.pagination.loadingMore')}
+        </div>
+      ) : null}
       {contextMenu ? (
         <EntryContextMenu
           entry={contextMenu.entry}
