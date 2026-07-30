@@ -685,6 +685,9 @@ export function DataCenter() {
                       onDownload={handleDownload}
                       onShare={handleShare}
                       onUploadToShared={handleUploadToShared}
+                      canLoadMore={canLoadMore}
+                      loadingMore={store.loadingMore}
+                      onLoadMore={handleLoadMore}
                       onMove={setMoveEntry}
                       onMoveToFolder={handleMoveToFolder}
                       onRename={setRenameEntry}
@@ -692,11 +695,6 @@ export function DataCenter() {
                       onTrace={handleTrace}
                     />
                   </div>
-                  <DataCenterLoadMoreFooter
-                    loadingMore={store.loadingMore}
-                    canLoadMore={canLoadMore}
-                    onLoadMore={handleLoadMore}
-                  />
                 </>
               )}
             </section>
