@@ -6,7 +6,7 @@ import {
   ScheduledTaskScheduler,
   type ScheduledTaskDispatcher,
 } from '../../electron/scheduled-tasks/scheduled-task-scheduler';
-import { validateCronExpr } from '../../electron/utils/cron-math';
+import { validateCronExpr } from '../../electron/scheduled-tasks/cron-math';
 import type { ScheduleTask, ScheduleTaskRun } from '../../electron/db/models/domain/schedule-task';
 
 function makeRecordingDispatcher() {

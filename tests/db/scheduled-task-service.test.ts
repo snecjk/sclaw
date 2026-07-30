@@ -4,6 +4,7 @@ import {
   ScheduledTaskService,
   DINGTALK_RECIPIENTS_MARKER,
 } from '../../electron/scheduled-tasks/scheduled-task-service';
+import { SCHEDULED_TASK_DINGTALK_RULES } from '../../shared/dingtalk-prompts';
 import type { DingTalkMention } from '../../shared/dingtalk-send/dingtalk-mention';
 
 const baseCreateInput = {
@@ -108,7 +109,7 @@ describe('ScheduledTaskService', () => {
       expect(svc.buildExecutionSystemPromptAppend(task)).toBeNull();
     });
 
-    it('bakes the scheduled-task 必发 block when recipients are resolved', async () => {
+    it('bakes recipients block + 模块 C when recipients are resolved from column', async () => {
       const recipients: DingTalkMention[] = [
         { type: 'user', displayName: 'Lei', userId: 'u-lei' },
       ];
@@ -120,6 +121,9 @@ describe('ScheduledTaskService', () => {
       expect(append).toContain('不要假设系统会自动发');
       expect(append).toContain('u-lei');
       expect(append).not.toContain('系统自动发送');
+      // 列收件人路径须带上模块 C（禁询问），避免 Claude 首跑改成请示
+      expect(append).toContain(SCHEDULED_TASK_DINGTALK_RULES);
+      expect(append).toContain('禁止在发送前询问');
     });
 
     it('resolves recipients from prompt block when column is empty', async () => {
@@ -131,6 +135,8 @@ describe('ScheduledTaskService', () => {
       const append = svc.buildExecutionSystemPromptAppend(task);
       expect(append).toContain('u-from-prompt');
       expect(append).toContain('指定即必发');
+      expect(append).toContain(SCHEDULED_TASK_DINGTALK_RULES);
+      expect(append).toContain('禁止在发送前询问');
     });
 
     it('uses agent 必发 rules when task prompt involves workflow and recipients are resolved', async () => {
@@ -148,6 +154,8 @@ describe('ScheduledTaskService', () => {
       expect(append).toContain('不要假设系统会自动发');
       expect(append).not.toContain('系统自动发送');
       expect(append).toContain('dws chat message send --user u-lei');
+      expect(append).toContain(SCHEDULED_TASK_DINGTALK_RULES);
+      expect(append).toContain('禁止在发送前询问');
     });
   });
 
