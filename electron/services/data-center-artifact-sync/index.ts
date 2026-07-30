@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { basename, extname } from 'node:path';
 import { readFile, stat } from 'node:fs/promises';
 import { ArtifactSaveRecordRepository } from '../../db/repositories/artifact-save-record-repository';
@@ -84,6 +85,12 @@ function reserveUniqueFileName(requestedName: string, usedNames: Set<string>): s
   }
   usedNames.add(normalizeNameKey(candidate));
   return candidate;
+}
+
+export function buildArtifactSyncIdempotencyKey(parts: string[]): string {
+  const stable = parts.join('\0');
+  const digest = createHash('sha256').update(stable).digest('base64url').slice(0, 32);
+  return `artifact-${digest}`;
 }
 
 function buildDataCenterEntriesUrl(baseUrl: string, target: DataCenterArtifactTarget, pageNo: number): string {
@@ -281,11 +288,11 @@ export async function syncArtifactsToDataCenter(input: SyncArtifactsToDataCenter
       }
       const requestedName = artifact.name || basename(artifact.filePath) || 'file';
       let uploadName = reserveUniqueFileName(requestedName, usedNames);
-      const idempotencyKey = [
+      const idempotencyKey = buildArtifactSyncIdempotencyKey([
         input.idempotencyScope,
         artifact.artifactKey,
         target.uri,
-      ].join(':').replace(/\s+/g, '-').slice(0, 128);
+      ]);
       let record = await repo.createOrUpdate({
         sourceType: input.sourceType,
         sourceId: input.sourceId,

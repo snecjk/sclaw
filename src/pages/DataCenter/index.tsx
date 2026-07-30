@@ -111,6 +111,7 @@ export function DataCenter() {
   const folderCount = isLocalDriveTab ? localStore.stats.folderCount : store.items.filter((item) => item.entryType === 'folder').length;
   const fileCount = isLocalDriveTab ? localStore.stats.uncategorizedFileCount : store.items.filter((item) => item.entryType === 'file').length;
   const authorizedCount = isLocalDriveTab ? localStore.stats.authorizedCount : store.total;
+  const canLoadMore = !isLocalDriveTab && store.hasMore;
   const quotaUsedPercent = store.quota?.usagePercent ?? 0;
   const quotaUsedText = store.quota
     ? t('dataCenterPage.toolbar.usedQuota', {
@@ -431,6 +432,14 @@ export function DataCenter() {
     void store.enterFolder(entry);
   };
 
+  const handleLoadMore = async () => {
+    try {
+      await store.loadMore();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('dataCenterPage.feedback.loadFailed'));
+    }
+  };
+
   const deleteDialogTitle = deleteEntry?.localAuthorized
     ? t('dataCenterPage.dialogs.removeAuthorizationTitle')
     : t('dataCenterPage.dialogs.deleteTitle');
@@ -626,7 +635,7 @@ export function DataCenter() {
               />
             ) : null}
 
-            <section className="min-h-0 flex-1 overflow-hidden">
+            <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {currentError ? (
                 <FeedbackState icon={<AlertCircle className="h-8 w-8" />} title={t('dataCenterPage.feedback.loadFailed')} description={errorDescription ?? ''} />
               ) : currentLoading ? (
@@ -642,35 +651,53 @@ export function DataCenter() {
                     : emptyFeedbackDescription}
                 />
               ) : currentViewMode === 'grid' ? (
-                <EntryGrid
-                  items={visibleItems}
-                  allowUploadToShared={isSite}
-                  onOpenFolder={handleOpenFolder}
-                  onPreview={handlePreview}
-                  onDownload={handleDownload}
-                  onShare={handleShare}
-                  onUploadToShared={handleUploadToShared}
-                  onMove={setMoveEntry}
-                  onMoveToFolder={handleMoveToFolder}
-                  onRename={setRenameEntry}
-                  onDelete={setDeleteEntry}
-                  onTrace={handleTrace}
-                />
+                <>
+                  <div className="min-h-0 flex-1">
+                    <EntryGrid
+                      items={visibleItems}
+                      allowUploadToShared={isSite}
+                      onOpenFolder={handleOpenFolder}
+                      onPreview={handlePreview}
+                      onDownload={handleDownload}
+                      onShare={handleShare}
+                      onUploadToShared={handleUploadToShared}
+                      onMove={setMoveEntry}
+                      onMoveToFolder={handleMoveToFolder}
+                      onRename={setRenameEntry}
+                      onDelete={setDeleteEntry}
+                      onTrace={handleTrace}
+                    />
+                  </div>
+                  <DataCenterLoadMoreFooter
+                    loadingMore={store.loadingMore}
+                    canLoadMore={canLoadMore}
+                    onLoadMore={handleLoadMore}
+                  />
+                </>
               ) : (
-                <EntryList
-                  items={visibleItems}
-                  allowUploadToShared={isSite}
-                  onOpenFolder={handleOpenFolder}
-                  onPreview={handlePreview}
-                  onDownload={handleDownload}
-                  onShare={handleShare}
-                  onUploadToShared={handleUploadToShared}
-                  onMove={setMoveEntry}
-                  onMoveToFolder={handleMoveToFolder}
-                  onRename={setRenameEntry}
-                  onDelete={setDeleteEntry}
-                  onTrace={handleTrace}
-                />
+                <>
+                  <div className="min-h-0 flex-1">
+                    <EntryList
+                      items={visibleItems}
+                      allowUploadToShared={isSite}
+                      onOpenFolder={handleOpenFolder}
+                      onPreview={handlePreview}
+                      onDownload={handleDownload}
+                      onShare={handleShare}
+                      onUploadToShared={handleUploadToShared}
+                      onMove={setMoveEntry}
+                      onMoveToFolder={handleMoveToFolder}
+                      onRename={setRenameEntry}
+                      onDelete={setDeleteEntry}
+                      onTrace={handleTrace}
+                    />
+                  </div>
+                  <DataCenterLoadMoreFooter
+                    loadingMore={store.loadingMore}
+                    canLoadMore={canLoadMore}
+                    onLoadMore={handleLoadMore}
+                  />
+                </>
               )}
             </section>
           </>
@@ -802,6 +829,34 @@ export function DataCenter() {
           toast.error(error instanceof Error ? error.message : t('chat:preview.shareDialog.failed'));
         }}
       />
+    </div>
+  );
+}
+
+function DataCenterLoadMoreFooter({
+  loadingMore,
+  canLoadMore,
+  onLoadMore,
+}: {
+  loadingMore: boolean;
+  canLoadMore: boolean;
+  onLoadMore: () => Promise<void>;
+}) {
+  const { t } = useTranslation('common');
+  if (!canLoadMore) return null;
+  return (
+    <div className="flex shrink-0 items-center justify-center gap-3 border-t border-border/60 px-2 py-3 text-[12px] text-muted-foreground">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-8 rounded-[8px] px-3 text-[12px]"
+        onClick={onLoadMore}
+        disabled={loadingMore}
+      >
+        {loadingMore ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+        {loadingMore ? t('dataCenterPage.pagination.loadingMore') : t('dataCenterPage.pagination.loadMore')}
+      </Button>
     </div>
   );
 }

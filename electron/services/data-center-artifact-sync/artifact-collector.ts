@@ -2,12 +2,17 @@ import { basename } from 'node:path';
 import { stat } from 'node:fs/promises';
 import type { ArtifactSaveItem } from './types';
 import { resolveWorkspaceFilePath } from '../../utils/artifact-path';
+import { PREVIEWABLE_FILE_EXT_PATTERN } from '../../../shared/artifact-path';
 
 const MEDIA_ATTACHED_REGEX = /\[media attached:\s*([^\n\r(]+?)\s*\(([^)]+)\)\s*\|\s*([^\]]*)\]/g;
-const MARKDOWN_LOCAL_LINK_REGEX = /\[([^\]]+)\]\(((?:file:\/\/)?\/[^)\n\r]+)\)/g;
+const MARKDOWN_LINK_REGEX = /\[([^\]\n]+)\]\(([^)\n\r]+)\)/g;
+const PREVIEW_PATH_REGEX = new RegExp(
+  `(?:^|[\\s:：])((?:preview://|file://)?(?:\\./)?[^\\s)\\]"'<>]+\\.(?:${PREVIEWABLE_FILE_EXT_PATTERN}))(?=$|[\\s)\\]"'<>])`,
+  'gi',
+);
 
 function cleanPath(value: string): string {
-  const trimmed = value.trim().replace(/^file:\/\//, '');
+  const trimmed = value.trim().replace(/^preview:\/\//, '').replace(/^file:\/\//, '');
   if (!trimmed || /^https?:\/\//i.test(trimmed) || trimmed.startsWith('artifact://')) return trimmed;
   if (trimmed.startsWith('/') || /^[A-Za-z]:[\\/]/.test(trimmed)) return trimmed;
   return resolveWorkspaceFilePath(trimmed);
@@ -37,10 +42,11 @@ async function toArtifact(filePath: string, name: string | undefined, contentTyp
 }
 
 function isLocalPath(value: string): boolean {
-  const trimmed = value.trim();
+  const trimmed = value.trim().replace(/^preview:\/\//, '');
   if (!trimmed || /^https?:\/\//i.test(trimmed) || trimmed.startsWith('artifact://')) return false;
   return trimmed.startsWith('/')
     || trimmed.startsWith('file://')
+    || trimmed.startsWith('./')
     || /^[A-Za-z]:[\\/]/.test(trimmed)
     || /\.[A-Za-z0-9]{1,12}$/.test(trimmed);
 }
@@ -123,11 +129,17 @@ function collectCandidatesFromText(text: string, candidates: Array<{ filePath: s
       name: match[3] || undefined,
     });
   }
-  for (const match of text.matchAll(MARKDOWN_LOCAL_LINK_REGEX)) {
+  for (const match of text.matchAll(MARKDOWN_LINK_REGEX)) {
+    if (!isLocalPath(match[2])) continue;
     candidates.push({
       name: match[1],
       filePath: match[2],
     });
+  }
+  for (const match of text.matchAll(PREVIEW_PATH_REGEX)) {
+    const filePath = match[1];
+    if (!filePath || !isLocalPath(filePath)) continue;
+    candidates.push({ filePath });
   }
 }
 

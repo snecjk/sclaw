@@ -175,6 +175,11 @@
             "dataSourceTitle": "データソース機能は未接続です",
             "dataSourceDescription": "現在のバックエンド API ドキュメントにはデータソース管理が含まれていないため、本フェーズではモックデータを使用しません。"
         },
+        "pagination": {
+            "loadedSummary": "{{loaded}} / {{total}} 件を表示中",
+            "loadMore": "さらに読み込む",
+            "loadingMore": "読み込み中"
+        },
         "table": {
             "name": "名前",
             "updatedAt": "更新日時",
@@ -261,6 +266,11 @@
             "folderNameRequired": "フォルダ名を入力してください",
             "loadFoldersFailed": "フォルダの読み込みに失敗しました",
             "createFolderFailed": "フォルダの作成に失敗しました",
+            "conflictTitle": "同名ファイル",
+            "conflictDescription": "この場所には同じ名前のファイルがあります。操作を選択してください。",
+            "conflictSkip": "スキップ",
+            "conflictReplace": "置換",
+            "conflictKeepBoth": "両方を保持",
             "saved": "成果物を保存しました",
             "saveFailed": "成果物の保存に失敗しました"
         },
