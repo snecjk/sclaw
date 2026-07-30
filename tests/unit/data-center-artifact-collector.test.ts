@@ -62,6 +62,41 @@ describe('data center artifact collector', () => {
     });
   });
 
+  it('normalizes Windows file URI drive paths before checking files', async () => {
+    const originalCwd = process.cwd();
+    const dir = await mkdtemp(join(tmpdir(), 'artifact-collector-windows-'));
+    const windowsPath = 'C:/Users/Alice/.stoclaw/workspace/.claw-output/win_report.docx';
+    const posixTestPath = join(dir, 'C:', 'Users', 'Alice', '.stoclaw', 'workspace', '.claw-output', 'win_report.docx');
+    await mkdir(join(dir, 'C:', 'Users', 'Alice', '.stoclaw', 'workspace', '.claw-output'), { recursive: true });
+    await writeFile(posixTestPath, 'fake-docx');
+
+    try {
+      process.chdir(dir);
+      const artifacts = await collectArtifactsFromAssistantMessages([
+        {
+          role: 'assistant',
+          content: '已生成文件',
+          _attachedFiles: [
+            {
+              fileName: 'win_report.docx',
+              filePath: 'file:///C:/Users/Alice/.stoclaw/workspace/.claw-output/win_report.docx',
+            },
+          ],
+        },
+      ]);
+
+      expect(artifacts).toHaveLength(1);
+      expect(artifacts[0]).toMatchObject({
+        name: 'win_report.docx',
+        filePath: windowsPath,
+        size: 9,
+      });
+    } finally {
+      process.chdir(originalCwd);
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('collects relative preview links from scheduled-task assistant text', async () => {
     mockedRoot = await mkdtemp(join(tmpdir(), 'artifact-collector-workspace-'));
     const home = join(mockedRoot, 'home');
