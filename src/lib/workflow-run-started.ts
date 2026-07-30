@@ -16,6 +16,9 @@ import {
   updateWorkflowRunMetadata,
 } from '@/stores/workflow-memory';
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
+import { consumeBufferedWorkflowStatusUpdate } from '@/lib/workflow-status-buffer';
+import { mergeWorkflowCardState } from '@/lib/workflow-card-state-merge';
+import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 
 export type WorkflowRunPresentation = 'local_turn' | 'patch_assistant';
 
@@ -101,13 +104,15 @@ export async function applyWorkflowRunStarted(
     lastStatus: 'running',
   });
 
+  const bufferedStatus = consumeBufferedWorkflowStatusUpdate(runId);
+  const initialStatus = bufferedStatus?.status ?? 'running';
   saveWorkflowExecution({
     sessionKey,
     workflowId,
     runId,
     templateId: wfRecord?.templateId ?? '',
     templateName,
-    status: 'running',
+    status: initialStatus,
     createdAt: startedAtMs,
     updatedAt: startedAtMs,
     collectedInputs: inputs,
@@ -130,14 +135,23 @@ export async function applyWorkflowRunStarted(
   }
 
   const chatStore = useChatStore.getState();
-  chatStore.setWorkflowCardState(runId, {
+  const initialCardState = {
     runId,
     workflowId,
-    status: 'running',
+    status: initialStatus,
     progress: 0,
     steps: [],
     startedAt: startedAtIso,
-  });
+  };
+  const existingCardState = chatStore.workflowCardStates[runId];
+  chatStore.setWorkflowCardState(
+    runId,
+    bufferedStatus
+      ? mergeWorkflowCardState(initialCardState, bufferedStatus, { localStartedAtMs: startedAtMs })
+      : existingCardState && isTerminalWorkflowRunStatus(existingCardState.status)
+        ? existingCardState
+        : initialCardState,
+  );
   chatStore.clearPendingWorkflow();
 
   return true;

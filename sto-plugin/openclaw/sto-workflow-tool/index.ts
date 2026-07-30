@@ -136,7 +136,11 @@ export default definePluginEntry({
 					Type.String({ description: "工作流显示名称，用于 UI 卡片" }),
 				),
 			}),
-			execute: async (params) => {
+			execute: async (params, context) => {
+				const sessionKey = context.sessionKey?.trim();
+				if (!sessionKey) {
+					throw new Error("当前聊天会话缺少 sessionKey，已阻止启动未绑定会话的工作流");
+				}
 				const idempotencyKey = `start-wf-${params.workflowId}-${Date.now()}`;
 				const run = await getClient().fetchJson<StartWorkflowResponse>(
 					`/agent/v1/workflows/${encodeURIComponent(params.workflowId)}/start`,
@@ -145,6 +149,7 @@ export default definePluginEntry({
 						body: JSON.stringify({
 							inputs: params.inputs ?? {},
 							idempotencyKey,
+							sessionKey,
 							// This plugin is invoked only by the OpenClaw chat runtime.
 							// The host bridge persists this onto the workflow run snapshot.
 							engineType: "openclaw",

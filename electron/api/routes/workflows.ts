@@ -32,6 +32,13 @@ type WorkflowV2StartResponse = {
   startedAt?: string;
 };
 
+function requireWorkflowChatSessionKey(sessionKey: unknown): string {
+  if (typeof sessionKey !== 'string' || !sessionKey.trim()) {
+    throw new Error('Workflow chat start requires a non-empty sessionKey');
+  }
+  return sessionKey.trim();
+}
+
 /**
  * The v1 start bridge is still called by engine-owned workflow tools. Treat an
  * omitted value as an old-plugin request, but never rewrite an explicit engine
@@ -558,14 +565,23 @@ export async function handleWorkflowRoutes(
     try {
       const workflowId = decodeURIComponent(startMatch[1]);
       const body = await parseJsonBody<WorkflowStartBody>(req);
+      const boundBody: WorkflowStartBody = {
+        ...body,
+        sessionKey: requireWorkflowChatSessionKey(body.sessionKey),
+      };
       logger.info(
-        '[workflow-trace] POST %s local-bridge idempotencyKey=%s inputKeys=%o requestedExecEngine=%s',
+        '[workflow-trace] POST %s local-bridge idempotencyKey=%s inputKeys=%o requestedExecEngine=%s sessionKey=%s',
         pathname,
-        body.idempotencyKey,
-        Object.keys(body.inputs ?? {}),
-        body.engineType ?? 'legacy-default',
+        boundBody.idempotencyKey,
+        Object.keys(boundBody.inputs ?? {}),
+        boundBody.engineType ?? 'legacy-default',
+        boundBody.sessionKey,
       );
-      const registered = await registerAndStartLocalWorkflow(workflowId, body, String(req.headers.stotoken ?? ''));
+      const registered = await registerAndStartLocalWorkflow(
+        workflowId,
+        boundBody,
+        String(req.headers.stotoken ?? ''),
+      );
       sendJson(res, 200, {
         success: true,
         data: {
@@ -579,7 +595,10 @@ export async function handleWorkflowRoutes(
       });
     } catch (error) {
       logger.error('[WorkflowRoutes] start workflow failed:', error);
-      res.statusCode = error instanceof Error && error.message.startsWith('Unsupported workflow execution engine:')
+      res.statusCode = error instanceof Error && (
+        error.message.startsWith('Unsupported workflow execution engine:')
+        || error.message.startsWith('Workflow chat start requires')
+      )
         ? 400
         : 500;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');

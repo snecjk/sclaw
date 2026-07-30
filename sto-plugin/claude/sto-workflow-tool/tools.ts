@@ -12,6 +12,7 @@ import { buildClaudeWorkflowStartBody } from "./workflow-start.js";
 interface WorkflowConfig {
   baseUrl: string;
   stoToken: string;
+  sessionKey: string;
   timeoutMs?: number;
 }
 
@@ -229,6 +230,10 @@ async function resolveTemplate(
 }
 
 export function createWorkflowTools(config: WorkflowConfig) {
+  const sessionKey = config.sessionKey.trim();
+  if (!sessionKey) {
+    throw new Error("Claude workflow tools require a chat sessionKey");
+  }
   const client = createWorkflowClient(config);
 
   const searchWorkflowTemplates = tool(
@@ -349,7 +354,7 @@ export function createWorkflowTools(config: WorkflowConfig) {
         {
           method: "POST",
           // This MCP server is only mounted for Claude Agent SDK sessions.
-          body: buildClaudeWorkflowStartBody(inputs ?? {}, idempotencyKey),
+          body: buildClaudeWorkflowStartBody(inputs ?? {}, idempotencyKey, sessionKey),
         },
       );
 

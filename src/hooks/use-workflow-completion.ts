@@ -4,6 +4,7 @@
 import { useEffect } from 'react';
 import { deliverWorkflowCompletionIfNeeded } from '@/lib/workflow-completion-delivery';
 import { mergeWorkflowCardState } from '@/lib/workflow-card-state-merge';
+import { bufferWorkflowStatusUpdate } from '@/lib/workflow-status-buffer';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import { useChatStore } from '@/stores/chat';
 import { getExecutionByRunId } from '@/stores/workflow-memory';
@@ -47,12 +48,33 @@ export function useWorkflowCompletion(sessionKey: string) {
       // sessionKey. The current page can prove ownership either through its
       // persisted execution record or through the already rendered run card.
       // Never accept an empty-key event without one of those run-specific ties.
-      if (!shouldAcceptWorkflowStatusUpdate(
+      const accepted = shouldAcceptWorkflowStatusUpdate(
         data.sessionKey,
         sessionKey,
         Boolean(exec),
         Boolean(currentState),
-      )) return;
+      );
+      if (!accepted) {
+        // Legacy agent tools do not know the renderer session key. Keep their
+        // early status (including a very fast terminal update) until their
+        // tool result registers the run with this chat.
+        if (data.sessionKey === '') {
+          bufferWorkflowStatusUpdate({
+            runId: data.runId,
+            workflowId: data.workflowId ?? '',
+            status: data.status,
+            progress: data.progress ?? 0,
+            currentStep: data.currentNodeId,
+            steps: data.steps ?? [],
+            result: data.result,
+            error: data.error,
+            startedAt: data.startedAt,
+            completedAt: data.completedAt,
+            waitingNodeId: data.waitingNodeId ?? null,
+          });
+        }
+        return;
+      }
       const incoming: WorkflowExecutionState = {
         runId: data.runId,
         workflowId: data.workflowId ?? currentState?.workflowId ?? '',

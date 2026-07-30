@@ -1,4 +1,5 @@
 import { buildWorkflowCardStatesForSession } from '@/stores/workflow-memory';
+import { mergeWorkflowCardState } from '@/lib/workflow-card-state-merge';
 import { absorbWorkflowExecutionStartedFromToolResults } from '@/lib/builtin-tool-dispatch';
 import {
   ensureWorkflowParameterFormInjected,
@@ -199,7 +200,17 @@ export function applyLoadedHistorySnapshot(input: {
     userCountBefore: historyUserCountBefore,
     userCountAfter: finalMessages.filter((m) => m.role === 'user').length,
   });
-  const restoredCardStates = buildWorkflowCardStatesForSession(targetSessionKey);
+  const restoredCardStates = {
+    ...get().workflowCardStates,
+    ...buildWorkflowCardStatesForSession(targetSessionKey),
+  };
+  // History is an eventually-consistent snapshot. Preserve newer IPC/hydration
+  // details already rendered for this session instead of replacing them.
+  const currentCardStates = get().workflowCardStates;
+  for (const [runId, restored] of Object.entries(restoredCardStates)) {
+    const current = currentCardStates[runId];
+    if (current) restoredCardStates[runId] = mergeWorkflowCardState(current, restored);
+  }
   const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
     sessionKey: targetSessionKey,
     get,

@@ -2,10 +2,12 @@
 export function buildClaudeWorkflowStartBody(
   inputs: Record<string, unknown>,
   idempotencyKey: string,
+  sessionKey: string,
 ): string {
   return JSON.stringify({
     inputs,
     idempotencyKey,
+    sessionKey,
     engineType: 'claude',
   });
 }
