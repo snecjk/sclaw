@@ -383,7 +383,7 @@ export function DataCenter() {
     }
     if (isSharedArtifactSpace && deleteEntry?.shared && deleteEntry.canManage) {
       await deleteDataCenterSharedEntry(entryId);
-      await store.load();
+      await store.load({ resetPage: true });
       return;
     }
     await store.deleteEntry(entryId);
@@ -393,7 +393,7 @@ export function DataCenter() {
   const handleMoveEntry = async (entry: DataCenterUiEntry, targetParentEntryId: string) => {
     if (entry.localAuthorized) return;
     await moveDataCenterEntry(entry.entryId, targetParentEntryId);
-    await store.load();
+    await store.load({ resetPage: true });
     await store.refreshQuota();
   };
 
