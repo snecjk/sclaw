@@ -316,6 +316,7 @@ export function DataCenter() {
   };
 
   const handleUploadToShared = async (entry: DataCenterUiEntry) => {
+    if (!isSite) return;
     if (entry.entryType !== 'file' || entry.spaceType !== 'qa_artifact') return;
     try {
       const spaces = store.sharedSpaces.length ? store.sharedSpaces : await store.loadSharedSpaces();
@@ -638,6 +639,7 @@ export function DataCenter() {
               ) : currentViewMode === 'grid' ? (
                 <EntryGrid
                   items={visibleItems}
+                  allowUploadToShared={isSite}
                   onOpenFolder={handleOpenFolder}
                   onPreview={handlePreview}
                   onDownload={handleDownload}
@@ -652,6 +654,7 @@ export function DataCenter() {
               ) : (
                 <EntryList
                   items={visibleItems}
+                  allowUploadToShared={isSite}
                   onOpenFolder={handleOpenFolder}
                   onPreview={handlePreview}
                   onDownload={handleDownload}
@@ -761,6 +764,7 @@ export function DataCenter() {
           onDownload={() => handleDownload(previewState.entry)}
           onShare={() => handleShare(previewState.entry)}
           onUploadToShared={() => handleUploadToShared(previewState.entry)}
+          allowUploadToShared={isSite}
         />
       ) : null}
 

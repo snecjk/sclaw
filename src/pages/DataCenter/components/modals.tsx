@@ -185,6 +185,7 @@ export function PreviewModal({
   onDownload,
   onShare,
   onUploadToShared,
+  allowUploadToShared = true,
 }: {
   entry: DataCenterUiEntry;
   tempUrl: DataCenterTempUrl;
@@ -193,11 +194,12 @@ export function PreviewModal({
   onDownload: () => void;
   onShare?: () => void;
   onUploadToShared?: () => void;
+  allowUploadToShared?: boolean;
 }) {
   const { t } = useTranslation('common');
   const [refreshing, setRefreshing] = useState(false);
   const canDownload = !entry.localAuthorized;
-  const canUploadToShared = entry.entryType === 'file' && entry.spaceType === 'qa_artifact' && !entry.localAuthorized;
+  const canUploadToShared = allowUploadToShared && entry.entryType === 'file' && entry.spaceType === 'qa_artifact' && !entry.localAuthorized;
 
   const refreshPreview = async () => {
     if (refreshing) return;

@@ -103,7 +103,20 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
     }
   };
 
-  const loadFolders = async (space: FolderSpace, entryId = ROOT_ENTRY_ID) => {
+  const fetchFolders = async (space: FolderSpace, entryId: string, spaceId: string | null) => {
+    const result = await listDataCenterEntries({
+      spaceType: space === 'shared' ? 'site_shared_artifact' : 'qa_artifact',
+      spaceId: spaceId ?? undefined,
+      parentEntryId: entryId,
+      entryType: 'folder',
+      pageSize: 200,
+      sortField: 'name',
+      sortOrder: 'asc',
+    });
+    return result.items.filter((item) => item.entryType === 'folder');
+  };
+
+  const loadFolders = async (space: FolderSpace, entryId = ROOT_ENTRY_ID, options: { preloadChildFolders?: boolean } = {}) => {
     const key = folderKey(space, entryId);
     setLoadingMap((prev) => ({ ...prev, [key]: true }));
     try {
@@ -112,19 +125,44 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
         setFolderMap((prev) => ({ ...prev, [key]: [] }));
         return;
       }
-      const result = await listDataCenterEntries({
-        spaceType: space === 'shared' ? 'site_shared_artifact' : 'qa_artifact',
-        spaceId: spaceId ?? undefined,
-        parentEntryId: entryId,
-        entryType: 'folder',
-        pageSize: 200,
-        sortField: 'name',
-        sortOrder: 'asc',
-      });
+      const folders = await fetchFolders(space, entryId, spaceId);
       setFolderMap((prev) => ({
         ...prev,
-        [key]: result.items.filter((item) => item.entryType === 'folder'),
+        [key]: folders,
       }));
+      if (options.preloadChildFolders && folders.length > 0) {
+        const childKeys = folders.map((folder) => folderKey(space, folder.entryId));
+        setLoadingMap((prev) => {
+          const next = { ...prev };
+          for (const childKey of childKeys) next[childKey] = true;
+          return next;
+        });
+        const childResults = await Promise.all(
+          folders.map(async (folder) => {
+            try {
+              return {
+                key: folderKey(space, folder.entryId),
+                folders: await fetchFolders(space, folder.entryId, spaceId),
+              };
+            } catch {
+              return { key: folderKey(space, folder.entryId), folders: null };
+            }
+          }),
+        );
+        setFolderMap((prev) => {
+          const next = { ...prev };
+          for (const childResult of childResults) {
+            if (childResult.folders === null) continue;
+            next[childResult.key] = childResult.folders;
+          }
+          return next;
+        });
+        setLoadingMap((prev) => {
+          const next = { ...prev };
+          for (const childKey of childKeys) next[childKey] = false;
+          return next;
+        });
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('dataCenterPage.saveArtifact.loadFoldersFailed'));
     } finally {
@@ -143,9 +181,9 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void loadFolders('my', ROOT_ENTRY_ID);
+    void loadFolders('my', ROOT_ENTRY_ID, { preloadChildFolders: true });
     if (isSite) {
-      void loadFolders('shared', ROOT_ENTRY_ID);
+      void loadFolders('shared', ROOT_ENTRY_ID, { preloadChildFolders: true });
     }
     // The dialog is mounted only while open; initial state already points at root.
     // eslint-disable-next-line react-hooks/exhaustive-deps

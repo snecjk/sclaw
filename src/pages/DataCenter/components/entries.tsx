@@ -393,12 +393,13 @@ function EntryActions({
   onRename,
   onDelete,
   onTrace,
+  allowUploadToShared,
   uploadToSharedLabel,
 }: EntryRenderProps & { entry: DataCenterUiEntry; uploadToSharedLabel?: string }) {
   const { t } = useTranslation('common');
   const [moreTooltipOpen, setMoreTooltipOpen] = useState(false);
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
-  const canUploadToShared = entry.entryType === 'file' && entry.spaceType === 'qa_artifact' && !entry.localAuthorized;
+  const canUploadToShared = allowUploadToShared && entry.entryType === 'file' && entry.spaceType === 'qa_artifact' && !entry.localAuthorized;
   const canMoveEntry = canMove(entry);
   const canRenameEntry = canRename(entry);
   const canDeleteEntry = canDelete(entry);

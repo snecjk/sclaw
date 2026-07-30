@@ -58,6 +58,28 @@ interface DataCenterStoreState {
   deleteEntry: (entryId: string) => Promise<void>;
 }
 
+function isSameLoadTarget(
+  current: DataCenterStoreState,
+  requested: DataCenterStoreState,
+  requestedPageNo: number,
+): boolean {
+  return current.section === requested.section
+    && current.spaceType === requested.spaceType
+    && current.spaceId === requested.spaceId
+    && current.parentEntryId === requested.parentEntryId
+    && current.keyword === requested.keyword
+    && current.pageNo === requestedPageNo
+    && current.pageSize === requested.pageSize
+    && current.sortField === requested.sortField
+    && current.sortOrder === requested.sortOrder;
+}
+
+function belongsToRequestedSpace(entry: DataCenterEntry, requested: DataCenterStoreState): boolean {
+  if (entry.spaceType !== requested.spaceType) return false;
+  if (requested.spaceType !== 'site_shared_artifact') return true;
+  return !requested.spaceId || entry.spaceId === requested.spaceId;
+}
+
 function sectionToSpace(section: DataCenterSection): DataCenterSpaceType {
   return section === 'drive' ? 'drive' : 'qa_artifact';
 }
@@ -206,7 +228,9 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
         sortField: state.sortField,
         sortOrder: state.sortOrder,
       });
-      const items = await enrichScheduledTaskEntryTitles(result.items);
+      const spaceItems = result.items.filter((item) => belongsToRequestedSpace(item, state));
+      const items = await enrichScheduledTaskEntryTitles(spaceItems);
+      if (!isSameLoadTarget(get(), state, pageNo)) return;
       set({
         items,
         total: result.total,
@@ -216,6 +240,7 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
         loading: false,
       });
     } catch (error) {
+      if (!isSameLoadTarget(get(), state, pageNo)) return;
       set({ loading: false, error: error instanceof Error ? error.message : String(error) });
     }
   },
