@@ -103,17 +103,30 @@ export const useDataCenterStore = create<DataCenterStoreState>((set, get) => ({
   },
 
   setQaArtifactSpace: (spaceType, spaceId = null) => {
-    set({
-      section: 'qa_artifact',
-      spaceType,
-      spaceId: spaceType === 'site_shared_artifact' ? spaceId : null,
-      parentEntryId: 'root',
-      breadcrumbs: [],
-      items: [],
-      total: 0,
-      pageNo: 1,
-      keyword: '',
-      error: null,
+    set((state) => {
+      const nextSpaceId = spaceType === 'site_shared_artifact' ? spaceId : null;
+      const alreadyAtTargetRoot = state.section === 'qa_artifact'
+        && state.spaceType === spaceType
+        && state.spaceId === nextSpaceId
+        && state.parentEntryId === 'root'
+        && state.keyword === '';
+
+      if (alreadyAtTargetRoot) {
+        return { error: null };
+      }
+
+      return {
+        section: 'qa_artifact',
+        spaceType,
+        spaceId: nextSpaceId,
+        parentEntryId: 'root',
+        breadcrumbs: [],
+        items: [],
+        total: 0,
+        pageNo: 1,
+        keyword: '',
+        error: null,
+      };
     });
   },
 

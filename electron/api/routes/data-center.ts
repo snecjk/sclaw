@@ -44,12 +44,15 @@ interface UploadDriveBody {
 
 interface UploadArtifactBody extends UploadDriveBody {
   sourceType?: ArtifactSourceType;
+  sourceId?: string;
+  sourceTitle?: string;
   sessionId?: string;
   artifactKey?: string;
   messageId?: string;
   runId?: string;
   workflowTemplateId?: string;
   workflowRunId?: string;
+  targetSpaceType?: string;
   targetSpaceId?: string;
   targetParentEntryId?: string;
 }
@@ -178,12 +181,15 @@ export async function handleDataCenterRoutes(
 
       const { form, fileName, size } = await buildUploadForm(body);
       form.append('sourceType', body.sourceType);
+      appendOptional(form, 'sourceId', body.sourceId);
+      appendOptional(form, 'sourceTitle', body.sourceTitle);
       form.append('sessionId', body.sessionId.trim());
       form.append('artifactKey', body.artifactKey.trim());
       appendOptional(form, 'messageId', body.messageId);
       appendOptional(form, 'runId', body.runId);
       appendOptional(form, 'workflowTemplateId', body.workflowTemplateId);
       appendOptional(form, 'workflowRunId', body.workflowRunId);
+      appendOptional(form, 'targetSpaceType', body.targetSpaceType);
       appendOptional(form, 'targetSpaceId', body.targetSpaceId);
       appendOptional(form, 'targetParentEntryId', body.targetParentEntryId);
 

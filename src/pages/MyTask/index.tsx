@@ -342,6 +342,8 @@ export default function MyTask() {
           prompt: input.message,
           dingtalkRecipients: input.dingTalkMentions ?? null,
           workflowCode: input.workflowCode ?? null,
+          myArtifactFolderPath: input.myArtifactFolderPath ?? null,
+          sharedArtifactFolderPath: input.sharedArtifactFolderPath ?? null,
         };
         const claudeFields = isClaude
           ? {

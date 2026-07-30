@@ -10,6 +10,7 @@ import sessionTypesAndChannelsMigration from './0008-session-types-and-channels'
 import wfRunWorkflowVersionMigration from './0009-wf-run-workflow-version';
 import channelPlaneMigration from './0010-channel-plane';
 import scheduleTasksMigration from './0011-schedule-tasks';
+import artifactSaveRecordsMigration from './0012-artifact-save-records';
 
 
 // Keep migrations as explicit imports so Electron/Vite bundling can retain them
@@ -27,4 +28,5 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
   wfRunWorkflowVersionMigration,
   channelPlaneMigration,
   scheduleTasksMigration,
+  artifactSaveRecordsMigration,
 ].sort((left, right) => left.version - right.version);

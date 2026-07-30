@@ -346,6 +346,9 @@ function EntryName({
   const sourceLabel = entry.sourceType === 'scheduled_task_artifact'
     ? t('dataCenterPage.entry.scheduledTask')
     : null;
+  const sourceTitle = entry.sourceType === 'scheduled_task_artifact'
+    ? entry.sourceTitle?.trim()
+    : '';
   const content = (
     <>
       <span className="flex h-9 w-9 shrink-0 items-center justify-center">{getEntryIcon(entry, entry.entryType === 'folder' ? 'h-8 w-8' : 'h-7 w-7')}</span>
@@ -358,6 +361,11 @@ function EntryName({
             </span>
           ) : null}
         </span>
+        {sourceTitle ? (
+          <span className="mt-0.5 block truncate text-[11px] leading-4 text-[#86909C] dark:text-muted-foreground">
+            关联任务：{sourceTitle}
+          </span>
+        ) : null}
       </span>
     </>
   );

@@ -29,6 +29,8 @@ export interface DataCenterEntry {
   fileExt: string | null;
   fileSize: number;
   sourceType: DataCenterSourceType;
+  sourceId?: string | null;
+  sourceTitle?: string | null;
   status: string;
   createdAt: string | null;
   updatedAt: string | null;
@@ -97,18 +99,22 @@ export interface DataCenterTempUrl {
 
 export interface DataCenterArtifactProvenance {
   sourceType: 'chat_artifact' | 'workflow_artifact' | 'scheduled_task_artifact';
+  sourceId?: string;
+  sourceTitle?: string;
   sessionId: string;
   artifactKey: string;
   messageId?: string;
   runId?: string;
   workflowTemplateId?: string;
   workflowRunId?: string;
+  targetSpaceType?: string;
 }
 
 export interface DataCenterUploadArtifactParams extends DataCenterArtifactProvenance {
   filePath: string;
   fileName?: string;
   parentEntryId?: string;
+  targetSpaceType?: string;
   targetSpaceId?: string;
   targetParentEntryId?: string;
   idempotencyKey: string;

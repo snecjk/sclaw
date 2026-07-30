@@ -14,6 +14,11 @@ import { logger } from '../utils/logger';
 import { attachRunWatcher, type RunWatcherTerminalSignal } from './scheduled-task-run-watcher';
 import { resolveScheduledTaskDingTalkRecipients } from '../../shared/dingtalk-send/scheduled-task-dingtalk-lift';
 import { prependSystemPromptAppend } from '../../shared/system-prompt-append';
+import { collectArtifactsFromAssistantText } from '../services/data-center-artifact-sync/artifact-collector';
+import {
+  resolveDataCenterTargetsFromUris,
+  syncArtifactsToDataCenter,
+} from '../services/data-center-artifact-sync';
 
 /**
  * 引擎无关的执行期 dispatcher。把 `ScheduledTaskScheduler` 交出的 `{ task, run }`
@@ -40,7 +45,8 @@ export type ScheduledTaskEvent =
   | 'scheduled-task:run:succeeded'
   | 'scheduled-task:run:failed'
   | 'scheduled-task:run:retrying'
-  | 'scheduled-task:task:paused';
+  | 'scheduled-task:task:paused'
+  | 'scheduled-task:artifact-save:completed';
 
 export interface ScheduledTaskEventSink {
   emit(event: ScheduledTaskEvent, payload: unknown): void;
@@ -276,10 +282,52 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
       runId: run.runId,
       stopReason: signal.stopReason,
     });
+    void this.saveArtifactsToDataCenter(task, run, sessionKey, signal.lastAssistantText).catch((error) => {
+      logger.warn('[scheduled-task] data center artifact save failed', {
+        taskId: task.id,
+        runId: run.runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
     this.deps.getEventSink().emit('scheduled-task:run:succeeded', {
       taskId: task.id,
       runId: run.runId,
       attempt: run.attempt,
+    });
+  }
+
+  private async saveArtifactsToDataCenter(
+    task: ScheduleTask,
+    run: ScheduleTaskRun,
+    sessionKey: string,
+    assistantText: string,
+  ): Promise<void> {
+    const targets = resolveDataCenterTargetsFromUris([
+      { uri: task.myArtifactFolderPath, label: '我的产物' },
+      { uri: task.sharedArtifactFolderPath, label: '网点共享产物' },
+    ]);
+    if (targets.length === 0) return;
+
+    const artifacts = await collectArtifactsFromAssistantText(assistantText);
+    const summary = await syncArtifactsToDataCenter({
+      sourceType: 'scheduled_task_artifact',
+      sourceId: task.id,
+      sourceTitle: task.name,
+      runId: run.runId,
+      sessionId: sessionKey,
+      artifacts,
+      targets,
+      idempotencyScope: `scheduled-task:${task.id}:${run.runId}`,
+    });
+    this.deps.getEventSink().emit('scheduled-task:artifact-save:completed', {
+      taskId: task.id,
+      taskTitle: task.name,
+      runId: run.runId,
+      sessionKey,
+      status: summary.status,
+      succeededCount: summary.succeededCount,
+      failedCount: summary.failedCount,
+      records: summary.records,
     });
   }
 

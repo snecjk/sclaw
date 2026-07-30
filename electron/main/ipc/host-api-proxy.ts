@@ -32,6 +32,9 @@ export function resolveHostApiTimeoutMs(path: string): number {
   if (path === '/api/scheduled-tasks/beautify-instruction') {
     return TIMEOUTS.BEAUTIFY_INSTRUCTION;
   }
+  if (path === '/api/local-authorized-files/authorize') {
+    return TIMEOUTS.LOCAL_FILE_AUTHORIZE;
+  }
   return TIMEOUTS.DEFAULT_FETCH;
 }
 
