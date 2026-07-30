@@ -198,6 +198,7 @@
             "renameTitle": "重命名",
             "newName": "新名称",
             "deleteTitle": "删除条目",
+            "deleteFileMessage": "确认删除「{{name}}」？",
             "deleteMessage": "确认删除「{{name}}」？文件夹只能在为空时删除。",
             "removeAuthorizationTitle": "移除授权",
             "removeAuthorizationRootMessage": "确认移除「{{name}}」的本地文件授权？移除后该授权目录不会再展示。",
