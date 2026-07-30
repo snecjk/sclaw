@@ -799,6 +799,30 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
   }
 }
 
+/* Composer voice mode — fixed decorative waveform (not mic-level linked) */
+@keyframes stoclaw-voice-wave {
+  0%,
+  100% {
+    transform: scaleY(0.32);
+  }
+
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.stoclaw-voice-wave-bar {
+  transform-origin: center bottom;
+  animation: stoclaw-voice-wave 1.05s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stoclaw-voice-wave-bar {
+    animation: none;
+    transform: scaleY(0.65);
+  }
+}
+
 /* Glassmorphism toast override */
 [data-sonner-toaster] [data-sonner-toast] {
   background: hsl(var(--glass-bg) / var(--glass-opacity)) !important;

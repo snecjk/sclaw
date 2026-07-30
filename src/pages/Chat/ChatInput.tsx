@@ -23,6 +23,7 @@ import {
   Workflow,
   ArrowUp,
   Wrench,
+  Mic,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { hostApiFetch } from '@/lib/host-api';
@@ -47,6 +48,8 @@ import { WorkflowPicker } from '@/components/workflow/WorkflowPicker';
 import { SkillPicker } from '@/components/skill-plaza/SkillPicker';
 
 import { useDingTalkMention } from '@/hooks/useDingTalkMention';
+import { useVoiceAsr } from '@/hooks/useVoiceAsr';
+import { VoiceComposerPanel } from '@/components/chat/VoiceComposerPanel';
 
 import type { ActiveMentionTrigger, MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
 import { extractSkillInlineQuery /*, hasSkillInlineTrigger */ } from '@/lib/dingtalk-mention-composer';
@@ -263,6 +266,36 @@ export function ChatInput({
     install: installDingTalkMention,
     installing: dingTalkInstalling,
   } = useDingTalkMention(mentionTrigger);
+  const commitVoiceText = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const editor = mentionEditorRef.current;
+    if (!editor) return;
+    const existing = editor.getSnapshot().plainText ?? '';
+    if (!existing.trim()) {
+      editor.setPlainText(trimmed);
+    } else {
+      const sep = /\s$/.test(existing) || /[，。！？；、]$/.test(existing) ? '' : ' ';
+      editor.setPlainText(`${existing}${sep}${trimmed}`);
+    }
+    editor.focus();
+  }, []);
+  const {
+    status: voiceStatus,
+    partialText: voicePartialText,
+    finalsText: voiceFinalsText,
+    isActive: voiceActive,
+    toggle: toggleVoiceInput,
+  } = useVoiceAsr({
+    disabled: disabled || sending,
+    onCommitText: commitVoiceText,
+  });
+  const voicePreviewText = `${voiceFinalsText}${voicePartialText}`.trim();
+  const voiceButtonTitle = voiceStatus === 'connecting'
+    ? t('composer.voiceConnecting')
+    : voiceStatus === 'recording'
+      ? t('composer.voiceListening')
+      : t('composer.voiceInput');
   const composerPlaceholder = disabled && engineType === 'openclaw'
     ? t('composer.gatewayDisconnectedPlaceholder')
     : placeholder?.trim() || t('composer.messagePlaceholder', { agent: currentAgentName });
@@ -870,7 +903,7 @@ export function ChatInput({
             </div>
           )}
 
-          {selectedTarget && (
+          {voiceActive ? null : selectedTarget ? (
             <div
               className={cn(
                 'px-4 pb-1',
@@ -887,9 +920,7 @@ export function ChatInput({
                 <X className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
             </div>
-          )}
-
-
+          ) : null}
 
           <div className={cn(
             'px-4',
@@ -897,11 +928,26 @@ export function ChatInput({
               ? cn(
                   // flex-1 吸收 min-h-[120px] 剩余高度，避免底栏下方出现额外空白（底栏 pb-3 ≈ 12px）
                   'flex min-h-0 flex-1 flex-col',
-                  attachments.length > 0 ? 'pt-1' : 'pt-3',
+                  attachments.length > 0 || voiceActive ? 'pt-1' : 'pt-3',
                 )
-              : cn(attachments.length > 0 ? 'pt-1.5' : 'pt-2.5'),
+              : cn(attachments.length > 0 || voiceActive ? 'pt-1.5' : 'pt-2.5'),
           )}>
             <div ref={mentionPopoverRef} className="relative flex-1 overflow-visible">
+              {voiceActive ? (
+                <VoiceComposerPanel
+                  compact={!isHomeComposer}
+                  connecting={voiceStatus === 'connecting' || voiceStatus === 'stopping'}
+                  statusLabel={
+                    voiceStatus === 'connecting'
+                      ? t('composer.voiceConnecting')
+                      : voiceStatus === 'stopping'
+                        ? t('composer.voiceStopping')
+                        : t('composer.voiceListening')
+                  }
+                  transcript={voicePreviewText}
+                />
+              ) : null}
+              <div className={cn(voiceActive && 'hidden')}>
               <DingTalkMentionPopover
                 open={dingTalkMentionOpen}
                 items={dingTalkItems}
@@ -925,7 +971,7 @@ export function ChatInput({
               <DingTalkMentionEditor
                 ref={mentionEditorRef}
                 placeholder={composerPlaceholder}
-                disabled={disabled}
+                disabled={disabled || voiceActive}
                 seedText={seedText}
                 seedSkillSlug={seedSkillSlug}
                 onSnapshotChange={setComposerSnapshot}
@@ -952,6 +998,7 @@ export function ChatInput({
                   setSkillPickerOpen(false);
                 }}
               />
+              </div>
             </div>
           </div>
 
@@ -963,7 +1010,7 @@ export function ChatInput({
                   type="button"
                   className={homeToolbarIconBtn}
                   onClick={pickFiles}
-                  disabled={disabled}
+                  disabled={disabled || voiceActive}
                   title={t('composer.attachFiles')}
                 >
                   <Paperclip className="h-4 w-4" aria-hidden />
@@ -974,7 +1021,7 @@ export function ChatInput({
                   type="button"
                   className={homeToolbarIconBtn}
                   onClick={handleOpenDingTalkMention}
-                  disabled={disabled}
+                  disabled={disabled || voiceActive}
                   title={t('composer.dingTalkMention')}
                 >
                   <AtSign className="h-4 w-4" aria-hidden />
@@ -989,7 +1036,7 @@ export function ChatInput({
                     skillPickerOpen && skillPickerMode === 'toolbar' && 'bg-primary/10 text-primary hover:bg-primary/12',
                   )}
                   onClick={toggleSkillPickerToolbar}
-                  disabled={disabled}
+                  disabled={disabled || voiceActive}
                   title={t('composer.pickSkill')}
                 >
                   <Wrench className="h-4 w-4" aria-hidden />
@@ -1048,7 +1095,7 @@ export function ChatInput({
                       setSkillPickerOpen(false);
                       setWorkflowPickerOpen((open) => !open);
                     }}
-                    disabled={disabled}
+                    disabled={disabled || voiceActive}
                     title={t('composer.pickWorkflow')}
                   >
                     {/* 临时图标，等用户提供 SVG 替换 */}
@@ -1058,8 +1105,27 @@ export function ChatInput({
               </div>
 
               <div className="flex min-w-0 items-center gap-2">
-                {toolbarInlineSelectors}
-                {/* 语音输入暂未接入，先隐藏 Mic 按钮；恢复时还原 ghost Button + Mic 图标 */}
+                {voiceActive ? null : toolbarInlineSelectors}
+                <Button
+                  variant="ghost"
+                  type="button"
+                  size="icon"
+                  className={cn(
+                    'h-[30px] w-[30px] shrink-0 rounded-[16px]',
+                    homeToolbarIconBtn,
+                    voiceActive && 'bg-red-500/15 text-red-500 hover:bg-red-500/20 hover:text-red-500',
+                  )}
+                  onClick={toggleVoiceInput}
+                  disabled={disabled || sending}
+                  title={voiceButtonTitle}
+                  aria-pressed={voiceActive}
+                >
+                  {voiceStatus === 'connecting' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  ) : (
+                    <Mic className="h-4 w-4" aria-hidden />
+                  )}
+                </Button>
                 {sending && canSend ? (
                   <Button
                     onClick={handleSend}
@@ -1117,7 +1183,7 @@ export function ChatInput({
                 type="button"
                 className="h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]"
                 onClick={pickFiles}
-                disabled={disabled}
+                disabled={disabled || voiceActive}
                 title={t('composer.attachFiles')}
               >
                 <Paperclip className="h-3.5 w-3.5" />
@@ -1171,7 +1237,7 @@ export function ChatInput({
                   skillPickerOpen && skillPickerMode === 'toolbar' && 'bg-primary/10 text-primary hover:bg-primary/12',
                 )}
                 onClick={toggleSkillPickerToolbar}
-                disabled={disabled}
+                disabled={disabled || voiceActive}
                 title={t('composer.pickSkill')}
               >
                 <Wrench className="h-3.5 w-3.5" />
@@ -1191,7 +1257,7 @@ export function ChatInput({
                     setSkillPickerOpen(false);
                     setWorkflowPickerOpen((open) => !open);
                   }}
-                  disabled={disabled}
+                  disabled={disabled || voiceActive}
                   title={t('composer.pickWorkflow')}
                 >
                   <span className="text-[13px] font-medium">{t('composer.pickWorkflow')}</span>
@@ -1215,6 +1281,28 @@ export function ChatInput({
             />
 
             {/* When sending: show Send (to queue) if there's input, otherwise show Stop */}
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                type="button"
+                size="icon"
+                className={cn(
+                  'h-9 w-9 shrink-0 rounded-full border transition-all',
+                  voiceActive
+                    ? 'border-red-500/40 bg-red-500/15 text-red-500 hover:bg-red-500/20'
+                    : 'border-transparent text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
+                )}
+                onClick={toggleVoiceInput}
+                disabled={disabled || sending}
+                title={voiceButtonTitle}
+                aria-pressed={voiceActive}
+              >
+                {voiceStatus === 'connecting' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Mic className="h-4 w-4" aria-hidden />
+                )}
+              </Button>
             {sending && canSend ? (
               <Button
                 onClick={handleSend}
@@ -1251,6 +1339,7 @@ export function ChatInput({
                 )}
               </Button>
             )}
+            </div>
           </div>
           )}
         </div>
