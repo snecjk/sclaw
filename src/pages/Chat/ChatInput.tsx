@@ -38,6 +38,8 @@ import {
 import { useGatewayStore } from '@/stores/gateway';
 import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
+import { useVoiceLoopStore } from '@/stores/voice-loop';
 import { getProjectIdFromProjectAgentId } from '../../../shared/project-agent';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import type { AgentSummary } from '@/types/agent';
@@ -280,22 +282,255 @@ export function ChatInput({
     }
     editor.focus();
   }, []);
+
+  const VOICE_CONFIRM_MS = 5000;
+  const voiceLoopActive = useVoiceLoopStore((s) => s.active);
+  const voiceLoopBoundSessionKey = useVoiceLoopStore((s) => s.boundSessionKey);
+  const voiceAwaitingAgent = useVoiceLoopStore((s) => s.awaitingAgentReply);
+  const voiceExpectMaterialization = useVoiceLoopStore((s) => s.expectMaterialization);
+  const setVoiceLoopActive = useVoiceLoopStore((s) => s.setActive);
+  const rebindVoiceLoopSession = useVoiceLoopStore((s) => s.rebindSessionKey);
+  const clearVoiceLoop = useVoiceLoopStore((s) => s.clear);
+  const markVoiceExpectMaterialization = useVoiceLoopStore((s) => s.markExpectMaterialization);
+  const markVoiceAwaitingAgent = useVoiceLoopStore((s) => s.markAwaitingAgentReply);
+  const clearVoiceAwaitingAgent = useVoiceLoopStore((s) => s.clearAwaitingAgentReply);
+  const [voiceConfirmText, setVoiceConfirmText] = useState<string | null>(null);
+  const [voiceConfirmEndsAt, setVoiceConfirmEndsAt] = useState<number | null>(null);
+  const [voiceConfirmRemainMs, setVoiceConfirmRemainMs] = useState(0);
+  const prevSendingRef = useRef(sending);
+  const resumeListenAfterAgentRef = useRef(false);
+  const handleSendRef = useRef<() => void>(() => undefined);
+  const voiceConfirming = voiceConfirmText != null && voiceConfirmEndsAt != null;
+
+  const clearVoiceDraftText = useCallback(() => {
+    mentionEditorRef.current?.clear();
+    setComposerSnapshot({
+      plainText: '',
+      mentions: [],
+      isEmpty: true,
+    });
+  }, []);
+
+  const handleVoiceUtteranceFinal = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    mentionEditorRef.current?.setPlainText(trimmed);
+    setVoiceConfirmText(trimmed);
+    setVoiceConfirmEndsAt(Date.now() + VOICE_CONFIRM_MS);
+    setVoiceConfirmRemainMs(VOICE_CONFIRM_MS);
+  }, []);
+
+  const cancelVoiceConfirm = useCallback(() => {
+    setVoiceConfirmText(null);
+    setVoiceConfirmEndsAt(null);
+    setVoiceConfirmRemainMs(0);
+  }, []);
+
+  const exitVoiceLoop = useCallback(() => {
+    resumeListenAfterAgentRef.current = false;
+    clearVoiceLoop();
+    cancelVoiceConfirm();
+  }, [cancelVoiceConfirm, clearVoiceLoop]);
+
   const {
     status: voiceStatus,
     partialText: voicePartialText,
     finalsText: voiceFinalsText,
-    isActive: voiceActive,
-    toggle: toggleVoiceInput,
+    isActive: voiceRecording,
+    start: startVoiceInput,
+    stop: stopVoiceInput,
   } = useVoiceAsr({
-    disabled: disabled || sending,
+    disabled: disabled || sending || voiceAwaitingAgent,
     onCommitText: commitVoiceText,
+    onUtteranceFinal: handleVoiceUtteranceFinal,
   });
-  const voicePreviewText = `${voiceFinalsText}${voicePartialText}`.trim();
-  const voiceButtonTitle = voiceStatus === 'connecting'
-    ? t('composer.voiceConnecting')
-    : voiceStatus === 'recording'
-      ? t('composer.voiceListening')
-      : t('composer.voiceInput');
+
+  const stopVoiceInputRef = useRef(stopVoiceInput);
+  stopVoiceInputRef.current = stopVoiceInput;
+
+  const voicePreviewText = voiceConfirming
+    ? (voiceConfirmText ?? '')
+    : `${voiceFinalsText}${voicePartialText}`.trim();
+
+  const handleMicClick = useCallback(() => {
+    if (disabled) return;
+    if (voiceConfirming) {
+      exitVoiceLoop();
+      clearVoiceDraftText();
+      return;
+    }
+    if (voiceRecording) {
+      exitVoiceLoop();
+      void stopVoiceInput({ commit: true });
+      return;
+    }
+    if (voiceLoopActive) {
+      exitVoiceLoop();
+      return;
+    }
+    if (sending || voiceAwaitingAgent) return;
+    clearVoiceDraftText();
+    setVoiceLoopActive(true, currentSessionKey);
+    void startVoiceInput();
+  }, [
+    clearVoiceDraftText,
+    currentSessionKey,
+    disabled,
+    exitVoiceLoop,
+    sending,
+    setVoiceLoopActive,
+    startVoiceInput,
+    stopVoiceInput,
+    voiceAwaitingAgent,
+    voiceConfirming,
+    voiceLoopActive,
+    voiceRecording,
+  ]);
+
+  // 会话不一致则关闭持续听（仅语音发送触发的 DEFAULT 物化允许 rebind）
+  useEffect(() => {
+    const { active, boundSessionKey, expectMaterialization } = useVoiceLoopStore.getState();
+    if (!active || !boundSessionKey) return;
+    if (boundSessionKey === currentSessionKey) return;
+
+    if (
+      expectMaterialization
+      && boundSessionKey === DEFAULT_SESSION_KEY
+      && currentSessionKey !== DEFAULT_SESSION_KEY
+    ) {
+      rebindVoiceLoopSession(currentSessionKey);
+      return;
+    }
+
+    clearVoiceLoop();
+    cancelVoiceConfirm();
+    clearVoiceDraftText();
+    resumeListenAfterAgentRef.current = false;
+    void stopVoiceInputRef.current({ commit: false, silent: true });
+  }, [
+    cancelVoiceConfirm,
+    clearVoiceDraftText,
+    clearVoiceLoop,
+    currentSessionKey,
+    rebindVoiceLoopSession,
+  ]);
+
+  // 2s 短确认倒计时 → 自动发送
+  useEffect(() => {
+    if (!voiceConfirming || voiceConfirmEndsAt == null) return;
+    const tick = window.setInterval(() => {
+      const remain = Math.max(0, voiceConfirmEndsAt - Date.now());
+      setVoiceConfirmRemainMs(remain);
+      if (remain <= 0) {
+        window.clearInterval(tick);
+        setVoiceConfirmText(null);
+        setVoiceConfirmEndsAt(null);
+        setVoiceConfirmRemainMs(0);
+        handleSendRef.current();
+      }
+    }, 50);
+    return () => window.clearInterval(tick);
+  }, [voiceConfirmEndsAt, voiceConfirming]);
+
+  // agent 回完：先清 awaiting，等 disabled 放开后再开麦（避免同帧 start 被 disabled 挡住）
+  useEffect(() => {
+    const wasSending = prevSendingRef.current;
+    prevSendingRef.current = sending;
+    const { active, boundSessionKey } = useVoiceLoopStore.getState();
+    if (
+      wasSending
+      && !sending
+      && active
+      && boundSessionKey === currentSessionKey
+      && !voiceConfirming
+      && !disabled
+    ) {
+      resumeListenAfterAgentRef.current = true;
+      clearVoiceAwaitingAgent();
+    }
+  }, [
+    clearVoiceAwaitingAgent,
+    currentSessionKey,
+    disabled,
+    sending,
+    voiceConfirming,
+  ]);
+
+  useEffect(() => {
+    if (!resumeListenAfterAgentRef.current) return;
+    if (voiceAwaitingAgent || sending || disabled || voiceConfirming || voiceRecording) return;
+    const { active, boundSessionKey } = useVoiceLoopStore.getState();
+    if (!active || boundSessionKey !== currentSessionKey) {
+      resumeListenAfterAgentRef.current = false;
+      return;
+    }
+    resumeListenAfterAgentRef.current = false;
+    void startVoiceInput();
+  }, [
+    currentSessionKey,
+    disabled,
+    sending,
+    startVoiceInput,
+    voiceAwaitingAgent,
+    voiceConfirming,
+    voiceRecording,
+  ]);
+
+  // remount 恢复：等回复 / 物化跳转期间绝不重新开麦
+  useEffect(() => {
+    const { active, boundSessionKey, awaitingAgentReply, expectMaterialization } =
+      useVoiceLoopStore.getState();
+    if (!active || awaitingAgentReply || expectMaterialization) return;
+    if (boundSessionKey && boundSessionKey !== currentSessionKey) return;
+    if (sending || voiceConfirming || voiceRecording || disabled) return;
+    void startVoiceInput();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount recovery only
+  }, []);
+
+  const voiceBoundToCurrentSession = !voiceLoopBoundSessionKey
+    || voiceLoopBoundSessionKey === currentSessionKey
+    || (
+      voiceLoopBoundSessionKey === DEFAULT_SESSION_KEY
+      && currentSessionKey !== DEFAULT_SESSION_KEY
+      && voiceExpectMaterialization
+    );
+  const voiceWaitingUi = Boolean(
+    voiceLoopActive && voiceBoundToCurrentSession && (sending || voiceAwaitingAgent),
+  );
+  const voicePanelOpen = Boolean(
+    voiceBoundToCurrentSession && (voiceRecording || voiceConfirming || voiceWaitingUi),
+  );
+
+  const voiceMode = voiceConfirming
+    ? 'confirm' as const
+    : voiceWaitingUi
+      ? 'waiting' as const
+      : 'listening' as const;
+
+  const voiceStatusLabel = voiceConfirming
+    ? t('composer.voiceConfirmCountdown', {
+        seconds: Math.max(1, Math.ceil(voiceConfirmRemainMs / 1000)),
+      })
+    : voiceWaitingUi
+      ? t('composer.voiceWaitingAgent')
+      : voiceStatus === 'connecting'
+        ? t('composer.voiceConnecting')
+        : voiceStatus === 'stopping'
+          ? t('composer.voiceStopping')
+          : t('composer.voiceListening');
+
+  const voiceButtonTitle = voiceConfirming
+    ? t('composer.voiceConfirmCancelHint')
+    : voiceWaitingUi
+      ? t('composer.voiceWaitingAgent')
+      : voiceStatus === 'connecting'
+        ? t('composer.voiceConnecting')
+        : voiceRecording
+          ? t('composer.voiceListening')
+          : voiceLoopActive && voiceBoundToCurrentSession
+            ? t('composer.voiceExitLoop')
+            : t('composer.voiceInput');
+
   const composerPlaceholder = disabled && engineType === 'openclaw'
     ? t('composer.gatewayDisconnectedPlaceholder')
     : placeholder?.trim() || t('composer.messagePlaceholder', { agent: currentAgentName });
@@ -668,6 +903,16 @@ export function ChatInput({
     mentionEditorRef.current?.clear();
     setAttachments([]);
     setMentionTrigger(null);
+
+    // 语音持续听：标记等回复；新会话 DEFAULT 物化时允许 remount 后 rebind，但等回复期间禁止开麦
+    const voiceLoop = useVoiceLoopStore.getState();
+    if (voiceLoop.active) {
+      markVoiceAwaitingAgent();
+      if (currentSessionKey === DEFAULT_SESSION_KEY) {
+        markVoiceExpectMaterialization();
+      }
+    }
+
     // When AI is responding and queue callback is available, add to queue instead of sending directly
     // but only if no workflow is selected (workflow creation flow needs direct send)
     if (sending && onQueue && !workflowIdToSend) {
@@ -680,7 +925,22 @@ export function ChatInput({
     setWorkflowPickerOpen(false);
     setSkillPickerOpen(false);
     closeDingTalkMention();
-  }, [allReady, attachments, closeDingTalkMention, composerSnapshot, disabled, onQueue, onSend, sending, targetAgentId]);
+  }, [
+    allReady,
+    attachments,
+    closeDingTalkMention,
+    composerSnapshot,
+    currentSessionKey,
+    disabled,
+    markVoiceAwaitingAgent,
+    markVoiceExpectMaterialization,
+    onQueue,
+    onSend,
+    sending,
+    targetAgentId,
+  ]);
+
+  handleSendRef.current = handleSend;
 
   const handleStop = useCallback(() => {
     if (!canStop) return;
@@ -903,7 +1163,7 @@ export function ChatInput({
             </div>
           )}
 
-          {voiceActive ? null : selectedTarget ? (
+          {voicePanelOpen ? null : selectedTarget ? (
             <div
               className={cn(
                 'px-4 pb-1',
@@ -928,26 +1188,28 @@ export function ChatInput({
               ? cn(
                   // flex-1 吸收 min-h-[120px] 剩余高度，避免底栏下方出现额外空白（底栏 pb-3 ≈ 12px）
                   'flex min-h-0 flex-1 flex-col',
-                  attachments.length > 0 || voiceActive ? 'pt-1' : 'pt-3',
+                  attachments.length > 0 || voicePanelOpen ? 'pt-1' : 'pt-3',
                 )
-              : cn(attachments.length > 0 || voiceActive ? 'pt-1.5' : 'pt-2.5'),
+              : cn(attachments.length > 0 || voicePanelOpen ? 'pt-1.5' : 'pt-2.5'),
           )}>
             <div ref={mentionPopoverRef} className="relative flex-1 overflow-visible">
-              {voiceActive ? (
+              {voicePanelOpen ? (
                 <VoiceComposerPanel
+                  mode={voiceMode}
                   compact={!isHomeComposer}
                   connecting={voiceStatus === 'connecting' || voiceStatus === 'stopping'}
-                  statusLabel={
-                    voiceStatus === 'connecting'
-                      ? t('composer.voiceConnecting')
-                      : voiceStatus === 'stopping'
-                        ? t('composer.voiceStopping')
-                        : t('composer.voiceListening')
-                  }
+                  statusLabel={voiceStatusLabel}
                   transcript={voicePreviewText}
+                  confirmSecondsLeft={
+                    voiceConfirming
+                      ? Math.max(1, Math.ceil(voiceConfirmRemainMs / 1000))
+                      : undefined
+                  }
+                  cancelLabel={t('composer.voiceConfirmCancel')}
+                  onCancelConfirm={voiceConfirming ? cancelVoiceConfirm : undefined}
                 />
               ) : null}
-              <div className={cn(voiceActive && 'hidden')}>
+              <div className={cn(voicePanelOpen && 'hidden')}>
               <DingTalkMentionPopover
                 open={dingTalkMentionOpen}
                 items={dingTalkItems}
@@ -971,7 +1233,7 @@ export function ChatInput({
               <DingTalkMentionEditor
                 ref={mentionEditorRef}
                 placeholder={composerPlaceholder}
-                disabled={disabled || voiceActive}
+                disabled={disabled || voicePanelOpen}
                 seedText={seedText}
                 seedSkillSlug={seedSkillSlug}
                 onSnapshotChange={setComposerSnapshot}
@@ -1010,7 +1272,7 @@ export function ChatInput({
                   type="button"
                   className={homeToolbarIconBtn}
                   onClick={pickFiles}
-                  disabled={disabled || voiceActive}
+                  disabled={disabled || voicePanelOpen}
                   title={t('composer.attachFiles')}
                 >
                   <Paperclip className="h-4 w-4" aria-hidden />
@@ -1021,7 +1283,7 @@ export function ChatInput({
                   type="button"
                   className={homeToolbarIconBtn}
                   onClick={handleOpenDingTalkMention}
-                  disabled={disabled || voiceActive}
+                  disabled={disabled || voicePanelOpen}
                   title={t('composer.dingTalkMention')}
                 >
                   <AtSign className="h-4 w-4" aria-hidden />
@@ -1036,7 +1298,7 @@ export function ChatInput({
                     skillPickerOpen && skillPickerMode === 'toolbar' && 'bg-primary/10 text-primary hover:bg-primary/12',
                   )}
                   onClick={toggleSkillPickerToolbar}
-                  disabled={disabled || voiceActive}
+                  disabled={disabled || voicePanelOpen}
                   title={t('composer.pickSkill')}
                 >
                   <Wrench className="h-4 w-4" aria-hidden />
@@ -1095,7 +1357,7 @@ export function ChatInput({
                       setSkillPickerOpen(false);
                       setWorkflowPickerOpen((open) => !open);
                     }}
-                    disabled={disabled || voiceActive}
+                    disabled={disabled || voicePanelOpen}
                     title={t('composer.pickWorkflow')}
                   >
                     {/* 临时图标，等用户提供 SVG 替换 */}
@@ -1105,7 +1367,7 @@ export function ChatInput({
               </div>
 
               <div className="flex min-w-0 items-center gap-2">
-                {voiceActive ? null : toolbarInlineSelectors}
+                {voicePanelOpen ? null : toolbarInlineSelectors}
                 <Button
                   variant="ghost"
                   type="button"
@@ -1113,12 +1375,14 @@ export function ChatInput({
                   className={cn(
                     'h-[30px] w-[30px] shrink-0 rounded-[16px]',
                     homeToolbarIconBtn,
-                    voiceActive && 'bg-red-500/15 text-red-500 hover:bg-red-500/20 hover:text-red-500',
+                    voicePanelOpen || (voiceLoopActive && voiceBoundToCurrentSession)
+                      ? 'bg-red-500/15 text-red-500 hover:bg-red-500/20 hover:text-red-500'
+                      : undefined,
                   )}
-                  onClick={toggleVoiceInput}
-                  disabled={disabled || sending}
+                  onClick={handleMicClick}
+                  disabled={disabled || (sending && !voiceLoopActive && !voiceConfirming)}
                   title={voiceButtonTitle}
-                  aria-pressed={voiceActive}
+                  aria-pressed={voicePanelOpen || (voiceLoopActive && voiceBoundToCurrentSession)}
                 >
                   {voiceStatus === 'connecting' ? (
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -1183,7 +1447,7 @@ export function ChatInput({
                 type="button"
                 className="h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]"
                 onClick={pickFiles}
-                disabled={disabled || voiceActive}
+                disabled={disabled || voicePanelOpen}
                 title={t('composer.attachFiles')}
               >
                 <Paperclip className="h-3.5 w-3.5" />
@@ -1237,7 +1501,7 @@ export function ChatInput({
                   skillPickerOpen && skillPickerMode === 'toolbar' && 'bg-primary/10 text-primary hover:bg-primary/12',
                 )}
                 onClick={toggleSkillPickerToolbar}
-                disabled={disabled || voiceActive}
+                disabled={disabled || voicePanelOpen}
                 title={t('composer.pickSkill')}
               >
                 <Wrench className="h-3.5 w-3.5" />
@@ -1257,7 +1521,7 @@ export function ChatInput({
                     setSkillPickerOpen(false);
                     setWorkflowPickerOpen((open) => !open);
                   }}
-                  disabled={disabled || voiceActive}
+                  disabled={disabled || voicePanelOpen}
                   title={t('composer.pickWorkflow')}
                 >
                   <span className="text-[13px] font-medium">{t('composer.pickWorkflow')}</span>
@@ -1288,14 +1552,14 @@ export function ChatInput({
                 size="icon"
                 className={cn(
                   'h-9 w-9 shrink-0 rounded-full border transition-all',
-                  voiceActive
+                  voicePanelOpen || (voiceLoopActive && voiceBoundToCurrentSession)
                     ? 'border-red-500/40 bg-red-500/15 text-red-500 hover:bg-red-500/20'
                     : 'border-transparent text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
                 )}
-                onClick={toggleVoiceInput}
-                disabled={disabled || sending}
+                onClick={handleMicClick}
+                disabled={disabled || (sending && !voiceLoopActive && !voiceConfirming)}
                 title={voiceButtonTitle}
-                aria-pressed={voiceActive}
+                aria-pressed={voicePanelOpen || (voiceLoopActive && voiceBoundToCurrentSession)}
               >
                 {voiceStatus === 'connecting' ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

@@ -1,5 +1,6 @@
 /**
  * 聊天输入框语音转写：点击麦克风开始/结束，识别结果写入 composer。
+ * 支持句末（ASR final）回调，供上层做短确认后自动发送。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -17,13 +18,25 @@ export type VoiceAsrStatus = 'idle' | 'connecting' | 'recording' | 'stopping';
 export interface UseVoiceAsrOptions {
   /** 每次收到 partial / final 时回调（可用于预览） */
   onTranscript?: (payload: { partial: string; finals: string }) => void;
-  /** 录音结束并汇总最终文本 */
+  /** 录音结束并汇总最终文本（手动 stop 时） */
   onCommitText?: (text: string) => void;
+  /**
+   * 收到一句 ASR final 后自动结束本轮录音并回调完整文本。
+   * 若设置，则不会在 stop 时再走 onCommitText（由上层负责写入）。
+   */
+  onUtteranceFinal?: (text: string) => void;
   disabled?: boolean;
 }
 
+export interface StopVoiceOptions {
+  /** 默认 true；句末自动结束时可设 false，避免与 onUtteranceFinal 重复写入 */
+  commit?: boolean;
+  /** 立即回到 idle，不展示「正在完成识别」（用于切会话等强制退出） */
+  silent?: boolean;
+}
+
 export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
-  const { onTranscript, onCommitText, disabled = false } = options;
+  const { onTranscript, onCommitText, onUtteranceFinal, disabled = false } = options;
   const [status, setStatus] = useState<VoiceAsrStatus>('idle');
   const [partialText, setPartialText] = useState('');
   const [finalsText, setFinalsText] = useState('');
@@ -32,8 +45,10 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
   const sessionRef = useRef<VoiceAsrSession | null>(null);
   const finalsRef = useRef('');
   const partialRef = useRef('');
+  const endingUtteranceRef = useRef(false);
   const onTranscriptRef = useRef(onTranscript);
   const onCommitTextRef = useRef(onCommitText);
+  const onUtteranceFinalRef = useRef(onUtteranceFinal);
 
   useEffect(() => {
     onTranscriptRef.current = onTranscript;
@@ -43,12 +58,75 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
     onCommitTextRef.current = onCommitText;
   }, [onCommitText]);
 
+  useEffect(() => {
+    onUtteranceFinalRef.current = onUtteranceFinal;
+  }, [onUtteranceFinal]);
+
   const resetTranscript = useCallback(() => {
     finalsRef.current = '';
     partialRef.current = '';
     setPartialText('');
     setFinalsText('');
   }, []);
+
+  // sending/disabled 变 true 时立刻停麦，避免「等待回复」UI 下 ASR 仍在转
+  useEffect(() => {
+    if (!disabled) return;
+    if (!sessionRef.current) {
+      if (status !== 'idle') setStatus('idle');
+      return;
+    }
+    const session = sessionRef.current;
+    sessionRef.current = null;
+    endingUtteranceRef.current = false;
+    resetTranscript();
+    setStatus('idle');
+    try {
+      session.stop();
+    } catch {
+      // ignore
+    }
+  }, [disabled, resetTranscript, status]);
+
+  const stop = useCallback(async (stopOptions?: StopVoiceOptions) => {
+    const shouldCommit = stopOptions?.commit !== false;
+    const silent = stopOptions?.silent === true;
+    const session = sessionRef.current;
+    if (!session) {
+      setStatus('idle');
+      endingUtteranceRef.current = false;
+      return;
+    }
+
+    sessionRef.current = null;
+    endingUtteranceRef.current = false;
+
+    if (silent) {
+      // 切会话等场景：立刻收起 UI，后台关掉 WS
+      resetTranscript();
+      setStatus('idle');
+      try {
+        session.stop();
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
+    setStatus('stopping');
+    try {
+      await session.stopAsync();
+    } catch {
+      session.stop();
+    }
+
+    const text = `${finalsRef.current}${partialRef.current}`.trim();
+    if (shouldCommit && text) {
+      onCommitTextRef.current?.(text);
+    }
+    resetTranscript();
+    setStatus('idle');
+  }, [resetTranscript]);
 
   const handleEvent = useCallback((event: VoiceAsrServerEvent) => {
     if (event.type === 'partial' && typeof event.text === 'string') {
@@ -71,6 +149,18 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
         partial: '',
         finals: finalsRef.current,
       });
+
+      const utteranceHandler = onUtteranceFinalRef.current;
+      if (utteranceHandler && !endingUtteranceRef.current) {
+        endingUtteranceRef.current = true;
+        const fullText = finalsRef.current;
+        void (async () => {
+          await stop({ commit: false });
+          if (fullText.trim()) {
+            utteranceHandler(fullText.trim());
+          }
+        })();
+      }
       return;
     }
 
@@ -79,32 +169,10 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
       setError(message);
       toast.error(message);
     }
-  }, []);
-
-  const stop = useCallback(async () => {
-    const session = sessionRef.current;
-    if (!session) {
-      setStatus('idle');
-      return;
-    }
-    setStatus('stopping');
-    sessionRef.current = null;
-    try {
-      await session.stopAsync();
-    } catch {
-      session.stop();
-    }
-
-    const text = `${finalsRef.current}${partialRef.current}`.trim();
-    if (text) {
-      onCommitTextRef.current?.(text);
-    }
-    resetTranscript();
-    setStatus('idle');
-  }, [resetTranscript]);
+  }, [stop]);
 
   const start = useCallback(async () => {
-    if (disabled || sessionRef.current) return;
+    if (disabled || sessionRef.current || endingUtteranceRef.current) return;
 
     const { user, ssoEnvironment, isAuthenticated } = useAuthStore.getState();
     const token = user?.stoToken?.trim();
@@ -116,6 +184,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
     setError(null);
     setStatus('connecting');
     resetTranscript();
+    endingUtteranceRef.current = false;
 
     try {
       let modelId = 'fun-asr-realtime';
@@ -156,7 +225,6 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
       sessionRef.current = session;
       await session.start({ wsUrl, sampleRate });
       if (sessionRef.current !== session) {
-        // 用户在 connecting 期间点了停止
         await session.stopAsync();
         return;
       }
@@ -165,6 +233,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
       sessionRef.current?.stop();
       sessionRef.current = null;
       setStatus('idle');
+      endingUtteranceRef.current = false;
       const message = err instanceof Error ? err.message : String(err);
       const denied = /Permission|NotAllowed|权限|denied/i.test(message);
       const tip = denied ? '无法访问麦克风，请在系统设置中允许麦克风权限' : (message || '启动语音识别失败');
@@ -176,7 +245,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
   const toggle = useCallback(() => {
     if (disabled) return;
     if (status === 'recording' || status === 'connecting' || status === 'stopping') {
-      void stop();
+      void stop({ commit: true });
       return;
     }
     void start();

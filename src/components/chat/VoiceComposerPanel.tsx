@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 /** Fixed decorative bar heights (relative). Animation delay staggers each bar. */
 const WAVE_BARS = [0.4, 0.7, 1, 0.55, 0.85, 0.45, 0.95, 0.6, 0.8, 0.5, 0.9, 0.55, 0.75, 0.42, 0.65] as const;
 
 /** 距底部小于该值时视为「仍贴底」，新转写继续自动滚到底。 */
 const STICK_BOTTOM_THRESHOLD_PX = 40;
+
+export type VoiceComposerMode = 'listening' | 'confirm' | 'waiting';
 
 export function VoiceWaveform({ className }: { className?: string }) {
   return (
@@ -28,9 +31,14 @@ export function VoiceWaveform({ className }: { className?: string }) {
 }
 
 interface VoiceComposerPanelProps {
+  mode?: VoiceComposerMode;
   statusLabel: string;
   transcript: string;
   connecting?: boolean;
+  /** 确认倒计时剩余秒数（向上取整展示） */
+  confirmSecondsLeft?: number;
+  cancelLabel?: string;
+  onCancelConfirm?: () => void;
   className?: string;
   compact?: boolean;
 }
@@ -40,9 +48,13 @@ interface VoiceComposerPanelProps {
  * Waveform is decorative (CSS only), not driven by microphone level.
  */
 export function VoiceComposerPanel({
+  mode = 'listening',
   statusLabel,
   transcript,
   connecting = false,
+  confirmSecondsLeft,
+  cancelLabel,
+  onCancelConfirm,
   className,
   compact = false,
 }: VoiceComposerPanelProps) {
@@ -64,11 +76,13 @@ export function VoiceComposerPanel({
 
     autoScrollingRef.current = true;
     el.scrollTop = el.scrollHeight;
-    // 等浏览器应用 scrollTop 后再允许手动滚动检测，避免被误判回贴底
     requestAnimationFrame(() => {
       autoScrollingRef.current = false;
     });
   }, [transcript]);
+
+  const showWave = mode === 'listening';
+  const dimWave = connecting || mode === 'waiting';
 
   return (
     <div
@@ -78,7 +92,17 @@ export function VoiceComposerPanel({
         className,
       )}
     >
-      <VoiceWaveform className={connecting ? 'opacity-50' : undefined} />
+      {showWave ? (
+        <VoiceWaveform className={dimWave ? 'opacity-50' : undefined} />
+      ) : mode === 'waiting' ? (
+        <div className="flex h-11 items-center justify-center" aria-hidden>
+          <span className="h-2 w-2 animate-pulse rounded-full bg-primary/80" />
+        </div>
+      ) : (
+        <div className="flex h-11 items-center justify-center gap-2 text-[22px] font-semibold tabular-nums text-primary">
+          {typeof confirmSecondsLeft === 'number' ? confirmSecondsLeft : '—'}
+        </div>
+      )}
       <p className="text-[12px] font-medium text-primary/90">
         {statusLabel}
       </p>
@@ -86,13 +110,10 @@ export function VoiceComposerPanel({
         ref={transcriptRef}
         onScroll={syncStickFromScroll}
         onWheel={(event) => {
-          // 阻止外层 composer 吃掉滚轮，保证预览区可独立上下翻
           event.stopPropagation();
-          // 用户主动滚轮时立刻按当前位置更新贴底状态
           requestAnimationFrame(syncStickFromScroll);
         }}
         className={cn(
-          // 不用 flex+justify-end：会破坏 overflow 滚动，导致只能跟到底
           'max-h-28 w-full overflow-y-auto overscroll-contain px-1',
           'text-center text-[14px] leading-relaxed text-foreground/90',
           !transcript && 'text-muted-foreground/70',
@@ -105,6 +126,17 @@ export function VoiceComposerPanel({
           {transcript || '…'}
         </p>
       </div>
+      {mode === 'confirm' && onCancelConfirm ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-0.5 h-8 rounded-full px-4 text-[12px]"
+          onClick={onCancelConfirm}
+        >
+          {cancelLabel || '取消'}
+        </Button>
+      ) : null}
     </div>
   );
 }
