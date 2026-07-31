@@ -1163,7 +1163,7 @@ export function ChatInput({
                 ),
           )}
         >
-          {voicePanelOpen ? <VoiceTopCrawlWave /> : null}
+          {voicePanelOpen && voiceMode === 'listening' ? <VoiceTopCrawlWave /> : null}
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
               {attachments.map((att) => (
