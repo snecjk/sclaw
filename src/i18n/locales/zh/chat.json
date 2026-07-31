@@ -201,6 +201,9 @@
         "notificationFailedDescription": "点击查看失败详情。",
         "notificationViewResult": "查看结果",
         "notificationViewDetails": "查看详情",
+        "notificationBackToConversation": "返回发起会话",
+        "notificationRunNotFound": "该运行记录不存在或已被清理。",
+        "notificationRunLoadFailed": "运行详情加载失败，请稍后重试。",
         "openArtifactLink": "打开链接",
         "viewWorkflowAction": "查看工作流",
         "createScheduledTaskAction": "创建定时任务"

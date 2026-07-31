@@ -388,6 +388,7 @@ function registerWorkflowSubmitHandler(
         inputs: values,
         idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
         sessionKey: chatState.currentSessionKey,
+        triggerType: 'chat',
         // Recovery resumes a legacy form submission created before engine choice
         // was persisted, so retain its historical engine explicitly.
         engineType: 'claude',

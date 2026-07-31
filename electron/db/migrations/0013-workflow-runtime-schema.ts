@@ -36,8 +36,12 @@ export const workflowRuntimeSchemaMigration: SqliteMigration = {
       version_id TEXT NOT NULL,
       workflow_version TEXT,
       status TEXT NOT NULL,
+      session_key TEXT,
+      engine_type TEXT NOT NULL DEFAULT 'claude',
+      engine_model TEXT,
       mode TEXT NOT NULL DEFAULT 'CLIENT_LOCAL',
       source TEXT NOT NULL DEFAULT 'client',
+      trigger_type TEXT NOT NULL DEFAULT 'workflow_manual',
       waiting_node_id TEXT,
       input_json TEXT,
       output_json TEXT,
@@ -49,9 +53,6 @@ export const workflowRuntimeSchemaMigration: SqliteMigration = {
       completed_at TEXT,
       updated_at TEXT NOT NULL,
       synced_at TEXT,
-      session_key TEXT,
-      engine_type TEXT NOT NULL DEFAULT 'claude',
-      engine_model TEXT,
       chat_card_visible INTEGER NOT NULL DEFAULT 0,
       chat_anchor_user_message_id TEXT,
       chat_card_title TEXT,
@@ -178,6 +179,8 @@ export const workflowRuntimeSchemaMigration: SqliteMigration = {
     db.exec(`
       CREATE INDEX IF NOT EXISTS idx_wf_run_chat_session_started
         ON wf_run(session_key, chat_card_visible, started_at);
+      CREATE INDEX IF NOT EXISTS idx_wf_run_trigger_started
+        ON wf_run(trigger_type, started_at);
     `);
   },
 };

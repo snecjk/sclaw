@@ -65,6 +65,8 @@ export interface StartWorkflowArgs {
   runDatabaseId: number;
   /** 会话键——透传给 generatePlan 落 wf_run.session_key（emit 桥 + getRun hydration 用）。Phase 2b 由 start 注册传入。 */
   sessionKey?: string;
+  /** 本地业务发起入口，仅落 wf_run，不同步云端。 */
+  triggerType?: 'chat' | 'scheduled_task' | 'workflow_manual' | 'designer_test' | 'api';
   engineType: 'claude' | 'openclaw';
   engineModel?: string;
   /**
@@ -508,6 +510,7 @@ export function createEngine(deps: EngineDeps) {
      * 正式启动节点调度。
      */
     async startWorkflow(args: StartWorkflowArgs): Promise<void> {
+      const triggerType = args.triggerType ?? (args.chatCard ? 'chat' : 'workflow_manual');
       // 端到端：拉 DSL → generatePlan 落本地计划（wf_run + wf_node_run + outbox）→ dispatch
       workflowExecLog('info', 'run-start', 'starting client-local workflow run', {
         runId: args.runId,
@@ -535,6 +538,7 @@ export function createEngine(deps: EngineDeps) {
           status: 'RUNNING',
           mode: 'CLIENT_LOCAL',
           source: 'client',
+          trigger_type: triggerType,
           input_json: stringifyJson(args.input ?? {}),
           definition_json: '{}',
           started_at: args.startedAt,
@@ -549,7 +553,7 @@ export function createEngine(deps: EngineDeps) {
         await generatePlan({ repo, dslClient: deps.dslClient, workflowId: args.workflowId,
           versionId: args.versionId, runId: args.runId, input: args.input, startedAt: args.startedAt,
           sessionKey: args.sessionKey, workflowVersion: args.workflowVersion, runDatabaseId: args.runDatabaseId,
-          engineType: args.engineType, engineModel: args.engineModel });
+          triggerType, engineType: args.engineType, engineModel: args.engineModel });
         const run = await repo.getRun(args.runId);
         const definition = run?.definition_json ? JSON.parse(run.definition_json) : {};
         await dispatch(args.runId, definition, undefined, { workflowId: args.workflowId, versionId: args.versionId }, parseJson(run?.input_json) ?? {});
@@ -558,6 +562,7 @@ export function createEngine(deps: EngineDeps) {
         await repo.upsertRun({ id: args.runDatabaseId, run_id: args.runId, workflow_id: args.workflowId, version_id: args.versionId,
           workflow_version: args.workflowVersion ?? null,
           status: 'FAILED', mode: 'CLIENT_LOCAL', source: 'client', input_json: stringifyJson(args.input ?? {}),
+          trigger_type: triggerType,
           definition_json: '{}', error: message, started_at: args.startedAt, completed_at: nowIso(), session_key: args.sessionKey,
           engine_type: args.engineType, engine_model: args.engineModel ?? null });
         await finalizeUnfinishedNodeRuns(args.runId, 'failed').catch(() => undefined);

@@ -191,6 +191,7 @@ export function useDesignerTryRun({
           inputs,
           idempotencyKey: `designer-run-${Date.now()}`,
           sessionKey: DESIGNER_TRY_RUN_SESSION_KEY,
+          triggerType: 'designer_test',
           runMode: 'trial',
           workflowVersionId: snapshot?.workflowVersionId ?? workflowVersionId,
           engineType,

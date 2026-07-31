@@ -201,6 +201,9 @@
         "notificationFailedDescription": "Open the failure details.",
         "notificationViewResult": "View result",
         "notificationViewDetails": "View details",
+        "notificationBackToConversation": "Back to conversation",
+        "notificationRunNotFound": "This run no longer exists or has been removed.",
+        "notificationRunLoadFailed": "Could not load the run details. Try again later.",
         "openArtifactLink": "Open link",
         "viewWorkflowAction": "View workflow",
         "createScheduledTaskAction": "Create scheduled task"

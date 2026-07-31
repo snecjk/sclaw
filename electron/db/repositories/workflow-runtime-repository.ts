@@ -21,6 +21,13 @@ function nowIso(): string {
   return formatShanghaiIso();
 }
 
+export function toCloudWorkflowRunPayload(
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  const { trigger_type: _localTriggerType, ...cloudRun } = source;
+  return cloudRun;
+}
+
 export class WorkflowRuntimeRepository {
   private async runDatabaseId(runRef: string | number): Promise<number> {
     if (typeof runRef === 'number') return runRef;
@@ -417,8 +424,13 @@ export class WorkflowRuntimeRepository {
 
   /** Cloud child tables use workflow_run.id, while engine code addresses runs by run_id. */
   private async cloudPayload(runBizId: string, entityType: string, payload: unknown): Promise<unknown> {
-    if (!payload || typeof payload !== 'object' || entityType === 'run') return payload;
+    if (!payload || typeof payload !== 'object') return payload;
     const source = payload as Record<string, any>;
+    if (entityType === 'run') {
+      // trigger_type only drives local notification navigation. The cloud
+      // workflow_run contract intentionally does not persist this UI origin.
+      return toCloudWorkflowRunPayload(source);
+    }
     const runPk = await this.runDatabaseId(runBizId);
     let stored: Record<string, any> | undefined;
     const db = getKyselyDatabase();

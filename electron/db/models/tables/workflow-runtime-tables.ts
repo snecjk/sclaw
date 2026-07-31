@@ -13,6 +13,7 @@ export interface WfRunTable {
   status: string;
   mode: string;
   source: string;
+  trigger_type: string;
   waiting_node_id: TsNull;
   input_json: TsNull;
   output_json: TsNull;
