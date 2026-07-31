@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DINGTALK_RECIPIENTS_MARKER } from '../../sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-mention-context';
+import { DINGTALK_RECIPIENTS_MARKER } from '../../sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-send/dingtalk-mention';
 import type { OpenClawPluginApi } from '../../sto-plugin/openclaw/sto-dingtalk-send-guard/api.js';
 
 const { readDingTalkMentionPending, clearDingTalkMentionPending } = vi.hoisted(() => ({
@@ -53,7 +53,7 @@ describe('sto-dingtalk-send-guard before_prompt_build', () => {
     register.register(api as unknown as OpenClawPluginApi);
 
     const result = await hooks.before_prompt_build(
-      { prompt: '你好', messages: [] },
+      { prompt: '总结一下和他的聊天', messages: [] },
       { agentId: 'agent-1', sessionKey: 'sess-1', trigger: 'user' },
     );
 
@@ -62,9 +62,33 @@ describe('sto-dingtalk-send-guard before_prompt_build', () => {
     expect(result?.appendSystemContext).toContain(DINGTALK_RECIPIENTS_MARKER);
     expect(result?.appendSystemContext).toContain('u-001');
     expect(result?.appendSystemContext).toContain('张三');
+    expect(result?.appendSystemContext).toContain('本轮禁止发送');
+    expect(result?.appendSystemContext).not.toContain('钉钉发送格式规则');
   });
 
-  it('returns undefined when no pending mention cache exists', async () => {
+  it('injects full send rules when @ turn has explicit send intent', async () => {
+    readDingTalkMentionPending.mockResolvedValue({
+      sessionKey: 'sess-send',
+      mentions: [{ type: 'group', displayName: '开发群', openConversationId: 'cid-1' }],
+      userText: '把总结发给这个群',
+      writtenAt: Date.now(),
+    });
+    clearDingTalkMentionPending.mockResolvedValue(undefined);
+
+    const api = buildApi();
+    register.register(api as unknown as OpenClawPluginApi);
+
+    const result = await hooks.before_prompt_build(
+      { prompt: '把总结发给这个群', messages: [] },
+      { agentId: 'agent-1', sessionKey: 'sess-send', trigger: 'user' },
+    );
+
+    expect(result?.appendSystemContext).toContain('用户已明确要求发送');
+    expect(result?.appendSystemContext).toContain('钉钉发送格式规则');
+    expect(result?.appendSystemContext).toContain('dws chat message send --group cid-1');
+  });
+
+  it('still injects oral send guard when no pending mention cache exists', async () => {
     readDingTalkMentionPending.mockResolvedValue(null);
 
     const api = buildApi();
@@ -75,7 +99,7 @@ describe('sto-dingtalk-send-guard before_prompt_build', () => {
       { agentId: 'agent-1', sessionKey: 'sess-empty', trigger: 'user' },
     );
 
-    expect(result).toBeUndefined();
+    expect(result?.appendSystemContext).toContain('口头点名发送护栏');
     expect(clearDingTalkMentionPending).not.toHaveBeenCalled();
   });
 
@@ -105,8 +129,8 @@ describe('sto-dingtalk-send-guard before_prompt_build', () => {
       { agentId: 'agent-1', sessionKey: 'sess-oral', trigger: 'user' },
     );
 
-    expect(result?.appendSystemContext).toContain('钉钉口头发送');
-    expect(result?.appendSystemContext).toContain('dws contact user search');
+    expect(result?.appendSystemContext).toContain('口头点名发送护栏');
+    expect(result?.appendSystemContext).toContain('dws 搜人/查群工具');
     expect(result?.appendSystemContext).toContain('禁止**调用 `share_to_dingtalk`');
     expect(result?.appendSystemContext).not.toContain('钉钉分享内置工具');
   });
@@ -122,7 +146,7 @@ describe('sto-dingtalk-send-guard before_prompt_build', () => {
       { agentId: 'agent-1', sessionKey: 'sess-oral-share', trigger: 'user' },
     );
 
-    expect(result?.appendSystemContext).toContain('钉钉口头发送');
+    expect(result?.appendSystemContext).toContain('口头点名发送护栏');
     expect(result?.appendSystemContext).not.toContain('钉钉分享内置工具');
   });
 

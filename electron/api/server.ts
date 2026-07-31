@@ -40,8 +40,7 @@ import { handleFileRoutes } from './routes/files';
 import { handleSessionRoutes } from './routes/sessions';
 import { handleSessionCatalogRoutes } from './routes/session-catalog';
 import { handleTaskGroupRoutes } from './routes/task-groups';
-import { handleCronRoutes } from './routes/cron';
-import { handleClaudeScheduledTaskRoutes } from './routes/claude-scheduled-tasks';
+import { handleScheduledTaskRoutes } from './routes/scheduled-tasks';
 import { handleDingTalkRoutes } from './routes/dingtalk';
 import { handleChannelHubRoutes } from './routes/channel-hub';
 import { handleStoSyncRoutes } from './routes/sto-sync';
@@ -53,6 +52,9 @@ import { handleWorkflowRoutes } from './routes/workflows';
 import { handleAiMemoryAgentV1Routes } from './routes/ai-memory-agent-v1';
 import { handleSclawBrowserRoutes } from './routes/sclaw-browser';
 import { handleBrowserBridgeRoutes } from './routes/browser-bridge';
+import { handleDataCenterRoutes } from './routes/data-center';
+import { handleArtifactSaveRecordRoutes } from './routes/artifact-save-records';
+import { handleLocalAuthorizedFileRoutes } from './routes/local-authorized-files';
 
 import { sendJson } from './route-utils';
 
@@ -87,12 +89,14 @@ const routeHandlers: RouteHandler[] = [
   handleSessionRoutes,
   handleSessionCatalogRoutes,
   handleTaskGroupRoutes,
-  handleCronRoutes,
   handleDictionaryRoutes,
   handleWorkflowRoutes,
+  handleDataCenterRoutes,
+  handleArtifactSaveRecordRoutes,
+  handleLocalAuthorizedFileRoutes,
   handleSclawBrowserRoutes,
   handleBrowserBridgeRoutes,
-  handleClaudeScheduledTaskRoutes,
+  handleScheduledTaskRoutes,
   handleDingTalkRoutes,
   handleMyTasksRoutes,
   handleLogRoutes,

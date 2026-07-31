@@ -1,3 +1,4 @@
+import type { DataCenterArtifactProvenance } from '@/types/data-center';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 
@@ -51,6 +52,8 @@ export interface AttachedFileMeta {
   filePath?: string;
   /** Download URL (workflow tempUrl). Falls back to filePath when absent. */
   downloadUrl?: string;
+  /** Data Center provenance used by the artifact-preview "保存产物" action. */
+  artifactProvenance?: DataCenterArtifactProvenance;
 }
 
 /** Raw message from OpenClaw chat.history */
@@ -232,6 +235,8 @@ export interface ChatState {
     schemaHash: string;
     workflowId?: string;
     collectedInputs?: Record<string, unknown>;
+    /** 工作流启动前用户在输入框 @ 的钉钉收件人（随对话上下文注入，由 Agent 按提示词决定是否发送）。 */
+    dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[];
     /** Set to true when the frontend has already inserted a parameter_form inline.
      *  Prevents maybeAppendWorkflowParameterForm from double-injecting. */
     frontendFormInserted?: boolean;

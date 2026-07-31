@@ -1,10 +1,10 @@
-import type { DingTalkAttachedFileHint } from '../../shared/dingtalk-file-send';
+import type { DingTalkAttachedFileHint } from '../../shared/dingtalk-send/dingtalk-file-send';
+import { shouldIncludeDingTalkFileSendWorkflow } from '../../shared/dingtalk-send/dingtalk-file-send';
 import {
   hasResolvedDingTalkMentions,
-  shouldIncludeDingTalkFileSendWorkflow,
   type DingTalkMention,
-} from '../../shared/dingtalk-mention-context';
-import { prepareDingTalkAgentTurnMessage } from '../../shared/dingtalk-recipient-message';
+} from '../../shared/dingtalk-send/dingtalk-mention';
+import { prepareDingTalkAgentTurnMessage } from '../../shared/dingtalk-send/dingtalk-recipient-message';
 import { writeDingTalkMentionPending } from './dingtalk-mention-pending';
 import { logger } from './logger';
 

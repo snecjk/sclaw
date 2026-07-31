@@ -10,6 +10,7 @@ import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
+import { useNativeScrollbarActivity } from '@/hooks/use-native-scrollbar-activity';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
 import { cn } from '@/lib/utils';
 import {
@@ -55,6 +56,7 @@ export function SclawBrowserEmbedChat({
   const streamText = streamMsg ? extractText(streamMsg) : (typeof streamingMessage === 'string' ? streamingMessage : '');
 
   const { contentRef, scrollRef } = useStickToBottomInstant(sessionKey);
+  useNativeScrollbarActivity(scrollRef);
 
   useEffect(() => {
     if (currentSessionKey !== sessionKey) return;

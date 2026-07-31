@@ -1,15 +1,16 @@
 import type { HookCallbackMatcher, HookEvent } from '@anthropic-ai/claude-agent-sdk';
-import { appendDingTalkAgentSendDisclaimer } from '../../../../shared/dingtalk-disclaimer';
-import { buildDingTalkMentionSystemContext } from '../../../../shared/dingtalk-mention-context';
+import { appendDingTalkAgentSendDisclaimer } from '../../../../shared/dingtalk-prompts/dingtalk-disclaimer';
 import {
-  DINGTALK_ORAL_SEND_PROMPT,
-  looksLikeDingTalkOralSendIntent,
-} from '../../../../shared/dingtalk-oral-send-prompt';
+  buildDingTalkMentionSystemContext,
+  looksLikeDingTalkMentionSendIntent,
+} from '../../../../shared/dingtalk-prompts/dingtalk-mention-context';
+import { DINGTALK_ORAL_SEND_GUARD } from '../../../../shared/dingtalk-prompts/dingtalk-oral-send-prompt';
+import { isScheduledTaskExecutionSessionKey } from '../../../../shared/scheduled-task-instruction';
 import {
   buildDwsChatMessageSendAgentCommandExample,
   fixDwsChatMessageSendToolParams,
   parseDwsChatMessageSendShellCommandArgs,
-} from '../../../../shared/dws-send-text';
+} from '../../../../shared/dingtalk-send/dws-send-text';
 import {
   evaluateDingTalkSendGuard,
   handleDingTalkSendGuardAfter,
@@ -140,23 +141,28 @@ const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
       });
 
       await clearDingTalkMentionPending(sessionKey);
+      const intentText = userPrompt || pendingMentions.userText || '';
+      const explicitSendIntent = looksLikeDingTalkMentionSendIntent(intentText);
+      logger.info('[dingtalk-mention] claude-runtime: inject mention context', {
+        sessionKey,
+        explicitSendIntent,
+      });
       return buildDingTalkMentionSystemContext(pendingMentions.mentions, {
         sendFileIntent: pendingMentions.sendFileIntent,
         attachedFiles: pendingMentions.attachedFiles,
+        explicitSendIntent,
       });
     }
 
     logger.debug('[dingtalk-mention] claude-runtime: no pending mentions', { sessionKey });
 
-    // 无 @ 时：口头点名发送 → 注入 dws 规则（Claude 路径无 share_to_dingtalk）
-    if (looksLikeDingTalkOralSendIntent(userPrompt)) {
-      logger.info('[dingtalk-mention] claude-runtime: oral send intent, inject dws rules', {
-        sessionKey,
-      });
-      return DINGTALK_ORAL_SEND_PROMPT;
+    // 定时执行 session 不注入口头护栏；对话场景常驻注入。
+    if (isScheduledTaskExecutionSessionKey(sessionKey)) {
+      return undefined;
     }
 
-    return undefined;
+    logger.debug('[dingtalk-mention] claude-runtime: inject oral send guard', { sessionKey });
+    return DINGTALK_ORAL_SEND_GUARD;
   },
 
   buildHooks(sessionKey: string) {
@@ -167,6 +173,7 @@ const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
           hooks: [
             async (input) => {
               if (input.hook_event_name !== 'PreToolUse') return {};
+
               const params = asRecord(input.tool_input);
               const formatProblem = resolveDingTalkSendFormatProblem(readCommand(params));
               if (formatProblem) {

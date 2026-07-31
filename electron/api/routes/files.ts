@@ -209,15 +209,18 @@ export async function handleFileRoutes(
       const body = await parseJsonBody<{ paths: string[] }>(req);
       const fsP = await import('node:fs/promises');
       const exists: Record<string, boolean> = {};
+      const sizes: Record<string, number> = {};
       for (const rawPath of (body.paths || []).slice(0, 200)) {
         try {
           const stat = await fsP.stat(resolveWorkspaceFilePath(rawPath));
           exists[rawPath] = stat.isFile();
+          sizes[rawPath] = stat.isFile() ? stat.size : 0;
         } catch {
           exists[rawPath] = false;
+          sizes[rawPath] = 0;
         }
       }
-      sendJson(res, 200, { exists });
+      sendJson(res, 200, { exists, sizes });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

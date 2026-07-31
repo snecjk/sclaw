@@ -1,6 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, ArrowDown, Loader2 } from 'lucide-react';
+import { AlertTriangle, ArrowDown, Loader2, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useChatStore, type RawMessage } from '@/stores/chat';
@@ -23,6 +23,7 @@ import { extractText } from '@/pages/Chat/message-utils';
 import { ChatConversationHeaderActions, ChatPreviewToggleHeaderAction } from '@/pages/Chat/ChatSearchBar';
 import { ChatPreviewHeaderTabs } from '@/pages/Chat/ChatPreviewHeaderTabs';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
+import { useNativeScrollbarActivity } from '@/hooks/use-native-scrollbar-activity';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
@@ -122,6 +123,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const { contentRef, scrollRef, scrollToBottom } = useStickToBottomInstant(currentSessionKey);
+  useNativeScrollbarActivity(scrollRef);
   const deferredSearchQuery = useDeferredValue(searchQuery.trim());
   const minLoading = useMinLoading(loading && messages.length > 0);
 
@@ -533,18 +535,25 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
       <div className="relative z-10 w-full shrink-0">
         <div className={stoChatColumnContentTrackClass('home', isSplitChatLayout)}>
       {error ? (
-        <div className="shrink-0 border-t border-destructive/20 bg-destructive/10 py-2">
-          <div className="flex items-center justify-between">
-            <p className="flex items-center gap-2 text-sm text-destructive">
-              <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
+        <div
+          role="alert"
+          className="mb-3.5 shrink-0 overflow-hidden rounded-[10px] border border-[var(--sto-chat-error-border)] bg-[var(--sto-chat-error-bg)]"
+        >
+          <div className="flex items-start gap-2 p-2">
+            <AlertTriangle
+              className="mt-0.5 h-4 w-4 shrink-0 text-[var(--sto-chat-error-icon)]"
+              aria-hidden
+            />
+            <p className="max-h-40 min-w-0 flex-1 overflow-y-auto break-words text-[13px] leading-5 text-foreground">
               {error}
             </p>
             <button
               type="button"
               onClick={() => clearError()}
-              className="text-xs text-destructive/60 underline hover:text-destructive"
+              aria-label={t('common:actions.close')}
+              className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-foreground transition-colors hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
             >
-              {t('common:actions.dismiss')}
+              <X className="h-4 w-4" aria-hidden />
             </button>
           </div>
         </div>

@@ -69,10 +69,6 @@ vi.mock('@/pages/Home/use-home-chat-entry-send', () => ({
   }),
 }));
 
-vi.mock('@/hooks/use-builtin-tool-listener', () => ({
-  useBuiltinToolListener: () => {},
-}));
-
 describe('Home skill seed', () => {
   beforeEach(() => {
     observedSeeds.length = 0;

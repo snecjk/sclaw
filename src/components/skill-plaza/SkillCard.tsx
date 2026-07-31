@@ -110,6 +110,10 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
       ? { label: t('plaza.tag.mine', { defaultValue: '自建' }), bg: 'rgba(249,115,22,0.12)', text: '#ff6700' }
       : null;
 
+  const promptTag = skill.skillKind === 'prompt'
+    ? { label: t('plaza.tag.prompt', { defaultValue: 'Prompt' }), bg: 'rgba(59,130,246,0.12)', text: '#2563eb' }
+    : null;
+
   const renderPlazaAction = () => {
     if (skill.updateAvailable) {
       return (
@@ -280,6 +284,14 @@ function SkillCardImpl({ skill, onOpenDetail, onDelete, isMineTab }: SkillCardPr
                 <span className="inline-flex items-center gap-1 text-xs text-[#86909C] font-medium">
                   <ArrowDownToLine className="h-3.5 w-3.5 opacity-55 flex-shrink-0" />
                   {skill.installCount >= 1000 ? `${(skill.installCount / 1000).toFixed(1)}k` : skill.installCount}
+                </span>
+              )}
+              {promptTag && (
+                <span
+                  className="text-[11px] font-semibold px-1.5 py-[2px] rounded flex-shrink-0 leading-[1.4]"
+                  style={{ backgroundColor: promptTag.bg, color: promptTag.text }}
+                >
+                  {promptTag.label}
                 </span>
               )}
               {tag && (

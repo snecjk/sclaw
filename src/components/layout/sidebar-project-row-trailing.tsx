@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import {
   sidebarRecentMenuContentClass,
@@ -29,6 +30,12 @@ export interface SidebarProjectRowTrailingProps {
 
 /** 容纳「新建对话」+「更多」两个 28px 按钮 */
 const SIDEBAR_ROW_TRAILING_W_CLASS = 'w-[56px]';
+const SIDEBAR_TOOLTIP_CLASS = cn(
+  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
+  'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
+  'dark:bg-[#2E3038] dark:text-white dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)]',
+);
+const SIDEBAR_TOOLTIP_ARROW_CLASS = 'fill-[#1D2129] dark:fill-[#2E3038]';
 
 export function SidebarProjectRowTrailing({
   onNewChat,
@@ -61,27 +68,34 @@ export function SidebarProjectRowTrailing({
           'rounded-md bg-[var(--sto-sidebar-bg)] group-hover:bg-[var(--sto-sidebar-row-hover-bg)]',
         )}
       >
-        <button
-          type="button"
-          aria-label={t('sidebar.newChatInProject')}
-          title={t('sidebar.newChatInProject')}
-          onClick={(e) => {
-            e.stopPropagation();
-            onNewChat();
-          }}
-          className={cn(
-            'order-2 flex h-7 w-7 items-center justify-center rounded-md',
-            sidebarTextIconClass,
-            'hover:bg-black/[0.04]',
-          )}
-        >
-          <img
-            src={sidebarProjectNewChatIcon}
-            alt=""
-            className="h-4 w-4"
-            aria-hidden
-          />
-        </button>
+        <Tooltip delayDuration={300}>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label={t('sidebar.newChatInProject')}
+              onClick={(e) => {
+                e.stopPropagation();
+                onNewChat();
+              }}
+              className={cn(
+                'order-2 flex h-7 w-7 items-center justify-center rounded-md',
+                sidebarTextIconClass,
+                'hover:bg-black/[0.04]',
+              )}
+            >
+              <img
+                src={sidebarProjectNewChatIcon}
+                alt=""
+                className="h-4 w-4"
+                aria-hidden
+              />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right" className={SIDEBAR_TOOLTIP_CLASS}>
+            {t('sidebar.newChatInProject')}
+            <TooltipArrow className={SIDEBAR_TOOLTIP_ARROW_CLASS} />
+          </TooltipContent>
+        </Tooltip>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button

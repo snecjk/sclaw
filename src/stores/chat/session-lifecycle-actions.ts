@@ -22,9 +22,12 @@ import {
 } from '@/lib/scheduled-task-group-name';
 import {
   appendPendingLocalVirtualTaskSessions,
+  filterTaskSidebarCatalogRows,
   findCronDatedTwinKey,
+  mergeEngineAndCatalogScheduledTaskSessions,
   omitSupersededCronDatedAgentTwins,
 } from '@/stores/chat/session-list-merge';
+import { DEFAULT_WORKSPACE_ID, listCatalogSessions } from '@/lib/session-catalog-api';
 import {
   buildInitialSidebarRecentOrder,
   isSidebarRecentChatSessionKey,
@@ -114,55 +117,60 @@ export function createSessionLifecycleActions(
 
       _loadSessionsInFlight = (async () => {
         try {
-          const data = await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.list', {});
-          let rawSessions: Record<string, unknown>[] = [];
-          if (data && Array.isArray(data.sessions)) {
-            rawSessions = data.sessions.filter((session) => {
-              const key = session && typeof session === 'object'
-                ? String((session as Record<string, unknown>).key ?? '')
-                : '';
-              return !isWorkflowOpenClawSessionKey(key);
-            });
-          }
-
-          // ── Merge local filesystem sessions (dated cron + claude task runs) ──
+          // Engine list may fail (Gateway down); catalog task placeholders still feed the sidebar (P2-D).
+          let engineRawSessions: Record<string, unknown>[] = [];
           try {
-            const [cronRes, claudeTaskRes] = await Promise.all([
-              hostApiFetch('/api/cron/sessions').catch(() => null),
-              hostApiFetch('/api/claude-scheduled-tasks/sessions').catch(() => null),
-            ]);
-            const cronData = cronRes && typeof cronRes === 'object' ? (cronRes as Record<string, unknown>) : null;
-            const claudeTaskData = claudeTaskRes && typeof claudeTaskRes === 'object' ? (claudeTaskRes as Record<string, unknown>) : null;
-            const cronSessions = Array.isArray(cronData?.sessions) ? (cronData.sessions as Record<string, unknown>[]) : [];
-            const claudeTaskSessions = Array.isArray(claudeTaskData?.sessions) ? (claudeTaskData.sessions as Record<string, unknown>[]) : [];
-
-            rawSessions = [...rawSessions, ...cronSessions, ...claudeTaskSessions];
-          } catch {
-            // ignore
+            const data = await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.list', {});
+            if (data && Array.isArray(data.sessions)) {
+              engineRawSessions = data.sessions.filter((session) => {
+                const key = session && typeof session === 'object'
+                  ? String((session as Record<string, unknown>).key ?? '')
+                  : '';
+                return !isWorkflowOpenClawSessionKey(key);
+              });
+            }
+          } catch (err) {
+            console.warn('[loadSessions] engine sessions.list failed; continuing with catalog', err);
           }
 
-          if (rawSessions.length > 0) {
-            const sessions: ChatSession[] = rawSessions.map((s: Record<string, unknown>) => {
-              const key = String(s.key || '');
-              const rawEngineType = s.engineType;
-              const engineType: ChatSession['engineType'] | undefined =
-                rawEngineType === 'claude' ? 'claude'
-                  : rawEngineType === 'openclaw' ? 'openclaw'
-                    : undefined;
-              return {
+          const engineSessions: ChatSession[] = engineRawSessions.map((s: Record<string, unknown>) => {
+            const key = String(s.key || '');
+            const rawEngineType = s.engineType;
+            const engineType: ChatSession['engineType'] | undefined =
+              rawEngineType === 'claude' ? 'claude'
+                : rawEngineType === 'openclaw' ? 'openclaw'
+                  : undefined;
+            return {
+              key,
+              label: s.label ? String(s.label) : undefined,
+              displayName: sanitizeSessionDisplayField(
                 key,
-                label: s.label ? String(s.label) : undefined,
-                displayName: sanitizeSessionDisplayField(
-                  key,
-                  s.displayName ? String(s.displayName) : undefined,
-                ),
-                thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
-                model: s.model ? String(s.model) : undefined,
-                updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
-                spawnedBy: typeof s.spawnedBy === 'string' ? s.spawnedBy : undefined,
-                engineType,
-              };
-            }).filter((s: ChatSession) => s.key);
+                s.displayName ? String(s.displayName) : undefined,
+              ),
+              thinkingLevel: s.thinkingLevel ? String(s.thinkingLevel) : undefined,
+              model: s.model ? String(s.model) : undefined,
+              updatedAt: parseSessionUpdatedAtMs(s.updatedAt),
+              spawnedBy: typeof s.spawnedBy === 'string' ? s.spawnedBy : undefined,
+              engineType,
+            };
+          }).filter((s: ChatSession) => s.key);
+
+          // P2-D: 侧栏任务会话以 catalog 占位补齐（取代已 404 的 /api/cron|claude…/sessions）。
+          let catalogRows: Awaited<ReturnType<typeof listCatalogSessions>> = [];
+          try {
+            catalogRows = await listCatalogSessions(DEFAULT_WORKSPACE_ID);
+            useSessionCatalogStore.setState({
+              taskCatalogSessions: filterTaskSidebarCatalogRows(catalogRows),
+            });
+          } catch (err) {
+            console.warn('[loadSessions] catalog list failed', err);
+          }
+          const sessions = mergeEngineAndCatalogScheduledTaskSessions(
+            engineSessions,
+            catalogRows,
+          ) as ChatSession[];
+
+          if (sessions.length > 0) {
 
             // ── Identify which jobs already have real dated sessions ──
             const cronDated = new Set<string>();
@@ -387,63 +395,39 @@ export function createSessionLifecycleActions(
               applyStoredSessionLabels(twinCollapsedSessions, scrubbedSessionLabels),
             );
 
-            // ── 定时任务会话名称富化：从任务定义 API 获取 displayName ──
-          // 会话列表加载时补充任务定义名称，填充 displayName。
-            // 当 startTask 异步分离执行时，后端 session 文件尚未写入，本地保留的会话条目缺少 displayName，
-            // 导致侧边栏任务分组标题降级为技术 ID 而非人类可读的任务名。
-
-            // 1) Cron jobs (openclaw)
+            // ── 定时任务会话名称富化：统一 /api/scheduled-tasks ──
+            // startTask 异步时本地占位可能缺 displayName，侧栏会降级成技术 ID。
             try {
-              const jobsResult = await hostApiFetch<Array<{ id: string; name: string }>>('/api/cron/jobs');
-              const jobNameMap = new Map(jobsResult.map((j) => [j.id, j.name]));
-              const unresolvedCronJobIds = new Set<string>();
-              for (const session of labeledSessions) {
-                const parsed = parseCronSessionKey(session.key);
-                if (parsed) {
-                  const name = jobNameMap.get(parsed.jobId);
-                  if (name) {
-                    session.displayName = name;
-                  } else {
-                    unresolvedCronJobIds.add(parsed.jobId);
-                  }
-                }
+              const tasks = await hostApiFetch<
+                Array<{ id: string; name: string; engineType: 'openclaw' | 'claude' }>
+              >('/api/scheduled-tasks');
+              const openclawNames = new Map<string, string>();
+              const claudeNames = new Map<string, string>();
+              for (const task of tasks) {
+                if (!task.id || !task.name?.trim()) continue;
+                const name = task.name.trim();
+                if (task.engineType === 'claude') claudeNames.set(task.id, name);
+                else openclawNames.set(task.id, name);
               }
-              if (unresolvedCronJobIds.size > 0) {
-                try {
-                  const fallbackJobs = await hostApiFetch<Array<{ id: string; name: string }>>('/api/cron/local-job-names');
-                  const fallbackMap = new Map(fallbackJobs.map((j) => [j.id, j.name]));
-                  for (const session of labeledSessions) {
-                    const parsed = parseCronSessionKey(session.key);
-                    if (parsed && unresolvedCronJobIds.has(parsed.jobId) && !session.displayName) {
-                      const fallbackName = fallbackMap.get(parsed.jobId);
-                      if (fallbackName) session.displayName = fallbackName;
-                    }
-                  }
-                } catch {
-                  // Fallback is best-effort
-                }
-              }
-            } catch {
-              // Ignore cron name enrichment failure
-            }
-
-            // 2) Claude scheduled tasks
-            try {
-              const tasksResult = await hostApiFetch<Array<{ id: string; name: string }>>('/api/claude-scheduled-tasks');
-              const taskNameMap = new Map(tasksResult.map((task) => [task.id, task.name]));
               for (const session of labeledSessions) {
-                const summaryParsed = parseClaudeScheduledTaskSessionKey(session.key);
-                const runParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
-                const taskId = summaryParsed?.taskId ?? runParsed?.taskId;
+                const cronParsed = parseCronSessionKey(session.key);
+                if (cronParsed) {
+                  const name = openclawNames.get(cronParsed.jobId);
+                  if (name) session.displayName = name;
+                  continue;
+                }
+                const taskId =
+                  parseClaudeScheduledTaskSessionKey(session.key)?.taskId
+                  ?? parseClaudeScheduledTaskRunSessionKey(session.key)?.taskId;
                 if (!taskId) continue;
-                const name = taskNameMap.get(taskId);
+                const name = claudeNames.get(taskId);
                 if (name) session.displayName = name;
               }
             } catch {
-              // Ignore Claude scheduled-task name enrichment failure
+              // Best-effort; fall through to label-based names.
             }
 
-            // 3) Label-based fallback when task APIs are unavailable (401 / Gateway down)
+            // Label-based fallback when task API unavailable (401 / HostApi down)
             for (const session of labeledSessions) {
               if (session.displayName?.trim()) continue;
               const cronParsed = parseCronSessionKey(session.key);

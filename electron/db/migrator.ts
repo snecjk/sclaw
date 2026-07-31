@@ -15,42 +15,91 @@ function ensureMigrationTable(db: SqliteDatabase): void {
 /**
  * The merged workflow branch owns v2-v5. Older memory/session builds used
  * those numbers independently, so remap their recorded versions before running
- * the append-only merged sequence (v6-v8). This retains all existing tables
- * while allowing the missing workflow migrations to execute exactly once.
+ * the append-only merged sequence (v6-v8). Channel-plane previously occupied
+ * v5 on the test branch and moves to v10 so workflow cloud-id migration can run.
+ * This retains all existing tables while allowing the missing workflow
+ * migrations to execute exactly once. The 0710 branch also used v11 for
+ * channel-plane and v12 for the consolidated workflow schema; after merging,
+ * those records move to v10 and v13 so scheduled tasks/artifact saves retain
+ * their main-branch v11/v12 slots.
  */
 export function normalizeLegacySessionCatalogMigrationVersions(db: SqliteDatabase): void {
   const rows = db.prepare(
-    'SELECT version, name FROM schema_migrations WHERE version IN (2, 3, 4, 6, 7, 8) ORDER BY version ASC',
+    'SELECT version, name FROM schema_migrations WHERE version IN (2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13) ORDER BY version ASC',
   ).all() as Array<{ version: number; name: string }>;
   const byVersion = new Map(rows.map((row) => [Number(row.version), String(row.name)]));
   const version2Name = byVersion.get(2);
-  if (version2Name !== 'session-catalog-schema' && version2Name !== 'memory-capture-jobs') return;
+  const version5Name = byVersion.get(5);
+  const version11Name = byVersion.get(11);
+  const version12Name = byVersion.get(12);
+  const hasLegacyMemoryOrSession =
+    version2Name === 'session-catalog-schema' || version2Name === 'memory-capture-jobs';
+  const hasLegacyChannelPlane = version5Name === 'channel-plane-channel-connections';
+  const hasBranchChannelPlane = version11Name === 'channel-plane-channel-connections';
+  const hasBranchWorkflowSchema = version12Name === 'workflow-runtime-schema';
 
-  const expected = version2Name === 'session-catalog-schema'
-    ? new Map([[3, 'session-types-and-channels']])
-    : new Map([[3, 'session-catalog-schema'], [4, 'session-types-and-channels']]);
-  for (const [version, name] of expected) {
-    const actual = byVersion.get(version);
-    if (actual && actual !== name) {
-      throw new Error(`[sqlite] cannot remap legacy memory/session migrations: v${version} is ${actual}`);
+  if (
+    !hasLegacyMemoryOrSession
+    && !hasLegacyChannelPlane
+    && !hasBranchChannelPlane
+    && !hasBranchWorkflowSchema
+  ) return;
+
+  if (hasLegacyMemoryOrSession) {
+    const expected = version2Name === 'session-catalog-schema'
+      ? new Map([[3, 'session-types-and-channels']])
+      : new Map([[3, 'session-catalog-schema'], [4, 'session-types-and-channels']]);
+    for (const [version, name] of expected) {
+      const actual = byVersion.get(version);
+      if (actual && actual !== name) {
+        throw new Error(`[sqlite] cannot remap legacy memory/session migrations: v${version} is ${actual}`);
+      }
     }
+  }
+
+  const version10Name = byVersion.get(10);
+  if ((hasLegacyChannelPlane || hasBranchChannelPlane) && version10Name && version10Name !== 'channel-plane-channel-connections') {
+    throw new Error(`[sqlite] cannot remap legacy channel-plane: v10 is ${version10Name}`);
+  }
+  const version13Name = byVersion.get(13);
+  if (hasBranchWorkflowSchema && version13Name && version13Name !== 'workflow-runtime-schema') {
+    throw new Error(`[sqlite] cannot remap workflow schema: v13 is ${version13Name}`);
   }
 
   db.exec('BEGIN IMMEDIATE;');
   try {
-    if (version2Name === 'memory-capture-jobs') {
-      if (byVersion.get(4) === 'session-types-and-channels') {
-        db.prepare('UPDATE schema_migrations SET version = 8 WHERE version = 4').run();
+    if (hasLegacyMemoryOrSession) {
+      if (version2Name === 'memory-capture-jobs') {
+        if (byVersion.get(4) === 'session-types-and-channels') {
+          db.prepare('UPDATE schema_migrations SET version = 8 WHERE version = 4').run();
+        }
+        if (byVersion.get(3) === 'session-catalog-schema') {
+          db.prepare('UPDATE schema_migrations SET version = 7 WHERE version = 3').run();
+        }
+        db.prepare('UPDATE schema_migrations SET version = 6 WHERE version = 2').run();
+      } else {
+        if (byVersion.get(3) === 'session-types-and-channels') {
+          db.prepare('UPDATE schema_migrations SET version = 8 WHERE version = 3').run();
+        }
+        db.prepare('UPDATE schema_migrations SET version = 7 WHERE version = 2').run();
       }
-      if (byVersion.get(3) === 'session-catalog-schema') {
-        db.prepare('UPDATE schema_migrations SET version = 7 WHERE version = 3').run();
+    }
+    if (hasLegacyChannelPlane && !version10Name) {
+      db.prepare('UPDATE schema_migrations SET version = 10 WHERE version = 5').run();
+    }
+    if (hasBranchChannelPlane) {
+      if (version10Name === 'channel-plane-channel-connections') {
+        db.prepare('DELETE FROM schema_migrations WHERE version = 11').run();
+      } else {
+        db.prepare('UPDATE schema_migrations SET version = 10 WHERE version = 11').run();
       }
-      db.prepare('UPDATE schema_migrations SET version = 6 WHERE version = 2').run();
-    } else {
-      if (byVersion.get(3) === 'session-types-and-channels') {
-        db.prepare('UPDATE schema_migrations SET version = 8 WHERE version = 3').run();
+    }
+    if (hasBranchWorkflowSchema) {
+      if (version13Name === 'workflow-runtime-schema') {
+        db.prepare('DELETE FROM schema_migrations WHERE version = 12').run();
+      } else {
+        db.prepare('UPDATE schema_migrations SET version = 13 WHERE version = 12').run();
       }
-      db.prepare('UPDATE schema_migrations SET version = 7 WHERE version = 2').run();
     }
     db.exec('COMMIT;');
     logger.info('[sqlite] normalized legacy memory/session migration versions');

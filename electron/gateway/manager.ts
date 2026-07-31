@@ -467,16 +467,8 @@ export class GatewayManager extends EventEmitter {
           await waitForPortFree(port);
         },
         startProcess: async () => {
-          // 在 spawn 自有 Gateway 之前丢弃关机期间错过的 cron 任务（推进 nextRunAtMs
-          // 到未来 + 清崩溃残留 runningAtMs），让新进程 runMissedJobs 发现没有任何
-          // nextRunAtMs 落在过去 → 不补跑。仅在 spawn 自有进程分支执行，连到外部
-          // Gateway 时不会进入此回调，自然跳过。
-          try {
-            const { advanceOpenClawCronNextRuns } = await import('../utils/advance-openclaw-cron-next-runs');
-            await advanceOpenClawCronNextRuns();
-          } catch (err) {
-            logger.warn('Failed to advance openclaw cron next runs on startup:', err);
-          }
+          // 定时任务已迁出 Gateway cron（统一 ScheduledTaskScheduler + discardMissedOnStartup）。
+          // 不再改写 jobs.json 推进 nextRunAtMs。
           await this.startProcess();
         },
         waitForReady: async (port) => {

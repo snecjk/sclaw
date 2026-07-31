@@ -9,7 +9,6 @@ import {
 } from '@/lib/app-plaza-api';
 import { openExternalUrl } from '@/lib/preview-url';
 import { appNavigate } from '@/lib/app-navigate';
-import { resolveSclawBrowserUrl } from '@/lib/resolve-sclaw-browser-url';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 import type { AppTone } from '@/types/more-apps';

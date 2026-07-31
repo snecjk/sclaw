@@ -25,6 +25,7 @@ import { buildWorkflowContextSummary, buildWorkflowFormId } from '@/lib/workflow
 import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
 import type { WorkflowSchemaField } from '@/types/workflow';
+import type { DingTalkMention } from '@/types/dingtalk-mention';
 
 export interface WorkflowSendContext {
   sessionKey: string;
@@ -48,6 +49,7 @@ export async function sendWithWorkflow(
   templateId: string,
   _context: WorkflowSendContext,
   sendMessage: (text: string, runId?: string | null, workflowId?: string | null, workflowContext?: unknown) => Promise<void>,
+  dingTalkMentions?: DingTalkMention[],
 ): Promise<boolean> {
   
   if (!canStartWorkflow()) {
@@ -91,6 +93,7 @@ export async function sendWithWorkflow(
       schema,
       schemaHash,
       collectedInputs: {},
+      dingTalkMentions: dingTalkMentions?.length ? dingTalkMentions : undefined,
       frontendFormInserted: false,
       modelGuidanceSent: false,
     });
@@ -103,6 +106,7 @@ export async function sendWithWorkflow(
       schema,
       schemaHash,
       collectedInputs: {},
+      dingTalkMentions: dingTalkMentions?.length ? dingTalkMentions : undefined,
       frontendFormInserted: false,
       modelGuidanceSent: true,
     });

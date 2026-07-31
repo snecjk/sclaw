@@ -1,6 +1,6 @@
 {
     "name": "stoclaw",
-    "version": "2026.7.28-GA.1",
+    "version": "2026.7.30-GA.1",
     "pnpm": {
         "onlyBuiltDependencies": [
             "@discordjs/opus",
@@ -100,6 +100,7 @@
         "clawhub": "^0.5.0",
         "cloudflare": "^4.5.0",
         "compromise": "^14.15.1",
+        "croner": "^10.0.1",
         "electron-store": "^11.0.2",
         "electron-updater": "^6.8.3",
         "extract-zip": "^2.0.1",

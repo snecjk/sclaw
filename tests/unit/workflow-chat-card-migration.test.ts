@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
-import workflowRuntimeSchemaMigration from '../../electron/db/migrations/0012-workflow-runtime-schema';
+import workflowRuntimeSchemaMigration from '../../electron/db/migrations/0013-workflow-runtime-schema';
 
 describe('workflow runtime schema chat-card columns', () => {
   let db: DatabaseSync | null = null;
@@ -12,7 +12,7 @@ describe('workflow runtime schema chat-card columns', () => {
 
   it('creates durable card metadata with new runs invisible by default', () => {
     db = new DatabaseSync(':memory:');
-    db.exec(workflowRuntimeSchemaMigration.sql!);
+    workflowRuntimeSchemaMigration.apply!(db);
     db.exec(`
       INSERT INTO wf_run(
         id, run_id, workflow_id, version_id, status, definition_json,

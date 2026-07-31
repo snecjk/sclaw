@@ -21,7 +21,7 @@ import {
 import { buildUserSkillHooks } from '../../sto-plugin/claude/sto-user-skill-tool/hooks';
 import {
   isScheduledTaskExecutionSessionKey,
-  SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT,
+  SCHEDULED_TASK_CORE_PROMPT,
 } from '../../shared/scheduled-task-instruction';
 import {
   buildStoAgentTelemetryClaudeRuntimeOptions,
@@ -118,7 +118,8 @@ const scheduledTaskToolExtension: ClaudeRuntimeExtension = {
     if (isExecutionContext) {
       return {
         hooks: buildScheduledTaskHooks(sessionKey),
-        systemPromptAppend: SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT,
+        // 模块 B：纯执行语义。钉钉格式/必发由执行器 systemPromptAppend 条件注入。
+        systemPromptAppend: SCHEDULED_TASK_CORE_PROMPT,
       };
     }
 

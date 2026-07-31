@@ -8,9 +8,10 @@ import { logger } from '../utils/logger';
 import {
   AGENT_EXECUTION_MEMORY_CONTEXT_MARKER,
   AGENT_MEMORY_CONTEXT_MARKER,
-  appendAgentMemoryBlock,
+  prependAgentMemoryBlock,
 } from '../../shared/agent-memory-prompt';
 import { parseOpenClawExecutionTurn } from './openclaw-execution-snapshot';
+import { prependSystemPromptAppend } from '../../shared/system-prompt-append';
 
 const VISION_MIME_TYPES = new Set([
   'image/png',
@@ -24,6 +25,13 @@ const VISION_MIME_TYPES = new Set([
   'image/tiff',
 ]);
 const OPENCLAW_SESSION_STAT_CONCURRENCY = 32;
+
+/**
+ * Gateway `chat.send` schema（additionalProperties:false）不接受 `systemPromptAppend`。
+ * OpenClaw 侧将 append 前置合并进 user message，使定时任务钉钉必发等上下文对模型可见。
+ * 不把 append 放进 RPC 参数，避免 schema 拒收。
+ */
+export const mergeOpenClawSystemPromptAppend = prependSystemPromptAppend;
 
 async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
   let nextIndex = 0;
@@ -163,8 +171,10 @@ export const openClawAdapter: EngineAdapter = {
   type: 'openclaw',
 
   prepareMemoryInjection(params, memory) {
-    let message = appendAgentMemoryBlock(params.message, memory.preference, AGENT_MEMORY_CONTEXT_MARKER);
-    message = appendAgentMemoryBlock(message, memory.execution, AGENT_EXECUTION_MEMORY_CONTEXT_MARKER);
+    // Keep the real user request last so skill matching is anchored to it instead of
+    // to tool names or commands that may appear in recalled execution experience.
+    let message = prependAgentMemoryBlock(params.message, memory.execution, AGENT_EXECUTION_MEMORY_CONTEXT_MARKER);
+    message = prependAgentMemoryBlock(message, memory.preference, AGENT_MEMORY_CONTEXT_MARKER);
     if (memory.preference || memory.execution) {
       logger.info(`[agent-memory][openclaw] message after memory injection:\n${message}`);
     }
@@ -251,9 +261,20 @@ export const openClawAdapter: EngineAdapter = {
       if (projectAgentResult.created || projectAgentResult.workspaceUpdated) {
         await ctx.gatewayManager.debouncedReload();
       }
+      const message = mergeOpenClawSystemPromptAppend(params.message, params.systemPromptAppend);
+      if (params.systemPromptAppend?.trim()) {
+        logger.info('[openclaw-adapter][prompt] final user message after prepend', {
+          sessionKey,
+          appendChars: params.systemPromptAppend.trim().length,
+          messageChars: message.length,
+          systemPromptAppend: params.systemPromptAppend,
+          userMessageBeforeMerge: params.message,
+          finalUserMessage: message,
+        });
+      }
       const rpcParams: Record<string, unknown> = {
         sessionKey,
-        message: params.message,
+        message,
         deliver: params.deliver,
         idempotencyKey: params.idempotencyKey,
       };
@@ -272,7 +293,17 @@ export const openClawAdapter: EngineAdapter = {
         await ctx.gatewayManager.debouncedReload();
       }
 
-      let message = params.message;
+      let message = mergeOpenClawSystemPromptAppend(params.message, params.systemPromptAppend);
+      if (params.systemPromptAppend?.trim()) {
+        logger.info('[openclaw-adapter][prompt] final user message after prepend (media)', {
+          sessionKey,
+          appendChars: params.systemPromptAppend.trim().length,
+          messageChars: message.length,
+          systemPromptAppend: params.systemPromptAppend,
+          userMessageBeforeMerge: params.message,
+          finalUserMessage: message,
+        });
+      }
       const imageAttachments: Array<Record<string, unknown>> = [];
       const fileReferences: string[] = [];
 
