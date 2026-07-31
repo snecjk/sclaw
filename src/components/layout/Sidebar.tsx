@@ -1957,7 +1957,7 @@ export function Sidebar() {
                   type="button"
                   onClick={() => navigate(`/data-center?section=${section.id}`)}
                   className={cn(
-                    'relative inline-flex h-7 w-full min-w-0 items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
+                    'relative inline-flex h-8 w-full min-w-0 items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
                     active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
                   )}
                 >
