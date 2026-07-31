@@ -36,6 +36,8 @@ const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUP
 
 export interface EngineDeps {
   repo: WorkflowRuntimeRepository;
+  /** Resolve session provenance without coupling the workflow engine to scheduler storage. */
+  isScheduledTaskSession?: (sessionKey: string) => Promise<boolean>;
   invokeAgent: InvokeAgentFn;            // 引擎绑 sdk+env+卡死保护后注入
   quota?: () => Promise<boolean>;          // /api/token-quota/check
   /** Release an engine-owned node session only after its node reaches a terminal state. */
@@ -510,7 +512,15 @@ export function createEngine(deps: EngineDeps) {
      * 正式启动节点调度。
      */
     async startWorkflow(args: StartWorkflowArgs): Promise<void> {
-      const triggerType = args.triggerType ?? (args.chatCard ? 'chat' : 'workflow_manual');
+      let triggerType = args.triggerType ?? (args.chatCard ? 'chat' : 'workflow_manual');
+      const sessionKey = args.sessionKey?.trim();
+      if (
+        triggerType === 'chat'
+        && sessionKey
+        && await deps.isScheduledTaskSession?.(sessionKey)
+      ) {
+        triggerType = 'scheduled_task';
+      }
       // 端到端：拉 DSL → generatePlan 落本地计划（wf_run + wf_node_run + outbox）→ dispatch
       workflowExecLog('info', 'run-start', 'starting client-local workflow run', {
         runId: args.runId,

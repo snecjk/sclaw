@@ -20,6 +20,7 @@ import { invokeAgent as agentRunnerInvokeAgent } from './agent-runner-claude';
 import { invokeOpenClawWorkflowAgent, releaseOpenClawWorkflowAgentSession } from './agent-runner-openclaw';
 import type { GatewayManager } from '../../gateway/manager';
 import { getWorkflowRuntimeRepository } from '../../db';
+import { ScheduleTaskRunRepository } from '../../db/repositories/schedule-task-run-repository';
 import type { EngineDeps } from './engine';
 import type { WorkflowRunStatus } from '../../../shared/workflow-run-status';
 import { workflowExecLog } from './logging';
@@ -63,6 +64,7 @@ export async function workflowV2BackendFetch(
 }
 
 export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager): EngineDeps {
+  const scheduleTaskRunRepo = new ScheduleTaskRunRepository();
   configureWorkflowIdPool(async (count) => {
     const response = await workflowV2BackendFetch('/agent/v2/ids/allocate', { method: 'POST', body: { count } });
     if (!Array.isArray(response?.ids)) throw new Error('global workflow id response missing ids');
@@ -70,6 +72,7 @@ export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager)
   });
   return {
     repo: getWorkflowRuntimeRepository(),
+    isScheduledTaskSession: (sessionKey) => scheduleTaskRunRepo.existsBySessionKey(sessionKey),
     invokeAgent: async (args) => {
       const run = await getWorkflowRuntimeRepository().getRun(args.ctx.runId);
       // Chat persists its selected model on the session before a workflow starts.
