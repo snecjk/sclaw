@@ -25,10 +25,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import {
   DATA_CENTER_API_NOT_FOUND,
+  createDataCenterFolder,
   createDataCenterIdempotencyKey,
   deleteDataCenterSharedEntry,
   getDataCenterDownloadUrl,
   getDataCenterPreviewUrl,
+  listLocalFolderFiles,
   moveDataCenterEntry,
   shareDataCenterEntries,
   uploadDriveFileFromPath,
@@ -219,6 +221,70 @@ export function DataCenter() {
           idempotencyKey: createDataCenterIdempotencyKey('drive', `${store.parentEntryId}-${fileName ?? filePath}`),
         });
         uploadedCount += 1;
+      }
+      toast.success(uploadedCount === 1
+        ? t('dataCenterPage.toasts.uploadedOne')
+        : t('dataCenterPage.toasts.uploadedMany', { count: uploadedCount }));
+      await store.load({ resetPage: true });
+      await store.refreshQuota();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.uploadFailed'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleUploadFolder = async () => {
+    if (!isUploadDriveTab) {
+      toast.info(t('dataCenterPage.toasts.artifactSaveFromPreview'));
+      return;
+    }
+    try {
+      const result = await invokeIpc<{ canceled: boolean; filePaths?: string[] }>('dialog:open', {
+        properties: ['openDirectory', 'multiSelections'],
+      });
+      if (result.canceled || !result.filePaths?.length) return;
+
+      setUploading(true);
+      let uploadedCount = 0;
+      for (const dirPath of result.filePaths) {
+        const folderName = dirPath.split(/[\\/]/).filter(Boolean).pop() || 'folder';
+        const { files } = await listLocalFolderFiles(dirPath);
+        const rootFolder = await createDataCenterFolder({
+          spaceType: store.spaceType,
+          spaceId: store.spaceId ?? undefined,
+          parentEntryId: store.parentEntryId,
+          name: folderName,
+        });
+        // Cache created folders by relative dir path ('' = selected folder root).
+        const folderIdByRelDir = new Map<string, string>([['', rootFolder.entryId]]);
+        const ensureFolder = async (relDir: string): Promise<string> => {
+          const cached = folderIdByRelDir.get(relDir);
+          if (cached) return cached;
+          const parentRelDir = relDir.split('/').slice(0, -1).join('/');
+          const parentEntryId = await ensureFolder(parentRelDir);
+          const name = relDir.split('/').pop() || 'folder';
+          const created = await createDataCenterFolder({
+            spaceType: store.spaceType,
+            spaceId: store.spaceId ?? undefined,
+            parentEntryId,
+            name,
+          });
+          folderIdByRelDir.set(relDir, created.entryId);
+          return created.entryId;
+        };
+        for (const file of files) {
+          const relDir = file.relativePath.split('/').slice(0, -1).join('/');
+          const parentEntryId = await ensureFolder(relDir);
+          const fileName = file.relativePath.split('/').pop() || undefined;
+          await uploadDriveFileFromPath({
+            filePath: file.absolutePath,
+            fileName,
+            parentEntryId,
+            idempotencyKey: createDataCenterIdempotencyKey('drive', `${parentEntryId}-${file.relativePath}`),
+          });
+          uploadedCount += 1;
+        }
       }
       toast.success(uploadedCount === 1
         ? t('dataCenterPage.toasts.uploadedOne')
@@ -538,10 +604,23 @@ export function DataCenter() {
                         <FolderPlus className="mr-2 h-4 w-4" />
                         {t('dataCenterPage.toolbar.createFolder')}
                       </Button>
-                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" onClick={handleUploadFiles} disabled={uploading}>
-                        {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-                        {t('dataCenterPage.toolbar.uploadFile')}
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" disabled={uploading}>
+                            {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+                            {t('dataCenterPage.toolbar.uploadFile')}
+                            <ChevronDown className="ml-2 h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-[132px] rounded-[10px] p-2">
+                          <DropdownMenuItem onSelect={() => { void handleUploadFiles(); }} className="text-[13px]">
+                            {t('dataCenterPage.toolbar.uploadFileOption')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => { void handleUploadFolder(); }} className="text-[13px]">
+                            {t('dataCenterPage.toolbar.uploadFolderOption')}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </>
                   ) : (
                     <DropdownMenu>
