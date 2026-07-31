@@ -1,9 +1,30 @@
-import { describe, expect, it, vi } from 'vitest';
-import { buildWorkflowStartChatCard } from '../../electron/api/routes/workflows';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  buildWorkflowStartChatCard,
+  resolveWorkflowStartModel,
+} from '../../electron/api/routes/workflows';
 import { createEngine } from '../../electron/services/workflow-runtime/engine';
 import { buildClaudeWorkflowStartBody } from '../../sto-plugin/claude/sto-workflow-tool/workflow-start';
 
+const workflowRouteMocks = vi.hoisted(() => ({
+  getEngineSessionRegistryEntry: vi.fn(),
+  getOpenClawProvidersConfig: vi.fn(),
+}));
+
+vi.mock('../../electron/engines/session-registry', () => ({
+  getEngineSessionRegistryEntry: workflowRouteMocks.getEngineSessionRegistryEntry,
+}));
+
+vi.mock('../../electron/utils/openclaw-auth', () => ({
+  getOpenClawProvidersConfig: workflowRouteMocks.getOpenClawProvidersConfig,
+}));
+
 describe('workflow chat-card start metadata', () => {
+  beforeEach(() => {
+    workflowRouteMocks.getEngineSessionRegistryEntry.mockReset();
+    workflowRouteMocks.getOpenClawProvidersConfig.mockReset();
+  });
+
   it('builds durable card metadata for the host v1 chat start bridge', () => {
     expect(buildWorkflowStartChatCard('wf_weather', {
       inputs: { city: '上海' },
@@ -35,6 +56,40 @@ describe('workflow chat-card start metadata', () => {
       chatCardTitle: '天气笑话',
       chatParamsSummary: '{"city":"北京"}',
     });
+  });
+
+  it('resolves the Claude workflow model from the originating chat session', async () => {
+    workflowRouteMocks.getEngineSessionRegistryEntry.mockResolvedValue({
+      sessionKey: 'session-1',
+      engineType: 'claude',
+      agentId: 'main',
+      model: '  dashscope/qwen3.5-plus  ',
+    });
+
+    await expect(resolveWorkflowStartModel('claude', 'session-1'))
+      .resolves.toBe('dashscope/qwen3.5-plus');
+    expect(workflowRouteMocks.getEngineSessionRegistryEntry).toHaveBeenCalledWith('session-1');
+  });
+
+  it('rejects a Claude workflow start when the chat session has no execution model', async () => {
+    workflowRouteMocks.getEngineSessionRegistryEntry.mockResolvedValue({
+      sessionKey: 'session-1',
+      engineType: 'claude',
+      agentId: 'main',
+    });
+
+    await expect(resolveWorkflowStartModel('claude', 'session-1'))
+      .rejects.toThrow('Claude 聊天会话执行模型未配置，无法启动工作流');
+  });
+
+  it('keeps resolving OpenClaw workflow starts from the configured chat default', async () => {
+    workflowRouteMocks.getOpenClawProvidersConfig.mockResolvedValue({
+      defaultModel: '  moonshot/kimi-k2.5  ',
+    });
+
+    await expect(resolveWorkflowStartModel('openclaw', 'session-1'))
+      .resolves.toBe('moonshot/kimi-k2.5');
+    expect(workflowRouteMocks.getEngineSessionRegistryEntry).not.toHaveBeenCalled();
   });
 
   it('persists the card marker in the first wf_run upsert', async () => {

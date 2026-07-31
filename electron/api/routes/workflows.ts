@@ -9,6 +9,7 @@ import { getInstalledWorkflowRuntime, installWorkflowRuntime, workflowV2BackendF
 import { workflowExecLog } from '../../services/workflow-runtime/logging';
 import { takeWorkflowDatabaseId } from '../../services/workflow-runtime/id-pool';
 import type { AgentEngineType } from '../../engines/types';
+import { getEngineSessionRegistryEntry } from '../../engines/session-registry';
 import type { StartWorkflowArgs } from '../../services/workflow-runtime/engine';
 import { getOpenClawProvidersConfig } from '../../utils/openclaw-auth';
 
@@ -256,11 +257,25 @@ function makeWorkflowStartIdempotencyKey(workflowId: string): string {
 
 /**
  * Tool-originated workflow starts bypass the renderer's model resolver. Pin
- * OpenClaw runs to the Gateway's configured chat default before the runtime
- * can fall back to a workflow DSL alias such as `sonnet`.
+ * Claude runs to the current chat session model and OpenClaw runs to the
+ * Gateway's configured chat default before dispatch. This keeps the local
+ * workflow on the same model selected by the originating chat.
  */
-export async function resolveWorkflowStartModel(engineType: AgentEngineType): Promise<string | undefined> {
-  if (engineType !== 'openclaw') return undefined;
+export async function resolveWorkflowStartModel(
+  engineType: AgentEngineType,
+  sessionKey?: string,
+): Promise<string> {
+  if (engineType === 'claude') {
+    const normalizedSessionKey = sessionKey?.trim();
+    const session = normalizedSessionKey
+      ? await getEngineSessionRegistryEntry(normalizedSessionKey)
+      : null;
+    const sessionModel = session?.engineType === 'claude' ? session.model?.trim() : undefined;
+    if (!sessionModel) {
+      throw new Error('Claude 聊天会话执行模型未配置，无法启动工作流');
+    }
+    return sessionModel;
+  }
 
   const defaultModel = (await getOpenClawProvidersConfig()).defaultModel?.trim();
   if (!defaultModel || !defaultModel.includes('/')) {
@@ -277,7 +292,7 @@ async function startLocalWorkflowRuntime(
   const versionId = registered.workflowVersionId;
   const startedAt = registered.startedAt ?? new Date().toISOString();
   const resolvedEngine = resolveWorkflowStartEngine(body.engineType);
-  const engineModel = await resolveWorkflowStartModel(resolvedEngine.engineType);
+  const engineModel = await resolveWorkflowStartModel(resolvedEngine.engineType, body.sessionKey);
   workflowExecLog('info', 'host-runtime-start', 'starting local workflow runtime from host route', {
     runId: registered.runId,
     workflowId,
