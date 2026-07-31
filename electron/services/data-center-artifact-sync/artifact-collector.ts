@@ -14,8 +14,14 @@ const PREVIEW_PATH_REGEX = new RegExp(
 
 function cleanPath(value: string): string {
   const trimmed = value.trim().replace(/^preview:\/\//, '');
-  const filePath = stripFileUrlScheme(trimmed);
+  let filePath = stripFileUrlScheme(trimmed);
   if (!filePath || /^https?:\/\//i.test(filePath) || filePath.startsWith('artifact://')) return filePath;
+  // Workflow/file URIs may percent-encode non-ASCII characters (e.g. Chinese names in markdown links).
+  try {
+    filePath = decodeURIComponent(filePath);
+  } catch {
+    // malformed URI sequence: keep original path
+  }
   if (filePath.startsWith('/')) return normalize(filePath);
   if (isWindowsDrivePath(filePath)) return filePath.replace(/\\/g, '/');
   return resolveWorkspaceFilePath(filePath);
