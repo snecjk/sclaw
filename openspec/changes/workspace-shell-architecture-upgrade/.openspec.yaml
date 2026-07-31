@@ -1,0 +1,25 @@
+schema: spec-driven
+created: 2026-07-31
+status: draft
+stage: 0-audit-openspec
+source:
+  - docs/可拖拽侧边栏与三栏工作区框架-Cursor-T2开发文档.md
+  - docs/workspace-shell-upgrade/
+mastergo:
+  file: "195806630222772"
+  page_id: "39:06193"
+  layer_id: "48:10836"
+  root_node_name: "区域 4"
+  goto: "https://mastergo.com/goto/UUOsojQL?page_id=39:06193&layer_id=48:10836&file=195806630222772"
+  goto_prev: "https://mastergo.com/goto/UUN8zpHY?page_id=39:06193&layer_id=48:10836&file=195806630222772"
+  cursor_mcp_status: errored-server-unavailable
+  http_dsl_status: ok-with-MG_MCP_TOKEN
+  confirmed_sidebar_px: [200, 260, 400]
+workspace_mins_approved:
+  closedWorkspaceMin: 560
+  splitChatMin: 480
+  splitPreviewMin: 560
+  expandedPreviewMin: 640
+  approved_by: user
+  approved_at: "2026-07-31"
+blockers: []

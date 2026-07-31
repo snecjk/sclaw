@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowDown, Loader2, X } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
@@ -32,6 +32,7 @@ import {
   stoOverlayScrollHostClass,
   stoSplitGridBodyChatClass,
   stoSplitGridBodyPreviewClass,
+  stoPreviewExpandedBodyClass,
   stoSplitRowContentsClass,
 } from '@/lib/surfaces';
 import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
@@ -276,7 +277,10 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   }, [messages, streamMsg]);
 
   const {
+    previewMode,
     showPreviewPanel,
+    isPreviewSplit,
+    isPreviewExpanded,
     activePreviewFilePath,
     setActivePreviewFilePath,
     previewableFiles,
@@ -284,6 +288,8 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     openArtifactPreview,
     openPreviewPanel,
     closePreviewPanel,
+    expandPreview,
+    restorePreview,
     dismissPreviewFile,
     showEditWorkflow,
     workflowId: sessionWorkflowId,
@@ -392,15 +398,23 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     ],
   );
 
+  const headerLayoutMode =
+    !canShowPreviewPanel || previewMode === 'closed'
+      ? 'conversation'
+      : previewMode === 'expanded'
+        ? 'preview-expanded'
+        : 'split';
+
   useContentHeader({
     title: sessionTitle,
     previewTabs: previewHeaderTabs,
     chatActions: conversationHeaderActions,
-    actions: previewToggleAction,
-    isSplitLayout: canShowPreviewPanel && showPreviewPanel,
+    previewActions: previewToggleAction,
+    layoutMode: headerLayoutMode,
   });
 
-  const isSplitChatLayout = canShowPreviewPanel && showPreviewPanel;
+  const isSplitChatLayout = isPreviewSplit;
+  const showPreviewSurface = canShowPreviewPanel && showPreviewPanel;
 
   const showLoadingPlaceholder = useMemo(
     () => loading && messages.length === 0,
@@ -413,13 +427,18 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
       ref={splitRowRef}
       className={cn(
         'relative min-h-0 flex-1 overflow-hidden',
-        isSplitChatLayout ? stoSplitRowContentsClass : 'flex flex-row',
+        isSplitChatLayout
+          ? stoSplitRowContentsClass
+          : isPreviewExpanded
+            ? 'flex min-h-0 flex-1 flex-col'
+            : 'flex flex-row',
         className,
       )}
     >
       <ChatConversationColumn
         variant="home"
         isSplitLayout={isSplitChatLayout}
+        isPreviewExpanded={isPreviewExpanded}
         splitGridChatClass={isSplitChatLayout ? stoSplitGridBodyChatClass : undefined}
       >
       <div className={stoOverlayScrollHostClass}>
@@ -562,39 +581,37 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
       ) : null}
       </ChatConversationColumn>
 
-    {/* Resize handle — 0px track; hit + hint edge align preview left stroke */}
-    {canShowPreviewPanel && showPreviewPanel && (
-      <SplitPanelResizeHandle
-        valuePercent={previewPanelPercent}
-        isResizing={isResizing}
-        onResizeStart={startResize}
-        onKeyboardAdjust={adjustPreviewPercent}
-      />
-    )}
-
-    {/* Right: Preview Panel */}
-    <AnimatePresence>
-      {canShowPreviewPanel && showPreviewPanel && (
-        <motion.div
-          ref={previewPanelRef}
-          layout={false}
-          initial={{ opacity: 0, x: 40 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 40 }}
-          transition={{ duration: 0.25, ease: 'easeInOut' }}
-          className={stoSplitGridBodyPreviewClass}
-        >
-          <ChatPreviewPanel
-            files={previewableFiles}
-            activeFilePath={activePreviewFilePath}
-            showEditWorkflow={showEditWorkflow}
-            workflowId={sessionWorkflowId}
-            onEditWorkflow={openWorkflowPreview}
-            className="h-full w-full"
+    {/* Resize handle — Preview 侧 Body Row overlay；仅 split 渲染 */}
+    {/* Preview surface — expanded 时 Conversation 仍挂载；禁止 DOM Fullscreen */}
+    {showPreviewSurface ? (
+      <div
+        ref={previewPanelRef}
+        className={cn(
+          isSplitChatLayout && stoSplitGridBodyPreviewClass,
+          isPreviewExpanded && stoPreviewExpandedBodyClass,
+        )}
+      >
+        {isSplitChatLayout ? (
+          <SplitPanelResizeHandle
+            valuePercent={previewPanelPercent}
+            isResizing={isResizing}
+            onResizeStart={startResize}
+            onKeyboardAdjust={adjustPreviewPercent}
           />
-        </motion.div>
-      )}
-    </AnimatePresence>
+        ) : null}
+        <ChatPreviewPanel
+          files={previewableFiles}
+          activeFilePath={activePreviewFilePath}
+          showEditWorkflow={showEditWorkflow}
+          workflowId={sessionWorkflowId}
+          onEditWorkflow={openWorkflowPreview}
+          isWorkspaceExpanded={isPreviewExpanded}
+          onExpandWorkspace={expandPreview}
+          onRestoreWorkspace={restorePreview}
+          className="h-full w-full"
+        />
+      </div>
+    ) : null}
   </div>
   <TaskCreateModal
     open={workflowCronModalOpen}

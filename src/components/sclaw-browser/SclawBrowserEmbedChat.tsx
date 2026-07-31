@@ -118,7 +118,11 @@ export function SclawBrowserEmbedChat({
       </header>
 
       <div className="sclaw-browser-embed-chat__scroll-host">
-      <div ref={scrollRef} className={cn(stoChatScrollPaneClass, 'sclaw-browser-embed-chat__scroll')}>
+      <div ref={scrollRef} className={cn(
+        stoChatScrollPaneClass,
+        // Embed 有独立 Toolbar：保留原 py-4，不受 Workbench Header→正文 8+8 公式约束
+        'sclaw-browser-embed-chat__scroll py-4 pt-4',
+      )}>
         <div ref={contentRef} className={cn(stoChatScrollContentClass, stoChatColumnContentTrackClass('home', false))}>
           {showLoadingPlaceholder ? (
             <div className="flex justify-center py-10 text-muted-foreground">

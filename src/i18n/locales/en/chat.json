@@ -206,6 +206,8 @@
         "resizeSeparator": "Resize preview panel",
         "overflowMenu": "All artifacts",
         "fullscreen": "Fullscreen",
+        "expandWorkspace": "Expand preview",
+        "restoreWorkspace": "Restore split preview",
         "refresh": "Refresh",
         "download": "Download",
         "share": "Share to DingTalk",

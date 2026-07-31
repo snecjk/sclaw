@@ -67,16 +67,30 @@
     --sto-chat-error-border: #fff1b8;
     --sto-chat-error-icon: #faad14;
 
-    /* S Claw 壳层（归档设计稿对齐）：侧栏与 gutter 共用 #EDEDED */
-    --sto-page-bg: #ededed;
-    --sto-sidebar-bg: #ededed;
-    --sto-sidebar-border: #e8eaef;
+    /* S Claw 壳层 Surface 层级（Stage 4 L0/L1/L2；与 dark 共用所有权） */
+    /* L0 Window/Shell/Sidebar/8px Frame */
+    --sto-shell-bg: #ededed;
+    /* L1 Workspace 主承载面 */
+    --sto-workspace-bg: #fafafa;
+    /* L2 Preview / Composer / 内容卡片 */
+    --sto-panel-bg: #ffffff;
+    /* 共享边缘（弱描边，不用重色相） */
+    --sto-surface-edge: #e8eaef;
+    /* L1 抬升阴影（轻；禁止重黑浮岛） */
+    --sto-workspace-shadow: 0 0 16px rgba(0, 0, 0, 0.01);
+    /* 兼容映射 —— 一律指向语义 Token，禁止组件另写壳层底色 */
+    --sto-page-bg: var(--sto-shell-bg);
+    --sto-sidebar-bg: var(--sto-shell-bg);
+    --sto-sidebar-border: var(--sto-surface-edge);
     --sto-accent: #ff8c00;
     --sto-accent-soft: #fff3e0;
     /* 侧栏主导航选中态：与 docs/sto-design.md Brand-6 一致 */
     --sto-brand-6: #ff6f00;
     --sto-header-h: 52px;
     --sto-content-header-h: 52px;
+    /* Workbench 垂直节奏：Header→Body Surface→正文（唯一公式 8+8=16） */
+    --sto-workbench-header-to-body-gap: 8px;
+    --sto-workbench-body-content-inset-y: 8px;
     /* ContentHeader 水平内距：左与 body/三栏容器对齐，右与 icon 列对齐 */
     --sto-chrome-traffic-light-pad: 0px;
     --sto-content-header-pad-start: var(--sto-content-pad-x);
@@ -85,10 +99,12 @@
     --sto-chrome-toggle-inset-top: 12px;
     --sto-chrome-h: calc(var(--sto-chrome-toggle-inset-top) + 32px);
     --sto-shell-card-gap: 8px;
-    /* MasterGo 2:23107 主内容卡片：18px 圆角 + 无描边 + 轻阴影（#FAFAFA 与壳层 #EDEDED 区分 gutter） */
+    /* Stage 1 AppShell Grid column; runtime overwritten by MainLayout snapshot */
+    --sto-sidebar-effective-w: 260px;
+    /* MasterGo 2:23107 主内容卡片：18px 圆角 + 无描边 + 轻阴影 */
     --sto-main-card-radius: 18px;
-    --sto-main-card-bg: #FAFAFA;
-    --sto-main-card-shadow: 0 0 16px rgba(0, 0, 0, 0.01);
+    --sto-main-card-bg: var(--sto-workspace-bg);
+    --sto-main-card-shadow: var(--sto-workspace-shadow);
     --sto-sidebar-w-expanded: 260px;
     --sto-sidebar-w-collapsed: 72px;
     /* 折叠侧栏主导航项（设计标注：59×28、padding 5px 10px、未选中图标 #7A8494） */
@@ -176,7 +192,7 @@
     --foreground: 220 14% 96%;
     --card: 220 22% 11%;
     --card-foreground: 220 14% 96%;
-    --popover: 220 22% 11%;
+    --popover: 220 18% 15%;
     --popover-foreground: 220 14% 96%;
     --primary: 26 100% 52%;
     --primary-foreground: 0 0% 100%;
@@ -226,9 +242,18 @@
     --sto-chat-error-border: hsl(43 50% 24%);
     --sto-chat-error-icon: hsl(38 90% 52%);
 
-    --sto-page-bg: hsl(207 53% 9%);
-    --sto-sidebar-bg: hsl(208 40% 11%);
-    --sto-sidebar-border: hsl(204 28% 18%);
+    /*
+     * Stage 4 dark Surface：由 L0/L1/L2 全局契约推导（MCP 无 dark Frame）。
+     * 同色相冷中性（220）；以有限明度差分层；Sidebar ≡ Shell（L0），禁止分叉色相。
+     */
+    --sto-shell-bg: hsl(220 24% 9%);
+    --sto-workspace-bg: hsl(220 22% 11%);
+    --sto-panel-bg: hsl(220 20% 13%);
+    --sto-surface-edge: hsl(220 14% 20%);
+    --sto-workspace-shadow: 0 0 12px rgba(0, 0, 0, 0.12);
+    --sto-page-bg: var(--sto-shell-bg);
+    --sto-sidebar-bg: var(--sto-shell-bg);
+    --sto-sidebar-border: var(--sto-surface-edge);
     --sto-accent: #ff9f2e;
     --sto-accent-soft: hsl(32 45% 14%);
     --sto-brand-6: #ff6f00;
@@ -237,9 +262,11 @@
     --sto-chrome-toggle-inset-top: 12px;
     --sto-chrome-h: calc(var(--sto-chrome-toggle-inset-top) + 32px);
     --sto-shell-card-gap: 8px;
+    /* Stage 1 AppShell Grid column; runtime overwritten by MainLayout snapshot */
+    --sto-sidebar-effective-w: 260px;
     --sto-main-card-radius: 18px;
-    --sto-main-card-bg: hsl(var(--card));
-    --sto-main-card-shadow: 0 0 16px rgba(0, 0, 0, 0.2);
+    --sto-main-card-bg: var(--sto-workspace-bg);
+    --sto-main-card-shadow: var(--sto-workspace-shadow);
     --sto-sidebar-w-expanded: 260px;
     --sto-sidebar-w-collapsed: 72px;
     --sto-sidebar-collapsed-nav-item-w: 59px;
@@ -339,6 +366,11 @@
   :root[data-platform='darwin'] [data-app-shell='provincial'][data-sidebar-collapsed='true'] {
     --sto-chrome-traffic-light-pad: 5rem;
     --sto-content-header-pad-start: max(var(--sto-content-pad-x), var(--sto-chrome-traffic-light-pad));
+  }
+
+  /* Stage 2：拖拽热路径关闭 Sidebar width transition，避免跟手延迟 */
+  [data-app-shell][data-sidebar-resizing='true'] aside {
+    transition-property: none !important;
   }
 
   ::selection {

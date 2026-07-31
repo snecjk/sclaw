@@ -61,21 +61,23 @@ export const userChatBubbleSurfaceClass = cn(
 
 /**
  * 首页新对话：输入框 + 项目条外层灰底壳（圆角 + 描边）。
+ * L2 外层垫面：相对 L1 Workspace 略降，内层 Composer 用 panel。
  * 使用位置：HomeComposer showProjectPicker。
  */
 export const chatComposerHomeStackShellClass = cn(
-  'flex flex-col gap-2 overflow-visible rounded-[22px] bg-[#F5F5F5] p-0',
-  'dark:bg-muted/60',
+  'flex flex-col gap-2 overflow-visible rounded-[22px] bg-[var(--sto-workspace-bg)] p-0',
+  'dark:bg-[var(--sto-workspace-bg)]',
 );
 
 /**
  * 首页/对话页 home 布局输入复合框壳（rounded-[22px]）。
+ * L2 Panel：light/dark 一律 `--sto-panel-bg`，禁止 dark 回退到与 L1 同明度的 `bg-card`。
  * 使用位置：ChatInput composerLayout=home。
  */
 export const chatComposerHomeShellClass = cn(
-  'relative flex min-h-[120px] flex-col overflow-visible rounded-[22px] border border-border bg-card',
-  'shadow-[0_6px_30px_rgba(43,17,0,0.03)] transition-[box-shadow,border-color,ring-width,ring-color] duration-200',
-  'dark:shadow-[0_4px_14px_rgba(0,0,0,0.22)]',
+  'relative flex min-h-[120px] flex-col overflow-visible rounded-[22px]',
+  'border border-[color:var(--sto-surface-edge)] bg-[var(--sto-panel-bg)]',
+  'shadow-[var(--sto-workspace-shadow)] transition-[box-shadow,border-color,ring-width,ring-color] duration-200',
 );
 
 /** home 输入壳：拖拽文件悬停 */
@@ -88,11 +90,8 @@ export const chatComposerHomeShellIdleClass = cn(
   'focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20 dark:focus-within:ring-primary/28',
 );
 
-/** 任务子项聊天：与省区 MainLayout 白卡片 {@link stoMainCardShellClass} 同色，避免输入框下方露出 gutter 灰 */
-export const stoTaskSubitemChatCanvasBg = cn(
-  'bg-[var(--sto-main-card-bg)]',
-  'dark:bg-background',
-);
+/** 任务子项聊天：与省区 MainLayout L1 Workspace {@link stoMainCardShellClass} 同色，避免输入框下方露出 gutter 灰 */
+export const stoTaskSubitemChatCanvasBg = 'bg-[var(--sto-main-card-bg)]';
 
 /**
  * 铺在 {@link glassSectionSurface} 上的卡片/列表行（浅色）：冷白 + 内高光，避免多层 glass-bg 半透明叠出发灰发黄；
@@ -416,7 +415,9 @@ export const stoOverlayScrollHostClass =
  */
 export const stoChatScrollPaneClass = cn(
   'sto-overlay-scroll-viewport',
-  'relative z-10 min-h-0 flex-1 w-full py-4',
+  'relative z-10 min-h-0 flex-1 w-full',
+  // Body Surface → 第一行正文 = 8px；底距保留 16 给 Composer 节奏（非 Header 公式）
+  'pt-[var(--sto-workbench-body-content-inset-y,8px)] pb-4',
   'overflow-y-auto overscroll-y-contain',
 );
 
@@ -457,24 +458,33 @@ export const stoSplitHorizontalInsetsClass = stoSplitShellInsetsClass;
 export const stoSplitRowInsetsClass = cn('box-border py-2');
 
 /**
- * 三栏预览框相对 0px 逻辑分界的 inset（Header/Body padding 与 resize handle 共用，避免漂移）。
- * 横向 10px = 预览框左描边；纵向 8px = body `py-2`。
+ * 三栏预览框相对 0px 逻辑分界的 inset。
+ * Stage 3：横向结构空缝为 0（删除 10px×2）；纵向 body `py` 仍用独立 Token。
  */
-export const STO_SPLIT_PREVIEW_INSET_X = '10px';
+export const STO_SPLIT_PREVIEW_INSET_X = '0px';
+/** @deprecated 垂直顶距改用 {@link WORKBENCH_HEADER_TO_BODY_GAP} / `--sto-workbench-header-to-body-gap`；底距仍可复用 8px */
 export const STO_SPLIT_PREVIEW_INSET_Y = '8px';
+
+/** Header bottom → Body Surface（权威；与 content-header-metrics 同源） */
+export const WORKBENCH_HEADER_TO_BODY_GAP = '8px';
+/** Body Surface → 第一行正文 */
+export const WORKBENCH_BODY_TO_CONTENT_INSET_Y = '8px';
 
 /** 拖拽提示线规格（局部色值，不写入全局 primary / 品牌 token） */
 export const STO_SPLIT_RESIZE_EDGE_COLOR = '#FFD6BA';
 export const STO_SPLIT_RESIZE_EDGE_WIDTH = '2px';
 
+/** Body Row Handle 命中宽（Preview 侧 overlay；中间轨道仍为 0px） */
+export const STO_SPLIT_RESIZE_HIT_WIDTH = '8px';
+
 /**
  * 三栏统一 grid（main）：2 行 × 3 列；中间列为 0px 逻辑边界（不占宽）。
  * --sto-split-preview-col 只写在 main。Header 为真实连续 52px 子项；body 用 {@link stoSplitGridContentsClass} 进入第二行。
- * 面板视觉间距由 `--sto-split-preview-inset-*` 控制，不用 gap 夹出 resizer 列。
+ * Stage 3：无双边 10px 结构空缝；Handle 不再靠 translate 补偿。
  */
 export const stoSplitUnifiedMainClass = cn(
   'grid min-h-0 min-w-0 flex-1 overflow-hidden box-border',
-  '[--sto-split-preview-inset-x:10px] [--sto-split-preview-inset-y:8px]',
+  '[--sto-split-preview-inset-x:0px] [--sto-split-preview-inset-y:8px]',
   'grid-rows-[var(--sto-content-header-h,52px)_minmax(0,1fr)]',
   'grid-cols-[minmax(0,1fr)_0px_var(--sto-split-preview-col,50%)]',
 );
@@ -485,37 +495,46 @@ export const stoSplitGridContentsClass = 'contents';
 /** 三栏 split row 外壳：display:contents，列定位由子项 grid class 承担 */
 export const stoSplitRowContentsClass = stoSplitGridContentsClass;
 
-/** MCP 对话/预览交界视觉间距约 20px → 左右各用 `--sto-split-preview-inset-x`（不是 resizer 列宽） */
+/** Preview expanded：Workspace 内单列（Header 在 MainLayout；Body 由 Outlet 填满） */
+export const stoPreviewExpandedMainClass = cn(
+  'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden box-border',
+);
 
 /** 三栏 Header 内嵌 grid 左列：会话 chip + 会话工具（拖动区由外层 Header 承担） */
 export const stoSplitGridHeaderChatClass = cn(
   'col-start-1 row-start-1',
   'flex h-full w-full min-w-0 items-center',
-  'box-border pr-[var(--sto-split-preview-inset-x)]',
+  'box-border',
 );
 
 /** 三栏 Header 内嵌 grid 右列：产物 tab + 面板工具（拖动区由外层 Header 承担） */
 export const stoSplitGridHeaderPreviewClass = cn(
   'col-start-3 row-start-1',
   'flex h-full w-full min-w-0 items-center',
-  'box-border pl-[var(--sto-split-preview-inset-x)]',
+  'box-border',
 );
 
-/** 三栏 body 行 col1：对话列 */
+/** 三栏 body 行 col1：对话列（右缘 = Overlay rail = 逻辑边界 = Preview 左边框） */
 export const stoSplitGridBodyChatClass = cn(
   'col-start-1 row-start-2 self-stretch',
   'relative flex min-h-0 min-w-0 flex-col overflow-hidden box-border',
-  'py-[var(--sto-split-preview-inset-y)]',
-  'pr-[var(--sto-split-preview-inset-x)]',
+  'pt-[var(--sto-workbench-header-to-body-gap,8px)]',
+  'pb-[var(--sto-split-preview-inset-y,8px)]',
 );
 
 /** 三栏 body 行 col3：预览面板 */
 export const stoSplitGridBodyPreviewClass = cn(
   'col-start-3 row-start-2 self-stretch',
-  'flex min-h-0 min-w-0 flex-col overflow-hidden box-border',
+  'relative flex min-h-0 min-w-0 flex-col overflow-hidden box-border',
   '[contain:inline-size]',
-  'py-[var(--sto-split-preview-inset-y)]',
-  'pl-[var(--sto-split-preview-inset-x)]',
+  'pt-[var(--sto-workbench-header-to-body-gap,8px)]',
+  'pb-[var(--sto-split-preview-inset-y,8px)]',
+);
+
+/** Preview expanded 时预览占满 Body（Header→Surface 仍用同一 8px gap） */
+export const stoPreviewExpandedBodyClass = cn(
+  'relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden',
+  'pt-[var(--sto-workbench-header-to-body-gap,8px)]',
 );
 
 /** ParameterFormDock layout（与对话列 variant 一致） */
@@ -579,10 +598,11 @@ export const stoSplitChatPaneClass = cn(
 export const stoSplitPreviewPaneClass =
   'flex h-full min-h-0 min-w-0 flex-col overflow-hidden [contain:inline-size]';
 
-/** 三栏预览区产物内容壳（白色背景；描边在 tab 行下方，不含 tab） */
+/** 三栏预览区产物内容壳（L2 Panel；描边在 tab 行下方，不含 tab） */
 export const stoPreviewContentShellClass = cn(
-  'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[18px] border border-border',
-  'bg-white shadow-glow dark:bg-card',
+  'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[18px]',
+  'border border-[color:var(--sto-surface-edge)] bg-[var(--sto-panel-bg)]',
+  'shadow-[var(--sto-workspace-shadow)]',
 );
 
 /** @deprecated 整卡描边已拆至 {@link stoPreviewContentShellClass}，tab 行在外 */
@@ -613,26 +633,22 @@ export const stoPreviewActionButtonClass = cn(
 );
 
 /**
- * 三栏拖拽热区壳：锚定在预览框左描边（逻辑分界 + inset-x），w-3 不扩展轨道；
- * 壳层始终透明；提示线见 {@link stoSplitPanelResizeEdgeClass}。
+ * 三栏拖拽热区壳：Preview 侧 Body Row overlay；中间轨道 0px；命中 8px。
+ * 禁止 row-span-2 / translate-x(10px) 补偿。
  * 使用 `group` + `data-resizing` 驱动提示线显隐（拖动中不能只靠 :hover）。
  */
 export const stoSplitPanelResizeHandleClass = cn(
-  'group no-drag relative col-start-2 row-start-1 row-span-2',
-  'z-20 justify-self-center self-stretch',
-  'w-3 shrink-0 translate-x-[var(--sto-split-preview-inset-x)] cursor-col-resize bg-transparent',
+  'group no-drag absolute inset-y-0 left-0 z-20',
+  'w-[8px] cursor-col-resize bg-transparent',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
 
 /**
- * 拖拽提示线：对齐预览框左描边与上下 inset；#FFD6BA / 2px；
+ * 拖拽提示线：Preview 左边框内侧；#FFD6BA / 2px；
  * 默认隐藏，handle hover / data-resizing / focus-visible 时显示。
- * pointer-events-none。禁止短灰线胶囊或 bg-primary。
  */
 export const stoSplitPanelResizeEdgeClass = cn(
-  'pointer-events-none absolute left-1/2 w-[2px] -translate-x-1/2 bg-[#FFD6BA]',
-  'top-[calc(var(--sto-content-header-h,52px)+var(--sto-split-preview-inset-y))]',
-  'bottom-[var(--sto-split-preview-inset-y)]',
+  'pointer-events-none absolute inset-y-0 left-0 w-[2px] bg-[#FFD6BA]',
   'opacity-0 transition-opacity duration-fast',
   'group-hover:opacity-100 group-focus-visible:opacity-100',
   'group-data-[resizing=true]:opacity-100',
@@ -673,25 +689,65 @@ export function clampPreviewPanelPercent(containerWidth: number, previewPx: numb
 export const stoPageFillBelowTitleClass =
   'h-[calc(100dvh-var(--sto-header-h,40px)-var(--sto-main-pad-y-total,40px))]';
 
-/** 省区 AppShell：chrome 下方侧栏 + 卡片行 */
+/** 省区 AppShell：chrome 下方侧栏 + 卡片行（flex 回退；Stage 1 Grid 用 {@link stoAppShellGridProvincialClass}） */
 export const stoAppShellBodyClass =
   'sto-app-shell-body flex min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-hidden';
 
-/** 省区主内容白卡片外层（展开：上/左/下 8px；收起：由 body 四边 8px，此处无 padding） */
-export function stoMainCardWrapClass(isSidebarCollapsed: boolean): string {
-  return cn(
-    'sto-main-card-wrap flex min-h-0 min-w-0 flex-1 flex-col box-border',
-    isSidebarCollapsed ? 'p-0' : 'pt-2 pb-2',
-  );
+/**
+ * 省区 AppShell 三列 Grid：Sidebar | 8px L0 Gap | Workspace。
+ * 第一列宽度由 `--sto-sidebar-effective-w` 驱动；禁止 collapsed body padding 拼外框。
+ * 必须显式单行 `minmax(0,1fr)`，否则隐式 auto row 会被长内容撑开并滚动整个 Grid。
+ */
+export const stoAppShellGridProvincialClass = cn(
+  'sto-app-shell-body sto-app-shell-grid no-drag box-border',
+  'grid min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-hidden',
+  'grid-cols-[var(--sto-sidebar-effective-w)_var(--sto-shell-card-gap)_minmax(0,1fr)]',
+  'grid-rows-[minmax(0,1fr)]',
+);
+
+/** 省区 L0 Gap 列（宽度由 Grid track 承担） */
+export const stoAppShellSidebarGapClass = 'sto-sidebar-gap min-h-0 min-w-0';
+
+/**
+ * Sidebar 拖拽命中区：占满 AppShell 第二列 8px Gap；默认透明 + col-resize。
+ */
+export const stoSidebarResizeHandleClass = cn(
+  'sto-sidebar-resize-handle group no-drag relative h-full min-h-0 min-w-0 w-full',
+  'cursor-col-resize bg-transparent',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+);
+
+/**
+ * Sidebar 拖拽提示线：默认隐藏；hover / data-resizing / focus-visible 显示。
+ */
+export const stoSidebarResizeEdgeClass = cn(
+  'pointer-events-none absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-[#FFD6BA]',
+  'opacity-0 transition-opacity duration-fast',
+  'group-hover:opacity-100 group-focus-visible:opacity-100',
+  'group-data-[resizing=true]:opacity-100',
+);
+
+/**
+ * 省区 L1 Workspace 外包：固定 top/right/bottom 8px Frame（与收起无关）。
+ * Grid Item 必须 min-h-0 + overflow-hidden，滚动下放到 Chat/Preview viewport。
+ */
+export const stoWorkspaceWrapClass = cn(
+  'sto-workspace-wrap flex min-h-0 min-w-0 flex-col overflow-hidden box-border',
+  'pt-[var(--sto-shell-card-gap)] pr-[var(--sto-shell-card-gap)] pb-[var(--sto-shell-card-gap)]',
+);
+
+/**
+ * @deprecated Stage 1：改用 {@link stoWorkspaceWrapClass}（不再按 collapsed 切换 padding）
+ */
+export function stoMainCardWrapClass(_isSidebarCollapsed?: boolean): string {
+  return stoWorkspaceWrapClass;
 }
 
-/** 省区壳层 body：收起态四边 8px gutter */
-export function stoAppShellBodyProvincialClass(isSidebarCollapsed: boolean): string {
-  return cn(
-    stoAppShellBodyClass,
-    'no-drag box-border',
-    isSidebarCollapsed && 'p-2',
-  );
+/**
+ * @deprecated Stage 1：改用 {@link stoAppShellGridProvincialClass}（不再按 collapsed 加 p-2）
+ */
+export function stoAppShellBodyProvincialClass(_isSidebarCollapsed?: boolean): string {
+  return stoAppShellGridProvincialClass;
 }
 
 /** 省区主内容白卡片：18px 圆角、无描边、MasterGo drop shadow */
@@ -715,7 +771,8 @@ export const stoMainCardBodyClass = cn(
  */
 export const stoMainCardBodyHomeClass = cn(
   'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden overscroll-y-contain',
-  'pb-5 pt-0',
+  // Header bottom → Body Surface = 8px（closed 与 split 共用公式）
+  'pt-[var(--sto-workbench-header-to-body-gap,8px)] pb-5',
 );
 
 /**

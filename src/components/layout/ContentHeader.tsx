@@ -1,9 +1,10 @@
 /**
  * ContentHeader — 省区主内容白卡片顶部 52px 全局标题栏。
  *
- * 双栏：左=侧栏展开钮+会话 chip，右=chatActions + actions。
- * 三栏：真实连续 52px Header（内嵌三列 grid 对齐 body）；左列=title+chatActions，右列=预览 tab+actions。
- * macOS 侧栏收起时 pad-start 走 CSS 变量（与 split row 共用），避让红绿灯。
+ * conversation：左=侧栏展开钮+会话 chip，右=chatActions + previewActions。
+ * split：真实连续 52px Header（内嵌三列 grid 对齐 body）；左列=title+chatActions，右列=预览 tab+previewActions。
+ * preview-expanded：全宽 Header；页签/标题 + previewActions（含 Preview restore，≠ Sidebar restore）。
+ * macOS 侧栏收起时 pad-start 走 CSS 变量，避让红绿灯。
  */
 import { isValidElement } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -22,17 +23,24 @@ import {
 import { ContentHeaderSessionChip } from '@/components/layout/content-header-session-chip';
 import { useContentHeaderDisplay } from '@/components/layout/content-header-context';
 import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
-import { useSettingsStore } from '@/stores/settings';
+import { useAppShellLayout } from '@/components/layout/app-shell-layout-context';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 
 export function ContentHeader() {
   const { t } = useTranslation('common');
-  const { title, previewTabs, chatActions, actions, isSplitLayout, onCloseSession } =
-    useContentHeaderDisplay();
-  const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
-  const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
+  const {
+    title,
+    previewTabs,
+    chatActions,
+    previewActions,
+    layoutMode,
+    onCloseSession,
+  } = useContentHeaderDisplay();
+  const { snapshot, setUserCollapsed } = useAppShellLayout();
+  const sidebarCollapsed = snapshot.effectiveCollapsed;
+  const canUserRestoreSidebar = snapshot.canUserRestoreSidebar;
   const workflowEditorActive = useWorkflowUiStore((s) => s.editorActive);
   const browserOverlayOpen = useSclawBrowserOverlayStore((s) => s.session !== null);
   const appPlazaVisible = useAppPlazaShellStore((s) => s.routeActive);
@@ -44,6 +52,8 @@ export function ContentHeader() {
 
   const platform = window.electron?.platform;
   const isWin = platform === 'win32';
+  const isSplitLayout = layoutMode === 'split';
+  const isPreviewExpanded = layoutMode === 'preview-expanded';
 
   const titleText = typeof title === 'string' ? title : null;
   const showTitle = title != null && title !== '';
@@ -59,10 +69,10 @@ export function ContentHeader() {
         !showTitle && !sidebarCollapsed && 'min-w-0',
       )}
     >
-      {sidebarCollapsed && !workflowEditorActive ? (
+      {canUserRestoreSidebar ? (
         <SidebarHeaderToggle
           isCollapsed
-          onToggle={() => setSidebarCollapsed(false)}
+          onToggle={() => setUserCollapsed(false)}
           collapseLabel={t('sidebar.toggleSidebarCollapse')}
           expandLabel={t('sidebar.toggleSidebarExpand')}
         />
@@ -86,9 +96,9 @@ export function ContentHeader() {
     </div>
   ) : null;
 
-  const actionsZone = actions ? (
+  const previewActionsZone = previewActions ? (
     <div className="no-drag flex shrink-0 items-center gap-1">
-      {actions}
+      {previewActions}
     </div>
   ) : null;
 
@@ -111,7 +121,7 @@ export function ContentHeader() {
           <div
             className={cn(
               contentHeaderSplitPreviewZoneClass,
-              !previewTabs && actionsZone && 'justify-end',
+              !previewTabs && previewActionsZone && 'justify-end',
             )}
           >
             {previewTabs ? (
@@ -119,10 +129,33 @@ export function ContentHeader() {
             ) : (
               <div className="min-w-0 flex-1" aria-hidden />
             )}
-            {actionsZone}
+            {previewActionsZone}
             {winControlsReserve}
           </div>
         </div>
+      </header>
+    );
+  }
+
+  if (isPreviewExpanded) {
+    return (
+      <header className={contentHeaderBarClass} aria-label={t('sidebar.chat')}>
+        {canUserRestoreSidebar ? (
+          <SidebarHeaderToggle
+            isCollapsed
+            onToggle={() => setUserCollapsed(false)}
+            collapseLabel={t('sidebar.toggleSidebarCollapse')}
+            expandLabel={t('sidebar.toggleSidebarExpand')}
+          />
+        ) : null}
+        {previewTabs ? (
+          previewTabs
+        ) : (
+          titleZone
+        )}
+        <div className="min-w-0 flex-1" aria-hidden />
+        {previewActionsZone}
+        {winControlsReserve}
       </header>
     );
   }
@@ -132,7 +165,7 @@ export function ContentHeader() {
       {titleZone}
       <div className="min-w-0 flex-1" aria-hidden />
       {chatActionsZone}
-      {actionsZone}
+      {previewActionsZone}
       {winControlsReserve}
     </header>
   );

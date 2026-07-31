@@ -19,7 +19,9 @@ import {
   STO_SPLIT_PREVIEW_INSET_Y,
   STO_SPLIT_RESIZE_EDGE_COLOR,
   STO_SPLIT_RESIZE_EDGE_WIDTH,
+  STO_SPLIT_RESIZE_HIT_WIDTH,
   stoPreviewArtifactTabClass,
+  stoSplitGridBodyChatClass,
   stoSplitGridBodyPreviewClass,
   stoSplitGridHeaderChatClass,
   stoSplitGridHeaderPreviewClass,
@@ -34,7 +36,7 @@ describe('split panel layout surfaces', () => {
       'grid-cols-[minmax(0,1fr)_0px_var(--sto-split-preview-col,50%)]',
     );
     expect(stoSplitUnifiedMainClass).not.toContain('_4px_');
-    expect(stoSplitUnifiedMainClass).toContain('[--sto-split-preview-inset-x:10px]');
+    expect(stoSplitUnifiedMainClass).toContain('[--sto-split-preview-inset-x:0px]');
     expect(stoSplitUnifiedMainClass).toContain('[--sto-split-preview-inset-y:8px]');
   });
 
@@ -92,31 +94,31 @@ describe('split panel layout surfaces', () => {
     expect(headerSrc).not.toMatch(/isSplitLayout && 'max-w-none/);
   });
 
-  it('shares preview inset between panes and the resize handle', () => {
-    expect(STO_SPLIT_PREVIEW_INSET_X).toBe('10px');
+  it('removes bilateral 10px structural seam (Stage 3 zero seam)', () => {
+    expect(STO_SPLIT_PREVIEW_INSET_X).toBe('0px');
     expect(STO_SPLIT_PREVIEW_INSET_Y).toBe('8px');
-    expect(stoSplitGridHeaderPreviewClass).toContain(
-      'pl-[var(--sto-split-preview-inset-x)]',
-    );
-    expect(stoSplitGridBodyPreviewClass).toContain(
-      'pl-[var(--sto-split-preview-inset-x)]',
-    );
-    expect(stoSplitGridBodyPreviewClass).toContain(
-      'py-[var(--sto-split-preview-inset-y)]',
-    );
-    expect(stoSplitPanelResizeHandleClass).toContain(
-      'translate-x-[var(--sto-split-preview-inset-x)]',
-    );
+    expect(stoSplitGridHeaderChatClass).not.toContain('pr-[var(--sto-split-preview-inset-x)]');
+    expect(stoSplitGridHeaderPreviewClass).not.toContain('pl-[var(--sto-split-preview-inset-x)]');
+    expect(stoSplitGridBodyChatClass).not.toContain('pr-[var(--sto-split-preview-inset-x)]');
+    expect(stoSplitGridBodyPreviewClass).not.toContain('pl-[var(--sto-split-preview-inset-x)]');
+    expect(stoSplitGridBodyChatClass).toContain('pt-[var(--sto-workbench-header-to-body-gap,8px)]');
+    expect(stoSplitGridBodyPreviewClass).toContain('pt-[var(--sto-workbench-header-to-body-gap,8px)]');
+    expect(stoSplitPanelResizeHandleClass).not.toContain('translate-x');
+    expect(stoSplitPanelResizeHandleClass).not.toContain('row-span-2');
   });
 
-  it('keeps an overlay hit target and a hint edge aligned to the preview stroke', () => {
-    expect(stoSplitPanelResizeHandleClass).toContain('col-start-2');
-    expect(stoSplitPanelResizeHandleClass).toContain('row-span-2');
-    expect(stoSplitPanelResizeHandleClass).toContain('w-3');
+  it('places Body-row Preview-side overlay handle with 8px hit and hint edge', () => {
+    expect(STO_SPLIT_RESIZE_HIT_WIDTH).toBe('8px');
+    expect(stoSplitPanelResizeHandleClass).toContain('absolute');
+    expect(stoSplitPanelResizeHandleClass).toContain('inset-y-0');
+    expect(stoSplitPanelResizeHandleClass).toContain('left-0');
+    expect(stoSplitPanelResizeHandleClass).toContain('w-[8px]');
     expect(stoSplitPanelResizeHandleClass).toContain('bg-transparent');
     expect(stoSplitPanelResizeHandleClass).toContain('no-drag');
     expect(stoSplitPanelResizeHandleClass).toContain('group');
-    expect(stoSplitPanelResizeHandleClass).not.toContain('w-0.5');
+    expect(stoSplitPanelResizeHandleClass).not.toContain('col-start-2');
+    expect(stoSplitPanelResizeHandleClass).not.toContain('row-span-2');
+    expect(stoSplitPanelResizeHandleClass).not.toContain('w-3');
 
     expect(stoSplitPanelResizeEdgeClass).toContain('pointer-events-none');
     expect(stoSplitPanelResizeEdgeClass).toContain(`bg-[${STO_SPLIT_RESIZE_EDGE_COLOR}]`);
@@ -198,5 +200,20 @@ describe('Chat and Home resize wiring', () => {
     expect(chatSrc).toContain('isResizing={isResizing}');
     expect(homeSrc).toMatch(/isResizing\s*\}/);
     expect(homeSrc).toContain('isResizing={isResizing}');
+  });
+
+  it('mounts resize handle inside Preview body only for split mode', () => {
+    const chatSrc = readFileSync(
+      resolve(process.cwd(), 'src/pages/Chat/index.tsx'),
+      'utf8',
+    );
+    const homeSrc = readFileSync(
+      resolve(process.cwd(), 'src/pages/Home/HomeMainConversation.tsx'),
+      'utf8',
+    );
+    expect(chatSrc).toContain('isSplitChatLayout ? (');
+    expect(chatSrc).toContain('SplitPanelResizeHandle');
+    expect(homeSrc).toContain('isSplitChatLayout ? (');
+    expect(homeSrc).toContain('SplitPanelResizeHandle');
   });
 });
