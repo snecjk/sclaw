@@ -49,6 +49,8 @@ export function useWorkflowCronTaskModal() {
           prompt: input.message,
           dingtalkRecipients: input.dingTalkMentions ?? null,
           workflowCode: input.workflowCode,
+          myArtifactFolderPath: input.myArtifactFolderPath ?? null,
+          sharedArtifactFolderPath: input.sharedArtifactFolderPath ?? null,
         };
         if (input.engineType === 'claude') {
           if (!selectedAgent?.id) {
