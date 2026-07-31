@@ -14,6 +14,7 @@ export interface WfRunRow {
   status: string;
   mode?: string | null;
   source?: string | null;
+  trigger_type?: string | null;
   waiting_node_id?: string | null;
   input_json?: string | null;
   output_json?: string | null;
@@ -135,6 +136,8 @@ export function mapWfRunRowToResponse(
     id: row.run_id,
     workflowId: row.workflow_id,
     status: normalizeWorkflowRunStatus(row.status),
+    triggerType: row.trigger_type ?? 'workflow_manual',
+    sessionKey: row.session_key ?? null,
     startedAt: row.started_at,
     ...(row.completed_at ? { completedAt: row.completed_at } : {}),
     ...(row.waiting_node_id ? { waitingNodeId: row.waiting_node_id } : {}),
@@ -168,12 +171,14 @@ export function mapWfRunRowToResponse(
     output,
     ...(row.error ? { error: row.error } : {}),
     ...(includeTimeline && row.last_agent_raw_text ? { lastAgentRawText: row.last_agent_raw_text } : {}),
-    ...(diagnostic ? {
+    ...(includeTimeline ? {
       versionId: row.version_id,
       workflowVersion: resolveWorkflowVersion(row),
       mode: row.mode ?? null,
       engineType: row.engine_type === 'openclaw' ? 'openclaw' : 'claude',
       engineModel: row.engine_model ?? null,
+    } : {}),
+    ...(diagnostic ? {
       input,
       result,
       startup: buildStartupFromDefinition(row),

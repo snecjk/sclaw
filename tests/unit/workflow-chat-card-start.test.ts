@@ -141,6 +141,7 @@ describe('workflow chat-card start metadata', () => {
     expect(upsertRun).toHaveBeenNthCalledWith(1, expect.objectContaining({
       run_id: 'run-new',
       session_key: 'session-1',
+      trigger_type: 'chat',
       chat_card_visible: 1,
       chat_card_title: '天气笑话',
       chat_params_summary: '{"city":"上海"}',

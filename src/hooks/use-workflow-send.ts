@@ -171,6 +171,7 @@ export async function createAndStartWorkflowDirect(
       inputs,
       idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
       sessionKey: context.sessionKey,
+      triggerType: 'chat',
       engineType: chooseImmediateWorkflowEngine(),
     });
 
@@ -280,6 +281,7 @@ export async function startExistingWorkflow(
       inputs,
       idempotencyKey,
       sessionKey: context.sessionKey,
+      triggerType: 'chat',
       engineType: chooseImmediateWorkflowEngine(),
     });
 

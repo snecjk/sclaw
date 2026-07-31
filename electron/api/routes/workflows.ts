@@ -313,6 +313,7 @@ async function startLocalWorkflowRuntime(
     input: body.inputs ?? {},
     startedAt,
     sessionKey: body.sessionKey ?? '',
+    triggerType: 'chat',
     engineType: resolvedEngine.engineType,
     engineModel,
     // This host route is exclusively the chat tool's v1 start bridge. Store

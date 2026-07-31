@@ -15,6 +15,8 @@ export interface GeneratePlanArgs { repo: RunCtx['repo']; dslClient: { fetchVers
   runDatabaseId: number;
   /** 会话键——emit 桥按它过滤 status-update 广播（use-workflow-completion.ts）。Phase 2b 由 start 注册传入。 */
   sessionKey?: string;
+  /** 本地业务发起入口，不进入云端 outbox。 */
+  triggerType: 'chat' | 'scheduled_task' | 'workflow_manual' | 'designer_test' | 'api';
   engineType: 'claude' | 'openclaw';
   engineModel?: string;
 }
@@ -53,6 +55,7 @@ export async function generatePlan(args: GeneratePlanArgs): Promise<string> {
   await repo.upsertRun({ id: args.runDatabaseId, run_id: runId, workflow_id: workflowId, version_id: versionId,
     workflow_version: args.workflowVersion ?? normalizeWorkflowVersion(versionDefinition),
     status: 'RUNNING', mode: 'CLIENT_LOCAL', source: 'client',
+    trigger_type: args.triggerType,
     input_json: JSON.stringify(stagedInput), definition_json: JSON.stringify(definition),
     started_at: startedAt, updated_at: nowIso(),
     session_key: sessionKey, engine_type: args.engineType, engine_model: args.engineModel ?? null });

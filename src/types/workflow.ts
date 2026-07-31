@@ -245,6 +245,7 @@ export interface MyWorkflowSummary {
 // ── Run / Execution ─────────────────────────────────────────────
 
 export type WorkflowRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout' | 'waiting_approval' | 'waiting_input' | 'unknown';
+export type WorkflowRunTriggerType = 'chat' | 'scheduled_task' | 'workflow_manual' | 'designer_test' | 'api';
 
 export interface WorkflowRunNodeRun {
   id: string;
@@ -328,6 +329,10 @@ export interface WorkflowRunResponse {
   workflowVersion?: string | number | null;
   status: WorkflowRunStatus;
   mode?: string | null;
+  /** Client-local business entry point. This field is not synchronized to the cloud run. */
+  triggerType?: WorkflowRunTriggerType;
+  /** Client-local chat session used by the optional “return to conversation” action. */
+  sessionKey?: string | null;
   engineType?: 'claude' | 'openclaw';
   engineModel?: string | null;
   startedAt: string;

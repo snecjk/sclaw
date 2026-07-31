@@ -296,6 +296,8 @@ export interface StartWorkflowLocalParams {
   idempotencyKey: string;
   /** 会话键——仅透传给本地 engine 落 wf_run.session_key，不发给后端。 */
   sessionKey: string;
+  /** 本地业务发起入口，仅写入客户端 wf_run，不发送到云端。 */
+  triggerType: 'chat' | 'scheduled_task' | 'workflow_manual' | 'designer_test' | 'api';
   runMode?: 'trial' | 'production';
   workflowVersionId?: string | number;
   /** Fixed for the entire local run and persisted before dispatch. */
@@ -401,6 +403,7 @@ export async function startWorkflowLocal(
     input: data.resolvedInputs ?? params.inputs ?? {},
     startedAt,
     sessionKey: params.sessionKey,
+    triggerType: params.triggerType,
     engineType: params.engineType,
     engineModel,
   });
