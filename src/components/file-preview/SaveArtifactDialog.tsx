@@ -11,6 +11,7 @@ import {
   deleteDataCenterSharedEntry,
   getDataCenterSpaces,
   listDataCenterEntries,
+  renameDataCenterEntry,
   uploadArtifactFromPath,
 } from '@/lib/data-center-api';
 import { resolveScheduledTaskArtifactProvenance } from '@/lib/scheduled-task-artifact-provenance';
@@ -93,6 +94,12 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ space: FolderSpace; folder: DataCenterEntry; x: number; y: number } | null>(null);
+  const [renamingFolder, setRenamingFolder] = useState<{ space: FolderSpace; folder: DataCenterEntry } | null>(null);
+  const [renameName, setRenameName] = useState('');
+  const [renameSubmitting, setRenameSubmitting] = useState(false);
+  const [deletingFolder, setDeletingFolder] = useState<{ space: FolderSpace; folder: DataCenterEntry } | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
   const loadSharedSpace = async (): Promise<string | null> => {
     if (sharedSpaceId) return sharedSpaceId;
@@ -200,6 +207,22 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSite]);
 
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu]);
+
   if (!file) return null;
 
   const provenance = file.artifactProvenance;
@@ -218,6 +241,108 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
       throw new Error(t('dataCenterPage.toasts.sharedSpaceUnavailable'));
     }
     return targetSpaceId;
+  };
+
+  const closeCreateFolder = () => {
+    if (createSubmitting) return;
+    setCreatingFolder(false);
+    setNewFolderName('');
+  };
+
+  const handleCreateFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name || createSubmitting) return;
+    setCreateSubmitting(true);
+    try {
+      const targetSpaceId = await resolveTargetSpaceId();
+      const createdFolder = await createDataCenterFolder({
+        spaceType: selectedTarget.space === 'shared' ? 'site_shared_artifact' : 'qa_artifact',
+        spaceId: targetSpaceId ?? undefined,
+        parentEntryId: selectedTarget.parentEntryId,
+        name,
+      });
+      setCreatingFolder(false);
+      setNewFolderName('');
+      await loadFolders(selectedTarget.space, selectedTarget.parentEntryId);
+      // A freshly created folder has no children; mark them as loaded-empty
+      // so the row does not show an expand/collapse toggle.
+      if (createdFolder?.entryId) {
+        setFolderMap((prev) => ({ ...prev, [folderKey(selectedTarget.space, createdFolder.entryId)]: [] }));
+      }
+      if (selectedTarget.parentEntryId === ROOT_ENTRY_ID) {
+        if (selectedTarget.space === 'shared') setSharedOpen(true);
+        else setMineOpen(true);
+      } else {
+        setOpenMap((prev) => ({ ...prev, [folderKey(selectedTarget.space, selectedTarget.parentEntryId)]: true }));
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('dataCenterPage.saveArtifact.createFolderFailed'));
+    } finally {
+      setCreateSubmitting(false);
+    }
+  };
+
+  const findParentEntryId = (space: FolderSpace, entryId: string): string => {
+    for (const [key, folders] of Object.entries(folderMap)) {
+      if (!key.startsWith(`${space}:`)) continue;
+      if (folders.some((folder) => folder.entryId === entryId)) {
+        return key.slice(space.length + 1);
+      }
+    }
+    return ROOT_ENTRY_ID;
+  };
+
+  const handleRenameFolder = async () => {
+    const name = renameName.trim();
+    if (!renamingFolder || !name || renameSubmitting) return;
+    setRenameSubmitting(true);
+    try {
+      const parentEntryId = findParentEntryId(renamingFolder.space, renamingFolder.folder.entryId);
+      await renameDataCenterEntry(renamingFolder.folder.entryId, name);
+      setRenamingFolder(null);
+      setRenameName('');
+      toast.success(t('dataCenterPage.toasts.renamed'));
+      await loadFolders(renamingFolder.space, parentEntryId, { preloadChildFolders: true });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.renameFailed'));
+    } finally {
+      setRenameSubmitting(false);
+    }
+  };
+
+  const handleDeleteFolder = async () => {
+    if (!deletingFolder || deleteSubmitting) return;
+    setDeleteSubmitting(true);
+    try {
+      const { space, folder } = deletingFolder;
+      const parentEntryId = findParentEntryId(space, folder.entryId);
+      if (space === 'shared' && folder.shared && folder.canManage) {
+        await deleteDataCenterSharedEntry(folder.entryId);
+      } else {
+        await deleteDataCenterEntry(folder.entryId);
+      }
+      if (selectedTarget.space === space && selectedTarget.parentEntryId === folder.entryId) {
+        setSelectedTarget({ space, parentEntryId: ROOT_ENTRY_ID });
+      }
+      const deletedKey = folderKey(space, folder.entryId);
+      setFolderMap((prev) => {
+        const next = { ...prev };
+        delete next[deletedKey];
+        return next;
+      });
+      setOpenMap((prev) => {
+        const next = { ...prev };
+        delete next[deletedKey];
+        return next;
+      });
+      setDeletingFolder(null);
+      toast.success(t('dataCenterPage.toasts.deleted'));
+      await loadFolders(space, parentEntryId, { preloadChildFolders: true });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('dataCenterPage.toasts.deleteFailed'));
+    } finally {
+      setDeleteSubmitting(false);
+    }
   };
 
   const findFileNameConflict = async (
@@ -404,6 +529,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                           selectedTarget={selectedTarget}
                           onSelect={(parentEntryId) => setSelectedTarget({ space: 'shared', parentEntryId })}
                           onToggleOpen={toggleFolderOpen}
+                          onContextMenu={(space, folder, x, y) => setContextMenu({ space, folder, x, y })}
                         />
                       ))
                     ) : null}
@@ -446,6 +572,7 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
                         selectedTarget={selectedTarget}
                         onSelect={(parentEntryId) => setSelectedTarget({ space: 'my', parentEntryId })}
                         onToggleOpen={toggleFolderOpen}
+                        onContextMenu={(space, folder, x, y) => setContextMenu({ space, folder, x, y })}
                       />
                     ))
                   ) : null}
@@ -455,14 +582,190 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
           </div>
         </div>
 
-        <div className="flex h-[48px] justify-end gap-2 border-t border-[#E5E6EB] px-3 py-2 dark:border-border">
-          <Button type="button" variant="outline" className="h-8 rounded-[8px] px-4 text-[12px] font-normal" onClick={onClose}>{t('actions.cancel')}</Button>
-          <Button type="button" className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90" onClick={save} disabled={!canSave || saving}>
-            {saving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-            {t('actions.confirm')}
-          </Button>
+        <div className="flex h-[48px] items-center justify-between gap-2 border-t border-[#E5E6EB] px-3 py-2 dark:border-border">
+          <button
+            type="button"
+            onClick={() => setCreatingFolder(true)}
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] px-2 text-[12px] font-normal text-[#4E5969] hover:bg-[#F2F3F5] hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-muted dark:hover:text-foreground"
+          >
+            <FolderPlus className="h-3.5 w-3.5" />
+            {t('dataCenterPage.saveArtifact.createFolderPlaceholder')}
+          </button>
+          <div className="flex shrink-0 gap-2">
+            <Button type="button" variant="outline" className="h-8 rounded-[8px] px-4 text-[12px] font-normal" onClick={onClose}>{t('actions.cancel')}</Button>
+            <Button type="button" className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90" onClick={save} disabled={!canSave || saving}>
+              {saving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+              {t('actions.confirm')}
+            </Button>
+          </div>
         </div>
       </div>
+      {creatingFolder ? (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 px-4"
+          onClick={closeCreateFolder}
+        >
+          <div
+            className="w-full max-w-[360px] rounded-[14px] border border-[#E5E6EB] bg-white p-4 shadow-2xl dark:border-border dark:bg-background"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h4 className="text-[13px] font-semibold text-[#1D2129] dark:text-foreground">{t('dataCenterPage.dialogs.createFolderTitle')}</h4>
+            <input
+              autoFocus
+              value={newFolderName}
+              onChange={(event) => setNewFolderName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void handleCreateFolder();
+                if (event.key === 'Escape') closeCreateFolder();
+              }}
+              placeholder={t('dataCenterPage.dialogs.folderName')}
+              className="mt-3 h-9 w-full rounded-[8px] border border-[#E5E6EB] bg-white px-3 text-[13px] outline-none focus:border-[#1D2129] dark:border-border dark:bg-background dark:focus:border-foreground"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={createSubmitting}
+                onClick={closeCreateFolder}
+                className="h-8 rounded-[8px] px-4 text-[12px] font-normal"
+              >
+                {t('actions.cancel')}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleCreateFolder()}
+                disabled={!newFolderName.trim() || createSubmitting}
+                className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
+              >
+                {createSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('dataCenterPage.saveArtifact.create')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {contextMenu ? (
+        <div
+          className="fixed z-[95] min-w-[128px] rounded-[10px] border border-[#E5E6EB] bg-white p-2 text-[#1D2129] shadow-[0_8px_24px_rgba(15,23,42,0.14)] dark:border-border dark:bg-popover dark:text-foreground"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          role="menu"
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="block h-9 w-full rounded-[6px] px-3 text-left text-[13px] leading-9 hover:bg-[#F2F3F5] dark:hover:bg-muted"
+            onClick={() => {
+              setContextMenu(null);
+              setRenamingFolder({ space: contextMenu.space, folder: contextMenu.folder });
+              setRenameName(contextMenu.folder.name);
+            }}
+          >
+            {t('dataCenterPage.menu.rename')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="block h-9 w-full rounded-[6px] px-3 text-left text-[13px] leading-9 text-[#F53F3F] hover:bg-[#F2F3F5] dark:hover:bg-muted"
+            onClick={() => {
+              setContextMenu(null);
+              setDeletingFolder({ space: contextMenu.space, folder: contextMenu.folder });
+            }}
+          >
+            {t('dataCenterPage.menu.delete')}
+          </button>
+        </div>
+      ) : null}
+      {renamingFolder ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 px-4"
+          onClick={() => {
+            if (renameSubmitting) return;
+            setRenamingFolder(null);
+            setRenameName('');
+          }}
+        >
+          <div
+            className="w-full max-w-[360px] rounded-[14px] border border-[#E5E6EB] bg-white p-4 shadow-2xl dark:border-border dark:bg-background"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h4 className="text-[13px] font-semibold text-[#1D2129] dark:text-foreground">{t('dataCenterPage.dialogs.renameTitle')}</h4>
+            <input
+              autoFocus
+              value={renameName}
+              onChange={(event) => setRenameName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void handleRenameFolder();
+                if (event.key === 'Escape' && !renameSubmitting) {
+                  setRenamingFolder(null);
+                  setRenameName('');
+                }
+              }}
+              placeholder={t('dataCenterPage.dialogs.folderName')}
+              className="mt-3 h-9 w-full rounded-[8px] border border-[#E5E6EB] bg-white px-3 text-[13px] outline-none focus:border-[#1D2129] dark:border-border dark:bg-background dark:focus:border-foreground"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={renameSubmitting}
+                onClick={() => {
+                  setRenamingFolder(null);
+                  setRenameName('');
+                }}
+                className="h-8 rounded-[8px] px-4 text-[12px] font-normal"
+              >
+                {t('actions.cancel')}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleRenameFolder()}
+                disabled={!renameName.trim() || renameSubmitting}
+                className="h-8 rounded-[8px] bg-[#1D2129] px-4 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground dark:hover:bg-primary/90"
+              >
+                {renameSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('actions.confirm')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {deletingFolder ? (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 px-4"
+          onClick={() => {
+            if (!deleteSubmitting) setDeletingFolder(null);
+          }}
+        >
+          <div
+            className="w-full max-w-[360px] rounded-[14px] border border-[#E5E6EB] bg-white p-4 shadow-2xl dark:border-border dark:bg-background"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h4 className="text-[13px] font-semibold text-[#1D2129] dark:text-foreground">{t('dataCenterPage.dialogs.deleteTitle')}</h4>
+            <p className="mt-3 text-[12px] leading-[18px] text-[#4E5969] dark:text-muted-foreground">
+              {t('dataCenterPage.dialogs.deleteMessage', { name: deletingFolder.folder.name })}
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={deleteSubmitting}
+                onClick={() => setDeletingFolder(null)}
+                className="h-8 rounded-[8px] px-4 text-[12px] font-normal"
+              >
+                {t('actions.cancel')}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleDeleteFolder()}
+                disabled={deleteSubmitting}
+                className="h-8 rounded-[8px] bg-[#F53F3F] px-4 text-[12px] font-normal text-white hover:bg-[#E23B3B]"
+              >
+                {deleteSubmitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : t('dataCenterPage.menu.delete')}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {conflict ? (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 px-4">
           <div className="w-full max-w-[414px] overflow-hidden rounded-[14px] border border-[#E5E6EB] bg-white shadow-2xl dark:border-border dark:bg-background">
@@ -615,6 +918,7 @@ function TreeFolderRow({
   selectedTarget,
   onSelect,
   onToggleOpen,
+  onContextMenu,
 }: {
   space: FolderSpace;
   folder: DataCenterEntry;
@@ -629,6 +933,7 @@ function TreeFolderRow({
   selectedTarget: SaveTarget;
   onSelect: (entryId: string) => void;
   onToggleOpen: (space: FolderSpace, entryId: string) => Promise<void>;
+  onContextMenu: (space: FolderSpace, folder: DataCenterEntry, x: number, y: number) => void;
 }) {
   const currentKey = folderKey(space, folder.entryId);
   const childrenLoaded = folderMap[currentKey] !== undefined;
@@ -640,6 +945,10 @@ function TreeFolderRow({
       <div
         className="flex h-7 w-full items-center gap-[10px] rounded-[6px] text-left hover:bg-[#F7F8FA] dark:hover:bg-muted/50"
         style={{ paddingLeft: depth * 27 }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onContextMenu(space, folder, event.clientX, event.clientY);
+        }}
       >
         <TreeCheckbox checked={checked} onClick={() => onSelect(folder.entryId)} />
         {showToggle ? (
@@ -679,6 +988,7 @@ function TreeFolderRow({
               selectedTarget={selectedTarget}
               onSelect={onSelect}
               onToggleOpen={onToggleOpen}
+              onContextMenu={onContextMenu}
             />
           ))}
         </div>

@@ -230,6 +230,7 @@
             "traceFailed": "追跡に失敗しました",
             "folderCreated": "フォルダを作成しました",
             "renamed": "名前を変更しました",
+            "renameFailed": "名前の変更に失敗しました",
             "moved": "移動しました",
             "moveFailed": "移動に失敗しました",
             "authorizationRemoved": "許可を解除しました",

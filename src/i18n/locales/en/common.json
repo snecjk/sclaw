@@ -235,6 +235,7 @@
             "traceFailed": "Trace failed",
             "folderCreated": "Folder created",
             "renamed": "Renamed",
+            "renameFailed": "Rename failed",
             "moved": "Moved",
             "moveFailed": "Move failed",
             "authorizationRemoved": "Authorization removed",
