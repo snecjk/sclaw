@@ -85,6 +85,7 @@
         "voiceListening": "Listening… will confirm after a sentence",
         "voiceConnecting": "Connecting speech recognition…",
         "voiceStopping": "Finishing recognition…",
+        "voiceConfirmPreparing": "Ready to send",
         "voiceConfirmCountdown": "Sending in {{seconds}}s",
         "voiceConfirmCancel": "Cancel auto-send",
         "voiceConfirmCancelHint": "Tap mic to exit voice mode",

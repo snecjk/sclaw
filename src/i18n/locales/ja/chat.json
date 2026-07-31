@@ -85,6 +85,7 @@
         "voiceListening": "聞き取り中…一文後に送信確認します",
         "voiceConnecting": "音声認識に接続中…",
         "voiceStopping": "認識を完了しています…",
+        "voiceConfirmPreparing": "自動送信の準備中",
         "voiceConfirmCountdown": "{{seconds}} 秒後に自動送信",
         "voiceConfirmCancel": "自動送信をキャンセル",
         "voiceConfirmCancelHint": "マイクで音声モード終了",

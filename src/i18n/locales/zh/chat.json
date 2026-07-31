@@ -85,6 +85,7 @@
         "voiceListening": "正在听…说完一句将确认发送",
         "voiceConnecting": "连接语音识别中…",
         "voiceStopping": "正在完成识别…",
+        "voiceConfirmPreparing": "准备自动发送",
         "voiceConfirmCountdown": "{{seconds}} 秒后自动发送",
         "voiceConfirmCancel": "取消自动发送",
         "voiceConfirmCancelHint": "点击麦克风退出语音",

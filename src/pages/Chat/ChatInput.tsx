@@ -51,7 +51,7 @@ import { SkillPicker } from '@/components/skill-plaza/SkillPicker';
 
 import { useDingTalkMention } from '@/hooks/useDingTalkMention';
 import { useVoiceAsr } from '@/hooks/useVoiceAsr';
-import { VoiceComposerPanel } from '@/components/chat/VoiceComposerPanel';
+import { VoiceComposerPanel, VoiceTopCrawlWave } from '@/components/chat/VoiceComposerPanel';
 
 import type { ActiveMentionTrigger, MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
 import { extractSkillInlineQuery /*, hasSkillInlineTrigger */ } from '@/lib/dingtalk-mention-composer';
@@ -864,6 +864,10 @@ export function ChatInput({
       && allReady
       && !disabled;
     if (!canSendNow) return;
+
+    // 确认倒计时中手动发送：立刻结束倒计时，避免 UI 继续走表 / 到期二次自动发送
+    cancelVoiceConfirm();
+
     const attachmentsToSend = readyAttachments.length > 0 ? readyAttachments : undefined;
     const mentionsToSend = snapshot.mentions.length > 0 ? snapshot.mentions : undefined;
     const workflowIdToSend = snapshot.workflowId;
@@ -928,6 +932,7 @@ export function ChatInput({
   }, [
     allReady,
     attachments,
+    cancelVoiceConfirm,
     closeDingTalkMention,
     composerSnapshot,
     currentSessionKey,
@@ -1151,6 +1156,7 @@ export function ChatInput({
                 ),
           )}
         >
+          {voicePanelOpen ? <VoiceTopCrawlWave /> : null}
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
               {attachments.map((att) => (
@@ -1204,6 +1210,9 @@ export function ChatInput({
                     voiceConfirming
                       ? Math.max(1, Math.ceil(voiceConfirmRemainMs / 1000))
                       : undefined
+                  }
+                  confirmTitle={
+                    voiceConfirming ? t('composer.voiceConfirmPreparing') : undefined
                   }
                   cancelLabel={t('composer.voiceConfirmCancel')}
                   onCancelConfirm={voiceConfirming ? cancelVoiceConfirm : undefined}
