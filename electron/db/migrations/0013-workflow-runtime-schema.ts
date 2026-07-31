@@ -5,27 +5,28 @@ import type { SqliteMigration } from '../types';
  *
  * Workflow runtime tables have not been released to production, so this
  * migration creates the final schema in one transaction instead of carrying
- * forward the local-only incremental upgrade history.
+ * forward the local-only incremental upgrade history. Older development
+ * builds may already have tables with these names but incompatible schemas;
+ * when this migration first runs, those local-only tables are discarded and
+ * rebuilt as the final schema.
  */
 export const workflowRuntimeSchemaMigration: SqliteMigration = {
   version: 13,
   name: 'workflow-runtime-schema',
   apply(db) {
-    const existingRunColumns = db.prepare('PRAGMA table_info(wf_run)').all() as Array<{ name: string }>;
-    if (existingRunColumns.length > 0 && !existingRunColumns.some((item) => item.name === 'id')) {
-      // Matches the old v5 cloud-id migration contract: the pre-cloud schema
-      // was development-only and must be rebuilt because its TEXT foreign keys
-      // are incompatible with the final INTEGER run ids.
-      db.exec(`
-        DROP TABLE IF EXISTS wf_outbox;
-        DROP TABLE IF EXISTS wf_user_input_task;
-        DROP TABLE IF EXISTS wf_approval_task;
-        DROP TABLE IF EXISTS wf_artifact;
-        DROP TABLE IF EXISTS wf_event;
-        DROP TABLE IF EXISTS wf_node_run;
-        DROP TABLE IF EXISTS wf_run;
-      `);
-    }
+    // This migration is only invoked when schema_migrations does not yet have
+    // v13. Drop every runtime table unconditionally so a user running an older
+    // client cannot retain a same-named development table with an incompatible
+    // shape (including tables that happen to have an `id` column already).
+    db.exec(`
+      DROP TABLE IF EXISTS wf_outbox;
+      DROP TABLE IF EXISTS wf_user_input_task;
+      DROP TABLE IF EXISTS wf_approval_task;
+      DROP TABLE IF EXISTS wf_artifact;
+      DROP TABLE IF EXISTS wf_event;
+      DROP TABLE IF EXISTS wf_node_run;
+      DROP TABLE IF EXISTS wf_run;
+    `);
 
     db.exec(`
     CREATE TABLE IF NOT EXISTS wf_run (
@@ -173,25 +174,6 @@ export const workflowRuntimeSchemaMigration: SqliteMigration = {
     CREATE INDEX IF NOT EXISTS idx_wf_outbox_pending
       ON wf_outbox(status, next_retry_at) WHERE status = 'pending';
     `);
-
-    // main previously shipped the workflow schema as v2-v5/v9. CREATE TABLE
-    // above is intentionally idempotent, so add the 0710-only columns when
-    // upgrading a database that already has those older tables.
-    const ensureColumn = (table: string, column: string, definition: string) => {
-      const columns = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
-      if (!columns.some((item) => item.name === column)) {
-        db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-      }
-    };
-
-    ensureColumn('wf_run', 'workflow_version', 'TEXT');
-    ensureColumn('wf_run', 'engine_type', "TEXT NOT NULL DEFAULT 'claude'");
-    ensureColumn('wf_run', 'engine_model', 'TEXT');
-    ensureColumn('wf_run', 'chat_card_visible', 'INTEGER NOT NULL DEFAULT 0');
-    ensureColumn('wf_run', 'chat_anchor_user_message_id', 'TEXT');
-    ensureColumn('wf_run', 'chat_card_title', 'TEXT');
-    ensureColumn('wf_run', 'chat_params_summary', 'TEXT');
-    ensureColumn('wf_node_run', 'agent_session_id', 'TEXT');
 
     db.exec(`
       CREATE INDEX IF NOT EXISTS idx_wf_run_chat_session_started

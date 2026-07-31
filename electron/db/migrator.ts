@@ -20,14 +20,20 @@ function ensureMigrationTable(db: SqliteDatabase): void {
  * This retains all existing tables while allowing the missing workflow
  * migrations to execute exactly once. The 0710 branch also used v11 for
  * channel-plane and v12 for the consolidated workflow schema; after merging,
- * those records move to v10 and v13 so scheduled tasks/artifact saves retain
- * their main-branch v11/v12 slots.
+ * the channel record moves to v10 while the workflow record is removed so the
+ * final v13 schema migration can replace any same-named local development
+ * tables. This retains the main-branch v11/v12 slots for scheduled tasks and
+ * artifact saves.
  */
 export function normalizeLegacySessionCatalogMigrationVersions(db: SqliteDatabase): void {
   const rows = db.prepare(
-    'SELECT version, name FROM schema_migrations WHERE version IN (2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13) ORDER BY version ASC',
+    'SELECT version, name FROM schema_migrations ORDER BY version ASC',
   ).all() as Array<{ version: number; name: string }>;
   const byVersion = new Map(rows.map((row) => [Number(row.version), String(row.name)]));
+  const highestAppliedVersion = rows.reduce(
+    (highest, row) => Math.max(highest, Number(row.version)),
+    0,
+  );
   const version2Name = byVersion.get(2);
   const version5Name = byVersion.get(5);
   const version11Name = byVersion.get(11);
@@ -97,8 +103,17 @@ export function normalizeLegacySessionCatalogMigrationVersions(db: SqliteDatabas
     if (hasBranchWorkflowSchema) {
       if (version13Name === 'workflow-runtime-schema') {
         db.prepare('DELETE FROM schema_migrations WHERE version = 12').run();
+      } else if (highestAppliedVersion <= 12) {
+        // Do not mark the branch-local workflow schema as final. v13 must run
+        // once to drop and recreate its potentially incompatible local tables.
+        db.prepare('DELETE FROM schema_migrations WHERE version = 12').run();
       } else {
-        db.prepare('UPDATE schema_migrations SET version = 13 WHERE version = 12').run();
+        // A later migration without v13 indicates a divergent migration
+        // history. Never insert v13 behind v14+ or clear workflow tables in
+        // that state; require an explicit compatibility migration instead.
+        throw new Error(
+          `[sqlite] cannot normalize branch workflow schema: found v12 workflow-runtime-schema but v13 is missing before v${highestAppliedVersion}`,
+        );
       }
     }
     db.exec('COMMIT;');
