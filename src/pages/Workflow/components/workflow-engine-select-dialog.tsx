@@ -3,6 +3,7 @@ import { Bot, Check, Cpu } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { invokeIpc } from '@/lib/api-client';
+import { getAgentEngineDisplayName } from '@/lib/agent-engine-display-name';
 
 type WorkflowEngineType = 'claude' | 'openclaw';
 
@@ -39,14 +40,14 @@ export function WorkflowEngineSelectDialog({
             <button type="button" role="radio" aria-checked={engineType === 'claude'} onClick={() => setEngineType('claude')}
               className={`relative rounded-xl border p-4 text-left transition-colors ${engineType === 'claude' ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border hover:bg-muted/50'}`}>
               <Cpu className="h-5 w-5 text-primary" aria-hidden />
-              <p className="mt-3 text-sm font-semibold text-foreground">Claude Agent SDK</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">使用 Claude Agent SDK 执行节点。</p>
+              <p className="mt-3 text-sm font-semibold text-foreground">{getAgentEngineDisplayName('claude')}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">使用 {getAgentEngineDisplayName('claude')} 执行节点。</p>
               {engineType === 'claude' ? <Check className="absolute right-3 top-3 h-4 w-4 text-primary" aria-hidden /> : null}
             </button>
             <button type="button" role="radio" aria-checked={engineType === 'openclaw'} disabled={isOpenClawReady === false} onClick={() => setEngineType('openclaw')}
               className={`relative rounded-xl border p-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${engineType === 'openclaw' ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'border-border hover:bg-muted/50'}`}>
               <Bot className="h-5 w-5 text-primary" aria-hidden />
-              <p className="mt-3 text-sm font-semibold text-foreground">OpenClaw</p>
+              <p className="mt-3 text-sm font-semibold text-foreground">{getAgentEngineDisplayName('openclaw')}</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{isOpenClawReady === false ? '网关未就绪，暂不可用。' : '使用隔离的 OpenClaw 工作流运行环境。'}</p>
               {engineType === 'openclaw' ? <Check className="absolute right-3 top-3 h-4 w-4 text-primary" aria-hidden /> : null}
             </button>

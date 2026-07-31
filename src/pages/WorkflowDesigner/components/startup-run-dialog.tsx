@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { WorkflowSchema, WorkflowSchemaField } from '@/types/workflow';
 import { invokeIpc } from '@/lib/api-client';
+import { getAgentEngineDisplayName } from '@/lib/agent-engine-display-name';
 import type { RuntimeUploadNode } from '@/pages/WorkflowDesigner/hooks/use-designer-try-run';
 
 interface StartupRunDialogProps {
@@ -230,8 +231,8 @@ export function StartupRunDialog({
           <h2 id="startup-run-title" className="text-xl font-semibold text-foreground">启动配置确认</h2>
           <label className="mt-4 flex items-center gap-2 text-sm font-medium">运行引擎
             <select value={engineType} onChange={(event) => setEngineType(event.target.value as 'claude' | 'openclaw')} disabled={isStarting} className="h-9 rounded-md border border-input bg-background px-2">
-              <option value="claude">Claude Agent SDK</option>
-              <option value="openclaw" disabled={isOpenClawReady === false}>{isOpenClawReady === false ? 'OpenClaw（网关未就绪）' : 'OpenClaw'}</option>
+              <option value="claude">{getAgentEngineDisplayName('claude')}</option>
+              <option value="openclaw" disabled={isOpenClawReady === false}>{isOpenClawReady === false ? `${getAgentEngineDisplayName('openclaw')}（网关未就绪）` : getAgentEngineDisplayName('openclaw')}</option>
             </select>
           </label>
         </header>
