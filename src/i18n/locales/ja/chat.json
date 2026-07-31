@@ -170,6 +170,8 @@
         "statusFailed": "失敗",
         "statusTimeout": "タイムアウト",
         "statusUnknown": "不明",
+        "runIdLabel": "実行 ID",
+        "nameLabel": "ワークフロー",
         "runUnavailable": "実行記録を利用できません",
         "retryQuery": "再試行",
         "runningFor": "実行時間 {{duration}}",

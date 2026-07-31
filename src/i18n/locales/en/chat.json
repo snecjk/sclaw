@@ -173,6 +173,8 @@
         "statusWaitingApproval": "Waiting for approval",
         "statusWaitingInput": "Waiting for input",
         "statusUnknown": "Unknown",
+        "runIdLabel": "Run ID",
+        "nameLabel": "Workflow",
         "runUnavailable": "Run record unavailable",
         "retryQuery": "Retry",
         "progressLabel": "Workflow execution progress",

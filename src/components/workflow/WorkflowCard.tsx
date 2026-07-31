@@ -51,7 +51,7 @@ interface StatusTheme {
 
 function isTemplateIdLabel(name: string | undefined): boolean {
   const trimmed = name?.trim();
-  return !trimmed || trimmed.startsWith('tpl_');
+  return !trimmed || /^(?:tpl|wf)_/i.test(trimmed);
 }
 
 /** MasterGo C 组：工作流状态行描边 #E8EAEF（paint_4:1000 / --sto-sidebar-border） */
@@ -195,17 +195,7 @@ export function WorkflowCard({
 
   const resolvedName = (() => {
     if (templateName && !isTemplateIdLabel(templateName)) return templateName;
-
-    const workflowId = state?.workflowId;
-    const isActive = !state || state.status === 'running' || state.status === 'pending';
-    if (workflowId && isActive) {
-      return t('workflow.backgroundRunningWithId', { workflowId });
-    }
-    if (workflowId) {
-      return t('workflow.withId', { workflowId });
-    }
-
-    return templateName || t('workflow.defaultName');
+    return t('workflow.defaultName');
   })();
 
   useEffect(() => {
@@ -297,6 +287,9 @@ export function WorkflowCard({
     || userFacingArtifacts.length > 0
     || showWorkflowActions
   );
+  const workflowIdentity = display.workflowId
+    ? `${resolvedName}（${display.workflowId}）`
+    : resolvedName;
 
   const statusRow = showStatus ? (
     <div
@@ -306,15 +299,25 @@ export function WorkflowCard({
         'px-3.5 py-3',
       )}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <p className="truncate text-[13px] font-medium leading-4 text-foreground">
-            {resolvedName}
-          </p>
-          {durationLabel && (isRunning || (isTerminal && display.completedAt)) ? (
-            <p className="shrink-0 text-[13px] leading-5 text-muted-foreground">{durationLabel}</p>
-          ) : null}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] leading-5">
+
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="shrink-0 text-muted-foreground">{t('workflow.nameLabel')}</span>
+          <span className="truncate font-medium text-foreground" title={workflowIdentity}>
+            {workflowIdentity}
+          </span>
+          <span className="shrink-0 text-muted-foreground">{t('workflow.runIdLabel')}</span>
+          <code
+              className="truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[12px] text-foreground"
+              title={runId}
+          >
+            {runId}
+          </code>
         </div>
+
+        {durationLabel && (isRunning || (isTerminal && display.completedAt)) ? (
+          <p className="shrink-0 text-muted-foreground">{durationLabel}</p>
+        ) : null}
         <div
           className={cn(
             'inline-flex shrink-0 items-center gap-1.5 text-sm font-medium leading-[18px]',

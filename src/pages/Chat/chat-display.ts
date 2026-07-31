@@ -33,6 +33,22 @@ function displayItemTimestamp(item: ChatDisplayItem): number {
   return 0;
 }
 
+function resolveWorkflowCardNameFromAnchor(
+  card: ChatWorkflowCardRef,
+  items: ChatDisplayItem[],
+): ChatWorkflowCardRef {
+  if (!/^wf_[\w-]+$/i.test(card.title.trim()) || !card.anchorUserMessageId) return card;
+  const anchor = items.find((item) => (
+    item.type === 'single'
+    && item.message.role === 'user'
+    && item.message.id === card.anchorUserMessageId
+  ));
+  if (anchor?.type !== 'single') return card;
+
+  const matchedName = extractText(anchor.message).match(/工作流\s*【([^】]+)】/)?.[1]?.trim();
+  return matchedName ? { ...card, title: matchedName } : card;
+}
+
 export function mergeWorkflowCardsIntoDisplayItems(
   baseItems: ChatDisplayItem[],
   cards: ChatWorkflowCardRef[],
@@ -45,30 +61,34 @@ export function mergeWorkflowCardsIntoDisplayItems(
 
   for (const card of sorted) {
     if (merged.some((item) => item.type === 'workflow-run' && item.card.runId === card.runId)) continue;
+    const displayCard = resolveWorkflowCardNameFromAnchor(card, baseItems);
     const cardItem: ChatDisplayItem = {
       type: 'workflow-run',
-      card,
-      key: `workflow-run:${card.runId}`,
+      card: displayCard,
+      key: `workflow-run:${displayCard.runId}`,
     };
     let insertAt = -1;
-    if (card.anchorUserMessageId) {
+    if (displayCard.anchorUserMessageId) {
       const userIndex = merged.findIndex((item) => (
         item.type === 'single'
         && item.message.role === 'user'
-        && item.message.id === card.anchorUserMessageId
+        && item.message.id === displayCard.anchorUserMessageId
       ));
       if (userIndex >= 0) {
         insertAt = userIndex + 1;
         while (insertAt < merged.length) {
           const item = merged[insertAt];
           if (item.type === 'single' && item.message.role === 'user') break;
-          if (item.type === 'workflow-run' && item.card.anchorUserMessageId !== card.anchorUserMessageId) break;
+          if (
+            item.type === 'workflow-run'
+            && item.card.anchorUserMessageId !== displayCard.anchorUserMessageId
+          ) break;
           insertAt += 1;
         }
       }
     }
     if (insertAt < 0) {
-      const startedAt = Date.parse(card.startedAt) || 0;
+      const startedAt = Date.parse(displayCard.startedAt) || 0;
       insertAt = merged.findIndex((item) => displayItemTimestamp(item) > startedAt);
       if (insertAt < 0) insertAt = merged.length;
     }

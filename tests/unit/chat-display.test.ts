@@ -348,4 +348,30 @@ describe('mergeWorkflowCardsIntoDisplayItems', () => {
     expect(merged.filter((item) => item.type === 'workflow-run')).toHaveLength(1);
     expect(merged.findIndex((item) => item.type === 'workflow-run')).toBe(2);
   });
+
+  it('recovers a workflow name from its anchored execute prompt when the card title is only a code', () => {
+    const items = buildChatDisplayItems([
+      {
+        id: 'user-workflow',
+        role: 'user',
+        content: '帮我执行 id 为：wf_c5d26a84 的工作流 【模拟请假审批】',
+        timestamp: 1,
+      },
+      { id: 'assistant-1', role: 'assistant', content: '已启动', timestamp: 2 },
+    ]);
+
+    const merged = mergeWorkflowCardsIntoDisplayItems(items, [{
+      runId: 'run_208761062424899584',
+      sessionKey: 'session-1',
+      anchorUserMessageId: 'user-workflow',
+      title: 'wf_c5d26a84',
+      startedAt: '1970-01-01T00:00:03.000Z',
+    }]);
+    const workflowCard = merged.find((item) => item.type === 'workflow-run');
+
+    expect(workflowCard?.type).toBe('workflow-run');
+    if (workflowCard?.type === 'workflow-run') {
+      expect(workflowCard.card.title).toBe('模拟请假审批');
+    }
+  });
 });

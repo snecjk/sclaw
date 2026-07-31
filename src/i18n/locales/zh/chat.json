@@ -173,6 +173,8 @@
         "statusWaitingApproval": "等待审批",
         "statusWaitingInput": "等待输入",
         "statusUnknown": "状态未知",
+        "runIdLabel": "运行 ID",
+        "nameLabel": "工作流",
         "runUnavailable": "运行记录不可用",
         "retryQuery": "重试",
         "progressLabel": "工作流执行进度",
