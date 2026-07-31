@@ -4,7 +4,11 @@ import {
   resolveWorkflowStartModel,
 } from '../../electron/api/routes/workflows';
 import { createEngine } from '../../electron/services/workflow-runtime/engine';
-import { buildClaudeWorkflowStartBody } from '../../sto-plugin/claude/sto-workflow-tool/workflow-start';
+import { createWorkflowTools } from '../../sto-plugin/claude/sto-workflow-tool/tools';
+import {
+  buildClaudeWorkflowStartBody,
+  requireClaudeWorkflowSessionKey,
+} from '../../sto-plugin/claude/sto-workflow-tool/workflow-start';
 
 const workflowRouteMocks = vi.hoisted(() => ({
   getEngineSessionRegistryEntry: vi.fn(),
@@ -56,6 +60,20 @@ describe('workflow chat-card start metadata', () => {
       chatCardTitle: '天气笑话',
       chatParamsSummary: '{"city":"北京"}',
     });
+  });
+
+  it('allows Claude workflow tools to initialize before a chat session is available', () => {
+    expect(() => createWorkflowTools({
+      baseUrl: 'http://127.0.0.1:3210',
+      stoToken: 'test-token',
+    })).not.toThrow();
+  });
+
+  it('requires the Claude chat session only when execute_workflow starts', () => {
+    expect(() => requireClaudeWorkflowSessionKey()).toThrow(
+      'Claude execute_workflow requires a chat sessionKey',
+    );
+    expect(requireClaudeWorkflowSessionKey('  session-1  ')).toBe('session-1');
   });
 
   it('resolves the Claude workflow model from the originating chat session', async () => {

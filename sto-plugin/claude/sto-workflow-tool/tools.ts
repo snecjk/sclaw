@@ -7,12 +7,15 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "../zod-shim.js";
-import { buildClaudeWorkflowStartBody } from "./workflow-start.js";
+import {
+  buildClaudeWorkflowStartBody,
+  requireClaudeWorkflowSessionKey,
+} from "./workflow-start.js";
 
 interface WorkflowConfig {
   baseUrl: string;
   stoToken: string;
-  sessionKey: string;
+  sessionKey?: string;
   timeoutMs?: number;
 }
 
@@ -230,10 +233,6 @@ async function resolveTemplate(
 }
 
 export function createWorkflowTools(config: WorkflowConfig) {
-  const sessionKey = config.sessionKey.trim();
-  if (!sessionKey) {
-    throw new Error("Claude workflow tools require a chat sessionKey");
-  }
   const client = createWorkflowClient(config);
 
   const searchWorkflowTemplates = tool(
@@ -348,6 +347,7 @@ export function createWorkflowTools(config: WorkflowConfig) {
       templateName: z.string().optional().describe("Workflow display name for UI cards"),
     },
     async ({ workflowId, inputs, templateName }) => runWorkflowTool("workflow_execution_started", async () => {
+      const sessionKey = requireClaudeWorkflowSessionKey(config.sessionKey);
       const idempotencyKey = `start-wf-${workflowId}-${Date.now()}`;
       const run = await client.fetchJson<StartWorkflowResponse>(
         `/agent/v1/workflows/${encodeURIComponent(workflowId)}/start`,

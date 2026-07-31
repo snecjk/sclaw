@@ -14,3 +14,12 @@ export function buildClaudeWorkflowStartBody(
     engineType: 'claude',
   });
 }
+
+/** Validate the chat binding only when a workflow is actually started. */
+export function requireClaudeWorkflowSessionKey(sessionKey?: string): string {
+  const normalized = sessionKey?.trim();
+  if (!normalized) {
+    throw new Error("Claude execute_workflow requires a chat sessionKey");
+  }
+  return normalized;
+}
