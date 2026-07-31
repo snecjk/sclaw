@@ -155,6 +155,8 @@
             "listView": "列表视图",
             "createFolder": "新建文件夹",
             "uploadFile": "上传文件",
+            "uploadFileOption": "文件",
+            "uploadFolderOption": "文件夹",
             "authorizeLocalFile": "授权本地文件",
             "authorizeLocalFileOption": "授权文件",
             "authorizeLocalFolderOption": "授权文件夹",

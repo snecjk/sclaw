@@ -154,6 +154,8 @@
             "listView": "List view",
             "createFolder": "New folder",
             "uploadFile": "Upload file",
+            "uploadFileOption": "Files",
+            "uploadFolderOption": "Folder",
             "authorizeLocalFile": "Authorize local files",
             "authorizeLocalFileOption": "Authorize files",
             "authorizeLocalFolderOption": "Authorize folder",

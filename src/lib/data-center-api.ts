@@ -223,6 +223,20 @@ export async function uploadArtifactFromPath(params: DataCenterUploadArtifactPar
   }));
 }
 
+export interface LocalFolderFileItem {
+  absolutePath: string;
+  /** Path relative to the selected folder root, `/`-separated. */
+  relativePath: string;
+}
+
+export async function listLocalFolderFiles(dirPath: string): Promise<{ files: LocalFolderFileItem[]; truncated: boolean }> {
+  const result = await hostApiFetch<{ files?: LocalFolderFileItem[]; truncated?: boolean }>('/api/files/list-recursive', {
+    method: 'POST',
+    body: JSON.stringify({ dirPath }),
+  });
+  return { files: result.files ?? [], truncated: result.truncated === true };
+}
+
 export function createDataCenterIdempotencyKey(prefix: string, stablePart?: string): string {
   const random = crypto.randomUUID();
   const cleanStable = stablePart?.trim().replace(/[^a-zA-Z0-9._:-]/g, '-').slice(0, 48);
