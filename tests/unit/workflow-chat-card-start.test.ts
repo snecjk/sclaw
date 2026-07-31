@@ -147,4 +147,44 @@ describe('workflow chat-card start metadata', () => {
       chat_params_summary: '{"city":"上海"}',
     }));
   });
+
+  it('classifies a chat workflow from a scheduled-task session', async () => {
+    const upsertRun = vi.fn().mockResolvedValue(undefined);
+    const isScheduledTaskSession = vi.fn().mockResolvedValue(true);
+    const repo = {
+      upsertRun,
+      listNodeRuns: vi.fn().mockResolvedValue([]),
+      enqueueOutbox: vi.fn().mockResolvedValue(undefined),
+    };
+    const engine = createEngine({
+      repo: repo as never,
+      isScheduledTaskSession,
+      invokeAgent: vi.fn(),
+      postSync: vi.fn(),
+      dslClient: {
+        fetchVersion: vi.fn().mockRejectedValue(new Error('stop after initial upsert')),
+      },
+    });
+
+    await expect(engine.startWorkflow({
+      runId: 'run-scheduled',
+      runDatabaseId: 102,
+      workflowId: 'wf_report',
+      versionId: 'version-1',
+      input: {},
+      startedAt: '2026-07-31T09:00:00+08:00',
+      sessionKey: 'agent:main:cron:task-1:2026-07-31',
+      triggerType: 'chat',
+      engineType: 'openclaw',
+      chatCard: { title: '日报' },
+    })).rejects.toThrow('stop after initial upsert');
+
+    expect(isScheduledTaskSession).toHaveBeenCalledWith(
+      'agent:main:cron:task-1:2026-07-31',
+    );
+    expect(upsertRun).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      run_id: 'run-scheduled',
+      trigger_type: 'scheduled_task',
+    }));
+  });
 });
