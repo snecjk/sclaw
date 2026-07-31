@@ -330,8 +330,8 @@ function isAssistantMessageRole(role: unknown): boolean {
 }
 
 export function messageHasWorkflowCard(msg: RawMessage): boolean {
-  return Array.isArray(msg.content)
-    && (msg.content as ContentBlock[]).some((block) => block.type === 'workflow_card');
+  void msg;
+  return false;
 }
 
 export function messageHasParameterFormBlock(msg: RawMessage): boolean {
@@ -635,22 +635,8 @@ export function extractParameterForm(
  * Extract workflow_card block from a message's content field.
  */
 export function extractWorkflowCard(message: RawMessage | unknown): { runId: string; templateName: string } | null {
-  if (!message || typeof message !== 'object') return null;
-  const msg = message as Record<string, unknown>;
-  const content = msg.content;
-
-  if (!Array.isArray(content)) return null;
-
-  let latest: { runId: string; templateName: string } | null = null;
-  for (const block of content as import('@/stores/chat').ContentBlock[]) {
-    if (block.type === 'workflow_card' && block.runId) {
-      latest = {
-        runId: block.runId,
-        templateName: block.templateName ?? '工作流',
-      };
-    }
-  }
-  return latest;
+  void message;
+  return null;
 }
 
 /** Legacy workflow tools may return a Markdown status report after completion.

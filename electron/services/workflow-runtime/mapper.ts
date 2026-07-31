@@ -14,6 +14,7 @@ export interface WfRunRow {
   status: string;
   mode?: string | null;
   source?: string | null;
+  trigger_type?: string | null;
   waiting_node_id?: string | null;
   input_json?: string | null;
   output_json?: string | null;
@@ -26,6 +27,8 @@ export interface WfRunRow {
   updated_at?: string;
   synced_at?: string | null;
   session_key?: string | null;
+  engine_type?: string | null;
+  engine_model?: string | null;
 }
 
 export interface WfNodeRunRow {
@@ -39,7 +42,8 @@ export interface WfNodeRunRow {
   output_json?: string | null;
   error?: string | null;
   last_completion_issue?: string | null;
-  attempt?: number | null;
+  attempt_count?: number | null;
+  agent_session_id?: string | null;
 }
 
 export interface WfEventRow {
@@ -60,6 +64,7 @@ export interface WfEventRow {
 }
 
 export interface LocalRunChildren {
+  view?: 'status' | 'detail' | 'diagnostic';
   nodeRuns?: WfNodeRunRow[];
   events?: WfEventRow[];
   approvalTasks?: any[];
@@ -85,6 +90,9 @@ export function mapWfRunRowToResponse(
   row: WfRunRow,
   opts: LocalRunChildren = {},
 ): WorkflowRunResponse {
+  const view = opts.view ?? 'status';
+  const diagnostic = view === 'diagnostic';
+  const includeTimeline = view === 'detail' || diagnostic;
   // workflowRunResponseToExecutionState 内部以 intersection 类型读取每个 nodeRun 的
   // output/input（collectArtifactsFromNodeRuns），故这里按需透传 extra 字段。
   const nodeRuns = (opts.nodeRuns ?? []).map((n) => ({
@@ -95,74 +103,115 @@ export function mapWfRunRowToResponse(
     startedAt: n.started_at ?? undefined,
     completedAt: n.completed_at ?? undefined,
     error: n.last_completion_issue ?? n.error ?? undefined,
-    input: safeParse(n.input_json, undefined),
-    output: safeParse(n.output_json, undefined),
+    ...(diagnostic ? {
+      attemptCount: n.attempt_count ?? 0,
+      agentSessionId: n.agent_session_id ?? undefined,
+      input: safeParse(n.input_json, undefined),
+      output: safeParse(n.output_json, undefined),
+    } : {}),
   }));
 
   // input_json 存的是 StartWorkflowArgs.input（松散 any，非严格 WorkflowRunInput 形状）。
   // 解析成功即透传；解析失败/为空时退化为空 inputs，保证类型守恒。
-  const parsedInput = safeParse<Record<string, unknown>>(row.input_json, {});
-  const input = (parsedInput && typeof parsedInput === 'object' && 'inputs' in parsedInput
-    ? parsedInput
-    : { inputs: parsedInput, agentContext: {}, startup: buildStartupFromDefinition(row) }) as unknown as WorkflowRunInput;
+  const localArtifactRows = opts.artifacts ?? [];
+  const output = enrichPacketArtifactsForLocalPreview(safeParse(row.output_json, null), localArtifactRows);
+  let input: WorkflowRunInput | undefined;
+  let result: WorkflowRunResponse['result'] | undefined;
+  if (diagnostic) {
+    const parsedInput = safeParse<Record<string, unknown>>(row.input_json, {});
+    input = (parsedInput && typeof parsedInput === 'object' && 'inputs' in parsedInput
+      ? parsedInput
+      : { inputs: parsedInput, agentContext: {}, startup: buildStartupFromDefinition(row) }) as unknown as WorkflowRunInput;
+    // last_agent_output_json is diagnostic history, not the final workflow output.
+    result = enrichPacketArtifactsForLocalPreview(safeParse<WorkflowRunResponse['result']>(
+      row.status === 'FAILED' ? row.output_json : row.last_agent_output_json,
+      null,
+    ), localArtifactRows);
+  }
 
-  // last_agent_output_json 存放 engine 产出的 client result（见 engine.ts result 落库）。
-  const result = safeParse<WorkflowRunResponse['result']>(
-    row.status === 'FAILED' ? row.output_json : row.last_agent_output_json,
-    null,
-  );
-
-  return {
+  const finalArtifactRows = diagnostic
+    ? localArtifactRows
+    : localArtifactRows.filter((artifact) => String(artifact.kind ?? '').toUpperCase() === 'OUTPUT');
+  const response: WorkflowRunResponse = {
     id: row.run_id,
     workflowId: row.workflow_id,
-    versionId: row.version_id,
-    workflowVersion: resolveWorkflowVersion(row),
     status: normalizeWorkflowRunStatus(row.status),
-    mode: row.mode ?? null,
+    triggerType: row.trigger_type ?? 'workflow_manual',
+    sessionKey: row.session_key ?? null,
     startedAt: row.started_at,
-    completedAt: row.completed_at ?? null,
-    waitingNodeId: row.waiting_node_id ?? null,
+    ...(row.completed_at ? { completedAt: row.completed_at } : {}),
+    ...(row.waiting_node_id ? { waitingNodeId: row.waiting_node_id } : {}),
     nodeRuns,
-    events: (opts.events ?? []).map((event) => ({
+    ...(includeTimeline ? { events: (opts.events ?? []).map((event) => ({
       id: `${event.run_id}:${event.sequence}`,
       sequence: event.sequence,
       type: event.type,
       nodeId: event.node_id ?? undefined,
       timestamp: event.created_at,
       payload: safeParse(event.message, event.message ?? null),
-    })),
-    approvalTasks: (opts.approvalTasks ?? []).map((task) => ({
+    })) } : {}),
+    ...((opts.approvalTasks?.length ?? 0) > 0 ? { approvalTasks: opts.approvalTasks!.map((task) => ({
       id: task.task_id, nodeId: task.node_id, status: task.status,
       assigneeRole: task.assignee_role, reason: task.reason, decisionNote: task.decision_note,
       requestedAt: task.requested_at, decidedAt: task.decided_at,
-    })),
-    userInputTasks: (opts.userInputTasks ?? []).map((task) => ({
+    })) } : {}),
+    ...((opts.userInputTasks?.length ?? 0) > 0 ? { userInputTasks: opts.userInputTasks!.map((task) => ({
       id: task.task_id, nodeId: task.node_id, status: task.status,
       title: task.title, instruction: task.instruction,
       schema: safeParse(task.form_schema_json, []), values: safeParse(task.submitted_data_json, {}),
       requestedAt: task.requested_at, submittedAt: task.submitted_at,
-    })),
-    artifacts: (opts.artifacts ?? []).map((artifact) => ({
+    })) } : {}),
+    artifacts: finalArtifactRows.map((artifact) => ({
       id: artifact.artifact_id, nodeId: artifact.node_id, kind: artifact.kind,
       name: artifact.summary || artifact.file_path?.split(/[\\/]/).pop() || 'artifact',
       type: artifact.content_type || artifact.kind,
       url: artifact.file_path ? pathToFileURL(artifact.file_path).href : artifact.uri || '',
       uri: artifact.uri, filePath: artifact.file_path, contentType: artifact.content_type,
     })),
-    toolInvocations: (opts.events ?? [])
-      .filter((event) => event.type === 'agent.tool_start' || event.type === 'agent.tool_end')
-      .map((event) => ({
-        id: event.call_id ?? `${event.run_id}:${event.sequence}`, nodeId: event.node_id,
-        toolId: event.tool_id, status: event.type === 'agent.tool_end' ? 'COMPLETED' : 'REQUESTED',
-        payload: safeParse(event.message, event.message ?? null), timestamp: event.created_at,
-      })),
-    input,
-    result,
-    output: safeParse(row.output_json, null),
-    startup: buildStartupFromDefinition(row),
-    lastAgentRawText: row.last_agent_raw_text ?? null,
-    error: row.error ?? null,
+    output,
+    ...(row.error ? { error: row.error } : {}),
+    ...(includeTimeline && row.last_agent_raw_text ? { lastAgentRawText: row.last_agent_raw_text } : {}),
+    ...(includeTimeline ? {
+      versionId: row.version_id,
+      workflowVersion: resolveWorkflowVersion(row),
+      mode: row.mode ?? null,
+      engineType: row.engine_type === 'openclaw' ? 'openclaw' : 'claude',
+      engineModel: row.engine_model ?? null,
+    } : {}),
+    ...(diagnostic ? {
+      input,
+      result,
+      startup: buildStartupFromDefinition(row),
+    } : {}),
   };
+  return response;
+}
+
+/**
+ * Add renderer-only local preview fields to a parsed packet copy. Canonical
+ * resourceId/artifact:// values remain untouched in SQLite and sync payloads.
+ */
+function enrichPacketArtifactsForLocalPreview<T>(value: T, artifactRows: any[]): T {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const packet = value as Record<string, unknown>;
+  if (!Array.isArray(packet.artifacts) || !artifactRows.length) return value;
+  const localById = new Map(artifactRows
+    .filter((row) => typeof row?.artifact_id === 'string' && typeof row?.file_path === 'string' && row.file_path)
+    .map((row) => [row.artifact_id, row]));
+  if (!localById.size) return value;
+
+  const artifacts = packet.artifacts.map((entry) => {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return entry;
+    const artifact = entry as Record<string, unknown>;
+    const artifactId = typeof artifact.artifactId === 'string'
+      ? artifact.artifactId
+      : typeof artifact.id === 'string' ? artifact.id : '';
+    const local = localById.get(artifactId);
+    if (!local) return entry;
+    const filePath = String(local.file_path);
+    return { ...artifact, filePath, url: pathToFileURL(filePath).href };
+  });
+  return { ...packet, artifacts } as T;
 }
 
 function resolveWorkflowVersion(row: Pick<WfRunRow, 'workflow_version' | 'definition_json'>): string | number | null {

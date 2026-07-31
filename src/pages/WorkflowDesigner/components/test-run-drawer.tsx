@@ -10,6 +10,7 @@ import {
   Circle,
   FileDown,
   Loader2,
+  MessageSquare,
   Play,
   RefreshCw,
   Wrench,
@@ -28,7 +29,9 @@ import { invokeIpc } from '@/lib/api-client';
 import { isHttpUrl, openExternalUrl } from '@/lib/preview-url';
 
 interface TestRunDrawerProps {
+  variant?: 'trial' | 'detail';
   open: boolean;
+  workflowName?: string | null;
   runId: string | null;
   run: WorkflowRunResponse | null;
   executionState: WorkflowExecutionState | null;
@@ -40,11 +43,13 @@ interface TestRunDrawerProps {
   isDraftSnapshot: boolean;
   launchError: string | null;
   onClose: () => void;
-  onCancel: () => void;
-  onContinue: () => void;
-  onRerun: () => void;
-  onDecideApproval: (approved: boolean, note?: string) => void;
-  onSubmitInput: (values: Record<string, unknown>) => void;
+  onCancel?: () => void;
+  onContinue?: () => void;
+  onRerun?: () => void;
+  onReturnToConversation?: () => void;
+  returnToConversationLabel?: string;
+  onDecideApproval?: (approved: boolean, note?: string) => void;
+  onSubmitInput?: (values: Record<string, unknown>) => void;
 }
 
 type View = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -331,12 +336,14 @@ export function TestRunDrawer(props: TestRunDrawerProps) {
   const artifacts = useMemo(() => collectDisplayArtifacts(props.run, props.executionState), [props.run, props.executionState]);
   const activeRunId = props.run?.id ?? props.runId;
   const startedAt = props.run?.startedAt ?? props.executionState?.startedAt;
-  const eventCount = props.run?.events.length ?? timeline.length;
+  const eventCount = props.run?.events?.length ?? timeline.length;
   // `versionId` is the local persistence record ID (for example 827), not a
   // workflow version. Prefer the version captured when this run was started,
   // then the version returned by the persisted run after it finishes.
   const workflowVersion = props.run?.workflowVersion ?? props.workflowVersion;
   const workflowVersionLabel = formatWorkflowVersion(workflowVersion);
+  const isDetail = props.variant === 'detail';
+  const runLabel = isDetail ? '本次运行' : '本次试运行';
 
   return (
       <Sheet open={props.open} onOpenChange={(open) => { if (!open) props.onClose(); }}>
@@ -344,14 +351,29 @@ export function TestRunDrawer(props: TestRunDrawerProps) {
           <header className="flex min-h-[88px] items-center justify-between border-b border-border bg-background px-6">
             <div className="flex items-center gap-3">
               <span className="h-3 w-3 rounded-full bg-orange-400 shadow-[0_0_0_6px_rgba(251,146,60,0.14)]" />
-              <h2 className="text-xl font-semibold">{view === 'completed' ? '试运行结果' : '试运行'}</h2>
+              <div>
+                <h2 className="text-xl font-semibold">
+                  {isDetail ? '运行详情' : view === 'completed' ? '试运行结果' : '试运行'}
+                </h2>
+                {isDetail && props.workflowName ? (
+                  <p className="mt-1 max-w-[360px] truncate text-sm text-muted-foreground">
+                    {props.workflowName}
+                  </p>
+                ) : null}
+              </div>
               {workflowVersion !== null && workflowVersion !== undefined ? <span className="text-sm text-muted-foreground">版本 {workflowVersionLabel}</span> : null}
               {props.isDraftSnapshot ? <span className="rounded-full bg-orange-50 px-2 py-1 text-xs text-orange-700">当前 {workflowVersionLabel} 草稿试运行</span> : null}
             </div>
             <div className="flex items-center gap-2">
-              {view === 'running' ? <Button variant="outline" className="border-orange-200 text-orange-700 hover:bg-orange-50" onClick={props.onCancel} disabled={props.isCancelling}>{props.isCancelling ? '取消中' : '取消运行'}</Button> : null}
-              {view === 'cancelled' ? <Button variant="outline" onClick={props.onContinue}><Play className="mr-2 h-4 w-4" />继续运行</Button> : null}
-              {view === 'completed' || view === 'failed' ? <Button variant="outline" onClick={props.onRerun}><RefreshCw className="mr-2 h-4 w-4" />重新运行</Button> : null}
+              {props.onReturnToConversation ? (
+                <Button variant="outline" onClick={props.onReturnToConversation}>
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  {props.returnToConversationLabel ?? '返回发起会话'}
+                </Button>
+              ) : null}
+              {view === 'running' && props.onCancel ? <Button variant="outline" className="border-orange-200 text-orange-700 hover:bg-orange-50" onClick={props.onCancel} disabled={props.isCancelling}>{props.isCancelling ? '取消中' : '取消运行'}</Button> : null}
+              {view === 'cancelled' && props.onContinue ? <Button variant="outline" onClick={props.onContinue}><Play className="mr-2 h-4 w-4" />继续运行</Button> : null}
+              {(view === 'completed' || view === 'failed') && props.onRerun ? <Button variant="outline" onClick={props.onRerun}><RefreshCw className="mr-2 h-4 w-4" />重新运行</Button> : null}
               <button type="button" aria-label="关闭" onClick={props.onClose} className="ml-1 inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button>
             </div>
           </header>
@@ -372,16 +394,16 @@ export function TestRunDrawer(props: TestRunDrawerProps) {
                     </dl>
                   </section>
 
-                  {status === 'waiting_approval' ? <section className="rounded-lg border border-orange-200 bg-orange-50 p-4"><p className="font-semibold">人工审批</p><Textarea className="mt-3 bg-background" value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} placeholder="审批备注（可选）" rows={2} /><div className="mt-3 flex justify-end gap-2"><Button variant="outline" onClick={() => props.onDecideApproval(false, decisionNote)}>拒绝</Button><Button onClick={() => props.onDecideApproval(true, decisionNote)}>通过</Button></div></section> : null}
-                  {status === 'waiting_input' ? <section className="rounded-lg border border-orange-200 bg-orange-50 p-4"><p className="font-semibold">补充输入</p><Textarea className="mt-3 bg-background font-mono text-xs" value={inputJson} onChange={(event) => setInputJson(event.target.value)} rows={5} /><div className="mt-3 flex justify-end"><Button onClick={() => { try { props.onSubmitInput(JSON.parse(inputJson)); } catch { /* Retain the entered JSON for correction. */ } }}>提交</Button></div></section> : null}
+                  {status === 'waiting_approval' && props.onDecideApproval ? <section className="rounded-lg border border-orange-200 bg-orange-50 p-4"><p className="font-semibold">人工审批</p><Textarea className="mt-3 bg-background" value={decisionNote} onChange={(event) => setDecisionNote(event.target.value)} placeholder="审批备注（可选）" rows={2} /><div className="mt-3 flex justify-end gap-2"><Button variant="outline" onClick={() => props.onDecideApproval?.(false, decisionNote)}>拒绝</Button><Button onClick={() => props.onDecideApproval?.(true, decisionNote)}>通过</Button></div></section> : null}
+                  {status === 'waiting_input' && props.onSubmitInput ? <section className="rounded-lg border border-orange-200 bg-orange-50 p-4"><p className="font-semibold">补充输入</p><Textarea className="mt-3 bg-background font-mono text-xs" value={inputJson} onChange={(event) => setInputJson(event.target.value)} rows={5} /><div className="mt-3 flex justify-end"><Button onClick={() => { try { props.onSubmitInput?.(JSON.parse(inputJson)); } catch { /* Retain the entered JSON for correction. */ } }}>提交</Button></div></section> : null}
                   <ExecutionTimeline items={timeline} />
                 </div>
             ) : null}
 
-            {view === 'completed' ? <div className="space-y-5"><section className="rounded-xl border border-slate-200 bg-background p-5"><p className="text-sm font-semibold text-orange-600">当前运行</p><strong className="mt-1 block text-lg">{activeRunId ?? '本次试运行'}</strong><dl className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">状态</dt><dd className="mt-1 font-semibold text-emerald-700">已完成</dd></div><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">当前版本号</dt><dd className="mt-1 font-semibold">{workflowVersionLabel}</dd></div><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">开始时间</dt><dd className="mt-1 font-semibold">{formatTime(startedAt)}</dd></div></dl></section><div className="flex gap-6 border-b border-slate-200"><button type="button" onClick={() => setTab('artifact')} className={`border-b-2 px-1 py-3 text-sm font-medium ${tab === 'artifact' ? 'border-orange-500 text-orange-600' : 'border-transparent text-slate-500'}`}>产物</button><button type="button" onClick={() => setTab('process')} className={`border-b-2 px-1 py-3 text-sm font-medium ${tab === 'process' ? 'border-orange-500 text-orange-600' : 'border-transparent text-slate-500'}`}>执行过程</button></div>{tab === 'artifact' ? <ArtifactList artifacts={artifacts} /> : <ExecutionTimeline items={timeline} />}</div> : null}
+            {view === 'completed' ? <div className="space-y-5"><section className="rounded-xl border border-slate-200 bg-background p-5"><p className="text-sm font-semibold text-orange-600">当前运行</p><strong className="mt-1 block text-lg">{activeRunId ?? runLabel}</strong><dl className="mt-5 grid grid-cols-2 gap-3"><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">状态</dt><dd className="mt-1 font-semibold text-emerald-700">已完成</dd></div><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">当前版本号</dt><dd className="mt-1 font-semibold">{workflowVersionLabel}</dd></div><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">开始时间</dt><dd className="mt-1 font-semibold">{formatTime(startedAt)}</dd></div></dl></section><div className="flex gap-6 border-b border-slate-200"><button type="button" onClick={() => setTab('artifact')} className={`border-b-2 px-1 py-3 text-sm font-medium ${tab === 'artifact' ? 'border-orange-500 text-orange-600' : 'border-transparent text-slate-500'}`}>产物</button><button type="button" onClick={() => setTab('process')} className={`border-b-2 px-1 py-3 text-sm font-medium ${tab === 'process' ? 'border-orange-500 text-orange-600' : 'border-transparent text-slate-500'}`}>执行过程</button></div>{tab === 'artifact' ? <ArtifactList artifacts={artifacts} /> : <ExecutionTimeline items={timeline} />}</div> : null}
 
-            {view === 'failed' ? <section className="rounded-xl border border-red-200 bg-background p-6"><div className="flex items-center gap-3 text-red-600"><AlertCircle className="h-6 w-6" /><h3 className="text-lg font-semibold">运行失败</h3></div><dl className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">当前版本号</dt><dd className="mt-1 font-semibold text-slate-900">{workflowVersionLabel}</dd></div><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">运行编号</dt><dd className="mt-1 truncate font-semibold text-slate-900" title={activeRunId ?? undefined}>{activeRunId ?? '-'}</dd></div></dl><p className="mt-4 break-words text-sm text-muted-foreground">{props.launchError ?? props.executionState?.error ?? props.run?.error ?? '试运行失败，请稍后重试。'}</p>{timeline.length > 0 ? <div className="mt-5"><ExecutionTimeline items={timeline} /></div> : null}</section> : null}
-            {view === 'cancelled' ? <section className="rounded-xl border border-slate-200 bg-background p-6"><div className="flex items-center gap-3"><XCircle className="h-6 w-6 text-slate-500" /><h3 className="text-lg font-semibold">已取消</h3></div><p className="mt-3 text-sm text-muted-foreground">本次试运行已取消。</p></section> : null}
+            {view === 'failed' ? <section className="rounded-xl border border-red-200 bg-background p-6"><div className="flex items-center gap-3 text-red-600"><AlertCircle className="h-6 w-6" /><h3 className="text-lg font-semibold">运行失败</h3></div><dl className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">当前版本号</dt><dd className="mt-1 font-semibold text-slate-900">{workflowVersionLabel}</dd></div><div className="rounded-lg border border-slate-200 bg-slate-50 p-3"><dt className="text-sm text-slate-500">运行编号</dt><dd className="mt-1 truncate font-semibold text-slate-900" title={activeRunId ?? undefined}>{activeRunId ?? '-'}</dd></div></dl><p className="mt-4 break-words text-sm text-muted-foreground">{props.launchError ?? props.executionState?.error ?? props.run?.error ?? (isDetail ? '无法读取运行详情，请稍后重试。' : '试运行失败，请稍后重试。')}</p>{timeline.length > 0 ? <div className="mt-5"><ExecutionTimeline items={timeline} /></div> : null}</section> : null}
+            {view === 'cancelled' ? <section className="rounded-xl border border-slate-200 bg-background p-6"><div className="flex items-center gap-3"><XCircle className="h-6 w-6 text-slate-500" /><h3 className="text-lg font-semibold">已取消</h3></div><p className="mt-3 text-sm text-muted-foreground">{runLabel}已取消。</p></section> : null}
           </div>
         </SheetContent>
       </Sheet>

@@ -3,17 +3,17 @@ import { WORKFLOW_PACKET_VERSION } from './workflow-packet';
 import { WORKFLOW_PACKET_ARTIFACTS_KEY, type UpstreamWorkflowArtifact } from './input-resolver';
 
 /** Builds the client-owned prompt. Cloud compiled prompts are deliberately ignored. */
-export function buildWorkflowNodePrompt(spec: AgentRunSpec, node: any, ctx: RunCtx): string {
+export function buildWorkflowNodePrompt(
+  spec: AgentRunSpec,
+  node: any,
+  ctx: RunCtx,
+  options: { execEngine?: 'claude' | 'openclaw'; attempt?: number } = {},
+): string {
   if (node?.type === 'agent_data_fetch') {
-    return buildDataFetchPrompt(spec, node, ctx);
+    return buildDataFetchPrompt(spec, node, ctx, options);
   }
 
-  // spec is the normalized runtime contract.  It may deliberately tighten a
-  // legacy `{ type: 'object' }` node configuration (for example HTML output).
   const schema = spec.completionContract?.dataJsonSchema ?? node?.config?.outputContract?.schema ?? spec.completionContract?.outputJsonSchema ?? { type: 'object' };
-  const htmlArtifactOutput = node?.type === 'agent_output'
-    && Array.isArray(schema?.required)
-    && schema.required.includes('html');
   const ports = Array.isArray(node?.config?.branches)
     ? node.config.branches.map((branch: any) => branch?.branchKey ?? branch?.key).filter(Boolean)
     : [];
@@ -24,45 +24,31 @@ export function buildWorkflowNodePrompt(spec: AgentRunSpec, node: any, ctx: RunC
     producer: { runId: ctx.runId, nodeId: 'runtime-input', nodeType: 'input', attempt: 0 },
     payload: inputPayload, artifacts: inputArtifacts, control: { selectedPort: null }, diagnostics: { warnings: [], errors: [] },
   };
-  const resultTemplate = {
-    protocolVersion: WORKFLOW_PACKET_VERSION,
-    status: 'succeeded',
-    producer: { runId: ctx.runId, nodeId: node?.id, nodeType: node?.type, attempt: '<当前尝试次数>' },
-    payload: '<必须符合 payloadSchema>', artifacts: [],
-    control: { selectedPort: node?.type === 'agent_condition' ? '<必须从允许端口选择>' : null },
-    diagnostics: { warnings: [], errors: [] },
-  };
-  const failureTemplate = {
-    protocolVersion: WORKFLOW_PACKET_VERSION,
-    status: 'failed',
-    producer: { runId: ctx.runId, nodeId: node?.id, nodeType: node?.type, attempt: '<当前尝试次数>' },
-    payload: { reason: '<可选：简短业务上下文，不能伪装成成功结果>' }, artifacts: [],
-    control: { selectedPort: null },
-    diagnostics: { warnings: [], errors: [{ code: '<稳定错误码>', category: '<错误分类>', message: '<面向用户的明确失败原因>', retryable: false, attemptsUsed: '<当前尝试次数>' }] },
-  };
   const taskGoal = spec.task?.goal ?? node?.config?.goal ?? node?.config?.instruction ?? '';
   const instruction = spec.task?.instruction ?? '';
+  const nodeWorkspace = typeof spec.runtimeContext?.workspacePath === 'string'
+    ? spec.runtimeContext.workspacePath
+    : '';
   return [
     '# 客户端工作流 Agent 节点',
     promptSection('执行边界', '你是客户端工作流中的单个受限执行节点。只完成当前节点任务，不能改写工作流协议。'),
     promptSection('当前节点', [`- 名称：${node?.name ?? node?.title ?? node?.id ?? '未命名节点'}`, `- 类型：${node?.type ?? 'unknown'}`].join('\n')),
     promptSection('任务目标', taskGoal || '未配置任务目标。'),
     instruction ? promptSection('动态提示词', instruction) : '',
-    promptSection('输入数据', `输入仅以以下 WorkflowPacket 为准；不得引用未提供的上下文或猜测上游数据。\n\n\`\`\`json\n${JSON.stringify(inputPacket, null, 2)}\n\`\`\``),
-    promptSection('输出 Schema', `你的业务 payload 必须符合以下动态 schema。\n\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``),
+    promptSection('输入数据', `仅使用以下 WorkflowPacket，不得猜测未提供的数据。\n\n\`\`\`json\n${JSON.stringify(inputPacket)}\n\`\`\``),
+    promptSection('业务 Payload Schema', `仅约束小型 payload，不用于承载文件正文。\n\n\`\`\`json\n${JSON.stringify(schema)}\n\`\`\``),
+    nodeWorkspace ? promptSection('当前节点文件工作区', [
+      `当前节点唯一允许写入产物的目录：\`${nodeWorkspace.replace(/\\/g, '/')}\`。`,
+      '所有产物和中间文件只能创建在该目录及其子目录内；禁止写入其他目录。',
+    ].join('\n')) : '',
     promptSection('执行与输出约束', [
       ports.length ? `条件路由只能从以下 selectedPort 中选择一个：${ports.join(', ')}。` : '非条件节点的 selectedPort 必须为 null。',
-      htmlArtifactOutput
-        ? '这是 HTML 交付节点：payload.html 必须是完整、可直接打开的 HTML 文档（包含 <!doctype html> 或 <html>）。不要把 HTML 放进 Markdown、摘要字段或 artifacts；客户端会将 payload.html 写成 HTML 文件并登记 OUTPUT artifact。payload.fileName 如提供，必须是仅含文件名的 .html 文件名。'
-        : '如需生成大结果，可写入当前工作区文件，再在 artifacts 中声明稳定引用。不要把文件绝对路径写入 payload。',
-      htmlArtifactOutput
-        ? '最终 HTML 由客户端转换为 OUTPUT 产物；除此之外，任何要交给下游且 UTF-8 编码超过 1024 字节的文本，都必须写入当前节点工作区的 processFiles/ 文件，并以 INTERMEDIATE artifact 引用传递。'
-        : largeTextArtifactRule(),
+      artifactFirstRule(node?.type),
+      largeTextArtifactRule(),
+      permissionRule(spec),
       failureOutputRule(),
-      'SDK 已启用 JSON Schema 结构化输出。最终回答必须直接产生该结构化结果；不要写 node-result.json，不要输出 Markdown、代码块或额外文本。',
-      'artifacts 不得包含 checksum。',
+      outputProtocolInstruction(options.execEngine, node, ctx, options.attempt),
     ].join('\n\n')),
-    promptSection('结果模板', `成功时使用成功包；任务无法完成时使用失败包。替换 payload、artifacts、selectedPort 与 attempt，禁止新增或删减根字段。\n\n成功包：\n\`\`\`json\n${JSON.stringify(resultTemplate, null, 2)}\n\`\`\`\n\n失败包：\n\`\`\`json\n${JSON.stringify(failureTemplate, null, 2)}\n\`\`\``),
   ].filter(Boolean).join('\n\n');
 }
 
@@ -71,7 +57,12 @@ export function buildWorkflowNodePrompt(spec: AgentRunSpec, node: any, ctx: RunC
  * download/audit metadata. Keep that private metadata in wf_node_run while
  * exposing one small, protocol-shaped artifact manifest to the model.
  */
-function buildDataFetchPrompt(spec: AgentRunSpec, node: any, ctx: RunCtx): string {
+function buildDataFetchPrompt(
+  spec: AgentRunSpec,
+  node: any,
+  ctx: RunCtx,
+  options: { execEngine?: 'claude' | 'openclaw'; attempt?: number },
+): string {
   const schema = spec.completionContract?.dataJsonSchema
     ?? node?.config?.outputContract?.schema
     ?? spec.completionContract?.outputJsonSchema
@@ -80,19 +71,23 @@ function buildDataFetchPrompt(spec: AgentRunSpec, node: any, ctx: RunCtx): strin
 
   const taskGoal = spec.task?.goal ?? node?.config?.goal ?? node?.config?.instruction ?? '';
   const instruction = spec.task?.instruction ?? '';
+  const nodeWorkspace = typeof spec.runtimeContext?.workspacePath === 'string' ? spec.runtimeContext.workspacePath : '';
   return [
     '# 客户端工作流智能取数节点',
     promptSection('执行边界', '你是客户端工作流的智能取数节点，只完成当前取数任务。'),
     promptSection('当前节点', [`- 名称：${node?.name ?? node?.title ?? node?.id ?? '未命名节点'}`, `- 类型：${node?.type ?? 'agent_data_fetch'}`].join('\n')),
     promptSection('任务目标', taskGoal || '未配置取数目标。'),
     instruction ? promptSection('动态提示词', instruction) : '',
-    promptSection('输入数据', `只使用以下 WorkflowPacket 输入；不得猜测或引用未提供的数据。\n\n\`\`\`json\n${JSON.stringify(inputPacket, null, 2)}\n\`\`\``),
-    promptSection('输出 Schema', `payload 必须符合此 schema。\n\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``),
+    promptSection('输入数据', `只使用以下 WorkflowPacket 输入；不得猜测未提供的数据。\n\n\`\`\`json\n${JSON.stringify(inputPacket)}\n\`\`\``),
+    promptSection('业务 Payload Schema', `仅约束小型 payload。\n\n\`\`\`json\n${JSON.stringify(schema)}\n\`\`\``),
+    nodeWorkspace ? promptSection('当前节点文件工作区', `所有产物和中间文件只能创建在 \`${nodeWorkspace.replace(/\\/g, '/')}\` 及其子目录内；禁止写入其他目录。`) : '',
     promptSection('执行与输出约束', [
       '输入文件只能通过 artifacts[].resourceId 读取；它是当前节点工作目录下的相对路径。不得使用、输出或臆造绝对路径、file:// 路径、OSS 地址或临时下载链接。',
+      artifactFirstRule(node?.type),
       largeTextArtifactRule(),
+      permissionRule(spec),
       failureOutputRule(),
-      'SDK 已强制结果 schema。最终只返回符合 WorkflowPacket 的 JSON，不要 Markdown、代码块、解释性文字或 node-result.json。',
+      outputProtocolInstruction(options.execEngine, node, ctx, options.attempt),
     ].join('\n\n')),
   ].filter(Boolean).join('\n\n');
 }
@@ -102,11 +97,39 @@ function promptSection(title: string, content: string): string {
 }
 
 function largeTextArtifactRule(): string {
-  return '大文本传递规则：任何要交给下游、UTF-8 编码超过 1024 字节的文本，不得内联在 payload。必须写入当前节点工作区的 processFiles/ 文件（JSON 用 .json，其它文本用 .txt），并在 artifacts 中声明 kind=INTERMEDIATE、artifactId、name、contentType 与相对 resourceId；payload 只保留简短摘要和该 artifactId。';
+  return '任一要交付的字符串超过 1024 UTF-8 字节时必须写入文件并声明 artifact；payload 只保留小型结构化数据或摘要。';
 }
 
 function failureOutputRule(): string {
-  return '失败输出规则：如果当前任务明确无法完成，必须返回 status="failed" 的完整 WorkflowPacket，失败原因必须写入 diagnostics.errors[0].message。不得把 result="failed"、reason 或错误文字仅放在 payload 后仍返回 status="succeeded"。技能不存在、权限不足、必需参数/数据不可用且无法继续属于确定性失败，retryable 必须为 false；仅网络抖动、上游服务暂不可用等瞬态问题才可设为 true。失败包的 selectedPort 必须为 null，失败不会传给下游节点。';
+  return '任务无法完成时返回 status="failed"，在 diagnostics.errors 写明 code、category、message、retryable；确定性失败不得标为 retryable，selectedPort 必须为 null。';
+}
+
+function permissionRule(spec: AgentRunSpec): string {
+  return spec.permissionPolicy?.mode === 'readonly'
+    ? '当前节点为只读模式。不得尝试绕过权限；如果任务明确要求文件产物，返回不可重试的权限失败包。'
+    : '';
+}
+
+function artifactFirstRule(nodeType?: string): string {
+  const defaultKind = nodeType === 'agent_output' ? 'OUTPUT' : 'INTERMEDIATE';
+  return `产物格式由任务要求和内容决定，可生成零个、一个或多个任意格式文件。先在节点工作区写文件，再在 artifacts 中声明 {resourceId, kind?, name?, contentType?}；resourceId 必须是相对路径，kind 默认 ${defaultKind}。不要填写 artifactId、uri、size、checksum，不要把文件正文或绝对路径放入 payload、diagnostics 或最终文本。`;
+}
+
+function outputProtocolInstruction(execEngine: 'claude' | 'openclaw' | undefined, node: any, ctx: RunCtx, attempt?: number): string {
+  const producer = { runId: ctx.runId, nodeId: node?.id, nodeType: node?.type, attempt: Math.max(1, Math.floor(attempt ?? 1)) };
+  const successTemplate = JSON.stringify({
+    protocolVersion: WORKFLOW_PACKET_VERSION,
+    status: 'succeeded',
+    producer,
+    payload: {},
+    artifacts: [],
+    control: { selectedPort: node?.type === 'agent_condition' ? '<允许端口>' : null },
+    diagnostics: { warnings: [], errors: [] },
+  });
+  if (execEngine === 'openclaw') {
+    return `OpenClaw 最终文本只能是一个完整 WorkflowPacket JSON，不要附加 Markdown 或解释。成功结构：${successTemplate}`;
+  }
+  return `调用 StructuredOutput，唯一参数 payload 是紧凑 JSON 字符串，其完整值必须是 WorkflowPacket；不要输出额外文本。成功结构：${successTemplate}`;
 }
 
 function createDataFetchInputPacket(ctx: RunCtx): Record<string, unknown> {
@@ -139,8 +162,14 @@ function splitWorkflowInput(value: unknown): { payload: Record<string, unknown>;
 function toUpstreamArtifacts(value: unknown): Array<Record<string, unknown>> {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry: unknown) => {
-    const artifact = (entry as UpstreamWorkflowArtifact | undefined)?.artifact;
-    return artifact ? [{ ...artifact }] : [];
+    const upstream = entry as UpstreamWorkflowArtifact | undefined;
+    const artifact = upstream?.artifact;
+    return artifact ? [{
+      ...artifact,
+      // Agents read from the consumer workspace, while the carried canonical
+      // reference continues to point at the producer workspace.
+      resourceId: upstream?.mountedResourceId ?? artifact.resourceId,
+    }] : [];
   });
 }
 

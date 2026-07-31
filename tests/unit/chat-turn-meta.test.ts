@@ -26,7 +26,7 @@ describe('chat-turn-meta', () => {
     expect(findLastUserMessageIndex(messages)).toBe(0);
   });
 
-  it('treats active workflow run as incomplete turn', () => {
+  it('ignores legacy workflow card blocks when determining turn completion', () => {
     expect(
       isCurrentUserTurnIncomplete({
         sessionMessages: [userMsg, assistantMsg],
@@ -35,7 +35,7 @@ describe('chat-turn-meta', () => {
         workflowCardStates: { run_abc: { status: 'pending' } },
         hasPendingWorkflowSchema: false,
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('treats terminal workflow run as complete turn', () => {
@@ -68,7 +68,7 @@ describe('chat-turn-meta', () => {
     const user3: RawMessage = { id: 'u3', role: 'user', content: 'more' };
     const messages = [userMsg, assistantMsg, user2, assistant2, user3];
 
-    expect(isLastAssistantInUserTurn(assistantMsg, messages)).toBe(true);
+    expect(isLastAssistantInUserTurn(assistantMsg, messages)).toBe(false);
     expect(isLastAssistantInUserTurn(assistant2, messages)).toBe(true);
     expect(isMessageInCurrentUserTurn(assistantMsg, messages)).toBe(false);
     expect(isMessageInCurrentUserTurn(assistant2, messages)).toBe(false);

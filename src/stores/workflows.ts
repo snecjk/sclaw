@@ -5,7 +5,6 @@
 import { create } from 'zustand';
 import { listWorkflowTemplates, getWorkflowStoToken, searchWorkflowTemplates } from '@/lib/workflow-api';
 import { useAuthStore } from '@/stores/auth';
-import { useChatStore } from '@/stores/chat';
 import type { WorkflowTemplateSearchItem } from '@/types/workflow';
 
 export interface LoadTemplatesOptions {
@@ -34,7 +33,6 @@ const PICKER_PAGE_SIZE = 20;
 let prefetchInFlight: Promise<void> | null = null;
 let loadInFlight: Promise<void> | null = null;
 
-const MAX_CONCURRENT_WORKFLOWS = 5;
 
 export function mergeWorkflowTemplateItems(
   ...groups: Array<WorkflowTemplateSearchItem[] | undefined | null>
@@ -141,12 +139,7 @@ export const useWorkflowsStore = create<WorkflowsState>((set, get) => ({
   },
 }));
 
-/** Check if a new workflow can be started (concurrency limit) */
+/** Runtime scheduling owns concurrency; chat no longer mirrors active card state. */
 export function canStartWorkflow(): boolean {
-  // Count active executions from chat store
-  const { workflowCardStates } = useChatStore.getState();
-  const activeCount = Object.values(workflowCardStates).filter(
-    (s) => s.status === 'pending' || s.status === 'running',
-  ).length;
-  return activeCount < MAX_CONCURRENT_WORKFLOWS;
+  return true;
 }

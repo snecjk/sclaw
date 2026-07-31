@@ -120,6 +120,41 @@ describe('plugin installer diagnostics', () => {
     }
   });
 
+  it('prefers the checked-out workflow extension over an equal-version bundled copy in development', async () => {
+    const localManifestSuffix = 'sto-plugin/openclaw/sto-workflow-tool/openclaw.plugin.json';
+    mockExistsSync.mockImplementation((input: string) => (
+      String(input).replace(/\\/g, '/').endsWith(localManifestSuffix)
+    ));
+
+    const { resolveStoWorkflowToolDevSyncSource } = await import('@electron/utils/plugin-install');
+
+    expect(
+      resolveStoWorkflowToolDevSyncSource(['/bundle/sto-workflow-tool'])?.replace(/\\/g, '/'),
+    ).toBe(`${process.cwd().replace(/\\/g, '/')}/sto-plugin/openclaw/sto-workflow-tool`);
+  });
+
+  it('runs the workflow-specific source sync during async development startup', async () => {
+    mockApp.isPackaged = false;
+    const localRoot = `${process.cwd().replace(/\\/g, '/')}/sto-plugin/openclaw/sto-workflow-tool`;
+    const installedManifest = '/home/test/.stoclaw/openclaw/extensions/sto-workflow-tool/openclaw.plugin.json';
+    mockExistsSync.mockImplementation((input: string) => {
+      const path = String(input).replace(/\\/g, '/');
+      return path.startsWith(`${localRoot}/`) || path === installedManifest;
+    });
+
+    const { ensureAllBundledPluginsInstalledAsync } = await import('@electron/utils/plugin-install');
+    await ensureAllBundledPluginsInstalledAsync();
+
+    expect(mockCpSync.mock.calls.some(([source, target, options]) => (
+      String(source).replace(/\\/g, '/').endsWith('/sto-plugin/openclaw/sto-workflow-tool/index.ts')
+      && String(target).replace(/\\/g, '/').endsWith('/extensions/sto-workflow-tool/index.ts')
+      && options?.force === true
+    ))).toBe(true);
+    expect(mockLoggerInfo).toHaveBeenCalledWith(
+      expect.stringContaining('[plugin] Synced sto-workflow-tool dev sources'),
+    );
+  });
+
   it('returns source-missing warning when bundled mirror cannot be found', async () => {
     const { ensurePluginInstalled } = await import('@electron/utils/plugin-install');
     const result = ensurePluginInstalled('wecom', ['/bundle/wecom'], 'WeCom');

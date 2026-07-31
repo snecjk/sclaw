@@ -5,7 +5,6 @@ import { useChatStore } from '@/stores/chat';
 import { useChatSessionEngineType } from '@/hooks/use-chat-session-engine-type';
 import { ChatMessage } from './ChatMessage';
 import { resolveChatMessageSearchKey } from './chat-message-search';
-import { appendWorkflowCardBlockToMessage, sessionHasParamsConfirmedWorkflowForRun } from '@/lib/workflow-card-injection';
 import {
   collectTurnAssistantSources,
   pickAssistantReplyMessage,
@@ -34,9 +33,7 @@ import {
   extractAtMentionDisplayNames,
   extractRawMessageText,
   extractText,
-  extractWorkflowCard,
   extractParameterForm,
-  findLatestWorkflowCardInMessages,
   isWorkflowPreambleAssistantMessage,
 } from './message-utils';
 import { DingTalkSentPreview } from './DingTalkSentPreview';
@@ -287,7 +284,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     if (pendingWorkflow !== null) return 'connectingModel';
     const hasWorkflowInTurn = turnMessages.some((msg) => {
       if (msg.role !== 'assistant') return false;
-      return extractWorkflowCard(msg) !== null || extractParameterForm(msg, pendingWorkflow) !== null;
+      return extractParameterForm(msg, pendingWorkflow) !== null;
     });
     return hasWorkflowInTurn ? 'connectingModel' : 'understandingQuestion';
   }, [turnMessages, pendingWorkflow]);
@@ -447,24 +444,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     ? extractText(replyDisplayMessage).trim().length > 0
     : false;
 
-  const chatDisplayMessage = useMemo(() => {
-    if (!replyDisplayMessage) return null;
-    if (extractWorkflowCard(replyDisplayMessage)) return replyDisplayMessage;
-    const card = findLatestWorkflowCardInMessages(turnMessages);
-    if (!card) return replyDisplayMessage;
-    if (sessionHasParamsConfirmedWorkflowForRun(sessionMessages, card.runId)) {
-      return replyDisplayMessage;
-    }
-    return appendWorkflowCardBlockToMessage(
-      replyDisplayMessage,
-      card.runId,
-      card.templateName,
-    );
-  }, [replyDisplayMessage, turnMessages, sessionMessages]);
-
-  const chatDisplayHasWorkflowCard = !!(
-    chatDisplayMessage && extractWorkflowCard(chatDisplayMessage)
-  );
+  const chatDisplayMessage = replyDisplayMessage;
+  const chatDisplayHasWorkflowCard = false;
 
   const replyTimestamp = useMemo(() => {
     if (chatDisplayMessage?.timestamp != null) return chatDisplayMessage.timestamp;

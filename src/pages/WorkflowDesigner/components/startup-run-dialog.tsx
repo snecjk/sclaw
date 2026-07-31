@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import type { WorkflowSchema, WorkflowSchemaField } from '@/types/workflow';
 import { invokeIpc } from '@/lib/api-client';
+import { getAgentEngineDisplayName } from '@/lib/agent-engine-display-name';
 import type { RuntimeUploadNode } from '@/pages/WorkflowDesigner/hooks/use-designer-try-run';
 
 interface StartupRunDialogProps {
@@ -20,7 +21,7 @@ interface StartupRunDialogProps {
   defaultValues?: Record<string, unknown>;
   runtimeUploadNodes?: RuntimeUploadNode[];
   isStarting: boolean;
-  onConfirm: (inputs: Record<string, unknown>) => void;
+  onConfirm: (inputs: Record<string, unknown>, engineType: 'claude' | 'openclaw') => void;
   onClose: () => void;
 }
 
@@ -148,6 +149,8 @@ export function StartupRunDialog({
   const groups = useMemo(() => groupFields(schema, fields), [fields, schema]);
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [error, setError] = useState('');
+  const [engineType, setEngineType] = useState<'claude' | 'openclaw'>('claude');
+  const [isOpenClawReady, setIsOpenClawReady] = useState<boolean | null>(null);
   const [runtimeFiles, setRuntimeFiles] = useState<Record<string, Array<{ name?: string; filePath: string; uri: string; kind: string; fileId: string }>>>({});
   const activeSchemaIdRef = useRef<string | null>(null);
 
@@ -167,6 +170,11 @@ export function StartupRunDialog({
     setRuntimeFiles({});
     setError('');
   }, [open, defaultValues, fields, schema?.nodeId]);
+
+  useEffect(() => {
+    if (!open) return;
+    void invokeIpc<boolean>('openclaw:isReady').then(setIsOpenClawReady).catch(() => setIsOpenClawReady(false));
+  }, [open]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -212,7 +220,7 @@ export function StartupRunDialog({
     }
     if (runtimeUploadNodes.length) inputs.__workflowRuntimeUploads = runtimeFiles;
     setError('');
-    onConfirm(inputs);
+    onConfirm(inputs, engineType);
   };
 
   const stepCount = groups.length + (runtimeUploadNodes.length ? 1 : 0);
@@ -221,6 +229,12 @@ export function StartupRunDialog({
       <section role="dialog" aria-modal="true" aria-labelledby="startup-run-title" className="grid max-h-[calc(100dvh-48px)] w-full max-w-[820px] grid-rows-[auto_minmax(0,1fr)_auto] gap-[18px] overflow-hidden rounded-[20px] border border-slate-200 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(252,249,244,0.96))] p-6 shadow-[0_20px_48px_rgb(15_23_42_/_12%)]">
         <header className="shrink-0">
           <h2 id="startup-run-title" className="text-xl font-semibold text-foreground">启动配置确认</h2>
+          <label className="mt-4 flex items-center gap-2 text-sm font-medium">运行引擎
+            <select value={engineType} onChange={(event) => setEngineType(event.target.value as 'claude' | 'openclaw')} disabled={isStarting} className="h-9 rounded-md border border-input bg-background px-2">
+              <option value="claude">{getAgentEngineDisplayName('claude')}</option>
+              <option value="openclaw" disabled={isOpenClawReady === false}>{isOpenClawReady === false ? `${getAgentEngineDisplayName('openclaw')}（网关未就绪）` : getAgentEngineDisplayName('openclaw')}</option>
+            </select>
+          </label>
         </header>
 
         <div className="min-h-0 overflow-y-auto pr-2">
