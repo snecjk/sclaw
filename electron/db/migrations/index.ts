@@ -7,6 +7,7 @@ import channelPlaneMigration from './0010-channel-plane';
 import scheduleTasksMigration from './0011-schedule-tasks';
 import artifactSaveRecordsMigration from './0012-artifact-save-records';
 import workflowRuntimeSchemaMigration from './0013-workflow-runtime-schema';
+import artifactSaveRecordsFallbackMigration from './0021-artifact-save-records-fallback';
 
 // Keep migrations as explicit imports so Electron/Vite bundling can retain them
 // reliably in both dev and packaged builds.
@@ -20,4 +21,5 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
   scheduleTasksMigration,
   artifactSaveRecordsMigration,
   workflowRuntimeSchemaMigration,
+  artifactSaveRecordsFallbackMigration,
 ].sort((left, right) => left.version - right.version);
