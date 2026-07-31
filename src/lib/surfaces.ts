@@ -1387,7 +1387,7 @@ export const sidebarBodyTextClass = 'text-[13px] font-normal leading-5';
 /** 侧栏正文 13/20 Medium — 仅设计稿明确标注 font_8:34896 的场景（当前侧栏默认不用，保留供后续态） */
 export const sidebarBodyTextMediumClass = 'text-[13px] font-medium leading-5';
 
-/** 一级正文色 Grey-10 #1D2129 — MCP paint_4:0441「文字/文本-默认」 */
+/** 侧栏一级正文色：浅色 #393E47；暗色由 --sto-sidebar-text-default 切换为 #E5E6EB */
 export const sidebarTextDefaultClass = 'text-[var(--sto-sidebar-text-default)]';
 
 /** 行内图标色 Grey-9 #4E5969 — MCP paint_4:0490「文字/文本-浅色-二级信息」 */
@@ -1460,17 +1460,17 @@ export const sidebarScrollContainerClass = cn(
 /** 侧栏中部 Overlay 定位壳（不滚动）；复用共享 host 契约 */
 export const sidebarScrollOverlayHostClass = stoOverlayScrollHostClass;
 
-/** 展开侧栏主导航 idle — 正文 Grey-10 + 图标 Grey-9；行高 28px（h-7） */
+/** 展开侧栏主导航 idle — 正文 Grey-10 + 图标 Grey-9；行高 32px（h-8） */
 export const sidebarNavExpandedIdleClass = cn(
-  'h-7 min-h-7 rounded-[8px] px-[10px] font-normal leading-5',
+  'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5',
   sidebarTextDefaultClass,
   '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
-/** 展开侧栏主导航 active — 底 #DCDCDC + Regular（选中仅靠底色，字重与 idle 一致）；行高 28px（h-7） */
+/** 展开侧栏主导航 active — 底 #DCDCDC + Regular（选中仅靠底色，字重与 idle 一致）；行高 32px（h-8） */
 export const sidebarNavExpandedActiveClass = cn(
-  'h-7 min-h-7 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
+  'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
   'bg-[var(--sto-sidebar-nav-active-bg)]',
   sidebarTextDefaultClass,
   '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
@@ -1513,7 +1513,7 @@ export const sidebarFooterMetaClass =
  * hover/open：rgba(0,0,0,0.1) + rounded 4px；dark 用 white/10；问号独立不在此热区内
  */
 export const sidebarAccountHotzoneTriggerClass = cn(
-  'flex min-w-0 flex-1 flex-col gap-0.5 rounded-[4px] px-2.5 py-2 text-left transition-colors',
+  'flex h-[46px] min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-[4px] px-2.5 py-1 text-left transition-colors',
   'hover:bg-black/10 data-[state=open]:bg-black/10',
   'dark:hover:bg-white/10 dark:data-[state=open]:bg-white/10',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sto-sidebar-bg)]',

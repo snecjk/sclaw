@@ -1194,16 +1194,16 @@ toast.error(toUserMessage(err));
 
 > 来源：MasterGo「调整标题颜色+任务icon」6 帧交互稿；MCP `paint_4:0441` / `0490` / `0520`。
 > **实现**：CSS 变量 `globals.css` → surface class `src/lib/surfaces.ts` → `Sidebar.tsx` / `sidebar-brand-header.tsx`。
-> **禁止**侧栏业务代码裸写 `#86909C` / `#4E5969` / `#1D2129` 等 hex。
+> **禁止**侧栏业务代码裸写 `#86909C` / `#4E5969` / `#393E47` / `#1D2129` 等 hex。
 
 ### MCP → Token 映射
 
 | 层级 | MasterGo Token | Hex | Grey | CSS Variable | Surface Class |
 | --- | --- | --- | --- | --- | --- |
-| 一级正文（主导航 / 任务组 / 子项 / 最近） | 文字/文本-默认 | `#1D2129` | Grey-10 | `--sto-sidebar-text-default` | `sidebarTextDefaultClass` / `sidebarListItemTextClass` |
+| 一级正文（主导航 / 数据中心二级 / 项目 / 任务 / 最近） | 侧栏正文 | `#393E47`（暗色 `#E5E6EB`） | — | `--sto-sidebar-text-default` | `sidebarTextDefaultClass` / `sidebarListItemTextClass` |
 | 行内图标（主导航 / 任务清单 / 设置） | 文字/文本-浅色-二级信息 | `#4E5969` | Grey-9 | `--sto-sidebar-text-icon` | `sidebarTextIconClass` |
 | 分区标题 / 版本号 / chevron 默认 | 文字/文本-更浅-三级信息 | `#86909C` | Grey-8 | `--sto-sidebar-text-section` | `sidebarSectionLabelClass` / `sidebarBrandVersionClass` |
-| 分区标题 hover | 文字/文本-默认（字重不变） | `#1D2129` | Grey-10 | 同上 | `group-hover` → default，**仍 Regular 400** |
+| 分区标题 hover | 侧栏正文（字重不变） | `#393E47`（暗色 `#E5E6EB`） | — | 同上 | `group-hover` → default，**仍 Regular 400** |
 | 主导航选中 / 分区 hover 底 | — | `#EAEAED` | — | `--sto-sidebar-row-hover-bg` | `sidebarNavExpandedActiveClass` / section toggle hover / 任务组行 hover |
 | 最近运行中 spinner | — | `#5F9274` | — | `--sto-sidebar-running-spinner` | `sidebarRunningSpinnerClass` |
 | 未读红点 | destructive | `#FA3C3C` | — | `bg-destructive` | `sidebarUnreadDotClass`（**6×6px**） |
@@ -1234,7 +1234,7 @@ toast.error(toUserMessage(err));
 
 | 场景 | 视觉规范 |
 | --- | --- |
-| 侧栏选中项（主导航） | 底 `#EAEAED` + 正文 `#1D2129` **Regular**（见 §侧栏文字色） |
+| 侧栏选中项（主导航） | 底 `#EAEAED` + 正文 `#393E47` **Regular**（暗色走对应 token，见 §侧栏文字色） |
 | 任务组 | `ClipboardList` h-4 + 手风琴（默认全收起，同时仅一组展开）+ 组级 chevron |
 | 最近会话状态 | 运行 `#5F9274` spinner > 失败 destructive 图标 > 未读 6px 红点；折叠图标列同规则 |
 | 侧栏折叠按钮 | 左上角，面板/汉堡图标 |
