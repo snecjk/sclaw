@@ -771,7 +771,7 @@ export function Sidebar() {
   const [recentOpen, setRecentOpen] = useState(true);
   const [projectsSectionOpen, setProjectsSectionOpen] = useState(true);
   const [workspaceSectionOpen, setWorkspaceSectionOpen] = useState(true);
-  const [dataCenterSectionOpen, setDataCenterSectionOpen] = useState(true);
+  const [dataCenterSectionOpen, setDataCenterSectionOpen] = useState(false);
   const [bucketOpen, setBucketOpen] = useState<Record<SessionBucketKey, boolean>>({
     today: true,
     yesterday: true,
