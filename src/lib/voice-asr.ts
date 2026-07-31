@@ -36,10 +36,23 @@ export interface VoiceSttModel {
 export interface VoiceModelsResponse {
   defaultSttModelId: string;
   asrWsPath: string;
+  /** Apollo ``voice.default.stt.idle.second``；未配置时不下发，客户端兜底 5s */
+  transcriptIdleSeconds?: number;
   models: {
     stt: VoiceSttModel[];
     tts: VoiceSttModel[];
   };
+}
+
+/** 转写业务空闲默认秒数（Apollo 未配置时） */
+export const DEFAULT_TRANSCRIPT_IDLE_SECONDS = 5;
+
+/** 将目录里的空闲秒数解析为毫秒；非法/缺失 → 本地兜底 5s */
+export function resolveTranscriptIdleMs(seconds?: number | null): number {
+  if (typeof seconds === 'number' && Number.isFinite(seconds) && seconds > 0) {
+    return Math.round(seconds * 1000);
+  }
+  return DEFAULT_TRANSCRIPT_IDLE_SECONDS * 1000;
 }
 
 const MEMORY_CENTER_BASE: Record<SsoEnvironment, string> = {

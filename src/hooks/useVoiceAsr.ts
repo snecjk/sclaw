@@ -6,17 +6,16 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   buildVoiceAsrWsUrl,
+  DEFAULT_TRANSCRIPT_IDLE_SECONDS,
   fetchVoiceModels,
   resolveMemoryCenterHttpBase,
+  resolveTranscriptIdleMs,
   VoiceAsrSession,
   type VoiceAsrServerEvent,
 } from '@/lib/voice-asr';
 import { useAuthStore } from '@/stores/auth';
 
 export type VoiceAsrStatus = 'idle' | 'connecting' | 'recording' | 'stopping';
-
-/** 转写文字连续无更新多久后，主动收尾进入确认（仅当已有非空内容） */
-const TRANSCRIPT_IDLE_MS = 5000;
 
 export interface UseVoiceAsrOptions {
   /** 每次收到 partial / final 时回调（可用于预览） */
@@ -26,7 +25,7 @@ export interface UseVoiceAsrOptions {
   /**
    * 收到一句 ASR final 后自动结束本轮录音并回调完整文本。
    * 若设置，则不会在 stop 时再走 onCommitText（由上层负责写入）。
-   * 另：有非空转写且连续 TRANSCRIPT_IDLE_MS 无文字更新时，也会走此回调。
+   * 另：有非空转写且连续空闲（Apollo transcriptIdleSeconds，默认 5s）无文字更新时，也会走此回调。
    */
   onUtteranceFinal?: (text: string) => void;
   disabled?: boolean;
@@ -51,7 +50,9 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
   const partialRef = useRef('');
   const endingUtteranceRef = useRef(false);
   const idleTimerRef = useRef<number | null>(null);
-  /** 上次用于空闲判定的合并文案；内容变化才重置 5s 计时 */
+  /** Apollo 下发的空闲毫秒；未配置时用本地兜底 */
+  const transcriptIdleMsRef = useRef(DEFAULT_TRANSCRIPT_IDLE_SECONDS * 1000);
+  /** 上次用于空闲判定的合并文案；内容变化才重置空闲计时 */
   const lastIdleTextRef = useRef('');
   const onTranscriptRef = useRef(onTranscript);
   const onCommitTextRef = useRef(onCommitText);
@@ -85,7 +86,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
     setFinalsText('');
   }, []);
 
-  /** 有非空转写且文案有变化时，重启 5s 空闲计时；空内容保持持续听 */
+  /** 有非空转写且文案有变化时，重启空闲计时；空内容保持持续听 */
   const syncTranscriptIdleTimer = useCallback(() => {
     if (!onUtteranceFinalRef.current) {
       clearIdleTimer();
@@ -102,6 +103,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
     }
     lastIdleTextRef.current = text;
     clearIdleTimer();
+    const idleMs = transcriptIdleMsRef.current;
     idleTimerRef.current = window.setTimeout(() => {
       idleTimerRef.current = null;
       const utteranceHandler = onUtteranceFinalRef.current;
@@ -110,7 +112,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
       if (!fullText) return;
       endingUtteranceRef.current = true;
       console.info('[voice-asr] transcript idle timeout → confirm', {
-        idleMs: TRANSCRIPT_IDLE_MS,
+        idleMs,
         textLength: fullText.length,
         textPreview: fullText.length > 80 ? `${fullText.slice(0, 80)}…` : fullText,
       });
@@ -118,7 +120,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
         await stopRef.current({ commit: false });
         utteranceHandler(fullText);
       })();
-    }, TRANSCRIPT_IDLE_MS);
+    }, idleMs);
   }, [clearIdleTimer]);
 
   // sending/disabled 变 true 时立刻停麦，避免「等待回复」UI 下 ASR 仍在转
@@ -258,15 +260,33 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
       let modelId = 'fun-asr-realtime';
       let asrWsPath = '/agent/v1/voice/asr/stream';
       let sampleRate = 16000;
+      // 目录拉取失败时仍用本地 5s 兜底
+      transcriptIdleMsRef.current = DEFAULT_TRANSCRIPT_IDLE_SECONDS * 1000;
       try {
         const catalog = await fetchVoiceModels();
         modelId = catalog.defaultSttModelId || modelId;
         asrWsPath = catalog.asrWsPath || asrWsPath;
+        transcriptIdleMsRef.current = resolveTranscriptIdleMs(catalog.transcriptIdleSeconds);
+        console.info('[voice-asr] transcript idle config', {
+          apolloSeconds: catalog.transcriptIdleSeconds ?? null,
+          resolvedIdleMs: transcriptIdleMsRef.current,
+          fallbackSeconds: DEFAULT_TRANSCRIPT_IDLE_SECONDS,
+          fromApollo: typeof catalog.transcriptIdleSeconds === 'number'
+            && Number.isFinite(catalog.transcriptIdleSeconds)
+            && catalog.transcriptIdleSeconds > 0,
+        });
         const active = catalog.models?.stt?.find((m) => m.id === modelId);
         const rate = active?.parameters?.sample_rate;
         if (typeof rate === 'number' && rate > 0) sampleRate = rate;
       } catch {
         // 模型目录失败时仍用内置默认，避免阻塞录音
+        console.info('[voice-asr] transcript idle config', {
+          apolloSeconds: null,
+          resolvedIdleMs: transcriptIdleMsRef.current,
+          fallbackSeconds: DEFAULT_TRANSCRIPT_IDLE_SECONDS,
+          fromApollo: false,
+          reason: 'voice-models-fetch-failed',
+        });
       }
 
       const httpBase = resolveMemoryCenterHttpBase(ssoEnvironment);
