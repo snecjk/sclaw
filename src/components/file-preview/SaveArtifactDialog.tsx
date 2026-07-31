@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, Check, ChevronDown, ChevronRight, FileText, Info, Loader2, X } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, ChevronRight, FileText, FolderPlus, Info, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import directoryIcon from '@/assets/icons/directory.svg';
 import { Button } from '@/components/ui/button';
 import {
+  createDataCenterFolder,
   createDataCenterIdempotencyKey,
   deleteDataCenterEntry,
   deleteDataCenterSharedEntry,
@@ -89,6 +90,9 @@ export function SaveArtifactDialog({ file, onClose, onSaved }: SaveArtifactDialo
   const [conflict, setConflict] = useState<FileNameConflict | null>(null);
   const [sharedOpen, setSharedOpen] = useState(true);
   const [mineOpen, setMineOpen] = useState(true);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [createSubmitting, setCreateSubmitting] = useState(false);
 
   const loadSharedSpace = async (): Promise<string | null> => {
     if (sharedSpaceId) return sharedSpaceId;
