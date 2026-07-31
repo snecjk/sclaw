@@ -415,7 +415,7 @@ export function ChatInput({
     rebindVoiceLoopSession,
   ]);
 
-  // 2s 短确认倒计时 → 自动发送
+  // 确认倒计时 → 自动发送
   useEffect(() => {
     if (!voiceConfirming || voiceConfirmEndsAt == null) return;
     const tick = window.setInterval(() => {

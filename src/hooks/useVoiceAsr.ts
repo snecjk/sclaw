@@ -15,6 +15,9 @@ import { useAuthStore } from '@/stores/auth';
 
 export type VoiceAsrStatus = 'idle' | 'connecting' | 'recording' | 'stopping';
 
+/** 转写文字连续无更新多久后，主动收尾进入确认（仅当已有非空内容） */
+const TRANSCRIPT_IDLE_MS = 5000;
+
 export interface UseVoiceAsrOptions {
   /** 每次收到 partial / final 时回调（可用于预览） */
   onTranscript?: (payload: { partial: string; finals: string }) => void;
@@ -23,6 +26,7 @@ export interface UseVoiceAsrOptions {
   /**
    * 收到一句 ASR final 后自动结束本轮录音并回调完整文本。
    * 若设置，则不会在 stop 时再走 onCommitText（由上层负责写入）。
+   * 另：有非空转写且连续 TRANSCRIPT_IDLE_MS 无文字更新时，也会走此回调。
    */
   onUtteranceFinal?: (text: string) => void;
   disabled?: boolean;
@@ -46,9 +50,13 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
   const finalsRef = useRef('');
   const partialRef = useRef('');
   const endingUtteranceRef = useRef(false);
+  const idleTimerRef = useRef<number | null>(null);
+  /** 上次用于空闲判定的合并文案；内容变化才重置 5s 计时 */
+  const lastIdleTextRef = useRef('');
   const onTranscriptRef = useRef(onTranscript);
   const onCommitTextRef = useRef(onCommitText);
   const onUtteranceFinalRef = useRef(onUtteranceFinal);
+  const stopRef = useRef<(stopOptions?: StopVoiceOptions) => Promise<void>>(async () => undefined);
 
   useEffect(() => {
     onTranscriptRef.current = onTranscript;
@@ -62,16 +70,61 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
     onUtteranceFinalRef.current = onUtteranceFinal;
   }, [onUtteranceFinal]);
 
+  const clearIdleTimer = useCallback(() => {
+    if (idleTimerRef.current != null) {
+      window.clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+  }, []);
+
   const resetTranscript = useCallback(() => {
     finalsRef.current = '';
     partialRef.current = '';
+    lastIdleTextRef.current = '';
     setPartialText('');
     setFinalsText('');
   }, []);
 
+  /** 有非空转写且文案有变化时，重启 5s 空闲计时；空内容保持持续听 */
+  const syncTranscriptIdleTimer = useCallback(() => {
+    if (!onUtteranceFinalRef.current) {
+      clearIdleTimer();
+      return;
+    }
+    const text = `${finalsRef.current}${partialRef.current}`.trim();
+    if (!text) {
+      lastIdleTextRef.current = '';
+      clearIdleTimer();
+      return;
+    }
+    if (text === lastIdleTextRef.current && idleTimerRef.current != null) {
+      return;
+    }
+    lastIdleTextRef.current = text;
+    clearIdleTimer();
+    idleTimerRef.current = window.setTimeout(() => {
+      idleTimerRef.current = null;
+      const utteranceHandler = onUtteranceFinalRef.current;
+      if (!utteranceHandler || endingUtteranceRef.current) return;
+      const fullText = `${finalsRef.current}${partialRef.current}`.trim();
+      if (!fullText) return;
+      endingUtteranceRef.current = true;
+      console.info('[voice-asr] transcript idle timeout → confirm', {
+        idleMs: TRANSCRIPT_IDLE_MS,
+        textLength: fullText.length,
+        textPreview: fullText.length > 80 ? `${fullText.slice(0, 80)}…` : fullText,
+      });
+      void (async () => {
+        await stopRef.current({ commit: false });
+        utteranceHandler(fullText);
+      })();
+    }, TRANSCRIPT_IDLE_MS);
+  }, [clearIdleTimer]);
+
   // sending/disabled 变 true 时立刻停麦，避免「等待回复」UI 下 ASR 仍在转
   useEffect(() => {
     if (!disabled) return;
+    clearIdleTimer();
     if (!sessionRef.current) {
       if (status !== 'idle') setStatus('idle');
       return;
@@ -86,11 +139,12 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
     } catch {
       // ignore
     }
-  }, [disabled, resetTranscript, status]);
+  }, [clearIdleTimer, disabled, resetTranscript, status]);
 
   const stop = useCallback(async (stopOptions?: StopVoiceOptions) => {
     const shouldCommit = stopOptions?.commit !== false;
     const silent = stopOptions?.silent === true;
+    clearIdleTimer();
     const session = sessionRef.current;
     if (!session) {
       setStatus('idle');
@@ -126,7 +180,9 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
     }
     resetTranscript();
     setStatus('idle');
-  }, [resetTranscript]);
+  }, [clearIdleTimer, resetTranscript]);
+
+  stopRef.current = stop;
 
   const handleEvent = useCallback((event: VoiceAsrServerEvent) => {
     if (event.type === 'partial' && typeof event.text === 'string') {
@@ -136,6 +192,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
         partial: event.text,
         finals: finalsRef.current,
       });
+      syncTranscriptIdleTimer();
       return;
     }
 
@@ -153,23 +210,33 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
       const utteranceHandler = onUtteranceFinalRef.current;
       if (utteranceHandler && !endingUtteranceRef.current) {
         endingUtteranceRef.current = true;
+        clearIdleTimer();
         const fullText = finalsRef.current;
+        console.info('[voice-asr] asr final → confirm', {
+          textLength: fullText.trim().length,
+          textPreview: fullText.trim().length > 80
+            ? `${fullText.trim().slice(0, 80)}…`
+            : fullText.trim(),
+        });
         void (async () => {
           await stop({ commit: false });
           if (fullText.trim()) {
             utteranceHandler(fullText.trim());
           }
         })();
+      } else {
+        syncTranscriptIdleTimer();
       }
       return;
     }
 
     if (event.type === 'error') {
+      clearIdleTimer();
       const message = event.message || '语音识别失败';
       setError(message);
       toast.error(message);
     }
-  }, [stop]);
+  }, [clearIdleTimer, stop, syncTranscriptIdleTimer]);
 
   const start = useCallback(async () => {
     if (disabled || sessionRef.current || endingUtteranceRef.current) return;
@@ -183,6 +250,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
 
     setError(null);
     setStatus('connecting');
+    clearIdleTimer();
     resetTranscript();
     endingUtteranceRef.current = false;
 
@@ -240,7 +308,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
       setError(tip);
       toast.error(tip);
     }
-  }, [disabled, handleEvent, resetTranscript]);
+  }, [clearIdleTimer, disabled, handleEvent, resetTranscript]);
 
   const toggle = useCallback(() => {
     if (disabled) return;
@@ -253,10 +321,11 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
 
   useEffect(() => {
     return () => {
+      clearIdleTimer();
       sessionRef.current?.stop();
       sessionRef.current = null;
     };
-  }, []);
+  }, [clearIdleTimer]);
 
   return {
     status,
