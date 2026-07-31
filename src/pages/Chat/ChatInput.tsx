@@ -343,6 +343,13 @@ export function ChatInput({
     disabled: disabled || sending || voiceAwaitingAgent,
     onCommitText: commitVoiceText,
     onUtteranceFinal: handleVoiceUtteranceFinal,
+    onSessionFailed: () => {
+      // WS/开麦失败：直接退出语音循环，避免红麦卡住只能手动点退出
+      resumeListenAfterAgentRef.current = false;
+      clearVoiceLoop();
+      cancelVoiceConfirm();
+      clearVoiceDraftText();
+    },
   });
 
   const stopVoiceInputRef = useRef(stopVoiceInput);

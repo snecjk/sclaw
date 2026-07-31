@@ -28,6 +28,11 @@ export interface UseVoiceAsrOptions {
    * 另：有非空转写且连续空闲（Apollo transcriptIdleSeconds，默认 5s）无文字更新时，也会走此回调。
    */
   onUtteranceFinal?: (text: string) => void;
+  /**
+   * WS/开麦等致命失败：已停麦回到 idle，上层应退出语音循环 UI。
+   * 正常 stop / 句末收尾不会触发。
+   */
+  onSessionFailed?: (message: string) => void;
   disabled?: boolean;
 }
 
@@ -39,7 +44,7 @@ export interface StopVoiceOptions {
 }
 
 export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
-  const { onTranscript, onCommitText, onUtteranceFinal, disabled = false } = options;
+  const { onTranscript, onCommitText, onUtteranceFinal, onSessionFailed, disabled = false } = options;
   const [status, setStatus] = useState<VoiceAsrStatus>('idle');
   const [partialText, setPartialText] = useState('');
   const [finalsText, setFinalsText] = useState('');
@@ -49,6 +54,8 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
   const finalsRef = useRef('');
   const partialRef = useRef('');
   const endingUtteranceRef = useRef(false);
+  /** 主动 stop / 句末收尾，避免 onClose 误判为异常退出 */
+  const intentionalCloseRef = useRef(false);
   const idleTimerRef = useRef<number | null>(null);
   /** Apollo 下发的空闲毫秒；未配置时用本地兜底 */
   const transcriptIdleMsRef = useRef(DEFAULT_TRANSCRIPT_IDLE_SECONDS * 1000);
@@ -57,6 +64,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
   const onTranscriptRef = useRef(onTranscript);
   const onCommitTextRef = useRef(onCommitText);
   const onUtteranceFinalRef = useRef(onUtteranceFinal);
+  const onSessionFailedRef = useRef(onSessionFailed);
   const stopRef = useRef<(stopOptions?: StopVoiceOptions) => Promise<void>>(async () => undefined);
 
   useEffect(() => {
@@ -70,6 +78,10 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
   useEffect(() => {
     onUtteranceFinalRef.current = onUtteranceFinal;
   }, [onUtteranceFinal]);
+
+  useEffect(() => {
+    onSessionFailedRef.current = onSessionFailed;
+  }, [onSessionFailed]);
 
   const clearIdleTimer = useCallback(() => {
     if (idleTimerRef.current != null) {
@@ -85,6 +97,26 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
     setPartialText('');
     setFinalsText('');
   }, []);
+
+  const failSession = useCallback((message: string) => {
+    clearIdleTimer();
+    intentionalCloseRef.current = true;
+    endingUtteranceRef.current = false;
+    const session = sessionRef.current;
+    sessionRef.current = null;
+    resetTranscript();
+    setStatus('idle');
+    setError(message);
+    if (session) {
+      try {
+        session.stop();
+      } catch {
+        // ignore
+      }
+    }
+    console.info('[voice-asr] session failed → exit voice mode', { message });
+    onSessionFailedRef.current?.(message);
+  }, [clearIdleTimer, resetTranscript]);
 
   /** 有非空转写且文案有变化时，重启空闲计时；空内容保持持续听 */
   const syncTranscriptIdleTimer = useCallback(() => {
@@ -127,6 +159,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
   useEffect(() => {
     if (!disabled) return;
     clearIdleTimer();
+    intentionalCloseRef.current = true;
     if (!sessionRef.current) {
       if (status !== 'idle') setStatus('idle');
       return;
@@ -147,6 +180,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
     const shouldCommit = stopOptions?.commit !== false;
     const silent = stopOptions?.silent === true;
     clearIdleTimer();
+    intentionalCloseRef.current = true;
     const session = sessionRef.current;
     if (!session) {
       setStatus('idle');
@@ -213,6 +247,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
       if (utteranceHandler && !endingUtteranceRef.current) {
         endingUtteranceRef.current = true;
         clearIdleTimer();
+        intentionalCloseRef.current = true;
         const fullText = finalsRef.current;
         console.info('[voice-asr] asr final → confirm', {
           textLength: fullText.trim().length,
@@ -232,12 +267,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
       return;
     }
 
-    if (event.type === 'error') {
-      clearIdleTimer();
-      const message = event.message || '语音识别失败';
-      setError(message);
-      toast.error(message);
-    }
+    // error 由 VoiceAsrSession.onError → failSession 统一处理，避免双触发
   }, [clearIdleTimer, stop, syncTranscriptIdleTimer]);
 
   const start = useCallback(async () => {
@@ -246,7 +276,9 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
     const { user, ssoEnvironment, isAuthenticated } = useAuthStore.getState();
     const token = user?.stoToken?.trim();
     if (!isAuthenticated || !token) {
-      toast.error('请先登录后再使用语音输入');
+      const tip = '请先登录后再使用语音输入';
+      toast.error(tip);
+      failSession(tip);
       return;
     }
 
@@ -255,6 +287,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
     clearIdleTimer();
     resetTranscript();
     endingUtteranceRef.current = false;
+    intentionalCloseRef.current = false;
 
     try {
       let modelId = 'fun-asr-realtime';
@@ -300,19 +333,28 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
       const session = new VoiceAsrSession({
         onEvent: handleEvent,
         onError: (message) => {
-          setError(message);
           toast.error(message);
+          failSession(message);
         },
         onClose: () => {
-          if (sessionRef.current === session) {
-            sessionRef.current = null;
-            setStatus((prev) => (prev === 'stopping' ? prev : 'idle'));
+          if (sessionRef.current !== session) return;
+          sessionRef.current = null;
+          clearIdleTimer();
+          resetTranscript();
+          const unexpected = !intentionalCloseRef.current && !endingUtteranceRef.current;
+          intentionalCloseRef.current = false;
+          setStatus((prev) => (prev === 'stopping' ? prev : 'idle'));
+          if (unexpected) {
+            const tip = '语音识别连接已断开';
+            toast.error(tip);
+            failSession(tip);
           }
         },
       });
       sessionRef.current = session;
       await session.start({ wsUrl, sampleRate });
       if (sessionRef.current !== session) {
+        intentionalCloseRef.current = true;
         await session.stopAsync();
         return;
       }
@@ -320,15 +362,14 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
     } catch (err) {
       sessionRef.current?.stop();
       sessionRef.current = null;
-      setStatus('idle');
       endingUtteranceRef.current = false;
       const message = err instanceof Error ? err.message : String(err);
       const denied = /Permission|NotAllowed|权限|denied/i.test(message);
       const tip = denied ? '无法访问麦克风，请在系统设置中允许麦克风权限' : (message || '启动语音识别失败');
-      setError(tip);
       toast.error(tip);
+      failSession(tip);
     }
-  }, [clearIdleTimer, disabled, handleEvent, resetTranscript]);
+  }, [clearIdleTimer, disabled, failSession, handleEvent, resetTranscript]);
 
   const toggle = useCallback(() => {
     if (disabled) return;
@@ -341,6 +382,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
 
   useEffect(() => {
     return () => {
+      intentionalCloseRef.current = true;
       clearIdleTimer();
       sessionRef.current?.stop();
       sessionRef.current = null;
