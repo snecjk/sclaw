@@ -124,7 +124,7 @@ export function SidebarProjectSessionRow({
           className="flex h-7 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-1 pr-12 text-left"
         >
           <span className="flex min-w-0 flex-1 items-center gap-0">
-            <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass, isActive && 'font-medium')}>
+            <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>
               {label}
             </span>
             <SidebarChannelSourceBadge source={channelSource} />

@@ -23,6 +23,7 @@ import {
   homeHubCardGridClass,
   homeHubCardScrollClass,
   homeHubFooterShellClass,
+  homeHubLandingOuterInsetClass,
   homeHubMainScrollClass,
   homeHubMainScrollHostClass,
 } from './home-hub-surface-styles';
@@ -111,13 +112,16 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
     <div
       className={cn(
         isSplitGridPassthrough ? splitGridPassthroughClass : 'flex min-h-0 flex-1 flex-col',
+        !isSplitGridPassthrough && !showConversation && homeHubLandingOuterInsetClass,
       )}
     >
       <div
         className={cn(
           isSplitGridPassthrough
             ? splitGridPassthroughClass
-            : 'flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6',
+            : showConversation
+              ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+              : 'flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6',
         )}
       >
         {showConversation ? (

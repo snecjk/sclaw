@@ -133,9 +133,10 @@ import {
   sidebarSectionStickyTopRecentClass,
   sidebarScrollListClass,
   sidebarScrollContainerClass,
+  sidebarScrollOverlayHostClass,
 } from '@/lib/surfaces';
 import { useSidebarSectionScrollCollapse } from '@/hooks/use-sidebar-section-scroll-collapse';
-import { useNativeScrollbarActivity } from '@/hooks/use-native-scrollbar-activity';
+import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
 
 type SessionBucketKey =
@@ -884,7 +885,7 @@ export function Sidebar() {
     onCollapseTaskSection: handleCollapseTaskSectionFromScroll,
   });
 
-  useNativeScrollbarActivity(scrollContainerRef);
+  const contentMeasureRef = useRef<HTMLDivElement>(null);
 
   // 用户手动展开项目：按分区锚点揭示内容，并暂缓下一次自动收起
   useLayoutEffect(() => {
@@ -2026,10 +2027,12 @@ export function Sidebar() {
         </div>
       </nav>
 
+      <div className={sidebarScrollOverlayHostClass}>
       <div
         ref={scrollContainerRef}
         className={cn(sidebarScrollContainerClass, sidebarCollapsed ? 'px-0' : 'px-2')}
       >
+        <div ref={contentMeasureRef}>
         {!sidebarCollapsed ? (
           <SidebarProjectsSection
             collapsed={sidebarCollapsed}
@@ -2276,6 +2279,12 @@ export function Sidebar() {
               </>
             ) : null)}
         </div>
+        </div>
+      </div>
+      <OverlayScrollbar
+        viewportRef={scrollContainerRef}
+        contentRef={contentMeasureRef}
+      />
       </div>
 
       <SidebarUpdateNotice collapsed={sidebarCollapsed} />

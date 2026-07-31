@@ -531,6 +531,93 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
   }
 }
 
+/* ── Scoped overlay scrollbar (Sidebar / Home / Embed consumers) ── */
+.sto-overlay-scroll-viewport {
+  scrollbar-width: none;
+}
+
+.sto-overlay-scroll-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.sto-overlay-scrollbar {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: 10;
+  width: 10px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.sto-overlay-scrollbar[data-overflow='true'] {
+  pointer-events: auto;
+}
+
+.sto-overlay-scrollbar[data-overflow='true'][data-active='true'],
+.sto-overlay-scrollbar[data-overflow='true'][data-dragging='true'] {
+  opacity: 1;
+}
+
+.sto-overlay-scrollbar-rail {
+  position: absolute;
+  inset-block: 4px;
+  inset-inline-end: 0;
+  width: 10px;
+}
+
+.sto-overlay-scrollbar-thumb {
+  position: absolute;
+  inset-inline-start: 50%;
+  width: 6px;
+  margin-inline-start: -3px;
+  border-radius: 9999px;
+  background-color: rgba(0, 0, 0, 0.12);
+  transform: translate3d(0, 0, 0);
+  will-change: transform, height;
+  touch-action: none;
+  cursor: default;
+}
+
+.sto-overlay-scrollbar-thumb:hover,
+.sto-overlay-scrollbar[data-dragging='true'] .sto-overlay-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.22);
+}
+
+.dark .sto-overlay-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.dark .sto-overlay-scrollbar-thumb:hover,
+.dark .sto-overlay-scrollbar[data-dragging='true'] .sto-overlay-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sto-overlay-scrollbar {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .sto-overlay-scrollbar {
+    display: none !important;
+  }
+
+  .sto-overlay-scroll-viewport {
+    scrollbar-width: auto;
+  }
+
+  .sto-overlay-scroll-viewport::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+    display: block;
+  }
+}
+
 /* macOS traffic light spacing */
 .drag-region {
   -webkit-app-region: drag;

@@ -19,16 +19,17 @@ import { extractText } from '@/pages/Chat/message-utils';
 import { ChatConversationHeaderActions, ChatPreviewToggleHeaderAction } from '@/pages/Chat/ChatSearchBar';
 import { ChatPreviewHeaderTabs } from '@/pages/Chat/ChatPreviewHeaderTabs';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
-import { useNativeScrollbarActivity } from '@/hooks/use-native-scrollbar-activity';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
+import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import {
   stoChatColumnContentTrackClass,
   stoChatScrollContentClass,
   stoChatScrollPaneClass,
   stoChatScrollPaneSplitClass,
+  stoOverlayScrollHostClass,
   stoSplitGridBodyChatClass,
   stoSplitGridBodyPreviewClass,
   stoSplitRowContentsClass,
@@ -97,7 +98,6 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   const [activeSearchIndex, setActiveSearchIndex] = useState(0);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const { contentRef, scrollRef, scrollToBottom } = useStickToBottomInstant(currentSessionKey);
-  useNativeScrollbarActivity(scrollRef);
   const deferredSearchQuery = useDeferredValue(searchQuery.trim());
   const minLoading = useMinLoading(loading && messages.length > 0);
 
@@ -422,6 +422,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
         isSplitLayout={isSplitChatLayout}
         splitGridChatClass={isSplitChatLayout ? stoSplitGridBodyChatClass : undefined}
       >
+      <div className={stoOverlayScrollHostClass}>
       <div
         ref={scrollRef}
         className={isSplitChatLayout ? stoChatScrollPaneSplitClass : stoChatScrollPaneClass}
@@ -491,6 +492,8 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
             </>
           )}
         </div>
+      </div>
+      <OverlayScrollbar viewportRef={scrollRef} contentRef={contentRef} />
       </div>
 
       <div className="relative z-10 w-full shrink-0">

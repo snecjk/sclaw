@@ -403,12 +403,21 @@ export function stoChatColumnContentTrackClass(
 }
 
 /**
- * 对话消息列表滚动区：铺满内容列宽，滚动条贴列右缘。
+ * Overlay scrollbar 定位壳：分配剩余高度、约束真实 viewport，并裁剪越界内容。
+ * Host 必须同时是受限高度的 flex item 和 flex column；缺少 flex/flex-col 会让 viewport 的 flex-1 失效，
+ * 缺少 overflow-hidden 会导致消息越过 composer 边界。
+ */
+export const stoOverlayScrollHostClass =
+  'relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden';
+
+/**
+ * 对话消息列表滚动区：铺满内容列宽；原生条由 `.sto-overlay-scroll-viewport` 隐藏，
+ * OverlayScrollbar 贴列右缘。阅读轨 padding 在 {@link stoChatColumnContentTrackClass}。
  */
 export const stoChatScrollPaneClass = cn(
-  'sto-thin-scrollbar',
+  'sto-overlay-scroll-viewport',
   'relative z-10 min-h-0 flex-1 w-full py-4',
-  'overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
+  'overflow-y-auto overscroll-y-contain',
 );
 
 /**
@@ -672,7 +681,7 @@ export const stoAppShellBodyClass =
 export function stoMainCardWrapClass(isSidebarCollapsed: boolean): string {
   return cn(
     'sto-main-card-wrap flex min-h-0 min-w-0 flex-1 flex-col box-border',
-    isSidebarCollapsed ? 'p-0' : 'pt-2 pl-2 pb-2',
+    isSidebarCollapsed ? 'p-0' : 'pt-2 pb-2',
   );
 }
 
@@ -697,6 +706,16 @@ export const stoMainCardShellClass = cn(
 export const stoMainCardBodyClass = cn(
   'min-h-0 min-w-0 flex-1 overflow-auto overscroll-y-contain',
   'px-[var(--sto-content-pad-x)] pb-5 pt-0 [scrollbar-gutter:stable]',
+);
+
+/**
+ * Home `/` 专用 body：无水平 padding / gutter，不成为纵向 scroll owner。
+ * 落地态视觉 inset 由 Home 内部恢复；对话 viewport 可贴主卡片右缘。
+ * 与 {@link stoMainCardBodyClass} 互斥。
+ */
+export const stoMainCardBodyHomeClass = cn(
+  'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden overscroll-y-contain',
+  'pb-5 pt-0',
 );
 
 /**
@@ -1429,11 +1448,17 @@ export const sidebarSectionStickyTopRecentClass =
 /** 侧栏滚动列表 — 层级低于 sticky 分区标题 */
 export const sidebarScrollListClass = 'relative z-0';
 
-/** 侧栏中部滚动区（classic 滚动条见 globals.css `html[data-scrollbar-layout=classic]`） */
+/**
+ * 侧栏中部唯一纵向 scroll viewport。
+ * Overlay 隐藏原生条；外层 host 为 flex column，本节点用 flex-1 取剩余高度。
+ */
 export const sidebarScrollContainerClass = cn(
-  'sidebar-scroll-container sto-thin-scrollbar',
+  'sto-overlay-scroll-viewport',
   'flex min-h-0 flex-1 flex-col gap-0 overflow-x-hidden overflow-y-auto overscroll-y-contain',
 );
+
+/** 侧栏中部 Overlay 定位壳（不滚动）；复用共享 host 契约 */
+export const sidebarScrollOverlayHostClass = stoOverlayScrollHostClass;
 
 /** 展开侧栏主导航 idle — 正文 Grey-10 + 图标 Grey-9；行高 28px（h-7） */
 export const sidebarNavExpandedIdleClass = cn(
