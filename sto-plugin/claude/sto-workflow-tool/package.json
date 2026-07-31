@@ -1,6 +1,6 @@
 {
   "name": "@sto/sto-workflow-tool-claude",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "main": "index.ts",
   "description": "申通工作流工具 — Claude Agent SDK 实现",

@@ -1,6 +1,6 @@
 {
   "name": "sto-dingtalk-send-guard",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "type": "module",
   "main": "index.ts",
   "description": "Rate-limit and batch-guard for dws chat message send",
