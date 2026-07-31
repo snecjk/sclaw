@@ -114,13 +114,13 @@
     --sto-grey-10: #1d2129;
 
     /* 侧栏文字色（MasterGo 8:46454 调整标题颜色+任务icon，MCP 2026-06） */
-    --sto-sidebar-text-default: var(--sto-grey-10);
+    --sto-sidebar-text-default: #393e47;
     --sto-sidebar-text-icon: var(--sto-grey-9);
     --sto-sidebar-text-section: var(--sto-grey-8);
     --sto-sidebar-row-hover-bg: #e4e4e4;
     --sto-sidebar-nav-active-bg: #dcdcdc;
     /** 分区标题 sticky 行高（任务 top-0，最近叠在其下） */
-    --sto-sidebar-section-sticky-h: 30px;
+    --sto-sidebar-section-sticky-h: 32px;
     --sto-sidebar-running-spinner: #5f9274;
     --sto-sidebar-subitem-active-bg: #dcdcdc;
     --sto-sidebar-footer-name: #1a1a1a;
@@ -251,7 +251,7 @@
     --sto-grey-10: #e5e6eb;
     --sto-grey-9: #a4aab3;
     --sto-grey-8: #9aa5b8;
-    --sto-sidebar-text-default: var(--sto-grey-10);
+    --sto-sidebar-text-default: #e5e6eb;
     --sto-sidebar-text-icon: var(--sto-grey-9);
     --sto-sidebar-text-section: var(--sto-grey-8);
     --sto-sidebar-row-hover-bg: hsl(204 24% 16%);
@@ -528,6 +528,93 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
 @media (prefers-reduced-motion: reduce) {
   .sto-thin-scrollbar::-webkit-scrollbar-thumb {
     transition: none;
+  }
+}
+
+/* ── Scoped overlay scrollbar (Sidebar / Home / Embed consumers) ── */
+.sto-overlay-scroll-viewport {
+  scrollbar-width: none;
+}
+
+.sto-overlay-scroll-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.sto-overlay-scrollbar {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: 10;
+  width: 10px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.sto-overlay-scrollbar[data-overflow='true'] {
+  pointer-events: auto;
+}
+
+.sto-overlay-scrollbar[data-overflow='true'][data-active='true'],
+.sto-overlay-scrollbar[data-overflow='true'][data-dragging='true'] {
+  opacity: 1;
+}
+
+.sto-overlay-scrollbar-rail {
+  position: absolute;
+  inset-block: 4px;
+  inset-inline-end: 0;
+  width: 10px;
+}
+
+.sto-overlay-scrollbar-thumb {
+  position: absolute;
+  inset-inline-start: 50%;
+  width: 6px;
+  margin-inline-start: -3px;
+  border-radius: 9999px;
+  background-color: rgba(0, 0, 0, 0.12);
+  transform: translate3d(0, 0, 0);
+  will-change: transform, height;
+  touch-action: none;
+  cursor: default;
+}
+
+.sto-overlay-scrollbar-thumb:hover,
+.sto-overlay-scrollbar[data-dragging='true'] .sto-overlay-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.22);
+}
+
+.dark .sto-overlay-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.dark .sto-overlay-scrollbar-thumb:hover,
+.dark .sto-overlay-scrollbar[data-dragging='true'] .sto-overlay-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sto-overlay-scrollbar {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .sto-overlay-scrollbar {
+    display: none !important;
+  }
+
+  .sto-overlay-scroll-viewport {
+    scrollbar-width: auto;
+  }
+
+  .sto-overlay-scroll-viewport::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+    display: block;
   }
 }
 
@@ -927,4 +1014,41 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
 
 [data-sonner-toaster].sto-global-toaster [data-sonner-toast][data-type='success'] [data-icon] svg {
   color: var(--sto-toast-success-icon);
+}
+
+/* Action：纯文字下划线，颜色继承 Toast 正文；不覆盖 margin-left:auto 等靠右布局 */
+[data-sonner-toaster].sto-global-toaster
+  [data-sonner-toast][data-styled='true']
+  [data-button]:not([data-cancel]) {
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+  white-space: nowrap;
+  text-decoration-line: underline;
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+[data-sonner-toaster].sto-global-toaster
+  [data-sonner-toast][data-styled='true']
+  [data-button]:not([data-cancel]):hover {
+  background: transparent;
+  opacity: 0.72;
+}
+
+[data-sonner-toaster].sto-global-toaster
+  [data-sonner-toast][data-styled='true']
+  [data-button]:not([data-cancel]):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  box-shadow: none;
 }

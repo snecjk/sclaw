@@ -403,12 +403,21 @@ export function stoChatColumnContentTrackClass(
 }
 
 /**
- * 对话消息列表滚动区：铺满内容列宽，滚动条贴列右缘。
+ * Overlay scrollbar 定位壳：分配剩余高度、约束真实 viewport，并裁剪越界内容。
+ * Host 必须同时是受限高度的 flex item 和 flex column；缺少 flex/flex-col 会让 viewport 的 flex-1 失效，
+ * 缺少 overflow-hidden 会导致消息越过 composer 边界。
+ */
+export const stoOverlayScrollHostClass =
+  'relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden';
+
+/**
+ * 对话消息列表滚动区：铺满内容列宽；原生条由 `.sto-overlay-scroll-viewport` 隐藏，
+ * OverlayScrollbar 贴列右缘。阅读轨 padding 在 {@link stoChatColumnContentTrackClass}。
  */
 export const stoChatScrollPaneClass = cn(
-  'sto-thin-scrollbar',
+  'sto-overlay-scroll-viewport',
   'relative z-10 min-h-0 flex-1 w-full py-4',
-  'overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
+  'overflow-y-auto overscroll-y-contain',
 );
 
 /**
@@ -672,7 +681,7 @@ export const stoAppShellBodyClass =
 export function stoMainCardWrapClass(isSidebarCollapsed: boolean): string {
   return cn(
     'sto-main-card-wrap flex min-h-0 min-w-0 flex-1 flex-col box-border',
-    isSidebarCollapsed ? 'p-0' : 'pt-2 pl-2 pb-2',
+    isSidebarCollapsed ? 'p-0' : 'pt-2 pb-2',
   );
 }
 
@@ -697,6 +706,16 @@ export const stoMainCardShellClass = cn(
 export const stoMainCardBodyClass = cn(
   'min-h-0 min-w-0 flex-1 overflow-auto overscroll-y-contain',
   'px-[var(--sto-content-pad-x)] pb-5 pt-0 [scrollbar-gutter:stable]',
+);
+
+/**
+ * Home `/` 专用 body：无水平 padding / gutter，不成为纵向 scroll owner。
+ * 落地态视觉 inset 由 Home 内部恢复；对话 viewport 可贴主卡片右缘。
+ * 与 {@link stoMainCardBodyClass} 互斥。
+ */
+export const stoMainCardBodyHomeClass = cn(
+  'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden overscroll-y-contain',
+  'pb-5 pt-0',
 );
 
 /**
@@ -1368,7 +1387,7 @@ export const sidebarBodyTextClass = 'text-[13px] font-normal leading-5';
 /** 侧栏正文 13/20 Medium — 仅设计稿明确标注 font_8:34896 的场景（当前侧栏默认不用，保留供后续态） */
 export const sidebarBodyTextMediumClass = 'text-[13px] font-medium leading-5';
 
-/** 一级正文色 Grey-10 #1D2129 — MCP paint_4:0441「文字/文本-默认」 */
+/** 侧栏一级正文色：浅色 #393E47；暗色由 --sto-sidebar-text-default 切换为 #E5E6EB */
 export const sidebarTextDefaultClass = 'text-[var(--sto-sidebar-text-default)]';
 
 /** 行内图标色 Grey-9 #4E5969 — MCP paint_4:0490「文字/文本-浅色-二级信息」 */
@@ -1429,23 +1448,29 @@ export const sidebarSectionStickyTopRecentClass =
 /** 侧栏滚动列表 — 层级低于 sticky 分区标题 */
 export const sidebarScrollListClass = 'relative z-0';
 
-/** 侧栏中部滚动区（classic 滚动条见 globals.css `html[data-scrollbar-layout=classic]`） */
+/**
+ * 侧栏中部唯一纵向 scroll viewport。
+ * Overlay 隐藏原生条；外层 host 为 flex column，本节点用 flex-1 取剩余高度。
+ */
 export const sidebarScrollContainerClass = cn(
-  'sidebar-scroll-container sto-thin-scrollbar',
+  'sto-overlay-scroll-viewport',
   'flex min-h-0 flex-1 flex-col gap-0 overflow-x-hidden overflow-y-auto overscroll-y-contain',
 );
 
-/** 展开侧栏主导航 idle — 正文 Grey-10 + 图标 Grey-9；行高 28px（h-7） */
+/** 侧栏中部 Overlay 定位壳（不滚动）；复用共享 host 契约 */
+export const sidebarScrollOverlayHostClass = stoOverlayScrollHostClass;
+
+/** 展开侧栏主导航 idle — 正文 Grey-10 + 图标 Grey-9；行高 32px（h-8） */
 export const sidebarNavExpandedIdleClass = cn(
-  'h-7 min-h-7 rounded-[8px] px-[10px] font-normal leading-5',
+  'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5',
   sidebarTextDefaultClass,
   '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
-/** 展开侧栏主导航 active — 底 #DCDCDC + Regular（选中仅靠底色，字重与 idle 一致）；行高 28px（h-7） */
+/** 展开侧栏主导航 active — 底 #DCDCDC + Regular（选中仅靠底色，字重与 idle 一致）；行高 32px（h-8） */
 export const sidebarNavExpandedActiveClass = cn(
-  'h-7 min-h-7 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
+  'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
   'bg-[var(--sto-sidebar-nav-active-bg)]',
   sidebarTextDefaultClass,
   '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
@@ -1488,7 +1513,7 @@ export const sidebarFooterMetaClass =
  * hover/open：rgba(0,0,0,0.1) + rounded 4px；dark 用 white/10；问号独立不在此热区内
  */
 export const sidebarAccountHotzoneTriggerClass = cn(
-  'flex min-w-0 flex-1 flex-col gap-0.5 rounded-[4px] px-2.5 py-2 text-left transition-colors',
+  'flex h-[46px] min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-[4px] px-2.5 py-1 text-left transition-colors',
   'hover:bg-black/10 data-[state=open]:bg-black/10',
   'dark:hover:bg-white/10 dark:data-[state=open]:bg-white/10',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sto-sidebar-bg)]',

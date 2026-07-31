@@ -133,9 +133,10 @@ import {
   sidebarSectionStickyTopRecentClass,
   sidebarScrollListClass,
   sidebarScrollContainerClass,
+  sidebarScrollOverlayHostClass,
 } from '@/lib/surfaces';
 import { useSidebarSectionScrollCollapse } from '@/hooks/use-sidebar-section-scroll-collapse';
-import { useNativeScrollbarActivity } from '@/hooks/use-native-scrollbar-activity';
+import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
 
 type SessionBucketKey =
@@ -198,12 +199,12 @@ const SIDEBAR_SHOW_TASK_GROUP_CHEVRON = true;
 
 /** 任务组二级行 — 不用 justify-between，短标题时 Chevron 紧跟标题（对齐项目一级行） */
 const SIDEBAR_TASK_GROUP_ROW_CLASS =
-  'flex h-7 w-full items-center gap-1.5 rounded-lg px-[10px] py-1 text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring';
+  'flex h-8 w-full items-center gap-1.5 rounded-lg px-[10px] py-1 text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring';
 /**
  * 任务二级子项容器 — 与项目二级水平对齐：
  * 层级竖线 25px（滚动区 8 + ml 17）；选中背景起点 32px（17 + 1px 边框 + pl-1.5）；
  * 一级行到底一个二级行外框间距 2px（mt-0.5）；文字起点 42px（32 + 行内 px-[10px]）；
- * 同级 gap-0.5 → 28+2=30px 节拍；
+ * 同级 gap-0.5 → 32+2=34px 节拍；
  * w-[calc(100%-17px)] 避免 ml+w-full 右侧溢出。
  */
 const SIDEBAR_TASK_SUBITEMS_CONTAINER_CLASS =
@@ -357,7 +358,7 @@ function SidebarTaskDateLinks({
                 openSubitemSession(entryId, sk, label);
               }}
               className={cn(
-                'relative z-[1] inline-flex h-7 w-full min-w-0 max-w-full items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
+                'relative z-[1] inline-flex h-8 w-full min-w-0 max-w-full items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
                 SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
                 active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
               )}
@@ -617,7 +618,7 @@ function SidebarScheduledTaskGroup({
                   }}
                   title={label}
                   className={cn(
-                    'h-7 w-full min-w-0 overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
+                    'h-8 w-full min-w-0 overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
                     SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
                     active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
                   )}
@@ -884,7 +885,7 @@ export function Sidebar() {
     onCollapseTaskSection: handleCollapseTaskSectionFromScroll,
   });
 
-  useNativeScrollbarActivity(scrollContainerRef);
+  const contentMeasureRef = useRef<HTMLDivElement>(null);
 
   // 用户手动展开项目：按分区锚点揭示内容，并暂缓下一次自动收起
   useLayoutEffect(() => {
@@ -1933,7 +1934,7 @@ export function Sidebar() {
           aria-expanded={dataCenterSectionOpen}
           onClick={() => setDataCenterSectionOpen((open) => !open)}
           className={cn(
-            'relative flex w-full shrink-0 items-center justify-start gap-[10px] text-left text-sm leading-5 transition-[color,background-color,border-radius] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
+            'relative flex w-full shrink-0 items-center justify-start gap-[10px] text-left text-[13px] leading-5 transition-[color,background-color,border-radius] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
             sidebarNavExpandedIdleClass,
           )}
         >
@@ -1947,7 +1948,7 @@ export function Sidebar() {
           />
         </button>
         {dataCenterSectionOpen ? (
-          <div className="ml-[17px] mt-0.5 flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-2 dark:border-border">
+          <div className="ml-[17px] mt-0.5 flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-1.5 dark:border-border">
             {DATA_CENTER_SECTIONS.map((section) => {
               const active = location.pathname === '/data-center' && dataCenterSection === section.id;
               return (
@@ -1956,7 +1957,7 @@ export function Sidebar() {
                   type="button"
                   onClick={() => navigate(`/data-center?section=${section.id}`)}
                   className={cn(
-                    'relative inline-flex h-8 w-full min-w-0 items-center overflow-hidden rounded-lg px-[10px] py-1.5 text-left transition-colors',
+                    'relative inline-flex h-7 w-full min-w-0 items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
                     active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
                   )}
                 >
@@ -2026,10 +2027,12 @@ export function Sidebar() {
         </div>
       </nav>
 
+      <div className={sidebarScrollOverlayHostClass}>
       <div
         ref={scrollContainerRef}
         className={cn(sidebarScrollContainerClass, sidebarCollapsed ? 'px-0' : 'px-2')}
       >
+        <div ref={contentMeasureRef}>
         {!sidebarCollapsed ? (
           <SidebarProjectsSection
             collapsed={sidebarCollapsed}
@@ -2276,6 +2279,12 @@ export function Sidebar() {
               </>
             ) : null)}
         </div>
+        </div>
+      </div>
+      <OverlayScrollbar
+        viewportRef={scrollContainerRef}
+        contentRef={contentMeasureRef}
+      />
       </div>
 
       <SidebarUpdateNotice collapsed={sidebarCollapsed} />

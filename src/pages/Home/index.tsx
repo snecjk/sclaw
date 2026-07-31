@@ -102,7 +102,7 @@ export function Home() {
         className={cn(
           isSplitGridPassthrough
             ? splitGridPassthroughClass
-            : 'mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden px-1 pt-2 sm:px-2',
+            : 'mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden pt-2',
         )}
       >
         <HomeAgentHubSurface seedSkillSlug={seedSkillSlug} />

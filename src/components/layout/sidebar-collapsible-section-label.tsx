@@ -54,7 +54,7 @@ export function SidebarCollapsibleSectionLabel({
       {/* hover 背景挂在整行：覆盖主 toggle + 右侧 actions */}
       <div
         className={cn(
-          'group/sto-sidebar-section-toggle flex h-[30px] w-full items-center gap-1 rounded-lg transition-colors',
+          'group/sto-sidebar-section-toggle flex h-8 w-full items-center gap-1 rounded-lg transition-colors',
           'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
         )}
       >
