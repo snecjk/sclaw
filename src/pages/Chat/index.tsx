@@ -52,6 +52,7 @@ import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
 import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
+import { useVoiceLoopStore } from '@/stores/voice-loop';
 export function Chat() {
   useBuiltinToolListener();
   const navigate = useNavigate();
@@ -205,6 +206,8 @@ export function Chat() {
     ],
   );
 
+  const voiceLoopActive = useVoiceLoopStore((s) => s.active);
+
   const { beginSendScroll, scrollToLatest } = useChatScrollFollow({
     scrollRef,
     contentRef,
@@ -214,6 +217,8 @@ export function Chat() {
     lastUserMessageAt,
     hasStreamContent: hasAnyStreamContent || !!activeTurn,
     streamContentKey,
+    // 语音循环下输入面板较高：发送后额外滚动，避免气泡底边被面板裁切
+    voiceComposerElevated: voiceLoopActive,
   });
 
   const isEmpty = messages.length === 0 && !sending;
