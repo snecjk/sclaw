@@ -11,8 +11,10 @@ export const SIDEBAR_MAX_WIDTH = 400;
 /** rawWidth ≤ this commits user collapsed (200 − 24). */
 export const SIDEBAR_COLLAPSE_THRESHOLD = 176;
 
-/** Provincial L0: Gap 8 + Workspace right pad 8. */
-export const SHELL_FRAME_HORIZONTAL_PX = 16;
+/** Provincial shell horizontal frame: Workspace right frame only (8px).
+ * The resize hit area is an overlay and no longer consumes a Grid track.
+ */
+export const SHELL_FRAME_HORIZONTAL_PX = 8;
 
 /** Stage 0 approved — Preview closed (Stage 2 default page constraint). */
 export const CLOSED_WORKSPACE_MIN = 560;

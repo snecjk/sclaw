@@ -115,12 +115,19 @@ describe('useChatPreviewPanel PreviewMode', () => {
     expect(result.current.activePreviewFilePath).toBeNull();
   });
 
-  it('does not use DOM Fullscreen for expand/restore', () => {
+  it('owns expand/restore in the shared Header action group without DOM Fullscreen', () => {
     const panelSrc = readPreviewPanelSource();
+    const headerActionsSrc = readHeaderActionsSource();
     expect(panelSrc).not.toContain('requestFullscreen');
     expect(panelSrc).not.toContain('exitFullscreen');
-    expect(panelSrc).toContain('onExpandWorkspace');
-    expect(panelSrc).toContain('onRestoreWorkspace');
+    expect(panelSrc).not.toContain('onExpandWorkspace');
+    expect(panelSrc).not.toContain('onRestoreWorkspace');
+    expect(headerActionsSrc).toContain('data-slot="preview-workspace-layout-toggle"');
+    expect(headerActionsSrc).toContain('onExpandWorkspace');
+    expect(headerActionsSrc).toContain('onRestoreWorkspace');
+    expect(headerActionsSrc.indexOf('data-slot="preview-workspace-layout-toggle"')).toBeLessThan(
+      headerActionsSrc.indexOf('<ChatPreviewToggleHeaderAction'),
+    );
   });
 });
 
@@ -131,4 +138,13 @@ function readPreviewPanelSource(): string {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { resolve } = require('node:path') as typeof import('node:path');
   return readFileSync(resolve(process.cwd(), 'src/pages/Chat/ChatPreviewPanel.tsx'), 'utf8');
+}
+
+function readHeaderActionsSource(): string {
+  // inline require via fs to avoid importing the whole tooltip tree
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { readFileSync } = require('node:fs') as typeof import('node:fs');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { resolve } = require('node:path') as typeof import('node:path');
+  return readFileSync(resolve(process.cwd(), 'src/pages/Chat/ChatSearchBar.tsx'), 'utf8');
 }

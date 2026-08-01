@@ -1,7 +1,7 @@
 schema: spec-driven
 created: 2026-07-31
 status: draft
-stage: 0-audit-openspec
+stage: 5-geometry-closeout-implemented-awaiting-manual-qa
 source:
   - docs/可拖拽侧边栏与三栏工作区框架-Cursor-T2开发文档.md
   - docs/workspace-shell-upgrade/

@@ -1,8 +1,8 @@
 /**
- * SidebarResizeHandle — AppShell 第二列（8px L0 Gap）拖拽命中区。
+ * SidebarResizeHandle — Workspace 起始侧的 8px 拖拽 overlay。
  *
  * 默认透明；hover / dragging / focus-visible 显示提示线。
- * 不新增第四列；collapsed 时由父级不渲染本组件。
+ * 不占 AppShell Grid 宽度；collapsed 时由父级不渲染本组件。
  */
 import type { KeyboardEvent, PointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';

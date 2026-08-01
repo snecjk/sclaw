@@ -74,7 +74,7 @@
 
 **Goals**
 
-- 单一 OpenSpec 承载四阶段串行实施。
+- 单一 OpenSpec 承载阶段 1–4 串行实施及阶段 5 人工验收收口。
 - 四个 capability 唯一归属，无交叉重复所有权。
 - 明确删除冲突方案（Fullscreen / 10px seam / row-span-2 translate / 72·260 Toast / 三套 Header actions）。
 - 登记阻塞参数与 MCP 状态。
@@ -89,22 +89,23 @@
 
 | Capability | 所有权 | 阶段 |
 | --- | --- | --- |
-| `app-shell-foundation` | Grid Frame、Provider、collapse reasons 分离、Toast/Header 消费 effective 宽 | 1（基座）；2 扩展 max |
+| `app-shell-foundation` | Sidebar/Workspace 两列 Grid、Frame、边界 overlay、Provider、collapse reasons 分离、Toast/Header 消费 effective 宽 | 1（基座）；2 扩展 max；5 几何收口 |
 | `resizable-sidebar-shell` | 200–400、吸附、viewport 自动收起、preferred 持久化 | 2 |
-| `workspace-layout-modes` | PreviewMode、零 seam、Handle、Header 槽位、Conversation 保活 | 3 |
+| `workspace-layout-modes` | PreviewMode、零 seam、Handle、稳定 Header 槽位、32px Search、Conversation 保活 | 3；5 人工验收收口 |
 | `shell-surface-hierarchy` | L0–L3 语义、light/dark 同结构、集成验收矩阵 | 1 建所有权；4 调色与总验收 |
 
 OverlayScrollbar 归属既有 `overlay-scrollbar-surfaces`；本 Change **依赖复用**，不新增第五 capability。
 
 ## Decisions
 
-### 1. 单一 Change + 四阶段串行
-- **Decision**：只建 `workspace-shell-architecture-upgrade`；禁止并行改四阶段源码。
-- **Rationale**：总纲要求统一设计、串行验收；并行会导致 Frame / PreviewMode / Surface 互相覆盖。
+### 1. 单一 Change + 五阶段串行
+- **Decision**：只建 `workspace-shell-architecture-upgrade`；阶段 1–4 完成后在同一 Change 增加阶段 5 收口，禁止并行修改这些结构源码。
+- **Rationale**：总纲要求统一设计、串行验收；阶段 5 修正同一组 capability 的人工验收缺陷，另建并行 Change 会导致 Frame / PreviewMode / Surface 所有权再次冲突。
 - **Alternative**：四个独立 Change → 否决（契约重复、冲突难收敛）。
 
 ### 2. Preview expanded = Workspace 内布局模式
 - **Decision**：`PreviewMode = 'closed' \| 'split' \| 'expanded'`；expanded 占满 L1 Workspace，Conversation 隐藏但不卸载；禁止 DOM Fullscreen / `position:fixed` 假装展开。
+- **Horizontal geometry**：设计节点 `48:11093` 的 Workspace `1152px`、Preview Surface `1128px`，差值由左右各 `12px` 的 Body-owned inset 构成。Sidebar 可见时，Expanded Header 的 Preview icon/tab 组 SHALL 复用该 Token，使其外框起点与下方 Surface 左边界共线；隐藏的 Conversation Header 槽保持挂载但不得占宽。Sidebar 收起时 Header 继续使用 macOS safe inset。该 inset 不得复用 Split end-only inset，也不得并入 8px L0 Workspace Frame。
 - **Rationale**：保留草稿、scrollTop、消息与 Overlay host；避免系统 Fullscreen 与壳层 Frame 冲突。
 - **Alternative**：保留 `requestFullscreen` → **删除**（与总纲冲突）。
 
@@ -161,6 +162,38 @@ effectiveMax = Math.min(
 
 - **Alternative**：用 Node `48:10836` 1440 样例列宽或窗口最小 960 反推 → **明确禁止**。
 
+### 9. Stage 5 几何所有权收口（人工验收修正）
+
+- **Decision**：省区 AppShell 从 `Sidebar | 8px Gap | Workspace` 三列改为 `Sidebar | Workspace` 两列；8px Sidebar resize hit area 绝对覆盖在 Workspace 起始侧，不占布局宽度，提示线固定在真实边界。
+- **Rationale**：运行时测量证明 Scrollbar 已贴 Sidebar 右边界，人工截图中的空带来自其后的 8px Grid Track；浅色下该 Track 与 Sidebar 同色，导致用户把它感知为 Sidebar 的一部分并产生约 4px 光学偏移。
+- **Alternative**：保留 8px Track 并移动 Scrollbar/内容补偿 → 否决，会继续制造结构空缝并在 dark 模式暴露第三层色带。
+
+  同步几何消费者：provincial `SHELL_FRAME_HORIZONTAL_PX` 从旧的“Gap 8 + right Frame 8”校准为仅 right Frame `8px`；`computeToastLayoutOffsetPx` 删除旧 Gap，只返回 effective Sidebar width（no-sidebar=0；full legacy 保持真实 rail）。批准的 Workspace 最低宽度值不变。
+
+- **Decision**：将 Header chrome safe inset、Workbench Body inset 和 Workspace Frame 拆成独立 Token；macOS collapsed 的 80px safe inset 只允许 Header 消费，`main`/Preview Body 不得消费。
+- **Rationale**：当前 `stoSplitShellInsetsClass` 挂 `main` 使 Preview Expanded Body 继承 5rem，直接生成错误大空白。
+- **Alternative**：Preview collapsed 模式加负 margin 抵消 → 否决为状态补丁。
+
+- **Decision**：ContentHeader 保留现有注册协议，但收敛为单一 DOM（chat zone + preview zone + stable workspace-actions）；layoutMode 只改变 Grid Area/visibility。Search Toggle 固定占 32px，Search Surface 高 32px并作为向左 overlay 的临时工具，不进入主 Flex 宽度。
+- **Rationale**：三套 return 会改变同一 preview action 的父容器和水平锚点；Search 普通流 264px 宽度会推动 actions。
+- **Alternative**：为每个模式记录独立 `right`/`translate` → 否决，状态组合不可维护。
+
+- **Decision**：Sidebar 展开时 Workspace start Frame 为 `0px`，Sidebar 完全收起时为 `8px`；Split Preview 的 L2 描边 Surface 额外拥有 `12px` end inset，因此窗口到描边总距为 `8+12=20px`。该 inset 只属于 Split Body，不挂 `main`，不改变 Preview 左侧零 seam，也不下放给 Preview Expanded。
+- **Rationale**：删除旧 `main` 水平 inset 修复了 collapsed Preview 的 5rem 空白，但同时误删了 Split Preview Surface 的设计留白。Workspace 外框、Header 操作锚点和 L2 Surface inset 必须分别建模。
+- **Alternative**：给 Preview 卡片加 `mr-3` / `translate-x(-12px)` / `width:calc(...)` → 否决，会令 Grid 百分比、Resize Handle 与视觉边界分叉。
+
+- **Decision**：Preview Expanded 隐藏并禁用 Conversation title/search/refresh/thinking，但保持其 DOM/状态；Workspace expand/restore 提升到 ContentHeader，并固定在 Preview panel toggle 左侧。Header chat/preview slots 不得出现可见原生横向滚动条。
+- **Rationale**：Conversation 已 hidden/inert 时其操作不应进入 Preview 区；当前 `overflow-x-auto` 会在 classic scrollbar 环境生成约 12–15px 透明条；布局动作和文件动作分处两级 Header 导致顺序无法稳定。
+- **Alternative**：Expanded 下把 chatActions 搬到 preview zone、在三枚按钮上逐个 `hidden`、或在 Body action row 绝对定位最大化按钮 → 否决，均继续混淆槽位所有权。
+
+- **Decision**：macOS native traffic lights 与 Sidebar chrome toggle 使用独立光学基线：traffic lights `{x:16,y:20}`，Sidebar toggle top inset `20px`；ContentHeader DOM 仍保持 52px `items-center`。
+- **Rationale**：Electron native 坐标、Sidebar row 坐标和 Workspace Header 坐标原点不同，旧“全部 centerY=34”测试只能证明数学外框，不能覆盖最新运行时光学验收。
+- **Alternative**：逐 SVG `translate-y` 或继续强制一个中心线 → 否决。
+
+- **Decision**：DOM center、SVG optical center、macOS native center 分层验收；不使用逐按钮 `translate-y`。Header 52px、Search Surface 32px为批准值。
+- **Rationale**：DOM 实测 centerY 均为34px，但 SVG 可见画布和 native chrome 仍可产生光学偏差。
+- **Alternative**：仅用 class 字符串测试 `items-center` → 否决，不能证明最终像素关系。
+
 ## 与活动 OpenSpec 的冲突处理
 
 | Change | 冲突 | Stage 0 处理 |
@@ -183,10 +216,11 @@ effectiveMax = Math.min(
 
 ## Migration Plan（实施阶段，非 Stage 0）
 
-1. 阶段 1：Grid + Provider + Toast/Header 接线；Sidebar 仍固定 260。
+1. 阶段 1：Grid + Provider + Toast/Header 接线；Sidebar 仍固定 260（历史实施基线）。
 2. 阶段 2：拖拽与 preferred；依赖已批准最低宽度。
 3. 阶段 3：PreviewMode + 零 seam + Header 重命名 + 去 Fullscreen。
 4. 阶段 4：Surface 色阶与总验收。
+5. 阶段 5：撤销实体 Sidebar Gap；Header/Body inset 解耦；稳定 Header slots；Search 32px；真实几何回归。
 
 每阶段：定向 vitest / eslint 白名单 / typecheck / `git diff --check` → 用户手动验收 → 停止。
 
@@ -240,12 +274,28 @@ Workspace 卡 `矩形 2482`：`1172×884 @ (260, **8**)` → 与运行时 Worksp
 ### 9.4 Header → 正文公式（批准）
 
 ```text
-WORKBENCH_HEADER_TO_BODY_GAP      = 8px   // Header bottom → Body Surface
-WORKBENCH_BODY_TO_CONTENT_INSET_Y = 8px   // Body Surface → 第一行正文
-TOTAL                             = 16px
+Conversation:
+CONVERSATION_HEADER_TO_BODY_GAP          = 8px   // Header bottom → Body Surface
+WORKBENCH_BODY_TO_CONTENT_INSET_Y        = 8px   // Body Surface → 第一行正文
+TOTAL                                    = 16px
+
+Split:
+SPLIT_HEADER_TO_SURFACE_GAP              = 0px   // Header bottom → Chat / Preview Surface
+WORKBENCH_BODY_TO_CONTENT_INSET_Y        = 8px   // Chat Surface → 第一行正文
+TOTAL                                    = 8px
+
+Preview Expanded:
+PREVIEW_EXPANDED_HEADER_TO_SURFACE_GAP   = 0px   // Header bottom → bordered Preview Surface
+
+Split / Preview Expanded bottom:
+WORKBENCH_SURFACE_BOTTOM_INSET           = 8px   // Surface → Workspace Body bottom
+WORKSPACE_FRAME_BOTTOM                   = 8px   // Workspace Body → Window bottom
+WINDOW_TO_SURFACE_BOTTOM_TOTAL           = 16px
 ```
 
-验收失败前：`Split Body pt=8` + `Scroll pt=16` → **24px**（禁止）。
+验收失败前：`Split Body pt=8` 形成持久空带，并与 Chat Scroll 内距叠成初始 `8+8=16px`；Split Body 顶距改由独立 `0px` Token 所有，禁止再继承 Conversation gap。
+用户 2026-08-02 明确确认 Split 与 Preview Expanded 的 Surface 均紧接 52px Header；Chat Surface 内部仍保留 8px 正文内距。Surface 本身、46px action row 和 viewer overflow owner 保留。
+同日人工验收确认 Split 底部留白为正确基准；Preview Expanded 必须复用同一 Body-owned bottom inset，不得在模式切换后贴住 Workspace 底边。
 
 ### 9.5 macOS traffic lights 校准
 

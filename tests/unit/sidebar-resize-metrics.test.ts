@@ -13,6 +13,7 @@ import {
   resolveWorkspaceRequiredWidth,
   shouldCommitSidebarCollapse,
   shouldViewportCollapseSidebar,
+  SHELL_FRAME_HORIZONTAL_PX,
 } from '@/lib/sidebar-resize-metrics';
 
 describe('clampSidebarPreferredWidth', () => {
@@ -74,19 +75,21 @@ describe('effectiveMax / viewport', () => {
     expect(resolveWorkspaceRequiredWidth('split')).toBe(1040);
     expect(resolveWorkspaceRequiredWidth('expanded')).toBe(640);
 
+    expect(SHELL_FRAME_HORIZONTAL_PX).toBe(8);
+
     const max = computeEffectiveSidebarMax({
       viewportWidth: 1280,
-      shellFrameWidth: 16,
+      shellFrameWidth: SHELL_FRAME_HORIZONTAL_PX,
       workspaceRequiredWidth: 560,
     });
     expect(max).toBe(SIDEBAR_MAX_WIDTH);
 
     const narrow = computeEffectiveSidebarMax({
       viewportWidth: 900,
-      shellFrameWidth: 16,
+      shellFrameWidth: SHELL_FRAME_HORIZONTAL_PX,
       workspaceRequiredWidth: 560,
     });
-    expect(narrow).toBe(324);
+    expect(narrow).toBe(332);
     expect(shouldViewportCollapseSidebar(199)).toBe(true);
     expect(shouldViewportCollapseSidebar(200)).toBe(false);
   });

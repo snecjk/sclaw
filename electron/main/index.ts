@@ -280,10 +280,10 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
     titleBarStyle: isMac ? 'hiddenInset' : useCustomTitleBar ? 'hidden' : 'default',
     trafficLightPosition: isMac
       ? {
-          // ContentHeader centerY=34；macOS lights Ø12；y=顶边 → 28 使圆心=34（旧 y=18 圆心24，Δ10 失败）
-          // 权威公式：src/lib/content-header-metrics.ts → MACOS_TRAFFIC_LIGHT_POSITION
+          // 最新原生 chrome 光学基线：x=16 / y=20；不再从 ContentHeader centerY 反推。
+          // 权威值：src/lib/content-header-metrics.ts → MACOS_TRAFFIC_LIGHT_POSITION
           x: 16,
-          y: 28,
+          y: 20,
         }
       : undefined,
     frame: isMac || !useCustomTitleBar,

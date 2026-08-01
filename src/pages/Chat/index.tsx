@@ -20,7 +20,7 @@ import { useChatDisplay } from './use-chat-display';
 import { isAssistantRole, resolveActiveTurnStableKey } from './chat-display';
 import { ChatInput, type FileAttachment } from './ChatInput';
 import { ChatEngineSelector, ChatModelSelector } from './ChatEngineModelSelectors';
-import { ChatConversationHeaderActions, ChatPreviewToggleHeaderAction } from './ChatSearchBar';
+import { ChatConversationHeaderActions, ChatPreviewWorkspaceHeaderActions } from './ChatSearchBar';
 import { ChatPreviewHeaderTabs } from './ChatPreviewHeaderTabs';
 import { PendingQueuePanel } from './PendingQueuePanel';
 import { ParameterFormDock } from '@/components/parameter-form/ParameterFormDock';
@@ -482,18 +482,29 @@ export function Chat() {
     ],
   );
 
-  const previewToggleAction = useMemo(
+  const previewHeaderActions = useMemo(
     () => (
-      <ChatPreviewToggleHeaderAction
+      <ChatPreviewWorkspaceHeaderActions
         canShowPreviewPanel={canShowPreviewPanel}
         isPreviewPanelOpen={showPreviewPanel}
+        isWorkspaceExpanded={isPreviewExpanded}
+        onExpandWorkspace={expandPreview}
+        onRestoreWorkspace={restorePreview}
         onTogglePreview={() => {
           if (showPreviewPanel) closePreviewPanel();
           else openPreviewPanel();
         }}
       />
     ),
-    [canShowPreviewPanel, showPreviewPanel, closePreviewPanel, openPreviewPanel],
+    [
+      canShowPreviewPanel,
+      showPreviewPanel,
+      isPreviewExpanded,
+      expandPreview,
+      restorePreview,
+      closePreviewPanel,
+      openPreviewPanel,
+    ],
   );
 
   const previewHeaderTabs = useMemo(
@@ -520,7 +531,7 @@ export function Chat() {
     title: sessionTitle,
     previewTabs: previewHeaderTabs,
     chatActions: conversationHeaderActions,
-    previewActions: previewToggleAction,
+    previewActions: previewHeaderActions,
     layoutMode:
       !canShowPreviewPanel || previewMode === 'closed'
         ? 'conversation'
@@ -758,9 +769,6 @@ export function Chat() {
             showEditWorkflow={showEditWorkflow}
             workflowId={sessionWorkflowId}
             onEditWorkflow={openWorkflowPreview}
-            isWorkspaceExpanded={isPreviewExpanded}
-            onExpandWorkspace={expandPreview}
-            onRestoreWorkspace={restorePreview}
             className="h-full w-full"
           />
         </div>

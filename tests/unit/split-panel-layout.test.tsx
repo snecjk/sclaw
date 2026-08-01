@@ -13,14 +13,15 @@ import {
   contentHeaderSplitPreviewZoneClass,
   contentHeaderTitleGroupClass,
   STO_PREVIEW_SPLIT_DEFAULT,
+  STO_PREVIEW_EXPANDED_INSET_X,
   STO_PREVIEW_SPLIT_MAX,
   STO_PREVIEW_SPLIT_MIN,
   STO_SPLIT_PREVIEW_INSET_X,
-  STO_SPLIT_PREVIEW_INSET_Y,
   STO_SPLIT_RESIZE_EDGE_COLOR,
   STO_SPLIT_RESIZE_EDGE_WIDTH,
   STO_SPLIT_RESIZE_HIT_WIDTH,
   stoPreviewArtifactTabClass,
+  stoPreviewExpandedBodyClass,
   stoSplitGridBodyChatClass,
   stoSplitGridBodyPreviewClass,
   stoSplitGridHeaderChatClass,
@@ -28,6 +29,7 @@ import {
   stoSplitPanelResizeEdgeClass,
   stoSplitPanelResizeHandleClass,
   stoSplitUnifiedMainClass,
+  WORKBENCH_SURFACE_BOTTOM_INSET,
 } from '@/lib/surfaces';
 
 describe('split panel layout surfaces', () => {
@@ -37,7 +39,7 @@ describe('split panel layout surfaces', () => {
     );
     expect(stoSplitUnifiedMainClass).not.toContain('_4px_');
     expect(stoSplitUnifiedMainClass).toContain('[--sto-split-preview-inset-x:0px]');
-    expect(stoSplitUnifiedMainClass).toContain('[--sto-split-preview-inset-y:8px]');
+    expect(stoSplitUnifiedMainClass).not.toContain('sto-split-preview-inset-y');
   });
 
   it('makes the chat header zone fill the first grid column', () => {
@@ -96,15 +98,43 @@ describe('split panel layout surfaces', () => {
 
   it('removes bilateral 10px structural seam (Stage 3 zero seam)', () => {
     expect(STO_SPLIT_PREVIEW_INSET_X).toBe('0px');
-    expect(STO_SPLIT_PREVIEW_INSET_Y).toBe('8px');
+    expect(WORKBENCH_SURFACE_BOTTOM_INSET).toBe('8px');
     expect(stoSplitGridHeaderChatClass).not.toContain('pr-[var(--sto-split-preview-inset-x)]');
     expect(stoSplitGridHeaderPreviewClass).not.toContain('pl-[var(--sto-split-preview-inset-x)]');
     expect(stoSplitGridBodyChatClass).not.toContain('pr-[var(--sto-split-preview-inset-x)]');
     expect(stoSplitGridBodyPreviewClass).not.toContain('pl-[var(--sto-split-preview-inset-x)]');
-    expect(stoSplitGridBodyChatClass).toContain('pt-[var(--sto-workbench-header-to-body-gap,8px)]');
-    expect(stoSplitGridBodyPreviewClass).toContain('pt-[var(--sto-workbench-header-to-body-gap,8px)]');
+    expect(stoSplitGridBodyPreviewClass).toContain(
+      'pr-[var(--sto-split-preview-surface-inset-end,12px)]',
+    );
+    expect(stoSplitGridBodyChatClass).not.toContain('sto-split-preview-surface-inset-end');
+    expect(stoPreviewExpandedBodyClass).not.toContain('sto-split-preview-surface-inset-end');
+    expect(stoSplitGridBodyChatClass).toContain('pt-[var(--sto-split-header-to-surface-gap,0px)]');
+    expect(stoSplitGridBodyPreviewClass).toContain('pt-[var(--sto-split-header-to-surface-gap,0px)]');
+    expect(stoSplitGridBodyChatClass).not.toContain('sto-workbench-header-to-body-gap');
+    expect(stoSplitGridBodyPreviewClass).not.toContain('sto-workbench-header-to-body-gap');
+    for (const cls of [
+      stoSplitGridBodyChatClass,
+      stoSplitGridBodyPreviewClass,
+      stoPreviewExpandedBodyClass,
+    ]) {
+      expect(cls).toContain('pb-[var(--sto-workbench-surface-bottom-inset,8px)]');
+      expect(cls).not.toContain('sto-split-preview-inset-y');
+    }
     expect(stoSplitPanelResizeHandleClass).not.toContain('translate-x');
     expect(stoSplitPanelResizeHandleClass).not.toContain('row-span-2');
+  });
+
+  it('keeps Preview Expanded Surface at a Body-owned bilateral 12px inset', () => {
+    expect(STO_PREVIEW_EXPANDED_INSET_X).toBe('12px');
+    expect(stoPreviewExpandedBodyClass).toContain(
+      'px-[var(--sto-expanded-preview-inset-x,12px)]',
+    );
+    expect(stoPreviewExpandedBodyClass).not.toContain(
+      'pl-[var(--sto-expanded-preview-inset-x',
+    );
+
+    const globals = readFileSync(resolve(process.cwd(), 'src/styles/globals.css'), 'utf8');
+    expect(globals.match(/--sto-expanded-preview-inset-x:\s*12px/g)).toHaveLength(2);
   });
 
   it('places Body-row Preview-side overlay handle with 8px hit and hint edge', () => {

@@ -16,7 +16,7 @@ import {
 } from '@/pages/Chat/chat-message-search';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
-import { ChatConversationHeaderActions, ChatPreviewToggleHeaderAction } from '@/pages/Chat/ChatSearchBar';
+import { ChatConversationHeaderActions, ChatPreviewWorkspaceHeaderActions } from '@/pages/Chat/ChatSearchBar';
 import { ChatPreviewHeaderTabs } from '@/pages/Chat/ChatPreviewHeaderTabs';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
@@ -364,18 +364,29 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     ],
   );
 
-  const previewToggleAction = useMemo(
+  const previewHeaderActions = useMemo(
     () => (
-      <ChatPreviewToggleHeaderAction
+      <ChatPreviewWorkspaceHeaderActions
         canShowPreviewPanel={canShowPreviewPanel}
         isPreviewPanelOpen={showPreviewPanel}
+        isWorkspaceExpanded={isPreviewExpanded}
+        onExpandWorkspace={expandPreview}
+        onRestoreWorkspace={restorePreview}
         onTogglePreview={() => {
           if (showPreviewPanel) closePreviewPanel();
           else openPreviewPanel();
         }}
       />
     ),
-    [canShowPreviewPanel, showPreviewPanel, closePreviewPanel, openPreviewPanel],
+    [
+      canShowPreviewPanel,
+      showPreviewPanel,
+      isPreviewExpanded,
+      expandPreview,
+      restorePreview,
+      closePreviewPanel,
+      openPreviewPanel,
+    ],
   );
 
   const previewHeaderTabs = useMemo(
@@ -409,7 +420,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     title: sessionTitle,
     previewTabs: previewHeaderTabs,
     chatActions: conversationHeaderActions,
-    previewActions: previewToggleAction,
+    previewActions: previewHeaderActions,
     layoutMode: headerLayoutMode,
   });
 
@@ -605,9 +616,6 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
           showEditWorkflow={showEditWorkflow}
           workflowId={sessionWorkflowId}
           onEditWorkflow={openWorkflowPreview}
-          isWorkspaceExpanded={isPreviewExpanded}
-          onExpandWorkspace={expandPreview}
-          onRestoreWorkspace={restorePreview}
           className="h-full w-full"
         />
       </div>

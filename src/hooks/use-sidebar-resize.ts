@@ -1,5 +1,5 @@
 /**
- * useSidebarResize — provincial AppShell Gap column drag (Pointer Capture + RAF).
+ * useSidebarResize — provincial AppShell boundary-overlay drag (Pointer Capture + RAF).
  *
  * Hot path: pointermove → rAF → CSS `--sto-sidebar-effective-w` only.
  * Commit Zustand / host-api on pointerup (or collapse). Cancel restores preDrag.

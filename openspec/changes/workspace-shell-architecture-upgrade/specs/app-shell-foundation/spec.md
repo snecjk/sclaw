@@ -1,18 +1,31 @@
 ## ADDED Requirements
 
-### Requirement: Provincial AppShell uses fixed three-column Frame geometry
-The provincial AppShell SHALL lay out as a CSS Grid with columns `effectiveSidebarWidth | 8px | minmax(0,1fr)` and SHALL apply a stable 8px L0 Frame on the Workspace wrapper for top/right/bottom regardless of sidebar collapse reason. Collapse SHALL NOT be implemented by switching body padding that reconstitutes the Frame.
+### Requirement: Provincial AppShell uses two-column boundary geometry with an overlay resize hit area
+The provincial AppShell SHALL lay out as a CSS Grid with columns `effectiveSidebarWidth | minmax(0,1fr)`. Sidebar right edge and Workspace left edge SHALL coincide without a width-consuming intermediary Grid track. When Sidebar resize is available, the 8px engineering hit area SHALL be an absolute overlay on the Workspace side of that boundary and SHALL NOT change Grid width or overlap the Sidebar OverlayScrollbar. The Workspace wrapper SHALL apply a stable 8px L0 Frame on top/right/bottom. Its start Frame SHALL be `0px` while Sidebar is expanded so the two tracks remain adjacent, and SHALL become `8px` when the provincial Sidebar is fully collapsed so the Workspace card does not touch the window edge. Collapse SHALL NOT be implemented by restoring a real intermediary Grid track. Provincial horizontal shell-frame math SHALL reserve only the remaining 8px Workspace right Frame (not the deleted intermediary Gap), and Workspace-centered Toast offset SHALL equal `effectiveSidebarWidth` without an extra provincial Gap.
 
 #### Scenario: Expanded provincial shell
 - **WHEN** the provincial layout is shown and the sidebar is not effectively collapsed
-- **THEN** the shell SHALL render Sidebar track, 8px L0 gap, and L1 Workspace
+- **THEN** the shell SHALL render adjacent Sidebar and L1 Workspace tracks with `sidebarRight = workspaceLeft` within `1px`
+- **AND** the Sidebar resize hit area SHALL overlay the Workspace side without consuming a Grid track
 - **AND** the Workspace wrapper SHALL provide top/right/bottom 8px Frame without depending on collapsed-only padding
 
 #### Scenario: Collapsed provincial shell (any reason)
 - **WHEN** `effectiveCollapsed` is true for provincial layout (user, viewport, or context)
 - **THEN** the Sidebar track SHALL be `0px`
-- **AND** the 8px L0 gap and Workspace Frame SHALL remain
+- **AND** the resize hit area SHALL not render
+- **AND** the Workspace main card SHALL remain `8px ± 1px` from the window start edge while top/right/bottom Frame also remain
+- **AND** the start Frame SHALL belong to the Workspace wrapper rather than a recreated Grid track
 - **AND** the shell SHALL NOT paint a collapsed-only background wedge to fake the Frame
+
+#### Scenario: Dark-mode boundary continuity
+- **WHEN** the adjacent Sidebar and Workspace boundary renders in dark theme
+- **THEN** the shell SHALL keep the same two-column geometry as light theme
+- **AND** it SHALL NOT paint a third color strip or reintroduce a width-consuming gap to express the resize affordance
+
+#### Scenario: Geometry consumers drop the deleted Gap
+- **WHEN** provincial Sidebar effective max and global Toast position are calculated after the two-column migration
+- **THEN** horizontal shell Frame SHALL equal the remaining `8px` Workspace right Frame for effective-max math
+- **AND** Toast layout offset SHALL equal `effectiveSidebarWidth` (or `0` for no-sidebar routes) without adding the deleted Gap
 
 #### Scenario: Full legacy layout remains distinct
 - **WHEN** `layoutVariant` is `full`

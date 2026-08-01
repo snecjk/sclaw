@@ -2,11 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   SIDEBAR_FULL_COLLAPSED_RAIL,
   SIDEBAR_PREFERRED_WIDTH_STAGE1,
-  SHELL_CARD_GAP_PX,
+  WORKSPACE_FRAME_PX,
   computeAppShellSnapshot,
   computeToastLayoutOffsetPx,
   resolveHasSidebar,
 } from '@/lib/app-shell-metrics';
+import {
+  stoAppShellGridProvincialClass,
+  stoSidebarResizeHandleClass,
+  stoWorkspaceWrapClass,
+} from '@/lib/surfaces';
 
 describe('resolveHasSidebar', () => {
   it('returns false for settings and auth shells', () => {
@@ -157,7 +162,7 @@ describe('computeAppShellSnapshot', () => {
 });
 
 describe('computeToastLayoutOffsetPx', () => {
-  it('uses effective width + provincial gap, never invents 72 for provincial', () => {
+  it('uses the effective sidebar width as the Workspace boundary offset', () => {
     const expanded = computeAppShellSnapshot({
       pathname: '/',
       layoutVariant: 'provincial',
@@ -165,9 +170,7 @@ describe('computeToastLayoutOffsetPx', () => {
       contextCollapsed: false,
       effectiveSidebarMax: 400,
     });
-    expect(computeToastLayoutOffsetPx(expanded)).toBe(
-      SIDEBAR_PREFERRED_WIDTH_STAGE1 + SHELL_CARD_GAP_PX,
-    );
+    expect(computeToastLayoutOffsetPx(expanded)).toBe(SIDEBAR_PREFERRED_WIDTH_STAGE1);
 
     const collapsed = computeAppShellSnapshot({
       pathname: '/',
@@ -176,7 +179,7 @@ describe('computeToastLayoutOffsetPx', () => {
       contextCollapsed: false,
       effectiveSidebarMax: 400,
     });
-    expect(computeToastLayoutOffsetPx(collapsed)).toBe(SHELL_CARD_GAP_PX);
+    expect(computeToastLayoutOffsetPx(collapsed)).toBe(0);
 
     const settings = computeAppShellSnapshot({
       pathname: '/settings',
@@ -195,5 +198,19 @@ describe('computeToastLayoutOffsetPx', () => {
       effectiveSidebarMax: 400,
     });
     expect(computeToastLayoutOffsetPx(fullCollapsed)).toBe(SIDEBAR_FULL_COLLAPSED_RAIL);
+  });
+});
+
+describe('provincial AppShell geometry contract', () => {
+  it('uses two tracks and keeps the resize hit area out of layout flow', () => {
+    expect(stoAppShellGridProvincialClass).toContain(
+      'grid-cols-[var(--sto-sidebar-effective-w)_minmax(0,1fr)]',
+    );
+    expect(stoAppShellGridProvincialClass).not.toContain('var(--sto-shell-card-gap)_minmax');
+    expect(stoSidebarResizeHandleClass).toContain('absolute');
+    expect(stoSidebarResizeHandleClass).toContain('left-0');
+    expect(stoWorkspaceWrapClass).toContain('relative');
+    expect(stoWorkspaceWrapClass).toContain('pl-[var(--sto-workspace-frame-start,0px)]');
+    expect(WORKSPACE_FRAME_PX).toBe(8);
   });
 });

@@ -1,8 +1,8 @@
 /**
  * Main Layout Component
  *
- * 省区：无整行顶栏；Stage 1 三列 Grid（Sidebar | 8px L0 | Workspace）。
- * Stage 2：第二列挂 SidebarResizeHandle（collapsed 时不渲染）。
+ * 省区：无整行顶栏；Sidebar | Workspace 两列 Grid。
+ * Stage 2：ResizeHandle 作为 Workspace 起始侧 overlay（collapsed 时不渲染）。
  * Stage 3：split 用统一三列 Grid；preview-expanded 用 Workspace 内单列（Conversation 由页面保持挂载）。
  * 完整 layout：52px TitleBar + 侧栏 + main 滚动区。
  */
@@ -11,17 +11,15 @@ import { matchPath, Outlet, useLocation } from 'react-router-dom';
 import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import {
   stoAppShellGridProvincialClass,
-  stoAppShellSidebarGapClass,
   stoMainCardBodyClass,
   stoMainCardBodyHomeClass,
   stoMainCardBodySplitClass,
   stoMainCardShellClass,
   stoPreviewExpandedMainClass,
-  stoSplitShellInsetsClass,
   stoSplitUnifiedMainClass,
   stoWorkspaceWrapClass,
 } from '@/lib/surfaces';
-import { formatCssPx } from '@/lib/app-shell-metrics';
+import { formatCssPx, WORKSPACE_FRAME_PX } from '@/lib/app-shell-metrics';
 import { SIDEBAR_MIN_WIDTH } from '@/lib/sidebar-resize-metrics';
 import { AppShellChromeOverlay } from '@/components/layout/app-shell-chrome-overlay';
 import { useAppShellLayout } from '@/components/layout/app-shell-layout-context';
@@ -88,7 +86,7 @@ function MainCardBody({ hideContentHeader }: { hideContentHeader: boolean }) {
   );
 }
 
-/** 省区主卡片：三栏时 main 承担水平 inset，保证 Header 与 split row 预览列左缘一致 */
+/** 省区主卡片：Header 与 Body 各自拥有 inset，不把 macOS safe slot 下放给 main。 */
 function ProvincialMainCard({ hideContentHeader }: { hideContentHeader: boolean }) {
   const { layoutMode } = useContentHeaderDisplay();
   const isSplitLayout = layoutMode === 'split';
@@ -100,9 +98,9 @@ function ProvincialMainCard({ hideContentHeader }: { hideContentHeader: boolean 
         stoMainCardShellClass,
         'relative',
         isSplitLayout
-          ? cn(stoSplitShellInsetsClass, stoSplitUnifiedMainClass)
+          ? stoSplitUnifiedMainClass
           : isPreviewExpanded
-            ? cn(stoSplitShellInsetsClass, stoPreviewExpandedMainClass)
+            ? stoPreviewExpandedMainClass
             : 'flex min-h-0 min-w-0 flex-1 flex-col',
       )}
     >
@@ -177,6 +175,9 @@ export function MainLayout() {
 
   const shellStyle = {
     ['--sto-sidebar-effective-w' as string]: formatCssPx(snapshot.effectiveSidebarWidth),
+    ['--sto-workspace-frame-start' as string]: formatCssPx(
+      snapshot.effectiveCollapsed ? WORKSPACE_FRAME_PX : 0,
+    ),
   } as CSSProperties;
 
   if (isProvincialSidebar) {
@@ -212,19 +213,17 @@ export function MainLayout() {
         <AppShellChromeOverlay />
         <div className={stoAppShellGridProvincialClass}>
           <Sidebar />
-          {showSidebarResize ? (
-            <SidebarResizeHandle
-              valueNow={snapshot.effectiveSidebarWidth}
-              ariaValueMin={SIDEBAR_MIN_WIDTH}
-              ariaValueMax={Math.max(SIDEBAR_MIN_WIDTH, snapshot.effectiveSidebarMax)}
-              isResizing={isResizing}
-              onResizeStart={startResize}
-              onKeyboardKey={adjustWidthByKeyboard}
-            />
-          ) : (
-            <div className={stoAppShellSidebarGapClass} aria-hidden />
-          )}
           <div className={stoWorkspaceWrapClass}>
+            {showSidebarResize ? (
+              <SidebarResizeHandle
+                valueNow={snapshot.effectiveSidebarWidth}
+                ariaValueMin={SIDEBAR_MIN_WIDTH}
+                ariaValueMax={Math.max(SIDEBAR_MIN_WIDTH, snapshot.effectiveSidebarMax)}
+                isResizing={isResizing}
+                onResizeStart={startResize}
+                onKeyboardKey={adjustWidthByKeyboard}
+              />
+            ) : null}
             <ContentHeaderProvider>
               <ProvincialMainCard hideContentHeader={false} />
             </ContentHeaderProvider>

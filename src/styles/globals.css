@@ -88,16 +88,24 @@
     --sto-brand-6: #ff6f00;
     --sto-header-h: 52px;
     --sto-content-header-h: 52px;
-    /* Workbench 垂直节奏：Header→Body Surface→正文（唯一公式 8+8=16） */
+    /* 模式独立垂直节奏：Conversation 8+8；Split 0+8；Expanded 0→Surface。 */
     --sto-workbench-header-to-body-gap: 8px;
+    --sto-split-header-to-surface-gap: 0px;
     --sto-workbench-body-content-inset-y: 8px;
+    --sto-workbench-surface-bottom-inset: 8px;
+    --sto-preview-expanded-header-to-surface-gap: 0px;
+    --sto-expanded-preview-inset-x: 12px;
+    --sto-split-preview-surface-inset-end: 12px;
+    --sto-workspace-frame-start: 0px;
     /* ContentHeader 水平内距：左与 body/三栏容器对齐，右与 icon 列对齐 */
     --sto-chrome-traffic-light-pad: 0px;
     --sto-content-header-pad-start: var(--sto-content-pad-x);
     --sto-content-header-pad-end: 8px;
-    /* 省区 AppChrome：折叠钮距窗口顶 12px；行高 = inset + 32px 按钮 */
+    /* Windows/通用 AppChrome；macOS Sidebar 有独立 optical inset。 */
     --sto-chrome-toggle-inset-top: 12px;
     --sto-chrome-h: calc(var(--sto-chrome-toggle-inset-top) + 32px);
+    --sto-sidebar-chrome-toggle-inset-top: 20px;
+    --sto-sidebar-chrome-h: calc(var(--sto-sidebar-chrome-toggle-inset-top) + 32px);
     --sto-shell-card-gap: 8px;
     /* Stage 1 AppShell Grid column; runtime overwritten by MainLayout snapshot */
     --sto-sidebar-effective-w: 260px;
@@ -259,8 +267,16 @@
     --sto-brand-6: #ff6f00;
     --sto-header-h: 52px;
     --sto-content-header-h: 52px;
+    --sto-split-header-to-surface-gap: 0px;
+    --sto-workbench-surface-bottom-inset: 8px;
+    --sto-preview-expanded-header-to-surface-gap: 0px;
+    --sto-expanded-preview-inset-x: 12px;
+    --sto-split-preview-surface-inset-end: 12px;
+    --sto-workspace-frame-start: 0px;
     --sto-chrome-toggle-inset-top: 12px;
     --sto-chrome-h: calc(var(--sto-chrome-toggle-inset-top) + 32px);
+    --sto-sidebar-chrome-toggle-inset-top: 20px;
+    --sto-sidebar-chrome-h: calc(var(--sto-sidebar-chrome-toggle-inset-top) + 32px);
     --sto-shell-card-gap: 8px;
     /* Stage 1 AppShell Grid column; runtime overwritten by MainLayout snapshot */
     --sto-sidebar-effective-w: 260px;

@@ -18,7 +18,10 @@ import {
 
 export const SIDEBAR_PREFERRED_WIDTH_STAGE1 = SIDEBAR_DEFAULT_WIDTH;
 export const SIDEBAR_FULL_COLLAPSED_RAIL = 72;
-export const SHELL_CARD_GAP_PX = 8;
+/** Provincial L0 Workspace frame. It is not a Sidebar/Workspace Grid gap. */
+export const WORKSPACE_FRAME_PX = 8;
+/** @deprecated Use {@link WORKSPACE_FRAME_PX}; kept for existing consumers. */
+export const SHELL_CARD_GAP_PX = WORKSPACE_FRAME_PX;
 
 export type AppShellLayoutVariant = 'provincial' | 'full';
 
@@ -131,12 +134,12 @@ export function computeAppShellSnapshot(input: ComputeAppShellSnapshotInput): Ap
 
 /**
  * Horizontal offset for Toaster center relative to viewport center.
- * Provincial always includes the 8px L0 gap/frame when a sidebar shell is present.
+ * Provincial Workspace starts exactly at the Sidebar boundary; there is no
+ * structural middle gap to add to the effective sidebar width.
  */
 export function computeToastLayoutOffsetPx(snapshot: AppShellLayoutSnapshot): number {
   if (!snapshot.hasSidebar) return 0;
-  const gap = snapshot.layoutVariant === 'provincial' ? SHELL_CARD_GAP_PX : 0;
-  return snapshot.effectiveSidebarWidth + gap;
+  return snapshot.effectiveSidebarWidth;
 }
 
 export function formatCssPx(value: number): string {

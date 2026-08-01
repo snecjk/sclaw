@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronUp, Search, X } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { ChevronDown, ChevronUp, Maximize2, Minimize2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -79,6 +80,7 @@ export function ChatSearchBar({
   variant = 'toolbar',
 }: ChatSearchBarProps) {
   const { t } = useTranslation('chat');
+  const inputRef = useRef<HTMLInputElement>(null);
   const hasQuery = value.trim().length > 0;
   const hasResults = resultCount > 0;
   const resultLabel = hasQuery
@@ -88,6 +90,12 @@ export function ChatSearchBar({
     : null;
 
   const isHeader = variant === 'header';
+
+  useEffect(() => {
+    if (isOpen) {
+      inputRef.current?.focus();
+    }
+  }, [isOpen]);
 
   const toggleButton = (
     <Tooltip>
@@ -118,26 +126,30 @@ export function ChatSearchBar({
   const searchPanel = (
     <div
       className={cn(
-        'overflow-hidden transition-all duration-200 ease-out',
-        isOpen ? (isHeader ? 'w-[16.5rem] opacity-100' : 'w-[16.5rem] opacity-100') : 'w-0 opacity-0',
+        isHeader
+          ? 'no-drag pointer-events-none absolute right-9 top-0 z-30 h-8 w-[16.5rem] transition-opacity duration-150'
+          : 'overflow-hidden transition-all duration-200 ease-out',
+        isHeader
+          ? isOpen ? 'pointer-events-auto opacity-100' : 'invisible opacity-0'
+          : isOpen ? 'w-[16.5rem] opacity-100' : 'w-0 opacity-0',
       )}
     >
       <div
         className={cn(
-          'flex w-[16.5rem] items-center gap-1.5 rounded-2xl border border-border/80 px-2 py-1.5',
+          'flex h-8 w-[16.5rem] items-center gap-1 rounded-[10px] border border-border/80 px-1.5',
           'bg-white/88 shadow-[0_12px_32px_rgba(15,23,42,0.07)] backdrop-blur-md',
           'dark:bg-white/[0.08]',
         )}
       >
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <Search className="h-3.5 w-3.5" aria-hidden />
         </div>
         <Input
+          ref={inputRef}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={t('toolbar.searchPlaceholder')}
-          className="h-8 min-w-0 border-0 bg-transparent px-0 text-[13px] shadow-none placeholder:text-[13px] focus-visible:ring-0 focus-visible:ring-offset-0"
-          autoFocus={isOpen}
+          className="h-full min-w-0 border-0 bg-transparent px-0 text-[13px] shadow-none placeholder:text-[13px] focus-visible:ring-0 focus-visible:ring-offset-0"
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.preventDefault();
@@ -158,14 +170,14 @@ export function ChatSearchBar({
           }}
         />
         <div className="flex shrink-0 items-center gap-1">
-          <span className="min-w-[2rem] text-center text-[10px] font-medium text-muted-foreground">
+          <span className="min-w-[2rem] text-center text-[10px] font-medium leading-none text-muted-foreground">
             {resultLabel}
           </span>
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            className="h-7 w-7 rounded-xl"
+            className="h-6 w-6 rounded-lg"
             onClick={onPrevious}
             disabled={disabled || !hasResults}
             title={t('toolbar.searchPrev')}
@@ -177,7 +189,7 @@ export function ChatSearchBar({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-7 w-7 rounded-xl"
+            className="h-6 w-6 rounded-lg"
             onClick={onNext}
             disabled={disabled || !hasResults}
             title={t('toolbar.searchNext')}
@@ -189,7 +201,7 @@ export function ChatSearchBar({
             type="button"
             variant="ghost"
             size="icon"
-            className="h-7 w-7 rounded-xl text-muted-foreground hover:text-foreground"
+            className="h-6 w-6 rounded-lg text-muted-foreground hover:text-foreground"
             onClick={hasQuery ? onClear : onToggle}
             disabled={disabled}
             title={hasQuery ? t('toolbar.searchClear') : t('toolbar.searchClose')}
@@ -204,7 +216,7 @@ export function ChatSearchBar({
 
   if (isHeader) {
     return (
-      <div className="relative z-20 flex flex-row-reverse items-center gap-1">
+      <div className="relative z-20 h-8 w-8 shrink-0">
         {toggleButton}
         {searchPanel}
       </div>
@@ -313,6 +325,73 @@ export function ChatPreviewToggleHeaderAction({
         label={isPreviewPanelOpen ? t('preview.collapsePanel') : t('toolbar.openPreview')}
       />
     </Tooltip>
+  );
+}
+
+export interface ChatPreviewWorkspaceHeaderActionsProps
+  extends ChatPreviewToggleHeaderActionProps {
+  isWorkspaceExpanded: boolean;
+  onExpandWorkspace: () => void;
+  onRestoreWorkspace: () => void;
+}
+
+/**
+ * Preview 在全局 Header 中的稳定操作组。
+ * 固定顺序：Workspace 展开/还原 → Preview 面板开关。
+ */
+export function ChatPreviewWorkspaceHeaderActions({
+  canShowPreviewPanel,
+  isPreviewPanelOpen,
+  isWorkspaceExpanded,
+  onExpandWorkspace,
+  onRestoreWorkspace,
+  onTogglePreview,
+}: ChatPreviewWorkspaceHeaderActionsProps) {
+  const { t } = useTranslation('chat');
+  if (!canShowPreviewPanel) return null;
+
+  return (
+    <>
+      {isPreviewPanelOpen ? (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              data-slot="preview-workspace-layout-toggle"
+              className={cn(
+                'group',
+                contentHeaderActionBtnClass,
+                isWorkspaceExpanded && contentHeaderActionBtnActiveClass,
+              )}
+              onClick={isWorkspaceExpanded ? onRestoreWorkspace : onExpandWorkspace}
+              aria-label={
+                isWorkspaceExpanded
+                  ? t('preview.restoreWorkspace')
+                  : t('preview.expandWorkspace')
+              }
+            >
+              {isWorkspaceExpanded ? (
+                <Minimize2 className="h-4 w-4" aria-hidden />
+              ) : (
+                <Maximize2 className="h-4 w-4" aria-hidden />
+              )}
+            </button>
+          </TooltipTrigger>
+          <HeaderActionTooltip
+            label={
+              isWorkspaceExpanded
+                ? t('preview.restoreWorkspace')
+                : t('preview.expandWorkspace')
+            }
+          />
+        </Tooltip>
+      ) : null}
+      <ChatPreviewToggleHeaderAction
+        canShowPreviewPanel={canShowPreviewPanel}
+        isPreviewPanelOpen={isPreviewPanelOpen}
+        onTogglePreview={onTogglePreview}
+      />
+    </>
   );
 }
 

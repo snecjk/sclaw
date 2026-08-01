@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
   contentHeaderBarClass,
+  contentHeaderPreviewExpandedStartClass,
   contentHeaderSplitBarClass,
   contentHeaderSplitChatZoneClass,
   contentHeaderSplitPreviewZoneClass,
@@ -67,6 +68,8 @@ export function ContentHeader() {
         isSplitLayout && 'overflow-hidden',
         workflowEditorActive && showTitle && 'max-w-none min-w-0 flex-1',
         !showTitle && !sidebarCollapsed && 'min-w-0',
+        isPreviewExpanded && 'min-w-0 max-w-none',
+        isPreviewExpanded && !canUserRestoreSidebar && 'w-0 gap-0',
       )}
     >
       {canUserRestoreSidebar ? (
@@ -77,27 +80,42 @@ export function ContentHeader() {
           expandLabel={t('sidebar.toggleSidebarExpand')}
         />
       ) : null}
-      {showTitle ? (
-        titleText && onCloseSession ? (
-          <ContentHeaderSessionChip label={titleText} onClose={onCloseSession} />
-        ) : (
-          <div className={contentHeaderTitleClass} title={titleText ?? undefined}>
-            {isValidElement(title) ? title : titleText}
-          </div>
-        )
-      ) : null}
+      <div
+        data-slot="conversation-title"
+        className={cn('min-w-0 overflow-hidden', isPreviewExpanded && 'hidden')}
+        aria-hidden={isPreviewExpanded || undefined}
+        {...(isPreviewExpanded ? { inert: true as const } : {})}
+      >
+        {showTitle ? (
+          titleText && onCloseSession ? (
+            <ContentHeaderSessionChip label={titleText} onClose={onCloseSession} />
+          ) : (
+            <div className={contentHeaderTitleClass} title={titleText ?? undefined}>
+              {isValidElement(title) ? title : titleText}
+            </div>
+          )
+        ) : null}
+      </div>
     </div>
   );
 
   /** 会话区操作（搜索/刷新/思考）：三栏时贴对话列右缘，单栏时并入右上角 */
   const chatActionsZone = chatActions ? (
-    <div className="no-drag flex shrink-0 items-center gap-1">
+    <div
+      data-slot="chat-actions"
+      className={cn(
+        'no-drag flex shrink-0 items-center gap-1',
+        isPreviewExpanded && 'hidden',
+      )}
+      aria-hidden={isPreviewExpanded || undefined}
+      {...(isPreviewExpanded ? { inert: true as const } : {})}
+    >
       {chatActions}
     </div>
   ) : null;
 
   const previewActionsZone = previewActions ? (
-    <div className="no-drag flex shrink-0 items-center gap-1">
+    <div data-slot="workspace-actions" className="no-drag flex shrink-0 items-center gap-1">
       {previewActions}
     </div>
   ) : null;
@@ -107,66 +125,61 @@ export function ContentHeader() {
     <div className={contentHeaderWinControlsReserveClass} aria-hidden />
   ) : null;
 
-  if (isSplitLayout) {
-    return (
-      <header className={contentHeaderSplitBarClass} aria-label={t('sidebar.chat')}>
-        <div className={stoSplitGridHeaderChatClass}>
-          <div className={contentHeaderSplitChatZoneClass}>
-            {titleZone}
-            <div className="min-w-0 flex-1" aria-hidden />
-            {chatActionsZone}
-          </div>
-        </div>
-        <div className={stoSplitGridHeaderPreviewClass}>
-          <div
-            className={cn(
-              contentHeaderSplitPreviewZoneClass,
-              !previewTabs && previewActionsZone && 'justify-end',
-            )}
-          >
-            {previewTabs ? (
-              previewTabs
-            ) : (
-              <div className="min-w-0 flex-1" aria-hidden />
-            )}
-            {previewActionsZone}
-            {winControlsReserve}
-          </div>
-        </div>
-      </header>
-    );
-  }
-
-  if (isPreviewExpanded) {
-    return (
-      <header className={contentHeaderBarClass} aria-label={t('sidebar.chat')}>
-        {canUserRestoreSidebar ? (
-          <SidebarHeaderToggle
-            isCollapsed
-            onToggle={() => setUserCollapsed(false)}
-            collapseLabel={t('sidebar.toggleSidebarCollapse')}
-            expandLabel={t('sidebar.toggleSidebarExpand')}
-          />
-        ) : null}
-        {previewTabs ? (
-          previewTabs
-        ) : (
-          titleZone
-        )}
-        <div className="min-w-0 flex-1" aria-hidden />
-        {previewActionsZone}
-        {winControlsReserve}
-      </header>
-    );
-  }
-
-  return (
-    <header className={contentHeaderBarClass} aria-label={t('sidebar.chat')}>
-      {titleZone}
+  const chatHeaderZone = (
+    <div
+      data-slot="chat-header-zone"
+      className={cn(
+        isSplitLayout
+          ? cn(stoSplitGridHeaderChatClass, contentHeaderSplitChatZoneClass)
+          : isPreviewExpanded
+            ? cn(
+                'flex min-w-0 shrink-0 items-center gap-2 overflow-hidden',
+                !canUserRestoreSidebar && 'w-0 gap-0',
+              )
+            : 'flex min-w-0 flex-1 items-center gap-2 overflow-hidden',
+      )}
+    >
+      <div data-slot="sidebar-title" className="min-w-0 shrink-0">
+        {titleZone}
+      </div>
       <div className="min-w-0 flex-1" aria-hidden />
       {chatActionsZone}
+    </div>
+  );
+
+  const previewHeaderZone = (
+    <div
+      data-slot="preview-header-zone"
+      className={cn(
+        isSplitLayout
+          ? cn(stoSplitGridHeaderPreviewClass, contentHeaderSplitPreviewZoneClass)
+          : isPreviewExpanded
+            ? 'flex min-w-0 flex-1 items-center gap-1 overflow-hidden'
+            : 'flex min-w-0 shrink-0 items-center gap-1 overflow-hidden',
+      )}
+    >
+      {isSplitLayout || isPreviewExpanded ? (
+        <div data-slot="preview-tabs" className="flex min-w-0 flex-1 items-center overflow-hidden">
+          {previewTabs}
+        </div>
+      ) : null}
       {previewActionsZone}
       {winControlsReserve}
+    </div>
+  );
+
+  return (
+    <header
+      data-layout-mode={layoutMode}
+      className={cn(
+        isSplitLayout ? contentHeaderSplitBarClass : contentHeaderBarClass,
+        isPreviewExpanded && !sidebarCollapsed && contentHeaderPreviewExpandedStartClass,
+        isPreviewExpanded && !canUserRestoreSidebar && 'gap-0',
+      )}
+      aria-label={t('sidebar.chat')}
+    >
+      {chatHeaderZone}
+      {previewHeaderZone}
     </header>
   );
 }

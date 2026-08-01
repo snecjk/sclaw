@@ -8,8 +8,6 @@ import {
   CloudUpload,
   RefreshCw,
   Download,
-  Maximize2,
-  Minimize2,
   Eye,
   ExternalLink,
 } from 'lucide-react';
@@ -48,15 +46,6 @@ export interface ChatPreviewPanelProps {
   showEditWorkflow?: boolean;
   workflowId?: string | null;
   onEditWorkflow?: OnEditWorkflowNavigate;
-  /**
-   * Workspace PreviewMode.expanded（非 DOM Fullscreen）。
-   * 与 Sidebar restore 语义不同。
-   */
-  isWorkspaceExpanded?: boolean;
-  /** split → expanded */
-  onExpandWorkspace?: () => void;
-  /** expanded → split（保留 splitPercent） */
-  onRestoreWorkspace?: () => void;
   className?: string;
 }
 
@@ -66,9 +55,6 @@ export function ChatPreviewPanel({
   showEditWorkflow = false,
   workflowId = null,
   onEditWorkflow,
-  isWorkspaceExpanded = false,
-  onExpandWorkspace,
-  onRestoreWorkspace,
   className,
 }: ChatPreviewPanelProps) {
   const { t } = useTranslation(['chat', 'common']);
@@ -135,14 +121,6 @@ export function ChatPreviewPanel({
     }
   }, [activeFile]);
 
-  const handleWorkspaceLayoutToggle = useCallback(() => {
-    if (isWorkspaceExpanded) {
-      onRestoreWorkspace?.();
-      return;
-    }
-    onExpandWorkspace?.();
-  }, [isWorkspaceExpanded, onExpandWorkspace, onRestoreWorkspace]);
-
   const handleRefresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
   }, []);
@@ -193,22 +171,6 @@ export function ChatPreviewPanel({
           <div className="flex shrink-0 items-center gap-2">
             {activeFile ? (
               <>
-                {onExpandWorkspace || onRestoreWorkspace ? (
-                  <PreviewActionButton
-                    onClick={handleWorkspaceLayoutToggle}
-                    aria-label={
-                      isWorkspaceExpanded
-                        ? t('preview.restoreWorkspace')
-                        : t('preview.expandWorkspace')
-                    }
-                  >
-                    {isWorkspaceExpanded ? (
-                      <Minimize2 className="h-4 w-4" aria-hidden />
-                    ) : (
-                      <Maximize2 className="h-4 w-4" aria-hidden />
-                    )}
-                  </PreviewActionButton>
-                ) : null}
                 <PreviewActionButton onClick={handleRefresh} aria-label={t('preview.refresh')}>
                   <RefreshCw className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>
