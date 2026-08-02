@@ -127,7 +127,7 @@ export function ChatSearchBar({
     <div
       className={cn(
         isHeader
-          ? 'no-drag pointer-events-none absolute right-9 top-0 z-30 h-8 w-[16.5rem] transition-opacity duration-150'
+          ? 'no-drag pointer-events-none absolute right-[calc(var(--sto-content-header-control-h,28px)+4px)] top-0 z-30 h-[var(--sto-content-header-control-h,28px)] w-[16.5rem] transition-opacity duration-150'
           : 'overflow-hidden transition-all duration-200 ease-out',
         isHeader
           ? isOpen ? 'pointer-events-auto opacity-100' : 'invisible opacity-0'
@@ -136,7 +136,7 @@ export function ChatSearchBar({
     >
       <div
         className={cn(
-          'flex h-8 w-[16.5rem] items-center gap-1 rounded-[10px] border border-border/80 px-1.5',
+          'flex h-[var(--sto-content-header-control-h,28px)] w-[16.5rem] items-center gap-1 rounded-[10px] border border-border/80 px-1.5',
           'bg-white/88 shadow-[0_12px_32px_rgba(15,23,42,0.07)] backdrop-blur-md',
           'dark:bg-white/[0.08]',
         )}
@@ -216,7 +216,7 @@ export function ChatSearchBar({
 
   if (isHeader) {
     return (
-      <div className="relative z-20 h-8 w-8 shrink-0">
+      <div className="relative z-20 h-[var(--sto-content-header-control-h,28px)] w-[var(--sto-content-header-control-h,28px)] shrink-0">
         {toggleButton}
         {searchPanel}
       </div>

@@ -466,7 +466,7 @@ export const STO_SPLIT_PREVIEW_INSET_X = '0px';
 export const STO_PREVIEW_EXPANDED_INSET_X = '12px';
 
 /** Conversation：Header bottom → Body Surface（与 content-header-metrics 同源） */
-export const CONVERSATION_HEADER_TO_BODY_GAP = '8px';
+export const CONVERSATION_HEADER_TO_SURFACE_GAP = '0px';
 /** Split：Header bottom → Chat / Preview Surface */
 export const SPLIT_HEADER_TO_SURFACE_GAP = '0px';
 /** Body Surface → 第一行正文 */
@@ -483,13 +483,13 @@ export const STO_SPLIT_RESIZE_HIT_WIDTH = '8px';
 
 /**
  * 三栏统一 grid（main）：2 行 × 3 列；中间列为 0px 逻辑边界（不占宽）。
- * --sto-split-preview-col 只写在 main。Header 为真实连续 52px 子项；body 用 {@link stoSplitGridContentsClass} 进入第二行。
+ * --sto-split-preview-col 只写在 main。Header 为真实连续 44px 子项；body 用 {@link stoSplitGridContentsClass} 进入第二行。
  * Stage 3：无双边 10px 结构空缝；Handle 不再靠 translate 补偿。
  */
 export const stoSplitUnifiedMainClass = cn(
   'grid min-h-0 min-w-0 flex-1 overflow-hidden box-border',
   '[--sto-split-preview-inset-x:0px]',
-  'grid-rows-[var(--sto-content-header-h,52px)_minmax(0,1fr)]',
+  'grid-rows-[var(--sto-content-header-h,44px)_minmax(0,1fr)]',
   'grid-cols-[minmax(0,1fr)_0px_var(--sto-split-preview-col,50%)]',
 );
 
@@ -618,7 +618,7 @@ export const stoSplitPreviewCardClass = stoPreviewContentShellClass;
 /** 预览产物 tab pill（选中 #E5E6EB / 未选 #F5F6F7；暗色未选用 muted 底 + 次级字色） */
 export function stoPreviewArtifactTabClass(isActive: boolean): string {
   return cn(
-    'no-drag inline-flex h-8 max-w-[143px] shrink-0 items-center gap-1 rounded-[10px] px-2 text-sm leading-none transition-colors duration-fast',
+    'no-drag inline-flex h-[var(--sto-content-header-control-h,28px)] max-w-[143px] shrink-0 items-center gap-1 rounded-[10px] px-2 text-sm leading-none transition-colors duration-fast',
     isActive
       ? 'bg-border text-foreground'
       : cn(
@@ -661,7 +661,7 @@ export const stoSplitPanelResizeEdgeClass = cn(
   'group-data-[resizing=true]:opacity-100',
 );
 
-/** ContentHeader 预览列：☰ + tab 与右侧操作 icon 同一 52px 行内对齐 */
+/** ContentHeader 预览列：☰ + tab 与右侧操作 icon 同一 44px 行内对齐 */
 export const contentHeaderPreviewTabsRowClass = cn(
   'flex h-full min-h-0 min-w-0 flex-1 items-center gap-2 overflow-hidden',
 );
@@ -780,8 +780,8 @@ export const stoMainCardBodyClass = cn(
  */
 export const stoMainCardBodyHomeClass = cn(
   'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden overscroll-y-contain',
-  // Header bottom → Body Surface = 8px（closed 与 split 共用公式）
-  'pt-[var(--sto-workbench-header-to-body-gap,8px)] pb-5',
+  // Conversation Header bottom → Body Surface = 0px；正文 8px 由 scroll viewport 持有。
+  'pt-[var(--sto-conversation-header-to-surface-gap,0px)] pb-5',
 );
 
 /**
@@ -791,12 +791,12 @@ export const stoMainCardBodyHomeClass = cn(
 export const stoMainCardBodySplitClass = stoSplitGridContentsClass;
 
 /**
- * 内容区 52px 全局标题栏（MasterGo 组 7046）。
- * 单层 52px 白条：drag-region，双击最大化由系统处理。
+ * 内容区 44px 全局标题栏（紧凑 Header 契约）。
+ * 单层 44px 白条：drag-region，双击最大化由系统处理。
  */
 export const contentHeaderBarClass = cn(
   'drag-region flex shrink-0 items-center justify-between gap-2 overflow-hidden',
-  'box-border h-[var(--sto-content-header-h,52px)] min-h-[var(--sto-content-header-h,52px)] max-h-[var(--sto-content-header-h,52px)]',
+  'box-border h-[var(--sto-content-header-h,44px)] min-h-[var(--sto-content-header-h,44px)] max-h-[var(--sto-content-header-h,44px)]',
   'rounded-t-[var(--sto-main-card-radius)] bg-[var(--sto-main-card-bg)]',
   'pl-[var(--sto-content-header-pad-start)] pr-[var(--sto-content-header-pad-end)]',
 );
@@ -850,7 +850,7 @@ export function resolveSplitGridContainerWidth(anchorEl: HTMLElement | null): nu
 }
 
 /**
- * 三栏 Header：main grid 真实连续 52px 子项（横跨三列），内嵌同百分比三列 grid。
+ * 三栏 Header：main grid 真实连续 44px 子项（横跨三列），内嵌同百分比三列 grid。
  * 空白区为系统 drag-region；交互控件各自 no-drag。
  */
 export const contentHeaderSplitBarClass = cn(
@@ -861,10 +861,10 @@ export const contentHeaderSplitBarClass = cn(
   'grid w-full min-w-0 shrink-0 overflow-hidden select-none',
   '[grid-template-columns:minmax(0,1fr)_0px_var(--sto-split-preview-col,50%)]',
 
-  // 固定 52px
-  'box-border h-[var(--sto-content-header-h,52px)]',
-  'min-h-[var(--sto-content-header-h,52px)]',
-  'max-h-[var(--sto-content-header-h,52px)]',
+  // 固定 44px
+  'box-border h-[var(--sto-content-header-h,44px)]',
+  'min-h-[var(--sto-content-header-h,44px)]',
+  'max-h-[var(--sto-content-header-h,44px)]',
 
   // 统一背景和顶部圆角
   'rounded-t-[var(--sto-main-card-radius)]',
@@ -877,7 +877,7 @@ export const contentHeaderTitleClass =
 
 /** 标题栏会话 chip（MasterGo 组 7046：#F5F6F7 pill + truncate + 关闭） */
 export const contentHeaderSessionChipClass = cn(
-  'inline-flex h-[30px] min-w-0 max-w-full items-center gap-1 rounded-[10px] bg-[#F5F6F7] pl-2.5 pr-1',
+  'inline-flex h-[var(--sto-content-header-control-h,28px)] min-w-0 max-w-full items-center gap-1 rounded-[10px] bg-[#F5F6F7] pl-2.5 pr-1',
 );
 
 /** 标题栏会话 chip 文案 */
@@ -893,11 +893,15 @@ export const contentHeaderSessionChipCloseClass = cn(
 
 /** 标题栏右侧 icon 按钮（16×16 icon，Grey-9 默认） */
 export const contentHeaderActionBtnClass = cn(
-  'no-drag flex h-8 w-8 shrink-0 items-center justify-center rounded-md',
+  'no-drag flex h-[var(--sto-content-header-control-h,28px)] w-[var(--sto-content-header-control-h,28px)] shrink-0 items-center justify-center rounded-md',
   'text-[#4E5969] transition-colors duration-fast',
   'hover:bg-black/[0.04] hover:text-foreground',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
+
+/** 标题栏文字操作按钮：与 icon / pill 共用 28px 控件高度，仅宽度随文案增长。 */
+export const contentHeaderTextActionBtnClass =
+  'no-drag h-[var(--sto-content-header-control-h,28px)] shrink-0 px-2';
 
 /** 标题栏 icon 激活态（深度思考开、搜索开等） */
 export const contentHeaderActionBtnActiveClass = 'bg-primary/10 text-primary';
@@ -1610,6 +1614,14 @@ export const sidebarUnreadDotClass = 'h-1.5 w-1.5 shrink-0 rounded-full bg-destr
 
 /** 最近分组内会话选中底 — light #DCDCDC；dark 走 --sto-sidebar-subitem-active-bg */
 export const sidebarRecentSessionActiveClass = 'bg-[var(--sto-sidebar-subitem-active-bg)]';
+
+/**
+ * 侧栏单操作行尾槽：标题预留与 28px 点击热区等宽，槽位贴行右缘。
+ * 适用于「最近」会话、项目会话和同型任务子项；双操作项目行不使用。
+ */
+export const sidebarSingleActionRowPaddingClass = 'pr-7';
+export const sidebarSingleActionTrailingSlotClass =
+  'absolute right-0 top-1/2 w-7 -translate-y-1/2';
 
 /** 最近会话/分组下拉 — MCP 140px 菜单容器 */
 export const sidebarRecentMenuContentClass =

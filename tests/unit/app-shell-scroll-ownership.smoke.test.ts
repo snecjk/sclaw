@@ -140,12 +140,17 @@ function buildFixtureHtml(): string {
     }
     #brand, #content-header {
       flex-shrink: 0;
-      height: 52px;
       display: flex;
       align-items: center;
       padding: 0 12px;
       background: #fff;
       border-bottom: 1px solid #e5e6eb;
+    }
+    #brand {
+      height: 52px;
+    }
+    #content-header {
+      height: 44px;
     }
     #main-card {
       display: flex;

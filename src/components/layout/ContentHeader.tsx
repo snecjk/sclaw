@@ -1,8 +1,8 @@
 /**
- * ContentHeader — 省区主内容白卡片顶部 52px 全局标题栏。
+ * ContentHeader — 省区主内容白卡片顶部 44px 全局标题栏。
  *
  * conversation：左=侧栏展开钮+会话 chip，右=chatActions + previewActions。
- * split：真实连续 52px Header（内嵌三列 grid 对齐 body）；左列=title+chatActions，右列=预览 tab+previewActions。
+ * split：真实连续 44px Header（内嵌三列 grid 对齐 body）；左列=title+chatActions，右列=预览 tab+previewActions。
  * preview-expanded：全宽 Header；页签/标题 + previewActions（含 Preview restore，≠ Sidebar restore）。
  * macOS 侧栏收起时 pad-start 走 CSS 变量，避让红绿灯。
  */
@@ -75,6 +75,7 @@ export function ContentHeader() {
       {canUserRestoreSidebar ? (
         <SidebarHeaderToggle
           isCollapsed
+          isContentHeaderCompact
           onToggle={() => setUserCollapsed(false)}
           collapseLabel={t('sidebar.toggleSidebarCollapse')}
           expandLabel={t('sidebar.toggleSidebarExpand')}

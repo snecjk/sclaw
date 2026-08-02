@@ -82,13 +82,13 @@ The system SHALL keep macOS native-chrome avoidance within ContentHeader only. H
 - **THEN** both themes SHALL use the same Header-only safe inset and Body-owned Surface inset geometry
 - **AND** neither theme SHALL add a mode-only background wedge or negative-margin compensation
 
-### Requirement: Header search surface is 32px and expands without action reflow
-The Header search control SHALL keep a 32px toggle box and a 32px outer search surface. The expanded search surface SHALL be a transient no-drag overlay anchored to the search toggle and expanding toward the available chat-header space; it SHALL NOT enter normal Header Flex width and SHALL NOT change Header height, Split boundary, or sibling action positions. Keyboard behavior (Enter, Shift+Enter, Escape), focus, clear, and result navigation SHALL remain available.
+### Requirement: Header compact controls are 28px and search expands without action reflow
+Primary ContentHeader action boxes, Session/Artifact pills, the Header-owned Sidebar restore control, and the outer search surface SHALL use one authoritative `28px` control-height Token. Header SVG glyphs SHALL remain `16px` unless an existing business icon has an independently approved optical size. The expanded search surface SHALL be a transient no-drag overlay anchored to the search toggle and expanding toward the available chat-header space; it SHALL NOT enter normal Header Flex width and SHALL NOT change Header height, Split boundary, or sibling action positions. Keyboard behavior (Enter, Shift+Enter, Escape), focus, clear, and result navigation SHALL remain available.
 
 #### Scenario: Search surface dimensions
 - **WHEN** the user opens Header search
-- **THEN** the outer search surface height SHALL equal `32px`
-- **AND** the ContentHeader height SHALL remain `52px`
+- **THEN** the outer search surface and its toggle box SHALL each equal `28px`
+- **AND** the ContentHeader height SHALL remain `44px`
 
 #### Scenario: Search does not move sibling actions
 - **WHEN** Header search transitions between closed and open
@@ -149,14 +149,15 @@ Approved runtime geometry (Stage 3 re-acceptance, provincial AppShell):
 | --- | --- | --- |
 | Workspace top frame | `8px` | `--sto-shell-card-gap` |
 | ContentHeader top | `8px` | after Workspace frame |
-| ContentHeader height | `52px` | Token; MCP Header children also 52 |
-| ContentHeader centerY | `34px` | `8 + 52/2` |
-| Header control centerY | `34px` | title / search / refresh / brain / tabs / layout; Δ ≤ 1px |
+| ContentHeader height | `44px` | latest product acceptance; supersedes the earlier 52px MCP sample |
+| ContentHeader centerY | `30px` | `8 + 44/2` |
+| Header control centerY | `30px` | title / search / refresh / brain / tabs / layout; Δ ≤ 1px |
+| Primary Header control height | `28px` | shared control Token; 16px SVG glyphs remain unchanged |
 
 #### Scenario: Shared Header height and centerline across PreviewMode
 - **WHEN** PreviewMode is `closed`, `split`, or `expanded`
-- **THEN** ContentHeader height SHALL equal the approved Token (`52px`)
-- **AND** the window-space Header centerY SHALL remain `34px` (Δ ≤ 1px across mode switches)
+- **THEN** ContentHeader height SHALL equal the approved Token (`44px`)
+- **AND** the window-space Header centerY SHALL remain `30px` (Δ ≤ 1px across mode switches)
 
 #### Scenario: Header DOM controls share one centerline
 - **WHEN** ContentHeader renders title, search, refresh, thinking, preview tabs, and layout actions
@@ -164,7 +165,7 @@ Approved runtime geometry (Stage 3 re-acceptance, provincial AppShell):
 - **AND** the implementation SHALL NOT use per-control `translate-y` / absolute vertical offsets
 
 ### Requirement: macOS native chrome and Sidebar chrome use separate optical baselines
-On macOS with `titleBarStyle: hiddenInset`, native traffic lights and the provincial Sidebar toggle SHALL use separately named optical-position metrics because they are measured from different coordinate owners. Latest runtime acceptance SHALL place native traffic lights at `{x:16,y:20}` and the provincial Sidebar chrome row toggle at a `20px` top inset. ContentHeader DOM controls SHALL continue to use the 52px Header `items-center` contract. Agents SHALL NOT force native and Sidebar chrome onto the ContentHeader mathematical centerline, and SHALL NOT use per-icon `translate-y`, negative margins, or unexplained local offsets.
+On macOS with `titleBarStyle: hiddenInset`, native traffic lights and the provincial Sidebar toggle SHALL use separately named optical-position metrics because they are measured from different coordinate owners. Latest runtime acceptance SHALL place native traffic lights at `{x:16,y:20}` and the provincial Sidebar chrome row toggle at a `16px` top inset with a `28px` click box. ContentHeader DOM controls SHALL use the independent 44px Header `items-center` contract. Agents SHALL NOT force native and Sidebar chrome onto the ContentHeader mathematical centerline, and SHALL NOT use per-icon `translate-y`, negative margins, or unexplained local offsets.
 
 Approved optical calibration:
 
@@ -173,22 +174,23 @@ Approved optical calibration:
 | Traffic light diameter (macOS points) | `12` |
 | Superseded `trafficLightPosition.y` | `28` → light center ≈ `34` |
 | Latest runtime accepted `trafficLightPosition.y` | `20` → light center ≈ `26` |
-| Provincial Sidebar toggle top inset | `20px` |
+| Provincial Sidebar toggle top inset | `16px` |
+| Provincial Sidebar toggle click box | `28px` |
 | Calibrated `x` | keep `16` unless screenshot proves otherwise |
 
 #### Scenario: macOS native and Sidebar chrome optical positions
 - **WHEN** the provincial shell runs on macOS
 - **THEN** `BrowserWindow.trafficLightPosition` SHALL equal `{x:16,y:20}`
-- **AND** the expanded Sidebar chrome toggle SHALL use a `20px` top inset while Header DOM controls remain flex-centered
+- **AND** the expanded Sidebar chrome toggle SHALL use a `16px` top inset and `28px` click box while Header DOM controls remain flex-centered
 
 ### Requirement: Header-to-body spacing uses explicit mode-owned formulas
-Vertical space from ContentHeader bottom to the first line of primary Conversation content SHALL use mode-owned formulas. Split and Preview Expanded SHALL each use a zero-gap Token between Header and their Surfaces; Conversation SHALL retain its independent outer gap. No path SHALL use accidental padding stacks, negative margin, translate, or clipping hacks:
+Vertical space from ContentHeader bottom to the first line of primary Conversation content SHALL use mode-owned formulas. Conversation, Split, and Preview Expanded SHALL each use a zero-gap Token between Header and their Surfaces. Conversation and Split Chat SHALL retain the independent `8px` content inset inside their scroll Surfaces. No path SHALL use accidental padding stacks, negative margin, translate, or clipping hacks:
 
 ```text
 Conversation:
-Header bottom → Body Surface     = CONVERSATION_HEADER_TO_BODY_GAP   (8px)
+Header bottom → Body Surface     = CONVERSATION_HEADER_TO_SURFACE_GAP (0px)
 Body Surface  → first content    = WORKBENCH_BODY_TO_CONTENT_INSET_Y (8px)
-Total visual                     = 16px
+Total visual                     = 8px
 
 Split:
 Header bottom → both Surfaces    = SPLIT_HEADER_TO_SURFACE_GAP       (0px)
@@ -199,26 +201,26 @@ Preview Expanded:
 Header bottom → Preview Surface  = PREVIEW_EXPANDED_HEADER_TO_SURFACE_GAP (0px)
 ```
 
-Split Chat and Preview Body Row top padding SHALL map to the Split zero-gap Token. Conversation scroll `padding-top` SHALL continue to map to the content inset Token. Preview Expanded SHALL preserve the bordered L2 Surface, its action row, and its viewer overflow owner while consuming only the Expanded zero-gap Token. Split SHALL NOT inherit the Conversation outer gap.
+Conversation Body and Split Chat/Preview Body Row top padding SHALL map to their independently named zero-gap Tokens. Conversation and Split Chat scroll `padding-top` SHALL continue to map to the content inset Token. Preview Expanded SHALL preserve the bordered L2 Surface, its action row, and its viewer overflow owner while consuming only the Expanded zero-gap Token.
 
 #### Scenario: Header-to-body spacing
 - **WHEN** primary Conversation renders in `closed`
-- **THEN** Header bottom to Body Surface SHALL equal `8px`
+- **THEN** Header bottom to Body Surface SHALL equal `0px`
 - **AND** Body Surface to the first content line SHALL equal `8px`
-- **AND** Header bottom to the first content line SHALL equal `16px`
+- **AND** Header bottom to the first content line SHALL equal `8px`
 
-#### Scenario: Split Surfaces touch the 52px Header
+#### Scenario: Split Surfaces touch the 44px Header
 - **WHEN** PreviewMode is `split`
 - **THEN** both Chat Surface and bordered Preview Surface SHALL touch ContentHeader bottom within `1px`
 - **AND** Chat Surface to the first content line SHALL equal `8px`
 - **AND** neither Split Body column SHALL consume the Conversation outer gap Token
 
-#### Scenario: Preview Expanded Surface touches the 52px Header
+#### Scenario: Preview Expanded Surface touches the 44px Header
 - **WHEN** PreviewMode is `expanded`
-- **THEN** ContentHeader visual height SHALL remain `52px`
+- **THEN** ContentHeader visual height SHALL remain `44px`
 - **AND** the bordered Preview Surface top SHALL equal ContentHeader bottom within `1px`
 - **AND** the Preview Surface, 46px action row, and viewer scroll/overflow structure SHALL remain mounted
-- **AND** Conversation SHALL retain its independent `8px` Header-to-Body gap
+- **AND** Conversation SHALL retain its independent `0px` Header-to-Surface gap
 - **AND** Split SHALL retain its independent `0px` Header-to-Surface gap
 
 ### Requirement: Preview layout Surfaces share one bottom inset

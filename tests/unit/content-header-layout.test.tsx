@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  CONVERSATION_HEADER_TO_BODY_GAP_PX,
+  CONVERSATION_HEADER_TO_SURFACE_GAP_PX,
   CONVERSATION_HEADER_TO_CONTENT_TOTAL_PX,
   CONTENT_HEADER_CENTER_Y_PX,
+  CONTENT_HEADER_CONTROL_HEIGHT_PX,
   CONTENT_HEADER_HEIGHT_PX,
   MACOS_TRAFFIC_LIGHT_DIAMETER_PX,
   MACOS_TRAFFIC_LIGHT_POSITION,
@@ -13,6 +14,7 @@ import {
   PREVIEW_EXPANDED_HEADER_TO_SURFACE_GAP_PX,
   SPLIT_HEADER_TO_CONTENT_TOTAL_PX,
   SPLIT_HEADER_TO_SURFACE_GAP_PX,
+  SIDEBAR_CHROME_TOGGLE_SIZE_PX,
   trafficLightCenterY,
   WORKBENCH_BODY_TO_CONTENT_INSET_Y_PX,
   WORKBENCH_SURFACE_BOTTOM_INSET_PX,
@@ -20,14 +22,18 @@ import {
 } from '@/lib/content-header-metrics';
 import {
   contentHeaderBarClass,
+  contentHeaderActionBtnClass,
   contentHeaderPreviewExpandedStartClass,
   contentHeaderPreviewTabsWrapClass,
+  contentHeaderSessionChipClass,
   contentHeaderSplitBarClass,
   contentHeaderSplitChatZoneClass,
   contentHeaderSplitPreviewZoneClass,
+  contentHeaderTextActionBtnClass,
   stoChatScrollPaneClass,
   stoMainCardBodyHomeClass,
   stoPreviewExpandedBodyClass,
+  stoPreviewArtifactTabClass,
   stoSplitGridBodyChatClass,
   stoSplitGridBodyPreviewClass,
 } from '@/lib/surfaces';
@@ -128,16 +134,25 @@ describe('content header layoutMode contract', () => {
 });
 
 describe('ContentHeader vertical pixel contract', () => {
-  it('owns a single Header height Token and centerline (8 + 52/2 = 34)', () => {
-    expect(CONTENT_HEADER_HEIGHT_PX).toBe(52);
+  it('owns a single compact Header height and control Token (8 + 44/2 = 30)', () => {
+    expect(CONTENT_HEADER_HEIGHT_PX).toBe(44);
+    expect(CONTENT_HEADER_CONTROL_HEIGHT_PX).toBe(28);
     expect(WORKSPACE_FRAME_TOP_PX).toBe(8);
-    expect(CONTENT_HEADER_CENTER_Y_PX).toBe(34);
+    expect(CONTENT_HEADER_CENTER_Y_PX).toBe(30);
     expect(CONTENT_HEADER_CENTER_Y_PX).toBe(
       WORKSPACE_FRAME_TOP_PX + CONTENT_HEADER_HEIGHT_PX / 2,
     );
 
     for (const cls of [contentHeaderBarClass, contentHeaderSplitBarClass]) {
-      expect(cls).toContain('h-[var(--sto-content-header-h,52px)]');
+      expect(cls).toContain('h-[var(--sto-content-header-h,44px)]');
+    }
+    for (const cls of [
+      contentHeaderActionBtnClass,
+      contentHeaderTextActionBtnClass,
+      contentHeaderSessionChipClass,
+      stoPreviewArtifactTabClass(true),
+    ]) {
+      expect(cls).toContain('h-[var(--sto-content-header-control-h,28px)]');
     }
     expect(contentHeaderBarClass).toContain('items-center');
     // Split bar 是嵌套 grid；中心线由子 zone items-center 承担（运行时 QA 已确认 Δ≤1px）
@@ -145,21 +160,23 @@ describe('ContentHeader vertical pixel contract', () => {
     expect(contentHeaderSplitPreviewZoneClass).toContain('items-center');
 
     const globals = readFileSync(resolve(process.cwd(), 'src/styles/globals.css'), 'utf8');
-    expect(globals).toMatch(/--sto-content-header-h:\s*52px/);
-    expect(globals).toMatch(/--sto-workbench-header-to-body-gap:\s*8px/);
+    expect(globals).toMatch(/--sto-content-header-h:\s*44px/);
+    expect(globals).toMatch(/--sto-content-header-control-h:\s*28px/);
+    expect(globals).toMatch(/--sto-conversation-header-to-surface-gap:\s*0px/);
     expect(globals).toMatch(/--sto-split-header-to-surface-gap:\s*0px/);
     expect(globals).toMatch(/--sto-workbench-body-content-inset-y:\s*8px/);
     expect(globals).toMatch(/--sto-workbench-surface-bottom-inset:\s*8px/);
     expect(globals).toMatch(/--sto-preview-expanded-header-to-surface-gap:\s*0px/);
-    expect(globals).toMatch(/--sto-sidebar-chrome-toggle-inset-top:\s*20px/);
+    expect(globals).toMatch(/--sto-sidebar-chrome-toggle-inset-top:\s*16px/);
+    expect(globals).toMatch(/--sto-sidebar-chrome-toggle-size:\s*28px/);
   });
 
   it('keeps mode-owned Header-to-Surface gaps without stacking Split padding', () => {
-    expect(CONVERSATION_HEADER_TO_BODY_GAP_PX).toBe(8);
+    expect(CONVERSATION_HEADER_TO_SURFACE_GAP_PX).toBe(0);
     expect(SPLIT_HEADER_TO_SURFACE_GAP_PX).toBe(0);
     expect(WORKBENCH_BODY_TO_CONTENT_INSET_Y_PX).toBe(8);
     expect(WORKBENCH_SURFACE_BOTTOM_INSET_PX).toBe(8);
-    expect(CONVERSATION_HEADER_TO_CONTENT_TOTAL_PX).toBe(16);
+    expect(CONVERSATION_HEADER_TO_CONTENT_TOTAL_PX).toBe(8);
     expect(SPLIT_HEADER_TO_CONTENT_TOTAL_PX).toBe(8);
     expect(PREVIEW_EXPANDED_HEADER_TO_SURFACE_GAP_PX).toBe(0);
 
@@ -170,16 +187,16 @@ describe('ContentHeader vertical pixel contract', () => {
       'pt-[var(--sto-split-header-to-surface-gap,0px)]',
     );
     expect(stoSplitGridBodyChatClass).not.toContain(
-      'pt-[var(--sto-workbench-header-to-body-gap,8px)]',
+      'pt-[var(--sto-conversation-header-to-surface-gap,0px)]',
     );
     expect(stoSplitGridBodyPreviewClass).not.toContain(
-      'pt-[var(--sto-workbench-header-to-body-gap,8px)]',
+      'pt-[var(--sto-conversation-header-to-surface-gap,0px)]',
     );
     expect(stoPreviewExpandedBodyClass).toContain(
       'pt-[var(--sto-preview-expanded-header-to-surface-gap,0px)]',
     );
     expect(stoPreviewExpandedBodyClass).not.toContain(
-      'pt-[var(--sto-workbench-header-to-body-gap,8px)]',
+      'pt-[var(--sto-conversation-header-to-surface-gap,0px)]',
     );
     for (const cls of [
       stoSplitGridBodyChatClass,
@@ -190,7 +207,7 @@ describe('ContentHeader vertical pixel contract', () => {
       expect(cls).not.toContain('sto-split-preview-inset-y');
     }
     expect(stoMainCardBodyHomeClass).toContain(
-      'pt-[var(--sto-workbench-header-to-body-gap,8px)]',
+      'pt-[var(--sto-conversation-header-to-surface-gap,0px)]',
     );
 
     expect(stoChatScrollPaneClass).toContain(
@@ -204,12 +221,21 @@ describe('ContentHeader vertical pixel contract', () => {
     expect(MACOS_TRAFFIC_LIGHT_POSITION_BEFORE_CALIBRATION).toEqual({ x: 16, y: 28 });
 
     const beforeCenter = trafficLightCenterY(MACOS_TRAFFIC_LIGHT_POSITION_BEFORE_CALIBRATION.y);
-    expect(beforeCenter).toBe(CONTENT_HEADER_CENTER_Y_PX);
+    expect(beforeCenter).toBe(34);
+    expect(beforeCenter).not.toBe(CONTENT_HEADER_CENTER_Y_PX);
 
     expect(MACOS_TRAFFIC_LIGHT_POSITION).toEqual({ x: 16, y: 20 });
     const afterCenter = trafficLightCenterY(MACOS_TRAFFIC_LIGHT_POSITION.y);
     expect(afterCenter).toBe(26);
-    expect(MACOS_SIDEBAR_TOGGLE_TOP_PX).toBe(20);
+    expect(MACOS_SIDEBAR_TOGGLE_TOP_PX).toBe(16);
+    expect(SIDEBAR_CHROME_TOGGLE_SIZE_PX).toBe(28);
+
+    const sidebarToggleSrc = readFileSync(
+      resolve(process.cwd(), 'src/components/layout/sidebar-header-toggle.tsx'),
+      'utf8',
+    );
+    expect(sidebarToggleSrc).toContain('var(--sto-sidebar-chrome-toggle-size,28px)');
+    expect(sidebarToggleSrc).not.toContain("'h-8 w-8'");
 
     const mainSrc = readFileSync(
       resolve(process.cwd(), 'electron/main/index.ts'),
@@ -236,17 +262,40 @@ describe('ContentHeader vertical pixel contract', () => {
     expect(contentHeaderPreviewTabsWrapClass).not.toContain('overflow-x-auto');
   });
 
-  it('keeps search surface at 32px and opens it as a Header overlay', () => {
+  it('keeps search surface at the 28px compact Token and opens it as a Header overlay', () => {
     const searchSrc = readFileSync(
       resolve(process.cwd(), 'src/pages/Chat/ChatSearchBar.tsx'),
       'utf8',
     );
-    expect(searchSrc).toContain('h-8 w-[16.5rem]');
-    expect(searchSrc).toContain('no-drag pointer-events-none absolute right-9 top-0');
+    expect(searchSrc).toContain(
+      'h-[var(--sto-content-header-control-h,28px)] w-[16.5rem]',
+    );
+    expect(searchSrc).toContain(
+      'no-drag pointer-events-none absolute right-[calc(var(--sto-content-header-control-h,28px)+4px)] top-0',
+    );
     expect(searchSrc).toContain('const inputRef = useRef<HTMLInputElement>(null)');
     expect(searchSrc).toContain('inputRef.current?.focus()');
     expect(searchSrc).toContain('ref={inputRef}');
     expect(searchSrc).not.toContain('autoFocus={isOpen}');
     expect(searchSrc).not.toContain('px-2 py-1.5');
+
+    const headerSrc = readFileSync(
+      resolve(process.cwd(), 'src/components/layout/ContentHeader.tsx'),
+      'utf8',
+    );
+    expect(headerSrc).toContain('isContentHeaderCompact');
+  });
+
+  it('keeps route-injected workflow Header controls on the shared compact Token', () => {
+    const sources = [
+      'src/hooks/use-workflow-editor-content-header.tsx',
+      'src/pages/WorkflowDesigner/workflow-designer.tsx',
+    ].map((path) => readFileSync(resolve(process.cwd(), path), 'utf8'));
+
+    for (const source of sources) {
+      expect(source).toContain('contentHeaderActionBtnClass');
+      expect(source).toContain('contentHeaderTextActionBtnClass');
+      expect(source).not.toContain('className="flex h-8 w-8 shrink-0');
+    }
   });
 });

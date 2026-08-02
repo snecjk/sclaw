@@ -91,7 +91,7 @@
 | --- | --- | --- |
 | `app-shell-foundation` | Sidebar/Workspace 两列 Grid、Frame、边界 overlay、Provider、collapse reasons 分离、Toast/Header 消费 effective 宽 | 1（基座）；2 扩展 max；5 几何收口 |
 | `resizable-sidebar-shell` | 200–400、吸附、viewport 自动收起、preferred 持久化 | 2 |
-| `workspace-layout-modes` | PreviewMode、零 seam、Handle、稳定 Header 槽位、32px Search、Conversation 保活 | 3；5 人工验收收口 |
+| `workspace-layout-modes` | PreviewMode、零 seam、Handle、稳定 Header 槽位、44px Header / 28px controls、Conversation 保活 | 3；5 人工验收收口 |
 | `shell-surface-hierarchy` | L0–L3 语义、light/dark 同结构、集成验收矩阵 | 1 建所有权；4 调色与总验收 |
 
 OverlayScrollbar 归属既有 `overlay-scrollbar-surfaces`；本 Change **依赖复用**，不新增第五 capability。
@@ -174,7 +174,7 @@ effectiveMax = Math.min(
 - **Rationale**：当前 `stoSplitShellInsetsClass` 挂 `main` 使 Preview Expanded Body 继承 5rem，直接生成错误大空白。
 - **Alternative**：Preview collapsed 模式加负 margin 抵消 → 否决为状态补丁。
 
-- **Decision**：ContentHeader 保留现有注册协议，但收敛为单一 DOM（chat zone + preview zone + stable workspace-actions）；layoutMode 只改变 Grid Area/visibility。Search Toggle 固定占 32px，Search Surface 高 32px并作为向左 overlay 的临时工具，不进入主 Flex 宽度。
+- **Decision**：ContentHeader 保留现有注册协议，但收敛为单一 DOM（chat zone + preview zone + stable workspace-actions）；layoutMode 只改变 Grid Area/visibility。最新产品验收将一级 Header 收紧为 `44px`，主要操作框、Session/Artifact pill 与 Search Surface 统一为 `28px`；Search 仍作为向左 overlay 的临时工具，不进入主 Flex 宽度，SVG glyph 保持 `16px`。
 - **Rationale**：三套 return 会改变同一 preview action 的父容器和水平锚点；Search 普通流 264px 宽度会推动 actions。
 - **Alternative**：为每个模式记录独立 `right`/`translate` → 否决，状态组合不可维护。
 
@@ -186,12 +186,12 @@ effectiveMax = Math.min(
 - **Rationale**：Conversation 已 hidden/inert 时其操作不应进入 Preview 区；当前 `overflow-x-auto` 会在 classic scrollbar 环境生成约 12–15px 透明条；布局动作和文件动作分处两级 Header 导致顺序无法稳定。
 - **Alternative**：Expanded 下把 chatActions 搬到 preview zone、在三枚按钮上逐个 `hidden`、或在 Body action row 绝对定位最大化按钮 → 否决，均继续混淆槽位所有权。
 
-- **Decision**：macOS native traffic lights 与 Sidebar chrome toggle 使用独立光学基线：traffic lights `{x:16,y:20}`，Sidebar toggle top inset `20px`；ContentHeader DOM 仍保持 52px `items-center`。
+- **Decision**：macOS native traffic lights 与 Sidebar chrome toggle 使用独立光学基线：traffic lights `{x:16,y:20}`；Sidebar toggle 使用 `16px` top inset + `28px` 点击框；ContentHeader DOM 使用独立的 44px `items-center` 契约。
 - **Rationale**：Electron native 坐标、Sidebar row 坐标和 Workspace Header 坐标原点不同，旧“全部 centerY=34”测试只能证明数学外框，不能覆盖最新运行时光学验收。
 - **Alternative**：逐 SVG `translate-y` 或继续强制一个中心线 → 否决。
 
-- **Decision**：DOM center、SVG optical center、macOS native center 分层验收；不使用逐按钮 `translate-y`。Header 52px、Search Surface 32px为批准值。
-- **Rationale**：DOM 实测 centerY 均为34px，但 SVG 可见画布和 native chrome 仍可产生光学偏差。
+- **Decision**：DOM center、SVG optical center、macOS native center 分层验收；不使用逐按钮 `translate-y`。Header `44px`、主要控件与 Search Surface `28px` 为最新批准值；此前 `52/32` 仅保留为历史测量依据。
+- **Rationale**：44px Header 内 28px 控件具有上下各 8px 的对称空间；SVG 可见画布和 native chrome 仍使用独立光学验收。
 - **Alternative**：仅用 class 字符串测试 `items-center` → 否决，不能证明最终像素关系。
 
 ## 与活动 OpenSpec 的冲突处理
@@ -220,7 +220,7 @@ effectiveMax = Math.min(
 2. 阶段 2：拖拽与 preferred；依赖已批准最低宽度。
 3. 阶段 3：PreviewMode + 零 seam + Header 重命名 + 去 Fullscreen。
 4. 阶段 4：Surface 色阶与总验收。
-5. 阶段 5：撤销实体 Sidebar Gap；Header/Body inset 解耦；稳定 Header slots；Search 32px；真实几何回归。
+5. 阶段 5：撤销实体 Sidebar Gap；Header/Body inset 解耦；稳定 Header slots；44px Header / 28px Search；真实几何回归。
 
 每阶段：定向 vitest / eslint 白名单 / typecheck / `git diff --check` → 用户手动验收 → 停止。
 
@@ -228,7 +228,7 @@ effectiveMax = Math.min(
 
 1. ~~四个最低宽度~~ → **已批准**：560 / 480 / 560 / 640（见 §8）。
 2. Cursor 内置 MasterGo MCP 仍 errored；阶段 2/3 可用已验证 HTTP DSL + Node `48:10836`。
-3. 一级 Header 最终高度以阶段 3 MCP **子 Node** 为准：**52px**（否决文档基线 56）。见下方测量表；禁止只写“MCP 实测 52px”而无子 Node。
+3. 阶段 3 MCP 子 Node 的 **52px** 作为历史溯源保留；产品 2026-08-02 最新人工验收批准一级 Header **44px**、主要控件 **28px**，以最新批准值为实现契约。
 4. Stage 3 人工验收失败项（统一顶栏垂直契约）补测与校准见 §9。
 
 ## 9. Header vertical metrics（Stage 3 复测 · 2026-08-01）
@@ -258,7 +258,7 @@ effectiveMax = Math.min(
 
 Workspace 卡 `矩形 2482`：`1172×884 @ (260, **8**)` → 与运行时 Workspace top frame `8px` 一致。
 
-### 9.3 运行时已确认（人工 QA）
+### 9.3 Stage 3 历史运行时基线（已由 9.6 supersede）
 
 | Quantity | Value |
 | --- | --- |
@@ -271,13 +271,13 @@ Workspace 卡 `矩形 2482`：`1172×884 @ (260, **8**)` → 与运行时 Worksp
 
 → Header 内部 `items-center` **正确**；禁止重写 Header DOM。
 
-### 9.4 Header → 正文公式（批准）
+### 9.4 Header → 正文公式（Stage 5 最新批准）
 
 ```text
 Conversation:
-CONVERSATION_HEADER_TO_BODY_GAP          = 8px   // Header bottom → Body Surface
+CONVERSATION_HEADER_TO_SURFACE_GAP       = 0px   // Header bottom → Body Surface
 WORKBENCH_BODY_TO_CONTENT_INSET_Y        = 8px   // Body Surface → 第一行正文
-TOTAL                                    = 16px
+TOTAL                                    = 8px
 
 Split:
 SPLIT_HEADER_TO_SURFACE_GAP              = 0px   // Header bottom → Chat / Preview Surface
@@ -294,7 +294,7 @@ WINDOW_TO_SURFACE_BOTTOM_TOTAL           = 16px
 ```
 
 验收失败前：`Split Body pt=8` 形成持久空带，并与 Chat Scroll 内距叠成初始 `8+8=16px`；Split Body 顶距改由独立 `0px` Token 所有，禁止再继承 Conversation gap。
-用户 2026-08-02 明确确认 Split 与 Preview Expanded 的 Surface 均紧接 52px Header；Chat Surface 内部仍保留 8px 正文内距。Surface 本身、46px action row 和 viewer overflow owner 保留。
+用户 2026-08-02 最终确认 Conversation、Split 与 Preview Expanded 的 Surface 均紧接一级 Header；Conversation/Split Chat Surface 内部仍保留 8px 正文内距。Surface 本身、46px action row 和 viewer overflow owner 保留。
 同日人工验收确认 Split 底部留白为正确基准；Preview Expanded 必须复用同一 Body-owned bottom inset，不得在模式切换后贴住 Workspace 底边。
 
 ### 9.5 macOS traffic lights 校准
@@ -311,4 +311,18 @@ WINDOW_TO_SURFACE_BOTTOM_TOTAL           = 16px
 | 校准 y | 34 − 6 = **28** → 圆心 34，Δ=0 |
 | x | 保持 **16**（水平未报失败） |
 
-权威实现：`src/lib/content-header-metrics.ts` + `electron/main/index.ts` 引用同一公式。
+本节记录 Stage 3 的数学中心校准过程；Stage 5 已由独立光学基线 `{x:16,y:20}` supersede，Header 缩至 44px 时不得重新用 Header centerY 反推 native 坐标。
+
+### 9.6 最新紧凑 Header 契约（产品批准 · 2026-08-02）
+
+| Quantity | Value |
+| --- | --- |
+| Workspace top frame | 8px |
+| ContentHeader height | **44px** |
+| ContentHeader centerY | **30px**（= 8 + 22） |
+| Primary Header control / Session / Artifact / Search | **28px** |
+| Header SVG glyph | **16px 保持** |
+| Conversation / Split / Expanded Header → Surface | **0px** |
+| Conversation / Split Chat Surface → first content | **8px** |
+
+实现必须通过共享 Header/Control Token 收口，不得修改 Preview 46px 二级 action row、macOS traffic lights 或用逐控件偏移补偿。

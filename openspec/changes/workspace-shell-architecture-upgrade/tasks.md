@@ -41,7 +41,7 @@
 <!-- Requirement: ContentHeader slots are chatActions, previewActions, and layoutMode -->
 <!-- Requirement: OverlayScrollbar is reused without rewrite -->
 <!-- Requirement: ContentHeader vertical geometry is a single Token and centerline -->
-<!-- Requirement: macOS traffic lights share the ContentHeader centerline -->
+<!-- Requirement: macOS native chrome and Sidebar chrome use separate optical baselines -->
 <!-- Requirement: Header-to-body spacing uses one explicit formula -->
 
 - [x] 3.0 Confirm Stages 1–2 accepted; MCP nodes for dual/triple/expanded if required
@@ -69,7 +69,7 @@
 <!-- Requirement: Provincial AppShell uses two-column boundary geometry with an overlay resize hit area -->
 <!-- Requirement: Header chrome inset and Workbench body inset have separate ownership -->
 <!-- Requirement: ContentHeader slots are chatActions, previewActions, and layoutMode -->
-<!-- Requirement: Header search surface is 32px and expands without action reflow -->
+<!-- Requirement: Header compact controls are 28px and search expands without action reflow -->
 <!-- Requirement: ContentHeader vertical geometry is a single Token and centerline -->
 <!-- Requirement: macOS native chrome and Sidebar chrome use separate optical baselines -->
 <!-- Requirement: ContentHeader never exposes a native horizontal scrollbar -->
@@ -79,20 +79,21 @@
 - [x] 5.1 Requirement `Provincial AppShell uses two-column boundary geometry with an overlay resize hit area`: replace provincial `Sidebar | 8px | Workspace` Grid with adjacent `Sidebar | Workspace`; move the existing 8px Sidebar resize hit area to a Workspace-side absolute boundary overlay; change provincial horizontal Frame math from old Gap+right `16px` to right Frame `8px`; remove the deleted Gap from Toast offset; do not change snap, persistence, or collapse reasons
 - [x] 5.2 Requirement `Header chrome inset and Workbench body inset have separate ownership`: remove Header start/end inset consumption from split/expanded `main`; keep macOS safe inset in Header only; give Preview Expanded its normal 8px Workbench Surface inset and preserve split zero seam
 - [x] 5.3 Requirement `ContentHeader slots are chatActions, previewActions, and layoutMode`: collapse the three top-level Header render templates into one stable DOM; keep existing registration API; anchor workspace actions 8px from Workspace right edge across conversation/split/preview-expanded
-- [x] 5.4 Requirement `Header search surface is 32px and expands without action reflow`: make the complete Header search surface 32px and expand it as a leftward no-drag overlay while preserving keyboard/focus/result behavior and sibling action coordinates
-- [ ] 5.5 Requirements `ContentHeader vertical geometry is a single Token and centerline` and `macOS traffic lights share the ContentHeader centerline`: verify runtime DOM centers, normalize Header SVG optical canvases without per-control translate offsets, and calibrate native macOS traffic lights from an actual application screenshot
+- [x] 5.4 Requirement `Header compact controls are 28px and search expands without action reflow`: historical delivery established the leftward no-drag search overlay at 32px; superseded by task 5.18 for the approved compact geometry
+- [ ] 5.5 Requirements `ContentHeader vertical geometry is a single Token and centerline` and `macOS native chrome and Sidebar chrome use separate optical baselines`: verify runtime DOM centers and SVG optical canvases without per-control translate offsets; keep native macOS and Sidebar chrome on their separately accepted baselines
 - [ ] 5.6 Requirements `Light and dark share hierarchy with tokenized appearance` and `Integration acceptance preserves protected behaviors`: run light/dark geometry matrix for Sidebar 200/260/400/collapsed, Preview closed/split 30/50/70/expanded, Search closed/open, and document unverified OS combinations
 - [ ] 5.7 Requirement `Integration acceptance preserves protected behaviors`: run exact directed Vitest/ESLint files, `pnpm run typecheck`, `git diff --check`; review three README files for required sync; update `.cursor/rules/02-styles.mdc` only after implementation is accepted
 - [ ] 5.8 Requirement `Integration acceptance preserves protected behaviors`: user manually accepts Stage 5 screenshots and interactions before the Change is eligible for archive
 - [x] 5.9 Requirements `Provincial AppShell uses two-column boundary geometry with an overlay resize hit area` and `Split Preview Surface keeps a Body-owned end inset`: add collapsed Workspace start Frame `8px` without restoring a Grid Gap; add Split Preview Body-owned end inset `12px` so window-to-border distance is `20px ± 1px`; keep expanded geometry and zero seam unchanged
 - [x] 5.10 Requirements `ContentHeader slots are chatActions, previewActions, and layoutMode` and `ContentHeader never exposes a native horizontal scrollbar`: hide/inert Conversation title and chat actions in Preview Expanded without moving them into Preview slots; remove visible Header horizontal scroll ownership; preserve overflow-menu access
 - [x] 5.11 Requirement `ContentHeader slots are chatActions, previewActions, and layoutMode`: move Workspace expand/restore from Preview file action row into stable Header workspace actions immediately before Preview open/close; share the composition in Home and Chat
-- [x] 5.12 Requirement `macOS native chrome and Sidebar chrome use separate optical baselines`: set native traffic lights to `{x:16,y:20}` and provincial Sidebar toggle top inset to `20px`; update authoritative metrics/tests without per-icon translation
-- [x] 5.13 Requirement `Header search surface is 32px and expands without action reflow`: restore runtime search ownership by marking the transient overlay `no-drag` and focusing its persistent input from the open-state transition; verify the clear/close and keyboard interaction contract without changing Header geometry
+- [x] 5.12 Requirement `macOS native chrome and Sidebar chrome use separate optical baselines`: keep native traffic lights at `{x:16,y:20}` and apply the latest provincial Sidebar toggle geometry (`16px` top inset + `28px` click box); update authoritative metrics/tests without per-icon translation
+- [x] 5.13 Requirement `Header compact controls are 28px and search expands without action reflow`: restore runtime search ownership by marking the transient overlay `no-drag` and focusing its persistent input from the open-state transition; verify the clear/close and keyboard interaction contract without changing Header geometry
 - [x] 5.14 Requirements `Header chrome inset and Workbench body inset have separate ownership` and `Split Preview Surface keeps a Body-owned end inset`: supersede the provisional Expanded `8px` one-sided inset with the approved `48:11093` bilateral `12px` Body-owned inset; keep the L0 Workspace Frame and Split end-only Token independent
 - [x] 5.15 Requirement `Header chrome inset and Workbench body inset have separate ownership`: when Sidebar is visible, align the Preview Expanded menu/tab group with the bordered Surface on the shared `12px` start Token and collapse the hidden Conversation Header zone to zero layout width; preserve the collapsed macOS safe inset path
-- [x] 5.16 Requirement `Header-to-body spacing uses explicit mode-owned formulas`: keep Conversation on `8px + 8px`; give Split an independent `0px + 8px` rhythm so both Surfaces touch Header without removing Chat content inset; keep Preview Expanded Header-to-bordered-Surface at its independent `0px`; preserve the L2 Surface, 46px action row, and viewer overflow owner
+- [x] 5.16 Requirement `Header-to-body spacing uses explicit mode-owned formulas`: historical delivery separated Conversation `8px + 8px` from Split `0px + 8px`; superseded by task 5.18 for the final Conversation `0px + 8px` acceptance while preserving the L2 Surface, 46px action row, and viewer overflow owner
 - [x] 5.17 Requirement `Preview layout Surfaces share one bottom inset`: promote the approved Split bottom spacing to one Body-owned `8px` Workbench Surface Token shared by Split Chat, Split Preview, and Preview Expanded; remove the legacy Split-only vertical Token while preserving the independent provincial `8px` Workspace bottom Frame
+- [x] 5.18 Requirements `ContentHeader vertical geometry is a single Token and centerline`, `Header compact controls are 28px and search expands without action reflow`, and `Header-to-body spacing uses explicit mode-owned formulas`: apply the approved 44px Header / 28px primary control geometry across Conversation, Split, and Preview Expanded; keep 16px glyphs, Preview's 46px secondary action row, and native macOS metrics unchanged; remove the Conversation-only outer 8px band while retaining the 8px scroll-content inset; directed geometry/search tests passed and light/dark share the same geometry Tokens（人工截图验收仍由 5.8 承担）
 
 ## 6. Cross-cutting guards (every implement stage)
 

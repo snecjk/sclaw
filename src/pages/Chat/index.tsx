@@ -571,7 +571,7 @@ export function Chat() {
         className={cn(
           !isSplitChatLayout
             && !isPreviewExpanded
-            && 'pt-[var(--sto-workbench-header-to-body-gap,8px)]',
+            && 'pt-[var(--sto-conversation-header-to-surface-gap,0px)]',
         )}
       >
       <div className="pointer-events-none absolute inset-0 overflow-hidden">

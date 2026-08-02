@@ -87,9 +87,10 @@
     /* 侧栏主导航选中态：与 docs/sto-design.md Brand-6 一致 */
     --sto-brand-6: #ff6f00;
     --sto-header-h: 52px;
-    --sto-content-header-h: 52px;
-    /* 模式独立垂直节奏：Conversation 8+8；Split 0+8；Expanded 0→Surface。 */
-    --sto-workbench-header-to-body-gap: 8px;
+    --sto-content-header-h: 44px;
+    --sto-content-header-control-h: 28px;
+    /* 模式独立垂直节奏：Conversation/Split 0+8；Expanded 0→Surface。 */
+    --sto-conversation-header-to-surface-gap: 0px;
     --sto-split-header-to-surface-gap: 0px;
     --sto-workbench-body-content-inset-y: 8px;
     --sto-workbench-surface-bottom-inset: 8px;
@@ -104,8 +105,9 @@
     /* Windows/通用 AppChrome；macOS Sidebar 有独立 optical inset。 */
     --sto-chrome-toggle-inset-top: 12px;
     --sto-chrome-h: calc(var(--sto-chrome-toggle-inset-top) + 32px);
-    --sto-sidebar-chrome-toggle-inset-top: 20px;
-    --sto-sidebar-chrome-h: calc(var(--sto-sidebar-chrome-toggle-inset-top) + 32px);
+    --sto-sidebar-chrome-toggle-inset-top: 16px;
+    --sto-sidebar-chrome-toggle-size: 28px;
+    --sto-sidebar-chrome-h: calc(var(--sto-sidebar-chrome-toggle-inset-top) + var(--sto-sidebar-chrome-toggle-size));
     --sto-shell-card-gap: 8px;
     /* Stage 1 AppShell Grid column; runtime overwritten by MainLayout snapshot */
     --sto-sidebar-effective-w: 260px;
@@ -266,7 +268,7 @@
     --sto-accent-soft: hsl(32 45% 14%);
     --sto-brand-6: #ff6f00;
     --sto-header-h: 52px;
-    --sto-content-header-h: 52px;
+    --sto-content-header-h: 44px;
     --sto-split-header-to-surface-gap: 0px;
     --sto-workbench-surface-bottom-inset: 8px;
     --sto-preview-expanded-header-to-surface-gap: 0px;
@@ -275,8 +277,9 @@
     --sto-workspace-frame-start: 0px;
     --sto-chrome-toggle-inset-top: 12px;
     --sto-chrome-h: calc(var(--sto-chrome-toggle-inset-top) + 32px);
-    --sto-sidebar-chrome-toggle-inset-top: 20px;
-    --sto-sidebar-chrome-h: calc(var(--sto-sidebar-chrome-toggle-inset-top) + 32px);
+    --sto-sidebar-chrome-toggle-inset-top: 16px;
+    --sto-sidebar-chrome-toggle-size: 28px;
+    --sto-sidebar-chrome-h: calc(var(--sto-sidebar-chrome-toggle-inset-top) + var(--sto-sidebar-chrome-toggle-size));
     --sto-shell-card-gap: 8px;
     /* Stage 1 AppShell Grid column; runtime overwritten by MainLayout snapshot */
     --sto-sidebar-effective-w: 260px;
@@ -372,7 +375,7 @@
   /** 省区 AppShell：无整行顶栏，全高由壳 + 卡片承担 */
   [data-app-shell='provincial'] {
     --sto-header-h: 0px;
-    --sto-content-header-h: 52px;
+    --sto-content-header-h: 44px;
   }
 
   /**

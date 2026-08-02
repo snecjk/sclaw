@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useContentHeader } from '@/components/layout/content-header-context';
+import { cn } from '@/lib/utils';
 import { definitionFromDetail, definitionToSavePayload } from '@/lib/workflow-designer-adapter';
 import { normalizeConditionBranches } from '@/pages/WorkflowDesigner/normalize-conditions';
 import { persistNewWorkflow } from '@/lib/workflow-designer-persist';
@@ -17,7 +18,11 @@ import {
   publishWorkflowDefinition,
   saveWorkflowDefinition,
 } from '@/lib/workflow-api';
-import { workflowBuilderShell } from '@/lib/surfaces';
+import {
+  contentHeaderActionBtnClass,
+  contentHeaderTextActionBtnClass,
+  workflowBuilderShell,
+} from '@/lib/surfaces';
 import { DesignerCanvas } from '@/pages/WorkflowDesigner/components/designer-canvas';
 import { HistoryVersionsDrawer } from '@/pages/WorkflowDesigner/components/history-versions-drawer';
 import { LocalRunHistoryDialog } from '@/pages/WorkflowDesigner/components/local-run-history-dialog';
@@ -224,9 +229,9 @@ export function WorkflowDesigner({
           type="button"
           aria-label={t('builder.back')}
           onClick={handleBack}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground/80 hover:bg-muted"
+          className={cn(contentHeaderActionBtnClass, 'text-foreground/80 hover:bg-muted')}
         >
-          <ChevronLeft className="h-5 w-5" aria-hidden />
+          <ChevronLeft className="h-4 w-4" aria-hidden />
         </button>
         <div className="min-w-0 flex-1">
           {workflow ? (
@@ -272,23 +277,59 @@ export function WorkflowDesigner({
               </p>
             </div>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={() => setHistoryOpen(true)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={contentHeaderTextActionBtnClass}
+            onClick={() => setHistoryOpen(true)}
+          >
             <History className="mr-1 h-3.5 w-3.5" />
             版本列表
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => setLocalRunHistoryOpen(true)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={contentHeaderTextActionBtnClass}
+            onClick={() => setLocalRunHistoryOpen(true)}
+          >
             <History className="mr-1 h-3.5 w-3.5" />
             本地运行记录
           </Button>
-          <Button ref={tryRunButtonRef} type="button" variant="outline" size="sm" disabled={isTryRunStarting} onClick={handleTryRun}>
+          <Button
+            ref={tryRunButtonRef}
+            type="button"
+            variant="outline"
+            size="sm"
+            className={contentHeaderTextActionBtnClass}
+            disabled={isTryRunStarting}
+            onClick={handleTryRun}
+          >
             <Play className="mr-1 h-3.5 w-3.5" />
             {isTryRunStarting ? '启动中' : t('builder.tryRun')}
           </Button>
-          <Button type="button" variant="outline" size="sm" disabled={saving || !dirty} onClick={() => void handleSave()}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={contentHeaderTextActionBtnClass}
+            disabled={saving || !dirty}
+            onClick={() => void handleSave()}
+          >
             <Save className="mr-1 h-3.5 w-3.5" />
             {saving ? '保存中' : '另存草稿'}
           </Button>
-          <Button type="button" size="sm" className="bg-[#5f6672] text-white hover:bg-[#4b5563]" disabled={publishing} onClick={() => void handlePublish()}>
+          <Button
+            type="button"
+            size="sm"
+            className={cn(
+              contentHeaderTextActionBtnClass,
+              'bg-[#5f6672] text-white hover:bg-[#4b5563]',
+            )}
+            disabled={publishing}
+            onClick={() => void handlePublish()}
+          >
             <SlidersHorizontal className="mr-1 h-3.5 w-3.5" />
             {publishing ? '发布中' : t('builder.publish')}
           </Button>

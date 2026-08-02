@@ -58,17 +58,17 @@ Header 左侧的 macOS 避让值不得成为 `main`、Split Body 或 Preview Exp
 
 旧文档曾基于 DOM control centerY=34 得出“不重写 Header DOM”。该结论只证明按钮外框垂直居中，不能证明模式切换的水平锚点稳定。本阶段允许且要求把三套 return 收敛成稳定槽位，但不得改业务 Slot 数据协议。
 
-### 1.5 Header 基准锁定为 52px
+### 1.5 Header 最新基准锁定为 44px
 
 旧阶段文档中残留的 `56px` 基线无效。权威基线为：
 
 ```text
 Workspace top frame = 8px
 ContentHeader top   = 8px
-ContentHeader h     = 52px
-ContentHeader centerY = 34px
-Header action box   = 32px
-Search surface      = 32px
+ContentHeader h     = 44px
+ContentHeader centerY = 30px
+Header action box   = 28px
+Search surface      = 28px
 ```
 
 ## 2. 最新设计稿的状态解读
@@ -77,7 +77,7 @@ Search surface      = 32px
 
 | 状态 | 设计表达 | 必须保持的不变量 |
 | --- | --- | --- |
-| A. Sidebar 展开 + Split | 左 Sidebar；中 Conversation；右 Preview；Header 连续 | Header 52；Split Header/Body 共边界；Workspace 右 Frame 稳定 |
+| A. Sidebar 展开 + Split | 左 Sidebar；中 Conversation；右 Preview；Header 连续 | Header 44；Split Header/Body 共边界；Workspace 右 Frame 稳定 |
 | B. Sidebar 展开 + Preview Expanded | Sidebar 保留；Preview 占满 Workspace | Header 中 icon/Tab 组与下方 Surface 共用 12px 左边界；右侧布局按钮位置不变 |
 | C. Sidebar 收起 + Preview Expanded | Workspace 占据窗口；macOS 控件仍在左上 | Header 单独避让红黄绿；Preview Body 左右各保留 12px inset，不能出现 80px 空白 |
 
@@ -95,7 +95,7 @@ Sidebar 最大：48:13949
 如果 MCP 中的新 Frame 与本文数值冲突：
 
 1. 用户最新文字要求优先。
-2. Header 52px、Search 32px、Sidebar 200/260/400 已明确批准，不允许普通模型自行覆盖。
+2. Header 44px、主要控件与 Search 28px、Sidebar 200/260/400 已明确批准，不允许普通模型自行覆盖。
 3. 其他差异先报告，不得用局部 CSS 猜测。
 
 ## 3. 当前代码事实与根因
@@ -128,17 +128,17 @@ Scrollbar 已贴 Sidebar 右边界，真正的空隙是其后的 8px Grid 列。
 
 删除实体 Gap 时必须同步这两个消费者，禁止只改 CSS Grid。
 
-### 3.2 Header 外框居中但可见图形未完全居中
+### 3.2 历史问题：Header 外框居中但可见图形未完全居中
 
-运行时 DOM 已证明 Header 和按钮 box centerY 均为 34px。剩余问题来自：
+Stage 3 运行时 DOM 曾证明 Header 和按钮 box centerY 均为 34px；该数值已被最新 44/28 契约 supersede。历史剩余问题来自：
 
 - Electron 原生 traffic lights 不参与 React flex 对齐。
 - SVG 源文件 viewBox / 可见图形尺寸不同。
 - 三种 Header 模式父容器不同，水平锚点发生变化。
 
-### 3.3 Search 外层不是 32px
+### 3.3 历史问题：Search 外层未受统一高度约束
 
-当前 Input 已经是 `h-8`，但外层仍有 `py-1.5` 和 border，搜索胶囊约 44–46px。它还以 `w-[16.5rem]` 进入普通 Flex 流，打开时会挤压标题和推动 action。
+旧实现 Input 使用 `h-8`，外层仍有 `py-1.5` 和 border，搜索胶囊约 44–46px；同时以 `w-[16.5rem]` 进入普通 Flex 流，打开时会挤压标题和推动 action。最新实现由 28px 控件 Token 驱动，并以 overlay 向左展开。
 
 ### 3.4 Preview Expanded 大空白
 
@@ -265,7 +265,8 @@ Full legacy 72px rail 仍保持现状，不受本阶段省区规则影响。
 ### 5.2 Header Chrome
 
 ```css
---sto-content-header-h: 52px;
+--sto-content-header-h: 44px;
+--sto-content-header-control-h: 28px;
 --sto-header-pad-start: 20px;
 --sto-header-pad-end: 8px;
 --sto-header-macos-safe-start: 80px;
@@ -284,7 +285,7 @@ macOS + Sidebar collapsed：
 ### 5.3 Workbench Body
 
 ```css
---sto-workbench-header-to-body-gap: 8px;
+--sto-conversation-header-to-surface-gap: 0px;
 --sto-split-header-to-surface-gap: 0px;
 --sto-workbench-body-content-inset-y: 8px;
 --sto-workbench-surface-bottom-inset: 8px;
@@ -363,30 +364,30 @@ centerY = 34px
 
 `SidebarHeaderToggle` 只允许一个渲染位置。当前 `titleZone` 内和 `preview-expanded` 分支外层的重复条件必须收敛为 `sidebar-title` 槽位内容。
 
-## 7. Search 32px 与无重排展开
+## 7. Search 28px 与无重排展开
 
 ### 7.1 尺寸
 
-目标是整个 Search Surface 32px：
+目标是整个 Search Surface 28px：
 
 ```text
-Search outer surface = 32px
-Search toggle         = 32×32px
+Search outer surface = 28px
+Search toggle         = 28×28px
 Search leading icon   = 24×24px
 Prev/Next/Close       = 24×24px
 vertical padding      = 0
 ```
 
-Input 可以 `h-full` 或 28px，但不得用“Input 32px + outer py-1.5”再次生成 44–46px 胶囊。
+Input 使用 `h-full`，不得叠加 outer vertical padding 再次生成高于 28px 的胶囊。
 
 ### 7.2 展开模型
 
-Search Toggle 始终只占 32px。Search Panel 作为相对 Toggle 的绝对定位子层向左展开：
+Search Toggle 始终只占 28px。Search Panel 作为相对 Toggle 的绝对定位子层向左展开：
 
 ```text
-right = toggle width + 4px
+right = 28px + 4px
 top = 0
-height = 32px
+height = 28px
 max width 受 Chat Header Zone 限制
 ```
 
@@ -407,11 +408,11 @@ Search 必须保留 `Escape`、`Enter`、`Shift+Enter`、自动聚焦、清空�
 
 ```text
 header top=8
-header h=52
-header centerY=34
-32px action centerY=34
-30px tab centerY=34
-search surface centerY=34
+header h=44
+header centerY=30
+28px action centerY=30
+28px tab centerY=30
+search surface centerY=30
 ```
 
 ### 8.2 SVG 光学中心
@@ -554,7 +555,7 @@ package.json / lockfile / build / scripts / CI
 - 删除 split/expanded main 对 Header inset 的消费。
 - 建立 Header-only safe inset 与 Body-owned Surface inset。
 - 修复 collapsed + Preview Expanded 80px 空白。
-- 保持 Header 52；Conversation Header→Surface 为 8px；Split 左右 Surface 与 Preview Expanded 描边 Surface 均使用各自独立的 0px Token 紧接 Header；Chat Surface 内部仍保留 8px 正文内距。
+- 保持 Header 44；Conversation、Split 左右 Surface 与 Preview Expanded 描边 Surface 均使用各自独立的 0px Token 紧接 Header；Conversation/Split Chat Surface 内部仍保留 8px 正文内距。
 - Split Chat、Split Preview 和 Preview Expanded 共用 `8px` Body-owned Surface 底距；再与 Workspace 外框的 `8px` 底部 Frame 叠加，窗口到 Surface 底边总距离为 `16px`。
 
 ### 5D：稳定 Header Slots
@@ -567,7 +568,7 @@ package.json / lockfile / build / scripts / CI
 
 ### 5E：Search 与光学中心
 
-- Search outer surface 改 32px。
+- Search outer surface 改 28px。
 - Search 改向左 overlay 展开，不参与主 Flex 宽度。
 - 规范化 Header SVG 画布。
 - 使用真实 macOS 截图标定 traffic lights；未测平台必须明确列为未验证。
@@ -652,7 +653,7 @@ git diff --check
 
 ### 15.3 Search
 
-1. 打开搜索，外框高度应为 32px。
+1. 打开搜索，外框高度应为 28px。
 2. 刷新、Brain、Preview Toggle 不移动。
 3. 标题允许被临时覆盖/裁剪，但不得把 Preview Tab 推走。
 4. 验证 Enter、Shift+Enter、Escape、清空。
@@ -719,7 +720,7 @@ Windows 未实测时不得声称已通过，只报告 DOM Header centerline 和�
 
 先执行 5A：读取当前 git status/diff，保护所有用户改动；读取最新 MCP 指定节点；使用运行时 getBoundingClientRect 输出 Sidebar/Workspace/Header/Search/Preview 基线；建立会失败的几何关系测试。不得一上来改 margin/padding。
 
-随后严格按 5B→5C→5D→5E→5F 串行。AppShell 改为 Sidebar|Workspace 两列，8px Sidebar resize hit area 作为 Workspace 侧绝对 overlay，不占布局宽度；macOS safe inset 只属于 Header；ContentHeader 收敛为稳定槽位；Search 整体 32px并向左 overlay 展开；Preview Expanded Body 使用左右各 12px 的独立 Surface inset。
+随后严格按 5B→5C→5D→5E→5F 串行。AppShell 改为 Sidebar|Workspace 两列，8px Sidebar resize hit area 作为 Workspace 侧绝对 overlay，不占布局宽度；macOS safe inset 只属于 Header；ContentHeader 收敛为稳定槽位；一级 Header / 主要控件为 44px / 28px，Search 向左 overlay 展开；Preview Expanded Body 使用左右各 12px 的独立 Surface inset。
 
 禁止：负 margin、逐按钮 translate-y、模式专用 magic number、setTimeout 重定位、重写 OverlayScrollbar、修改业务消息/文件预览、改依赖/lockfile/build/CI、git checkout/restore/reset、整仓格式化。
 

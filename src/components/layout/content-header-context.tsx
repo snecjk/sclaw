@@ -1,5 +1,5 @@
 /**
- * ContentHeaderContext — 全局内容区 52px 标题栏槽位。
+ * ContentHeaderContext — 全局内容区 44px 标题栏槽位。
  *
  * 各路由页通过 useContentHeader 注入 title / chatActions / previewActions / layoutMode；
  * MainLayout 内 ContentHeader 读取渲染。

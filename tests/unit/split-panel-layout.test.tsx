@@ -47,13 +47,13 @@ describe('split panel layout surfaces', () => {
     expect(contentHeaderSplitChatZoneClass).toContain('flex-1');
   });
 
-  it('uses a real continuous 52px split header bar with drag-region', () => {
+  it('uses a real continuous 44px split header bar with drag-region', () => {
     expect(contentHeaderSplitBarClass).toContain('drag-region');
     expect(contentHeaderSplitBarClass).toContain('col-start-1');
     expect(contentHeaderSplitBarClass).toContain('col-end-4');
     expect(contentHeaderSplitBarClass).toContain('row-start-1');
     expect(contentHeaderSplitBarClass).toContain('grid');
-    expect(contentHeaderSplitBarClass).toContain('h-[var(--sto-content-header-h,52px)]');
+    expect(contentHeaderSplitBarClass).toContain('h-[var(--sto-content-header-h,44px)]');
     expect(contentHeaderSplitBarClass).toContain('select-none');
     expect(contentHeaderSplitBarClass).toContain(
       '[grid-template-columns:minmax(0,1fr)_0px_var(--sto-split-preview-col,50%)]',
@@ -110,8 +110,8 @@ describe('split panel layout surfaces', () => {
     expect(stoPreviewExpandedBodyClass).not.toContain('sto-split-preview-surface-inset-end');
     expect(stoSplitGridBodyChatClass).toContain('pt-[var(--sto-split-header-to-surface-gap,0px)]');
     expect(stoSplitGridBodyPreviewClass).toContain('pt-[var(--sto-split-header-to-surface-gap,0px)]');
-    expect(stoSplitGridBodyChatClass).not.toContain('sto-workbench-header-to-body-gap');
-    expect(stoSplitGridBodyPreviewClass).not.toContain('sto-workbench-header-to-body-gap');
+    expect(stoSplitGridBodyChatClass).not.toContain('sto-conversation-header-to-surface-gap');
+    expect(stoSplitGridBodyPreviewClass).not.toContain('sto-conversation-header-to-surface-gap');
     for (const cls of [
       stoSplitGridBodyChatClass,
       stoSplitGridBodyPreviewClass,
