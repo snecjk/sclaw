@@ -69,7 +69,12 @@ ContentHeader h     = 44px
 ContentHeader centerY = 30px
 Header action box   = 28px
 Search surface      = 28px
+Sidebar toggle top  = 16px
+Sidebar toggle box  = 28px
+Sidebar toggle glyph= 18px
 ```
+
+其中 Sidebar 的 `28px` 指 hover/focus 点击框；内部 `PanelLeftClose` 图形保持 `18px`，不得把 SVG 本体放大到 28px。
 
 ## 2. 最新设计稿的状态解读
 
@@ -427,6 +432,8 @@ Search / Refresh / Brain / Panel 当前源 SVG 的 viewBox 和可见图形高度
 ### 8.3 macOS traffic lights
 
 设计稿不包含原生 traffic lights，最终必须用真实 macOS 应用截图验收。
+
+系统红绿灯与 Sidebar 收起钮使用独立光学基线：红绿灯保持 `{x:16,y:20}`；Sidebar 收起钮使用 `16px` 顶部 inset、`28px` 点击框与 `18px` SVG。不得再用 ContentHeader centerY 反推两者位置。
 
 建议将纯几何常量放到 Main/Renderer 都能安全读取的共享 TypeScript 模块，避免 `content-header-metrics.ts` 和 `electron/main/index.ts` 各写一份数值。
 

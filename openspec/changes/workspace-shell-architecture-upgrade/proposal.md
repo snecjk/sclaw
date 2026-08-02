@@ -21,7 +21,7 @@
 - 修订活动 Change：`chat-file-preview-enhancement`、`unify-toast-and-chat-error-feedback`、`overlay-scrollbar-surfaces/tasks.md`（状态校准）。
 - 四个响应式最低宽度已批准并写入 design：`closedWorkspaceMin=560`、`splitChatMin=480`、`splitPreviewMin=560`、`expandedPreviewMin=640`。进入阶段 1 源码仍需用户完成 Stage 0 文档验收（tasks 0.8）。
 - 增加 Stage 5 人工验收收口：AppShell 改为 `Sidebar | Workspace` 两列；8px Sidebar resize hit area 改为不占宽 overlay；Header/Body inset 解耦；ContentHeader 收敛为稳定槽位；一级 Header / 主要控件最终收紧为 `44px / 28px`，Search 展开不重排 action。
-- 增加 Stage 5 几何终验：省区 Sidebar 收起后 Workspace 恢复 8px 起始 Frame；split Preview Surface 由 Body 独占 12px 右内距；Preview Expanded 隐藏并禁用会话标题与 Search/Refresh/Brain；Workspace 展开/还原提升到 Header 且固定在 Preview 开关左侧；macOS 红绿灯与 Sidebar 收起钮采用独立 `20px` 顶部光学基线。
+- 增加 Stage 5 几何终验：省区 Sidebar 收起后 Workspace 恢复 8px 起始 Frame；split Preview Surface 由 Body 独占 12px 右内距；Preview Expanded 隐藏并禁用会话标题与 Search/Refresh/Brain；Workspace 展开/还原提升到 Header 且固定在 Preview 开关左侧；macOS 红绿灯保持 `{x:16,y:20}`，Sidebar 收起钮独立使用 `16px` 顶部 inset 与 `28px` 点击框。
 
 ## Capabilities
 

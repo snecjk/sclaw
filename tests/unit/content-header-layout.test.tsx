@@ -235,6 +235,7 @@ describe('ContentHeader vertical pixel contract', () => {
       'utf8',
     );
     expect(sidebarToggleSrc).toContain('var(--sto-sidebar-chrome-toggle-size,28px)');
+    expect(sidebarToggleSrc).toContain('className="h-[18px] w-[18px]"');
     expect(sidebarToggleSrc).not.toContain("'h-8 w-8'");
 
     const mainSrc = readFileSync(
