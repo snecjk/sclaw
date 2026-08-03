@@ -1,8 +1,8 @@
 import { readFile, unlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { DingTalkAttachedFileHint } from './shared/dingtalk-file-send';
-import type { DingTalkMention } from './shared/dingtalk-mention';
+import type { DingTalkAttachedFileHint } from './shared/dingtalk-send/dingtalk-file-send';
+import type { DingTalkMention } from './shared/dingtalk-send/dingtalk-mention';
 
 export type DingTalkMentionPendingPayload = {
   sessionKey: string;

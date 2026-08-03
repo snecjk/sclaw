@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   extractText,
   extractThinkingTimeline,
+  isWorkflowCompletionTranscript,
   stripDwsSendMetadataForDisplay,
 } from '../../src/pages/Chat/message-utils';
 
@@ -64,5 +65,17 @@ describe('message display sanitize', () => {
     if (timeline[0]?.type === 'thinking') {
       expect(timeline[0].content).toBe('✅ 已将《月》这首诗发送给 **李峥**');
     }
+  });
+});
+
+describe('workflow completion transcript detection', () => {
+  it('recognizes legacy Markdown completion reports so the workflow card owns artifact display', () => {
+    expect(isWorkflowCompletionTranscript(
+      '✅ 工作流【盖亚 v3】已执行完成！\n\n执行状态：\n运行 ID：run_203443162047086592\n状态：✅ 成功\n\n生成产物：\nscience_knowledge.html\n预览链接',
+    )).toBe(true);
+  });
+
+  it('does not hide ordinary assistant text that merely mentions a run id', () => {
+    expect(isWorkflowCompletionTranscript('我会继续检查 run_203443162047086592 的配置。')).toBe(false);
   });
 });

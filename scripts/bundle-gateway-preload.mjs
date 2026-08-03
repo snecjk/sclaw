@@ -2,7 +2,7 @@
 
 /**
  * Bundle gateway-preload-entry.ts → gateway-fetch-preload.cjs
- * 与 shared/dws-send-text.ts 同源，供 Gateway NODE_OPTIONS -r 预加载。
+ * 与 shared/dingtalk-send/dws-send-text.ts 同源，供 Gateway NODE_OPTIONS -r 预加载。
  */
 
 import 'zx/globals';

@@ -4,7 +4,7 @@ import {
   extensionFromBasename,
   normalizeArtifactPathPrefix,
 } from '../../shared/artifact-path';
-import { isStoCompanyUrl } from '../../shared/preview-href';
+import { classifyPreviewHref, isStoCompanyUrl } from '../../shared/preview-href';
 
 export function isHttpUrl(path: string): boolean {
   return path.startsWith('http://') || path.startsWith('https://');
@@ -86,6 +86,13 @@ function extToMimeType(ext: string): string {
     csv: 'text/csv',
     tsv: 'text/tab-separated-values',
     xml: 'application/xml',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    bmp: 'image/bmp',
+    svg: 'image/svg+xml',
     doc: 'application/msword',
     docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     xls: 'application/vnd.ms-excel',
@@ -154,7 +161,7 @@ export function resolvePreviewMimeType(
 
 /** True when the last path segment looks like a file name with extension (e.g. report.pdf). */
 export function urlPathHasFileExtension(pathOrUrl: string): boolean {
-  let segment = '';
+  let segment: string;
   if (isHttpUrl(pathOrUrl)) {
     try {
       segment = new URL(pathOrUrl).pathname.split('/').filter(Boolean).pop() || '';
@@ -280,7 +287,7 @@ function resolveArtifactPreviewFileName(
 ): string {
   const name = artifactName?.trim() ?? '';
   if (name && name !== 'preview' && !name.startsWith('http')) {
-    return appendExtensionIfMissing(name, mimeType);
+    return name;
   }
   return previewFileNameFromUrl(previewUrl, mimeType);
 }
@@ -315,12 +322,14 @@ export function isPreviewableArtifactUrl(url: string, typeHint?: string | null):
   if (!url?.trim()) return false;
   if (isHttpUrl(url)) return isPreviewableRemoteUrl(url, typeHint);
   if (url.startsWith('artifact://')) return false;
-  return false;
+  return classifyPreviewHref(url).type === 'local';
 }
 
-/** HTTP(S) artifact URLs users can open or preview; hides internal artifact:// refs. */
+/** User-visible remote or local artifacts; hides internal artifact:// and unsafe schemes. */
 export function isUserFacingArtifactUrl(url: string | undefined | null): boolean {
-  return Boolean(url?.trim() && isHttpUrl(url));
+  if (!url?.trim() || url.startsWith('artifact://')) return false;
+  const type = classifyPreviewHref(url).type;
+  return type === 'local' || type === 'http-preview' || type === 'http-external';
 }
 
 /** Open http(s) links in the system browser — required in Electron (plain <a> navigates in-app). */
@@ -374,9 +383,11 @@ export function artifactToPreviewFile(artifact: {
   url: string;
   previewUrl?: string;
   tempUrl?: string;
+  filePath?: string;
 }): AttachedFileMeta {
   const previewUrl = artifact.previewUrl?.trim() || artifact.url;
   const downloadUrl = artifact.tempUrl?.trim() || artifact.url;
+  const localFilePath = artifact.filePath?.trim();
   const mimeType = resolvePreviewMimeType(
     inferMimeTypeFromUrl(previewUrl, artifact.type),
     previewUrl,
@@ -385,7 +396,10 @@ export function artifactToPreviewFile(artifact: {
   const fileName = resolveArtifactPreviewFileName(artifact.name, previewUrl, mimeType);
 
   return {
-    filePath: previewUrl,
+    // Workflow artifacts may include both an in-app/OSS preview URL and a
+    // local output path. Keep the latter for native actions such as “show in
+    // folder”; preview components can render the local file directly.
+    filePath: localFilePath || previewUrl,
     downloadUrl: downloadUrl !== previewUrl ? downloadUrl : undefined,
     fileName,
     mimeType,

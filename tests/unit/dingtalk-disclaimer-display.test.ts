@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   appendDingTalkAgentSendDisclaimer,
   stripDingTalkAgentSendDisclaimerForDisplay,
-} from '../../shared/dingtalk-mention-context';
+} from '../../shared/dingtalk-prompts/dingtalk-disclaimer';
 import { extractText } from '../../src/pages/Chat/message-utils';
 
 describe('stripDingTalkAgentSendDisclaimerForDisplay', () => {

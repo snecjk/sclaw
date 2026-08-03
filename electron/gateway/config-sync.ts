@@ -46,6 +46,7 @@ import { getDwsBinDir } from '../utils/dws-cli';
 import { prependPathEntry, prependNodePathEntry } from '../utils/env-path';
 import { copyPluginFromNodeModules, fixupPluginManifest } from '../utils/plugin-install';
 import { SAI_CLIENT_ID_VALUE, applySaiClientIdEnv } from '../utils/sai-client-id';
+import { prepareWorkflowOpenClawRuntimeForGatewayLaunch } from '../services/workflow-runtime/agent-runner-openclaw';
 
 export interface GatewayLaunchContext {
   appSettings: Awaited<ReturnType<typeof getAllSettings>>;
@@ -299,6 +300,11 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
 
   const appSettings = await getAllSettings();
   await syncGatewayConfigBeforeLaunch(appSettings);
+
+  // The workflow runtime is a fixed Gateway agent. It must exist before the
+  // child process reads the agent registry; workflow execution must never
+  // reload/restart a live Gateway merely to register this agent.
+  await prepareWorkflowOpenClawRuntimeForGatewayLaunch();
 
   if (!existsSync(entryScript)) {
     throw new Error(`OpenClaw entry script not found at: ${entryScript}`);

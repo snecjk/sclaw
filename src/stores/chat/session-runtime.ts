@@ -212,7 +212,6 @@ export function buildSessionSwitchPatch(
       : state.sessionLastActivity,
     messages: [],
     ...runtimePatchFromSessionRuntime(nextRuntime),
-    workflowCardStates: {},
     pendingWorkflow: null,
   };
 }

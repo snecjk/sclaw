@@ -284,6 +284,11 @@ export function ensureDir(dir: string): void {
  * Best-effort: never creates bootstrap files that did not already exist.
  */
 function ensureWorkspaceArtifactOutputConstraintDocs(workspaceRoot: string): void {
+  // workflow-runtime has a shared OpenClaw Agent workspace but each smart node
+  // owns a child `runId/nodeId` directory. Appending the generic root-level
+  // `.claw-output` rule here would make node artifacts mix across runs.
+  const normalizedRoot = workspaceRoot.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  if (normalizedRoot.endsWith('/workflow-runtime/workspaces')) return;
   for (const fileName of ['AGENTS.md', 'CLAUDE.md'] as const) {
     const filePath = join(workspaceRoot, fileName);
     if (!existsSync(filePath)) continue;

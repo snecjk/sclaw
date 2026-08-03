@@ -147,6 +147,12 @@ export interface WorkflowGraphEdge {
   id: string;
   source: string;
   target: string;
+  /** 条件分支表达式（仅来自 condition/agent_condition 节点的出边）。 */
+  condition?: string;
+  /** 条件分支源端口（agent_condition 节点分支键）。 */
+  sourcePort?: string;
+  /** 条件分支目标端口。 */
+  targetPort?: string;
 }
 
 export interface WorkflowDefaultPreset {
@@ -175,6 +181,7 @@ export interface WorkflowDetailResponse {
   description?: string | null;
   schemaVersion?: string | null;
   version: number;
+  workflowVersionId?: number;
   nodes: WorkflowGraphNode[];
   edges: WorkflowGraphEdge[];
   startup: WorkflowStartupDetail;
@@ -237,7 +244,8 @@ export interface MyWorkflowSummary {
 
 // ── Run / Execution ─────────────────────────────────────────────
 
-export type WorkflowRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'timeout' | 'unknown';
+export type WorkflowRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout' | 'waiting_approval' | 'waiting_input' | 'unknown';
+export type WorkflowRunTriggerType = 'chat' | 'scheduled_task' | 'workflow_manual' | 'designer_test' | 'api';
 
 export interface WorkflowRunNodeRun {
   id: string;
@@ -246,15 +254,22 @@ export interface WorkflowRunNodeRun {
   startedAt?: string;
   completedAt?: string;
   error?: string;
+  attemptCount?: number;
+  agentSessionId?: string;
 }
 
 export interface WorkflowRunArtifact {
   id: string;
+  kind?: string;
+  nodeId?: string;
   name: string;
   type: string;
   url: string;
   previewUrl?: string;
   tempUrl?: string;
+  filePath?: string;
+  uri?: string;
+  contentType?: string;
   size?: number;
 }
 
@@ -291,29 +306,53 @@ export interface WorkflowRunClientResult {
     contentType?: string;
     size?: number;
   }>;
+  processFiles?: Array<{
+    id?: string;
+    name?: string;
+    kind?: string;
+    type?: string;
+    url?: string;
+    tempUrl?: string;
+    previewUrl?: string;
+    filePath?: string;
+    contentType?: string;
+    size?: number;
+  }>;
 }
 
 export interface WorkflowRunResponse {
   id: string;
   workflowId: string;
+  /** 版本记录主键，仅供内部关联，不能作为用户可见版本号。 */
+  versionId?: string | number | null;
+  /** 服务端返回的用户可见流程版本号。 */
+  workflowVersion?: string | number | null;
   status: WorkflowRunStatus;
   mode?: string | null;
+  /** Client-local business entry point. This field is not synchronized to the cloud run. */
+  triggerType?: WorkflowRunTriggerType;
+  /** Client-local chat session used by the optional “return to conversation” action. */
+  sessionKey?: string | null;
+  engineType?: 'claude' | 'openclaw';
+  engineModel?: string | null;
   startedAt: string;
   completedAt?: string | null;
   waitingNodeId?: string | null;
   nodeRuns: WorkflowRunNodeRun[];
-  events: unknown[];
-  approvalTasks: unknown[];
-  userInputTasks: unknown[];
+  /** Detail view only. */
+  events?: unknown[];
+  approvalTasks?: unknown[];
+  userInputTasks?: unknown[];
   artifacts: WorkflowRunArtifact[];
-  toolInvocations: unknown[];
-  input: WorkflowRunInput;
+  /** Diagnostic view only; status/detail do not duplicate tool events. */
+  toolInvocations?: unknown[];
+  input?: WorkflowRunInput;
   /** Client result view (preferred over legacy `output`). */
   result?: WorkflowRunClientResult | null;
   output: unknown | null;
-  startup: WorkflowRunStartupInfo;
+  startup?: WorkflowRunStartupInfo;
   lastAgentRawText?: string | null;
-  error: string | null;
+  error?: string | null;
 }
 
 // ── Legacy / UI-friendly execution state ────────────────────────
@@ -340,6 +379,7 @@ export interface WorkflowExecutionResult {
     url: string;
     previewUrl?: string;
     tempUrl?: string;
+    filePath?: string;
     size?: number;
   }>;
 }
@@ -356,6 +396,27 @@ export interface WorkflowExecutionState {
   steps: WorkflowExecutionStep[];
   result?: WorkflowExecutionResult;
   error?: string;
+  /** 暂停态目标节点（waiting_approval/waiting_input）——gap2 emit 桥透传，UI 据此高亮审批/输入卡片。 */
+  waitingNodeId?: string | null;
+  approvalTasks?: unknown[];
+  userInputTasks?: unknown[];
+}
+
+export interface ChatWorkflowCardRef {
+  runId: string;
+  sessionKey: string;
+  anchorUserMessageId: string | null;
+  title: string;
+  paramsSummary?: string | null;
+  startedAt: string;
+}
+
+export interface RegisterChatWorkflowCardInput {
+  runId: string;
+  sessionKey: string;
+  anchorUserMessageId?: string | null;
+  title?: string | null;
+  paramsSummary?: string | null;
 }
 
 // ── Content Block ───────────────────────────────────────────────

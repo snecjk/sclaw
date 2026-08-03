@@ -6,6 +6,7 @@ import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-
 import { Component, useEffect } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { Toaster, toast } from 'sonner';
+import { getSidebarLayoutVariant } from '@/lib/sidebar-layout';
 import i18n from './i18n';
 import { MainLayout } from './components/layout/MainLayout';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -33,6 +34,7 @@ import { useAgentsStore } from './stores/agents';
 import { useChatStore } from './stores/chat';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
 import { AccountSwitchFab } from './components/layout/AccountSwitchFab';
+import { WorkflowCompletionNotifier } from './components/workflow/WorkflowCompletionNotifier';
 
 /**
  * Error Boundary to catch and display React rendering errors
@@ -119,6 +121,7 @@ function App() {
   const isAuthInitialized = useAuthStore((state) => state.isInitialized);
   const accessDenied = useAuthStore((state) => state.accessDenied);
   const initAuth = useAuthStore((state) => state.init);
+  const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
 
   useEffect(() => {
     initSettings();
@@ -300,9 +303,17 @@ function App() {
     });
   }, [currentSessionKey, currentAgentId, location.pathname]);
 
+  const noSidebarRoutes = ['/login', '/setup', '/sprite', '/float-icon'];
+  const hasSidebar = !noSidebarRoutes.some((r) => location.pathname.startsWith(r));
+  const sidebarWidth = hasSidebar ? (sidebarCollapsed ? 72 : 260) : 0;
+  const isProvincial = hasSidebar && getSidebarLayoutVariant() === 'provincial';
+  const sidebarGutter = isProvincial ? 8 : 0;
+  const toastCenterX = `calc(50% + ${(sidebarWidth + sidebarGutter) / 2}px)`;
+
   return (
     <ErrorBoundary>
       <TooltipProvider delayDuration={300}>
+        <WorkflowCompletionNotifier />
         <Routes>
           {/* SSO Login page */}
           <Route path="/login" element={<Login />} />
@@ -337,7 +348,20 @@ function App() {
 
         {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
         {location.pathname !== '/float-icon' ? (
-          <Toaster position="bottom-center" richColors closeButton style={{ zIndex: 99999 }} />
+          <Toaster
+            className="sto-global-toaster"
+            position="top-center"
+            richColors
+            offset={23}
+            gap={12}
+            visibleToasts={3}
+            style={{
+              left: toastCenterX,
+              right: 'auto',
+              transform: 'translateX(-50%)',
+              zIndex: 99999,
+            }}
+          />
         ) : null}
         {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
           <AccountSwitchFab />

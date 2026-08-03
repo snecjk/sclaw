@@ -10,6 +10,7 @@ describe('isSidebarHiddenChatSessionKey', () => {
     expect(isSidebarHiddenChatSessionKey('agent:main:main')).toBe(true);
     expect(isSidebarHiddenChatSessionKey('agent:research:main')).toBe(true);
     expect(isSidebarHiddenChatSessionKey('agent:main:sto-hq-reconciliation-2026-05-18')).toBe(true);
+    expect(isSidebarHiddenChatSessionKey('agent:workflow-runtime:workflow:run-1:node-1')).toBe(true);
     expect(isSidebarHiddenChatSessionKey('agent:main:session-123')).toBe(false);
   });
 });

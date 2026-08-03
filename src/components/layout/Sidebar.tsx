@@ -20,6 +20,7 @@ import {
   Workflow,
   Check,
   LayoutGrid,
+  Database,
 } from 'lucide-react';
 import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg';
 import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg';
@@ -33,7 +34,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { SidebarUpdateNotice } from '@/components/layout/sidebar-update-notice';
 import { useSettingsStore } from '@/stores/settings';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
@@ -132,8 +133,10 @@ import {
   sidebarSectionStickyTopRecentClass,
   sidebarScrollListClass,
   sidebarScrollContainerClass,
+  sidebarScrollOverlayHostClass,
 } from '@/lib/surfaces';
 import { useSidebarSectionScrollCollapse } from '@/hooks/use-sidebar-section-scroll-collapse';
+import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import { getCurrentEnvConfig } from '../../../shared/env-config';
 
 type SessionBucketKey =
@@ -149,8 +152,12 @@ type SessionBucketKey =
 const INITIAL_NOW_MS = Date.now();
 
 /** Collapsed rail: offset from narrow bar + opaque popover so glass tooltips do not show main content through them. */
-const SIDEBAR_COLLAPSED_TOOLTIP_SURFACE =
-  '!bg-popover text-popover-foreground shadow-md backdrop-blur-none border-border';
+const SIDEBAR_TOOLTIP_CLASS = cn(
+  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
+  'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
+  'dark:bg-[#2E3038] dark:text-white dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)]',
+);
+const SIDEBAR_TOOLTIP_ARROW_CLASS = 'fill-[#1D2129] dark:fill-[#2E3038]';
 
 /** Footer account dropdown — MasterGo: 160×186 卡片 + 34px 行高菜单项 */
 const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS =
@@ -158,9 +165,9 @@ const SIDEBAR_ACCOUNT_MENU_CONTENT_CLASS =
 const SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS =
   'min-w-[160px] rounded-[12px] border border-[#E5E6EB] bg-white p-1 shadow-lg dark:border-border dark:bg-card';
 const SIDEBAR_ACCOUNT_MENU_ITEM_CLASS =
-  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[14px] leading-[18px] text-[#1D2129] dark:text-foreground';
+  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[13px] leading-[18px] text-[#1D2129] dark:text-foreground';
 const SIDEBAR_ACCOUNT_MENU_LOGOUT_CLASS =
-  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[14px] font-bold leading-[18px] text-[#1D2129] dark:text-foreground';
+  'h-[34px] w-full min-w-0 rounded-[6px] px-6 py-2 text-[13px] font-bold leading-[18px] text-[#1D2129] dark:text-foreground';
 const SIDEBAR_ACCOUNT_MENU_ITEM_HOVER =
   'hover:bg-[#F5F6F7] focus:bg-[#F5F6F7] data-[highlighted]:bg-[#F5F6F7] data-[state=open]:bg-[#F5F6F7] dark:hover:bg-muted dark:focus:bg-muted dark:data-[highlighted]:bg-muted dark:data-[state=open]:bg-muted';
 const SIDEBAR_ACCOUNT_MENU_DIVIDER_CLASS = 'mx-6 my-0 h-px bg-[#E5E6EB] dark:bg-border';
@@ -177,6 +184,11 @@ const SIDEBAR_COLLAPSED_SESSION_LIMIT = 40;
 const SIDEBAR_TASK_LIST_INITIAL_ROW_LIMIT = 8;
 /** 旧版按日期分桶渲染（today/yesterday/…）— 保留逻辑，UI 已合并为「最近」单列表 */
 const USE_LEGACY_SESSION_DATE_BUCKETS = false;
+const DATA_CENTER_DEFAULT_SECTION = 'qa_artifact';
+const DATA_CENTER_SECTIONS = [
+  { id: 'qa_artifact', labelKey: 'dataCenterPage.sections.qaArtifact' },
+  { id: 'drive', labelKey: 'dataCenterPage.sections.drive' },
+] as const;
 
 /** 侧栏收起态：展开按钮 */
 const SIDEBAR_COLLAPSED_EXPAND_BTN_CLASS =
@@ -187,10 +199,16 @@ const SIDEBAR_SHOW_TASK_GROUP_CHEVRON = true;
 
 /** 任务组二级行 — 不用 justify-between，短标题时 Chevron 紧跟标题（对齐项目一级行） */
 const SIDEBAR_TASK_GROUP_ROW_CLASS =
-  'flex h-9 w-full items-center gap-1.5 rounded-lg px-[10px] py-2 text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring';
-/** 三级子项容器 — 竖线与项目二级对齐；w-[calc(100%-17px)] 避免 ml+w-full 右侧溢出被裁切 */
+  'flex h-8 w-full items-center gap-1.5 rounded-lg px-[10px] py-1 text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring';
+/**
+ * 任务二级子项容器 — 与项目二级水平对齐：
+ * 层级竖线 25px（滚动区 8 + ml 17）；选中背景起点 32px（17 + 1px 边框 + pl-1.5）；
+ * 一级行到底一个二级行外框间距 2px（mt-0.5）；文字起点 42px（32 + 行内 px-[10px]）；
+ * 同级 gap-0.5 → 32+2=34px 节拍；
+ * w-[calc(100%-17px)] 避免 ml+w-full 右侧溢出。
+ */
 const SIDEBAR_TASK_SUBITEMS_CONTAINER_CLASS =
-  'ml-[17px] flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-4 dark:border-border';
+  'mt-0.5 ml-[17px] flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-1.5 dark:border-border';
 const SCLAW_BROWSER_SIDEBAR_PRESERVE_SELECTOR = '[data-sclaw-browser-sidebar-preserve="true"]';
 
 function getSessionBucket(activityMs: number, nowMs: number): SessionBucketKey {
@@ -340,7 +358,7 @@ function SidebarTaskDateLinks({
                 openSubitemSession(entryId, sk, label);
               }}
               className={cn(
-                'relative z-[1] inline-flex h-8 w-full min-w-0 max-w-full items-center overflow-hidden rounded-lg px-[10px] py-1.5 text-left transition-colors',
+                'relative z-[1] inline-flex h-8 w-full min-w-0 max-w-full items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
                 SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
                 active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
               )}
@@ -527,17 +545,6 @@ function SidebarScheduledTaskGroup({
   // Strip Gateway technical prefix only; keep user-defined names like「定时任务测试」intact.
   const displayName = name.replace(/^Cron:\s*/i, '');
 
-  // 按日期统计当天会话数量，用于决定用哪种日期格式
-  const dayCounts = new Map<string, number>();
-  for (const s of sessions) {
-    const ts = sessionLastActivity[s.key] ?? s.updatedAt ?? 0;
-    if (ts > 0) {
-      const d = new Date(ts);
-      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      dayCounts.set(dateKey, (dayCounts.get(dateKey) ?? 0) + 1);
-    }
-  }
-
   return (
     <div className="rounded-lg">
       <button
@@ -569,25 +576,25 @@ function SidebarScheduledTaskGroup({
       {isOpen && visibleSessions.length > 0 ? (
         <div className={SIDEBAR_TASK_SUBITEMS_CONTAINER_CLASS}>
           {visibleSessions.map((s) => {
-            const ts = sessionLastActivity[s.key] ?? s.updatedAt ?? 0;
+            // 按天聚合：标签用 dated key 的 YYYY-MM-DD（历史多行已在数据源滤掉）。
+            const dated =
+              parseCronSessionKey(s.key)?.date
+              ?? parseClaudeScheduledTaskSessionKey(s.key)?.date;
             let label: string;
-            if (ts > 0) {
-              const d = new Date(ts);
-              const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-              const hasMultiple = (dayCounts.get(dateKey) ?? 0) > 1;
-              const y = d.getFullYear();
-              const m = String(d.getMonth() + 1).padStart(2, '0');
-              const day = String(d.getDate()).padStart(2, '0');
-              if (hasMultiple) {
-                const h = String(d.getHours()).padStart(2, '0');
-                const min = String(d.getMinutes()).padStart(2, '0');
-                const sec = String(d.getSeconds()).padStart(2, '0');
-                label = `${y}年${m}月${day}日${h}时${min}分${sec}秒`; // 产品说：定时任务去掉【的材料】这3个字
-              } else {
-                label = `${y}年${m}月${day}日`; // 产品说：定时任务去掉【的材料】这3个字
-              }
+            if (dated) {
+              const [ys, ms, ds] = dated.split('-');
+              label = `${ys}年${ms}月${ds}日`;
             } else {
-              label = s.label || s.displayName || s.key;
+              const ts = sessionLastActivity[s.key] ?? s.updatedAt ?? 0;
+              if (ts > 0) {
+                const d = new Date(ts);
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                label = `${y}年${m}月${day}日`;
+              } else {
+                label = s.label || s.displayName || s.key;
+              }
             }
             const active = currentSessionKey === s.key;
             const runtime = runtimeBySessionKey[s.key];
@@ -611,7 +618,7 @@ function SidebarScheduledTaskGroup({
                   }}
                   title={label}
                   className={cn(
-                    'h-8 w-full min-w-0 overflow-hidden rounded-lg px-[10px] py-1.5 text-left transition-colors',
+                    'h-8 w-full min-w-0 overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
                     SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS,
                     active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
                   )}
@@ -669,7 +676,7 @@ function SidebarNavLink({
             : 'text-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]',
         )
       : cn(
-          'shrink-0 gap-[10px] text-sm leading-5',
+          'shrink-0 gap-[10px] text-[13px] leading-5',
           isActive ? sidebarNavExpandedActiveClass : sidebarNavExpandedIdleClass,
         ),
   );
@@ -692,9 +699,10 @@ function SidebarNavLink({
           side="right"
           sideOffset={12}
           collisionPadding={12}
-          className={cn('max-w-[14rem]', SIDEBAR_COLLAPSED_TOOLTIP_SURFACE)}
+          className={cn('max-w-[14rem]', SIDEBAR_TOOLTIP_CLASS)}
         >
           {label}
+          <TooltipArrow className={SIDEBAR_TOOLTIP_ARROW_CLASS} />
         </TooltipContent>
       </Tooltip>
     );
@@ -764,6 +772,7 @@ export function Sidebar() {
   const [recentOpen, setRecentOpen] = useState(true);
   const [projectsSectionOpen, setProjectsSectionOpen] = useState(true);
   const [workspaceSectionOpen, setWorkspaceSectionOpen] = useState(true);
+  const [dataCenterSectionOpen, setDataCenterSectionOpen] = useState(false);
   const [bucketOpen, setBucketOpen] = useState<Record<SessionBucketKey, boolean>>({
     today: true,
     yesterday: true,
@@ -787,6 +796,7 @@ export function Sidebar() {
     sidebarCollapsed,
   });
   const allCatalogByKey = useSessionCatalogStore((s) => s.allCatalogByKey);
+  const taskCatalogSessions = useSessionCatalogStore((s) => s.taskCatalogSessions);
   const sessionWorkspaceByKey = useSessionCatalogStore((s) => s.sessionWorkspaceByKey);
   const patchSessionCatalog = useSessionCatalogStore((s) => s.patchSessionCatalog);
   const catalogBootstrap = useSessionCatalogStore((s) => s.bootstrap);
@@ -874,6 +884,8 @@ export function Sidebar() {
     onCollapseProjectsSection: handleCollapseProjectsSectionFromScroll,
     onCollapseTaskSection: handleCollapseTaskSectionFromScroll,
   });
+
+  const contentMeasureRef = useRef<HTMLDivElement>(null);
 
   // 用户手动展开项目：按分区锚点揭示内容，并暂缓下一次自动收起
   useLayoutEffect(() => {
@@ -1167,15 +1179,27 @@ export function Sidebar() {
     [sessions],
   );
 
-  // Legacy cron + Claude task (base, dated, run) sessions — shown under "任务列表" grouped by task name
-  const taskListScheduledSessions = useMemo(
-    () => visibleSessions.filter((s) => (
-      isAnyCronSessionKey(s.key)
-      || parseClaudeScheduledTaskRunSessionKey(s.key)
-      || parseClaudeScheduledTaskSessionKey(s.key) != null  // covers base & dated
-    )),
-    [visibleSessions],
-  );
+  // 「任务」：catalog dated cron/claude_task（历史 run/base 已在 store 侧滤掉）。
+  const taskListScheduledSessions = useMemo(() => {
+    const byKey = new Map(visibleSessions.map((session) => [session.key, session]));
+    return taskCatalogSessions.map((row) => {
+      const existing = byKey.get(row.sessionKey);
+      const title = row.title?.trim() || undefined;
+      const activityMs = row.lastActivityAt ? Date.parse(row.lastActivityAt) : undefined;
+      return {
+        key: row.sessionKey,
+        label: existing?.label ?? title,
+        displayName: existing?.displayName ?? title,
+        updatedAt: existing?.updatedAt
+          ?? (typeof activityMs === 'number' && Number.isFinite(activityMs) ? activityMs : undefined),
+        engineType: existing?.engineType
+          ?? (row.sessionType === 'claude_task' ? 'claude' as const : 'openclaw' as const),
+        model: existing?.model,
+        thinkingLevel: existing?.thinkingLevel,
+        spawnedBy: existing?.spawnedBy,
+      };
+    });
+  }, [taskCatalogSessions, visibleSessions]);
 
   // Normal chat sessions — shown under time buckets (today / yesterday / ...)
   const normalSessions = useMemo(
@@ -1221,38 +1245,52 @@ export function Sidebar() {
 
   const sessionsOrderedForCollapse = recentSessionsSorted.slice(0, SIDEBAR_COLLAPSED_SESSION_LIMIT);
 
-  // Group scheduled-task sessions by task id; titles resolved from task definitions + session metadata.
+  // Group scheduled-task sessions by catalog session_type + task_id; titles from definitions + session meta.
   const scheduledTaskGroups = useMemo(() => {
     type GroupDraft = {
       key: string;
       kind: 'st' | 'cron' | 'claude';
       taskId: number | string;
-      sessions: typeof visibleSessions;
+      sessions: typeof taskListScheduledSessions;
     };
     const groups = new Map<string, GroupDraft>();
+    const rowByKey = new Map(taskCatalogSessions.map((row) => [row.sessionKey, row]));
 
     for (const session of taskListScheduledSessions) {
-      const cronParsed = parseCronSessionKey(session.key);
-      const claudeTaskRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
-      const claudeTaskDatedParsed = parseClaudeScheduledTaskSessionKey(session.key);
-
+      const catalogRow = rowByKey.get(session.key);
       let draft: GroupDraft | undefined;
-      if (cronParsed) {
-        draft = { key: `cron:${cronParsed.jobId}`, kind: 'cron', taskId: cronParsed.jobId, sessions: [] };
-      } else if (claudeTaskDatedParsed) {
+
+      if (catalogRow?.sessionType === 'cron' && catalogRow.taskId) {
+        draft = { key: `cron:${catalogRow.taskId}`, kind: 'cron', taskId: catalogRow.taskId, sessions: [] };
+      } else if (catalogRow?.sessionType === 'claude_task' && catalogRow.taskId) {
         draft = {
-          key: `claude-task:${claudeTaskDatedParsed.taskId}`,
+          key: `claude-task:${catalogRow.taskId}`,
           kind: 'claude',
-          taskId: claudeTaskDatedParsed.taskId,
+          taskId: catalogRow.taskId,
           sessions: [],
         };
-      } else if (claudeTaskRunParsed) {
-        draft = {
-          key: `claude-task:${claudeTaskRunParsed.taskId}`,
-          kind: 'claude',
-          taskId: claudeTaskRunParsed.taskId,
-          sessions: [],
-        };
+      } else {
+        // Fallback: key parse（catalog 缺 task_id 时）
+        const cronParsed = parseCronSessionKey(session.key);
+        const claudeTaskRunParsed = parseClaudeScheduledTaskRunSessionKey(session.key);
+        const claudeTaskDatedParsed = parseClaudeScheduledTaskSessionKey(session.key);
+        if (cronParsed) {
+          draft = { key: `cron:${cronParsed.jobId}`, kind: 'cron', taskId: cronParsed.jobId, sessions: [] };
+        } else if (claudeTaskDatedParsed) {
+          draft = {
+            key: `claude-task:${claudeTaskDatedParsed.taskId}`,
+            kind: 'claude',
+            taskId: claudeTaskDatedParsed.taskId,
+            sessions: [],
+          };
+        } else if (claudeTaskRunParsed) {
+          draft = {
+            key: `claude-task:${claudeTaskRunParsed.taskId}`,
+            kind: 'claude',
+            taskId: claudeTaskRunParsed.taskId,
+            sessions: [],
+          };
+        }
       }
 
       if (!draft) continue;
@@ -1286,7 +1324,7 @@ export function Sidebar() {
     }
 
     return resolvedGroups;
-  }, [taskListScheduledSessions, sessionLastActivity, scheduledTaskNameMaps, runtimeBySessionKey, currentSessionKey, sending, activatingScheduledSessionAt, nowMs]);
+  }, [taskListScheduledSessions, taskCatalogSessions, sessionLastActivity, scheduledTaskNameMaps, runtimeBySessionKey, currentSessionKey, sending, activatingScheduledSessionAt, nowMs]);
 
   const taskListRenderPlan = useMemo(() => {
     type SortableTaskListEntry = {
@@ -1720,7 +1758,7 @@ export function Sidebar() {
       { to: '/workflow', icon: <Workflow className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.workflow') },
       { to: '/more-apps', icon: <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.moreApps') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
-      // { to: '/data-center', icon: <Database className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.dataCenter') },
+      { to: '/data-center', icon: <Database className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.dataCenter') },
     ];
     return all.filter((item) => isSidebarPrimaryNavItemVisible(item.to, {
       primaryMyData: sidebarVis.primaryMyData,
@@ -1777,12 +1815,12 @@ export function Sidebar() {
 
       <nav
         className={cn(
-          'flex shrink-0 flex-col gap-0.5 overflow-x-hidden pb-2',
+          'flex shrink-0 flex-col gap-0 overflow-x-hidden pb-2',
           sidebarCollapsed ? 'px-0 pt-2' : 'px-2 pt-0',
         )}
       >
         {/* 固定区：新对话、定时任务、技能广场、工作区等 */}
-        <div className="flex shrink-0 flex-col gap-0.5">
+        <div className="flex shrink-0 flex-col gap-0">
         <div className={cn('flex flex-col gap-0.5', sidebarCollapsed && 'mt-2')}>
 {primaryNav.map((item) => {
   // 当有选中非默认会话，或处于项目新对话草稿时，顶部「新对话」不高亮
@@ -1882,27 +1920,80 @@ export function Sidebar() {
       }
     : undefined;
   
+  const dataCenterSection = new URLSearchParams(location.search).get('section') || DATA_CENTER_DEFAULT_SECTION;
+  const isDataCenterItem = item.to === '/data-center';
+  const itemActiveOverride = isDataCenterItem
+    ? false
+    : homeIsActiveOverride;
+
+  if (isDataCenterItem && !sidebarCollapsed) {
+    return (
+      <div key={item.to} className="min-w-0">
+        <button
+          type="button"
+          aria-expanded={dataCenterSectionOpen}
+          onClick={() => setDataCenterSectionOpen((open) => !open)}
+          className={cn(
+            'relative flex w-full shrink-0 items-center justify-start gap-[10px] text-left text-[13px] leading-5 transition-[color,background-color,border-radius] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
+            sidebarNavExpandedIdleClass,
+          )}
+        >
+          <span className="flex shrink-0 items-center justify-center">{item.icon}</span>
+          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+          <ChevronDown
+            className={cn(
+              'h-3.5 w-3.5 text-muted-foreground transition-transform',
+              !dataCenterSectionOpen && '-rotate-90',
+            )}
+          />
+        </button>
+        {dataCenterSectionOpen ? (
+          <div className="ml-[17px] mt-0.5 flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-1.5 dark:border-border">
+            {DATA_CENTER_SECTIONS.map((section) => {
+              const active = location.pathname === '/data-center' && dataCenterSection === section.id;
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  onClick={() => navigate(`/data-center?section=${section.id}`)}
+                  className={cn(
+                    'relative inline-flex h-8 w-full min-w-0 items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
+                    active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
+                  )}
+                >
+                  <span className="min-w-0 flex-1 truncate">{t(`common:${section.labelKey}`)}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
-    <SidebarNavLink
-      key={item.to}
-      to={item.to}
-      end={item.end}
-      icon={item.icon}
-      label={item.label}
-      collapsed={sidebarCollapsed}
-      onClick={
-        item.to === '/'
-          ? () => handleHomeClick?.()
-          : item.to === '/data-center'
-            ? (e) => {
-                e.preventDefault();
-                navigate('/data-center');
-              }
-            : undefined
-      }
-      isActiveOverride={homeIsActiveOverride}
-      badge={item.badge}
-    />
+    <div key={item.to} className="min-w-0">
+      <SidebarNavLink
+        to={item.to}
+        end={item.end}
+        icon={item.icon}
+        label={item.label}
+        collapsed={sidebarCollapsed}
+        onClick={
+          item.to === '/'
+            ? () => handleHomeClick?.()
+            : isDataCenterItem
+              ? (e) => {
+                  e.preventDefault();
+                  setSidebarCollapsed(false);
+                  setDataCenterSectionOpen(true);
+                }
+              : undefined
+        }
+        isActiveOverride={itemActiveOverride}
+        badge={item.badge}
+      />
+    </div>
   );
 })}
         </div>
@@ -1936,10 +2027,12 @@ export function Sidebar() {
         </div>
       </nav>
 
+      <div className={sidebarScrollOverlayHostClass}>
       <div
         ref={scrollContainerRef}
         className={cn(sidebarScrollContainerClass, sidebarCollapsed ? 'px-0' : 'px-2')}
       >
+        <div ref={contentMeasureRef}>
         {!sidebarCollapsed ? (
           <SidebarProjectsSection
             collapsed={sidebarCollapsed}
@@ -1998,10 +2091,11 @@ export function Sidebar() {
                       )}
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent side="right" className="text-xs">
+                  <TooltipContent side="right" className={SIDEBAR_TOOLTIP_CLASS}>
                     {taskGroupsAllExpanded
                       ? t('common:sidebar.collapseAllGroups')
                       : t('common:sidebar.expandAllGroups')}
+                    <TooltipArrow className={SIDEBAR_TOOLTIP_ARROW_CLASS} />
                   </TooltipContent>
                 </Tooltip>
               ) : null
@@ -2009,7 +2103,7 @@ export function Sidebar() {
           />
         ) : null}
         {!sidebarCollapsed && taskListSectionOpen ? (
-          <div className={cn('relative z-0 mt-1 flex flex-col gap-0.5', sidebarScrollListClass)}>
+          <div className={cn('relative z-0 mt-0.5 mb-1 flex flex-col gap-0.5', sidebarScrollListClass)}>
             {taskListRenderPlan.items.map((item) =>
               item.kind === 'sto' ? (
                 <SidebarTaskGroup
@@ -2049,7 +2143,7 @@ export function Sidebar() {
         {!sidebarCollapsed ? (
           <div
             ref={recentSectionSentinelRef}
-            className="pointer-events-none -mb-1 h-0 w-full shrink-0 overflow-hidden opacity-0"
+            className="pointer-events-none h-0 w-full shrink-0 overflow-hidden opacity-0"
             aria-hidden
           />
         ) : null}
@@ -2067,8 +2161,8 @@ export function Sidebar() {
         <div
           className={cn(
             sidebarScrollListClass,
-            'space-y-1 pb-2',
-            sidebarCollapsed ? 'pt-1' : recentOpen ? 'pt-1' : 'pt-0',
+            'space-y-0.5 pb-2',
+            sidebarCollapsed ? 'pt-1' : recentOpen ? 'pt-0.5' : 'pt-0',
           )}
         >
           {sidebarCollapsed && sessionsOrderedForCollapse.length > 0 ? (
@@ -2104,11 +2198,12 @@ export function Sidebar() {
                       sideOffset={12}
                       collisionPadding={12}
                       className={cn(
-                        SIDEBAR_COLLAPSED_TOOLTIP_SURFACE,
+                        SIDEBAR_TOOLTIP_CLASS,
                         'max-w-[min(24rem,calc(100vw-3rem))] whitespace-normal break-words px-3 py-2 text-left leading-snug',
                       )}
                     >
                       {full}
+                      <TooltipArrow className={SIDEBAR_TOOLTIP_ARROW_CLASS} />
                     </TooltipContent>
                   </Tooltip>
                 );
@@ -2117,7 +2212,7 @@ export function Sidebar() {
           ) : null}
           {!sidebarCollapsed &&
             (recentSessionsSorted.length === 0 ? (
-              <p className={cn('px-2 pt-2 text-center text-sm leading-5 opacity-80', sidebarTextSectionClass)}>
+              <p className={cn('px-2 pt-2 text-center text-[13px] leading-5 opacity-80', sidebarTextSectionClass)}>
                 {t('common:sidebar.emptyChatHistory')}
               </p>
             ) : recentOpen ? (
@@ -2184,6 +2279,12 @@ export function Sidebar() {
               </>
             ) : null)}
         </div>
+        </div>
+      </div>
+      <OverlayScrollbar
+        viewportRef={scrollContainerRef}
+        contentRef={contentMeasureRef}
+      />
       </div>
 
       <SidebarUpdateNotice collapsed={sidebarCollapsed} />

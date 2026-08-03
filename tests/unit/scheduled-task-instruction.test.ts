@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildScheduledTaskDingTalkPromptAppend,
+  buildScheduledTaskExecutionSystemPrompt,
   buildWorkflowExecutionInstruction,
   detectMetaScheduledTaskIntent,
   evaluateScheduledTaskCreationBlock,
   isScheduledTaskExecutionSessionKey,
   normalizeScheduledTaskInstruction,
+  SCHEDULED_TASK_CORE_PROMPT,
+  SCHEDULED_TASK_DINGTALK_RULES,
   SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT,
+  DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK,
 } from '../../shared/scheduled-task-instruction';
-import { SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT as VENDORED_SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT } from '../../sto-plugin/openclaw/sto-scheduled-task-tool/shared/scheduled-task-instruction';
+import { SCHEDULED_TASK_CORE_PROMPT as VENDORED_CORE } from '../../sto-plugin/openclaw/sto-scheduled-task-tool/shared/scheduled-task-core';
+import { DINGTALK_RECIPIENTS_MARKER } from '../../shared/dingtalk-send/dingtalk-mention';
 
 describe('scheduled-task-instruction', () => {
   it('detects cron and claude task execution session keys', () => {
@@ -15,7 +21,10 @@ describe('scheduled-task-instruction', () => {
     expect(isScheduledTaskExecutionSessionKey('agent:main:cron:job-1:2026-06-25')).toBe(true);
     expect(isScheduledTaskExecutionSessionKey('agent:main:cron:job-1:run:abc')).toBe(true);
     expect(isScheduledTaskExecutionSessionKey('claude-task-run:task-1:run-1')).toBe(true);
+    expect(isScheduledTaskExecutionSessionKey('claude-task:task-1:2026-06-25')).toBe(true);
+    expect(isScheduledTaskExecutionSessionKey('claude-task:task-1')).toBe(true);
     expect(isScheduledTaskExecutionSessionKey('agent:main:main')).toBe(false);
+    expect(isScheduledTaskExecutionSessionKey('agent:main:chat:abc')).toBe(false);
   });
 
   it('blocks scheduled task creation tools in execution context', () => {
@@ -25,6 +34,10 @@ describe('scheduled-task-instruction', () => {
     }).blocked).toBe(true);
     expect(evaluateScheduledTaskCreationBlock({
       sessionKey: 'claude-task-run:task-1:run-1',
+      toolName: 'create_claude_scheduled_task',
+    }).blocked).toBe(true);
+    expect(evaluateScheduledTaskCreationBlock({
+      sessionKey: 'claude-task:task-1:2026-06-25',
       toolName: 'create_claude_scheduled_task',
     }).blocked).toBe(true);
     expect(evaluateScheduledTaskCreationBlock({
@@ -66,22 +79,78 @@ describe('scheduled-task-instruction', () => {
     expect(detectMetaScheduledTaskIntent('执行客户成本分析工作流')).toBe(false);
   });
 
-  it('execution system prompt overrides chat forward rules for dingtalk delivery', () => {
-    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('不是对话 @ 代发');
-    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('执行结果');
+  it('injects only CORE when prompt has no dingtalk send signal', () => {
+    const prompt = buildScheduledTaskExecutionSystemPrompt({ prompt: '查询上海天气' });
+    expect(prompt).toBe(SCHEDULED_TASK_CORE_PROMPT);
+    expect(prompt).not.toContain(SCHEDULED_TASK_DINGTALK_RULES);
+    expect(prompt).not.toContain(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
+    // CORE 不得暗示「系统代发」
+    expect(prompt).not.toContain('钉钉由系统在终态自动发送');
+    expect(prompt).not.toContain('Agent 无需发送');
+  });
+
+  it('injects CORE + format when prompt has dws send but no recipients block', () => {
+    const prompt = buildScheduledTaskExecutionSystemPrompt({
+      prompt: '查天气后 dws chat message send --user 1 --text hi',
+    });
+    expect(prompt).toContain(SCHEDULED_TASK_CORE_PROMPT);
+    expect(prompt).toContain(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
+    expect(prompt).not.toContain(SCHEDULED_TASK_DINGTALK_RULES);
+  });
+
+  it('injects CORE + dingtalk rules + format when prompt has recipients marker', () => {
+    const prompt = buildScheduledTaskExecutionSystemPrompt({
+      prompt: `${DINGTALK_RECIPIENTS_MARKER}\n查天气`,
+    });
+    expect(prompt).toContain(SCHEDULED_TASK_CORE_PROMPT);
+    expect(prompt).toContain(SCHEDULED_TASK_DINGTALK_RULES);
+    expect(prompt).toContain(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
+    expect(prompt).toContain('不要假设「系统会在终态自动发送」');
+  });
+
+  it('injects module C for workflow + recipients (agent send, no program delegate)', () => {
+    const prompt = buildScheduledTaskExecutionSystemPrompt({
+      prompt: `${DINGTALK_RECIPIENTS_MARKER}\n帮我执行 id 为：wf_123 的工作流 【日报】`,
+    });
+    expect(prompt).toContain(SCHEDULED_TASK_CORE_PROMPT);
+    expect(prompt).toContain(SCHEDULED_TASK_DINGTALK_RULES);
+    expect(prompt).toContain(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
+    expect(prompt).not.toContain('程序发送');
+  });
+
+  it('buildScheduledTaskDingTalkPromptAppend uses module C for workflow + recipients block', () => {
+    const withBlock = buildScheduledTaskDingTalkPromptAppend(
+      `${DINGTALK_RECIPIENTS_MARKER}\nexecute_workflow wf_1`,
+    );
+    expect(withBlock).toContain(SCHEDULED_TASK_DINGTALK_RULES);
+    expect(withBlock).toContain(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
+    expect(withBlock).not.toContain('程序发送');
+  });
+
+  it('buildScheduledTaskDingTalkPromptAppend omits CORE', () => {
+    expect(buildScheduledTaskDingTalkPromptAppend('查询天气')).toBeNull();
+    expect(buildScheduledTaskDingTalkPromptAppend('dws chat message send --user 1')).toBe(
+      DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK,
+    );
+    const withBlock = buildScheduledTaskDingTalkPromptAppend(
+      `${DINGTALK_RECIPIENTS_MARKER}\n查天气`,
+    );
+    expect(withBlock).toContain(SCHEDULED_TASK_DINGTALK_RULES);
+    expect(withBlock).toContain(DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK);
+    expect(withBlock).not.toContain(SCHEDULED_TASK_CORE_PROMPT);
+  });
+
+  it('deprecated full prompt is CORE + C + A composite', () => {
+    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain(SCHEDULED_TASK_CORE_PROMPT);
+    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain(SCHEDULED_TASK_DINGTALK_RULES);
+    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain(
+      DINGTALK_SEND_FORMAT_RULES_FOR_SCHEDULED_TASK,
+    );
     expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('dws chat message send');
-    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('优先于 message 内');
-  });
-
-  it('documents the local-artifact-to-dingtalk-drive flow in the P0 instruction', () => {
-    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('【P0 本地产物上钉盘】');
     expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('dws drive upload');
-    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('不需要 `--space-id`');
-    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('docUrl');
-    expect(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toContain('禁止把 `file://` 路径写进钉钉正文');
   });
 
-  it('keeps the vendored openclaw copy byte-equal to the shared source', () => {
-    expect(VENDORED_SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT).toBe(SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT);
+  it('keeps the vendored openclaw CORE byte-equal to the shared module B', () => {
+    expect(VENDORED_CORE).toBe(SCHEDULED_TASK_CORE_PROMPT);
   });
 });

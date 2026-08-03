@@ -5,6 +5,7 @@
  */
 import { useCallback, useMemo, useState } from 'react';
 import {
+  CloudUpload,
   RefreshCw,
   Download,
   MonitorPlay,
@@ -21,16 +22,22 @@ import { invokeIpc } from '@/lib/api-client';
 import { hostApiFetch } from '@/lib/host-api';
 import { FilePreviewViewer } from '@/components/file-preview/FilePreviewViewer';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
+import { SaveArtifactDialog } from '@/components/file-preview/SaveArtifactDialog';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   buildArtifactShareDialogDraft,
   type DingTalkShareDialogDraft,
 } from '@/lib/dingtalk-share';
+import { isVirtualTaskSessionKey } from '@/stores/chat/cron-session-utils';
+import { enrichScheduledTaskArtifactProvenance } from '@/lib/scheduled-task-artifact-provenance';
 import {
   stoPreviewActionButtonClass,
   stoPreviewActionRowClass,
   stoPreviewContentShellClass,
 } from '@/lib/surfaces';
-import type { AttachedFileMeta } from '@/stores/chat';
+import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
+
+const previewActionTooltipClass = 'border-none bg-[#1D2129] px-2.5 py-1.5 text-[12px] font-medium leading-4 text-white shadow-none dark:bg-[#1D2129] dark:text-white';
 
 export interface ChatPreviewPanelProps {
   /** 当前可见的产物列表（已过滤 dismissed） */
@@ -51,10 +58,12 @@ export function ChatPreviewPanel({
   onEditWorkflow,
   className,
 }: ChatPreviewPanelProps) {
-  const { t } = useTranslation('chat');
+  const { t } = useTranslation(['chat', 'common']);
   const [refreshKey, setRefreshKey] = useState(0);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
+  const [saveArtifactOpen, setSaveArtifactOpen] = useState(false);
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
 
   const activeFile = useMemo(() => {
     if (!activeFilePath) return null;
@@ -72,6 +81,20 @@ export function ChatPreviewPanel({
     }
     return null;
   }, [files, activeFilePath]);
+
+  const saveableActiveFile = useMemo(() => {
+    if (!activeFile?.filePath) return activeFile;
+    if (activeFile.artifactProvenance) return activeFile;
+    const sourceType = isVirtualTaskSessionKey(currentSessionKey) ? 'scheduled_task_artifact' : 'chat_artifact';
+    return {
+      ...activeFile,
+      artifactProvenance: enrichScheduledTaskArtifactProvenance({
+        sourceType,
+        sessionId: currentSessionKey,
+        artifactKey: activeFile.filePath,
+      }),
+    } satisfies AttachedFileMeta;
+  }, [activeFile, currentSessionKey]);
 
   const handleOpenShareDialog = useCallback(() => {
     if (!activeFile?.filePath) return;
@@ -175,6 +198,9 @@ export function ChatPreviewPanel({
                 <PreviewActionButton onClick={handleOpenExternal} aria-label={t('preview.openExternal')}>
                   <ExternalLink className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>
+                <PreviewActionButton onClick={() => setSaveArtifactOpen(true)} aria-label={t('common:dataCenterPage.saveArtifact.saveToDataCenterTitle')}>
+                  <CloudUpload className="h-4 w-4" aria-hidden />
+                </PreviewActionButton>
                 {showEditWorkflow && workflowId ? (
                   <button
                     type="button"
@@ -220,6 +246,15 @@ export function ChatPreviewPanel({
           toast.error(error instanceof Error ? error.message : t('preview.shareDialog.failed'));
         }}
       />
+      {saveArtifactOpen ? (
+        <SaveArtifactDialog
+          file={saveableActiveFile}
+          onClose={() => setSaveArtifactOpen(false)}
+          onSaved={() => {
+            setSaveArtifactOpen(false);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -234,13 +269,20 @@ function PreviewActionButton({
   'aria-label': string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={ariaLabel}
-      className={stoPreviewActionButtonClass}
-    >
-      {children}
-    </button>
+    <Tooltip delayDuration={200}>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={ariaLabel}
+          className={stoPreviewActionButtonClass}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" sideOffset={6} className={previewActionTooltipClass}>
+        {ariaLabel}
+      </TooltipContent>
+    </Tooltip>
   );
 }

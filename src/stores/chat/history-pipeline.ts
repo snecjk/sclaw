@@ -3,8 +3,6 @@ import {
   enrichWithToolResultFiles,
   isToolResultRole,
 } from './helpers';
-import { mergeLocalWorkflowTurnsFromCurrent, mergeWorkflowTurnsFromMemory } from '@/lib/workflow-local-turn';
-import { ensureWorkflowCardsInMessages, mergeWorkflowCardBlocksFromCurrent } from '@/lib/workflow-card-injection';
 import {
   dedupeRedundantUserMessages,
   ensureOpeningUserMessageFirst,
@@ -67,10 +65,6 @@ export function mergeHistoryDisplayMessages(input: {
     currentMessages,
     getMessageText,
   );
-  messages = mergeLocalWorkflowTurnsFromCurrent(messages, currentMessages);
-  messages = mergeWorkflowCardBlocksFromCurrent(messages, currentMessages);
-  messages = mergeWorkflowTurnsFromMemory(messages, sessionKey);
-  messages = ensureWorkflowCardsInMessages(messages, sessionKey, getMessageText);
   messages = recoverInitialUserFromSessionLabel(
     messages,
     sessionKey,

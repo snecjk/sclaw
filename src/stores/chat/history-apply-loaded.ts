@@ -1,5 +1,3 @@
-import { buildWorkflowCardStatesForSession } from '@/stores/workflow-memory';
-import { absorbWorkflowExecutionStartedFromToolResults } from '@/lib/builtin-tool-dispatch';
 import {
   ensureWorkflowParameterFormInjected,
   patchLastAssistantWithWorkflowForm,
@@ -49,17 +47,8 @@ export async function prepareHistoryToolEffects(input: {
   agentId?: string | null;
   getCurrentSessionKey: () => string;
 }): Promise<boolean> {
-  const {
-    agentId,
-    getCurrentSessionKey,
-    rawMessages,
-    sessionKey,
-  } = input;
+  const { getCurrentSessionKey, sessionKey } = input;
   if (getCurrentSessionKey() !== sessionKey) return false;
-  await absorbWorkflowExecutionStartedFromToolResults(rawMessages, {
-    sessionKey,
-    agentId: agentId ?? 'main',
-  });
   return getCurrentSessionKey() === sessionKey;
 }
 
@@ -199,7 +188,6 @@ export function applyLoadedHistorySnapshot(input: {
     userCountBefore: historyUserCountBefore,
     userCountAfter: finalMessages.filter((m) => m.role === 'user').length,
   });
-  const restoredCardStates = buildWorkflowCardStatesForSession(targetSessionKey);
   const formRecovery = recoverParameterFormsOnHistoryLoad(finalMessages, {
     sessionKey: targetSessionKey,
     get,
@@ -217,7 +205,6 @@ export function applyLoadedHistorySnapshot(input: {
       messages: deferredPatched,
       thinkingLevel,
       loading: false,
-      workflowCardStates: restoredCardStates,
     });
     ensureWorkflowParameterFormInjected();
     localizeAndHydrateWorkflowForms({
@@ -237,7 +224,6 @@ export function applyLoadedHistorySnapshot(input: {
     messages: finalMessages,
     thinkingLevel,
     loading: false,
-    workflowCardStates: restoredCardStates,
   });
   logChatFlow('history.apply.committed', {
     sessionKey: targetSessionKey,

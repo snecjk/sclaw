@@ -1,4 +1,3 @@
-import type { WorkflowExecutionState } from '@/types/workflow';
 import type { RawMessage, WorkflowContextBlock } from './types';
 import type { SclawBrowserEmbedContextBlock } from '@/lib/sclaw-browser-embed-context';
 
@@ -11,7 +10,6 @@ export async function prepareSendContext(input: {
   trimmedText: string;
   sessionKey: string;
   messages: RawMessage[];
-  workflowCardStates: Record<string, WorkflowExecutionState>;
   workflowContext?: WorkflowContextBlock | null;
   embedBrowserContext?: SclawBrowserEmbedContextBlock | null;
   clearPendingWorkflow: () => void;
@@ -22,7 +20,6 @@ export async function prepareSendContext(input: {
     messages,
     sessionKey,
     trimmedText,
-    workflowCardStates,
     workflowContext,
   } = input;
 
@@ -47,7 +44,7 @@ export async function prepareSendContext(input: {
       const hint = buildWorkflowSessionHint(
         sessionKey,
         messages,
-        workflowCardStates,
+        {},
       );
       textForGateway = appendWorkflowSessionHint(trimmedText, hint);
     } else if (isWorkflowCreationIntent(trimmedText)) {

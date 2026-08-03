@@ -40,6 +40,30 @@ describe("sto-workflow-tool plugin", () => {
 		};
 	}
 
+	function getRegisteredTool(
+		id: string,
+		context: { sessionKey?: string; agentId?: string } = {
+			sessionKey: "agent:main:main",
+			agentId: "main",
+		},
+	): {
+		execute: (
+			toolCallId: string,
+			params: Record<string, unknown>,
+		) => Promise<{ content: Array<{ text: string }> }>;
+	} {
+		type RegisteredTool = ReturnType<typeof getRegisteredTool>;
+		const call = registerTool.mock.calls.find(
+			(c) => (c[1] as { name?: string } | undefined)?.name === id,
+		);
+		const registration = call?.[0] as
+			| ((ctx: typeof context) => RegisteredTool)
+			| RegisteredTool
+			| undefined;
+		if (!registration) throw new Error(`Tool not registered: ${id}`);
+		return typeof registration === "function" ? registration(context) : registration;
+	}
+
 	it("registers five workflow tools and before_prompt_build", async () => {
 		const api = buildApi();
 		register.register(api as never);
@@ -54,9 +78,7 @@ describe("sto-workflow-tool plugin", () => {
 
 		const api = buildApi();
 		register.register(api as never);
-		const searchTool = registerTool.mock.calls.find(
-			(c) => (c[0] as { id: string }).id === "search_workflow_templates",
-		)?.[0] as { execute: Function };
+		const searchTool = getRegisteredTool("search_workflow_templates");
 
 		const result = await searchTool.execute("call_search", { query: "对账", limit: 5 });
 		const envelope = JSON.parse(result.content[0].text);
@@ -78,9 +100,7 @@ describe("sto-workflow-tool plugin", () => {
 
 		const api = buildApi();
 		register.register(api as never);
-		const searchTool = registerTool.mock.calls.find(
-			(c) => (c[0] as { id: string }).id === "search_workflow_templates",
-		)?.[0] as { execute: Function };
+		const searchTool = getRegisteredTool("search_workflow_templates");
 
 		const result = await searchTool.execute("call_search", { query: "客户异常监控", limit: 10 });
 		const envelope = JSON.parse(result.content[0].text);
@@ -92,9 +112,7 @@ describe("sto-workflow-tool plugin", () => {
 	it("get_workflow_schema rejects missing templateId and query", async () => {
 		const api = buildApi();
 		register.register(api as never);
-		const schemaTool = registerTool.mock.calls.find(
-			(c) => (c[0] as { id: string }).id === "get_workflow_schema",
-		)?.[0] as { execute: Function };
+		const schemaTool = getRegisteredTool("get_workflow_schema");
 
 		const result = await schemaTool.execute("call_schema", {});
 		const envelope = JSON.parse(result.content[0].text);
@@ -114,9 +132,7 @@ describe("sto-workflow-tool plugin", () => {
 
 		const api = buildApi();
 		register.register(api as never);
-		const schemaTool = registerTool.mock.calls.find(
-			(c) => (c[0] as { id: string }).id === "get_workflow_schema",
-		)?.[0] as { execute: Function };
+		const schemaTool = getRegisteredTool("get_workflow_schema");
 
 		const result = await schemaTool.execute("call_schema", {
 			query: "云端agent测试-产物测试",
@@ -145,9 +161,7 @@ describe("sto-workflow-tool plugin", () => {
 
 		const api = buildApi();
 		register.register(api as never);
-		const schemaTool = registerTool.mock.calls.find(
-			(c) => (c[0] as { id: string }).id === "get_workflow_schema",
-		)?.[0] as { execute: Function };
+		const schemaTool = getRegisteredTool("get_workflow_schema");
 
 		const result = await schemaTool.execute("call_schema", { templateId: "tpl_2b794225" });
 		const envelope = JSON.parse(result.content[0].text);
@@ -163,9 +177,7 @@ describe("sto-workflow-tool plugin", () => {
 	it("create_workflow rejects empty schemaHash before API call", async () => {
 		const api = buildApi();
 		register.register(api as never);
-		const createTool = registerTool.mock.calls.find(
-			(c) => (c[0] as { id: string }).id === "create_workflow",
-		)?.[0] as { execute: Function };
+		const createTool = getRegisteredTool("create_workflow");
 
 		const result = await createTool.execute("call_create", {
 			templateId: "tpl_1",
@@ -188,20 +200,41 @@ describe("sto-workflow-tool plugin", () => {
 
 		const api = buildApi();
 		register.register(api as never);
-		const execTool = registerTool.mock.calls.find(
-			(c) => (c[0] as { id: string }).id === "execute_workflow",
-		)?.[0] as { execute: Function };
+		const execTool = getRegisteredTool("execute_workflow");
 
 		const result = await execTool.execute("call_exec", {
 			workflowId: "wf_816b0847",
 			templateName: "客户异常监控",
+			inputs: { city: "上海" },
 		});
 		const envelope = JSON.parse(result.content[0].text);
 		expect(envelope.type).toBe("workflow_execution_started");
 		expect(envelope.data.runId).toBe("run_abc");
 		expect(fetchJsonMock).toHaveBeenCalledWith(
 			expect.stringContaining("/agent/v1/workflows/wf_816b0847/start"),
-			expect.objectContaining({ method: "POST" }),
+			expect.objectContaining({
+				method: "POST",
+				body: expect.stringContaining('"engineType":"openclaw"'),
+			}),
 		);
+		const requestBody = JSON.parse(fetchJsonMock.mock.calls[0]?.[1]?.body as string);
+		expect(requestBody.sessionKey).toBe("agent:main:main");
+		expect(requestBody.chatCardTitle).toBe("客户异常监控");
+		expect(requestBody.chatParamsSummary).toBe('{"city":"上海"}');
+	});
+
+	it("execute_workflow refuses to start without a sessionKey", async () => {
+		const api = buildApi();
+		register.register(api as never);
+		const execTool = getRegisteredTool("execute_workflow", {});
+
+		const result = await execTool.execute("call_exec", {
+			workflowId: "wf_unbound",
+		});
+		const envelope = JSON.parse(result.content[0].text);
+
+		expect(envelope.success).toBe(false);
+		expect(envelope.error.message).toMatch(/sessionKey/);
+		expect(fetchJsonMock).not.toHaveBeenCalled();
 	});
 });

@@ -2,18 +2,22 @@ import { definePluginEntry, type OpenClawPluginApi } from './api.js';
 import {
   evaluateDingTalkSendGuard,
   handleDingTalkSendGuardAfter,
+  isScheduledTaskSessionKey,
   rememberPendingDingTalkSend,
 } from './dingtalk-send-guard.js';
 import {
   clearDingTalkMentionPending,
   readDingTalkMentionPending,
 } from './dingtalk-mention-pending.js';
-import { buildDingTalkMentionSystemContext } from './shared/dingtalk-mention-context';
-import { fixDwsChatMessageSendToolParamsForOpenClawExec } from './shared/dws-send-text';
 import {
-  DINGTALK_ORAL_SEND_PROMPT,
+  buildDingTalkMentionSystemContext,
+  looksLikeDingTalkMentionSendIntent,
+} from './shared/dingtalk-prompts/dingtalk-mention-context.js';
+import { fixDwsChatMessageSendToolParamsForOpenClawExec } from './shared/dingtalk-send/dws-send-text.js';
+import {
+  DINGTALK_ORAL_SEND_GUARD,
   looksLikeDingTalkOralSendIntent,
-} from './shared/dingtalk-oral-send-prompt.js';
+} from './shared/dingtalk-prompts/dingtalk-oral-send-prompt.js';
 import {
   DINGTALK_SHARE_TOOL_PROMPT,
   looksLikeDingTalkShareIntent,
@@ -58,6 +62,8 @@ export default definePluginEntry({
 
       const appendBlocks: string[] = [];
       let hasPendingMentions = false;
+      const isExecutionSession = isScheduledTaskSessionKey(ctx.sessionKey);
+      const prompt = typeof event?.prompt === 'string' ? event.prompt : '';
 
       if (ctx.sessionKey) {
         const pendingMentions = await readDingTalkMentionPending(ctx.sessionKey);
@@ -67,13 +73,16 @@ export default definePluginEntry({
             `[${TAG}] before_prompt_build: pending DingTalk mentions found (${pendingMentions.mentions.length} recipients) sessionKey=${ctx.sessionKey}`,
           );
 
+          const intentText = prompt || pendingMentions.userText || '';
+          const explicitSendIntent = looksLikeDingTalkMentionSendIntent(intentText);
           const block = buildDingTalkMentionSystemContext(pendingMentions.mentions, {
             sendFileIntent: pendingMentions.sendFileIntent,
             attachedFiles: pendingMentions.attachedFiles,
+            explicitSendIntent,
           });
           await clearDingTalkMentionPending(ctx.sessionKey);
-          api.logger.debug?.(
-            `[${TAG}] before_prompt_build: injected DingTalk mention context (${pendingMentions.mentions.length} recipients)`,
+          api.logger.info?.(
+            `[${TAG}] before_prompt_build: injected DingTalk mention context (${pendingMentions.mentions.length} recipients, sendIntent=${explicitSendIntent})`,
           );
           appendBlocks.push(block);
         } else {
@@ -83,12 +92,14 @@ export default definePluginEntry({
         }
       }
 
-      // 优先级：@ Recipients > 口头点名发送（dws）> 分享选人窗（share）
-      const prompt = typeof event?.prompt === 'string' ? event.prompt : '';
-      if (!hasPendingMentions) {
-        if (looksLikeDingTalkOralSendIntent(prompt)) {
-          appendBlocks.push(DINGTALK_ORAL_SEND_PROMPT);
-        } else if (looksLikeDingTalkShareIntent(prompt)) {
+      // 对话场景：口头护栏常驻（定时执行 session 不注）。有 @ 块时跳过（结构化路径优先）。
+      // 分享选人窗：无 @、且非口头点名意图时注入。
+      if (!isExecutionSession && !hasPendingMentions) {
+        appendBlocks.push(DINGTALK_ORAL_SEND_GUARD);
+        if (
+          looksLikeDingTalkShareIntent(prompt)
+          && !looksLikeDingTalkOralSendIntent(prompt)
+        ) {
           appendBlocks.push(DINGTALK_SHARE_TOOL_PROMPT);
         }
       }
@@ -99,14 +110,13 @@ export default definePluginEntry({
 
     api.on(
       'before_tool_call',
-      (event, ctx) => {
+      async (event, ctx) => {
         const decision = evaluateDingTalkSendGuard({
           toolName: event.toolName,
           params: event.params,
           sessionKey: ctx.sessionKey ?? ctx.sessionId,
         });
         if (!decision.allowed) {
-          api.logger.warn?.(`[${TAG}] blocked tool=${event.toolName}: ${decision.reason}`);
           return {
             block: true,
             blockReason: `${decision.reason} ${NO_BYPASS_HINT}`,
@@ -138,16 +148,18 @@ export default definePluginEntry({
 
     api.on(
       'after_tool_call',
-      (event, ctx) => {
+      async (event, ctx) => {
         const rawEvent =
           event && typeof event === 'object' ? (event as Record<string, unknown>) : {};
+        const sessionKey = ctx.sessionKey ?? ctx.sessionId;
+        const result = pickToolResult(rawEvent);
         handleDingTalkSendGuardAfter({
           toolName: event.toolName,
           params: event.params,
-          sessionKey: ctx.sessionKey ?? ctx.sessionId,
+          sessionKey,
           toolCallId: event.toolCallId ?? ctx.toolCallId,
           error: event.error,
-          result: pickToolResult(rawEvent),
+          result,
         });
       },
       { priority: 100 },

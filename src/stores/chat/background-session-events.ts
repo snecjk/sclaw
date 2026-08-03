@@ -1,4 +1,4 @@
-import { dispatchBuiltinToolResult, syncWorkflowCardsAfterToolDispatch } from '@/lib/builtin-tool-dispatch';
+import { dispatchBuiltinToolResult } from '@/lib/builtin-tool-dispatch';
 import { noteObservedRun } from '@/lib/session-unread-notify';
 import { touchSessionReadAt } from '@/stores/session-unread';
 import {
@@ -271,7 +271,6 @@ async function dispatchToolResultAndRefresh(get: ChatGet, sessionKey: string, me
   await dispatchBuiltinToolResult({
     id: message.id, toolCallId: message.toolCallId, toolName: message.toolName, content: message.content,
   }, { sessionKey, agentId });
-  syncWorkflowCardsAfterToolDispatch(sessionKey);
   const state = get();
   if (state.currentSessionKey === sessionKey) void state.loadHistory(true);
 }
