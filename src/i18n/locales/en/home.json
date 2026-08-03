@@ -8,8 +8,8 @@
       "placeholder": "Help me prepare an HQ settlement reconciliation sheet"
     }
   },
-  "homeWorkflowCard": {
-    "footerHint": "Click to start"
+  "homeRecommend": {
+    "emptyCategory": "No recommendations in this category"
   },
   "hero": {
     "title": "Smarter business management",

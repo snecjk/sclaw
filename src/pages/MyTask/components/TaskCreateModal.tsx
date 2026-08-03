@@ -773,6 +773,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
         method: 'POST',
         body: JSON.stringify({
           instruction: trimmed,
+          type: 'task',
           workflowId: selectedWorkflow || undefined,
           workflowName: selectedWorkflowOption?.label,
         }),

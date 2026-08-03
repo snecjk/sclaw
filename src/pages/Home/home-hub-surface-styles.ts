@@ -6,27 +6,23 @@ import { cn } from '@/lib/utils';
 
 export const homeHubTextPrimary = 'text-[#1D2129] dark:text-foreground';
 
-export const homeHubTextSecondary = 'text-[#86909C] dark:text-muted-foreground';
+export const homeHubTextSecondary = 'text-[#4E5969] dark:text-muted-foreground';
 
-/** MasterGo 卡片壳：r18、白底、shadow-glow，设计稿无描边；暗色用 secondary 与主卡片底色分层 */
+/** MasterGo 卡片壳：r18、白底、0.5 浅描边；暗色用 secondary 与主卡片底色分层 */
 export const homeHubCardShellClass = cn(
-  'flex flex-col rounded-[18px] bg-card p-4 shadow-glow',
-  'dark:bg-secondary dark:shadow-soft',
+  'box-border flex flex-col items-start gap-3 rounded-[18px] border-[0.5px] border-[#E5E6EB] bg-white p-[18px]',
+  'dark:border-border dark:bg-secondary',
 );
 
-/** 可点击卡片（工作流 / 经营管理卡）在统一壳层上保留 hover；h-full 使 grid 同行等高、底栏对齐 */
+/** 可点击卡片：精简标题+描述；h-full 使 grid 同行等高，设计稿高 106 */
 export const homeHubInteractiveCardShellClass = cn(
   homeHubCardShellClass,
-  'relative h-full min-h-0 min-w-0 w-full overflow-hidden text-left transition-shadow duration-base hover:shadow-soft',
+  'relative h-full min-h-[106px] min-w-0 w-full overflow-hidden text-left transition-colors duration-base hover:border-[#C9CDD4]',
 );
 
-/** MasterGo Overlay「功能」标签 */
-export const homeHubCardTagClass =
-  'rounded-md bg-[rgba(136,188,157,0.16)] px-1.5 py-[3px] text-xs font-medium leading-[14px] text-[#5F9274]';
+export const homeHubCardTitleClass = cn('text-[13px] font-medium leading-normal', homeHubTextPrimary);
 
-export const homeHubCardTitleClass = cn('text-sm font-medium leading-[18px]', homeHubTextPrimary);
-
-export const homeHubCardDescClass = cn('text-xs leading-[18px]', homeHubTextSecondary);
+export const homeHubCardDescClass = cn('text-xs font-normal leading-5', homeHubTextSecondary);
 
 /**
  * 卡片区滚动壳：高度随内容收缩；超出可用高度后再内部滚动。
@@ -36,15 +32,9 @@ export const homeHubCardDescClass = cn('text-xs leading-[18px]', homeHubTextSeco
 export const homeHubCardScrollClass =
   'w-full max-h-[calc(100cqh-12.5rem)] overflow-y-auto overscroll-y-contain';
 
-/** 能力卡片网格（只负责布局，高度/滚动由 homeHubCardScrollClass 负责） */
-export const homeHubCardGridClass = 'grid w-full items-stretch content-start gap-4 sm:grid-cols-3';
-
-/** 卡片中间区：占据剩余高度，把底栏顶到底部 */
-export const homeHubCardBodyRegionClass = 'mt-5 min-h-[4.5rem] flex-1';
-
-/** 卡片底栏（头像 + 团队名 + CTA），同行卡片底部对齐 */
-export const homeHubCardFooterRegionClass =
-  'flex min-h-[30px] shrink-0 items-center gap-3 border-t border-[#E5E6EB] pt-4 dark:border-border';
+/** 能力卡片网格（设计稿一行多卡） */
+export const homeHubCardGridClass =
+  'grid w-full items-stretch content-start gap-3 sm:grid-cols-2 lg:grid-cols-4';
 
 /** 首页 Hero / 卡片 / 输入区共用最大宽（与 --sto-hero-input-max-w 同源，当前 780px） */
 export const homeHubContentMaxWidthClass =
