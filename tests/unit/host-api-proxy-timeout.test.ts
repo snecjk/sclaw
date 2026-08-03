@@ -16,4 +16,14 @@ describe('Host API proxy timeout routing', () => {
   it('keeps unrelated requests on the default timeout', () => {
     expect(resolveHostApiTimeoutMs('/api/chat/history')).toBe(TIMEOUTS.DEFAULT_FETCH);
   });
+
+  it('allows connector connect/token-connect up to DWS install budget (download CLI)', () => {
+    expect(resolveHostApiTimeoutMs('/api/connectors/conn-27389885c97c/connect')).toBe(
+      TIMEOUTS.DWS_INSTALL,
+    );
+    expect(resolveHostApiTimeoutMs('/api/connectors/conn-gitlab/token-connect')).toBe(
+      TIMEOUTS.DWS_INSTALL,
+    );
+    expect(resolveHostApiTimeoutMs('/api/connectors/conn-27389885c97c/connect')).toBe(300_000);
+  });
 });

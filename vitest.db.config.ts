@@ -14,6 +14,9 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['tests/db/**/*.test.ts'],
+    include: [
+      'tests/db/**/*.test.ts',
+      'tests/unit/sqlite-migrator-legacy-session-catalog.test.ts',
+    ],
   },
 });

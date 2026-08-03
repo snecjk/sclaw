@@ -5,6 +5,7 @@
  * 三栏：真实连续 52px Header（内嵌三列 grid 对齐 body）；左列=title+chatActions，右列=预览 tab+actions。
  * macOS 侧栏收起时 pad-start 走 CSS 变量（与 split row 共用），避让红绿灯。
  */
+import { useLocation } from 'react-router-dom';
 import { isValidElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,7 @@ import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 
 export function ContentHeader() {
   const { t } = useTranslation('common');
+  const { pathname } = useLocation();
   const { title, previewTabs, chatActions, actions, isSplitLayout, onCloseSession } =
     useContentHeaderDisplay();
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
@@ -36,9 +38,10 @@ export function ContentHeader() {
   const workflowEditorActive = useWorkflowUiStore((s) => s.editorActive);
   const browserOverlayOpen = useSclawBrowserOverlayStore((s) => s.session !== null);
   const appPlazaVisible = useAppPlazaShellStore((s) => s.routeActive);
+  const skillsPlazaVisible = pathname.startsWith('/skills');
 
-  // Drawer / App Plaza shell occupy the header band.
-  if (browserOverlayOpen || appPlazaVisible) {
+  // Drawer / App Plaza / 技能广场自带页顶栏，不占 52px ContentHeader。
+  if (browserOverlayOpen || appPlazaVisible || skillsPlazaVisible) {
     return null;
   }
 

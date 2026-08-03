@@ -15,7 +15,9 @@ export const DWS_PLATFORM_ASSETS = {
   'linux-arm64': { assetName: 'dws-linux-arm64.tar.gz', archive: 'tar.gz' as const },
 };
 
-export type DwsDownloadSource = 'github' | 'gitee';
+export type DwsDownloadSource = 'cdn' | 'github' | 'gitee';
+
+export type DwsDownloadSourcePriority = DwsDownloadSource;
 
 export interface DwsReleaseSources {
   github?: { repo?: string };
@@ -106,7 +108,7 @@ export async function probeGithubReachable(
     const response = await fetchFn(probeUrl, {
       method: 'GET',
       redirect: 'follow',
-      timeoutMs: 12_000,
+      timeoutMs: 30_000,
     });
     return response.ok;
   } catch {
@@ -114,17 +116,36 @@ export async function probeGithubReachable(
   }
 }
 
+function isDirectHttpUrl(url: string | undefined | null): url is string {
+  if (!url) return false;
+  return url.startsWith('http://') || url.startsWith('https://');
+}
+
+function defaultSourcePriority(): DwsDownloadSourcePriority[] {
+  if (getConfiguredGiteeRepo()) return ['cdn', 'gitee', 'github'];
+  if (process.env.DWS_NO_FALLBACK === '1') return ['cdn', 'gitee'];
+  return ['cdn', 'gitee', 'github'];
+}
+
 export async function pickDownloadSource(options: {
   manifest?: DwsManifestLike | null;
   fetchFn: FetchFn;
   githubRepo?: string;
+  sourcePriority?: DwsDownloadSourcePriority[];
+  platformSpec?: DwsPlatformAssetSpec | null;
 }): Promise<DwsDownloadSource> {
   void options.fetchFn;
   void options.githubRepo;
   void options.manifest;
-  if (getConfiguredGiteeRepo()) return 'gitee';
-  if (process.env.DWS_NO_FALLBACK === '1') return 'gitee';
-  return 'gitee';
+  const priority = options.sourcePriority?.length
+    ? options.sourcePriority
+    : defaultSourcePriority();
+  for (const source of priority) {
+    if (source === 'cdn' && isDirectHttpUrl(options.platformSpec?.url)) return 'cdn';
+    if (source === 'gitee') return 'gitee';
+    if (source === 'github') return 'github';
+  }
+  return priority[0] ?? 'gitee';
 }
 
 export function resolveActiveGiteeRepo(manifest?: DwsManifestLike | null): string {
@@ -138,7 +159,7 @@ export async function fetchGiteeRelease(
 ): Promise<{ assets?: Array<{ name?: string; browser_download_url?: string; size?: number }> }> {
   const tag = normalizeDwsVersionTag(version);
   const tagUrl = `https://gitee.com/api/v5/repos/${giteeRepo}/releases/tags/${tag}`;
-  const tagResponse = await fetchFn(tagUrl, { timeoutMs: 60_000 });
+  const tagResponse = await fetchFn(tagUrl, { timeoutMs: 120_000 });
   if (tagResponse.ok) {
     const release = await tagResponse.json() as Record<string, unknown> | null;
     if (release && typeof release === 'object' && !Array.isArray(release)) {
@@ -147,7 +168,7 @@ export async function fetchGiteeRelease(
   }
 
   const listUrl = `https://gitee.com/api/v5/repos/${giteeRepo}/releases`;
-  const listResponse = await fetchFn(listUrl, { timeoutMs: 60_000 });
+  const listResponse = await fetchFn(listUrl, { timeoutMs: 120_000 });
   if (!listResponse.ok) {
     throw new Error(`Gitee releases list HTTP ${listResponse.status} for ${listUrl}`);
   }
@@ -182,6 +203,14 @@ export async function resolveAssetDownloadUrl(options: {
 }): Promise<{ url: string; source: DwsDownloadSource; giteeRepo?: string; githubRepo?: string }> {
   const githubRepo = getGithubRepo(options.manifest);
   const giteeRepo = resolveActiveGiteeRepo(options.manifest);
+
+  if (options.source === 'cdn') {
+    const url = options.platformSpec?.url;
+    if (!isDirectHttpUrl(url)) {
+      throw new Error(`CDN asset URL missing for ${options.assetName}`);
+    }
+    return { url, source: 'cdn' };
+  }
 
   if (options.source === 'gitee') {
     const url = await resolveGiteeAssetUrl(giteeRepo, options.version, options.assetName, options.fetchFn);
@@ -221,6 +250,7 @@ export async function resolveAssetDownloadUrlWithFallback(options: {
   assetName: string;
   platformSpec?: DwsPlatformAssetSpec | null;
   fetchFn: FetchFn;
+  sourcePriority?: DwsDownloadSourcePriority[];
 }): Promise<{
   url: string;
   source: DwsDownloadSource;
@@ -228,15 +258,20 @@ export async function resolveAssetDownloadUrlWithFallback(options: {
   githubRepo?: string;
   fallbackFrom?: DwsDownloadSource;
 }> {
-  const source = await pickDownloadSource({
+  const priority = options.sourcePriority?.length
+    ? options.sourcePriority
+    : defaultSourcePriority();
+  const primary = await pickDownloadSource({
     manifest: options.manifest,
     fetchFn: options.fetchFn,
     githubRepo: getGithubRepo(options.manifest),
+    sourcePriority: priority,
+    platformSpec: options.platformSpec,
   });
 
   try {
     return await resolveAssetDownloadUrl({
-      source,
+      source: primary,
       manifest: options.manifest,
       version: options.version,
       assetName: options.assetName,
@@ -244,7 +279,15 @@ export async function resolveAssetDownloadUrlWithFallback(options: {
       fetchFn: options.fetchFn,
     });
   } catch (primaryError) {
-    if (source !== 'gitee' || process.env.DWS_NO_FALLBACK === '1') throw primaryError;
+    if (primary === 'cdn') {
+      const withoutCdn = priority.filter((item) => item !== 'cdn');
+      if (withoutCdn.length === 0) throw primaryError;
+      return resolveAssetDownloadUrlWithFallback({
+        ...options,
+        sourcePriority: withoutCdn,
+      });
+    }
+    if (primary !== 'gitee' || process.env.DWS_NO_FALLBACK === '1') throw primaryError;
     const githubRepo = getGithubRepo(options.manifest);
     const url = options.platformSpec?.url
       || buildGithubDirectAssetUrl(githubRepo, options.version, options.assetName);

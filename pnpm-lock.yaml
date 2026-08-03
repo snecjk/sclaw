@@ -7,6 +7,7 @@ settings:
 overrides:
   isbinaryfile: ^5.0.0
   https-proxy-agent: 7.0.6
+  libsignal: https://github.com/whiskeysockets/libsignal-node.git#bcea72df9ec34d9d9140ab30619cf479c7c144c7
 
 importers:
 
@@ -329,6 +330,8 @@ importers:
 
   sto-plugin/openclaw/sto-browser-bridge: {}
 
+  sto-plugin/openclaw/sto-browser-bridge/sto-toolkit: {}
+
   sto-plugin/openclaw/sto-dingtalk-send-guard: {}
 
   sto-plugin/openclaw/sto-dynamic-agent-route: {}
@@ -342,6 +345,8 @@ importers:
   sto-plugin/openclaw/sto-user-skill-tool: {}
 
   sto-plugin/openclaw/sto-workflow-tool: {}
+
+  sto-plugin/openclaw/sto-workflow-tool/sto-toolkit: {}
 
   sto-plugin/sto-toolkit: {}
 
@@ -4990,8 +4995,8 @@ packages:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
 
-  libsignal@git+https://git@github.com:whiskeysockets/libsignal-node.git#bcea72df9ec34d9d9140ab30619cf479c7c144c7:
-    resolution: {commit: bcea72df9ec34d9d9140ab30619cf479c7c144c7, repo: git@github.com:whiskeysockets/libsignal-node.git, type: git}
+  libsignal@https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/bcea72df9ec34d9d9140ab30619cf479c7c144c7:
+    resolution: {tarball: https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/bcea72df9ec34d9d9140ab30619cf479c7c144c7}
     version: 6.0.0
 
   lie@3.3.0:
@@ -10527,7 +10532,7 @@ snapshots:
       '@cacheable/node-cache': 1.7.6
       '@hapi/boom': 9.1.4
       async-mutex: 0.5.0
-      libsignal: git+https://git@github.com:whiskeysockets/libsignal-node.git#bcea72df9ec34d9d9140ab30619cf479c7c144c7
+      libsignal: https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/bcea72df9ec34d9d9140ab30619cf479c7c144c7
       lru-cache: 11.5.1
       music-metadata: 11.13.0
       p-queue: 9.3.0
@@ -12784,7 +12789,7 @@ snapshots:
       prelude-ls: 1.2.1
       type-check: 0.4.0
 
-  libsignal@git+https://git@github.com:whiskeysockets/libsignal-node.git#bcea72df9ec34d9d9140ab30619cf479c7c144c7:
+  libsignal@https://codeload.github.com/whiskeysockets/libsignal-node/tar.gz/bcea72df9ec34d9d9140ab30619cf479c7c144c7:
     dependencies:
       curve25519-js: 0.0.4
       protobufjs: 7.6.4

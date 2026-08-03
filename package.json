@@ -13,7 +13,8 @@
         ],
         "overrides": {
             "isbinaryfile": "^5.0.0",
-            "https-proxy-agent": "7.0.6"
+            "https-proxy-agent": "7.0.6",
+            "libsignal": "https://github.com/whiskeysockets/libsignal-node.git#bcea72df9ec34d9d9140ab30619cf479c7c144c7"
         },
         "supportedArchitectures": {
             "os": [

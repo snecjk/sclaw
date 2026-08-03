@@ -40,7 +40,11 @@ export default defineConfig(({ mode }) => {
           // Main process entry file
           entry: 'electron/main/index.ts',
           onstart(options) {
-            options.startup();
+            // Cursor/CI may set ELECTRON_RUN_AS_NODE=1, which makes require('electron')
+            // resolve to the npm path string instead of the Electron API in the main process.
+            const env = { ...process.env };
+            delete env.ELECTRON_RUN_AS_NODE;
+            options.startup(['.', '--no-sandbox'], { env });
           },
           vite: {
             define: envDefine,
@@ -56,6 +60,7 @@ export default defineConfig(({ mode }) => {
               outDir: 'dist-electron/main',
               rollupOptions: {
                 external: [
+                  'electron',
                   'electron-store',
                   'electron-updater',
                   // mem0's official OSS entry imports its provider peers at runtime.
@@ -67,6 +72,11 @@ export default defineConfig(({ mode }) => {
                   /openclaw\/extensions\//,
                   /^node:/,
                 ],
+                output: {
+                  // Keep main process in a single file so require('electron') resolves
+                  // to the built-in module (not node_modules/electron path string).
+                  inlineDynamicImports: true,
+                },
               },
             },
           },

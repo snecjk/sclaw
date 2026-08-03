@@ -4,6 +4,10 @@ import {
   stripPreviewScheme,
   type PreviewHrefResult,
 } from '../../shared/preview-href';
+import {
+  isInAppNavigateHref,
+  normalizeInAppNavigatePath,
+} from '../../shared/connectors/deep-link';
 import { hostApiFetch } from '@/lib/host-api';
 import { isHttpUrl, normalizeLocalFilePath, toMarkdownPreviewPath } from '@/lib/preview-url';
 
@@ -11,6 +15,7 @@ export type PreviewHrefAction =
   | { action: 'preview-local'; path: string }
   | { action: 'preview-remote'; url: string }
   | { action: 'open-external'; url: string }
+  | { action: 'navigate-app'; path: string }
   | { action: 'unsupported' };
 
 export {
@@ -62,6 +67,9 @@ export function coerceHrefForMarkdownTransform(href: string): string | null {
   const trimmed = href.trim();
   if (!trimmed) return trimmed;
 
+  // Keep in-app routes intact (must not be treated as local filesystem paths).
+  if (isInAppNavigateHref(trimmed)) return normalizeInAppNavigatePath(trimmed);
+
   const result = classifyPreviewHref(trimmed);
   if (result.type === 'blocked') return null;
   if (result.type === 'local') {
@@ -75,6 +83,10 @@ export function coerceHrefForMarkdownTransform(href: string): string | null {
 export function resolvePreviewHrefAction(href: string): PreviewHrefAction {
   const trimmed = href.trim();
   if (!trimmed) return { action: 'unsupported' };
+
+  if (isInAppNavigateHref(trimmed)) {
+    return { action: 'navigate-app', path: normalizeInAppNavigatePath(trimmed) };
+  }
 
   if (trimmed.startsWith('artifact://')) return { action: 'unsupported' };
 

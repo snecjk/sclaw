@@ -4,6 +4,7 @@
  * with markdown, thinking sections, images, and tool cards.
  */
 import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, CircleCheck } from 'lucide-react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
@@ -1199,6 +1200,7 @@ function MessageBubble({
   const isReplyStream = isStreaming && !isUser && !workflowGuidanceShell;
   const wasReplyStreamRef = useRef(false);
   const [enableReplyTypewriter, setEnableReplyTypewriter] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const justStarted = isReplyStream && !wasReplyStreamRef.current;
@@ -1330,6 +1332,22 @@ function MessageBubble({
                 const action = resolvePreviewHrefAction(
                   rawHref.startsWith('preview://') ? rawHref : rawHref,
                 );
+
+                if (action.action === 'navigate-app') {
+                  return (
+                    <a
+                      href={`#${action.path.startsWith('/') ? action.path : `/${action.path}`}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        navigate(action.path);
+                      }}
+                      className="inline cursor-pointer break-all break-words font-inherit text-link underline-offset-2 hover:underline"
+                    >
+                      {children}
+                    </a>
+                  );
+                }
 
                 if (action.action === 'open-external') {
                   return (
@@ -1469,7 +1487,14 @@ function preprocessTextForPreviewLinks(text: string): string {
   // Protect existing markdown links [text](url) — keep http(s) URLs intact (preview://https:// breaks ReactMarkdown).
   const mdLinks: string[] = [];
   text = text.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (match, linkText, href) => {
-    if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('preview://')) {
+    if (
+      href.startsWith('http://')
+      || href.startsWith('https://')
+      || href.startsWith('preview://')
+      || href.startsWith('/skills')
+      || href.startsWith('#/skills')
+      || href.toLowerCase().startsWith('stoclaw://')
+    ) {
       mdLinks.push(match);
     } else {
       mdLinks.push(`[${linkText}](${href})`);
