@@ -97,7 +97,7 @@
         "quickInputManageSave": "Save",
         "quickInputManageDragAria": "Drag to reorder",
         "quickInputManageEditAria": "Edit",
-        "quickInputManageInsertAria": "Insert into input",
+        "quickInputManageShareAria": "Share to DingTalk",
         "quickInputManageDeleteAria": "Delete",
         "quickInputDeleteConfirmTitle": "Delete this item?",
         "quickInputDeleteConfirmMessage": "This cannot be undone. Please proceed with care.",

@@ -15,7 +15,7 @@ interface QuickInputManageListItemProps {
   /** 搜索过滤时禁用拖拽，避免打乱完整列表顺序 */
   sortable?: boolean;
   onEdit: (item: QuickInputItem) => void;
-  onInsert: (item: QuickInputItem) => void;
+  onShare: (item: QuickInputItem) => void;
   onDelete: (item: QuickInputItem) => void;
 }
 
@@ -23,7 +23,7 @@ export function QuickInputManageListItem({
   item,
   sortable = true,
   onEdit,
-  onInsert,
+  onShare,
   onDelete,
 }: QuickInputManageListItemProps) {
   const { t } = useTranslation('chat');
@@ -77,9 +77,9 @@ export function QuickInputManageListItem({
         </button>
         <button
           type="button"
-          onClick={() => onInsert(item)}
+          onClick={() => onShare(item)}
           className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[#86909C] transition-colors hover:bg-white hover:text-[#1D2129] dark:hover:bg-background dark:hover:text-foreground"
-          aria-label={t('composer.quickInputManageInsertAria')}
+          aria-label={t('composer.quickInputManageShareAria')}
         >
           <ShareMessageIcon className="h-3.5 w-3.5" />
         </button>

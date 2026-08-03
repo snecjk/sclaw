@@ -175,7 +175,6 @@ export const QuickInputPicker = forwardRef<HTMLDivElement, QuickInputPickerProps
         <QuickInputManageModal
           open={manageModalOpen}
           onClose={() => setManageModalOpen(false)}
-          onInsert={(item) => onSelect?.(item)}
           onChanged={() => {
             void refreshList();
           }}

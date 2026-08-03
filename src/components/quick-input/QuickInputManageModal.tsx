@@ -1,5 +1,5 @@
 /**
- * 快捷输入管理弹窗：搜索 + 可排序列表（编辑/插入/删除）+ 取消/保存。
+ * 快捷输入管理弹窗：搜索 + 可排序列表（编辑/分享/删除）+ 取消/保存。
  * 容器与底部按钮样式对齐 QuickInputCreateModal；搜索框对齐 QuickInputPicker。
  * 列表排序使用 @dnd-kit/sortable。删除即时调 API；保存提交槽位重排。
  */
@@ -25,8 +25,13 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Loader2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import {
+  buildConversationShareDialogDraft,
+  type DingTalkShareDialogDraft,
+} from '@/lib/dingtalk-share';
 import {
   deleteQuickInput,
   listQuickInputs,
@@ -46,8 +51,6 @@ const restrictToVerticalAxis: Modifier = ({ transform }) => ({
 interface QuickInputManageModalProps {
   open: boolean;
   onClose: () => void;
-  /** 插入到输入框 */
-  onInsert?: (item: QuickInputItem) => void;
   /** 列表发生增删改排后的回调（供 Picker 刷新） */
   onChanged?: () => void;
 }
@@ -55,7 +58,6 @@ interface QuickInputManageModalProps {
 export function QuickInputManageModal({
   open,
   onClose,
-  onInsert,
   onChanged,
 }: QuickInputManageModalProps) {
   return (
@@ -64,7 +66,6 @@ export function QuickInputManageModal({
         <QuickInputManageModalInner
           key="quick-input-manage"
           onClose={onClose}
-          onInsert={onInsert}
           onChanged={onChanged}
         />
       ) : null}
@@ -74,11 +75,9 @@ export function QuickInputManageModal({
 
 function QuickInputManageModalInner({
   onClose,
-  onInsert,
   onChanged,
 }: {
   onClose: () => void;
-  onInsert?: (item: QuickInputItem) => void;
   onChanged?: () => void;
 }) {
   const { t } = useTranslation('chat');
@@ -89,6 +88,8 @@ function QuickInputManageModalInner({
   const [query, setQuery] = useState('');
   const [editingItem, setEditingItem] = useState<QuickInputItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<QuickInputItem | null>(null);
+  const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   const refreshList = useCallback(async () => {
     setLoading(true);
@@ -122,11 +123,19 @@ function QuickInputManageModalInner({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !editingItem && !deleteTarget && !saving) onClose();
+      if (
+        e.key === 'Escape' &&
+        !editingItem &&
+        !deleteTarget &&
+        !shareDialogOpen &&
+        !saving
+      ) {
+        onClose();
+      }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose, editingItem, deleteTarget, saving]);
+  }, [onClose, editingItem, deleteTarget, shareDialogOpen, saving]);
 
   const trimmedQuery = query.trim().toLowerCase();
   const isFiltering = trimmedQuery.length > 0;
@@ -175,12 +184,22 @@ function QuickInputManageModalInner({
     }
   };
 
+  const handleShare = (item: QuickInputItem) => {
+    setShareDraft(buildConversationShareDialogDraft(item.content, []));
+    setShareDialogOpen(true);
+  };
+
+  const closeShareDialog = () => {
+    setShareDialogOpen(false);
+    setShareDraft(null);
+  };
+
   return createPortal(
     <>
       <motion.div
         className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm"
         onClick={() => {
-          if (!saving) onClose();
+          if (!saving && !shareDialogOpen) onClose();
         }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -255,10 +274,7 @@ function QuickInputManageModalInner({
                           item={item}
                           sortable={!isFiltering}
                           onEdit={setEditingItem}
-                          onInsert={(target) => {
-                            onInsert?.(target);
-                            onClose();
-                          }}
+                          onShare={handleShare}
                           onDelete={setDeleteTarget}
                         />
                       ))}
@@ -340,6 +356,24 @@ function QuickInputManageModalInner({
               ? err.message
               : t('composer.quickInputSaveFailed');
           toast.error(message);
+        }}
+      />
+
+      <ArtifactShareDialog
+        open={shareDialogOpen}
+        draft={shareDraft}
+        title={t('preview.shareDialog.title')}
+        description={t('preview.shareDialog.description')}
+        overlayClassName="z-[10070]"
+        onShared={() => {
+          toast.success(t('preview.shareDialog.success'));
+          closeShareDialog();
+        }}
+        onCancel={closeShareDialog}
+        onError={(error) => {
+          toast.error(
+            error instanceof Error ? error.message : t('preview.shareDialog.failed'),
+          );
         }}
       />
     </>,

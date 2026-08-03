@@ -97,7 +97,7 @@
         "quickInputManageSave": "保存",
         "quickInputManageDragAria": "ドラッグして並び替え",
         "quickInputManageEditAria": "編集",
-        "quickInputManageInsertAria": "入力欄に挿入",
+        "quickInputManageShareAria": "钉钉に共有",
         "quickInputManageDeleteAria": "削除",
         "quickInputDeleteConfirmTitle": "削除しますか？",
         "quickInputDeleteConfirmMessage": "削除後は元に戻せません。ご注意ください。",

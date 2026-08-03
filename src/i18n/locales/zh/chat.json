@@ -97,7 +97,7 @@
         "quickInputManageSave": "保存",
         "quickInputManageDragAria": "拖拽排序",
         "quickInputManageEditAria": "编辑",
-        "quickInputManageInsertAria": "插入到输入框",
+        "quickInputManageShareAria": "分享到钉钉",
         "quickInputManageDeleteAria": "删除",
         "quickInputDeleteConfirmTitle": "确定删除吗？",
         "quickInputDeleteConfirmMessage": "删除后将不可恢复，请谨慎处理。",
