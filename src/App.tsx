@@ -306,10 +306,11 @@ function App() {
   return (
     <ErrorBoundary>
       <TooltipProvider delayDuration={300}>
+      <AppShellLayoutProvider>
         <WorkflowCompletionNotifier />
-        <Routes>
-          {/* SSO Login page */}
-          <Route path="/login" element={<Login />} />
+          <Routes>
+            {/* SSO Login page */}
+            <Route path="/login" element={<Login />} />
 
             {/* Setup wizard (shown on first launch) */}
             <Route path="/setup/*" element={<Setup />} />
