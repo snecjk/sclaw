@@ -60,7 +60,7 @@ import {
 import { useDingTalkMention } from '@/hooks/useDingTalkMention';
 
 import type { ActiveMentionTrigger, MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
-import { extractSkillInlineQuery /*, hasSkillInlineTrigger */ } from '@/lib/dingtalk-mention-composer';
+import { extractSkillInlineQuery, extractSlashInlineQuery /*, hasSkillInlineTrigger */ } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention, MentionSearchItem } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import { mentionSearchItemToMention } from '@/types/dingtalk-mention';
@@ -490,6 +490,10 @@ export function ChatInput({
   const skillPickerInlineQuery = useMemo(
     () => (skillPickerMode === 'inline' ? extractSkillInlineQuery(composerSnapshot.plainText) : ''),
     [composerSnapshot.plainText, skillPickerMode],
+  );
+  const workflowPickerQuery = useMemo(
+    () => (workflowPickerSlashOpenRef.current ? extractSlashInlineQuery(composerSnapshot.plainText) : ''),
+    [composerSnapshot.plainText],
   );
 
   const handleSkillSelect = useCallback(({ slug, title }: { slug: string; title: string }) => {
@@ -1229,6 +1233,7 @@ export function ChatInput({
               <WorkflowPicker
                 ref={workflowPickerRef}
                 open={workflowPickerOpen}
+                query={workflowPickerQuery}
                 anchorRef={workflowButtonRef}
                 composerRef={composerShellRef}
                 onClose={() => {
@@ -1240,13 +1245,14 @@ export function ChatInput({
                   setWorkflowPickerOpen(false);
                   const { useChatStore } = await import('@/stores/chat');
                   useChatStore.getState().clearPendingWorkflow();
+                  mentionEditorRef.current?.consumeSlashTrigger(workflowPickerQuery);
                   mentionEditorRef.current?.insertWorkflow(id, name, 'mine');
                   mentionEditorRef.current?.focus();
                 }}
                 onSelectSkill={({ slug, title }) => {
                   workflowPickerSlashOpenRef.current = false;
                   setWorkflowPickerOpen(false);
-                  mentionEditorRef.current?.consumeSlashTrigger();
+                  mentionEditorRef.current?.consumeSlashTrigger(workflowPickerQuery);
                   mentionEditorRef.current?.insertSkill(slug, title);
                   mentionEditorRef.current?.focus();
                 }}
@@ -1375,6 +1381,7 @@ export function ChatInput({
             <WorkflowPicker
               ref={workflowPickerRef}
               open={workflowPickerOpen}
+              query={workflowPickerQuery}
               anchorRef={workflowButtonRef}
               composerRef={composerShellRef}
               onClose={() => {
@@ -1386,13 +1393,14 @@ export function ChatInput({
                 setWorkflowPickerOpen(false);
                 const { useChatStore } = await import('@/stores/chat');
                 useChatStore.getState().clearPendingWorkflow();
+                mentionEditorRef.current?.consumeSlashTrigger(workflowPickerQuery);
                 mentionEditorRef.current?.insertWorkflow(id, name, 'mine');
                 mentionEditorRef.current?.focus();
               }}
               onSelectSkill={({ slug, title }) => {
                 workflowPickerSlashOpenRef.current = false;
                 setWorkflowPickerOpen(false);
-                mentionEditorRef.current?.consumeSlashTrigger();
+                mentionEditorRef.current?.consumeSlashTrigger(workflowPickerQuery);
                 mentionEditorRef.current?.insertSkill(slug, title);
                 mentionEditorRef.current?.focus();
               }}

@@ -166,6 +166,13 @@ export function extractSkillInlineQuery(plainText: string): string {
   return plainText.slice(idx + 1);
 }
 
+/** 从 plainText 提取 `/` 之后的工作流/技能筛选关键词（composer slash Picker）。 */
+export function extractSlashInlineQuery(plainText: string): string {
+  const idx = plainText.lastIndexOf('/');
+  if (idx === -1) return '';
+  return plainText.slice(idx + 1);
+}
+
 /** plainText 中是否包含技能 inline 触发符 `*`。 */
 export function hasSkillInlineTrigger(plainText: string): boolean {
   return plainText.includes('*');
@@ -191,12 +198,15 @@ export function consumeSkillTriggerText(root: HTMLElement, explicitQuery?: strin
   return true;
 }
 
-export function consumeSlashTriggerText(root: HTMLElement): boolean {
+export function consumeSlashTriggerText(root: HTMLElement, explicitQuery?: string): boolean {
   const plainText = serializeMentionEditor(root).plainText;
   const startIdx = plainText.lastIndexOf('/');
   if (startIdx === -1) return false;
 
-  const range = buildRangeFromPlainTextOffsets(root, startIdx, startIdx + 1);
+  const query = explicitQuery ?? extractSlashInlineQuery(plainText);
+  const endIdx = startIdx + 1 + query.length;
+
+  const range = buildRangeFromPlainTextOffsets(root, startIdx, endIdx);
   if (!range) return false;
 
   range.deleteContents();

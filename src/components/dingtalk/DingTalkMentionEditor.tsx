@@ -62,7 +62,7 @@ export interface DingTalkMentionEditorHandle {
   insertWorkflow: (workflowId: string, name: string, source?: string) => void;
   insertSkill: (slug: string, title: string) => void;
   consumeSkillInlineTrigger: (query?: string) => boolean;
-  consumeSlashTrigger: () => boolean;
+  consumeSlashTrigger: (query?: string) => boolean;
   removeSkill: () => void;
   /** 插入 `@` 并打开钉钉 mention 选择（与手动输入 `@` 等价） */
   openMentionPicker: () => void;
@@ -197,10 +197,10 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         }
         return consumed;
       },
-      consumeSlashTrigger: () => {
+      consumeSlashTrigger: (query) => {
         const root = editorRef.current;
         if (!root) return false;
-        const consumed = consumeSlashTriggerText(root);
+        const consumed = consumeSlashTriggerText(root, query);
         if (consumed) {
           syncFromDom();
         }
