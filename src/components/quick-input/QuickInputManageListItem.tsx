@@ -1,6 +1,6 @@
 /**
  * 快捷输入管理列表项：拖拽柄 + 内容 + 编辑/分享/删除。
- * 排序由 @dnd-kit/sortable 驱动，拖拽仅从手柄触发。
+ * 点击内容区与编辑按钮同为编辑；排序由 @dnd-kit/sortable 驱动，拖拽仅从手柄触发。
  */
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -61,9 +61,13 @@ export function QuickInputManageListItem({
           <GripVertical className="h-3.5 w-3.5" aria-hidden />
         </button>
 
-        <p className="min-w-0 flex-1 truncate text-xs font-normal leading-4 text-[#111827] dark:text-foreground">
+        <button
+          type="button"
+          onClick={() => onEdit(item)}
+          className="min-w-0 flex-1 truncate text-left text-xs font-normal leading-4 text-[#111827] dark:text-foreground"
+        >
           {item.content}
-        </p>
+        </button>
       </div>
 
       <div className="flex shrink-0 items-center gap-1">

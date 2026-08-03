@@ -88,7 +88,7 @@
         "workflowClear": "ワークフローをクリア",
         "quickInputTitle": "クイック入力",
         "quickInputEmpty": "保存されたクイック入力はまだありません",
-        "quickInputCreate": "+ クイック入力を作成",
+        "quickInputCreate": "クイック入力を作成",
         "quickInputComingSoon": "クイック入力は近日公開",
         "quickInputSearchPlaceholder": "クイック入力を検索",
         "quickInputManage": "管理",
