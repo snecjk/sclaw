@@ -44,7 +44,7 @@
         "targetChip": "@{{agent}}",
         "agentPickerTitle": "将下一条消息直接发送给其他 Agent",
         "gatewayDisconnectedPlaceholder": "网关未连接...",
-        "messagePlaceholder": "给 {{agent}} 发送消息，输入 @ 搜索钉钉联系人或群",
+        "messagePlaceholder": "今天能帮你做些什么？@钉钉联系或群，/调用工作流和技能",
         "send": "发送",
         "stop": "停止",
         "gatewayConnected": "已连接",
