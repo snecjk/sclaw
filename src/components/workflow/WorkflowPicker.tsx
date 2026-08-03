@@ -168,8 +168,8 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
             : undefined
         }
       >
-        <div className="relative min-h-0 flex-1 overflow-hidden">
-          <div ref={listViewportRef} className="sto-overlay-scroll-viewport h-full min-h-0 overflow-y-auto">
+        <div className="relative max-h-[256px] overflow-hidden">
+          <div ref={listViewportRef} className="sto-overlay-scroll-viewport max-h-[256px] overflow-y-auto overscroll-contain">
             <div ref={listContentRef}>
               <button type="button" className={sectionTitleClass} onClick={scrollToTop}>
                 {t('composer.workflowPickerSectionTitle')}
