@@ -127,6 +127,13 @@ export function DataCenter() {
   const errorDescription = currentError === DATA_CENTER_API_NOT_FOUND
     ? t('dataCenterPage.feedback.apiNotFound')
     : currentError;
+  const breadcrumbRootLabel = isLocalDriveTab
+    ? t('dataCenterPage.tabs.localFiles')
+    : isUploadDriveTab
+      ? t('dataCenterPage.tabs.uploadFiles')
+      : isSharedArtifactSpace
+        ? t('dataCenterPage.tabs.sharedArtifacts')
+        : t('dataCenterPage.tabs.myArtifacts');
   const emptyFeedbackDescription = (() => {
     if (isLocalDriveTab && currentParentEntryId !== ROOT_ENTRY_ID) return '';
     if (isSharedArtifactSpace) return t('dataCenterPage.feedback.sharedQaEmptyDescription');
@@ -581,14 +588,14 @@ export function DataCenter() {
                           {t('dataCenterPage.drive.usedPercent', { percent: formatUsagePercent(quotaUsedPercent) })}
                         </p>
                       </div>
-                      <p className="mt-1 text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">{quotaUsedText}</p>
+                      <p className="text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">{quotaUsedText}</p>
                     </>
                   ) : (
                     <>
                       <p className="text-[14px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">
                         {t('dataCenterPage.drive.authorizedCount', { count: authorizedCount })}
                       </p>
-                      <p className="mt-1 text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">
+                      <p className="text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">
                         {t('dataCenterPage.drive.localSummary', { folders: folderCount, files: fileCount })}
                       </p>
                     </>
@@ -706,6 +713,7 @@ export function DataCenter() {
             {currentParentEntryId !== ROOT_ENTRY_ID ? (
               <FolderBreadcrumbBar
                 breadcrumbs={currentBreadcrumbs}
+                rootLabel={breadcrumbRootLabel}
                 onBack={() => isDriveSection
                   ? isLocalDriveTab
                     ? localStore.openBreadcrumb(getParentBreadcrumbId(currentBreadcrumbs))
