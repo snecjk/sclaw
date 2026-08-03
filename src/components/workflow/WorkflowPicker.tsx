@@ -64,6 +64,8 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
     const localRef = useRef<HTMLDivElement | null>(null);
     const listViewportRef = useRef<HTMLDivElement>(null);
     const listContentRef = useRef<HTMLDivElement>(null);
+    const skillSectionRef = useRef<HTMLDivElement>(null);
+    const workflowHeaderRef = useRef<HTMLButtonElement>(null);
 
     const { workflows, loading, refetch } = useMyPublishedWorkflows();
     const mySkills = useSkillPlazaStore((s) => s.mySkills);
@@ -140,8 +142,20 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
       listViewportRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    const sectionTitleClass =
-      'sticky top-0 z-10 flex w-full bg-white px-2 py-1 text-left text-[12px] font-medium leading-4 text-[#86909C] dark:bg-[#18181B] dark:text-muted-foreground';
+    const scrollToSkillSection = () => {
+      const viewport = listViewportRef.current;
+      const skillSection = skillSectionRef.current;
+      if (!viewport || !skillSection) return;
+
+      const workflowHeaderHeight = workflowHeaderRef.current?.offsetHeight ?? 24;
+      viewport.scrollTo({
+        top: Math.max(0, skillSection.offsetTop - workflowHeaderHeight),
+        behavior: 'smooth',
+      });
+    };
+
+    const sectionTitleBaseClass =
+      'sticky z-10 flex h-6 w-full items-center bg-white px-2 py-1 text-left text-[12px] font-medium leading-4 text-[#86909C] dark:bg-[#18181B] dark:text-muted-foreground';
     const itemClass =
       'flex w-full items-start gap-1.5 rounded-lg p-2 text-left transition-colors hover:bg-[#F0F2F5] dark:hover:bg-white/[0.06]';
     const itemIconClass = 'mt-0.5 h-3 w-3 shrink-0 text-[#1D2129] dark:text-foreground';
@@ -171,7 +185,12 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
         <div className="relative max-h-[256px] overflow-hidden">
           <div ref={listViewportRef} className="sto-overlay-scroll-viewport max-h-[256px] overflow-y-auto overscroll-contain">
             <div ref={listContentRef}>
-              <button type="button" className={sectionTitleClass} onClick={scrollToTop}>
+              <button
+                ref={workflowHeaderRef}
+                type="button"
+                className={cn(sectionTitleBaseClass, 'top-0')}
+                onClick={scrollToTop}
+              >
                 {t('composer.workflowPickerSectionTitle')}
               </button>
               {loading && (
@@ -206,43 +225,49 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
 
               <div className="my-1 h-px bg-[#F2F3F5]" />
 
-              <button type="button" className={sectionTitleClass} onClick={scrollToTop}>
-                {t('composer.skillPickerSectionTitle')}
-              </button>
-              {skillsLoading && mySkills.length === 0 ? (
-                <div className="px-3 py-2 text-[12px] text-muted-foreground">
-                  {t('composer.skillLoading')}
-                </div>
-              ) : null}
-              {!skillsLoading && skillItems.length === 0 ? (
-                <PickerEmptyState message={t('composer.skillNoInstalled')} />
-              ) : null}
-              {!skillsLoading && skillItems.length > 0 && filteredSkills.length === 0 ? (
-                <PickerEmptyState message={t('composer.skillNoResults')} />
-              ) : null}
-              {filteredSkills.map((skill) => (
+              <div ref={skillSectionRef}>
                 <button
-                  key={skill.slug}
                   type="button"
-                  onClick={() => {
-                    onSelectSkill?.({ slug: skill.slug, title: skill.title });
-                    onClose();
-                  }}
-                  className={itemClass}
+                  className={cn(sectionTitleBaseClass, 'top-6')}
+                  onClick={scrollToSkillSection}
                 >
-                  <Wrench className={itemIconClass} strokeWidth={2} aria-hidden />
-                  <div className="min-w-0">
-                    <div className={itemTitleClass}>
-                      <HighlightedText text={skill.title} query="" />
-                    </div>
-                    {skill.description ? (
-                      <div className={itemDescriptionClass}>
-                        <HighlightedText text={skill.description} query="" />
-                      </div>
-                    ) : null}
-                  </div>
+                  {t('composer.skillPickerSectionTitle')}
                 </button>
-              ))}
+                {skillsLoading && mySkills.length === 0 ? (
+                  <div className="px-3 py-2 text-[12px] text-muted-foreground">
+                    {t('composer.skillLoading')}
+                  </div>
+                ) : null}
+                {!skillsLoading && skillItems.length === 0 ? (
+                  <PickerEmptyState message={t('composer.skillNoInstalled')} />
+                ) : null}
+                {!skillsLoading && skillItems.length > 0 && filteredSkills.length === 0 ? (
+                  <PickerEmptyState message={t('composer.skillNoResults')} />
+                ) : null}
+                {filteredSkills.map((skill) => (
+                  <button
+                    key={skill.slug}
+                    type="button"
+                    onClick={() => {
+                      onSelectSkill?.({ slug: skill.slug, title: skill.title });
+                      onClose();
+                    }}
+                    className={itemClass}
+                  >
+                    <Wrench className={itemIconClass} strokeWidth={2} aria-hidden />
+                    <div className="min-w-0">
+                      <div className={itemTitleClass}>
+                        <HighlightedText text={skill.title} query="" />
+                      </div>
+                      {skill.description ? (
+                        <div className={itemDescriptionClass}>
+                          <HighlightedText text={skill.description} query="" />
+                        </div>
+                      ) : null}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
           <OverlayScrollbar viewportRef={listViewportRef} contentRef={listContentRef} />
