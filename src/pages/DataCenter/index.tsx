@@ -5,7 +5,6 @@ import {
   AlertCircle,
   ChevronDown,
   Database,
-  Folder,
   FolderPlus,
   Grid2X2,
   List,
@@ -721,7 +720,8 @@ export function DataCenter() {
                 <FeedbackState icon={<Loader2 className="h-8 w-8 animate-spin" />} title={t('dataCenterPage.feedback.loadingTitle')} description={t('dataCenterPage.feedback.loadingDescription')} />
               ) : visibleItems.length === 0 ? (
                 <FeedbackState
-                  icon={<Folder className="h-8 w-8" />}
+                  icon={null}
+                  variant="empty"
                   title={localPermissionDenied
                     ? t('dataCenterPage.feedback.localPermissionDeniedTitle')
                     : currentKeyword ? t('dataCenterPage.feedback.noMatch') : t('dataCenterPage.feedback.empty')}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode, type UIEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, MoreHorizontal } from 'lucide-react';
+import emptyIllustration from '@/assets/empty.png';
 import downloadIcon from '@/assets/icons/download-icon.svg';
 import shareIcon from '@/assets/icons/share-icon.svg';
 import uploadIcon from '@/assets/icons/upload-icon.svg';
@@ -646,7 +647,29 @@ function ActionTooltip({ label, children }: { label: string; children: ReactNode
   );
 }
 
-export function FeedbackState({ icon, title, description }: { icon: ReactNode; title: string; description?: string }) {
+export function FeedbackState({
+  icon,
+  title,
+  description,
+  variant = 'default',
+}: {
+  icon: ReactNode;
+  title: string;
+  description?: string;
+  variant?: 'default' | 'empty';
+}) {
+  if (variant === 'empty') {
+    return (
+      <div className="flex h-full min-h-[360px] flex-col items-center justify-center text-center">
+        <img src={emptyIllustration} alt="" aria-hidden="true" className="h-[78px] w-[96px] object-contain" />
+        <h2 className="mt-3 text-[14px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">{title}</h2>
+        {description ? (
+          <p className="mt-1 max-w-md text-[12px] leading-5 text-[#A8B0BD] dark:text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full min-h-[360px] flex-col items-center justify-center rounded-xl border border-dashed border-border bg-background text-center dark:bg-card/40">
       <div className="text-muted-foreground">{icon}</div>

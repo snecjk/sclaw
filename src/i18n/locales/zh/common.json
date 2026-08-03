@@ -179,7 +179,7 @@
             "qaEmptyDescription": "在产物预览右上角点击“保存产物”后，会出现在这里",
             "sharedQaEmptyDescription": "当前网点还没有共享产物",
             "driveEmptyDescription": "点击授权本地文件开始管理",
-            "uploadDriveEmptyDescription": "点击上传文件，将在线数据资产保存到这里",
+            "uploadDriveEmptyDescription": "点击上传文件，进行在线数据资产管理",
             "dataSourceTitle": "数据源能力待接入",
             "dataSourceDescription": "当前后端接口文档尚未包含数据源管理，本期不做假数据。"
         },
