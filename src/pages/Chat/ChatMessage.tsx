@@ -98,6 +98,8 @@ import type { SkillMeta } from '@/types/skill-meta';
 import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessPanel';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import { ShareMessageIcon } from '@/components/icons/ShareMessageIcon';
+import { QuickInputIcon } from '@/components/icons/composer-toolbar-icons';
+import { SaveAsQuickInputButton } from '@/components/quick-input/SaveAsQuickInputButton';
 import {
   buildConversationShareDialogDraft,
   type DingTalkShareDialogDraft,
@@ -997,6 +999,10 @@ function UserMessageMetaRow({
           {formatTimestamp(timestamp)}
         </span>
       ) : null}
+
+      <SaveAsQuickInputButton content={copyText} className={MESSAGE_META_ICON_BUTTON_CLASS}>
+        <QuickInputIcon className={cn(MESSAGE_META_SHARE_ICON_CLASS, 'text-current')} />
+      </SaveAsQuickInputButton>
       <Button
         type="button"
         variant="ghost"

@@ -113,6 +113,8 @@
         "quickInputCreateCloseAria": "关闭",
         "quickInputCreateContentRequired": "请输入内容",
         "quickInputCreateSuccess": "快捷输入已创建",
+        "quickInputAlreadyExists": "内容已存在",
+        "quickInputAddSuccess": "添加成功",
         "quickInputUpdateSuccess": "快捷输入已更新",
         "quickInputSaveSuccess": "排序已保存",
         "quickInputDeleteSuccess": "快捷输入已删除",

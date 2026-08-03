@@ -113,6 +113,8 @@
         "quickInputCreateCloseAria": "Close",
         "quickInputCreateContentRequired": "Please enter content",
         "quickInputCreateSuccess": "Quick input created",
+        "quickInputAlreadyExists": "Content already exists",
+        "quickInputAddSuccess": "Added successfully",
         "quickInputUpdateSuccess": "Quick input updated",
         "quickInputSaveSuccess": "Order saved",
         "quickInputDeleteSuccess": "Quick input deleted",

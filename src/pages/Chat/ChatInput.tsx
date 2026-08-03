@@ -48,6 +48,7 @@ import {
   SkillToolIcon,
   WorkflowNodesIcon,
 } from '@/components/icons/composer-toolbar-icons';
+import { FlyToTargetLayer } from '@/components/fly-to-target';
 import {
   Tooltip,
   TooltipArrow,
@@ -896,6 +897,9 @@ export function ChatInput({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      <FlyToTargetLayer targetRef={quickInputButtonRef}>
+        <QuickInputIcon className="h-full w-full text-foreground" />
+      </FlyToTargetLayer>
       <div className="w-full">
         {/* 单壳：附件缩略图与输入区同在一个圆角边框内（与 memory-center-web 助手输入一致） */}
         <div

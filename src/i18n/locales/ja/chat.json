@@ -113,6 +113,8 @@
         "quickInputCreateCloseAria": "閉じる",
         "quickInputCreateContentRequired": "内容を入力してください",
         "quickInputCreateSuccess": "クイック入力を作成しました",
+        "quickInputAlreadyExists": "内容は既に存在します",
+        "quickInputAddSuccess": "追加しました",
         "quickInputUpdateSuccess": "クイック入力を更新しました",
         "quickInputSaveSuccess": "並び順を保存しました",
         "quickInputDeleteSuccess": "クイック入力を削除しました",
