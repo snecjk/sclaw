@@ -243,10 +243,10 @@ export class VoiceAsrSession {
     if (this.handlers.onLevel) {
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
-      // 更跟手：少平滑、放宽动态范围，小声也更容易顶起来
-      analyser.smoothingTimeConstant = 0.45;
-      analyser.minDecibels = -90;
-      analyser.maxDecibels = -18;
+      // 敏感度略收：说话有起伏，底噪更淡
+      analyser.smoothingTimeConstant = 0.62;
+      analyser.minDecibels = -76;
+      analyser.maxDecibels = -24;
       this.analyser = analyser;
       source.connect(analyser);
       this.startLevelPump();
@@ -318,9 +318,9 @@ export class VoiceAsrSession {
           count += 1;
         }
         const raw = (sum / Math.max(1, count)) / 255;
-        // 提高增益 + 更陡曲线；中心略加重，强化「从中间荡开」
-        const centerBoost = 1 + (1 - dist) * 0.35;
-        const shaped = Math.pow(Math.min(1, raw * 2.15 * centerBoost), 0.62);
+        // 增益略收；中心略加重，强化「从中间荡开」
+        const centerBoost = 1 + (1 - dist) * 0.24;
+        const shaped = Math.pow(Math.min(1, raw * 1.28 * centerBoost), 0.85);
         bars[i] = Math.max(0.03, shaped);
       }
       onLevel(bars);
