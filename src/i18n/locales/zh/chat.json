@@ -86,6 +86,7 @@
         "workflowLoading": "加载中...",
         "workflowNoResults": "未找到匹配模板",
         "workflowNoTemplates": "暂无工作流",
+        "workflowManage": "管理工作流",
         "workflowClear": "清除工作流",
         "quickInputTitle": "快捷输入",
         "quickInputEmpty": "还没有保存过快捷输入",

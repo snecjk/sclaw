@@ -6,7 +6,7 @@
  * Files are staged to disk via IPC — only lightweight path references
  * are sent with the message (no base64 over WebSocket).
  */
-import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   SendHorizontal,
@@ -251,6 +251,7 @@ export function ChatInput({
   const [quickInputPickerOpen, setQuickInputPickerOpen] = useState(false);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [skillPickerMode, setSkillPickerMode] = useState<'inline' | 'toolbar'>('inline');
+  const [skillPickerStyle, setSkillPickerStyle] = useState<CSSProperties | undefined>(undefined);
   const gatewayStatus = useGatewayStore((s) => s.status);
   const agents = useAgentsStore((s) => s.agents);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
@@ -430,6 +431,34 @@ export function ChatInput({
     document.addEventListener('mousedown', handlePointerDown);
     return () => {
       document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [skillPickerMode, skillPickerOpen]);
+
+  useLayoutEffect(() => {
+    if (!skillPickerOpen || skillPickerMode !== 'toolbar') {
+      setSkillPickerStyle(undefined);
+      return undefined;
+    }
+
+    const updatePosition = () => {
+      const button = skillButtonRef.current;
+      const host = mentionPopoverRef.current;
+      if (!button || !host) return;
+
+      const buttonRect = button.getBoundingClientRect();
+      const hostRect = host.getBoundingClientRect();
+      setSkillPickerStyle({
+        left: Math.round(buttonRect.left - hostRect.left),
+        bottom: Math.round(hostRect.bottom - buttonRect.top),
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    document.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      document.removeEventListener('scroll', updatePosition, true);
     };
   }, [skillPickerMode, skillPickerOpen]);
 
@@ -1018,6 +1047,7 @@ export function ChatInput({
                 mode={skillPickerMode}
                 query={skillPickerInlineQuery}
                 onSelect={handleSkillSelect}
+                style={skillPickerStyle}
                 onClose={() => {
                   if (skillPickerMode === 'inline') {
                     mentionEditorRef.current?.consumeSkillInlineTrigger();

@@ -86,6 +86,7 @@
         "workflowLoading": "Loading...",
         "workflowNoResults": "No matching templates",
         "workflowNoTemplates": "No workflows",
+        "workflowManage": "Manage workflows",
         "workflowClear": "Clear workflow",
         "quickInputTitle": "Quick inputs",
         "quickInputEmpty": "No quick inputs saved yet",

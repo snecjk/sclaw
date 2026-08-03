@@ -8,10 +8,14 @@ import {
   type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { Search, Workflow } from 'lucide-react';
+import { Search, SlidersHorizontal, Workflow } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { useMyPublishedWorkflows } from './use-my-published-workflows';
+import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
+import { splitHighlightSegments } from '@/lib/skill-picker-filter';
+import { skillPickerHighlightClass } from '@/lib/surfaces';
 
 interface WorkflowPickerProps {
   open: boolean;
@@ -25,15 +29,34 @@ interface WorkflowPickerProps {
 type PickerPosition = {
   left: number;
   bottom: number;
-  width: number;
 };
+
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  const segments = useMemo(() => splitHighlightSegments(text, query), [text, query]);
+  return (
+    <>
+      {segments.map((segment, index) => (
+        segment.highlight ? (
+          <span key={`${index}-${segment.text}`} className={skillPickerHighlightClass}>
+            {segment.text}
+          </span>
+        ) : (
+          <span key={`${index}-${segment.text}`}>{segment.text}</span>
+        )
+      ))}
+    </>
+  );
+}
 
 export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
   ({ open, onClose, onSelect, anchorRef, className }, ref) => {
     const { t } = useTranslation('chat');
+    const navigate = useNavigate();
     const [query, setQuery] = useState('');
     const [position, setPosition] = useState<PickerPosition | null>(null);
     const localRef = useRef<HTMLDivElement | null>(null);
+    const listViewportRef = useRef<HTMLDivElement>(null);
+    const listContentRef = useRef<HTMLDivElement>(null);
 
     const { workflows, loading, refetch } = useMyPublishedWorkflows();
 
@@ -63,15 +86,9 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
       const updatePosition = () => {
         const rect = anchorRef.current?.getBoundingClientRect();
         if (!rect) return;
-        const width = Math.min(320, Math.max(280, window.innerWidth - 24));
-        const left = Math.min(
-          Math.max(12, rect.left),
-          window.innerWidth - width - 12,
-        );
         setPosition({
-          left,
-          bottom: window.innerHeight - rect.top + 8,
-          width,
+          left: Math.round(rect.left),
+          bottom: Math.round(window.innerHeight - rect.top + 9),
         });
       };
 
@@ -106,10 +123,10 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
       <div
         ref={setRefs}
         className={cn(
-          'z-50 overflow-hidden rounded-2xl border border-glass-border glass p-2',
+          'z-50 flex h-[390px] w-[280px] flex-col overflow-hidden rounded-lg border border-[#E5E6EB] bg-white p-2 shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-white/10 dark:bg-[#18181B]',
           position
             ? 'fixed'
-            : 'absolute left-0 bottom-full mb-2 w-80',
+            : 'absolute left-0 bottom-full mb-2',
           className,
         )}
         style={
@@ -117,53 +134,70 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
             ? {
                 left: position.left,
                 bottom: position.bottom,
-                width: position.width,
               }
             : undefined
         }
       >
         {/* Search */}
-        <div className="flex items-center gap-2 px-2 py-1.5">
-          <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+        <div className="mb-1 flex h-[34px] w-[264px] items-center gap-2 rounded-lg border border-[#E5E6EB] bg-white px-3 dark:border-white/10 dark:bg-white/[0.03]">
+          <Search className="h-4 w-4 shrink-0 text-[#A7ADB8]" strokeWidth={2} />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('composer.workflowPlaceholder')}
-            className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/50 outline-none"
+            className="h-full flex-1 bg-transparent text-[12px] font-normal text-[#111827] outline-none placeholder:text-[#C9CDD4]"
           />
         </div>
 
         {/* List */}
-        <div className="max-h-64 overflow-y-auto mt-1">
-          {loading && (
-            <div className="px-3 py-2 text-[12px] text-muted-foreground">{t('composer.workflowLoading')}</div>
-          )}
-          {!loading && filtered.length === 0 && (
-            <div className="px-3 py-2 text-[12px] text-muted-foreground">{t('composer.workflowNoTemplates')}</div>
-          )}
-          {!loading && filtered.map((workflow) => (
-            <button
-              key={workflow.id}
-              type="button"
-              onClick={() => {
-                onSelect(workflow.id, workflow.name);
-                onClose();
-              }}
-              className={cn(
-                'flex w-full items-start gap-2.5 rounded-xl px-3 py-2.5 text-left transition-colors',
-                'hover:bg-black/5 dark:hover:bg-white/5',
+        <div className="relative mt-1 min-h-0 flex-1 overflow-hidden">
+          <div ref={listViewportRef} className="sto-overlay-scroll-viewport h-full min-h-0 overflow-y-auto">
+            <div ref={listContentRef}>
+              {loading && (
+                <div className="px-3 py-2 text-[12px] text-muted-foreground">{t('composer.workflowLoading')}</div>
               )}
-            >
-              <span className="text-lg shrink-0 mt-0.5"><Workflow className="h-4 w-4 text-muted-foreground" /></span>
-              <div className="min-w-0">
-                <div className="text-[13px] font-medium text-foreground truncate">{workflow.name}</div>
-                {workflow.description && (
-                  <div className="text-[11px] text-muted-foreground truncate mt-0.5">{workflow.description}</div>
-                )}
-              </div>
-            </button>
-          ))}
+              {!loading && filtered.length === 0 && (
+                <div className="px-3 py-2 text-[12px] text-muted-foreground">{t('composer.workflowNoTemplates')}</div>
+              )}
+              {!loading && filtered.map((workflow) => (
+                <button
+                  key={workflow.id}
+                  type="button"
+                  onClick={() => {
+                    onSelect(workflow.id, workflow.name);
+                    onClose();
+                  }}
+                  className="flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-[#F0F2F5] dark:hover:bg-white/[0.06]"
+                >
+                  <Workflow className="mt-0.5 h-3 w-3 shrink-0 text-[#1D2129]" strokeWidth={2} />
+                  <div className="min-w-0">
+                    <div className="truncate text-[12px] font-normal leading-4 text-[#111827] dark:text-foreground">
+                      <HighlightedText text={workflow.name} query={query} />
+                    </div>
+                    {workflow.description && (
+                      <div className="mt-0.5 truncate text-[10px] font-normal leading-3.5 text-[#86909C]">
+                        <HighlightedText text={workflow.description} query={query} />
+                      </div>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <OverlayScrollbar viewportRef={listViewportRef} contentRef={listContentRef} />
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            navigate('/workflow');
+          }}
+          className="mt-1 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[#E5E6EB] bg-white text-[12px] font-medium text-[#1D2129] transition-colors hover:bg-[#F0F2F5] dark:border-white/10 dark:bg-white/[0.03] dark:text-foreground dark:hover:bg-white/[0.06]"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+          <span>{t('composer.workflowManage')}</span>
+        </button>
       </div>
     );
 

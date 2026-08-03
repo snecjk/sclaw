@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Plus, Search, Wrench } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -25,6 +25,7 @@ export interface SkillPickerProps {
   onClose: () => void;
   onAddMore?: () => void;
   className?: string;
+  style?: CSSProperties;
 }
 
 function HighlightedText({ text, query }: { text: string; query: string }) {
@@ -45,7 +46,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
 }
 
 export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
-  ({ open, mode, query: inlineQuery, onSelect, onClose, onAddMore, className }, ref) => {
+  ({ open, mode, query: inlineQuery, onSelect, onClose, onAddMore, className, style }, ref) => {
     const { t } = useTranslation('chat');
     const [toolbarQuery, setToolbarQuery] = useState('');
     const mySkills = useSkillPlazaStore((s) => s.mySkills);
@@ -98,6 +99,7 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
         role="listbox"
         aria-label={t('composer.skillPickerAriaLabel')}
         className={cn(skillPickerShellClass, className)}
+        style={style}
       >
         {mode === 'toolbar' ? (
           <div className="mb-1 flex h-[34px] w-[264px] items-center gap-2 rounded-lg border border-[#E5E6EB] bg-white px-3 dark:border-white/10 dark:bg-white/[0.03]">
