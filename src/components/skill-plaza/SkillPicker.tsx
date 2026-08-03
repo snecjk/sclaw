@@ -15,6 +15,7 @@ import {
 } from '@/lib/surfaces';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
+import { PickerEmptyState } from '@/components/picker-empty-state';
 
 export interface SkillPickerProps {
   open: boolean;
@@ -124,14 +125,10 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
                 </div>
               ) : null}
               {!loading && items.length === 0 ? (
-                <div className="px-3 py-2 text-[12px] text-muted-foreground">
-                  {t('composer.skillNoInstalled')}
-                </div>
+                <PickerEmptyState message={t('composer.skillNoInstalled')} />
               ) : null}
               {!loading && items.length > 0 && filtered.length === 0 ? (
-                <div className="px-3 py-2 text-[12px] text-muted-foreground">
-                  {t('composer.skillNoResults')}
-                </div>
+                <PickerEmptyState message={t('composer.skillNoResults')} />
               ) : null}
               {filtered.map((skill) => (
                 <button

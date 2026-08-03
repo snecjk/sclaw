@@ -16,6 +16,7 @@ import { useMyPublishedWorkflows } from './use-my-published-workflows';
 import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import { splitHighlightSegments } from '@/lib/skill-picker-filter';
 import { skillPickerHighlightClass } from '@/lib/surfaces';
+import { PickerEmptyState } from '@/components/picker-empty-state';
 
 interface WorkflowPickerProps {
   open: boolean;
@@ -157,7 +158,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
                 <div className="px-3 py-2 text-[12px] text-muted-foreground">{t('composer.workflowLoading')}</div>
               )}
               {!loading && filtered.length === 0 && (
-                <div className="px-3 py-2 text-[12px] text-muted-foreground">{t('composer.workflowNoTemplates')}</div>
+                <PickerEmptyState message={t('composer.workflowNoTemplates')} />
               )}
               {!loading && filtered.map((workflow) => (
                 <button
