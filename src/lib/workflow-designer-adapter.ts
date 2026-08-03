@@ -31,6 +31,9 @@ export function definitionFromDetail(detail: WorkflowDetailResponse): WorkflowDe
       id: e.id,
       source: e.source,
       target: e.target,
+      condition: e.condition,
+      sourcePort: e.sourcePort,
+      targetPort: e.targetPort,
     })),
   };
 }

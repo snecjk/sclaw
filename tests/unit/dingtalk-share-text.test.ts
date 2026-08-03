@@ -4,7 +4,7 @@ import {
   collectConversationFileRefsFromText,
   normalizeSharePathKey,
   replaceConversationFileRefsWithShareUrls,
-} from '../../shared/dingtalk-share-text';
+} from '../../shared/dingtalk-send/dingtalk-share-text';
 
 const OSS_URL =
   'https://ali-sto-wisdom-star-test.oss-cn-shanghai.aliyuncs.com/ai-memory-center/temp/files/1782869580970_shentong-analysis-20260629.html?x-oss-signature-version=OSS4-HMAC-SHA256&x-oss-date=20260701T013301Z&x-oss-expires=86399&x-oss-credential=LTAI5tKZku9MaQ4WCtzyMPbh%2F20260701%2Fcn-shanghai%2Foss%2Faliyun_v4_request&x-oss-signature=a46ca895d99c218e147b6eea94d1830ff20afc3ba955e9a4b2ab009b971b530f';

@@ -59,4 +59,20 @@ describe('ClaudeExecutionSummaryService', () => {
     const prompt = request.messages?.find((message) => message.role === 'user')?.content;
     expect(prompt).toContain('"confidence": 0.7,\n  "candidateAssessments"');
   });
+
+  it('forbids capturing orchestrated workflow runs as reusable execution experience', async () => {
+    const service = new ClaudeExecutionSummaryService();
+    await service.summarize({
+      userTask: '执行工作流 workflow-123',
+      injectedExperiences: [{ memoryId: 'memory-1', memory: '旧经验' }],
+    });
+
+    const request = createChatCompletionStreamMock.mock.calls[0]?.[0] as {
+      messages?: Array<{ role?: string; content?: string }>;
+    };
+    const prompt = request.messages?.find((message) => message.role === 'user')?.content;
+    expect(prompt).toContain('必须输出 {"shouldStore": false, "reason": "orchestrated_workflow_execution"}');
+    expect(prompt).toContain('不得把其中的工具调用、命令、参数或步骤沉淀为可复用执行经验');
+    expect(prompt).toContain('本轮属于已编排工作流执行时');
+  });
 });

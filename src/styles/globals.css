@@ -50,6 +50,23 @@
     --link-foreground: 0 0% 100%;
     --link-muted: 228 100% 97%;
 
+    /* Toast / chat-error feedback surfaces — MasterGo MCP 45:11515 / 45:11441 */
+    --sto-toast-info-bg: #f0f4ff;
+    --sto-toast-info-border: #d6e1ff;
+    --sto-toast-info-icon: #4760fe;
+    --sto-toast-warning-bg: #fffbe6;
+    --sto-toast-warning-border: #fff1b8;
+    --sto-toast-warning-icon: #f4aa17;
+    --sto-toast-error-bg: #fff2f0;
+    --sto-toast-error-border: #ffe4e0;
+    --sto-toast-error-icon: #fa3c3c;
+    --sto-toast-success-bg: #eaf6ee;
+    --sto-toast-success-border: #c8ead6;
+    --sto-toast-success-icon: #31af65;
+    --sto-chat-error-bg: #fffbe6;
+    --sto-chat-error-border: #fff1b8;
+    --sto-chat-error-icon: #faad14;
+
     /* S Claw 壳层（归档设计稿对齐）：侧栏与 gutter 共用 #EDEDED */
     --sto-page-bg: #ededed;
     --sto-sidebar-bg: #ededed;
@@ -97,13 +114,13 @@
     --sto-grey-10: #1d2129;
 
     /* 侧栏文字色（MasterGo 8:46454 调整标题颜色+任务icon，MCP 2026-06） */
-    --sto-sidebar-text-default: var(--sto-grey-10);
+    --sto-sidebar-text-default: #393e47;
     --sto-sidebar-text-icon: var(--sto-grey-9);
     --sto-sidebar-text-section: var(--sto-grey-8);
     --sto-sidebar-row-hover-bg: #e4e4e4;
     --sto-sidebar-nav-active-bg: #dcdcdc;
     /** 分区标题 sticky 行高（任务 top-0，最近叠在其下） */
-    --sto-sidebar-section-sticky-h: 30px;
+    --sto-sidebar-section-sticky-h: 32px;
     --sto-sidebar-running-spinner: #5f9274;
     --sto-sidebar-subitem-active-bg: #dcdcdc;
     --sto-sidebar-footer-name: #1a1a1a;
@@ -193,6 +210,22 @@
     --link-foreground: 0 0% 100%;
     --link-muted: 231 35% 18%;
 
+    --sto-toast-info-bg: hsl(231 35% 18%);
+    --sto-toast-info-border: hsl(231 40% 28%);
+    --sto-toast-info-icon: hsl(231 92% 72%);
+    --sto-toast-warning-bg: hsl(43 45% 14%);
+    --sto-toast-warning-border: hsl(43 50% 24%);
+    --sto-toast-warning-icon: hsl(38 90% 52%);
+    --sto-toast-error-bg: hsl(0 40% 14%);
+    --sto-toast-error-border: hsl(0 45% 24%);
+    --sto-toast-error-icon: hsl(0 72% 56%);
+    --sto-toast-success-bg: hsl(140 30% 14%);
+    --sto-toast-success-border: hsl(140 35% 24%);
+    --sto-toast-success-icon: hsl(130 60% 48%);
+    --sto-chat-error-bg: hsl(43 45% 14%);
+    --sto-chat-error-border: hsl(43 50% 24%);
+    --sto-chat-error-icon: hsl(38 90% 52%);
+
     --sto-page-bg: hsl(207 53% 9%);
     --sto-sidebar-bg: hsl(208 40% 11%);
     --sto-sidebar-border: hsl(204 28% 18%);
@@ -218,7 +251,7 @@
     --sto-grey-10: #e5e6eb;
     --sto-grey-9: #a4aab3;
     --sto-grey-8: #9aa5b8;
-    --sto-sidebar-text-default: var(--sto-grey-10);
+    --sto-sidebar-text-default: #e5e6eb;
     --sto-sidebar-text-icon: var(--sto-grey-9);
     --sto-sidebar-text-section: var(--sto-grey-8);
     --sto-sidebar-row-hover-bg: hsl(204 24% 16%);
@@ -459,6 +492,130 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
 
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-muted-foreground/30;
+}
+
+/* ── Scoped thin scrollbar (sidebar + chat scroll areas) ── */
+.sto-thin-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sto-thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sto-thin-scrollbar::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+  transition: background-color 0.15s ease;
+}
+
+.sto-thin-scrollbar[data-scrollbar-active='true']::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.12);
+}
+
+.sto-thin-scrollbar[data-scrollbar-active='true']::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.22);
+}
+
+.dark .sto-thin-scrollbar[data-scrollbar-active='true']::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.dark .sto-thin-scrollbar[data-scrollbar-active='true']::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sto-thin-scrollbar::-webkit-scrollbar-thumb {
+    transition: none;
+  }
+}
+
+/* ── Scoped overlay scrollbar (Sidebar / Home / Embed consumers) ── */
+.sto-overlay-scroll-viewport {
+  scrollbar-width: none;
+}
+
+.sto-overlay-scroll-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+.sto-overlay-scrollbar {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  z-index: 10;
+  width: 10px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.sto-overlay-scrollbar[data-overflow='true'] {
+  pointer-events: auto;
+}
+
+.sto-overlay-scrollbar[data-overflow='true'][data-active='true'],
+.sto-overlay-scrollbar[data-overflow='true'][data-dragging='true'] {
+  opacity: 1;
+}
+
+.sto-overlay-scrollbar-rail {
+  position: absolute;
+  inset-block: 4px;
+  inset-inline-end: 0;
+  width: 10px;
+}
+
+.sto-overlay-scrollbar-thumb {
+  position: absolute;
+  inset-inline-start: 50%;
+  width: 6px;
+  margin-inline-start: -3px;
+  border-radius: 9999px;
+  background-color: rgba(0, 0, 0, 0.12);
+  transform: translate3d(0, 0, 0);
+  will-change: transform, height;
+  touch-action: none;
+  cursor: default;
+}
+
+.sto-overlay-scrollbar-thumb:hover,
+.sto-overlay-scrollbar[data-dragging='true'] .sto-overlay-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.22);
+}
+
+.dark .sto-overlay-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.dark .sto-overlay-scrollbar-thumb:hover,
+.dark .sto-overlay-scrollbar[data-dragging='true'] .sto-overlay-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sto-overlay-scrollbar {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .sto-overlay-scrollbar {
+    display: none !important;
+  }
+
+  .sto-overlay-scroll-viewport {
+    scrollbar-width: auto;
+  }
+
+  .sto-overlay-scroll-viewport::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+    display: block;
+  }
 }
 
 /* macOS traffic light spacing */
@@ -799,11 +956,99 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
   }
 }
 
-/* Glassmorphism toast override */
-[data-sonner-toaster] [data-sonner-toast] {
-  background: hsl(var(--glass-bg) / var(--glass-opacity)) !important;
-  backdrop-filter: blur(var(--glass-blur)) !important;
-  -webkit-backdrop-filter: blur(var(--glass-blur)) !important;
-  border-color: hsl(var(--glass-border)) !important;
-  box-shadow: var(--glass-shadow) !important;
+/* ── Global Sonner Toast overrides (MasterGo MCP 45:11515) ── */
+[data-sonner-toaster].sto-global-toaster [data-sonner-toast] {
+  padding: 16px 18px;
+  font-size: 14px;
+  line-height: 18px;
+  color: hsl(var(--foreground));
+  border-width: 1px;
+  border-style: solid;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+}
+
+[data-sonner-toaster].sto-global-toaster [data-sonner-toast] [data-icon] svg {
+  width: 18px;
+  height: 18px;
+}
+
+[data-sonner-toaster].sto-global-toaster [data-sonner-toast][data-type='info'],
+[data-sonner-toaster].sto-global-toaster [data-sonner-toast][data-type='normal'],
+[data-sonner-toaster].sto-global-toaster [data-sonner-toast]:not([data-type]) {
+  background: var(--sto-toast-info-bg);
+  border-color: var(--sto-toast-info-border);
+  border-radius: 8px;
+}
+
+[data-sonner-toaster].sto-global-toaster [data-sonner-toast][data-type='info'] [data-icon] svg,
+[data-sonner-toaster].sto-global-toaster [data-sonner-toast][data-type='normal'] [data-icon] svg,
+[data-sonner-toaster].sto-global-toaster [data-sonner-toast]:not([data-type]) [data-icon] svg {
+  color: var(--sto-toast-info-icon);
+}
+
+[data-sonner-toaster].sto-global-toaster [data-sonner-toast][data-type='warning'] {
+  background: var(--sto-toast-warning-bg);
+  border-color: var(--sto-toast-warning-border);
+  border-radius: 8px;
+}
+
+[data-sonner-toaster].sto-global-toaster [data-sonner-toast][data-type='warning'] [data-icon] svg {
+  color: var(--sto-toast-warning-icon);
+}
+
+[data-sonner-toaster].sto-global-toaster [data-sonner-toast][data-type='error'] {
+  background: var(--sto-toast-error-bg);
+  border-color: var(--sto-toast-error-border);
+  border-radius: 8px;
+}
+
+[data-sonner-toaster].sto-global-toaster [data-sonner-toast][data-type='error'] [data-icon] svg {
+  color: var(--sto-toast-error-icon);
+}
+
+[data-sonner-toaster].sto-global-toaster [data-sonner-toast][data-type='success'] {
+  background: var(--sto-toast-success-bg);
+  border-color: var(--sto-toast-success-border);
+  border-radius: 10px;
+}
+
+[data-sonner-toaster].sto-global-toaster [data-sonner-toast][data-type='success'] [data-icon] svg {
+  color: var(--sto-toast-success-icon);
+}
+
+/* Action：纯文字下划线，颜色继承 Toast 正文；不覆盖 margin-left:auto 等靠右布局 */
+[data-sonner-toaster].sto-global-toaster
+  [data-sonner-toast][data-styled='true']
+  [data-button]:not([data-cancel]) {
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+  white-space: nowrap;
+  text-decoration-line: underline;
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+[data-sonner-toaster].sto-global-toaster
+  [data-sonner-toast][data-styled='true']
+  [data-button]:not([data-cancel]):hover {
+  background: transparent;
+  opacity: 0.72;
+}
+
+[data-sonner-toaster].sto-global-toaster
+  [data-sonner-toast][data-styled='true']
+  [data-button]:not([data-cancel]):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  box-shadow: none;
 }

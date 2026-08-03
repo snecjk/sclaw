@@ -68,3 +68,18 @@ export function getSqliteDatabaseInfo(): SqliteDatabaseInfo {
   }
   return databaseInfo as SqliteDatabaseInfo;
 }
+
+/**
+ * Test-only seam: inject a Kysely client (typically wrapping an in-memory
+ * `DatabaseSync`) so the repositories' `getKyselyDatabase()` calls run against
+ * a throwaway DB in node tests — `initializeSqliteDatabase()` cannot run there
+ * because it resolves the DB path via `app.getPath('userData')` (Electron-only).
+ * Pass `null` to tear down (restores the uninitialized singleton state).
+ *
+ * Mirrors the `*ForTests` convention used elsewhere (e.g. resetDwsSendDedupForTests).
+ */
+export function setKyselyDatabaseForTests(kysely: Kysely<SqliteDbSchema> | null): void {
+  kyselyInstance = kysely;
+  databaseInstance = null;
+  databaseInfo = null;
+}

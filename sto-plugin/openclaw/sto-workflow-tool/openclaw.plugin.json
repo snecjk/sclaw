@@ -1,7 +1,7 @@
 {
   "id": "sto-workflow-tool",
   "name": "申通工作流内置工具",
-  "description": "提供工作流模板搜索、执行等内置 OpenClaw Tools，直接调用 STO HTTP API",
+  "description": "提供工作流模板搜索、执行等内置 OpenClaw Tools，通过桌面端 Host API 调用工作流能力",
   "activation": {
     "onStartup": true
   },
@@ -11,7 +11,7 @@
     "properties": {
       "baseUrl": {
         "type": "string",
-        "description": "STO 后端 base URL"
+        "description": "桌面端 Host API base URL"
       },
       "ssoAuthPath": {
         "type": "string",

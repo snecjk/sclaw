@@ -34,6 +34,8 @@ export const TIMEOUTS = {
   AUTH_LOGIN: 300_000,
   /** Scheduled task instruction AI beautify */
   BEAUTIFY_INSTRUCTION: 60_000,
+  /** Native file/folder picker waits until the user confirms or cancels. */
+  LOCAL_FILE_AUTHORIZE: 0,
 } as const;
 
 /**

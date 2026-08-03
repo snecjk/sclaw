@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendDingTalkMentionContext } from '../../shared/dingtalk-mention-context';
+import { appendDingTalkMentionContext } from '../../shared/dingtalk-prompts/dingtalk-mention-context';
 import {
   deriveSessionLabelFromHistory,
   deriveSessionLabelFromUserText,

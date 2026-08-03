@@ -51,6 +51,16 @@ describe('artifactToPreviewFile', () => {
     expect(file.fileName).toBe('客户异常监控报告_20260705');
   });
 
+  it('keeps a local workflow artifact path for native file actions', () => {
+    const file = artifactToPreviewFile({
+      name: 'report.html',
+      type: 'html',
+      url: 'file:///C:/Users/test/.stoclaw/workflow-runtime/workspaces/run-1/report.html',
+      filePath: 'C:\\Users\\test\\.stoclaw\\workflow-runtime\\workspaces\\run-1\\report.html',
+    });
+    expect(file.filePath).toBe('C:\\Users\\test\\.stoclaw\\workflow-runtime\\workspaces\\run-1\\report.html');
+  });
+
   it('falls back to URL inference when name is the preview placeholder', () => {
     const file = artifactToPreviewFile({
       name: 'preview',

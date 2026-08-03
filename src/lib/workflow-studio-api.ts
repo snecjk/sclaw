@@ -21,6 +21,20 @@ export interface WorkflowStudioTemplateDetail extends WorkflowStudioTemplate {
   workflowDefinition: WorkflowDefinition;
 }
 
+export interface WorkflowHistoryVersion {
+  id: string;
+  version: number;
+  status: string;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  isCurrent?: boolean;
+  summary?: string | null;
+}
+
+export interface WorkflowHistoryVersionDetail extends WorkflowHistoryVersion {
+  workflow: WorkflowDefinition;
+}
+
 export interface CreateWorkflowStudioRequest {
   templateId: string;
   name: string;
@@ -100,4 +114,46 @@ export async function getWorkflowStudioTemplate(
     { headers: studioHeaders() },
   );
   return parseStudioJson<WorkflowStudioTemplateDetail>(json);
+}
+
+/** GET /workflow/v1/workflows/{workflowId}/versions — MC HistoryVersionsDrawer */
+export async function listWorkflowHistoryVersions(
+  workflowId: string,
+): Promise<WorkflowHistoryVersion[]> {
+  const json = await hostApiFetch<unknown>(
+    `/workflow/v1/workflows/${encodeURIComponent(workflowId)}/versions`,
+    { headers: studioHeaders() },
+  );
+  const data = parseStudioJson<WorkflowHistoryVersion[] | { items?: WorkflowHistoryVersion[] }>(json);
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === 'object' && Array.isArray(data.items)) return data.items;
+  return [];
+}
+
+/** GET /workflow/v1/workflows/{workflowId}/versions/{versionId} */
+export async function getWorkflowHistoryVersionDetail(
+  workflowId: string,
+  versionId: string,
+): Promise<WorkflowHistoryVersionDetail> {
+  const json = await hostApiFetch<unknown>(
+    `/workflow/v1/workflows/${encodeURIComponent(workflowId)}/versions/${encodeURIComponent(versionId)}`,
+    { headers: studioHeaders() },
+  );
+  return parseStudioJson<WorkflowHistoryVersionDetail>(json);
+}
+
+/** POST /workflow/v1/workflows/{workflowId}/versions/{versionId}/restore */
+export async function restoreWorkflowHistoryVersion(
+  workflowId: string,
+  versionId: string,
+): Promise<WorkflowDefinition> {
+  const json = await hostApiFetch<unknown>(
+    `/workflow/v1/workflows/${encodeURIComponent(workflowId)}/versions/${encodeURIComponent(versionId)}/restore`,
+    {
+      method: 'POST',
+      headers: studioHeaders(),
+      body: '{}',
+    },
+  );
+  return parseStudioJson<WorkflowDefinition>(json);
 }

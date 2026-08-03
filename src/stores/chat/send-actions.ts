@@ -178,7 +178,6 @@ export function createSendActions(
         trimmedText: gatewayText,
         sessionKey: currentSessionKey,
         messages: get().currentSessionKey === currentSessionKey ? get().messages : [],
-        workflowCardStates: get().currentSessionKey === currentSessionKey ? get().workflowCardStates : {},
         workflowContext,
         embedBrowserContext,
         clearPendingWorkflow: get().clearPendingWorkflow,

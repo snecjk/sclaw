@@ -25,6 +25,8 @@ export interface SkillSummary {
   updateAvailable?: boolean;
   forceUpdate?: boolean;
   isBuiltin?: boolean;
+  /** skill | prompt — Prompt items show a plaza badge */
+  skillKind?: 'skill' | 'prompt';
   /** False for official preinstall whitelist skills — UI hides delete. */
   canUninstall?: boolean;
 }

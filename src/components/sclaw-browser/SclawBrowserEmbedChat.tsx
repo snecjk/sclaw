@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { AlertCircle, Loader2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '@/stores/chat';
-import { useWorkflowCompletion } from '@/hooks/use-workflow-completion';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
@@ -18,6 +17,7 @@ import {
   stoChatScrollContentClass,
   stoChatScrollPaneClass,
 } from '@/lib/surfaces';
+import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 import { SclawBrowserEmbedChatSessions, type SclawBrowserEmbedChatSessionsProps } from './SclawBrowserEmbedChatSessions';
 
@@ -49,8 +49,6 @@ export function SclawBrowserEmbedChat({
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
-
-  useWorkflowCompletion(currentSessionKey);
 
   const streamMsg = streamingMessage && typeof streamingMessage === 'object'
     ? streamingMessage as unknown as { role?: string; content?: unknown; timestamp?: number; id?: string }
@@ -116,6 +114,7 @@ export function SclawBrowserEmbedChat({
         </button>
       </header>
 
+      <div className="sclaw-browser-embed-chat__scroll-host">
       <div ref={scrollRef} className={cn(stoChatScrollPaneClass, 'sclaw-browser-embed-chat__scroll')}>
         <div ref={contentRef} className={cn(stoChatScrollContentClass, stoChatColumnContentTrackClass('home', false))}>
           {showLoadingPlaceholder ? (
@@ -136,6 +135,7 @@ export function SclawBrowserEmbedChat({
                     />
                   );
                 }
+                if (item.type === 'workflow-run') return null;
                 return (
                   <ChatMessage
                     key={item.key}
@@ -157,6 +157,8 @@ export function SclawBrowserEmbedChat({
             </>
           )}
         </div>
+      </div>
+      <OverlayScrollbar viewportRef={scrollRef} contentRef={contentRef} />
       </div>
 
       {error ? (

@@ -189,6 +189,46 @@ export async function handleFileRoutes(
     return true;
   }
 
+  // POST /api/files/list-recursive — recursively list files inside a local folder
+  // (used by data-center folder upload; Windows cannot pick files and folders in one dialog)
+  if (url.pathname === '/api/files/list-recursive' && req.method === 'POST') {
+    try {
+      const body = await parseJsonBody<{ dirPath: string }>(req);
+      const rawPath = body.dirPath?.trim() || '';
+      if (!rawPath) {
+        sendJson(res, 400, { success: false, error: 'Missing dirPath' });
+        return true;
+      }
+      const rootPath = resolveWorkspaceFilePath(rawPath);
+      const fsP = await import('node:fs/promises');
+      const MAX_FILES = 5000;
+      const files: Array<{ absolutePath: string; relativePath: string }> = [];
+      let truncated = false;
+      const walk = async (dir: string, rel: string): Promise<void> => {
+        const entries = await fsP.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (files.length >= MAX_FILES) {
+            truncated = true;
+            return;
+          }
+          if (entry.name.startsWith('.')) continue;
+          const absolutePath = join(dir, entry.name);
+          const relativePath = rel ? `${rel}/${entry.name}` : entry.name;
+          if (entry.isDirectory()) {
+            await walk(absolutePath, relativePath);
+          } else if (entry.isFile()) {
+            files.push({ absolutePath, relativePath });
+          }
+        }
+      };
+      await walk(rootPath, '');
+      sendJson(res, 200, { files, truncated });
+    } catch (error) {
+      sendJson(res, 500, { success: false, error: String(error) });
+    }
+    return true;
+  }
+
   // POST /api/files/resolve — resolve hint path to existing file (preview entry)
   if (url.pathname === '/api/files/resolve' && req.method === 'POST') {
     try {
@@ -209,15 +249,18 @@ export async function handleFileRoutes(
       const body = await parseJsonBody<{ paths: string[] }>(req);
       const fsP = await import('node:fs/promises');
       const exists: Record<string, boolean> = {};
+      const sizes: Record<string, number> = {};
       for (const rawPath of (body.paths || []).slice(0, 200)) {
         try {
           const stat = await fsP.stat(resolveWorkspaceFilePath(rawPath));
           exists[rawPath] = stat.isFile();
+          sizes[rawPath] = stat.isFile() ? stat.size : 0;
         } catch {
           exists[rawPath] = false;
+          sizes[rawPath] = 0;
         }
       }
-      sendJson(res, 200, { exists });
+      sendJson(res, 200, { exists, sizes });
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });
     }

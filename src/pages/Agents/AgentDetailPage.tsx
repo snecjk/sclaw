@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  ArrowLeft, Bot, RefreshCw, Search, Plus, Trash2, X,
-  Play, Timer, Clock, CheckCircle2, XCircle, Loader2, History,
-  Calendar, MessageSquare, Puzzle, FileText, Cpu, MessagesSquare,
-  Check, Wand2,
+  ArrowLeft, Bot, RefreshCw, Search, Plus, Trash2, X, Loader2,
+  Puzzle, FileText, Cpu, MessagesSquare, Check, Wand2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +10,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { ChannelConfigModal } from '@/components/channels/ChannelConfigModal';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { useAgentsStore } from '@/stores/agents';
@@ -21,11 +18,10 @@ import { useProviderStore } from '@/stores/providers';
 import { buildProviderListItems } from '@/lib/provider-accounts';
 import { getProviderIconUrl, shouldInvertInDark, HIDDEN_PROVIDER_IDS } from '@/lib/providers';
 import { hostApiFetch } from '@/lib/host-api';
-import { cn, formatRelativeTime } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { glassNestedCard, glassSectionSurface, stoMainInnerShell } from '@/lib/surfaces';
 import { CHANNEL_NAMES } from '@/types/channel';
 import type { AgentSummary } from '@/types/agent';
-import type { CronJob, CronJobCreateInput } from '@/types/cron';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import dingtalkIcon from '@/assets/channels/dingtalk.svg';
@@ -881,236 +877,6 @@ function SkillsTab({ agentId }: { agentId: string }) {
   );
 }
 
-// ── Tasks Tab ─────────────────────────────────────────────────────────────────
-interface CronItemProps {
-  job: CronJob;
-  onToggle: (enabled: boolean) => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  onTrigger: () => Promise<void>;
-}
-
-function CronItem({ job, onToggle, onEdit, onDelete, onTrigger }: CronItemProps) {
-  const [triggering, setTriggering] = useState(false);
-  const handleTrigger = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setTriggering(true);
-    try { await onTrigger(); toast.success('任务已触发'); }
-    catch (err) { toast.error(`触发失败: ${String(err)}`); }
-    finally { setTriggering(false); }
-  };
-
-  const scheduleStr = (() => {
-    const s = job.schedule;
-    if (typeof s === 'string') return s;
-    if (s && typeof s === 'object') {
-      const so = s as { kind?: string; expr?: string; everyMs?: number };
-      if (so.kind === 'cron' && so.expr) return so.expr;
-      if (so.kind === 'every' && so.everyMs) return `每 ${Math.round(so.everyMs / 60000)} 分钟`;
-    }
-    return String(s ?? '');
-  })();
-
-  return (
-    <div
-      className={cn('group relative flex cursor-pointer flex-col rounded-md border border-border p-4 transition-colors hover:border-border', glassNestedCard)}
-      onClick={onEdit}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-primary/[0.06] text-foreground">
-            <Clock className={cn('h-4 w-4', job.enabled ? 'text-foreground' : 'text-muted-foreground')} />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-0.5">
-              <h4 className="text-[14px] font-semibold text-foreground truncate">{job.name}</h4>
-              <div className={cn('h-2 w-2 rounded-full shrink-0', job.enabled ? 'bg-green-500' : 'bg-muted-foreground')} />
-            </div>
-            <p className="text-[12px] text-muted-foreground flex items-center gap-1">
-              <Timer className="h-3 w-3" />{scheduleStr}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <Switch checked={job.enabled} onCheckedChange={onToggle} />
-        </div>
-      </div>
-      <div className="mt-2 pl-12">
-        <p className="text-[12.5px] text-muted-foreground line-clamp-1 flex items-center gap-1.5">
-          <MessageSquare className="h-3 w-3 shrink-0" />{job.message}
-        </p>
-        {job.lastRun && (
-          <p className="text-[11px] text-muted-foreground/70 mt-1 flex items-center gap-1">
-            <History className="h-3 w-3" />上次: {formatRelativeTime(job.lastRun.time)}
-            {job.lastRun.success ? <CheckCircle2 className="h-3 w-3 text-green-500" /> : <XCircle className="h-3 w-3 text-red-500" />}
-          </p>
-        )}
-        {job.nextRun && job.enabled && (
-          <p className="text-[11px] text-muted-foreground/70 flex items-center gap-1">
-            <Calendar className="h-3 w-3" />下次: {new Date(job.nextRun).toLocaleString()}
-          </p>
-        )}
-        <div className="flex justify-end gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button variant="ghost" size="sm" onClick={handleTrigger} disabled={triggering}
-            className="h-7 px-2 text-[12px] rounded-md text-foreground/70">
-            {triggering ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Play className="h-3 w-3 mr-1" />}立即运行
-          </Button>
-          <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className="h-7 px-2 text-[12px] rounded-md text-destructive/70 hover:text-destructive hover:bg-destructive/10">
-            <Trash2 className="h-3 w-3 mr-1" />删除
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Simple inline cron dialog
-function SimpleCronDialog({ job, onClose, onSave }: { job?: CronJob; onClose: () => void; onSave: (input: CronJobCreateInput) => Promise<void> }) {
-  const [name, setName] = useState(job?.name ?? '');
-  const [message, setMessage] = useState(job?.message ?? '');
-  const [schedule, setSchedule] = useState(() => {
-    const s = job?.schedule;
-    if (!s) return '0 9 * * *';
-    if (typeof s === 'string') return s;
-    if (typeof s === 'object' && 'expr' in (s as object)) return (s as { expr: string }).expr;
-    return '0 9 * * *';
-  });
-  const [saving, setSaving] = useState(false);
-  const schedulePresets = [
-    { label: '每分钟', value: '* * * * *' },
-    { label: '每5分钟', value: '*/5 * * * *' },
-    { label: '每小时', value: '0 * * * *' },
-    { label: '每天9点', value: '0 9 * * *' },
-  ];
-  const handleSubmit = async () => {
-    if (!name.trim() || !message.trim()) { toast.error('请填写名称和消息'); return; }
-    setSaving(true);
-    try { await onSave({ name: name.trim(), message: message.trim(), schedule, enabled: true }); onClose(); toast.success(job ? '任务已更新' : '任务已创建'); }
-    catch (err) { toast.error(String(err)); }
-    finally { setSaving(false); }
-  };
-  return (
-    <div className="fixed inset-0 z-[100] bg-canvas-gradient/80 backdrop-blur-md flex items-center justify-center p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-2xl border border-glass-border bg-canvas-gradient shadow-2xl p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-xl font-semibold text-foreground">{job ? '编辑任务' : '创建任务'}</h3>
-        <div className="space-y-2">
-          <Label className={labelCls}>任务名称</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="日报提醒" className={inputCls} />
-        </div>
-        <div className="space-y-2">
-          <Label className={labelCls}>消息内容</Label>
-          <Textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3}
-            placeholder="请生成今日工作报告" className="rounded-xl font-mono text-[13px] bg-[hsl(var(--glass-bg)/0.5)] border-glass-border resize-none" />
-        </div>
-        <div className="space-y-2">
-          <Label className={labelCls}>执行计划</Label>
-          <div className="grid grid-cols-2 gap-2">
-            {schedulePresets.map((p) => (
-              <button key={p.value} onClick={() => setSchedule(p.value)}
-                className={cn('rounded-xl border px-3 py-2 text-[13px] font-medium text-left transition-colors',
-                  schedule === p.value ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-primary/5', glassNestedCard)}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-          <Input value={schedule} onChange={(e) => setSchedule(e.target.value)} placeholder="cron 表达式" className={cn(inputCls, 'mt-1')} />
-        </div>
-        <div className="flex justify-end gap-2 pt-2">
-          <Button variant="outline" onClick={onClose} className="h-9 rounded-md px-4 text-[13px] border-glass-border">取消</Button>
-          <Button onClick={() => void handleSubmit()} disabled={saving} className="h-9 rounded-md px-4 text-[13px]">
-            {saving && <RefreshCw className="h-4 w-4 animate-spin mr-2" />}保存
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TasksTab({ agentId }: { agentId: string }) {
-  const [jobs, setJobs] = useState<CronJob[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showDialog, setShowDialog] = useState(false);
-  const [editingJob, setEditingJob] = useState<CronJob | undefined>();
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
-
-  const fetchJobs = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await hostApiFetch<CronJob[]>(
-        `/api/cron/jobs?agentId=${encodeURIComponent(agentId)}`
-      );
-      setJobs(Array.isArray(res) ? res : []);
-    } catch {
-      setJobs([]);
-    } finally { setLoading(false); }
-  }, [agentId]);
-
-  useEffect(() => { void fetchJobs(); }, [fetchJobs]);
-
-  const handleSave = async (input: CronJobCreateInput) => {
-    if (editingJob) {
-      await hostApiFetch(`/api/cron/jobs/${encodeURIComponent(editingJob.id)}`, { method: 'PUT', body: JSON.stringify(input) });
-    } else {
-      await hostApiFetch('/api/cron/jobs', { method: 'POST', body: JSON.stringify({ ...input, agentId }) });
-    }
-    await fetchJobs();
-  };
-
-  const handleToggle = async (id: string, enabled: boolean) => {
-    await hostApiFetch(`/api/cron/jobs/${encodeURIComponent(id)}/toggle`, { method: 'PUT', body: JSON.stringify({ enabled }) });
-    setJobs((prev) => prev.map((j) => j.id === id ? { ...j, enabled } : j));
-  };
-
-  const handleDelete = async (id: string) => {
-    await hostApiFetch(`/api/cron/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    setJobs((prev) => prev.filter((j) => j.id !== id));
-    toast.success('任务已删除');
-  };
-
-  const handleTrigger = async (id: string) => {
-    await hostApiFetch(`/api/cron/jobs/${encodeURIComponent(id)}/trigger`, { method: 'POST' });
-  };
-
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <p className="text-[14px] text-muted-foreground">管理该智能体的专属定时任务</p>
-        <Button onClick={() => { setEditingJob(undefined); setShowDialog(true); }}
-          className="h-9 rounded-md px-4 text-[13px] font-medium shadow-none">
-          <Plus className="mr-2 h-4 w-4" />新建任务
-        </Button>
-      </div>
-      {loading ? (
-        <div className="flex h-40 items-center justify-center"><LoadingSpinner /></div>
-      ) : jobs.length === 0 ? (
-        <div className={cn('flex flex-col items-center justify-center rounded-md border border-dashed border-border py-16 text-muted-foreground', glassNestedCard)}>
-          <Clock className="mb-3 h-8 w-8 opacity-40" />
-          <p className="text-[14px]">暂无任务，点击右上角新建</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {jobs.map((job) => (
-            <CronItem key={job.id} job={job}
-              onToggle={(enabled) => void handleToggle(job.id, enabled)}
-              onEdit={() => { setEditingJob(job); setShowDialog(true); }}
-              onDelete={() => setDeleteTarget(job.id)}
-              onTrigger={() => handleTrigger(job.id)}
-            />
-          ))}
-        </div>
-      )}
-      {showDialog && (
-        <SimpleCronDialog job={editingJob} onClose={() => { setShowDialog(false); setEditingJob(undefined); }} onSave={handleSave} />
-      )}
-      <ConfirmDialog open={!!deleteTarget} title="删除任务" message="确认删除该任务？"
-        confirmLabel="删除" cancelLabel="取消" variant="destructive"
-        onConfirm={async () => { if (deleteTarget) await handleDelete(deleteTarget); setDeleteTarget(null); }}
-        onCancel={() => setDeleteTarget(null)} />
-    </div>
-  );
-}
-
 // ── Channels Tab ──────────────────────────────────────────────────────────────
 interface ChannelAccountItem {
   accountId: string;
@@ -1241,13 +1007,12 @@ interface AgentDetailPageProps {
 export function AgentDetailPage({ agent, onBack }: AgentDetailPageProps) {
   const { t } = useTranslation('agents');
   const [tab, setTab] = useState('info');
-  const hiddenTabs = new Set(['skills', 'tasks']);
+  const hiddenTabs = new Set(['skills']);
 
   const tabs = [
     { value: 'info', label: t('detail.tabInfo'), icon: <FileText className="h-4 w-4" /> },
     { value: 'model', label: t('detail.tabModel'), icon: <Cpu className="h-4 w-4" /> },
     { value: 'skills', label: t('detail.tabSkills'), icon: <Puzzle className="h-4 w-4" /> },
-    { value: 'tasks', label: t('detail.tabTasks'), icon: <Clock className="h-4 w-4" /> },
     { value: 'channels', label: t('detail.tabChannels'), icon: <MessagesSquare className="h-4 w-4" /> },
   ];
 
@@ -1311,9 +1076,6 @@ export function AgentDetailPage({ agent, onBack }: AgentDetailPageProps) {
           </TabsContent>
           <TabsContent value="skills" forceMount className={tab !== 'skills' ? 'hidden' : ''}>
             <SkillsTab agentId={agent.id} />
-          </TabsContent>
-          <TabsContent value="tasks" forceMount className={tab !== 'tasks' ? 'hidden' : ''}>
-            <TasksTab agentId={agent.id} />
           </TabsContent>
           <TabsContent value="channels" forceMount className={tab !== 'channels' ? 'hidden' : ''}>
             <ChannelsTab agent={agent} />

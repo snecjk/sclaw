@@ -4,11 +4,18 @@ import { useTranslation } from 'react-i18next';
 import { Progress } from '@/components/ui/progress';
 import { UpdateDownloadProgress } from '@/components/settings/update/UpdateDownloadProgress';
 import type { ProgressInfo } from '@/stores/update';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useUpdateStore } from '@/stores/update';
 import { cn } from '@/lib/utils';
 import { dismissUpdate, isUpdateDismissed } from '@/lib/update-dismiss-storage';
 import { UpdateContentModal } from './update-content-modal';
+
+const SIDEBAR_TOOLTIP_CLASS = cn(
+  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
+  'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
+  'dark:bg-[#2E3038] dark:text-white dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)]',
+);
+const SIDEBAR_TOOLTIP_ARROW_CLASS = 'fill-[#1D2129] dark:fill-[#2E3038]';
 
 interface SidebarUpdateNoticeProps {
   collapsed: boolean;
@@ -299,7 +306,10 @@ export function SidebarUpdateNotice({ collapsed }: SidebarUpdateNoticeProps) {
                   <UpdateSyncGlyph spinning={previewUiStatus === 'downloading'} />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">{previewCollapsedLabel}</TooltipContent>
+              <TooltipContent side="right" className={SIDEBAR_TOOLTIP_CLASS}>
+                {previewCollapsedLabel}
+                <TooltipArrow className={SIDEBAR_TOOLTIP_ARROW_CLASS} />
+              </TooltipContent>
             </Tooltip>
           </div>
           <UpdateContentModal
@@ -351,7 +361,10 @@ export function SidebarUpdateNotice({ collapsed }: SidebarUpdateNoticeProps) {
                 <UpdateSyncGlyph spinning={status === 'downloading' || status === 'installing'} />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="right">{collapsedLabel}</TooltipContent>
+            <TooltipContent side="right" className={SIDEBAR_TOOLTIP_CLASS}>
+              {collapsedLabel}
+              <TooltipArrow className={SIDEBAR_TOOLTIP_ARROW_CLASS} />
+            </TooltipContent>
           </Tooltip>
         </div>
         <UpdateContentModal

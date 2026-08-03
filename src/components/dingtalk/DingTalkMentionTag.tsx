@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
-import type { DingTalkSentRecipientKind } from '../../../shared/dingtalk-sent-display';
+import type { DingTalkSentRecipientKind } from '../../../shared/dingtalk-send/dingtalk-sent-display';
 
 /** 与输入框 @ 标签一致的配色（见 dingtalk-mention-composer MENTION_SPAN_BASE_CLASS）。 */
 export const dingTalkMentionTagClassName = [

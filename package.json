@@ -1,6 +1,6 @@
 {
     "name": "stoclaw",
-    "version": "2026.7.28-GA.1",
+    "version": "2026.7.31-GA.1",
     "pnpm": {
         "onlyBuiltDependencies": [
             "@discordjs/opus",
@@ -94,11 +94,13 @@
         "@mistralai/mistralai": "^1.14.1",
         "@qdrant/js-client-rest": "^1.18.0",
         "@supabase/supabase-js": "^2.110.2",
+        "@xyflow/react": "^12.11.2",
         "ajv": "^6.12.6",
         "better-sqlite3": "^12.11.1",
         "clawhub": "^0.5.0",
         "cloudflare": "^4.5.0",
         "compromise": "^14.15.1",
+        "croner": "^10.0.1",
         "electron-store": "^11.0.2",
         "electron-updater": "^6.8.3",
         "extract-zip": "^2.0.1",
@@ -171,7 +173,6 @@
         "react-i18next": "^16.5.4",
         "react-markdown": "^10.1.0",
         "react-router-dom": "^7.13.0",
-        "reactflow": "11.11.4",
         "remark-gfm": "^4.0.1",
         "sharp": "^0.34.5",
         "sonner": "^2.0.7",

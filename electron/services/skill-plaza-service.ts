@@ -9,6 +9,7 @@ import { getOpenClawConfigDir, getOpenClawSkillsDir, getSkillsManifestPath, getS
 import { getCurrentActiveUserCode } from './user-skill-workspace';
 import { readPreinstalledManifestSlugs } from '../utils/skill-config';
 import { getStoToken, getAuthState, isSiteUser } from '../utils/auth-store';
+import { SAI_CLIENT_ID_VALUE } from '../utils/sai-client-id';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
 import { resolveStoBaseUrl } from '../utils/sto-domain';
 import { logger } from '../utils/logger';
@@ -80,6 +81,8 @@ export interface SkillSummary {
   forceUpdate?: boolean;
   /** Remote plaza `is_builtin` — auto-install when missing (not local preinstall). */
   isBuiltin?: boolean;
+  /** Remote plaza `skill_kind` — skill (default) or prompt. */
+  skillKind?: 'skill' | 'prompt';
   /** False when slug is in resources/skills/preinstalled-manifest.json. */
   canUninstall?: boolean;
 }
@@ -236,6 +239,7 @@ class PythonApiClient {
     if (params.page !== undefined) qs.set('page', String(params.page));
     if (params.pageSize !== undefined) qs.set('page_size', String(params.pageSize));
     if (categorys) qs.set('categorys', categorys);
+    qs.set('agent_code', SAI_CLIENT_ID_VALUE);
 
     const query = qs.toString();
     const endpoint = query ? `/agent/v1/skills/plaza?${query}` : '/agent/v1/skills/plaza';
@@ -244,9 +248,10 @@ class PythonApiClient {
   }
 
   async getSkillDetail(slug: string): Promise<SkillDetail> {
+    const qs = new URLSearchParams({ agent_code: SAI_CLIENT_ID_VALUE });
     const raw = await this.request<Record<string, unknown>>(
       'GET',
-      `/agent/v1/skills/plaza/${encodeURIComponent(slug)}`,
+      `/agent/v1/skills/plaza/${encodeURIComponent(slug)}?${qs.toString()}`,
       undefined,
       DETAIL_REQUEST_TIMEOUT_MS,
     );
@@ -343,6 +348,7 @@ function normalizeSkillSummary(skill: Partial<SkillSummary>): SkillSummary {
     updateAvailable: skill.updateAvailable ?? false,
     forceUpdate: skill.forceUpdate ?? false,
     isBuiltin: skill.isBuiltin ?? false,
+    skillKind: skill.skillKind === 'prompt' ? 'prompt' : 'skill',
     canUninstall: skill.canUninstall,
   };
 }

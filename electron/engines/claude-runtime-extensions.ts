@@ -21,14 +21,14 @@ import {
 import { buildUserSkillHooks } from '../../sto-plugin/claude/sto-user-skill-tool/hooks';
 import {
   isScheduledTaskExecutionSessionKey,
-  SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT,
+  SCHEDULED_TASK_CORE_PROMPT,
 } from '../../shared/scheduled-task-instruction';
 import {
   buildStoAgentTelemetryClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-agent-telemetry/sdk';
 import { getAuthState, getStoToken } from '../utils/auth-store';
 import { logger } from '../utils/logger';
-import { resolveStoBaseUrl } from '../utils/sto-domain';
+import { PORTS } from '../utils/config';
 
 export interface ClaudeRuntimeOptions {
   hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
@@ -87,14 +87,14 @@ const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
 
 const workflowToolExtension: ClaudeRuntimeExtension = {
   id: 'sto-workflow-tool',
-  async build() {
+  async build({ sessionKey }) {
     const stoToken = await getStoToken();
     if (!stoToken) {
       logger.warn('[claude-workflow] STO token is unavailable; workflow tools will not be registered');
       return {};
     }
 
-    const baseUrl = await resolveStoBaseUrl();
+    const baseUrl = `http://127.0.0.1:${PORTS.CLAWX_HOST_API}`;
     logger.info(`[claude-workflow] registering workflow tools baseUrl=${baseUrl}`);
 
     return {
@@ -104,6 +104,7 @@ const workflowToolExtension: ClaudeRuntimeExtension = {
         'sto-workflow-tool': createWorkflowMcpServer({
           baseUrl,
           stoToken,
+          sessionKey,
         }),
       },
     };
@@ -117,7 +118,8 @@ const scheduledTaskToolExtension: ClaudeRuntimeExtension = {
     if (isExecutionContext) {
       return {
         hooks: buildScheduledTaskHooks(sessionKey),
-        systemPromptAppend: SCHEDULED_TASK_EXECUTION_SYSTEM_PROMPT,
+        // 模块 B：纯执行语义。钉钉格式/必发由执行器 systemPromptAppend 条件注入。
+        systemPromptAppend: SCHEDULED_TASK_CORE_PROMPT,
       };
     }
 

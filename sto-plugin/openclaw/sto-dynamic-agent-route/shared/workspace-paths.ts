@@ -1,6 +1,7 @@
 /**
  * Self-contained copy for Gateway extension install (~/.stoclaw/openclaw/extensions/...).
  * Keep in sync with repository root `shared/workspace-paths.ts`.
+ * Regenerate: `pnpm run sync:plugin-shared`
  */
 export const DEFAULT_WORKSPACE_TILDE = '~/.stoclaw/workspace';
 export const LEGACY_OPENCLAW_MAIN_WORKSPACE_TILDE = '~/.stoclaw/openclaw/workspace';

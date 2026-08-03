@@ -3,6 +3,7 @@ import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-sess
 import { STO_TASK_IDS, type StoTaskId } from '@/lib/sto-tasks';
 import { parseClaudeScheduledTaskSessionKey, parseCronSessionKey } from '@/stores/chat/cron-session-utils';
 import { stoTaskSubitemKey } from '@/stores/sto-task-subitems';
+import { isWorkflowOpenClawSessionKey } from '../../shared/workflow-openclaw-session';
 
 const ENTRY_YMD = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -46,7 +47,8 @@ export function isSidebarHiddenChatSessionKey(sessionKey: string): boolean {
     isMainAgentChatSessionKey(sessionKey) ||
     isSclawBrowserEmbedChatSessionKey(sessionKey) ||
     isClaudeScheduledTaskSummarySessionKey(sessionKey) ||
-    isCronRunSessionKey(sessionKey)
+    isCronRunSessionKey(sessionKey) ||
+    isWorkflowOpenClawSessionKey(sessionKey)
   );
 }
 

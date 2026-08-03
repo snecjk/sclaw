@@ -819,6 +819,20 @@ export async function createAgentWithId(
     const existsOnDisk = diskIds.has(id);
 
     if (existsInConfig) {
+      // `skipBootstrap` was written by older StoClaw versions but is not part
+      // of the current OpenClaw agent schema. Remove it while repairing the
+      // entry so a Gateway reload can start successfully.
+      const existingAgent = entries.find((entry) => entry.id === id)!;
+      const { skipBootstrap: _legacySkipBootstrap, ...agentWithoutLegacyBootstrap } = existingAgent;
+      if (options?.workspace || _legacySkipBootstrap !== undefined) {
+        const index = entries.findIndex((entry) => entry.id === id);
+        entries[index] = {
+          ...agentWithoutLegacyBootstrap,
+          ...(options.workspace ? { workspace: options.workspace.trim() } : {}),
+        };
+        config.agents = { ...agentsConfig, list: entries };
+        await writeOpenClawConfig(config);
+      }
       logger.info('createAgentWithId: agent already in config (idempotent)', { agentId: id });
       return await buildSnapshotFromConfig(config);
     }
@@ -846,7 +860,9 @@ export async function createAgentWithId(
       list: nextEntries,
     };
 
-    await provisionAgentFilesystem(config, newAgent, { inheritWorkspace: options?.inheritWorkspace });
+    await provisionAgentFilesystem(config, newAgent, {
+      inheritWorkspace: options?.inheritWorkspace,
+    });
     await writeOpenClawConfig(config);
 
     const features = await readAgentFeatures();

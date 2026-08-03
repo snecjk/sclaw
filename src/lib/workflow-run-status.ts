@@ -8,6 +8,7 @@ export {
   normalizeRunArtifacts,
   resolveWorkflowArtifactUrl,
   collectAllRunArtifacts,
+  collectFinalRunArtifacts,
   earliestNodeRunStartedAt,
   resolveWorkflowRunStartedAt,
   workflowRunResponseToExecutionState,

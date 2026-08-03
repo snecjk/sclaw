@@ -101,15 +101,21 @@ export function RecommendCard({
     navigate(`/?skill=${encodeURIComponent(skillSlug)}`);
   }, [isSkillDisabled, navigate, skillSlug]);
 
+  // 模版生成实例时会在名称末尾追加 " HH:mm" 时间标识；推荐卡仅展示模版语义名。
+  const displayTitle =
+    item.item_type === 'workflow_instance'
+      ? item.title.replace(/\s+\d{1,2}:\d{2}$/, '')
+      : item.title;
+
   return (
     <div className={cn(homeHubInteractiveCardShellClass, 'text-left')}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className={cn(homeHubCardTitleClass, 'truncate')}>{item.title}</h3>
-            {item.item_type ? (
+            <h3 className={cn(homeHubCardTitleClass, 'truncate')}>{displayTitle}</h3>
+            {item.category ? (
               <span className={cn('shrink-0', homeHubCardTagClass)}>
-                {t('agentHub.functionTag')}
+                {item.category}
               </span>
             ) : null}
           </div>

@@ -34,6 +34,10 @@ export type CanvasNodeData = {
   subtitle: string;
   summary?: string;
   status: string;
+  workflowNode?: WorkflowNode;
+  workflow?: WorkflowDefinition;
+  onNodeChange?: (node: WorkflowNode) => void;
+  onDeleteNode?: (nodeId: string) => void;
 };
 
 export type CanvasNodeView = {

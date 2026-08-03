@@ -4,10 +4,20 @@
  * 对应原型 .task-record-detail-modal
  */
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import { hostApiFetch } from '@/lib/host-api';
 import type { ExecutionRecord, RecordStatus } from '../types';
+
+interface ArtifactSaveRecord {
+  id: string;
+  artifactName: string;
+  targetLabel: string | null;
+  status: 'pending' | 'uploading' | 'succeeded' | 'failed';
+  dataCenterPathLabel: string | null;
+  errorMessage: string | null;
+}
 
 /** Format duration from milliseconds into a localized string */
 function formatDurationI18n(
@@ -63,6 +73,7 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 
 export function RecordDetailModal({ record, onClose }: RecordDetailModalProps) {
   const { t } = useTranslation('tasks');
+  const [saveRecords, setSaveRecords] = useState<ArtifactSaveRecord[]>([]);
 
   // Escape 键关闭
   const handleKeyDown = useCallback(
@@ -78,6 +89,26 @@ export function RecordDetailModal({ record, onClose }: RecordDetailModalProps) {
       return () => document.removeEventListener('keydown', handleKeyDown);
     }
   }, [record, handleKeyDown]);
+
+  useEffect(() => {
+    if (!record?.id) {
+      setSaveRecords([]);
+      return;
+    }
+    let cancelled = false;
+    hostApiFetch<ArtifactSaveRecord[]>(
+      `/api/artifact-save-records?runId=${encodeURIComponent(record.id)}&limit=50`,
+    )
+      .then((records) => {
+        if (!cancelled) setSaveRecords(records);
+      })
+      .catch(() => {
+        if (!cancelled) setSaveRecords([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [record?.id]);
 
   if (!record) return null;
 
@@ -145,6 +176,38 @@ export function RecordDetailModal({ record, onClose }: RecordDetailModalProps) {
               <span className="text-destructive">{record.failReason}</span>
             </DetailRow>
           )}
+
+          {saveRecords.length > 0 ? (
+            <div className="mt-3 rounded-xl border border-border bg-muted/20 p-3">
+              <div className="mb-2 text-sm font-semibold text-foreground">数据中心保存</div>
+              <div className="flex flex-col gap-2">
+                {saveRecords.map((item) => (
+                  <div key={item.id} className="rounded-lg bg-background px-3 py-2 text-xs">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="min-w-0 truncate font-medium text-foreground">{item.artifactName}</span>
+                      <span
+                        className={cn(
+                          'shrink-0 rounded-full px-2 py-0.5',
+                          item.status === 'succeeded'
+                            ? 'bg-success/10 text-success'
+                            : item.status === 'failed'
+                              ? 'bg-destructive/10 text-destructive'
+                              : 'bg-primary/10 text-primary',
+                        )}
+                      >
+                        {item.status === 'succeeded' ? '成功' : item.status === 'failed' ? '失败' : '保存中'}
+                      </span>
+                    </div>
+                    <div className="mt-1 truncate text-muted-foreground">
+                      {item.status === 'failed'
+                        ? item.errorMessage || '保存失败'
+                        : item.dataCenterPathLabel || item.targetLabel || '-'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
