@@ -1,87 +1,82 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import { VOICE_LEVEL_BAR_COUNT } from '@/lib/voice-asr';
 
 /** 距底部小于该值时视为「仍贴底」，新转写继续自动滚到底。 */
 const STICK_BOTTOM_THRESHOLD_PX = 40;
 
 export type VoiceComposerMode = 'listening' | 'confirm' | 'waiting';
 
-/** 临听：精致光核 + 阳光柔光向外扩散（装饰动画，不跟麦克风音量） */
-export function VoiceListeningOrb({ className }: { className?: string }) {
-  const shineRef = useRef<HTMLSpanElement>(null);
+const FALLBACK_LEVELS = Array.from({ length: VOICE_LEVEL_BAR_COUNT }, () => 0.06);
 
-  // 内高光随机扭动：不等间隔游走，避免固定频率循环
-  useEffect(() => {
-    const el = shineRef.current;
-    if (!el) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+type VoiceBarsTone = 'active' | 'dim' | 'idle';
 
-    let cancelled = false;
-    let timer = 0;
-
-    const tick = () => {
-      if (cancelled || !shineRef.current) return;
-      const node = shineRef.current;
-      const top = 1 + Math.random() * 6;
-      const left = 1 + Math.random() * 6;
-      const rotate = -40 + Math.random() * 80;
-      const scale = 0.75 + Math.random() * 0.55;
-      const opacity = 0.45 + Math.random() * 0.55;
-      const duration = 0.35 + Math.random() * 0.95;
-
-      node.style.transition = `top ${duration}s ease-in-out, left ${duration}s ease-in-out, transform ${duration}s ease-in-out, opacity ${duration}s ease-in-out`;
-      node.style.top = `${top}px`;
-      node.style.left = `${left}px`;
-      node.style.transform = `rotate(${rotate}deg) scale(${scale})`;
-      node.style.opacity = String(opacity);
-
-      // 下一次在「差不多走完」前后随机再拐，避免节拍感
-      const nextIn = duration * 1000 * (0.45 + Math.random() * 0.75);
-      timer = window.setTimeout(tick, nextIn);
-    };
-
-    tick();
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, []);
+/**
+ * 居中细声线：由真实麦音频谱驱动；无 levels 时显示底线。
+ */
+export function VoiceListeningBars({
+  className,
+  tone = 'active',
+  levels,
+}: {
+  className?: string;
+  tone?: VoiceBarsTone;
+  /** 0–1，长度建议 VOICE_LEVEL_BAR_COUNT */
+  levels?: number[];
+}) {
+  const bins = levels && levels.length > 0 ? levels : FALLBACK_LEVELS;
+  const live = tone === 'active' || tone === 'dim';
 
   return (
     <div
-      className={cn('relative flex h-14 w-14 items-center justify-center', className)}
+      className={cn(
+        'stoclaw-voice-soundline mx-auto flex h-9 w-full max-w-[520px] items-center justify-center gap-[1.5px]',
+        tone === 'dim' && 'opacity-55',
+        tone === 'idle' && 'opacity-60',
+        className,
+      )}
       aria-hidden
     >
-      <span className="stoclaw-voice-glow stoclaw-voice-glow--warm" />
-      <span className="stoclaw-voice-glow stoclaw-voice-glow--gold stoclaw-voice-glow--d1" />
-      <span className="stoclaw-voice-glow stoclaw-voice-glow--peach stoclaw-voice-glow--d2" />
-      {/* 外柔晕 → 主光核 → 内高光，三层叠出体积感 */}
-      <span className="stoclaw-voice-orb-halo" />
-      <span className="stoclaw-voice-orb relative z-10">
-        <span className="stoclaw-voice-orb-core" />
-        <span ref={shineRef} className="stoclaw-voice-orb-shine" />
-      </span>
+      {bins.map((level, i) => {
+        // 频谱已在中间→两侧对称排布，这里只轻微收两端，避免边角毛刺
+        const t = bins.length <= 1 ? 0.5 : i / (bins.length - 1);
+        const envelope = Math.pow(Math.sin(t * Math.PI), 0.35);
+        const raw = live ? Math.min(1, Math.max(0.03, level)) : 0.08;
+        const h = Math.max(0.06, raw * (0.5 + 0.5 * envelope));
+        return (
+          <span
+            key={i}
+            className="stoclaw-voice-soundline-bar stoclaw-voice-soundline-bar--live"
+            style={{
+              height: `${Math.round(h * 100)}%`,
+              opacity: 0.45 + h * 0.55,
+            }}
+          />
+        );
+      })}
     </div>
   );
 }
 
-/** @deprecated 使用 VoiceListeningOrb */
-export const VoiceWaveform = VoiceListeningOrb;
+/** @deprecated 大光核已停用；保留导出以免外部引用断裂 */
+export function VoiceListeningOrb({ className }: { className?: string }) {
+  return <VoiceListeningBars className={className} tone="active" />;
+}
+
+/** @deprecated 使用 VoiceListeningBars */
+export const VoiceWaveform = VoiceListeningBars;
 
 /** 语音模式：一小段音波沿输入框上沿从左向右滚过 */
 const VOICE_EDGE_BAR_HEIGHTS = (() => {
   const n = 14;
   return Array.from({ length: n }, (_, i) => {
     const t = (i / (n - 1)) * Math.PI;
-    // 中间高、两端收成尖，整段只占上沿一小截
     const envelope = Math.sin(t);
     const ripple = 0.45 + 0.55 * Math.abs(Math.sin(i * 1.7 + 0.3));
     return Math.max(0.2, envelope * ripple);
   });
 })();
 
-/** 每根条不同周期/相位，滚动时高度错落变化，避免整段硬平移 */
 const VOICE_EDGE_BAR_MOTION = VOICE_EDGE_BAR_HEIGHTS.map((_, i) => ({
   durationSec: 0.38 + (i % 5) * 0.09 + (i % 3) * 0.04,
   delaySec: (i * 0.07) % 0.85,
@@ -91,7 +86,6 @@ export function VoiceTopCrawlWave({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        // inset 避开左右圆角：只在上沿平直段滚动，避免角上像悬浮
         'stoclaw-voice-edge pointer-events-none absolute z-20',
         className,
       )}
@@ -121,29 +115,26 @@ interface VoiceComposerPanelProps {
   statusLabel: string;
   transcript: string;
   connecting?: boolean;
-  /** 确认倒计时剩余秒数（向上取整展示） */
+  /** 实时麦声音频谱 0–1 */
+  levels?: number[];
   confirmSecondsLeft?: number;
-  /** 确认阶段顶部提示，如「准备自动发送」 */
   confirmTitle?: string;
-  cancelLabel?: string;
-  onCancelConfirm?: () => void;
   className?: string;
   compact?: boolean;
 }
 
 /**
  * Replaces the text editor while voice ASR is active.
- * Listening indicator is decorative (CSS only), not driven by microphone level.
+ * Centered live soundline + status + short transcript preview.
  */
 export function VoiceComposerPanel({
   mode = 'listening',
   statusLabel,
   transcript,
   connecting = false,
+  levels,
   confirmSecondsLeft,
   confirmTitle,
-  cancelLabel,
-  onCancelConfirm,
   className,
   compact = false,
 }: VoiceComposerPanelProps) {
@@ -170,41 +161,41 @@ export function VoiceComposerPanel({
     });
   }, [transcript]);
 
-  const showListening = mode === 'listening';
-  const dimListening = connecting || mode === 'waiting';
   const isConfirm = mode === 'confirm';
+  const barsTone: VoiceBarsTone = mode === 'waiting'
+    ? 'idle'
+    : connecting || mode !== 'listening'
+      ? 'dim'
+      : 'active';
 
   return (
     <div
       className={cn(
-        'flex w-full flex-col items-center justify-center gap-3 rounded-xl',
-        compact ? 'min-h-[72px] py-3' : 'min-h-[96px] py-4',
+        'flex w-full flex-col items-center justify-center gap-1.5',
+        compact ? 'min-h-[56px] py-1' : 'min-h-[64px] flex-1 py-1.5',
         className,
       )}
     >
-      {showListening ? (
-        <VoiceListeningOrb className={dimListening ? 'opacity-50' : undefined} />
-      ) : mode === 'waiting' ? (
-        <div className="flex h-11 items-center justify-center" aria-hidden>
-          <span className="h-2 w-2 animate-pulse rounded-full bg-primary/80" />
-        </div>
-      ) : (
-        <div className="flex min-h-11 flex-col items-center justify-center gap-1">
+      {isConfirm ? (
+        <div className="flex w-full items-center justify-center gap-2">
+          <div className="tabular-nums text-[18px] font-semibold leading-none text-primary">
+            {typeof confirmSecondsLeft === 'number' ? confirmSecondsLeft : '—'}
+          </div>
           {confirmTitle ? (
-            <p className="text-[12px] font-medium text-primary/90">
+            <p className="truncate text-[12px] font-medium text-primary/90">
               {confirmTitle}
             </p>
           ) : null}
-          <div className="text-[22px] font-semibold tabular-nums leading-none text-primary">
-            {typeof confirmSecondsLeft === 'number' ? confirmSecondsLeft : '—'}
-          </div>
         </div>
+      ) : (
+        <>
+          <VoiceListeningBars tone={barsTone} levels={levels} />
+          <p className="max-w-full truncate text-center text-[12px] font-medium leading-none text-primary/90">
+            {statusLabel}
+          </p>
+        </>
       )}
-      {!isConfirm ? (
-        <p className="text-[12px] font-medium text-primary/90">
-          {statusLabel}
-        </p>
-      ) : null}
+
       <div
         ref={transcriptRef}
         onScroll={syncStickFromScroll}
@@ -213,8 +204,8 @@ export function VoiceComposerPanel({
           requestAnimationFrame(syncStickFromScroll);
         }}
         className={cn(
-          'max-h-28 w-full overflow-y-auto overscroll-contain px-1',
-          'text-center text-[14px] leading-relaxed text-foreground/90',
+          'max-h-10 w-full min-h-0 overflow-y-auto overscroll-contain px-1',
+          'text-center text-[13px] leading-[1.35] text-foreground/90',
           !transcript && 'text-muted-foreground/70',
         )}
         role="log"
@@ -225,17 +216,6 @@ export function VoiceComposerPanel({
           {transcript || '…'}
         </p>
       </div>
-      {isConfirm && onCancelConfirm ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-0.5 h-8 rounded-full px-4 text-[12px]"
-          onClick={onCancelConfirm}
-        >
-          {cancelLabel || '取消'}
-        </Button>
-      ) : null}
     </div>
   );
 }

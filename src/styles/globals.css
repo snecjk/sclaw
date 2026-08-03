@@ -1067,6 +1067,35 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
   will-change: transform, opacity;
 }
 
+/* 输入区居中细声线（实时麦音量驱动，无 CSS 起伏动画） */
+.stoclaw-voice-soundline-bar {
+  flex: 0 0 1px;
+  width: 1px;
+  min-width: 1px;
+  max-width: 1px;
+  align-self: center;
+  border-radius: 9999px;
+  background: linear-gradient(
+    180deg,
+    hsl(38 100% 78% / 0.95) 0%,
+    hsl(var(--primary)) 48%,
+    hsl(var(--primary) / 0.7) 100%
+  );
+  box-shadow: 0 0 3px hsl(var(--primary) / 0.22);
+  transform-origin: center center;
+  will-change: height, opacity;
+}
+
+.stoclaw-voice-soundline-bar--live {
+  transition: height 45ms linear, opacity 45ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stoclaw-voice-soundline-bar--live {
+    transition: none;
+  }
+}
+
 /* Glassmorphism toast override */
 [data-sonner-toaster] [data-sonner-toast] {
   background: hsl(var(--glass-bg) / var(--glass-opacity)) !important;

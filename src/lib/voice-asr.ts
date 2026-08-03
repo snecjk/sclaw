@@ -65,6 +65,8 @@ const MEMORY_CENTER_BASE: Record<SsoEnvironment, string> = {
 
 const TARGET_SAMPLE_RATE = 16000;
 const SCRIPT_BUFFER_SIZE = 4096;
+/** 声纹条数（与 UI 一致） */
+export const VOICE_LEVEL_BAR_COUNT = 64;
 
 export function resolveMemoryCenterHttpBase(ssoEnvironment: SsoEnvironment): string {
   return MEMORY_CENTER_BASE[ssoEnvironment] || MEMORY_CENTER_BASE['production-external'];
@@ -136,6 +138,8 @@ export type VoiceAsrSessionHandlers = {
   onEvent?: (event: VoiceAsrServerEvent) => void;
   onError?: (message: string) => void;
   onClose?: () => void;
+  /** 0–1 频段电平，供声纹 UI 跟随真实麦音量 */
+  onLevel?: (levels: Float32Array) => void;
 };
 
 /**
@@ -149,6 +153,10 @@ export class VoiceAsrSession {
   private processor: ScriptProcessorNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
   private silentGain: GainNode | null = null;
+  private analyser: AnalyserNode | null = null;
+  private levelRaf = 0;
+  private levelFrame = 0;
+  private readonly levelBins = new Float32Array(VOICE_LEVEL_BAR_COUNT);
   private ready = false;
   private closed = false;
   private pendingChunks: ArrayBuffer[] = [];
@@ -230,6 +238,20 @@ export class VoiceAsrSession {
 
     const source = audioContext.createMediaStreamSource(mediaStream);
     this.source = source;
+
+    // 频谱分析 → UI 声纹（与 PCM 推流并行）
+    if (this.handlers.onLevel) {
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      // 更跟手：少平滑、放宽动态范围，小声也更容易顶起来
+      analyser.smoothingTimeConstant = 0.45;
+      analyser.minDecibels = -90;
+      analyser.maxDecibels = -18;
+      this.analyser = analyser;
+      source.connect(analyser);
+      this.startLevelPump();
+    }
+
     // ScriptProcessor 已弃用但仍是 Electron/Chromium 下最稳妥的跨版本方案
     const processor = audioContext.createScriptProcessor(SCRIPT_BUFFER_SIZE, 1, 1);
     this.processor = processor;
@@ -258,6 +280,52 @@ export class VoiceAsrSession {
     source.connect(processor);
     processor.connect(silentGain);
     silentGain.connect(audioContext.destination);
+  }
+
+  private startLevelPump(): void {
+    const analyser = this.analyser;
+    const onLevel = this.handlers.onLevel;
+    if (!analyser || !onLevel) return;
+
+    const freq = new Uint8Array(analyser.frequencyBinCount);
+    const tick = () => {
+      if (this.closed || !this.analyser) {
+        this.levelRaf = 0;
+        return;
+      }
+      this.levelRaf = window.requestAnimationFrame(tick);
+      // ~30fps 推 UI，减轻 React 压力
+      this.levelFrame += 1;
+      if (this.levelFrame % 2 !== 0) return;
+
+      analyser.getByteFrequencyData(freq);
+      const bars = this.levelBins;
+      const n = bars.length;
+      // 人声主要在偏低中频，略跳过直流/超高频
+      const usable = Math.max(8, Math.floor(freq.length * 0.72));
+      const start = 2;
+      const span = Math.max(1, usable - start);
+      // 中间 → 两侧对称：中心吃低频（人声能量），越靠边越高频
+      const mid = (n - 1) / 2;
+      for (let i = 0; i < n; i += 1) {
+        const dist = mid <= 0 ? 0 : Math.abs(i - mid) / mid;
+        const t0 = start + Math.floor(dist * span * 0.999);
+        const t1 = Math.min(start + span, t0 + Math.max(1, Math.floor(span / (n / 2))));
+        let sum = 0;
+        let count = 0;
+        for (let t = t0; t < t1; t += 1) {
+          sum += freq[t] ?? 0;
+          count += 1;
+        }
+        const raw = (sum / Math.max(1, count)) / 255;
+        // 提高增益 + 更陡曲线；中心略加重，强化「从中间荡开」
+        const centerBoost = 1 + (1 - dist) * 0.35;
+        const shaped = Math.pow(Math.min(1, raw * 2.15 * centerBoost), 0.62);
+        bars[i] = Math.max(0.03, shaped);
+      }
+      onLevel(bars);
+    };
+    this.levelRaf = window.requestAnimationFrame(tick);
   }
 
   stop(): void {
@@ -313,6 +381,17 @@ export class VoiceAsrSession {
   }
 
   private async cleanupMedia(): Promise<void> {
+    if (this.levelRaf) {
+      window.cancelAnimationFrame(this.levelRaf);
+      this.levelRaf = 0;
+    }
+    try {
+      this.analyser?.disconnect();
+    } catch {
+      // ignore
+    }
+    this.analyser = null;
+
     try {
       this.processor?.disconnect();
     } catch {

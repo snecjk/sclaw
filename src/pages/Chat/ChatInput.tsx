@@ -326,6 +326,13 @@ export function ChatInput({
     setVoiceConfirmRemainMs(0);
   }, []);
 
+  /** 「取消自动发送」：退出语音循环，保留草稿供手动编辑/发送 */
+  const handleCancelVoiceAutoSend = useCallback(() => {
+    cancelVoiceConfirm();
+    resumeListenAfterAgentRef.current = false;
+    clearVoiceLoop();
+  }, [cancelVoiceConfirm, clearVoiceLoop]);
+
   const exitVoiceLoop = useCallback(() => {
     resumeListenAfterAgentRef.current = false;
     clearVoiceLoop();
@@ -337,6 +344,7 @@ export function ChatInput({
     partialText: voicePartialText,
     finalsText: voiceFinalsText,
     isActive: voiceRecording,
+    levels: voiceLevels,
     start: startVoiceInput,
     stop: stopVoiceInput,
   } = useVoiceAsr({
@@ -1213,6 +1221,7 @@ export function ChatInput({
                   connecting={voiceStatus === 'connecting' || voiceStatus === 'stopping'}
                   statusLabel={voiceStatusLabel}
                   transcript={voicePreviewText}
+                  levels={voiceMode === 'listening' ? voiceLevels : undefined}
                   confirmSecondsLeft={
                     voiceConfirming
                       ? Math.max(1, Math.ceil(voiceConfirmRemainMs / 1000))
@@ -1221,8 +1230,6 @@ export function ChatInput({
                   confirmTitle={
                     voiceConfirming ? t('composer.voiceConfirmPreparing') : undefined
                   }
-                  cancelLabel={t('composer.voiceConfirmCancel')}
-                  onCancelConfirm={voiceConfirming ? cancelVoiceConfirm : undefined}
                 />
               ) : null}
               <div className={cn(voicePanelOpen && 'hidden')}>
@@ -1384,6 +1391,18 @@ export function ChatInput({
 
               <div className="flex min-w-0 items-center gap-2">
                 {voicePanelOpen ? null : toolbarInlineSelectors}
+                {voiceConfirming ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-[30px] shrink-0 rounded-full px-3 text-[12px]"
+                    onClick={handleCancelVoiceAutoSend}
+                    title={t('composer.voiceConfirmCancel')}
+                  >
+                    {t('composer.voiceConfirmCancel')}
+                  </Button>
+                ) : null}
                 <Button
                   variant="ghost"
                   type="button"
@@ -1391,14 +1410,14 @@ export function ChatInput({
                   className={cn(
                     'h-[30px] w-[30px] shrink-0 rounded-[16px]',
                     homeToolbarIconBtn,
-                    voicePanelOpen || (voiceLoopActive && voiceBoundToCurrentSession)
+                    voicePanelOpen
                       ? 'bg-red-500/15 text-red-500 hover:bg-red-500/20 hover:text-red-500'
                       : undefined,
                   )}
                   onClick={handleMicClick}
                   disabled={disabled || (sending && !voiceLoopActive && !voiceConfirming)}
                   title={voiceButtonTitle}
-                  aria-pressed={voicePanelOpen || (voiceLoopActive && voiceBoundToCurrentSession)}
+                  aria-pressed={voicePanelOpen}
                 >
                   {voiceStatus === 'connecting' ? (
                     <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
@@ -1562,20 +1581,32 @@ export function ChatInput({
 
             {/* When sending: show Send (to queue) if there's input, otherwise show Stop */}
             <div className="flex items-center gap-1.5">
+              {voiceConfirming ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 shrink-0 rounded-full px-3 text-[12px]"
+                  onClick={handleCancelVoiceAutoSend}
+                  title={t('composer.voiceConfirmCancel')}
+                >
+                  {t('composer.voiceConfirmCancel')}
+                </Button>
+              ) : null}
               <Button
                 variant="ghost"
                 type="button"
                 size="icon"
                 className={cn(
                   'h-9 w-9 shrink-0 rounded-full border transition-all',
-                  voicePanelOpen || (voiceLoopActive && voiceBoundToCurrentSession)
+                  voicePanelOpen
                     ? 'border-red-500/40 bg-red-500/15 text-red-500 hover:bg-red-500/20'
                     : 'border-transparent text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
                 )}
                 onClick={handleMicClick}
                 disabled={disabled || (sending && !voiceLoopActive && !voiceConfirming)}
                 title={voiceButtonTitle}
-                aria-pressed={voicePanelOpen || (voiceLoopActive && voiceBoundToCurrentSession)}
+                aria-pressed={voicePanelOpen}
               >
                 {voiceStatus === 'connecting' ? (
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />

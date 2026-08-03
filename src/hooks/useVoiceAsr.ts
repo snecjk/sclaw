@@ -10,12 +10,15 @@ import {
   fetchVoiceModels,
   resolveMemoryCenterHttpBase,
   resolveTranscriptIdleMs,
+  VOICE_LEVEL_BAR_COUNT,
   VoiceAsrSession,
   type VoiceAsrServerEvent,
 } from '@/lib/voice-asr';
 import { useAuthStore } from '@/stores/auth';
 
 export type VoiceAsrStatus = 'idle' | 'connecting' | 'recording' | 'stopping';
+
+const IDLE_LEVELS = () => Array.from({ length: VOICE_LEVEL_BAR_COUNT }, () => 0.06);
 
 export interface UseVoiceAsrOptions {
   /** 每次收到 partial / final 时回调（可用于预览） */
@@ -49,6 +52,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
   const [partialText, setPartialText] = useState('');
   const [finalsText, setFinalsText] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [levels, setLevels] = useState<number[]>(IDLE_LEVELS);
 
   const sessionRef = useRef<VoiceAsrSession | null>(null);
   const finalsRef = useRef('');
@@ -96,6 +100,7 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
     lastIdleTextRef.current = '';
     setPartialText('');
     setFinalsText('');
+    setLevels(IDLE_LEVELS());
   }, []);
 
   const failSession = useCallback((message: string) => {
@@ -350,6 +355,10 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
             failSession(tip);
           }
         },
+        onLevel: (bins) => {
+          // 拷贝一份给 React，避免与 analyser 缓冲共用引用
+          setLevels(Array.from(bins));
+        },
       });
       sessionRef.current = session;
       await session.start({ wsUrl, sampleRate });
@@ -394,6 +403,8 @@ export function useVoiceAsr(options: UseVoiceAsrOptions = {}) {
     partialText,
     finalsText,
     error,
+    /** 实时麦声音频谱 0–1，供声纹 UI */
+    levels,
     isActive: status === 'recording' || status === 'connecting' || status === 'stopping',
     start,
     stop,
