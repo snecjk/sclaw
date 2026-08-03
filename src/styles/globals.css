@@ -1048,10 +1048,11 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
 [data-sonner-toaster].sto-global-toaster
   [data-sonner-toast][data-styled='true']
   [data-button]:not([data-cancel]):focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
-  box-shadow: none;
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+    box-shadow: none;
 }
+
 /* Composer voice mode — sunlight bloom diffusion around listening orb */
 @keyframes stoclaw-voice-glow {
   0% {
