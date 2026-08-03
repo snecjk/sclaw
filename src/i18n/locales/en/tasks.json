@@ -100,7 +100,7 @@
     },
     "templateModal": {
       "title": "Official Recommended",
-      "subtitle": "Select an official recommendation to quickly create a scheduled task",
+      "subtitle": "Pick a workflow, skill, or prompt to fill the task description",
       "empty": "No official recommendations available",
       "instantiating": "Creating…",
       "openExisting": "Continue editing",
@@ -111,7 +111,7 @@
       "searchNoMatch": "No matching tasks found",
       "noTasks": "No scheduled tasks",
       "noTasksDescription": "Create scheduled tasks to automate recurring AI agent work",
-      "officialAria": "Official recommended workflows",
+      "officialAria": "Official recommendations",
       "templateFallbackCategory": "Workflow template",
       "addTemplate": "Official Recommended"
     },

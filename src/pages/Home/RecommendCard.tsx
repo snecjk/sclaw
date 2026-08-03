@@ -32,6 +32,11 @@ export interface RecommendCardProps {
   item: RecommendItem;
   onClick: () => void;
   onSkillInstalled?: () => void;
+  /**
+   * 覆盖默认「新会话 + ?skill=」行为。
+   * MyTask 等场景传入后：安装/更新完成或已安装点击时走该回调，不再跳转对话。
+   */
+  onSkillUse?: () => void;
   skillStatus?: {
     installed: boolean;
     enabled?: boolean;
@@ -46,6 +51,7 @@ export function RecommendCard({
   item,
   onClick,
   onSkillInstalled,
+  onSkillUse,
   skillStatus,
   skillStatusLoading = false,
 }: RecommendCardProps) {
@@ -60,12 +66,16 @@ export function RecommendCard({
   const isSkillUpdateAvailable =
     skillStatus?.updateAvailable ?? item.skill_update_available ?? false;
 
-  /** 已安装技能：新会话 + ?skill= 预填芯片 */
+  /** 已安装技能：默认新会话 + ?skill=；可由 onSkillUse 覆盖 */
   const handleSkillUse = useCallback(() => {
     if (isSkillDisabled) return;
+    if (onSkillUse) {
+      onSkillUse();
+      return;
+    }
     useChatStore.getState().newSession();
     navigate(`/?skill=${encodeURIComponent(skillSlug)}`);
-  }, [isSkillDisabled, navigate, skillSlug]);
+  }, [isSkillDisabled, navigate, onSkillUse, skillSlug]);
 
   /** 安装/更新后刷新状态并进入使用 */
   const handleSkillInstallThenUse = useCallback(() => {

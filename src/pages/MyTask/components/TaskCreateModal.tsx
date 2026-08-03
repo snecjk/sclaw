@@ -620,7 +620,10 @@ export function TaskCreateModal({
     <AnimatePresence>
       {open && (
         <TaskCreateModalInner
-          key={job?.id ?? `workflow:${initialValues?.workflowCode ?? '__create__'}`}
+          key={
+            job?.id ??
+            `create:${initialValues?.workflowCode ?? initialValues?.message ?? '__create__'}`
+          }
           job={job}
           onClose={onClose}
           onSave={onSave}
