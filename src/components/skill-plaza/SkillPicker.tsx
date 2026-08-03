@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
-import { Search, Wrench } from 'lucide-react';
+import { Plus, Search, Wrench } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
@@ -14,6 +14,7 @@ import {
   skillPickerShellClass,
 } from '@/lib/surfaces';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
+import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 
 export interface SkillPickerProps {
   open: boolean;
@@ -22,6 +23,7 @@ export interface SkillPickerProps {
   query: string;
   onSelect: (skill: { slug: string; title: string }) => void;
   onClose: () => void;
+  onAddMore?: () => void;
   className?: string;
 }
 
@@ -43,7 +45,7 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
 }
 
 export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
-  ({ open, mode, query: inlineQuery, onSelect, onClose, className }, ref) => {
+  ({ open, mode, query: inlineQuery, onSelect, onClose, onAddMore, className }, ref) => {
     const { t } = useTranslation('chat');
     const [toolbarQuery, setToolbarQuery] = useState('');
     const mySkills = useSkillPlazaStore((s) => s.mySkills);
@@ -51,6 +53,8 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
     const fetchLocalSkills = useSkillPlazaStore((s) => s.fetchLocalSkills);
 
     const prevOpenRef = useRef(false);
+    const listViewportRef = useRef<HTMLDivElement>(null);
+    const listContentRef = useRef<HTMLDivElement>(null);
     useEffect(() => {
       if (!open) {
         const timer = setTimeout(() => setToolbarQuery(''), 0);
@@ -95,65 +99,78 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
         aria-label={t('composer.skillPickerAriaLabel')}
         className={cn(skillPickerShellClass, className)}
       >
-        <div className="px-3 py-2 text-[11px] font-medium text-muted-foreground/80">
-          {t('composer.skillPickerTitle')}
-        </div>
-
         {mode === 'toolbar' ? (
-          <div className="flex items-center gap-2 px-2 py-1.5">
-            <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <div className="mb-1 flex h-[34px] w-[264px] items-center gap-2 rounded-lg border border-[#E5E6EB] bg-white px-3 dark:border-white/10 dark:bg-white/[0.03]">
+            <Search className="h-4 w-4 shrink-0 text-[#A7ADB8]" strokeWidth={2} aria-hidden />
             <input
               value={toolbarQuery}
               onChange={(e) => setToolbarQuery(e.target.value)}
               placeholder={t('composer.skillSearchPlaceholder')}
               aria-label={t('composer.skillSearchPlaceholder')}
-              className="flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground/50"
+              className="h-full flex-1 bg-transparent text-[12px] font-normal text-[#111827] outline-none placeholder:text-[#C9CDD4]"
               autoFocus
             />
           </div>
         ) : null}
 
-        <div className={cn(skillPickerListClass, 'mt-1')}>
-          {loading && mySkills.length === 0 ? (
-            <div className="px-3 py-2 text-[12px] text-muted-foreground">
-              {t('composer.skillLoading')}
-            </div>
-          ) : null}
-          {!loading && items.length === 0 ? (
-            <div className="px-3 py-2 text-[12px] text-muted-foreground">
-              {t('composer.skillNoInstalled')}
-            </div>
-          ) : null}
-          {!loading && items.length > 0 && filtered.length === 0 ? (
-            <div className="px-3 py-2 text-[12px] text-muted-foreground">
-              {t('composer.skillNoResults')}
-            </div>
-          ) : null}
-          {filtered.map((skill) => (
-            <button
-              key={skill.slug}
-              type="button"
-              role="option"
-              onClick={() => {
-                onSelect({ slug: skill.slug, title: skill.title });
-                onClose();
-              }}
-              className={skillPickerRowClass}
-            >
-              <Wrench className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-              <div className="min-w-0">
-                <div className="truncate text-[13px] font-medium text-foreground">
-                  <HighlightedText text={skill.title} query={activeQuery} />
+        <div className="relative mt-1 min-h-0 flex-1 overflow-hidden">
+          <div ref={listViewportRef} className={cn('sto-overlay-scroll-viewport', skillPickerListClass)}>
+            <div ref={listContentRef}>
+              {loading && mySkills.length === 0 ? (
+                <div className="px-3 py-2 text-[12px] text-muted-foreground">
+                  {t('composer.skillLoading')}
                 </div>
-                {skill.description ? (
-                  <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                    <HighlightedText text={skill.description} query={activeQuery} />
+              ) : null}
+              {!loading && items.length === 0 ? (
+                <div className="px-3 py-2 text-[12px] text-muted-foreground">
+                  {t('composer.skillNoInstalled')}
+                </div>
+              ) : null}
+              {!loading && items.length > 0 && filtered.length === 0 ? (
+                <div className="px-3 py-2 text-[12px] text-muted-foreground">
+                  {t('composer.skillNoResults')}
+                </div>
+              ) : null}
+              {filtered.map((skill) => (
+                <button
+                  key={skill.slug}
+                  type="button"
+                  role="option"
+                  onClick={() => {
+                    onSelect({ slug: skill.slug, title: skill.title });
+                    onClose();
+                  }}
+                  className={skillPickerRowClass}
+                >
+                  <Wrench className="mt-0.5 h-3 w-3 shrink-0 text-[#1D2129]" strokeWidth={2} aria-hidden />
+                  <div className="min-w-0">
+                    <div className="truncate text-[12px] font-normal leading-4 text-[#111827] dark:text-foreground">
+                      <HighlightedText text={skill.title} query={activeQuery} />
+                    </div>
+                    {skill.description ? (
+                      <div className="mt-0.5 truncate text-[10px] font-normal leading-3.5 text-[#86909C]">
+                        <HighlightedText text={skill.description} query={activeQuery} />
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
-            </button>
-          ))}
+                </button>
+              ))}
+            </div>
+          </div>
+          <OverlayScrollbar viewportRef={listViewportRef} contentRef={listContentRef} />
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            onAddMore?.();
+          }}
+          className="mt-1 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[#E5E6EB] bg-white text-[12px] font-medium text-[#1D2129] transition-colors hover:bg-[#F0F2F5] dark:border-white/10 dark:bg-white/[0.03] dark:text-foreground dark:hover:bg-white/[0.06]"
+        >
+          <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+          <span>{t('composer.skillAddMore')}</span>
+        </button>
       </div>
     );
   },

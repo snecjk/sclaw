@@ -7,6 +7,7 @@
  * are sent with the message (no base64 over WebSocket).
  */
 import { useState, useRef, useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   SendHorizontal,
   Square,
@@ -33,6 +34,7 @@ import {
 import { useGatewayStore } from '@/stores/gateway';
 import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { getProjectIdFromProjectAgentId } from '../../../shared/project-agent';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import type { AgentSummary } from '@/types/agent';
@@ -225,6 +227,7 @@ export function ChatInput({
   toolbarInlineSelectors,
 }: ChatInputProps) {
   const { t } = useTranslation('chat');
+  const navigate = useNavigate();
   const [composerSnapshot, setComposerSnapshot] = useState<MentionComposerSnapshot>({
     plainText: '',
     mentions: [],
@@ -477,6 +480,12 @@ export function ChatInput({
       return !open;
     });
   }, []);
+
+  const handleAddMoreSkills = useCallback(() => {
+    useSkillPlazaStore.setState({ activeTab: 'all', activeCategory: '', searchQuery: '' });
+    setSkillPickerOpen(false);
+    navigate('/skills');
+  }, [navigate]);
 
   const toggleQuickInputPicker = useCallback(() => {
     setSkillPickerOpen(false);
@@ -1015,6 +1024,7 @@ export function ChatInput({
                   }
                   setSkillPickerOpen(false);
                 }}
+                onAddMore={handleAddMoreSkills}
               />
             </div>
           </div>
