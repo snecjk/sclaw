@@ -21,6 +21,13 @@ function mergeMentionItems(
   return merged;
 }
 
+function sortMentionItems(items: MentionSearchItem[]): MentionSearchItem[] {
+  return [...items].sort((a, b) => {
+    if (a.type === b.type) return 0;
+    return a.type === 'user' ? -1 : 1;
+  });
+}
+
 export function useDingTalkMention(trigger: ActiveMentionTrigger | null, enabled = true) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<MentionSearchItem[]>([]);
@@ -76,7 +83,7 @@ export function useDingTalkMention(trigger: ActiveMentionTrigger | null, enabled
           queryToSearch ? 20 : RECENT_PAGE_SIZE,
         );
         if (requestIdRef.current !== requestId) return;
-        setItems(result.items);
+        setItems(sortMentionItems(result.items));
         setRecent(result.recent === true);
         setHasMore(result.hasMore === true);
         setNextCursor(result.nextCursor ?? null);
@@ -115,7 +122,7 @@ export function useDingTalkMention(trigger: ActiveMentionTrigger | null, enabled
     try {
       const result = await searchDingTalkMentions('', RECENT_PAGE_SIZE, nextCursor);
       if (requestIdRef.current !== requestId) return;
-      setItems((prev) => mergeMentionItems(prev, result.items));
+      setItems((prev) => sortMentionItems(mergeMentionItems(prev, result.items)));
       setHasMore(result.hasMore === true);
       setNextCursor(result.nextCursor ?? null);
     } catch (err) {

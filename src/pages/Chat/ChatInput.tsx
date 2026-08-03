@@ -960,6 +960,27 @@ export function ChatInput({
                 ),
           )}
         >
+          <DingTalkMentionPopover
+            open={dingTalkMentionOpen}
+            items={dingTalkItems}
+            query={mentionTrigger?.query ?? ''}
+            recent={dingTalkRecent}
+            loading={dingTalkLoading}
+            loadingMore={dingTalkLoadingMore}
+            hasMore={dingTalkHasMore}
+            loggingIn={dingTalkLoggingIn}
+            installing={dingTalkInstalling}
+            error={dingTalkError}
+            needsAuth={dingTalkNeedsAuth}
+            needsInstall={dingTalkNeedsInstall}
+            activeIndex={dingTalkActiveIndex}
+            onHoverIndex={setDingTalkActiveIndex}
+            onSelect={applyDingTalkMention}
+            onLogin={loginDingTalkMention}
+            onInstall={installDingTalkMention}
+            onLoadMore={loadMoreDingTalkMentions}
+          />
+
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
               {attachments.map((att) => (
@@ -1004,26 +1025,6 @@ export function ChatInput({
               : cn(attachments.length > 0 ? 'pt-1.5' : 'pt-2.5'),
           )}>
             <div ref={mentionPopoverRef} className="relative flex-1 overflow-visible">
-              <DingTalkMentionPopover
-                open={dingTalkMentionOpen}
-                items={dingTalkItems}
-                query={mentionTrigger?.query ?? ''}
-                recent={dingTalkRecent}
-                loading={dingTalkLoading}
-                loadingMore={dingTalkLoadingMore}
-                hasMore={dingTalkHasMore}
-                loggingIn={dingTalkLoggingIn}
-                installing={dingTalkInstalling}
-                error={dingTalkError}
-                needsAuth={dingTalkNeedsAuth}
-                needsInstall={dingTalkNeedsInstall}
-                activeIndex={dingTalkActiveIndex}
-                onHoverIndex={setDingTalkActiveIndex}
-                onSelect={applyDingTalkMention}
-                onLogin={loginDingTalkMention}
-                onInstall={installDingTalkMention}
-                onLoadMore={loadMoreDingTalkMentions}
-              />
               <DingTalkMentionEditor
                 ref={mentionEditorRef}
                 placeholder={composerPlaceholder}
