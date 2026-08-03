@@ -87,7 +87,7 @@ export function adaptConnectorDescriptor(value: unknown): ConnectorDescriptor | 
 }
 
 export async function fetchConnectorCatalog(): Promise<ConnectorDescriptor[]> {
-  const value = await memoryCenterFetchForSession('/agent/v1/app-plaza/connectors', {
+  const value = await memoryCenterFetchForSession('/agent/v1/connectors', {
     method: 'POST',
   });
   const data = assertEnvelope<unknown[]>(value, '连接器目录').data;
