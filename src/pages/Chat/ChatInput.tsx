@@ -238,6 +238,7 @@ export function ChatInput({
   const [targetAgentId, setTargetAgentId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const mentionEditorRef = useRef<DingTalkMentionEditorHandle>(null);
+  const composerShellRef = useRef<HTMLDivElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const mentionPopoverRef = useRef<HTMLDivElement>(null);
   const workflowPickerRef = useRef<HTMLDivElement>(null);
@@ -248,6 +249,7 @@ export function ChatInput({
   const skillButtonRef = useRef<HTMLButtonElement>(null);
   const isComposingRef = useRef(false);
   const [workflowPickerOpen, setWorkflowPickerOpen] = useState(false);
+  const workflowPickerSlashOpenRef = useRef(false);
   const [quickInputPickerOpen, setQuickInputPickerOpen] = useState(false);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [skillPickerMode, setSkillPickerMode] = useState<'inline' | 'toolbar'>('inline');
@@ -499,7 +501,21 @@ export function ChatInput({
     mentionEditorRef.current?.focus();
   }, [skillPickerInlineQuery, skillPickerMode]);
 
+  const handleComposerSnapshotChange = useCallback((snapshot: MentionComposerSnapshot) => {
+    setComposerSnapshot(snapshot);
+    if (
+      workflowPickerSlashOpenRef.current
+      && workflowPickerOpen
+      && !snapshot.workflowId
+      && !snapshot.plainText.includes('/')
+    ) {
+      workflowPickerSlashOpenRef.current = false;
+      setWorkflowPickerOpen(false);
+    }
+  }, [workflowPickerOpen]);
+
   const toggleSkillPickerToolbar = useCallback(() => {
+    workflowPickerSlashOpenRef.current = false;
     setWorkflowPickerOpen(false);
     setQuickInputPickerOpen(false);
     setSkillPickerOpen((open) => {
@@ -516,8 +532,24 @@ export function ChatInput({
     navigate('/skills');
   }, [navigate]);
 
+  const handleTextInput = useCallback((text: string) => {
+    if (text !== '/' || workflowPickerOpen || composerSnapshot.workflowId || isComposingRef.current) {
+      return;
+    }
+
+    if (dingTalkMentionOpen) {
+      closeDingTalkMention();
+      setMentionTrigger(null);
+    }
+    setSkillPickerOpen(false);
+    setQuickInputPickerOpen(false);
+    workflowPickerSlashOpenRef.current = true;
+    setWorkflowPickerOpen(true);
+  }, [closeDingTalkMention, composerSnapshot.workflowId, dingTalkMentionOpen, workflowPickerOpen]);
+
   const toggleQuickInputPicker = useCallback(() => {
     setSkillPickerOpen(false);
+    workflowPickerSlashOpenRef.current = false;
     setWorkflowPickerOpen(false);
     setQuickInputPickerOpen((open) => !open);
   }, []);
@@ -799,22 +831,6 @@ export function ChatInput({
         setTargetAgentId(null);
         return;
       }
-      // Trigger workflow picker when typing /
-      const hasWorkflowInEditor = !!composerSnapshot.workflowId;
-      if (e.key === '/' && !workflowPickerOpen && !hasWorkflowInEditor) {
-        const nativeEvent = e.nativeEvent as KeyboardEvent;
-        if (!isComposingRef.current && !nativeEvent.isComposing && nativeEvent.keyCode !== 229) {
-          // Close mention popover if open
-          if (dingTalkMentionOpen) {
-            closeDingTalkMention();
-            setMentionTrigger(null);
-          }
-          setSkillPickerOpen(false);
-          setQuickInputPickerOpen(false);
-          setWorkflowPickerOpen(true);
-        }
-      }
-
       // 暂时关闭 `*` 触发技能列表；恢复时取消下方注释
       // const hasSkillInEditor = !!composerSnapshot.skill;
       // if (e.key === '*' && !hasSkillInEditor) {
@@ -849,15 +865,12 @@ export function ChatInput({
       dingTalkItems,
       dingTalkMentionOpen,
       composerSnapshot.isEmpty,
-      composerSnapshot.skill,
-      composerSnapshot.workflowId,
       handleSend,
       moveDingTalkActive,
       skillPickerMode,
       skillPickerOpen,
       quickInputPickerOpen,
       targetAgentId,
-      workflowPickerOpen,
     ],
   );
 
@@ -937,6 +950,7 @@ export function ChatInput({
       <div className="w-full">
         {/* 单壳：附件缩略图与输入区同在一个圆角边框内（与 memory-center-web 助手输入一致） */}
         <div
+          ref={composerShellRef}
           className={cn(
             isHomeComposer
               ? cn(
@@ -1031,8 +1045,9 @@ export function ChatInput({
                 disabled={disabled}
                 seedText={seedText}
                 seedSkillSlug={seedSkillSlug}
-                onSnapshotChange={setComposerSnapshot}
+                onSnapshotChange={handleComposerSnapshotChange}
                 onTriggerChange={setMentionTrigger}
+                onTextInput={handleTextInput}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 onCompositionStart={() => {
@@ -1144,6 +1159,7 @@ export function ChatInput({
                       onClick={() => {
                         setSkillPickerOpen(false);
                         setQuickInputPickerOpen(false);
+                        workflowPickerSlashOpenRef.current = false;
                         setWorkflowPickerOpen((open) => !open);
                       }}
                       disabled={disabled}
@@ -1214,12 +1230,24 @@ export function ChatInput({
                 ref={workflowPickerRef}
                 open={workflowPickerOpen}
                 anchorRef={workflowButtonRef}
-                onClose={() => setWorkflowPickerOpen(false)}
+                composerRef={composerShellRef}
+                onClose={() => {
+                  workflowPickerSlashOpenRef.current = false;
+                  setWorkflowPickerOpen(false);
+                }}
                 onSelect={async (id, name) => {
+                  workflowPickerSlashOpenRef.current = false;
                   setWorkflowPickerOpen(false);
                   const { useChatStore } = await import('@/stores/chat');
                   useChatStore.getState().clearPendingWorkflow();
                   mentionEditorRef.current?.insertWorkflow(id, name, 'mine');
+                  mentionEditorRef.current?.focus();
+                }}
+                onSelectSkill={({ slug, title }) => {
+                  workflowPickerSlashOpenRef.current = false;
+                  setWorkflowPickerOpen(false);
+                  mentionEditorRef.current?.consumeSlashTrigger();
+                  mentionEditorRef.current?.insertSkill(slug, title);
                   mentionEditorRef.current?.focus();
                 }}
               />
@@ -1315,6 +1343,7 @@ export function ChatInput({
                   onClick={() => {
                     setSkillPickerOpen(false);
                     setQuickInputPickerOpen(false);
+                    workflowPickerSlashOpenRef.current = false;
                     setWorkflowPickerOpen((open) => !open);
                   }}
                   disabled={disabled}
@@ -1347,12 +1376,24 @@ export function ChatInput({
               ref={workflowPickerRef}
               open={workflowPickerOpen}
               anchorRef={workflowButtonRef}
-              onClose={() => setWorkflowPickerOpen(false)}
+              composerRef={composerShellRef}
+              onClose={() => {
+                workflowPickerSlashOpenRef.current = false;
+                setWorkflowPickerOpen(false);
+              }}
               onSelect={async (id, name) => {
+                workflowPickerSlashOpenRef.current = false;
                 setWorkflowPickerOpen(false);
                 const { useChatStore } = await import('@/stores/chat');
                 useChatStore.getState().clearPendingWorkflow();
                 mentionEditorRef.current?.insertWorkflow(id, name, 'mine');
+                mentionEditorRef.current?.focus();
+              }}
+              onSelectSkill={({ slug, title }) => {
+                workflowPickerSlashOpenRef.current = false;
+                setWorkflowPickerOpen(false);
+                mentionEditorRef.current?.consumeSlashTrigger();
+                mentionEditorRef.current?.insertSkill(slug, title);
                 mentionEditorRef.current?.focus();
               }}
             />

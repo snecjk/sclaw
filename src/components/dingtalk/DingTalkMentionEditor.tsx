@@ -17,6 +17,7 @@ import {
   insertPlainTextAtCaret,
   insertWorkflowSpan,
   consumeSkillTriggerText,
+  consumeSlashTriggerText,
   MENTION_SPAN_SELECTOR,
   removeMentionBeforeCaret,
   removeMentionSpan,
@@ -61,6 +62,7 @@ export interface DingTalkMentionEditorHandle {
   insertWorkflow: (workflowId: string, name: string, source?: string) => void;
   insertSkill: (slug: string, title: string) => void;
   consumeSkillInlineTrigger: (query?: string) => boolean;
+  consumeSlashTrigger: () => boolean;
   removeSkill: () => void;
   /** 插入 `@` 并打开钉钉 mention 选择（与手动输入 `@` 等价） */
   openMentionPicker: () => void;
@@ -74,6 +76,7 @@ interface DingTalkMentionEditorProps {
   onTriggerChange?: (trigger: ActiveMentionTrigger | null) => void;
   onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   onKeyUp?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
+  onTextInput?: (text: string) => void;
   onPaste?: (event: React.ClipboardEvent<HTMLDivElement>) => void;
   onCompositionStart?: () => void;
   onCompositionEnd?: () => void;
@@ -94,6 +97,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       onTriggerChange,
       onKeyDown,
       onKeyUp,
+      onTextInput,
       onPaste,
       onCompositionStart,
       onCompositionEnd,
@@ -193,6 +197,15 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         }
         return consumed;
       },
+      consumeSlashTrigger: () => {
+        const root = editorRef.current;
+        if (!root) return false;
+        const consumed = consumeSlashTriggerText(root);
+        if (consumed) {
+          syncFromDom();
+        }
+        return consumed;
+      },
       removeSkill: () => {
         const root = editorRef.current;
         if (!root) return;
@@ -242,9 +255,13 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       syncFromDom();
     }, [seedSkillSlug, syncFromDom]);
 
-    const handleInput = useCallback(() => {
+    const handleInput = useCallback((event: React.FormEvent<HTMLDivElement>) => {
+      const nativeEvent = event.nativeEvent as InputEvent;
+      if (typeof nativeEvent.data === 'string' && nativeEvent.data.length > 0) {
+        onTextInput?.(nativeEvent.data);
+      }
       syncFromDom();
-    }, [syncFromDom]);
+    }, [onTextInput, syncFromDom]);
 
     const handleMentionRemove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
       const target = event.target as HTMLElement;

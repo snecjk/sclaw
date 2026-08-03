@@ -191,6 +191,18 @@ export function consumeSkillTriggerText(root: HTMLElement, explicitQuery?: strin
   return true;
 }
 
+export function consumeSlashTriggerText(root: HTMLElement): boolean {
+  const plainText = serializeMentionEditor(root).plainText;
+  const startIdx = plainText.lastIndexOf('/');
+  if (startIdx === -1) return false;
+
+  const range = buildRangeFromPlainTextOffsets(root, startIdx, startIdx + 1);
+  if (!range) return false;
+
+  range.deleteContents();
+  return true;
+}
+
 function collectTextBeforeCaret(root: HTMLElement, range: Range): string {
   const preRange = document.createRange();
   preRange.selectNodeContents(root);

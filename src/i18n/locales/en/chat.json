@@ -91,6 +91,8 @@
         "workflowLoading": "Loading...",
         "workflowNoResults": "No matching templates",
         "workflowNoTemplates": "No workflows",
+        "workflowPickerSectionTitle": "Workflows",
+        "skillPickerSectionTitle": "Skills",
         "workflowManage": "Manage workflows",
         "workflowClear": "Clear workflow",
         "quickInputTitle": "Quick inputs",
