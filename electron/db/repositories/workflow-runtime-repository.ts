@@ -21,6 +21,13 @@ function nowIso(): string {
   return formatShanghaiIso();
 }
 
+export function toCloudWorkflowRunPayload(
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  const { trigger_type: _localTriggerType, ...cloudRun } = source;
+  return cloudRun;
+}
+
 export class WorkflowRuntimeRepository {
   private async runDatabaseId(runRef: string | number): Promise<number> {
     if (typeof runRef === 'number') return runRef;
@@ -67,6 +74,78 @@ export class WorkflowRuntimeRepository {
       .executeTakeFirst();
   }
 
+  async registerChatRunCard(run_id: string, metadata: {
+    sessionKey: string;
+    anchorUserMessageId?: string | null;
+    title?: string | null;
+    paramsSummary?: string | null;
+  }): Promise<boolean> {
+    const db = getKyselyDatabase();
+    const existing = await db
+      .selectFrom('wf_run')
+      .select(['session_key', 'chat_anchor_user_message_id', 'chat_card_title', 'chat_params_summary'])
+      .where('run_id', '=', run_id)
+      .executeTakeFirst();
+    if (!existing) return false;
+    if (existing.session_key && existing.session_key !== metadata.sessionKey) return false;
+
+    const result = await db
+      .updateTable('wf_run')
+      .set({
+        session_key: existing.session_key ?? metadata.sessionKey,
+        chat_card_visible: 1,
+        chat_anchor_user_message_id: metadata.anchorUserMessageId ?? existing.chat_anchor_user_message_id,
+        chat_card_title: metadata.title ?? existing.chat_card_title,
+        chat_params_summary: metadata.paramsSummary ?? existing.chat_params_summary,
+        updated_at: nowIso(),
+      })
+      .where('run_id', '=', run_id)
+      .executeTakeFirst();
+    return Number(result.numUpdatedRows ?? 0) > 0;
+  }
+
+  async listChatRunCardRefsBySession(session_key: string): Promise<any[]> {
+    return getKyselyDatabase()
+      .selectFrom('wf_run')
+      .select([
+        'run_id', 'workflow_id', 'session_key', 'chat_anchor_user_message_id', 'chat_card_title',
+        'chat_params_summary', 'started_at',
+      ])
+      .where('session_key', '=', session_key)
+      .where('chat_card_visible', '=', 1)
+      .where('deleted_at', 'is', null)
+      .orderBy('started_at', 'asc')
+      .orderBy('run_id', 'asc')
+      .execute();
+  }
+
+  async isChatRunCardVisible(run_id: string): Promise<boolean> {
+    const row = await getKyselyDatabase()
+      .selectFrom('wf_run')
+      .select('run_id')
+      .where('run_id', '=', run_id)
+      .where('chat_card_visible', '=', 1)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return Boolean(row);
+  }
+
+  /** Status/detail projection; excludes definition, startup input, and agent-result bodies. */
+  async getRunSummary(run_id: string, options: { includeTimelineText?: boolean } = {}): Promise<any> {
+    const db = getKyselyDatabase();
+    const base = db
+      .selectFrom('wf_run')
+      .where('run_id', '=', run_id);
+    const columns = [
+        'run_id', 'workflow_id', 'status', 'waiting_node_id', 'output_json',
+        'error', 'started_at', 'completed_at',
+      ] as const;
+    if (options.includeTimelineText) {
+      return base.select([...columns, 'last_agent_raw_text']).executeTakeFirst();
+    }
+    return base.select(columns).executeTakeFirst();
+  }
+
   /** Update a run only while it is non-terminal. Returns whether a row changed. */
   async updateRunIfActive(run_id: string, patch: any): Promise<boolean> {
     const db = getKyselyDatabase();
@@ -102,7 +181,7 @@ export class WorkflowRuntimeRepository {
     const db = getKyselyDatabase();
     return db
       .selectFrom('wf_run')
-      .select(['run_id', 'workflow_id', 'version_id', 'workflow_version', 'definition_json', 'status', 'started_at', 'completed_at'])
+      .select(['run_id', 'workflow_id', 'version_id', 'workflow_version', 'definition_json', 'status', 'started_at', 'completed_at', 'engine_type', 'engine_model'])
       .where('workflow_id', '=', workflow_id)
       .where('mode', '=', 'CLIENT_LOCAL')
       .where('source', '=', 'client')
@@ -155,6 +234,23 @@ export class WorkflowRuntimeRepository {
     const rows = await db
       .selectFrom('wf_node_run')
       .selectAll()
+      .where('run_id', '=', runPk)
+      .orderBy('started_at', 'asc')
+      .orderBy('node_id', 'asc')
+      .execute();
+    return rows.map((row) => ({ ...row, run_id }));
+  }
+
+  /** Compact projection for status cards/polling; excludes prompt and packet bodies. */
+  async listNodeRunSummaries(run_id: string): Promise<any[]> {
+    const db = getKyselyDatabase();
+    const runPk = await this.runDatabaseId(run_id);
+    const rows = await db
+      .selectFrom('wf_node_run')
+      .select([
+        'run_id', 'node_id', 'node_type', 'status', 'started_at', 'completed_at',
+        'last_completion_issue',
+      ])
       .where('run_id', '=', runPk)
       .orderBy('started_at', 'asc')
       .orderBy('node_id', 'asc')
@@ -328,8 +424,13 @@ export class WorkflowRuntimeRepository {
 
   /** Cloud child tables use workflow_run.id, while engine code addresses runs by run_id. */
   private async cloudPayload(runBizId: string, entityType: string, payload: unknown): Promise<unknown> {
-    if (!payload || typeof payload !== 'object' || entityType === 'run') return payload;
+    if (!payload || typeof payload !== 'object') return payload;
     const source = payload as Record<string, any>;
+    if (entityType === 'run') {
+      // trigger_type only drives local notification navigation. The cloud
+      // workflow_run contract intentionally does not persist this UI origin.
+      return toCloudWorkflowRunPayload(source);
+    }
     const runPk = await this.runDatabaseId(runBizId);
     let stored: Record<string, any> | undefined;
     const db = getKyselyDatabase();
@@ -346,7 +447,13 @@ export class WorkflowRuntimeRepository {
     } else if (entityType === 'user_input' && source.task_id) {
       stored = await db.selectFrom('wf_user_input_task').selectAll().where('task_id', '=', source.task_id).executeTakeFirst() as any;
     }
-    return { ...source, ...(stored ?? {}), run_id: runPk };
+    // agent_session_id is a local executor identity.  The v2 sync contract
+    // does not own or need an engine transcript identifier, so keep it out of
+    // cloud payloads while still persisting it in the local node-run row.
+    const { agent_session_id: _localAgentSessionId, ...cloudSource } = source;
+    const storedRecord = stored ?? {};
+    const { agent_session_id: _storedLocalAgentSessionId, ...cloudStored } = storedRecord;
+    return { ...cloudSource, ...cloudStored, run_id: runPk };
   }
 
   /**

@@ -13,6 +13,14 @@ export interface WorkflowArtifactRef {
   size?: number;
 }
 
+/** Model-facing artifact declaration. Host-owned identity and file metadata are added after validation. */
+export interface WorkflowArtifactDraft {
+  resourceId: string;
+  kind?: 'OUTPUT' | 'INTERMEDIATE';
+  name?: string;
+  contentType?: string;
+}
+
 export interface WorkflowPacket {
   protocolVersion: typeof WORKFLOW_PACKET_VERSION;
   status: WorkflowPacketStatus;
@@ -75,6 +83,7 @@ export function isWorkflowPacket(value: unknown): value is WorkflowPacket {
 
 export function validateWorkflowPacket(value: unknown, opts: {
   runId: string; nodeId: string; nodeType: string; allowedPorts?: string[]; requireSelectedPort?: boolean;
+  artifactMode?: 'canonical' | 'draft';
 }): WorkflowPacketValidation {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return { ok: false, code: 'RESULT_PACKET_INVALID', message: 'node-result.json 必须是对象' };
   const packet = value as Record<string, any>;
@@ -99,7 +108,19 @@ export function validateWorkflowPacket(value: unknown, opts: {
     }
   }
   for (const artifact of packet.artifacts) {
-    if (!artifact || typeof artifact !== 'object' || !artifact.artifactId || !artifact.kind || !artifact.name || !artifact.contentType) {
+    if (!artifact || typeof artifact !== 'object') {
+      return { ok: false, code: 'ARTIFACT_INVALID', message: '产物声明必须是对象' };
+    }
+    if (opts.artifactMode === 'draft') {
+      const keys = new Set(['resourceId', 'kind', 'name', 'contentType']);
+      if (typeof artifact.resourceId !== 'string' || !artifact.resourceId.trim()
+        || (artifact.kind !== undefined && !['OUTPUT', 'INTERMEDIATE'].includes(artifact.kind))
+        || (artifact.name !== undefined && typeof artifact.name !== 'string')
+        || (artifact.contentType !== undefined && typeof artifact.contentType !== 'string')
+        || Object.keys(artifact).some((key) => !keys.has(key))) {
+        return { ok: false, code: 'ARTIFACT_DRAFT_INVALID', message: '产物草稿只允许 resourceId、kind、name、contentType，且 resourceId 必填' };
+      }
+    } else if (!artifact.artifactId || !artifact.kind || !artifact.name || !artifact.contentType) {
       return { ok: false, code: 'ARTIFACT_INVALID', message: '产物引用缺少必要元数据' };
     }
     if ('checksum' in artifact) return { ok: false, code: 'ARTIFACT_INVALID', message: 'WorkflowPacket v1 不支持 checksum' };
@@ -121,6 +142,63 @@ export function packetPayload(value: unknown): unknown {
   return isWorkflowPacket(value) ? value.payload : value;
 }
 
+/**
+ * Repairs the only compatibility issue accepted at the SDK boundary: some
+ * models submit an otherwise valid successful payload as a JSON string. The
+ * workflow contract remains object-first because the repaired value is still
+ * validated against the node's business schema before it can cross a node
+ * boundary. Text, arrays and failed packets are intentionally left untouched.
+ */
+export function normalizeStructuredOutputPacket(value: unknown): { packet: unknown; normalized: boolean } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { packet: value, normalized: false };
+  const packet = value as Record<string, unknown>;
+  if (packet.status !== 'succeeded' || typeof packet.payload !== 'string') return { packet: value, normalized: false };
+
+  try {
+    const payload = JSON.parse(packet.payload);
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { packet: value, normalized: false };
+    return { packet: { ...packet, payload }, normalized: true };
+  } catch {
+    return { packet: value, normalized: false };
+  }
+}
+
+/**
+ * Claude Agent SDK exposes json_schema output through a StructuredOutput tool
+ * whose sole argument is a JSON string named `payload`. Keep that transport
+ * envelope separate from the workflow protocol: only the parsed object is a
+ * candidate WorkflowPacket and is still validated below by the caller.
+ */
+export function claudeStructuredOutputEnvelopeJsonSchema(): Record<string, unknown> {
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['payload'],
+    properties: {
+      payload: {
+        type: 'string',
+        minLength: 1,
+        description: 'A compact JSON string whose complete value is one WorkflowPacket object. This is the Claude SDK StructuredOutput transport envelope.',
+      },
+    },
+  };
+}
+
+export function unwrapClaudeStructuredOutputEnvelope(value: unknown): { packet: unknown; unwrapped: boolean } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { packet: value, unwrapped: false };
+  const envelope = value as Record<string, unknown>;
+  if (Object.keys(envelope).length !== 1 || typeof envelope.payload !== 'string' || !envelope.payload) {
+    return { packet: value, unwrapped: false };
+  }
+  try {
+    const packet = JSON.parse(envelope.payload);
+    if (!packet || typeof packet !== 'object' || Array.isArray(packet)) return { packet: value, unwrapped: false };
+    return { packet, unwrapped: true };
+  } catch {
+    return { packet: value, unwrapped: false };
+  }
+}
+
 /** SDK-native JSON schema. This is passed to Claude Agent SDK outputFormat, not parsed from prose. */
 export function workflowPacketJsonSchema(payloadSchema: any, opts: { runId: string; nodeId: string; nodeType: string; allowedPorts?: string[]; requireSelectedPort?: boolean }): Record<string, unknown> {
   // Both terminal outcomes share the same root shape. A failed condition node
@@ -139,14 +217,31 @@ export function workflowPacketJsonSchema(payloadSchema: any, opts: { runId: stri
       // satisfy the successful business payload schema. The success branch
       // below applies that schema only to successful results.
       payload: {},
-      artifacts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['artifactId', 'kind', 'name', 'contentType'], properties: {
-        artifactId: { type: 'string' }, kind: { enum: ['INPUT', 'OUTPUT', 'INTERMEDIATE'] }, name: { type: 'string' }, contentType: { type: 'string' }, uri: { type: 'string' }, resourceId: { type: ['string', 'null'] }, size: { type: 'integer', minimum: 0 },
+      artifacts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['resourceId'], properties: {
+        resourceId: { type: 'string', minLength: 1 }, kind: { enum: ['OUTPUT', 'INTERMEDIATE'] }, name: { type: 'string' }, contentType: { type: 'string' },
       } } },
       control: { type: 'object', additionalProperties: false, required: ['selectedPort'], properties: { selectedPort } },
       diagnostics: { type: 'object', additionalProperties: false, required: ['warnings', 'errors'], properties: { warnings: { type: 'array', items: { type: 'string' } }, errors: { type: 'array', items: diagnosticJsonSchema() } } },
     },
     anyOf: [
-      { properties: { status: { const: 'succeeded' }, payload: payloadSchema ?? { type: 'object' }, diagnostics: { properties: { errors: { maxItems: 0 } } } } },
+      {
+        properties: {
+          status: { const: 'succeeded' },
+          // The string branch is transport compatibility only. It lets the
+          // client recover a JSON-stringified object and apply the strict
+          // business schema locally before accepting the packet.
+          payload: {
+            anyOf: [
+              payloadSchema ?? { type: 'object' },
+              {
+                type: 'string',
+                description: 'Compatibility transport only: a JSON-stringified object. The client parses it and validates the resulting object against the business payload schema; do not use this form intentionally.',
+              },
+            ],
+          },
+          diagnostics: { properties: { errors: { maxItems: 0 } } },
+        },
+      },
       { properties: { status: { const: 'failed' }, control: { properties: { selectedPort: { const: null } } }, diagnostics: { properties: { errors: { minItems: 1 } } } } },
     ],
   };

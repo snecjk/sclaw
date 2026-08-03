@@ -504,6 +504,7 @@ export class SkillManager {
   async reconcile(
     ctx?: Partial<EngineSkillContext>,
     engines?: EngineSkillId[],
+    options?: { notifyAfterBatch?: boolean },
   ): Promise<Record<EngineSkillId, ReconcileResult>> {
     ensureAdaptersRegistered();
     const userCode = ctx?.userCode !== undefined
@@ -527,7 +528,9 @@ export class SkillManager {
     }
 
     for (const adapter of adapters) {
-      if (adapter.onAfterBatch) {
+      const result = results[adapter.id];
+      const projectionChanged = result.mirrored.length > 0 || result.removed.length > 0;
+      if (options?.notifyAfterBatch !== false && projectionChanged && adapter.onAfterBatch) {
         await adapter.onAfterBatch(fullCtx).catch(() => undefined);
       }
     }

@@ -63,6 +63,25 @@ function mapRow(row: Record<string, unknown>): ScheduleTaskRun {
  * find-then-create 的单飞编排在 ScheduledTaskService / Scheduler。
  */
 export class ScheduleTaskRunRepository {
+  /**
+   * Whether a session was created/used by the scheduled-task runtime.
+   * Run status is intentionally ignored because this describes session origin.
+   */
+  async existsBySessionKey(sessionKey: string): Promise<boolean> {
+    const normalizedSessionKey = sessionKey.trim();
+    if (!normalizedSessionKey) return false;
+
+    const db = getKyselyDatabase();
+    const row = await db
+      .selectFrom('schedule_task_runs')
+      .select('run_id')
+      .where('session_key', '=', normalizedSessionKey)
+      .where('deleted_at', 'is', null)
+      .limit(1)
+      .executeTakeFirst();
+    return Boolean(row);
+  }
+
   async getRun(
     runId: string,
     options?: { includeDeleted?: boolean },

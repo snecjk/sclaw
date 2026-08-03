@@ -367,6 +367,36 @@ describe('user-message-merge', () => {
     expect(merged[0]?.content).toBe('总部结算对账 创建工作流');
   });
 
+  it.each([
+    '执行技能冷笑话工作流工作流（Claude）',
+    '执行3日看天计划工作流（OpenClaw）',
+  ])('does not reconstruct workflow session title as a user message: %s', (sessionTitle) => {
+    const enriched = [
+      {
+        id: 'history-user-1',
+        role: 'user',
+        content: '帮我执行 id 为：wf_c862b7c4 的工作流 【技能冷笑话工作流】',
+        timestamp: 1710000001,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '工作流已成功启动',
+        timestamp: 1710000002,
+      },
+    ] as RawMessage[];
+
+    const merged = recoverInitialUserFromSessionLabel(
+      enriched,
+      'agent:main:session-1',
+      { 'agent:main:session-1': sessionTitle },
+      sessionTitle,
+    );
+
+    expect(merged).toEqual(enriched);
+    expect(merged.some((message) => message.content === sessionTitle)).toBe(false);
+  });
+
   it('moves a late-recovered opening user turn ahead of workflow results', () => {
     const messages = [
       {

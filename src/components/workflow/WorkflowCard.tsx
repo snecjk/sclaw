@@ -13,20 +13,21 @@ import {
   openExternalUrl,
 } from '@/lib/preview-url';
 import { shouldPreviewInSidePanel } from '@/lib/preview-href';
-import { useChatStore, type AttachedFileMeta } from '@/stores/chat';
+import type { AttachedFileMeta } from '@/stores/chat';
 import {
   ArtifactProductCard,
   buildArtifactMetaLine,
 } from '@/components/chat/artifact-product-card';
 import { buildArtifactCardMenuItems } from '@/lib/artifact-card-menu';
-import { getExecutionByRunId } from '@/stores/workflow-memory';
-import { hydrateWorkflowRun } from '@/lib/workflow-run-hydration';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
+import { getWorkflowProgressDetails } from '@/lib/workflow-card-progress';
+import { getChatWorkflowCard } from '@/lib/workflow-api';
 import type { WorkflowExecutionState, WorkflowRunStatus } from '@/types/workflow';
 
 interface WorkflowCardProps {
   runId: string;
   templateName: string;
+  paramsSummary?: string | null;
   /** default：对话流独立块（与消息气泡/输入框同宽，仅 mt-3 间距）；inline：嵌在参数已确认展开区内（外层 pl-5 竖线区） */
   layout?: 'default' | 'inline';
   /**
@@ -50,7 +51,7 @@ interface StatusTheme {
 
 function isTemplateIdLabel(name: string | undefined): boolean {
   const trimmed = name?.trim();
-  return !trimmed || trimmed.startsWith('tpl_');
+  return !trimmed || /^(?:tpl|wf)_/i.test(trimmed);
 }
 
 /** MasterGo C 组：工作流状态行描边 #E8EAEF（paint_4:1000 / --sto-sidebar-border） */
@@ -82,6 +83,27 @@ const STATUS_THEMES: Record<WorkflowRunStatus | 'pending', StatusTheme> = {
   },
   timeout: {
     labelKey: 'workflow.statusTimeout',
+    icon: Clock,
+    statusTextClass: 'text-warning',
+    statusIconClass: 'text-warning',
+    progressClass: 'bg-warning',
+  },
+  cancelled: {
+    labelKey: 'workflow.statusCancelled',
+    icon: Circle,
+    statusTextClass: 'text-muted-foreground',
+    statusIconClass: 'text-muted-foreground',
+    progressClass: 'bg-muted-foreground',
+  },
+  waiting_approval: {
+    labelKey: 'workflow.statusWaitingApproval',
+    icon: Clock,
+    statusTextClass: 'text-warning',
+    statusIconClass: 'text-warning',
+    progressClass: 'bg-warning',
+  },
+  waiting_input: {
+    labelKey: 'workflow.statusWaitingInput',
     icon: Clock,
     statusTextClass: 'text-warning',
     statusIconClass: 'text-warning',
@@ -159,52 +181,76 @@ function useDurationLabel(
 export function WorkflowCard({
   runId,
   templateName,
+  paramsSummary,
   layout = 'default',
   section = 'full',
   onPreviewArtifact,
   onCreateScheduledTask,
 }: WorkflowCardProps) {
   const { t } = useTranslation('chat');
-  const sessionKey = useChatStore((s) => s.currentSessionKey);
-  const agentId = useChatStore((s) => s.currentAgentId);
-  const state = useChatStore((s) => s.workflowCardStates[runId]);
+  const [state, setState] = useState<WorkflowExecutionState | null>(null);
+  const [queryError, setQueryError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
 
-  const resolvedName = useMemo(() => {
-    const exec = getExecutionByRunId(runId, sessionKey);
-    const fromMemory = exec?.templateName?.trim();
-    if (fromMemory && !isTemplateIdLabel(fromMemory)) return fromMemory;
+  const resolvedName = (() => {
     if (templateName && !isTemplateIdLabel(templateName)) return templateName;
-
-    const workflowId = state?.workflowId || exec?.workflowId;
-    const isActive = !state || state.status === 'running' || state.status === 'pending';
-    if (workflowId && isActive) {
-      return t('workflow.backgroundRunningWithId', { workflowId });
-    }
-    if (workflowId) {
-      return t('workflow.withId', { workflowId });
-    }
-
-    return fromMemory || templateName || t('workflow.defaultName');
-  }, [runId, sessionKey, templateName, state?.workflowId, state?.status, t]);
+    return t('workflow.defaultName');
+  })();
 
   useEffect(() => {
-    const needsHydrate = !state
-      || !isTerminalWorkflowRunStatus(state.status)
-      || (!state.result?.summary && !(state.result?.artifacts?.length));
-    if (!needsHydrate) return;
-    void hydrateWorkflowRun(runId, { sessionKey, agentId });
-  }, [runId, sessionKey, agentId, state?.status, state?.result?.summary, state?.result?.artifacts]);
+    let disposed = false;
+    let timer: number | undefined;
+    let inFlight = false;
+    let failures = 0;
+    const backoff = [3_000, 6_000, 12_000, 30_000];
 
-  useEffect(() => {
-    if (state && isTerminalWorkflowRunStatus(state.status)) return undefined;
-    // A legacy tool start has no renderer session key, so its terminal push can
-    // precede card registration or be filtered by an older client. Polling the
-    // local runtime while active closes that gap and stops immediately at a terminal state.
-    const timer = window.setInterval(() => {
-      void hydrateWorkflowRun(runId, { sessionKey, agentId });
-    }, 3_000);
-    return () => window.clearInterval(timer);
-  }, [runId, sessionKey, agentId, state?.status]);
+    const schedule = (delay: number) => {
+      if (disposed) return;
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = window.setTimeout(() => void poll(), delay);
+    };
+    const poll = async () => {
+      if (disposed || inFlight || document.visibilityState === 'hidden') return;
+      inFlight = true;
+      try {
+        const snapshot = await getChatWorkflowCard(runId);
+        if (disposed) return;
+        if (!snapshot) {
+          setNotFound(true);
+          setQueryError(null);
+          return;
+        }
+        failures = 0;
+        setNotFound(false);
+        setQueryError(null);
+        setState(snapshot);
+        if (!isTerminalWorkflowRunStatus(snapshot.status)) {
+          schedule(snapshot.status === 'waiting_approval' || snapshot.status === 'waiting_input' ? 5_000 : 3_000);
+        }
+      } catch (error) {
+        if (disposed) return;
+        setQueryError(error instanceof Error ? error.message : String(error));
+        const delay = backoff[Math.min(failures, backoff.length - 1)];
+        failures += 1;
+        schedule(delay);
+      } finally {
+        inFlight = false;
+      }
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void poll();
+      else if (timer !== undefined) window.clearTimeout(timer);
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    void poll();
+    return () => {
+      disposed = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [runId, retryNonce]);
 
   const display = useMemo<WorkflowExecutionState>(() => {
     if (!state) {
@@ -222,17 +268,14 @@ export function WorkflowCard({
   const statusKey = display.status in STATUS_THEMES ? display.status : 'pending';
   const theme = STATUS_THEMES[statusKey];
   const StatusIcon = theme.icon;
-  const isRunning = display.status === 'running';
+  const progressDetails = getWorkflowProgressDetails(display);
+  const isRunning = progressDetails.isActive;
   const isTerminal = isTerminalWorkflowRunStatus(display.status);
   const durationLabel = useDurationLabel(display.startedAt, display.completedAt, isRunning);
-  const showProgress = isRunning && display.progress > 0;
+  const showProgress = isRunning;
   const userFacingArtifacts = (display.status === 'completed' ? display.result?.artifacts ?? [] : []).filter(
-    (artifact) => isUserFacingArtifactUrl(artifact.url),
+    (artifact) => isUserFacingArtifactUrl(artifact.filePath || artifact.url),
   );
-  const previewableArtifact = userFacingArtifacts.find((artifact) => shouldPreviewInSidePanel(artifact.url));
-  const primaryArtifact = previewableArtifact ?? userFacingArtifacts[0];
-  const shouldShowPreviewAction = Boolean(previewableArtifact);
-  const canOpenArtifactPreview = Boolean(previewableArtifact && onPreviewArtifact);
   const showWorkflowActions = isTerminal
     && !!display.workflowId
     && !!onCreateScheduledTask;
@@ -241,9 +284,12 @@ export function WorkflowCard({
   const showResults = section === 'full' || section === 'results';
   const hasResultsContent = showResults && (
     Boolean(display.result?.summary)
-    || Boolean(primaryArtifact)
+    || userFacingArtifacts.length > 0
     || showWorkflowActions
   );
+  const workflowIdentity = display.workflowId
+    ? `${resolvedName}（${display.workflowId}）`
+    : resolvedName;
 
   const statusRow = showStatus ? (
     <div
@@ -253,15 +299,25 @@ export function WorkflowCard({
         'px-3.5 py-3',
       )}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <p className="truncate text-[13px] font-medium leading-4 text-foreground">
-            {resolvedName}
-          </p>
-          {durationLabel && (isRunning || (isTerminal && display.completedAt)) ? (
-            <p className="shrink-0 text-[13px] leading-5 text-muted-foreground">{durationLabel}</p>
-          ) : null}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] leading-5">
+
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="shrink-0 text-muted-foreground">{t('workflow.nameLabel')}</span>
+          <span className="truncate font-medium text-foreground" title={workflowIdentity}>
+            {workflowIdentity}
+          </span>
+          <span className="shrink-0 text-muted-foreground">{t('workflow.runIdLabel')}</span>
+          <code
+              className="truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[12px] text-foreground"
+              title={runId}
+          >
+            {runId}
+          </code>
         </div>
+
+        {durationLabel && (isRunning || (isTerminal && display.completedAt)) ? (
+          <p className="shrink-0 text-muted-foreground">{durationLabel}</p>
+        ) : null}
         <div
           className={cn(
             'inline-flex shrink-0 items-center gap-1.5 text-sm font-medium leading-[18px]',
@@ -277,20 +333,56 @@ export function WorkflowCard({
         </div>
       </div>
 
+      {paramsSummary ? (
+        <p className="mt-1 truncate text-[12px] leading-4 text-muted-foreground" title={paramsSummary}>
+          {paramsSummary}
+        </p>
+      ) : null}
+
       {showProgress ? (
         <div className="mt-2.5">
-          <div className="h-1 overflow-hidden rounded-full bg-muted">
+          <div className="h-1 overflow-hidden rounded-full bg-muted" aria-label={t('workflow.progressLabel')}>
             {/* 动态进度宽：Tailwind 无法静态表达百分比，保留 inline width */}
             <div
-              className={cn('h-full rounded-full transition-all duration-500', theme.progressClass)}
-              style={{ width: `${Math.max(display.progress, 8)}%` }}
+              className={cn(
+                'h-full rounded-full transition-all duration-500',
+                theme.progressClass,
+                display.progress === 0 && 'animate-pulse',
+              )}
+              style={{ width: `${display.progress > 0 ? Math.max(display.progress, 8) : 28}%` }}
             />
           </div>
+          {progressDetails.helperText ? (
+            <p className="mt-1.5 truncate text-[12px] leading-4 text-muted-foreground">
+              {progressDetails.helperText === 'preparing' ? t('workflow.preparingProgress') : null}
+              {progressDetails.helperText === 'steps'
+                ? t('workflow.stepProgress', {
+                  completed: progressDetails.completedSteps,
+                  total: progressDetails.totalSteps,
+                  current: progressDetails.currentStep ?? t('workflow.stepPending'),
+                })
+                : null}
+              {progressDetails.helperText === 'waitingApproval' ? t('workflow.waitingApprovalProgress') : null}
+              {progressDetails.helperText === 'waitingInput' ? t('workflow.waitingInputProgress') : null}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
       {display.error ? (
         <p className="mt-2 text-[13px] leading-5 text-destructive">{display.error}</p>
+      ) : null}
+      {notFound || queryError ? (
+        <div className="mt-2 flex items-center justify-between gap-3 text-[13px] leading-5 text-destructive">
+          <span>{notFound ? t('workflow.runUnavailable') : queryError}</span>
+          <button
+            type="button"
+            className="shrink-0 text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => setRetryNonce((value) => value + 1)}
+          >
+            {t('workflow.retryQuery')}
+          </button>
+        </div>
       ) : null}
     </div>
   ) : null;
@@ -303,24 +395,33 @@ export function WorkflowCard({
         </p>
       ) : null}
 
-      {primaryArtifact ? (
-        <ArtifactProductCard
-          title={primaryArtifact.name}
-          metaLine={buildArtifactMetaLine({
-            fileName: primaryArtifact.name,
-            mimeType: primaryArtifact.type || 'application/octet-stream',
-            t,
+      {userFacingArtifacts.length > 0 ? (
+        <div className="space-y-2">
+          {userFacingArtifacts.map((artifact) => {
+            const previewFile = artifactToPreviewFile(artifact);
+            const previewable = shouldPreviewInSidePanel(previewFile.filePath || artifact.url);
+            return (
+              <ArtifactProductCard
+                key={artifact.id || artifact.url || artifact.name}
+                title={artifact.name}
+                metaLine={buildArtifactMetaLine({
+                  fileName: artifact.name,
+                  mimeType: artifact.type || 'application/octet-stream',
+                  t,
+                })}
+                actionLabel={previewable ? t('artifact.preview') : t('workflow.openArtifactLink')}
+                menuItems={buildArtifactCardMenuItems(previewFile, t)}
+                onAction={() => {
+                  if (previewable && onPreviewArtifact) {
+                    onPreviewArtifact(previewFile);
+                    return;
+                  }
+                  openExternalUrl(artifact.url);
+                }}
+              />
+            );
           })}
-          actionLabel={shouldShowPreviewAction ? t('artifact.preview') : t('workflow.openArtifactLink')}
-          menuItems={buildArtifactCardMenuItems(artifactToPreviewFile(primaryArtifact), t)}
-          onAction={() => {
-            if (canOpenArtifactPreview) {
-              onPreviewArtifact!(artifactToPreviewFile(previewableArtifact!));
-              return;
-            }
-            openExternalUrl(primaryArtifact.url);
-          }}
-        />
+        </div>
       ) : null}
 
       {showWorkflowActions ? (
@@ -342,6 +443,8 @@ export function WorkflowCard({
 
   return (
     <div
+      id={`workflow-card-${runId}`}
+      tabIndex={-1}
       className={cn(
         'w-full space-y-2',
         layout === 'default' && section === 'full' && 'mt-3',

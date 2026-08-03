@@ -35,6 +35,7 @@ import { useAgentsStore } from './stores/agents';
 import { useChatStore } from './stores/chat';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
 import { AccountSwitchFab } from './components/layout/AccountSwitchFab';
+import { WorkflowCompletionNotifier } from './components/workflow/WorkflowCompletionNotifier';
 
 /**
  * Error Boundary to catch and display React rendering errors
@@ -305,10 +306,10 @@ function App() {
   return (
     <ErrorBoundary>
       <TooltipProvider delayDuration={300}>
-        <AppShellLayoutProvider>
-          <Routes>
-            {/* SSO Login page */}
-            <Route path="/login" element={<Login />} />
+        <WorkflowCompletionNotifier />
+        <Routes>
+          {/* SSO Login page */}
+          <Route path="/login" element={<Login />} />
 
             {/* Setup wizard (shown on first launch) */}
             <Route path="/setup/*" element={<Setup />} />

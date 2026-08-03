@@ -54,8 +54,8 @@ export interface ExecutionExperienceSummary {
   intent?: string;
   /** 适用条件：何时复用本经验。 */
   applicableWhen?: string[];
-  /** 下次同类任务可直接执行的目标命令（1条或按顺序多条，含参数模板/占位符）。
-   *  注入后模型应优先直接执行，而非重走探索。 */
+  /** 下次同类非工作流任务可直接执行的目标命令（1条或按顺序多条，含参数模板/占位符）。
+   *  注入后模型应优先直接执行，而非重走探索；已编排工作流执行不适用。 */
   directCommand?: ExecutionExperiencePathItem[];
   /** 探索过程（discover/help/技能触发等一次性摸索步骤）。
    *  仅当 directCommand 失效或命令可能变更时才需要，已知目标时跳过。 */
@@ -106,11 +106,12 @@ function buildSummaryPrompt(input: Record<string, unknown>): string {
     '}',
     '',
     '要求：',
-    '1. directCommand 是真正命中目标、下次同类任务可直接复用的命令（含参数模板/占位符），不要把 discover/help/技能触发这类探索性步骤放进来。',
-    '2. discoveryPath 放探索过程（discover/help/技能触发等），仅在不确定或命令变更时才需要；已知目标命令时应跳过。',
-    '3. directCommand/avoidPath 的 command 必须是具体命令串（含参数），不要只写工具类别名（如不要只写 Bash）。',
-    '4. status=unknown 表示未取得工具结果，不能作为命令成功或失败的证据，也不能据此沉淀 directCommand 或 avoidPath。',
-    ...(hasInjectedExperiences ? ['5. injectedExperiences 是本轮实际注入给模型的旧经验。只有旧路径已在本轮实际尝试且失败、并且新路径已成功完成同一目标时，才可输出 decision=supersedes。未使用或与本轮无关时必须输出 irrelevant_to_run 或 uncertain，绝不能输出 supersedes。没有工具证据时输出 uncertain。'] : []),
+    '1. 先判断本轮是否为发起、继续、重试或恢复一个已经编排好的工作流（包括按 workflowId 执行）。如果是，必须输出 {"shouldStore": false, "reason": "orchestrated_workflow_execution"}。工作流执行由既有节点、连线和配置决定，不得把其中的工具调用、命令、参数或步骤沉淀为可复用执行经验。',
+    '2. directCommand 是真正命中目标、下次同类非工作流任务可直接复用的命令（含参数模板/占位符），不要把 discover/help/技能触发这类探索性步骤放进来。',
+    '3. discoveryPath 放探索过程（discover/help/技能触发等），仅在不确定或命令变更时才需要；已知目标命令时应跳过。',
+    '4. directCommand/avoidPath 的 command 必须是具体命令串（含参数），不要只写工具类别名（如不要只写 Bash）。',
+    '5. status=unknown 表示未取得工具结果，不能作为命令成功或失败的证据，也不能据此沉淀 directCommand 或 avoidPath。',
+    ...(hasInjectedExperiences ? ['6. injectedExperiences 是本轮实际注入给模型的旧经验。只有旧路径已在本轮实际尝试且失败、并且新路径已成功完成同一非工作流目标时，才可输出 decision=supersedes。未使用、与本轮无关或本轮属于已编排工作流执行时，必须输出 irrelevant_to_run 或 uncertain，绝不能输出 supersedes。没有工具证据时输出 uncertain。'] : []),
     '如果不值得沉淀，输出：{"shouldStore": false, "reason": "原因"}',
   ].join('\n');
 }
@@ -145,7 +146,7 @@ export function formatExecutionMemoryText(exp: ExecutionExperienceSummary): stri
   const intent = typeof exp.intent === 'string' ? exp.intent.trim() : '';
   if (intent) lines.push(`执行经验：${intent}`);
   // 顶部引导语：让模型下次优先直接执行目标命令，而非重走探索老路。
-  lines.push('已知目标命令时直接执行下方"直接执行"，探索路径仅在不确定/命令变更时使用。');
+  lines.push('仅用于非工作流任务：已知目标命令时直接执行下方"直接执行"，探索路径仅在不确定/命令变更时使用；已编排工作流执行必须完全忽略本经验。');
 
   const pathLines = (items: ExecutionExperiencePathItem[] | undefined, header: string): void => {
     const steps = (items ?? []).filter((s) => s && typeof s.command === 'string' && s.command.trim());

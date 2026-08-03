@@ -2,7 +2,7 @@
  * workflow-runtime 生产接线工厂（A+B 之 B：注入真实依赖）。
  *
  * 把 engine 需要的 4 个生产依赖接通：
- * - invokeAgent：绑真实 @anthropic-ai/claude-agent-sdk 的 query（复用 agent-runner），
+ * - invokeAgent：绑真实 @anthropic-ai/claude-agent-sdk 的 query（复用 agent-runner-claude），
  *   env 复用 buildClaudeEnvForAccount（鉴权同聊天），排除全部 5 runtime 扩展。
  * - postSync：proxyAwareFetch POST /agent/v2/runs/{id}/sync + buildStoMemoryCenterAuthHeaders。
  * - dslClient.fetchVersion：GET /agent/v2/workflows/getVersion/{version_pk}。
@@ -16,33 +16,22 @@ import { resolveStoBaseUrl } from '../../utils/sto-domain';
 import { buildStoMemoryCenterAuthHeaders } from '../../utils/sto-memory-api-auth';
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
 import { getStoTokenQuotaService } from '../sto-token-quota-service';
-import { getOpenClawProvidersConfig } from '../../utils/openclaw-auth';
-import { invokeAgent as agentRunnerInvokeAgent } from './agent-runner';
+import { invokeAgent as agentRunnerInvokeAgent } from './agent-runner-claude';
+import { invokeOpenClawWorkflowAgent, releaseOpenClawWorkflowAgentSession } from './agent-runner-openclaw';
+import type { GatewayManager } from '../../gateway/manager';
 import { getWorkflowRuntimeRepository } from '../../db';
+import { ScheduleTaskRunRepository } from '../../db/repositories/schedule-task-run-repository';
 import type { EngineDeps } from './engine';
 import type { WorkflowRunStatus } from '../../../shared/workflow-run-status';
 import { workflowExecLog } from './logging';
 import { configureWorkflowIdPool } from './id-pool';
 import { runWorkspacePath, workspacePath } from './workspace-paths';
+import { notifyWorkflowCompletion } from './completion-notification';
 
 let cachedSdk: any = null;
-let cachedWorkflowModel: string | undefined;
 async function getSdk(): Promise<any> {
   if (!cachedSdk) cachedSdk = await import('@anthropic-ai/claude-agent-sdk');
   return cachedSdk;
-}
-
-/**
- * Workflow definitions may contain server-side aliases (for example "sonnet"),
- * which are not model ids available to the local Claude SDK proxy.  Use the
- * application's currently selected provider model instead.
- */
-async function getConfiguredWorkflowModel(): Promise<string | undefined> {
-  if (cachedWorkflowModel) return cachedWorkflowModel;
-  const { defaultModel } = await getOpenClawProvidersConfig();
-  const model = defaultModel?.trim().split('/').pop()?.trim();
-  if (model) cachedWorkflowModel = model;
-  return model;
 }
 
 /** 带鉴权的后端 v2 调用：resolveStoBaseUrl + getStoToken + buildStoMemoryCenterAuthHeaders + proxyAwareFetch。
@@ -74,7 +63,8 @@ export async function workflowV2BackendFetch(
   return res.json();
 }
 
-export function createWorkflowRuntimeEngineDeps(): EngineDeps {
+export function createWorkflowRuntimeEngineDeps(gatewayManager?: GatewayManager): EngineDeps {
+  const scheduleTaskRunRepo = new ScheduleTaskRunRepository();
   configureWorkflowIdPool(async (count) => {
     const response = await workflowV2BackendFetch('/agent/v2/ids/allocate', { method: 'POST', body: { count } });
     if (!Array.isArray(response?.ids)) throw new Error('global workflow id response missing ids');
@@ -82,7 +72,34 @@ export function createWorkflowRuntimeEngineDeps(): EngineDeps {
   });
   return {
     repo: getWorkflowRuntimeRepository(),
+    isScheduledTaskSession: (sessionKey) => scheduleTaskRunRepo.existsBySessionKey(sessionKey),
     invokeAgent: async (args) => {
+      const run = await getWorkflowRuntimeRepository().getRun(args.ctx.runId);
+      // Chat persists its selected model on the session before a workflow starts.
+      // Prefer that pinned run model; only non-chat runs may use the DSL model.
+      const effectiveModel = run?.engine_model?.trim() || args.model?.trim();
+      if (!effectiveModel) {
+        throw new Error('Workflow execution model is missing');
+      }
+      const execEngine = run?.engine_type === 'openclaw' ? 'openclaw' : 'claude';
+      const persistActualModel = async (model: string): Promise<void> => {
+        await getWorkflowRuntimeRepository().updateRunIfActive(args.ctx.runId, { engine_model: model });
+        workflowExecLog('info', 'agent-model-selected', 'workflow agent model resolved', {
+          runId: args.ctx.runId,
+          nodeId: args.nodeId,
+          execEngine,
+          model,
+        });
+      };
+      if (run?.engine_type === 'openclaw') {
+        if (!gatewayManager) throw new Error('OpenClaw workflow gateway unavailable');
+        if (!args.agentSessionId) throw new Error('OpenClaw workflow node session is required');
+        await persistActualModel(effectiveModel);
+        return invokeOpenClawWorkflowAgent({ gateway: gatewayManager, ctx: { ...args.ctx, nodeId: args.nodeId }, prompt: args.prompt,
+          attempt: args.attempt, model: effectiveModel,
+          agentSessionId: args.agentSessionId, resumeSession: args.resumeSession,
+          noProgressMs: (args as any).noProgressMs, deadlineMs: (args as any).deadlineMs, onStreamEvent: args.onStreamEvent });
+      }
       const sdk = await getSdk();
       return agentRunnerInvokeAgent({
         sdk,
@@ -92,17 +109,15 @@ export function createWorkflowRuntimeEngineDeps(): EngineDeps {
         additionalDirectories: [runWorkspacePath(args.ctx.runId)],
         noProgressMs: (args as any).noProgressMs,
         deadlineMs: (args as any).deadlineMs,
-        // Keep the complete DSL model reference.  The shared Claude runtime
-        // resolves it against the account catalog, just as chat does; stripping
-        // its provider prefix here turns a valid reference into an invalid one.
-        model: args.model && !['sonnet', 'haiku', 'opus'].includes(args.model)
-          ? args.model
-          : await getConfiguredWorkflowModel(),
+        model: effectiveModel,
+        onModelResolved: persistActualModel,
         onStreamEvent: args.onStreamEvent,
         allowedTools: args.allowedTools,
-        allowedSkills: args.allowedSkills,
         permissionMode: args.permissionMode,
         outputSchema: args.outputSchema,
+        execEngine: 'claude',
+        agentSessionId: args.agentSessionId,
+        resumeSession: args.resumeSession,
       });
     },
     postSync: async (runId, entries) => {
@@ -124,6 +139,16 @@ export function createWorkflowRuntimeEngineDeps(): EngineDeps {
       const remaining = typeof data.remaining === 'number' ? data.remaining : undefined;
       return result.success && (remaining === undefined || remaining > 0);
     },
+    releaseAgentSession: async (runId, nodeSessionId) => {
+      if (!nodeSessionId) return;
+      const run = await getWorkflowRuntimeRepository().getRun(runId);
+      if (run?.engine_type === 'openclaw') {
+        await releaseOpenClawWorkflowAgentSession(nodeSessionId);
+        return;
+      }
+      const sdk = await getSdk();
+      if (typeof sdk.deleteSession === 'function') await sdk.deleteSession(nodeSessionId);
+    },
     onRecover: (runs) => {
       for (const w of BrowserWindow.getAllWindows()) {
         w.webContents.send('workflow-runtime:recover', runs);
@@ -142,14 +167,36 @@ export function createWorkflowRuntimeEngineDeps(): EngineDeps {
       const repo = getWorkflowRuntimeRepository();
       void (async () => {
         let sessionKey = '';
+        let runRow: {
+          session_key?: string | null;
+          workflow_id?: string;
+          last_agent_raw_text?: string | null;
+          started_at?: string;
+          completed_at?: string | null;
+        } | undefined;
         try {
-          const row = await repo.getRun(runId);
-          sessionKey = row?.session_key ?? '';
+          runRow = await repo.getRun(runId);
+          sessionKey = runRow?.session_key ?? '';
         } catch { /* run 行缺失时退化为无 sessionKey，renderer 侧按 sessionKey 过滤会自然丢弃 */ }
+        const nodeRuns = runRow ? await repo.listNodeRuns(runId).catch(() => []) : [];
+        const completedNodes = nodeRuns.filter((node: any) => ['SUCCEEDED', 'COMPLETED', 'SUCCESS'].includes(String(node.status).toUpperCase())).length;
+        const activeNode = nodeRuns.find((node: any) => String(node.status).toUpperCase() === 'RUNNING');
+        const totalNodes = Math.max(nodeRuns.length, 1);
         const payload: {
           runId: string; sessionKey: string; status: WorkflowRunStatus;
           waitingNodeId?: string; error?: string;
-        } = { runId, sessionKey, status };
+          progress?: number; currentNodeId?: string; attempt?: number;
+          startedAt?: string; completedAt?: string;
+        } = {
+          runId,
+          sessionKey,
+          status,
+          progress: status === 'completed' ? 100 : Math.min(99, Math.floor((completedNodes / totalNodes) * 100)),
+          currentNodeId: activeNode?.node_id,
+          attempt: activeNode?.attempt_count,
+          startedAt: runRow?.started_at,
+          completedAt: runRow?.completed_at ?? undefined,
+        };
         if (extra?.waitingNodeId) payload.waitingNodeId = extra.waitingNodeId;
         if (extra?.error) payload.error = extra.error;
         workflowExecLog('info', 'status-change', 'broadcast workflow status', {
@@ -162,6 +209,14 @@ export function createWorkflowRuntimeEngineDeps(): EngineDeps {
         for (const w of BrowserWindow.getAllWindows()) {
           w.webContents.send('workflow:status-update', payload);
         }
+        notifyWorkflowCompletion(BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null, {
+          runId,
+          sessionKey,
+          status,
+          workflowName: runRow?.workflow_id,
+          summary: typeof runRow?.last_agent_raw_text === 'string' ? runRow.last_agent_raw_text.slice(0, 120) : undefined,
+          error: extra?.error,
+        });
       })();
     },
     onTokenExpired: () => {
@@ -176,9 +231,14 @@ import { registerWorkflowRuntimeHandlers, type RuntimeHandlers } from './index';
 let _handlers: RuntimeHandlers | null = null;
 
 /** 在 registerIpcHandlers 中调用：注册 workflow-runtime IPC 通道。 */
-export function installWorkflowRuntime(): RuntimeHandlers {
+export function installWorkflowRuntime(gatewayManager?: GatewayManager): RuntimeHandlers {
   if (_handlers) return _handlers;
-  _handlers = registerWorkflowRuntimeHandlers(createWorkflowRuntimeEngineDeps());
+  _handlers = registerWorkflowRuntimeHandlers(createWorkflowRuntimeEngineDeps(gatewayManager));
+  return _handlers;
+}
+
+/** Read the installed singleton without allowing a status request to initialize it early. */
+export function getInstalledWorkflowRuntime(): RuntimeHandlers | null {
   return _handlers;
 }
 

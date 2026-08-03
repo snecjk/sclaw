@@ -102,6 +102,26 @@ describe('agent config lifecycle', () => {
     );
   });
 
+  it('removes the legacy unsupported skipBootstrap property when ensuring an agent', async () => {
+    await writeOpenClawJson({
+      agents: {
+        list: [
+          { id: 'main', name: 'Main', default: true },
+          { id: 'workflow-runtime', name: 'Workflow Runtime', workspace: '/old-workspace', skipBootstrap: true },
+        ],
+      },
+    });
+
+    const { createAgentWithId } = await import('@electron/utils/agent-config');
+    await createAgentWithId('workflow-runtime', 'Workflow Runtime', { workspace: '/workflow-runtime' });
+
+    const config = await readOpenClawJson();
+    const agent = (config.agents as { list: Array<Record<string, unknown>> }).list
+      .find((entry) => entry.id === 'workflow-runtime');
+    expect(agent).toMatchObject({ id: 'workflow-runtime', workspace: '/workflow-runtime' });
+    expect(agent).not.toHaveProperty('skipBootstrap');
+  });
+
   it('deletes the config entry, bindings, runtime directory, and managed workspace for a removed agent', async () => {
     await writeOpenClawJson({
       agents: {

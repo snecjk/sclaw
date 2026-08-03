@@ -32,6 +32,7 @@ export interface AgentRunSpec {
     options?: Record<string, unknown>;
   };
   inputs: any;
+  /** @deprecated Workflow execution always loads all enabled global/user skills. */
   allowedSkills: string[];
   allowedTools: string[];
   outputSchema: string;
@@ -40,6 +41,8 @@ export interface AgentRunSpec {
     smartNode?: { kind: string };
     startup: { schema: Record<string, unknown>; resolvedInputs: Record<string, unknown> };
     isFirstAgentNode: boolean;
+    /** Per-node local artifact directory, isolated below the workflow run root. */
+    workspacePath?: string;
   };
   permissionPolicy: { mode: string; requireApprovalForTools?: string[] };
   limits: { timeoutMs?: number; maxToolCalls?: number };

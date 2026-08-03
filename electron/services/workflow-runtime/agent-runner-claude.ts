@@ -1,18 +1,19 @@
 import path from 'node:path';
 import { mkdir } from 'node:fs/promises';
-import { getDataDir } from '../../utils/paths';
+import { runWorkspacePath } from './workspace-paths';
 import { prepareClaudeRuntime } from '../../engines/claude-sdk-runtime';
 import { getDefaultProviderAccountId } from '../../services/providers/provider-store';
 import { workflowExecLog } from './logging';
+import { prepareWorkflowSkills } from './skill-loader';
 
 /**
  * agent-runner — a slim workflow-node runner that calls the Claude Agent SDK's
  * `query()` directly (no chat EngineAdapter), reusing the shared Claude SDK
  * runtime preparation for provider auth and the bundled native binary path.
  *
- * Excludes ALL 5 chat runtime extensions (no mcpServers / hooks / plugins /
- * systemPrompt / skills) so workflow nodes run with only the SDK's built-in
- * tools under `bypassPermissions`. Reads and writes are limited by the SDK to
+ * Excludes chat runtime extensions (no mcpServers / hooks / plugins /
+ * systemPrompt), while loading the same globally and user-scoped skills as
+ * ordinary chat. Reads and writes are limited by the SDK to
  * the current workflow run workspace (NOT $HOME), so nodes can share artifacts
  * without gaining access to arbitrary user directories.
  *
@@ -101,15 +102,22 @@ export interface InvokeArgs {
   accountId?: string;
   /** Explicit model id selected from the locally configured runtime catalog. */
   model?: string;
+  /** Called after the Claude runtime resolves the exact model passed to the SDK. */
+  onModelResolved?: (model: string) => void | Promise<void>;
   /** Reserved for retry metadata; not consumed by the runner. */
   retryReason?: string;
+  /** Stable UUID shared by all attempts of this workflow node. */
+  agentSessionId?: string;
+  /** True for a retry or interrupted-run recovery, false for the first attempt. */
+  resumeSession?: boolean;
   /** Streams Claude SDK partial events into the workflow runtime event log. */
   onStreamEvent?: (event: AgentStreamEvent) => void | Promise<void>;
   allowedTools?: string[];
-  allowedSkills?: string[];
   permissionMode?: string;
   /** Passed to Claude Agent SDK outputFormat; the SDK, not prompt parsing, enforces the shape. */
   outputSchema?: Record<string, unknown>;
+  /** Durable workflow execution-engine label for operational logs. */
+  execEngine?: 'claude' | 'openclaw';
 }
 
 export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
@@ -120,7 +128,7 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
   // Only computed when the caller (tests included) doesn't inject a cwd, so the
   // electron-backed getDataDir() is never called in tests.
   const cwd =
-    args.cwd ?? path.join(getDataDir(), 'workflow-runtime', 'workspaces', ctx.runId);
+    args.cwd ?? runWorkspacePath(ctx.runId);
 
   // Both cwd and additional directories are the run workspace, not $HOME.
   const additionalDirectories = args.additionalDirectories ?? [cwd];
@@ -138,11 +146,25 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
   // sent to the SDK.  Passing args.model here used to bypass that normalization
   // and caused provider/model-format 400 errors for workflow-only runs.
   const effectiveModel = preparedRuntime?.selection.model ?? args.model;
+  if (effectiveModel) {
+    try {
+      await args.onModelResolved?.(effectiveModel);
+    } catch (error) {
+      // Model telemetry must not prevent an otherwise valid workflow node run.
+      workflowExecLog('warn', 'agent-model-record', 'failed to persist resolved model', {
+        runId: ctx.runId,
+        nodeId: ctx.nodeId,
+        model: effectiveModel,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
   const noProgressMs = args.noProgressMs ?? 300_000;
   const deadlineMs = args.deadlineMs ?? 960_000;
 
   await ensureDirectory(cwd);
   await Promise.all(additionalDirectories.map(ensureDirectory));
+  await prepareWorkflowSkills(['claude']);
 
   // Desktop workflow runs do not have an interactive SDK approval bridge.
   // workspace_write therefore skips SDK confirmation only inside the already
@@ -151,11 +173,15 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
   const options: Record<string, unknown> = {
     cwd,
     additionalDirectories,
+    execEngine: args.execEngine ?? 'claude',
     env,
     permissionMode,
     allowDangerouslySkipPermissions: permissionMode === 'bypassPermissions',
     pathToClaudeCodeExecutable: args.pathToClaudeCodeExecutable ?? preparedRuntime?.pathToClaudeCodeExecutable,
-    settingSources: [],
+    // Claude discovers the managed ~/.stoclaw/.claude/skills projection through
+    // the user settings source. Keep this aligned with chat while the workflow
+    // explicitly excludes chat MCP/hooks/plugins/system prompt below.
+    settingSources: ['user' as const],
     // Workflow definitions can carry cloud-only model aliases such as "sonnet".
     // The local executor must instead use the model selected in the local
     // provider catalog, otherwise the SDK falls back to an unavailable Claude
@@ -164,11 +190,13 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
     includePartialMessages: true,
     allowedTools: args.allowedTools?.length ? args.allowedTools : undefined,
     outputFormat: args.outputSchema ? { type: 'json_schema', schema: args.outputSchema } : undefined,
-    skills: args.allowedSkills?.length ? args.allowedSkills : undefined,
-    // Deliberately exclude all 5 chat runtime extensions for the workflow agent:
-    // no mcpServers, hooks, plugins, or systemPrompt. Do not pass `skills` here:
-    // the SDK supports values like `all`, but `none` is not a valid sentinel in
-    // current builds and causes an internal `*.map is not a function` failure.
+    // Match the chat Claude adapter: all currently enabled global/user skills
+    // are projected before this query and made available to the SDK.
+    skills: 'all' as const,
+    sessionId: args.resumeSession ? undefined : args.agentSessionId,
+    resume: args.resumeSession ? args.agentSessionId : undefined,
+    // Deliberately exclude chat runtime extensions for the workflow agent:
+    // no mcpServers, hooks, plugins, or systemPrompt.
   };
 
   workflowExecLog('debug', 'agent-input', prompt, {
@@ -177,6 +205,9 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
     model: effectiveModel,
     cwd,
     additionalDirectories,
+    execEngine: args.execEngine ?? 'claude',
+    agentSessionId: args.agentSessionId,
+    resumeSession: args.resumeSession ?? false,
   });
   const query = await sdk.query({ prompt, options });
   const key = `${ctx.runId}:${ctx.nodeId}`;
@@ -205,6 +236,7 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
         // outputLength: finalText.length,
         // usage: r.usage,
         error: r.error,
+        execEngine: args.execEngine ?? 'claude',
       });
       resolve({ ...r, rawText: finalText });
     };
@@ -250,6 +282,7 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
             workflowExecLog('debug', 'agent-stream_event', streamDeltaText, {
               runId: ctx.runId,
               nodeId: ctx.nodeId,
+              execEngine: args.execEngine ?? 'claude',
             });
             await emitStreamEvent(args.onStreamEvent, {
               type: 'agent.answer_delta',
@@ -285,6 +318,7 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
               runId: ctx.runId,
               nodeId: ctx.nodeId,
               source: 'assistant_message',
+              execEngine: args.execEngine ?? 'claude',
             });
             await emitStreamEvent(args.onStreamEvent, {
               type: 'agent.answer_delta',

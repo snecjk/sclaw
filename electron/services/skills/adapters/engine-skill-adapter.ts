@@ -60,7 +60,7 @@ export function toSkillPackage(desired: DesiredSkillPackage): SkillPackage {
 }
 
 type GatewayReloader = {
-  debouncedReload?: (opts?: { force?: boolean }) => void;
+  debouncedReload?: (delayMs?: number, opts?: { force?: boolean }) => void;
   reload?: (opts?: { force?: boolean }) => Promise<void>;
 };
 
@@ -87,7 +87,10 @@ export async function notifyGatewayAfterSkillBatch(): Promise<void> {
   if (!gatewayReloader) return;
   try {
     if (typeof gatewayReloader.debouncedReload === 'function') {
-      gatewayReloader.debouncedReload({ force: true });
+      // GatewayManager takes delay first. Passing the options object as the
+      // first argument coerces the delay to 0 in setTimeout, which restarts
+      // Gateway in the middle of a workflow on Windows.
+      gatewayReloader.debouncedReload(undefined, { force: true });
       return;
     }
     if (typeof gatewayReloader.reload === 'function') {

@@ -5,7 +5,11 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
-import { useWorkflowCompletion } from '@/hooks/use-workflow-completion';
+import {
+  EMPTY_WORKFLOW_CHAT_CARD_REFS,
+  useWorkflowChatCardsStore,
+} from '@/stores/workflow-chat-cards';
+import { WorkflowCard } from '@/components/workflow/WorkflowCard';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
@@ -47,6 +51,7 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
+import { attachMissingWorkflowChatCardAnchors } from '@/lib/workflow-chat-card-registration';
 
 /**
  * Main-agent conversation thread on the home route (replaces the old `/chat` welcome + messages UI).
@@ -91,7 +96,28 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
   const clearError = useChatStore((s) => s.clearError);
 
-  useWorkflowCompletion(currentSessionKey);
+  const workflowCards = useWorkflowChatCardsStore(
+    (state) => state.refsBySessionKey[currentSessionKey],
+  ) ?? EMPTY_WORKFLOW_CHAT_CARD_REFS;
+  const loadWorkflowCards = useWorkflowChatCardsStore((state) => state.loadSession);
+
+  useEffect(() => {
+    void loadWorkflowCards(currentSessionKey);
+  }, [currentSessionKey, loadWorkflowCards]);
+
+  useEffect(() => {
+    if (!currentSessionKey || sending) return;
+    void loadWorkflowCards(currentSessionKey, true);
+  }, [currentSessionKey, sending, loadWorkflowCards]);
+
+  useEffect(() => {
+    if (!currentSessionKey || workflowCards.every((card) => card.anchorUserMessageId)) return;
+    void attachMissingWorkflowChatCardAnchors({
+      sessionKey: currentSessionKey,
+      messages,
+      cards: workflowCards,
+    });
+  }, [currentSessionKey, messages, workflowCards]);
 
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -143,6 +169,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     sending,
     pendingFinal,
     showThinking,
+    workflowCards,
     lastChatEventAt,
     streamMsg,
     streamText,
@@ -471,6 +498,18 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
           ) : (
             <>
               {staticItems.map((item) => {
+                if (item.type === 'workflow-run') {
+                  return (
+                    <WorkflowCard
+                      key={item.key}
+                      runId={item.card.runId}
+                      templateName={item.card.title}
+                      paramsSummary={item.card.paramsSummary}
+                      onPreviewArtifact={openArtifactPreview}
+                      onCreateScheduledTask={openWorkflowCronTaskModal}
+                    />
+                  );
+                }
                 if (item.type === 'assistant-turn') {
                   return (
                     <AssistantTurnMessage

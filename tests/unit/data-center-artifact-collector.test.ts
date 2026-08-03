@@ -89,6 +89,26 @@ describe('data center artifact collector', () => {
     });
   });
 
+  it('collects file URI markdown links with URL-encoded non-ASCII paths', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'artifact-collector-url-encoded-'));
+    const filePath = join(dir, '朋友圈文案.txt');
+    await writeFile(filePath, 'fake-circle-content');
+
+    const artifacts = await collectArtifactsFromAssistantMessages([
+      {
+        role: 'assistant',
+        content: `已生成完成！\n\n[朋友圈文案.txt](file://${dir}/%E6%9C%8B%E5%8F%8B%E5%9C%88%E6%96%87%E6%A1%88.txt)`,
+      },
+    ]);
+
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]).toMatchObject({
+      name: '朋友圈文案.txt',
+      filePath,
+      size: 19,
+    });
+  });
+
   it('normalizes Windows file URI drive paths before checking files', async () => {
     const originalCwd = process.cwd();
     const dir = await mkdtemp(join(tmpdir(), 'artifact-collector-windows-'));

@@ -5,8 +5,10 @@
  * All endpoints return { success, data, traceId } and require stoToken header.
  */
 import { invokeIpc } from '@/lib/api-client';
+import { useChatStore } from '@/stores/chat';
 import { hostApiFetch } from '@/lib/host-api';
 import { useAuthStore } from '@/stores/auth';
+import { resolveModelToPersistForSession } from '@/lib/sync-workspace-default-to-chat';
 import type {
   ApiResponse,
   WorkflowTemplateSearchResponse,
@@ -20,6 +22,8 @@ import type {
   StartWorkflowResponse,
   WorkflowRunResponse,
   WorkflowExecutionState,
+  ChatWorkflowCardRef,
+  RegisterChatWorkflowCardInput,
 } from '@/types/workflow';
 import { workflowRunResponseToExecutionState } from '@/lib/workflow-run-status';
 import { formatShanghaiIso } from '../../shared/workflow-timestamp';
@@ -292,8 +296,14 @@ export interface StartWorkflowLocalParams {
   idempotencyKey: string;
   /** 会话键——仅透传给本地 engine 落 wf_run.session_key，不发给后端。 */
   sessionKey: string;
+  /** 本地业务发起入口，仅写入客户端 wf_run，不发送到云端。 */
+  triggerType: 'chat' | 'scheduled_task' | 'workflow_manual' | 'designer_test' | 'api';
   runMode?: 'trial' | 'production';
   workflowVersionId?: string | number;
+  /** Fixed for the entire local run and persisted before dispatch. */
+  engineType: 'claude' | 'openclaw';
+  /** Explicit chat model to pin for this run, when the caller has one. */
+  engineModel?: string;
 }
 
 export interface StartWorkflowLocalResult {
@@ -307,6 +317,36 @@ export interface StartWorkflowLocalResult {
 }
 
 /**
+ * OpenClaw workflow nodes run in dedicated Gateway sessions, so an inherited
+ * Claude session model must never be pinned onto `wf_run`.  Resolve from the
+ * same workspace-default source as a new OpenClaw chat instead.
+ */
+export function resolveWorkflowRunEngineModel(params: {
+  engineType: StartWorkflowLocalParams['engineType'];
+  engineModel?: string;
+  sessionKey: string;
+}): string | undefined {
+  const chat = useChatStore.getState();
+  if (params.engineType === 'openclaw') {
+    const workspaceDefault = resolveModelToPersistForSession({
+      sessionKey: params.sessionKey,
+      agentId: chat.currentAgentId,
+      engineType: 'openclaw',
+      preferSessionModel: false,
+      preferPendingModel: false,
+    });
+    if (!workspaceDefault) {
+      throw new Error('未找到 OpenClaw 聊天默认模型，无法启动工作流');
+    }
+    return workspaceDefault.modelId;
+  }
+
+  const sessionModel = chat.sessions.find((session) => session.key === params.sessionKey)?.model
+    ?? chat.sessions.find((session) => session.key === chat.currentSessionKey)?.model;
+  return params.engineModel?.trim() || sessionModel?.trim() || undefined;
+}
+
+/**
  * v2 本地执行下沉入口：
  * 常规会话工作流：POST /agent/v2/workflows/{id}/createRunLog 注册后启动。
  * 画布试运行同样先保存到云端版本；客户端只按版本 ID 拉取执行 DSL。
@@ -315,6 +355,7 @@ export async function startWorkflowLocal(
   params: StartWorkflowLocalParams
 ): Promise<StartWorkflowLocalResult> {
   const startedAt = formatShanghaiIso();
+  const engineModel = resolveWorkflowRunEngineModel(params);
 
   // 常规会话工作流仍需在服务端注册，以保持既有运行记录关联行为。
   let data: StartWorkflowLocalResponse | undefined;
@@ -362,6 +403,9 @@ export async function startWorkflowLocal(
     input: data.resolvedInputs ?? params.inputs ?? {},
     startedAt,
     sessionKey: params.sessionKey,
+    triggerType: params.triggerType,
+    engineType: params.engineType,
+    engineModel,
   });
 
   return {
@@ -389,13 +433,32 @@ export async function getWorkflowRun(runId: string): Promise<WorkflowRunResponse
 // ── 6b. Get run via client-local runtime IPC (gap3 hydration) ────
 //   Client-local executions live in the renderer-side DB (wf_run / wf_node_run).
 //   The workflow-runtime:getRun IPC reads from that local store and returns the
-//   full WorkflowRunResponse (or null when the run row is absent — e.g. a run
-//   owned by another site or not yet persisted). Used by card hydration on
+//   compact status response by default (or null when the run row is absent).
+//   Designer timelines explicitly request detail; raw packets require diagnostic. Used by card hydration on
 //   session switch / app init, where the authoritative source is the local DB
 //   rather than the backend HTTP route above.
 
-export async function getRunViaIpc(runId: string): Promise<WorkflowRunResponse | null> {
-  return invokeIpc<WorkflowRunResponse | null>('workflow-runtime:getRun', runId);
+export async function getRunViaIpc(
+  runId: string,
+  view: 'status' | 'detail' | 'diagnostic' = 'status',
+): Promise<WorkflowRunResponse | null> {
+  return invokeIpc<WorkflowRunResponse | null>('workflow-runtime:getRun', { runId, view });
+}
+
+export async function registerChatWorkflowCard(
+  input: RegisterChatWorkflowCardInput,
+): Promise<boolean> {
+  const result = await invokeIpc<{ registered: boolean }>('workflow-runtime:registerChatCard', input);
+  return result.registered;
+}
+
+export async function listChatWorkflowCards(sessionKey: string): Promise<ChatWorkflowCardRef[]> {
+  return invokeIpc<ChatWorkflowCardRef[]>('workflow-runtime:listChatCards', sessionKey);
+}
+
+export async function getChatWorkflowCard(runId: string): Promise<WorkflowExecutionState | null> {
+  const run = await invokeIpc<WorkflowRunResponse | null>('workflow-runtime:getChatCard', runId);
+  return run ? workflowRunResponseToExecutionState(run) : null;
 }
 
 /** Lightweight local-run list for the canvas history dialog. */

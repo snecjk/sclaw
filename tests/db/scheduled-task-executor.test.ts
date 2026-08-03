@@ -139,6 +139,18 @@ describe('EngineScheduledTaskDispatcher', () => {
     return { dispatcher, gateway };
   }
 
+  it('recognizes scheduled-task session provenance regardless of run status', async () => {
+    const { run } = await seedRun();
+    expect(await runRepo.existsBySessionKey('session-scheduled')).toBe(false);
+
+    await runRepo.updateRun(run.runId, {
+      status: 'succeeded',
+      sessionKey: 'session-scheduled',
+    });
+
+    expect(await runRepo.existsBySessionKey('session-scheduled')).toBe(true);
+  });
+
   it('marks run failed when gatewayManager is not registered (no send attempted)', async () => {
     const { task, run } = await seedRun();
     const { dispatcher } = makeDispatcher({ gatewayManager: null });

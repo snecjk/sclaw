@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const hostApiFetchMock = vi.fn();
 const subscribeHostEventMock = vi.fn();
 const loadHistoryMock = vi.fn();
+const handleChatEventMock = vi.fn();
 const chatStateMock = {
   currentSessionKey: 'agent:main',
   runtimeBySessionKey: {
@@ -18,6 +19,7 @@ const chatStateMock = {
     },
   },
   loadHistory: (...args: unknown[]) => loadHistoryMock(...args),
+  handleChatEvent: (...args: unknown[]) => handleChatEventMock(...args),
 };
 
 vi.mock('@/lib/host-api', () => ({
@@ -79,5 +81,26 @@ describe('gateway store event wiring', () => {
       expect(loadHistoryMock).toHaveBeenCalledWith(true, true, 'agent:main');
     });
     expect(loadHistoryMock).not.toHaveBeenCalledWith(true, true, 'agent:idle');
+  });
+
+  it('does not route workflow smart-node engine events into the chat store', async () => {
+    hostApiFetchMock.mockResolvedValueOnce({ state: 'running', port: 18789 });
+    const handlers = new Map<string, (payload: unknown) => void>();
+    subscribeHostEventMock.mockImplementation((eventName: string, handler: (payload: unknown) => void) => {
+      handlers.set(eventName, handler);
+      return () => {};
+    });
+
+    const { useGatewayStore } = await import('@/stores/gateway');
+    await useGatewayStore.getState().init();
+    handlers.get('gateway:engine-event')?.({
+      type: 'message.delta',
+      sessionKey: 'agent:workflow-runtime:workflow:run-1:node-1',
+      runId: 'gateway-run-1',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'working' }] },
+    });
+
+    await Promise.resolve();
+    expect(handleChatEventMock).not.toHaveBeenCalled();
   });
 });

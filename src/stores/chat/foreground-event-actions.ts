@@ -1,10 +1,8 @@
 import {
   collectToolUpdates,
-  getMessageText,
   isToolResultRole,
   upsertToolStatuses,
 } from './helpers';
-import { ensureWorkflowCardsInMessages } from '@/lib/workflow-card-injection';
 import {
   appendStreamingAssistantSnapshot,
 } from './streaming-state';
@@ -73,18 +71,6 @@ export function createForegroundEventActions(
       set,
       clearHistoryPoll: () => clearHistoryPoll(sessionKey),
     });
-  };
-
-  const syncWorkflowCardsForCurrentSession = () => {
-    const sessionKey = get().currentSessionKey;
-    const synced = ensureWorkflowCardsInMessages(
-      get().messages,
-      sessionKey,
-      getMessageText,
-    );
-    if (synced !== get().messages) {
-      set({ messages: synced });
-    }
   };
 
   return {
@@ -234,7 +220,7 @@ export function createForegroundEventActions(
               phase,
               sessionKey: currentSessionKey,
               engineType: currentEngineType,
-              syncWorkflowCardsForCurrentSession,
+              syncWorkflowCardsForCurrentSession: () => undefined,
               runTerminalReloadEffects,
             });
           } else {

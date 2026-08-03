@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { AlertCircle, Loader2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '@/stores/chat';
-import { useWorkflowCompletion } from '@/hooks/use-workflow-completion';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
@@ -50,8 +49,6 @@ export function SclawBrowserEmbedChat({
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
-
-  useWorkflowCompletion(currentSessionKey);
 
   const streamMsg = streamingMessage && typeof streamingMessage === 'object'
     ? streamingMessage as unknown as { role?: string; content?: unknown; timestamp?: number; id?: string }
@@ -142,6 +139,7 @@ export function SclawBrowserEmbedChat({
                     />
                   );
                 }
+                if (item.type === 'workflow-run') return null;
                 return (
                   <ChatMessage
                     key={item.key}
