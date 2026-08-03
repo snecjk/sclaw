@@ -1,0 +1,198 @@
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import {
+  isStoAppDeployRunning,
+  type StoAppDeployJob,
+} from '@/hooks/use-sto-app-deploy';
+import { codeDeployStatusLabel } from '../../../shared/code-deploy-status';
+
+interface StoAppDeployControlProps {
+  canDeploy: boolean;
+  job: StoAppDeployJob | null;
+  onOpenDialog: () => void;
+  onClearTerminalJob?: () => void;
+}
+
+export function StoAppDeployControl({
+  canDeploy,
+  job,
+  onOpenDialog,
+  onClearTerminalJob,
+}: StoAppDeployControlProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const running = isStoAppDeployRunning(job);
+
+  useEffect(() => {
+    if (!panelOpen) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setPanelOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPanelOpen(false);
+    };
+    window.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [panelOpen]);
+
+  const handleClick = () => {
+    if (job) {
+      setPanelOpen((open) => !open);
+      return;
+    }
+    if (canDeploy) onOpenDialog();
+  };
+
+  return (
+    <div ref={rootRef} className="relative">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={cn(
+          'h-7 gap-1 px-2 text-xs',
+          running && 'text-amber-700 dark:text-amber-300',
+          (job?.phase === 'failed' || job?.phase === 'error') && 'text-destructive',
+          job?.phase === 'success' && 'text-emerald-700 dark:text-emerald-300',
+        )}
+        disabled={!canDeploy && !job}
+        title={
+          running
+            ? '点击查看当前发布进度'
+            : job
+              ? '点击查看最近一次发布结果'
+              : canDeploy
+                ? '先 sto-app push，再发起发布'
+                : '需先绑定 STO 应用后再发布'
+        }
+        onClick={handleClick}
+      >
+        {running ? (
+          <>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+            发布中
+          </>
+        ) : job?.phase === 'failed' || job?.phase === 'error' ? (
+          '发布失败'
+        ) : job?.phase === 'success' ? (
+          '发布成功'
+        ) : job?.phase === 'timeout' ? (
+          '发布超时'
+        ) : (
+          '发布'
+        )}
+      </Button>
+
+      {panelOpen && job ? (
+        <div
+          className={cn(
+            'absolute right-0 top-full z-[80] mt-1 w-[320px] rounded-lg border border-border',
+            'bg-background p-3 text-left shadow-[0_12px_32px_rgba(15,23,42,0.14)]',
+          )}
+          role="dialog"
+          aria-label="发布状态"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-[13px] font-medium text-foreground">
+                {running ? '发布进行中' : '最近发布结果'}
+              </div>
+              <div className="mt-0.5 text-[12px] text-muted-foreground">{job.label}</div>
+            </div>
+            {running ? (
+              <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+            ) : null}
+          </div>
+
+          <dl className="mt-3 space-y-1.5 text-[12px]">
+            <StatusRow label="状态">
+              {job.fields.status
+                ? `${job.fields.status}（${codeDeployStatusLabel(job.fields.status)}）`
+                : running
+                  ? '准备中'
+                  : '-'}
+            </StatusRow>
+            <StatusRow label="环境">{job.fields.env || '-'}</StatusRow>
+            <StatusRow label="deploymentId" mono>
+              {job.fields.deploymentId || '-'}
+            </StatusRow>
+            <StatusRow label="applicationId" mono>
+              {job.fields.applicationId || '-'}
+            </StatusRow>
+            {job.fields.pipelineInstanceId ? (
+              <StatusRow label="流水线">{job.fields.pipelineInstanceId}</StatusRow>
+            ) : null}
+            {job.fields.failureStage ? (
+              <StatusRow label="失败阶段">{job.fields.failureStage}</StatusRow>
+            ) : null}
+            {job.fields.failureMessage || job.error ? (
+              <StatusRow label="失败原因">
+                {job.fields.failureMessage || job.error}
+              </StatusRow>
+            ) : null}
+          </dl>
+
+          {!running ? (
+            <div className="mt-3 flex justify-end gap-2">
+              {canDeploy ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    onClearTerminalJob?.();
+                    setPanelOpen(false);
+                    onOpenDialog();
+                  }}
+                >
+                  再次发布
+                </Button>
+              ) : null}
+              {onClearTerminalJob ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    onClearTerminalJob();
+                    setPanelOpen(false);
+                  }}
+                >
+                  关闭结果
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function StatusRow({
+  label,
+  children,
+  mono,
+}: {
+  label: string;
+  children: ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-[76px_1fr] gap-2">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className={cn('break-all text-foreground', mono && 'font-mono text-[11px]')}>
+        {children}
+      </dd>
+    </div>
+  );
+}

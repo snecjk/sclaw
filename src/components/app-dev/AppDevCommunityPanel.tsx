@@ -11,85 +11,13 @@ import {
   installAppNpmPackage,
   installAppPipPackage,
   listAppDevAssistSkills,
+  listAppDevPackageCatalog,
   type AppDevAssistSkill,
+  type AppDevPackageCatalogItem,
 } from '@/lib/app-dev-api';
 import { cn } from '@/lib/utils';
 
 type CommunitySection = 'assist' | 'frontend' | 'backend';
-
-interface PackageSkillItem {
-  id: string;
-  kind: 'frontend' | 'backend';
-  name: string;
-  packageName: string;
-  description: string;
-}
-
-const PACKAGE_SKILLS: PackageSkillItem[] = [
-  {
-    id: 'fe-axios',
-    kind: 'frontend',
-    name: 'Axios',
-    packageName: 'axios',
-    description: '常用 HTTP 请求库，适合对接公司接口。',
-  },
-  {
-    id: 'fe-dayjs',
-    kind: 'frontend',
-    name: 'Day.js',
-    packageName: 'dayjs',
-    description: '轻量日期时间处理。',
-  },
-  {
-    id: 'fe-clsx',
-    kind: 'frontend',
-    name: 'clsx',
-    packageName: 'clsx',
-    description: '条件拼接 className。',
-  },
-  {
-    id: 'fe-recharts',
-    kind: 'frontend',
-    name: 'Recharts',
-    packageName: 'recharts',
-    description: 'React 图表组件。',
-  },
-  {
-    id: 'be-fastapi',
-    kind: 'backend',
-    name: 'FastAPI',
-    packageName: 'fastapi',
-    description: 'Python Web API 框架。',
-  },
-  {
-    id: 'be-uvicorn',
-    kind: 'backend',
-    name: 'Uvicorn',
-    packageName: 'uvicorn',
-    description: 'ASGI 服务器，配合 FastAPI 使用。',
-  },
-  {
-    id: 'be-requests',
-    kind: 'backend',
-    name: 'Requests',
-    packageName: 'requests',
-    description: 'Python HTTP 客户端。',
-  },
-  {
-    id: 'be-httpx',
-    kind: 'backend',
-    name: 'HTTPX',
-    packageName: 'httpx',
-    description: '支持异步的 Python HTTP 客户端。',
-  },
-  {
-    id: 'be-pydantic',
-    kind: 'backend',
-    name: 'Pydantic',
-    packageName: 'pydantic',
-    description: '数据校验与模型定义。',
-  },
-];
 
 interface AppDevCommunityPanelProps {
   workspaceId: string;
@@ -101,6 +29,8 @@ export function AppDevCommunityPanel({ workspaceId }: AppDevCommunityPanelProps)
   const [busyId, setBusyId] = useState<string | null>(null);
   const [assistSkills, setAssistSkills] = useState<AppDevAssistSkill[]>([]);
   const [assistLoading, setAssistLoading] = useState(false);
+  const [packages, setPackages] = useState<AppDevPackageCatalogItem[]>([]);
+  const [packagesLoading, setPackagesLoading] = useState(false);
 
   const refreshAssist = async () => {
     setAssistLoading(true);
@@ -113,30 +43,60 @@ export function AppDevCommunityPanel({ workspaceId }: AppDevCommunityPanelProps)
     }
   };
 
+  const refreshPackages = async () => {
+    setPackagesLoading(true);
+    try {
+      setPackages(await listAppDevPackageCatalog(workspaceId));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '无法加载组件包清单');
+    } finally {
+      setPackagesLoading(false);
+    }
+  };
+
   useEffect(() => {
     void refreshAssist();
+    void refreshPackages();
   }, [workspaceId]);
 
   const installPackage = async (
     skillId: string,
     packageName: string,
     kind: 'frontend' | 'backend',
+    packageId?: string,
   ) => {
     const name = packageName.trim();
     if (!name || busyId) return;
     setBusyId(skillId);
     try {
       if (kind === 'frontend') {
-        await installAppNpmPackage(workspaceId, name);
-        toast.success(`已安装前端包 ${name}`, {
-          description: '已执行 npm install --save，写入 frontend/package.json',
-        });
+        const result = await installAppNpmPackage(workspaceId, name, packageId);
+        if (result.ai?.mode === 'full') {
+          toast.success(`已安装 ${name}`, {
+            description: `依赖已写入 package.json；AI 技能已启用：${result.ai.skillPath}`,
+          });
+        } else {
+          toast.success(`已安装前端包 ${name}`, {
+            description: packageId
+              ? '依赖已安装，但清单未配置 AI 技能'
+              : '自定义包仅安装依赖；清单内选装才会附带 AI 用法技能',
+          });
+        }
       } else {
-        await installAppPipPackage(workspaceId, name);
-        toast.success(`已安装 Python 包 ${name}`, {
-          description: '已用 uv 安装到 backend/.venv，并写入 requirements.txt',
-        });
+        const result = await installAppPipPackage(workspaceId, name, packageId);
+        if (result.ai?.mode === 'full') {
+          toast.success(`已安装 ${name}`, {
+            description: `已写入 backend；AI 技能已启用：${result.ai.skillPath}`,
+          });
+        } else {
+          toast.success(`已安装 Python 包 ${name}`, {
+            description: packageId
+              ? '依赖已安装，但清单未配置 AI 技能'
+              : '自定义包仅安装依赖；清单内选装才会附带 AI 用法技能',
+          });
+        }
       }
+      await refreshAssist();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '安装失败');
     } finally {
@@ -160,7 +120,7 @@ export function AppDevCommunityPanel({ workspaceId }: AppDevCommunityPanelProps)
     }
   };
 
-  const packageItems = PACKAGE_SKILLS.filter((item) => item.kind === section);
+  const packageItems = packages.filter((item) => item.kind === section);
 
   return (
     <div className="min-h-0 flex-1 overflow-auto p-6">
@@ -171,13 +131,16 @@ export function AppDevCommunityPanel({ workspaceId }: AppDevCommunityPanelProps)
             社区
           </h2>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            开发辅助技能来自本应用工程模板的
+            开发辅助来自
             {' '}
             <code className="text-[11px]">openspec/skill-catalog</code>
-            ，启用后写入
+            。前端/后端选装包来自
+            {' '}
+            <code className="text-[11px]">packages.manifest.json</code>
+            ：点击安装会同时处理依赖与 AI 用法技能（写入
             {' '}
             <code className="text-[11px]">openspec/skills/</code>
-            （属于用户应用，不是 SClaw 客户端仓库）。
+            并更新 AGENTS）。
           </p>
         </header>
 
@@ -255,40 +218,63 @@ export function AppDevCommunityPanel({ workspaceId }: AppDevCommunityPanelProps)
         ) : (
           <>
             <section className="space-y-2">
-              {packageItems.map((skill) => {
-                const busy = busyId === skill.id;
-                return (
-                  <div
-                    key={skill.id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background/70 px-4 py-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">{skill.name}</p>
-                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                        {skill.packageName}
-                        {' · '}
-                        {skill.description}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-8 shrink-0 gap-1.5 px-3 text-xs"
-                      disabled={Boolean(busyId)}
-                      onClick={() => void installPackage(skill.id, skill.packageName, skill.kind)}
+              {packagesLoading && packageItems.length === 0 ? (
+                <p className="py-8 text-center text-xs text-muted-foreground">加载中…</p>
+              ) : packageItems.length === 0 ? (
+                <p className="py-8 text-center text-xs text-muted-foreground">
+                  暂无清单包。请在模板
+                  {' '}
+                  <code className="text-[11px]">openspec/skill-catalog/packages.manifest.json</code>
+                  {' '}
+                  中配置。
+                </p>
+              ) : (
+                packageItems.map((skill) => {
+                  const busy = busyId === skill.id;
+                  return (
+                    <div
+                      key={skill.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background/70 px-4 py-3"
                     >
-                      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
-                      安装
-                    </Button>
-                  </div>
-                );
-              })}
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">{skill.name}</p>
+                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                          {skill.packageName}
+                          {' · '}
+                          {skill.description}
+                        </p>
+                        {skill.ai?.summary ? (
+                          <p className="mt-1 text-[11px] text-muted-foreground/90">
+                            AI：
+                            {skill.ai.summary}
+                          </p>
+                        ) : null}
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 shrink-0 gap-1.5 px-3 text-xs"
+                        disabled={Boolean(busyId)}
+                        onClick={() =>
+                          void installPackage(skill.id, skill.packageName, skill.kind, skill.id)
+                        }
+                      >
+                        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+                        安装
+                      </Button>
+                    </div>
+                  );
+                })
+              )}
             </section>
 
             <section className="space-y-3 rounded-xl border border-border bg-background/70 p-4">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 自定义包名
               </h3>
+              <p className="text-[11px] text-muted-foreground">
+                仅安装依赖，不附带 AI 技能。正式能力请先写入 packages.manifest.json。
+              </p>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Input
                   value={customName}

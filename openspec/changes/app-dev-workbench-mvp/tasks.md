@@ -27,6 +27,7 @@
 - [x] 4.2 host-api 封装全部新能力，页面不直接 IPC（Requirement: Renderer accesses all capabilities through host-api）
 - [x] 4.3 就绪自动加载预览；连续进度呈现（准备环境/安装/启动/就绪）（Requirement: Chat-plus-preview workbench layout）
 - [x] 4.4 错误回流：编译/运行错误注入 Agent 对话 + "正在修复"状态（Requirement: Error feedback loop to agent）
+- [x] 4.5 运行状态菜单支持停止/启动/重启；自然语言重启并按新 preview URL 重建预览（Requirement: Chat-plus-preview workbench layout）
 
 ## 5. 本地 checkpoint（service-git-checkpoint）
 

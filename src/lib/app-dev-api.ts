@@ -45,6 +45,8 @@ export interface DevAppSummary {
   projectType: string;
   createdAt: string;
   localReady: boolean;
+  applicationId?: string;
+  availability?: 'local' | 'remote-only' | 'path-missing';
 }
 
 export async function getAppDevEnvironment(): Promise<AppDevEnvironment> {
@@ -59,6 +61,18 @@ export async function prepareAppDevEnvironment(): Promise<void> {
 export async function listDevApps(): Promise<DevAppSummary[]> {
   const res = await hostApiFetch<{ apps: DevAppSummary[] }>('/api/app-dev/apps');
   return res.apps ?? [];
+}
+
+export async function cloneDevApp(input: {
+  applicationId: string;
+  applicationName?: string;
+  parentDir: string;
+}): Promise<{ workspaceId: string; appPath: string; workspaceName: string; applicationId: string }> {
+  return hostApiFetch('/api/app-dev/apps/clone', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
 }
 
 export async function deleteDevApp(
@@ -129,6 +143,14 @@ export async function startApp(workspaceId: string): Promise<void> {
 
 export async function stopApp(workspaceId: string): Promise<void> {
   await hostApiFetch('/api/app-dev/apps/stop', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspaceId }),
+  });
+}
+
+export async function restartApp(workspaceId: string): Promise<void> {
+  await hostApiFetch('/api/app-dev/apps/restart', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspaceId }),
@@ -227,23 +249,54 @@ export async function searchAppSourceFiles(
 export async function installAppNpmPackage(
   workspaceId: string,
   packageName: string,
-): Promise<{ packageName: string; output: string }> {
+  packageId?: string,
+): Promise<{
+  packageName: string;
+  output: string;
+  packageId?: string;
+  ai?: { skillId?: string; skillPath?: string; mode: 'full' | 'deps-only' };
+}> {
   return hostApiFetch('/api/app-dev/packages/npm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workspaceId, packageName }),
+    body: JSON.stringify({ workspaceId, packageName, packageId }),
   });
 }
 
 export async function installAppPipPackage(
   workspaceId: string,
   packageName: string,
-): Promise<{ packageName: string; output: string }> {
+  packageId?: string,
+): Promise<{
+  packageName: string;
+  output: string;
+  packageId?: string;
+  ai?: { skillId?: string; skillPath?: string; mode: 'full' | 'deps-only' };
+}> {
   return hostApiFetch('/api/app-dev/packages/pip', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workspaceId, packageName }),
+    body: JSON.stringify({ workspaceId, packageName, packageId }),
   });
+}
+
+export interface AppDevPackageCatalogItem {
+  id: string;
+  kind: 'frontend' | 'backend';
+  name: string;
+  packageName: string;
+  description: string;
+  npmPackages?: string[];
+  ai?: { skillId?: string; summary?: string };
+}
+
+export async function listAppDevPackageCatalog(
+  workspaceId: string,
+): Promise<AppDevPackageCatalogItem[]> {
+  const res = await hostApiFetch<{ packages: AppDevPackageCatalogItem[] }>(
+    `/api/app-dev/packages?workspaceId=${encodeURIComponent(workspaceId)}`,
+  );
+  return res.packages ?? [];
 }
 
 export interface AppDevAssistSkill {
@@ -322,5 +375,41 @@ export async function continueStoAppMerge(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspaceId, revisionId }),
+  });
+}
+
+export type CodeDeployEnv = 'daily' | 'stage' | 'online';
+
+export async function deployStoApp(input: {
+  workspaceId: string;
+  env: CodeDeployEnv;
+  applicationId?: string;
+  requestId?: string;
+  deploymentVersion?: string;
+  /** Commit message used by sto-app push before create. */
+  pushMessage?: string;
+}): Promise<{
+  success: boolean;
+  applicationId: string;
+  env: CodeDeployEnv;
+  pushed?: boolean;
+  data: unknown;
+}> {
+  return hostApiFetch('/api/app-dev/sto-app/deploy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function refreshStoAppDeploy(deploymentId: string): Promise<{
+  success: boolean;
+  deploymentId: string;
+  data: unknown;
+}> {
+  return hostApiFetch('/api/app-dev/sto-app/deploy/refresh', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ deploymentId }),
   });
 }

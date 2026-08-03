@@ -31,11 +31,17 @@ import { createWorkspace, deleteWorkspace, listUserWorkspaces } from './session-
 import { startDevServer, stopDevServer, getDevServer } from './app-dev-server-manager';
 import { logger } from '../utils/logger';
 import type { GatewayManager } from '../gateway/manager';
-import { createStoApp } from './sto-app-service';
+import { createStoApp, cloneStoApp, extractApplicationId, listStoApps, getStoAppStatus } from './sto-app-service';
+import {
+  listStoAppBindings,
+  removeStoAppBindingByWorkspaceId,
+  upsertStoAppBinding,
+  getStoAppBindingByWorkspaceId,
+} from './sto-app-binding-store';
 
-/** Remote React engineering template (OSS). Packaged builds no longer require bundled app-templates. */
+/** Remote React A2UI template (OSS). Unpackaged/dev prefers local checkout. */
 const REACT_TEMPLATE_ZIP_URL =
-  'http://ali-sto-tps.oss-cn-shanghai.aliyuncs.com/6BB155FE-CAE2-4B-react-template.zip';
+  'http://ali-sto-tps.oss-cn-shanghai.aliyuncs.com/D935F6FF-BB2D-49-react-a2ui-template.zip';
 
 export interface AppDevStatus {
   workspaceId: string;
@@ -63,6 +69,7 @@ export interface AppDevMarker {
 }
 
 export interface DevAppSummary {
+  /** Empty when remote-only / path-missing (cannot open workbench yet). */
   workspaceId: string;
   name: string;
   appPath: string;
@@ -70,6 +77,10 @@ export interface DevAppSummary {
   createdAt: string;
   /** Local path exists and marker is present. */
   localReady: boolean;
+  applicationId?: string;
+  /** Cloud list authority states for this device. */
+  availability: 'local' | 'remote-only' | 'path-missing';
+  listError?: string;
 }
 
 export function appDevMarkerPath(appPath: string): string {
@@ -78,6 +89,37 @@ export function appDevMarkerPath(appPath: string): string {
 
 export function isAppDevWorkspaceRoot(appPath: string): boolean {
   return existsSync(appDevMarkerPath(appPath));
+}
+
+function buildAppDevAgentsContextBlock(vars: { name: string }): string {
+  return `<!-- sclaw-app-dev-context -->
+你正在帮助用户开发一个名为「${vars.name}」的业务应用（SClaw 开发应用）。
+
+## 项目结构
+- \`src/pages/\`：A2UI 页面资产（**主战场**，优先修改）
+- \`contracts/\`：action / intent 契约（Button 的 action 名必须已注册）
+- \`docs/api/\`：公司接口文档（Markdown），调用接口前先阅读这里
+- \`src/runtime/\`：页面加载与 Action Runtime（平台壳，默认不要改）
+- \`src/App.tsx\`：A2UI 宿主壳，**默认不要改**；**禁止**在业务预览里展示 Action Runtime / 开发者调试日志（调试日志应由 SClaw 工作台单独一列展示，不在应用页面内）
+- 工程构建对齐公司发布平台：\`npm run build\` 产物在 \`build/\`；不要改 \`outDir\` 或随意升级 rollup（模板已锁定）
+- \`openspec/\`：本应用的 OpenSpec；**不是** SClaw 客户端仓库
+
+## 工作方式
+- 用户是业务人员，用自然语言描述需求；不要要求他们写代码或看终端日志
+- 预览面向业务用户：只展示业务页面；不要加「Action Runtime」「当前页 #id」「改 page.json」等开发说明
+- **优先修改 \`src/pages/*.page.json\` 与 \`contracts/\`**；预览由 A2UI 渲染器驱动
+- 禁止把业务页面写成自由 React JSX
+- 组件：查询/列表/表格/分页页 **必须** 使用 antd Catalog（\`catalogId: "antd"\`）组件：\`AntdFilterBar\`、\`AntdTable\`、\`AntdPagination\`、\`AntdButton\`、\`AntdStack\`、\`AntdText\`
+- 用户即使不提 antd，只要需求是「查询条件 + 表格 + 分页」，也要优先用上述组件；参考 \`src/pages/customer-list.page.json\`
+- 同一 surface 不要混用 basic 的 Column/Text 与 Antd*（一个 surface 一个 catalogId）
+- page JSON 必须是 A2UI v0.9 消息数组（createSurface / updateComponents / updateDataModel），不要编造 \`{ type, props }\` 伪格式
+- 交互通过 actionId：先改 \`contracts/action-registry.v1.json\`，再在页面 Button/Filter 上引用
+- 多页面：新增 \`src/pages/<id>.page.json\` 后还要在 \`src/runtime/page-loader.ts\` 注册
+- 优先使用公司接口文档；不确定时先查 \`docs/api/\`；页面里用 actionId，不写死后端 URL
+- 新功能或跨模块改动：先读 \`openspec/skills/\`，再按 OpenSpec（proposal → design → specs → tasks → apply）推进
+- 保持页面简洁可用；改动后用简短中文说明「改了什么、用户会看到什么」
+- 不要提交密钥到代码里；鉴权方式以接口文档为准
+<!-- /sclaw-app-dev-context -->`;
 }
 
 async function writeAppDevBootstrap(
@@ -104,34 +146,26 @@ async function writeAppDevBootstrap(
   }
   await writeFile(appDevMarkerPath(appPath), `${JSON.stringify(marker, null, 2)}\n`, 'utf8');
 
-  // Injected as the project agent's default context. Written with a stable
-  // marker so we can re-apply after OpenClaw seeds overwrite AGENTS.md.
-  const agentsMd = `# ${vars.name}
-
-<!-- sclaw-app-dev-context -->
-你正在帮助用户开发一个名为「${vars.name}」的业务应用（SClaw 开发应用）。
-
-## 项目结构
-- \`frontend/\`：React + Vite 前端（用户主要看到和修改的页面）
-- \`backend/\`：后端预留目录
-- \`docs/api/\`：公司接口文档（Markdown），调用接口前先阅读这里
-- \`openspec/\`：本应用的 OpenSpec（规格驱动开发）与已安装开发技能；**不是** SClaw 客户端仓库
-
-## 工作方式
-- 用户是业务人员，用自然语言描述需求；不要要求他们写代码或看终端日志
-- 优先修改 \`frontend/src/\` 下的页面与样式，改完后右侧预览会自动刷新
-- 优先使用公司接口文档与组件；不确定时先查 \`docs/api/\`
-- 新功能或跨模块改动：先读 \`openspec/skills/\` 中相关技能，再按 OpenSpec（proposal → design → specs → tasks → apply）推进
-- 保持页面简洁可用；改动后用简短中文说明「改了什么、用户会看到什么」
-- 不要提交密钥到代码里；鉴权方式以接口文档为准
-<!-- /sclaw-app-dev-context -->
-`;
-  await writeFile(join(sclawDir, 'AGENTS.md'), agentsMd, 'utf8');
+  const agentsPath = join(sclawDir, 'AGENTS.md');
+  const contextBlock = buildAppDevAgentsContextBlock({ name: vars.name });
+  if (existsSync(agentsPath)) {
+    let content = await readFile(agentsPath, 'utf8');
+    const start = content.indexOf('<!-- sclaw-app-dev-context -->');
+    const end = content.indexOf('<!-- /sclaw-app-dev-context -->');
+    if (start >= 0 && end > start) {
+      content = `${content.slice(0, start)}${contextBlock}${content.slice(end + '<!-- /sclaw-app-dev-context -->'.length)}`;
+    } else {
+      content = `${content.trimEnd()}\n\n${contextBlock}\n`;
+    }
+    await writeFile(agentsPath, content.endsWith('\n') ? content : `${content}\n`, 'utf8');
+  } else {
+    await writeFile(agentsPath, `# ${vars.name}\n\n${contextBlock}\n`, 'utf8');
+  }
 }
 
 /**
  * Ensure marker + AGENTS.md context exist (self-heal after OpenClaw seed overwrite).
- * Call after ensureProjectAgent so our context wins.
+ * Always refreshes the sclaw-app-dev-context block so anti-hallucination rules stay current.
  */
 export async function ensureAppDevContext(workspaceId: string): Promise<void> {
   const { getWorkspaceRootPath } = await import('./session-catalog-service');
@@ -156,32 +190,50 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
     if (match?.name) name = match.name;
   }
 
-  const agentsPath = join(appPath, '.sclaw', 'AGENTS.md');
-  if (existsSync(agentsPath)) {
-    const current = await readFile(agentsPath, 'utf8');
-    if (current.includes('<!-- sclaw-app-dev-context -->')) {
-      // Marker present and context already ours — still refresh marker file.
-      if (!existsSync(markerFile)) {
-        await writeAppDevBootstrap(appPath, { name, projectType });
-      }
-      return;
-    }
-  }
   await writeAppDevBootstrap(appPath, { name, projectType });
+  await ensureAppOpenspecScaffold(appPath);
+  // Refresh already-enabled package skills from updated catalog copy.
+  try {
+    const skillsDir = join(appPath, 'openspec', 'skills');
+    const catalogRoot = appOpenspecCatalogRoot(appPath);
+    if (existsSync(skillsDir)) {
+      const entries = await readdir(skillsDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory() || !entry.name.startsWith('pkg-')) continue;
+        const src = join(catalogRoot, entry.name);
+        if (existsSync(join(src, 'SKILL.md'))) {
+          await cp(src, join(skillsDir, entry.name), { recursive: true });
+        }
+      }
+      await syncOpenspecSkillsIntoAgents(appPath);
+    }
+  } catch {
+    // best-effort
+  }
 }
 
 function bundledTemplateDir(): string | null {
   // Local checkout only — packaged builds must not rely on bundled app-templates.
   if (app.isPackaged) return null;
-  return join(process.cwd(), 'resources', 'app-templates', 'react-template');
+  return join(process.cwd(), 'resources', 'app-templates', 'react-a2ui-template');
 }
 
 function cachedTemplateDir(): string {
-  return join(app.getPath('userData'), 'app-templates', 'react-template');
+  return join(app.getPath('userData'), 'app-templates', 'react-a2ui-template');
 }
 
+/** Single-package (root package.json + src) or legacy monorepo (frontend/package.json). */
 function isValidReactTemplate(dir: string): boolean {
-  return existsSync(join(dir, 'frontend', 'package.json'));
+  if (existsSync(join(dir, 'frontend', 'package.json'))) return true;
+  return existsSync(join(dir, 'package.json')) && existsSync(join(dir, 'src'));
+}
+
+/** npm / vite cwd for a user app (root package or legacy frontend/). */
+export function resolveAppNpmCwd(appPath: string): string {
+  if (existsSync(join(appPath, 'package.json'))) return appPath;
+  const frontendDir = join(appPath, 'frontend');
+  if (existsSync(join(frontendDir, 'package.json'))) return frontendDir;
+  throw new Error('未找到 package.json（应用根或 frontend/）');
 }
 
 function templateMetaPath(dir: string): string {
@@ -218,13 +270,19 @@ async function downloadReactTemplateZip(zipPath: string): Promise<void> {
 
 /**
  * Ensure the React engineering template is available locally.
- * Primary: download + extract OSS zip into userData cache.
- * Fallback: local resources/app-templates in unpackaged/dev only (never packaged).
+ * Unpackaged/dev: prefer local `react-a2ui-template` to avoid stale OSS monorepo zips.
+ * Packaged: download + extract OSS zip into userData cache; fallback to local only if present.
  */
 async function ensureReactTemplateDir(): Promise<string> {
   if (ensureTemplatePromise) return ensureTemplatePromise;
 
   ensureTemplatePromise = (async () => {
+    const bundled = bundledTemplateDir();
+    if (!app.isPackaged && bundled && isValidReactTemplate(bundled)) {
+      logger.info(`[app-dev] using local A2UI template dir=${bundled}`);
+      return bundled;
+    }
+
     const cacheDir = cachedTemplateDir();
     const metaPath = templateMetaPath(cacheDir);
 
@@ -242,8 +300,8 @@ async function ensureReactTemplateDir(): Promise<string> {
       }
     }
 
-    const stagingRoot = await mkdtemp(join(tmpdir(), 'sclaw-react-template-'));
-    const zipPath = join(stagingRoot, 'react-template.zip');
+    const stagingRoot = await mkdtemp(join(tmpdir(), 'sclaw-react-a2ui-template-'));
+    const zipPath = join(stagingRoot, 'react-a2ui-template.zip');
     const extractDir = join(stagingRoot, 'extract');
 
     try {
@@ -251,13 +309,17 @@ async function ensureReactTemplateDir(): Promise<string> {
       await downloadReactTemplateZip(zipPath);
       await extractZip(zipPath, extractDir);
 
-      if (!isValidReactTemplate(extractDir)) {
-        throw new Error('应用模板解压后缺少 frontend/package.json');
+      const top = await readdir(extractDir, { withFileTypes: true });
+      const resolvedExtract =
+        top.length === 1 && top[0].isDirectory() ? join(extractDir, top[0].name) : extractDir;
+
+      if (!isValidReactTemplate(resolvedExtract)) {
+        throw new Error('应用模板解压后缺少 package.json+src 或 frontend/package.json');
       }
 
       await rm(cacheDir, { recursive: true, force: true }).catch(() => undefined);
       await mkdir(dirname(cacheDir), { recursive: true });
-      await cp(extractDir, cacheDir, { recursive: true });
+      await cp(resolvedExtract, cacheDir, { recursive: true });
       await writeFile(
         metaPath,
         `${JSON.stringify({
@@ -270,7 +332,6 @@ async function ensureReactTemplateDir(): Promise<string> {
       logger.info(`[app-dev] react template ready from OSS cacheDir=${cacheDir}`);
       return cacheDir;
     } catch (error) {
-      const bundled = bundledTemplateDir();
       if (bundled && isValidReactTemplate(bundled)) {
         logger.warn(
           `[app-dev] OSS template download failed, falling back to local checkout template: ${bundled}`,
@@ -410,13 +471,15 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
     projectType: input.projectType ?? 'frontend',
   });
 
+  let createdApplicationId: string | undefined;
   try {
-    await createStoApp(appPath, {
+    const created = await createStoApp(appPath, {
       name,
       description: `${name} 应用`,
       message: `Initial commit: ${name}`,
     });
     logger.info(`[app-dev] sto-app create linked name=${name} appPath=${appPath}`);
+    createdApplicationId = extractApplicationId(created.json);
   } catch (err) {
     logger.warn(`[app-dev] sto-app create skipped name=${name} appPath=${appPath}:`, err);
   }
@@ -445,6 +508,22 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
   const workspace = await createWorkspace({ name, rootPath: appPath });
   const workspaceId: string = workspace.id;
 
+  if (!createdApplicationId) {
+    const status = await getStoAppStatus(appPath).catch(() => null);
+    createdApplicationId = status?.applicationId;
+    if (!createdApplicationId && status?.applicationName) {
+      // keep name for later binding if id appears
+    }
+  }
+  if (createdApplicationId) {
+    await upsertStoAppBinding({
+      applicationId: createdApplicationId,
+      applicationName: name,
+      localPath: appPath,
+      workspaceId,
+    }).catch((err) => logger.warn('[app-dev] binding upsert after create failed:', err));
+  }
+
   logger.info(`[app-dev] createUserApp workspaceReady workspaceId=${workspaceId} appPath=${appPath}`);
 
   setStatus(workspaceId, { appPath, phase: 'created', progress: 0 });
@@ -471,9 +550,10 @@ export async function importUserApp(input: {
   }
 
   const hasFrontend = existsSync(join(appPath, 'frontend', 'package.json'));
+  const hasRootPackage = existsSync(join(appPath, 'package.json')) && existsSync(join(appPath, 'src'));
   const hasMarker = isAppDevWorkspaceRoot(appPath);
-  if (!hasFrontend && !hasMarker) {
-    throw new Error('所选文件夹不是可导入的开发应用（需包含 frontend/package.json）');
+  if (!hasFrontend && !hasRootPackage && !hasMarker) {
+    throw new Error('所选文件夹不是可导入的开发应用（需包含 package.json+src 或 frontend/package.json）');
   }
 
   let projectType = 'frontend';
@@ -530,38 +610,157 @@ export async function importUserApp(input: {
   return { workspaceId, appPath, workspaceName: workspace.name ?? workspaceName };
 }
 
-/** List session-catalog workspaces that are marked as SClaw 开发应用. */
+/** List development apps: cloud `apps list` is authoritative; bindings mark local readiness. */
 export async function listDevApps(): Promise<DevAppSummary[]> {
+  const listed = await listStoApps();
+  if (!listed.ok && listed.apps.length === 0) {
+    throw new Error(listed.output || '无法获取 STO 应用列表，请检查 sto-app CLI 与登录态');
+  }
+
+  const bindings = await listStoAppBindings();
+  const bindingById = new Map(bindings.map((b) => [b.applicationId, b]));
   const workspaces = await listUserWorkspaces();
+  const workspaceById = new Map(workspaces.map((w) => [w.id, w]));
+
   const apps: DevAppSummary[] = [];
-  for (const workspace of workspaces) {
-    const markerFile = appDevMarkerPath(workspace.rootPath);
-    if (!existsSync(markerFile)) continue;
-    let projectType = 'frontend';
-    let createdAt = workspace.createdAt;
-    try {
-      const raw = JSON.parse(await readFile(markerFile, 'utf8')) as Partial<AppDevMarker>;
-      if (typeof raw.projectType === 'string') projectType = raw.projectType;
-      if (typeof raw.createdAt === 'string') createdAt = raw.createdAt;
-    } catch {
-      // ignore malformed marker; still treat as app-dev
+  for (const cloud of listed.apps) {
+    const binding = bindingById.get(cloud.applicationId);
+    let localPath = binding?.localPath?.trim() ?? '';
+    let workspaceId = binding?.workspaceId?.trim() ?? '';
+
+    // Heal binding from workspace path if missing but workspace still points here.
+    if ((!localPath || !existsSync(localPath)) && workspaceId) {
+      const ws = workspaceById.get(workspaceId);
+      if (ws?.rootPath && existsSync(ws.rootPath)) {
+        localPath = ws.rootPath;
+      }
     }
+
+    // Match unbound local workspaces by exact path name heuristic once.
+    if (!localPath) {
+      const match = workspaces.find((w) => {
+        if (!isAppDevWorkspaceRoot(w.rootPath)) return false;
+        return w.name === cloud.applicationName || w.rootPath.endsWith(`${sep}${cloud.applicationName}`);
+      });
+      if (match) {
+        localPath = match.rootPath;
+        workspaceId = match.id;
+        await upsertStoAppBinding({
+          applicationId: cloud.applicationId,
+          applicationName: cloud.applicationName,
+          localPath,
+          workspaceId,
+        }).catch(() => undefined);
+      }
+    }
+
+    const pathOk = Boolean(localPath) && existsSync(localPath);
+    const markerOk = pathOk && isAppDevWorkspaceRoot(localPath);
+    if (pathOk && markerOk && workspaceId) {
+      let projectType = 'frontend';
+      let createdAt = new Date(0).toISOString();
+      try {
+        const raw = JSON.parse(await readFile(appDevMarkerPath(localPath), 'utf8')) as Partial<AppDevMarker>;
+        if (typeof raw.projectType === 'string') projectType = raw.projectType;
+        if (typeof raw.createdAt === 'string') createdAt = raw.createdAt;
+      } catch {
+        // ignore
+      }
+      const ws = workspaceById.get(workspaceId);
+      apps.push({
+        workspaceId,
+        name: cloud.applicationName || ws?.name || cloud.applicationId,
+        appPath: localPath,
+        projectType,
+        createdAt: createdAt || ws?.createdAt || new Date().toISOString(),
+        localReady: true,
+        applicationId: cloud.applicationId,
+        availability: 'local',
+      });
+      continue;
+    }
+
     apps.push({
-      workspaceId: workspace.id,
-      name: workspace.name,
-      appPath: workspace.rootPath,
-      projectType,
-      createdAt,
-      localReady: true,
+      workspaceId: '',
+      name: cloud.applicationName,
+      appPath: localPath || '',
+      projectType: 'frontend',
+      createdAt: binding?.updatedAt || new Date().toISOString(),
+      localReady: false,
+      applicationId: cloud.applicationId,
+      availability: pathOk ? 'path-missing' : 'remote-only',
     });
   }
+
   return apps.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 /** Workspace ids that belong to 开发应用 — used to hide them from the sidebar. */
 export async function listDevAppWorkspaceIds(): Promise<string[]> {
-  const apps = await listDevApps();
-  return apps.map((app) => app.workspaceId);
+  const apps = await listDevApps().catch(() => [] as DevAppSummary[]);
+  return apps.filter((app) => app.localReady && app.workspaceId).map((app) => app.workspaceId);
+}
+
+/**
+ * Clone a cloud STO app into a user-selected parent directory, then bind workspace.
+ * Target path = parentDir / sanitize(name). Must be empty or non-existent.
+ */
+export async function cloneDevApp(input: {
+  applicationId: string;
+  applicationName?: string;
+  parentDir: string;
+}): Promise<CreateUserAppResult & { applicationId: string }> {
+  const applicationId = input.applicationId.trim();
+  if (!applicationId) throw new Error('缺少 applicationId');
+  const parentDir = resolve(input.parentDir.trim());
+  if (!parentDir || !existsSync(parentDir) || !statSync(parentDir).isDirectory()) {
+    throw new Error('请选择有效的父目录');
+  }
+
+  const name = (input.applicationName?.trim() || applicationId).trim();
+  const folderName = sanitizePackageName(name) || applicationId;
+  const appPath = join(parentDir, folderName);
+  if (existsSync(appPath)) {
+    const contents = await readdir(appPath).catch(() => []);
+    if (contents.length > 0) {
+      throw new Error(`目标文件夹已存在且不为空：${appPath}`);
+    }
+  }
+
+  await cloneStoApp(applicationId, appPath);
+
+  await writeAppDevBootstrap(appPath, {
+    name,
+    projectType: 'frontend',
+  });
+
+  try {
+    await ensureAppOpenspecScaffold(appPath);
+  } catch (err) {
+    logger.warn('[app-dev] openspec scaffold after clone skipped:', err);
+  }
+
+  const workspace = await createWorkspace({ name, rootPath: appPath });
+  const workspaceId = workspace.id;
+
+  await upsertStoAppBinding({
+    applicationId,
+    applicationName: name,
+    localPath: appPath,
+    workspaceId,
+  });
+
+  setStatus(workspaceId, { appPath, phase: 'created', progress: 0 });
+  void runSetupPipeline(workspaceId, appPath).catch((err) => {
+    logger.error('[app-dev] setup pipeline after clone failed:', err);
+  });
+
+  return {
+    workspaceId,
+    appPath,
+    workspaceName: workspace.name ?? name,
+    applicationId,
+  };
 }
 
 /**
@@ -586,6 +785,7 @@ export async function deleteDevApp(
   stopApp(id);
   statuses.delete(id);
 
+  await removeStoAppBindingByWorkspaceId(id).catch(() => undefined);
   await deleteWorkspace(id, gatewayManager);
 
   let deletedFiles = false;
@@ -613,12 +813,12 @@ export async function deleteDevApp(
 
 async function runNpmInstall(workspaceId: string, appPath: string): Promise<void> {
   const { npmBin } = getManagedNodePaths();
-  const frontendDir = join(appPath, 'frontend');
+  const npmCwd = resolveAppNpmCwd(appPath);
   let ratio = 0;
 
   await new Promise<void>((resolve, reject) => {
     const child = spawn(npmBin, ['install', '--no-audit', '--no-fund'], {
-      cwd: frontendDir,
+      cwd: npmCwd,
       env: getNodeSpawnEnv() as NodeJS.ProcessEnv,
       windowsHide: true,
     });
@@ -659,7 +859,7 @@ export async function runSetupPipeline(workspaceId: string, appPath: string): Pr
       }
     }
 
-    const nodeModules = join(appPath, 'frontend', 'node_modules');
+    const nodeModules = join(resolveAppNpmCwd(appPath), 'node_modules');
     if (!existsSync(nodeModules)) {
       setStatus(workspaceId, { phase: 'installing', progress: pipelineProgress('installing', 0) });
       await runNpmInstall(workspaceId, appPath);
@@ -678,6 +878,16 @@ export async function runSetupPipeline(workspaceId: string, appPath: string): Pr
 export function stopApp(workspaceId: string): void {
   stopDevServer(workspaceId);
   setStatus(workspaceId, { phase: 'stopped', progress: 0, previewUrl: undefined });
+}
+
+/**
+ * Recreate the dev server instead of reusing the currently registered process.
+ * The next start allocates a fresh port, so callers must consume the new
+ * previewUrl from status rather than reloading a cached URL.
+ */
+export async function restartApp(workspaceId: string, appPath: string): Promise<void> {
+  stopApp(workspaceId);
+  await runSetupPipeline(workspaceId, appPath);
 }
 
 // ---------------------------------------------------------------------------
@@ -976,15 +1186,32 @@ async function ensureRequirementsLine(requirementsPath: string, packageName: str
   await writeFile(requirementsPath, next, 'utf8');
 }
 
-/** Install a frontend npm package into `frontend/` with `--save`. */
+/** Install a frontend npm package into app package root (or legacy frontend/) with `--save`.
+ * When `packageId` matches `openspec/skill-catalog/packages.manifest.json`, also installs AI skill assets.
+ */
 export async function installNpmPackage(
   appPath: string,
   packageNameRaw: string,
-): Promise<{ packageName: string; output: string }> {
-  const packageName = assertNpmPackageName(packageNameRaw);
-  const frontendDir = join(appPath, 'frontend');
-  if (!existsSync(join(frontendDir, 'package.json'))) {
-    throw new Error('未找到 frontend/package.json，无法安装前端组件包');
+  options?: { packageId?: string },
+): Promise<{
+  packageName: string;
+  output: string;
+  packageId?: string;
+  ai?: { skillId?: string; skillPath?: string; mode: 'full' | 'deps-only' };
+}> {
+  const catalogEntry = options?.packageId
+    ? await findPackageCatalogEntry(appPath, options.packageId)
+    : await findPackageCatalogEntryByNpmName(appPath, packageNameRaw);
+
+  const packageNames = catalogEntry?.npmPackages?.length
+    ? catalogEntry.npmPackages
+    : [assertNpmPackageName(packageNameRaw)];
+
+  let npmCwd: string;
+  try {
+    npmCwd = resolveAppNpmCwd(appPath);
+  } catch {
+    throw new Error('未找到 package.json（应用根或 frontend/），无法安装前端组件包');
   }
 
   if (!isNodeRuntimeReady()) {
@@ -992,26 +1219,64 @@ export async function installNpmPackage(
   }
 
   const { npmBin } = getManagedNodePaths();
-  const result = await collectSpawnOutput(
-    npmBin,
-    ['install', packageName, '--save', '--no-audit', '--no-fund'],
-    { cwd: frontendDir, env: getNodeSpawnEnv() as NodeJS.ProcessEnv },
-  );
-  if (!result.ok) {
-    throw new Error(`npm install ${packageName} 失败\n${result.output}`);
+  const outputs: string[] = [];
+  for (const name of packageNames) {
+    const packageName = assertNpmPackageName(name);
+    const result = await collectSpawnOutput(
+      npmBin,
+      ['install', packageName, '--save', '--no-audit', '--no-fund'],
+      { cwd: npmCwd, env: getNodeSpawnEnv() as NodeJS.ProcessEnv },
+    );
+    if (!result.ok) {
+      throw new Error(`npm install ${packageName} 失败\n${result.output}`);
+    }
+    outputs.push(result.output);
   }
-  return { packageName, output: result.output };
+
+  const primaryName = assertNpmPackageName(packageNames[0] ?? packageNameRaw);
+  if (!catalogEntry?.ai?.skillId) {
+    return {
+      packageName: primaryName,
+      output: outputs.join('\n'),
+      packageId: catalogEntry?.id,
+      ai: { mode: 'deps-only' },
+    };
+  }
+
+  const skill = await installAppDevAssistSkill(appPath, catalogEntry.ai.skillId);
+  await appendPackageAiNote(appPath, catalogEntry);
+  return {
+    packageName: primaryName,
+    output: outputs.join('\n'),
+    packageId: catalogEntry.id,
+    ai: { skillId: skill.skillId, skillPath: skill.targetPath, mode: 'full' },
+  };
 }
 
 /**
  * Install a Python package into `backend/` via bundled uv:
  * create `.venv` if needed, `uv pip install`, and append to requirements.txt.
+ * When packageId matches packages.manifest.json, also installs AI skill assets.
  */
 export async function installPipPackage(
   appPath: string,
   packageNameRaw: string,
-): Promise<{ packageName: string; output: string }> {
-  const packageName = assertPipPackageName(packageNameRaw);
+  options?: { packageId?: string },
+): Promise<{
+  packageName: string;
+  output: string;
+  packageId?: string;
+  ai?: { skillId?: string; skillPath?: string; mode: 'full' | 'deps-only' };
+}> {
+  const catalogEntry = options?.packageId
+    ? await findPackageCatalogEntry(appPath, options.packageId)
+    : (await readPackageCatalog(appPath)).find(
+        (item) =>
+          item.kind === 'backend' &&
+          item.packageName.toLowerCase() === packageNameRaw.trim().toLowerCase(),
+      );
+
+  const packageName = assertPipPackageName(catalogEntry?.packageName ?? packageNameRaw);
   const backendDir = join(appPath, 'backend');
   await mkdir(backendDir, { recursive: true });
 
@@ -1044,7 +1309,24 @@ export async function installPipPackage(
   }
 
   await ensureRequirementsLine(join(backendDir, 'requirements.txt'), packageName);
-  return { packageName, output: install.output };
+
+  if (!catalogEntry?.ai?.skillId) {
+    return {
+      packageName,
+      output: install.output,
+      packageId: catalogEntry?.id,
+      ai: { mode: 'deps-only' },
+    };
+  }
+
+  const skill = await installAppDevAssistSkill(appPath, catalogEntry.ai.skillId);
+  await appendPackageAiNote(appPath, catalogEntry);
+  return {
+    packageName,
+    output: install.output,
+    packageId: catalogEntry.id,
+    ai: { skillId: skill.skillId, skillPath: skill.targetPath, mode: 'full' },
+  };
 }
 
 // ── OpenSpec / 开发辅助 skills（来自工程模板，不单独挂在 SClaw 仓库）──
@@ -1063,6 +1345,86 @@ function appOpenspecCatalogRoot(appPath: string): string {
   const inApp = join(appPath, 'openspec', 'skill-catalog');
   if (existsSync(join(inApp, 'manifest.json'))) return inApp;
   return join(templateDir(), 'openspec', 'skill-catalog');
+}
+
+export type AppDevPackageCatalogItem = {
+  id: string;
+  kind: 'frontend' | 'backend';
+  name: string;
+  packageName: string;
+  description: string;
+  npmPackages?: string[];
+  ai?: { skillId?: string; summary?: string };
+};
+
+async function readPackageCatalog(appPath: string): Promise<AppDevPackageCatalogItem[]> {
+  await ensureAppOpenspecScaffold(appPath);
+  const catalogRoot = appOpenspecCatalogRoot(appPath);
+  const manifestPath = join(catalogRoot, 'packages.manifest.json');
+  if (!existsSync(manifestPath)) return [];
+  try {
+    const raw = JSON.parse(await readFile(manifestPath, 'utf8')) as {
+      packages?: AppDevPackageCatalogItem[];
+    };
+    return Array.isArray(raw.packages) ? raw.packages.filter((p) => p?.id && p?.packageName) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function findPackageCatalogEntry(
+  appPath: string,
+  packageId: string,
+): Promise<AppDevPackageCatalogItem | undefined> {
+  const id = packageId.trim();
+  if (!id) return undefined;
+  const list = await readPackageCatalog(appPath);
+  return list.find((item) => item.id === id);
+}
+
+async function findPackageCatalogEntryByNpmName(
+  appPath: string,
+  packageNameRaw: string,
+): Promise<AppDevPackageCatalogItem | undefined> {
+  const name = packageNameRaw.trim().toLowerCase();
+  if (!name) return undefined;
+  const list = await readPackageCatalog(appPath);
+  return list.find((item) => {
+    if (item.kind !== 'frontend') return false;
+    if (item.packageName.toLowerCase() === name) return true;
+    return (item.npmPackages ?? []).some((pkg) => pkg.toLowerCase() === name);
+  });
+}
+
+async function appendPackageAiNote(
+  appPath: string,
+  entry: AppDevPackageCatalogItem,
+): Promise<void> {
+  const agentsPath = join(appPath, '.sclaw', 'AGENTS.md');
+  if (!existsSync(agentsPath)) return;
+  const markerStart = `<!-- sclaw-pkg:${entry.id} -->`;
+  const markerEnd = `<!-- /sclaw-pkg:${entry.id} -->`;
+  let content = await readFile(agentsPath, 'utf8');
+  if (content.includes(markerStart)) return;
+  const summary = entry.ai?.summary?.trim() || entry.description;
+  const skillLine = entry.ai?.skillId
+    ? `- 技能：\`openspec/skills/${entry.ai.skillId}/SKILL.md\``
+    : '- 技能：无';
+  const block = [
+    markerStart,
+    `## 已选装包：${entry.name} (\`${entry.packageName}\`)`,
+    summary,
+    skillLine,
+    markerEnd,
+  ].join('\n');
+  content = `${content.trimEnd()}\n\n${block}\n`;
+  await writeFile(agentsPath, content, 'utf8');
+}
+
+export async function listAppDevPackageCatalog(
+  appPath: string,
+): Promise<AppDevPackageCatalogItem[]> {
+  return readPackageCatalog(appPath);
 }
 
 function assertOpenspecSkillId(raw: string): string {
@@ -1093,6 +1455,26 @@ async function ensureAppOpenspecScaffold(appPath: string): Promise<void> {
   const catalogSrc = join(templateOpenspec, 'skill-catalog');
   if (!existsSync(join(catalogDest, 'manifest.json')) && existsSync(join(catalogSrc, 'manifest.json'))) {
     await cp(catalogSrc, catalogDest, { recursive: true });
+  }
+
+  // Keep package AI catalog in sync with engineering template (overwrite guidance assets).
+  if (existsSync(catalogSrc)) {
+    await mkdir(catalogDest, { recursive: true });
+    const packagesManifest = 'packages.manifest.json';
+    const srcManifest = join(catalogSrc, packagesManifest);
+    const destManifest = join(catalogDest, packagesManifest);
+    if (existsSync(srcManifest)) {
+      await cp(srcManifest, destManifest);
+    }
+    try {
+      const entries = await readdir(catalogSrc, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory() || !entry.name.startsWith('pkg-')) continue;
+        await cp(join(catalogSrc, entry.name), join(catalogDest, entry.name), { recursive: true });
+      }
+    } catch {
+      // ignore catalog sync errors
+    }
   }
 }
 

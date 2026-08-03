@@ -220,6 +220,25 @@ export async function pushStoApp(
   const cwd = resolve(appPath);
   const trimmed = message.trim() || '更新应用';
   logger.info(`[sto-app] action=push appPath=${cwd} message=${JSON.stringify(trimmed)}`);
+
+  // Always pull first when bound; surface remote/merge errors instead of force-writing.
+  const pull = await runStoApp(['pull', '--json'], cwd);
+  if (!pull.ok) {
+    const data = pull.json && typeof pull.json === 'object'
+      ? pull.json as Record<string, unknown>
+      : null;
+    const syncState = detectSyncState(data);
+    if (syncState === 'merge-required' || syncState === 'remote-ahead') {
+      throw new Error(pull.output || '远端有更新或存在冲突，请先处理后再提交');
+    }
+    // Some CLIs return non-zero when already up to date — continue only if JSON looks clean.
+    if (!data || detectSyncState(data) === 'unknown') {
+      logger.warn(`[sto-app] action=pull-before-push soft-fail output=${summarizeOutput(pull.output)}`);
+    } else if (syncState !== 'synced' && syncState !== 'local-changes') {
+      throw new Error(pull.output || '拉取远端失败，无法提交');
+    }
+  }
+
   const result = await runStoApp(['push', '--message', trimmed, '--json'], cwd);
   if (!result.ok) {
     throw new Error(result.output || 'sto-app 提交失败');
@@ -253,4 +272,104 @@ export async function continueStoAppMerge(
   }
   logger.info(`[sto-app] action=merge-continue success appPath=${cwd} revisionId=${trimmed}`);
   return result;
+}
+
+export interface StoCloudApp {
+  applicationId: string;
+  applicationName: string;
+  raw?: unknown;
+}
+
+function pickString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function normalizeCloudApp(item: unknown): StoCloudApp | null {
+  if (!item || typeof item !== 'object') return null;
+  const row = item as Record<string, unknown>;
+  const applicationId = pickString(
+    row.applicationId,
+    row.appId,
+    row.id,
+    row.application_id,
+  );
+  if (!applicationId) return null;
+  const applicationName = pickString(
+    row.applicationName,
+    row.name,
+    row.title,
+    row.appName,
+  ) ?? applicationId;
+  return { applicationId, applicationName, raw: item };
+}
+
+function extractCloudAppList(json: unknown): StoCloudApp[] {
+  if (!json) return [];
+  if (Array.isArray(json)) {
+    return json.map(normalizeCloudApp).filter((item): item is StoCloudApp => Boolean(item));
+  }
+  if (typeof json !== 'object') return [];
+  const root = json as Record<string, unknown>;
+  const candidates = [root.apps, root.items, root.data, root.list, root.applications];
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      return candidate.map(normalizeCloudApp).filter((item): item is StoCloudApp => Boolean(item));
+    }
+    if (candidate && typeof candidate === 'object') {
+      const nested = candidate as Record<string, unknown>;
+      const nestedList = nested.apps ?? nested.items ?? nested.list;
+      if (Array.isArray(nestedList)) {
+        return nestedList.map(normalizeCloudApp).filter((item): item is StoCloudApp => Boolean(item));
+      }
+    }
+  }
+  return [];
+}
+
+export async function listStoApps(): Promise<{
+  ok: boolean;
+  apps: StoCloudApp[];
+  output: string;
+}> {
+  const cwd = homedir();
+  logger.info('[sto-app] action=list');
+  const result = await runStoApp(['apps', 'list', '--json'], cwd);
+  const apps = extractCloudAppList(result.json);
+  logger.info(`[sto-app] action=list ok=${result.ok} count=${apps.length}`);
+  return { ok: result.ok, apps, output: result.output };
+}
+
+export async function cloneStoApp(
+  applicationId: string,
+  targetDir: string,
+): Promise<StoAppCommandResult> {
+  const id = applicationId.trim();
+  const target = resolve(targetDir.trim());
+  if (!id) throw new Error('缺少 applicationId');
+  if (!target) throw new Error('缺少目标目录');
+  logger.info(`[sto-app] action=clone applicationId=${id} targetDir=${target}`);
+  const result = await runStoApp(['clone', id, target, '--json'], homedir());
+  if (!result.ok) {
+    throw new Error(result.output || 'sto-app 拉取应用失败');
+  }
+  logger.info(`[sto-app] action=clone success applicationId=${id} targetDir=${target}`);
+  return result;
+}
+
+/** Best-effort extract applicationId from create/clone CLI JSON. */
+export function extractApplicationId(json: unknown): string | undefined {
+  if (!json || typeof json !== 'object') return undefined;
+  const row = json as Record<string, unknown>;
+  return pickString(
+    row.applicationId,
+    row.appId,
+    row.id,
+    (row.app as Record<string, unknown> | undefined)?.applicationId,
+    (row.app as Record<string, unknown> | undefined)?.id,
+    (row.data as Record<string, unknown> | undefined)?.applicationId,
+    (row.data as Record<string, unknown> | undefined)?.id,
+  );
 }

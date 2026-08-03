@@ -14,6 +14,11 @@ The Main process SHALL manage user project dev servers through a central registr
 - **WHEN** two apps run dev servers concurrently
 - **THEN** each SHALL receive a distinct free port
 
+#### Scenario: Restart dev server
+- **WHEN** the user requests a restart for a running app
+- **THEN** the manager SHALL stop the registered process and start a new dev server process
+- **AND** SHALL publish the newly allocated preview URL after the new server becomes ready
+
 ### Requirement: Log capture and crash recovery
 The manager SHALL capture stdout/stderr into a bounded in-memory buffer per app, and SHALL restart a crashed dev server with exponential backoff, escalating to agent diagnosis after repeated failures.
 

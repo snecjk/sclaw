@@ -8,7 +8,6 @@ import { createPortal } from 'react-dom';
 import {
   AlertCircle,
   ArrowLeft,
-  ExternalLink,
   History,
   MessageCircle,
 } from 'lucide-react';
@@ -31,22 +30,28 @@ import {
   stoChatScrollContentClass,
   stoChatScrollPaneClass,
 } from '@/lib/surfaces';
-import { openExternalUrl } from '@/lib/preview-url';
 import { AppDevWorkbenchStage } from '@/components/app-dev/AppDevWorkbenchStage';
+import { AppDevRunStatusMenu } from '@/components/app-dev/AppDevRunStatusMenu';
 import { StoAppCommitDialog } from '@/components/app-dev/StoAppCommitDialog';
+import { StoAppDeployControl } from '@/components/app-dev/StoAppDeployControl';
+import { StoAppDeployDialog } from '@/components/app-dev/StoAppDeployDialog';
 import {
   createAppCheckpoint,
+  continueStoAppMerge,
   drainAppErrors,
   ensureAppDevContext,
   getAppDevEnvironment,
   getAppStatus,
   getStoAppStatus,
+  pullStoApp,
   pushStoApp,
   type StoAppStatus,
   restoreAppCheckpoint,
   startApp,
   type AppDevStatus,
 } from '@/lib/app-dev-api';
+import { useStoAppDeploy } from '@/hooks/use-sto-app-deploy';
+import { useAppDevRunControl } from '@/hooks/use-app-dev-run-control';
 import {
   type AppPlazaDevAppTab,
   useAppPlazaShellStore,
@@ -56,24 +61,16 @@ import {
   sclawBrowserEmbedChatShortcutLabel,
 } from '../../../shared/sclaw-embed-browser-shortcut';
 
-const PHASE_LABELS: Record<string, string> = {
-  created: '正在准备运行环境…',
-  'preparing-env': '正在准备运行环境…',
-  installing: '正在安装应用组件…',
-  starting: '正在启动应用…',
-  ready: '运行中',
-  stopped: '已停止',
-  error: '出了点问题',
-};
-
 function WorkbenchChatPane({
   sessionKey,
   appName,
   composerSeed,
+  onBeforeSend,
 }: {
   sessionKey: string;
   appName: string;
   composerSeed?: { text: string; version: number } | null;
+  onBeforeSend?: (text: string) => boolean;
 }) {
   const messages = useChatStore((s) => s.messages);
   const sending = useChatStore((s) => s.sending);
@@ -165,6 +162,7 @@ function WorkbenchChatPane({
         <HomeComposer
           key={composerSeed ? `seed-${composerSeed.version}` : 'composer'}
           seedText={composerSeed?.text}
+          onBeforeSend={onBeforeSend}
           showDisclaimer={false}
           footerAlign="center"
         />
@@ -188,12 +186,38 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const [chatOpen, setChatOpen] = useState(true);
   const [stoStatus, setStoStatus] = useState<StoAppStatus | null>(null);
   const [commitOpen, setCommitOpen] = useState(false);
+  const [deployOpen, setDeployOpen] = useState(false);
+  const [sourceRevision, setSourceRevision] = useState(0);
   const sending = useChatStore((s) => s.sending);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const prevSendingRef = useRef(false);
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
   const appName = workspaces.find((w) => w.id === workspaceId)?.name ?? tab.title;
+  const runControl = useAppDevRunControl({ workspaceId, setStatus });
   const closeDevAppTab = useAppPlazaShellStore((s) => s.closeDevAppTab);
+  const canDeploy = Boolean(
+    stoStatus?.available && (stoStatus.bound || stoStatus.applicationId),
+  );
+  const deploy = useStoAppDeploy({
+    workspaceId,
+    applicationId: stoStatus?.applicationId,
+    appName,
+    onFailedPrompt: (prompt) => {
+      setComposerSeed((prev) => ({
+        text: prompt,
+        version: (prev?.version ?? 0) + 1,
+      }));
+      setChatOpen(true);
+    },
+    onStatusRefresh: async () => {
+      const next = await getStoAppStatus(workspaceId).catch(() => null);
+      if (next) setStoStatus(next);
+    },
+  });
+
+  useEffect(() => {
+    setSourceRevision(0);
+  }, [workspaceId]);
 
   const platform = window.electron?.platform
     ?? (navigator.platform.toLowerCase().includes('mac') ? 'darwin' : 'win32');
@@ -262,6 +286,8 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       if ((!next || next.phase === 'stopped') && !startedOnce) {
         startedOnce = true;
         void startApp(workspaceId).catch(() => undefined);
+      } else if (next && next.phase !== 'stopped') {
+        startedOnce = true;
       }
       if (next) setStatus(next);
     };
@@ -279,6 +305,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         await createAppCheckpoint(workspaceId, '对话修改').catch(() => undefined);
         const errors = await drainAppErrors(workspaceId).catch(() => [] as string[]);
         if (errors.length > 0) setPendingErrors(errors);
+        setSourceRevision((n) => n + 1);
       })();
     }
     prevSendingRef.current = sending;
@@ -301,18 +328,11 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const handleRestore = async () => {
     const result = await restoreAppCheckpoint(workspaceId);
     if (result.restored) {
+      setSourceRevision((n) => n + 1);
       toast.success('已恢复到上一版，页面稍后自动刷新');
     } else {
       toast.error('暂时无法恢复，请稍后再试');
     }
-  };
-
-  const handleOpenInSystemBrowser = () => {
-    if (!status?.previewUrl) {
-      toast.message('预览还没准备好，稍后再试');
-      return;
-    }
-    openExternalUrl(status.previewUrl);
   };
 
   const handleBack = () => {
@@ -332,8 +352,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   };
 
   const phase = status?.phase ?? 'created';
-  const isRunning = phase === 'ready' && Boolean(status?.previewUrl);
-  const isWorking = phase === 'created' || phase === 'preparing-env' || phase === 'installing' || phase === 'starting';
   const stoStatusTone = stoStatus?.available && stoStatus.bound
     ? stoStatus.syncState === 'merge-required'
       ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300'
@@ -369,19 +387,13 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         </button>
         <div className="h-4 w-px bg-border" aria-hidden />
         <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{appName}</h1>
-        <span className="no-drag flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span
-            className={cn(
-              'inline-block h-2 w-2 rounded-full',
-              isRunning && 'bg-[var(--sto-functional-success)]',
-              isWorking && 'bg-[var(--sto-functional-warning)]',
-              phase === 'error' && 'bg-[var(--sto-functional-error)]',
-              phase === 'stopped' && 'bg-muted-foreground/50',
-            )}
-            aria-hidden
-          />
-          {PHASE_LABELS[phase] ?? phase}
-        </span>
+        <AppDevRunStatusMenu
+          phase={phase}
+          pending={runControl.pending}
+          onStart={() => void runControl.start()}
+          onStop={() => void runControl.stop()}
+          onRestart={() => void runControl.restart()}
+        />
 
         <div className="no-drag flex items-center gap-1">
           <span
@@ -409,29 +421,66 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
             提交
           </Button>
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs"
-            disabled
-            title="发布 CLI 暂未提供"
-          >
-            发布
-          </Button>
+          {stoStatus?.bound && (stoStatus.syncState === 'remote-ahead' || stoStatus.syncState === 'merge-required') ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              onClick={() => {
+                void pullStoApp(workspaceId)
+                  .then(async () => {
+                    const next = await getStoAppStatus(workspaceId).catch(() => null);
+                    if (next) setStoStatus(next);
+                    setSourceRevision((n) => n + 1);
+                    toast.success('已拉取远端更新');
+                  })
+                  .catch(async (error) => {
+                    const next = await getStoAppStatus(workspaceId).catch(() => null);
+                    if (next) setStoStatus(next);
+                    toast.error(error instanceof Error ? error.message : '拉取失败');
+                  });
+              }}
+            >
+              拉取
+            </Button>
+          ) : null}
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs"
-            title="在系统浏览器中打开预览"
-            disabled={!isRunning}
-            onClick={handleOpenInSystemBrowser}
-          >
-            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-            系统浏览器预览
-          </Button>
+          {stoStatus?.bound && stoStatus.syncState === 'merge-required' ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              disabled={!stoStatus.revisionId}
+              onClick={() => {
+                const revisionId = stoStatus.revisionId?.trim();
+                if (!revisionId) {
+                  toast.error('缺少冲突版本号');
+                  return;
+                }
+                void continueStoAppMerge(workspaceId, revisionId)
+                  .then(async () => {
+                    const next = await getStoAppStatus(workspaceId).catch(() => null);
+                    if (next) setStoStatus(next);
+                    setSourceRevision((n) => n + 1);
+                    toast.success('已继续合并');
+                  })
+                  .catch((error) => {
+                    toast.error(error instanceof Error ? error.message : '合并继续失败');
+                  });
+              }}
+            >
+              继续合并
+            </Button>
+          ) : null}
+
+          <StoAppDeployControl
+            canDeploy={canDeploy}
+            job={deploy.job}
+            onOpenDialog={() => setDeployOpen(true)}
+            onClearTerminalJob={deploy.clear}
+          />
 
           <Button
             type="button"
@@ -471,8 +520,10 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           pendingErrors={pendingErrors}
           onFixErrors={handleFixErrors}
           onDismissErrors={() => setPendingErrors([])}
-          onRetryStart={() => void startApp(workspaceId).catch(() => undefined)}
+          onRetryStart={() => void runControl.start()}
           onFillComposerFromDiagnostics={handleFillComposerFromDiagnostics}
+          sourceRevision={sourceRevision}
+          previewRevision={runControl.previewRevision}
         />
 
         {chatOpen ? (
@@ -483,6 +534,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
                   sessionKey={currentSessionKey}
                   appName={appName}
                   composerSeed={composerSeed}
+                  onBeforeSend={runControl.interceptRestartIntent}
                 />
               )
               : null}
@@ -509,6 +561,16 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         initialMessage={`更新应用: ${appName}`}
         onCancel={() => setCommitOpen(false)}
         onConfirm={handleSubmit}
+      />
+      <StoAppDeployDialog
+        open={deployOpen}
+        appName={appName}
+        applicationId={stoStatus?.applicationId}
+        onCancel={() => setDeployOpen(false)}
+        onConfirm={(input) => {
+          setDeployOpen(false);
+          deploy.start(input);
+        }}
       />
     </div>
   );

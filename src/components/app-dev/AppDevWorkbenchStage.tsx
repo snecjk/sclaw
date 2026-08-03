@@ -4,7 +4,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
+  ArrowLeft,
   Cloud,
+  ExternalLink,
   Eye,
   FileCode2,
   FolderTree,
@@ -13,6 +15,7 @@ import {
   RotateCw,
   Save,
   Search,
+  Square,
   Users,
   X,
   Wand2,
@@ -23,7 +26,10 @@ import { AppDevCommunityPanel } from '@/components/app-dev/AppDevCommunityPanel'
 import { AppDevFileTree } from '@/components/app-dev/AppDevFileTree';
 import { AppDevGitPanel } from '@/components/app-dev/AppDevGitPanel';
 import { AppDevMonacoEditor, formatAppDevDiagnosticsPrompt } from '@/components/app-dev/AppDevMonacoEditor';
-import { SclawBrowserFrame } from '@/components/sclaw-browser/SclawBrowserFrame';
+import {
+  SclawBrowserFrame,
+  type SclawBrowserFrameHandle,
+} from '@/components/sclaw-browser/SclawBrowserFrame';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { buildAppDevFileTree } from '@/lib/app-dev-file-tree';
@@ -36,7 +42,10 @@ import {
   type AppSourceFileEntry,
   type AppSourceSearchHit,
 } from '@/lib/app-dev-api';
+import { openExternalUrl } from '@/lib/preview-url';
 import { cn } from '@/lib/utils';
+import '@/components/more-apps/app-plaza-shell.css';
+import '@/components/sclaw-browser/sclaw-browser-overlay.css';
 
 export type AppDevStageMode = 'preview' | 'code' | 'git' | 'cloud' | 'community';
 type CodeSidebar = 'files' | 'search';
@@ -69,6 +78,13 @@ interface AppDevWorkbenchStageProps {
   onRetryStart: () => void;
   /** Monaco diagnostics → fill chat composer (no auto-send). */
   onFillComposerFromDiagnostics?: (text: string) => void;
+  /**
+   * Bumped when AI / restore writes files on disk.
+   * Open code tabs reload from disk (no manual「刷新代码」按钮).
+   */
+  sourceRevision?: number;
+  /** Bumped for a process restart, including when the new server reuses a URL. */
+  previewRevision?: number;
 }
 
 function fileName(path: string): string {
@@ -84,6 +100,8 @@ export function AppDevWorkbenchStage({
   onDismissErrors,
   onRetryStart,
   onFillComposerFromDiagnostics,
+  sourceRevision = 0,
+  previewRevision = 0,
 }: AppDevWorkbenchStageProps) {
   const [mode, setMode] = useState<AppDevStageMode>('preview');
   const [sidebar, setSidebar] = useState<CodeSidebar>('files');
@@ -105,10 +123,35 @@ export function AppDevWorkbenchStage({
   const dirty = Boolean(activeTab && activeTab.draft !== activeTab.saved);
   const tree = useMemo(() => buildAppDevFileTree(files.map((f) => f.path)), [files]);
   const openPathsRef = useRef<Set<string>>(new Set());
+  const tabsRef = useRef(tabs);
+  const modeRef = useRef(mode);
+  const previewFrameRef = useRef<SclawBrowserFrameHandle>(null);
+  const sourceRevisionSeenRef = useRef(sourceRevision);
+  const [previewCanGoBack, setPreviewCanGoBack] = useState(false);
+  const [previewAddress, setPreviewAddress] = useState('');
+  /**
+   * URL the frame is mounted with. Only explicit refresh / address commits may
+   * change it — tracking in-page navigation here would remount on every route.
+   */
+  const [previewMountUrl, setPreviewMountUrl] = useState('');
+  const [previewReloadNonce, setPreviewReloadNonce] = useState(0);
+
+  useEffect(() => {
+    const next = status?.previewUrl ?? '';
+    setPreviewAddress(next);
+    setPreviewMountUrl(next);
+    setPreviewCanGoBack(false);
+    setPreviewReloadNonce(0);
+  }, [status?.previewUrl]);
 
   useEffect(() => {
     openPathsRef.current = new Set(tabs.map((t) => t.path));
+    tabsRef.current = tabs;
   }, [tabs]);
+
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
 
   const loadFileList = async () => {
     setFilesLoading(true);
@@ -179,16 +222,120 @@ export function AppDevWorkbenchStage({
     }
   };
 
+  const refreshPreview = () => {
+    const current =
+      previewFrameRef.current?.getURL()?.trim()
+      || previewAddress.trim()
+      || status?.previewUrl?.trim()
+      || '';
+    if (!current) {
+      previewFrameRef.current?.reload();
+      return;
+    }
+    // Remount at the current URL (including hash) so soft SPA reloads cannot no-op.
+    setPreviewMountUrl(current);
+    setPreviewAddress(current);
+    setPreviewCanGoBack(false);
+    setPreviewReloadNonce((value) => value + 1);
+  };
+
+  const commitPreviewAddress = () => {
+    const next = previewAddress.trim();
+    if (!next) {
+      setPreviewAddress(previewMountUrl || status?.previewUrl || '');
+      return;
+    }
+    setPreviewMountUrl(next);
+    previewFrameRef.current?.loadURL(next);
+  };
+
+  const openPreviewInSystemBrowser = () => {
+    const current =
+      previewFrameRef.current?.getURL()?.trim()
+      || previewAddress.trim()
+      || status?.previewUrl?.trim()
+      || '';
+    if (!current) {
+      toast.message('预览还没准备好，稍后再试');
+      return;
+    }
+    openExternalUrl(current);
+  };
+
+  const refreshOpenCodeFromDisk = async (opts?: { force?: boolean }) => {
+    const openTabs = tabsRef.current;
+    await loadFileList();
+    if (openTabs.length === 0) return;
+
+    setFileLoading(true);
+    try {
+      const results = await Promise.all(
+        openTabs.map(async (tab) => {
+          if (!opts?.force && tab.draft !== tab.saved) {
+            return { path: tab.path, skipped: true as const };
+          }
+          const file = await readAppSourceFile(workspaceId, tab.path);
+          return { path: tab.path, content: file.content, skipped: false as const };
+        }),
+      );
+      setTabs((prev) => prev.map((tab) => {
+        const hit = results.find((r) => r.path === tab.path);
+        if (!hit || hit.skipped) return tab;
+        return { ...tab, draft: hit.content, saved: hit.content };
+      }));
+      const skipped = results.filter((r) => r.skipped).length;
+      if (skipped > 0 && !opts?.force) {
+        toast.message(`有 ${skipped} 个未保存文件未刷新`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '刷新代码失败');
+    } finally {
+      setFileLoading(false);
+    }
+  };
+
   useEffect(() => {
-    if (mode !== 'code') return;
+    if (sourceRevision <= 0) return;
+    if (sourceRevisionSeenRef.current === sourceRevision) return;
+    sourceRevisionSeenRef.current = sourceRevision;
+    void refreshOpenCodeFromDisk({ force: true });
+    refreshPreview();
+  }, [sourceRevision, workspaceId]);
+
+  useEffect(() => {
+    sourceRevisionSeenRef.current = -1;
+  }, [workspaceId]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const isSave = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's';
-      if (!isSave) return;
+      if (isSave && modeRef.current === 'code') {
+        event.preventDefault();
+        event.stopPropagation();
+        void handleSave();
+        return;
+      }
+
+      const isRefresh =
+        event.key === 'F5'
+        || ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'r' && !event.shiftKey);
+      if (!isRefresh) return;
+
+      // Capture: prevent Electron / Chromium from reloading the whole workbench shell.
       event.preventDefault();
-      void handleSave();
+      event.stopPropagation();
+
+      const currentMode = modeRef.current;
+      if (currentMode === 'preview') {
+        refreshPreview();
+        return;
+      }
+      if (currentMode === 'code') {
+        void refreshOpenCodeFromDisk();
+      }
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
   });
 
   const openFile = (path: string) => {
@@ -308,7 +455,90 @@ export function AppDevWorkbenchStage({
 
       {mode === 'preview' ? (
         isRunning && status?.previewUrl ? (
-          <SclawBrowserFrame url={status.previewUrl} title={appName} embedRuntimeId={null} />
+          <div className="flex min-h-0 flex-1 flex-col">
+            <header className="app-plaza-browser-toolbar">
+              <div className="app-plaza-browser-toolbar__nav">
+                <button
+                  type="button"
+                  className="app-plaza-browser-toolbar__nav-btn"
+                  disabled={!previewCanGoBack}
+                  onClick={() => previewFrameRef.current?.goBack()}
+                  title="返回上一页"
+                  aria-label="返回上一页"
+                >
+                  <ArrowLeft className="h-4 w-4" aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className="app-plaza-browser-toolbar__nav-btn"
+                  onClick={refreshPreview}
+                  title="刷新"
+                  aria-label="刷新"
+                >
+                  <RotateCw className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
+              <form
+                className="app-plaza-browser-address"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  commitPreviewAddress();
+                }}
+              >
+                <input
+                  className="app-plaza-browser-toolbar__url"
+                  value={previewAddress}
+                  onChange={(event) => setPreviewAddress(event.target.value)}
+                  onBlur={() => {
+                    const current =
+                      previewFrameRef.current?.getURL()
+                      || previewMountUrl
+                      || status.previewUrl
+                      || '';
+                    if (previewAddress.trim() && previewAddress.trim() !== current) {
+                      commitPreviewAddress();
+                    } else {
+                      setPreviewAddress(current);
+                    }
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      setPreviewAddress(
+                        previewFrameRef.current?.getURL()
+                        || previewMountUrl
+                        || status.previewUrl
+                        || '',
+                      );
+                      (event.target as HTMLInputElement).blur();
+                    }
+                  }}
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  aria-label="预览地址"
+                />
+              </form>
+              <button
+                type="button"
+                className="app-plaza-browser-toolbar__btn"
+                onClick={openPreviewInSystemBrowser}
+              >
+                在系统浏览器打开
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            </header>
+            <div className="relative min-h-0 flex-1">
+              <SclawBrowserFrame
+                key={`${previewMountUrl || status.previewUrl}:${previewRevision}:${previewReloadNonce}`}
+                ref={previewFrameRef}
+                url={previewMountUrl || status.previewUrl}
+                title={appName}
+                embedRuntimeId={null}
+                onNavStateChange={({ canGoBack }) => setPreviewCanGoBack(canGoBack)}
+                onPageUrl={(pageUrl) => setPreviewAddress(pageUrl)}
+              />
+            </div>
+          </div>
         ) : (
           <div className="flex flex-1 items-center justify-center p-8">
             <div className="w-full max-w-sm text-center">
@@ -322,6 +552,18 @@ export function AppDevWorkbenchStage({
                   <Button type="button" size="sm" className="gap-1" onClick={onRetryStart}>
                     <RotateCw className="h-3.5 w-3.5" aria-hidden />
                     重试
+                  </Button>
+                </>
+              ) : phase === 'stopped' ? (
+                <>
+                  <Square className="mx-auto mb-4 h-9 w-9 text-muted-foreground" aria-hidden />
+                  <p className="mb-2 text-sm font-medium text-foreground">预览已停止</p>
+                  <p className="mb-6 text-xs leading-relaxed text-muted-foreground">
+                    可以从顶部状态菜单重新启动，也可以点击下方按钮启动。
+                  </p>
+                  <Button type="button" size="sm" className="gap-1" onClick={onRetryStart}>
+                    <RotateCw className="h-3.5 w-3.5" aria-hidden />
+                    启动预览
                   </Button>
                 </>
               ) : (

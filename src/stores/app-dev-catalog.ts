@@ -30,8 +30,9 @@ export const useAppDevCatalogStore = create<AppDevCatalogState>((set, get) => ({
       // Keep any optimistically registered ids that the API hasn't listed yet.
       const merged = Array.from(new Set([...get().workspaceIds, ...ids]));
       set({ workspaceIds: merged, apps, loaded: true });
-    } catch {
+    } catch (error) {
       set({ loaded: true });
+      throw error;
     }
   },
   registerWorkspaceId: (workspaceId) => {

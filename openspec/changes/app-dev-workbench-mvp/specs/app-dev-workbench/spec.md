@@ -9,6 +9,20 @@ The system SHALL provide a workbench page with the existing Chat (bound to the a
 - **WHEN** the dev server becomes ready for the current app
 - **THEN** the preview pane SHALL automatically load the local preview URL without user action
 
+#### Scenario: Control the running preview
+- **WHEN** the user opens the run-status control
+- **THEN** a running preview SHALL offer stop and restart actions
+- **AND** a stopped or failed preview SHALL offer a start action
+
+#### Scenario: Reload preview after restart
+- **WHEN** a preview restart completes
+- **THEN** the workbench SHALL discard the old preview frame and load the newly reported preview URL
+- **AND** SHALL reload the frame even if the newly allocated URL equals the previous URL
+
+#### Scenario: Natural-language restart
+- **WHEN** the user sends a standalone natural-language command to restart the preview
+- **THEN** the workbench SHALL consume the command locally and invoke the same restart operation without sending it to the project agent
+
 #### Scenario: Dark mode
 - **WHEN** the workbench renders in dark mode
 - **THEN** layout chrome, status indicators, progress and error states SHALL use semantic theme tokens per docs/sto-design.md with readable contrast, including hover/focus/disabled states

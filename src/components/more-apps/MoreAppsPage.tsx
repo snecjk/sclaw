@@ -101,7 +101,9 @@ export function MoreAppsPage() {
 
   useEffect(() => {
     if (activeTab === 'installed' || createAppOpen) {
-      void refreshDevApps();
+      void refreshDevApps().catch((error) => {
+        toast.error(error instanceof Error ? error.message : '无法同步 STO 应用列表');
+      });
     }
   }, [activeTab, createAppOpen, refreshDevApps]);
 

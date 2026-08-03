@@ -12,6 +12,7 @@ import {
   DEFAULT_APPS_PARENT_DIR,
   createCheckpoint,
   createUserApp,
+  cloneDevApp,
   importUserApp,
   ensureAppDevContext,
   getAppDevStatus,
@@ -21,6 +22,7 @@ import {
   listDevAppWorkspaceIds,
   listDevApps,
   readAppSourceFile,
+  restartApp,
   restoreCheckpoint,
   runSetupPipeline,
   searchAppSourceFiles,
@@ -30,6 +32,7 @@ import {
   installPipPackage,
   listAppDevAssistSkills,
   installAppDevAssistSkill,
+  listAppDevPackageCatalog,
   deleteDevApp,
   type CreateUserAppInput,
 } from '../../services/app-dev-service';
@@ -42,6 +45,7 @@ import {
   pullStoApp,
   pushStoApp,
 } from '../../services/sto-app-service';
+import { getStoAppBindingByWorkspaceId } from '../../services/sto-app-binding-store';
 
 async function resolveAppPath(workspaceId: string): Promise<string> {
   const rootPath = await getWorkspaceRootPath(workspaceId);
@@ -97,6 +101,21 @@ export async function handleAppDevRoutes(
       return true;
     }
 
+    if (url.pathname === '/api/app-dev/apps/clone' && req.method === 'POST') {
+      const body = await parseJsonBody<{
+        applicationId?: string;
+        applicationName?: string;
+        parentDir?: string;
+      }>(req);
+      const result = await cloneDevApp({
+        applicationId: body.applicationId ?? '',
+        applicationName: body.applicationName,
+        parentDir: body.parentDir ?? '',
+      });
+      sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
     if (url.pathname === '/api/app-dev/apps/import' && req.method === 'POST') {
       const body = await parseJsonBody<{ appPath: string; name?: string }>(req);
       const result = await importUserApp({
@@ -143,6 +162,14 @@ export async function handleAppDevRoutes(
     if (url.pathname === '/api/app-dev/apps/stop' && req.method === 'POST') {
       const body = await parseJsonBody<{ workspaceId: string }>(req);
       stopApp(body.workspaceId);
+      sendJson(res, 200, { success: true });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/apps/restart' && req.method === 'POST') {
+      const body = await parseJsonBody<{ workspaceId: string }>(req);
+      const appPath = await resolveAppPath(body.workspaceId);
+      void restartApp(body.workspaceId, appPath).catch(() => undefined);
       sendJson(res, 200, { success: true });
       return true;
     }
@@ -218,18 +245,37 @@ export async function handleAppDevRoutes(
     }
 
     // --- Community skill package install ---
+    if (url.pathname === '/api/app-dev/packages' && req.method === 'GET') {
+      const workspaceId = url.searchParams.get('workspaceId') ?? '';
+      const appPath = await resolveAppPath(workspaceId);
+      sendJson(res, 200, { success: true, packages: await listAppDevPackageCatalog(appPath) });
+      return true;
+    }
+
     if (url.pathname === '/api/app-dev/packages/npm' && req.method === 'POST') {
-      const body = await parseJsonBody<{ workspaceId: string; packageName: string }>(req);
+      const body = await parseJsonBody<{
+        workspaceId: string;
+        packageName: string;
+        packageId?: string;
+      }>(req);
       const appPath = await resolveAppPath(body.workspaceId);
-      const result = await installNpmPackage(appPath, body.packageName ?? '');
+      const result = await installNpmPackage(appPath, body.packageName ?? '', {
+        packageId: body.packageId,
+      });
       sendJson(res, 200, { success: true, ...result });
       return true;
     }
 
     if (url.pathname === '/api/app-dev/packages/pip' && req.method === 'POST') {
-      const body = await parseJsonBody<{ workspaceId: string; packageName: string }>(req);
+      const body = await parseJsonBody<{
+        workspaceId: string;
+        packageName: string;
+        packageId?: string;
+      }>(req);
       const appPath = await resolveAppPath(body.workspaceId);
-      const result = await installPipPackage(appPath, body.packageName ?? '');
+      const result = await installPipPackage(appPath, body.packageName ?? '', {
+        packageId: body.packageId,
+      });
       sendJson(res, 200, { success: true, ...result });
       return true;
     }
@@ -254,7 +300,19 @@ export async function handleAppDevRoutes(
     if (url.pathname === '/api/app-dev/sto-app/status' && req.method === 'GET') {
       const workspaceId = url.searchParams.get('workspaceId') ?? '';
       const appPath = await resolveAppPath(workspaceId);
-      sendJson(res, 200, { success: true, status: await getStoAppStatus(appPath) });
+      const status = await getStoAppStatus(appPath);
+      if (!status.applicationId) {
+        const binding = await getStoAppBindingByWorkspaceId(workspaceId);
+        if (binding?.applicationId) {
+          status.applicationId = binding.applicationId;
+          status.applicationName = status.applicationName ?? binding.applicationName;
+          if (!status.bound) {
+            status.bound = true;
+            status.syncLabel = status.syncLabel === '未绑定' ? '状态未知' : status.syncLabel;
+          }
+        }
+      }
+      sendJson(res, 200, { success: true, status });
       return true;
     }
 
@@ -279,6 +337,84 @@ export async function handleAppDevRoutes(
       const appPath = await resolveAppPath(body.workspaceId);
       const result = await continueStoAppMerge(appPath, body.revisionId ?? '');
       sendJson(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/sto-app/deploy' && req.method === 'POST') {
+      const body = await parseJsonBody<{
+        workspaceId?: string;
+        env?: string;
+        applicationId?: string;
+        requestId?: string;
+        deploymentVersion?: string;
+        pushMessage?: string;
+      }>(req);
+      const workspaceId = body.workspaceId ?? '';
+      if (!workspaceId) throw new Error('缺少 workspaceId');
+      const appPath = await resolveAppPath(workspaceId);
+
+      const status = await getStoAppStatus(appPath);
+      const binding = await getStoAppBindingByWorkspaceId(workspaceId);
+      const applicationId = (body.applicationId ?? status.applicationId ?? binding?.applicationId ?? '').trim();
+      if (!applicationId) {
+        throw new Error('缺少 applicationId：请先绑定并提交到 STO 应用');
+      }
+
+      const env = body.env;
+      if (env !== 'daily' && env !== 'stage' && env !== 'online') {
+        throw new Error('请选择部署环境：daily / stage / online');
+      }
+
+      // Always push local changes before kicking off DevOps deploy.
+      const pushMessage = (body.pushMessage ?? `发布前同步 (${env})`).trim() || `发布前同步 (${env})`;
+      logger.info(`[app-dev] deploy: push before create workspaceId=${workspaceId} env=${env}`);
+      await pushStoApp(appPath, pushMessage);
+
+      const { saiCodeDeployCreate } = await import('../../utils/sai-cli');
+      const result = await saiCodeDeployCreate({
+        env,
+        applicationId,
+        requestId: body.requestId,
+        deploymentVersion: body.deploymentVersion,
+      });
+      if (!result.ok) {
+        const message = typeof result.error === 'string'
+          ? result.error
+          : result.error && typeof result.error === 'object' && 'message' in (result.error as object)
+            ? String((result.error as { message?: unknown }).message ?? '发布失败')
+            : '发布失败';
+        throw new Error(message);
+      }
+      sendJson(res, 200, {
+        success: true,
+        applicationId,
+        env,
+        pushed: true,
+        data: result.data ?? null,
+      });
+      return true;
+    }
+
+    if (url.pathname === '/api/app-dev/sto-app/deploy/refresh' && req.method === 'POST') {
+      const body = await parseJsonBody<{ deploymentId?: string }>(req);
+      const deploymentId = (body.deploymentId ?? '').trim();
+      if (!deploymentId) throw new Error('缺少 deploymentId');
+
+      const { saiCodeDeployRefresh } = await import('../../utils/sai-cli');
+      const result = await saiCodeDeployRefresh({ deploymentId });
+      if (!result.ok) {
+        const message = typeof result.error === 'string'
+          ? result.error
+          : result.error && typeof result.error === 'object' && 'message' in (result.error as object)
+            ? String((result.error as { message?: unknown }).message ?? '刷新部署状态失败')
+            : '刷新部署状态失败';
+        throw new Error(message);
+      }
+      sendJson(res, 200, {
+        success: true,
+        deploymentId,
+        data: result.data ?? null,
+      });
       return true;
     }
 

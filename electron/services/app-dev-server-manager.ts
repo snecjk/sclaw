@@ -10,9 +10,18 @@ import { app } from 'electron';
 import { spawn, type ChildProcess } from 'child_process';
 import { createServer } from 'net';
 import { get as httpGet } from 'http';
+import { existsSync } from 'fs';
 import { join } from 'path';
 import { getManagedNodePaths, getNodeSpawnEnv } from '../utils/node-runtime';
 import { logger } from '../utils/logger';
+
+/** Prefer app-root package.json (A2UI single package); fall back to legacy frontend/. */
+function resolveDevServerCwd(appPath: string): string {
+  if (existsSync(join(appPath, 'package.json'))) return appPath;
+  const frontendDir = join(appPath, 'frontend');
+  if (existsSync(join(frontendDir, 'package.json'))) return frontendDir;
+  throw new Error('未找到 package.json（应用根或 frontend/），无法启动预览');
+}
 
 const LOG_BUFFER_LINES = 500;
 const READY_PROBE_TIMEOUT_MS = 60_000;
@@ -172,22 +181,29 @@ export async function startDevServer(
   }
 
   const { npmBin } = getManagedNodePaths();
+  if (!npmBin || !existsSync(npmBin)) {
+    throw new Error(`未找到可用的 npm 可执行文件: ${npmBin || '(empty)'}`);
+  }
   const port = await allocateFreePort();
-  const frontendDir = join(appPath, 'frontend');
+  const cwd = resolveDevServerCwd(appPath);
   const previewUrl = `http://127.0.0.1:${port}/`;
 
-  logger.info(`[app-dev] starting dev server for ${workspaceId} on port ${port}`);
+  logger.info(`[app-dev] starting dev server for ${workspaceId} on port ${port} cwd=${cwd}`);
   const child = spawn(
     npmBin,
     ['run', 'dev', '--', '--port', String(port), '--strictPort', '--host', '127.0.0.1'],
     {
-      cwd: frontendDir,
+      cwd,
       env: getNodeSpawnEnv() as NodeJS.ProcessEnv,
       windowsHide: true,
       detached: process.platform !== 'win32',
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   );
+
+  child.on('error', (err) => {
+    logger.error(`[app-dev] dev server spawn error for ${workspaceId}:`, err);
+  });
 
   const entry: DevServerEntry = {
     workspaceId,
@@ -204,6 +220,11 @@ export async function startDevServer(
 
   child.stdout?.on('data', (d) => pushLog(entry, String(d)));
   child.stderr?.on('data', (d) => pushLog(entry, String(d)));
+  child.on('error', (err) => {
+    const message = `spawn error: ${err instanceof Error ? err.message : String(err)}`;
+    pushLog(entry, message);
+    entry.recentErrors.push(message);
+  });
   child.on('exit', (code) => {
     logger.info(`[app-dev] dev server for ${workspaceId} exited with code ${code}`);
     if (registry.get(workspaceId) !== entry) return;
