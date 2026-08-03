@@ -214,7 +214,7 @@ function WorkflowGenerateRoute() {
         defaultValues={tryRun.startupDefaultValues}
         runtimeUploadNodes={tryRun.runtimeUploadNodes}
         isStarting={tryRun.isStarting}
-        onConfirm={(inputs) => void tryRun.confirmStartup(inputs)}
+        onConfirm={(inputs, engineType) => void tryRun.confirmStartup(inputs, engineType)}
         onClose={tryRun.cancelStartupDialog}
       />
       <TestRunDrawer
@@ -322,7 +322,7 @@ function WorkflowEditRoute() {
         defaultValues={tryRun.startupDefaultValues}
         runtimeUploadNodes={tryRun.runtimeUploadNodes}
         isStarting={tryRun.isStarting}
-        onConfirm={(inputs) => void tryRun.confirmStartup(inputs)}
+        onConfirm={(inputs, engineType) => void tryRun.confirmStartup(inputs, engineType)}
         onClose={tryRun.cancelStartupDialog}
       />
       <TestRunDrawer

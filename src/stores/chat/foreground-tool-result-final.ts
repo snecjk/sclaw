@@ -1,6 +1,5 @@
 import { parseStoToolEnvelope, type WorkflowSchemaReadyData } from '@/lib/builtin-tool-envelope';
 import { dispatchBuiltinToolResult } from '@/lib/builtin-tool-dispatch';
-import { ensureWorkflowCardsInMessages } from '@/lib/workflow-card-injection';
 import {
   extractImagesAsAttachedFiles,
   extractMediaRefs,
@@ -86,19 +85,10 @@ export function handleForegroundToolResultFinal(input: {
       content: finalMessage.content,
     }, { sessionKey, agentId });
 
-    let nextMessages = get().messages;
+    const nextMessages = get().messages;
     const withForm = patchLastAssistantWithWorkflowForm(nextMessages, getMessageText);
     if (withForm !== nextMessages) {
-      nextMessages = withForm;
       set({ messages: withForm });
-    }
-    const withCards = ensureWorkflowCardsInMessages(
-      nextMessages,
-      sessionKey,
-      getMessageText,
-    );
-    if (withCards !== nextMessages) {
-      set({ messages: withCards });
     }
     ensureWorkflowParameterFormInjected(getMessageText);
     void get().loadHistory(true);

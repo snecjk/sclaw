@@ -1,6 +1,7 @@
 import { stripCronLabelPrefix } from '@/lib/cron-session-display';
 import { normalizeUserMessageForDisplay } from '@/lib/user-message-display';
 import { resolveStoredSessionLabel } from '@/lib/session-label';
+import { isWorkflowSessionTitle } from '@/lib/workflow-session';
 import {
   isCorruptedSessionLabel,
   isPlaceholderSessionLabel,
@@ -440,11 +441,21 @@ function resolveOpeningSessionLabel(
   gatewayLabel?: string,
 ): string | undefined {
   const stored = resolveStoredSessionLabel(sessionKey, sessionLabels)?.trim();
-  if (stored && !isCorruptedSessionLabel(stored) && !isPlaceholderSessionLabel(stored)) {
+  if (
+    stored
+    && !isWorkflowSessionTitle(stored)
+    && !isCorruptedSessionLabel(stored)
+    && !isPlaceholderSessionLabel(stored)
+  ) {
     return stripCronLabelPrefix(stored) || stored;
   }
   const label = gatewayLabel?.trim();
-  if (label && !isCorruptedSessionLabel(label) && !isPlaceholderSessionLabel(label)) {
+  if (
+    label
+    && !isWorkflowSessionTitle(label)
+    && !isCorruptedSessionLabel(label)
+    && !isPlaceholderSessionLabel(label)
+  ) {
     return stripCronLabelPrefix(label) || label;
   }
   return undefined;

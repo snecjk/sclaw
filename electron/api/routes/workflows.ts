@@ -5,9 +5,13 @@ import { getStoToken } from '../../utils/auth-store';
 import { logger } from '../../utils/logger';
 import type { HostApiContext } from '../context';
 import { parseJsonBody, sendJson } from '../route-utils';
-import { installWorkflowRuntime, workflowV2BackendFetch } from '../../services/workflow-runtime/bootstrap';
+import { getInstalledWorkflowRuntime, installWorkflowRuntime, workflowV2BackendFetch } from '../../services/workflow-runtime/bootstrap';
 import { workflowExecLog } from '../../services/workflow-runtime/logging';
 import { takeWorkflowDatabaseId } from '../../services/workflow-runtime/id-pool';
+import type { AgentEngineType } from '../../engines/types';
+import { getEngineSessionRegistryEntry } from '../../engines/session-registry';
+import type { StartWorkflowArgs } from '../../services/workflow-runtime/engine';
+import { getOpenClawProvidersConfig } from '../../utils/openclaw-auth';
 
 type WorkflowStartBody = {
   runDatabaseId?: number;
@@ -16,7 +20,40 @@ type WorkflowStartBody = {
   sessionKey?: string;
   runMode?: 'trial' | 'production';
   workflowVersionId?: string | number;
+  /** The chat workflow tool's selected execution engine. */
+  engineType?: AgentEngineType;
+  /** Optional display metadata supplied by the chat workflow tool. */
+  chatCardTitle?: string;
+  chatParamsSummary?: string;
 };
+
+const CHAT_CARD_TEXT_MAX = 2_000;
+
+function normalizeChatCardText(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  return normalized ? normalized.slice(0, CHAT_CARD_TEXT_MAX) : null;
+}
+
+export function summarizeWorkflowChatInputs(inputs: Record<string, unknown> | undefined): string | null {
+  if (!inputs || Object.keys(inputs).length === 0) return null;
+  try {
+    return JSON.stringify(inputs).slice(0, CHAT_CARD_TEXT_MAX);
+  } catch {
+    return null;
+  }
+}
+
+export function buildWorkflowStartChatCard(
+  workflowId: string,
+  body: Pick<WorkflowStartBody, 'inputs' | 'chatCardTitle' | 'chatParamsSummary'>,
+): NonNullable<StartWorkflowArgs['chatCard']> {
+  return {
+    title: normalizeChatCardText(body.chatCardTitle) ?? workflowId,
+    paramsSummary: normalizeChatCardText(body.chatParamsSummary)
+      ?? summarizeWorkflowChatInputs(body.inputs),
+  };
+}
 
 type WorkflowV2StartResponse = {
   runId: string;
@@ -27,6 +64,31 @@ type WorkflowV2StartResponse = {
   status?: string;
   startedAt?: string;
 };
+
+function requireWorkflowChatSessionKey(sessionKey: unknown): string {
+  if (typeof sessionKey !== 'string' || !sessionKey.trim()) {
+    throw new Error('Workflow chat start requires a non-empty sessionKey');
+  }
+  return sessionKey.trim();
+}
+
+/**
+ * The v1 start bridge is still called by engine-owned workflow tools. Treat an
+ * omitted value as an old-plugin request, but never rewrite an explicit engine
+ * choice while creating the immutable workflow-run snapshot.
+ */
+export function resolveWorkflowStartEngine(engineType: unknown): {
+  engineType: AgentEngineType;
+  source: 'request' | 'legacy-default';
+} {
+  if (engineType === 'openclaw' || engineType === 'claude') {
+    return { engineType, source: 'request' };
+  }
+  if (engineType === undefined) {
+    return { engineType: 'claude', source: 'legacy-default' };
+  }
+  throw new Error(`Unsupported workflow execution engine: ${String(engineType)}`);
+}
 
 async function proxyWorkflowStreamRequest(
   req: IncomingMessage,
@@ -193,20 +255,56 @@ function makeWorkflowStartIdempotencyKey(workflowId: string): string {
   return `start-wf-${workflowId}-${Date.now()}`;
 }
 
-function startLocalWorkflowRuntime(
+/**
+ * Tool-originated workflow starts bypass the renderer's model resolver. Pin
+ * Claude runs to the current chat session model and OpenClaw runs to the
+ * Gateway's configured chat default before dispatch. This keeps the local
+ * workflow on the same model selected by the originating chat.
+ */
+export async function resolveWorkflowStartModel(
+  engineType: AgentEngineType,
+  sessionKey?: string,
+): Promise<string> {
+  if (engineType === 'claude') {
+    const normalizedSessionKey = sessionKey?.trim();
+    const session = normalizedSessionKey
+      ? await getEngineSessionRegistryEntry(normalizedSessionKey)
+      : null;
+    const sessionModel = session?.engineType === 'claude' ? session.model?.trim() : undefined;
+    if (!sessionModel) {
+      throw new Error('Claude 聊天会话执行模型未配置，无法启动工作流');
+    }
+    return sessionModel;
+  }
+
+  const defaultModel = (await getOpenClawProvidersConfig()).defaultModel?.trim();
+  if (!defaultModel || !defaultModel.includes('/')) {
+    throw new Error('OpenClaw 聊天默认模型未配置或格式无效，无法启动工作流');
+  }
+  return defaultModel;
+}
+
+async function startLocalWorkflowRuntime(
   workflowId: string,
   registered: WorkflowV2StartResponse,
   body: WorkflowStartBody,
-): void {
+): Promise<void> {
   const versionId = registered.workflowVersionId;
   const startedAt = registered.startedAt ?? new Date().toISOString();
+  const resolvedEngine = resolveWorkflowStartEngine(body.engineType);
+  const engineModel = await resolveWorkflowStartModel(resolvedEngine.engineType, body.sessionKey);
   workflowExecLog('info', 'host-runtime-start', 'starting local workflow runtime from host route', {
     runId: registered.runId,
     workflowId,
     versionId,
     sessionKey: body.sessionKey,
+    requestedExecEngine: body.engineType ?? null,
+    execEngine: resolvedEngine.engineType,
+    engineSource: resolvedEngine.source,
+    engineModel: engineModel ?? null,
   });
-  void installWorkflowRuntime().startWorkflow({
+  const runtime = installWorkflowRuntime();
+  const execution = runtime.startWorkflow({
     runId: registered.runId,
     runDatabaseId: registered.runDatabaseId,
     workflowId,
@@ -215,7 +313,15 @@ function startLocalWorkflowRuntime(
     input: body.inputs ?? {},
     startedAt,
     sessionKey: body.sessionKey ?? '',
-  }).catch((error) => {
+    triggerType: 'chat',
+    engineType: resolvedEngine.engineType,
+    engineModel,
+    // This host route is exclusively the chat tool's v1 start bridge. Store
+    // the card marker in the same first SQLite write as the run itself so a
+    // missing/delayed renderer tool-result can never suppress the card.
+    chatCard: buildWorkflowStartChatCard(workflowId, body),
+  });
+  void execution.catch((error) => {
     workflowExecLog('error', 'host-runtime-start-failed', 'local workflow runtime failed', {
       runId: registered.runId,
       workflowId,
@@ -229,6 +335,19 @@ function startLocalWorkflowRuntime(
       error,
     );
   });
+
+  // Do not acknowledge the tool start until the first atomic wf_run upsert is
+  // observable. The renderer refreshes the session card-reference list when
+  // the chat turn finishes, so this closes the final-result/SQLite race without
+  // waiting for the workflow execution itself.
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    if (await runtime.getRun(registered.runId)) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  logger.warn(
+    '[workflow-trace] wf_run persistence was not observable before start acknowledgement runId=%s',
+    registered.runId,
+  );
 }
 
 async function registerLocalWorkflowRun(
@@ -287,7 +406,7 @@ async function registerAndStartLocalWorkflow(
   stoToken?: string,
 ): Promise<WorkflowV2StartResponse> {
   const registered = await registerLocalWorkflowRun(workflowId, body, stoToken);
-  startLocalWorkflowRuntime(workflowId, registered, body);
+  await startLocalWorkflowRuntime(workflowId, registered, body);
   return registered;
 }
 
@@ -513,13 +632,23 @@ export async function handleWorkflowRoutes(
     try {
       const workflowId = decodeURIComponent(startMatch[1]);
       const body = await parseJsonBody<WorkflowStartBody>(req);
+      const boundBody: WorkflowStartBody = {
+        ...body,
+        sessionKey: requireWorkflowChatSessionKey(body.sessionKey),
+      };
       logger.info(
-        '[workflow-trace] POST %s local-bridge idempotencyKey=%s inputKeys=%o',
+        '[workflow-trace] POST %s local-bridge idempotencyKey=%s inputKeys=%o requestedExecEngine=%s sessionKey=%s',
         pathname,
-        body.idempotencyKey,
-        Object.keys(body.inputs ?? {}),
+        boundBody.idempotencyKey,
+        Object.keys(boundBody.inputs ?? {}),
+        boundBody.engineType ?? 'legacy-default',
+        boundBody.sessionKey,
       );
-      const registered = await registerAndStartLocalWorkflow(workflowId, body, String(req.headers.stotoken ?? ''));
+      const registered = await registerAndStartLocalWorkflow(
+        workflowId,
+        boundBody,
+        String(req.headers.stotoken ?? ''),
+      );
       sendJson(res, 200, {
         success: true,
         data: {
@@ -533,7 +662,12 @@ export async function handleWorkflowRoutes(
       });
     } catch (error) {
       logger.error('[WorkflowRoutes] start workflow failed:', error);
-      res.statusCode = 500;
+      res.statusCode = error instanceof Error && (
+        error.message.startsWith('Unsupported workflow execution engine:')
+        || error.message.startsWith('Workflow chat start requires')
+      )
+        ? 400
+        : 500;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
       res.end(JSON.stringify({ success: false, error: String(error) }));
     }
@@ -582,6 +716,19 @@ export async function handleWorkflowRoutes(
   const runMatch = pathname.match(/^\/agent\/v1\/runs\/([^/]+)$/);
   if (runMatch && req.method === 'GET') {
     try {
+      const runId = decodeURIComponent(runMatch[1]);
+      // Tool-originated runs are executed by the desktop runtime. Prefer its
+      // authoritative SQLite view so get_workflow_status receives local
+      // artifact filePath/file:// preview references from the runtime mapper.
+      // The persisted WorkflowPacket remains canonical and path-independent.
+      const localRun = await getInstalledWorkflowRuntime()?.getRun(runId, { view: 'status' });
+      if (localRun) {
+        logger.info('[workflow-trace] GET %s local-runtime runId=%s artifacts=%d',
+          pathname, runId, Array.isArray(localRun.artifacts) ? localRun.artifacts.length : 0);
+        sendJson(res, 200, { success: true, data: localRun });
+        return true;
+      }
+      logger.info('[workflow-trace] GET %s local-runtime-miss runId=%s; falling back to backend', pathname, runId);
       await proxyWorkflowRequest(req, res, pathname);
     } catch (error) {
       logger.error('[WorkflowRoutes] get run failed:', error);

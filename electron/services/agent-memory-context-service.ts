@@ -9,6 +9,8 @@ import {
 export const AGENT_MEMORY_INITIALIZATION_TIMEOUT_MS = 5000;
 export const AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS = 3000;
 export const AGENT_MEMORY_WARMUP_MAX_ATTEMPTS = 3;
+export const AGENT_MEMORY_SEARCH_TOP_K = 8;
+export const AGENT_MEMORY_MIN_RELEVANCE_SCORE = 0.3;
 const AGENT_MEMORY_WARMUP_RETRY_BASE_DELAY_MS = 500;
 
 class AgentMemoryTimeoutError extends Error {
@@ -69,6 +71,22 @@ function getPayloadItemCount(payload: unknown): number | null {
   if (Array.isArray(record.results)) return record.results.length;
   if (Array.isArray(record.items)) return record.items.length;
   return typeof record.count === 'number' ? record.count : null;
+}
+
+function filterPayloadByRelevance(payload: unknown): unknown {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+  const record = payload as Record<string, unknown>;
+  if (!Array.isArray(record.results)) return payload;
+
+  const results = record.results.filter((item) => {
+    if (!item || typeof item !== 'object') return false;
+    const score = (item as Record<string, unknown>).score;
+    // Keep unscored results for compatibility with providers that do not expose
+    // a normalized relevance score. Scored weak matches must not influence tool routing.
+    return typeof score !== 'number'
+      || (Number.isFinite(score) && score >= AGENT_MEMORY_MIN_RELEVANCE_SCORE);
+  });
+  return results.length === record.results.length ? payload : { ...record, results };
 }
 
 export class AgentMemoryContextService {
@@ -140,10 +158,11 @@ export class AgentMemoryContextService {
       logger.info('[agent-memory] main context search start', {
         queryLength: query.length,
         userId,
-        topK: 12,
+        topK: AGENT_MEMORY_SEARCH_TOP_K,
+        minRelevanceScore: AGENT_MEMORY_MIN_RELEVANCE_SCORE,
       });
       const payload = await withTimeout(
-        agentMemoryOrchestrator.searchMemories(query, { userId, topK: 12 }),
+        agentMemoryOrchestrator.searchMemories(query, { userId, topK: AGENT_MEMORY_SEARCH_TOP_K }),
         'retrieval',
         AGENT_MEMORY_RETRIEVAL_TIMEOUT_MS,
       );
@@ -155,7 +174,13 @@ export class AgentMemoryContextService {
             ? Object.keys(payload as Record<string, unknown>)
             : typeof payload,
       });
-      const context = buildAgentMemoryContextBlocks(payload);
+      const relevantPayload = filterPayloadByRelevance(payload);
+      logger.info('[agent-memory] main context relevance filtered', {
+        rawResultCount: getPayloadItemCount(payload),
+        relevantResultCount: getPayloadItemCount(relevantPayload),
+        minRelevanceScore: AGENT_MEMORY_MIN_RELEVANCE_SCORE,
+      });
+      const context = buildAgentMemoryContextBlocks(relevantPayload);
       logger.info('[agent-memory] main context built', {
         hasPreference: Boolean(context.preference),
         preferenceLength: context.preference?.length ?? 0,

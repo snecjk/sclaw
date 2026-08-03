@@ -24,7 +24,8 @@ import type { ArtifactSaveRecordsTable } from './models/tables/artifact-save-rec
 export interface SqliteMigration {
   version: number;
   name: string;
-  sql: string;
+  sql?: string;
+  apply?: (db: SqliteDatabase) => void;
 }
 
 export interface SqliteMigrationRecord {

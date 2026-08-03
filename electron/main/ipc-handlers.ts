@@ -166,7 +166,7 @@ export function registerIpcHandlers(
   registerFloatIconHandlers(getFloatIconWindow);
 
   // Workflow runtime（客户端执行下沉）：注册 workflow-runtime:* IPC + 注入生产依赖
-  installWorkflowRuntime();
+  installWorkflowRuntime(gatewayManager);
   ipcMain.handle('workflow-editor:metric', async (_event, metric: unknown) => {
     if (!metric || typeof metric !== 'object') return { accepted: false };
     const data = metric as Record<string, unknown>;

@@ -1,5 +1,8 @@
 import type { TSchema } from "./typebox-shim.js";
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk/core";
+import type {
+	OpenClawPluginApi,
+	OpenClawPluginToolContext,
+} from "openclaw/plugin-sdk/core";
 import { stoToolError, toolResultFromEnvelope, type StoToolEnvelope } from "./envelope.js";
 
 export type StoToolExecuteContext = {
@@ -25,7 +28,7 @@ export function defineStoTool<TParams>(
 	const { id, domain, resultType, label, description, parameters, execute } = options;
 	const logTag = domain === "workflow" ? "sto-workflow-tool" : "sto-builtin-tool";
 
-	api.registerTool({
+	api.registerTool((toolContext: OpenClawPluginToolContext) => ({
 		id,
 		name: id,
 		label,
@@ -44,7 +47,10 @@ export function defineStoTool<TParams>(
 				`[${logTag}] ${id} invoked toolCallId=${toolCallId} params=${paramsPreview}`,
 			);
 			try {
-				const data = await execute(params as TParams, {});
+				const data = await execute(params as TParams, {
+					sessionKey: toolContext.sessionKey,
+					agentId: toolContext.agentId,
+				});
 				if (id === "get_workflow_schema" && data && typeof data === "object") {
 					const schemaData = data as {
 						templateId?: string;
@@ -68,5 +74,5 @@ export function defineStoTool<TParams>(
 				return toolResultFromEnvelope(stoToolError(domain, message));
 			}
 		},
-	});
+	}), { name: id });
 }

@@ -52,6 +52,12 @@ import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
 import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
+import { WorkflowCard } from '@/components/workflow/WorkflowCard';
+import {
+  EMPTY_WORKFLOW_CHAT_CARD_REFS,
+  useWorkflowChatCardsStore,
+} from '@/stores/workflow-chat-cards';
+import { attachMissingWorkflowChatCardAnchors } from '@/lib/workflow-chat-card-registration';
 export function Chat() {
   const navigate = useNavigate();
   const { t } = useTranslation('chat');
@@ -79,6 +85,10 @@ export function Chat() {
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
   const agents = useAgentsStore((s) => s.agents);
+  const workflowCards = useWorkflowChatCardsStore(
+    (state) => state.refsBySessionKey[currentSessionKey],
+  ) ?? EMPTY_WORKFLOW_CHAT_CARD_REFS;
+  const loadWorkflowCards = useWorkflowChatCardsStore((s) => s.loadSession);
 
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
 
@@ -149,6 +159,27 @@ export function Chat() {
     };
   }, [cleanupEmptySession]);
 
+  useEffect(() => {
+    if (currentSessionKey) void loadWorkflowCards(currentSessionKey);
+  }, [currentSessionKey, loadWorkflowCards]);
+
+  useEffect(() => {
+    if (!currentSessionKey || sending) return;
+    // A chat launch is persisted by Main before the turn is acknowledged.
+    // Refresh refs at the turn boundary so discovery does not depend on the
+    // workflow tool-result event reaching the renderer.
+    void loadWorkflowCards(currentSessionKey, true);
+  }, [currentSessionKey, sending, loadWorkflowCards]);
+
+  useEffect(() => {
+    if (!currentSessionKey || workflowCards.every((card) => card.anchorUserMessageId)) return;
+    void attachMissingWorkflowChatCardAnchors({
+      sessionKey: currentSessionKey,
+      messages,
+      cards: workflowCards,
+    });
+  }, [currentSessionKey, messages, workflowCards]);
+
   // Update timestamp when sending starts
   useEffect(() => {
     if (sending && streamingTimestamp === 0) {
@@ -171,6 +202,7 @@ export function Chat() {
     sending,
     pendingFinal,
     showThinking,
+    workflowCards,
     lastChatEventAt,
     streamMsg,
     streamText,
@@ -564,6 +596,18 @@ export function Chat() {
           ) : (
             <>
               {staticItems.map((item) => {
+                if (item.type === 'workflow-run') {
+                  return (
+                    <WorkflowCard
+                      key={item.key}
+                      runId={item.card.runId}
+                      templateName={item.card.title}
+                      paramsSummary={item.card.paramsSummary}
+                      onPreviewArtifact={openArtifactPreview}
+                      onCreateScheduledTask={openWorkflowCronTaskModal}
+                    />
+                  );
+                }
                 if (item.type === 'assistant-turn') {
                   return (
                     <AssistantTurnMessage

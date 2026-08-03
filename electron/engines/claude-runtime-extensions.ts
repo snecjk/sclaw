@@ -89,7 +89,7 @@ const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
 
 const workflowToolExtension: ClaudeRuntimeExtension = {
   id: 'sto-workflow-tool',
-  async build() {
+  async build({ sessionKey }) {
     const stoToken = await getStoToken();
     if (!stoToken) {
       logger.warn('[claude-workflow] STO token is unavailable; workflow tools will not be registered');
@@ -106,6 +106,7 @@ const workflowToolExtension: ClaudeRuntimeExtension = {
         'sto-workflow-tool': createWorkflowMcpServer({
           baseUrl,
           stoToken,
+          sessionKey,
         }),
       },
     };

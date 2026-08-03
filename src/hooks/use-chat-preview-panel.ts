@@ -1,14 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AttachedFileMeta, RawMessage } from '@/stores/chat';
-import { useChatStore } from '@/stores/chat';
 import { useSessionWorkflowPreview } from '@/hooks/use-session-workflow-preview';
 import { filterSessionWorkflowCardStates } from '@/lib/session-workflow-context';
 import { usePreviewableFiles } from '@/pages/Chat/message-utils';
 import { logFilePreview } from '@/lib/file-preview-debug';
 
 export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: string) {
-  const workflowCardStates = useChatStore((s) => s.workflowCardStates);
-
   const [showPreviewPanel, setShowPreviewPanel] = useState(false);
   const [activePreviewFilePath, setActivePreviewFilePath] = useState<string | null>(null);
   /** Files opened on demand (e.g. workflow fallback URL) — not always present in message scan. */
@@ -17,8 +14,8 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
   const [dismissedFilePaths, setDismissedFilePaths] = useState<Set<string>>(() => new Set());
 
   const sessionWorkflowCardStates = useMemo(
-    () => filterSessionWorkflowCardStates(allMessages, workflowCardStates),
-    [allMessages, workflowCardStates],
+    () => filterSessionWorkflowCardStates(allMessages, {}),
+    [allMessages],
   );
 
   const previewableFiles = usePreviewableFiles(allMessages, sessionWorkflowCardStates, sessionKey);

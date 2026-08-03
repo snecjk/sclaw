@@ -69,12 +69,13 @@ import { WORKFLOW_SYSTEM_PROMPT, buildWorkflowHooks } from "./hooks.js";
  */
 export async function runWorkflowAgent(
   userPrompt: string,
-  config: { baseUrl: string; stoToken: string },
+  config: { baseUrl: string; stoToken: string; sessionKey: string },
 ) {
   // 1. 创建 MCP Server（对应 OpenClaw 的 api.registerTool 批量注册）
   const workflowServer = createWorkflowMcpServer({
     baseUrl: config.baseUrl,
     stoToken: config.stoToken,
+    sessionKey: config.sessionKey,
   });
 
   // 2. 构建 hooks（对应 OpenClaw 的 api.on('before_tool_call') + api.on('after_tool_call')）

@@ -11,16 +11,15 @@
  */
 import type { WorkflowRuntimeRepository } from '../../db/repositories/workflow-runtime-repository';
 import type { AgentRunSpec, RunCtx } from './types';
-import { createHash } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { mkdir, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { evaluateCondition as evaluateWorkflowCondition, executeLogicNode } from './logic-nodes';
 import { runAgentNodeWithRetry, type InvokeAgentFn } from './agent-retry';
+import { deriveWorkflowNodeSessionId } from './node-session';
 import { flushOnce, startFlushLoop, stopFlushLoop, type FlushDeps } from './outbox-flusher';
-import { uploadArtifact, type ArtifactRow } from './artifact-uploader';
+import { recordArtifact as persistArtifact, type ArtifactRow } from './artifact-recorder';
 import { recoverOnLaunch, resumeRun } from './crash-recovery';
-import { cancelAgent } from './agent-runner';
+import { cancelAgent } from './agent-runner-claude';
+import { cancelOpenClawWorkflowAgent } from './agent-runner-openclaw';
 import { findStartNode, generatePlan, validateWorkflowDefinition } from './plan-generator';
 import { buildConditionContext, resolveNodeInput } from './input-resolver';
 import { workspacePath } from './workspace-paths';
@@ -29,6 +28,7 @@ import { formatShanghaiIso } from '../../../shared/workflow-timestamp';
 import { hydrateNodeInputFiles } from './node-input-files';
 import { createFailurePacket, createWorkflowPacket, getWorkflowPacketFailureMessage, isWorkflowPacket } from './workflow-packet';
 import { normalizeRuntimeDefinition } from './runtime-definition';
+import { normalizeArtifactFirstPayloadSchema, promoteCarriedOutputArtifacts } from './artifact-output';
 
 const SMART_TYPES = new Set(['agent_task', 'agent_data_fetch', 'agent_data_process', 'agent_condition', 'agent_output']);
 const nowIso = () => formatShanghaiIso();
@@ -36,11 +36,14 @@ const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUP
 
 export interface EngineDeps {
   repo: WorkflowRuntimeRepository;
+  /** Resolve session provenance without coupling the workflow engine to scheduler storage. */
+  isScheduledTaskSession?: (sessionKey: string) => Promise<boolean>;
   invokeAgent: InvokeAgentFn;            // 引擎绑 sdk+env+卡死保护后注入
   quota?: () => Promise<boolean>;          // /api/token-quota/check
+  /** Release an engine-owned node session only after its node reaches a terminal state. */
+  releaseAgentSession?: (runId: string, nodeSessionId: string) => Promise<void>;
   postSync: FlushDeps['postSync'];        // POST /agent/v2/runs/{id}/sync
   onTokenExpired?: () => void;
-  uploadOssFile?: any;                     // uploadOssFile（artifact-uploader）
   onRecover?: (runs: any[]) => void;
   /** 状态转换桥（gap2）：dispatch 热路径 4 个转换点 + crash-recovery 调用，
    * bootstrap 读 run 行拿 session_key 组装 WorkflowStatusPayload 广播到所有 renderer。 */
@@ -64,6 +67,20 @@ export interface StartWorkflowArgs {
   runDatabaseId: number;
   /** 会话键——透传给 generatePlan 落 wf_run.session_key（emit 桥 + getRun hydration 用）。Phase 2b 由 start 注册传入。 */
   sessionKey?: string;
+  /** 本地业务发起入口，仅落 wf_run，不同步云端。 */
+  triggerType?: 'chat' | 'scheduled_task' | 'workflow_manual' | 'designer_test' | 'api';
+  engineType: 'claude' | 'openclaw';
+  engineModel?: string;
+  /**
+   * Present only for a workflow started from a chat launch tool. Persisting
+   * this with the first wf_run upsert makes card discovery independent from
+   * renderer tool-result/event delivery.
+   */
+  chatCard?: {
+    title?: string | null;
+    paramsSummary?: string | null;
+    anchorUserMessageId?: string | null;
+  };
 }
 
 export function createEngine(deps: EngineDeps) {
@@ -114,6 +131,7 @@ export function createEngine(deps: EngineDeps) {
     const startupSchema = resolveStartupSchema(def);
     let hasExecutedSmartNode = existingNodeRuns.some((nodeRun) => SMART_TYPES.has(nodeRun.node_type) && nodeRun.status === 'SUCCEEDED');
     const runRow = await Promise.resolve(repo.getRun(runId)).catch(() => undefined);
+    const execEngine = runRow?.engine_type === 'openclaw' ? 'openclaw' : 'claude';
     const runInput = initialInput ?? parseJson(runRow?.input_json) ?? {};
     const runSnapshotBase = {
       run_id: runId,
@@ -167,6 +185,7 @@ export function createEngine(deps: EngineDeps) {
         versionId: runSnapshotBase.version_id,
         nodeId: cur.id,
         nodeType: cur.type,
+        execEngine,
       });
       await repo.upsertNodeRun({ run_id: runId, node_id: cur.id, node_type: cur.type, status: 'RUNNING', input_json: nodeInputJson, started_at: nowIso() });
       await repo.enqueueOutbox(runId, 'node_run', `${runId}:${cur.id}`, { run_id: runId, node_id: cur.id, node_type: cur.type, status: 'RUNNING', input_json: nodeInputJson }, 'progress');
@@ -177,6 +196,15 @@ export function createEngine(deps: EngineDeps) {
       let result: { action: 'continue' | 'pause'; output?: any };
       // 智能节点：编译为 agent run spec 后交给 agent-retry，内部处理配额、重试和卡死保护。
       if (SMART_TYPES.has(cur.type)) {
+        // Log before invoking either transport so an initialization, gateway,
+        // or model failure still leaves an unambiguous engine audit record.
+        workflowExecLog('info', 'agent-engine-selected', 'smart node execution engine selected', {
+          runId,
+          workflowId: runSnapshotBase.workflow_id,
+          nodeId: cur.id,
+          nodeType: cur.type,
+          execEngine,
+        });
         if (cur.type === 'agent_data_fetch'
           && ['runtime_upload', 'mixed'].includes(cur.config?.businessConfig?.inputProvisionMode)
           && !containsArtifact(nodeInput)) {
@@ -191,7 +219,19 @@ export function createEngine(deps: EngineDeps) {
           versionId: runSnapshotBase.version_id,
         });
         const spec = compileLocalAgentSpec(cur, agentCtx, runSnapshotBase.version_id);
-        const agentResult = await runAgentNodeWithRetry(agentCtx, cur, spec, { invokeAgent: deps.invokeAgent, quota: deps.quota });
+        const agentResult = await runAgentNodeWithRetry(agentCtx, cur, spec, {
+          invokeAgent: deps.invokeAgent,
+          quota: deps.quota,
+          execEngine,
+        });
+        const agentSessionId = deriveWorkflowNodeSessionId(runId, cur.id);
+        if (agentResult.status !== 'manual_review' && deps.releaseAgentSession) {
+          await deps.releaseAgentSession(runId, agentSessionId).catch((error) => {
+            workflowExecLog('warn', 'agent-session-release-failed', 'failed to release terminal node agent session', {
+              runId, nodeId: cur.id, error: error instanceof Error ? error.message : String(error),
+            });
+          });
+        }
         if (agentResult.status === 'succeeded') hasExecutedSmartNode = true;
         result = { action: agentResult.status === 'succeeded' ? 'continue' : 'pause', output: agentResult.output };
         if (agentResult.status === 'manual_review') {
@@ -240,8 +280,8 @@ export function createEngine(deps: EngineDeps) {
           deps.onStatusChange?.(runId, 'failed', { error: failureMessage });
           return;
         }
-        result.output = await materializeAgentOutputArtifact(runId, cur, agentResult.output);
-        const lastAgentOutputJson = stringifyJson(agentResult.output ?? {});
+        result.output = agentResult.output;
+        const lastAgentOutputJson = stringifyJson(result.output ?? {});
         await repo.upsertRun({
           run_id: runId,
           last_agent_output_json: lastAgentOutputJson,
@@ -323,7 +363,7 @@ export function createEngine(deps: EngineDeps) {
         });
       }
       if (!(await isRunActive(runId))) return;
-      if (cur.type === 'output') result.output = await materializeOutput(runId, cur, result.output);
+      if (cur.type === 'output') result.output = materializeOutput(result.output);
       upstream[cur.id] = result.output ?? {};
       await enqueueArtifactsFromOutput(
         runId,
@@ -399,6 +439,7 @@ export function createEngine(deps: EngineDeps) {
       const changed = await repo.updateRunIfActive(runId, { status: 'FAILED', error: message, completed_at: nowIso() }).catch(() => false);
       if (changed) {
         await finalizeUnfinishedNodeRuns(runId, 'failed').catch(() => undefined);
+        await releaseRunAgentSessions(runId);
         await repo.enqueueOutbox(runId, 'run', runId, {
           run_id: runId, workflow_id: meta?.workflowId ?? run?.workflow_id,
           version_id: meta?.versionId ?? run?.version_id, status: 'FAILED', error: message,
@@ -415,38 +456,9 @@ export function createEngine(deps: EngineDeps) {
     return Boolean(row && row.status === 'RUNNING');
   }
 
-  async function materializeOutput(runId: string, node: any, output: any): Promise<any> {
-    // An agent_output HTML delivery has already been materialized and uploaded
-    // in its own workspace.  The terminal node must promote that exact file,
-    // not stringify the whole upstream map into a second result.json.
-    const htmlDelivery = findHtmlDelivery(output?.payload ?? output);
-    if (htmlDelivery) {
-      const existing = (await repo.listArtifacts(runId)).find((artifact: any) =>
-        artifact?.content_type === 'text/html' && artifact?.node_id !== node.id,
-      );
-      if (existing) {
-        const finalArtifact = { ...existing, kind: 'OUTPUT', summary: existing.summary ?? htmlDelivery.fileName ?? 'result.html' };
-        await repo.upsertArtifact(finalArtifact);
-        await repo.enqueueOutbox(runId, 'artifact', existing.artifact_id, finalArtifact, 'progress');
-        return output;
-      }
-    }
-    const format = node.config?.format ?? 'structured_json';
-    const ext = format === 'html' ? 'html' : format === 'markdown' ? 'md' : format === 'text' ? 'txt' : 'json';
-    const contentType = ext === 'html' ? 'text/html' : ext === 'md' ? 'text/markdown' : ext === 'txt' ? 'text/plain' : 'application/json';
-    const content = ext === 'json'
-      ? JSON.stringify(output ?? {}, null, 2)
-      : typeof output === 'string' ? output : JSON.stringify(output ?? {}, null, 2);
-    const directory = workspacePath(runId, node.id);
-    const filePath = path.join(directory, `result.${ext}`);
-    await mkdir(directory, { recursive: true });
-    await writeFile(filePath, content, 'utf8');
-    const idHash = createHash('sha1').update(`${runId}:${node.id}:${filePath}`).digest('hex').slice(0, 16);
-    await uploadArtifact({ repo, uploadOssFile: deps.uploadOssFile }, {
-      artifact_id: `${runId}:${node.id}:${idHash}`, run_id: runId, node_id: node.id,
-      kind: 'OUTPUT', file_path: filePath, content_type: contentType, summary: node.name ?? `result.${ext}`, created_at: nowIso(),
-    });
-    return output;
+  function materializeOutput(output: any): any {
+    if (!isWorkflowPacket(output)) return output;
+    return promoteCarriedOutputArtifacts(output);
   }
 
   function compileLocalAgentSpec(node: any, ctx: RunCtx, versionId: unknown): AgentRunSpec {
@@ -461,10 +473,8 @@ export function createEngine(deps: EngineDeps) {
     const guardrails = agent.guardrails ?? config.guardrails ?? {};
     const completionContract = guardrails.completionContract ?? config.completionContract ?? {};
     const inputConfig = agent.inputs ?? config.inputs ?? config.input ?? {};
-    const configuredSchema = config.outputContract?.schema ?? completionContract.dataJsonSchema;
-    const dataJsonSchema = requiresHtmlArtifact(node, task, config) && isUnconstrainedObjectSchema(configuredSchema)
-      ? htmlArtifactPayloadSchema()
-      : (configuredSchema ?? { type: 'object' });
+    const configuredSchema = config.outputContract?.schema ?? completionContract.dataJsonSchema ?? { type: 'object' };
+    const dataJsonSchema = normalizeArtifactFirstPayloadSchema(configuredSchema);
     return {
       schemaVersion: 'agent-run-spec/v1', workflowId: ctx.workflowId, workflowVersion: String(versionId ?? ''), runId: ctx.runId, nodeId: node.id,
       task: { name: task.name ?? node.name ?? node.id, goal: task.goal ?? config.goal ?? config.instruction ?? '', instruction: task.instruction ?? '', outputSchema: task.outputSchema },
@@ -485,74 +495,6 @@ export function createEngine(deps: EngineDeps) {
     };
   }
 
-  /**
-   * HTML is a delivery format, not a suggestion hidden in a task sentence.
-   * New DSLs should set businessConfig.formatPreference='html'; the goal text
-   * fallback keeps already published DSLs such as "生成Html并输出最终结果" safe.
-   */
-  function requiresHtmlArtifact(node: any, task: any, config: any): boolean {
-    if (node?.type !== 'agent_output') return false;
-    const declaredFormat = [
-      config?.businessConfig?.formatPreference,
-      config?.formatPreference,
-      config?.outputFormat,
-      task?.outputFormat,
-    ].filter((value) => typeof value === 'string').join(' ').toLowerCase();
-    if (declaredFormat.includes('html')) return true;
-    const legacyIntent = [task?.goal, task?.instruction, config?.businessConfig?.goal, config?.goal, config?.instruction]
-      .filter((value) => typeof value === 'string').join(' ');
-    return /html/i.test(legacyIntent);
-  }
-
-  function htmlArtifactPayloadSchema(): Record<string, unknown> {
-    return {
-      type: 'object', additionalProperties: false, required: ['html'],
-      properties: {
-        html: { type: 'string', minLength: 15, description: '完整 HTML 文档内容' },
-        fileName: { type: 'string', pattern: '^[^\\\\/:*?"<>|]+\\.html?$', description: '可选的 HTML 文件名' },
-      },
-    };
-  }
-
-  function isUnconstrainedObjectSchema(schema: unknown): boolean {
-    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return true;
-    const value = schema as Record<string, unknown>;
-    return value.type === 'object'
-      && !Array.isArray(value.required)
-      && (!value.properties || (typeof value.properties === 'object' && Object.keys(value.properties as object).length === 0));
-  }
-
-  async function materializeAgentOutputArtifact(runId: string, node: any, output: unknown): Promise<unknown> {
-    const config = node?.config ?? {};
-    const agent = config.agentConfig ?? {};
-    const task = agent.task ?? config.task ?? {};
-    if (!requiresHtmlArtifact(node, task, config) || !isWorkflowPacket(output)) return output;
-    const payload = output.payload;
-    const html = payload && typeof payload === 'object' && !Array.isArray(payload) ? (payload as any).html : undefined;
-    if (typeof html !== 'string' || html.trim().length < 15) {
-      throw new Error(`HTML 输出节点 ${node.name ?? node.id} 未返回有效 payload.html`);
-    }
-    const requestedName = typeof (payload as any).fileName === 'string' ? (payload as any).fileName.trim() : '';
-    const fileName = /^[^\\/:*?"<>|]+\.html?$/i.test(requestedName) ? requestedName : 'result.html';
-    const directory = workspacePath(runId, node.id);
-    const filePath = path.join(directory, fileName);
-    await mkdir(directory, { recursive: true });
-    await writeFile(filePath, html, 'utf8');
-    const info = await stat(filePath);
-    const idHash = createHash('sha1').update(`${runId}:${node.id}:${filePath}`).digest('hex').slice(0, 16);
-    const artifactId = `${runId}:${node.id}:${idHash}`;
-    const artifacts = output.artifacts.filter((artifact) => artifact.artifactId !== artifactId);
-    return {
-      ...output,
-      artifacts: [...artifacts, {
-        artifactId, kind: 'OUTPUT', name: fileName, contentType: 'text/html',
-        // Keep a local, node-relative reference so a later output node can
-        // consume this HTML without depending on OSS upload completion.
-        resourceId: fileName, uri: `artifact://${runId}/${node.id}/${artifactId}`, size: info.size,
-      }],
-    };
-  }
-
   async function buildFailureResult(runId: string, failedNodeId: string, failure: unknown): Promise<any> {
     const nodeRuns = await repo.listNodeRuns(runId);
     return {
@@ -570,20 +512,58 @@ export function createEngine(deps: EngineDeps) {
      * 正式启动节点调度。
      */
     async startWorkflow(args: StartWorkflowArgs): Promise<void> {
+      let triggerType = args.triggerType ?? (args.chatCard ? 'chat' : 'workflow_manual');
+      const sessionKey = args.sessionKey?.trim();
+      if (
+        triggerType === 'chat'
+        && sessionKey
+        && await deps.isScheduledTaskSession?.(sessionKey)
+      ) {
+        triggerType = 'scheduled_task';
+      }
       // 端到端：拉 DSL → generatePlan 落本地计划（wf_run + wf_node_run + outbox）→ dispatch
       workflowExecLog('info', 'run-start', 'starting client-local workflow run', {
         runId: args.runId,
         workflowId: args.workflowId,
         versionId: args.versionId,
         sessionKey: args.sessionKey,
+        requestedExecEngine: args.engineType,
       });
       if (!Number.isSafeInteger(args.runDatabaseId) || args.runDatabaseId <= 0) {
         throw new Error('workflow runDatabaseId must be a positive JavaScript-safe integer');
       }
+      if (args.engineType !== 'claude' && args.engineType !== 'openclaw') {
+        throw new Error('workflow execution engine is required');
+      }
       try {
+        // Persist the run identity before the remote DSL fetch. Chat-card
+        // registration and compact status reads can now bind immediately even
+        // when plan generation is slow; generatePlan enriches this same row.
+        await repo.upsertRun({
+          id: args.runDatabaseId,
+          run_id: args.runId,
+          workflow_id: args.workflowId,
+          version_id: args.versionId,
+          workflow_version: args.workflowVersion ?? null,
+          status: 'RUNNING',
+          mode: 'CLIENT_LOCAL',
+          source: 'client',
+          trigger_type: triggerType,
+          input_json: stringifyJson(args.input ?? {}),
+          definition_json: '{}',
+          started_at: args.startedAt,
+          session_key: args.sessionKey,
+          engine_type: args.engineType,
+          engine_model: args.engineModel ?? null,
+          chat_card_visible: args.chatCard ? 1 : 0,
+          chat_anchor_user_message_id: args.chatCard?.anchorUserMessageId ?? null,
+          chat_card_title: args.chatCard?.title ?? null,
+          chat_params_summary: args.chatCard?.paramsSummary ?? null,
+        });
         await generatePlan({ repo, dslClient: deps.dslClient, workflowId: args.workflowId,
           versionId: args.versionId, runId: args.runId, input: args.input, startedAt: args.startedAt,
-          sessionKey: args.sessionKey, workflowVersion: args.workflowVersion, runDatabaseId: args.runDatabaseId });
+          sessionKey: args.sessionKey, workflowVersion: args.workflowVersion, runDatabaseId: args.runDatabaseId,
+          triggerType, engineType: args.engineType, engineModel: args.engineModel });
         const run = await repo.getRun(args.runId);
         const definition = run?.definition_json ? JSON.parse(run.definition_json) : {};
         await dispatch(args.runId, definition, undefined, { workflowId: args.workflowId, versionId: args.versionId }, parseJson(run?.input_json) ?? {});
@@ -592,7 +572,9 @@ export function createEngine(deps: EngineDeps) {
         await repo.upsertRun({ id: args.runDatabaseId, run_id: args.runId, workflow_id: args.workflowId, version_id: args.versionId,
           workflow_version: args.workflowVersion ?? null,
           status: 'FAILED', mode: 'CLIENT_LOCAL', source: 'client', input_json: stringifyJson(args.input ?? {}),
-          definition_json: '{}', error: message, started_at: args.startedAt, completed_at: nowIso(), session_key: args.sessionKey });
+          trigger_type: triggerType,
+          definition_json: '{}', error: message, started_at: args.startedAt, completed_at: nowIso(), session_key: args.sessionKey,
+          engine_type: args.engineType, engine_model: args.engineModel ?? null });
         await finalizeUnfinishedNodeRuns(args.runId, 'failed').catch(() => undefined);
         await repo.enqueueOutbox(args.runId, 'run', args.runId, { run_id: args.runId, workflow_id: args.workflowId,
           version_id: args.versionId, status: 'FAILED', mode: 'CLIENT_LOCAL', source: 'client',
@@ -672,11 +654,13 @@ export function createEngine(deps: EngineDeps) {
     async cancel(runId: string, nodeId: string): Promise<void> {
       workflowExecLog('warn', 'run-cancel', 'cancelling workflow run', { runId, nodeId });
       cancelAgent(runId, nodeId);
+      cancelOpenClawWorkflowAgent(runId, nodeId);
       const run = await repo.getRun(runId).catch(() => undefined);
       if (run && TERMINAL_STATUSES.has(run.status)) return;
       const changed = await repo.updateRunIfActive(runId, { status: 'CANCELLED', completed_at: nowIso() });
       if (!changed) return;
       await finalizeUnfinishedNodeRuns(runId, 'cancelled');
+      await releaseRunAgentSessions(runId);
       await repo.enqueueOutbox(runId, 'run', runId, {
         run_id: runId,
         workflow_id: run?.workflow_id,
@@ -704,9 +688,9 @@ export function createEngine(deps: EngineDeps) {
     stopSync(): void {
       stopFlushLoop();
     },
-    // 供 NodeDispatcher 在智能节点产出 artifact 后调
-    async uploadArtifact(art: ArtifactRow): Promise<void> {
-      await uploadArtifact({ repo, uploadOssFile: deps.uploadOssFile }, art);
+    // 供 NodeDispatcher 在智能节点产出 artifact 后记录本地元数据。
+    async recordArtifact(art: ArtifactRow): Promise<void> {
+      await persistArtifact(repo, art);
     },
     async retrySync(runId?: string): Promise<void> {
       await repo.retryFailedOutbox(runId);
@@ -775,74 +759,47 @@ export function createEngine(deps: EngineDeps) {
     }
   }
 
+  /** Clear all local engine transcripts only when the enclosing run is terminal. */
+  async function releaseRunAgentSessions(runId: string): Promise<void> {
+    if (!deps.releaseAgentSession) return;
+    const nodeRuns = await repo.listNodeRuns(runId).catch(() => []);
+    await Promise.all(nodeRuns
+      .filter((nodeRun) => Boolean(nodeRun.agent_session_id))
+      .map((nodeRun) => deps.releaseAgentSession!(runId, nodeRun.agent_session_id).catch((error) => {
+        workflowExecLog('warn', 'agent-session-release-failed', 'failed to release terminal node agent session', {
+          runId,
+          nodeId: nodeRun.node_id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      })));
+  }
+
   async function enqueueArtifactsFromOutput(
     runId: string,
     nodeId: string,
     output: unknown,
     kind: 'OUTPUT' | 'INTERMEDIATE',
   ): Promise<void> {
-    const declaredPaths = collectFilePaths(output);
-    const discoveredPaths = await listWorkspaceFiles(workspacePath(runId, nodeId));
-    const paths = [...new Set([...declaredPaths, ...discoveredPaths])];
     const declaredArtifacts = isWorkflowPacket(output) ? output.artifacts : [];
-    await Promise.all(paths.map(async (filePath) => {
-      const idHash = createHash('sha1').update(`${runId}:${nodeId}:${filePath}`).digest('hex').slice(0, 16);
-      const artifactId = `${runId}:${nodeId}:${idHash}`;
-      // A packet-declared HTML delivery is OUTPUT even though it is produced by
-      // an agent node before the terminal `output` node. Do not overwrite that
-      // classification with the generic INTERMEDIATE default during upload.
-      const declared = declaredArtifacts.find((artifact) => artifact.artifactId === artifactId);
-      await uploadArtifact({ repo, uploadOssFile: deps.uploadOssFile }, {
-        artifact_id: artifactId,
+    const ownedArtifacts = declaredArtifacts.filter((artifact) =>
+      artifact.artifactId.startsWith(`${runId}:${nodeId}:`)
+      && typeof artifact.resourceId === 'string'
+      && artifact.resourceId,
+    );
+    await Promise.all(ownedArtifacts.map(async (declared) => {
+      const filePath = path.resolve(workspacePath(runId, nodeId), declared.resourceId!);
+      await persistArtifact(repo, {
+        artifact_id: declared.artifactId,
         run_id: runId,
         node_id: nodeId,
-        kind: declared?.kind ?? kind,
+        kind: declared.kind ?? kind,
         file_path: filePath,
-        content_type: declared?.contentType ?? contentTypeForPath(filePath),
-        summary: declared?.name ?? path.basename(filePath),
+        content_type: declared.contentType,
+        summary: declared.name,
         created_at: nowIso(),
       });
     }));
   }
-}
-
-function findHtmlDelivery(value: unknown, depth = 0): { html: string; fileName?: string } | null {
-  if (depth > 4 || !value || typeof value !== 'object') return null;
-  if (!Array.isArray(value)) {
-    const record = value as Record<string, unknown>;
-    if (typeof record.html === 'string' && record.html.trim().length >= 15) {
-      return { html: record.html, fileName: typeof record.fileName === 'string' ? record.fileName : undefined };
-    }
-    for (const nested of Object.values(record)) {
-      const match = findHtmlDelivery(nested, depth + 1);
-      if (match) return match;
-    }
-  }
-  return null;
-}
-
-async function listWorkspaceFiles(directory: string): Promise<string[]> {
-  try {
-    const entries = await readdir(directory, { withFileTypes: true });
-    const nested = await Promise.all(entries.map(async (entry) => {
-      const target = path.join(directory, entry.name);
-      if (entry.isDirectory()) return listWorkspaceFiles(target);
-      if (!entry.isFile()) return [];
-      const info = await stat(target);
-      return info.size > 0 ? [target] : [];
-    }));
-    return nested.flat();
-  } catch {
-    return [];
-  }
-}
-
-function contentTypeForPath(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase();
-  return ({ '.html': 'text/html', '.htm': 'text/html', '.md': 'text/markdown', '.txt': 'text/plain',
-    '.json': 'application/json', '.csv': 'text/csv', '.pdf': 'application/pdf', '.png': 'image/png',
-    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' } as Record<string, string>)[ext]
-    ?? 'application/octet-stream';
 }
 
 /** 选下一节点：优先按分支端口匹配，未命中时走无条件默认边。 */
@@ -916,46 +873,8 @@ function stringifyJson(value: unknown): string {
   });
 }
 
-function collectFilePaths(value: unknown): string[] {
-  const out = new Set<string>();
-  const seen = new WeakSet<object>();
-  const visit = (current: unknown): void => {
-    if (typeof current === 'string') {
-      const path = parseFilePath(current);
-      if (path) out.add(path);
-      return;
-    }
-    if (!current || typeof current !== 'object') return;
-    if (seen.has(current)) return;
-    seen.add(current);
-    if (Array.isArray(current)) {
-      for (const item of current) visit(item);
-      return;
-    }
-    for (const [key, item] of Object.entries(current as Record<string, unknown>)) {
-      if (['filePath', 'file_path', 'path', 'uri', 'url'].includes(key)) {
-        const path = typeof item === 'string' ? parseFilePath(item) : undefined;
-        if (path) out.add(path);
-      }
-      visit(item);
-    }
-  };
-  visit(value);
-  return [...out];
-}
-
 function containsArtifact(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   if ((value as any).kind === 'artifact' || (value as any).filePath || String((value as any).uri ?? '').startsWith('file:')) return true;
   return Object.values(value as Record<string, unknown>).some(containsArtifact);
-}
-
-function parseFilePath(value: string): string | undefined {
-  const trimmed = value.trim();
-  if (!trimmed.startsWith('file://')) return undefined;
-  try {
-    return fileURLToPath(trimmed);
-  } catch {
-    return trimmed.replace(/^file:\/\//, '');
-  }
 }

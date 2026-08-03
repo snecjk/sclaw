@@ -7,6 +7,7 @@ import {
   parseStoToolEnvelope,
   type WorkflowCreatedData,
   type WorkflowExecutionStartedData,
+  type WorkflowRunStatusData,
   type WorkflowSchemaReadyData,
 } from '@/lib/builtin-tool-envelope';
 import { applyWorkflowRunStarted } from '@/lib/workflow-run-started';
@@ -15,13 +16,8 @@ import {
   applyWorkflowSchemaReady,
 } from '@/stores/chat/parameter-form-recovery';
 import {
-  ensureWorkflowCardsInMessages,
-  getAssistantMessageText,
-  messageHasWorkflowCardForRun,
-} from '@/lib/workflow-card-injection';
-import type { RawMessage } from '@/stores/chat/types';
-import { isToolResultRole } from '@/stores/chat/helpers';
-import { getExecutionByRunId, saveWorkflowRecord } from '@/stores/workflow-memory';
+  saveWorkflowRecord,
+} from '@/stores/workflow-memory';
 
 export interface BuiltinToolResultMessage {
   id?: string;
@@ -88,18 +84,15 @@ async function handleWorkflowExecutionStarted(
   });
 }
 
-/** Patch visible messages when the target session is active. */
-export function syncWorkflowCardsAfterToolDispatch(sessionKey: string): void {
-  const chatState = useChatStore.getState();
-  if (chatState.currentSessionKey !== sessionKey) return;
-  const patched = ensureWorkflowCardsInMessages(
-    chatState.messages,
-    sessionKey,
-    getAssistantMessageText,
-  );
-  if (patched !== chatState.messages) {
-    useChatStore.setState({ messages: patched });
-  }
+/** Status queries remain ordinary tool/model responses and never own a card. */
+function handleWorkflowRunStatus(
+  data: WorkflowRunStatusData,
+  ctx: BuiltinToolDispatchContext,
+): void {
+  // A status query remains a normal tool/model response. It must not create,
+  // move, or update a chat progress card in the querying session.
+  void data;
+  void ctx;
 }
 
 /**
@@ -134,7 +127,14 @@ export async function dispatchBuiltinToolResult(
       (envelope.data ?? {}) as WorkflowExecutionStartedData,
       resolvedCtx,
     );
-    syncWorkflowCardsAfterToolDispatch(resolvedCtx.sessionKey);
+    return true;
+  }
+
+  if (envelope?.type === 'workflow_run_status' && envelope.success) {
+    handleWorkflowRunStatus(
+      (envelope.data ?? {}) as WorkflowRunStatusData,
+      resolvedCtx,
+    );
     return true;
   }
 
@@ -144,54 +144,6 @@ export async function dispatchBuiltinToolResult(
   }
 
   return false;
-}
-
-/**
- * Recover workflow runs from gateway history tool_result rows (filtered from chat UI).
- * Live streaming may not invoke dispatchBuiltinToolResult before the model's text reply.
- */
-export async function absorbWorkflowExecutionStartedFromToolResults(
-  rawMessages: RawMessage[],
-  ctx: { sessionKey: string; agentId: string },
-): Promise<void> {
-  for (let i = rawMessages.length - 1; i >= 0; i -= 1) {
-    const msg = rawMessages[i];
-    if (!isToolResultRole(msg.role)) continue;
-
-    const envelope = parseStoToolEnvelope(msg.content)
-      ?? parseStoToolEnvelope(msg);
-    if (envelope?.type !== 'workflow_execution_started' || !envelope.success) continue;
-
-    const data = (envelope.data ?? {}) as WorkflowExecutionStartedData;
-    if (!data.runId || !data.workflowId) continue;
-
-    const chatState = useChatStore.getState();
-    const alreadyTracked = Boolean(
-      getExecutionByRunId(data.runId, ctx.sessionKey)
-      || chatState.workflowCardStates[data.runId],
-    );
-
-    if (!alreadyTracked) {
-      await applyWorkflowRunStarted({
-        sessionKey: ctx.sessionKey,
-        agentId: ctx.agentId,
-        workflowId: data.workflowId,
-        runId: data.runId,
-        templateName: data.templateName ?? '工作流',
-        presentation: 'patch_assistant',
-        versionId: data.versionId ?? data.workflowVersionId,
-      });
-      return;
-    }
-
-    if (chatState.currentSessionKey === ctx.sessionKey) {
-      const hasCard = chatState.messages.some((m) => messageHasWorkflowCardForRun(m, data.runId));
-      if (!hasCard) {
-        syncWorkflowCardsAfterToolDispatch(ctx.sessionKey);
-      }
-    }
-    return;
-  }
 }
 
 /** Test helper */

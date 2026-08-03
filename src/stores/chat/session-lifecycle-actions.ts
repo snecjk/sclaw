@@ -70,6 +70,7 @@ import {
   transferSessionSendReadiness,
 } from '@/lib/session-send-readiness';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
+import { isWorkflowOpenClawSessionKey } from '../../../shared/workflow-openclaw-session';
 
 const NEW_SESSION_TEMP_LABEL = '新对话';
 const SESSION_LOAD_MIN_INTERVAL_MS = 1_200;
@@ -121,7 +122,12 @@ export function createSessionLifecycleActions(
           try {
             const data = await useGatewayStore.getState().rpc<Record<string, unknown>>('sessions.list', {});
             if (data && Array.isArray(data.sessions)) {
-              engineRawSessions = data.sessions;
+              engineRawSessions = data.sessions.filter((session) => {
+                const key = session && typeof session === 'object'
+                  ? String((session as Record<string, unknown>).key ?? '')
+                  : '';
+                return !isWorkflowOpenClawSessionKey(key);
+              });
             }
           } catch (err) {
             console.warn('[loadSessions] engine sessions.list failed; continuing with catalog', err);

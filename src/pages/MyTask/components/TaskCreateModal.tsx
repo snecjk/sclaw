@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Loader2, ChevronDown, Check, Sparkles, Folder, ArrowLeft } from 'lucide-react';
+import { X, Loader2, ChevronDown, Check, Sparkles, Folder, FolderPlus, ArrowLeft } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
@@ -18,6 +18,7 @@ import {
   formFieldFocusClass,
   formFieldHoverBorderClass,
   formFieldOpenClass,
+  invertedPrimarySurfaceClass,
   modalPrimarySubmitButtonClass,
 } from '@/lib/surfaces';
 import {
@@ -29,7 +30,7 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { ClaudeTaskPermissionProfile } from '@/types/scheduled-task';
 import type { ManagedLocalTask } from '@/stores/cron';
 import { hostApiFetch } from '@/lib/host-api';
-import { getDataCenterEntry, getDataCenterSpaces, listDataCenterEntries } from '@/lib/data-center-api';
+import { createDataCenterFolder, deleteDataCenterEntry, getDataCenterEntry, getDataCenterSpaces, listDataCenterEntries, renameDataCenterEntry } from '@/lib/data-center-api';
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import type { DataCenterEntry, DataCenterSpace, DataCenterSpaceType } from '@/types/data-center';
 import { toast } from 'sonner';
@@ -214,6 +215,16 @@ function FolderPickerDialog({
   const [breadcrumbs, setBreadcrumbs] = useState<Array<{ entryId: string; name: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ folder: DataCenterEntry; x: number; y: number } | null>(null);
+  const [renamingFolder, setRenamingFolder] = useState<DataCenterEntry | null>(null);
+  const [renameName, setRenameName] = useState('');
+  const [renameSubmitting, setRenameSubmitting] = useState(false);
+  const [deletingFolder, setDeletingFolder] = useState<DataCenterEntry | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -250,7 +261,74 @@ function FolderPickerDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, spaceType, spaceId, parentEntryId]);
+  }, [open, spaceType, spaceId, parentEntryId, refreshKey]);
+
+  const handleCreateFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name || createSubmitting) return;
+    setCreateSubmitting(true);
+    try {
+      await createDataCenterFolder({
+        spaceType,
+        spaceId: spaceId || undefined,
+        parentEntryId,
+        name,
+      });
+      setNewFolderName('');
+      setCreatingFolder(false);
+      setRefreshKey((key) => key + 1);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '新建文件夹失败');
+    } finally {
+      setCreateSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [contextMenu]);
+
+  const handleRenameFolder = async () => {
+    const name = renameName.trim();
+    if (!renamingFolder || !name || renameSubmitting) return;
+    setRenameSubmitting(true);
+    try {
+      await renameDataCenterEntry(renamingFolder.entryId, name);
+      setRenamingFolder(null);
+      setRenameName('');
+      setRefreshKey((key) => key + 1);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '重命名失败');
+    } finally {
+      setRenameSubmitting(false);
+    }
+  };
+
+  const handleDeleteFolder = async () => {
+    if (!deletingFolder || deleteSubmitting) return;
+    setDeleteSubmitting(true);
+    try {
+      await deleteDataCenterEntry(deletingFolder.entryId);
+      setDeletingFolder(null);
+      setRefreshKey((key) => key + 1);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '删除失败');
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  };
 
   if (!open) return null;
 
@@ -259,7 +337,8 @@ function FolderPickerDialog({
   const parentBreadcrumb = breadcrumbs.length > 1 ? breadcrumbs[breadcrumbs.length - 2] : null;
 
   return (
-    <div className="fixed inset-0 z-[10060] flex items-center justify-center bg-black/35 px-4" onClick={onClose}>
+    <>
+      <div className="fixed inset-0 z-[10060] flex items-center justify-center bg-black/35 px-4" onClick={onClose}>
       <div
         className="flex max-h-[min(560px,calc(100vh-4rem))] w-full max-w-[520px] flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl"
         onClick={(event) => event.stopPropagation()}
@@ -315,6 +394,10 @@ function FolderPickerDialog({
                   key={folder.entryId}
                   type="button"
                   onClick={() => setParentEntryId(folder.entryId)}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    setContextMenu({ folder, x: event.clientX, y: event.clientY });
+                  }}
                   className="flex h-10 items-center gap-2 rounded-lg px-2 text-left text-sm hover:bg-muted"
                 >
                   <Folder className="h-4 w-4 shrink-0 text-[#4E7FFF]" />
@@ -326,17 +409,203 @@ function FolderPickerDialog({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-border bg-muted/20 px-4 py-3">
-          <Button variant="outline" onClick={onClose} className="h-9 rounded-[10px] px-4 text-sm">取消</Button>
-          <Button
-            onClick={() => onSelect({ parentEntryId, pathLabel: currentLabel })}
-            className="h-9 rounded-[10px] px-4 text-sm"
+        <div className="flex items-center justify-between gap-2 border-t border-border bg-muted/20 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setCreatingFolder(true)}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[10px] px-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
           >
-            选择当前目录
-          </Button>
+            <FolderPlus className="h-4 w-4" />
+            新建文件夹
+          </button>
+          <div className="flex shrink-0 gap-2">
+            <Button variant="outline" onClick={onClose} className="h-9 rounded-[10px] px-4 text-sm">取消</Button>
+            <Button
+              onClick={() => onSelect({ parentEntryId, pathLabel: currentLabel })}
+              className={cn('h-9 rounded-[10px] px-4 text-sm', invertedPrimarySurfaceClass)}
+            >
+              选择当前目录
+            </Button>
+          </div>
         </div>
       </div>
     </div>
+
+      {creatingFolder ? (
+        <div
+          className="fixed inset-0 z-[10070] flex items-center justify-center bg-black/35 px-6"
+          onClick={() => {
+            if (createSubmitting) return;
+            setCreatingFolder(false);
+            setNewFolderName('');
+          }}
+        >
+          <div
+            className="w-full max-w-[360px] rounded-2xl border border-border bg-background p-4 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h4 className="text-base font-semibold text-foreground">新建文件夹</h4>
+            <input
+              autoFocus
+              value={newFolderName}
+              onChange={(event) => setNewFolderName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void handleCreateFolder();
+                if (event.key === 'Escape' && !createSubmitting) {
+                  setCreatingFolder(false);
+                  setNewFolderName('');
+                }
+              }}
+              placeholder="请输入文件夹名称"
+              className="mt-3 h-9 w-full rounded-[10px] border border-border bg-background px-3 text-sm outline-none focus:border-foreground"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                disabled={createSubmitting}
+                onClick={() => {
+                  setCreatingFolder(false);
+                  setNewFolderName('');
+                }}
+                className="h-9 rounded-[10px] px-4 text-sm"
+              >
+                取消
+              </Button>
+              <Button
+                onClick={() => void handleCreateFolder()}
+                disabled={!newFolderName.trim() || createSubmitting}
+                className={cn('h-9 rounded-[10px] px-4 text-sm', invertedPrimarySurfaceClass)}
+              >
+                {createSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : '确定'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {contextMenu ? (
+        <div
+          className="fixed z-[10080] min-w-[128px] rounded-[10px] border border-[#E5E6EB] bg-white p-2 text-[#1D2129] shadow-[0_8px_24px_rgba(15,23,42,0.14)] dark:border-border dark:bg-popover dark:text-foreground"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          role="menu"
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="block h-9 w-full rounded-[6px] px-3 text-left text-[13px] leading-9 hover:bg-[#F2F3F5] dark:hover:bg-muted"
+            onClick={() => {
+              setContextMenu(null);
+              setRenamingFolder(contextMenu.folder);
+              setRenameName(contextMenu.folder.name);
+            }}
+          >
+            重命名
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="block h-9 w-full rounded-[6px] px-3 text-left text-[13px] leading-9 text-[#F53F3F] hover:bg-[#F2F3F5] dark:hover:bg-muted"
+            onClick={() => {
+              setContextMenu(null);
+              setDeletingFolder(contextMenu.folder);
+            }}
+          >
+            删除
+          </button>
+        </div>
+      ) : null}
+
+      {renamingFolder ? (
+        <div
+          className="fixed inset-0 z-[10070] flex items-center justify-center bg-black/35 px-6"
+          onClick={() => {
+            if (renameSubmitting) return;
+            setRenamingFolder(null);
+            setRenameName('');
+          }}
+        >
+          <div
+            className="w-full max-w-[360px] rounded-2xl border border-border bg-background p-4 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h4 className="text-base font-semibold text-foreground">重命名文件夹</h4>
+            <input
+              autoFocus
+              value={renameName}
+              onChange={(event) => setRenameName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void handleRenameFolder();
+                if (event.key === 'Escape' && !renameSubmitting) {
+                  setRenamingFolder(null);
+                  setRenameName('');
+                }
+              }}
+              placeholder="请输入文件夹名称"
+              className="mt-3 h-9 w-full rounded-[10px] border border-border bg-background px-3 text-sm outline-none focus:border-foreground"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                disabled={renameSubmitting}
+                onClick={() => {
+                  setRenamingFolder(null);
+                  setRenameName('');
+                }}
+                className="h-9 rounded-[10px] px-4 text-sm"
+              >
+                取消
+              </Button>
+              <Button
+                onClick={() => void handleRenameFolder()}
+                disabled={!renameName.trim() || renameSubmitting}
+                className={cn('h-9 rounded-[10px] px-4 text-sm', invertedPrimarySurfaceClass)}
+              >
+                {renameSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : '确定'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deletingFolder ? (
+        <div
+          className="fixed inset-0 z-[10070] flex items-center justify-center bg-black/35 px-6"
+          onClick={() => {
+            if (deleteSubmitting) return;
+            setDeletingFolder(null);
+          }}
+        >
+          <div
+            className="w-full max-w-[360px] rounded-2xl border border-border bg-background p-4 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h4 className="text-base font-semibold text-foreground">删除文件夹</h4>
+            <p className="mt-3 text-sm text-muted-foreground">
+              确定要删除文件夹“{deletingFolder.name}”吗？
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                disabled={deleteSubmitting}
+                onClick={() => setDeletingFolder(null)}
+                className="h-9 rounded-[10px] px-4 text-sm"
+              >
+                取消
+              </Button>
+              <Button
+                onClick={() => void handleDeleteFolder()}
+                disabled={deleteSubmitting}
+                className="h-9 rounded-[10px] bg-[#F53F3F] px-4 text-sm text-white hover:bg-[#E23B3B]"
+              >
+                {deleteSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : '删除'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 

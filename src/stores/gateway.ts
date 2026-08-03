@@ -9,6 +9,7 @@ import { subscribeHostEvent } from '@/lib/host-events';
 import {
   handleCompletedEngineEvent,
   handleStartedEngineEvent,
+  shouldIgnoreGatewayAgentSession,
 } from './chat/gateway-agent-events';
 import { createGatewayEventDeduper } from './chat/gateway-event-dedupe';
 import {
@@ -80,6 +81,10 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
   const p = payload.params;
   const data = (p.data && typeof p.data === 'object') ? (p.data as Record<string, unknown>) : {};
   const engineEvent = buildAgentNotificationEngineEvent({ params: p, data });
+  const notificationChatEvent = buildNotificationChatEvent({ params: p, data });
+  if (shouldIgnoreGatewayAgentSession(engineEvent?.sessionKey ?? notificationChatEvent?.sessionKey)) {
+    return;
+  }
   if (engineEvent) {
     logChatFlow('event.notification.normalized', {
       type: engineEvent.type,
@@ -89,7 +94,6 @@ function handleGatewayNotification(notification: { method?: string; params?: Rec
     });
   }
 
-  const notificationChatEvent = buildNotificationChatEvent({ params: p, data });
   if (notificationChatEvent) {
     if (shouldProcessGatewayEvent(notificationChatEvent)) {
       import('./chat')
@@ -112,6 +116,7 @@ function handleGatewayEngineEvent(data: unknown): void {
   import('./chat').then(({ useChatStore }) => {
     const normalizedEvent = buildChatEventFromEngineEvent(data as Record<string, unknown>);
     if (!normalizedEvent) return;
+    if (shouldIgnoreGatewayAgentSession(normalizedEvent.sessionKey)) return;
     if (!shouldProcessGatewayEvent(normalizedEvent)) return;
     logChatFlow('event.engine.received', {
       type: (data as Record<string, unknown>).type,

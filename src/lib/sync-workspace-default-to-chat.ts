@@ -176,11 +176,17 @@ export async function applyOpenClawSessionModel(params: {
 /**
  * Decide which model to persist for a session (decision rule, not a display source).
  * Priority: session.model → pending → Claude agent model → workspace default.
+ * Callers that are switching to a different engine can opt out of the stored
+ * session or pending model, which may have been inherited from that other engine.
  */
 export function resolveModelToPersistForSession(opts: {
   sessionKey: string;
   agentId: string;
   engineType: ChatEngineType;
+  /** Ignore an existing session model when it belongs to a different engine flow. */
+  preferSessionModel?: boolean;
+  /** Ignore the unsent new-chat selection when it belongs to a different engine flow. */
+  preferPendingModel?: boolean;
 }): { modelId: string; accountId: string } | null {
   const sessionKey = opts.sessionKey.trim();
   if (!sessionKey) return null;
@@ -214,11 +220,15 @@ export function resolveModelToPersistForSession(opts: {
     ? (agent?.modelAccountId?.trim() || fallbackAccountId)
     : fallbackAccountId;
 
-  const fromSession = tryResolve(session?.model, sessionPreferredAccount);
-  if (fromSession) return fromSession;
+  if (opts.preferSessionModel !== false) {
+    const fromSession = tryResolve(session?.model, sessionPreferredAccount);
+    if (fromSession) return fromSession;
+  }
 
-  const fromPending = tryResolve(chat.pendingNewSessionModel, sessionPreferredAccount);
-  if (fromPending) return fromPending;
+  if (opts.preferPendingModel !== false) {
+    const fromPending = tryResolve(chat.pendingNewSessionModel, sessionPreferredAccount);
+    if (fromPending) return fromPending;
+  }
 
   if (opts.engineType === 'claude') {
     const fromAgent = tryResolve(

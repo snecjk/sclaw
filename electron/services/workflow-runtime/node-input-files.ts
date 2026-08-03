@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { copyFile, mkdir, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, realpath, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
 import { proxyAwareFetch } from '../../utils/proxy-fetch';
@@ -26,7 +26,12 @@ export async function hydrateNodeInputFiles(
   runId: string,
   fetchImpl: FetchLike = proxyAwareFetch,
 ): Promise<{ input: unknown; files: HydratedNodeFile[] }> {
-  const upstreamInput = await hydrateUpstreamWorkflowArtifacts(nodeInput, runId, node?.id);
+  // A terminal output node only promotes upstream OUTPUT references. It never
+  // reads their contents, so copying them into end_node/inputs both wastes I/O
+  // and risks mistaking a consumer mount path for the producer resourceId.
+  const upstreamInput = node?.type === 'output'
+    ? nodeInput
+    : await hydrateUpstreamWorkflowArtifacts(nodeInput, runId, node?.id);
   if (node?.type !== 'agent_data_fetch') return { input: upstreamInput, files: [] };
   const business = node?.config?.businessConfig ?? {};
   if (business.sourceType && business.sourceType !== 'local_upload') return { input: nodeInput, files: [] };
@@ -126,27 +131,37 @@ async function hydrateUpstreamWorkflowArtifacts(nodeInput: unknown, runId: strin
     if (relative.startsWith('..') || path.isAbsolute(relative)) {
       throw new Error(`上游节点产物 resourceId 非法: ${artifact.resourceId}`);
     }
-    const targetName = `${String(index + 1).padStart(2, '0')}-${safeFileName(artifact.name)}`;
+    // resourceId is the actual file identity. A display name may omit the
+    // extension (for example "上海青浦室内活动规划" for an HTML file), so using
+    // artifact.name here would make the mounted file format ambiguous.
+    const targetName = `${String(index + 1).padStart(2, '0')}-${safeFileName(path.basename(artifact.resourceId))}`;
     const targetPath = path.join(targetDirectory, targetName);
     try {
-      await copyFile(sourcePath, targetPath);
-    } catch {
-      throw new Error(`上游节点产物不存在，无法传递给节点 ${targetNodeId}: ${artifact.name}`);
+      const [sourceDirectoryRealPath, sourceRealPath] = await Promise.all([realpath(sourceDirectory), realpath(sourcePath)]);
+      const realRelative = path.relative(sourceDirectoryRealPath, sourceRealPath);
+      if (realRelative.startsWith('..') || path.isAbsolute(realRelative)) {
+        throw new Error(`上游节点产物通过符号链接逃逸工作区: ${artifact.name}`);
+      }
+      await copyFile(sourceRealPath, targetPath);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('符号链接逃逸')) throw error;
+      throw new Error(`上游节点产物不存在，无法传递给节点 ${targetNodeId}: ${artifact.name}`, { cause: error });
     }
     return {
       ...entry,
-      artifact: {
-        ...artifact,
-        // resourceId is intentionally relative to the consumer workspace.
-        resourceId: `inputs/${targetName}`,
-      },
+      // Keep artifact.resourceId canonical (relative to sourceNodeId). The
+      // consumer-only path must not leak into persisted/final artifact refs.
+      mountedResourceId: `inputs/${targetName}`,
     };
   }));
   return { ...base, [WORKFLOW_PACKET_ARTIFACTS_KEY]: hydrated };
 }
 
 function safeFileName(name: string): string {
-  const cleaned = path.basename(name).replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').trim();
+  const cleaned = [...path.basename(name).replace(/[<>:"/\\|?*]/g, '_')]
+    .map((character) => character.charCodeAt(0) < 32 ? '_' : character)
+    .join('')
+    .trim();
   return cleaned || 'input-file';
 }
 

@@ -6,7 +6,9 @@ import {
   findLastUserMessage,
   isAssistantRole,
   type ChatDisplayItem,
+  mergeWorkflowCardsIntoDisplayItems,
 } from './chat-display';
+import type { ChatWorkflowCardRef } from '@/types/workflow';
 import type { ActiveTurnStream } from './AssistantTurnMessage';
 import { extractImages, extractThinking, extractToolUse } from './message-utils';
 
@@ -72,6 +74,7 @@ export function useChatDisplay(params: {
   streamingMessages: RawMessage[];
   streamingToolResults: RawMessage[];
   streamingTools: StreamingTool[];
+  workflowCards?: ChatWorkflowCardRef[];
 }) {
   const {
     messages,
@@ -84,6 +87,7 @@ export function useChatDisplay(params: {
     streamingMessages = [],
     streamingToolResults = [],
     streamingTools = [],
+    workflowCards = [],
   } = params;
   const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
 
@@ -239,7 +243,20 @@ export function useChatDisplay(params: {
     lastUserMessageAt,
   ]);
 
-  return { staticItems, activeTurn, shouldRenderStreaming, hasAnyStreamContent };
+  const visibleWorkflowCards = activeTurn?.precedingUserMessage?.id
+    ? workflowCards.filter((card) => card.anchorUserMessageId !== activeTurn.precedingUserMessage?.id)
+    : workflowCards;
+  const staticItemsWithWorkflowCards = mergeWorkflowCardsIntoDisplayItems(
+    staticItems,
+    visibleWorkflowCards,
+  );
+
+  return {
+    staticItems: staticItemsWithWorkflowCards,
+    activeTurn,
+    shouldRenderStreaming,
+    hasAnyStreamContent,
+  };
 }
 
 export type { ChatDisplayItem };

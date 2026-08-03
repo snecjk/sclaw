@@ -245,6 +245,7 @@ export interface MyWorkflowSummary {
 // ── Run / Execution ─────────────────────────────────────────────
 
 export type WorkflowRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'timeout' | 'waiting_approval' | 'waiting_input' | 'unknown';
+export type WorkflowRunTriggerType = 'chat' | 'scheduled_task' | 'workflow_manual' | 'designer_test' | 'api';
 
 export interface WorkflowRunNodeRun {
   id: string;
@@ -253,6 +254,8 @@ export interface WorkflowRunNodeRun {
   startedAt?: string;
   completedAt?: string;
   error?: string;
+  attemptCount?: number;
+  agentSessionId?: string;
 }
 
 export interface WorkflowRunArtifact {
@@ -326,22 +329,30 @@ export interface WorkflowRunResponse {
   workflowVersion?: string | number | null;
   status: WorkflowRunStatus;
   mode?: string | null;
+  /** Client-local business entry point. This field is not synchronized to the cloud run. */
+  triggerType?: WorkflowRunTriggerType;
+  /** Client-local chat session used by the optional “return to conversation” action. */
+  sessionKey?: string | null;
+  engineType?: 'claude' | 'openclaw';
+  engineModel?: string | null;
   startedAt: string;
   completedAt?: string | null;
   waitingNodeId?: string | null;
   nodeRuns: WorkflowRunNodeRun[];
-  events: unknown[];
-  approvalTasks: unknown[];
-  userInputTasks: unknown[];
+  /** Detail view only. */
+  events?: unknown[];
+  approvalTasks?: unknown[];
+  userInputTasks?: unknown[];
   artifacts: WorkflowRunArtifact[];
-  toolInvocations: unknown[];
-  input: WorkflowRunInput;
+  /** Diagnostic view only; status/detail do not duplicate tool events. */
+  toolInvocations?: unknown[];
+  input?: WorkflowRunInput;
   /** Client result view (preferred over legacy `output`). */
   result?: WorkflowRunClientResult | null;
   output: unknown | null;
-  startup: WorkflowRunStartupInfo;
+  startup?: WorkflowRunStartupInfo;
   lastAgentRawText?: string | null;
-  error: string | null;
+  error?: string | null;
 }
 
 // ── Legacy / UI-friendly execution state ────────────────────────
@@ -368,6 +379,7 @@ export interface WorkflowExecutionResult {
     url: string;
     previewUrl?: string;
     tempUrl?: string;
+    filePath?: string;
     size?: number;
   }>;
 }
@@ -388,6 +400,23 @@ export interface WorkflowExecutionState {
   waitingNodeId?: string | null;
   approvalTasks?: unknown[];
   userInputTasks?: unknown[];
+}
+
+export interface ChatWorkflowCardRef {
+  runId: string;
+  sessionKey: string;
+  anchorUserMessageId: string | null;
+  title: string;
+  paramsSummary?: string | null;
+  startedAt: string;
+}
+
+export interface RegisterChatWorkflowCardInput {
+  runId: string;
+  sessionKey: string;
+  anchorUserMessageId?: string | null;
+  title?: string | null;
+  paramsSummary?: string | null;
 }
 
 // ── Content Block ───────────────────────────────────────────────

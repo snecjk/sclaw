@@ -1,4 +1,3 @@
-import type { WorkflowExecutionState } from '@/types/workflow';
 import type { DataCenterArtifactProvenance } from '@/types/data-center';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
@@ -229,8 +228,6 @@ export interface ChatState {
   setPendingProjectId: (projectId: string | null) => void;
 
   // Workflow
-  workflowCardStates: Record<string, WorkflowExecutionState>;
-  setWorkflowCardState: (runId: string, state: WorkflowExecutionState) => void;
   pendingWorkflow: {
     templateId: string;
     templateName: string;
