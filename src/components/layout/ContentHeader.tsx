@@ -140,10 +140,22 @@ export function ContentHeader() {
             : 'flex min-w-0 flex-1 items-center gap-2 overflow-hidden',
       )}
     >
-      <div data-slot="sidebar-title" className="min-w-0 shrink-0">
+      <div
+        data-slot="sidebar-title"
+        className={cn(
+          'min-w-0',
+          isSplitLayout ? 'flex-1 overflow-hidden' : 'shrink-0',
+        )}
+      >
         {titleZone}
       </div>
-      <div className="min-w-0 flex-1" aria-hidden />
+      <div
+        className={cn(
+          'min-w-0 flex-1',
+          (isSplitLayout || isPreviewExpanded) && 'hidden',
+        )}
+        aria-hidden
+      />
       {chatActionsZone}
     </div>
   );

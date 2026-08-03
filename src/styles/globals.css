@@ -379,11 +379,12 @@
   }
 
   /**
-   * 侧栏收起时主卡片顶到窗口左缘：ContentHeader + 三栏 split row 共用 pad-start，
-   * 与侧栏列 SidebarProvincialChromeRow 的 pl-20 一致，避免红绿灯遮住展开钮与会话标题。
+   * 侧栏收起时，ContentHeader 单独避让 macOS 原生窗口控件。
+   * Header-only 76px safe start 使 native traffic lights 与 28px Sidebar 展开钮保持 8px 净间距。
+   * 该值不得下放到 Workspace Body / Preview Surface。
    */
   :root[data-platform='darwin'] [data-app-shell='provincial'][data-sidebar-collapsed='true'] {
-    --sto-chrome-traffic-light-pad: 5rem;
+    --sto-chrome-traffic-light-pad: 76px;
     --sto-content-header-pad-start: max(var(--sto-content-pad-x), var(--sto-chrome-traffic-light-pad));
   }
 

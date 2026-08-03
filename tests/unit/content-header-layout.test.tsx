@@ -99,6 +99,13 @@ describe('content header layoutMode contract', () => {
     );
     expect(headerSrc).toContain("!canUserRestoreSidebar && 'w-0 gap-0'");
     expect(headerSrc).toContain("isPreviewExpanded && !canUserRestoreSidebar && 'gap-0'");
+    expect(headerSrc).toMatch(
+      /isSplitLayout \? 'flex-1 overflow-hidden' : 'shrink-0'/,
+    );
+    expect(headerSrc).toMatch(
+      /\(isSplitLayout \|\| isPreviewExpanded\) && 'hidden'/,
+    );
+    expect(headerSrc).toContain("'no-drag flex shrink-0 items-center gap-1'");
     expect(headerSrc).not.toMatch(/isPreviewExpanded[\s\S]*?-m[lr]-/);
   });
 
@@ -169,6 +176,7 @@ describe('ContentHeader vertical pixel contract', () => {
     expect(globals).toMatch(/--sto-preview-expanded-header-to-surface-gap:\s*0px/);
     expect(globals).toMatch(/--sto-sidebar-chrome-toggle-inset-top:\s*16px/);
     expect(globals).toMatch(/--sto-sidebar-chrome-toggle-size:\s*28px/);
+    expect(globals).toMatch(/--sto-chrome-traffic-light-pad:\s*76px/);
   });
 
   it('keeps mode-owned Header-to-Surface gaps without stacking Split padding', () => {
@@ -285,6 +293,23 @@ describe('ContentHeader vertical pixel contract', () => {
       'utf8',
     );
     expect(headerSrc).toContain('isContentHeaderCompact');
+  });
+
+  it('uses neutral paired glyphs instead of persistent primary active color', () => {
+    const actionSrc = readFileSync(
+      resolve(process.cwd(), 'src/pages/Chat/ChatSearchBar.tsx'),
+      'utf8',
+    );
+    const surfacesSrc = readFileSync(resolve(process.cwd(), 'src/lib/surfaces.ts'), 'utf8');
+
+    expect(actionSrc).not.toContain('contentHeaderActionBtnActiveClass');
+    expect(surfacesSrc).not.toContain('contentHeaderActionBtnActiveClass');
+    expect(actionSrc).toContain('<BrainCircuit className="h-4 w-4"');
+    expect(actionSrc).toContain('<Brain className="h-4 w-4"');
+    expect(actionSrc).toContain('<PanelRightClose className="h-4 w-4"');
+    expect(actionSrc).toContain('<PanelRightOpen className="h-4 w-4"');
+    expect(actionSrc).toContain('<Minimize2 className="h-4 w-4"');
+    expect(actionSrc).toContain('<Maximize2 className="h-4 w-4"');
   });
 
   it('keeps route-injected workflow Header controls on the shared compact Token', () => {

@@ -274,7 +274,7 @@ Full legacy 72px rail 仍保持现状，不受本阶段省区规则影响。
 --sto-content-header-control-h: 28px;
 --sto-header-pad-start: 20px;
 --sto-header-pad-end: 8px;
---sto-header-macos-safe-start: 80px;
+--sto-header-macos-safe-start: 76px;
 --sto-header-effective-start: var(--sto-header-pad-start);
 ```
 
@@ -286,6 +286,8 @@ macOS + Sidebar collapsed：
 ```
 
 这个值只允许在 Header Root / Header Start Slot 使用。
+
+`76px` 是 macOS Sidebar collapsed 的 Header-only 光学起点：它使 native traffic lights 与 28px Sidebar 展开钮保持 `8px ± 1px`。Preview Expanded 时零宽 chat spacer 不参与 Flex gap，Sidebar 展开钮到 Preview menu 只保留 Header 直属的 `8px` gap。
 
 ### 5.3 Workbench Body
 

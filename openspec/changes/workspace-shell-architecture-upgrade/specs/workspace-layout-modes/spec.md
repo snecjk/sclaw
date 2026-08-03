@@ -59,12 +59,14 @@ ContentHeader registration SHALL expose `chatActions`, `previewActions`, and `la
 - **AND** new code SHALL NOT add `panelActions` as a third parallel slot
 
 ### Requirement: Header chrome inset and Workbench body inset have separate ownership
-The system SHALL keep macOS native-chrome avoidance within ContentHeader only. Header start inset SHALL NOT be applied to the Workspace `main`, Split Body, Conversation Body, or Preview Expanded Body. Split Preview SHALL keep zero horizontal seam at its logical boundary. Preview Expanded SHALL use its own bilateral `12px` Workbench Surface inset, derived from approved design node `48:11093` (`1152px - 1128px = 24px`), and SHALL NOT inherit the collapsed macOS `5rem` Header safe inset or the Split end-only inset Token.
+The system SHALL keep macOS native-chrome avoidance within ContentHeader only. The collapsed macOS Header safe start SHALL be `76px`, producing an `8px ± 1px` clear gap from the native traffic-light group to the `28px` Sidebar restore control. Header start inset SHALL NOT be applied to the Workspace `main`, Split Body, Conversation Body, or Preview Expanded Body. Split Preview SHALL keep zero horizontal seam at its logical boundary. Preview Expanded SHALL use its own bilateral `12px` Workbench Surface inset, derived from approved design node `48:11093` (`1152px - 1128px = 24px`), and SHALL NOT inherit the collapsed macOS Header safe inset or the Split end-only inset Token.
 
 #### Scenario: Collapsed macOS Preview Expanded
 - **WHEN** the provincial Sidebar is collapsed on macOS and PreviewMode is `expanded`
 - **THEN** ContentHeader controls SHALL avoid the native traffic lights
-- **AND** Preview Surface left and right insets from the Workspace Body SHALL each remain `12px ± 1px`, not `5rem`
+- **AND** the native traffic-light group to Sidebar restore-control clear gap SHALL be `8px ± 1px`
+- **AND** the Sidebar restore control to Preview menu clear gap SHALL be `8px ± 1px`, owned only by the direct Header zone gap
+- **AND** Preview Surface left and right insets from the Workspace Body SHALL each remain `12px ± 1px`, not the Header safe inset
 
 #### Scenario: Visible-Sidebar Expanded Header aligns with Preview Surface
 - **WHEN** the Sidebar is visible and PreviewMode is `expanded`
@@ -105,6 +107,13 @@ Primary ContentHeader action boxes, Session/Artifact pills, the Header-owned Sid
 - **WHEN** Header search is open in dark theme
 - **THEN** its background, border, text, focus, disabled, and hover states SHALL use semantic tokens consistent with `docs/sto-design.md`
 - **AND** the geometry and keyboard behavior SHALL match light theme
+
+#### Scenario: Header toggle state uses neutral paired glyphs
+- **WHEN** the user toggles Thinking visibility, Preview Panel visibility, Workspace expanded mode, or Header search
+- **THEN** the Header button SHALL NOT retain a primary-colored background or primary-colored glyph after activation
+- **AND** Thinking, Preview Panel, and Workspace expanded mode SHALL use paired neutral glyphs to distinguish their states
+- **AND** the expanded Search Surface SHALL distinguish the Search state without moving sibling actions
+- **AND** hover, disabled, and `focus-visible` feedback SHALL remain available
 
 ### Requirement: ContentHeader never exposes a native horizontal scrollbar
 ContentHeader and its chat-header and preview-tab slots SHALL NOT become visible horizontal Scroll Owners. Conversation titles SHALL truncate, Preview tab overflow SHALL remain available through the existing overflow menu, and the Header SHALL keep its authoritative height without a classic scrollbar gutter. This requirement SHALL use the same geometry in light and dark themes.

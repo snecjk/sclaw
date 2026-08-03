@@ -170,13 +170,16 @@ effectiveMax = Math.min(
 
   同步几何消费者：provincial `SHELL_FRAME_HORIZONTAL_PX` 从旧的“Gap 8 + right Frame 8”校准为仅 right Frame `8px`；`computeToastLayoutOffsetPx` 删除旧 Gap，只返回 effective Sidebar width（no-sidebar=0；full legacy 保持真实 rail）。批准的 Workspace 最低宽度值不变。
 
-- **Decision**：将 Header chrome safe inset、Workbench Body inset 和 Workspace Frame 拆成独立 Token；macOS collapsed 的 80px safe inset 只允许 Header 消费，`main`/Preview Body 不得消费。
+- **Decision**：将 Header chrome safe inset、Workbench Body inset 和 Workspace Frame 拆成独立 Token；macOS collapsed 的 Header-only safe start 经光学验收从 80px 收紧为 `76px`，使 native traffic lights 与 28px Sidebar 展开钮保持 `8px ± 1px` 净间距。该 inset 只允许 Header 消费，`main`/Preview Body 不得消费。Preview Expanded 中的零宽 chat spacer 退出布局，Sidebar 展开钮与 Preview menu 仅由 Header 直属 `8px` gap 定义。
 - **Rationale**：当前 `stoSplitShellInsetsClass` 挂 `main` 使 Preview Expanded Body 继承 5rem，直接生成错误大空白。
 - **Alternative**：Preview collapsed 模式加负 margin 抵消 → 否决为状态补丁。
 
 - **Decision**：ContentHeader 保留现有注册协议，但收敛为单一 DOM（chat zone + preview zone + stable workspace-actions）；layoutMode 只改变 Grid Area/visibility。最新产品验收将一级 Header 收紧为 `44px`，主要操作框、Session/Artifact pill 与 Search Surface 统一为 `28px`；Search 仍作为向左 overlay 的临时工具，不进入主 Flex 宽度，SVG glyph 保持 `16px`。
 - **Rationale**：三套 return 会改变同一 preview action 的父容器和水平锚点；Search 普通流 264px 宽度会推动 actions。
 - **Alternative**：为每个模式记录独立 `right`/`translate` → 否决，状态组合不可维护。
+
+- **Decision**：Header 状态按钮不再用 primary 色块或 primary 图标持久表达已开启；Thinking、Preview Panel 和 Workspace expand 使用中性色成对 glyph 表达状态，Search 由已展开的 Search Surface 表达状态。Hover 和 `focus-visible` 反馈仍保留。
+- **Rationale**：状态已有明确的形状或 Surface 变化，再叠加橙色会将布局工具误读为业务选中态。
 
 - **Decision**：Sidebar 展开时 Workspace start Frame 为 `0px`，Sidebar 完全收起时为 `8px`；Split Preview 的 L2 描边 Surface 额外拥有 `12px` end inset，因此窗口到描边总距为 `8+12=20px`。该 inset 只属于 Split Body，不挂 `main`，不改变 Preview 左侧零 seam，也不下放给 Preview Expanded。
 - **Rationale**：删除旧 `main` 水平 inset 修复了 collapsed Preview 的 5rem 空白，但同时误删了 Split Preview Surface 的设计留白。Workspace 外框、Header 操作锚点和 L2 Surface inset 必须分别建模。

@@ -903,9 +903,6 @@ export const contentHeaderActionBtnClass = cn(
 export const contentHeaderTextActionBtnClass =
   'no-drag h-[var(--sto-content-header-control-h,28px)] shrink-0 px-2';
 
-/** 标题栏 icon 激活态（深度思考开、搜索开等） */
-export const contentHeaderActionBtnActiveClass = 'bg-primary/10 text-primary';
-
 /**
  * 列表页搜索/表单 focus：浅色 Grey-5 描边；暗色 primary 轻 ring。
  * 使用位置：工作流列表搜索、我的任务工具栏（阶段 2 接入 TaskCreateModal）。

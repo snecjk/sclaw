@@ -1,18 +1,24 @@
 import { useEffect, useRef } from 'react';
-import { ChevronDown, ChevronUp, Maximize2, Minimize2, Search, X } from 'lucide-react';
+import {
+  Brain,
+  BrainCircuit,
+  ChevronDown,
+  ChevronUp,
+  Maximize2,
+  Minimize2,
+  PanelRightClose,
+  PanelRightOpen,
+  Search,
+  X,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
-import {
-  contentHeaderActionBtnActiveClass,
-  contentHeaderActionBtnClass,
-} from '@/lib/surfaces';
+import { contentHeaderActionBtnClass } from '@/lib/surfaces';
 import searchIcon from '@/assets/icons/search.svg';
 import refreshIcon from '@/assets/icons/refresh.svg';
-import brainIcon from '@/assets/icons/brain.svg';
-import panelIcon from '@/assets/icons/panel.svg';
 
 /** 会话面板顶部 action 图标的功能气泡：深色 Grey-10 底 + 白字 + 同色箭头。 */
 const HEADER_TOOLTIP_BG = '#1D2129';
@@ -107,7 +113,7 @@ export function ChatSearchBar({
           className={cn(
             'group',
             isHeader
-              ? cn(contentHeaderActionBtnClass, isOpen && contentHeaderActionBtnActiveClass)
+              ? contentHeaderActionBtnClass
               : cn(
                   'h-8 w-8 rounded-full border border-border bg-primary/[0.04] hover:bg-primary/[0.08]',
                   isOpen && 'bg-primary/12 text-primary',
@@ -270,15 +276,15 @@ export function ChatConversationHeaderActions({
         <TooltipTrigger asChild>
           <button
             type="button"
-            className={cn(
-              'group',
-              contentHeaderActionBtnClass,
-              showThinking && contentHeaderActionBtnActiveClass,
-            )}
+            className={cn('group', contentHeaderActionBtnClass)}
             onClick={onToggleThinking}
             aria-label={showThinking ? t('toolbar.hideThinking') : t('toolbar.showThinking')}
           >
-            <HeaderActionIcon src={brainIcon} />
+            {showThinking ? (
+              <BrainCircuit className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+            ) : (
+              <Brain className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+            )}
           </button>
         </TooltipTrigger>
         <HeaderActionTooltip
@@ -310,15 +316,15 @@ export function ChatPreviewToggleHeaderAction({
       <TooltipTrigger asChild>
         <button
           type="button"
-          className={cn(
-            'group',
-            contentHeaderActionBtnClass,
-            isPreviewPanelOpen && contentHeaderActionBtnActiveClass,
-          )}
+          className={cn('group', contentHeaderActionBtnClass)}
           onClick={onTogglePreview}
           aria-label={isPreviewPanelOpen ? t('preview.collapsePanel') : t('toolbar.openPreview')}
         >
-          <HeaderActionIcon src={panelIcon} />
+          {isPreviewPanelOpen ? (
+            <PanelRightClose className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+          ) : (
+            <PanelRightOpen className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+          )}
         </button>
       </TooltipTrigger>
       <HeaderActionTooltip
@@ -358,11 +364,7 @@ export function ChatPreviewWorkspaceHeaderActions({
             <button
               type="button"
               data-slot="preview-workspace-layout-toggle"
-              className={cn(
-                'group',
-                contentHeaderActionBtnClass,
-                isWorkspaceExpanded && contentHeaderActionBtnActiveClass,
-              )}
+              className={cn('group', contentHeaderActionBtnClass)}
               onClick={isWorkspaceExpanded ? onRestoreWorkspace : onExpandWorkspace}
               aria-label={
                 isWorkspaceExpanded
