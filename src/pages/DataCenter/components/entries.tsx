@@ -656,12 +656,16 @@ export function FeedbackState({
   icon: ReactNode;
   title: string;
   description?: string;
-  variant?: 'default' | 'empty';
+  variant?: 'default' | 'empty' | 'plain';
 }) {
-  if (variant === 'empty') {
+  if (variant === 'empty' || variant === 'plain') {
     return (
       <div className="flex h-full min-h-[360px] flex-col items-center justify-center text-center">
-        <img src={emptyIllustration} alt="" aria-hidden="true" className="h-[78px] w-[96px] object-contain" />
+        {variant === 'empty' ? (
+          <img src={emptyIllustration} alt="" aria-hidden="true" className="h-[78px] w-[96px] object-contain" />
+        ) : (
+          <div className="text-muted-foreground">{icon}</div>
+        )}
         <h2 className="mt-3 text-[14px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">{title}</h2>
         {description ? (
           <p className="mt-1 max-w-md text-[12px] leading-5 text-[#A8B0BD] dark:text-muted-foreground">{description}</p>

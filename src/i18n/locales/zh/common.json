@@ -160,7 +160,7 @@
             "authorizeLocalFile": "授权本地文件",
             "authorizeLocalFileOption": "授权文件",
             "authorizeLocalFolderOption": "授权文件夹",
-            "usedQuota": "已用 {{used}} / {{quota}}"
+            "usedQuota": "储存空间已用{{used}}/{{quota}}"
         },
         "drive": {
             "authorizedCount": "共授权 {{count}} 个文件",
