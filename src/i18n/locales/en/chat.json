@@ -87,6 +87,7 @@
         "workflowNoTemplates": "No workflows",
         "workflowClear": "Clear workflow",
         "quickInputTitle": "Quick inputs",
+        "quickInputSaveAs": "Save to quick inputs",
         "quickInputEmpty": "No quick inputs saved yet",
         "quickInputCreate": "New quick input",
         "quickInputComingSoon": "Quick inputs coming soon",
