@@ -23,6 +23,18 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/**
+ * Trial prompt from the catalog: multi-line Unicode must be preserved intact
+ * (only outer whitespace is trimmed, matching the server contract). Returns
+ * `undefined` for older servers that omit the field — description/summary
+ * must never masquerade as the prompt.
+ */
+function promptText(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 function number(value: unknown, fallback = 0): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
@@ -74,6 +86,7 @@ export function adaptConnectorDescriptor(value: unknown): ConnectorDescriptor | 
     badge: text(raw.badge),
     minClientVersion: text(raw.minClientVersion),
     runtime,
+    prompt: promptText(raw.prompt),
     agent: {
       readyWhen: text(agentRaw.readyWhen) || undefined,
       skillHint: text(agentRaw.skillHint) || undefined,

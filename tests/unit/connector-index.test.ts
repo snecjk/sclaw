@@ -23,6 +23,7 @@ const sampleCatalog: ConnectorDescriptor[] = [
       examples: ['查联系人'],
       skill: { slug: 'dws', scope: 'connector', source: 'bundled' },
     },
+    prompt: '帮我查询钉钉通讯录\n第二行：统计「研发部」人数',
   },
   {
     id: 'conn-gitlab',
@@ -61,6 +62,10 @@ describe('connector-index agent prompt', () => {
     expect(prompt).toContain('通讯录、发消息');
     expect(prompt).toContain('当前未连接（不可调用 detail skill / CLI）：钉钉');
     expect(prompt).toContain('Skill(slug)');
+    // 试用提示词只是用户可见草稿：无论连接器是否连接，
+    // 都不得注入 Agent 系统上下文（connector-index）。
+    expect(prompt).not.toContain('帮我查询钉钉通讯录');
+    expect(prompt).not.toContain('第二行：统计「研发部」人数');
   });
 });
 

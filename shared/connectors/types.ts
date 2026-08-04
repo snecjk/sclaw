@@ -157,6 +157,13 @@ export interface ConnectorDescriptor {
   minClientVersion: string;
   runtime: Record<string, unknown>;
   agent: ConnectorAgentSpec;
+  /**
+   * Operator-authored trial prompt (multi-line Unicode allowed). Shown as a
+   * one-shot editable draft in the main chat input when the user clicks
+   * “去试试” on a connected connector. Never auto-sent and never injected
+   * into Agent system context. Absent when the server predates the field.
+   */
+  prompt?: string;
 }
 
 export interface ConnectorLocalStateItem {

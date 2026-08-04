@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/utils';
+import { navigateToNewSessionWithDraft } from '@/lib/main-chat-navigation';
 import {
   resolveManagedCliBinary,
   unwrapConnectorRuntime,
@@ -111,6 +112,19 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
     }
     void handleConnect();
   }, [isTokenKind, handleConnect]);
+
+  // 运营侧配置的试用提示词；旧服务端缺字段时保持 undefined，
+  // 绝不用 description/summary 冒充提示词。
+  const tryPrompt = item.prompt?.trim() ?? '';
+
+  const handleTryPrompt = useCallback(() => {
+    if (!tryPrompt) {
+      toast.message('暂无试用提示词');
+      return;
+    }
+    setDetailOpen(false);
+    navigateToNewSessionWithDraft(navigate, tryPrompt);
+  }, [navigate, tryPrompt]);
 
   return (
     <>
@@ -300,11 +314,10 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
               </button>
               <button
                 type="button"
-                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] border border-border px-5 text-[13px] font-medium text-[#1D2129] transition-colors hover:bg-[#F2F3F5] dark:text-foreground"
-                onClick={() => {
-                  setDetailOpen(false);
-                  navigate('/');
-                }}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] border border-border px-5 text-[13px] font-medium text-[#1D2129] transition-colors hover:bg-[#F2F3F5] disabled:cursor-not-allowed disabled:opacity-50 dark:text-foreground"
+                disabled={!tryPrompt}
+                title={tryPrompt ? '到主聊天试用该连接器' : '暂无试用提示词'}
+                onClick={handleTryPrompt}
               >
                 去试试
               </button>

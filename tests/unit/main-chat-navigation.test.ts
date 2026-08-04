@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   isMainChatHomePath,
   navigateToMainChatHome,
+  navigateToNewSessionWithDraft,
   navigateToNewSessionWithPrompt,
   navigateToSessionWithPrompt,
+  readMainChatDraftState,
 } from '@/lib/main-chat-navigation';
 
 const switchSession = vi.fn();
@@ -104,5 +106,67 @@ describe('main-chat-navigation', () => {
     switchSession.mockClear();
     navigateToNewSessionWithPrompt(navigate as never, '/workflow', 'hi', { workflowId: 'tpl_1' });
     expect(navigate).toHaveBeenCalledWith({ pathname: '/', search: '?q=hi&workflowId=tpl_1' });
+  });
+});
+
+describe('main-chat-navigation draft (去试试)', () => {
+  beforeEach(() => {
+    switchSession.mockClear();
+    newSession.mockClear();
+    renameSession.mockClear();
+  });
+
+  it('creates a new session and carries a one-shot draft via router state, not ?q=', () => {
+    const navigate = vi.fn();
+    const draft = '帮我查询钉钉通讯录\n第二行：统计「研发部」人数';
+
+    const navigated = navigateToNewSessionWithDraft(navigate as never, draft);
+
+    expect(navigated).toBe(true);
+    expect(newSession).toHaveBeenCalledTimes(1);
+    expect(switchSession).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledTimes(1);
+    const [to, options] = navigate.mock.calls[0] as [unknown, { state?: Record<string, unknown> }];
+    expect(to).toBe('/');
+    // 独立草稿链路：目标是纯路径字符串，不得复用会触发自动发送的 ?q= 查询参数
+    expect(typeof to).toBe('string');
+    expect(String(to)).not.toContain('?');
+    expect(options.state?.mainChatDraft).toBe(draft);
+    expect(typeof options.state?.mainChatDraftToken).toBe('string');
+    expect(String(options.state?.mainChatDraftToken).length).toBeGreaterThan(0);
+  });
+
+  it('generates a fresh token per navigation so repeated clicks still seed', () => {
+    const navigate = vi.fn();
+    navigateToNewSessionWithDraft(navigate as never, '草稿');
+    navigateToNewSessionWithDraft(navigate as never, '草稿');
+    const [first, second] = navigate.mock.calls as Array<
+      [unknown, { state?: { mainChatDraftToken?: string } }]
+    >;
+    expect(first[1].state?.mainChatDraftToken).not.toBe(second[1].state?.mainChatDraftToken);
+  });
+
+  it('rejects empty or whitespace-only drafts without side effects', () => {
+    const navigate = vi.fn();
+    expect(navigateToNewSessionWithDraft(navigate as never, '')).toBe(false);
+    expect(navigateToNewSessionWithDraft(navigate as never, '   \n\t ')).toBe(false);
+    expect(newSession).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('readMainChatDraftState validates router state payloads', () => {
+    expect(readMainChatDraftState(null)).toBeNull();
+    expect(readMainChatDraftState(undefined)).toBeNull();
+    expect(readMainChatDraftState('draft')).toBeNull();
+    expect(readMainChatDraftState({})).toBeNull();
+    expect(readMainChatDraftState({ mainChatDraft: '  ' })).toBeNull();
+    expect(readMainChatDraftState({ mainChatDraft: 123 })).toBeNull();
+    expect(
+      readMainChatDraftState({ mainChatDraft: ' 草稿文本 ', mainChatDraftToken: ' tk ' }),
+    ).toEqual({ mainChatDraft: '草稿文本', mainChatDraftToken: 'tk' });
+    expect(readMainChatDraftState({ mainChatDraft: '草稿文本' })).toEqual({
+      mainChatDraft: '草稿文本',
+      mainChatDraftToken: '',
+    });
   });
 });
