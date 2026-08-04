@@ -45,9 +45,11 @@
    - 在 `App.tsx` 直接使用 Sonner `<Toaster>` 并传入 `className`、`style` 等。
    - 备选：新建 `AppToaster` 封装 → 否决（过度抽象、DOM 测量复杂度无收益）。
 
-2. **基于侧栏状态 + `calc()` 定位，不做 DOM 几何系统**
-   - 使用 `useSettingsStore.sidebarCollapsed` + `getSidebarLayoutVariant()` 计算偏移。
-   - 备选：`ResizeObserver` + `data-toast-anchor` → 否决（复杂度高、定位仍不准确）。
+2. **Toast 水平偏移读 AppShell effective width（禁止 72/260 写死）**
+   - **修订（2026-07-31 Stage 0）**：定位 MUST 消费 `AppShellLayoutSnapshot.effectiveSidebarWidth`（外加已确认的 provincial L0 gutter，若 snapshot 未含则由壳层统一导出），**禁止** `sidebarCollapsed ? 72 : 260`。
+   - 省区 collapsed → effective width `0`（不是 full-legacy 的 72）。Settings / login / setup / sprite / float-icon → `0`。
+   - 在 `app-shell-foundation` Stage 1 落地前，`App.tsx` 现有硬编码视为迁移债务；本 Change 不再扩写平行公式。
+   - 备选：`ResizeObserver` + `data-toast-anchor` → 仍否决；硬编码 72/260 → **删除**。
 
 3. **保留 Sonner styled 结构，用命名空间 CSS 覆盖视觉**
    - 保留 `richColors`，在 `globals.css` 用 `[data-sonner-toaster].sto-global-toaster` 选择器覆盖。
@@ -63,7 +65,8 @@
 
 ## Risks
 
-- [Risk] 侧栏折叠时定位偏移 → Mitigation：`calc()` 自动响应，百分比适应窗口变化。
+- [Risk] 侧栏折叠时定位偏移 → Mitigation：Stage 1 起跟 `effectiveSidebarWidth`；不再假设 collapsed=72。
+- [Risk] Settings 仍按 hasSidebar 偏移 → Mitigation：shell snapshot `hasSidebar=false` / width=0。
 - [Risk] 长错误撑破卡片 → Mitigation：正文 `max-height` + `overflow-y-auto` + `break-words`。
 - [Risk] 暗色对比度不足 → Mitigation：为 feedback Token 提供 `.dark` 值。
 - [Risk] 重复错误提示回归 → Mitigation：Home 只有 `HomeMainConversation` 订阅 error。

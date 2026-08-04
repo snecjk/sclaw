@@ -16,7 +16,7 @@ import { useHomeChatEntrySend } from './use-home-chat-entry-send';
 export function Home() {
   // 开预览时外层须 display:contents，否则对话/预览列进不了 main 的三栏 grid（白屏）
   const showConversation = useHomeConversationActive();
-  const { isSplitGridPassthrough, splitGridPassthroughClass } =
+  const { splitGridPassthroughClass } =
     useSplitGridPassthroughClass(showConversation);
   const cleanupEmptySession = useChatStore((s) => s.cleanupEmptySession);
 
@@ -102,9 +102,8 @@ export function Home() {
     <>
       <div
         className={cn(
-          isSplitGridPassthrough
-            ? splitGridPassthroughClass
-            : 'mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden pt-2',
+          splitGridPassthroughClass
+            ?? 'mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden',
         )}
       >
         <HomeAgentHubSurface seedSkillSlug={seedSkillSlug} />

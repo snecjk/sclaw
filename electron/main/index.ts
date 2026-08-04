@@ -278,7 +278,14 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
       webviewTag: true, // Enable <webview> for embedding OpenClaw Control UI
     },
     titleBarStyle: isMac ? 'hiddenInset' : useCustomTitleBar ? 'hidden' : 'default',
-    trafficLightPosition: isMac ? { x: 16, y: 18 } : undefined,
+    trafficLightPosition: isMac
+      ? {
+          // 最新原生 chrome 光学基线：x=16 / y=20；不再从 ContentHeader centerY 反推。
+          // 权威值：src/lib/content-header-metrics.ts → MACOS_TRAFFIC_LIGHT_POSITION
+          x: 16,
+          y: 20,
+        }
+      : undefined,
     frame: isMac || !useCustomTitleBar,
     show: false,  // We call show() manually below — before loading content
     backgroundColor: '#0f1525',  // Match splash screen background

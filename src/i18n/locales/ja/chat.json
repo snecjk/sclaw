@@ -219,6 +219,8 @@
         "resizeSeparator": "プレビュー幅を調整",
         "overflowMenu": "すべての成果物",
         "fullscreen": "全画面",
+        "expandWorkspace": "プレビューを展開",
+        "restoreWorkspace": "分割プレビューに戻す",
         "refresh": "更新",
         "download": "ダウンロード",
         "share": "钉钉で共有",

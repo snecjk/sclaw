@@ -120,17 +120,18 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
   return (
     <div
       className={cn(
-        isSplitGridPassthrough ? splitGridPassthroughClass : 'flex min-h-0 flex-1 flex-col',
-        !isSplitGridPassthrough && !showConversation && homeHubLandingOuterInsetClass,
+        showConversation
+          ? (splitGridPassthroughClass ?? 'flex min-h-0 flex-1 flex-col')
+          : cn('flex min-h-0 flex-1 flex-col', homeHubLandingOuterInsetClass),
       )}
     >
       <div
         className={cn(
-          isSplitGridPassthrough
-            ? splitGridPassthroughClass
-            : showConversation
-              ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
-              : 'flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6',
+          showConversation
+            ? (isSplitGridPassthrough
+              ? splitGridPassthroughClass
+              : 'flex min-h-0 flex-1 flex-col overflow-hidden')
+            : 'flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6',
         )}
       >
         {showConversation ? (
