@@ -104,13 +104,13 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
       >
         {mode === 'toolbar' ? (
           <div className="mb-1 flex h-[34px] w-[264px] items-center gap-2 rounded-lg border border-[#E5E6EB] bg-white px-3 dark:border-white/10 dark:bg-white/[0.03]">
-            <Search className="h-4 w-4 shrink-0 text-[#A7ADB8]" strokeWidth={2} aria-hidden />
+            <Search className="h-4 w-4 shrink-0 text-[#A7ADB8] dark:text-muted-foreground" strokeWidth={2} aria-hidden />
             <input
               value={toolbarQuery}
               onChange={(e) => setToolbarQuery(e.target.value)}
               placeholder={t('composer.skillSearchPlaceholder')}
               aria-label={t('composer.skillSearchPlaceholder')}
-              className="h-full flex-1 bg-transparent text-[12px] font-normal text-[#111827] outline-none placeholder:text-[#C9CDD4]"
+              className="h-full flex-1 bg-transparent text-[12px] font-normal text-[#111827] outline-none placeholder:text-[#C9CDD4] dark:text-foreground dark:placeholder:text-muted-foreground"
               autoFocus
             />
           </div>
@@ -141,13 +141,13 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
                   }}
                   className={skillPickerRowClass}
                 >
-                  <Wrench className="mt-0.5 h-3 w-3 shrink-0 text-[#1D2129]" strokeWidth={2} aria-hidden />
+                  <Wrench className="mt-0.5 h-3 w-3 shrink-0 text-[#1D2129] dark:text-muted-foreground" strokeWidth={2} aria-hidden />
                   <div className="min-w-0">
                     <div className="truncate text-[12px] font-normal leading-4 text-[#111827] dark:text-foreground">
                       <HighlightedText text={skill.title} query={activeQuery} />
                     </div>
                     {skill.description ? (
-                      <div className="mt-0.5 truncate text-[10px] font-normal leading-3.5 text-[#86909C]">
+                      <div className="mt-0.5 truncate text-[10px] font-normal leading-3.5 text-[#86909C] dark:text-muted-foreground">
                         <HighlightedText text={skill.description} query={activeQuery} />
                       </div>
                     ) : null}
