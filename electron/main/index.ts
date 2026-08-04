@@ -126,6 +126,10 @@ app.commandLine.appendSwitch('renderer-process-limit', '1');
 
 _ts('app flags set');
 
+// Dock / menu bar display name (Launchpad permanent name still comes from
+// electron-builder productName → CFBundleName after rebuild+reinstall).
+app.setName('SClaw');
+
 // On Linux, set CHROME_DESKTOP so Chromium can find the correct .desktop file.
 // On Wayland this maps the running window to stoclaw.desktop (icon + app grouping);
 // on X11 it supplements the StartupWMClass matching.
@@ -296,7 +300,9 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
   // Set window title with environment suffix for non-production builds
   const envCfg = getCurrentEnvConfig();
   if (envCfg.displaySuffix) {
-    win.setTitle(`STO Claw ${envCfg.displaySuffix}`);
+    win.setTitle(`SClaw ${envCfg.displaySuffix}`);
+  } else {
+    win.setTitle('SClaw');
   }
 
   if (saved?.isMaximized) {
