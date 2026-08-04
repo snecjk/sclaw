@@ -13,6 +13,38 @@ function ensureMigrationTable(db: SqliteDatabase): void {
 }
 
 /**
+ * Side-branch migrations (e.g. sto-mobile channel CHECK) may already occupy
+ * remapped target slots. Park them at a free high version so UNIQUE(version)
+ * does not fail during legacy remaps.
+ */
+function nextFreeMigrationVersion(db: SqliteDatabase, preferredMin = 100): number {
+  const rows = db.prepare('SELECT version FROM schema_migrations').all() as Array<{ version: number }>;
+  const used = new Set(rows.map((row) => Number(row.version)).filter(Number.isFinite));
+  let candidate = preferredMin;
+  while (used.has(candidate)) candidate += 1;
+  return candidate;
+}
+
+function relocateConflictingRemapTargets(
+  db: SqliteDatabase,
+  byVersion: Map<number, string>,
+  expectedTargets: Map<number, string>,
+): void {
+  for (const [target, expected] of expectedTargets) {
+    const existing = byVersion.get(target);
+    if (!existing || existing === expected) continue;
+
+    const freeVersion = nextFreeMigrationVersion(db);
+    db.prepare('UPDATE schema_migrations SET version = ? WHERE version = ?').run(freeVersion, target);
+    byVersion.delete(target);
+    byVersion.set(freeVersion, existing);
+    logger.info(
+      `[sqlite] relocated conflicting migration "${existing}" from v${target} → v${freeVersion}`,
+    );
+  }
+}
+
+/**
  * The merged workflow branch owns v2-v5. Older memory/session builds used
  * those numbers independently, so remap their recorded versions before running
  * the append-only merged sequence (v6-v8). Channel-plane previously occupied
@@ -72,25 +104,46 @@ export function normalizeLegacySessionCatalogMigrationVersions(db: SqliteDatabas
     throw new Error(`[sqlite] cannot remap workflow schema: v13 is ${version13Name}`);
   }
 
+  const expectedTargets = new Map<number, string>();
+  if (hasLegacyMemoryOrSession) {
+    if (version2Name === 'memory-capture-jobs') {
+      expectedTargets.set(6, 'memory-capture-jobs');
+      expectedTargets.set(7, 'session-catalog-schema');
+      expectedTargets.set(8, 'session-types-and-channels');
+    } else {
+      expectedTargets.set(7, 'session-catalog-schema');
+      expectedTargets.set(8, 'session-types-and-channels');
+    }
+  }
+  if (hasLegacyChannelPlane) {
+    expectedTargets.set(10, 'channel-plane-channel-connections');
+  }
+
   db.exec('BEGIN IMMEDIATE;');
   try {
+    relocateConflictingRemapTargets(db, byVersion, expectedTargets);
+
     if (hasLegacyMemoryOrSession) {
       if (version2Name === 'memory-capture-jobs') {
-        if (byVersion.get(4) === 'session-types-and-channels') {
+        if (byVersion.get(4) === 'session-types-and-channels' && byVersion.get(8) !== 'session-types-and-channels') {
           db.prepare('UPDATE schema_migrations SET version = 8 WHERE version = 4').run();
         }
-        if (byVersion.get(3) === 'session-catalog-schema') {
+        if (byVersion.get(3) === 'session-catalog-schema' && byVersion.get(7) !== 'session-catalog-schema') {
           db.prepare('UPDATE schema_migrations SET version = 7 WHERE version = 3').run();
         }
-        db.prepare('UPDATE schema_migrations SET version = 6 WHERE version = 2').run();
+        if (byVersion.get(2) === 'memory-capture-jobs' && byVersion.get(6) !== 'memory-capture-jobs') {
+          db.prepare('UPDATE schema_migrations SET version = 6 WHERE version = 2').run();
+        }
       } else {
-        if (byVersion.get(3) === 'session-types-and-channels') {
+        if (byVersion.get(3) === 'session-types-and-channels' && byVersion.get(8) !== 'session-types-and-channels') {
           db.prepare('UPDATE schema_migrations SET version = 8 WHERE version = 3').run();
         }
-        db.prepare('UPDATE schema_migrations SET version = 7 WHERE version = 2').run();
+        if (byVersion.get(2) === 'session-catalog-schema' && byVersion.get(7) !== 'session-catalog-schema') {
+          db.prepare('UPDATE schema_migrations SET version = 7 WHERE version = 2').run();
+        }
       }
     }
-    if (hasLegacyChannelPlane && !version10Name) {
+    if (hasLegacyChannelPlane && byVersion.get(10) !== 'channel-plane-channel-connections') {
       db.prepare('UPDATE schema_migrations SET version = 10 WHERE version = 5').run();
     }
     if (hasBranchChannelPlane) {

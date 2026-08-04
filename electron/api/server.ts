@@ -36,6 +36,7 @@ import { handleUsageRoutes } from './routes/usage';
 import { handleSkillRoutes } from './routes/skills';
 import { handleSkillPlazaRoutes } from './routes/skill-plaza';
 import { handleAppPlazaRoutes } from './routes/app-plaza';
+import { handleConnectorRoutes } from './routes/connectors';
 import { handleFileRoutes } from './routes/files';
 import { handleSessionRoutes } from './routes/sessions';
 import { handleSessionCatalogRoutes } from './routes/session-catalog';
@@ -85,6 +86,7 @@ const routeHandlers: RouteHandler[] = [
   handleSkillRoutes,
   handleSkillPlazaRoutes,
   handleAppPlazaRoutes,
+  handleConnectorRoutes,
   handleFileRoutes,
   handleSessionRoutes,
   handleSessionCatalogRoutes,

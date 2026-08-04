@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { HomeAgentHubSurface } from './HomeAgentHubSurface';
 import { useHomeConversationActive } from './use-home-conversation-active';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { createAutoSendWatcher } from '@/stores/message-queue';
+import { readMainChatDraftState } from '@/lib/main-chat-navigation';
 import { cn } from '@/lib/utils';
 import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
@@ -41,6 +42,29 @@ export function Home() {
   const seedWorkflowId = searchParams.get('workflowId')?.trim() || undefined;
   const isWorkflowRun = searchParams.get('workflowRun') === '1';
   const workflowEngine = searchParams.get('workflowEngine') === 'openclaw' ? 'openclaw' : 'claude';
+
+  // 连接器「去试试」经 router state 携带的一次性输入草稿（刻意不走 ?q=：
+  // q 会被自动发送，草稿只允许预填输入框由用户手动发送）。消费后立即
+  // 清掉路由 state，防止刷新 / 返回 / 重渲染再次覆盖用户正在编辑的内容。
+  const location = useLocation();
+  const navigate = useNavigate();
+  const locationState = location.state;
+  const draftState = readMainChatDraftState(locationState);
+  const consumedDraftTokensRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!draftState) return;
+    const token = draftState.mainChatDraftToken;
+    if (token) {
+      if (consumedDraftTokensRef.current.has(token)) return;
+      consumedDraftTokensRef.current.add(token);
+    }
+    // 子组件 effect 先于父组件执行：DingTalkMentionEditor 此时已把草稿
+    // 写入输入框并聚焦，清掉 state 只会让 seedText prop 变回 undefined，
+    // 不会清空已填充的草稿。
+    navigate(location.pathname, { replace: true, state: null });
+  }, [draftState, locationState, location.pathname, navigate]);
+
   const { handleHubSend } = useHomeChatEntrySend();
   const gatewayStatus = useGatewayStore((s) => s.status);
   const hasAutoSentRef = useRef(false);
@@ -106,7 +130,10 @@ export function Home() {
             ?? 'mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden',
         )}
       >
-        <HomeAgentHubSurface seedSkillSlug={seedSkillSlug} />
+        <HomeAgentHubSurface
+          seedText={draftState?.mainChatDraft}
+          seedSkillSlug={seedSkillSlug}
+        />
       </div>
 
     </>

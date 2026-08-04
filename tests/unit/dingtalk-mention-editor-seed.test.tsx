@@ -105,6 +105,34 @@ describe('DingTalkMentionEditor seedText', () => {
     expect(range.startContainer).toBe(editor.firstChild);
     expect(range.startOffset).toBe('技能命令 '.length);
   });
+
+  it('seeds a multi-line Unicode connector prompt, focused and user-editable', () => {
+    const prompt = '帮我查询钉钉通讯录\n第二行：统计「研发部」人数';
+    const onSnapshotChange = vi.fn();
+    render(
+      <DingTalkMentionEditor
+        seedText={prompt}
+        onSnapshotChange={onSnapshotChange}
+      />,
+    );
+
+    const editor = screen.getByRole('textbox');
+
+    // 多行 Unicode 完整保留（含换行），填充后聚焦
+    expect(editor.textContent).toBe(`${prompt} `);
+    expect(document.activeElement).toBe(editor);
+    const seeded = onSnapshotChange.mock.calls.at(-1)?.[0];
+    expect(seeded?.plainText.trim()).toBe(prompt);
+    expect(seeded?.isEmpty).toBe(false);
+
+    // 用户可以继续编辑草稿；编辑只更新快照，不会触发任何发送
+    act(() => {
+      editor.textContent = `${prompt}（用户补充）`;
+      fireEvent.input(editor);
+    });
+    const edited = onSnapshotChange.mock.calls.at(-1)?.[0];
+    expect(edited?.plainText).toBe(`${prompt}（用户补充）`);
+  });
 });
 
 describe('DingTalkMentionEditor CSS auto-height (no JS inline height)', () => {

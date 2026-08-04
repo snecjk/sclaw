@@ -1,8 +1,8 @@
 /**
  * DingTalk Workspace CLI (dws) bridge — download, install, PATH, spawn.
  *
- * Binary + skill are upgraded atomically from bundled manifest (GitHub Releases).
- * Skill (mono) is installed to ~/.stoclaw/openclaw/skills/dws via release dws-skills.zip.
+ * Connect flow: resolve manifest (backend install spec) → download CLI + skill →
+ * install binary → install skill to ~/.stoclaw/connectors/skills/{slug}/.
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -27,11 +27,15 @@ import { join, dirname } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { app, type BrowserWindow } from 'electron';
+import { parseManagedCliInstallSpec } from '../../shared/connectors/parse-install-spec';
+import type { ManagedCliInstallSpec } from '../../shared/connectors/types';
 import { logger } from './logger';
 import { proxyAwareFetch } from './proxy-fetch';
 import { getSetting } from './store';
 import { getDwsLoginManager } from './dws-login';
-import { getOpenClawSkillsDir } from './paths';
+import { invalidateDwsStatusCache } from './dws-status-cache';
+import { getConnectorSkillsCacheDir } from '../connectors/connector-skill-sync';
+import { resolveConnectorInstallManifest } from '../connectors/resolve-install-manifest';
 import { extractZip } from './zip-extract';
 import {
   SKILLS_ZIP_ASSET_NAME,
@@ -42,6 +46,7 @@ import {
   resolveAssetDownloadUrlWithFallback,
   resolveSha256ForDownloadUrl,
   type DwsAssetChecksumSpec,
+  type DwsDownloadSourcePriority,
   type DwsPlatformAssetSpec,
   type DwsReleaseSources,
 } from '../../shared/dws-release-resolver';
@@ -88,12 +93,24 @@ export function getDwsBinDir(): string {
 const DWS_STATE_DIR = join(homedir(), '.stoclaw', 'dws');
 const LOCAL_MANIFEST_PATH = join(DWS_STATE_DIR, 'manifest.json');
 
-function getBinaryName(): string {
-  return process.platform === 'win32' ? 'dws.exe' : 'dws';
+function normalizeCliBinaryName(binary?: string): string {
+  const name = (binary || 'dws').trim().replace(/\.exe$/i, '') || 'dws';
+  return name.toLowerCase();
 }
 
-function getInstallTarget(): string {
-  return join(DWS_BIN_DIR, getBinaryName());
+function getBinaryFileName(binary?: string): string {
+  const name = normalizeCliBinaryName(binary);
+  return process.platform === 'win32' ? `${name}.exe` : name;
+}
+
+function getInstallTarget(binary?: string): string {
+  return join(DWS_BIN_DIR, getBinaryFileName(binary));
+}
+
+function getLocalManifestPath(binary?: string): string {
+  const name = normalizeCliBinaryName(binary);
+  if (name === 'dws') return LOCAL_MANIFEST_PATH;
+  return join(homedir(), '.stoclaw', 'connectors', 'cli-state', name, 'manifest.json');
 }
 
 function getPlatformKey(): string {
@@ -101,11 +118,39 @@ function getPlatformKey(): string {
   return `${process.platform}-${arch}`;
 }
 
-function resolveBundledManifestPath(): string {
-  if (app.isPackaged) {
-    return join(process.resourcesPath, 'resources', 'dws', 'manifest.json');
-  }
-  return join(process.cwd(), 'resources', 'dws', 'manifest.json');
+export interface DwsInstallOptions {
+  installSpec?: ManagedCliInstallSpec;
+  connectorId?: string;
+  skillSlug?: string;
+  /** Target CLI binary name (default dws). Used for install path under ~/.stoclaw/bin. */
+  binary?: string;
+  onProgress?: (message: string) => void;
+  notify?: (path: string) => void;
+}
+
+function normalizeDwsInstallOptions(
+  options?: DwsInstallOptions | ((path: string) => void),
+): DwsInstallOptions {
+  if (typeof options === 'function') return { notify: options };
+  return options ?? {};
+}
+
+function connectorSkillDir(slug: string): string {
+  return join(getConnectorSkillsCacheDir(), slug);
+}
+
+async function resolveDwsManifest(options: DwsInstallOptions): Promise<DwsBundledManifest | null> {
+  const installSpec = options.installSpec ?? parseManagedCliInstallSpec({});
+  const manifest = await resolveConnectorInstallManifest({
+    installSpec,
+    connectorId: options.connectorId ?? 'dingtalk-dws',
+  });
+  const version =
+    (typeof manifest?.dwsVersion === 'string' && manifest.dwsVersion.trim())
+    || (typeof manifest?.version === 'string' && manifest.version.trim())
+    || '';
+  if (!version || !manifest?.platforms) return null;
+  return { ...manifest, dwsVersion: version } as DwsBundledManifest;
 }
 
 function compareSemver(a: string, b: string): number {
@@ -126,10 +171,9 @@ export function normalizeDwsVersion(version: string): string {
 }
 
 export function resolveDwsBinary(): string | null {
-  const target = getInstallTarget();
+  const target = getInstallTarget('dws');
   if (existsSync(target)) return target;
-  const name = getBinaryName();
-  return name;
+  return getBinaryFileName('dws');
 }
 
 function parseDwsJson(stdout: string): unknown {
@@ -214,32 +258,20 @@ export function runDws(args: string[], timeoutMs = 30_000): Promise<DwsCliResult
   });
 }
 
-function readBundledManifest(): DwsBundledManifest | null {
-  const path = resolveBundledManifestPath();
-  if (!existsSync(path)) {
-    logger.warn('Bundled dws manifest not found:', path);
-    return null;
-  }
+function readLocalManifest(binary?: string): DwsLocalManifest | null {
+  const path = getLocalManifestPath(binary);
+  if (!existsSync(path)) return null;
   try {
-    return JSON.parse(readFileSync(path, 'utf-8')) as DwsBundledManifest;
-  } catch (error) {
-    logger.warn('Failed to read bundled dws manifest:', error);
-    return null;
-  }
-}
-
-function readLocalManifest(): DwsLocalManifest | null {
-  if (!existsSync(LOCAL_MANIFEST_PATH)) return null;
-  try {
-    return JSON.parse(readFileSync(LOCAL_MANIFEST_PATH, 'utf-8')) as DwsLocalManifest;
+    return JSON.parse(readFileSync(path, 'utf-8')) as DwsLocalManifest;
   } catch {
     return null;
   }
 }
 
-function writeLocalManifest(manifest: DwsLocalManifest): void {
-  mkdirSync(DWS_STATE_DIR, { recursive: true });
-  writeFileSync(LOCAL_MANIFEST_PATH, JSON.stringify(manifest, null, 2), 'utf-8');
+function writeLocalManifest(manifest: DwsLocalManifest, binary?: string): void {
+  const path = getLocalManifestPath(binary);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify(manifest, null, 2), 'utf-8');
 }
 
 async function downloadDwsReleaseAsset(
@@ -248,6 +280,7 @@ async function downloadDwsReleaseAsset(
   platformSpec: DwsPlatformAssetSpec | null,
   targetPath: string,
   checksumSpec?: DwsAssetChecksumSpec | null,
+  sourcePriority?: DwsDownloadSourcePriority[],
 ): Promise<void> {
   const resolved = await resolveAssetDownloadUrlWithFallback({
     manifest: bundled,
@@ -255,6 +288,7 @@ async function downloadDwsReleaseAsset(
     assetName,
     platformSpec,
     fetchFn: proxyAwareFetch,
+    sourcePriority,
   });
 
   if (resolved.fallbackFrom === 'gitee') {
@@ -284,8 +318,12 @@ async function downloadDwsReleaseAsset(
   }
 }
 
+/** CLI / skill 包体积大、网络不稳定时下载可能很慢；仅限制“建连/首包”，不限制整包落盘。 */
+const DWS_DOWNLOAD_CONNECT_TIMEOUT_MS = 120_000;
+
 async function downloadFile(url: string, targetPath: string, expectedSha256?: string | null): Promise<void> {
-  const response = await proxyAwareFetch(url, { timeoutMs: 180_000 });
+  // 首包超时 2 分钟；拿到 Response 后 timeout 会释放，body 流式落盘不再被 Abort。
+  const response = await proxyAwareFetch(url, { timeoutMs: DWS_DOWNLOAD_CONNECT_TIMEOUT_MS });
   if (!response.ok) {
     throw new Error(`Download failed: HTTP ${response.status}`);
   }
@@ -317,18 +355,24 @@ async function downloadFile(url: string, targetPath: string, expectedSha256?: st
   }
 }
 
-function findBinaryInDir(dir: string): string | null {
-  const expected = getBinaryName();
+function findBinaryInDir(dir: string, binary?: string): string | null {
+  const expected = getBinaryFileName(binary);
+  const base = normalizeCliBinaryName(binary);
   const entries = readdirSync(dir);
   for (const entry of entries) {
     const full = join(dir, entry);
     const stat = statSync(full);
     if (stat.isDirectory()) {
-      const nested = findBinaryInDir(full);
+      const nested = findBinaryInDir(full, binary);
       if (nested) return nested;
       continue;
     }
-    if (entry === expected || entry === 'dws' || entry === 'dws.exe') {
+    if (
+      entry === expected
+      || entry === base
+      || entry === `${base}.exe`
+      || (base === 'dws' && (entry === 'dws' || entry === 'dws.exe'))
+    ) {
       return full;
     }
   }
@@ -356,29 +400,37 @@ function clearMacQuarantine(binaryPath: string): void {
   }
 }
 
-function getDwsOpenClawSkillDir(): string {
-  return join(getOpenClawSkillsDir(), 'dws');
+function getDwsConnectorSkillDir(slug: string): string {
+  return connectorSkillDir(slug);
 }
 
-async function installMonoDwsSkillFromReleaseZip(bundled: DwsBundledManifest): Promise<void> {
+async function installMonoDwsSkillFromReleaseZip(
+  bundled: DwsBundledManifest,
+  skillSlug: string,
+  installSpec?: ManagedCliInstallSpec,
+  onProgress?: (message: string) => void,
+): Promise<void> {
   const skillsAssetName = bundled.skillsZip?.assetName || SKILLS_ZIP_ASSET_NAME;
-  const skillDir = getDwsOpenClawSkillDir();
+  const skillDir = getDwsConnectorSkillDir(skillSlug);
   const tmpDir = await mkdtemp(join(tmpdir(), 'stoclaw-dws-skill-'));
   const zipPath = join(tmpDir, 'dws-skills.zip');
   const extractDir = join(tmpDir, 'extract');
 
   try {
+    onProgress?.('正在下载 skill…');
     await downloadDwsReleaseAsset(
       bundled,
       skillsAssetName,
       bundled.skillsZip?.url ? { url: bundled.skillsZip.url, assetName: skillsAssetName } : null,
       zipPath,
       bundled.skillsZip,
+      installSpec?.sourcePriority,
     );
+    onProgress?.('正在安装 skill…');
     mkdirSync(extractDir, { recursive: true });
     await extractArchive(zipPath, extractDir, 'zip');
 
-    mkdirSync(getOpenClawSkillsDir(), { recursive: true });
+    mkdirSync(getConnectorSkillsCacheDir(), { recursive: true });
     rmSync(skillDir, { recursive: true, force: true });
     cpSync(extractDir, skillDir, { recursive: true });
 
@@ -394,6 +446,53 @@ async function installMonoDwsSkillFromReleaseZip(bundled: DwsBundledManifest): P
   }
 }
 
+/** Install dws skill package into connector skill cache (connect flow). */
+export async function installDwsSkillPackageToConnectorCache(options: {
+  manifest: DwsBundledManifest;
+  skillSlug: string;
+  installSpec?: ManagedCliInstallSpec;
+  onProgress?: (message: string) => void;
+}): Promise<void> {
+  if (options.manifest.skillMode === 'mono') {
+    await installMonoDwsSkillFromReleaseZip(
+      options.manifest,
+      options.skillSlug,
+      options.installSpec,
+      options.onProgress,
+    );
+    return;
+  }
+
+  if (!(await dwsSupportsSkillSetup())) {
+    throw new Error('dws skillMode=multi requires dws skill setup, which is not supported by current binary');
+  }
+
+  options.onProgress?.('正在安装 skill…');
+  const skillResult = await runDws(['skill', 'setup', '--mode', 'multi', '-y'], 120_000);
+  if (!skillResult.ok) {
+    throw new Error(skillResult.error || 'dws skill setup failed');
+  }
+}
+
+async function installDwsSkillToConnectorCache(
+  bundled: DwsBundledManifest,
+  skillSlug: string,
+  installSpec?: ManagedCliInstallSpec,
+  onProgress?: (message: string) => void,
+): Promise<void> {
+  await installDwsSkillPackageToConnectorCache({
+    manifest: bundled,
+    skillSlug,
+    installSpec,
+    onProgress,
+  });
+  try {
+    await installDwsSkillToClaudeCodeDir();
+  } catch (error) {
+    logger.warn('dws skill setup for Claude Code skipped:', error instanceof Error ? error.message : String(error));
+  }
+}
+
 async function dwsSupportsSkillSetup(): Promise<boolean> {
   const help = await runDws(['skill', '--help'], 5_000);
   if (!help.ok) return false;
@@ -403,29 +502,7 @@ async function dwsSupportsSkillSetup(): Promise<boolean> {
   return /\bsetup\b/.test(text);
 }
 
-async function installDwsSkillToOpenClawSkillsDir(bundled: DwsBundledManifest): Promise<void> {
-  if (bundled.skillMode === 'mono') {
-    await installMonoDwsSkillFromReleaseZip(bundled);
-    return;
-  }
 
-  if (!(await dwsSupportsSkillSetup())) {
-    throw new Error('dws skillMode=multi requires dws skill setup, which is not supported by current binary');
-  }
-
-  const skillResult = await runDws(['skill', 'setup', '--mode', 'multi', '-y'], 120_000);
-  if (!skillResult.ok) {
-    throw new Error(skillResult.error || 'dws skill setup failed');
-  }
-  logger.warn('dws skillMode=multi installed via dws skill setup; verify skills under ~/.stoclaw/openclaw/skills/');
-}
-
-/**
- * Best-effort install the dws skill into Claude Code's ~/.claude/skills/ dir,
- * so Claude Code CLI sessions can invoke `Skill("dws")` and follow its guidance
- * to run `dws chat message send` via Bash. Non-fatal: failure only warns and
- * never aborts the main dws binary/skill install.
- */
 async function installDwsSkillToClaudeCodeDir(): Promise<void> {
   if (!(await dwsSupportsSkillSetup())) {
     // Older binaries lack `dws skill setup`; skip silently.
@@ -435,11 +512,12 @@ async function installDwsSkillToClaudeCodeDir(): Promise<void> {
   if (!result.ok) {
     logger.warn(`dws skill setup for Claude Code failed (non-fatal): ${result.error ?? ''}`);
     return;
-  }}
+  }
+}
 
 async function installBinaryFromManifest(
   bundled: DwsBundledManifest,
-  notify?: (path: string) => void,
+  options: DwsInstallOptions,
 ): Promise<{ success: boolean; path?: string; version?: string; error?: string }> {
   const platformKey = getPlatformKey();
   const platformSpec = bundled.platforms[platformKey];
@@ -448,22 +526,33 @@ async function installBinaryFromManifest(
     return { success: false, error: `No dws release for platform ${platformKey}` };
   }
 
-  const target = getInstallTarget();
+  const target = getInstallTarget(options.binary);
   const archiveType = platformSpec.archive
     ?? (assetName.endsWith('.zip') ? 'zip' : 'tar.gz');
+  const skillSlug = options.skillSlug?.trim() || normalizeCliBinaryName(options.binary);
+  const installSpec = options.installSpec ?? parseManagedCliInstallSpec({});
 
-  const tmpDir = await mkdtemp(join(tmpdir(), 'stoclaw-dws-'));
+  const tmpDir = await mkdtemp(join(tmpdir(), 'stoclaw-cli-'));
   const archivePath = join(tmpDir, assetName);
 
   try {
-    await downloadDwsReleaseAsset(bundled, assetName, platformSpec, archivePath, platformSpec);
+    options.onProgress?.('正在下载 CLI…');
+    await downloadDwsReleaseAsset(
+      bundled,
+      assetName,
+      platformSpec,
+      archivePath,
+      platformSpec,
+      installSpec.sourcePriority,
+    );
+    options.onProgress?.('正在安装 CLI…');
     const extractDir = join(tmpDir, 'extract');
     mkdirSync(extractDir, { recursive: true });
     await extractArchive(archivePath, extractDir, archiveType);
 
-    const extractedBinary = findBinaryInDir(extractDir);
+    const extractedBinary = findBinaryInDir(extractDir, options.binary);
     if (!extractedBinary) {
-      throw new Error('dws binary not found in downloaded archive');
+      throw new Error(`${normalizeCliBinaryName(options.binary)} binary not found in downloaded archive`);
     }
 
     mkdirSync(dirname(target), { recursive: true });
@@ -483,15 +572,7 @@ async function installBinaryFromManifest(
     }
     clearMacQuarantine(target);
 
-    await installDwsSkillToOpenClawSkillsDir(bundled);
-    // Best-effort: also install the dws skill into Claude Code's ~/.claude/skills/
-    // so Claude Code CLI sessions can invoke `Skill("dws")`. Non-fatal — never
-    // abort the main install if this auxiliary target is unavailable.
-    try {
-      await installDwsSkillToClaudeCodeDir();
-    } catch (error) {
-      logger.warn('dws skill setup for Claude Code skipped:', error instanceof Error ? error.message : String(error));
-    }
+    await installDwsSkillToConnectorCache(bundled, skillSlug, installSpec, options.onProgress);
 
     writeLocalManifest({
       dwsVersion: bundled.dwsVersion,
@@ -500,11 +581,12 @@ async function installBinaryFromManifest(
       binaryPath: target,
       installedAt: new Date().toISOString(),
       bundledByStoClawVersion: app.getVersion(),
-    });
+    }, options.binary);
 
     ensureDwsBinInPath();
-    logger.info(`dws installed: ${target} -> v${bundled.dwsVersion}`);
-    notify?.(target);
+    logger.info(`cli installed: ${target} -> v${bundled.dwsVersion}`);
+    options.notify?.(target);
+    invalidateDwsStatusCache();
     return { success: true, path: target, version: normalizeDwsVersion(bundled.dwsVersion) };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
@@ -533,6 +615,7 @@ export async function dwsAuthLogin(parentWindow?: BrowserWindow | null): Promise
   if (parentWindow && !parentWindow.isDestroyed()) {
     try {
       await getDwsLoginManager().startLogin(parentWindow);
+      invalidateDwsStatusCache();
       return { ok: true, exitCode: 0 };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -543,7 +626,9 @@ export async function dwsAuthLogin(parentWindow?: BrowserWindow | null): Promise
     }
   }
 
-  return runDws(['auth', 'login'], 300_000);
+  const result = await runDws(['auth', 'login'], 300_000);
+  if (result.ok) invalidateDwsStatusCache();
+  return result;
 }
 
 export async function dwsCheckInstalled(): Promise<{
@@ -583,22 +668,25 @@ export async function dwsCheckInstalled(): Promise<{
 }
 
 export async function installOrUpdateDwsCli(
-  notify?: (path: string) => void,
+  options?: DwsInstallOptions | ((path: string) => void),
 ): Promise<{ success: boolean; path?: string; version?: string; updated?: boolean; error?: string }> {
+  const normalized = normalizeDwsInstallOptions(options);
   const enabled = getSetting('dingTalkDwsEnabled');
   if (enabled === false) {
     return { success: true, updated: false };
   }
 
-  const bundled = readBundledManifest();
+  const installSpec = normalized.installSpec ?? parseManagedCliInstallSpec({});
+  const skillSlug = normalized.skillSlug?.trim() || normalizeCliBinaryName(normalized.binary);
+  const bundled = await resolveDwsManifest(normalized);
   if (!bundled) {
-    return { success: false, error: 'Bundled dws manifest missing' };
+    return { success: false, error: 'install manifest missing' };
   }
 
-  const target = getInstallTarget();
-  const local = readLocalManifest();
+  const target = getInstallTarget(normalized.binary);
+  const local = readLocalManifest(normalized.binary);
   const binaryExists = existsSync(target);
-  const skillInstalled = existsSync(join(getDwsOpenClawSkillDir(), 'SKILL.md'));
+  const skillInstalled = existsSync(join(getDwsConnectorSkillDir(skillSlug), 'SKILL.md'));
 
   if (
     binaryExists
@@ -608,6 +696,7 @@ export async function installOrUpdateDwsCli(
     && local.skillsRevision === bundled.skillsRevision
   ) {
     ensureDwsBinInPath();
+    invalidateDwsStatusCache();
     return { success: true, path: target, version: normalizeDwsVersion(local.dwsVersion), updated: false };
   }
 
@@ -619,20 +708,17 @@ export async function installOrUpdateDwsCli(
     && !skillInstalled
   ) {
     try {
-      await installDwsSkillToOpenClawSkillsDir(bundled);
-      try {
-        await installDwsSkillToClaudeCodeDir();
-      } catch (error) {
-        logger.warn('dws skill setup for Claude Code skipped:', error instanceof Error ? error.message : String(error));
-      }
+      await installDwsSkillToConnectorCache(bundled, skillSlug, installSpec, normalized.onProgress);
       writeLocalManifest({
         ...local,
         skillMode: bundled.skillMode,
         skillsRevision: bundled.skillsRevision,
         installedAt: new Date().toISOString(),
         bundledByStoClawVersion: app.getVersion(),
-      });
-      ensureDwsBinInPath();      return {
+      }, normalized.binary);
+      ensureDwsBinInPath();
+      invalidateDwsStatusCache();
+      return {
         success: true,
         path: target,
         version: normalizeDwsVersion(local.dwsVersion),
@@ -640,18 +726,18 @@ export async function installOrUpdateDwsCli(
       };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      logger.error('dws skill repair failed:', msg);
+      logger.error('cli skill repair failed:', msg);
       return { success: false, error: msg };
     }
   }
 
-  return installBinaryFromManifest(bundled, notify);
+  return installBinaryFromManifest(bundled, { ...normalized, installSpec, skillSlug });
 }
 
 export async function autoInstallDwsCliIfNeeded(
-  notify?: (path: string) => void,
+  options?: DwsInstallOptions | ((path: string) => void),
 ): Promise<{ success: boolean; path?: string; updated?: boolean; error?: string }> {
-  const result = await installOrUpdateDwsCli(notify);
+  const result = await installOrUpdateDwsCli(options);
   return {
     success: result.success,
     path: result.path,

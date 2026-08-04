@@ -487,7 +487,6 @@ async function initialize(): Promise<void> {
     { ensureClawXContext, repairClawXOnlyBootstrapFiles },
     { autoInstallCliIfNeeded, generateCompletionCache, installCompletionToProfile },
     { autoInstallSaiCliIfNeeded },
-    { autoInstallDwsCliIfNeeded },
     { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled, watchLocalSkillsForDev },
     { cleanupRetiredSkillsAndPlugins },
     { ensureLongOutputConstraint, ensureChineseThinkingConstraint, getAgentWorkspacePath },
@@ -512,7 +511,6 @@ async function initialize(): Promise<void> {
     import('../utils/openclaw-workspace'),
     import('../utils/openclaw-cli'),
     import('../utils/sai-cli'),
-    import('../utils/dws-cli'),
     import('../utils/skill-config'),
     import('../utils/retired-skills-cleanup'),
     import('../utils/agent-config'),
@@ -717,18 +715,16 @@ async function initialize(): Promise<void> {
       logger.warn('SAI CLI auto-install failed:', message);
       mainWindow?.webContents.send('sai:cli-install-failed', message);
     });
-    await autoInstallDwsCliIfNeeded((installedPath) => {
-      mainWindow?.webContents.send('dws:cli-installed', installedPath);
-    }).then(async (result) => {
-      if (result.success) {
-        const { promptGatewayRestartAfterDwsInstall } = await import('../utils/dws-install-notify');
-        await promptGatewayRestartAfterDwsInstall(gm, mainWindow, result);
-      }
-    }).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.warn('dws auto-install failed:', message);
-      mainWindow?.webContents.send('dws:cli-install-failed', message);
-    });
+    // dws 静默强装已取消：改为用户在应用广场「链接器」一键连接时安装。
+    // 启动时仅同步已安装/已授权状态到 connectors state，重建 Gateway 白名单。
+    void import('../connectors')
+      .then(({ getConnectorService }) => getConnectorService().syncProbes())
+      .catch((error) => {
+        logger.warn(
+          'connectors syncProbes failed:',
+          error instanceof Error ? error.message : String(error),
+        );
+      });
   });
 
   // Bridge gateway and host-side events before any auto-start logic runs, so

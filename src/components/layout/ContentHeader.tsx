@@ -6,6 +6,7 @@
  * preview-expanded：全宽 Header；页签/标题 + previewActions（含 Preview restore，≠ Sidebar restore）。
  * macOS 侧栏收起时 pad-start 走 CSS 变量，避让红绿灯。
  */
+import { useLocation } from 'react-router-dom';
 import { isValidElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -32,6 +33,7 @@ import { useWindowsChromeOwner } from '@/hooks/use-windows-chrome-owner';
 
 export function ContentHeader() {
   const { t } = useTranslation('common');
+  const { pathname } = useLocation();
   const {
     title,
     previewTabs,
@@ -47,9 +49,10 @@ export function ContentHeader() {
   const browserOverlayOpen = useSclawBrowserOverlayStore((s) => s.session !== null);
   const appPlazaVisible = useAppPlazaShellStore((s) => s.routeActive);
   const windowsChromeOwner = useWindowsChromeOwner();
+  const skillsPlazaVisible = pathname.startsWith('/skills');
 
-  // Drawer / App Plaza shell occupy the header band.
-  if (browserOverlayOpen || appPlazaVisible) {
+  // Drawer / App Plaza / 技能广场自带页顶栏，不占 44px ContentHeader。
+  if (browserOverlayOpen || appPlazaVisible || skillsPlazaVisible) {
     return null;
   }
 

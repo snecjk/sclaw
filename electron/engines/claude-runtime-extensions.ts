@@ -29,6 +29,8 @@ import {
 import { getAuthState, getStoToken } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import { PORTS } from '../utils/config';
+import { buildConnectedConnectorsAgentPrompt } from '../connectors/agent-context';
+import { buildConnectorBashGateHooks } from '../connectors/claude-binary-gate';
 
 export interface ClaudeRuntimeOptions {
   hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
@@ -203,13 +205,30 @@ const ssoUserContextExtension: ClaudeRuntimeExtension = {
   },
 };
 
+const connectorBashGateExtension: ClaudeRuntimeExtension = {
+  id: 'sto-connectors-bash-gate',
+  build() {
+    return { hooks: buildConnectorBashGateHooks() };
+  },
+};
+
+const connectorsContextExtension: ClaudeRuntimeExtension = {
+  id: 'sto-connectors-context',
+  build() {
+    const prompt = buildConnectedConnectorsAgentPrompt();
+    return prompt ? { systemPromptAppend: prompt } : {};
+  },
+};
+
 const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
+  connectorBashGateExtension,
   dingTalkSendGuardExtension,
   workflowToolExtension,
   scheduledTaskToolExtension,
   userSkillToolExtension,
   agentTelemetryExtension,
   ssoUserContextExtension,
+  connectorsContextExtension,
 ];
 
 export async function buildClaudeRuntimeOptions(
