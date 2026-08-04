@@ -19,6 +19,7 @@ import {
   isPreviewHttpFetchMessage,
   preparePreviewSrcDoc,
 } from '@/lib/preview-srcdoc';
+import { UserWatermark } from '@/components/layout/UserWatermark';
 // @ts-ignore — highlight.js v10 ships without bundled .d.ts
 import hljs from 'highlight.js';
 import 'highlight.js/styles/atom-one-dark.css';
@@ -184,7 +185,9 @@ export function FilePreviewViewer({
 
   useEffect(() => {
     const handler = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      const fs = document.fullscreenElement;
+      const el = containerRef.current;
+      setIsFullscreen(!!fs && !!el && (fs === el || fs.contains(el)));
     };
     document.addEventListener('fullscreenchange', handler);
     return () => document.removeEventListener('fullscreenchange', handler);
@@ -834,6 +837,8 @@ img{max-width:100%}
   return (
     <div ref={containerRef} className="relative h-full w-full">
       {content}
+      {/* Fullscreen leaves the app shell; keep a local copy so artifacts stay watermarked. */}
+      {isFullscreen ? <UserWatermark mode="absolute" /> : null}
       <button
         onClick={toggleFullscreen}
         title={isFullscreen ? '退出全屏' : '全屏放映'}
