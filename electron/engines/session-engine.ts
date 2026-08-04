@@ -27,17 +27,7 @@ export async function resolveAgentIdForSessionKey(sessionKey: string): Promise<s
     // ignore
   }
 
-  const taskId = parseClaudeTaskIdFromSessionKey(sessionKey);
-  if (taskId) {
-    try {
-      const { getClaudeScheduledTaskService } = await import('../services/claude-scheduled-task-service');
-      const task = await getClaudeScheduledTaskService().getTask(taskId);
-      if (task?.agentId?.trim()) return task.agentId.trim().toLowerCase();
-    } catch {
-      // ignore
-    }
-  }
-
+  // 旧 claude-scheduled-task 定义回查已随子系统删除；非 project-agent / 未登记的会话回落到 'main'。
   return 'main';
 }
 

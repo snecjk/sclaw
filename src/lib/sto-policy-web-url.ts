@@ -151,3 +151,6 @@ export function isStoPolicyHostUrl(url: string): boolean {
     return false;
   }
 }
+
+/** @deprecated Prefer `@/lib/embed-site-auth` */
+export { hasStoPolicyAuthInEmbedSession } from '@/lib/embed-site-auth';

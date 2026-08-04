@@ -1,17 +1,17 @@
 import { memo } from 'react';
 import { Send } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { DingTalkMentionTag } from '@/components/dingtalk/DingTalkMentionTag';
 import {
   DINGTALK_AGENT_SEND_DISCLAIMER_PLAIN_TEXT,
-} from '../../../shared/dingtalk-disclaimer';
+} from '../../../shared/dingtalk-prompts/dingtalk-disclaimer';
 import {
   splitDingTalkSentPreviewText,
   type DingTalkSentMessagePreview,
-} from '../../../shared/dingtalk-sent-display';
+} from '../../../shared/dingtalk-send/dingtalk-sent-display';
 import { maskDwsSensitiveIdsForDisplay } from './message-utils';
 
 interface DingTalkSentPreviewProps {
@@ -62,7 +62,7 @@ export const DingTalkSentPreview = memo(function DingTalkSentPreview({
             </div>
             {maskedBody ? (
               <div className="prose prose-sm max-w-none text-sm leading-relaxed text-foreground dark:prose-invert">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{maskedBody}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={chatRemarkPlugins}>{maskedBody}</ReactMarkdown>
               </div>
             ) : null}
             <p className="mt-2 border-t border-border/60 pt-2 text-xs leading-relaxed text-[#999999] dark:text-muted-foreground">

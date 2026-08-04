@@ -13,33 +13,19 @@ async function loadScheduledTaskNameMaps(): Promise<ScheduledTaskNameMaps> {
   const sto = new Map<number, string>();
   const claude = new Map<string, string>();
 
+  // 统一源 /api/scheduled-tasks 自带 engineType，按引擎分流进 cron(openclaw)/claude map。
   try {
-    const jobs = await hostApiFetch<Array<{ id: string; name: string }>>('/api/cron/jobs');
-    for (const job of jobs) {
-      if (job.id && job.name?.trim()) cron.set(job.id, job.name.trim());
-    }
-  } catch {
-    // Gateway may be unavailable; local fallback below.
-  }
-
-  try {
-    const fallbackJobs = await hostApiFetch<Array<{ id: string; name: string }>>('/api/cron/local-job-names');
-    for (const job of fallbackJobs) {
-      if (job.id && job.name?.trim() && !cron.has(job.id)) {
-        cron.set(job.id, job.name.trim());
-      }
-    }
-  } catch {
-    // Best-effort fallback.
-  }
-
-  try {
-    const tasks = await hostApiFetch<Array<{ id: string; name: string }>>('/api/claude-scheduled-tasks');
+    const tasks = await hostApiFetch<
+      Array<{ id: string; name: string; engineType: 'openclaw' | 'claude' }>
+    >('/api/scheduled-tasks');
     for (const task of tasks) {
-      if (task.id && task.name?.trim()) claude.set(task.id, task.name.trim());
+      if (!task.id || !task.name?.trim()) continue;
+      const trimmed = task.name.trim();
+      if (task.engineType === 'claude') claude.set(task.id, trimmed);
+      else cron.set(task.id, trimmed);
     }
   } catch {
-    // Ignore Claude task list failures.
+    // Best-effort; maps remain empty.
   }
 
   return { cron, sto, claude };

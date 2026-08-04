@@ -4,12 +4,12 @@ import {
   DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER,
   ensureDingTalkAgentSendDisclaimerFormat,
   hasDingTalkDisclaimerDivider,
-} from '../../shared/dingtalk-disclaimer';
+} from '../../shared/dingtalk-prompts/dingtalk-disclaimer';
 import {
   fixDwsChatMessageSendArgv,
   fixDwsChatMessageSendShellScript,
   parseDwsChatMessageSendShellCommandArgs,
-} from '../../shared/dws-send-text';
+} from '../../shared/dingtalk-send/dws-send-text';
 
 describe('ensureDingTalkAgentSendDisclaimerFormat', () => {
   it('appends divider and footer when missing', () => {

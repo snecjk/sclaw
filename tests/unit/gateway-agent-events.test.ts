@@ -3,6 +3,7 @@ import {
   completeRunAfterAgentCompleted,
   scheduleCompletedRunHistoryReload,
   shouldFinalizeCompletedRun,
+  shouldIgnoreGatewayAgentSession,
   shouldRefreshSessionList,
 } from '@/stores/chat/gateway-agent-events';
 import { createIdleSessionRuntimeState } from '@/stores/chat/session-runtime';
@@ -56,6 +57,12 @@ describe('gateway agent event side effects', () => {
       currentSessionKey: 'agent:main',
       sessions: [{ key: 'agent:main' }],
     })).toBe(false);
+  });
+
+  it('ignores workflow smart-node sessions in the ordinary chat event pipeline', () => {
+    expect(shouldIgnoreGatewayAgentSession('agent:workflow-runtime:workflow:run-1:node-1')).toBe(true);
+    expect(shouldIgnoreGatewayAgentSession('agent:main:session-1')).toBe(false);
+    expect(shouldIgnoreGatewayAgentSession(null)).toBe(false);
   });
 
   it('does not finalize a new active run from an old completion event', () => {

@@ -22,8 +22,7 @@ import {
   mapUnreadConversationItem,
   sortConversationsByLastMsg,
   type RecentMentionRow,
-} from '../../../shared/dingtalk-recent-mentions';
-
+} from '../../../shared/dingtalk-send/dingtalk-recent-mentions';
 interface MentionSearchRequest {
   query?: string;
   limit?: number;

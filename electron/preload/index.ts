@@ -38,12 +38,21 @@ const electronAPI = {
         'session-catalog:invoke',
         'preview:httpFetch',
         // Workflow
-        'workflow:startTracking',
-        'workflow:stopTracking',
-        'workflow:sync-state',
         'workflow:appendSessionRecord',
-        'workflow:stream:subscribe',
-        'workflow:stream:unsubscribe',
+        // Workflow runtime（客户端执行下沉）
+        'workflow-runtime:start',
+        'workflow-runtime:takeDatabaseId',
+        'workflow-runtime:resume',
+        'workflow-runtime:cancel',
+        'workflow-runtime:resumeApproval',
+        'workflow-runtime:resumeInput',
+        'workflow-runtime:retrySync',
+        'workflow-runtime:getRun',
+        'workflow-runtime:listRuns',
+        'workflow-runtime:registerChatCard',
+        'workflow-runtime:listChatCards',
+        'workflow-runtime:getChatCard',
+        'workflow-editor:metric',
         'gateway:health',
         'gateway:getControlUiUrl',
         // OpenClaw
@@ -183,14 +192,13 @@ const electronAPI = {
         'form:isShowing',
         'form:hide',
         // Workflow
-        'workflow:startTracking',
-        'workflow:stopTracking',
-        'workflow:sync-state',
         'workflow:appendSessionRecord',
         'workflow:stream:subscribe',
         'workflow:stream:unsubscribe',
         // SClaw embed browser runtime
         'sclaw-browser:prepareSession',
+        'sclaw-browser:hasStoPolicyAuth',
+        'sclaw-browser:hasTeambitionAuth',
         'sclaw-browser:registerRuntime',
         'sclaw-browser:linkChatSession',
         'sclaw-browser:bindWebContents',
@@ -251,10 +259,13 @@ const electronAPI = {
         'auth:token-expired',
         'sto:models-synced',
         'workflow:status-update',
+        'workflow:completion-open',
+        'workflow:event',
         'workflow:poll-trace',
         'workflow:stream:event',
         'workflow:stream:error',
         'sclaw-browser:toggle-chat',
+        'sclaw-browser:open-url',
       ];
 
       if (validChannels.includes(channel)) {

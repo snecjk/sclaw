@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isOverCollapsed, pickBeautifyModel, scoreBeautifyModel } from '../../electron/services/scheduled-task-instruction-beautifier';
+import { isOverCollapsed, pickBeautifyModel, scoreBeautifyModel } from '../../electron/scheduled-tasks/scheduled-task-instruction-beautifier';
 
 describe('scheduled-task-instruction-beautifier model pick', () => {
   it('prefers turbo over plus models', () => {

@@ -23,9 +23,20 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { AppIcon } from './AppIcon';
 import type { AppItem, AppPlazaBanner, MarketCategory } from '@/types/more-apps';
 import { openInSclawBrowser } from '@/lib/open-sclaw-browser';
+import {
+  appendSkipLoginReturnUrl,
+  fetchAppPlazaSkipLoginLink,
+} from '@/lib/app-plaza-api';
+import {
+  hasStoPolicyAuthInEmbedSession,
+  hasTeambitionAuthInEmbedSession,
+  isTeambitionAppUrl,
+} from '@/lib/embed-site-auth';
 import { formatAppBadges } from './format-app-badges';
 
 const HERO_CAROUSEL_INTERVAL = 5000;
+/** 空 systemCode（无法换免登）或 sto-policy 需二次登录确认后再打开 */
+const STO_POLICY_SYSTEM_CODE = 'sto-policy';
 
 export function MoreAppsPage() {
   const { t } = useTranslation('common');
@@ -69,6 +80,7 @@ export function MoreAppsPage() {
   } = useMoreAppsStore();
 
   const [confirmDeleteApp, setConfirmDeleteApp] = useState<AppItem | null>(null);
+  const [pendingStoPolicyApp, setPendingStoPolicyApp] = useState<AppItem | null>(null);
   const [failedBannerImages, setFailedBannerImages] = useState<string[]>([]);
   const heroTimerRef = useRef<NodeJS.Timeout | null>(null);
   // Skip the search-debounce effect's first run on mount — the mount effect
@@ -80,6 +92,10 @@ export function MoreAppsPage() {
   const allApps = useMemo(() => {
     return [...catalogApps, ...externalApps].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }, [catalogApps, externalApps]);
+
+  const isCatalogApp = useCallback((app: AppItem) => {
+    return catalogApps.some((candidate) => candidate.id === app.id);
+  }, [catalogApps]);
 
   // Server categories with a fixed "精选" entry first; while loading or on error
   // only "精选" is shown (分类失败时保留精选 — independent degradation).
@@ -170,13 +186,96 @@ export function MoreAppsPage() {
     };
   }, [activeTab, heroSlideIndex, setHeroSlideIndex, banners]);
 
-  const handleOpenApp = useCallback((app: AppItem) => {
-    if (!app.url?.trim()) return;
+  const openAppWithSkipLogin = useCallback(async (app: AppItem) => {
+    // 免登仅针对应用广场目录应用；外部/我的应用自定义项始终直接打开 URL。
+    const systemCode = app.systemCode?.trim() || '';
+    const hasUrl = !!app.url?.trim();
+    const skipLoginEligible = isCatalogApp(app);
+    if (!systemCode && !hasUrl) return;
+
     if (!isAppInstalled(app.id)) {
       installApp(app.id);
     }
-    openInSclawBrowser({ url: app.url, title: app.name, appId: app.id });
-  }, [installApp, isAppInstalled]);
+
+    const shouldExchangeSkipLogin =
+      skipLoginEligible && !!systemCode && systemCode !== STO_POLICY_SYSTEM_CODE;
+
+    if (shouldExchangeSkipLogin) {
+      try {
+        const skipLoginUrl = await fetchAppPlazaSkipLoginLink(systemCode);
+        const openUrl = appendSkipLoginReturnUrl(skipLoginUrl, app.url);
+        openInSclawBrowser({
+          url: openUrl,
+          title: app.name,
+          appId: app.id,
+          sourceUrl: app.url,
+          systemCode,
+          skipLoginEligible,
+          iconUrl: app.iconUrl,
+          iconKey: app.iconKey,
+          tone: app.tone,
+        });
+        return;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        toast.error(message || '免登链接获取失败');
+        if (!hasUrl) return;
+        // Fall back to catalog URL (useStoToken / sto-sso-web injection still applies).
+      }
+    }
+
+    if (hasUrl) {
+      openInSclawBrowser({
+        url: app.url,
+        title: app.name,
+        appId: app.id,
+        sourceUrl: app.url,
+        systemCode: systemCode || undefined,
+        skipLoginEligible,
+        iconUrl: app.iconUrl,
+        iconKey: app.iconKey,
+        tone: app.tone,
+      });
+    }
+  }, [installApp, isAppInstalled, isCatalogApp]);
+
+  const handleOpenApp = useCallback(async (app: AppItem) => {
+    const systemCode = app.systemCode?.trim() || '';
+    const hasUrl = !!app.url?.trim();
+    const skipLoginEligible = isCatalogApp(app);
+    if (!systemCode && !hasUrl) return;
+
+    // 只有应用广场目录应用才需要二次登录确认 / 免登判断。
+    // sto-policy：有未过期 stoToken/Authorization cookie 则直接打开。
+    // Teambition（空 systemCode）：有未过期 TEAMBITION_SESSIONID 则直接打开。
+    if (skipLoginEligible && !systemCode) {
+      if (isTeambitionAppUrl(app.url)) {
+        const authed = await hasTeambitionAuthInEmbedSession();
+        if (authed) {
+          void openAppWithSkipLogin(app);
+          return;
+        }
+      }
+      setPendingStoPolicyApp(app);
+      return;
+    }
+    if (skipLoginEligible && systemCode === STO_POLICY_SYSTEM_CODE) {
+      const authed = await hasStoPolicyAuthInEmbedSession();
+      if (!authed) {
+        setPendingStoPolicyApp(app);
+        return;
+      }
+    }
+
+    void openAppWithSkipLogin(app);
+  }, [isCatalogApp, openAppWithSkipLogin]);
+
+  const confirmStoPolicyOpen = useCallback(async () => {
+    const app = pendingStoPolicyApp;
+    setPendingStoPolicyApp(null);
+    if (!app) return;
+    await openAppWithSkipLogin(app);
+  }, [pendingStoPolicyApp, openAppWithSkipLogin]);
 
   // Resolve a banner's click target against the currently loaded APP set.
   // APP-type is only clickable when targetAppId resolves to a loaded app's url;
@@ -185,7 +284,10 @@ export function MoreAppsPage() {
     (banner: AppPlazaBanner) => {
       if (banner.targetType === 'URL' && banner.targetUrl) return true;
       if (banner.targetType === 'APP' && banner.targetAppId) {
-        return bannerAppLookup.some((a) => a.id === banner.targetAppId && !!a.url?.trim());
+        return bannerAppLookup.some((a) => {
+          if (a.id !== banner.targetAppId) return false;
+          return !!a.url?.trim() || !!a.systemCode?.trim();
+        });
       }
       return false;
     },
@@ -203,8 +305,8 @@ export function MoreAppsPage() {
       }
       if (banner.targetType === 'APP' && banner.targetAppId) {
         const app = bannerAppLookup.find((a) => a.id === banner.targetAppId);
-        if (app?.url?.trim()) {
-          handleOpenApp(app);
+        if (app && (app.url?.trim() || app.systemCode?.trim())) {
+          void handleOpenApp(app);
         }
         // Unresolvable APP target: keep showing the image but do not click — never guess the URL.
       }
@@ -612,6 +714,17 @@ export function MoreAppsPage() {
 
       {/* Modals */}
       <AddExternalAppModal />
+      <ConfirmDialog
+        open={!!pendingStoPolicyApp}
+        title={t('moreApps.stoPolicyLoginTitle', { defaultValue: '需要二次登录' })}
+        message={t('moreApps.stoPolicyLoginDesc', {
+          defaultValue: '该系统需要二次登录，确认后将继续打开。',
+        })}
+        confirmLabel={t('common.confirm', { defaultValue: '确定' })}
+        cancelLabel={t('common.cancel', { defaultValue: '取消' })}
+        onConfirm={confirmStoPolicyOpen}
+        onCancel={() => setPendingStoPolicyApp(null)}
+      />
       <ConfirmDialog
         open={!!confirmDeleteApp}
         title={t('moreApps.deleteConfirmTitle', { defaultValue: '删除应用' })}

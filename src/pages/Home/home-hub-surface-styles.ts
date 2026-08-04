@@ -67,6 +67,13 @@ export const homeHubMainScrollClass = cn(
 export const homeHubFooterShellClass =
   'shrink-0 px-4 pb-0 pt-4 sm:px-6';
 
+/**
+ * Home full-bleed 后，落地态恢复原 MainCardBody 20px + Home index px-1/sm:px-2。
+ * 与内层 px-4/sm:px-6 叠加后对齐改版前卡片边缘 inset。
+ */
+export const homeHubLandingOuterInsetClass =
+  'px-[calc(var(--sto-content-pad-x)+0.25rem)] sm:px-[calc(var(--sto-content-pad-x)+0.5rem)]';
+
 /** MasterGo font_2:6551 + Grey-5 底部免责 */
 export const homeHubFooterDisclaimerClass =
   'text-xs font-normal leading-[14px] text-[#C9CDD4] dark:text-muted-foreground';

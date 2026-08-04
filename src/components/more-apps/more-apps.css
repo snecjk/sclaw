@@ -101,6 +101,8 @@
   --ma-featured-badge-bg: #fff1e6;
   --ma-featured-badge-fg: #c56a00;
   --ma-more-border: rgba(255, 111, 0, 0.35);
+  /* 下方内容滚动区使用稳定滚动条槽；页头操作区预留同宽空间以统一右边界。 */
+  --ma-scrollbar-gutter: 12px;
 }
 
 .dark .page-more-apps {
@@ -134,6 +136,7 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
+  padding-inline-end: var(--ma-scrollbar-gutter);
   margin-bottom: 20px;
   min-width: 0;
 }
@@ -160,6 +163,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  padding-inline-end: var(--ma-scrollbar-gutter);
   margin-bottom: 14px;
   min-width: 0;
 }
@@ -369,6 +373,26 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.page-more-apps .app-icon--letter {
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.page-more-apps .app-icon__letter {
+  font-size: 18px;
+  line-height: 1;
+  color: inherit;
+  user-select: none;
+}
+
+.page-more-apps .app-icon--sm .app-icon__letter {
+  font-size: 14px;
+}
+
+.page-more-apps .app-icon--lg .app-icon__letter {
+  font-size: 20px;
 }
 
 .page-more-apps .app-icon--sm svg {
@@ -653,14 +677,14 @@
 .page-more-apps .app-market__hero-banner {
   display: block;
   width: 100%;
-  aspect-ratio: 16 / 5;
+  aspect-ratio: 16 / 3;
   min-height: 120px;
   margin-bottom: 0;
   padding: 0;
   border-radius: 20px;
-  border: 1px solid rgba(26, 115, 232, 0.14);
+  border: none;
   background: linear-gradient(135deg, #d6e8ff 0%, #c8ddff 42%, #e0edff 100%);
-  box-shadow: 0 8px 24px rgba(26, 115, 232, 0.1);
+  box-shadow: none;
   overflow: hidden;
   text-align: left;
   font: inherit;
@@ -675,7 +699,7 @@
 }
 
 .page-more-apps .app-market__hero-banner--clickable:hover {
-  box-shadow: 0 10px 28px rgba(26, 115, 232, 0.14);
+  box-shadow: none;
 }
 
 .page-more-apps .app-market__hero-banner--clickable:focus-visible {
@@ -712,7 +736,7 @@
 /* Banner loading skeleton */
 .page-more-apps .app-market__hero-carousel--loading .app-market__hero-skeleton {
   width: 100%;
-  aspect-ratio: 16 / 5;
+  aspect-ratio: 16 / 3;
   min-height: 120px;
   border-radius: 20px;
   border: 1px solid rgba(26, 115, 232, 0.1);
@@ -737,7 +761,7 @@
   justify-content: center;
   gap: 12px;
   width: 100%;
-  aspect-ratio: 16 / 5;
+  aspect-ratio: 16 / 3;
   min-height: 120px;
   padding: 16px;
   border-radius: 20px;

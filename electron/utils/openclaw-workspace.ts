@@ -6,7 +6,7 @@
  */
 import { access, readFile, writeFile, readdir, mkdir, unlink } from 'fs/promises';
 import { constants } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { homedir } from 'os';
 import { expandContextIncludes } from './context-fragment';
 import { logger } from './logger';
@@ -14,6 +14,16 @@ import { getResourcesDir, getOpenClawConfigDir, ensureWorkspaceArtifactOutputDir
 
 const CLAWX_BEGIN = '<!-- stoclaw:begin -->';
 const CLAWX_END = '<!-- stoclaw:end -->';
+const WORKFLOW_RUNTIME_AGENT_ID = 'workflow-runtime';
+
+/**
+ * Workflow smart nodes have a separately managed, minimal AGENTS.md template.
+ * The generic chat workspace context must never be merged into that workspace.
+ */
+export function shouldMergeClawXContextIntoWorkspace(workspaceDir: string): boolean {
+  const normalize = (value: string) => resolve(value).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  return normalize(workspaceDir) !== normalize(join(homedir(), '.stoclaw', 'workflow-runtime', 'workspaces'));
+}
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -68,6 +78,9 @@ async function resolveAllWorkspaceDirs(): Promise<string[]> {
       const agents = config?.agents?.list;
       if (Array.isArray(agents)) {
         for (const agent of agents) {
+          // This agent owns an isolated workflow-only bootstrap template.
+          // Merging chat context into it changes node execution semantics.
+          if (agent?.id === WORKFLOW_RUNTIME_AGENT_ID) continue;
           const ws = agent?.workspace;
           if (typeof ws === 'string' && ws.trim()) {
             dirs.add(ws.replace(/^~/, homedir()));
@@ -89,7 +102,9 @@ async function resolveAllWorkspaceDirs(): Promise<string[]> {
     dirs.add(join(openclawDir, 'workspace'));
   }
 
-  return [...dirs];
+  // Also protect the canonical path in case it was reached through a legacy
+  // default workspace entry instead of the workflow-runtime agent record.
+  return [...dirs].filter(shouldMergeClawXContextIntoWorkspace);
 }
 
 // ── Bootstrap file repair ────────────────────────────────────────

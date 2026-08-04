@@ -9,22 +9,21 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
-      "baseUrl": {
+      "hostApiHost": {
         "type": "string",
-        "description": "STO 后端 base URL，如 https://baseinfo-aimemory.sto.cn"
+        "default": "127.0.0.1",
+        "description": "StoClaw HostApi 地址（创建任务打 /api/scheduled-tasks）"
       },
-      "ssoAuthPath": {
-        "type": "string",
-        "default": "~/.stoclaw/openclaw/sso-auth.json",
-        "description": "SSO 凭据文件路径"
+      "hostApiPort": {
+        "type": "number",
+        "default": 3210,
+        "description": "StoClaw HostApi 端口"
+      },
+      "timeoutMs": {
+        "type": "number",
+        "default": 60000,
+        "description": "HostApi 请求超时（毫秒）"
       }
-    }
-  },
-  "tools": ["create_scheduled_task"],
-  "toolConfig": {
-    "create_scheduled_task": {
-      "label": "创建定时任务",
-      "help": "当用户需要创建定时任务时调用此工具，从自然语言描述中提取任务参数"
     }
   },
   "uiHints": {

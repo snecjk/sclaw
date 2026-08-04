@@ -1,4 +1,4 @@
-import { prepareDingTalkAgentTurnMessage } from '../../shared/dingtalk-recipient-message';
+import { prepareDingTalkAgentTurnMessage } from '../../shared/dingtalk-send/dingtalk-recipient-message';
 import {
   hasResolvedDingTalkMentions,
   messageHasDingTalkRecipientContext,
@@ -99,7 +99,7 @@ export function buildTaskMessageWithRecipients(
   return prepareDingTalkAgentTurnMessage(instruction, mentions, { scenario: 'scheduled-task' });
 }
 
-export { prepareDingTalkAgentTurnMessage } from '../../shared/dingtalk-recipient-message';
+export { prepareDingTalkAgentTurnMessage } from '../../shared/dingtalk-send/dingtalk-recipient-message';
 
 export function mentionsToScheduledTaskFields(mentions: DingTalkMention[]): {
   notifyMode?: string;

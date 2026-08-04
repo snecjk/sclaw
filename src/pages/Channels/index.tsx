@@ -257,8 +257,7 @@ export function Channels() {
   /** 切换引擎后若当前 Agent 不兼容，先本地记下引擎，等用户显式选 Agent 再保存 */
   const [pendingDingTalkEngine, setPendingDingTalkEngine] = useState<'claude' | 'openclaw' | null>(
     null,
-  );
-  const [showConfigModal, setShowConfigModal] = useState(false);
+  );  const [showConfigModal, setShowConfigModal] = useState(false);
   const [showDingTalkHubModal, setShowDingTalkHubModal] = useState(false);
   const [showMobileConfigModal, setShowMobileConfigModal] = useState(false);
   const [selectedChannelType, setSelectedChannelType] = useState<ChannelType | null>(null);

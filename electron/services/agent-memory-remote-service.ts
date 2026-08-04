@@ -146,12 +146,12 @@ async function requestMemoryCenter<T>(path: string, init?: RequestInit & { timeo
     });
     throw new Error(body.errMessage || `Memory center request failed: ${response.status}`);
   }
-  logger.info('[mem0][remote] request success', {
-    path,
-    method: init?.method || 'GET',
-    status: response.status,
-    traceId: body.traceId,
-  });
+  // logger.info('[mem0][remote] request success', {
+  //   path,
+  //   method: init?.method || 'GET',
+  //   status: response.status,
+  //   traceId: body.traceId,
+  // });
   return body.data as T;
 }
 
@@ -465,13 +465,13 @@ export class AgentMemoryRemoteService {
         idleTimeoutMs: CHAT_STREAM_IDLE_TIMEOUT_MS,
         totalTimeoutMs: Math.max(1, CHAT_STREAM_TOTAL_TIMEOUT_MS - elapsedMs),
         onTimeout: () => controller.abort(),
-        onChunk: (progress) => logger.debug('[mem0][remote] chat stream chunk', progress),
-        onEvent: (progress) => logger.debug(
-          progress.done
-            ? '[mem0][remote] chat stream done'
-            : '[mem0][remote] chat stream event',
-          progress,
-        ),
+        // onChunk: (progress) => logger.debug('[mem0][remote] chat stream chunk', progress),
+        // onEvent: (progress) => logger.debug(
+        //   progress.done
+        //     ? '[mem0][remote] chat stream done'
+        //     : '[mem0][remote] chat stream event',
+        //   progress,
+        // ),
       });
       logger.info('[mem0][remote] createChatCompletionStream success', {
         status: response.status,

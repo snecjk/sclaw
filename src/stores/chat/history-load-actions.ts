@@ -1,24 +1,9 @@
-import { toast } from 'sonner';
 import { useGatewayStore } from '../gateway';
-import { CHAT_HISTORY_LIMIT, CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
-import {
-  isCronDatedSessionKey,
-  isCronSessionKey,
-  isVirtualTaskSessionKey,
-  isClaudeScheduledTaskDatedSessionKey,
-  isClaudeScheduledTaskRunSessionKey,
-  isClaudeScheduledTaskSessionKey,
-} from './cron-session-utils';
-import {
-  loadClaudeScheduledTaskFallbackMessages,
-  loadCronFallbackMessages,
-  loadVirtualTaskFallbackMessages,
-} from './virtual-task-history';
+import { CHAT_HISTORY_LENGTH_MAX_LIMIT } from '../../../shared/chat-config';
 import {
   applyLoadedHistorySnapshot,
   prepareHistoryToolEffects,
 } from './history-apply-loaded';
-import { mergeHistoryMessageSources } from './history-merge';
 import { logChatFlow } from './chat-flow-log';
 import type { ChatGet, ChatSet, HistoryActions } from './store-api';
 import type { ChatSession, RawMessage } from './types';
@@ -39,38 +24,6 @@ export interface HistoryLoadDeps {
     sessionKey: string,
     currentAgentId?: string | null,
   ) => ChatSession['engineType'] | undefined;
-}
-
-async function loadFallbackMessagesForSession(sessionKey: string): Promise<RawMessage[]> {
-  if (isVirtualTaskSessionKey(sessionKey)) {
-    return loadVirtualTaskFallbackMessages(sessionKey, CHAT_HISTORY_LIMIT);
-  }
-  if (isCronSessionKey(sessionKey) || isCronDatedSessionKey(sessionKey)) {
-    return loadCronFallbackMessages(sessionKey, CHAT_HISTORY_LIMIT);
-  }
-  if (
-    isClaudeScheduledTaskSessionKey(sessionKey)
-    || isClaudeScheduledTaskRunSessionKey(sessionKey)
-    || isClaudeScheduledTaskDatedSessionKey(sessionKey)
-  ) {
-    return loadClaudeScheduledTaskFallbackMessages(sessionKey, CHAT_HISTORY_LIMIT);
-  }
-  return [];
-}
-
-async function mergeFallbackHistoryIfNeeded(
-  sessionKey: string,
-  allMessages: RawMessage[],
-): Promise<RawMessage[]> {
-  if (isVirtualTaskSessionKey(sessionKey)) {
-    const fallbackMessages = await loadFallbackMessagesForSession(sessionKey);
-    return fallbackMessages.length > 0
-      ? mergeHistoryMessageSources([fallbackMessages, allMessages])
-      : allMessages;
-  }
-  if (allMessages.length > 0) return allMessages;
-
-  return loadFallbackMessagesForSession(sessionKey);
 }
 
 export function createHistoryLoadActions(
@@ -135,6 +88,7 @@ export function createHistoryLoadActions(
 
         try {
           // Gateway chat.history does not support offset; load up to the hard max in one call.
+          // 任务会话与普通聊天同一路径：仅 chat.history（旧 /api/*/session-history 已 404，不再 fallback）。
           let thinkingLevel: string | null = null;
           const data = await useGatewayStore.getState().rpc<Record<string, unknown>>(
             'chat.history',
@@ -171,18 +125,9 @@ export function createHistoryLoadActions(
           if (data.thinkingLevel) {
             thinkingLevel = String(data.thinkingLevel);
           }
-
-          if (allMessages.length >= CHAT_HISTORY_LENGTH_MAX_LIMIT) {
-            toast.info('会话消息已达上限', {
-              description: '当前会话历史记录较多，建议开启新会话以获得更好的体验。',
-              duration: 5000,
-            });
-          }
-
-          const rawMessages = await mergeFallbackHistoryIfNeeded(targetSessionKey, allMessages);
           logChatFlow('history.load.fetched', {
             sessionKey: targetSessionKey,
-            rawCount: rawMessages.length,
+            rawCount: allMessages.length,
             gatewayCount: allMessages.length,
             thinkingLevel,
             isRunning: typeof data.isRunning === 'boolean' ? data.isRunning : null,
@@ -190,35 +135,19 @@ export function createHistoryLoadActions(
 
           if (get().currentSessionKey !== targetSessionKey) return;
           const canApply = await prepareHistoryToolEffects({
-            rawMessages,
+            rawMessages: allMessages,
             sessionKey: targetSessionKey,
             agentId: get().currentAgentId,
             getCurrentSessionKey: () => get().currentSessionKey,
           });
           if (!canApply) return;
-          applyHistorySnapshot(rawMessages, thinkingLevel, {
+          applyHistorySnapshot(allMessages, thinkingLevel, {
             isRunning: typeof data.isRunning === 'boolean' ? data.isRunning : undefined,
             runtimeResult: data.runtimeResult,
           });
         } catch (err) {
           console.warn('Failed to load chat history:', err);
-          if (get().currentSessionKey !== targetSessionKey) return;
-          const fallbackMessages = await loadFallbackMessagesForSession(targetSessionKey);
-          if (get().currentSessionKey !== targetSessionKey) return;
-          if (fallbackMessages.length > 0) {
-            logChatFlow('history.load.fallback', {
-              sessionKey: targetSessionKey,
-              fallbackCount: fallbackMessages.length,
-            });
-            const canApply = await prepareHistoryToolEffects({
-              rawMessages: fallbackMessages,
-              sessionKey: targetSessionKey,
-              agentId: get().currentAgentId,
-              getCurrentSessionKey: () => get().currentSessionKey,
-            });
-            if (!canApply) return;
-            applyHistorySnapshot(fallbackMessages, null);
-          } else if (get().currentSessionKey === targetSessionKey) {
+          if (get().currentSessionKey === targetSessionKey) {
             set({ messages: [], loading: false });
           }
         }

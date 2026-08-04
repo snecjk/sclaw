@@ -28,5 +28,5 @@ export type RuntimeActions = Pick<
 >;
 export type WorkflowActions = Pick<
   ChatState,
-  'setWorkflowCardState' | 'setPendingWorkflow' | 'clearPendingWorkflowMemory' | 'clearPendingWorkflow'
+  'setPendingWorkflow' | 'clearPendingWorkflowMemory' | 'clearPendingWorkflow'
 >;

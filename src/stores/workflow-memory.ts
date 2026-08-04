@@ -1,3 +1,5 @@
+import type { WorkflowRunStatus } from '@/types/workflow';
+
 /**
  * Workflow Memory Store
  *
@@ -17,10 +19,12 @@ export interface WorkflowMemoryRecord {
   schemaHash: string;
   collectedInputs: Record<string, unknown>;
   createdAt: number; // timestamp
+  /** Workflow version snapshot used by workflow-runtime:start to fetch DSL. */
+  versionId?: string | number;
   /** Last run id for re-execution and result lookup */
   lastRunId?: string;
   /** Last known execution status */
-  lastStatus?: 'pending' | 'running' | 'completed' | 'failed' | 'timeout' | 'unknown';
+  lastStatus?: WorkflowRunStatus;
   /** When the workflow last completed (success or failure) */
   completedAt?: number;
   /** All runs for this workflow instance (newest first). */
@@ -44,7 +48,9 @@ export interface WorkflowExecutionRecord {
   runId: string;            // ID returned from startWorkflow
   templateId: string;
   templateName: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'timeout' | 'unknown';
+  /** Workflow version snapshot used by workflow-runtime:start to fetch DSL. */
+  versionId?: string | number;
+  status: WorkflowRunStatus;
   createdAt: number;        // When execution was started
   updatedAt: number;        // Last status update
   collectedInputs: Record<string, unknown>;  // User-filled parameters
@@ -52,6 +58,8 @@ export interface WorkflowExecutionRecord {
   paramsSummary?: string;
   /** Model completion summary already sent for this run. */
   completionSummaryDelivered?: boolean;
+  /** Completion notification already delivered in this client profile. */
+  completionNotificationDeliveredAt?: number;
 }
 
 const STORAGE_KEY = 'stoclaw:session-workflows';
@@ -364,7 +372,7 @@ export function saveWorkflowExecution(record: WorkflowExecutionRecord): void {
 export function patchWorkflowExecution(
   sessionKey: string,
   runId: string,
-  patch: Partial<Pick<WorkflowExecutionRecord, 'status' | 'paramsSummary' | 'completionSummaryDelivered' | 'updatedAt'>>,
+  patch: Partial<Pick<WorkflowExecutionRecord, 'status' | 'paramsSummary' | 'completionSummaryDelivered' | 'completionNotificationDeliveredAt' | 'updatedAt'>>,
 ): void {
   const store = loadExecutions();
   const records = store[sessionKey];
@@ -378,6 +386,11 @@ export function patchWorkflowExecution(
 
 export function markCompletionSummaryDelivered(sessionKey: string, runId: string): void {
   patchWorkflowExecution(sessionKey, runId, { completionSummaryDelivered: true });
+}
+
+/** Persist notification delivery so duplicate terminal broadcasts never re-toast a run. */
+export function markCompletionNotificationDelivered(sessionKey: string, runId: string): void {
+  patchWorkflowExecution(sessionKey, runId, { completionNotificationDeliveredAt: Date.now() });
 }
 
 /**
@@ -401,7 +414,7 @@ export function updateExecutionStatus(
       store[key] = records;
       saveExecutionsStore(store);
       syncRunStatusToWorkflowRecord(key, exec.workflowId, runId, status, now);
-      if (exec.templateId && (status === 'completed' || status === 'failed' || status === 'timeout')) {
+      if (exec.templateId && (status === 'completed' || status === 'failed' || status === 'timeout' || status === 'cancelled')) {
         clearPendingWorkflowDraft(key, exec.templateId);
       }
       return;
@@ -425,7 +438,7 @@ function syncRunStatusToWorkflowRecord(
   const runs = (prev.runs ?? []).map((r) =>
     r.runId === runId ? { ...r, status, updatedAt } : r,
   );
-  const isTerminal = status === 'completed' || status === 'failed' || status === 'timeout';
+  const isTerminal = status === 'completed' || status === 'failed' || status === 'timeout' || status === 'cancelled';
   sessionRecords[idx] = {
     ...prev,
     lastStatus: prev.lastRunId === runId ? status : prev.lastStatus,

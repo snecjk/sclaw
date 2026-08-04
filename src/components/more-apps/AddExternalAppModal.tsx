@@ -2,6 +2,7 @@
  * AddExternalAppModal — modal for installing / editing external apps
  */
 import { useState, FormEvent, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useMoreAppsStore } from '@/stores/more-apps';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -51,6 +52,12 @@ export function AddExternalAppModal() {
 
   if (!addModalOpen) return null;
 
+  // Render beside the app layout instead of inside the main content card.
+  // This keeps the fixed overlay out of the card's clipping/stacking boundary,
+  // so sidebar sticky headers cannot paint above the backdrop.
+  const portalTarget =
+    document.querySelector<HTMLElement>('[data-app-shell]') ?? document.body;
+
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const trimmedUrl = url.trim();
@@ -81,8 +88,8 @@ export function AddExternalAppModal() {
     setDesc('');
   };
 
-  return (
-    <div className="more-apps-modal" hidden={!addModalOpen}>
+  return createPortal(
+    <div className="page-more-apps more-apps-modal" hidden={!addModalOpen}>
       <div
         className="more-apps-modal__backdrop"
         onClick={closeAddModal}
@@ -178,6 +185,7 @@ export function AddExternalAppModal() {
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    portalTarget,
   );
 }

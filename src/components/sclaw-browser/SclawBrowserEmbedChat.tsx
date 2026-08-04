@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { AlertCircle, Loader2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '@/stores/chat';
-import { useWorkflowCompletion } from '@/hooks/use-workflow-completion';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
@@ -18,15 +17,23 @@ import {
   stoChatScrollContentClass,
   stoChatScrollPaneClass,
 } from '@/lib/surfaces';
+import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
-import { SclawBrowserEmbedChatSessions } from './SclawBrowserEmbedChatSessions';
+import { SclawBrowserEmbedChatSessions, type SclawBrowserEmbedChatSessionsProps } from './SclawBrowserEmbedChatSessions';
 
 interface SclawBrowserEmbedChatProps {
   sessionKey: string;
   appTitle: string;
+  onClose?: () => void;
+  sessionsProps?: SclawBrowserEmbedChatSessionsProps;
 }
 
-export function SclawBrowserEmbedChat({ sessionKey, appTitle }: SclawBrowserEmbedChatProps) {
+export function SclawBrowserEmbedChat({
+  sessionKey,
+  appTitle,
+  onClose,
+  sessionsProps,
+}: SclawBrowserEmbedChatProps) {
   const { t } = useTranslation(['chat', 'common']);
   const closeChatPanel = useSclawBrowserOverlayStore((s) => s.closeChatPanel);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
@@ -42,8 +49,6 @@ export function SclawBrowserEmbedChat({ sessionKey, appTitle }: SclawBrowserEmbe
   const streamingTools = useChatStore((s) => s.streamingTools);
   const pendingFinal = useChatStore((s) => s.pendingFinal);
   const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
-
-  useWorkflowCompletion(currentSessionKey);
 
   const streamMsg = streamingMessage && typeof streamingMessage === 'object'
     ? streamingMessage as unknown as { role?: string; content?: unknown; timestamp?: number; id?: string }
@@ -77,8 +82,9 @@ export function SclawBrowserEmbedChat({ sessionKey, appTitle }: SclawBrowserEmbe
   );
 
   const handleClose = useCallback(() => {
-    closeChatPanel();
-  }, [closeChatPanel]);
+    if (onClose) onClose();
+    else closeChatPanel();
+  }, [onClose, closeChatPanel]);
 
   if (currentSessionKey !== sessionKey) {
     return (
@@ -97,7 +103,7 @@ export function SclawBrowserEmbedChat({ sessionKey, appTitle }: SclawBrowserEmbe
           </h2>
           <p className="sclaw-browser-embed-chat__subtitle truncate">{appTitle}</p>
         </div>
-        <SclawBrowserEmbedChatSessions />
+        <SclawBrowserEmbedChatSessions {...sessionsProps} />
         <button
           type="button"
           className="sclaw-browser-embed-chat__close"
@@ -108,6 +114,7 @@ export function SclawBrowserEmbedChat({ sessionKey, appTitle }: SclawBrowserEmbe
         </button>
       </header>
 
+      <div className="sclaw-browser-embed-chat__scroll-host">
       <div ref={scrollRef} className={cn(stoChatScrollPaneClass, 'sclaw-browser-embed-chat__scroll')}>
         <div ref={contentRef} className={cn(stoChatScrollContentClass, stoChatColumnContentTrackClass('home', false))}>
           {showLoadingPlaceholder ? (
@@ -128,6 +135,7 @@ export function SclawBrowserEmbedChat({ sessionKey, appTitle }: SclawBrowserEmbe
                     />
                   );
                 }
+                if (item.type === 'workflow-run') return null;
                 return (
                   <ChatMessage
                     key={item.key}
@@ -149,6 +157,8 @@ export function SclawBrowserEmbedChat({ sessionKey, appTitle }: SclawBrowserEmbe
             </>
           )}
         </div>
+      </div>
+      <OverlayScrollbar viewportRef={scrollRef} contentRef={contentRef} />
       </div>
 
       {error ? (

@@ -3,6 +3,7 @@ import { mapEventSessionKey } from './session-event-routing';
 import type { ChatState } from './types';
 import { getSessionRuntimeState } from './session-runtime';
 import { isTerminalRun } from './run-lifecycle';
+import { isWorkflowOpenClawSessionKey } from '../../../shared/workflow-openclaw-session';
 
 const LOAD_SESSIONS_MIN_INTERVAL_MS = 1_200;
 const LOAD_HISTORY_MIN_INTERVAL_MS = 800;
@@ -39,6 +40,11 @@ function maybeLoadHistory(
 
 function eventString(value: unknown): string | null {
   return value != null ? String(value) : null;
+}
+
+export function shouldIgnoreGatewayAgentSession(sessionKey: unknown): boolean {
+  const key = eventString(sessionKey);
+  return key != null && isWorkflowOpenClawSessionKey(key);
 }
 
 export function shouldRefreshSessionList(input: {
@@ -122,6 +128,7 @@ export function handleStartedEngineEvent(
   const runId = engineEvent.runId;
   const sessionKey = engineEvent.sessionKey;
   if (runId == null || sessionKey == null) return;
+  if (shouldIgnoreGatewayAgentSession(sessionKey)) return;
 
   import('./store')
     .then(({ useChatStore }) => {
@@ -152,6 +159,7 @@ export function handleStartedEngineEvent(
 export function handleCompletedEngineEvent(engineEvent: Record<string, unknown>): void {
   const runId = engineEvent.runId;
   const sessionKey = engineEvent.sessionKey;
+  if (shouldIgnoreGatewayAgentSession(sessionKey)) return;
 
   import('./store')
     .then(({ useChatStore }) => {

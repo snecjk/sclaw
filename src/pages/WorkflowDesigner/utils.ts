@@ -1,5 +1,5 @@
 import { NODE_H, NODE_TEMPLATES, NODE_W } from '@/pages/WorkflowDesigner/constants';
-import { MarkerType, Position, type Edge, type Node } from 'reactflow';
+import { MarkerType, Position, type Edge, type Node } from '@xyflow/react';
 import type {
   CanvasNodeData,
   CanvasNodeView,
@@ -45,7 +45,13 @@ export function nodeRunStatusLabel(status: string): string {
   return labels[status] ?? '待运行';
 }
 
-export function buildCanvasNodes(workflow: WorkflowDefinition): Node<CanvasNodeData>[] {
+export function buildCanvasNodes(
+  workflow: WorkflowDefinition,
+  options: {
+    onNodeChange?: (node: WorkflowNode) => void;
+    onDeleteNode?: (nodeId: string) => void;
+  } = {},
+): Node<CanvasNodeData>[] {
   return workflow.nodes.map((node, index) => {
     const position = readNodePosition(node, index);
     return {
@@ -59,6 +65,10 @@ export function buildCanvasNodes(workflow: WorkflowDefinition): Node<CanvasNodeD
         subtitle: nodeTypeLabel(node.type),
         summary: nodeSummary(node.type),
         status: 'pending',
+        workflowNode: node,
+        workflow,
+        onNodeChange: options.onNodeChange,
+        onDeleteNode: options.onDeleteNode,
       },
       draggable: true,
       sourcePosition: Position.Right,
@@ -71,8 +81,17 @@ export function buildCanvasEdges(
   workflow: WorkflowDefinition,
   selectedEdgeId?: string | null,
 ): Edge[] {
+  const parallelEdgeGroups = new Map<string, WorkflowDefinition['edges']>();
+  for (const edge of workflow.edges) {
+    const key = `${edge.source}::${edge.target}`;
+    const current = parallelEdgeGroups.get(key) ?? [];
+    current.push(edge);
+    parallelEdgeGroups.set(key, current);
+  }
+
   return workflow.edges.map((edge) => ({
     id: edge.id,
+    type: 'designer',
     source: edge.source,
     target: edge.target,
     label: edge.condition || undefined,
@@ -80,9 +99,22 @@ export function buildCanvasEdges(
     updatable: true,
     interactionWidth: 20,
     selected: edge.id === selectedEdgeId,
+    data: (() => {
+      const group = parallelEdgeGroups.get(`${edge.source}::${edge.target}`) ?? [edge];
+      const parallelIndex = group.findIndex((item) => item.id === edge.id);
+      return {
+        parallelIndex,
+        parallelCount: group.length,
+        branchHint:
+          group.length > 1
+            ? edge.condition || edge.sourcePort || `分支 ${parallelIndex + 1}`
+            : '',
+      };
+    })(),
     style: {
-      strokeWidth: edge.id === selectedEdgeId ? 3 : 2,
-      stroke: edge.id === selectedEdgeId ? 'hsl(var(--primary))' : 'hsl(var(--muted-foreground))',
+      strokeWidth: edge.id === selectedEdgeId ? 2.5 : 1.5,
+      stroke: edge.id === selectedEdgeId ? '#f97316' : '#cbd5e1',
+      strokeDasharray: '6 4',
     },
   }));
 }
@@ -126,10 +158,14 @@ function buildSmartAgentConfig(type: string): Record<string, unknown> {
   };
 }
 
-export function defaultNodeConfig(type: string, index: number): Record<string, unknown> {
-  const position = {
-    x: 90 + (index % 3) * (NODE_W + 70),
-    y: 120 + Math.floor(index / 3) * (NODE_H + 60),
+export function defaultNodeConfig(
+  type: string,
+  index: number,
+  positionOverride?: { x: number; y: number },
+): Record<string, unknown> {
+  const position = positionOverride ?? {
+    x: 90 + (index % 3) * (NODE_W + 90),
+    y: 120 + Math.floor(index / 3) * (NODE_H + 70),
   };
   const base = {
     editor: { position },
@@ -278,13 +314,39 @@ export function defaultNodeConfig(type: string, index: number): Record<string, u
   return base;
 }
 
-export function createNode(type: string, index: number): WorkflowNode {
+export function createNode(
+  type: string,
+  index: number,
+  position?: { x: number; y: number },
+): WorkflowNode {
   const template = resolveNodeTemplate(type);
   return {
     id: `node_${Date.now()}_${index}`,
     type,
     name: template?.label ?? type,
-    config: defaultNodeConfig(type, index),
+    config: defaultNodeConfig(type, index, position),
+  };
+}
+
+export function centerDroppedNodePosition(position: { x: number; y: number }): { x: number; y: number } {
+  return {
+    x: Math.round(position.x - NODE_W / 2),
+    y: Math.round(position.y - 40),
+  };
+}
+
+export function buildAiWorkflowGenerateTarget(workflow?: WorkflowDefinition | null): {
+  pathname: string;
+  prompt: string;
+} {
+  const prompt = workflow?.description?.trim() || workflow?.name?.trim() || '帮我创建工作流';
+  const params = new URLSearchParams();
+  if (workflow?.id) params.set('id', workflow.id);
+  if (!workflow?.id && prompt) params.set('prompt', prompt);
+  const suffix = params.toString();
+  return {
+    pathname: `/workflow/generate${suffix ? `?${suffix}` : ''}`,
+    prompt,
   };
 }
 
@@ -293,6 +355,59 @@ export function createEdge(source: string, target: string): WorkflowEdge {
     id: `edge_${source}_${target}_${Date.now()}`,
     source,
     target,
+  };
+}
+
+export function insertNodeOnEdge(
+  workflow: WorkflowDefinition,
+  edgeId: string,
+  nodeType: string,
+): { workflow: WorkflowDefinition; newNodeId: string } | null {
+  const edge = workflow.edges.find((item) => item.id === edgeId);
+  if (!edge) return null;
+
+  const sourceNodeIndex = workflow.nodes.findIndex((node) => node.id === edge.source);
+  const targetNodeIndex = workflow.nodes.findIndex((node) => node.id === edge.target);
+  const sourceNode = workflow.nodes[sourceNodeIndex];
+  const targetNode = workflow.nodes[targetNodeIndex];
+  const sourcePos = sourceNode ? readNodePosition(sourceNode, Math.max(sourceNodeIndex, 0)) : null;
+  const targetPos = targetNode ? readNodePosition(targetNode, Math.max(targetNodeIndex, 0)) : null;
+  const newNode = createNode(nodeType, workflow.nodes.length);
+
+  if (sourcePos && targetPos) {
+    newNode.config = {
+      ...newNode.config,
+      editor: {
+        ...(newNode.config.editor as Record<string, unknown> | undefined),
+        position: {
+          x: Math.round((sourcePos.x + targetPos.x) / 2),
+          y: Math.round((sourcePos.y + targetPos.y) / 2),
+        },
+      },
+    };
+  }
+
+  const inheritedEdge: WorkflowEdge = {
+    id: `edge_${edge.source}_${newNode.id}_${Date.now()}`,
+    source: edge.source,
+    target: newNode.id,
+    ...(edge.condition !== undefined ? { condition: edge.condition } : {}),
+    ...(edge.sourcePort !== undefined ? { sourcePort: edge.sourcePort } : {}),
+    ...(edge.targetPort !== undefined ? { targetPort: edge.targetPort } : {}),
+  };
+  const outgoingEdge = createEdge(newNode.id, edge.target);
+
+  return {
+    workflow: {
+      ...workflow,
+      nodes: [...workflow.nodes, newNode],
+      edges: [
+        ...workflow.edges.filter((item) => item.id !== edgeId),
+        inheritedEdge,
+        outgoingEdge,
+      ],
+    },
+    newNodeId: newNode.id,
   };
 }
 
@@ -306,7 +421,7 @@ export function readNodePosition(node: WorkflowNode, index: number): { x: number
   }
   const column = index % 3;
   const row = Math.floor(index / 3);
-  return { x: 90 + column * (NODE_W + 70), y: 120 + row * (NODE_H + 60) };
+  return { x: 90 + column * (NODE_W + 90), y: 120 + row * (NODE_H + 70) };
 }
 
 export function patchNodePosition(

@@ -10,6 +10,7 @@ import { isHiddenStoTaskSubitemChatSessionKey } from '@/lib/sto-task-session';
 import {
   stoAppShellBodyProvincialClass,
   stoMainCardBodyClass,
+  stoMainCardBodyHomeClass,
   stoMainCardBodySplitClass,
   stoMainCardShellClass,
   stoMainCardWrapClass,
@@ -25,17 +26,32 @@ import { useChatStore } from '@/stores/chat';
 import { useSettingsStore } from '@/stores/settings';
 import { SidebarDeleteConfirmPortal } from '@/components/layout/sidebar-delete-confirm-portal';
 import { SclawBrowserHost } from '@/components/sclaw-browser/SclawBrowserHost';
+import { AppPlazaShell } from '@/components/more-apps/AppPlazaShell';
 import { Sidebar } from './Sidebar';
 import { TitleBar } from './TitleBar';
 
+function isHomeRoute(pathname: string): boolean {
+  return pathname === '/';
+}
+
 /** Scrollable page body inside provincial main card (overlay is mounted on `<main>`). */
 function MainCardBody({ hideContentHeader }: { hideContentHeader: boolean }) {
+  const { pathname } = useLocation();
   const { isSplitLayout } = useContentHeaderDisplay();
+  const isHome = isHomeRoute(pathname);
 
   // 三栏与双栏 body 类互斥：cn 合并时 px-[var(--sto-content-pad-x)] 可能压过 px-0，split row 会比 header 窄 ~32–40px
   if (isSplitLayout) {
     return (
       <div className={stoMainCardBodySplitClass}>
+        <Outlet />
+      </div>
+    );
+  }
+
+  if (isHome) {
+    return (
+      <div className={stoMainCardBodyHomeClass}>
         <Outlet />
       </div>
     );
@@ -70,6 +86,7 @@ function ProvincialMainCard({ hideContentHeader }: { hideContentHeader: boolean 
     >
       {!hideContentHeader ? <ContentHeader /> : null}
       <MainCardBody hideContentHeader={hideContentHeader} />
+      <AppPlazaShell />
       <SclawBrowserHost />
     </main>
   );
@@ -85,6 +102,7 @@ export function MainLayout() {
   const switchToAgentMainSession = useChatStore((s) => s.switchToAgentMainSession);
   const isProvincialSidebar = getSidebarLayoutVariant() === 'provincial';
   const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
+  const isHome = isHomeRoute(pathname);
 
   const prevPathnameRef = useRef(pathname);
   const prevSessionKeyRef = useRef(currentSessionKey);
@@ -127,6 +145,7 @@ export function MainLayout() {
           <ContentHeaderProvider>
             <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               <Outlet />
+              <AppPlazaShell />
               <SclawBrowserHost />
             </div>
           </ContentHeaderProvider>
@@ -165,10 +184,13 @@ export function MainLayout() {
             'relative min-h-0 min-w-0 flex-1 [overflow-anchor:none] dark:bg-background',
             onSettingsRoute
               ? 'flex flex-col overflow-hidden bg-[#F1F1F3] dark:bg-background'
-              : 'overflow-auto overscroll-y-contain bg-[var(--sto-page-bg)] px-[var(--sto-content-pad-x)] py-5 [scrollbar-gutter:stable]',
+              : isHome
+                ? 'flex flex-col overflow-hidden bg-[var(--sto-page-bg)] py-5'
+                : 'overflow-auto overscroll-y-contain bg-[var(--sto-page-bg)] px-[var(--sto-content-pad-x)] py-5 [scrollbar-gutter:stable]',
           )}
         >
           <Outlet />
+          <AppPlazaShell />
           <SclawBrowserHost />
         </main>
       </div>

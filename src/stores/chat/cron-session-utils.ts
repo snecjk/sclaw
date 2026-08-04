@@ -1,5 +1,3 @@
-import { CHAT_HISTORY_LIMIT } from '../../../shared/chat-config';
-
 export interface CronSessionKeyParts {
   agentId: string;
   jobId: string;
@@ -64,14 +62,6 @@ export function isAnyCronSessionKey(sessionKey: string): boolean {
   return parseCronSessionKey(sessionKey) != null;
 }
 
-export function buildCronSessionHistoryPath(sessionKey: string, limit = CHAT_HISTORY_LIMIT): string {
-  const params = new URLSearchParams({ sessionKey });
-  if (Number.isFinite(limit) && limit > 0) {
-    params.set('limit', String(Math.floor(limit)));
-  }
-  return `/api/cron/session-history?${params.toString()}`;
-}
-
 // ---------------------------------------------------------------------------
 // Claude Scheduled Task Session Keys
 // ---------------------------------------------------------------------------
@@ -116,14 +106,6 @@ export function isClaudeScheduledTaskDatedSessionKey(sessionKey: string): boolea
 
 export function buildClaudeTaskDatedSessionKey(taskId: string, date: string): string {
   return `claude-task:${taskId}:${date}`;
-}
-
-export function buildClaudeScheduledTaskSessionHistoryPath(sessionKey: string, limit = CHAT_HISTORY_LIMIT): string {
-  const params = new URLSearchParams({ sessionKey });
-  if (Number.isFinite(limit) && limit > 0) {
-    params.set('limit', String(Math.floor(limit)));
-  }
-  return `/api/claude-scheduled-tasks/session-history?${params.toString()}`;
 }
 
 export interface ClaudeScheduledTaskRunSessionKeyParts {

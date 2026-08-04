@@ -75,7 +75,18 @@ class WorkflowExecutionTracker {
     this.cleanupTimer = setInterval(() => this.periodicCleanup(), 60_000);
   }
 
-  startTracking(runId: string, sessionKey: string, agentId: string, workflowId: string) {
+  startTracking(input: {
+    runId: string;
+    sessionKey: string;
+    agentId: string;
+    workflowId: string;
+  }) {
+    const {
+      runId,
+      sessionKey,
+      agentId,
+      workflowId,
+    } = input;
     const existing = this.sessions.get(runId);
     if (existing) {
       // Resume polling when session exists but timer was cleared (e.g. after HMR / terminal edge cases).

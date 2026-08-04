@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HookCallback } from '@anthropic-ai/claude-agent-sdk';
-import { DINGTALK_RECIPIENTS_MARKER } from '../../shared/dingtalk-mention-context';
+import { DINGTALK_RECIPIENTS_MARKER } from '../../shared/dingtalk-send/dingtalk-mention';
 import { RETIRED_SKILLS_SYSTEM_PROMPT } from '../../shared/retired-skills';
+import { SCHEDULED_TASK_CORE_PROMPT } from '../../shared/scheduled-task-instruction';
+import { CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT } from '../../sto-plugin/claude/claude-scheduled-task-tool/tools';
 import { buildClaudeRuntimeOptions } from '../../electron/engines/claude-runtime-extensions';
 import { resetDingTalkSendRateLimitForTests } from '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk/dingtalk-send-guard';
 
@@ -32,6 +34,53 @@ describe('buildClaudeRuntimeOptions', () => {
     expect(runtime.systemPromptAppend).toContain('sto-distinctive-design');
     expect(runtime.systemPromptAppend).toContain('cli-report-generator');
     expect(runtime.systemPromptAppend).toContain('sto-distinctive-design-guard');
+  });
+
+  it('uses execution prompt for production claude-task dated session keys', async () => {
+    readDingTalkMentionPending.mockResolvedValue(null);
+
+    const runtime = await buildClaudeRuntimeOptions('claude-task:task-1:2026-06-25');
+
+    expect(runtime.systemPromptAppend).toContain(SCHEDULED_TASK_CORE_PROMPT);
+    expect(runtime.systemPromptAppend).not.toContain(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT);
+    expect(runtime.mcpServers?.['claude-scheduled-task-tool']).toBeUndefined();
+  });
+
+  it('keeps management prompt and MCP for ordinary chat sessions', async () => {
+    readDingTalkMentionPending.mockResolvedValue(null);
+
+    const runtime = await buildClaudeRuntimeOptions('agent:main:main');
+
+    expect(runtime.systemPromptAppend).toContain(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT);
+    expect(runtime.mcpServers?.['claude-scheduled-task-tool']).toBeDefined();
+  });
+
+  it('uses the Chinese Claude scheduled-task management policy', () => {
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('Claude 本地定时任务工具使用规则');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【意图分流】');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【时间规则】');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【任务指令与钉钉收件人】');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('当前更新工具不支持修改 recipients');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('`dws chat message send` 是普通钉钉消息发送');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).not.toContain('Claude scheduled task tools:');
+  });
+
+  it('injects oral send guard for ordinary chat without pending mentions', async () => {
+    readDingTalkMentionPending.mockResolvedValue(null);
+
+    const { DINGTALK_ORAL_SEND_GUARD } = await import('../../shared/dingtalk-prompts/dingtalk-oral-send-prompt');
+    const runtime = await buildClaudeRuntimeOptions('agent:main:chat-1');
+
+    expect(runtime.systemPromptAppend).toContain(DINGTALK_ORAL_SEND_GUARD);
+  });
+
+  it('does not inject oral send guard on scheduled-task execution sessions', async () => {
+    readDingTalkMentionPending.mockResolvedValue(null);
+
+    const { DINGTALK_ORAL_SEND_GUARD } = await import('../../shared/dingtalk-prompts/dingtalk-oral-send-prompt');
+    const runtime = await buildClaudeRuntimeOptions('claude-task:task-1:2026-06-25');
+
+    expect(runtime.systemPromptAppend).not.toContain(DINGTALK_ORAL_SEND_GUARD);
   });
 
   it('injects pending DingTalk mention context into Claude system prompt', async () => {

@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Sparkles, Copy, Check, ExternalLink } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
 import logoSvg from '@/assets/logo.svg';
 import { useSettingsStore } from '@/stores/settings';
 import { useGatewayStore } from '@/stores/gateway';
@@ -227,7 +227,7 @@ export function Sprite() {
               </div>
               <div className="min-w-0 max-w-[85%]">
                 <div className="bg-white/30 dark:bg-white/[0.08] border border-glass-border rounded-2xl px-4 py-2.5 text-sm prose prose-sm dark:prose-invert text-foreground break-words select-text">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{responseText}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={chatRemarkPlugins}>{responseText}</ReactMarkdown>
                 </div>
                 <div className="flex items-center mt-1 h-5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                   <button
