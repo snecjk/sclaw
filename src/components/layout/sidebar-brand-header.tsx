@@ -48,7 +48,12 @@ function SidebarBrandTitle({
         height={28}
         className={sidebarBrandLogoClass}
       />
-      <span className={cn('shrink-0', sidebarBrandVersionClass)}>{displayVersion}</span>
+      <span
+        className={cn('min-w-0 truncate', sidebarBrandVersionClass)}
+        title={displayVersion}
+      >
+        {displayVersion}
+      </span>
       {showEnvBadgeAfterVersion ? (
         <span className="no-drag shrink-0">
           <ChromeEnvBadge />

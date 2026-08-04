@@ -8,6 +8,7 @@ import {
   Minimize2,
   PanelRightClose,
   PanelRightOpen,
+  RefreshCw,
   Search,
   X,
 } from 'lucide-react';
@@ -17,8 +18,6 @@ import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { contentHeaderActionBtnClass } from '@/lib/surfaces';
-import searchIcon from '@/assets/icons/search.svg';
-import refreshIcon from '@/assets/icons/refresh.svg';
 
 /** 会话面板顶部 action 图标的功能气泡：深色 Grey-10 底 + 白字 + 同色箭头。 */
 const HEADER_TOOLTIP_BG = '#1D2129';
@@ -34,26 +33,6 @@ function HeaderActionTooltip({ label }: { label: string }) {
       <p>{label}</p>
       <TooltipArrow className="fill-[#1D2129]" style={{ fill: HEADER_TOOLTIP_BG }} />
     </TooltipContent>
-  );
-}
-
-/**
- * Header action icon. Icons ship with a fixed #4E5969 fill, so hovering darkens
- * them toward #1D2129 via a brightness filter (~0.38 maps #4E5969 → ≈#1D2129),
- * driven by the parent button's `group` hover state.
- */
-function HeaderActionIcon({ src, className }: { src: string; className?: string }) {
-  return (
-    <img
-      src={src}
-      alt=""
-      aria-hidden
-      className={cn(
-        'h-4 w-4 object-contain transition duration-fast dark:invert',
-        'group-hover:brightness-[0.38]',
-        className,
-      )}
-    />
   );
 }
 
@@ -122,7 +101,7 @@ export function ChatSearchBar({
           onClick={onToggle}
           aria-label={t('toolbar.searchToggle')}
         >
-          <HeaderActionIcon src={searchIcon} />
+          <Search className="h-4 w-4" strokeWidth={1.75} aria-hidden />
         </Button>
       </TooltipTrigger>
       <HeaderActionTooltip label={t('toolbar.searchToggle')} />
@@ -267,7 +246,11 @@ export function ChatConversationHeaderActions({
             disabled={loading}
             aria-label={t('toolbar.refresh')}
           >
-            <HeaderActionIcon src={refreshIcon} className={cn(loading && 'animate-spin')} />
+            <RefreshCw
+              className={cn('h-4 w-4', loading && 'animate-spin')}
+              strokeWidth={1.75}
+              aria-hidden
+            />
           </button>
         </TooltipTrigger>
         <HeaderActionTooltip label={t('toolbar.refresh')} />

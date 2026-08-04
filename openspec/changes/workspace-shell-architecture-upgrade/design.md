@@ -329,3 +329,11 @@ WINDOW_TO_SURFACE_BOTTOM_TOTAL           = 16px
 | Conversation / Split Chat Surface → first content | **8px** |
 
 实现必须通过共享 Header/Control Token 收口，不得修改 Preview 46px 二级 action row、macOS traffic lights 或用逐控件偏移补偿。
+
+## 10. Windows custom chrome hit ownership（Stage 5 follow-up）
+
+- **Decision**：Windows 最小化、最大化/还原、关闭控件必须由当前可见的 draggable Chrome Surface 持有，位于其 DOM 子树内并声明为 `no-drag`；普通 Conversation / Split / Preview Expanded 由 `ContentHeader` 持有，App Plaza 由其 TabStrip 持有，没有上述 Surface 的省区特殊页面才使用 Shell fallback。任一时刻只允许挂载一组 Windows 窗口控件。
+- **Rationale**：Electron 的 `-webkit-app-region` 使用原生命中测试；独立浮层即使提高 `z-index`，仍可能被另一 DOM 分支的 `drag-region` 吞掉。直接父子所有权能同时保证窗口空白区可拖动与控件区域可点击，并删除依赖固定宽度的占位补丁。
+- **Alternative considered**：继续把 Header / App Plaza 的空占位从 `112px` 扩到按钮实际宽度。该方案仍要求每个 Chrome Surface 手动同步占位，无法从结构上保证特殊页面和未来 Header 变体，故拒绝。
+- **[Risk]** 多个 Surface 同时挂载控件会产生重复按钮和重叠命中 → **Mitigation**：由可见 Chrome Surface 显式声明 owner，Shell fallback 仅在 ContentHeader、App Plaza 均不拥有 Chrome 时渲染；增加“恰好一组控件”的定向测试。
+- **[Risk]** Windows 修复误改 macOS native chrome → **Mitigation**：所有自定义控件严格受 `platform === 'win32'` 保护，不修改 BrowserWindow、traffic lights、Sidebar toggle、44px Header、28px 主控件或 PreviewMode 几何。

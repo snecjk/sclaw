@@ -17,7 +17,6 @@ import {
   contentHeaderSplitPreviewZoneClass,
   contentHeaderTitleClass,
   contentHeaderTitleGroupClass,
-  contentHeaderWinControlsReserveClass,
   stoSplitGridHeaderChatClass,
   stoSplitGridHeaderPreviewClass,
 } from '@/lib/surfaces';
@@ -28,6 +27,8 @@ import { useAppShellLayout } from '@/components/layout/app-shell-layout-context'
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
+import { WindowsWindowControls } from '@/components/layout/windows-window-controls';
+import { useWindowsChromeOwner } from '@/hooks/use-windows-chrome-owner';
 
 export function ContentHeader() {
   const { t } = useTranslation('common');
@@ -45,14 +46,13 @@ export function ContentHeader() {
   const workflowEditorActive = useWorkflowUiStore((s) => s.editorActive);
   const browserOverlayOpen = useSclawBrowserOverlayStore((s) => s.session !== null);
   const appPlazaVisible = useAppPlazaShellStore((s) => s.routeActive);
+  const windowsChromeOwner = useWindowsChromeOwner();
 
   // Drawer / App Plaza shell occupy the header band.
   if (browserOverlayOpen || appPlazaVisible) {
     return null;
   }
 
-  const platform = window.electron?.platform;
-  const isWin = platform === 'win32';
   const isSplitLayout = layoutMode === 'split';
   const isPreviewExpanded = layoutMode === 'preview-expanded';
 
@@ -121,11 +121,6 @@ export function ContentHeader() {
     </div>
   ) : null;
 
-  /** Win 列表页等无 actions 时，drag-region 会挡住 AppShellChromeOverlay 的窗口三分控件 */
-  const winControlsReserve = isWin ? (
-    <div className={contentHeaderWinControlsReserveClass} aria-hidden />
-  ) : null;
-
   const chatHeaderZone = (
     <div
       data-slot="chat-header-zone"
@@ -177,7 +172,7 @@ export function ContentHeader() {
         </div>
       ) : null}
       {previewActionsZone}
-      {winControlsReserve}
+      {windowsChromeOwner === 'content-header' ? <WindowsWindowControls /> : null}
     </div>
   );
 

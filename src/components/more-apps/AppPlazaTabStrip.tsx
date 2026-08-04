@@ -12,6 +12,8 @@ import {
 } from '@/stores/app-plaza-shell';
 import { useAppShellLayout } from '@/components/layout/app-shell-layout-context';
 import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
+import { WindowsWindowControls } from '@/components/layout/windows-window-controls';
+import { useWindowsChromeOwner } from '@/hooks/use-windows-chrome-owner';
 
 /** Chrome tab icon: page favicon when available, otherwise generic globe. */
 function TabFavicon({ tab }: { tab: AppPlazaBrowserTab }) {
@@ -55,7 +57,7 @@ export function AppPlazaTabStrip() {
   const closeBrowserTab = useAppPlazaShellStore((s) => s.closeBrowserTab);
   const { snapshot, setUserCollapsed } = useAppShellLayout();
   const canUserRestoreSidebar = snapshot.canUserRestoreSidebar;
-  const isWin = window.electron?.platform === 'win32';
+  const windowsChromeOwner = useWindowsChromeOwner();
 
   return (
     <div
@@ -134,7 +136,7 @@ export function AppPlazaTabStrip() {
 
       {/* Empty chrome — window drag (same pattern as ContentHeader). */}
       <div className="app-plaza-tabstrip__spacer" aria-hidden />
-      {isWin ? <div className="app-plaza-tabstrip__win-reserve no-drag" aria-hidden /> : null}
+      {windowsChromeOwner === 'app-plaza' ? <WindowsWindowControls /> : null}
     </div>
   );
 }

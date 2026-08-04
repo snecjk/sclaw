@@ -245,3 +245,26 @@ Split Chat, Split Preview, and Preview Expanded SHALL consume one Body-owned `8p
 - **WHEN** preview layout classes are evaluated
 - **THEN** Split Chat, Split Preview, and Preview Expanded SHALL consume the shared Workbench Surface bottom inset Token
 - **AND** the implementation SHALL NOT retain `--sto-split-preview-inset-y`, per-mode `pb-*` literals, negative margins, or height compensation
+
+### Requirement: Windows window controls belong to the active draggable Chrome Surface
+On Windows, the minimize, maximize/restore, and close controls MUST be `no-drag` descendants inside the active draggable Chrome Surface DOM subtree. Conversation, Split, and Preview Expanded MUST share the ContentHeader-owned control group; App Plaza MUST use its TabStrip-owned control group; provincial routes without either Surface MAY use one Shell fallback. Exactly one Windows control group SHALL be mounted at a time. The implementation SHALL NOT rely on a detached overlay plus fixed-width empty reserve nodes to punch through a sibling `drag-region`. Existing window IPC channels and Main-process behavior MUST remain unchanged. macOS native traffic lights, Sidebar chrome geometry, ContentHeader geometry, PreviewMode, Sidebar resizing, and light/dark Surface tokens MUST remain unchanged.
+
+#### Scenario: Windows ContentHeader controls receive pointer input
+- **WHEN** the provincial shell runs on Windows in Conversation, Split, or Preview Expanded mode
+- **THEN** exactly one minimize/maximize/close control group SHALL be mounted as a `no-drag` descendant inside ContentHeader
+- **AND** each control SHALL remain clickable while empty ContentHeader space remains draggable
+
+#### Scenario: Windows alternate Chrome Surface owns one control group
+- **WHEN** App Plaza or a provincial page without ContentHeader is active on Windows
+- **THEN** the active TabStrip or Shell fallback SHALL own exactly one window control group
+- **AND** no detached duplicate control group or fixed-width empty reserve SHALL overlap it
+
+#### Scenario: macOS native chrome is unchanged
+- **WHEN** the same routes and PreviewMode transitions run on macOS
+- **THEN** no custom Windows control group SHALL render
+- **AND** native traffic lights SHALL remain at `{x:16,y:20}` while Sidebar and ContentHeader geometry remain unchanged
+
+#### Scenario: Windows controls preserve semantic light and dark states
+- **WHEN** the active Windows Chrome Surface is rendered in light or dark mode
+- **THEN** the control group SHALL preserve the existing semantic foreground, hover, focus-visible, and destructive close states
+- **AND** ownership changes SHALL NOT introduce a light-only Surface fill, border, disabled state, or selected state

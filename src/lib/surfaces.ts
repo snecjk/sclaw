@@ -809,12 +809,6 @@ export const contentHeaderBarClass = cn(
 export const contentHeaderPreviewExpandedStartClass =
   'pl-[var(--sto-expanded-preview-inset-x,12px)]';
 
-/**
- * Win 省区帧less 壳：为右上角最小化/最大化/关闭留出 no-drag 点击区。
- * drag-region 会吞掉该区域的 pointer event（与 z-index 无关），无 actions 的列表页必须显式预留。
- */
-export const contentHeaderWinControlsReserveClass = 'no-drag w-28 shrink-0 self-stretch';
-
 /** @deprecated 合并为 {@link contentHeaderBarClass} */
 export const contentHeaderShellClass = contentHeaderBarClass;
 
