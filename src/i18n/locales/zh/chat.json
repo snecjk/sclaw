@@ -96,6 +96,7 @@
         "workflowManage": "管理工作流",
         "workflowClear": "清除工作流",
         "quickInputTitle": "快捷输入",
+        "quickInputSaveAs": "保存到快捷输入",
         "quickInputEmpty": "还没有保存过快捷输入",
         "quickInputCreate": "新建快捷输入",
         "quickInputComingSoon": "快捷输入即将上线",

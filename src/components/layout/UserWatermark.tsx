@@ -6,7 +6,10 @@ import { cn } from '@/lib/utils';
 import { formatUserWatermarkText } from '@/lib/user-watermark-text';
 import { useAuthStore } from '@/stores/auth';
 
-const TILE_COUNT = 600;
+/** Enough cells to fill the oversized rotated canvas edge-to-edge. */
+const COLS = 14;
+const ROWS = 18;
+const TILE_COUNT = COLS * ROWS;
 
 type UserWatermarkProps = {
   /** fixed = app-wide; absolute = scoped to a relative fullscreen host */
@@ -30,16 +33,24 @@ export function UserWatermark({ mode = 'fixed', className }: UserWatermarkProps)
         className,
       )}
     >
+      {/*
+        Canvas must exceed the viewport diagonal so rotation still covers corners.
+        Grid stretches to the full canvas — do not center a sparse flex cluster.
+      */}
       <div
-        className="absolute left-1/2 top-1/2 flex w-[200vmax] flex-wrap content-center justify-center gap-x-10 gap-y-12"
+        className="absolute left-1/2 top-1/2 grid"
         style={{
+          width: '220vw',
+          height: '220vh',
           transform: 'translate(-50%, -50%) rotate(-24deg)',
+          gridTemplateColumns: `repeat(${COLS}, minmax(0, 1fr))`,
+          gridTemplateRows: `repeat(${ROWS}, minmax(0, 1fr))`,
         }}
       >
         {Array.from({ length: TILE_COUNT }, (_, i) => (
           <span
             key={i}
-            className="shrink-0 whitespace-nowrap text-[13px] font-medium tracking-wide text-[#1D2129]/[0.08] dark:text-white/[0.1]"
+            className="flex items-center justify-center whitespace-nowrap text-[13px] font-medium tracking-wide text-[#1D2129]/[0.07] dark:text-white/[0.055]"
           >
             {text}
           </span>

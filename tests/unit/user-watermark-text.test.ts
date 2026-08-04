@@ -12,36 +12,39 @@ describe('formatUserWatermarkText', () => {
     })).toBeNull();
   });
 
-  it('uses realName and userName as 工号', () => {
+  it('uses realName and code as 工号', () => {
     expect(formatUserWatermarkText({
       realName: '张三',
       userName: '10001',
-      empCode: '',
-      code: '',
-    })).toBe('张三 10001');
+      empCode: 'E2',
+      code: 'W3',
+    })).toBe('张三 W3');
   });
 
-  it('does not duplicate when name equals 工号', () => {
+  it('does not duplicate when realName equals code', () => {
     expect(formatUserWatermarkText({
-      realName: '',
-      userName: '10001',
+      realName: '10001',
+      userName: '',
       empCode: '',
-      code: '',
+      code: '10001',
     })).toBe('10001');
   });
 
-  it('falls back to empCode then code for 工号', () => {
+  it('falls back to userName for name when realName is empty', () => {
     expect(formatUserWatermarkText({
-      realName: '李四',
-      userName: '',
+      realName: '',
+      userName: '登录名',
       empCode: 'E2',
       code: 'C3',
-    })).toBe('李四 E2');
+    })).toBe('登录名 C3');
+  });
+
+  it('omits 工号 when code is empty', () => {
     expect(formatUserWatermarkText({
       realName: '李四',
-      userName: '',
-      empCode: '',
-      code: 'C3',
-    })).toBe('李四 C3');
+      userName: '10001',
+      empCode: 'E2',
+      code: '',
+    })).toBe('李四');
   });
 });

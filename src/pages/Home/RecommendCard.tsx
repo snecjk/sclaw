@@ -156,7 +156,7 @@ export function RecommendCard({
           type="button"
           className={cn(
             homeHubInteractiveCardShellClass,
-            'overflow-visible text-left transition-shadow hover:border-[#E5E6EB] hover:shadow-[0px_0px_16px_0px_rgba(0,0,0,0.01)] dark:hover:border-border',
+            'text-left transition-shadow hover:shadow-[0px_0px_16px_0px_rgba(0,0,0,0.12)] dark:hover:border-border',
             disabled && 'cursor-not-allowed opacity-60',
           )}
           onClick={handleCardClick}
