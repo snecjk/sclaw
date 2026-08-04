@@ -71,15 +71,11 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
     void refetchLatest();
   }, [showConversation, refetchRecommend, refetchLatest]);
 
-  // 默认选中首个类别；列表变化后若当前选中失效则回退到首个
-  useEffect(() => {
-    if (recommendCategories.length === 0) {
-      setActiveCategory('');
-      return;
-    }
-    if (!recommendCategories.some((c) => c.code === activeCategory)) {
-      setActiveCategory(recommendCategories[0].code);
-    }
+  // 默认展示首个类别；列表变化后若当前选中失效则回退到首个。
+  const selectedCategory = useMemo(() => {
+    if (recommendCategories.length === 0) return '';
+    if (recommendCategories.some((c) => c.code === activeCategory)) return activeCategory;
+    return recommendCategories[0].code;
   }, [recommendCategories, activeCategory]);
 
   // displayItems：模版项存在实例时替换为实例项；key 始终用原始模版 id 以保证 refetch 后稳定 reconcile。
@@ -99,13 +95,28 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
     });
   }, [recommendItems, latestByTemplate]);
 
+  const activeCategoryIsAll = useMemo(() => {
+    const category = recommendCategories.find((c) => c.code === selectedCategory);
+    if (!category) return false;
+    const normalizedCode = category.code.trim().toLowerCase();
+    const normalizedName = category.name.trim().toLowerCase();
+    return (
+      normalizedCode === '' ||
+      normalizedCode === 'all' ||
+      normalizedName === '全部' ||
+      normalizedName === 'all' ||
+      normalizedName === 'すべて'
+    );
+  }, [recommendCategories, selectedCategory]);
+
   // 按选中类别的 code 与条目 recommend_category 精确匹配
   const filteredItems = useMemo(() => {
-    if (!activeCategory) return [];
+    if (!selectedCategory) return [];
+    if (activeCategoryIsAll) return displayItems;
     return displayItems.filter(
-      ({ item }) => (item.recommend_category || '').trim() === activeCategory,
+      ({ item }) => (item.recommend_category || '').trim() === selectedCategory,
     );
-  }, [displayItems, activeCategory]);
+  }, [displayItems, selectedCategory, activeCategoryIsAll]);
 
   /** 推荐卡片点击：按 item_type 分发（技能点击在 RecommendCard 内部处理） */
   const handleRecommendClick = (item: RecommendItem) => {
@@ -197,7 +208,7 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
       <>
         <RecommendCategoryTabs
           categories={recommendCategories}
-          value={activeCategory}
+          value={selectedCategory}
           onChange={setActiveCategory}
         />
         <div className={homeHubCardGridClass}>{renderFilteredRecommendCards()}</div>
