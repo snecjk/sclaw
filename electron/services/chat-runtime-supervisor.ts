@@ -9,13 +9,14 @@ import {
   CHAT_RUNTIME_PROTOCOL_VERSION,
   type CanonicalChatEvent,
   type CanonicalChatEventType,
-  type ChatRunPhase,
   type ChatRuntimeSnapshot,
   type ChatRuntimePolicy,
   isTerminalChatRunPhase,
 } from '../../shared/chat-runtime-protocol';
 import { logger } from '../utils/logger';
 import { isWorkflowOpenClawSessionKey } from '../../shared/workflow-openclaw-session';
+import { patchTerminalRuntimeMetadata, transitionChatRuntime, transitionChatRuntimePhase } from './chat-runtime-transition';
+import { inspectTranscript } from '../engines/chat-runtime-inspection';
 
 const RECOVERY_DEADLINE_MS = 135_000;
 const RECOVERY_RETRY_MS = 5_000;
@@ -24,6 +25,12 @@ const ERROR_RECOVERY_GRACE_MS = 15_000;
 const RUN_HARD_DEADLINE_MS = 20 * 60_000;
 const HISTORY_POLL_START_DELAY_MS = 1_000;
 const HISTORY_POLL_INTERVAL_MS = 2_000;
+const IDEMPOTENCY_REPLAY_WINDOW_MS = 10 * 60_000;
+
+export type BeginRuntimeResult =
+  | { kind: 'created'; snapshot: ChatRuntimeSnapshot }
+  | { kind: 'replay'; snapshot: ChatRuntimeSnapshot }
+  | { kind: 'expired_key'; snapshot: ChatRuntimeSnapshot };
 
 function normalizeRuntimePolicy(
   policy: ChatRuntimePolicy | undefined,
@@ -50,30 +57,6 @@ function getRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
-}
-
-function hasAssistantOutput(message: Record<string, unknown> | null): boolean {
-  if (!message) return false;
-  if (typeof message.content === 'string' && message.content.trim()) return true;
-  if (typeof message.text === 'string' && message.text.trim()) return true;
-  return Array.isArray(message.content) && message.content.some((block) => {
-    const item = getRecord(block);
-    return typeof item?.text === 'string' && item.text.trim().length > 0;
-  });
-}
-
-function historyHasCompletedTurn(messages: unknown[]): boolean {
-  let lastUserIndex = -1;
-  for (let index = 0; index < messages.length; index += 1) {
-    const message = getRecord(messages[index]);
-    if (String(message?.role ?? '').toLowerCase() === 'user') lastUserIndex = index;
-  }
-  if (lastUserIndex < 0) return false;
-  return messages.slice(lastUserIndex + 1).some((value) => {
-    const message = getRecord(value);
-    return String(message?.role ?? '').toLowerCase() === 'assistant'
-      && hasAssistantOutput(message);
-  });
 }
 
 function messageOccurredAt(message: Record<string, unknown> | null): number {
@@ -117,25 +100,6 @@ function transcriptMessageFingerprint(message: Record<string, unknown>, index: n
   }
 }
 
-function hasTrailingPendingToolUse(message: Record<string, unknown> | null): boolean {
-  if (!message) return false;
-  const stopReason = String(message.stopReason ?? message.stop_reason ?? '').toLowerCase();
-  if (stopReason === 'tooluse' || stopReason === 'tool_use') return true;
-  if (['end_turn', 'endturn', 'stop', 'completed'].includes(stopReason)) return false;
-  if (Array.isArray(message.content)) {
-    for (let index = message.content.length - 1; index >= 0; index -= 1) {
-      const block = getRecord(message.content[index]);
-      const type = String(block?.type ?? '');
-      if (!type) continue;
-      if (type === 'tool_use' || type === 'toolCall') return true;
-      if (type === 'text' && typeof block?.text === 'string' && block.text.trim()) return false;
-      if (['thinking', 'tool_result', 'toolResult', 'image'].includes(type)) continue;
-    }
-  }
-  const toolCalls = message.tool_calls ?? message.toolCalls;
-  return Array.isArray(toolCalls) && toolCalls.length > 0;
-}
-
 function eventTypeForEngineEvent(event: NormalizedEngineEvent): CanonicalChatEventType {
   switch (event.type) {
     case 'turn.started': return 'run.started';
@@ -148,23 +112,6 @@ function eventTypeForEngineEvent(event: NormalizedEngineEvent): CanonicalChatEve
   }
 }
 
-function phaseForEvent(type: CanonicalChatEventType, current: ChatRunPhase): ChatRunPhase {
-  switch (type) {
-    case 'run.dispatching': return 'dispatching';
-    case 'run.accepted':
-    case 'run.started':
-    case 'message.delta':
-    case 'tool.updated': return 'running';
-    case 'message.final': return current;
-    case 'run.awaiting_transcript': return 'awaiting_transcript';
-    case 'run.completed': return 'completed';
-    case 'run.failed': return 'failed';
-    case 'run.aborted': return 'aborted';
-    case 'run.interrupted': return 'interrupted';
-    default: return current;
-  }
-}
-
 export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
   private readonly snapshots = new Map<string, ChatRuntimeSnapshot>();
   private readonly lastPersistedAt = new Map<string, number>();
@@ -174,8 +121,14 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
   private readonly hardDeadlineTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly historyPollTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly projectedTranscriptEvents = new Map<string, Set<string>>();
-  private initialized = false;
+  private readonly dirtySnapshots = new Map<string, ChatRuntimeSnapshot>();
+  private readonly persistTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly persistOperations = new Map<string, Promise<void>>();
+  private readonly transcriptSettleRuns = new Map<string, Promise<void>>();
+  private initializationState: 'uninitialized' | 'initializing' | 'ready' | 'degraded' = 'uninitialized';
   private initializePromise: Promise<void> | null = null;
+  private initializeRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly sessionOperations = new Map<string, Promise<unknown>>();
 
   constructor(private readonly gatewayManager: GatewayManager) {
     super();
@@ -183,20 +136,34 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
   }
 
   async initialize(): Promise<void> {
-    if (this.initialized) return;
+    if (this.initializationState === 'ready') return;
     if (this.initializePromise) return this.initializePromise;
+    this.initializationState = 'initializing';
     this.initializePromise = this.initializeFromRepository();
     try {
       await this.initializePromise;
-      this.initialized = true;
+      this.initializationState = 'ready';
+    } catch (error) {
+      this.initializationState = 'degraded';
+      this.scheduleInitializationRetry();
+      throw error;
     } finally {
       this.initializePromise = null;
     }
   }
 
+  private scheduleInitializationRetry(): void {
+    if (this.initializeRetryTimer) return;
+    this.initializeRetryTimer = setTimeout(() => {
+      this.initializeRetryTimer = null;
+      void this.initialize().catch((error) => {
+        logger.warn('[chat-runtime] initialize retry failed', error);
+      });
+    }, RECOVERY_RETRY_MS);
+  }
+
   private async initializeFromRepository(): Promise<void> {
-    try {
-      const active = await getChatRuntimeRepository().listActive();
+    const active = await getChatRuntimeRepository().listActive();
       const latestBySession = new Map<string, ChatRuntimeSnapshot>();
       for (const stored of active) {
         const previous = latestBySession.get(stored.sessionKey);
@@ -226,10 +193,25 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         this.scheduleHardDeadline(recovered.sessionKey, recovered.epoch);
         this.scheduleHistoryPoll(recovered.sessionKey);
       }
+    try {
       await getChatRuntimeRepository().prune();
     } catch (error) {
-      logger.warn('[chat-runtime] initialize failed', error);
+      logger.warn('[chat-runtime] prune failed', error);
     }
+  }
+
+  getInitializationState(): typeof this.initializationState {
+    return this.initializationState;
+  }
+
+  private enqueueSession<T>(sessionKey: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.sessionOperations.get(sessionKey) ?? Promise.resolve();
+    const current = previous.catch(() => undefined).then(operation);
+    this.sessionOperations.set(sessionKey, current);
+    void current.finally(() => {
+      if (this.sessionOperations.get(sessionKey) === current) this.sessionOperations.delete(sessionKey);
+    }).catch(() => undefined);
+    return current;
   }
 
   get(sessionKey: string): ChatRuntimeSnapshot | null {
@@ -277,8 +259,23 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     idempotencyKey: string;
     engineType: AgentEngineType;
     runtimePolicy?: ChatRuntimePolicy;
-  }): Promise<ChatRuntimeSnapshot> {
-    await this.initialize();
+  }): Promise<BeginRuntimeResult> {
+    return this.enqueueSession(input.sessionKey, () => this.beginUnlocked(input));
+  }
+
+  private async beginUnlocked(input: {
+    sessionKey: string;
+    idempotencyKey: string;
+    engineType: AgentEngineType;
+    runtimePolicy?: ChatRuntimePolicy;
+  }): Promise<BeginRuntimeResult> {
+    try {
+      await this.initialize();
+    } catch (error) {
+      // Persistence recovery is degraded, but an interactive send can still be
+      // tracked safely in memory while the scheduled initialization retry heals it.
+      logger.warn('[chat-runtime] continuing send with degraded persistence', { error: String(error) });
+    }
     let replay: ChatRuntimeSnapshot | null = null;
     try {
       replay = await getChatRuntimeRepository().getByIdempotencyKey(input.sessionKey, input.idempotencyKey);
@@ -287,7 +284,9 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     }
     if (replay) {
       this.snapshots.set(input.sessionKey, replay);
-      return replay;
+      return Date.now() - replay.startedAt <= IDEMPOTENCY_REPLAY_WINDOW_MS
+        ? { kind: 'replay', snapshot: replay }
+        : { kind: 'expired_key', snapshot: replay };
     }
     const now = Date.now();
     const prior = this.snapshots.get(input.sessionKey);
@@ -319,7 +318,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     await this.publish(snapshot, 'run.dispatching', { idempotencyKey: input.idempotencyKey }, true);
     this.scheduleHardDeadline(input.sessionKey, snapshot.epoch);
     this.scheduleHistoryPoll(input.sessionKey);
-    return this.snapshots.get(input.sessionKey) as ChatRuntimeSnapshot;
+    return { kind: 'created', snapshot: this.snapshots.get(input.sessionKey) as ChatRuntimeSnapshot };
   }
 
   async accepted(input: {
@@ -329,9 +328,28 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     engineType: AgentEngineType;
     result?: unknown;
   }): Promise<void> {
+    return this.enqueueSession(input.sessionKey, () => this.acceptedUnlocked(input));
+  }
+
+  private async acceptedUnlocked(input: {
+    sessionKey: string;
+    idempotencyKey: string;
+    runId?: string;
+    engineType: AgentEngineType;
+    result?: unknown;
+  }): Promise<void> {
     const current = this.snapshots.get(input.sessionKey)
-      ?? await this.begin(input);
+      ?? (await this.beginUnlocked(input)).snapshot;
     if (current.idempotencyKey !== input.idempotencyKey) return;
+    if (isTerminalChatRunPhase(current.phase)) {
+      const metadata = patchTerminalRuntimeMetadata(current, {
+        runId: input.runId?.trim() || current.runId,
+        acceptanceResult: input.result ?? current.acceptanceResult,
+      });
+      this.snapshots.set(input.sessionKey, metadata);
+      await this.persist(metadata, true);
+      return;
+    }
     await this.publish({
       ...current,
       runId: input.runId?.trim() || current.runId,
@@ -347,10 +365,26 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     error: string;
     uncertain?: boolean;
   }): Promise<void> {
+    return this.enqueueSession(input.sessionKey, () => this.rejectedUnlocked(input));
+  }
+
+  private async rejectedUnlocked(input: {
+    sessionKey: string;
+    idempotencyKey: string;
+    error: string;
+    uncertain?: boolean;
+  }): Promise<void> {
     const current = this.snapshots.get(input.sessionKey);
     if (!current || current.idempotencyKey !== input.idempotencyKey) return;
     if (input.uncertain) {
-      const uncertain = { ...current, phase: 'uncertain' as const, error: null };
+      const transition = transitionChatRuntimePhase({
+        snapshot: current,
+        phase: 'uncertain',
+        occurredAt: Date.now(),
+        patch: { error: null },
+      });
+      if (!transition.accepted) return;
+      const uncertain = transition.snapshot;
       this.snapshots.set(input.sessionKey, uncertain);
       await this.persist(uncertain, true);
       this.scheduleRecovery(input.sessionKey, Date.now());
@@ -360,28 +394,55 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
   }
 
   async aborting(sessionKey: string): Promise<void> {
+    return this.enqueueSession(sessionKey, () => this.abortingUnlocked(sessionKey));
+  }
+
+  private async abortingUnlocked(sessionKey: string): Promise<void> {
     const current = this.snapshots.get(sessionKey);
     if (!current || isTerminalChatRunPhase(current.phase)) return;
-    const next = { ...current, phase: 'aborting' as const, updatedAt: Date.now() };
+    const transition = transitionChatRuntimePhase({ snapshot: current, phase: 'aborting', occurredAt: Date.now() });
+    if (!transition.accepted) return;
+    const next = transition.snapshot;
     this.snapshots.set(sessionKey, next);
     await this.persist(next, true);
   }
 
   async aborted(sessionKey: string, runId?: string | null): Promise<void> {
+    return this.enqueueSession(sessionKey, () => this.abortedUnlocked(sessionKey, runId));
+  }
+
+  private async abortedUnlocked(sessionKey: string, runId?: string | null): Promise<void> {
     const current = this.snapshots.get(sessionKey);
     if (!current || (runId && current.runId && runId !== current.runId)) return;
     await this.publish(current, 'run.aborted', undefined, true);
   }
 
   async abortFailed(sessionKey: string, error: string): Promise<void> {
+    return this.enqueueSession(sessionKey, () => this.abortFailedUnlocked(sessionKey, error));
+  }
+
+  private async abortFailedUnlocked(sessionKey: string, error: string): Promise<void> {
     const current = this.snapshots.get(sessionKey);
     if (!current || current.phase !== 'aborting') return;
-    const next = { ...current, phase: 'running' as const, error, updatedAt: Date.now() };
+    const transition = transitionChatRuntimePhase({
+      snapshot: current,
+      phase: 'running',
+      occurredAt: Date.now(),
+      patch: { error },
+    });
+    if (!transition.accepted) return;
+    const next = transition.snapshot;
     this.snapshots.set(sessionKey, next);
     await this.persist(next, true);
   }
 
   async handleEngineEvent(event: NormalizedEngineEvent, engineType?: AgentEngineType): Promise<void> {
+    const sessionKey = event.sessionKey?.trim();
+    if (!sessionKey) return;
+    return this.enqueueSession(sessionKey, () => this.handleEngineEventUnlocked(event, engineType));
+  }
+
+  private async handleEngineEventUnlocked(event: NormalizedEngineEvent, engineType?: AgentEngineType): Promise<void> {
     const sessionKey = event.sessionKey?.trim();
     if (!sessionKey) return;
     if (isWorkflowOpenClawSessionKey(sessionKey)) return;
@@ -425,7 +486,22 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     }
     this.clearErrorFinalization(sessionKey);
     const payload = 'message' in event ? event.message : getRecord(event)?.runtimeResult;
-    const canonicalType = event.type === 'message.final' && event.message == null
+    const liveMessage = getRecord(payload);
+    if (liveMessage && (event.type === 'message.delta' || event.type === 'message.final' || event.type === 'tool.result')) {
+      let projected = this.projectedTranscriptEvents.get(sessionKey);
+      if (!projected) {
+        projected = new Set<string>();
+        this.projectedTranscriptEvents.set(sessionKey, projected);
+      }
+      projected.add(transcriptMessageFingerprint(liveMessage, 0));
+    }
+    const adapter = await getAdapterForSession(sessionKey, engineType ?? current.engineType);
+    const finalClassification = event.type === 'message.final'
+      ? adapter?.classifyFinalMessage?.({ message: event.message, phase: event.phase })
+        ?? (event.message == null ? 'awaiting_transcript' : event.phase === 'completed' ? 'completed' : 'progress')
+      : null;
+    const engineCompleted = event.type === 'turn.completed' || finalClassification === 'completed';
+    const canonicalType = engineCompleted || finalClassification === 'awaiting_transcript'
       ? 'run.awaiting_transcript'
       : eventType;
     await this.publish({
@@ -436,20 +512,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     }, canonicalType, payload, canonicalType.startsWith('run.'));
 
     const latest = this.snapshots.get(sessionKey);
-    if (event.type === 'message.final' && latest) {
-      const message = getRecord(event.message);
-      const phaseIsCompleted = event.phase === 'completed';
-      const role = String(message?.role ?? '').toLowerCase();
-      const openClawTerminal = latest.engineType === 'openclaw'
-        && role === 'assistant'
-        && hasAssistantOutput(message)
-        && !hasTrailingPendingToolUse(message);
-      if (phaseIsCompleted || openClawTerminal) {
-        await this.publish(latest, 'run.completed', {
-          reconcileReason: phaseIsCompleted ? 'message-final-completed-phase' : 'openclaw-assistant-final',
-        }, true);
-      }
-    }
+    if (engineCompleted && latest) this.startTranscriptSettle(latest, event.type);
   }
 
   private async publish(
@@ -459,15 +522,18 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     forcePersist = false,
   ): Promise<void> {
     const now = Date.now();
-    const phase = phaseForEvent(type, base.phase);
-    const snapshot: ChatRuntimeSnapshot = {
-      ...base,
-      phase,
-      sequence: base.sequence + 1,
-      lastEventAt: now,
-      terminalAt: isTerminalChatRunPhase(phase) ? now : null,
-      updatedAt: now,
-    };
+    const transition = transitionChatRuntime({ snapshot: base, type, occurredAt: now });
+    if (!transition.accepted) {
+      logger.debug('[chat-runtime] transition rejected', {
+        sessionKey: base.sessionKey,
+        phase: base.phase,
+        eventType: type,
+        reason: transition.reason,
+      });
+      return;
+    }
+    const snapshot = transition.snapshot;
+    const phase = snapshot.phase;
     this.snapshots.set(snapshot.sessionKey, snapshot);
     const event: CanonicalChatEvent = {
       protocolVersion: CHAT_RUNTIME_PROTOCOL_VERSION,
@@ -493,7 +559,8 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     } else if (phase === 'awaiting_transcript') {
       this.scheduleRecovery(snapshot.sessionKey, Date.now());
     }
-    logger.info('[chat-runtime]', {
+    const log = type === 'message.delta' || type === 'tool.updated' ? logger.debug : logger.info;
+    log('[chat-runtime]', {
       sessionKey: snapshot.sessionKey,
       runId: snapshot.runId,
       idempotencyKey: snapshot.idempotencyKey,
@@ -507,13 +574,60 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
   private async persist(snapshot: ChatRuntimeSnapshot, force: boolean): Promise<void> {
     const now = Date.now();
     const last = this.lastPersistedAt.get(snapshot.sessionKey) ?? 0;
-    if (!force && now - last < DELTA_PERSIST_THROTTLE_MS) return;
-    this.lastPersistedAt.set(snapshot.sessionKey, now);
-    try {
-      await getChatRuntimeRepository().upsert(snapshot);
-    } catch (error) {
-      logger.warn('[chat-runtime] persist failed', { sessionKey: snapshot.sessionKey, error });
+    const dirty = this.dirtySnapshots.get(snapshot.sessionKey);
+    if (!dirty || snapshot.epoch > dirty.epoch || (
+      snapshot.epoch === dirty.epoch && snapshot.sequence >= dirty.sequence
+    )) this.dirtySnapshots.set(snapshot.sessionKey, snapshot);
+
+    if (force || now - last >= DELTA_PERSIST_THROTTLE_MS) {
+      const timer = this.persistTimers.get(snapshot.sessionKey);
+      if (timer) clearTimeout(timer);
+      this.persistTimers.delete(snapshot.sessionKey);
+      await this.enqueuePersist(snapshot.sessionKey);
+      return;
     }
+    if (this.persistTimers.has(snapshot.sessionKey)) return;
+    this.persistTimers.set(snapshot.sessionKey, setTimeout(() => {
+      this.persistTimers.delete(snapshot.sessionKey);
+      void this.enqueuePersist(snapshot.sessionKey);
+    }, Math.max(1, DELTA_PERSIST_THROTTLE_MS - (now - last))));
+  }
+
+  private enqueuePersist(sessionKey: string): Promise<void> {
+    const previous = this.persistOperations.get(sessionKey) ?? Promise.resolve();
+    const operation = previous.catch(() => undefined).then(async () => {
+      const snapshot = this.dirtySnapshots.get(sessionKey);
+      if (!snapshot) return;
+      try {
+        const repository = getChatRuntimeRepository();
+        const result = typeof repository.upsertIfNewer === 'function'
+          ? await repository.upsertIfNewer(snapshot)
+          : (await repository.upsert(snapshot), 'updated' as const);
+        const current = this.dirtySnapshots.get(sessionKey);
+        if (current === snapshot) this.dirtySnapshots.delete(sessionKey);
+        this.lastPersistedAt.set(sessionKey, Date.now());
+        if (result === 'stale') {
+          logger.debug('[chat-runtime] stale persistence rejected', {
+            sessionKey,
+            epoch: snapshot.epoch,
+            sequence: snapshot.sequence,
+          });
+        }
+      } catch (error) {
+        logger.warn('[chat-runtime] persist failed', { sessionKey, error });
+        if (!this.persistTimers.has(sessionKey)) {
+          this.persistTimers.set(sessionKey, setTimeout(() => {
+            this.persistTimers.delete(sessionKey);
+            void this.enqueuePersist(sessionKey);
+          }, DELTA_PERSIST_THROTTLE_MS));
+        }
+      }
+    });
+    this.persistOperations.set(sessionKey, operation);
+    void operation.finally(() => {
+      if (this.persistOperations.get(sessionKey) === operation) this.persistOperations.delete(sessionKey);
+    }).catch(() => undefined);
+    return operation;
   }
 
   private attachGatewayEvents(): void {
@@ -572,6 +686,10 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
   }
 
   private async reconcileSession(sessionKey: string, projectTranscript = false): Promise<void> {
+    return this.enqueueSession(sessionKey, () => this.reconcileSessionUnlocked(sessionKey, projectTranscript));
+  }
+
+  private async reconcileSessionUnlocked(sessionKey: string, projectTranscript = false): Promise<void> {
     const current = this.snapshots.get(sessionKey);
     if (!current || isTerminalChatRunPhase(current.phase)) return;
     try {
@@ -584,17 +702,43 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       }
       const latest = this.snapshots.get(sessionKey) ?? current;
       if (isTerminalChatRunPhase(latest.phase)) return;
-      // OpenClaw chat.history currently has no isRunning field. Transcript
-      // projection is still valid; only runtime reconciliation needs this flag.
-      if (typeof historyResult.isRunning !== 'boolean') return;
-      if (historyResult.isRunning) {
-        const next = { ...latest, phase: 'running' as const, error: null, updatedAt: Date.now() };
+      const inspection = typeof adapter?.inspectRun === 'function'
+        ? await adapter.inspectRun(
+          { gatewayManager: this.gatewayManager },
+          { sessionKey, runId: latest.runId, startedAt: latest.startedAt, limit: 50 },
+        )
+        : inspectTranscript({
+          messages: historyResult.messages,
+          startedAt: latest.startedAt,
+          isRunning: historyResult.isRunning,
+          runId: latest.runId,
+        });
+      if (inspection?.status === 'active' || (!inspection && historyResult.isRunning === true)) {
+        const transition = transitionChatRuntimePhase({
+          snapshot: latest,
+          phase: 'running',
+          occurredAt: Date.now(),
+          patch: { error: null },
+        });
+        if (!transition.accepted) return;
+        const next = transition.snapshot;
         this.snapshots.set(sessionKey, next);
         await this.persist(next, true);
-      } else if (historyHasCompletedTurn(historyResult.messages)) {
-        await this.publish(latest, 'run.completed', { reconcileReason: 'history-not-running' }, true);
+      } else if (inspection?.status === 'completed') {
+        if (latest.phase === 'awaiting_transcript') this.startTranscriptSettle(latest, 'reconcile');
+        else await this.publish(latest, 'run.completed', { reconcileReason: 'adapter-inspection' }, true);
+      } else if (inspection?.status === 'not_started') {
+        await this.publish({ ...latest, error: 'The engine did not start this run.' }, 'run.interrupted', {
+          reason: 'engine-not-started',
+        }, true);
       } else if (latest.phase !== 'awaiting_transcript') {
-        const next = { ...latest, phase: 'reconciling' as const, updatedAt: Date.now() };
+        const transition = transitionChatRuntimePhase({
+          snapshot: latest,
+          phase: 'reconciling',
+          occurredAt: Date.now(),
+        });
+        if (!transition.accepted) return;
+        const next = transition.snapshot;
         this.snapshots.set(sessionKey, next);
         await this.persist(next, true);
       }
@@ -643,7 +787,12 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       const current = this.snapshots.get(sessionKey);
       if (!current || isTerminalChatRunPhase(current.phase)) return;
       if (runId && current.runId && runId !== current.runId) return;
-      void this.publish({ ...current, error }, 'run.failed', { error }, true);
+      void this.enqueueSession(sessionKey, async () => {
+        const latest = this.snapshots.get(sessionKey);
+        if (!latest || isTerminalChatRunPhase(latest.phase)) return;
+        if (runId && latest.runId && runId !== latest.runId) return;
+        await this.publish({ ...latest, error }, 'run.failed', { error }, true);
+      });
     }, ERROR_RECOVERY_GRACE_MS);
     this.errorTimers.set(sessionKey, timer);
   }
@@ -664,7 +813,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       this.hardDeadlineTimers.delete(sessionKey);
       const current = this.snapshots.get(sessionKey);
       if (!current || current.epoch !== epoch || isTerminalChatRunPhase(current.phase)) return;
-      void this.interruptByPolicy(current, 'hard-deadline');
+      void this.enqueueSession(sessionKey, () => this.interruptByPolicy(current, 'hard-deadline'));
     }, delay);
     this.hardDeadlineTimers.set(sessionKey, timer);
   }
@@ -701,6 +850,9 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       this.historyPollTimers.delete(sessionKey);
       const current = this.snapshots.get(sessionKey);
       if (!current || isTerminalChatRunPhase(current.phase)) return;
+      const adapter = await getAdapterForSession(sessionKey, current.engineType);
+      if (!adapter) return;
+      if (adapter.chatCapabilities && !adapter.chatCapabilities.requiresHistoryProjection) return;
       // OpenClaw's live assistant buffer does not always include the persisted
       // reasoning/tool records. Project current-turn history even while deltas
       // are flowing so the canonical overlay stays chronologically complete.
@@ -711,6 +863,59 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       }
     };
     this.historyPollTimers.set(sessionKey, setTimeout(poll, HISTORY_POLL_START_DELAY_MS));
+  }
+
+  private startTranscriptSettle(snapshot: ChatRuntimeSnapshot, reason: string): void {
+    if (this.transcriptSettleRuns.has(snapshot.sessionKey)) return;
+    const operation = this.settleTranscript(snapshot.sessionKey, snapshot.epoch, reason);
+    this.transcriptSettleRuns.set(snapshot.sessionKey, operation);
+    void operation.finally(() => {
+      if (this.transcriptSettleRuns.get(snapshot.sessionKey) === operation) {
+        this.transcriptSettleRuns.delete(snapshot.sessionKey);
+      }
+    }).catch(() => undefined);
+  }
+
+  private async settleTranscript(sessionKey: string, epoch: number, reason: string): Promise<void> {
+    const delays = [0, 300, 800, 1_600];
+    let previousRevision: string | undefined;
+    let confirmed = false;
+    for (const delay of delays) {
+      if (delay > 0) await new Promise<void>((resolve) => setTimeout(resolve, delay));
+      const current = this.snapshots.get(sessionKey);
+      if (!current || current.epoch !== epoch || isTerminalChatRunPhase(current.phase)) return;
+      try {
+        const adapter = await getAdapterForSession(sessionKey, current.engineType);
+        if (!adapter || typeof adapter.inspectRun !== 'function') {
+          confirmed = true;
+          break;
+        }
+        const inspection = await adapter.inspectRun(
+          { gatewayManager: this.gatewayManager },
+          { sessionKey, runId: current.runId, startedAt: current.startedAt, limit: 50 },
+        );
+        if (inspection.currentTurnMessages?.length) {
+          await this.projectCurrentTranscript(current, inspection.currentTurnMessages);
+        }
+        if (inspection.status === 'completed' && inspection.transcriptRevision) {
+          if (previousRevision === inspection.transcriptRevision) {
+            confirmed = true;
+            break;
+          }
+          previousRevision = inspection.transcriptRevision;
+        }
+      } catch (error) {
+        logger.debug('[chat-runtime] transcript settle deferred', { sessionKey, error: String(error) });
+      }
+    }
+    await this.enqueueSession(sessionKey, async () => {
+      const current = this.snapshots.get(sessionKey);
+      if (!current || current.epoch !== epoch || isTerminalChatRunPhase(current.phase)) return;
+      await this.publish(current, 'run.completed', {
+        reconcileReason: reason,
+        transcriptPending: !confirmed,
+      }, true);
+    });
   }
 
   private clearHistoryPoll(sessionKey: string): void {
@@ -727,7 +932,9 @@ export function getChatRuntimeSupervisor(gatewayManager: GatewayManager): ChatRu
   if (!supervisor) {
     supervisor = new ChatRuntimeSupervisor(gatewayManager);
     supervisors.set(gatewayManager, supervisor);
-    void supervisor.initialize();
+    void supervisor.initialize().catch((error) => {
+      logger.warn('[chat-runtime] initialize failed', error);
+    });
   }
   return supervisor;
 }

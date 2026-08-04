@@ -3,6 +3,8 @@ import { DEFAULT_SESSION_KEY } from './types';
 import type { ChatGet, ChatSet, SessionActions } from './store-api';
 import { clearSessionEntryFromMap, getAgentIdFromSessionKey, isTemporaryAgentSessionKey } from './session-identity';
 import { clearSessionSendReadiness } from '@/lib/session-send-readiness';
+import { getSessionDisplayMessages } from './display-selectors';
+import { useChatRuntimeV2Store } from './runtime-v2-store';
 
 export interface SessionNavigationDependencies {
   markSessionRead: (sessionKey: string) => void;
@@ -22,7 +24,7 @@ export function createSessionNavigationActions(
       dependencies.markSessionRead(key);
       set((state) => {
         const leavingEmpty = isTemporaryAgentSessionKey(state.currentSessionKey)
-          && state.messages.length === 0
+          && getSessionDisplayMessages(state.currentSessionKey).length === 0
           && !state.sessionLastActivity[state.currentSessionKey]
           && !state.sessionLabels[state.currentSessionKey];
         const retainedSessions = leavingEmpty
@@ -42,7 +44,6 @@ export function createSessionNavigationActions(
           sessionLastActivity: leavingEmpty
             ? clearSessionEntryFromMap(state.sessionLastActivity, state.currentSessionKey)
             : state.sessionLastActivity,
-          messages: [],
           loading: false,
         };
       });
@@ -58,7 +59,8 @@ export function createSessionNavigationActions(
       if (key) get().switchSession(key);
     },
     cleanupEmptySession: () => {
-      const { currentSessionKey, messages, sessionLastActivity, sessionLabels } = get();
+      const { currentSessionKey, sessionLastActivity, sessionLabels } = get();
+      const messages = getSessionDisplayMessages(currentSessionKey);
       const isEmptyNonMain = isTemporaryAgentSessionKey(currentSessionKey)
         && messages.length === 0
         && !sessionLastActivity[currentSessionKey]
@@ -75,6 +77,7 @@ export function createSessionNavigationActions(
         ),
       }));
       clearSessionSendReadiness(currentSessionKey);
+      useChatRuntimeV2Store.getState().clearSession(currentSessionKey);
     },
   };
 }

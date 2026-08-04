@@ -95,7 +95,7 @@ export class ChatRuntimeRepository {
     return rows.map((row) => mapRow(row as Record<string, unknown>));
   }
 
-  async upsert(snapshot: ChatRuntimeSnapshot): Promise<void> {
+  async upsertIfNewer(snapshot: ChatRuntimeSnapshot): Promise<'inserted' | 'updated' | 'stale' | 'unchanged'> {
     const db = getKyselyDatabase();
     const idempotencyKey = snapshot.idempotencyKey ?? `runtime-${snapshot.sessionKey}-${snapshot.startedAt}`;
     // Records and test fixtures created before protocol policy fields existed must
@@ -104,10 +104,9 @@ export class ChatRuntimeRepository {
       origin: 'interactive' as const,
       deadlineAt: null,
     };
-    const existing = await this.getByIdempotencyKey(snapshot.sessionKey, idempotencyKey);
     const timestamp = new Date(snapshot.updatedAt).toISOString();
     const values = {
-      id: existing ? undefined : randomUUID(),
+      id: randomUUID(),
       session_key: snapshot.sessionKey,
       run_id: snapshot.runId,
       idempotency_key: idempotencyKey,
@@ -127,8 +126,40 @@ export class ChatRuntimeRepository {
       updated_at: timestamp,
     };
 
-    if (existing) {
-      await db.updateTable('chat_runtime_runs').set({
+    return db.transaction().execute(async (trx) => {
+      const row = await trx.selectFrom('chat_runtime_runs')
+        .selectAll()
+        .where('session_key', '=', snapshot.sessionKey)
+        .where('idempotency_key', '=', idempotencyKey)
+        .executeTakeFirst();
+      if (!row) {
+        await trx.insertInto('chat_runtime_runs').values(values).execute();
+        return 'inserted';
+      }
+
+      const existingEpoch = Number(row.epoch);
+      const existingSequence = Number(row.sequence);
+      if (existingEpoch > snapshot.epoch || (
+        existingEpoch === snapshot.epoch && existingSequence > snapshot.sequence
+      )) return 'stale';
+
+      if (existingEpoch === snapshot.epoch && existingSequence === snapshot.sequence) {
+        if (String(row.phase) !== snapshot.phase) return 'stale';
+        const metadataChanged = row.run_id !== values.run_id
+          || row.acceptance_result_json !== values.acceptance_result_json
+          || row.error !== values.error;
+        if (!metadataChanged) return 'unchanged';
+        await trx.updateTable('chat_runtime_runs').set({
+          run_id: values.run_id,
+          acceptance_result_json: values.acceptance_result_json,
+          error: values.error,
+          updated_at: timestamp,
+          version: sql<number>`version + 1`,
+        }).where('id', '=', row.id).execute();
+        return 'updated';
+      }
+
+      await trx.updateTable('chat_runtime_runs').set({
         run_id: values.run_id,
         origin: values.origin,
         owner_id: values.owner_id,
@@ -142,16 +173,13 @@ export class ChatRuntimeRepository {
         acceptance_result_json: values.acceptance_result_json,
         updated_at: timestamp,
         version: sql<number>`version + 1`,
-      }).where('session_key', '=', snapshot.sessionKey)
-        .where('idempotency_key', '=', idempotencyKey)
-        .execute();
-      return;
-    }
+      }).where('id', '=', row.id).execute();
+      return 'updated';
+    });
+  }
 
-    await db.insertInto('chat_runtime_runs').values({
-      ...values,
-      id: values.id as string,
-    }).execute();
+  async upsert(snapshot: ChatRuntimeSnapshot): Promise<void> {
+    await this.upsertIfNewer(snapshot);
   }
 
   async prune(now = Date.now()): Promise<void> {

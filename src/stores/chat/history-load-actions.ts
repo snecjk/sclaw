@@ -7,10 +7,13 @@ import {
 import { logChatFlow } from './chat-flow-log';
 import type { ChatGet, ChatSet, HistoryActions } from './store-api';
 import type { ChatSession, RawMessage } from './types';
+import { useChatRuntimeV2Store } from './runtime-v2-store';
 
 const HISTORY_LOAD_MIN_INTERVAL_MS = 800;
 const _historyLoadInFlight = new Map<string, Promise<void>>();
 const _lastHistoryLoadAtBySession = new Map<string, number>();
+const _historyGenerationBySession = new Map<string, number>();
+const _historyTrailingForce = new Set<string>();
 
 export interface HistoryLoadDeps {
   toMs: (ts: unknown) => number;
@@ -37,7 +40,12 @@ export function createHistoryLoadActions(
       const targetSessionKey = requestedSessionKey ?? get().currentSessionKey;
       const existingLoad = _historyLoadInFlight.get(targetSessionKey);
       if (existingLoad) {
+        if (force) _historyTrailingForce.add(targetSessionKey);
         await existingLoad;
+        await Promise.resolve();
+        if (_historyTrailingForce.delete(targetSessionKey)) {
+          return get().loadHistory(quiet, true, targetSessionKey);
+        }
         if (!requestedSessionKey && get().currentSessionKey !== targetSessionKey) {
           return get().loadHistory(quiet, force);
         }
@@ -50,6 +58,8 @@ export function createHistoryLoadActions(
       }
 
       if (!quiet) set({ loading: true });
+      const generation = (_historyGenerationBySession.get(targetSessionKey) ?? 0) + 1;
+      _historyGenerationBySession.set(targetSessionKey, generation);
       logChatFlow('history.load.start', {
         sessionKey: targetSessionKey,
         quiet,
@@ -97,7 +107,11 @@ export function createHistoryLoadActions(
           const allMessages: RawMessage[] = Array.isArray(data.messages)
             ? data.messages as RawMessage[]
             : [];
-          if (get().currentSessionKey !== targetSessionKey) return;
+          if (_historyGenerationBySession.get(targetSessionKey) !== generation) return;
+          if (get().currentSessionKey !== targetSessionKey) {
+            useChatRuntimeV2Store.getState().setTranscript(targetSessionKey, allMessages);
+            return;
+          }
           if (data.thinkingLevel) {
             thinkingLevel = String(data.thinkingLevel);
           }
@@ -124,7 +138,7 @@ export function createHistoryLoadActions(
         } catch (err) {
           console.warn('Failed to load chat history:', err);
           if (get().currentSessionKey === targetSessionKey) {
-            set({ messages: [], loading: false });
+            set({ loading: false });
           }
         }
       })();
@@ -143,6 +157,9 @@ export function createHistoryLoadActions(
         const active = _historyLoadInFlight.get(targetSessionKey);
         if (active === loadPromise) {
           _historyLoadInFlight.delete(targetSessionKey);
+        }
+        if (_historyTrailingForce.delete(targetSessionKey)) {
+          void get().loadHistory(true, true, targetSessionKey);
         }
       }
     },

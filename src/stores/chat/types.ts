@@ -165,8 +165,6 @@ export interface WorkflowChatUiSessionState {
 }
 
 export interface ChatState {
-  // Messages
-  messages: RawMessage[];
   loading: boolean;
 
   /** True while model switch API is in flight — blocks chat input to prevent

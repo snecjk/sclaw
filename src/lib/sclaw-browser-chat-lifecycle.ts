@@ -23,6 +23,7 @@ import {
 } from '@/lib/resolve-chat-session-engine-type';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { getCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
 import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 import type { ChatSession } from '@/stores/chat/types';
 
@@ -108,7 +109,7 @@ function reconcileUnusedEmbedEngineType(chatSessionKey: string): ChatEngineType 
     const session = state.sessions.find((item) => item.key === chatSessionKey);
     return session?.engineType === 'claude' ? 'claude' : 'openclaw';
   }
-  if (state.messages.length > 0) {
+  if (getCurrentChatDisplayMessages().length > 0) {
     const session = state.sessions.find((item) => item.key === chatSessionKey);
     return session?.engineType === 'claude' ? 'claude' : resolveCurrentAgentEngineType(state.currentAgentId);
   }

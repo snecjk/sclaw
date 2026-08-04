@@ -8,7 +8,6 @@ import {
   useCallback,
   useContext,
   useLayoutEffect,
-  useMemo,
   useState,
   type ReactNode,
 } from 'react';
@@ -31,12 +30,9 @@ export interface ContentHeaderSlot {
   onCloseSession?: () => void;
 }
 
-interface ContentHeaderContextValue {
-  slot: ContentHeaderSlot | null;
-  setSlot: (slot: ContentHeaderSlot | null) => void;
-}
-
-const ContentHeaderContext = createContext<ContentHeaderContextValue | null>(null);
+const ContentHeaderSlotContext = createContext<ContentHeaderSlot | null | undefined>(undefined);
+const ContentHeaderSetterContext = createContext<((slot: ContentHeaderSlot | null) => void) | null>(null);
+const ContentHeaderSplitContext = createContext<boolean | undefined>(undefined);
 
 function resolveDefaultTitle(pathname: string, t: (key: string) => string): string {
   if (pathname === '/') return t('common:sidebar.home');
@@ -75,21 +71,23 @@ export function ContentHeaderProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const value = useMemo(() => ({ slot, setSlot }), [slot, setSlot]);
-
   return (
-    <ContentHeaderContext.Provider value={value}>
-      {children}
-    </ContentHeaderContext.Provider>
+    <ContentHeaderSetterContext.Provider value={setSlot}>
+      <ContentHeaderSplitContext.Provider value={slot?.isSplitLayout ?? false}>
+        <ContentHeaderSlotContext.Provider value={slot}>
+          {children}
+        </ContentHeaderSlotContext.Provider>
+      </ContentHeaderSplitContext.Provider>
+    </ContentHeaderSetterContext.Provider>
   );
 }
 
 function useContentHeaderRegistry() {
-  const ctx = useContext(ContentHeaderContext);
-  if (!ctx) {
+  const setSlot = useContext(ContentHeaderSetterContext);
+  if (!setSlot) {
     throw new Error('ContentHeaderContext is missing — wrap MainLayout with ContentHeaderProvider');
   }
-  return ctx;
+  return setSlot;
 }
 
 /** 当前页面向全局 ContentHeader 注入 title / previewTabs / chatActions / actions；卸载时自动清空 */
@@ -102,7 +100,7 @@ export function useContentHeader({
   onCloseSession,
   enabled = true,
 }: ContentHeaderSlot & { enabled?: boolean }) {
-  const { setSlot } = useContentHeaderRegistry();
+  const setSlot = useContentHeaderRegistry();
 
   useLayoutEffect(() => {
     if (!enabled) {
@@ -110,8 +108,13 @@ export function useContentHeader({
       return;
     }
     setSlot({ title, previewTabs, chatActions, actions, isSplitLayout, onCloseSession });
-    return () => setSlot(null);
   }, [title, previewTabs, chatActions, actions, isSplitLayout, onCloseSession, enabled, setSlot]);
+
+  // Dependency changes replace the slot in-place. Clearing in that effect's cleanup
+  // causes an update loop when callers create fresh React nodes on every render:
+  // cleanup -> setSlot(null) -> provider render -> fresh node -> cleanup. Only clear
+  // when the page that owns the slot actually unmounts.
+  useLayoutEffect(() => () => setSlot(null), [setSlot]);
 }
 
 /** ContentHeader 组件读取当前应展示的槽位（含路由默认标题） */
@@ -123,7 +126,10 @@ export function useContentHeaderDisplay(): {
   isSplitLayout: boolean;
   onCloseSession: (() => void) | null;
 } {
-  const { slot } = useContentHeaderRegistry();
+  const slot = useContext(ContentHeaderSlotContext);
+  if (slot === undefined) {
+    throw new Error('ContentHeaderContext is missing — wrap MainLayout with ContentHeaderProvider');
+  }
   const { pathname } = useLocation();
   const { t } = useTranslation();
   const defaultTitle = resolveDefaultTitle(pathname, t);
@@ -139,4 +145,13 @@ export function useContentHeaderDisplay(): {
     isSplitLayout: slot?.isSplitLayout ?? false,
     onCloseSession: slot?.onCloseSession ?? null,
   };
+}
+
+/** Layout ancestors subscribe only to the split flag, never to React-node slot contents. */
+export function useContentHeaderSplitLayout(): boolean {
+  const isSplitLayout = useContext(ContentHeaderSplitContext);
+  if (isSplitLayout === undefined) {
+    throw new Error('ContentHeaderContext is missing — wrap MainLayout with ContentHeaderProvider');
+  }
+  return isSplitLayout;
 }

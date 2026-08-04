@@ -56,6 +56,30 @@ describe('chat runtime repository', () => {
     await expect(repository.listActive()).resolves.toHaveLength(1);
   });
 
+  it('rejects an older epoch or sequence without regressing the stored snapshot', async () => {
+    await expect(repository.upsertIfNewer(snapshot({
+      epoch: 2,
+      sequence: 8,
+      phase: 'completed',
+      terminalAt: 800,
+      updatedAt: 800,
+    }))).resolves.toBe('inserted');
+    await expect(repository.upsertIfNewer(snapshot({
+      epoch: 2,
+      sequence: 7,
+      phase: 'running',
+      updatedAt: 900,
+    }))).resolves.toBe('stale');
+    await expect(repository.upsertIfNewer(snapshot({
+      epoch: 1,
+      sequence: 99,
+      phase: 'running',
+      updatedAt: 1_000,
+    }))).resolves.toBe('stale');
+    await expect(repository.getByIdempotencyKey('agent:main:session-1', 'message-1'))
+      .resolves.toMatchObject({ epoch: 2, sequence: 8, phase: 'completed' });
+  });
+
   it('uses a stable internal key for externally-started runs', async () => {
     const external = snapshot({ idempotencyKey: null, runId: 'run-external', phase: 'running' });
     await repository.upsert(external);

@@ -58,14 +58,18 @@ import {
   EMPTY_WORKFLOW_CHAT_CARD_REFS,
   useWorkflowChatCardsStore,
 } from '@/stores/workflow-chat-cards';
-import { attachMissingWorkflowChatCardAnchors } from '@/lib/workflow-chat-card-registration';
+import {
+  attachMissingWorkflowChatCardAnchors,
+  workflowAnchorRepairRevision,
+} from '@/lib/workflow-chat-card-registration';
+import { getCurrentChatDisplayMessages, useCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
 export function Chat() {
   const navigate = useNavigate();
   const { t } = useTranslation('chat');
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
 
-  const messages = useChatStore((s) => s.messages);
+  const messages = useCurrentChatDisplayMessages();
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const sessions = useChatStore((s) => s.sessions);
@@ -102,7 +106,6 @@ export function Chat() {
   const queueMoveUp = useCallback((id: string) => useMessageQueueStore.getState().moveUp(currentSessionKey, id), [currentSessionKey]);
   const queueMoveDown = useCallback((id: string) => useMessageQueueStore.getState().moveDown(currentSessionKey, id), [currentSessionKey]);
 
-  const [streamingTimestamp, setStreamingTimestamp] = useState<number>(0);
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const previewPanelPercent = useSettingsStore((s) => s.previewSplitPercent ?? 50);
   const setPreviewSplitPercent = useSettingsStore((s) => s.setPreviewSplitPercent);
@@ -155,6 +158,7 @@ export function Chat() {
   // is navigating *back* to Chat), use quiet mode so the existing messages
   // stay visible while fresh data loads in the background.  This avoids
   // an unnecessary messages → spinner → messages flicker.
+  const anchorRepairRevision = workflowAnchorRepairRevision(messages, workflowCards);
   useEffect(() => {
     return () => {
       // If the user navigates away without sending any messages, remove the
@@ -182,17 +186,9 @@ export function Chat() {
       messages,
       cards: workflowCards,
     });
-  }, [currentSessionKey, messages, workflowCards]);
-
-  // Update timestamp when sending starts
-  useEffect(() => {
-    if (sending && streamingTimestamp === 0) {
-       
-      setStreamingTimestamp(Date.now() / 1000);
-    } else if (!sending && streamingTimestamp !== 0) {
-      setStreamingTimestamp(0);
-    }
-  }, [sending, streamingTimestamp]);
+    // The compact revision captures only anchor-relevant message/card changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSessionKey, anchorRepairRevision]);
 
   // Gateway not running block has been completely removed so the UI always renders.
 
@@ -308,19 +304,10 @@ export function Chat() {
     return searchableMessages.filter((entry) => entry.text.toLocaleLowerCase().includes(normalizedQuery));
   }, [deferredSearchQuery, searchableMessages]);
 
-  useEffect(() => {
-    setActiveSearchIndex(0);
-  }, [deferredSearchQuery]);
-
-  useEffect(() => {
-    if (searchMatches.length === 0) {
-      setActiveSearchIndex(0);
-      return;
-    }
-    setActiveSearchIndex((currentIndex) => Math.min(currentIndex, searchMatches.length - 1));
-  }, [searchMatches]);
-
-  const activeSearchMatch = searchMatches[activeSearchIndex] ?? null;
+  const boundedActiveSearchIndex = searchMatches.length > 0
+    ? Math.min(activeSearchIndex, searchMatches.length - 1)
+    : 0;
+  const activeSearchMatch = searchMatches[boundedActiveSearchIndex] ?? null;
   const matchedMessageKeys = useMemo(
     () => new Set(searchMatches.map((entry) => entry.key)),
     [searchMatches],
@@ -346,13 +333,13 @@ export function Chat() {
 
   const handleSearchNext = useCallback(() => {
     if (searchMatches.length === 0) return;
-    setActiveSearchIndex((currentIndex) => (currentIndex + 1) % searchMatches.length);
-  }, [searchMatches.length]);
+    setActiveSearchIndex((boundedActiveSearchIndex + 1) % searchMatches.length);
+  }, [boundedActiveSearchIndex, searchMatches.length]);
 
   const handleSearchPrevious = useCallback(() => {
     if (searchMatches.length === 0) return;
-    setActiveSearchIndex((currentIndex) => (currentIndex - 1 + searchMatches.length) % searchMatches.length);
-  }, [searchMatches.length]);
+    setActiveSearchIndex((boundedActiveSearchIndex - 1 + searchMatches.length) % searchMatches.length);
+  }, [boundedActiveSearchIndex, searchMatches.length]);
 
   const handleSearchClear = useCallback(() => {
     setSearchQuery('');
@@ -406,7 +393,7 @@ export function Chat() {
     suspendAutoSend(state.currentSessionKey);
     const turnKey =
       activeTurn?.turnStableKey
-      ?? resolveActiveTurnStableKey(state.messages);
+      ?? resolveActiveTurnStableKey(getCurrentChatDisplayMessages());
     if (turnKey) {
       markTurnInterrupted(turnKey);
     }
@@ -485,6 +472,7 @@ export function Chat() {
           value: searchQuery,
           onChange: (value) => {
             setSearchQuery(value);
+            setActiveSearchIndex(0);
             if (!isSearchOpen) {
               setIsSearchOpen(true);
             }
@@ -493,7 +481,7 @@ export function Chat() {
           onPrevious: handleSearchPrevious,
           onClear: handleSearchClear,
           resultCount: searchMatches.length,
-          activeIndex: searchMatches.length > 0 ? activeSearchIndex : 0,
+          activeIndex: boundedActiveSearchIndex,
         }}
       />
     ),
@@ -509,7 +497,7 @@ export function Chat() {
       handleSearchPrevious,
       handleSearchClear,
       searchMatches.length,
-      activeSearchIndex,
+      boundedActiveSearchIndex,
     ],
   );
 
@@ -617,6 +605,7 @@ export function Chat() {
                   return (
                     <AssistantTurnMessage
                       key={item.key}
+                      sessionMessages={messages}
                       turnMessages={item.messages}
                       turnToolResults={item.toolResults}
                       precedingUserMessage={item.precedingUserMessage}
@@ -638,6 +627,7 @@ export function Chat() {
                   <ChatMessage
                     key={item.key}
                     message={item.message}
+                    sessionMessages={messages}
                     showThinking={showThinking}
                     searchMessageKey={searchMessageKey}
                     isSearchMatch={matchedMessageKeys.has(searchMessageKey)}
@@ -653,6 +643,7 @@ export function Chat() {
               {activeTurn ? (
                 <AssistantTurnMessage
                   key={`active-turn:${currentSessionKey}`}
+                  sessionMessages={messages}
                   turnMessages={activeTurn.turnMessages}
                   turnToolResults={activeTurn.turnToolResults}
                   precedingUserMessage={activeTurn.precedingUserMessage}

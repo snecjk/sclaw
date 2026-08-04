@@ -1,4 +1,4 @@
-import { useContentHeaderDisplay } from '@/components/layout/content-header-context';
+import { useContentHeaderSplitLayout } from '@/components/layout/content-header-context';
 import { stoSplitGridContentsClass } from '@/lib/surfaces';
 
 /**
@@ -6,7 +6,7 @@ import { stoSplitGridContentsClass } from '@/lib/surfaces';
  * 否则对话/预览列无法成为 main grid 的 row2 子项（表现为三栏空白）。
  */
 export function useSplitGridPassthroughClass(enabled = true) {
-  const { isSplitLayout } = useContentHeaderDisplay();
+  const isSplitLayout = useContentHeaderSplitLayout();
   const isSplitGridPassthrough = enabled && isSplitLayout;
 
   return {

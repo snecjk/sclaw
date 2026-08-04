@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyRuntimeSnapshot,
   createClientSessionState,
   reduceSessionEvent,
 } from '@/stores/chat/client-session-reducer';
@@ -70,5 +71,27 @@ describe('canonical chat client session reducer', () => {
   it('rejects events from an older epoch', () => {
     const current = reduceSessionEvent(createClientSessionState(), event({ epoch: 2 })).state;
     expect(reduceSessionEvent(current, event({ epoch: 1, sequence: 99 })).accepted).toBe(false);
+  });
+
+  it('does not let a stale hydration snapshot replace a newer event state', () => {
+    const current = reduceSessionEvent(createClientSessionState(), event({ epoch: 3, sequence: 9 })).state;
+    const next = applyRuntimeSnapshot(current, {
+      protocolVersion: 1,
+      sessionKey: event().sessionKey,
+      runId: 'run-old',
+      idempotencyKey: 'message-old',
+      runtimePolicy: { origin: 'interactive', deadlineAt: null },
+      engineType: 'openclaw',
+      phase: 'running',
+      epoch: 3,
+      sequence: 8,
+      startedAt: 1,
+      lastEventAt: 1,
+      terminalAt: null,
+      error: null,
+      acceptanceResult: null,
+      updatedAt: 1,
+    });
+    expect(next).toBe(current);
   });
 });

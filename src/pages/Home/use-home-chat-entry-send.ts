@@ -9,6 +9,7 @@ import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
+import { getCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
 
 /**
  * 首页入口（省区工作台 / Agent Hub）与聊天页保持一致：
@@ -40,7 +41,8 @@ export function useHomeChatEntrySend() {
       workflowName?: string | null,
       skillMeta?: SkillMeta,
     ) => {
-      const { currentAgentId, currentSessionKey, sessions, messages } = useChatStore.getState();
+      const { currentAgentId, currentSessionKey, sessions } = useChatStore.getState();
+      const messages = getCurrentChatDisplayMessages();
       const currentSession = sessions.find((session) => session.key === currentSessionKey);
       const agentEngineType = (agents ?? []).find((agent) => agent.id === (targetAgentId || currentAgentId))?.engineType
         ?? 'openclaw';

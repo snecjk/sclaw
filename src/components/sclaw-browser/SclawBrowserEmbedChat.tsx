@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { AlertCircle, Loader2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '@/stores/chat';
+import { useCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
 import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
@@ -38,7 +39,7 @@ export function SclawBrowserEmbedChat({
   const { t } = useTranslation(['chat', 'common']);
   const closeChatPanel = useSclawBrowserOverlayStore((s) => s.closeChatPanel);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
-  const messages = useChatStore((s) => s.messages);
+  const messages = useCurrentChatDisplayMessages();
   const loading = useChatStore((s) => s.loading);
   const {
     sending,
@@ -134,6 +135,7 @@ export function SclawBrowserEmbedChat({
                   return (
                     <AssistantTurnMessage
                       key={item.key}
+                      sessionMessages={messages}
                       turnMessages={item.messages}
                       turnToolResults={item.toolResults}
                       precedingUserMessage={item.precedingUserMessage}
@@ -146,6 +148,7 @@ export function SclawBrowserEmbedChat({
                   <ChatMessage
                     key={item.key}
                     message={item.message}
+                    sessionMessages={messages}
                     showThinking={showThinking}
                   />
                 );
@@ -153,6 +156,7 @@ export function SclawBrowserEmbedChat({
               {activeTurn ? (
                 <AssistantTurnMessage
                   key="active-turn"
+                  sessionMessages={messages}
                   turnMessages={activeTurn.turnMessages}
                   turnToolResults={activeTurn.turnToolResults}
                   precedingUserMessage={activeTurn.precedingUserMessage}

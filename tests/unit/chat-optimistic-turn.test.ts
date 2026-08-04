@@ -12,9 +12,11 @@ describe('optimistic user turns', () => {
       ...initialChatDataState,
       currentSessionKey: 'agent:main:visible',
       currentAgentId: 'main',
-      messages: [visibleMessage],
       sessionLabels: {},
     } as unknown as ChatState;
+    useChatRuntimeV2Store.getState().clearSession('agent:main:visible');
+    useChatRuntimeV2Store.getState().clearSession('agent:writer:queued');
+    useChatRuntimeV2Store.getState().setTranscript('agent:main:visible', [visibleMessage]);
     const get = () => state;
     const set: ChatSet = (partial) => {
       state = { ...state, ...(typeof partial === 'function' ? partial(state) : partial) };
@@ -28,7 +30,8 @@ describe('optimistic user turns', () => {
       gatewayMessage: 'queued text',
     });
 
-    expect(state.messages).toEqual([visibleMessage]);
+    expect(useChatRuntimeV2Store.getState().sessionsByKey['agent:main:visible']?.transcript)
+      .toEqual([visibleMessage]);
     expect(useChatRuntimeV2Store.getState().sessionsByKey['agent:writer:queued']?.overlay.optimisticUserMessage)
       .toEqual(result);
   });

@@ -26,9 +26,58 @@ export interface ChatSessionRuntimeView {
   streamingTools: ToolStatus[];
 }
 
+export interface ChatRuntimeIndicator {
+  sending: boolean;
+  activeRunId: string | null;
+  error: string | null;
+}
+
+let indicatorRevision = '';
+let indicatorCache: Record<string, ChatRuntimeIndicator> = {};
+
+function selectRuntimeIndicators(state: { sessionsByKey: Record<string, ClientSessionState> }) {
+  const entries = Object.entries(state.sessionsByKey).sort(([left], [right]) => left.localeCompare(right));
+  const revision = entries.map(([sessionKey, session]) => {
+    const runtime = session.runtime;
+    const sending = Boolean(runtime && ACTIVE_PHASES.has(runtime.phase));
+    return `${sessionKey}\u0000${sending ? '1' : '0'}\u0000${sending ? runtime?.runId ?? '' : ''}\u0000${session.error?.message ?? ''}`;
+  }).join('\u0001');
+  if (revision === indicatorRevision) return indicatorCache;
+  indicatorRevision = revision;
+  indicatorCache = Object.fromEntries(entries.map(([sessionKey, session]) => {
+    const runtime = buildChatSessionRuntimeView(session);
+    return [sessionKey, {
+      sending: runtime.sending,
+      activeRunId: runtime.activeRunId,
+      error: runtime.error,
+    }];
+  }));
+  return indicatorCache;
+}
+
+export function useChatRuntimeIndicators(): Record<string, ChatRuntimeIndicator> {
+  return useChatRuntimeV2Store(selectRuntimeIndicators);
+}
+
+const EMPTY_RUNTIME_VIEW: ChatSessionRuntimeView = {
+  sending: false,
+  activeRunId: null,
+  pendingFinal: false,
+  error: null,
+  phase: null,
+  lastEventAt: 0,
+  lastUserMessageAt: null,
+  streamingMessage: null,
+  streamingMessages: [],
+  streamingToolResults: [],
+  streamingTools: [],
+};
+const runtimeViewCache = new WeakMap<ClientSessionState, ChatSessionRuntimeView>();
+
 export function buildChatSessionRuntimeView(
   session: ClientSessionState | undefined,
 ): ChatSessionRuntimeView {
+  if (!session) return EMPTY_RUNTIME_VIEW;
   const runtime = session?.runtime ?? null;
   const sending = Boolean(runtime && ACTIVE_PHASES.has(runtime.phase));
   const lastUser = [...(session?.transcript ?? [])].reverse().find((message) => message.role === 'user');
@@ -36,7 +85,7 @@ export function buildChatSessionRuntimeView(
   const lastUserMessageAt = sending && typeof userTimestamp === 'number' && Number.isFinite(userTimestamp)
     ? userTimestamp < 1_000_000_000_000 ? userTimestamp * 1_000 : userTimestamp
     : null;
-  return {
+  const view: ChatSessionRuntimeView = {
     sending,
     activeRunId: sending ? runtime?.runId ?? null : null,
     pendingFinal: Boolean(session?.overlay.awaitingTranscript),
@@ -49,11 +98,21 @@ export function buildChatSessionRuntimeView(
     streamingToolResults: session?.overlay.streamingToolResults ?? [],
     streamingTools: session?.overlay.streamingTools ?? [],
   };
+  return view;
+}
+
+function getCachedRuntimeView(session: ClientSessionState | undefined): ChatSessionRuntimeView {
+  if (!session) return EMPTY_RUNTIME_VIEW;
+  const cached = runtimeViewCache.get(session);
+  if (cached) return cached;
+  const view = buildChatSessionRuntimeView(session);
+  runtimeViewCache.set(session, view);
+  return view;
 }
 
 export function useChatSessionRuntimeView(sessionKey: string): ChatSessionRuntimeView {
   const session = useChatRuntimeV2Store((state) => state.sessionsByKey[sessionKey]);
-  return buildChatSessionRuntimeView(session);
+  return getCachedRuntimeView(session);
 }
 
 export function useCurrentChatRuntimeView(): ChatSessionRuntimeView {

@@ -4,6 +4,7 @@ import type {
   ChatRunPhase,
   ChatRuntimeSnapshot,
 } from '../../../shared/chat-runtime-protocol';
+import { isTerminalChatRunPhase } from '../../../shared/chat-runtime-protocol';
 import type { AttachedFileMeta, RawMessage, ToolStatus } from './types';
 import { collectToolUpdates, isToolResultRole, upsertToolStatuses } from './helpers';
 import { appendStreamingAssistantSnapshot } from './streaming-state';
@@ -29,11 +30,24 @@ export interface ClientRunState {
   lastEventAt: number;
 }
 
+export interface ClientSessionSyncState {
+  status: 'uninitialized' | 'hydrating' | 'ready' | 'gapped';
+  hydrationGeneration: number;
+  pendingEvents: CanonicalChatEvent[];
+}
+
+export interface ChatMessageDecorations {
+  /** Derived display-only projection. Raw transcript remains untouched. */
+  projectedMessages: RawMessage[] | null;
+}
+
 export interface ClientSessionState {
   transcript: RawMessage[];
   overlay: ChatTurnOverlay;
+  decorations: ChatMessageDecorations;
   runtime: ClientRunState | null;
   error: AppError | null;
+  sync: ClientSessionSyncState;
   updatedAt: number;
 }
 
@@ -55,16 +69,29 @@ export function createClientSessionState(): ClientSessionState {
       pendingAttachments: [],
       awaitingTranscript: false,
     },
+    decorations: { projectedMessages: null },
     runtime: null,
     error: null,
+    sync: { status: 'uninitialized', hydrationGeneration: 0, pendingEvents: [] },
     updatedAt: 0,
   };
+}
+
+export function isSnapshotNewer(
+  state: ClientSessionState,
+  snapshot: ChatRuntimeSnapshot,
+): boolean {
+  const current = state.runtime;
+  if (!current) return true;
+  if (snapshot.epoch !== current.epoch) return snapshot.epoch > current.epoch;
+  return snapshot.sequence >= current.sequence;
 }
 
 export function applyRuntimeSnapshot(
   state: ClientSessionState,
   snapshot: ChatRuntimeSnapshot,
 ): ClientSessionState {
+  if (!isSnapshotNewer(state, snapshot)) return state;
   return {
     ...state,
     runtime: {
@@ -82,6 +109,7 @@ export function applyRuntimeSnapshot(
       ...state.overlay,
       awaitingTranscript: snapshot.phase === 'awaiting_transcript',
     },
+    sync: { ...state.sync, status: 'ready' },
     updatedAt: snapshot.updatedAt,
   };
 }
@@ -114,6 +142,12 @@ export function reduceSessionEvent(
     }
     if (event.epoch === current.epoch && event.sequence > current.sequence + 1) {
       return { state, accepted: false, needsHydration: true };
+    }
+    if (event.epoch === current.epoch && current.runId && event.runId && current.runId !== event.runId) {
+      return { state, accepted: false, needsHydration: true };
+    }
+    if (event.epoch === current.epoch && isTerminalChatRunPhase(current.phase)) {
+      return { state, accepted: false, needsHydration: false };
     }
   }
 

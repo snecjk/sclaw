@@ -12,6 +12,7 @@ import {
 } from '../../shared/agent-memory-prompt';
 import { parseOpenClawExecutionTurn } from './openclaw-execution-snapshot';
 import { prependSystemPromptAppend } from '../../shared/system-prompt-append';
+import { hasPendingRuntimeToolUse, hasRuntimeAssistantOutput, inspectTranscript, runtimeRecord } from './chat-runtime-inspection';
 
 const VISION_MIME_TYPES = new Set([
   'image/png',
@@ -169,6 +170,40 @@ function sessionsFromOpenClawStoreMetadata(
 
 export const openClawAdapter: EngineAdapter = {
   type: 'openclaw',
+  chatCapabilities: {
+    hasReliableRuntimeStatus: false,
+    hasStructuredReasoningEvents: false,
+    hasStructuredToolEvents: false,
+    requiresHistoryProjection: true,
+  },
+
+  classifyFinalMessage({ message, phase }) {
+    if (phase === 'completed') return 'completed';
+    const record = runtimeRecord(message);
+    if (!record) return 'awaiting_transcript';
+    return String(record.role ?? '').toLowerCase() === 'assistant'
+      && hasRuntimeAssistantOutput(record)
+      && !hasPendingRuntimeToolUse(record)
+      ? 'completed'
+      : 'progress';
+  },
+
+  async inspectRun(ctx, params) {
+    try {
+      const result = await ctx.gatewayManager.rpc<Record<string, unknown>>('chat.history', {
+        sessionKey: params.sessionKey,
+        limit: params.limit ?? 50,
+      });
+      return inspectTranscript({
+        messages: Array.isArray(result.messages) ? result.messages : [],
+        startedAt: params.startedAt,
+        isRunning: typeof result.isRunning === 'boolean' ? result.isRunning : undefined,
+        runId: params.runId,
+      });
+    } catch (error) {
+      return { status: 'unknown', runId: params.runId ?? undefined, reason: String(error) };
+    }
+  },
 
   prepareMemoryInjection(params, memory) {
     // Keep the real user request last so skill matching is anchored to it instead of

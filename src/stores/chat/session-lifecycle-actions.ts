@@ -28,6 +28,7 @@ import {
   omitSupersededCronDatedAgentTwins,
 } from '@/stores/chat/session-list-merge';
 import { DEFAULT_WORKSPACE_ID, listCatalogSessions } from '@/lib/session-catalog-api';
+import { getSessionDisplayMessages } from './display-selectors';
 import {
   buildInitialSidebarRecentOrder,
   isSidebarRecentChatSessionKey,
@@ -554,6 +555,9 @@ export function createSessionLifecycleActions(
 
       useSessionUnreadStore.getState().markSessionRead(key);
       clearSessionSendReadiness(key);
+      void import('./runtime-v2-store').then(({ useChatRuntimeV2Store }) => {
+        useChatRuntimeV2Store.getState().clearSession(key);
+      });
 
       const { currentSessionKey, sessions } = get();
       const remaining = sessions.filter((s) => s.key !== key);
@@ -565,7 +569,6 @@ export function createSessionLifecycleActions(
           sessionLabels: Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== key)),
           sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
           sidebarRecentOrder: removeSidebarRecentOrderKey(s.sidebarRecentOrder, key),
-          messages: [],
           currentSessionKey: next?.key ?? DEFAULT_SESSION_KEY,
           currentAgentId: getAgentIdFromSessionKey(next?.key ?? DEFAULT_SESSION_KEY),
         }));
@@ -593,7 +596,8 @@ export function createSessionLifecycleActions(
       // NOTE: We intentionally do NOT call sessions.reset on the old session.
       // sessions.reset archives (renames) the session JSONL file, making old
       // conversation history inaccessible when the user switches back to it.
-      const { currentSessionKey, messages, sessions, sessionLastActivity, sessionLabels } = get();
+      const { currentSessionKey, sessions, sessionLastActivity, sessionLabels } = get();
+      const messages = getSessionDisplayMessages(currentSessionKey);
       // 仅将没有任何历史记录且无活动时间的会话视为空会话
       const leavingEmpty = isTemporaryAgentSessionKey(currentSessionKey)
         && messages.length === 0
@@ -624,7 +628,6 @@ export function createSessionLifecycleActions(
             sidebarRecentOrder: leavingEmpty
               ? removeSidebarRecentOrderKey(s.sidebarRecentOrder, currentSessionKey)
               : s.sidebarRecentOrder,
-            messages: [],
           }));
         touchSessionReadAt(DEFAULT_SESSION_KEY);
         clearSessionSendReadiness(DEFAULT_SESSION_KEY);
@@ -703,7 +706,6 @@ export function createSessionLifecycleActions(
             : s.sessionLabels,
           sessionLastActivity: nextSessionLastActivity,
           sidebarRecentOrder: buildInitialSidebarRecentOrder(recentSessions, nextSessionLastActivity),
-          messages: [],
         };
       });
       // 新建即视为已读，写入已读水位；后续该会话前台完成的迟到事件不会误标未读。

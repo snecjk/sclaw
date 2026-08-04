@@ -31,4 +31,10 @@ describe('chat inline model selector layout', () => {
     expect(homeComposerSource).toContain('<ChatModelSelector variant="inline" className="min-w-max shrink-0" />');
     expect(chatPageSource).toContain('<ChatModelSelector variant="inline" className="min-w-max shrink-0" />');
   });
+
+  it('uses native selectors instead of Radix Popper anchors in the chat composer', () => {
+    expect(selectorSource).toContain('const nativeSelectOverlay');
+    expect(selectorSource).toContain('<select');
+    expect(selectorSource).not.toContain('<DropdownMenuTrigger');
+  });
 });

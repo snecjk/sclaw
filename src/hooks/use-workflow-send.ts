@@ -19,6 +19,7 @@ import {
 } from '@/lib/workflow-api';
 import { canStartWorkflow, useWorkflowsStore } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
+import { updateCurrentChatDisplayProjection } from '@/stores/chat/display-selectors';
 import { buildWorkflowStartUserText } from '@/lib/workflow-local-turn';
 import { registerStartedWorkflowChatCard } from '@/lib/workflow-chat-card-registration';
 import { buildWorkflowContextSummary, buildWorkflowFormId } from '@/lib/workflow-form-utils';
@@ -477,7 +478,8 @@ export async function tryResolvePendingWorkflow(
 
   // If confirm intent (or short reply) but still missing params, try backfill from history
   if ((isConfirmIntent || isShortReply) && !allRequiredFilled) {
-    const messages = chatState.messages;
+    const { getSessionDisplayMessages } = await import('@/stores/chat/display-selectors');
+    const messages = getSessionDisplayMessages(chatState.currentSessionKey);
     inputs = extractInputsFromHistory(pending.schema.fields, messages, inputs);
     allRequiredFilled = requiredFields.every((f) => {
       if (inputs[f.key] !== undefined) return true;
@@ -528,9 +530,8 @@ export async function tryResolvePendingWorkflow(
       const formId = buildWorkflowFormId(pending.templateId);
       const now = Date.now() / 1000;
       const { registerParameterFormHandler } = await import('@/components/parameter-form/form-handlers');
-      useChatStore.setState((s) => ({
-        messages: [
-          ...s.messages,
+      updateCurrentChatDisplayProjection((messages) => [
+          ...messages,
           {
             role: 'assistant',
             content: [
@@ -545,8 +546,7 @@ export async function tryResolvePendingWorkflow(
             timestamp: now,
             id: crypto.randomUUID(),
           } as import('@/stores/chat').RawMessage,
-        ],
-      }));
+        ]);
       registerParameterFormHandler(formId, async (values) => {
         const ok = await createAndStartWorkflowDirect(
           pending.templateId,

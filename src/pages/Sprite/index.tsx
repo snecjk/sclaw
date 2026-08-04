@@ -11,6 +11,7 @@ import logoSvg from '@/assets/logo.svg';
 import { useSettingsStore } from '@/stores/settings';
 import { useGatewayStore } from '@/stores/gateway';
 import { useChatStore } from '@/stores/chat';
+import { getCurrentChatDisplayMessages, useCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
 import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
 import { invokeIpc } from '@/lib/api-client';
 import { extractText } from '@/pages/Chat/message-utils';
@@ -36,7 +37,7 @@ export function Sprite() {
 
   // Chat state
   const { sending, streamingMessage } = useCurrentChatRuntimeView();
-  const messages = useChatStore((s) => s.messages);
+  const messages = useCurrentChatDisplayMessages();
   const sendMessage = useChatStore((s) => s.sendMessage);
 
   // Initialize stores on mount
@@ -98,7 +99,7 @@ export function Sprite() {
       setLastUserText(text);
       setView('chat');
       setAwaitingReply(true);
-      msgBaseIndexRef.current = useChatStore.getState().messages.length;
+      msgBaseIndexRef.current = getCurrentChatDisplayMessages().length;
       sendMessage({ text });
     },
     [sendMessage],

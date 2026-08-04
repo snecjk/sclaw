@@ -16,6 +16,7 @@ import { releaseSendAttempt, tryAcquireSendAttempt } from './send-attempt-lock';
 import { getAgentIdFromSessionKey } from './session-identity';
 import { initializeChatRuntimeV2, useChatRuntimeV2Store } from './runtime-v2-store';
 import { buildChatSessionRuntimeView } from './runtime-selectors';
+import { getSessionDisplayMessages } from './display-selectors';
 
 export function isUncertainDispatchError(error: unknown): boolean {
   const code = normalizeAppError(error).code;
@@ -135,7 +136,7 @@ export function createSendActions(
       const preparedContext = await prepareSendContext({
         trimmedText: gatewayText,
         sessionKey: currentSessionKey,
-        messages: get().currentSessionKey === currentSessionKey ? get().messages : [],
+        messages: get().currentSessionKey === currentSessionKey ? getSessionDisplayMessages(currentSessionKey) : [],
         workflowContext,
         embedBrowserContext,
         clearPendingWorkflow: get().clearPendingWorkflow,

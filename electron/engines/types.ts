@@ -58,8 +58,32 @@ export interface EngineAdapterContext {
   gatewayManager: GatewayManager;
 }
 
+export interface EngineRuntimeInspection {
+  status: 'active' | 'completed' | 'not_started' | 'unknown';
+  runId?: string;
+  currentTurnMessages?: unknown[];
+  transcriptRevision?: string;
+  reason?: string;
+}
+
+export interface EngineChatCapabilities {
+  hasReliableRuntimeStatus: boolean;
+  hasStructuredReasoningEvents: boolean;
+  hasStructuredToolEvents: boolean;
+  requiresHistoryProjection: boolean;
+}
+
 export interface EngineAdapter {
   type: AgentEngineType;
+  chatCapabilities: EngineChatCapabilities;
+  inspectRun(
+    ctx: EngineAdapterContext,
+    params: { sessionKey: string; runId?: string | null; startedAt: number; limit?: number },
+  ): Promise<EngineRuntimeInspection>;
+  classifyFinalMessage(input: {
+    message: unknown;
+    phase?: string;
+  }): 'completed' | 'awaiting_transcript' | 'progress';
   prepareMemoryInjection(params: EngineSendParams, memory: AgentMemoryContextBlocks): EngineSendParams;
   abortRun(ctx: EngineAdapterContext, params: EngineAbortParams): Promise<{ success: boolean; error?: string }>;
   getHistory(

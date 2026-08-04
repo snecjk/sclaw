@@ -19,7 +19,7 @@ import {
 } from '@/lib/surfaces';
 import { AppShellChromeOverlay } from '@/components/layout/app-shell-chrome-overlay';
 import { ContentHeader } from '@/components/layout/ContentHeader';
-import { ContentHeaderProvider, useContentHeaderDisplay } from '@/components/layout/content-header-context';
+import { ContentHeaderProvider, useContentHeaderSplitLayout } from '@/components/layout/content-header-context';
 import { getSidebarLayoutVariant } from '@/lib/sidebar-layout';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
@@ -37,7 +37,7 @@ function isHomeRoute(pathname: string): boolean {
 /** Scrollable page body inside provincial main card (overlay is mounted on `<main>`). */
 function MainCardBody({ hideContentHeader }: { hideContentHeader: boolean }) {
   const { pathname } = useLocation();
-  const { isSplitLayout } = useContentHeaderDisplay();
+  const isSplitLayout = useContentHeaderSplitLayout();
   const isHome = isHomeRoute(pathname);
 
   // 三栏与双栏 body 类互斥：cn 合并时 px-[var(--sto-content-pad-x)] 可能压过 px-0，split row 会比 header 窄 ~32–40px
@@ -72,7 +72,7 @@ function MainCardBody({ hideContentHeader }: { hideContentHeader: boolean }) {
 
 /** 省区主卡片：三栏时 main 承担水平 inset，保证 Header 与 split row 预览列左缘一致 */
 function ProvincialMainCard({ hideContentHeader }: { hideContentHeader: boolean }) {
-  const { isSplitLayout } = useContentHeaderDisplay();
+  const isSplitLayout = useContentHeaderSplitLayout();
 
   return (
     <main

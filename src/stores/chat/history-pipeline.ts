@@ -22,10 +22,15 @@ export interface PreparedHistoryMessages {
 
 export function prepareHistoryMessages(input: {
   rawMessages: RawMessage[];
-  currentMessages: RawMessage[];
+  previousTranscript?: RawMessage[];
+  /** @deprecated Compatibility for callers predating canonical transcript storage. */
+  currentMessages?: RawMessage[];
   sessionKey: string;
 }): PreparedHistoryMessages {
-  const rawMessages = mergeHistoryWhenShrunk(input.rawMessages, input.currentMessages);
+  const rawMessages = mergeHistoryWhenShrunk(
+    input.rawMessages,
+    input.previousTranscript ?? input.currentMessages ?? [],
+  );
   absorbWorkflowSchemaFromToolResults(rawMessages, input.sessionKey);
 
   const messagesWithToolImages = enrichWithToolResultFiles(rawMessages);

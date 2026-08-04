@@ -4,6 +4,7 @@ import {
   type ChatEngineType,
 } from '@/lib/resolve-chat-session-engine-type';
 import { useChatStore } from '@/stores/chat';
+import { useCurrentChatDisplayMessageCount } from '@/stores/chat/display-selectors';
 import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 
 /**
@@ -14,7 +15,7 @@ export function useChatSessionEngineType(): ChatEngineType {
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const sessions = useChatStore((s) => s.sessions);
-  const messagesLength = useChatStore((s) => s.messages.length);
+  const messagesLength = useCurrentChatDisplayMessageCount();
   const agents = useAgentsStore((s) => s.agents);
 
   return useMemo(() => {

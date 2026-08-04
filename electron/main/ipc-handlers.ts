@@ -1311,18 +1311,8 @@ function registerGatewayHandlers(
     broadcast('gateway:message', enrichGatewayPayload(message));
   });
 
-  gatewayManager.on('notification', (notification) => {
-    broadcast('gateway:notification', sanitizeMemoryFromChatPayload(enrichGatewayPayload(notification)));
-  });
-
   gatewayManager.on('channel:status', (data) => {
     broadcast('gateway:channel-status', data);
-  });
-
-  gatewayManager.on('chat:message', (data) => {
-    if (data && typeof data === 'object' && 'engineEvent' in data) {
-      broadcast('gateway:engine-event', sanitizeMemoryFromChatPayload(enrichGatewayPayload((data as { engineEvent?: unknown }).engineEvent)));
-    }
   });
 
   gatewayManager.on('exit', (code) => {

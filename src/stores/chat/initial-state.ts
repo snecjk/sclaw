@@ -4,7 +4,6 @@ import { DEFAULT_SESSION_KEY } from './types';
 /** Data-only state. Actions are composed separately so this stays testable. */
 export const initialChatDataState: Pick<
   ChatState,
-  | 'messages'
   | 'loading'
   | 'modelSwitching'
   | 'sessions'
@@ -20,7 +19,6 @@ export const initialChatDataState: Pick<
   | 'pendingProjectId'
   | 'workflowChatUiBySessionKey'
 > = {
-  messages: [],
   loading: false,
   modelSwitching: false,
   sessions: [],

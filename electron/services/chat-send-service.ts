@@ -23,19 +23,24 @@ export function runMainChatSend(
 ): Promise<ChatSendResult> {
   return runIdempotentChatSend(input.sessionKey, input.idempotencyKey, async () => {
     const runtimeSupervisor = getChatRuntimeSupervisor(gatewayManager);
-    const runtime = await runtimeSupervisor.begin({
+    const beginResult = await runtimeSupervisor.begin({
       sessionKey: input.sessionKey,
       idempotencyKey: input.idempotencyKey,
       engineType: input.engineType,
       runtimePolicy: input.runtimePolicy,
     });
-    if (
-      runtime.acceptanceResult
-      && Date.now() - runtime.startedAt <= 10 * 60 * 1000
-      && runtime.phase !== 'failed'
-      && runtime.phase !== 'interrupted'
-    ) {
-      return { success: true, result: runtime.acceptanceResult as { runId?: string } };
+    const runtime = beginResult.snapshot;
+    if (beginResult.kind === 'expired_key') {
+      return { success: false, error: 'IDEMPOTENCY_KEY_EXPIRED: generate a new idempotency key for a new send' };
+    }
+    if (beginResult.kind === 'replay') {
+      if (runtime.acceptanceResult) {
+        return { success: true, result: runtime.acceptanceResult as { runId?: string } };
+      }
+      return {
+        success: false,
+        error: runtime.error ?? `IDEMPOTENT_REPLAY_${runtime.phase.toUpperCase()}`,
+      };
     }
     const memory = await agentMemoryContextService.prepare(input.sourceText?.trim() || input.message);
     const coordinator = getMemoryTurnCoordinator(gatewayManager);

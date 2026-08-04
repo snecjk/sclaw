@@ -43,6 +43,7 @@ import {
 } from './store-helpers';
 import type { ResolveChatSessionEngineTypeOptions } from '@/lib/resolve-chat-session-engine-type';
 import { getBaseAgentIdFromProjectAgentId } from '../../../shared/project-agent';
+import { getSessionDisplayMessages } from './display-selectors';
 
 export type {
   AttachedFileMeta,
@@ -97,7 +98,7 @@ function buildSessionSwitchPatch(
   nextSessionKey: string,
 ): Partial<ChatState> {
   const leavingEmpty = isTemporaryAgentSessionKey(state.currentSessionKey)
-    && state.messages.length === 0
+    && getSessionDisplayMessages(state.currentSessionKey).length === 0
     && !state.sessionLastActivity[state.currentSessionKey]
     && !state.sessionLabels[state.currentSessionKey];
   const sessions = leavingEmpty
@@ -114,7 +115,6 @@ function buildSessionSwitchPatch(
     sessionLastActivity: leavingEmpty
       ? clearSessionEntryFromMap(state.sessionLastActivity, state.currentSessionKey)
       : state.sessionLastActivity,
-    messages: [],
     loading: false,
   };
 }

@@ -4,6 +4,7 @@ import {
 import { getMessageText } from './helpers';
 import type { ChatGet, ChatSet } from './store-api';
 import type { RawMessage } from './types';
+import { getSessionDisplayMessages } from './display-selectors';
 
 export function restorePendingWorkflowDraftInBackground(input: {
   get: ChatGet;
@@ -29,7 +30,7 @@ export function restorePendingWorkflowDraftInBackground(input: {
     void import('@/lib/workflow-api').then(({ getStartupSchema }) => {
       getStartupSchema(draft.templateId).then((startup) => {
         if (get().currentSessionKey !== sessionKey) return;
-        const msgs = get().messages;
+        const msgs = getSessionDisplayMessages(sessionKey);
         if (
           !isWorkflowFormInjectionAllowed(
             draft.templateId,

@@ -15,9 +15,19 @@ vi.mock('@/stores/chat', () => ({
   useChatStore: {
     getState: () => ({
       currentSessionKey: 'session-1',
-      messages: [{ id: 'user-anchor', role: 'user', content: '启动工作流' }],
-      optimisticUserMessage: null,
     }),
+  },
+}));
+
+vi.mock('@/stores/chat/display-selectors', () => ({
+  getSessionDisplayMessages: () => [
+    { id: 'user-anchor', role: 'user', content: '启动工作流' },
+  ],
+}));
+
+vi.mock('@/stores/chat/runtime-v2-store', () => ({
+  useChatRuntimeV2Store: {
+    getState: () => ({ sessionsByKey: {} }),
   },
 }));
 

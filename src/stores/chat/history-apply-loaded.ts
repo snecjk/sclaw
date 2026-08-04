@@ -7,7 +7,6 @@ import { getMessageText } from './helpers';
 import {
   dropSyntheticSkillSessionLabelUsers,
   isSameUserMessage,
-  mergeOptimisticUserIntoHistory,
   normalizeUserMessageText,
   traceLoadHistoryUserReconciliation,
 } from './user-message-merge';
@@ -28,6 +27,7 @@ import type { ChatSession, RawMessage } from './types';
 import { restoreSkillMetaOnMessages } from '@/lib/skill-message-meta-cache';
 import { useChatRuntimeV2Store } from './runtime-v2-store';
 import { buildChatSessionRuntimeView } from './runtime-selectors';
+import { getCurrentChatDisplayMessages } from './display-selectors';
 
 export interface ApplyLoadedHistoryDeps {
   toMs: (ts: unknown) => number;
@@ -111,16 +111,17 @@ export function applyLoadedHistorySnapshot(input: {
     hasRuntimeState: Boolean(runtimeState),
   });
 
+  const canonicalBeforeLoad = useChatRuntimeV2Store.getState().sessionsByKey[targetSessionKey];
   const preparedHistory = prepareHistoryMessages({
     rawMessages,
-    currentMessages: get().messages,
+    previousTranscript: canonicalBeforeLoad?.transcript ?? [],
     sessionKey: targetSessionKey,
   });
   const preparedRawMessages = preparedHistory.rawMessages;
   // Canonical transcript keeps the engine payload untouched. Legacy display
   // enrichment below may merge cached/decorated messages, but never writes
   // those decorations back into RawTranscript.
-  useChatRuntimeV2Store.getState().setTranscript(targetSessionKey, rawMessages);
+  useChatRuntimeV2Store.getState().setTranscript(targetSessionKey, preparedRawMessages);
   const enrichedMessages = preparedHistory.enrichedMessages;
   const canonicalSession = useChatRuntimeV2Store.getState().sessionsByKey[targetSessionKey];
   const runtimeView = buildChatSessionRuntimeView(canonicalSession);
@@ -129,12 +130,7 @@ export function applyLoadedHistorySnapshot(input: {
   const historyUserCountBefore = enrichedMessages.filter((m) => m.role === 'user').length;
   const historyMessageCountBefore = enrichedMessages.length;
   const cachedOptimistic = canonicalSession?.overlay.optimisticUserMessage ?? null;
-  let finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
-    userMessageAt: userMsgAt,
-    sending: runtimeView.sending,
-    sessionKey: targetSessionKey,
-    cachedOptimistic,
-  });
+  let finalMessages = enrichedMessages;
   clearOptimisticUserIfEchoed({
     targetSessionKey,
     finalMessages,
@@ -150,7 +146,7 @@ export function applyLoadedHistorySnapshot(input: {
   const gatewaySessionLabel = get().sessions.find((session) => session.key === targetSessionKey)?.label;
   finalMessages = mergeHistoryDisplayMessages({
     messages: finalMessages,
-    currentMessages: get().messages,
+    currentMessages: getCurrentChatDisplayMessages(),
     sessionKey: targetSessionKey,
     sessionLabels: get().sessionLabels,
     gatewaySessionLabel,
@@ -184,8 +180,8 @@ export function applyLoadedHistorySnapshot(input: {
     thinkingLevel,
   });
   if (formRecovery.deferSet) {
+    useChatRuntimeV2Store.getState().setDisplayProjection(targetSessionKey, formRecovery.messages);
     set({
-      messages: formRecovery.messages,
       thinkingLevel,
       loading: false,
     });
@@ -202,11 +198,8 @@ export function applyLoadedHistorySnapshot(input: {
   }
   finalMessages = formRecovery.messages;
 
-  set({
-    messages: finalMessages,
-    thinkingLevel,
-    loading: false,
-  });
+  useChatRuntimeV2Store.getState().setDisplayProjection(targetSessionKey, finalMessages);
+  set({ thinkingLevel, loading: false });
   logChatFlow('history.apply.committed', {
     sessionKey: targetSessionKey,
     messageCount: finalMessages.length,

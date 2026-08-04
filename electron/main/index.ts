@@ -739,16 +739,6 @@ async function initialize(): Promise<void> {
     heb.emit('gateway:error', { message: error.message });
   });
 
-  gm.on('notification', (notification) => {
-    heb.emit('gateway:notification', sanitizeMemoryFromChatPayload(notification));
-  });
-
-  gm.on('chat:message', (data) => {
-    if (data && typeof data === 'object' && 'engineEvent' in data) {
-      heb.emit('gateway:engine-event', sanitizeMemoryFromChatPayload((data as { engineEvent?: unknown }).engineEvent));
-    }
-  });
-
   gm.on('channel:status', (data) => {
     heb.emit('gateway:channel-status', data);
   });

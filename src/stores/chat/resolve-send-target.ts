@@ -1,5 +1,6 @@
 import { buildDingTalkMentionRpcExtras } from '@/lib/dingtalk-mention-context';
 import type { ChatGet, ChatSet } from './store-api';
+import { getSessionDisplayMessages } from './display-selectors';
 import type { ChatSession, SendMessageOptions } from './types';
 import { getAgentIdFromSessionKey } from './session-identity';
 
@@ -65,7 +66,7 @@ export async function resolveSendTarget(input: {
     sessionKey,
     targetAgentId ?? getAgentIdFromSessionKey(sessionKey) ?? get().currentAgentId,
     {
-      messageCount: get().currentSessionKey === sessionKey ? (get().messages?.length ?? 0) : undefined,
+      messageCount: get().currentSessionKey === sessionKey ? getSessionDisplayMessages(sessionKey).length : undefined,
     },
   );
   const session = get().sessions.find((item) => item.key === sessionKey);

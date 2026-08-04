@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 import { createClientSessionState } from '@/stores/chat/client-session-reducer';
 import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
+import { getSessionDisplayMessages } from '@/stores/chat/display-selectors';
 
 describe('canonical chat runtime selectors', () => {
   it('derives active UI state from explicit non-terminal phases', () => {
@@ -85,5 +86,19 @@ describe('canonical chat runtime selectors', () => {
     ]);
     expect(useChatRuntimeV2Store.getState().sessionsByKey.session.overlay.streamingMessage).toBeNull();
     expect(useChatRuntimeV2Store.getState().sessionsByKey.session.overlay.optimisticUserMessage).toBeNull();
+  });
+
+  it('keeps store and session references stable for an identical transcript', () => {
+    const transcript = [{ id: 'user-1', role: 'user' as const, content: 'same' }];
+    useChatRuntimeV2Store.setState({ sessionsByKey: {} });
+    useChatRuntimeV2Store.getState().setTranscript('stable', transcript);
+    const beforeStore = useChatRuntimeV2Store.getState();
+    const beforeSession = beforeStore.sessionsByKey.stable;
+
+    useChatRuntimeV2Store.getState().setTranscript('stable', [{ ...transcript[0] }]);
+
+    expect(useChatRuntimeV2Store.getState()).toBe(beforeStore);
+    expect(useChatRuntimeV2Store.getState().sessionsByKey.stable).toBe(beforeSession);
+    expect(getSessionDisplayMessages('stable')).toBe(getSessionDisplayMessages('stable'));
   });
 });

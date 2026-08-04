@@ -1,6 +1,7 @@
 import { upgradeWorkflowParamUserMessages } from '@/lib/workflow-param-messages';
 import type { ChatGet, ChatSet } from './store-api';
 import type { RawMessage } from './types';
+import { useChatRuntimeV2Store } from './runtime-v2-store';
 
 export function localizeAndHydrateWorkflowForms(input: {
   get: ChatGet;
@@ -18,15 +19,16 @@ export function localizeAndHydrateWorkflowForms(input: {
     patchWorkflowForm = false,
     rawMessages,
     sessionKey,
-    set,
+    set: _set,
   } = input;
+  void _set;
 
   void (async () => {
     const localized = await upgradeWorkflowParamUserMessages(messages, sessionKey);
     if (get().currentSessionKey !== sessionKey) return;
 
     if (localized !== messages) {
-      set({ messages: localized });
+      useChatRuntimeV2Store.getState().setDisplayProjection(sessionKey, localized);
       onLocalized?.(localized);
     }
 

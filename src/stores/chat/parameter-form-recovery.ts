@@ -23,6 +23,7 @@ import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-clien
 import { clearPendingWorkflowDraft, saveWorkflowRecord, sessionHasWorkflowExecution } from '@/stores/workflow-memory';
 import { useChatStore } from '@/stores/chat';
 import { useChatRuntimeV2Store } from './runtime-v2-store';
+import { getSessionDisplayMessages } from './display-selectors';
 import { buildChatSessionRuntimeView } from './runtime-selectors';
 import { isToolResultRole } from '@/stores/chat/helpers';
 import type { WorkflowSchema } from '@/types/workflow';
@@ -441,17 +442,18 @@ export function ensureWorkflowParameterFormInjected(
   const state = useChatStore.getState();
   const pending = getPendingWorkflow(state.currentSessionKey);
   if (!pending?.templateId || !pending.schema || !pending.schemaHash) return false;
+  const sessionMessages = getSessionDisplayMessages(state.currentSessionKey);
 
-  if (sessionHasWorkflowParameterForm(state.messages, pending.templateId)) {
+  if (sessionHasWorkflowParameterForm(sessionMessages, pending.templateId)) {
     if (!pending.frontendFormInserted) {
       state.setPendingWorkflow({ ...pending, frontendFormInserted: true }, state.currentSessionKey);
     }
     return true;
   }
 
-  const resolved = state.messages.some((message) => (
+  const resolved = sessionMessages.some((message) => (
     resolveParameterFormForAssistantMessage(message, {
-      sessionMessages: state.messages,
+      sessionMessages,
       sessionKey: state.currentSessionKey,
       pendingWorkflow: pending,
       getMessageText,

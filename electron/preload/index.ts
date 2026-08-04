@@ -227,8 +227,6 @@ const electronAPI = {
       const validChannels = [
         'gateway:status-changed',
         'gateway:message',
-        'gateway:notification',
-        'gateway:engine-event',
         'chat-runtime:event',
         'gateway:channel-status',
         'channel:whatsapp-qr',
@@ -294,8 +292,6 @@ const electronAPI = {
       const validChannels = [
         'gateway:status-changed',
         'gateway:message',
-        'gateway:notification',
-        'gateway:engine-event',
         'chat-runtime:event',
         'gateway:channel-status',
         'channel:whatsapp-qr',
