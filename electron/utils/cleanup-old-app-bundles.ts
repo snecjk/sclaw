@@ -24,7 +24,8 @@ const execFileAsync = promisify(execFile);
 export const CLEANUP_RETRY_DELAYS_MS = [0, 30_000, 120_000, 300_000] as const;
 export const LEGACY_MAC_APP_BUNDLE_NAME = 'S Claw.app';
 export const RENAMED_MAC_APP_BUNDLE_NAME = 'SClaw.app';
-const MAC_RELAUNCH_DELAY_SECONDS = '1.2';
+const MAC_RELAUNCH_DELAY_SECONDS = '0.25';
+const MAC_RELAUNCH_WAIT_ATTEMPTS = '240';
 const MAC_MOVE_RELAUNCH_ATTEMPTS = '60';
 const MAC_MOVE_RELAUNCH_DELAY_SECONDS = '0.25';
 
@@ -60,6 +61,12 @@ export function isStaleAppTargetName(bundleName: string, entryName: string): boo
   return pattern.test(entryName);
 }
 
+/** Match updater backups produced before or after the macOS app bundle rename. */
+export function isKnownOldAppBackupName(currentBundleName: string, entryName: string): boolean {
+  return [currentBundleName, LEGACY_MAC_APP_BUNDLE_NAME, RENAMED_MAC_APP_BUNDLE_NAME]
+    .some((bundleName) => isOldAppBackupName(bundleName, entryName));
+}
+
 export function resolveMacAppInstallTargetPath(installDir: string, extractedAppPath: string): string {
   const extractedName = basename(extractedAppPath);
   const targetName = extractedName === LEGACY_MAC_APP_BUNDLE_NAME
@@ -73,8 +80,20 @@ export function scheduleMacAppBundleRelaunch(appBundlePath: string): void {
     '/bin/sh',
     [
       '-c',
-      'sleep "$1"; exec /usr/bin/open -n "$2"',
+      [
+        'parent_pid=$1',
+        'attempts=$2',
+        'delay_seconds=$3',
+        'i=0',
+        'while /bin/kill -0 "$parent_pid" 2>/dev/null && [ "$i" -lt "$attempts" ]; do',
+        '  i=$((i + 1))',
+        '  sleep "$delay_seconds"',
+        'done',
+        'exec /usr/bin/open -n "$4"',
+      ].join('\n'),
       'sclaw-relaunch',
+      String(process.pid),
+      MAC_RELAUNCH_WAIT_ATTEMPTS,
       MAC_RELAUNCH_DELAY_SECONDS,
       appBundlePath,
     ],
@@ -100,18 +119,30 @@ export function scheduleMacAppBundleMoveAndRelaunch(
         'target_path=$2',
         'attempts=$3',
         'delay_seconds=$4',
+        'parent_pid=$5',
+        'wait_attempts=$6',
         'i=0',
         'while [ "$i" -lt "$attempts" ]; do',
         '  if /bin/mv "$source_path" "$target_path" 2>/dev/null; then',
+        '    i=0',
+        '    while /bin/kill -0 "$parent_pid" 2>/dev/null && [ "$i" -lt "$wait_attempts" ]; do',
+        '      i=$((i + 1))',
+        '      sleep "$delay_seconds"',
+        '    done',
         '    exec /usr/bin/open -n "$target_path"',
         '  fi',
         '  i=$((i + 1))',
         '  sleep "$delay_seconds"',
         'done',
-        'staged_path=$5',
+        'staged_path=$7',
         'if [ -n "$staged_path" ] && [ -e "$staged_path" ] && [ ! -e "$target_path" ]; then',
         '  /bin/mv "$staged_path" "$target_path" 2>/dev/null',
         'fi',
+        'i=0',
+        'while /bin/kill -0 "$parent_pid" 2>/dev/null && [ "$i" -lt "$wait_attempts" ]; do',
+        '  i=$((i + 1))',
+        '  sleep "$delay_seconds"',
+        'done',
         'exec /usr/bin/open -n "$source_path"',
       ].join('\n'),
       'sclaw-move-relaunch',
@@ -119,6 +150,8 @@ export function scheduleMacAppBundleMoveAndRelaunch(
       targetAppPath,
       MAC_MOVE_RELAUNCH_ATTEMPTS,
       MAC_MOVE_RELAUNCH_DELAY_SECONDS,
+      String(process.pid),
+      MAC_RELAUNCH_WAIT_ATTEMPTS,
       stagedTargetPath ?? '',
     ],
     {
@@ -130,7 +163,8 @@ export function scheduleMacAppBundleMoveAndRelaunch(
 }
 
 function isDisposableAppBundleName(bundleName: string, entryName: string): boolean {
-  return isOldAppBackupName(bundleName, entryName) || isStaleAppTargetName(bundleName, entryName);
+  return isKnownOldAppBackupName(bundleName, entryName)
+    || isStaleAppTargetName(bundleName, entryName);
 }
 
 async function describeEntry(target: string): Promise<string> {

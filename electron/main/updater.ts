@@ -20,6 +20,7 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
+  isKnownOldAppBackupName,
   removeMacAppBundlePath,
   resolveMacAppInstallTargetPath,
   scheduleMacAppBundleRelaunch,
@@ -1150,20 +1151,18 @@ export class AppUpdater extends EventEmitter {
         return;
       }
       const appDir = path.dirname(currentAppPath);
-      const appBaseName = path.basename(currentAppPath, '.app');
-      const escapedName = appBaseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const pattern = new RegExp(`^${escapedName}\\.app\\.old-\\d+$`);
+      const currentBundleName = path.basename(currentAppPath);
 
       const entries = await fsp.readdir(appDir);
       for (const entry of entries) {
-        if (!pattern.test(entry)) continue;
+        if (!isKnownOldAppBackupName(currentBundleName, entry)) continue;
         const fullPath = path.join(appDir, entry);
         if (protectedPath && fullPath === protectedPath) {
           // 这一个是 marker 记录的"刚装好的备份"，留给 60s 延迟清理流程处理
           continue;
         }
         logger.info(`[Updater] cleanupOrphanedBackups: removing orphan backup ${fullPath}`);
-        await fsp.rm(fullPath, { recursive: true, force: true }).catch((e) => {
+        await removeMacAppBundlePath(fullPath).catch((e) => {
           logger.warn(`[Updater] cleanupOrphanedBackups: failed to remove ${fullPath}:`, e);
         });
       }

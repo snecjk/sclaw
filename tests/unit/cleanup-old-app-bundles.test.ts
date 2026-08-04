@@ -6,6 +6,7 @@ import {
   CLEANUP_RETRY_DELAYS_MS,
   getMacAppBundleInfo,
   getStaleMacAppTargetPath,
+  isKnownOldAppBackupName,
   isOldAppBackupName,
   isStaleAppTargetName,
   resolveMacAppInstallTargetPath,
@@ -33,6 +34,13 @@ describe('cleanup-old-app-bundles', () => {
     expect(isOldAppBackupName(bundle, 'SClaw.app')).toBe(false);
     expect(isOldAppBackupName(bundle, 'SClaw.app.old')).toBe(false);
     expect(isOldAppBackupName(bundle, 'Other.app.old-123')).toBe(false);
+  });
+
+  it('matches backups from both sides of the macOS bundle rename', () => {
+    expect(isKnownOldAppBackupName('SClaw.app', 'S Claw.app.old-1785859923820')).toBe(true);
+    expect(isKnownOldAppBackupName('SClaw.app', 'SClaw.app.old-1785859923820')).toBe(true);
+    expect(isKnownOldAppBackupName('S Claw.app', 'SClaw.app.old-1785859923820')).toBe(true);
+    expect(isKnownOldAppBackupName('SClaw.app', 'Other.app.old-1785859923820')).toBe(false);
   });
 
   it('matches updater-staged stale target names only', () => {
