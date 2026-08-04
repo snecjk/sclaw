@@ -173,7 +173,9 @@ Content-Type: application/json
 ```
 
 > 完整 URL 示例（测试）：`https://baseinfo-chatbotapi-test.sto.cn/api/m/sclaw/mobile/bind/silent`  
-> 亦可：`.../bind/silent?Token=<token>`（不传 Header 时）。
+> 亦可：`.../bind/silent?Token=<token>`（不传 Header 时）。  
+>
+> **路径易错：** 必须是 **`/api/m/sclaw/...`**。写成 `/api/sclaw/mobile/bind/silent`（少 `/m`）会 **404**，与服务是否部署无关。
 
 **请求体：**
 
