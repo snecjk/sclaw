@@ -16,6 +16,7 @@ import {
   type CatalogSessionDto,
   type WorkspaceDto,
 } from '@/lib/session-catalog-api';
+import { filterTaskSidebarCatalogRows } from '@/stores/chat/session-list-merge';
 
 export const DEFAULT_WORKSPACE_ID = 'default';
 
@@ -31,11 +32,18 @@ const MIGRATION_FLAG = 'stoclaw:session-catalog-migrated';
 
 let bootstrapInFlight: Promise<void> | null = null;
 
+function filterTaskCatalogSessions(rows: CatalogSessionDto[]): CatalogSessionDto[] {
+  // 只保留 dated cron/claude_task；过滤历史 run/base，同日去重。
+  return filterTaskSidebarCatalogRows(rows);
+}
+
 interface SessionCatalogState {
   ready: boolean;
   workspaces: WorkspaceDto[];
   selectedProjectId: string | null;
   catalogSessions: CatalogSessionDto[];
+  /** Sidebar「任务」：dated 的 cron / claude_task（已滤历史 run/base） */
+  taskCatalogSessions: CatalogSessionDto[];
   allCatalogByKey: Record<string, CatalogSessionMeta>;
   sessionWorkspaceByKey: Record<string, string>;
 
@@ -83,6 +91,7 @@ export const useSessionCatalogStore = create<SessionCatalogState>((set, get) => 
   workspaces: [],
   selectedProjectId: null,
   catalogSessions: [],
+  taskCatalogSessions: [],
   allCatalogByKey: {},
   sessionWorkspaceByKey: {},
 
@@ -94,8 +103,9 @@ export const useSessionCatalogStore = create<SessionCatalogState>((set, get) => 
       listCatalogSessions(DEFAULT_WORKSPACE_ID),
       ...workspaces.map((workspace) => listCatalogSessions(workspace.id)),
     ]);
+    const flat = batches.flat();
     const allCatalogByKey = Object.fromEntries(
-      batches.flat().map((row) => [
+      flat.map((row) => [
         row.sessionKey,
         {
           pinRank: row.pinRank,
@@ -107,6 +117,7 @@ export const useSessionCatalogStore = create<SessionCatalogState>((set, get) => 
     const targetId = get().selectedProjectId ?? DEFAULT_WORKSPACE_ID;
     set({
       allCatalogByKey,
+      taskCatalogSessions: filterTaskCatalogSessions(flat),
       catalogSessions: await listCatalogSessions(targetId),
     });
   },

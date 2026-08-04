@@ -3,6 +3,7 @@ import {
   buildChatDisplayItems,
   buildTurnStableKey,
   isRedundantThinking,
+  mergeWorkflowCardsIntoDisplayItems,
   mergeThinkingTimelines,
   pickTimelineSourceMessages,
   resolveActiveTurnStableKey,
@@ -301,5 +302,76 @@ describe('isRedundantThinking', () => {
     const a = '用户要求发送明天上海的天气给文鹏，我需要先调用天气技能获取数据。';
     const b = '用户要求发送明天上海的天气，我需要先调用天气技能获取数据，然后使用钉钉格式发送给文鹏。';
     expect(isRedundantThinking(a, b)).toBe(true);
+  });
+});
+
+describe('mergeWorkflowCardsIntoDisplayItems', () => {
+  it('places an anchored card after the complete assistant turn', () => {
+    const items = buildChatDisplayItems([
+      { id: 'user-1', role: 'user', content: '启动天气工作流', timestamp: 1 },
+      { id: 'assistant-1', role: 'assistant', content: '已启动', timestamp: 2 },
+      { id: 'user-2', role: 'user', content: '继续聊天', timestamp: 4 },
+      { id: 'assistant-2', role: 'assistant', content: '好的', timestamp: 5 },
+    ]);
+    const merged = mergeWorkflowCardsIntoDisplayItems(items, [{
+      runId: 'run-1',
+      sessionKey: 'session-1',
+      anchorUserMessageId: 'user-1',
+      title: '天气工作流',
+      startedAt: '1970-01-01T00:00:03.000Z',
+    }]);
+
+    expect(merged.map((item) => item.type === 'workflow-run' ? item.key : item.type)).toEqual([
+      'single',
+      'single',
+      'workflow-run:run-1',
+      'single',
+      'single',
+    ]);
+  });
+
+  it('uses startedAt for a missing anchor and deduplicates run ids', () => {
+    const items = buildChatDisplayItems([
+      { id: 'user-1', role: 'user', content: '第一轮', timestamp: 1 },
+      { id: 'assistant-1', role: 'assistant', content: '完成', timestamp: 2 },
+      { id: 'user-2', role: 'user', content: '第二轮', timestamp: 4 },
+    ]);
+    const card = {
+      runId: 'run-standalone',
+      sessionKey: 'session-1',
+      anchorUserMessageId: 'missing-user',
+      title: '独立工作流',
+      startedAt: '1970-01-01T00:00:03.000Z',
+    };
+    const merged = mergeWorkflowCardsIntoDisplayItems(items, [card, card]);
+
+    expect(merged.filter((item) => item.type === 'workflow-run')).toHaveLength(1);
+    expect(merged.findIndex((item) => item.type === 'workflow-run')).toBe(2);
+  });
+
+  it('recovers a workflow name from its anchored execute prompt when the card title is only a code', () => {
+    const items = buildChatDisplayItems([
+      {
+        id: 'user-workflow',
+        role: 'user',
+        content: '帮我执行 id 为：wf_c5d26a84 的工作流 【模拟请假审批】',
+        timestamp: 1,
+      },
+      { id: 'assistant-1', role: 'assistant', content: '已启动', timestamp: 2 },
+    ]);
+
+    const merged = mergeWorkflowCardsIntoDisplayItems(items, [{
+      runId: 'run_208761062424899584',
+      sessionKey: 'session-1',
+      anchorUserMessageId: 'user-workflow',
+      title: 'wf_c5d26a84',
+      startedAt: '1970-01-01T00:00:03.000Z',
+    }]);
+    const workflowCard = merged.find((item) => item.type === 'workflow-run');
+
+    expect(workflowCard?.type).toBe('workflow-run');
+    if (workflowCard?.type === 'workflow-run') {
+      expect(workflowCard.card.title).toBe('模拟请假审批');
+    }
   });
 });

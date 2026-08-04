@@ -5,6 +5,7 @@ import type { HostApiContext } from '@electron/api/context';
 const listAppsMock = vi.fn();
 const listCategoriesMock = vi.fn();
 const listBannersMock = vi.fn();
+const getSkipLoginLinkMock = vi.fn();
 const sendJsonMock = vi.fn();
 
 vi.mock('@electron/services/app-plaza-service', () => ({
@@ -12,6 +13,7 @@ vi.mock('@electron/services/app-plaza-service', () => ({
     listApps: (...args: unknown[]) => listAppsMock(...args),
     listCategories: (...args: unknown[]) => listCategoriesMock(...args),
     listBanners: (...args: unknown[]) => listBannersMock(...args),
+    getSkipLoginLink: (...args: unknown[]) => getSkipLoginLinkMock(...args),
   }),
 }));
 
@@ -39,6 +41,7 @@ describe('app plaza Host API routes', () => {
     listAppsMock.mockReset();
     listCategoriesMock.mockReset();
     listBannersMock.mockReset();
+    getSkipLoginLinkMock.mockReset();
     sendJsonMock.mockReset();
   });
 
@@ -72,5 +75,19 @@ describe('app plaza Host API routes', () => {
       new URL(`http://localhost${path}`),
       ctx,
     )).toBe(true);
+  });
+
+  it('forwards skip-login-link by systemCode', async () => {
+    const payload = { success: true, data: 'https://sso.example.com/Login?code=1' };
+    getSkipLoginLinkMock.mockResolvedValue(payload);
+    const handled = await handleAppPlazaRoutes(
+      { method: 'GET' } as IncomingMessage,
+      res,
+      new URL('http://localhost/api/app-plaza/skip-login-link?systemCode=JIUTIAN'),
+      ctx,
+    );
+    expect(handled).toBe(true);
+    expect(getSkipLoginLinkMock).toHaveBeenCalledWith('JIUTIAN');
+    expect(sendJsonMock).toHaveBeenCalledWith(res, 200, payload);
   });
 });

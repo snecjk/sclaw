@@ -370,8 +370,17 @@ body.sclaw-browser-split-dragging * {
   background: rgba(15, 23, 42, 0.06);
 }
 
-.sclaw-browser-embed-chat__scroll {
+.sclaw-browser-embed-chat__scroll-host {
+  position: relative;
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sclaw-browser-embed-chat__scroll {
   min-height: 0;
 }
 

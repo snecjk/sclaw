@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { ExternalLink, FileText, RefreshCw, Maximize, Minimize, Table, FileSpreadsheet, Presentation } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
 import { cn } from '@/lib/utils';
 import { hostApiFetch, getHostApiBase } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
@@ -42,6 +42,22 @@ function isHtmlFileType(mimeType: string, fileName: string, filePath?: string): 
   if (filePath && /\.html?(?:\?|#|$)/i.test(filePath)) return true;
   if (filePath && isHttpUrl(filePath) && isExtensionlessWebUrl(filePath)) return true;
   return false;
+}
+
+function isImageFileType(mimeType: string): boolean {
+  return mimeType.startsWith('image/');
+}
+
+async function fetchRemotePreviewText(filePath: string): Promise<string> {
+  const result = await previewBridgeHttpFetch({
+    url: filePath,
+    allowedOrigin: new URL(filePath).origin,
+  });
+  if (!result.ok || !result.bodyBase64) {
+    throw new Error(result.error || `HTTP ${result.status ?? 'error'}`);
+  }
+  const bytes = Uint8Array.from(atob(result.bodyBase64), (char) => char.charCodeAt(0));
+  return new TextDecoder('utf-8').decode(bytes);
 }
 
 /** Map file extension to highlight.js language name. */
@@ -295,9 +311,7 @@ export function FilePreviewViewer({
 
     void (async () => {
       try {
-        const response = await fetch(filePath);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const content = await response.text();
+        const content = await fetchRemotePreviewText(filePath);
         if (cancelled) return;
         setHtmlContent(content);
       } catch {
@@ -333,9 +347,7 @@ export function FilePreviewViewer({
 
     void (async () => {
       try {
-        const response = await fetch(filePath);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const content = await response.text();
+        const content = await fetchRemotePreviewText(filePath);
         if (cancelled) return;
         setTextContent(content);
       } catch (e) {
@@ -598,6 +610,10 @@ img{max-width:100%}
         );
       }
 
+      if (isImageFileType(effectiveMime)) {
+        return <ImagePreview src={filePath} fileName={fileName} className={className} />;
+      }
+
       if (effectiveMime === 'application/pdf') {
         return (
           <iframe
@@ -665,6 +681,10 @@ img{max-width:100%}
           <OpenExternalButton filePath={filePath} />
         </div>
       );
+    }
+
+    if (isImageFileType(effectiveMime)) {
+      return <ImagePreview src={toServeUrl(filePath)} fileName={fileName} className={className} />;
     }
 
     if (effectiveMime === 'application/pdf') {
@@ -828,6 +848,19 @@ img{max-width:100%}
   );
 }
 
+function ImagePreview({ src, fileName, className }: { src: string; fileName: string; className?: string }) {
+  return (
+    <div className={cn('flex h-full w-full items-center justify-center overflow-auto bg-white p-6 dark:bg-[#0d1117]', className)}>
+      <img
+        src={src}
+        alt={fileName}
+        className="max-h-full max-w-full object-contain"
+        draggable={false}
+      />
+    </div>
+  );
+}
+
 function PptxPreviewPanel({ buffer, className }: { buffer: Uint8Array; className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const previewerRef = useRef<any>(null);
@@ -881,7 +914,7 @@ function MarkdownPreviewPane({ content, className }: { content: string; classNam
     <div className={cn('h-full overflow-auto bg-white px-6 py-5 dark:bg-[#0d1117]', className)}>
       <article className="prose prose-sm max-w-none text-foreground dark:prose-invert">
         <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
+          remarkPlugins={chatRemarkPlugins}
           components={{
             code({ className: codeClassName, children, ...props }) {
               const match = /language-(\w+)/.exec(codeClassName || '');

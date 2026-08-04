@@ -94,7 +94,8 @@ export function getOpenClawProviderKey(type: string, providerId: string): string
   return type;
 }
 
-async function resolveRuntimeProviderKey(config: ProviderConfig): Promise<string> {
+/** Resolve a stored provider account to the provider key used by Gateway. */
+export async function resolveOpenClawRuntimeProviderKey(config: ProviderConfig): Promise<string> {
   const account = await getProviderAccount(config.id);
   if (account?.authMode === 'oauth_browser') {
     if (config.type === 'google') {
@@ -218,7 +219,7 @@ export async function syncAllProviderAuthToRuntime(): Promise<void> {
   const accounts = await listProviderAccounts();
 
   for (const account of accounts) {
-    const runtimeProviderKey = await resolveRuntimeProviderKey({
+    const runtimeProviderKey = await resolveOpenClawRuntimeProviderKey({
       id: account.id,
       name: account.label,
       type: account.vendorId,
@@ -294,7 +295,7 @@ async function syncProviderSecretToRuntime(
 }
 
 async function resolveRuntimeSyncContext(config: ProviderConfig): Promise<RuntimeProviderSyncContext | null> {
-  const runtimeProviderKey = await resolveRuntimeProviderKey(config);
+  const runtimeProviderKey = await resolveOpenClawRuntimeProviderKey(config);
   const meta = getProviderConfig(config.type);
   const api = config.apiProtocol || (config.type === 'custom' ? 'openai-completions' : meta?.api);
   if (!api) {
@@ -481,7 +482,7 @@ export async function syncDeletedProviderToRuntime(
     return;
   }
 
-  const ock = runtimeProviderKey ?? await resolveRuntimeProviderKey({ ...provider, id: providerId });
+  const ock = runtimeProviderKey ?? await resolveOpenClawRuntimeProviderKey({ ...provider, id: providerId });
   await removeProviderFromOpenClaw(ock);
 
   scheduleGatewayRefresh(
@@ -500,7 +501,7 @@ export async function syncDeletedProviderApiKeyToRuntime(
     return;
   }
 
-  const ock = runtimeProviderKey ?? await resolveRuntimeProviderKey({ ...provider, id: providerId });
+  const ock = runtimeProviderKey ?? await resolveOpenClawRuntimeProviderKey({ ...provider, id: providerId });
   await removeProviderFromOpenClaw(ock);
 }
 
@@ -513,7 +514,7 @@ export async function syncDefaultProviderToRuntime(
     return;
   }
 
-  const ock = await resolveRuntimeProviderKey(provider);
+  const ock = await resolveOpenClawRuntimeProviderKey(provider);
   const providerKey = await getApiKey(providerId);
   const fallbackModels = await getProviderFallbackModelRefs(provider);
   const oauthTypes = ['qwen-portal', 'minimax-portal', 'minimax-portal-cn'];

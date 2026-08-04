@@ -28,9 +28,19 @@ function SkillCardListImpl({ skill, onOpenDetail, onDelete }: SkillCardListProps
       <SkillIcon icon={skill.icon} disabled={isDisabled} />
 
       <div className={cn('flex-1 min-w-0 flex flex-col gap-0.5', isDisabled && 'opacity-50')}>
-        <h3 className="text-sm font-semibold text-foreground whitespace-nowrap overflow-hidden text-ellipsis">
-          {skill.title}
-        </h3>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <h3 className="text-sm font-semibold text-foreground whitespace-nowrap overflow-hidden text-ellipsis">
+            {skill.title}
+          </h3>
+          {skill.skillKind === 'prompt' && (
+            <span
+              className="text-[11px] font-semibold px-1.5 py-[1px] rounded flex-shrink-0 leading-[1.4]"
+              style={{ backgroundColor: 'rgba(59,130,246,0.12)', color: '#2563eb' }}
+            >
+              {t('plaza.tag.prompt', { defaultValue: 'Prompt' })}
+            </span>
+          )}
+        </div>
         <p className="text-[13px] text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
           {skill.description}
         </p>

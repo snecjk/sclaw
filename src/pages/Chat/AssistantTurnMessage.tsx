@@ -1,11 +1,10 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { RawMessage, AttachedFileMeta, ToolStatus } from '@/stores/chat';
 import type { SkillMeta } from '@/types/skill-meta';
 import { useChatStore } from '@/stores/chat';
 import { useChatSessionEngineType } from '@/hooks/use-chat-session-engine-type';
 import { ChatMessage } from './ChatMessage';
 import { resolveChatMessageSearchKey } from './chat-message-search';
-import { appendWorkflowCardBlockToMessage, sessionHasParamsConfirmedWorkflowForRun } from '@/lib/workflow-card-injection';
 import {
   collectTurnAssistantSources,
   pickAssistantReplyMessage,
@@ -16,22 +15,25 @@ import { parseThinkingTurnLayout, trimTrailingThinkingOnlyToolGroupSegments } fr
 import {
   readTurnStreamingToolsCache,
   readTurnToolResultsCache,
+  migrateTurnToolsCache,
   writeTurnStreamingToolsCache,
 } from '@/lib/thinking-turn-tools-cache';
 import { resolveDoneTurnStreamingTools } from '@/lib/thinking-done-tools';
 import { consumeTurnInterrupted } from '@/lib/turn-interrupt-marker';
-import { migrateTurnDisplayCache } from '@/pages/Chat/thinking/segment-merge';
+import {
+  buildTurnDisplayCacheKey,
+  migrateTurnDisplayCache,
+  shouldPromoteActiveTurnCache,
+} from '@/pages/Chat/thinking/segment-merge';
 import {
   extractDingTalkSentPreviews,
   stripEchoedDingTalkSentBodiesFromAssistantReply,
-} from '../../../shared/dingtalk-sent-display';
+} from '../../../shared/dingtalk-send/dingtalk-sent-display';
 import {
   extractAtMentionDisplayNames,
   extractRawMessageText,
   extractText,
-  extractWorkflowCard,
   extractParameterForm,
-  findLatestWorkflowCardInMessages,
   isWorkflowPreambleAssistantMessage,
 } from './message-utils';
 import { DingTalkSentPreview } from './DingTalkSentPreview';
@@ -143,6 +145,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 }: AssistantTurnMessageProps) {
   const sessionMessages = useChatStore((s) => s.messages);
   const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
+  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const engineType = useChatSessionEngineType();
 
   const isStreaming = !!activeStream;
@@ -157,12 +160,25 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     }
   }, [turnStableKey]);
 
-  if (turnStableKey && turnStableKey !== 'active-turn') {
-    migrateTurnDisplayCache('active-turn', turnStableKey);
+  const previousTurnStableKeyRef = useRef(turnStableKey);
+  const previousTurnStableKey = previousTurnStableKeyRef.current;
+  const shouldPromoteActiveCache = shouldPromoteActiveTurnCache(
+    previousTurnStableKey,
+    turnStableKey,
+  );
+  const turnDisplayCacheKey = buildTurnDisplayCacheKey(currentSessionKey, turnStableKey);
+  const previousTurnDisplayCacheKey = buildTurnDisplayCacheKey(
+    currentSessionKey,
+    previousTurnStableKey,
+  );
+  if (shouldPromoteActiveCache) {
+    migrateTurnDisplayCache(previousTurnDisplayCacheKey, turnDisplayCacheKey);
+    migrateTurnToolsCache(previousTurnDisplayCacheKey, turnDisplayCacheKey);
   }
+  previousTurnStableKeyRef.current = turnStableKey;
 
-  if (turnStableKey && streamingTools.length > 0) {
-    writeTurnStreamingToolsCache(turnStableKey, streamingTools);
+  if (turnDisplayCacheKey && streamingTools.length > 0) {
+    writeTurnStreamingToolsCache(turnDisplayCacheKey, streamingTools);
   }
 
   const streamSources = useMemo(() => {
@@ -179,21 +195,28 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
   const turnCacheAliasKeys = useMemo(() => {
     const aliases: string[] = [];
-    if (turnStableKey !== 'active-turn') {
-      aliases.push('active-turn');
+    if (shouldPromoteActiveCache && previousTurnDisplayCacheKey) {
+      aliases.push(previousTurnDisplayCacheKey);
     }
     const userKey = precedingUserMessage?.id
       ? buildTurnStableKey(precedingUserMessage, 0)
       : null;
-    if (userKey && userKey !== turnStableKey && !aliases.includes(userKey)) {
-      aliases.push(userKey);
+    const userCacheKey = buildTurnDisplayCacheKey(currentSessionKey, userKey ?? undefined);
+    if (userCacheKey && userCacheKey !== turnDisplayCacheKey && !aliases.includes(userCacheKey)) {
+      aliases.push(userCacheKey);
     }
     return aliases;
-  }, [precedingUserMessage, turnStableKey]);
+  }, [
+    currentSessionKey,
+    precedingUserMessage,
+    previousTurnDisplayCacheKey,
+    shouldPromoteActiveCache,
+    turnDisplayCacheKey,
+  ]);
 
   const cachedToolResultsForTurn = useMemo(
-    () => readTurnToolResultsCache(turnStableKey, turnCacheAliasKeys),
-    [turnStableKey, turnCacheAliasKeys],
+    () => readTurnToolResultsCache(turnDisplayCacheKey, turnCacheAliasKeys),
+    [turnDisplayCacheKey, turnCacheAliasKeys],
   );
 
   const chronologicalEntries = useMemo(() => {
@@ -236,7 +259,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     const doneTools =
       engineType === 'claude'
         ? resolveDoneTurnStreamingTools({
-            turnStableKey,
+            turnStableKey: turnDisplayCacheKey,
             aliasKeys: turnCacheAliasKeys,
             turnMessages,
             toolResults:
@@ -244,10 +267,10 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
                 ? cachedToolResultsForTurn
                 : turnToolResults,
           })
-        : readTurnStreamingToolsCache(turnStableKey, turnCacheAliasKeys);
+        : readTurnStreamingToolsCache(turnDisplayCacheKey, turnCacheAliasKeys);
     return normalizeBakedStreamingTools(doneTools);
   }, [
-    turnStableKey,
+    turnDisplayCacheKey,
     turnCacheAliasKeys,
     isStreaming,
     streamingTools,
@@ -261,7 +284,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     if (pendingWorkflow !== null) return 'connectingModel';
     const hasWorkflowInTurn = turnMessages.some((msg) => {
       if (msg.role !== 'assistant') return false;
-      return extractWorkflowCard(msg) !== null || extractParameterForm(msg, pendingWorkflow) !== null;
+      return extractParameterForm(msg, pendingWorkflow) !== null;
     });
     return hasWorkflowInTurn ? 'connectingModel' : 'understandingQuestion';
   }, [turnMessages, pendingWorkflow]);
@@ -421,24 +444,8 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
     ? extractText(replyDisplayMessage).trim().length > 0
     : false;
 
-  const chatDisplayMessage = useMemo(() => {
-    if (!replyDisplayMessage) return null;
-    if (extractWorkflowCard(replyDisplayMessage)) return replyDisplayMessage;
-    const card = findLatestWorkflowCardInMessages(turnMessages);
-    if (!card) return replyDisplayMessage;
-    if (sessionHasParamsConfirmedWorkflowForRun(sessionMessages, card.runId)) {
-      return replyDisplayMessage;
-    }
-    return appendWorkflowCardBlockToMessage(
-      replyDisplayMessage,
-      card.runId,
-      card.templateName,
-    );
-  }, [replyDisplayMessage, turnMessages, sessionMessages]);
-
-  const chatDisplayHasWorkflowCard = !!(
-    chatDisplayMessage && extractWorkflowCard(chatDisplayMessage)
-  );
+  const chatDisplayMessage = replyDisplayMessage;
+  const chatDisplayHasWorkflowCard = false;
 
   const replyTimestamp = useMemo(() => {
     if (chatDisplayMessage?.timestamp != null) return chatDisplayMessage.timestamp;
@@ -520,7 +527,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
 
   const thinkingPanelEl = showThinkingPanel ? (
     <ThinkingTurnProcess
-      turnStableKey={turnStableKey}
+      turnStableKey={turnDisplayCacheKey}
       segments={thinkingSegmentsForDisplay}
       isStreaming={isStreaming}
       isConnecting={isConnecting}

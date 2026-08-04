@@ -1,8 +1,29 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { resolveSclawBrowserUrl } from '@/lib/open-sclaw-browser';
 
 vi.mock('@/lib/workflow-api', () => ({
   getWorkflowStoToken: vi.fn(),
+}));
+
+const fetchAppPlazaSkipLoginLinkMock = vi.fn();
+const appendSkipLoginReturnUrlMock = vi.fn();
+
+vi.mock('@/lib/app-plaza-api', () => ({
+  fetchAppPlazaSkipLoginLink: (...args: unknown[]) => fetchAppPlazaSkipLoginLinkMock(...args),
+  appendSkipLoginReturnUrl: (...args: unknown[]) => appendSkipLoginReturnUrlMock(...args),
+}));
+
+const openExternalUrlMock = vi.fn();
+
+vi.mock('@/lib/preview-url', () => ({
+  openExternalUrl: (...args: unknown[]) => openExternalUrlMock(...args),
+}));
+
+const toastErrorMock = vi.fn();
+
+vi.mock('sonner', () => ({
+  toast: {
+    error: (...args: unknown[]) => toastErrorMock(...args),
+  },
 }));
 
 vi.mock('@/lib/sto-policy-web-url', async (importOriginal) => {
@@ -15,6 +36,12 @@ vi.mock('@/lib/sto-policy-web-url', async (importOriginal) => {
 
 import { getWorkflowStoToken } from '@/lib/workflow-api';
 import { injectStoSsoWebAutoLogin } from '@/lib/sto-policy-web-url';
+import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
+import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
+import {
+  openSclawBrowserInSystemBrowser,
+  resolveSclawBrowserUrl,
+} from '@/lib/open-sclaw-browser';
 
 const mockedGetWorkflowStoToken = vi.mocked(getWorkflowStoToken);
 const mockedInjectStoSsoWebAutoLogin = vi.mocked(injectStoSsoWebAutoLogin);
@@ -22,6 +49,12 @@ const mockedInjectStoSsoWebAutoLogin = vi.mocked(injectStoSsoWebAutoLogin);
 describe('resolveSclawBrowserUrl', () => {
   beforeEach(() => {
     mockedGetWorkflowStoToken.mockReset();
+    fetchAppPlazaSkipLoginLinkMock.mockReset();
+    appendSkipLoginReturnUrlMock.mockReset();
+    openExternalUrlMock.mockReset();
+    toastErrorMock.mockReset();
+    useSclawBrowserOverlayStore.setState({ session: null });
+    useAppPlazaShellStore.setState({ browserTabs: [], activeTabId: 'home' });
   });
 
   it('replaces useStoToken=1 with stotoken when local token exists', () => {
@@ -38,9 +71,16 @@ describe('resolveSclawBrowserUrl', () => {
     );
   });
 
-  it('leaves url unchanged when useStoToken is not 1', () => {
+  it('uses custom param name when useStoToken is not 1', () => {
     mockedGetWorkflowStoToken.mockReturnValue('tok-local-abc');
-    const url = 'https://example.com/app?useStoToken=0&stotoken=keep';
+    expect(
+      resolveSclawBrowserUrl('https://example.com/app?foo=bar&useStoToken=stoTokenxxx'),
+    ).toBe('https://example.com/app?foo=bar&stoTokenxxx=tok-local-abc');
+  });
+
+  it('leaves url unchanged when useStoToken is absent', () => {
+    mockedGetWorkflowStoToken.mockReturnValue('tok-local-abc');
+    const url = 'https://example.com/app?stotoken=keep';
     expect(resolveSclawBrowserUrl(url)).toBe(url);
   });
 
@@ -48,6 +88,13 @@ describe('resolveSclawBrowserUrl', () => {
     mockedGetWorkflowStoToken.mockReturnValue('tok-relative');
     expect(resolveSclawBrowserUrl('customer-quote.html?useStoToken=1')).toBe(
       'customer-quote.html?stotoken=tok-relative',
+    );
+  });
+
+  it('supports relative urls with custom useStoToken param name', () => {
+    mockedGetWorkflowStoToken.mockReturnValue('tok-relative');
+    expect(resolveSclawBrowserUrl('customer-quote.html?a=1&useStoToken=myToken')).toBe(
+      'customer-quote.html?a=1&myToken=tok-relative',
     );
   });
 
@@ -64,5 +111,117 @@ describe('resolveSclawBrowserUrl', () => {
     expect(resolveSclawBrowserUrl('https://zc.sto.cn/?useStoToken=1')).toBe(
       'https://zc.sto.cn/?stotoken=tok-policy',
     );
+  });
+
+  it('re-exchanges skip-login before opening in system browser', async () => {
+    fetchAppPlazaSkipLoginLinkMock.mockResolvedValue(
+      'https://sso.example.com/Authenticate/Login?code=abc',
+    );
+    appendSkipLoginReturnUrlMock.mockReturnValue(
+      'https://sso.example.com/Authenticate/Login?code=abc&returnUrl=https%3A%2F%2Ftarget.example.com',
+    );
+    useSclawBrowserOverlayStore.setState({
+      session: {
+        appId: 'app-1',
+        title: 'App 1',
+        url: 'https://sso.example.com/Authenticate/Login?old=1',
+        sourceUrl: 'https://target.example.com',
+        systemCode: 'JIUTIAN',
+        skipLoginEligible: true,
+      },
+    });
+
+    await openSclawBrowserInSystemBrowser();
+
+    expect(fetchAppPlazaSkipLoginLinkMock).toHaveBeenCalledWith('JIUTIAN');
+    expect(appendSkipLoginReturnUrlMock).toHaveBeenCalledWith(
+      'https://sso.example.com/Authenticate/Login?code=abc',
+      'https://target.example.com',
+    );
+    expect(openExternalUrlMock).toHaveBeenCalledWith(
+      'https://sso.example.com/Authenticate/Login?code=abc&returnUrl=https%3A%2F%2Ftarget.example.com',
+    );
+  });
+
+  it('falls back to current session url when skip-login exchange fails', async () => {
+    fetchAppPlazaSkipLoginLinkMock.mockRejectedValue(new Error('换票失败'));
+    useSclawBrowserOverlayStore.setState({
+      session: {
+        appId: 'app-1',
+        title: 'App 1',
+        url: 'https://sso.example.com/Authenticate/Login?old=1',
+        sourceUrl: 'https://target.example.com',
+        systemCode: 'JIUTIAN',
+        skipLoginEligible: true,
+      },
+    });
+
+    await openSclawBrowserInSystemBrowser();
+
+    expect(toastErrorMock).toHaveBeenCalledWith('换票失败');
+    expect(openExternalUrlMock).toHaveBeenCalledWith(
+      'https://sso.example.com/Authenticate/Login?old=1',
+    );
+  });
+
+  it('exchanges skip-login for a specific tab systemCode (e.g. SITE_KEEPER)', async () => {
+    fetchAppPlazaSkipLoginLinkMock.mockResolvedValue(
+      'https://sso.example.com/Authenticate/Login?code=keeper',
+    );
+    appendSkipLoginReturnUrlMock.mockReturnValue(
+      'https://sso.example.com/Authenticate/Login?code=keeper&returnUrl=https%3A%2F%2Fwangdian.sto.cn',
+    );
+
+    const { openSclawBrowserTabInSystemBrowser } = await import('@/lib/open-sclaw-browser');
+    await openSclawBrowserTabInSystemBrowser({
+      url: 'https://wangdian.sto.cn/home',
+      sourceUrl: 'https://wangdian.sto.cn',
+      systemCode: 'SITE_KEEPER',
+      skipLoginEligible: true,
+    });
+
+    expect(fetchAppPlazaSkipLoginLinkMock).toHaveBeenCalledWith('SITE_KEEPER');
+    expect(openExternalUrlMock).toHaveBeenCalledWith(
+      'https://sso.example.com/Authenticate/Login?code=keeper&returnUrl=https%3A%2F%2Fwangdian.sto.cn',
+    );
+  });
+
+  it('skips skip-login exchange when tab systemCode is empty', async () => {
+    const { openSclawBrowserTabInSystemBrowser } = await import('@/lib/open-sclaw-browser');
+    await openSclawBrowserTabInSystemBrowser({
+      url: 'https://example.com/plain',
+      sourceUrl: 'https://example.com/plain',
+      systemCode: '',
+      skipLoginEligible: true,
+    });
+
+    expect(fetchAppPlazaSkipLoginLinkMock).not.toHaveBeenCalled();
+    expect(openExternalUrlMock).toHaveBeenCalledWith('https://example.com/plain');
+  });
+
+  it('skips skip-login exchange when tab systemCode is sto-policy', async () => {
+    const { openSclawBrowserTabInSystemBrowser } = await import('@/lib/open-sclaw-browser');
+    await openSclawBrowserTabInSystemBrowser({
+      url: 'https://zc.sto.cn/',
+      sourceUrl: 'https://zc.sto.cn/',
+      systemCode: 'sto-policy',
+      skipLoginEligible: true,
+    });
+
+    expect(fetchAppPlazaSkipLoginLinkMock).not.toHaveBeenCalled();
+    expect(openExternalUrlMock).toHaveBeenCalledWith('https://zc.sto.cn/');
+  });
+
+  it('never exchanges skip-login for non-App-Plaza tabs even when systemCode exists', async () => {
+    const { openSclawBrowserTabInSystemBrowser } = await import('@/lib/open-sclaw-browser');
+    await openSclawBrowserTabInSystemBrowser({
+      url: 'https://example.com/custom',
+      sourceUrl: 'https://example.com/custom',
+      systemCode: 'SITE_KEEPER',
+      skipLoginEligible: false,
+    });
+
+    expect(fetchAppPlazaSkipLoginLinkMock).not.toHaveBeenCalled();
+    expect(openExternalUrlMock).toHaveBeenCalledWith('https://example.com/custom');
   });
 });

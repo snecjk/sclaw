@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { appendDingTalkAgentSendDisclaimer, buildDingTalkMentionSystemContext } from '../../shared/dingtalk-mention-context';
+import { appendDingTalkAgentSendDisclaimer } from '../../shared/dingtalk-prompts/dingtalk-disclaimer';
+import { buildDingTalkMentionSystemContext } from '../../shared/dingtalk-prompts/dingtalk-mention-context';
 import {
   extractDingTalkSentPreviews,
   formatDingTalkSentTextForChatPreview,
   parseDwsChatMessageSendCommand,
   stripEchoedDingTalkSentBodiesFromAssistantReply,
   splitDingTalkSentPreviewText,
-} from '../../shared/dingtalk-sent-display';
+} from '../../shared/dingtalk-send/dingtalk-sent-display';
 
 describe('parseDwsChatMessageSendCommand', () => {
   it('parses JSON.stringify --text with disclaimer footer', () => {

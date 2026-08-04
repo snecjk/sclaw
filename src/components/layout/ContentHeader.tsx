@@ -25,6 +25,7 @@ import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
 import { useSettingsStore } from '@/stores/settings';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
+import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 
 export function ContentHeader() {
   const { t } = useTranslation('common');
@@ -34,9 +35,10 @@ export function ContentHeader() {
   const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
   const workflowEditorActive = useWorkflowUiStore((s) => s.editorActive);
   const browserOverlayOpen = useSclawBrowserOverlayStore((s) => s.session !== null);
+  const appPlazaVisible = useAppPlazaShellStore((s) => s.routeActive);
 
-  // Drawer toolbar occupies the header band; drag-region steals clicks regardless of z-index.
-  if (browserOverlayOpen) {
+  // Drawer / App Plaza shell occupy the header band.
+  if (browserOverlayOpen || appPlazaVisible) {
     return null;
   }
 

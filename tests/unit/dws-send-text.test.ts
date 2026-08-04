@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { appendDingTalkAgentSendDisclaimer } from '../../shared/dingtalk-disclaimer';
-import { buildDingTalkMentionSystemContext } from '../../shared/dingtalk-mention-context';
+import { appendDingTalkAgentSendDisclaimer } from '../../shared/dingtalk-prompts/dingtalk-disclaimer';
+import { buildDingTalkMentionSystemContext } from '../../shared/dingtalk-prompts/dingtalk-mention-context';
 import {
   buildDwsChatMessageSendAgentCommandExample,
   buildWin32DirectDwsExecNodeCommand,
+  dwsChatMessageSendTextContainsLocalArtifactPath,
   extractNormalizedDwsSendArgv,
   fixDwsChatMessageSendShellScript,
   fixDwsChatMessageSendToolParams,
@@ -13,11 +14,12 @@ import {
   parseDwsChatMessageSendShellCommandArgs,
   rewriteDwsSendSpawnInvocation,
   shellQuoteDwsSendTextForPowerShell,
+  textContainsLocalArtifactPath,
   tryParseDwsSendExecInvocation,
-} from '../../shared/dws-send-text';
+} from '../../shared/dingtalk-send/dws-send-text';
 import {
   normalizeDwsChatMessageSendText as pluginNormalize,
-} from '../../sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dws-send-text';
+} from '../../sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-send/dws-send-text';
 
 const cmd =
   'dws chat message send --user u1 --title "消息" --text "### 标题\\n\\n- **早上**：多云\\n\\n---\\n\\n> *本消息由 SClaw 代为发送，非本人实时回复。*" --format json';
@@ -194,7 +196,7 @@ describe('dws-send-text normalization', () => {
   it('mention context prefill examples round-trip through fixDwsChatMessageSendShellScript', () => {
     const context = buildDingTalkMentionSystemContext([
       { type: 'user', displayName: '张三', userId: 'u1' },
-    ]);
+    ], { explicitSendIntent: true });
     const exampleLine = context
       .split('\n')
       .find((line) => /^- .+: dws chat message send --user u1 /.test(line));
@@ -258,5 +260,61 @@ describe('artifact URL normalization', () => {
     const text = argv?.[argv.indexOf('--text') + 1] as string;
     expect(text).toContain(`- 产物：${SINGLE}`);
     expect(text).not.toContain('%25');
+  });
+
+  // 下载密钥类 query：`+` `/` `=` 常被 encodeURIComponent 成 `%2B` `%2F` `%3D`；
+  // decodeURI 不会解开它们，旧逻辑再 encodeURI 会打成 `%252B` 导致链接失效。
+  const KEY_RAW =
+    'https://wd-vipn.sto.cn/anonymous/ai/claw/shop/stock/download?key=OsSP5xLkfYMYQrGJLKY+ime/iuLkWJfeISMm99bWEml4KSkluwx+KFk0blJFn8Cmzf4XNnjLeUgmvP4leTOzL439Hibp4hmlGWrlpMygjQzlRKy295aAO53t0Vx5jcbmM6s4SMsyC0gOFWb66hnr9B551ydagHZMlqI4V2l39ofSEHfEmp/2ElZLCSxXSQr8uq5tT4PqNKB0yLpoq0s2dQ==';
+  const KEY_SINGLE =
+    'https://wd-vipn.sto.cn/anonymous/ai/claw/shop/stock/download?key=OsSP5xLkfYMYQrGJLKY%2Bime%2FiuLkWJfeISMm99bWEml4KSkluwx%2BKFk0blJFn8Cmzf4XNnjLeUgmvP4leTOzL439Hibp4hmlGWrlpMygjQzlRKy295aAO53t0Vx5jcbmM6s4SMsyC0gOFWb66hnr9B551ydagHZMlqI4V2l39ofSEHfEmp%2F2ElZLCSxXSQr8uq5tT4PqNKB0yLpoq0s2dQ%3D%3D';
+  const KEY_DOUBLE = KEY_SINGLE.replace(/%/g, '%25');
+
+  it('query reserved escapes (%2B/%2F/%3D) stay single-encoded (idempotent)', () => {
+    expect(normalizeArtifactUrl(KEY_SINGLE)).toBe(KEY_SINGLE);
+    expect(normalizeArtifactUrl(KEY_SINGLE)).not.toContain('%25');
+  });
+
+  it('double-encoded query reserved escapes collapse to single encoding', () => {
+    expect(normalizeArtifactUrl(KEY_DOUBLE)).toBe(KEY_SINGLE);
+    expect(normalizeArtifactUrl(KEY_DOUBLE)).not.toContain('%252B');
+    expect(normalizeArtifactUrl(KEY_DOUBLE)).not.toContain('%252F');
+    expect(normalizeArtifactUrl(KEY_DOUBLE)).not.toContain('%253D');
+  });
+
+  it('raw +/=/ in query are left usable (encodeURI does not force %2B)', () => {
+    expect(normalizeArtifactUrl(KEY_RAW)).toBe(KEY_RAW);
+  });
+
+  it('normalizeDwsChatMessageSendText collapses double-encoded download key urls', () => {
+    const body = `报表下载：${KEY_DOUBLE}`;
+    const normalized = normalizeDwsChatMessageSendText(body);
+    expect(normalized).toContain(KEY_SINGLE);
+    expect(normalized).not.toContain('%252B');
+  });
+});
+
+describe('local artifact path detection in dws --text', () => {
+  it('detects file://, .claw-output and bare absolute artifact paths', () => {
+    expect(textContainsLocalArtifactPath('file:///Users/a/.claw-output/a.html')).toBe(true);
+    expect(
+      textContainsLocalArtifactPath(
+        '报告：/Users/yaolei/.stoclaw/workspace/.claw-output/客户异常监控20260724_151406.html',
+      ),
+    ).toBe(true);
+    expect(textContainsLocalArtifactPath('见 /Users/yaolei/Desktop/report.html')).toBe(true);
+    expect(textContainsLocalArtifactPath('C:\\Users\\sto\\.claw-output\\r.html')).toBe(true);
+    expect(textContainsLocalArtifactPath('周报：https://example.com/r.html')).toBe(false);
+    expect(textContainsLocalArtifactPath('纯文字无路径')).toBe(false);
+  });
+
+  it('only inspects --text bodies so drive upload --file does not false-positive', () => {
+    const clean =
+      'dws drive upload --file /Users/yaolei/.claw-output/report.html -y --format json && dws chat message send --user u1 --text "周报已上传" --format json';
+    expect(dwsChatMessageSendTextContainsLocalArtifactPath(clean)).toBe(false);
+
+    const dirty =
+      'dws chat message send --user u1 --text "报告：/Users/yaolei/.stoclaw/workspace/.claw-output/x.html" --format json';
+    expect(dwsChatMessageSendTextContainsLocalArtifactPath(dirty)).toBe(true);
   });
 });

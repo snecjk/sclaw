@@ -2,6 +2,7 @@
  * Parse STO builtin OpenClaw tool result envelopes from toolresult messages.
  * Mirrors sto-plugin/sto-toolkit/envelope.ts (Renderer-safe subset).
  */
+import type { WorkflowRunApiPayload } from '@/lib/workflow-run-status';
 
 export interface StoToolEnvelope<T = unknown> {
   type: string;
@@ -18,7 +19,15 @@ export interface WorkflowExecutionStartedData {
   status?: string;
   templateName?: string;
   startedAt?: string;
+  /** 服务端执行路径返回的版本 ID（用于 getRun hydration 对齐版本）。 */
+  versionId?: string | number;
+  workflowVersionId?: string | number;
 }
+
+/** `get_workflow_status` 的运行快照，允许旧插件以 runId 返回。 */
+export type WorkflowRunStatusData = Partial<WorkflowRunApiPayload> & {
+  runId?: string;
+};
 
 export interface WorkflowTemplatesFoundData {
   query: string;
@@ -44,17 +53,6 @@ export interface WorkflowCreatedData {
   templateId: string;
   schemaHash: string;
   values?: Record<string, unknown>;
-}
-
-export interface ScheduledTaskConfirmationData {
-  type: 'scheduled_task_confirmation';
-  success?: boolean;
-  extractedParams?: {
-    name?: string;
-    cronExpr?: string;
-    description?: string;
-    notifyMode?: string;
-  };
 }
 
 /** Extract JSON text from tool result content (string or content blocks). */

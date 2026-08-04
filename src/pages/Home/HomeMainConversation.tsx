@@ -1,11 +1,15 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, ArrowDown, Loader2 } from 'lucide-react';
+import { AlertTriangle, ArrowDown, Loader2, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
-import { useWorkflowCompletion } from '@/hooks/use-workflow-completion';
+import {
+  EMPTY_WORKFLOW_CHAT_CARD_REFS,
+  useWorkflowChatCardsStore,
+} from '@/stores/workflow-chat-cards';
+import { WorkflowCard } from '@/components/workflow/WorkflowCard';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
@@ -23,11 +27,13 @@ import { useMinLoading } from '@/hooks/use-min-loading';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
+import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import {
   stoChatColumnContentTrackClass,
   stoChatScrollContentClass,
   stoChatScrollPaneClass,
   stoChatScrollPaneSplitClass,
+  stoOverlayScrollHostClass,
   stoSplitGridBodyChatClass,
   stoSplitGridBodyPreviewClass,
   stoSplitRowContentsClass,
@@ -44,6 +50,7 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
+import { attachMissingWorkflowChatCardAnchors } from '@/lib/workflow-chat-card-registration';
 
 /**
  * Main-agent conversation thread on the home route (replaces the old `/chat` welcome + messages UI).
@@ -88,7 +95,28 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
   const clearError = useChatStore((s) => s.clearError);
 
-  useWorkflowCompletion(currentSessionKey);
+  const workflowCards = useWorkflowChatCardsStore(
+    (state) => state.refsBySessionKey[currentSessionKey],
+  ) ?? EMPTY_WORKFLOW_CHAT_CARD_REFS;
+  const loadWorkflowCards = useWorkflowChatCardsStore((state) => state.loadSession);
+
+  useEffect(() => {
+    void loadWorkflowCards(currentSessionKey);
+  }, [currentSessionKey, loadWorkflowCards]);
+
+  useEffect(() => {
+    if (!currentSessionKey || sending) return;
+    void loadWorkflowCards(currentSessionKey, true);
+  }, [currentSessionKey, sending, loadWorkflowCards]);
+
+  useEffect(() => {
+    if (!currentSessionKey || workflowCards.every((card) => card.anchorUserMessageId)) return;
+    void attachMissingWorkflowChatCardAnchors({
+      sessionKey: currentSessionKey,
+      messages,
+      cards: workflowCards,
+    });
+  }, [currentSessionKey, messages, workflowCards]);
 
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -140,6 +168,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     sending,
     pendingFinal,
     showThinking,
+    workflowCards,
     lastChatEventAt,
     streamMsg,
     streamText,
@@ -420,6 +449,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
         isSplitLayout={isSplitChatLayout}
         splitGridChatClass={isSplitChatLayout ? stoSplitGridBodyChatClass : undefined}
       >
+      <div className={stoOverlayScrollHostClass}>
       <div
         ref={scrollRef}
         className={isSplitChatLayout ? stoChatScrollPaneSplitClass : stoChatScrollPaneClass}
@@ -438,6 +468,18 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
           ) : (
             <>
               {staticItems.map((item) => {
+                if (item.type === 'workflow-run') {
+                  return (
+                    <WorkflowCard
+                      key={item.key}
+                      runId={item.card.runId}
+                      templateName={item.card.title}
+                      paramsSummary={item.card.paramsSummary}
+                      onPreviewArtifact={openArtifactPreview}
+                      onCreateScheduledTask={openWorkflowCronTaskModal}
+                    />
+                  );
+                }
                 if (item.type === 'assistant-turn') {
                   return (
                     <AssistantTurnMessage
@@ -490,22 +532,31 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
           )}
         </div>
       </div>
+      <OverlayScrollbar viewportRef={scrollRef} contentRef={contentRef} />
+      </div>
 
       <div className="relative z-10 w-full shrink-0">
         <div className={stoChatColumnContentTrackClass('home', isSplitChatLayout)}>
       {error ? (
-        <div className="shrink-0 border-t border-destructive/20 bg-destructive/10 py-2">
-          <div className="flex items-center justify-between">
-            <p className="flex items-center gap-2 text-sm text-destructive">
-              <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
+        <div
+          role="alert"
+          className="mb-3.5 shrink-0 overflow-hidden rounded-[10px] border border-[var(--sto-chat-error-border)] bg-[var(--sto-chat-error-bg)]"
+        >
+          <div className="flex items-start gap-2 p-2">
+            <AlertTriangle
+              className="mt-0.5 h-4 w-4 shrink-0 text-[var(--sto-chat-error-icon)]"
+              aria-hidden
+            />
+            <p className="max-h-40 min-w-0 flex-1 overflow-y-auto break-words text-[13px] leading-5 text-foreground">
               {error}
             </p>
             <button
               type="button"
               onClick={() => clearError()}
-              className="text-xs text-destructive/60 underline hover:text-destructive"
+              aria-label={t('common:actions.close')}
+              className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-foreground transition-colors hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
             >
-              {t('common:actions.dismiss')}
+              <X className="h-4 w-4" aria-hidden />
             </button>
           </div>
         </div>

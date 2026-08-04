@@ -15,21 +15,29 @@ import { toast } from 'sonner';
 import {
   getStartupSchema,
   createWorkflow,
-  startWorkflow,
-  beginWorkflowRunSseTrace,
+  startWorkflowLocal,
 } from '@/lib/workflow-api';
-import { invokeIpc } from '@/lib/api-client';
 import { canStartWorkflow, useWorkflowsStore } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
-import { appendWorkflowStartedLocalTurn, buildWorkflowStartUserText } from '@/lib/workflow-local-turn';
+import { buildWorkflowStartUserText } from '@/lib/workflow-local-turn';
+import { registerStartedWorkflowChatCard } from '@/lib/workflow-chat-card-registration';
 import { buildWorkflowContextSummary, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
 import type { WorkflowSchemaField } from '@/types/workflow';
+import type { DingTalkMention } from '@/types/dingtalk-mention';
 
 export interface WorkflowSendContext {
   sessionKey: string;
   agentId: string;
+}
+
+/** The list-card selector persists its choice on the workflow chat session. */
+function chooseImmediateWorkflowEngine(): 'claude' | 'openclaw' {
+  const { currentSessionKey, sessions } = useChatStore.getState();
+  return sessions.find((session) => session.key === currentSessionKey)?.engineType === 'openclaw'
+    ? 'openclaw'
+    : 'claude';
 }
 
 /**
@@ -41,6 +49,7 @@ export async function sendWithWorkflow(
   templateId: string,
   _context: WorkflowSendContext,
   sendMessage: (text: string, runId?: string | null, workflowId?: string | null, workflowContext?: unknown) => Promise<void>,
+  dingTalkMentions?: DingTalkMention[],
 ): Promise<boolean> {
   
   if (!canStartWorkflow()) {
@@ -84,6 +93,7 @@ export async function sendWithWorkflow(
       schema,
       schemaHash,
       collectedInputs: {},
+      dingTalkMentions: dingTalkMentions?.length ? dingTalkMentions : undefined,
       frontendFormInserted: false,
       modelGuidanceSent: false,
     });
@@ -96,6 +106,7 @@ export async function sendWithWorkflow(
       schema,
       schemaHash,
       collectedInputs: {},
+      dingTalkMentions: dingTalkMentions?.length ? dingTalkMentions : undefined,
       frontendFormInserted: false,
       modelGuidanceSent: true,
     });
@@ -111,8 +122,10 @@ export async function sendWithWorkflow(
 }
 
 /**
- * Phase 2: Create and start the workflow after parameters have been collected.
- * Handles both form submission and natural language parameter confirmation paths.
+ * 新建并启动工作流的业务入口。
+ *
+ * 参数收集完成后先调用 createWorkflow 创建工作流，再调用 startWorkflowLocal
+ * 注册 run 并触发客户端本地 runtime 执行。表单提交和自然语言参数确认都会走这里。
  */
 export async function createAndStartWorkflowDirect(
   templateId: string,
@@ -153,20 +166,16 @@ export async function createAndStartWorkflowDirect(
     });
 
     const trackStartMs = Date.now();
-    const run = await startWorkflow(created.workflowId, {
+    const run = await startWorkflowLocal({
+      workflowId: created.workflowId,
       inputs,
       idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
+      sessionKey: context.sessionKey,
+      triggerType: 'chat',
+      engineType: chooseImmediateWorkflowEngine(),
     });
 
     const userText = buildWorkflowStartUserText(schema, inputs);
-    const startedAtIso = new Date(trackStartMs).toISOString();
-    appendWorkflowStartedLocalTurn({
-      userText,
-      templateId,
-      templateName,
-      runId: run.runId,
-      workflowId: created.workflowId,
-    });
 
     updateWorkflowRunMetadata(context.sessionKey, created.workflowId, {
       lastRunId: run.runId,
@@ -184,6 +193,7 @@ export async function createAndStartWorkflowDirect(
       updatedAt: trackStartMs,
       collectedInputs: inputs,
       paramsSummary: userText,
+      versionId: run.versionId,
     });
 
     appendWorkflowSessionRecord({
@@ -203,22 +213,12 @@ export async function createAndStartWorkflowDirect(
     );
     dismissWorkflowParameterFormsForTemplate(templateId);
 
-    useChatStore.getState().setWorkflowCardState(run.runId, {
+    await registerStartedWorkflowChatCard({
       runId: run.runId,
-      workflowId: created.workflowId,
-      status: 'running',
-      progress: 0,
-      steps: [],
-      startedAt: startedAtIso,
-    });
-
-    await invokeIpc('workflow:startTracking', {
-      runId: run.runId,
-      workflowId: created.workflowId,
       sessionKey: context.sessionKey,
-      agentId: context.agentId,
+      title: templateName,
+      paramsSummary: userText,
     });
-    beginWorkflowRunSseTrace(run.runId);
 
     // Clear pending state
     useChatStore.getState().clearPendingWorkflow();
@@ -254,7 +254,10 @@ async function resolveWorkflowTemplateName(
 }
 
 /**
- * Start an already-created workflow (used for re-execution from memory).
+ * 启动已存在的工作流，主要用于从会话记忆/历史记录里重新执行。
+ *
+ * 与 createAndStartWorkflowDirect 不同，这里不会重新创建 workflow，只会通过
+ * startWorkflowLocal 注册新的 run，并触发客户端本地 runtime 执行。
  */
 export async function startExistingWorkflow(
   workflowId: string,
@@ -273,9 +276,13 @@ export async function startExistingWorkflow(
   
 
   try {
-    const run = await startWorkflow(workflowId, {
+    const run = await startWorkflowLocal({
+      workflowId,
       inputs,
       idempotencyKey,
+      sessionKey: context.sessionKey,
+      triggerType: 'chat',
+      engineType: chooseImmediateWorkflowEngine(),
     });
 
     const { isReExecutionIntent } = await import('@/hooks/use-workflow-intent');
@@ -297,6 +304,7 @@ export async function startExistingWorkflow(
       assistantText: isReexec
         ? `工作流已重新启动执行（工作流 ID: ${workflowId}），请稍候查看执行进度。`
         : undefined,
+      versionId: run.versionId,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

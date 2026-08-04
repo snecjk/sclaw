@@ -16,7 +16,10 @@ const SKILL_INSTALL_PATHS = new Set([
   '/api/skill-plaza/upload',
 ]);
 
-function resolveHostApiTimeoutMs(path: string): number {
+export function resolveHostApiTimeoutMs(path: string): number {
+  if (path === '/api/chat/send') {
+    return TIMEOUTS.CHAT_SEND;
+  }
   if (path === '/api/auth/login') {
     return TIMEOUTS.AUTH_LOGIN;
   }
@@ -26,8 +29,11 @@ function resolveHostApiTimeoutMs(path: string): number {
   if (SKILL_INSTALL_PATHS.has(path)) {
     return TIMEOUTS.SKILL_INSTALL;
   }
-  if (path === '/api/cron/beautify-instruction') {
+  if (path === '/api/scheduled-tasks/beautify-instruction') {
     return TIMEOUTS.BEAUTIFY_INSTRUCTION;
+  }
+  if (path === '/api/local-authorized-files/authorize') {
+    return TIMEOUTS.LOCAL_FILE_AUTHORIZE;
   }
   return TIMEOUTS.DEFAULT_FETCH;
 }

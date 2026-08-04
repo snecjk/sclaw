@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import {
+  buildTurnStableKey,
   buildChatDisplayItems,
   findLastUserMessage,
   isAssistantRole,
-  resolveActiveTurnStableKey,
   type ChatDisplayItem,
+  mergeWorkflowCardsIntoDisplayItems,
 } from './chat-display';
+import type { ChatWorkflowCardRef } from '@/types/workflow';
 import type { ActiveTurnStream } from './AssistantTurnMessage';
 import { extractImages, extractThinking, extractToolUse } from './message-utils';
 
@@ -72,6 +74,7 @@ export function useChatDisplay(params: {
   streamingMessages: RawMessage[];
   streamingToolResults: RawMessage[];
   streamingTools: StreamingTool[];
+  workflowCards?: ChatWorkflowCardRef[];
 }) {
   const {
     messages,
@@ -84,6 +87,7 @@ export function useChatDisplay(params: {
     streamingMessages = [],
     streamingToolResults = [],
     streamingTools = [],
+    workflowCards = [],
   } = params;
   const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
 
@@ -160,6 +164,27 @@ export function useChatDisplay(params: {
     // fresh activeTurn ensures the loading indicator appears as a new line
     // rather than overlaying the previous completed answer.
     const last = displayItems[displayItems.length - 1];
+    if (
+      lastUserMessageAt != null
+      && last?.type === 'single'
+      && last.message.role === 'user'
+    ) {
+      const userMessageIndex = messages.lastIndexOf(last.message);
+      return {
+        staticItems: displayItems,
+        activeTurn: {
+          turnStableKey: buildTurnStableKey(
+            last.message,
+            userMessageIndex >= 0 ? userMessageIndex : messages.length - 1,
+          ),
+          turnMessages: [],
+          turnToolResults: [],
+          precedingUserMessage: last.message,
+          activeStream,
+        },
+      };
+    }
+
     if (lastUserMessageAt != null && last?.type === 'assistant-turn') {
       return {
         staticItems: displayItems.slice(0, -1),
@@ -197,7 +222,7 @@ export function useChatDisplay(params: {
     return {
       staticItems: displayItems,
       activeTurn: {
-        turnStableKey: resolveActiveTurnStableKey(messages) ?? 'active-turn',
+        turnStableKey: 'active-turn',
         turnMessages: [],
         turnToolResults: [],
         precedingUserMessage: null,
@@ -218,7 +243,20 @@ export function useChatDisplay(params: {
     lastUserMessageAt,
   ]);
 
-  return { staticItems, activeTurn, shouldRenderStreaming, hasAnyStreamContent };
+  const visibleWorkflowCards = activeTurn?.precedingUserMessage?.id
+    ? workflowCards.filter((card) => card.anchorUserMessageId !== activeTurn.precedingUserMessage?.id)
+    : workflowCards;
+  const staticItemsWithWorkflowCards = mergeWorkflowCardsIntoDisplayItems(
+    staticItems,
+    visibleWorkflowCards,
+  );
+
+  return {
+    staticItems: staticItemsWithWorkflowCards,
+    activeTurn,
+    shouldRenderStreaming,
+    hasAnyStreamContent,
+  };
 }
 
 export type { ChatDisplayItem };

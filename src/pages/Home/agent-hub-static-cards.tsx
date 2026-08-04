@@ -7,7 +7,6 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
   homeHubCardShellClass,
-  homeHubCardTagClass,
   homeHubCardTitleClass,
   homeHubCardDescClass,
 } from './home-hub-surface-styles';
@@ -104,7 +103,6 @@ export function StaticFallbackCards() {
         <div className="min-w-0 flex-1 text-left">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className={homeHubCardTitleClass}>{t(titleKey)}</h3>
-            <span className={homeHubCardTagClass}>{t('agentHub.functionTag')}</span>
           </div>
           <p className={cn('mt-1.5', homeHubCardDescClass)}>{t(descKey)}</p>
         </div>

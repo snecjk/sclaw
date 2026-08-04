@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   appendPendingLocalVirtualTaskSessions,
+  filterTaskSidebarCatalogRows,
+  mergeEngineAndCatalogScheduledTaskSessions,
   omitSupersededCronDatedAgentTwins,
 } from '@/stores/chat/session-list-merge';
 
@@ -72,5 +74,118 @@ describe('appendPendingLocalVirtualTaskSessions cron agent twins', () => {
     ];
     const merged = appendPendingLocalVirtualTaskSessions(remote, local, new Set());
     expect(merged.map((s) => s.key)).toEqual(['agent:main:cron:job-1:2026-06-28']);
+  });
+});
+
+describe('mergeEngineAndCatalogScheduledTaskSessions', () => {
+  it('fills catalog-only dated cron placeholders missing from engine list', () => {
+    const merged = mergeEngineAndCatalogScheduledTaskSessions(
+      [{ key: 'agent:main:main' }],
+      [{
+        sessionKey: 'agent:main:cron:job-1:2026-07-24',
+        sessionType: 'cron',
+        taskId: 'job-1',
+        title: '日报',
+        lastActivityAt: '2026-07-24T01:00:00.000Z',
+      }],
+    );
+    expect(merged.map((s) => s.key)).toEqual([
+      'agent:main:cron:job-1:2026-07-24',
+      'agent:main:main',
+    ]);
+    expect(merged[0]).toMatchObject({
+      displayName: '日报',
+      engineType: 'openclaw',
+      updatedAt: Date.parse('2026-07-24T01:00:00.000Z'),
+    });
+  });
+
+  it('lets engine fields win but keeps catalog displayName when engine omits it', () => {
+    const merged = mergeEngineAndCatalogScheduledTaskSessions(
+      [{
+        key: 'claude-task:t1:2026-07-24',
+        updatedAt: 100,
+        engineType: 'claude' as const,
+        model: 'sonnet',
+      }],
+      [{
+        sessionKey: 'claude-task:t1:2026-07-24',
+        sessionType: 'claude_task',
+        taskId: 't1',
+        title: '周报',
+        lastActivityAt: '2026-07-24T02:00:00.000Z',
+      }],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+      key: 'claude-task:t1:2026-07-24',
+      displayName: '周报',
+      updatedAt: 100,
+      engineType: 'claude',
+      model: 'sonnet',
+    });
+  });
+
+  it('only accepts dated session_type cron/claude_task; drops run/base/history', () => {
+    const merged = mergeEngineAndCatalogScheduledTaskSessions(
+      [],
+      [
+        {
+          sessionKey: 'scheduled-task:42',
+          sessionType: 'scheduled_task',
+          taskId: '42',
+          title: '云端旧任务',
+          lastActivityAt: null,
+        },
+        {
+          sessionKey: 'agent:main:cron:job-2',
+          sessionType: 'cron',
+          taskId: 'job-2',
+          title: 'base',
+          lastActivityAt: null,
+        },
+        {
+          sessionKey: 'agent:main:cron:job-2:run:abc',
+          sessionType: 'cron',
+          taskId: 'job-2',
+          title: 'run',
+          lastActivityAt: '2026-07-24T15:00:00.000Z',
+        },
+        {
+          sessionKey: 'agent:main:cron:job-2:2026-07-24',
+          sessionType: 'cron',
+          taskId: 'job-2',
+          title: 'dated',
+          lastActivityAt: '2026-07-24T16:00:00.000Z',
+        },
+      ],
+    );
+    expect(merged.map((s) => s.key)).toEqual(['agent:main:cron:job-2:2026-07-24']);
+  });
+});
+
+describe('filterTaskSidebarCatalogRows', () => {
+  it('keeps one dated row per task+day (latest activity)', () => {
+    const filtered = filterTaskSidebarCatalogRows([
+      {
+        sessionKey: 'agent:main:cron:job-1:2026-07-24',
+        sessionType: 'cron',
+        taskId: 'job-1',
+        lastActivityAt: '2026-07-24T10:00:00.000Z',
+      },
+      {
+        sessionKey: 'agent:ops:cron:job-1:2026-07-24',
+        sessionType: 'cron',
+        taskId: 'job-1',
+        lastActivityAt: '2026-07-24T12:00:00.000Z',
+      },
+      {
+        sessionKey: 'agent:main:cron:job-1:run:x',
+        sessionType: 'cron',
+        taskId: 'job-1',
+        lastActivityAt: '2026-07-24T13:00:00.000Z',
+      },
+    ]);
+    expect(filtered.map((r) => r.sessionKey)).toEqual(['agent:ops:cron:job-1:2026-07-24']);
   });
 });

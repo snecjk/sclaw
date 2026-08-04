@@ -87,7 +87,6 @@ export function HomeComposer({
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessions = useChatStore((s) => s.sessions);
   const messagesLength = useChatStore((s) => s.messages.length);
-  const error = useChatStore((s) => s.error);
   const { handleHubSend, handleHubQueue } = useHomeChatEntrySend();
 
   const queue = useMessageQueueStore((s) => s.getQueue(currentSessionKey));
@@ -157,7 +156,6 @@ export function HomeComposer({
             engineType={resolvedEngineType}
           />
         )}
-        {error ? <p className="mt-2 text-sm text-destructive">{error}</p> : null}
       </section>
       {showDisclaimer ? (
         <p

@@ -1,4 +1,3 @@
-import { hydrateSessionWorkflowCards } from '@/lib/workflow-run-hydration';
 import { upgradeWorkflowParamUserMessages } from '@/lib/workflow-param-messages';
 import { getMessageText } from './helpers';
 import { patchLastAssistantWithWorkflowForm } from './parameter-form-recovery';
@@ -28,7 +27,7 @@ export function localizeAndHydrateWorkflowForms(input: {
     const localized = await upgradeWorkflowParamUserMessages(messages, sessionKey);
     if (get().currentSessionKey !== sessionKey) return;
 
-    let nextMessages = localized !== messages ? localized : messages;
+    const nextMessages = localized !== messages ? localized : messages;
     if (localized !== messages) {
       set({ messages: localized });
       onLocalized?.(localized);
@@ -38,14 +37,9 @@ export function localizeAndHydrateWorkflowForms(input: {
       const patched = patchLastAssistantWithWorkflowForm(nextMessages, getMessageText, { rawMessages });
       if (patched !== nextMessages) {
         set({ messages: patched });
-        nextMessages = patched;
         onLocalized?.(patched);
       }
     }
 
-    await hydrateSessionWorkflowCards(nextMessages, {
-      sessionKey,
-      agentId: get().currentAgentId,
-    });
   })();
 }

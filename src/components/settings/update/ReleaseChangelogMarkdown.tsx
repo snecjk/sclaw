@@ -1,5 +1,5 @@
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
 import { cn } from '@/lib/utils';
 
 interface ReleaseChangelogMarkdownProps {
@@ -14,7 +14,7 @@ export function ReleaseChangelogMarkdown({ content, className }: ReleaseChangelo
   return (
     <div className={cn('flex flex-col', className)}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={chatRemarkPlugins}
         components={{
           h3: ({ children }) => (
             <h3 className="mt-4 text-[13px] font-bold leading-snug text-[#1D2129] first:mt-0 dark:text-foreground">

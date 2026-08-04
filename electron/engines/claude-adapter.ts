@@ -8,7 +8,7 @@ import { toLegacyChatMessagePayload, type NormalizedEngineEvent } from '../gatew
 import { listClaudeBridgePluginPaths } from '../services/claude-plugin-bridge';
 import { resolveSessionToolCwd } from '../services/session-catalog-service';
 import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, listEngineSessionRegistryEntries, patchEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry, type EngineSessionRegistryEntry } from './session-registry';
-import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EngineSessionSummary } from './types';
+import type { EngineAdapter, EngineAdapterContext, EngineHistoryResult, EnginePermissionProfile, EngineSessionSummary } from './types';
 import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { ImageBlockParam, MessageParam, TextBlockParam } from '@anthropic-ai/sdk/resources';
 import {
@@ -55,6 +55,14 @@ const liveClaudeMessages = new Map<string, Array<{
   receivedAt: number;
 }>>();
 const claudeRuntimeResults = new Map<string, NonNullable<EngineHistoryResult['runtimeResult']>>();
+
+/**
+ * 执行器读 Claude run 终态（isError / summary / durationMs）。run 完成时
+ * `consumeClaudeQuery` 已把 `result` 消息写入此 map；未运行 / 已清空 → null。
+ */
+export function getClaudeRuntimeResult(sessionKey: string): NonNullable<EngineHistoryResult['runtimeResult']> | null {
+  return claudeRuntimeResults.get(sessionKey) ?? null;
+}
 const CLAUDE_VISION_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
@@ -757,11 +765,9 @@ export async function consumeClaudeQuery(
       }
       if ((message.type === 'user' || message.type === 'assistant') && 'message' in message) {
         if (message.type === 'user' && shouldHideClaudeUserMessage(message, (message as { message?: unknown }).message)) {
-          // Hidden user messages carry tool_result blocks (e.g. the scheduled-task
-          // worker reads the dws send result here to set dingtalkAlreadySent). The
-          // `continue` below skips the tail onMessage call, so surface the message
-          // to observers first — otherwise the worker's dws-result detection is dead
-          // code and the workflow fallback re-sends dingtalk the agent already sent.
+          // Hidden user messages carry tool_result blocks. The `continue` below
+          // skips the tail onMessage path, so surface the message to observers
+          // first (UI / history / workflow tool_result indexing).
           await onMessage?.(message);
           const workflowToolResult = extractWorkflowToolResult((message as { message?: unknown }).message);
           if (workflowToolResult) {
@@ -902,6 +908,8 @@ async function startClaudeQuery(
     /** 本轮用户原文，用于口头钉钉发送等按需注入。 */
     userPrompt?: string;
     systemPromptAppend?: string;
+    /** 定时任务执行时由 executor 透传；交互式 chat 不设（→ 保留默认 bypass）。 */
+    permissionProfile?: EnginePermissionProfile;
   },
 ): Promise<{ success: boolean; result?: { runId: string }; error?: string }> {
   try {
@@ -941,11 +949,30 @@ async function startClaudeQuery(
       .filter(Boolean)
       .join('\n\n');
     logger.info(`[claude-adapter][prompt] final systemPromptAppend: sessionKey=${sessionKey}, systemPromptAppend=\n${systemPromptAppend || '(none)'}`);
+    const userPromptPreview =
+      typeof prompt === 'string'
+        ? prompt
+        : '(stream/non-string prompt)';
+    logger.info('[claude-adapter][prompt] user message', {
+      sessionKey,
+      userPromptChars: typeof prompt === 'string' ? prompt.length : null,
+      userPrompt: userPromptPreview,
+    });
+    // 权限档位：定时任务带 permissionProfile 时按档映射（dangerous-bypass→bypass；
+    // 其余→默认受约束）；交互式 chat（undefined）保留既有 bypass 默认，不改变行为。
+    const permissionProfile = options?.permissionProfile;
+    const permissionMode: 'bypassPermissions' | undefined =
+      permissionProfile === undefined
+        ? 'bypassPermissions'
+        : permissionProfile === 'dangerous-bypass'
+          ? 'bypassPermissions'
+          : undefined;
+    const allowDangerouslySkipPermissions = permissionMode === 'bypassPermissions';
     const queryBaseOptions = {
       cwd,
       env: sharedRuntime.env,
-      permissionMode: 'bypassPermissions' as const,
-      allowDangerouslySkipPermissions: true,
+      permissionMode,
+      allowDangerouslySkipPermissions,
       settingSources: ['user' as const],
       skills: 'all' as const,
       // Enable token-level streaming events (SDKPartialAssistantMessage) so the
@@ -1150,7 +1177,9 @@ export const claudeAdapter: EngineAdapter = {
 
   prepareMemoryInjection(params, memory) {
     const memorySystemPrompt = [memory.preference, memory.execution].filter(Boolean).join('\n\n');
-    const systemPromptAppend = [params.systemPromptAppend?.trim(), memorySystemPrompt]
+    // Memory is advisory. Put task-specific system context after it so recalled
+    // experience cannot override the current task's rules or workflow contract.
+    const systemPromptAppend = [memorySystemPrompt, params.systemPromptAppend?.trim()]
       .filter(Boolean)
       .join('\n\n') || undefined;
     if (memorySystemPrompt) {
@@ -1228,6 +1257,7 @@ export const claudeAdapter: EngineAdapter = {
       eventSink: ctx.gatewayManager,
       userPrompt: params.message,
       systemPromptAppend: params.systemPromptAppend,
+      permissionProfile: params.permissionProfile,
     });
   },
 
@@ -1244,6 +1274,7 @@ export const claudeAdapter: EngineAdapter = {
       eventSink: ctx.gatewayManager,
       userPrompt: params.message,
       systemPromptAppend: params.systemPromptAppend,
+      permissionProfile: params.permissionProfile,
     });
   },
 

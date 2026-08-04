@@ -16,10 +16,9 @@ export function useSessionWorkflowPreview(
 ) {
   const storeSessionKey = useChatStore((s) => s.currentSessionKey);
   const resolvedSessionKey = sessionKey ?? storeSessionKey;
-  const workflowCardStates = useChatStore((s) => s.workflowCardStates);
   const sessionWorkflowCardStates = useMemo(
-    () => filterSessionWorkflowCardStates(messages, workflowCardStates),
-    [messages, workflowCardStates],
+    () => filterSessionWorkflowCardStates(messages, {}),
+    [messages],
   );
 
   const workflowId = useMemo(

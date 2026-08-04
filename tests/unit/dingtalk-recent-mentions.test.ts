@@ -7,7 +7,7 @@ import {
   mapUnreadConversationItem,
   pickUnreadCount,
   sortConversationsByLastMsg,
-} from '../../shared/dingtalk-recent-mentions';
+} from '../../shared/dingtalk-send/dingtalk-recent-mentions';
 
 describe('dingtalk recent mentions', () => {
   it('maps list-all single chat as user and group as group', () => {

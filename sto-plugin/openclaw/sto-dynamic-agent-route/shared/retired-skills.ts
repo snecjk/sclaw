@@ -1,6 +1,7 @@
 /**
  * Self-contained copy for Gateway extension install (~/.stoclaw/openclaw/extensions/...).
  * Keep in sync with repository root `shared/retired-skills.ts`.
+ * Regenerate: `pnpm run sync:plugin-shared`
  */
 export const RETIRED_SKILL_SLUGS = [
   'sto-distinctive-design',

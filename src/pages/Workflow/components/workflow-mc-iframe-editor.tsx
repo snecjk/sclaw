@@ -1,4 +1,13 @@
-import { useMemo, useState } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -7,8 +16,19 @@ import {
   openMemoryCenterWorkflowDesigner,
 } from '@/lib/memory-center-web-url';
 import { getWorkflowStoToken } from '@/lib/workflow-api';
+import { invokeIpc } from '@/lib/api-client';
 import { useAuthStore } from '@/stores/auth';
 import { workflowMcEditorShell } from '@/lib/surfaces';
+import {
+  WORKFLOW_DRAFT_REQUEST,
+  WORKFLOW_IFRAME_BRIDGE_PROTOCOL,
+  createWorkflowBridgeNonce,
+  isWorkflowDraftError,
+  isWorkflowDraftResponse,
+  isWorkflowPerformanceMetric,
+  type WorkflowDraftSnapshot,
+} from '@/lib/workflow-iframe-bridge';
+import { getMemoryCenterWebBase } from '@/lib/memory-center-web-url';
 
 interface WorkflowMcIframeEditorProps {
   workflowId: string;
@@ -18,45 +38,186 @@ interface WorkflowMcIframeEditorProps {
   promptCacheId?: string;
 }
 
+export interface WorkflowMcIframeEditorHandle {
+  requestDraftSnapshot: () => Promise<WorkflowDraftSnapshot>;
+}
+
+// The iframe persists the exact canvas snapshot before replying. Allow enough
+// time for a real cloud save (including slower VPN/network conditions).
+const DRAFT_REQUEST_TIMEOUT_MS = 30_000;
+
 /** 编辑/AI 创建流程：iframe 嵌入 MC /workflows-workbench/{workflowId}（顶栏由 useWorkflowEditorContentHeader 注入） */
-export function WorkflowMcIframeEditor({ workflowId, prompt, promptCacheId }: WorkflowMcIframeEditorProps) {
+export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, WorkflowMcIframeEditorProps>(function WorkflowMcIframeEditor({
+  workflowId,
+  prompt,
+  promptCacheId,
+}, ref) {
   const ssoEnvironment = useAuthStore((s) => s.ssoEnvironment);
   const stoToken = useAuthStore((s) => s.user?.stoToken);
   const token = useMemo(() => stoToken?.trim() || getWorkflowStoToken() || '', [stoToken]);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [bridgeNonce] = useState(createWorkflowBridgeNonce);
+  const iframeCreatedAtRef = useRef<number | null>(null);
+  const pendingRequestRef = useRef<{
+    requestId: string;
+    resolve: (snapshot: WorkflowDraftSnapshot) => void;
+    reject: (error: Error) => void;
+    promise: Promise<WorkflowDraftSnapshot>;
+    timer: number;
+  } | null>(null);
+  const expectedOrigin = useMemo(() => new URL(getMemoryCenterWebBase(ssoEnvironment)).origin, [ssoEnvironment]);
 
   const iframeSrc = useMemo(
-    () => buildMemoryCenterWorkflowDesignerEmbedUrl(workflowId, token, ssoEnvironment, promptCacheId, prompt),
-    [workflowId, token, ssoEnvironment, promptCacheId, prompt],
+    () => buildMemoryCenterWorkflowDesignerEmbedUrl(
+      workflowId,
+      token,
+      ssoEnvironment,
+      promptCacheId,
+      prompt,
+      bridgeNonce,
+    ),
+    [workflowId, token, ssoEnvironment, promptCacheId, prompt, bridgeNonce],
   );
+
+  useEffect(() => {
+    iframeCreatedAtRef.current = performance.now();
+    void invokeEditorMetric({ workflowId, stage: 'iframe_created', elapsedMs: 0 });
+  }, [iframeSrc, workflowId]);
+
+  const requestDraftSnapshot = useCallback(() => {
+    const target = iframeRef.current?.contentWindow;
+    if (!target) {
+      return Promise.reject(new Error('画布尚未加载完成，请稍后重试'));
+    }
+    if (pendingRequestRef.current) {
+      return pendingRequestRef.current.promise;
+    }
+
+    const requestId = createWorkflowBridgeNonce();
+    let resolveDraft!: (snapshot: WorkflowDraftSnapshot) => void;
+    let rejectDraft!: (error: Error) => void;
+    const promise = new Promise<WorkflowDraftSnapshot>((resolve, reject) => {
+      resolveDraft = resolve;
+      rejectDraft = reject;
+    });
+    const timer = window.setTimeout(() => {
+      pendingRequestRef.current = null;
+      rejectDraft(new Error('未能获取当前画布草稿，请刷新画布后重试'));
+    }, DRAFT_REQUEST_TIMEOUT_MS);
+    pendingRequestRef.current = { requestId, resolve: resolveDraft, reject: rejectDraft, promise, timer };
+    try {
+      target.postMessage({
+        protocol: WORKFLOW_IFRAME_BRIDGE_PROTOCOL,
+        type: WORKFLOW_DRAFT_REQUEST,
+        requestId,
+        workflowId,
+        nonce: bridgeNonce,
+      }, expectedOrigin);
+    } catch (error) {
+      window.clearTimeout(timer);
+      pendingRequestRef.current = null;
+      rejectDraft(error instanceof Error ? error : new Error(String(error)));
+    }
+    return promise;
+  }, [bridgeNonce, expectedOrigin, workflowId]);
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent<unknown>) => {
+      if (event.origin !== expectedOrigin || event.source !== iframeRef.current?.contentWindow) return;
+      const payload = event.data;
+      if (isWorkflowPerformanceMetric(payload)) {
+        if (payload.nonce !== bridgeNonce || payload.workflowId !== workflowId) return;
+        void invokeEditorMetric({
+          workflowId,
+          stage: payload.stage,
+          elapsedMs: performance.now() - (iframeCreatedAtRef.current ?? performance.now()),
+          embeddedElapsedMs: payload.elapsedMs,
+          error: payload.error,
+        });
+        return;
+      }
+      const pending = pendingRequestRef.current;
+      if (!pending) return;
+      if (isWorkflowDraftResponse(payload)) {
+        if (
+          payload.requestId !== pending.requestId ||
+          payload.nonce !== bridgeNonce ||
+          payload.workflowId !== workflowId
+        ) return;
+        window.clearTimeout(pending.timer);
+        pendingRequestRef.current = null;
+        pending.resolve(payload);
+      } else if (isWorkflowDraftError(payload)) {
+        if (
+          payload.requestId !== pending.requestId ||
+          payload.nonce !== bridgeNonce ||
+          payload.workflowId !== workflowId
+        ) return;
+        window.clearTimeout(pending.timer);
+        pendingRequestRef.current = null;
+        pending.reject(new Error(payload.message));
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      const pending = pendingRequestRef.current;
+      if (pending) {
+        window.clearTimeout(pending.timer);
+        pending.reject(new Error('画布已关闭，无法获取草稿'));
+        pendingRequestRef.current = null;
+      }
+    };
+  }, [bridgeNonce, expectedOrigin, workflowId]);
+
+  useImperativeHandle(ref, () => ({ requestDraftSnapshot }), [requestDraftSnapshot]);
 
   return (
     <div className={workflowMcEditorShell}>
       <div className="relative min-h-0 flex-1">
         {/* key 随 src 变化重挂载，loading 态自动重置为 true，无需 effect */}
-        <McEditorIframe key={iframeSrc} src={iframeSrc} prompt={prompt} promptCacheId={promptCacheId} workflowId={workflowId} token={token} />
+        <McEditorIframe
+          key={iframeSrc}
+          iframeRef={iframeRef}
+          src={iframeSrc}
+          prompt={prompt}
+          promptCacheId={promptCacheId}
+          workflowId={workflowId}
+          token={token}
+          onIframeLoad={() => void invokeEditorMetric({
+            workflowId,
+            stage: 'iframe_load',
+            elapsedMs: performance.now() - (iframeCreatedAtRef.current ?? performance.now()),
+          })}
+        />
       </div>
     </div>
   );
-}
+});
 
 function McEditorIframe({
   src,
+  iframeRef,
   prompt,
   promptCacheId,
   workflowId,
   token,
+  onIframeLoad,
 }: {
   src: string;
+  iframeRef: RefObject<HTMLIFrameElement | null>;
   prompt?: string;
   promptCacheId?: string;
   workflowId: string;
   token: string;
+  onIframeLoad: () => void;
 }) {
   const [loadFailed, setLoadFailed] = useState(false);
   const [iframeLoading, setIframeLoading] = useState(true);
 
   const handleIframeLoad = () => {
     setIframeLoading(false);
+    onIframeLoad();
     if (src.includes('/workflows-workbench/')) {
       markMcWebAuthedInSession();
     }
@@ -84,6 +245,7 @@ function McEditorIframe({
         </div>
       ) : (
         <iframe
+          ref={iframeRef}
           title="AI 记忆中心工作流编辑器"
           src={src}
           className="h-full w-full border-0 bg-background"
@@ -96,4 +258,12 @@ function McEditorIframe({
       )}
     </>
   );
+}
+
+async function invokeEditorMetric(metric: Record<string, unknown>): Promise<void> {
+  try {
+    await invokeIpc('workflow-editor:metric', metric);
+  } catch {
+    // 性能日志不可用不应影响画布编辑。
+  }
 }
