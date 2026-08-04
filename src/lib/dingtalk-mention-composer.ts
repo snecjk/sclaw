@@ -44,6 +44,19 @@ function isSkillSpan(node: Node | null): boolean {
     && (node.classList.contains(SKILL_SPAN_CLASS) || Boolean(node.dataset.skillSlug));
 }
 
+function isEmptyEditorFillerNode(node: Node): boolean {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return (node.textContent ?? '').trim() === '';
+  }
+  return node instanceof HTMLBRElement;
+}
+
+function clearEmptyEditorFillers(root: HTMLElement): void {
+  if (root.childNodes.length === 0) return;
+  if (!Array.from(root.childNodes).every(isEmptyEditorFillerNode)) return;
+  root.replaceChildren();
+}
+
 function readSkillFromSpan(span: HTMLSpanElement): SkillMeta | null {
   const slug = span.dataset.skillSlug;
   const title = span.dataset.skillTitle ?? span.querySelector('.skill-token-label')?.textContent?.trim() ?? '';
@@ -581,6 +594,7 @@ export function insertWorkflowSpan(
       slashRange.deleteContents();
     }
   }
+  clearEmptyEditorFillers(root);
 
   const span = createWorkflowSpan(workflowId, name, source);
   const space = document.createTextNode('\u00A0');

@@ -4,6 +4,8 @@
  */
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
+import { awaitSessionSendReadiness } from '@/lib/session-send-readiness';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
@@ -19,6 +21,27 @@ export interface DispatchChatSendOptions {
   /** 工作流名称（mine 来源时用于上下文块）。 */
   workflowName?: string | null;
   skillMeta?: SkillMeta;
+}
+
+async function materializeDefaultSessionForWorkflowShortcut(): Promise<{
+  sessionKey: string;
+  agentId: string;
+}> {
+  const state = useChatStore.getState();
+  if (state.currentSessionKey === DEFAULT_SESSION_KEY) {
+    state.newSession(
+      state.pendingProjectId
+        ? { projectId: state.pendingProjectId, materialize: true }
+        : undefined,
+    );
+  }
+
+  const nextState = useChatStore.getState();
+  await awaitSessionSendReadiness(nextState.currentSessionKey);
+  return {
+    sessionKey: nextState.currentSessionKey,
+    agentId: nextState.currentAgentId,
+  };
 }
 
 export async function dispatchChatSend(options: DispatchChatSendOptions): Promise<void> {
@@ -77,13 +100,15 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
 
   // Explicit template pick from picker — fetch schema → send to model.
   if (workflowId) {
-    if (chatState.pendingWorkflow?.templateId !== workflowId) {
-      chatState.clearPendingWorkflow();
+    const workflowSession = await materializeDefaultSessionForWorkflowShortcut();
+    const workflowChatState = useChatStore.getState();
+    if (workflowChatState.pendingWorkflow?.templateId !== workflowId) {
+      workflowChatState.clearPendingWorkflow();
     }
     const { sendWithWorkflow } = await import('@/hooks/use-workflow-send');
     const ok = await sendWithWorkflow(text, workflowId, {
-      sessionKey: chatState.currentSessionKey,
-      agentId: chatState.currentAgentId,
+      sessionKey: workflowSession.sessionKey,
+      agentId: workflowSession.agentId,
     }, sendWithWorkflowContext, dingTalkMentions);
     if (!ok) return;
     return;
