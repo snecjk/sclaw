@@ -50,7 +50,7 @@ export const homeHubMainScrollHostClass =
  */
 export const homeHubMainScrollClass = cn(
   homeHubContentMaxWidthClass,
-  'home-hub-main-scroll flex min-h-0 flex-1 flex-col justify-start gap-10 overflow-hidden pb-6 pt-4 sm:pt-6',
+  'home-hub-main-scroll flex min-h-0 flex-1 flex-col justify-start gap-[30px] overflow-hidden pb-6 pt-4 sm:pt-6',
 );
 
 /** 底部输入 + 免责区外壳（底边距与对话列一致，仅依赖 MainLayout body pb-5） */

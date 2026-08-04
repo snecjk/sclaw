@@ -1,9 +1,10 @@
 /**
- * 快捷输入管理弹窗：搜索 + 可排序列表（编辑/分享/删除）+ 取消/保存。
+ * 快捷输入管理弹窗：有数据时搜索 + 可排序列表（编辑/分享/删除）+ 取消/保存；无数据时空态。
  * 容器与底部按钮样式对齐 QuickInputCreateModal；搜索框对齐 QuickInputPicker。
- * 列表排序使用 @dnd-kit/sortable。删除即时调 API；保存提交槽位重排。
+ * 列表排序使用 @dnd-kit/sortable。删除即时写 store；保存提交槽位重排。
+ * 拖拽草稿序留在本地，点保存后再写回 store。
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   DndContext,
@@ -25,6 +26,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Loader2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import quickInputEmptyIcon from '@/assets/icons/quick-input-empty.png';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -32,14 +34,9 @@ import {
   buildConversationShareDialogDraft,
   type DingTalkShareDialogDraft,
 } from '@/lib/dingtalk-share';
-import {
-  deleteQuickInput,
-  listQuickInputs,
-  reorderQuickInputs,
-  updateQuickInput,
-} from '@/lib/quick-input-api';
 import { QuickInputCreateModal } from './QuickInputCreateModal';
 import { QuickInputManageListItem } from './QuickInputManageListItem';
+import { useQuickInputStore } from './store';
 import { QUICK_INPUT_LIST_CAP, type QuickInputItem } from './types';
 
 /** 锁定左右位移，仅允许上下拖动 */
@@ -51,70 +48,69 @@ const restrictToVerticalAxis: Modifier = ({ transform }) => ({
 interface QuickInputManageModalProps {
   open: boolean;
   onClose: () => void;
-  /** 列表发生增删改排后的回调（供 Picker 刷新） */
-  onChanged?: () => void;
 }
 
-export function QuickInputManageModal({
-  open,
-  onClose,
-  onChanged,
-}: QuickInputManageModalProps) {
+export function QuickInputManageModal({ open, onClose }: QuickInputManageModalProps) {
   return (
     <AnimatePresence>
       {open ? (
-        <QuickInputManageModalInner
-          key="quick-input-manage"
-          onClose={onClose}
-          onChanged={onChanged}
-        />
+        <QuickInputManageModalInner key="quick-input-manage" onClose={onClose} />
       ) : null}
     </AnimatePresence>
   );
 }
 
-function QuickInputManageModalInner({
-  onClose,
-  onChanged,
-}: {
-  onClose: () => void;
-  onChanged?: () => void;
-}) {
+function QuickInputManageModalInner({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation('chat');
-  const [items, setItems] = useState<QuickInputItem[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const storeTotal = useQuickInputStore((s) => s.total);
+  const storeLoading = useQuickInputStore((s) => s.loading);
+  const fetchList = useQuickInputStore((s) => s.fetchList);
+  const updateItem = useQuickInputStore((s) => s.update);
+  const removeItem = useQuickInputStore((s) => s.remove);
+  const reorderItems = useQuickInputStore((s) => s.reorder);
+
+  /** 拖拽草稿：与 store 分离，保存时再写回；仅打开时灌入一次，避免冲掉本地改序 */
+  const [draftItems, setDraftItems] = useState<QuickInputItem[]>([]);
+  /** 打开时的初始顺序，用于判断是否发生过排序 */
+  const [initialOrderIds, setInitialOrderIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
   const [editingItem, setEditingItem] = useState<QuickInputItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<QuickInputItem | null>(null);
   const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
-
-  const refreshList = useCallback(async () => {
-    setLoading(true);
-    try {
-      const result = await listQuickInputs();
-      setItems(result.items.slice(0, QUICK_INPUT_LIST_CAP));
-      setTotal(result.total);
-    } catch (err) {
-      const message =
-        err instanceof Error && err.message
-          ? err.message
-          : t('composer.quickInputLoadFailed');
-      toast.error(message);
-      setItems([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    void refreshList();
-  }, [refreshList]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        await fetchList();
+        if (cancelled) return;
+        const items = useQuickInputStore.getState().items;
+        setDraftItems(items);
+        setInitialOrderIds(items.map((item) => item.id));
+      } catch (err) {
+        if (cancelled) return;
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : t('composer.quickInputLoadFailed');
+        toast.error(message);
+        setDraftItems([]);
+        setInitialOrderIds([]);
+      } finally {
+        if (!cancelled) setInitialized(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchList, t]);
 
-  const capped = total > QUICK_INPUT_LIST_CAP;
+  const capped = storeTotal > QUICK_INPUT_LIST_CAP;
+  const loading = !initialized || (storeLoading && draftItems.length === 0);
+  const hasData = draftItems.length > 0;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -141,20 +137,20 @@ function QuickInputManageModalInner({
   const isFiltering = trimmedQuery.length > 0;
 
   const filtered = useMemo(() => {
-    if (!isFiltering) return items;
-    return items.filter(
+    if (!isFiltering) return draftItems;
+    return draftItems.filter(
       (item) =>
         item.title.toLowerCase().includes(trimmedQuery) ||
         item.content.toLowerCase().includes(trimmedQuery),
     );
-  }, [items, isFiltering, trimmedQuery]);
+  }, [draftItems, isFiltering, trimmedQuery]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     if (isFiltering) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    setItems((prev) => {
+    setDraftItems((prev) => {
       const oldIndex = prev.findIndex((item) => item.id === active.id);
       const newIndex = prev.findIndex((item) => item.id === over.id);
       if (oldIndex < 0 || newIndex < 0) return prev;
@@ -164,14 +160,21 @@ function QuickInputManageModalInner({
 
   const handleSave = async () => {
     if (saving) return;
+
+    const draftOrderIds = draftItems.map((item) => item.id);
+    const orderChanged =
+      draftOrderIds.length !== initialOrderIds.length ||
+      draftOrderIds.some((id, index) => id !== initialOrderIds[index]);
+
+    if (!orderChanged || draftOrderIds.length === 0) {
+      onClose();
+      return;
+    }
+
     setSaving(true);
     try {
-      if (items.length > 0) {
-        const next = await reorderQuickInputs(items.map((item) => item.id));
-        setItems(next.slice(0, QUICK_INPUT_LIST_CAP));
-      }
+      await reorderItems(draftOrderIds);
       toast.success(t('composer.quickInputSaveSuccess'));
-      onChanged?.();
       onClose();
     } catch (err) {
       const message =
@@ -236,21 +239,30 @@ function QuickInputManageModalInner({
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col gap-2 self-stretch px-4 py-2">
-            <div className="box-border flex h-[34px] w-full shrink-0 items-center gap-2 rounded-lg border border-[#E8EAEF] bg-white p-2 dark:border-border dark:bg-background">
-              <Search className="h-3.5 w-3.5 shrink-0 text-[#86909C]" aria-hidden />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('composer.quickInputManageSearchPlaceholder')}
-                className="min-w-0 flex-1 bg-transparent text-xs text-[#1D2129] outline-none placeholder:text-[#86909C] dark:text-foreground"
-              />
-            </div>
+            {hasData ? (
+              <div className="box-border flex h-[34px] w-full shrink-0 items-center gap-2 rounded-lg border border-[#E8EAEF] bg-white p-2 dark:border-border dark:bg-background">
+                <Search className="h-3.5 w-3.5 shrink-0 text-[#86909C]" aria-hidden />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={t('composer.quickInputManageSearchPlaceholder')}
+                  className="min-w-0 flex-1 bg-transparent text-xs text-[#1D2129] outline-none placeholder:text-[#86909C] dark:text-foreground"
+                />
+              </div>
+            ) : null}
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+            <div className="sto-hide-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {loading ? (
-                <div className="flex items-center justify-center gap-2 px-3 py-10 text-xs text-[#86909C]">
+                <div className="flex h-full items-center justify-center gap-2 px-3 py-10 text-xs text-[#86909C]">
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
                   {t('composer.quickInputLoading')}
+                </div>
+              ) : !hasData ? (
+                <div className="flex h-full flex-col items-center justify-center gap-3 px-2 py-6">
+                  <img src={quickInputEmptyIcon} alt="" width={40} height={40} aria-hidden />
+                  <p className="text-center text-xs font-normal leading-4 text-[#86909C]">
+                    {t('composer.quickInputEmpty')}
+                  </p>
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="px-3 py-10 text-center text-xs text-[#86909C]">
@@ -323,12 +335,11 @@ function QuickInputManageModalInner({
         onClose={() => setEditingItem(null)}
         onConfirm={async (content) => {
           if (!editingItem) return;
-          const updated = await updateQuickInput(editingItem.id, content);
-          setItems((prev) =>
+          const updated = await updateItem(editingItem.id, content);
+          setDraftItems((prev) =>
             prev.map((entry) => (entry.id === updated.id ? updated : entry)),
           );
           toast.success(t('composer.quickInputUpdateSuccess'));
-          onChanged?.();
         }}
       />
 
@@ -343,11 +354,11 @@ function QuickInputManageModalInner({
         overlayClassName="z-[10060]"
         onConfirm={async () => {
           if (!deleteTarget) return;
-          await deleteQuickInput(deleteTarget.id);
+          const id = deleteTarget.id;
+          await removeItem(id);
           setDeleteTarget(null);
+          setDraftItems((prev) => prev.filter((entry) => entry.id !== id));
           toast.success(t('composer.quickInputDeleteSuccess'));
-          onChanged?.();
-          await refreshList();
         }}
         onCancel={() => setDeleteTarget(null)}
         onError={(err) => {

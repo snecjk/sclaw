@@ -1,6 +1,7 @@
 /**
  * 快捷输入选择浮层：对齐 WorkflowPicker（portal + fixed）。
  * 有数据：搜索 + 列表（可滚动）+ 新建；无数据：空态。
+ * 列表数据来自 useQuickInputStore。
  */
 import {
   forwardRef,
@@ -17,12 +18,13 @@ import { Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { createQuickInput, listQuickInputs } from '@/lib/quick-input-api';
 import { QuickInputManageIcon } from '@/components/icons/QuickInputManageIcon';
+import { PlusIcon } from '@/components/icons/PlusIcon';
 import quickInputEmptyIcon from '@/assets/icons/quick-input-empty.png';
 import { QuickInputCreateModal } from './QuickInputCreateModal';
 import { QuickInputManageModal } from './QuickInputManageModal';
 import { QuickInputListItem } from './QuickInputListItem';
+import { useQuickInputStore } from './store';
 import { QUICK_INPUT_LIST_CAP, type QuickInputItem } from './types';
 
 export type { QuickInputItem };
@@ -50,35 +52,27 @@ export const QuickInputPicker = forwardRef<HTMLDivElement, QuickInputPickerProps
     const { t } = useTranslation('chat');
     const [position, setPosition] = useState<PickerPosition | null>(null);
     const [query, setQuery] = useState('');
-    const [items, setItems] = useState<QuickInputItem[]>([]);
-    const [total, setTotal] = useState(0);
-    const [loading, setLoading] = useState(false);
     const [createModalOpen, setCreateModalOpen] = useState(false);
     const [manageModalOpen, setManageModalOpen] = useState(false);
     const localRef = useRef<HTMLDivElement | null>(null);
-    const loadSeqRef = useRef(0);
+
+    const items = useQuickInputStore((s) => s.items);
+    const total = useQuickInputStore((s) => s.total);
+    const loading = useQuickInputStore((s) => s.loading);
+    const fetchList = useQuickInputStore((s) => s.fetchList);
+    const create = useQuickInputStore((s) => s.create);
 
     const refreshList = useCallback(async () => {
-      const seq = ++loadSeqRef.current;
-      setLoading(true);
       try {
-        const result = await listQuickInputs();
-        if (seq !== loadSeqRef.current) return;
-        setItems(result.items);
-        setTotal(result.total);
+        await fetchList();
       } catch (err) {
-        if (seq !== loadSeqRef.current) return;
         const message =
           err instanceof Error && err.message
             ? err.message
             : t('composer.quickInputLoadFailed');
         toast.error(message);
-        setItems([]);
-        setTotal(0);
-      } finally {
-        if (seq === loadSeqRef.current) setLoading(false);
       }
-    }, [t]);
+    }, [fetchList, t]);
 
     useEffect(() => {
       if (!open) {
@@ -98,7 +92,7 @@ export const QuickInputPicker = forwardRef<HTMLDivElement, QuickInputPickerProps
       const updatePosition = () => {
         const rect = anchorRef.current?.getBoundingClientRect();
         if (!rect) return;
-        const width = Math.min(320, Math.max(280, window.innerWidth - 24));
+        const width = Math.min(280, window.innerWidth - 24);
         const left = Math.min(
           Math.max(12, rect.left),
           window.innerWidth - width - 12,
@@ -165,9 +159,7 @@ export const QuickInputPicker = forwardRef<HTMLDivElement, QuickInputPickerProps
           open={createModalOpen}
           onClose={() => setCreateModalOpen(false)}
           onConfirm={async (content) => {
-            const created = await createQuickInput(content);
-            setItems((prev) => [created, ...prev].slice(0, QUICK_INPUT_LIST_CAP));
-            setTotal((prev) => prev + 1);
+            const created = await create(content);
             toast.success(t('composer.quickInputCreateSuccess'));
             onCreate?.(created);
           }}
@@ -175,9 +167,6 @@ export const QuickInputPicker = forwardRef<HTMLDivElement, QuickInputPickerProps
         <QuickInputManageModal
           open={manageModalOpen}
           onClose={() => setManageModalOpen(false)}
-          onChanged={() => {
-            void refreshList();
-          }}
         />
       </>
     );
@@ -193,7 +182,7 @@ export const QuickInputPicker = forwardRef<HTMLDivElement, QuickInputPickerProps
           'box-border z-50 flex flex-col justify-center gap-1 overflow-hidden rounded-xl',
           'border border-[#E5E6EB] bg-white p-2 shadow-[0_4px_12px_rgba(0,0,0,0.1)]',
           'dark:border-border dark:bg-secondary dark:shadow-soft',
-          position ? 'fixed' : 'absolute left-0 bottom-full mb-2 w-[320px]',
+          position ? 'fixed' : 'absolute left-0 bottom-full mb-2 w-[280px]',
           className,
         )}
         style={
@@ -239,7 +228,7 @@ export const QuickInputPicker = forwardRef<HTMLDivElement, QuickInputPickerProps
             <p className="text-center text-xs text-[#86909C]">{t('composer.quickInputLoading')}</p>
           </div>
         ) : hasData ? (
-          <div className="max-h-[220px] overflow-y-auto overscroll-contain py-0.5">
+          <div className="h-[200px] overflow-y-auto overscroll-contain py-0.5">
             {filtered.length === 0 ? (
               <div className="px-3 py-6 text-center text-xs text-[#86909C]">
                 {t('composer.quickInputNoResults')}
@@ -271,11 +260,12 @@ export const QuickInputPicker = forwardRef<HTMLDivElement, QuickInputPickerProps
             type="button"
             onClick={handleOpenCreate}
             className={cn(
-              'flex h-9 w-full items-center justify-center rounded-xl border border-[#E5E6EB]',
-              'text-[13px] font-medium text-[#1D2129] transition-colors',
+              'flex h-9 w-full items-center justify-center gap-1 rounded-xl border border-[#E5E6EB]',
+              'text-[12px] font-medium text-[#1D2129] transition-colors',
               'hover:bg-[#F7F8FA] dark:border-border dark:text-foreground dark:hover:bg-muted',
             )}
           >
+            <PlusIcon />
             {t('composer.quickInputCreate')}
           </button>
         </div>

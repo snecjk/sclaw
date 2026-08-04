@@ -32,7 +32,7 @@ export function QuickInputListItem({ item, onSelect }: QuickInputListItemProps) 
           )}
         >
           <QuickInputIcon className="h-[14px] w-[14px] shrink-0 text-[#111827] dark:text-foreground" />
-          <span className="flex min-w-0 flex-1 items-center truncate text-xs font-normal leading-4 text-[#111827] dark:text-foreground">
+          <span className="min-w-0 flex-1 truncate text-xs font-normal leading-4 text-[#111827] dark:text-foreground">
             {item.title}
           </span>
         </button>

@@ -494,6 +494,18 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
   @apply bg-muted-foreground/30;
 }
 
+/* ── Hide native scrollbar (keep scroll) ── */
+.sto-hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.sto-hide-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
 /* ── Scoped thin scrollbar (sidebar + chat scroll areas) ── */
 .sto-thin-scrollbar::-webkit-scrollbar {
   width: 6px;
