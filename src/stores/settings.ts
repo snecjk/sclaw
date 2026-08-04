@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import i18n from '@/i18n';
 import { hostApiFetch } from '@/lib/host-api';
+import { clampSidebarPreferredWidth, SIDEBAR_DEFAULT_WIDTH } from '@/lib/sidebar-resize-metrics';
 import { resolveSupportedLanguage } from '../../shared/language';
 
 type Theme = 'light' | 'dark' | 'system';
@@ -37,6 +38,8 @@ interface SettingsState {
 
   // UI State
   sidebarCollapsed: boolean;
+  /** User preferred sidebar width (200–400); display may clamp via effectiveMax */
+  sidebarPreferredWidth: number;
   devModeUnlocked: boolean;
   /** 三栏预览区宽度占比（30–70），持久化记忆用户拖拽结果 */
   previewSplitPercent: number;
@@ -64,6 +67,7 @@ interface SettingsState {
   setAutoCheckUpdate: (value: boolean) => void;
   setAutoDownloadUpdate: (value: boolean) => void;
   setSidebarCollapsed: (value: boolean) => void;
+  setSidebarPreferredWidth: (width: number) => void;
   setDevModeUnlocked: (value: boolean) => void;
   setPreviewSplitPercent: (percent: number) => void;
   markSetupComplete: () => void;
@@ -91,6 +95,7 @@ const defaultSettings = {
   autoCheckUpdate: true,
   autoDownloadUpdate: true,
   sidebarCollapsed: false,
+  sidebarPreferredWidth: SIDEBAR_DEFAULT_WIDTH,
   devModeUnlocked: false,
   previewSplitPercent: 50,
   setupComplete: false,
@@ -107,10 +112,14 @@ export const useSettingsStore = create<SettingsState>()(
           const resolvedLanguage = settings.language
             ? resolveSupportedLanguage(settings.language)
             : undefined;
+          const preferred = settings.sidebarPreferredWidth != null
+            ? clampSidebarPreferredWidth(settings.sidebarPreferredWidth)
+            : undefined;
           set((state) => ({
             ...state,
             ...settings,
             ...(resolvedLanguage ? { language: resolvedLanguage } : {}),
+            ...(preferred != null ? { sidebarPreferredWidth: preferred } : {}),
           }));
           if (resolvedLanguage) {
             i18n.changeLanguage(resolvedLanguage);
@@ -194,7 +203,21 @@ export const useSettingsStore = create<SettingsState>()(
           body: JSON.stringify({ autoDownloadUpdate }),
         }).catch(() => {});
       },
-      setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+      setSidebarCollapsed: (sidebarCollapsed) => {
+        set({ sidebarCollapsed });
+        void hostApiFetch('/api/settings/sidebarCollapsed', {
+          method: 'PUT',
+          body: JSON.stringify({ value: sidebarCollapsed }),
+        }).catch(() => { });
+      },
+      setSidebarPreferredWidth: (width) => {
+        const sidebarPreferredWidth = clampSidebarPreferredWidth(width);
+        set({ sidebarPreferredWidth });
+        void hostApiFetch('/api/settings/sidebarPreferredWidth', {
+          method: 'PUT',
+          body: JSON.stringify({ value: sidebarPreferredWidth }),
+        }).catch(() => { });
+      },
       setPreviewSplitPercent: (previewSplitPercent) => set({
         previewSplitPercent: Math.max(30, Math.min(70, previewSplitPercent)),
       }),
@@ -210,14 +233,24 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'stoclaw-settings',
-      version: 1,
+      version: 2,
       migrate: (persisted, fromVersion) => {
         const p = (persisted ?? {}) as Record<string, unknown>;
-        if (fromVersion === 0) {
+        if (fromVersion < 1) {
           return {
             ...p,
             autoCheckUpdate: true,
             autoDownloadUpdate: true,
+            sidebarPreferredWidth: SIDEBAR_DEFAULT_WIDTH,
+          };
+        }
+        if (fromVersion < 2) {
+          const raw = p.sidebarPreferredWidth;
+          return {
+            ...p,
+            sidebarPreferredWidth: clampSidebarPreferredWidth(
+              typeof raw === 'number' ? raw : SIDEBAR_DEFAULT_WIDTH,
+            ),
           };
         }
         return persisted;

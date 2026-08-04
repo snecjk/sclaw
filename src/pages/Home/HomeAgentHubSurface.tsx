@@ -205,26 +205,23 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
     );
   };
 
-  let outerClass: string | undefined = 'flex min-h-0 flex-1 flex-col';
-  if (isSplitGridPassthrough) {
-    outerClass = splitGridPassthroughClass;
-  }
-
-  let bodyClass: string | undefined = 'flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6';
-  if (isSplitGridPassthrough) {
-    bodyClass = splitGridPassthroughClass;
-  } else if (showConversation) {
-    bodyClass = 'flex min-h-0 flex-1 flex-col overflow-hidden';
-  }
-
   return (
     <div
       className={cn(
-        outerClass,
-        !isSplitGridPassthrough && !showConversation && homeHubLandingOuterInsetClass,
+        showConversation
+          ? (splitGridPassthroughClass ?? 'flex min-h-0 flex-1 flex-col')
+          : cn('flex min-h-0 flex-1 flex-col', homeHubLandingOuterInsetClass),
       )}
     >
-      <div className={bodyClass}>
+      <div
+        className={cn(
+          showConversation
+            ? (isSplitGridPassthrough
+              ? splitGridPassthroughClass
+              : 'flex min-h-0 flex-1 flex-col overflow-hidden')
+            : 'flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6',
+        )}
+      >
         {showConversation ? (
           <HomeMainConversation
             className="min-h-0 flex-1"

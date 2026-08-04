@@ -273,6 +273,8 @@
         "resizeSeparator": "调整预览区宽度",
         "overflowMenu": "全部产物",
         "fullscreen": "全屏放映",
+        "expandWorkspace": "展开预览区",
+        "restoreWorkspace": "还原分栏预览",
         "refresh": "刷新",
         "download": "下载",
         "share": "分享到钉钉",
