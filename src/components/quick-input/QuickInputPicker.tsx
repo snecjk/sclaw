@@ -209,10 +209,10 @@ export const QuickInputPicker = forwardRef<HTMLDivElement, QuickInputPickerProps
             <button
               type="button"
               onClick={handleOpenManage}
-              className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[#4E5969] transition-colors hover:text-[#1D2129] dark:text-muted-foreground dark:hover:text-foreground"
+              className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[#4E5969] dark:text-foreground"
             >
               <QuickInputManageIcon />
-              <span className="inline-flex h-4 w-6 items-center text-xs font-medium leading-4 text-[#4E5969]">
+              <span className="inline-flex h-4 w-6 items-center text-xs font-medium leading-4">
                 {t('composer.quickInputManage')}
               </span>
             </button>

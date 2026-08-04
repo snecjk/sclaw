@@ -28,13 +28,19 @@ export const homeHubCardDescClass = cn('text-xs font-normal leading-5', homeHubT
  * 卡片区滚动壳：高度随内容收缩；超出可用高度后再内部滚动。
  * 用 100cqh（相对 home-hub-main-scroll-host）扣掉 Hero/间距，勿用 flex-1，
  * 否则卡片少时会被撑满整块空白。
+ * p-4：给卡片 hover 阴影（blur 16）留白，避免 overflow-y-auto 裁切边缘；
+ * -m-4：抵消内边距，保持与 Hero 同宽对齐（横向溢出落在更宽的 scroll-host 内）。
  */
 export const homeHubCardScrollClass =
-  'w-full max-h-[calc(100cqh-12.5rem)] overflow-y-auto overscroll-y-contain';
+  'w-full max-h-[calc(100cqh-12.5rem)] overflow-y-auto overscroll-y-contain p-4 -m-4';
 
 /** 能力卡片网格（设计稿一行多卡） */
 export const homeHubCardGridClass =
   'grid w-full items-stretch content-start gap-3 sm:grid-cols-2 lg:grid-cols-4';
+
+/** 无推荐数据时的静态兜底：固定一行三卡 */
+export const homeHubFallbackCardGridClass =
+  'grid w-full items-stretch content-start gap-3 grid-cols-1 sm:grid-cols-3';
 
 /** 首页 Hero / 卡片 / 输入区共用最大宽（与 --sto-hero-input-max-w 同源，当前 780px） */
 export const homeHubContentMaxWidthClass =
@@ -46,11 +52,12 @@ export const homeHubMainScrollHostClass =
 
 /**
  * Hero + 卡片列：与底部输入同宽居中。
- * overflow-hidden：滚动交给卡片滚动壳，避免嵌套滚动导致“滚不动”。
+ * 不用 overflow-hidden：否则会裁切卡片滚动壳 -m-4 伸出的 hover 阴影；
+ * 纵向滚动仍由卡片滚动壳（max-h + overflow-y-auto）承担。
  */
 export const homeHubMainScrollClass = cn(
   homeHubContentMaxWidthClass,
-  'home-hub-main-scroll flex min-h-0 flex-1 flex-col justify-start gap-[30px] overflow-hidden pb-6 pt-4 sm:pt-6',
+  'home-hub-main-scroll flex min-h-0 flex-1 flex-col justify-start gap-[30px] pb-6 pt-4 sm:pt-6',
 );
 
 /** 底部输入 + 免责区外壳（底边距与对话列一致，仅依赖 MainLayout body pb-5） */
