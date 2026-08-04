@@ -105,7 +105,7 @@ export async function deleteQuickInput(id: string): Promise<void> {
   );
 }
 
-/** 槽位重排：orderedIds 为当前可见列表从上到下 */
+/** 完整窗重排：orderedIds 须为当前可见列表完整顺序（从上到下），不可残缺 */
 export async function reorderQuickInputs(orderedIds: string[]): Promise<QuickInputItem[]> {
   const data = await unwrap(
     hostApiFetch<ApiEnvelope<{ items: PromptApiItem[]; total: number }>>(

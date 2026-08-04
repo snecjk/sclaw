@@ -1,8 +1,8 @@
 /**
  * 快捷输入管理弹窗：有数据时搜索 + 可排序列表（编辑/分享/删除）+ 取消/保存；无数据时空态。
  * 容器与底部按钮样式对齐 QuickInputCreateModal；搜索框对齐 QuickInputPicker。
- * 列表排序使用 @dnd-kit/sortable。删除即时写 store；保存提交槽位重排。
- * 拖拽草稿序留在本地，点保存后再写回 store。
+ * 列表排序使用 @dnd-kit/sortable；搜索筛选时 sortable=false 禁止拖拽。
+ * 删除即时写 store；保存提交完整窗重排。拖拽草稿序留在本地，点保存后再写回 store。
  */
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
