@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Bot, ChevronDown, Cpu } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { AlertCircle, Bot, Check, ChevronDown, Cpu } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -66,10 +67,140 @@ const inlinePillTrigger = cn(
 );
 
 const inlineModelPillTrigger = cn(inlinePillTrigger, 'w-max max-w-none shrink-0');
-const nativeSelectOverlay = cn(
-  'absolute inset-0 h-full w-full cursor-pointer opacity-0',
-  'disabled:pointer-events-none disabled:cursor-default',
-);
+
+interface SelectorMenuOption<T extends string> {
+  key: string;
+  value: T;
+  label: string;
+  decoration?: ReactNode;
+}
+
+function SelectorMenu<T extends string>({
+  value,
+  options,
+  disabled,
+  title,
+  triggerClassName,
+  menuWidth,
+  children,
+  onSelect,
+}: {
+  value: T;
+  options: SelectorMenuOption<T>[];
+  disabled?: boolean;
+  title: string;
+  triggerClassName: string;
+  menuWidth: number;
+  children: ReactNode;
+  onSelect: (value: T) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({ visibility: 'hidden' });
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const updatePosition = () => {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const width = Math.min(menuWidth, Math.max(0, window.innerWidth - 16));
+      const estimatedHeight = Math.min(320, options.length * 36 + 8);
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openAbove = spaceBelow < estimatedHeight + 12 && rect.top > spaceBelow;
+      const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+      const next: CSSProperties = openAbove
+        ? { bottom: window.innerHeight - rect.top + 6, left, width }
+        : { top: rect.bottom + 6, left, width };
+      setMenuStyle((current) => (
+        current.top === next.top
+        && current.bottom === next.bottom
+        && current.left === next.left
+        && current.width === next.width
+          ? current
+          : next
+      ));
+    };
+
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [menuWidth, open, options.length]);
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        title={title}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={triggerClassName}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {children}
+      </button>
+      {open && typeof document !== 'undefined' ? createPortal(
+        <div
+          ref={menuRef}
+          role="listbox"
+          aria-label={title}
+          style={menuStyle}
+          className={cn(
+            'fixed z-[100001] max-h-[min(320px,calc(100vh-16px))] overflow-y-auto rounded-xl',
+            'border border-glass-border bg-popover p-1 text-popover-foreground shadow-lg',
+          )}
+        >
+          {options.map((option) => {
+            const selected = option.value === value;
+            return (
+              <button
+                key={option.key}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                className={cn(
+                  'relative flex h-9 w-full select-none items-center gap-2 rounded-md px-2 text-left outline-none',
+                  'text-[13px] transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent',
+                  selected && 'bg-primary/8 font-medium',
+                )}
+                onClick={() => {
+                  setOpen(false);
+                  if (!selected) onSelect(option.value);
+                }}
+              >
+                <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                {option.decoration}
+                {selected ? <Check className="h-4 w-4 shrink-0 text-primary" aria-hidden /> : null}
+              </button>
+            );
+          })}
+        </div>,
+        document.body,
+      ) : null}
+    </>
+  );
+}
 
 function isModelNotAllowedError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err);
@@ -236,31 +367,30 @@ export function ChatEngineSelector({
     : isSclawBrowserEmbedChatSessionKey(currentSessionKey)
       ? '历史会话不可切换引擎（可切换模型）'
       : '当前会话不可切换引擎';
+  const engineOptions: SelectorMenuOption<'openclaw' | 'claude'>[] = [
+    { key: 'openclaw', value: 'openclaw', label: 'OpenClaw' },
+    { key: 'claude', value: 'claude', label: 'Claude Agent' },
+  ];
 
   if (variant === 'inline') {
     return (
-      <div
+      <SelectorMenu
+        value={agentDefaultEngineType}
+        options={engineOptions}
+        menuWidth={192}
+        disabled={engineSelectDisabled || engineSaving || !canSwitchEngine}
         title={engineTriggerTitle}
-        className={cn(
+        triggerClassName={cn(
           inlinePillTrigger,
-          'relative min-w-0 max-w-none flex-1',
+          'min-w-0 max-w-none flex-1',
           (engineSaving || !canSwitchEngine) && 'opacity-60',
           className,
         )}
+        onSelect={(engineType) => void handleEngineSwitch(engineType)}
       >
         <span className="min-w-0 flex-1 truncate">{displayEngineLabel}</span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
-        <select
-          aria-label={engineTriggerTitle}
-          className={nativeSelectOverlay}
-          disabled={engineSelectDisabled || engineSaving || !canSwitchEngine}
-          value={agentDefaultEngineType}
-          onChange={(event) => void handleEngineSwitch(event.target.value as 'openclaw' | 'claude')}
-        >
-          <option value="openclaw">OpenClaw</option>
-          <option value="claude">Claude Agent</option>
-        </select>
-      </div>
+      </SelectorMenu>
     );
   }
 
@@ -270,24 +400,22 @@ export function ChatEngineSelector({
         引擎
       </span>
       {canSwitchEngine ? (
-        <div className={cn(pillBase, 'relative max-w-[min(100vw-11rem,200px)]')}>
-          <div className={cn(pillBtn, engineSaving && 'opacity-60')}>
+        <div className={cn(pillBase, 'max-w-[min(100vw-11rem,200px)]')}>
+          <SelectorMenu
+            value={agentDefaultEngineType}
+            options={engineOptions}
+            menuWidth={192}
+            disabled={engineSelectDisabled || engineSaving}
+            title="切换新会话执行引擎"
+            triggerClassName={cn(pillBtn, engineSaving && 'opacity-60')}
+            onSelect={(engineType) => void handleEngineSwitch(engineType)}
+          >
             <Bot className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
             <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground/90">
               {agentDefaultEngineLabel}
             </span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
-          </div>
-          <select
-            aria-label="切换新会话执行引擎"
-            className={nativeSelectOverlay}
-            disabled={engineSelectDisabled || engineSaving}
-            value={agentDefaultEngineType}
-            onChange={(event) => void handleEngineSwitch(event.target.value as 'openclaw' | 'claude')}
-          >
-            <option value="openclaw">OpenClaw</option>
-            <option value="claude">Claude Agent</option>
-          </select>
+          </SelectorMenu>
         </div>
       ) : (
         <div className={cn(pillBase, pillStatic, 'max-w-[min(100vw-11rem,200px)] opacity-75')}>
@@ -646,27 +774,36 @@ export function ChatModelSelector({
   };
 
   const modelSelectDisabled = (currentEngineType === 'openclaw' && !isGatewayRunning) || sending || modelOptions.length === 0;
+  const selectorModelOptions: SelectorMenuOption<string>[] = modelOptions.map((option) => ({
+    key: option.key,
+    value: option.modelId,
+    label: option.displayName,
+    decoration: (
+      <span className={cn(
+        'shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium leading-none',
+        option.isBuiltin
+          ? 'bg-link-muted text-link dark:bg-[hsl(231_35%_18%)] dark:text-[hsl(var(--link))]'
+          : 'bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-400',
+      )}>
+        {option.isBuiltin ? t('toolbar.modelTagBuiltin') : t('toolbar.modelTagCustom')}
+      </span>
+    ),
+  }));
 
   if (variant === 'inline') {
     return (
-      <div
+      <SelectorMenu
+        value={selectedModelId}
+        options={selectorModelOptions}
+        menuWidth={360}
+        disabled={modelSelectDisabled || modelSaving}
         title={t('toolbar.switchModelTitle')}
-        className={cn(inlineModelPillTrigger, 'relative', modelSaving && 'opacity-60', className)}
+        triggerClassName={cn(inlineModelPillTrigger, modelSaving && 'opacity-60', className)}
+        onSelect={(modelId) => void handleModelSwitch(modelId)}
       >
         <span className="shrink-0 whitespace-nowrap">{modelDisplayText}</span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
-        <select
-          aria-label={t('toolbar.switchModelTitle')}
-          className={nativeSelectOverlay}
-          disabled={modelSelectDisabled || modelSaving}
-          value={selectedModelId}
-          onChange={(event) => void handleModelSwitch(event.target.value)}
-        >
-          {modelOptions.map((option) => (
-            <option key={option.key} value={option.modelId}>{option.displayName}</option>
-          ))}
-        </select>
-      </div>
+      </SelectorMenu>
     );
   }
 
@@ -675,8 +812,16 @@ export function ChatModelSelector({
       <span className="shrink-0 whitespace-nowrap px-1 text-[11px] font-medium text-muted-foreground/90 sm:text-[12px]">
         {t('toolbar.currentModel')}
       </span>
-      <div className={cn(pillBase, 'relative max-w-[min(100vw-11rem,260px)]')}>
-        <div className={cn(pillBtn, modelSaving && 'opacity-60')}>
+      <div className={cn(pillBase, 'max-w-[min(100vw-11rem,260px)]')}>
+        <SelectorMenu
+          value={selectedModelId}
+          options={selectorModelOptions}
+          menuWidth={360}
+          disabled={modelSelectDisabled || modelSaving}
+          title={t('toolbar.switchModelTitle')}
+          triggerClassName={cn(pillBtn, modelSaving && 'opacity-60')}
+          onSelect={(modelId) => void handleModelSwitch(modelId)}
+        >
           <Cpu className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
           <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground/90">
             {modelDisplayText}
@@ -692,18 +837,7 @@ export function ChatModelSelector({
             </span>
           ) : null}
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden strokeWidth={2.25} />
-        </div>
-        <select
-          aria-label={t('toolbar.switchModelTitle')}
-          className={nativeSelectOverlay}
-          disabled={modelSelectDisabled || modelSaving}
-          value={selectedModelId}
-          onChange={(event) => void handleModelSwitch(event.target.value)}
-        >
-          {modelOptions.map((option) => (
-            <option key={option.key} value={option.modelId}>{option.displayName}</option>
-          ))}
-        </select>
+        </SelectorMenu>
       </div>
     </div>
   );
