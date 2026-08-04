@@ -36,6 +36,10 @@ export const homeHubCardScrollClass =
 export const homeHubCardGridClass =
   'grid w-full items-stretch content-start gap-3 sm:grid-cols-2 lg:grid-cols-4';
 
+/** 无推荐数据时的静态兜底：固定一行三卡 */
+export const homeHubFallbackCardGridClass =
+  'grid w-full items-stretch content-start gap-3 grid-cols-1 sm:grid-cols-3';
+
 /** 首页 Hero / 卡片 / 输入区共用最大宽（与 --sto-hero-input-max-w 同源，当前 780px） */
 export const homeHubContentMaxWidthClass =
   'mx-auto w-full min-w-0 max-w-[var(--sto-hero-input-max-w)]';

@@ -138,7 +138,10 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
           },
         },
       );
-    } else if (item.item_type === 'workflow_template') {
+      return;
+    }
+
+    if (item.item_type === 'workflow_template') {
       // 工作流模版：安装（参考官方推荐模版的安装逻辑）
       navigateToNewSessionWithPrompt(
         navigate,
@@ -149,22 +152,79 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
     }
   };
 
+  const renderFilteredRecommendCards = () => {
+    if (filteredItems.length === 0) {
+      return (
+        <div className="col-span-full flex min-h-[88px] items-center justify-center text-sm text-[#86909C] dark:text-muted-foreground">
+          {t('homeRecommend.emptyCategory', '该分类暂无推荐')}
+        </div>
+      );
+    }
+
+    return filteredItems.map(({ key, item }) => {
+      const skillSlug = item.skill_slug || item.item_ref_id;
+      const isSkill = item.item_type === 'skill';
+      return (
+        <RecommendCard
+          key={key}
+          item={item}
+          onClick={() => handleRecommendClick(item)}
+          onSkillInstalled={() => {
+            handleSkillStatusRefresh(skillSlug);
+          }}
+          skillStatus={isSkill ? skillStatusMap[skillSlug] : undefined}
+          skillStatusLoading={isSkill ? skillStatusLoading || refreshingSlugs.has(skillSlug) : false}
+        />
+      );
+    });
+  };
+
+  /** 落地态推荐区：loading / 空数据兜底 / 分类+推荐卡 */
+  const renderLandingCardSection = () => {
+    if (recommendLoading || latestLoading) {
+      return (
+        <div className={homeHubCardGridClass}>
+          <RecommendCardSkeletonGrid />
+        </div>
+      );
+    }
+
+    if (recommendItems.length === 0) {
+      return <StaticFallbackCards />;
+    }
+
+    return (
+      <>
+        <RecommendCategoryTabs
+          categories={recommendCategories}
+          value={activeCategory}
+          onChange={setActiveCategory}
+        />
+        <div className={homeHubCardGridClass}>{renderFilteredRecommendCards()}</div>
+      </>
+    );
+  };
+
+  let outerClass: string | undefined = 'flex min-h-0 flex-1 flex-col';
+  if (isSplitGridPassthrough) {
+    outerClass = splitGridPassthroughClass;
+  }
+
+  let bodyClass: string | undefined = 'flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6';
+  if (isSplitGridPassthrough) {
+    bodyClass = splitGridPassthroughClass;
+  } else if (showConversation) {
+    bodyClass = 'flex min-h-0 flex-1 flex-col overflow-hidden';
+  }
+
   return (
     <div
       className={cn(
-        isSplitGridPassthrough ? splitGridPassthroughClass : 'flex min-h-0 flex-1 flex-col',
+        outerClass,
         !isSplitGridPassthrough && !showConversation && homeHubLandingOuterInsetClass,
       )}
     >
-      <div
-        className={cn(
-          isSplitGridPassthrough
-            ? splitGridPassthroughClass
-            : showConversation
-              ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
-              : 'flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6',
-        )}
-      >
+      <div className={bodyClass}>
         {showConversation ? (
           <HomeMainConversation
             className="min-h-0 flex-1"
@@ -176,51 +236,13 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
           <div className={homeHubMainScrollHostClass}>
             <div className={homeHubMainScrollClass}>
               <HomeHero className="shrink-0" />
-
-              <div className={homeHubCardScrollClass}>
-                {!recommendLoading && recommendItems.length > 0 ? (
-                  <RecommendCategoryTabs
-                    categories={recommendCategories}
-                    value={activeCategory}
-                    onChange={setActiveCategory}
-                  />
-                ) : null}
-                <div className={homeHubCardGridClass}>
-                  {recommendLoading || latestLoading ? (
-                    <RecommendCardSkeletonGrid />
-                  ) : recommendItems.length > 0 ? (
-                    filteredItems.length > 0 ? (
-                      filteredItems.map(({ key, item }) => {
-                        const skillSlug = item.skill_slug || item.item_ref_id;
-                        return (
-                          <RecommendCard
-                            key={key}
-                            item={item}
-                            onClick={() => handleRecommendClick(item)}
-                            onSkillInstalled={() => {
-                              handleSkillStatusRefresh(skillSlug);
-                            }}
-                            skillStatus={item.item_type === 'skill' ? skillStatusMap[skillSlug] : undefined}
-                            skillStatusLoading={item.item_type === 'skill' ? (skillStatusLoading || refreshingSlugs.has(skillSlug)) : false}
-                          />
-                        );
-                      })
-                    ) : (
-                      <div className="col-span-full flex min-h-[88px] items-center justify-center text-sm text-[#86909C] dark:text-muted-foreground">
-                        {t('homeRecommend.emptyCategory', '该分类暂无推荐')}
-                      </div>
-                    )
-                  ) : (
-                    <StaticFallbackCards />
-                  )}
-                </div>
-              </div>
+              <div className={homeHubCardScrollClass}>{renderLandingCardSection()}</div>
             </div>
           </div>
         )}
       </div>
 
-      {!showConversation ? (
+      {showConversation ? null : (
         <div className={homeHubFooterShellClass}>
           <HomeComposer
             seedText={seedText}
@@ -230,7 +252,7 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
             showProjectPicker
           />
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
