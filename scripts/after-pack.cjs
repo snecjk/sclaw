@@ -19,7 +19,7 @@
  *      @mariozechner/clipboard).
  */
 
-const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, mkdtempSync, realpathSync, readFileSync, createWriteStream } = require('fs');
+const { cpSync, existsSync, readdirSync, rmSync, statSync, mkdirSync, mkdtempSync, realpathSync, readFileSync, createWriteStream, symlinkSync } = require('fs');
 const { execSync } = require('child_process');
 const { join, dirname, basename } = require('path');
 const { tmpdir } = require('os');
@@ -1224,7 +1224,28 @@ exports.default = async function afterPack(context) {
   let resourcesDir;
   if (platform === 'darwin') {
     const appName = context.packager.appInfo.productFilename;
+    const appBundlePath = join(appOutDir, `${appName}.app`);
+    const macosDir = join(appBundlePath, 'Contents', 'MacOS');
     resourcesDir = join(appOutDir, `${appName}.app`, 'Contents', 'Resources');
+    // 兼容旧版 updater：
+    // 旧版会尝试启动 Contents/MacOS/S Claw，
+    // 新版真实可执行文件为 Contents/MacOS/SClaw。
+    const currentExecutable = join(macosDir, 'SClaw');
+    const legacyExecutable = join(macosDir, 'S Claw');
+
+    if (!existsSync(currentExecutable)) {
+      throw new Error(
+        `[after-pack] Missing macOS executable: ${currentExecutable}`,
+      );
+    }
+
+    // 删除逻辑稍微简化，兼容意外留下的断链
+    rmSync(legacyExecutable, { force: true });
+    symlinkSync('SClaw', legacyExecutable);
+
+    console.log(
+      '[after-pack] Added legacy macOS executable alias: S Claw -> SClaw',
+    );
   } else {
     resourcesDir = join(appOutDir, 'resources');
   }

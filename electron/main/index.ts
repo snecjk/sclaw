@@ -11,8 +11,9 @@ function _ts(label: string): void {
 
 import { app, BrowserWindow, dialog, nativeImage, session, shell } from 'electron';
 import type { Server } from 'node:http';
-import { basename, join, resolve } from 'path';
+import { basename, dirname, join, resolve } from 'path';
 import { existsSync } from 'node:fs';
+import { rename } from 'node:fs/promises';
 
 // Type-only imports for lazy-loaded modules (zero runtime cost).
 // The actual classes are loaded dynamically in initialize() to avoid
@@ -52,12 +53,17 @@ import {
 import { getSetting } from '../utils/store';
 import { getCurrentEnvConfig } from '../../shared/env-config';
 import { getSqliteDatabaseInfo, initializeSqliteDatabase } from '../db';
+import {
+  LEGACY_MAC_APP_BUNDLE_NAME,
+  RENAMED_MAC_APP_BUNDLE_NAME,
+  scheduleMacAppBundleMoveAndRelaunch,
+  stageExistingMacAppTarget,
+} from '../utils/cleanup-old-app-bundles';
 
 _ts('static imports loaded');
 
 const WINDOWS_APP_USER_MODEL_ID = 'app.stoclaw.desktop';
 const LEGACY_USER_DATA_DIR_NAME = 'stoclaw';
-const RENAMED_MAC_APP_BUNDLE_NAME = 'SClaw.app';
 const LEGACY_MAC_APP_BUNDLE_PATH = '/Applications/S Claw.app';
 
 function pinLegacyUserDataPath(): void {
@@ -98,6 +104,42 @@ async function promptRemoveLegacyMacAppIfNeeded(win: BrowserWindow): Promise<voi
   } catch (error) {
     logger.warn(`[rename] failed to move legacy macOS app to Trash: ${legacyAppPath}`, error);
     await shell.showItemInFolder(legacyAppPath);
+  }
+}
+
+async function migrateLegacyMacAppBundleIfNeeded(): Promise<boolean> {
+  if (process.platform !== 'darwin' || !app.isPackaged) return false;
+
+  const currentAppPath = getCurrentMacAppBundlePath();
+  if (!currentAppPath || basename(currentAppPath) !== LEGACY_MAC_APP_BUNDLE_NAME) {
+    return false;
+  }
+
+  const targetAppPath = join(dirname(currentAppPath), RENAMED_MAC_APP_BUNDLE_NAME);
+  let stagedTargetPath: string | null = null;
+
+  try {
+    stagedTargetPath = await stageExistingMacAppTarget(currentAppPath, targetAppPath);
+    if (stagedTargetPath) {
+      logger.info(`[rename] staged existing renamed macOS app ${targetAppPath} to ${stagedTargetPath}`);
+    }
+
+    logger.info(`[rename] scheduling legacy macOS app bundle migration ${currentAppPath} to ${targetAppPath}`);
+    scheduleMacAppBundleMoveAndRelaunch(currentAppPath, targetAppPath, stagedTargetPath);
+    setQuitting();
+    app.quit();
+    return true;
+  } catch (error) {
+    logger.warn(`[rename] failed to migrate legacy macOS app bundle ${currentAppPath} to ${targetAppPath}`, error);
+    if (stagedTargetPath && existsSync(stagedTargetPath) && !existsSync(targetAppPath)) {
+      try {
+        await rename(stagedTargetPath, targetAppPath);
+        logger.info(`[rename] restored staged renamed macOS app ${stagedTargetPath}`);
+      } catch (restoreError) {
+        logger.warn(`[rename] failed to restore staged renamed macOS app ${stagedTargetPath}`, restoreError);
+      }
+    }
+    return false;
   }
 }
 
@@ -971,6 +1013,9 @@ if (gotTheLock) {
   // Application lifecycle
   app.whenReady().then(async () => {
     _ts('app.whenReady() resolved');
+    if (await migrateLegacyMacAppBundleIfNeeded()) {
+      return;
+    }
     void import('../utils/cleanup-old-app-bundles').then(({ scheduleOldAppBackupCleanup }) =>
       scheduleOldAppBackupCleanup(),
     );
