@@ -70,8 +70,8 @@ describe('app shell surface tokens (Stage 4)', () => {
     expect(chatComposerHomeShellClass).not.toContain('bg-card');
     expect(chatComposerHomeShellClass).not.toContain('dark:shadow-[');
 
-    // 外层 nest 相对 L1 workspace 略降，必须用 L0 shell，避免与主卡片同色导致灰底消失
-    expect(chatComposerHomeStackShellClass).toContain('bg-[var(--sto-shell-bg)]');
+    // 外层 nest：比 workspace 略深、比 shell 更淡；禁止绑回 workspace-bg（会与主卡片同色）
+    expect(chatComposerHomeStackShellClass).toContain('bg-[#F5F5F5]');
     expect(chatComposerHomeStackShellClass).not.toContain('bg-[var(--sto-workspace-bg)]');
   });
 

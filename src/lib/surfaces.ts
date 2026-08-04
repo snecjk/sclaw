@@ -61,13 +61,13 @@ export const userChatBubbleSurfaceClass = cn(
 
 /**
  * 首页新对话：输入框 + 项目条外层灰底壳（圆角）。
- * 垫面相对 L1 Workspace 略降：用 L0 `--sto-shell-bg`，勿用 `--sto-workspace-bg`
- *（与主卡片同色时「进入项目工作」条会看不见灰底）。内层 Composer 仍用 L2 panel。
+ * 相对 L1 Workspace（#fafafa）略深、比 L0 Shell（#ededed）更淡，避免与主卡片同色看不见，
+ * 也不要用过深的 shell-bg。内层 Composer 仍用 L2 panel。
  * 使用位置：HomeComposer showProjectPicker。
  */
 export const chatComposerHomeStackShellClass = cn(
-  'flex flex-col gap-2 overflow-visible rounded-[22px] bg-[var(--sto-shell-bg)] p-0',
-  'dark:bg-[var(--sto-shell-bg)]',
+  'flex flex-col gap-2 overflow-visible rounded-[22px] bg-[#F5F5F5] p-0',
+  'dark:bg-muted/60',
 );
 
 /**
