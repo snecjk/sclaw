@@ -11,6 +11,7 @@ import logoSvg from '@/assets/logo.svg';
 import { useSettingsStore } from '@/stores/settings';
 import { useGatewayStore } from '@/stores/gateway';
 import { useChatStore } from '@/stores/chat';
+import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
 import { invokeIpc } from '@/lib/api-client';
 import { extractText } from '@/pages/Chat/message-utils';
 import { QuickActions } from './QuickActions';
@@ -34,8 +35,7 @@ export function Sprite() {
   const initGateway = useGatewayStore((s) => s.init);
 
   // Chat state
-  const sending = useChatStore((s) => s.sending);
-  const streamingMessage = useChatStore((s) => s.streamingMessage);
+  const { sending, streamingMessage } = useCurrentChatRuntimeView();
   const messages = useChatStore((s) => s.messages);
   const sendMessage = useChatStore((s) => s.sendMessage);
 

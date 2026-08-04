@@ -141,6 +141,7 @@ StoClaw employs a **dual-process architecture** with a unified host API layer. T
 │  │              Electron Main Process                          │  │
 │  │  • Window & application lifecycle management               │  │
 │  │  • Gateway process supervision                              │  │
+│  │  • Authoritative chat-run lifecycle & recovery               │  │
 │  │  • System integration (tray, notifications, keychain)       │  │
 │  │  • Auto-update orchestration                                │  │
 │  └────────────────────────────────────────────────────────────┘  │
@@ -184,6 +185,7 @@ StoClaw employs a **dual-process architecture** with a unified host API layer. T
 - **Single Entry for Frontend Calls**: Renderer requests go through host-api/api-client; protocol details are hidden behind a stable interface
 - **Main-Process Transport Ownership**: Electron Main controls WS/HTTP usage and fallback to IPC for reliability
 - **Graceful Recovery**: Built-in reconnect, timeout, and backoff logic handles transient failures automatically
+- **Authoritative Chat Runtime**: Main normalizes OpenClaw/Claude events into a versioned `chat-runtime:event` stream, persists minimal run metadata in SQLite, and exposes `chat-runtime:get` / `chat-runtime:listActive` snapshots for renderer and process-restart recovery. Transcripts remain engine-owned; optimistic and streaming content stay in a replaceable renderer overlay.
 - **Secure Storage**: API keys and sensitive data leverage the operating system's native secure storage mechanisms
 - **CORS-Safe by Design**: Local HTTP access is proxied by Main, preventing renderer-side CORS issues
 
@@ -217,6 +219,8 @@ Chain multiple skills together to create sophisticated automation pipelines. Pro
 Workflow agents use an artifact-first delivery contract. A task may return small structured data directly or create one or more files in any task-appropriate format. Files are declared by node-relative resource paths; the desktop runtime validates the workspace boundary, records canonical artifact metadata, and passes only compact references downstream. Individual payload strings larger than 1 KiB must be delivered as files so generated content is not duplicated in workflow records or later model prompts.
 
 Chat workflow progress cards are durable SQLite-backed timeline items. A card is registered only when a new run starts in its originating chat session; asking for an existing run's status remains an ordinary tool response. The renderer discovers card references by session and each mounted card polls a compact `wf_run` snapshot through the Main-process API, so switching sessions or reloading history does not depend on transient workflow status events or synthetic message content.
+
+Chat run lifecycle is authoritative in Electron Main. `ChatRuntimeSupervisor` normalizes engine events, persists recovery state, and projects newly persisted current-turn history records into canonical events while a run is active. This keeps OpenClaw reasoning and tool chronology visible during execution even when its live assistant buffer contains only reply text; Renderer does not poll engine runtime state or interpret engine-specific completion rules.
 
 ---
 

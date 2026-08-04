@@ -757,6 +757,14 @@ async function initialize(): Promise<void> {
     heb.emit('gateway:exit', { code });
   });
 
+  void import('../services/chat-runtime-supervisor').then(({ getChatRuntimeSupervisor }) => {
+    getChatRuntimeSupervisor(gm).on('event', (event) => {
+      heb.emit('chat-runtime:event', event);
+    });
+  }).catch((error) => {
+    logger.warn('[chat-runtime] host event bridge failed:', error);
+  });
+
   deviceOAuthManager.on('oauth:code', (payload) => {
     heb.emit('oauth:code', payload);
   });

@@ -16,8 +16,6 @@ import {
   mergeHistoryDisplayMessages,
   prepareHistoryMessages,
 } from './history-pipeline';
-import { getSessionRuntimeState } from './session-runtime';
-import { applyRuntimePatch } from './runtime-controller';
 import {
   loadMissingPreviewsInBackground,
   maybeDeriveSessionLabel,
@@ -25,15 +23,15 @@ import {
 } from './history-side-effects';
 import { restorePendingWorkflowDraftInBackground } from './history-workflow-effects';
 import { localizeAndHydrateWorkflowForms } from './history-form-effects';
-import { reconcileHistoryRuntimeCompletion } from './history-runtime-completion';
 import { logChatFlow } from './chat-flow-log';
 import type { ChatGet, ChatSet } from './store-api';
 import type { ChatSession, RawMessage } from './types';
 import { restoreSkillMetaOnMessages } from '@/lib/skill-message-meta-cache';
+import { useChatRuntimeV2Store } from './runtime-v2-store';
+import { buildChatSessionRuntimeView } from './runtime-selectors';
 
 export interface ApplyLoadedHistoryDeps {
   toMs: (ts: unknown) => number;
-  clearHistoryPoll: (sessionKey: string) => void;
   resolveEngineTypeForSession: (
     sessions: ChatSession[],
     sessionKey: string,
@@ -53,21 +51,13 @@ export async function prepareHistoryToolEffects(input: {
 }
 
 function clearOptimisticUserIfEchoed(input: {
-  set: ChatSet;
   targetSessionKey: string;
   finalMessages: RawMessage[];
   cachedOptimistic: RawMessage | null;
   userMsgAt: number | null;
   toMs: (ts: unknown) => number;
 }): void {
-  const {
-    set,
-    targetSessionKey,
-    finalMessages,
-    cachedOptimistic,
-    userMsgAt,
-    toMs,
-  } = input;
+  const { targetSessionKey, finalMessages, cachedOptimistic, userMsgAt, toMs } = input;
   if (!cachedOptimistic) return;
 
   const optimisticRefAt = userMsgAt
@@ -76,7 +66,7 @@ function clearOptimisticUserIfEchoed(input: {
     optimisticRefAt > 0
     && finalMessages.some((m) => isSameUserMessage(m, cachedOptimistic, optimisticRefAt))
   ) {
-    set((s) => applyRuntimePatch(s, targetSessionKey, { optimisticUserMessage: null }));
+    useChatRuntimeV2Store.getState().setOptimisticUserMessage(targetSessionKey, null);
     return;
   }
 
@@ -88,7 +78,7 @@ function clearOptimisticUserIfEchoed(input: {
       && normalizeUserMessageText(m.content) === cachedNorm
     ))
   ) {
-    set((s) => applyRuntimePatch(s, targetSessionKey, { optimisticUserMessage: null }));
+    useChatRuntimeV2Store.getState().setOptimisticUserMessage(targetSessionKey, null);
   }
 }
 
@@ -111,8 +101,6 @@ export function applyLoadedHistorySnapshot(input: {
     thinkingLevel,
   } = input;
   const {
-    clearHistoryPoll,
-    resolveEngineTypeForSession,
     toMs,
   } = deps;
 
@@ -130,24 +118,25 @@ export function applyLoadedHistorySnapshot(input: {
     sessionKey: targetSessionKey,
   });
   const preparedRawMessages = preparedHistory.rawMessages;
-  const filteredMessages = preparedHistory.filteredMessages;
+  // Canonical transcript keeps the engine payload untouched. Legacy display
+  // enrichment below may merge cached/decorated messages, but never writes
+  // those decorations back into RawTranscript.
+  useChatRuntimeV2Store.getState().setTranscript(targetSessionKey, rawMessages);
   const enrichedMessages = preparedHistory.enrichedMessages;
+  const canonicalSession = useChatRuntimeV2Store.getState().sessionsByKey[targetSessionKey];
+  const runtimeView = buildChatSessionRuntimeView(canonicalSession);
 
-  const userMsgAt = get().lastUserMessageAt;
+  const userMsgAt = runtimeView.lastUserMessageAt;
   const historyUserCountBefore = enrichedMessages.filter((m) => m.role === 'user').length;
   const historyMessageCountBefore = enrichedMessages.length;
-  const cachedOptimistic = getSessionRuntimeState(
-    get().runtimeBySessionKey,
-    targetSessionKey,
-  ).optimisticUserMessage ?? get().optimisticUserMessage;
+  const cachedOptimistic = canonicalSession?.overlay.optimisticUserMessage ?? null;
   let finalMessages = mergeOptimisticUserIntoHistory(enrichedMessages, get().messages, {
     userMessageAt: userMsgAt,
-    sending: get().sending,
+    sending: runtimeView.sending,
     sessionKey: targetSessionKey,
     cachedOptimistic,
   });
   clearOptimisticUserIfEchoed({
-    set,
     targetSessionKey,
     finalMessages,
     cachedOptimistic,
@@ -167,7 +156,7 @@ export function applyLoadedHistorySnapshot(input: {
     sessionLabels: get().sessionLabels,
     gatewaySessionLabel,
     userMessageAt: userMsgAt ?? null,
-    sending: get().sending,
+    sending: runtimeView.sending,
     getMessageText,
   });
   finalMessages = restoreSkillMetaOnMessages(
@@ -182,7 +171,7 @@ export function applyLoadedHistorySnapshot(input: {
   traceLoadHistoryUserReconciliation({
     sessionKey: targetSessionKey,
     userMessageAt: userMsgAt,
-    sending: get().sending,
+    sending: runtimeView.sending,
     beforeCount: historyMessageCountBefore,
     afterCount: finalMessages.length,
     userCountBefore: historyUserCountBefore,
@@ -273,22 +262,6 @@ export function applyLoadedHistorySnapshot(input: {
   });
   if (get().currentSessionKey !== targetSessionKey) return;
 
-  const activeEngineType = resolveEngineTypeForSession(
-    get().sessions,
-    targetSessionKey,
-    get().currentAgentId,
-  );
-
-  if (get().currentSessionKey !== targetSessionKey) return;
-
-  reconcileHistoryRuntimeCompletion({
-    get,
-    set,
-    sessionKey: targetSessionKey,
-    filteredMessages,
-    runtimeState,
-    clearHistoryPoll,
-    activeEngineType,
-    toMs,
-  });
+  // Runtime completion is authoritative in Main's ChatRuntimeSupervisor.
+  // History updates transcript only; it no longer infers terminal run state.
 }

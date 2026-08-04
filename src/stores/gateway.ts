@@ -6,23 +6,25 @@ import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { subscribeHostEvent } from '@/lib/host-events';
-import {
-  handleCompletedEngineEvent,
-  handleStartedEngineEvent,
-  shouldIgnoreGatewayAgentSession,
-} from './chat/gateway-agent-events';
-import { createGatewayEventDeduper } from './chat/gateway-event-dedupe';
-import {
-  buildAgentNotificationEngineEvent,
-  buildChatEventFromEngineEvent,
-  buildNotificationChatEvent,
-} from './chat/gateway-event-normalization';
-import { logChatFlow } from './chat/chat-flow-log';
+import { isWorkflowOpenClawSessionKey } from '../../shared/workflow-openclaw-session';
 import type { GatewayStatus } from '../types/gateway';
+import {
+  initializeChatRuntimeV2,
+  subscribeCanonicalChatRuntimeProjection,
+} from './chat/runtime-v2-store';
+import type { CanonicalChatEvent } from '../../shared/chat-runtime-protocol';
+import {
+  markSessionUnreadAfterSuccessfulRun,
+  noteObservedRun,
+} from '@/lib/session-unread-notify';
+import { touchSessionReadAt } from '@/stores/session-unread';
+import { isVirtualTaskSessionKey } from './chat/cron-session-utils';
+import { getAgentIdFromSessionKey } from './chat/session-identity';
+import { dispatchBuiltinToolResult } from '@/lib/builtin-tool-dispatch';
+import type { RawMessage } from './chat/types';
 
 let gatewayInitPromise: Promise<void> | null = null;
 let gatewayEventUnsubscribers: Array<() => void> | null = null;
-const gatewayEventDeduper = createGatewayEventDeduper();
 
 interface GatewayHealth {
   ok: boolean;
@@ -45,88 +47,71 @@ interface GatewayState {
   clearError: () => void;
 }
 
-function shouldProcessGatewayEvent(event: Record<string, unknown>): boolean {
-  return gatewayEventDeduper.shouldProcess(event);
-}
-
-export function shouldReconcileChatRunsAfterGatewayStatus(
-  previous: GatewayStatus['state'],
-  next: GatewayStatus['state'],
-): boolean {
-  return previous !== 'running' && next === 'running';
-}
-
-function reconcileActiveChatRunsAfterGatewayReconnect(): void {
-  void import('./chat')
-    .then(({ useChatStore }) => {
-      const chat = useChatStore.getState();
-      for (const [sessionKey, runtime] of Object.entries(chat.runtimeBySessionKey)) {
-        if (!runtime.sending && !runtime.pendingFinal && !runtime.activeRunId) continue;
-        void chat.loadHistory(true, true, sessionKey);
+function handleCanonicalChatEvent(event: CanonicalChatEvent): void {
+  if (isWorkflowOpenClawSessionKey(event.sessionKey)) return;
+  if (event.type === 'run.started' || event.type === 'message.delta' || event.type === 'message.final') {
+    noteObservedRun(event.runId);
+  }
+  void import('./chat').then((chatModule) => {
+    const state = chatModule.useChatStore.getState();
+    switch (event.type) {
+      case 'run.dispatching':
+      case 'run.accepted':
+        return;
+      case 'run.started': {
+        if (
+          isVirtualTaskSessionKey(event.sessionKey)
+          && !state.sessions.some((session) => session.key === event.sessionKey)
+        ) {
+          chatModule.useChatStore.setState((current) => ({
+            sessions: [...current.sessions, {
+              key: event.sessionKey,
+              engineType: event.engineType,
+              agentId: getAgentIdFromSessionKey(event.sessionKey),
+            }],
+          }));
+        }
+        return;
       }
-    })
-    .catch((error) => {
-      console.warn('[chat-flow] gateway.reconnect.history-reconcile.failed', {
-        error: String(error),
-      });
-    });
-}
-
-function handleGatewayNotification(notification: { method?: string; params?: Record<string, unknown> } | undefined): void {
-  const payload = notification;
-  if (!payload || payload.method !== 'agent' || !payload.params || typeof payload.params !== 'object') {
-    return;
-  }
-
-  const p = payload.params;
-  const data = (p.data && typeof p.data === 'object') ? (p.data as Record<string, unknown>) : {};
-  const engineEvent = buildAgentNotificationEngineEvent({ params: p, data });
-  const notificationChatEvent = buildNotificationChatEvent({ params: p, data });
-  if (shouldIgnoreGatewayAgentSession(engineEvent?.sessionKey ?? notificationChatEvent?.sessionKey)) {
-    return;
-  }
-  if (engineEvent) {
-    logChatFlow('event.notification.normalized', {
-      type: engineEvent.type,
-      runId: engineEvent.runId ?? null,
-      sessionKey: engineEvent.sessionKey ?? null,
-      phase: engineEvent.phase ?? null,
-    });
-  }
-
-  if (notificationChatEvent) {
-    if (shouldProcessGatewayEvent(notificationChatEvent)) {
-      import('./chat')
-        .then(({ useChatStore }) => {
-          useChatStore.getState().handleChatEvent(notificationChatEvent);
-        })
-        .catch(() => {});
+      case 'message.delta':
+      case 'message.final':
+        return;
+      case 'tool.updated': {
+        const message = event.payload as RawMessage | null;
+        if (message) {
+          void dispatchBuiltinToolResult({
+            id: message.id,
+            toolCallId: message.toolCallId,
+            toolName: message.toolName,
+            content: message.content,
+          }, {
+            sessionKey: event.sessionKey,
+            agentId: getAgentIdFromSessionKey(event.sessionKey),
+          }).then(() => {
+            void chatModule.useChatStore.getState().loadHistory(true, true, event.sessionKey);
+          });
+        }
+        return;
+      }
+      case 'run.awaiting_transcript':
+        return;
+      case 'run.completed': {
+        if (event.sessionKey === state.currentSessionKey) touchSessionReadAt(event.sessionKey);
+        else markSessionUnreadAfterSuccessfulRun(event.sessionKey, state.currentSessionKey, { runId: event.runId });
+        void state.loadHistory(true, true, event.sessionKey);
+        void state.loadSessions();
+        return;
+      }
+      case 'run.failed':
+      case 'run.interrupted':
+      case 'run.aborted': {
+        void state.loadHistory(true, true, event.sessionKey);
+        return;
+      }
     }
-  }
-
-  if (engineEvent?.type === 'turn.started') {
-    handleStartedEngineEvent(engineEvent, shouldProcessGatewayEvent);
-  } else if (engineEvent?.type === 'turn.completed') {
-    handleCompletedEngineEvent(engineEvent);
-  }
-}
-
-function handleGatewayEngineEvent(data: unknown): void {
-  if (!data || typeof data !== 'object') return;
-  import('./chat').then(({ useChatStore }) => {
-    const normalizedEvent = buildChatEventFromEngineEvent(data as Record<string, unknown>);
-    if (!normalizedEvent) return;
-    if (shouldIgnoreGatewayAgentSession(normalizedEvent.sessionKey)) return;
-    if (!shouldProcessGatewayEvent(normalizedEvent)) return;
-    logChatFlow('event.engine.received', {
-      type: (data as Record<string, unknown>).type,
-      state: normalizedEvent.state ?? null,
-      runId: normalizedEvent.runId ?? null,
-      sessionKey: normalizedEvent.sessionKey ?? null,
-      seq: normalizedEvent.seq ?? null,
-    });
-    useChatStore.getState().handleChatEvent(normalizedEvent);
-  }).catch(() => {});
+  }).catch((error) => {
+    console.warn('[chat-runtime] canonical event bridge failed', error);
+  });
 }
 
 function mapChannelStatus(status: string): 'connected' | 'connecting' | 'disconnected' | 'error' {
@@ -165,28 +150,22 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
       try {
         const status = await hostApiFetch<GatewayStatus>('/api/gateway/status');
         set({ status, isInitialized: true });
+        const projectionUnsubscribe = gatewayEventUnsubscribers
+          ? null
+          : subscribeCanonicalChatRuntimeProjection(handleCanonicalChatEvent);
+        await initializeChatRuntimeV2().catch((error) => {
+          console.warn('[chat-runtime] initialization failed', error);
+        });
 
         if (!gatewayEventUnsubscribers) {
           const unsubscribers: Array<() => void> = [];
           unsubscribers.push(subscribeHostEvent<GatewayStatus>('gateway:status', (payload) => {
-            const previousState = get().status.state;
             set({ status: payload });
-            if (shouldReconcileChatRunsAfterGatewayStatus(previousState, payload.state)) {
-              reconcileActiveChatRunsAfterGatewayReconnect();
-            }
           }));
           unsubscribers.push(subscribeHostEvent<{ message?: string }>('gateway:error', (payload) => {
             set({ lastError: payload.message || 'Gateway error' });
           }));
-          unsubscribers.push(subscribeHostEvent<{ method?: string; params?: Record<string, unknown> }>(
-            'gateway:notification',
-            (payload) => {
-              handleGatewayNotification(payload);
-            },
-          ));
-          unsubscribers.push(subscribeHostEvent('gateway:engine-event', (payload) => {
-            handleGatewayEngineEvent(payload);
-          }));
+          if (projectionUnsubscribe) unsubscribers.push(projectionUnsubscribe);
           unsubscribers.push(subscribeHostEvent<{ channelId?: string; status?: string }>(
             'gateway:channel-status',
             (update) => {
@@ -210,6 +189,8 @@ export const useGatewayStore = create<GatewayState>((set, get) => ({
             },
           ));
           gatewayEventUnsubscribers = unsubscribers;
+        } else {
+          projectionUnsubscribe?.();
         }
       } catch (error) {
         console.error('Failed to initialize Gateway:', error);

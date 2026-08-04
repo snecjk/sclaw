@@ -1,11 +1,11 @@
 import { traceChatSession } from '../../../shared/chat-session-trace';
 import { normalizeDerivedSessionLabel, isCorruptedSessionLabel } from '@/lib/workflow-session-hint';
 import { shouldAutoDeriveSessionLabel } from '@/lib/session-label';
-import { applyRuntimePatch } from './runtime-controller';
 import { dedupeRedundantUserMessages } from './user-message-merge';
 import type { ChatGet, ChatSet } from './store-api';
 import type { RawMessage, SendMessageOptions } from './types';
 import { rememberSkillMessageMeta } from '@/lib/skill-message-meta-cache';
+import { useChatRuntimeV2Store } from './runtime-v2-store';
 
 export function insertOptimisticUserTurn(input: {
   get: ChatGet;
@@ -60,29 +60,14 @@ export function insertOptimisticUserTurn(input: {
     },
   });
 
-  set((s) => ({
-    ...(s.currentSessionKey === sessionKey ? {
+  set((s) => (
+    s.currentSessionKey === sessionKey ? {
       messages: dedupeRedundantUserMessages([...s.messages, userMsg], nowMs, {
         sessionKey,
       }),
-    } : {}),
-    ...applyRuntimePatch(s, sessionKey, {
-      sending: true,
-      aborting: false,
-      activeRunId: null,
-      sendAcceptance: null,
-      streamingText: '',
-      streamingMessage: null,
-      streamingMessages: [],
-      streamingToolResults: [],
-      streamingTools: [],
-      pendingFinal: false,
-      lastUserMessageAt: nowMs,
-      optimisticUserMessage: userMsg,
-      pendingToolImages: [],
-      error: null,
-    }),
-  }));
+    } : {}
+  ));
+  useChatRuntimeV2Store.getState().setOptimisticUserMessage(sessionKey, userMsg);
 
   const { sessionLabels, messages } = get();
   const isFirstMessage = !messages.slice(0, -1).some((m) => m.role === 'user');

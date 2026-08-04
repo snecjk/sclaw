@@ -4,6 +4,7 @@ import { runIdempotentChatSend } from '../api/routes/chat-send-idempotency';
 import type { AgentMemoryContextBlocks } from '../../shared/agent-memory-prompt';
 import { agentMemoryContextService } from './agent-memory-context-service';
 import { getMemoryTurnCoordinator } from './memory-turn-coordinator';
+import { getChatRuntimeSupervisor } from './chat-runtime-supervisor';
 
 type ChatSendResult = { success: boolean; result?: { runId?: string }; error?: string };
 
@@ -19,6 +20,20 @@ export function runMainChatSend(
   dispatch: (prepared: EngineSendParams) => Promise<ChatSendResult>,
 ): Promise<ChatSendResult> {
   return runIdempotentChatSend(input.sessionKey, input.idempotencyKey, async () => {
+    const runtimeSupervisor = getChatRuntimeSupervisor(gatewayManager);
+    const runtime = await runtimeSupervisor.begin({
+      sessionKey: input.sessionKey,
+      idempotencyKey: input.idempotencyKey,
+      engineType: input.engineType,
+    });
+    if (
+      runtime.acceptanceResult
+      && Date.now() - runtime.startedAt <= 10 * 60 * 1000
+      && runtime.phase !== 'failed'
+      && runtime.phase !== 'interrupted'
+    ) {
+      return { success: true, result: runtime.acceptanceResult as { runId?: string } };
+    }
     const memory = await agentMemoryContextService.prepare(input.sourceText?.trim() || input.message);
     const coordinator = getMemoryTurnCoordinator(gatewayManager);
     coordinator.begin({
@@ -34,6 +49,11 @@ export function runMainChatSend(
       const result = await dispatch(prepared);
       if (!result.success) {
         coordinator.reject(input.sessionKey, input.idempotencyKey);
+        await runtimeSupervisor.rejected({
+          sessionKey: input.sessionKey,
+          idempotencyKey: input.idempotencyKey,
+          error: result.error || 'Failed to send message',
+        });
         return result;
       }
       await coordinator.bind({
@@ -41,9 +61,22 @@ export function runMainChatSend(
         idempotencyKey: input.idempotencyKey,
         runId: result.result?.runId,
       });
+      await runtimeSupervisor.accepted({
+        sessionKey: input.sessionKey,
+        idempotencyKey: input.idempotencyKey,
+        runId: result.result?.runId,
+        engineType: input.engineType,
+        result: result.result ?? {},
+      });
       return result;
     } catch (error) {
       coordinator.reject(input.sessionKey, input.idempotencyKey);
+      await runtimeSupervisor.rejected({
+        sessionKey: input.sessionKey,
+        idempotencyKey: input.idempotencyKey,
+        error: String(error),
+        uncertain: /timeout|network|ECONN|fetch failed/i.test(String(error)),
+      });
       throw error;
     }
   });

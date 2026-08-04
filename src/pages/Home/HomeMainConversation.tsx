@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowDown, Loader2, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useChatStore, type RawMessage } from '@/stores/chat';
+import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
 import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
 import {
   EMPTY_WORKFLOW_CHAT_CARD_REFS,
@@ -82,17 +83,21 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const messages = useChatStore((s) => s.messages);
   const loading = useChatStore((s) => s.loading);
-  const sending = useChatStore((s) => s.sending);
-  const error = useChatStore((s) => s.error);
+  const {
+    sending,
+    pendingFinal,
+    lastEventAt: canonicalLastEventAt,
+    lastUserMessageAt,
+    streamingMessage,
+    streamingMessages,
+    streamingToolResults,
+    streamingTools,
+    error,
+  } = useCurrentChatRuntimeView();
   const showThinking = useChatStore((s) => s.showThinking);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
   const refresh = useChatStore((s) => s.refresh);
-  const streamingMessage = useChatStore((s) => s.streamingMessage);
-  const streamingMessages = useChatStore((s) => s.streamingMessages);
-  const streamingToolResults = useChatStore((s) => s.streamingToolResults);
-  const streamingTools = useChatStore((s) => s.streamingTools);
-  const pendingFinal = useChatStore((s) => s.pendingFinal);
-  const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
+  const lastChatEventAt = canonicalLastEventAt;
   const clearError = useChatStore((s) => s.clearError);
 
   const workflowCards = useWorkflowChatCardsStore(
@@ -175,6 +180,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     streamingMessages,
     streamingToolResults,
     streamingTools,
+    lastUserMessageAt,
   });
 
   useEffect(() => {

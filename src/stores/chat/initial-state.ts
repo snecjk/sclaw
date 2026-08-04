@@ -6,25 +6,10 @@ export const initialChatDataState: Pick<
   ChatState,
   | 'messages'
   | 'loading'
-  | 'error'
-  | 'sending'
   | 'modelSwitching'
-  | 'activeRunId'
-  | 'sendAcceptance'
-  | 'streamingText'
-  | 'streamingMessage'
-  | 'streamingMessages'
-  | 'streamingToolResults'
-  | 'streamingTools'
-  | 'pendingFinal'
-  | 'lastChatEventAt'
-  | 'lastUserMessageAt'
-  | 'optimisticUserMessage'
-  | 'pendingToolImages'
   | 'sessions'
   | 'currentSessionKey'
   | 'currentAgentId'
-  | 'runtimeBySessionKey'
   | 'sessionLabels'
   | 'sessionLastActivity'
   | 'sidebarRecentOrder'
@@ -37,25 +22,10 @@ export const initialChatDataState: Pick<
 > = {
   messages: [],
   loading: false,
-  error: null,
-  sending: false,
   modelSwitching: false,
-  activeRunId: null,
-  sendAcceptance: null,
-  streamingText: '',
-  streamingMessage: null,
-  streamingMessages: [],
-  streamingToolResults: [],
-  streamingTools: [],
-  pendingFinal: false,
-  lastChatEventAt: 0,
-  lastUserMessageAt: null,
-  optimisticUserMessage: null,
-  pendingToolImages: [],
   sessions: [],
   currentSessionKey: DEFAULT_SESSION_KEY,
   currentAgentId: 'main',
-  runtimeBySessionKey: {},
   sessionLabels: {},
   sessionLastActivity: {},
   sidebarRecentOrder: [],

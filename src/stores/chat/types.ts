@@ -141,68 +141,18 @@ export interface ToolStatus {
   updatedAt: number;
 }
 
-export interface SessionRuntimeState {
-  sending: boolean;
-  /** Abort has been requested, but the engine has not confirmed termination yet. */
-  aborting: boolean;
-  activeRunId: string | null;
-  streamingText: string;
-  streamingMessage: unknown | null;
-  /** Live assistant snapshots seen during the active turn, in arrival order. */
-  streamingMessages: RawMessage[];
-  /** Live tool result messages seen during the active turn, in arrival order. */
-  streamingToolResults: RawMessage[];
-  streamingTools: ToolStatus[];
-  pendingFinal: boolean;
-  lastUserMessageAt: number | null;
-  /** Optimistic user message kept across session switches while Gateway has not echoed it. */
-  optimisticUserMessage: RawMessage | null;
-  pendingToolImages: AttachedFileMeta[];
-  error: string | null;
-  /** Tracks whether the Gateway has acknowledged the current optimistic send. */
-  sendAcceptance: SendAcceptanceState | null;
-  updatedAt: number;
-}
-
-export interface SendAcceptanceState {
-  idempotencyKey: string;
-  status: 'pending' | 'accepted' | 'uncertain';
-  startedAt: number;
-}
-
 export interface ChatState {
   // Messages
   messages: RawMessage[];
   loading: boolean;
-  error: string | null;
 
-  // Streaming
-  sending: boolean;
   /** True while model switch API is in flight — blocks chat input to prevent
    *  sending before backend has applied the new model. */
   modelSwitching: boolean;
-  activeRunId: string | null;
-  sendAcceptance: SendAcceptanceState | null;
-  streamingText: string;
-  streamingMessage: unknown | null;
-  /** Live assistant snapshots seen during the active turn, in arrival order. */
-  streamingMessages: RawMessage[];
-  /** Live tool result messages seen during the active turn, in arrival order. */
-  streamingToolResults: RawMessage[];
-  streamingTools: ToolStatus[];
-  pendingFinal: boolean;
-  /** Timestamp (ms) of the last gateway chat event; used for stale-run UI hints. */
-  lastChatEventAt: number;
-  lastUserMessageAt: number | null;
-  optimisticUserMessage: RawMessage | null;
-  /** Images collected from tool results, attached to the next assistant message */
-  pendingToolImages: AttachedFileMeta[];
   // Sessions
   sessions: ChatSession[];
   currentSessionKey: string;
   currentAgentId: string;
-  /** Runtime state cache per session key so background runs survive session switches. */
-  runtimeBySessionKey: Record<string, SessionRuntimeState>;
   /** First user message text per session key, used as display label */
   sessionLabels: Record<string, string>;
   /** Last message timestamp (ms) per session key, used for sorting */
@@ -262,7 +212,6 @@ export interface ChatState {
   loadHistory: (quiet?: boolean, force?: boolean, sessionKey?: string) => Promise<void>;
   sendMessage: (options: SendMessageOptions) => Promise<void>;
   abortRun: (sessionKey?: string) => Promise<boolean>;
-  handleChatEvent: (event: Record<string, unknown>) => void;
   toggleThinking: () => void;
   refresh: () => Promise<void>;
   clearError: () => void;

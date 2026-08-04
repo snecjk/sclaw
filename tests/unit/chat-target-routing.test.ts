@@ -28,6 +28,7 @@ vi.mock('@/stores/agents', () => ({
 vi.mock('@/stores/session-catalog', () => ({
   useSessionCatalogStore: {
     getState: () => ({ bindSession: bindSessionMock }),
+    setState: vi.fn(),
   },
 }));
 
@@ -68,6 +69,7 @@ describe('chat target routing', () => {
 
     invokeIpcMock.mockReset();
     invokeIpcMock.mockImplementation(async (channel: string, ...args: unknown[]) => {
+      if (channel === 'chat-runtime:listActive') return [];
       if (channel === 'gateway:rpc') {
         const [method] = args as [string];
         if (method === 'chat.history') {
@@ -224,10 +226,6 @@ describe('chat target routing', () => {
       messages: [],
       sessionLabels: {},
       sessionLastActivity: {},
-      runtimeBySessionKey: {},
-      sending: false,
-      activeRunId: null,
-      error: null,
       loading: false,
     });
 

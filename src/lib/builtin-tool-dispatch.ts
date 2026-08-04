@@ -1,6 +1,6 @@
 /**
  * Single entry for STO builtin OpenClaw tool results.
- * Gateway tool_result messages are filtered from chat UI — dispatch from handleChatEvent.
+ * Gateway tool_result messages are filtered from chat UI and dispatched from canonical runtime effects.
  */
 import { toast } from 'sonner';
 import {

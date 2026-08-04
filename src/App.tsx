@@ -207,7 +207,6 @@ function App() {
       });
       // Clear both top-level and session-level chat errors so the error bar
       // doesn't persist after re-login
-      useChatStore.setState({ error: null });
       useChatStore.getState().clearError();
     };
 

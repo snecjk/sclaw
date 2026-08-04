@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowDown, Bot, Cpu, Orbit, Sparkles, Workflow } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useChatStore, type RawMessage } from '@/stores/chat';
+import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
 import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
 import { useGatewayStore } from '@/stores/gateway';
 import { resolveAgentById, useAgentsStore } from '@/stores/agents';
@@ -69,19 +70,22 @@ export function Chat() {
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const sessions = useChatStore((s) => s.sessions);
   const loading = useChatStore((s) => s.loading);
-  const sending = useChatStore((s) => s.sending);
-  const error = useChatStore((s) => s.error);
+  const {
+    sending,
+    pendingFinal,
+    lastEventAt: canonicalLastEventAt,
+    lastUserMessageAt,
+    streamingMessage,
+    streamingMessages,
+    streamingToolResults,
+    streamingTools,
+    error,
+  } = useCurrentChatRuntimeView();
   const showThinking = useChatStore((s) => s.showThinking);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
   const refresh = useChatStore((s) => s.refresh);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
-  const streamingMessage = useChatStore((s) => s.streamingMessage);
-  const streamingMessages = useChatStore((s) => s.streamingMessages);
-  const streamingToolResults = useChatStore((s) => s.streamingToolResults);
-  const streamingTools = useChatStore((s) => s.streamingTools);
-  const pendingFinal = useChatStore((s) => s.pendingFinal);
-  const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
-  const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
+  const lastChatEventAt = canonicalLastEventAt;
   const abortRun = useChatStore((s) => s.abortRun);
   const clearError = useChatStore((s) => s.clearError);
   const agents = useAgentsStore((s) => s.agents);
@@ -209,6 +213,7 @@ export function Chat() {
     streamingMessages,
     streamingToolResults,
     streamingTools,
+    lastUserMessageAt,
   });
 
   const streamContentKey = useMemo(

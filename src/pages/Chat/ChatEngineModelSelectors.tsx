@@ -11,6 +11,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { resolveBaseAgentId, resolveEffectiveAgent, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { getProjectIdFromProjectAgentId } from '../../../shared/project-agent';
 import { useGatewayStore } from '@/stores/gateway';
@@ -161,7 +162,7 @@ export function ChatEngineSelector({
   variant?: 'toolbar' | 'inline';
 }) {
   const { pathname } = useLocation();
-  const sending = useChatStore((s) => s.sending);
+  const { sending } = useCurrentChatRuntimeView();
   const loading = useChatStore((s) => s.loading);
   const messages = useChatStore((s) => s.messages);
   const currentAgentId = useChatStore((s) => s.currentAgentId);
@@ -350,7 +351,7 @@ export function ChatModelSelector({
   className?: string;
   variant?: 'toolbar' | 'inline';
 }) {
-  const sending = useChatStore((s) => s.sending);
+  const { sending } = useCurrentChatRuntimeView();
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessions = useChatStore((s) => s.sessions);

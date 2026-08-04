@@ -22,6 +22,8 @@ import {
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
 import { clearPendingWorkflowDraft, saveWorkflowRecord, sessionHasWorkflowExecution } from '@/stores/workflow-memory';
 import { useChatStore } from '@/stores/chat';
+import { useChatRuntimeV2Store } from './runtime-v2-store';
+import { buildChatSessionRuntimeView } from './runtime-selectors';
 import { isToolResultRole } from '@/stores/chat/helpers';
 import type { WorkflowSchema } from '@/types/workflow';
 import type { ContentBlock, RawMessage } from './types';
@@ -87,7 +89,7 @@ function hasLivePendingWorkflowForTemplate(
   return Boolean(
     pending?.templateId === templateId
     && pending.schema
-    && state.sending,
+    && isCurrentSessionSending(),
   );
 }
 
@@ -208,7 +210,7 @@ export function isWorkflowFormInjectionAllowed(
     if (
       pending?.templateId === templateId
       && pending.schema
-      && state.sending
+      && isCurrentSessionSending()
       && isWorkflowFormUserTurn(userVisible, pending.templateName)
     ) {
       return true;
@@ -251,7 +253,7 @@ export function reconcilePendingWorkflowForSession(
       sessionKey,
       {
         rawMessages,
-        allowLivePending: useChatStore.getState().sending,
+        allowLivePending: isCurrentSessionSending(),
       },
     )
   ) {
@@ -1191,4 +1193,10 @@ export function recoverParameterFormsOnHistoryLoad(
   }
 
   return { messages: finalMessages, deferSet: false };
+}
+function isCurrentSessionSending(): boolean {
+  const sessionKey = useChatStore.getState().currentSessionKey;
+  return buildChatSessionRuntimeView(
+    useChatRuntimeV2Store.getState().sessionsByKey[sessionKey],
+  ).sending;
 }

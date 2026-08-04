@@ -26,6 +26,7 @@ import { canShowAssistantTurnMeta, resolveCurrentTurnLifecycleForMeta } from '@/
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
+import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 import {
   extractText,
   extractPlainTextFromContent,
@@ -401,10 +402,7 @@ export const ChatMessage = memo(function ChatMessage({
   );
   const showUserParamsFold = isUser && hasText && isWorkflowParamsUserText(text);
 
-  const sending = useChatStore((s) => s.sending);
-  const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
-  const pendingFinal = useChatStore((s) => s.pendingFinal);
-  const activeRunId = useChatStore((s) => s.activeRunId);
+  const { sending, pendingFinal, activeRunId, lastUserMessageAt } = useChatSessionRuntimeView(sessionKey);
   const isLastAssistantInTurn = !isUser && (
     isTurnDisplayReply || isTurnDisplayAssistantMessage(message, sessionMessages)
   );

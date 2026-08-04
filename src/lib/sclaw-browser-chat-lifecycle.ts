@@ -23,6 +23,7 @@ import {
 } from '@/lib/resolve-chat-session-engine-type';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 import type { ChatSession } from '@/stores/chat/types';
 
 export interface EmbedChatActivation {
@@ -258,15 +259,6 @@ export function deactivateSclawBrowserEmbedChat(
   }
 
   if (chat.currentSessionKey === chatSessionKey && !restoreKey) {
-    useChatStore.setState({
-      streamingText: '',
-      streamingMessage: null,
-      streamingMessages: [],
-      streamingToolResults: [],
-      streamingTools: [],
-      activeRunId: null,
-      error: null,
-      pendingFinal: false,
-    });
+    useChatRuntimeV2Store.getState().clearOverlay(chatSessionKey);
   }
 }

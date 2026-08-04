@@ -41,6 +41,8 @@ import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { closeSclawBrowser, isSclawBrowserOpen } from '@/lib/open-sclaw-browser';
 import { useChatStore } from '@/stores/chat';
+import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
+import { buildChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 import { useGatewayStore } from '@/stores/gateway';
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
@@ -296,10 +298,7 @@ function SidebarTaskDateLinks({
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const switchSession = useChatStore((s) => s.switchSession);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
-  const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
-  const currentSessionSending = useChatStore((s) => s.sending);
-  const currentSessionActiveRunId = useChatStore((s) => s.activeRunId);
-  const currentSessionError = useChatStore((s) => s.error);
+  const canonicalSessionsByKey = useChatRuntimeV2Store((s) => s.sessionsByKey);
   const sessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
   const isSubitemUnread = useStoTaskSubitemsStore((s) => s.isSubitemUnread);
   const markSubitemReadFromActivity = useStoTaskSubitemsStore((s) => s.markSubitemReadFromActivity);
@@ -335,16 +334,9 @@ function SidebarTaskDateLinks({
         const sk = sessionKeyBySubitem[stoTaskSubitemKey(taskId, entryId)] ?? '';
         const active = Boolean(sk) && currentSessionKey === sk;
         const activity = sk ? (sessionLastActivity[sk] ?? 0) : 0;
-        const runtime = sk ? runtimeBySessionKey[sk] : undefined;
-        const isRunning = Boolean(
-          runtime?.sending
-          || runtime?.activeRunId
-          || (active && (currentSessionSending || currentSessionActiveRunId)),
-        );
-        const hasError = Boolean(
-          (runtime?.error != null && runtime.error !== '')
-          || (active && currentSessionError != null && currentSessionError !== ''),
-        );
+        const runtime = buildChatSessionRuntimeView(sk ? canonicalSessionsByKey[sk] : undefined);
+        const isRunning = runtime.sending;
+        const hasError = Boolean(runtime.error);
         const unread = !active && !isRunning && !hasError && isSubitemUnread(taskId, entryId, activity);
         const dateLabel = formatMaterialDateFromEntryId(entryId, i18n.language);
         const label = t('tasks:sidebarMaterialTitle', { date: dateLabel });
@@ -528,10 +520,7 @@ function SidebarScheduledTaskGroup({
   const navigate = useNavigate();
   const location = useLocation();
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
-  const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
-  const currentSessionSending = useChatStore((s) => s.sending);
-  const currentSessionActiveRunId = useChatStore((s) => s.activeRunId);
-  const currentSessionError = useChatStore((s) => s.error);
+  const canonicalSessionsByKey = useChatRuntimeV2Store((s) => s.sessionsByKey);
   const unreadKeys = useSessionUnreadStore((s) => s.unreadKeys);
 
   if (sessions.length === 0) return null;
@@ -597,16 +586,9 @@ function SidebarScheduledTaskGroup({
               }
             }
             const active = currentSessionKey === s.key;
-            const runtime = runtimeBySessionKey[s.key];
-            const isRunning = Boolean(
-              runtime?.sending
-              || runtime?.activeRunId
-              || (active && (currentSessionSending || currentSessionActiveRunId)),
-            );
-            const hasError = Boolean(
-              (runtime?.error != null && runtime.error !== '')
-              || (active && currentSessionError != null && currentSessionError !== ''),
-            );
+            const runtime = buildChatSessionRuntimeView(canonicalSessionsByKey[s.key]);
+            const isRunning = runtime.sending;
+            const hasError = Boolean(runtime.error);
             const showUnreadDot = !active && !isRunning && !hasError && readSessionUnread(unreadKeys, s.key);
             return (
               <div key={s.key} className="group relative flex w-full min-w-0 items-center">
@@ -717,8 +699,7 @@ export function Sidebar() {
   const pendingProjectId = useChatStore((s) => s.pendingProjectId);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
   const sessionLastActivity = useChatStore((s) => s.sessionLastActivity);
-  const runtimeBySessionKey = useChatStore((s) => s.runtimeBySessionKey);
-  const sending = useChatStore((s) => s.sending);
+  const canonicalSessionsByKey = useChatRuntimeV2Store((s) => s.sessionsByKey);
   const activatingScheduledSessionAt = useChatStore((s) => s.activatingScheduledSessionAt);
   const switchSession = useChatStore((s) => s.switchSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
@@ -995,62 +976,12 @@ export function Sidebar() {
           return;
         }
         if (state.currentSessionKey !== DEFAULT_SESSION_KEY || state.messages.length > 0 || state.loading) {
-          const nextRuntimeBySessionKey = {
-            ...state.runtimeBySessionKey,
-            [state.currentSessionKey]: {
-              sending: state.sending,
-              aborting: state.runtimeBySessionKey[state.currentSessionKey]?.aborting ?? false,
-              activeRunId: state.activeRunId,
-              sendAcceptance: state.sendAcceptance,
-              streamingText: state.streamingText,
-              streamingMessage: state.streamingMessage,
-              streamingMessages: state.streamingMessages,
-              streamingToolResults: state.streamingToolResults,
-              streamingTools: state.streamingTools,
-              pendingFinal: state.pendingFinal,
-              lastUserMessageAt: state.lastUserMessageAt,
-              optimisticUserMessage: state.optimisticUserMessage,
-              pendingToolImages: state.pendingToolImages,
-              error: state.error,
-              updatedAt: Date.now(),
-            },
-            [DEFAULT_SESSION_KEY]: {
-              sending: false,
-              aborting: false,
-              activeRunId: null,
-              sendAcceptance: null,
-              streamingText: '',
-              streamingMessage: null,
-              streamingMessages: [],
-              streamingToolResults: [],
-              streamingTools: [],
-              pendingFinal: false,
-              lastUserMessageAt: null,
-              optimisticUserMessage: null,
-              pendingToolImages: [],
-              error: null,
-              updatedAt: Date.now(),
-            },
-          };
           useChatStore.setState({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: 'main',
             pendingProjectId: null,
-            runtimeBySessionKey: nextRuntimeBySessionKey,
             messages: [],
             loading: false,
-            sending: false,
-            streamingText: '',
-            streamingMessage: null,
-            streamingMessages: [],
-            streamingToolResults: [],
-            streamingTools: [],
-            activeRunId: null,
-            sendAcceptance: null,
-            error: null,
-            pendingFinal: false,
-            lastUserMessageAt: null,
-            pendingToolImages: [],
             pendingWorkflow: null,
           });
         }
@@ -1303,10 +1234,16 @@ export function Sidebar() {
     }
 
     const resolvedGroups: ScheduledTaskSidebarGroup[] = [];
+    const canonicalRuntimeActivity = Object.fromEntries(
+      Object.entries(canonicalSessionsByKey).map(([sessionKey, session]) => {
+        const runtime = buildChatSessionRuntimeView(session);
+        return [sessionKey, { sending: runtime.sending, activeRunId: runtime.activeRunId }];
+      }),
+    );
     const sessionSortOptions = {
-      runtimeBySessionKey,
+      runtimeActivityBySessionKey: canonicalRuntimeActivity,
       currentSessionKey,
-      currentSessionSending: sending,
+      currentSessionSending: buildChatSessionRuntimeView(canonicalSessionsByKey[currentSessionKey]).sending,
       activatingScheduledSessionAt,
       nowMs,
     };
@@ -1324,7 +1261,7 @@ export function Sidebar() {
     }
 
     return resolvedGroups;
-  }, [taskListScheduledSessions, taskCatalogSessions, sessionLastActivity, scheduledTaskNameMaps, runtimeBySessionKey, currentSessionKey, sending, activatingScheduledSessionAt, nowMs]);
+  }, [taskListScheduledSessions, taskCatalogSessions, sessionLastActivity, scheduledTaskNameMaps, canonicalSessionsByKey, currentSessionKey, activatingScheduledSessionAt, nowMs]);
 
   const taskListRenderPlan = useMemo(() => {
     type SortableTaskListEntry = {
@@ -1837,77 +1774,14 @@ export function Sidebar() {
           messages,
           currentSessionKey: currKey,
           loading,
-          sending,
-          activeRunId,
-          streamingText,
-          streamingMessage,
-          streamingMessages,
-          streamingToolResults,
-          streamingTools,
-          pendingFinal,
-          lastUserMessageAt,
-          optimisticUserMessage,
-          pendingToolImages,
-          error,
-          runtimeBySessionKey,
         } = useChatStore.getState();
         if (messages.length > 0 || currKey !== DEFAULT_SESSION_KEY || loading) {
-          const nextRuntimeBySessionKey = {
-            ...runtimeBySessionKey,
-            [currKey]: {
-              sending,
-              aborting: useChatStore.getState().runtimeBySessionKey[currKey]?.aborting ?? false,
-              activeRunId,
-              sendAcceptance: useChatStore.getState().sendAcceptance,
-              streamingText,
-              streamingMessage,
-              streamingMessages,
-              streamingToolResults,
-              streamingTools,
-              pendingFinal,
-              lastUserMessageAt,
-              optimisticUserMessage,
-              pendingToolImages,
-              error,
-              updatedAt: Date.now(),
-            },
-            [DEFAULT_SESSION_KEY]: {
-              sending: false,
-              aborting: false,
-              activeRunId: null,
-              sendAcceptance: null,
-              streamingText: '',
-              streamingMessage: null,
-              streamingMessages: [],
-              streamingToolResults: [],
-              streamingTools: [],
-              pendingFinal: false,
-              lastUserMessageAt: null,
-              optimisticUserMessage: null,
-              pendingToolImages: [],
-              error: null,
-              updatedAt: Date.now(),
-            },
-          };
           useChatStore.setState({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: 'main',
             pendingProjectId: null,
-            runtimeBySessionKey: nextRuntimeBySessionKey,
             messages: [],
             loading: false,
-            sending: false,
-            streamingText: '',
-            streamingMessage: null,
-            streamingMessages: [],
-            streamingToolResults: [],
-            streamingTools: [],
-            activeRunId: null,
-            sendAcceptance: null,
-            error: null,
-            pendingFinal: false,
-            lastUserMessageAt: null,
-            pendingToolImages: [],
             pendingWorkflow: null,
           });
         } else {

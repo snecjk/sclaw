@@ -59,9 +59,6 @@ export function useHomeChatEntrySend() {
 
       const { dispatchChatSend } = await import('@/hooks/dispatch-chat-send');
       await dispatchChatSend({ text, attachments, targetAgentId, dingTalkMentions: _dingTalkMentions, workflowId, workflowSource, workflowName, skillMeta });
-      if (useChatStore.getState().error) {
-        toast.error(t('assistant.sendFailed'));
-      }
     },
     [agents, isGatewayRunning, t],
   );

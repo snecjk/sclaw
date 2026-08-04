@@ -46,13 +46,6 @@ import {
   type ChatSession,
 } from './types';
 import type { ChatGet, ChatSet, SessionActions } from './store-api';
-import { clearSessionRuntimeTimers } from './runtime-timers';
-import { clearSessionRunLifecycle } from './run-lifecycle';
-import {
-  captureTopLevelRuntime,
-  clearActivatingSessionIfHandedOff,
-  createIdleSessionRuntimeState,
-} from './session-runtime';
 import {
   clearSessionEntryFromMap,
   createTemporaryAgentSessionKey,
@@ -462,13 +455,9 @@ export function createSessionLifecycleActions(
               );
               let activatingScheduledSessionAt = state.activatingScheduledSessionAt;
               for (const sessionKey of Object.keys(discoveredActivity)) {
-                activatingScheduledSessionAt = clearActivatingSessionIfHandedOff(
-                  activatingScheduledSessionAt,
-                  sessionKey,
-                  state.runtimeBySessionKey,
-                  sessionLastActivity,
-                  labeledSessions,
-                );
+                if (!activatingScheduledSessionAt[sessionKey]) continue;
+                activatingScheduledSessionAt = { ...activatingScheduledSessionAt };
+                delete activatingScheduledSessionAt[sessionKey];
               }
               const recentSessions = labeledSessions.filter((session) => isSidebarRecentChatSessionKey(session.key));
               const recentKeys = recentSessions.map((session) => session.key);
@@ -564,8 +553,6 @@ export function createSessionLifecycleActions(
       }
 
       useSessionUnreadStore.getState().markSessionRead(key);
-      clearSessionRuntimeTimers(key);
-      clearSessionRunLifecycle(key);
       clearSessionSendReadiness(key);
 
       const { currentSessionKey, sessions } = get();
@@ -575,23 +562,10 @@ export function createSessionLifecycleActions(
         const next = remaining[0];
         set((s) => ({
           sessions: remaining,
-          runtimeBySessionKey: clearSessionEntryFromMap(s.runtimeBySessionKey, key),
           sessionLabels: Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== key)),
           sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
           sidebarRecentOrder: removeSidebarRecentOrderKey(s.sidebarRecentOrder, key),
           messages: [],
-          streamingText: '',
-          streamingMessage: null,
-          streamingMessages: [],
-          streamingToolResults: [],
-          streamingTools: [],
-          activeRunId: null,
-          sendAcceptance: null,
-          error: null,
-          pendingFinal: false,
-          lastUserMessageAt: null,
-          optimisticUserMessage: null,
-          pendingToolImages: [],
           currentSessionKey: next?.key ?? DEFAULT_SESSION_KEY,
           currentAgentId: getAgentIdFromSessionKey(next?.key ?? DEFAULT_SESSION_KEY),
         }));
@@ -601,7 +575,6 @@ export function createSessionLifecycleActions(
       } else {
         set((s) => ({
           sessions: remaining,
-          runtimeBySessionKey: clearSessionEntryFromMap(s.runtimeBySessionKey, key),
           sessionLabels: Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== key)),
           sessionLastActivity: Object.fromEntries(Object.entries(s.sessionLastActivity).filter(([k]) => k !== key)),
           sidebarRecentOrder: removeSidebarRecentOrderKey(s.sidebarRecentOrder, key),
@@ -635,24 +608,13 @@ export function createSessionLifecycleActions(
       // This avoids empty catalog rows while still carrying project/agent/model context.
       if (projectId && projectId !== 'default' && !shouldMaterialize) {
         const draftAgentId = resolveProjectAgentId(projectId, baseAgentId);
-        set((s) => {
-          const nextRuntimeBySessionKey = {
-            ...s.runtimeBySessionKey,
-            [currentSessionKey]: captureTopLevelRuntime(
-              s,
-              s.runtimeBySessionKey[currentSessionKey]?.aborting ?? false,
-            ),
-            [DEFAULT_SESSION_KEY]: createIdleSessionRuntimeState(),
-          };
-          if (leavingEmpty) delete nextRuntimeBySessionKey[currentSessionKey];
-          return {
+        set((s) => ({
             currentSessionKey: DEFAULT_SESSION_KEY,
             currentAgentId: draftAgentId,
             pendingProjectId: projectId,
             sessions: leavingEmpty
               ? s.sessions.filter((session) => session.key !== currentSessionKey)
               : s.sessions,
-            runtimeBySessionKey: nextRuntimeBySessionKey,
             sessionLabels: leavingEmpty
               ? clearSessionEntryFromMap(s.sessionLabels, currentSessionKey)
               : s.sessionLabels,
@@ -663,22 +625,8 @@ export function createSessionLifecycleActions(
               ? removeSidebarRecentOrderKey(s.sidebarRecentOrder, currentSessionKey)
               : s.sidebarRecentOrder,
             messages: [],
-            sending: false,
-            streamingText: '',
-            streamingMessage: null,
-            streamingMessages: [],
-            streamingToolResults: [],
-            streamingTools: [],
-            activeRunId: null,
-            sendAcceptance: null,
-            error: null,
-            pendingFinal: false,
-            lastUserMessageAt: null,
-            optimisticUserMessage: null,
-            pendingToolImages: [],
             pendingWorkflow: null,
-          };
-        });
+          }));
         touchSessionReadAt(DEFAULT_SESSION_KEY);
         clearSessionSendReadiness(DEFAULT_SESSION_KEY);
         const projectAgentReadiness = import('@/lib/session-catalog-api').then(async ({
@@ -735,17 +683,6 @@ export function createSessionLifecycleActions(
         }));
       }
       set((s) => {
-        const nextRuntimeBySessionKey = {
-          ...s.runtimeBySessionKey,
-          [currentSessionKey]: captureTopLevelRuntime(
-            s,
-            s.runtimeBySessionKey[currentSessionKey]?.aborting ?? false,
-          ),
-        };
-        if (leavingEmpty) {
-          delete nextRuntimeBySessionKey[currentSessionKey];
-        }
-        nextRuntimeBySessionKey[newKey] = createIdleSessionRuntimeState();
         const nextSessions = [
           ...(leavingEmpty ? s.sessions.filter((sess) => sess.key !== currentSessionKey) : s.sessions),
           newSessionEntry,
@@ -762,26 +699,12 @@ export function createSessionLifecycleActions(
           currentAgentId: newAgentId,
           pendingProjectId: null,
           sessions: nextSessions,
-          runtimeBySessionKey: nextRuntimeBySessionKey,
           sessionLabels: leavingEmpty
             ? Object.fromEntries(Object.entries(s.sessionLabels).filter(([k]) => k !== currentSessionKey))
             : s.sessionLabels,
           sessionLastActivity: nextSessionLastActivity,
           sidebarRecentOrder: buildInitialSidebarRecentOrder(recentSessions, nextSessionLastActivity),
           messages: [],
-          sending: false,
-          streamingText: '',
-          streamingMessage: null,
-          streamingMessages: [],
-          streamingToolResults: [],
-          streamingTools: [],
-          activeRunId: null,
-          sendAcceptance: null,
-          error: null,
-          pendingFinal: false,
-          lastUserMessageAt: null,
-          optimisticUserMessage: null,
-          pendingToolImages: [],
           pendingWorkflow: null,
         };
       });

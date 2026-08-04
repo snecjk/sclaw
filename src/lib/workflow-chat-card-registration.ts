@@ -3,6 +3,7 @@ import { useChatStore } from '@/stores/chat';
 import { refreshWorkflowChatCards } from '@/stores/workflow-chat-cards';
 import type { RawMessage } from '@/stores/chat/types';
 import type { ChatWorkflowCardRef } from '@/types/workflow';
+import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 
 function timestampMs(value: RawMessage['timestamp']): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value < 1e12 ? value * 1_000 : value;
@@ -16,7 +17,8 @@ function timestampMs(value: RawMessage['timestamp']): number | null {
 function latestUserMessageId(sessionKey: string): string | null {
   const state = useChatStore.getState();
   if (state.currentSessionKey !== sessionKey) return null;
-  if (state.optimisticUserMessage?.id) return state.optimisticUserMessage.id;
+  const optimistic = useChatRuntimeV2Store.getState().sessionsByKey[sessionKey]?.overlay.optimisticUserMessage;
+  if (optimistic?.id) return optimistic.id;
   for (let index = state.messages.length - 1; index >= 0; index -= 1) {
     const message = state.messages[index];
     if (message.role === 'user' && message.id) return message.id;
