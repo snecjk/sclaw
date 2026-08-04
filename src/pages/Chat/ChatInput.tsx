@@ -465,29 +465,6 @@ export function ChatInput({
     };
   }, [skillPickerMode, skillPickerOpen]);
 
-  // 暂时关闭 `*` 触发技能列表；恢复时取消下方注释
-  // useEffect(() => {
-  //   if (composerSnapshot.skill) return;
-  //
-  //   const hasTrigger = hasSkillInlineTrigger(composerSnapshot.plainText);
-  //
-  //   // toolbar 模式由按钮控制，不受 editor 内 `*` 影响
-  //   if (skillPickerOpen && skillPickerMode === 'toolbar') return;
-  //
-  //   if (hasTrigger) {
-  //     if (!skillPickerOpen || skillPickerMode !== 'inline') {
-  //       setWorkflowPickerOpen(false);
-  //       setSkillPickerMode('inline');
-  //       setSkillPickerOpen(true);
-  //     }
-  //     return;
-  //   }
-  //
-  //   if (skillPickerOpen && skillPickerMode === 'inline') {
-  //     setSkillPickerOpen(false);
-  //   }
-  // }, [composerSnapshot.plainText, composerSnapshot.skill, skillPickerMode, skillPickerOpen]);
-
   const skillPickerInlineQuery = useMemo(
     () => (skillPickerMode === 'inline' ? extractSkillInlineQuery(composerSnapshot.plainText) : ''),
     [composerSnapshot.plainText, skillPickerMode],
@@ -1237,6 +1214,7 @@ export function ChatInput({
               <WorkflowPicker
                 ref={workflowPickerRef}
                 open={workflowPickerOpen}
+                mode={workflowPickerSlashOpenRef.current ? 'slash' : 'toolbar'}
                 query={workflowPickerQuery}
                 anchorRef={workflowButtonRef}
                 composerRef={composerShellRef}
@@ -1245,18 +1223,24 @@ export function ChatInput({
                   setWorkflowPickerOpen(false);
                 }}
                 onSelect={async (id, name) => {
+                  const shouldConsumeSlash = workflowPickerSlashOpenRef.current;
                   workflowPickerSlashOpenRef.current = false;
                   setWorkflowPickerOpen(false);
                   const { useChatStore } = await import('@/stores/chat');
                   useChatStore.getState().clearPendingWorkflow();
-                  mentionEditorRef.current?.consumeSlashTrigger(workflowPickerQuery);
+                  if (shouldConsumeSlash) {
+                    mentionEditorRef.current?.consumeSlashTrigger(workflowPickerQuery);
+                  }
                   mentionEditorRef.current?.insertWorkflow(id, name, 'mine');
                   mentionEditorRef.current?.focus();
                 }}
                 onSelectSkill={({ slug, title }) => {
+                  const shouldConsumeSlash = workflowPickerSlashOpenRef.current;
                   workflowPickerSlashOpenRef.current = false;
                   setWorkflowPickerOpen(false);
-                  mentionEditorRef.current?.consumeSlashTrigger(workflowPickerQuery);
+                  if (shouldConsumeSlash) {
+                    mentionEditorRef.current?.consumeSlashTrigger(workflowPickerQuery);
+                  }
                   mentionEditorRef.current?.insertSkill(slug, title);
                   mentionEditorRef.current?.focus();
                 }}
@@ -1385,6 +1369,7 @@ export function ChatInput({
             <WorkflowPicker
               ref={workflowPickerRef}
               open={workflowPickerOpen}
+              mode={workflowPickerSlashOpenRef.current ? 'slash' : 'toolbar'}
               query={workflowPickerQuery}
               anchorRef={workflowButtonRef}
               composerRef={composerShellRef}
@@ -1393,18 +1378,24 @@ export function ChatInput({
                 setWorkflowPickerOpen(false);
               }}
               onSelect={async (id, name) => {
+                const shouldConsumeSlash = workflowPickerSlashOpenRef.current;
                 workflowPickerSlashOpenRef.current = false;
                 setWorkflowPickerOpen(false);
                 const { useChatStore } = await import('@/stores/chat');
                 useChatStore.getState().clearPendingWorkflow();
-                mentionEditorRef.current?.consumeSlashTrigger(workflowPickerQuery);
+                if (shouldConsumeSlash) {
+                  mentionEditorRef.current?.consumeSlashTrigger(workflowPickerQuery);
+                }
                 mentionEditorRef.current?.insertWorkflow(id, name, 'mine');
                 mentionEditorRef.current?.focus();
               }}
               onSelectSkill={({ slug, title }) => {
+                const shouldConsumeSlash = workflowPickerSlashOpenRef.current;
                 workflowPickerSlashOpenRef.current = false;
                 setWorkflowPickerOpen(false);
-                mentionEditorRef.current?.consumeSlashTrigger(workflowPickerQuery);
+                if (shouldConsumeSlash) {
+                  mentionEditorRef.current?.consumeSlashTrigger(workflowPickerQuery);
+                }
                 mentionEditorRef.current?.insertSkill(slug, title);
                 mentionEditorRef.current?.focus();
               }}

@@ -8,7 +8,8 @@ import {
   type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { Workflow, Wrench } from 'lucide-react';
+import { Search, SlidersHorizontal, Workflow, Wrench } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { useMyPublishedWorkflows } from './use-my-published-workflows';
@@ -18,11 +19,18 @@ import {
   splitHighlightSegments,
   type SkillPickerItem,
 } from '@/lib/skill-picker-filter';
-import { skillPickerHighlightClass } from '@/lib/surfaces';
+import {
+  skillPickerHighlightClass,
+  skillPickerListClass,
+  skillPickerRowClass,
+  skillPickerShellClass,
+} from '@/lib/surfaces';
+import { PickerEmptyState } from '@/components/picker-empty-state';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 
 interface WorkflowPickerProps {
   open: boolean;
+  mode?: 'toolbar' | 'slash';
   query?: string;
   onClose: () => void;
   onSelect: (id: string, name: string) => void;
@@ -58,9 +66,11 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
 }
 
 export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
-  ({ open, query = '', onClose, onSelect, onSelectSkill, anchorRef, composerRef, className }, ref) => {
+  ({ open, mode = 'toolbar', query = '', onClose, onSelect, onSelectSkill, anchorRef, composerRef, className }, ref) => {
     const { t } = useTranslation('chat');
+    const navigate = useNavigate();
     const [position, setPosition] = useState<PickerPosition | null>(null);
+    const [toolbarQuery, setToolbarQuery] = useState('');
     const localRef = useRef<HTMLDivElement | null>(null);
     const listViewportRef = useRef<HTMLDivElement>(null);
     const listContentRef = useRef<HTMLDivElement>(null);
@@ -71,33 +81,41 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
     const mySkills = useSkillPlazaStore((s) => s.mySkills);
     const skillsLoading = useSkillPlazaStore((s) => s.loading);
     const fetchLocalSkills = useSkillPlazaStore((s) => s.fetchLocalSkills);
+    const isSlashMode = mode === 'slash';
+
+    useEffect(() => {
+      if (!open) {
+        const timer = setTimeout(() => setToolbarQuery(''), 0);
+        return () => clearTimeout(timer);
+      }
+      return undefined;
+    }, [open]);
 
     // 仅在 picker 打开瞬间兜底重拉一次，避免「空列表 + loading 落定」形成自激重拉死循环。
     const prevOpenRef = useRef(false);
     useEffect(() => {
       if (open && !prevOpenRef.current) {
         void refetch();
-        if (mySkills.length === 0 && !skillsLoading) {
+        if (isSlashMode && mySkills.length === 0 && !skillsLoading) {
           void fetchLocalSkills({ reset: true });
         }
       }
       prevOpenRef.current = open;
-    }, [fetchLocalSkills, mySkills.length, open, refetch, skillsLoading]);
+    }, [fetchLocalSkills, isSlashMode, mySkills.length, open, refetch, skillsLoading]);
 
     useLayoutEffect(() => {
-      if (!open || (!anchorRef?.current && !composerRef?.current)) {
+      if (!open || (!anchorRef?.current && !(isSlashMode && composerRef?.current))) {
         setPosition(null);
         return;
       }
 
       const updatePosition = () => {
-        const rect = composerRef?.current?.getBoundingClientRect()
+        const rect = (isSlashMode ? composerRef?.current?.getBoundingClientRect() : null)
           ?? anchorRef?.current?.getBoundingClientRect();
         if (!rect) return;
-        const width = Math.min(
-          Math.max(280, Math.round(rect.width)),
-          Math.max(280, window.innerWidth - 24),
-        );
+        const width = isSlashMode
+          ? Math.min(Math.max(280, Math.round(rect.width)), Math.max(280, window.innerWidth - 24))
+          : Math.min(280, Math.max(280, window.innerWidth - 24));
         setPosition({
           left: Math.round(Math.min(Math.max(12, rect.left), window.innerWidth - width - 12)),
           bottom: Math.round(window.innerHeight - rect.top + 8),
@@ -112,7 +130,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
         window.removeEventListener('resize', updatePosition);
         window.removeEventListener('scroll', updatePosition, true);
       };
-    }, [open, anchorRef, composerRef]);
+    }, [isSlashMode, open, anchorRef, composerRef]);
 
     const skillItems: SkillPickerItem[] = useMemo(
       () => mySkills
@@ -125,7 +143,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
       [mySkills],
     );
 
-    const activeQuery = query.trim();
+    const activeQuery = (isSlashMode ? query : toolbarQuery).trim();
 
     const filteredWorkflows = useMemo(
       () => {
@@ -186,6 +204,92 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
       </div>
     );
 
+    // 点击【工作流 icon】展示的浮框面板
+    const toolbarPanel = (
+      <div
+        ref={setRefs}
+        className={cn(
+          skillPickerShellClass,
+          position ? 'fixed' : 'absolute left-0 bottom-full mb-2',
+          className,
+        )}
+        style={
+          position
+            ? {
+                left: position.left,
+                bottom: position.bottom,
+                width: position.width,
+              }
+            : undefined
+        }
+      >
+        <div className="mb-1 flex h-[34px] w-[264px] shrink-0 items-center gap-2 rounded-lg border border-[#E5E6EB] bg-white px-3 dark:border-white/10 dark:bg-white/[0.03]">
+          <Search className="h-4 w-4 shrink-0 text-[#A7ADB8] dark:text-muted-foreground" strokeWidth={2} aria-hidden />
+          <input
+            value={toolbarQuery}
+            onChange={(event) => setToolbarQuery(event.target.value)}
+            placeholder={t('composer.workflowPlaceholder')}
+            aria-label={t('composer.workflowPlaceholder')}
+            className="h-full min-w-0 flex-1 bg-transparent text-[12px] font-normal text-[#111827] outline-none placeholder:text-[#C9CDD4] dark:text-foreground dark:placeholder:text-muted-foreground"
+            autoFocus
+          />
+        </div>
+
+        <div className="relative mt-1 min-h-0 flex-1 overflow-hidden">
+          <div ref={listViewportRef} className={cn('sto-overlay-scroll-viewport', skillPickerListClass)}>
+            <div ref={listContentRef}>
+              {loading ? (
+                <div className="px-3 py-2 text-[12px] text-muted-foreground">{t('composer.workflowLoading')}</div>
+              ) : null}
+              {!loading && workflows.length === 0 ? (
+                <PickerEmptyState message={t('composer.workflowNoTemplates')} />
+              ) : null}
+              {!loading && workflows.length > 0 && filteredWorkflows.length === 0 ? (
+                <PickerEmptyState message={t('composer.workflowNoResults')} />
+              ) : null}
+              {!loading && filteredWorkflows.map((workflow) => (
+                <button
+                  key={workflow.id}
+                  type="button"
+                  onClick={() => {
+                    onSelect(workflow.id, workflow.name);
+                    onClose();
+                  }}
+                  className={skillPickerRowClass}
+                >
+                  <Workflow className="mt-0.5 h-3 w-3 shrink-0 text-[#1D2129] dark:text-muted-foreground" strokeWidth={2} />
+                  <div className="min-w-0">
+                    <div className="truncate text-[12px] font-normal leading-4 text-[#111827] dark:text-foreground">
+                      <HighlightedText text={workflow.name} query={activeQuery} />
+                    </div>
+                    {workflow.description ? (
+                      <div className="mt-0.5 truncate text-[10px] font-normal leading-3.5 text-[#86909C] dark:text-muted-foreground">
+                        <HighlightedText text={workflow.description} query={activeQuery} />
+                      </div>
+                    ) : null}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <OverlayScrollbar viewportRef={listViewportRef} contentRef={listContentRef} />
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            navigate('/workflow');
+          }}
+          className="mt-1 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[#E5E6EB] bg-white text-[12px] font-medium text-[#1D2129] transition-colors hover:bg-[#F0F2F5] dark:border-white/10 dark:bg-white/[0.03] dark:text-foreground dark:hover:bg-white/[0.06]"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+          <span>{t('composer.workflowManage')}</span>
+        </button>
+      </div>
+    );
+
+    // 输入“/”符号打开【工作流 + 技能】组合浮框面板
     const panel = (
       <div
         ref={setRefs}
@@ -300,9 +404,9 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
 
     // Portal 到 body，彻底避开输入壳 / 首页列的 overflow 裁切。
     if (anchorRef || composerRef) {
-      return createPortal(panel, document.body);
+      return createPortal(isSlashMode ? panel : toolbarPanel, document.body);
     }
-    return panel;
+    return isSlashMode ? panel : toolbarPanel;
   },
 );
 
