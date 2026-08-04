@@ -8,8 +8,8 @@
       "placeholder": "帮我做一份客户异常监控"
     }
   },
-  "homeWorkflowCard": {
-    "footerHint": "点击启动"
+  "homeRecommend": {
+    "emptyCategory": "该分类暂无推荐"
   },
   "hero": {
     "title": "让经营管理更高效",

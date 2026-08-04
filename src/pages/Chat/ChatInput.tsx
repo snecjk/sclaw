@@ -11,18 +11,14 @@ import {
   SendHorizontal,
   Square,
   X,
-  Paperclip,
   FileText,
   Film,
   Music,
   FileArchive,
   File,
   Loader2,
-  AtSign,
   Bot,
-  Workflow,
   ArrowUp,
-  Wrench,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { hostApiFetch } from '@/lib/host-api';
@@ -45,6 +41,20 @@ import { DingTalkMentionEditor, type DingTalkMentionEditorHandle } from '@/compo
 import { DingTalkMentionPopover } from '@/components/dingtalk/DingTalkMentionPopover';
 import { WorkflowPicker } from '@/components/workflow/WorkflowPicker';
 import { SkillPicker } from '@/components/skill-plaza/SkillPicker';
+import { QuickInputPicker } from '@/components/quick-input/QuickInputPicker';
+import {
+  AttachFileIcon,
+  QuickInputIcon,
+  SkillToolIcon,
+  WorkflowNodesIcon,
+} from '@/components/icons/composer-toolbar-icons';
+import { FlyToTargetLayer } from '@/components/fly-to-target';
+import {
+  Tooltip,
+  TooltipArrow,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 import { useDingTalkMention } from '@/hooks/useDingTalkMention';
 
@@ -148,6 +158,27 @@ function FileIcon({ mimeType, className }: { mimeType: string; className?: strin
   return <File className={className} />;
 }
 
+const homeToolbarTooltipClass =
+  'overflow-visible border-none bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white shadow-none';
+
+function HomeToolbarIconTooltip({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip delayDuration={200}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className={homeToolbarTooltipClass}>
+        {label}
+        <TooltipArrow className="fill-[#1D2129]" width={10} height={5} />
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 /**
  * Read a browser File object as base64 string (without the data URL prefix).
  */
@@ -209,10 +240,13 @@ export function ChatInput({
   const mentionPopoverRef = useRef<HTMLDivElement>(null);
   const workflowPickerRef = useRef<HTMLDivElement>(null);
   const workflowButtonRef = useRef<HTMLButtonElement>(null);
+  const quickInputPickerRef = useRef<HTMLDivElement>(null);
+  const quickInputButtonRef = useRef<HTMLButtonElement>(null);
   const skillPickerRef = useRef<HTMLDivElement>(null);
   const skillButtonRef = useRef<HTMLButtonElement>(null);
   const isComposingRef = useRef(false);
   const [workflowPickerOpen, setWorkflowPickerOpen] = useState(false);
+  const [quickInputPickerOpen, setQuickInputPickerOpen] = useState(false);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [skillPickerMode, setSkillPickerMode] = useState<'inline' | 'toolbar'>('inline');
   const gatewayStatus = useGatewayStore((s) => s.status);
@@ -285,6 +319,7 @@ export function ChatInput({
     setTargetAgentId(null);
     setPickerOpen(false);
     setWorkflowPickerOpen(false);
+    setQuickInputPickerOpen(false);
     setSkillPickerOpen(false);
     setMentionTrigger(null);
     closeDingTalkMention();
@@ -361,6 +396,23 @@ export function ChatInput({
   }, [workflowPickerOpen]);
 
   useEffect(() => {
+    if (!quickInputPickerOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        !quickInputPickerRef.current?.contains(target) &&
+        !quickInputButtonRef.current?.contains(target)
+      ) {
+        setQuickInputPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [quickInputPickerOpen]);
+
+  useEffect(() => {
     if (!skillPickerOpen) return;
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -418,12 +470,19 @@ export function ChatInput({
 
   const toggleSkillPickerToolbar = useCallback(() => {
     setWorkflowPickerOpen(false);
+    setQuickInputPickerOpen(false);
     setSkillPickerOpen((open) => {
       if (!open) {
         setSkillPickerMode('toolbar');
       }
       return !open;
     });
+  }, []);
+
+  const toggleQuickInputPicker = useCallback(() => {
+    setSkillPickerOpen(false);
+    setWorkflowPickerOpen(false);
+    setQuickInputPickerOpen((open) => !open);
   }, []);
 
   const applyDingTalkMention = useCallback((item: MentionSearchItem) => {
@@ -645,6 +704,7 @@ export function ChatInput({
     setTargetAgentId(null);
     setPickerOpen(false);
     setWorkflowPickerOpen(false);
+    setQuickInputPickerOpen(false);
     setSkillPickerOpen(false);
     closeDingTalkMention();
   }, [allReady, attachments, closeDingTalkMention, composerSnapshot, disabled, onQueue, onSend, sending, targetAgentId]);
@@ -692,6 +752,12 @@ export function ChatInput({
         return;
       }
 
+      if (e.key === 'Escape' && quickInputPickerOpen) {
+        e.preventDefault();
+        setQuickInputPickerOpen(false);
+        return;
+      }
+
       if (e.key === 'Backspace' && composerSnapshot.isEmpty && targetAgentId) {
         setTargetAgentId(null);
         return;
@@ -707,6 +773,7 @@ export function ChatInput({
             setMentionTrigger(null);
           }
           setSkillPickerOpen(false);
+          setQuickInputPickerOpen(false);
           setWorkflowPickerOpen(true);
         }
       }
@@ -751,6 +818,7 @@ export function ChatInput({
       moveDingTalkActive,
       skillPickerMode,
       skillPickerOpen,
+      quickInputPickerOpen,
       targetAgentId,
       workflowPickerOpen,
     ],
@@ -811,14 +879,11 @@ export function ChatInput({
   const isEmbedded = variant === 'embedded';
   const isHomeComposer = composerLayout === 'home';
 
-  const handleOpenDingTalkMention = () => {
-    mentionEditorRef.current?.openMentionPicker();
-  };
-
   const homeToolbarIconBtn = cn(
-    'h-[30px] w-[30px] rounded-[20px] p-0 text-muted-foreground/75',
-    'hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
+    'inline-flex h-[30px] w-[30px] flex-col items-center justify-center rounded-lg px-[1.62px] py-[2.08px]',
+    'text-[#000] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted',
   );
+  const homeToolbarIconActive = 'bg-[#F0F2F5] hover:bg-[#F0F2F5] dark:bg-muted dark:hover:bg-muted';
 
   return (
     <div
@@ -832,6 +897,9 @@ export function ChatInput({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      <FlyToTargetLayer targetRef={quickInputButtonRef}>
+        <QuickInputIcon className="h-full w-full text-foreground" />
+      </FlyToTargetLayer>
       <div className="w-full">
         {/* 单壳：附件缩略图与输入区同在一个圆角边框内（与 memory-center-web 助手输入一致） */}
         <div
@@ -958,42 +1026,33 @@ export function ChatInput({
           {isHomeComposer ? (
             <div className="relative flex shrink-0 items-center justify-between gap-2 px-4 pb-3 pt-1">
               <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  variant="ghost"
-                  type="button"
-                  className={homeToolbarIconBtn}
-                  onClick={pickFiles}
-                  disabled={disabled}
-                  title={t('composer.attachFiles')}
-                >
-                  <Paperclip className="h-4 w-4" aria-hidden />
-                </Button>
+                <HomeToolbarIconTooltip label={t('composer.attachFiles')}>
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    className={homeToolbarIconBtn}
+                    onClick={pickFiles}
+                    disabled={disabled}
+                  >
+                    <AttachFileIcon />
+                  </Button>
+                </HomeToolbarIconTooltip>
 
-                <Button
-                  variant="ghost"
-                  type="button"
-                  className={homeToolbarIconBtn}
-                  onClick={handleOpenDingTalkMention}
-                  disabled={disabled}
-                  title={t('composer.dingTalkMention')}
-                >
-                  <AtSign className="h-4 w-4" aria-hidden />
-                </Button>
-
-                <Button
-                  ref={skillButtonRef}
-                  variant="ghost"
-                  type="button"
-                  className={cn(
-                    homeToolbarIconBtn,
-                    skillPickerOpen && skillPickerMode === 'toolbar' && 'bg-primary/10 text-primary hover:bg-primary/12',
-                  )}
-                  onClick={toggleSkillPickerToolbar}
-                  disabled={disabled}
-                  title={t('composer.pickSkill')}
-                >
-                  <Wrench className="h-4 w-4" aria-hidden />
-                </Button>
+                <HomeToolbarIconTooltip label={t('composer.pickSkill')}>
+                  <Button
+                    ref={skillButtonRef}
+                    variant="ghost"
+                    type="button"
+                    className={cn(
+                      homeToolbarIconBtn,
+                      skillPickerOpen && skillPickerMode === 'toolbar' && homeToolbarIconActive,
+                    )}
+                    onClick={toggleSkillPickerToolbar}
+                    disabled={disabled}
+                  >
+                    <SkillToolIcon />
+                  </Button>
+                </HomeToolbarIconTooltip>
 
                 {showAgentPicker ? (
                   <div ref={pickerRef} className="relative shrink-0">
@@ -1002,7 +1061,7 @@ export function ChatInput({
                       type="button"
                       className={cn(
                         homeToolbarIconBtn,
-                        (pickerOpen || selectedTarget) && 'bg-primary/10 text-primary hover:bg-primary/12',
+                        (pickerOpen || selectedTarget) && homeToolbarIconActive,
                       )}
                       onClick={() => setPickerOpen((open) => !open)}
                       disabled={disabled}
@@ -1036,24 +1095,43 @@ export function ChatInput({
                 ) : null}
 
                 <div ref={workflowPickerRef} className="relative shrink-0">
-                  <Button
-                    ref={workflowButtonRef}
-                    variant="ghost"
-                    type="button"
-                    className={cn(
-                      homeToolbarIconBtn,
-                      workflowPickerOpen && 'bg-primary/10 text-primary hover:bg-primary/12',
-                    )}
-                    onClick={() => {
-                      setSkillPickerOpen(false);
-                      setWorkflowPickerOpen((open) => !open);
-                    }}
-                    disabled={disabled}
-                    title={t('composer.pickWorkflow')}
-                  >
-                    {/* 临时图标，等用户提供 SVG 替换 */}
-                    <Workflow className="h-4 w-4" aria-hidden />
-                  </Button>
+                  <HomeToolbarIconTooltip label={t('composer.pickWorkflow')}>
+                    <Button
+                      ref={workflowButtonRef}
+                      variant="ghost"
+                      type="button"
+                      className={cn(
+                        homeToolbarIconBtn,
+                        workflowPickerOpen && homeToolbarIconActive,
+                      )}
+                      onClick={() => {
+                        setSkillPickerOpen(false);
+                        setQuickInputPickerOpen(false);
+                        setWorkflowPickerOpen((open) => !open);
+                      }}
+                      disabled={disabled}
+                    >
+                      <WorkflowNodesIcon />
+                    </Button>
+                  </HomeToolbarIconTooltip>
+                </div>
+
+                <div className="relative shrink-0">
+                  <HomeToolbarIconTooltip label={t('composer.quickInputTitle')}>
+                    <Button
+                      ref={quickInputButtonRef}
+                      variant="ghost"
+                      type="button"
+                      className={cn(
+                        homeToolbarIconBtn,
+                        quickInputPickerOpen && homeToolbarIconActive,
+                      )}
+                      onClick={toggleQuickInputPicker}
+                      disabled={disabled}
+                    >
+                      <QuickInputIcon />
+                    </Button>
+                  </HomeToolbarIconTooltip>
                 </div>
               </div>
 
@@ -1108,6 +1186,16 @@ export function ChatInput({
                   mentionEditorRef.current?.focus();
                 }}
               />
+              <QuickInputPicker
+                ref={quickInputPickerRef}
+                open={quickInputPickerOpen}
+                anchorRef={quickInputButtonRef}
+                onClose={() => setQuickInputPickerOpen(false)}
+                onSelect={(item) => {
+                  mentionEditorRef.current?.insertPlainText(item.content);
+                  mentionEditorRef.current?.focus();
+                }}
+              />
             </div>
           ) : (
           <div className="flex items-center justify-between gap-3 px-4 pb-1.5 pt-0.5">
@@ -1120,7 +1208,7 @@ export function ChatInput({
                 disabled={disabled}
                 title={t('composer.attachFiles')}
               >
-                <Paperclip className="h-3.5 w-3.5" />
+                <AttachFileIcon />
               </Button>
 
               {showAgentPicker && (
@@ -1136,7 +1224,7 @@ export function ChatInput({
                     disabled={disabled}
                     title={t('composer.pickAgent')}
                   >
-                    <AtSign className="h-3.5 w-3.5" />
+                    <Bot className="h-3.5 w-3.5" />
                   </Button>
                   {pickerOpen && (
                     <div className="absolute left-0 bottom-full z-50 mb-2 w-72 overflow-hidden rounded-2xl border border-glass-border glass p-1.5">
@@ -1168,14 +1256,14 @@ export function ChatInput({
                 type="button"
                 className={cn(
                   'h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
-                  skillPickerOpen && skillPickerMode === 'toolbar' && 'bg-primary/10 text-primary hover:bg-primary/12',
+                  skillPickerOpen && skillPickerMode === 'toolbar' && 'bg-black/5 text-foreground hover:bg-black/5 dark:bg-white/[0.06] dark:hover:bg-white/[0.06]',
                 )}
                 onClick={toggleSkillPickerToolbar}
                 disabled={disabled}
                 title={t('composer.pickSkill')}
               >
-                <Wrench className="h-3.5 w-3.5" />
-              </Button>
+                  <SkillToolIcon />
+                </Button>
 
               {/* Workflow picker button */}
               <div ref={workflowPickerRef} className="relative shrink-0">
@@ -1185,16 +1273,34 @@ export function ChatInput({
                   type="button"
                   className={cn(
                     'h-8  rounded-full p-4 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
-                    workflowPickerOpen && 'bg-primary/10 text-primary hover:bg-primary/12'
+                    workflowPickerOpen && 'bg-black/5 text-foreground hover:bg-black/5 dark:bg-white/[0.06] dark:hover:bg-white/[0.06]',
                   )}
                   onClick={() => {
                     setSkillPickerOpen(false);
+                    setQuickInputPickerOpen(false);
                     setWorkflowPickerOpen((open) => !open);
                   }}
                   disabled={disabled}
                   title={t('composer.pickWorkflow')}
                 >
                   <span className="text-[13px] font-medium">{t('composer.pickWorkflow')}</span>
+                </Button>
+              </div>
+
+              <div className="relative shrink-0">
+                <Button
+                  ref={quickInputButtonRef}
+                  variant="ghost"
+                  type="button"
+                  className={cn(
+                    'h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
+                    quickInputPickerOpen && 'bg-black/5 text-foreground hover:bg-black/5 dark:bg-white/[0.06] dark:hover:bg-white/[0.06]',
+                  )}
+                  onClick={toggleQuickInputPicker}
+                  disabled={disabled}
+                  title={t('composer.quickInputTitle')}
+                >
+                  <QuickInputIcon />
                 </Button>
               </div>
             </div>
@@ -1210,6 +1316,16 @@ export function ChatInput({
                 const { useChatStore } = await import('@/stores/chat');
                 useChatStore.getState().clearPendingWorkflow();
                 mentionEditorRef.current?.insertWorkflow(id, name, 'mine');
+                mentionEditorRef.current?.focus();
+              }}
+            />
+            <QuickInputPicker
+              ref={quickInputPickerRef}
+              open={quickInputPickerOpen}
+              anchorRef={quickInputButtonRef}
+              onClose={() => setQuickInputPickerOpen(false)}
+              onSelect={(item) => {
+                mentionEditorRef.current?.insertPlainText(item.content);
                 mentionEditorRef.current?.focus();
               }}
             />

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import directoryIcon from '@/assets/icons/directory.svg';
-import docIcon from '@/assets/icons/doc-icon.png';
+import docIcon from '@/assets/icons/doc-icon.svg';
 import excelIcon from '@/assets/icons/excel-icon.svg';
 import htmlIcon from '@/assets/icons/html-icon.svg';
 import imgIcon from '@/assets/icons/img-icon.svg';

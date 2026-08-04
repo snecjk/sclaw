@@ -159,7 +159,7 @@
             "authorizeLocalFile": "Authorize local files",
             "authorizeLocalFileOption": "Authorize files",
             "authorizeLocalFolderOption": "Authorize folder",
-            "usedQuota": "Used {{used}} / {{quota}}"
+            "usedQuota": "Storage used {{used}}/{{quota}}"
         },
         "drive": {
             "authorizedCount": "{{count}} authorized files",

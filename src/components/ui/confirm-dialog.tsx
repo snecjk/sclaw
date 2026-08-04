@@ -17,6 +17,8 @@ interface ConfirmDialogProps {
   confirmingLabel?: string;
   cancelLabel?: string;
   variant?: 'default' | 'destructive';
+  /** 遮罩层额外 class（例如提高 z-index，叠在其他高层级弹窗之上） */
+  overlayClassName?: string;
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
   onError?: (error: unknown) => void;
@@ -30,6 +32,7 @@ export function ConfirmDialog({
   confirmingLabel,
   cancelLabel = 'Cancel',
   variant = 'default',
+  overlayClassName,
   onConfirm,
   onCancel,
   onError,
@@ -78,7 +81,10 @@ export function ConfirmDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4"
+      className={cn(
+        'fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4',
+        overlayClassName,
+      )}
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm-dialog-title"

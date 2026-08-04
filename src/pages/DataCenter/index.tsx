@@ -5,7 +5,6 @@ import {
   AlertCircle,
   ChevronDown,
   Database,
-  Folder,
   FolderPlus,
   Grid2X2,
   List,
@@ -70,6 +69,10 @@ import {
 
 type AssociationFilter = 'all' | 'task';
 
+function formatQuotaBytes(bytes: number): string {
+  return formatBytes(bytes).replace(/\s+/g, '');
+}
+
 export function DataCenter() {
   const { t } = useTranslation(['common', 'chat']);
   const navigate = useNavigate();
@@ -117,13 +120,20 @@ export function DataCenter() {
   const quotaUsedPercent = store.quota?.usagePercent ?? 0;
   const quotaUsedText = store.quota
     ? t('dataCenterPage.toolbar.usedQuota', {
-      used: formatBytes(store.quota.usedBytes),
-      quota: formatBytes(store.quota.quotaBytes),
+      used: formatQuotaBytes(store.quota.usedBytes),
+      quota: formatQuotaBytes(store.quota.quotaBytes),
     })
-    : t('dataCenterPage.toolbar.usedQuota', { used: formatBytes(0), quota: '-' });
+    : t('dataCenterPage.toolbar.usedQuota', { used: formatQuotaBytes(0), quota: '-' });
   const errorDescription = currentError === DATA_CENTER_API_NOT_FOUND
     ? t('dataCenterPage.feedback.apiNotFound')
     : currentError;
+  const breadcrumbRootLabel = isLocalDriveTab
+    ? t('dataCenterPage.tabs.localFiles')
+    : isUploadDriveTab
+      ? t('dataCenterPage.tabs.uploadFiles')
+      : isSharedArtifactSpace
+        ? t('dataCenterPage.tabs.sharedArtifacts')
+        : t('dataCenterPage.tabs.myArtifacts');
   const emptyFeedbackDescription = (() => {
     if (isLocalDriveTab && currentParentEntryId !== ROOT_ENTRY_ID) return '';
     if (isSharedArtifactSpace) return t('dataCenterPage.feedback.sharedQaEmptyDescription');
@@ -567,30 +577,32 @@ export function DataCenter() {
                 <div className="min-w-0">
                   {isUploadDriveTab ? (
                     <>
-                      <div className="h-2 w-[86px] overflow-hidden rounded-full bg-[#D8DDE6] dark:bg-muted">
-                        <div
-                          className="h-full rounded-full bg-[#1D2129] dark:bg-foreground"
-                          style={{ width: formatUsageProgressWidth(quotaUsedPercent) }}
-                        />
+                      <div className="flex items-center gap-1.5">
+                        <div className="h-2 w-[88px] overflow-hidden rounded-full bg-[#D8DDE6] dark:bg-muted">
+                          <div
+                            className="h-full rounded-full bg-[#1D2129] dark:bg-foreground"
+                            style={{ width: formatUsageProgressWidth(quotaUsedPercent) }}
+                          />
+                        </div>
+                        <p className="text-[13px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">
+                          {t('dataCenterPage.drive.usedPercent', { percent: formatUsagePercent(quotaUsedPercent) })}
+                        </p>
                       </div>
-                      <p className="mt-2 text-[13px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">
-                        {t('dataCenterPage.drive.usedPercent', { percent: formatUsagePercent(quotaUsedPercent) })}
-                      </p>
-                      <p className="mt-1 text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">{quotaUsedText}</p>
+                      <p className="text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">{quotaUsedText}</p>
                     </>
                   ) : (
                     <>
                       <p className="text-[14px] font-semibold leading-5 text-[#1D2129] dark:text-foreground">
                         {t('dataCenterPage.drive.authorizedCount', { count: authorizedCount })}
                       </p>
-                      <p className="mt-1 text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">
+                      <p className="text-[12px] leading-5 text-[#6B778C] dark:text-muted-foreground">
                         {t('dataCenterPage.drive.localSummary', { folders: folderCount, files: fileCount })}
                       </p>
                     </>
                   )}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <div className="flex h-[34px] items-center rounded-[10px] bg-[#F2F3F5] p-1 dark:bg-muted">
+                  <div className="flex h-[34px] items-center rounded-[10px] bg-[#E5E6EB] p-1 dark:bg-muted">
                     <IconToggle active={currentViewMode === 'grid'} label={t('dataCenterPage.toolbar.gridView')} onClick={() => isLocalDriveTab ? localStore.setViewMode('grid') : store.setViewMode('grid')}>
                       <Grid2X2 className="h-4 w-4" />
                     </IconToggle>
@@ -600,13 +612,13 @@ export function DataCenter() {
                   </div>
                   {isUploadDriveTab ? (
                     <>
-                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" onClick={() => setCreateFolderOpen(true)}>
+                      <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" onClick={() => setCreateFolderOpen(true)}>
                         <FolderPlus className="mr-2 h-4 w-4" />
                         {t('dataCenterPage.toolbar.createFolder')}
                       </Button>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" disabled={uploading}>
+                          <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" disabled={uploading}>
                             {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
                             {t('dataCenterPage.toolbar.uploadFile')}
                             <ChevronDown className="ml-2 h-3.5 w-3.5" />
@@ -625,7 +637,7 @@ export function DataCenter() {
                   ) : (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" disabled={uploading}>
+                        <Button type="button" variant="outline" className="h-[34px] rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] dark:bg-muted dark:text-foreground dark:hover:bg-muted/70" disabled={uploading}>
                           {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
                           {t('dataCenterPage.toolbar.authorizeLocalFile')}
                           <ChevronDown className="ml-2 h-3.5 w-3.5" />
@@ -673,7 +685,7 @@ export function DataCenter() {
                     />
                   </div>
                   <AssociationFilterDropdown value={associationFilter} onChange={setAssociationFilter} />
-                  <div className="flex h-[34px] items-center rounded-[10px] bg-[#F2F3F5] p-1 dark:bg-muted">
+                  <div className="flex h-[34px] items-center rounded-[10px] bg-[#E5E6EB] p-1 dark:bg-muted">
                     <IconToggle active={store.viewMode === 'grid'} label={t('dataCenterPage.toolbar.gridView')} onClick={() => store.setViewMode('grid')}>
                       <Grid2X2 className="h-4 w-4" />
                     </IconToggle>
@@ -684,7 +696,7 @@ export function DataCenter() {
                   <Button
                     type="button"
                     variant="outline"
-                    className="h-[34px] rounded-[10px] border-0 bg-[#F2F3F5] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#E5E6EB] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-muted dark:text-foreground dark:hover:bg-muted/70"
+                    className="h-[34px] rounded-[10px] border-0 bg-[#E5E6EB] px-3 text-[13px] font-medium text-[#1D2129] shadow-none hover:bg-[#D8DDE6] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-muted dark:text-foreground dark:hover:bg-muted/70"
                     onClick={() => setCreateFolderOpen(true)}
                     disabled={!canCreateFolder}
                   >
@@ -701,6 +713,7 @@ export function DataCenter() {
             {currentParentEntryId !== ROOT_ENTRY_ID ? (
               <FolderBreadcrumbBar
                 breadcrumbs={currentBreadcrumbs}
+                rootLabel={breadcrumbRootLabel}
                 onBack={() => isDriveSection
                   ? isLocalDriveTab
                     ? localStore.openBreadcrumb(getParentBreadcrumbId(currentBreadcrumbs))
@@ -716,12 +729,23 @@ export function DataCenter() {
 
             <section className="flex min-h-0 flex-1 flex-col overflow-hidden">
               {currentError ? (
-                <FeedbackState icon={<AlertCircle className="h-8 w-8" />} title={t('dataCenterPage.feedback.loadFailed')} description={errorDescription ?? ''} />
+                <FeedbackState
+                  icon={<AlertCircle className="h-8 w-8" />}
+                  variant="plain"
+                  title={t('dataCenterPage.feedback.loadFailed')}
+                  description={errorDescription ?? ''}
+                />
               ) : currentLoading ? (
-                <FeedbackState icon={<Loader2 className="h-8 w-8 animate-spin" />} title={t('dataCenterPage.feedback.loadingTitle')} description={t('dataCenterPage.feedback.loadingDescription')} />
+                <FeedbackState
+                  icon={<Loader2 className="h-8 w-8 animate-spin" />}
+                  variant="plain"
+                  title={t('dataCenterPage.feedback.loadingTitle')}
+                  description={t('dataCenterPage.feedback.loadingDescription')}
+                />
               ) : visibleItems.length === 0 ? (
                 <FeedbackState
-                  icon={<Folder className="h-8 w-8" />}
+                  icon={null}
+                  variant="empty"
                   title={localPermissionDenied
                     ? t('dataCenterPage.feedback.localPermissionDeniedTitle')
                     : currentKeyword ? t('dataCenterPage.feedback.noMatch') : t('dataCenterPage.feedback.empty')}
@@ -955,7 +979,7 @@ function AssociationFilterDropdown({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="inline-flex h-[34px] items-center justify-center rounded-[10px] border border-[#E5E6EB] bg-white px-3 text-[13px] font-normal text-[#4E5969] shadow-none outline-none ring-0 transition-colors hover:bg-[#F7F8FA] focus:border-[#E5E6EB] focus:outline-none focus:ring-0 focus-visible:border-[#E5E6EB] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-[#E5E6EB] dark:border-border dark:bg-background dark:text-muted-foreground dark:hover:bg-muted/50"
+          className="inline-flex h-[34px] items-center justify-center rounded-[10px] border border-[#E5E6EB] bg-white px-3 text-[13px] font-medium text-[#1D2129] shadow-none outline-none ring-0 transition-colors hover:bg-[#F7F8FA] focus:border-[#E5E6EB] focus:outline-none focus:ring-0 focus-visible:border-[#E5E6EB] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-[#E5E6EB] dark:border-border dark:bg-background dark:text-foreground dark:hover:bg-muted/50"
         >
           {t('dataCenterPage.toolbar.associationLabel', { value: label })}
           <ChevronDown className="ml-1 h-3.5 w-3.5" />
