@@ -27,6 +27,94 @@ export interface ShellScriptInstallResult {
   error?: string;
 }
 
+export type WindowsInstallScriptKind = 'cmd' | 'powershell';
+
+export function detectWindowsInstallScriptKind(
+  scriptUrl: string,
+  script: string,
+): WindowsInstallScriptKind {
+  let pathname = scriptUrl.toLowerCase();
+  try {
+    pathname = new URL(scriptUrl).pathname.toLowerCase();
+  } catch {
+    // Keep the raw value for relative or otherwise non-standard URLs.
+  }
+  if (pathname.endsWith('.ps1')) return 'powershell';
+  if (pathname.endsWith('.cmd') || pathname.endsWith('.bat')) return 'cmd';
+
+  const withoutBom = script.replace(/^\uFEFF/, '');
+  if (/^\s*(?:#requires\b|\[CmdletBinding\(\)\]|param\s*\(|\$[A-Za-z_][\w]*)/im.test(withoutBom)) {
+    return 'powershell';
+  }
+  return 'cmd';
+}
+
+export function buildWindowsInstallScriptCommand(
+  kind: WindowsInstallScriptKind,
+  scriptPath: string,
+): { command: string; args: string[] } {
+  if (kind === 'powershell') {
+    return {
+      command: 'powershell.exe',
+      args: [
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        scriptPath,
+      ],
+    };
+  }
+  return { command: 'cmd.exe', args: ['/d', '/c', scriptPath] };
+}
+
+export function mergeWindowsPathValues(...values: Array<string | undefined>): string {
+  const seen = new Set<string>();
+  const entries: string[] = [];
+  for (const value of values) {
+    for (const rawEntry of value?.split(';') ?? []) {
+      const entry = rawEntry.trim();
+      const key = entry.replace(/[\\/]+$/, '').toLowerCase();
+      if (!entry || seen.has(key)) continue;
+      seen.add(key);
+      entries.push(entry);
+    }
+  }
+  return entries.join(';');
+}
+
+function refreshWindowsProcessPath(): void {
+  const command = [
+    '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()',
+    '@{ machine = [Environment]::GetEnvironmentVariable("Path", "Machine"); user = [Environment]::GetEnvironmentVariable("Path", "User") } | ConvertTo-Json -Compress',
+  ].join('; ');
+  const result = spawnSync('powershell.exe', [
+    '-NoLogo',
+    '-NoProfile',
+    '-NonInteractive',
+    '-Command',
+    command,
+  ], {
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+  if (result.status !== 0 || !result.stdout?.trim()) {
+    logger.warn('[managed-cli] Unable to refresh Windows PATH after install');
+    return;
+  }
+  try {
+    const paths = JSON.parse(result.stdout) as { machine?: string; user?: string };
+    process.env.PATH = mergeWindowsPathValues(paths.user, paths.machine, process.env.PATH);
+  } catch (error) {
+    logger.warn(
+      '[managed-cli] Unable to parse refreshed Windows PATH:',
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
 function expandHome(pathValue: string): string {
   const trimmed = pathValue.trim();
   if (trimmed.startsWith('~/') || trimmed === '~') {
@@ -115,18 +203,24 @@ async function runWindowsScript(scriptUrl: string): Promise<void> {
     throw new Error(`获取 Windows 安装脚本失败 HTTP ${response.status}`);
   }
   const script = await response.text();
+  const kind = detectWindowsInstallScriptKind(response.url || scriptUrl, script);
   const tmpDir = await mkdtemp(join(tmpdir(), 'stoclaw-cli-install-'));
-  const scriptPath = join(tmpDir, 'install.cmd');
+  const scriptPath = join(tmpDir, kind === 'powershell' ? 'install.ps1' : 'install.cmd');
   try {
-    await writeFile(scriptPath, script);
-    const r = spawnSync('cmd.exe', ['/c', scriptPath], {
+    // Windows PowerShell 5.1 needs a BOM to reliably read non-ASCII UTF-8 scripts.
+    const scriptContent = kind === 'powershell' && !script.startsWith('\uFEFF')
+      ? `\uFEFF${script}`
+      : script;
+    await writeFile(scriptPath, scriptContent, 'utf8');
+    const invocation = buildWindowsInstallScriptCommand(kind, scriptPath);
+    const r = spawnSync(invocation.command, invocation.args, {
       encoding: 'utf8',
       windowsHide: true,
       cwd: tmpDir,
       env: process.env,
     });
     if (r.status !== 0) {
-      throw new Error((r.stderr || r.stdout || `install.cmd exit ${r.status}`).trim());
+      throw new Error((r.stderr || r.stdout || `${scriptPath} exit ${r.status}`).trim());
     }
   } finally {
     await rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
@@ -175,6 +269,9 @@ export async function installViaShellScript(
       const url = options.windows?.trim();
       if (!url) return { success: false, error: '缺少 install.windows 脚本 URL' };
       await runWindowsScript(url);
+      // Installers commonly persist a new user PATH. Refresh it in this Electron
+      // process so the newly installed binary is discoverable without a restart.
+      refreshWindowsProcessPath();
     } else {
       const url = options.unix?.trim();
       if (!url) return { success: false, error: '缺少 install.unix 脚本 URL' };

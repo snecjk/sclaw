@@ -1,7 +1,6 @@
 /**
  * Install connector detail skill into ~/.stoclaw/connectors/skills/{slug}/ during connect.
  */
-import { spawnSync } from 'node:child_process';
 import {
   cpSync,
   createWriteStream,
@@ -36,6 +35,7 @@ import {
 } from '../utils/dws-cli';
 import { logger } from '../utils/logger';
 import { proxyAwareFetch } from '../utils/proxy-fetch';
+import { extractTarGz } from '../utils/tar-extract';
 import { extractZip } from '../utils/zip-extract';
 import { getConnectorSkillsCacheDir } from './connector-skill-sync';
 
@@ -134,12 +134,6 @@ async function downloadPackageToFile(url: string, dest: string): Promise<void> {
     Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
     createWriteStream(dest),
   );
-}
-
-function extractTarGz(archivePath: string, destDir: string): void {
-  mkdirSync(destDir, { recursive: true });
-  const r = spawnSync('tar', ['-xzf', archivePath, '-C', destDir], { encoding: 'utf8', windowsHide: true });
-  if (r.status !== 0) throw new Error(r.stderr || r.stdout || '解压 skill 失败');
 }
 
 function findSkillRoot(extractDir: string): string {

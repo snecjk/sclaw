@@ -31,6 +31,7 @@ import {
 import { logger } from './logger';
 import { getClaudeSkillsDir, getOpenClawSkillsDir } from './paths';
 import { proxyAwareFetch } from './proxy-fetch';
+import { extractTarGz } from './tar-extract';
 
 export interface QpathCliResult {
   ok: boolean;
@@ -277,17 +278,6 @@ async function downloadToFile(url: string, dest: string): Promise<{ revision: st
     || extractQpathSkillRevisionFromFilename(url)
     || (etag || null);
   return { revision };
-}
-
-function extractTarGz(archivePath: string, destDir: string): void {
-  mkdirSync(destDir, { recursive: true });
-  const r = spawnSync('tar', ['-xzf', archivePath, '-C', destDir], {
-    encoding: 'utf8',
-    windowsHide: true,
-  });
-  if (r.status !== 0) {
-    throw new Error(r.stderr || r.stdout || '解压 skill 失败');
-  }
 }
 
 function findSkillRoot(extractDir: string): string {
