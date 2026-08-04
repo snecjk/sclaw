@@ -48,7 +48,12 @@ function SidebarBrandTitle({
         height={28}
         className={sidebarBrandLogoClass}
       />
-      <span className={cn('shrink-0', sidebarBrandVersionClass)}>{displayVersion}</span>
+      <span
+        className={cn('min-w-0 truncate', sidebarBrandVersionClass)}
+        title={displayVersion}
+      >
+        {displayVersion}
+      </span>
       {showEnvBadgeAfterVersion ? (
         <span className="no-drag shrink-0">
           <ChromeEnvBadge />
@@ -84,7 +89,7 @@ export function SidebarBrandHeader({
       <>
         <div
           className={cn(
-            'drag-region flex min-h-[var(--sto-chrome-h)] shrink-0 items-start justify-between gap-2 px-3 pt-[var(--sto-chrome-toggle-inset-top)]',
+            'drag-region flex min-h-[var(--sto-sidebar-chrome-h)] shrink-0 items-start justify-between gap-2 px-3 pt-[var(--sto-sidebar-chrome-toggle-inset-top)]',
             'pl-20',
           )}
         >

@@ -799,14 +799,14 @@ function appendDwsPathToRcFile(rcFile: string, exportLine: string): boolean {
     if (existsSync(rcFile)) {
       const content = readFileSync(rcFile, 'utf-8');
       if (content.includes(DWS_BIN_DIR)) return true;
-      appendFileSync(rcFile, `\n# Added by STO Claw (dws)\n${exportLine}\n`);
+      appendFileSync(rcFile, `\n# Added by SClaw (dws)\n${exportLine}\n`);
       logger.info(`Added ${DWS_BIN_DIR} to ${rcFile}`);
       return true;
     }
 
     // macOS 默认 zsh，很多用户没有 ~/.zshrc；创建以便新终端全局可用。
     if (process.platform === 'darwin' && rcFile.endsWith('.zshrc')) {
-      writeFileSync(rcFile, `# Added by STO Claw (dws)\n${exportLine}\n`, 'utf-8');
+      writeFileSync(rcFile, `# Added by SClaw (dws)\n${exportLine}\n`, 'utf-8');
       logger.info(`Created ${rcFile} with ${DWS_BIN_DIR}`);
       return true;
     }

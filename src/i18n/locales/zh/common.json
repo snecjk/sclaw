@@ -54,7 +54,7 @@
         },
         "compactAccountMenu": "账户与设置",
         "supportGroup": {
-            "title": "S Claw产品咨询群",
+            "title": "SClaw产品咨询群",
             "hint": "钉钉扫一扫进群咨询问题",
             "helpAria": "查看产品咨询群二维码",
             "loadError": "二维码加载失败，请稍后重试"
@@ -160,7 +160,7 @@
             "authorizeLocalFile": "授权本地文件",
             "authorizeLocalFileOption": "授权文件",
             "authorizeLocalFolderOption": "授权文件夹",
-            "usedQuota": "已用 {{used}} / {{quota}}"
+            "usedQuota": "储存空间已用{{used}}/{{quota}}"
         },
         "drive": {
             "authorizedCount": "共授权 {{count}} 个文件",
@@ -179,7 +179,7 @@
             "qaEmptyDescription": "在产物预览右上角点击“保存产物”后，会出现在这里",
             "sharedQaEmptyDescription": "当前网点还没有共享产物",
             "driveEmptyDescription": "点击授权本地文件开始管理",
-            "uploadDriveEmptyDescription": "点击上传文件，将在线数据资产保存到这里",
+            "uploadDriveEmptyDescription": "点击上传文件，进行在线数据资产管理",
             "dataSourceTitle": "数据源能力待接入",
             "dataSourceDescription": "当前后端接口文档尚未包含数据源管理，本期不做假数据。"
         },

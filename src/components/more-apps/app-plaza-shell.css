@@ -45,12 +45,6 @@
   align-self: stretch;
 }
 
-.app-plaza-tabstrip__win-reserve {
-  flex-shrink: 0;
-  align-self: stretch;
-  width: 7rem;
-}
-
 .app-plaza-tab {
   display: inline-flex;
   align-items: center;

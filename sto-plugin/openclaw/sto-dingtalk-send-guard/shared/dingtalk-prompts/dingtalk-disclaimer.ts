@@ -4,17 +4,17 @@
  * Regenerate: `pnpm run sync:plugin-shared`
  */
 export const DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER =
-  '> *本消息由 S Claw 代为发送，非本人实时回复。*';
+  '> *本消息由 SClaw 代为发送，非本人实时回复。*';
 
 /** @deprecated 旧版 HTML 属性，规范化时会被替换 */
 export const DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER_LEGACY =
-  '<font color="#999999">本消息由 S Claw 代为发送，非本人实时回复。</font>';
+  '<font color="#999999">本消息由 SClaw 代为发送，非本人实时回复。</font>';
 
-export const DINGTALK_AGENT_SEND_DISCLAIMER_MARKER = 'S Claw 代为发送';
+export const DINGTALK_AGENT_SEND_DISCLAIMER_MARKER = 'SClaw 代为发送';
 
 /** 聊天 UI 展示用纯文案（不含 HTML）。 */
 export const DINGTALK_AGENT_SEND_DISCLAIMER_PLAIN_TEXT =
-  '本消息由 S Claw 代为发送，非本人实时回复。';
+  '本消息由 SClaw 代为发送，非本人实时回复。';
 
 /** @deprecated 使用 DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER */
 export const DINGTALK_AGENT_SEND_DISCLAIMER_HTML = DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER;
@@ -27,7 +27,7 @@ const DISCLAIMER_FONT_BLOCK =
 
 /** 正文与代发说明之间已有 `---` 分隔线。 */
 export function hasDingTalkDisclaimerDivider(text: string): boolean {
-  return /\n---\n[\s\S]*S Claw 代为发送/i.test(text);
+  return /\n---\n[\s\S]*S\s*Claw\s*代为发送/i.test(text);
 }
 
 /**
@@ -46,9 +46,9 @@ export function stripDingTalkAgentSendDisclaimerBody(text: string): string {
   return result
     .replace(/\n*<font\s+color=[^\n>]*>[\s\S]*?<\/font>\s*$/gi, '')
     .replace(/\n*<font\s+color=[^\n>]*\s*$/gi, '')
-    .replace(/\n*>\s*\*?[^\n]*S Claw 代为发送[^\n]*\*?\s*$/gi, '')
-    .replace(/\n*#999999>[^\n]*S Claw 代为发送[^\n]*\s*$/gi, '')
-    .replace(/\n*[^\n<]*S Claw 代为发送[^\n<]*\s*$/gi, '')
+    .replace(/\n*>\s*\*?[^\n]*S\s*Claw\s*代为发送[^\n]*\*?\s*$/gi, '')
+    .replace(/\n*#999999>[^\n]*S\s*Claw\s*代为发送[^\n]*\s*$/gi, '')
+    .replace(/\n*[^\n<]*S\s*Claw\s*代为发送[^\n<]*\s*$/gi, '')
     .replace(DISCLAIMER_FONT_BLOCK, '')
     .trim();
 }

@@ -9,9 +9,10 @@ function _ts(label: string): void {
   console.log(`[STARTUP] ${label}: +${Date.now() - _startupT0}ms`);
 }
 
-import { app, BrowserWindow, nativeImage, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, nativeImage, session, shell } from 'electron';
 import type { Server } from 'node:http';
-import { join } from 'path';
+import { basename, join, resolve } from 'path';
+import { existsSync } from 'node:fs';
 
 // Type-only imports for lazy-loaded modules (zero runtime cost).
 // The actual classes are loaded dynamically in initialize() to avoid
@@ -55,6 +56,50 @@ import { getSqliteDatabaseInfo, initializeSqliteDatabase } from '../db';
 _ts('static imports loaded');
 
 const WINDOWS_APP_USER_MODEL_ID = 'app.stoclaw.desktop';
+const LEGACY_USER_DATA_DIR_NAME = 'stoclaw';
+const RENAMED_MAC_APP_BUNDLE_NAME = 'SClaw.app';
+const LEGACY_MAC_APP_BUNDLE_PATH = '/Applications/S Claw.app';
+
+function pinLegacyUserDataPath(): void {
+  app.setPath('userData', join(app.getPath('appData'), LEGACY_USER_DATA_DIR_NAME));
+}
+
+pinLegacyUserDataPath();
+
+function getCurrentMacAppBundlePath(): string | null {
+  const bundlePath = resolve(process.execPath, '..', '..', '..');
+  return bundlePath.endsWith('.app') ? bundlePath : null;
+}
+
+async function promptRemoveLegacyMacAppIfNeeded(win: BrowserWindow): Promise<void> {
+  if (process.platform !== 'darwin' || !app.isPackaged) return;
+
+  const currentAppPath = getCurrentMacAppBundlePath();
+  if (!currentAppPath || basename(currentAppPath) !== RENAMED_MAC_APP_BUNDLE_NAME) return;
+
+  const legacyAppPath = resolve(LEGACY_MAC_APP_BUNDLE_PATH);
+  if (resolve(currentAppPath) === legacyAppPath || !existsSync(legacyAppPath)) return;
+
+  const result = await dialog.showMessageBox(win, {
+    type: 'question',
+    buttons: ['移到废纸篓', '稍后处理'],
+    defaultId: 0,
+    cancelId: 1,
+    title: '移除旧版 S Claw？',
+    message: '检测到“应用程序”文件夹中仍有旧版 S Claw。',
+    detail: '当前正在运行 SClaw。为避免 Dock 或 Launchpad 中出现两个应用，建议将旧版 S Claw 移到废纸篓。此操作不会删除 SClaw 的用户数据。',
+  });
+
+  if (result.response !== 0) return;
+
+  try {
+    await shell.trashItem(legacyAppPath);
+    logger.info(`[rename] moved legacy macOS app to Trash: ${legacyAppPath}`);
+  } catch (error) {
+    logger.warn(`[rename] failed to move legacy macOS app to Trash: ${legacyAppPath}`, error);
+    await shell.showItemInFolder(legacyAppPath);
+  }
+}
 
 /**
  * Send startup progress message to the splash screen
@@ -126,6 +171,10 @@ app.commandLine.appendSwitch('renderer-process-limit', '1');
 
 _ts('app flags set');
 
+// Dock / menu bar display name (Launchpad permanent name still comes from
+// electron-builder productName → CFBundleName after rebuild+reinstall).
+app.setName('SClaw');
+
 // On Linux, set CHROME_DESKTOP so Chromium can find the correct .desktop file.
 // On Wayland this maps the running window to stoclaw.desktop (icon + app grouping);
 // on X11 it supplements the StartupWMClass matching.
@@ -190,7 +239,7 @@ if (gotElectronLock) {
           );
         } else {
           console.info(
-            `[StoClaw] Another S Claw instance holds process lock (${fileLock.lockPath}, ${ownerDescriptor}); exiting duplicate process`,
+            `[StoClaw] Another SClaw instance holds process lock (${fileLock.lockPath}, ${ownerDescriptor}); exiting duplicate process`,
           );
           app.exit(0);
         }
@@ -278,7 +327,14 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
       webviewTag: true, // Enable <webview> for embedding OpenClaw Control UI
     },
     titleBarStyle: isMac ? 'hiddenInset' : useCustomTitleBar ? 'hidden' : 'default',
-    trafficLightPosition: isMac ? { x: 16, y: 18 } : undefined,
+    trafficLightPosition: isMac
+      ? {
+          // 最新原生 chrome 光学基线：x=16 / y=20；不再从 ContentHeader centerY 反推。
+          // 权威值：src/lib/content-header-metrics.ts → MACOS_TRAFFIC_LIGHT_POSITION
+          x: 16,
+          y: 20,
+        }
+      : undefined,
     frame: isMac || !useCustomTitleBar,
     show: false,  // We call show() manually below — before loading content
     backgroundColor: '#0f1525',  // Match splash screen background
@@ -296,7 +352,9 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
   // Set window title with environment suffix for non-production builds
   const envCfg = getCurrentEnvConfig();
   if (envCfg.displaySuffix) {
-    win.setTitle(`STO Claw ${envCfg.displaySuffix}`);
+    win.setTitle(`SClaw ${envCfg.displaySuffix}`);
+  } else {
+    win.setTitle('SClaw');
   }
 
   if (saved?.isMaximized) {
@@ -643,6 +701,10 @@ async function initialize(): Promise<void> {
   // Defer heavy file-copy maintenance until after first paint so first-launch
   // startup is responsive on Windows and avoids blank/unresponsive cold starts.
   schedulePostFirstPaintWork(window, async () => {
+    void promptRemoveLegacyMacAppIfNeeded(window).catch((error) => {
+      logger.warn('Failed to prompt for legacy macOS app cleanup:', error);
+    });
+
     logger.info('Running deferred startup maintenance tasks');
 
     await cleanupRetiredSkillsAndPlugins({ skipPluginDirs: true }).catch((error) => {

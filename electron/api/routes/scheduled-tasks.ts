@@ -59,7 +59,8 @@ export async function handleScheduledTaskRoutes(
 
   // ---- beautify instruction: POST /beautify-instruction ----
   // 独立于 CRUD：复用 scheduled-task-instruction-beautifier 服务。
-  // 输入/输出契约与前端 hostApiFetch 1:1（instruction / workflowId? / workflowName? → instruction / changed / source / model?）。
+  // 输入：instruction / type?(task|prompt, 默认 task) / workflowId? / workflowName?
+  // 输出：instruction / changed / source / model?
   if (url.pathname === '/api/scheduled-tasks/beautify-instruction' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<BeautifyScheduledTaskInstructionInput>(req);

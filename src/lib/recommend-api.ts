@@ -7,7 +7,17 @@
 import { hostApiFetch } from '@/lib/host-api';
 
 /** 推荐位条目类型 */
-export type RecommendItemType = 'workflow_template' | 'workflow_instance' | 'skill';
+export type RecommendItemType =
+  | 'workflow_template'
+  | 'workflow_instance'
+  | 'skill'
+  | 'prompt';
+
+/** 推荐类别（数据字典 recommend_category_code） */
+export interface RecommendCategory {
+  code: string;
+  name: string;
+}
 
 /** 推荐位条目 */
 export interface RecommendItem {
@@ -17,8 +27,12 @@ export interface RecommendItem {
   description: string | null;
   icon: string | null;
   sort_order: number;
-  /** 工作流分类（workflow_template 类型时由后端回填） */
+  /** 工作流分类（workflow_template 类型时由后端回填，与 recommend_category 不同） */
   category?: string | null;
+  /** 推荐位策划类别（数据字典 value） */
+  recommend_category?: string | null;
+  /** 提示词正文（item_type 为 prompt 时） */
+  content?: string | null;
   // 技能相关字段（item_type 为 skill 时使用）
   skill_slug?: string;
   skill_installed?: boolean;
@@ -33,9 +47,36 @@ export interface RecommendItemsResponse {
   data: {
     position_key: string;
     items: RecommendItem[];
+    categories?: RecommendCategory[];
   };
   errCode?: string;
   errMessage?: string;
+}
+
+export interface RecommendItemsResult {
+  items: RecommendItem[];
+  categories: RecommendCategory[];
+}
+
+function isAllRecommendCategory(category: RecommendCategory): boolean {
+  const normalizedCode = category.code.trim().toLowerCase();
+  const normalizedName = category.name.trim().toLowerCase();
+  return (
+    normalizedCode === '' ||
+    normalizedCode === 'all' ||
+    normalizedName === '全部' ||
+    normalizedName === 'all' ||
+    normalizedName === 'すべて'
+  );
+}
+
+function sortRecommendCategories(categories: RecommendCategory[]): RecommendCategory[] {
+  return [...categories].sort((a, b) => {
+    const aIsAll = isAllRecommendCategory(a);
+    const bIsAll = isAllRecommendCategory(b);
+    if (aIsAll === bIsAll) return 0;
+    return aIsAll ? -1 : 1;
+  });
 }
 
 /** 推荐位 position_key 枚举（与 memory-center-web recommendConfig.ts 对齐） */
@@ -48,19 +89,18 @@ export const RECOMMEND_POSITION_KEYS = {
 export type RecommendPositionKey =
   (typeof RECOMMEND_POSITION_KEYS)[keyof typeof RECOMMEND_POSITION_KEYS];
 
-/** 获取指定推荐位的可见条目 */
+/** 获取指定推荐位的可见条目 + 类别 */
 export async function fetchRecommendItems(
   positionKey: RecommendPositionKey,
-): Promise<RecommendItem[]> {
+): Promise<RecommendItemsResult> {
   const res = await hostApiFetch<RecommendItemsResponse>(
     `/ai-memory/agent/v1/recommend/positions/${positionKey}/items`,
     { method: 'GET' },
   );
   if (!res.success || !res.data) {
-    return [];
+    return { items: [], categories: [] };
   }
-  const items = res.data.items ?? [];
-  return items.map((item) => {
+  const items = (res.data.items ?? []).map((item) => {
     if (item.item_type === 'skill' && !item.skill_version) {
       const raw = item as unknown as Record<string, unknown>;
       if (typeof raw.version === 'string') {
@@ -69,4 +109,8 @@ export async function fetchRecommendItems(
     }
     return item;
   });
+  return {
+    items,
+    categories: sortRecommendCategories(res.data.categories ?? []),
+  };
 }

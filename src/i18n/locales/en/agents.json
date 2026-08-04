@@ -23,7 +23,7 @@
     },
     "deleteDialog": {
         "title": "Delete Agent",
-        "message": "Delete \"{{name}}\" from S Claw? This permanently deletes the agent and its S Claw-managed workspace, runtime, and session files from disk."
+        "message": "Delete \"{{name}}\" from SClaw? This permanently deletes the agent and its SClaw-managed workspace, runtime, and session files from disk."
     },
     "settingsDialog": {
         "title": "{{name}} Settings",
@@ -40,7 +40,7 @@
     },
     "removeChannelDialog": {
         "title": "Remove Channel",
-        "message": "Remove {{name}} from S Claw? This deletes the current channel configuration."
+        "message": "Remove {{name}} from SClaw? This deletes the current channel configuration."
     },
     "toast": {
         "agentCreated": "Agent created",

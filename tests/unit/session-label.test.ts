@@ -50,13 +50,13 @@ describe('resolveSessionLabel', () => {
   it('uses agent displayName only for main session', () => {
     expect(resolveSessionLabel({
       key: 'agent:main:main',
-      displayName: 'S Claw',
+      displayName: 'SClaw',
       sessionLabels: {},
       t,
-    })).toBe('S Claw');
+    })).toBe('SClaw');
     expect(resolveSessionLabel({
       key: 'agent:main:session-1',
-      displayName: 'S Claw',
+      displayName: 'SClaw',
       sessionLabels: {},
       t,
     })).toBe('新对话');

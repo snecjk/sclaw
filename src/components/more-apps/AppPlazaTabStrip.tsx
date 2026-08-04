@@ -1,7 +1,7 @@
 /**
  * Chrome-like tab strip — favicon comes from the page (page-favicon-updated), like Chrome.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Globe, Home, Plus, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -10,37 +10,42 @@ import {
   type AppPlazaBrowserTab,
   useAppPlazaShellStore,
 } from '@/stores/app-plaza-shell';
-import { useSettingsStore } from '@/stores/settings';
+import { useAppShellLayout } from '@/components/layout/app-shell-layout-context';
 import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
+import { WindowsWindowControls } from '@/components/layout/windows-window-controls';
+import { useWindowsChromeOwner } from '@/hooks/use-windows-chrome-owner';
 
 /** Chrome tab icon: page favicon when available, otherwise generic globe. */
 function TabFavicon({ tab }: { tab: AppPlazaBrowserTab }) {
-  const [failed, setFailed] = useState(false);
   const pageFavicon = tab.pageFaviconUrl?.trim();
-
-  useEffect(() => {
-    setFailed(false);
-  }, [pageFavicon, tab.id]);
 
   if (tab.status === 'blank') {
     return <Globe className="app-plaza-tab__icon-svg" aria-hidden />;
   }
 
-  if (pageFavicon && !failed) {
-    return (
-      <img
-        key={pageFavicon}
-        src={pageFavicon}
-        alt=""
-        className="app-plaza-tab__favicon"
-        draggable={false}
-        onError={() => setFailed(true)}
-      />
-    );
+  if (pageFavicon) {
+    // Remount on URL change so failed state resets without an effect.
+    return <TabFaviconImage key={`${tab.id}:${pageFavicon}`} src={pageFavicon} />;
   }
 
   // Loading / no favicon yet — same placeholder Chrome uses before page reports one.
   return <Globe className="app-plaza-tab__icon-svg" aria-hidden />;
+}
+
+function TabFaviconImage({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return <Globe className="app-plaza-tab__icon-svg" aria-hidden />;
+  }
+  return (
+    <img
+      src={src}
+      alt=""
+      className="app-plaza-tab__favicon"
+      draggable={false}
+      onError={() => setFailed(true)}
+    />
+  );
 }
 
 export function AppPlazaTabStrip() {
@@ -50,9 +55,9 @@ export function AppPlazaTabStrip() {
   const selectTab = useAppPlazaShellStore((s) => s.selectTab);
   const addBlankTab = useAppPlazaShellStore((s) => s.addBlankTab);
   const closeBrowserTab = useAppPlazaShellStore((s) => s.closeBrowserTab);
-  const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
-  const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
-  const isWin = window.electron?.platform === 'win32';
+  const { snapshot, setUserCollapsed } = useAppShellLayout();
+  const canUserRestoreSidebar = snapshot.canUserRestoreSidebar;
+  const windowsChromeOwner = useWindowsChromeOwner();
 
   return (
     <div
@@ -60,10 +65,10 @@ export function AppPlazaTabStrip() {
       role="tablist"
       aria-label={t('moreApps.browserTabs.aria', { defaultValue: '应用页签' })}
     >
-      {sidebarCollapsed ? (
+      {canUserRestoreSidebar ? (
         <SidebarHeaderToggle
           isCollapsed
-          onToggle={() => setSidebarCollapsed(false)}
+          onToggle={() => setUserCollapsed(false)}
           collapseLabel={t('sidebar.toggleSidebarCollapse')}
           expandLabel={t('sidebar.toggleSidebarExpand')}
           className="app-plaza-tabstrip__sidebar-toggle"
@@ -131,7 +136,7 @@ export function AppPlazaTabStrip() {
 
       {/* Empty chrome — window drag (same pattern as ContentHeader). */}
       <div className="app-plaza-tabstrip__spacer" aria-hidden />
-      {isWin ? <div className="app-plaza-tabstrip__win-reserve no-drag" aria-hidden /> : null}
+      {windowsChromeOwner === 'app-plaza' ? <WindowsWindowControls /> : null}
     </div>
   );
 }

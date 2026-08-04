@@ -107,6 +107,12 @@ SetCompressor zlib
   ; elevation this call silently fails — no crash, just no key written.
   WriteRegDWORD HKLM "SYSTEM\CurrentControlSet\Control\FileSystem" "LongPathsEnabled" 1
 
+  ; Remove legacy shortcuts created before the SClaw rename.
+  Delete "$DESKTOP\S Claw.lnk"
+  Delete "$SMPROGRAMS\S Claw.lnk"
+  Delete "$SMPROGRAMS\S Claw\S Claw.lnk"
+  RMDir "$SMPROGRAMS\S Claw"
+
   ; Clear authentication data from any previous installation.
   ; This ensures users must re-authenticate after reinstalling rather than
   ; silently reusing a stale/expired token from the old install.

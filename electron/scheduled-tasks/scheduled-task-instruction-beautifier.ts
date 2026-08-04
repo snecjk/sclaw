@@ -15,7 +15,8 @@ const BEAUTIFY_INPUT_MAX_CHARS = 4_000;
 const FAST_MODEL_PATTERN = /turbo|flash|lite|mini|fast|haiku|small|speed/i;
 const HEAVY_MODEL_PATTERN = /plus|max|pro|opus|ultra|large|vision/i;
 
-const SYSTEM_PROMPT = [
+/** 定时任务执行描述美化（默认） */
+const TASK_SYSTEM_PROMPT = [
   '你是定时任务「执行描述」优化助手。触发时间（cron）已由系统单独保存。',
   '任务：在完整保留用户执行细节（分步计划、工具/skill 名称、数据范围、输出与交付要求）的前提下，润色表述、理顺语气、去掉冗余口语。',
   '禁止：删除步骤、压缩要点、把多段描述改成一句「执行某工作流」或仅保留工作流 id。',
@@ -24,8 +25,21 @@ const SYSTEM_PROMPT = [
   '只输出优化后的纯文本，不要解释、markdown 或引号。',
 ].join('\n');
 
+/** 用户创建提示词模版 / 快捷输入美化 */
+const PROMPT_SYSTEM_PROMPT = [
+  '你是「提示词模版」优化助手，帮助用户把常用输入润色成清晰、可复用的提示词模版。',
+  '任务：在完整保留用户意图、约束条件、输出格式与关键细节的前提下，润色表述、理顺结构、补全省略不清的指令口吻，使其可直接粘贴给 AI 执行。',
+  '禁止：删改核心诉求；编造用户未提及的目标、数据或步骤；改写成定时任务/工作流调度描述；过度压缩成一句空泛口号。',
+  '建议：必要时用简短分点或段落提升可读性；语气保持祈使/指令风格；不要添加与原文无关的角色设定或冗长开场白。',
+  '只输出优化后的纯文本提示词，不要解释、markdown 代码块或引号包裹。',
+].join('\n');
+
+export type BeautifyInstructionType = 'task' | 'prompt';
+
 export interface BeautifyScheduledTaskInstructionInput {
   instruction: string;
+  /** 美化场景：task=定时任务描述（默认），prompt=提示词模版 */
+  type?: BeautifyInstructionType;
   workflowId?: string;
   workflowName?: string;
 }
@@ -35,6 +49,14 @@ export interface BeautifyScheduledTaskInstructionResult {
   changed: boolean;
   source: 'model' | 'rules-fallback';
   model?: string;
+}
+
+export function resolveBeautifyType(type?: BeautifyInstructionType): BeautifyInstructionType {
+  return type === 'prompt' ? 'prompt' : 'task';
+}
+
+export function resolveBeautifySystemPrompt(type?: BeautifyInstructionType): string {
+  return resolveBeautifyType(type) === 'prompt' ? PROMPT_SYSTEM_PROMPT : TASK_SYSTEM_PROMPT;
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
@@ -112,6 +134,11 @@ function truncateInstructionForModel(text: string): string {
 }
 
 function buildUserPrompt(input: BeautifyScheduledTaskInstructionInput): string {
+  const beautifyType = resolveBeautifyType(input.type);
+  if (beautifyType === 'prompt') {
+    return ['用户原始提示词：', truncateInstructionForModel(input.instruction)].join('\n');
+  }
+
   const lines = [
     input.workflowId?.trim()
       ? `关联工作流：id=${input.workflowId.trim()}，名称=${input.workflowName?.trim() || input.workflowId.trim()}`
@@ -178,6 +205,7 @@ async function callChatCompletions(params: {
   url: string;
   headers: Record<string, string>;
   model: string;
+  systemPrompt: string;
   userPrompt: string;
 }): Promise<string> {
   const startedAt = Date.now();
@@ -190,7 +218,7 @@ async function callChatCompletions(params: {
     body: JSON.stringify({
       model: params.model,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: params.systemPrompt },
         { role: 'user', content: params.userPrompt },
       ],
       max_tokens: BEAUTIFY_MAX_TOKENS,
@@ -212,7 +240,10 @@ async function callChatCompletions(params: {
   return sanitizeModelOutput(text);
 }
 
-async function beautifyWithStoAccount(userPrompt: string): Promise<{ text: string; model: string }> {
+async function beautifyWithStoAccount(
+  userPrompt: string,
+  systemPrompt: string,
+): Promise<{ text: string; model: string }> {
   const token = await getStoToken();
   if (!token) {
     throw new Error('未登录 STO，无法使用 AI 美化');
@@ -237,6 +268,7 @@ async function beautifyWithStoAccount(userPrompt: string): Promise<{ text: strin
       Authorization: `Bearer ${apiKey}`,
     },
     model,
+    systemPrompt,
     userPrompt,
   });
 
@@ -254,11 +286,16 @@ export async function beautifyScheduledTaskInstruction(
     throw new Error('instruction is required');
   }
 
-  const rulesResult = normalizeRulesFallbackInstruction(input);
+  const beautifyType = resolveBeautifyType(input.type);
+  const systemPrompt = resolveBeautifySystemPrompt(beautifyType);
   const userPrompt = buildUserPrompt(input);
+  const rulesResult =
+    beautifyType === 'prompt'
+      ? { instruction: original, changed: false }
+      : normalizeRulesFallbackInstruction(input);
 
   try {
-    const { text: optimized, model } = await beautifyWithStoAccount(userPrompt);
+    const { text: optimized, model } = await beautifyWithStoAccount(userPrompt, systemPrompt);
     if (!optimized || isMockLlmResponse(optimized)) {
       throw new Error('模型返回为空或无效');
     }
