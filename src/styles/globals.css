@@ -1112,7 +1112,313 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
 [data-sonner-toaster].sto-global-toaster
   [data-sonner-toast][data-styled='true']
   [data-button]:not([data-cancel]):focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
-  box-shadow: none;
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+/* Composer voice mode — sunlight bloom diffusion around listening orb */
+@keyframes stoclaw-voice-glow {
+  0% {
+    transform: scale(0.28) rotate(0deg);
+    opacity: 0.7;
+    filter: blur(2px);
+  }
+
+  45% {
+    opacity: 0.42;
+    filter: blur(6px);
+  }
+
+  100% {
+    transform: scale(1.85) rotate(18deg);
+    opacity: 0;
+    filter: blur(10px);
+  }
+}
+
+@keyframes stoclaw-voice-orb-breathe {
+  0%,
+  100% {
+    transform: scale(0.88);
+    opacity: 0.4;
+  }
+
+  50% {
+    transform: scale(1.28);
+    opacity: 1;
+  }
+}
+
+.stoclaw-voice-glow {
+  position: absolute;
+  inset: -8%;
+  border-radius: 9999px;
+  pointer-events: none;
+  animation: stoclaw-voice-glow 3.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  /* 无描边：柔光色晕，像阳光往四周渗开 */
+  border: none;
+}
+
+.stoclaw-voice-glow--warm {
+  background: radial-gradient(
+    ellipse 55% 50% at 50% 50%,
+    hsl(var(--primary) / 0.55) 0%,
+    hsl(28 100% 62% / 0.28) 32%,
+    hsl(38 100% 70% / 0.12) 55%,
+    transparent 72%
+  );
+}
+
+.stoclaw-voice-glow--gold {
+  background: radial-gradient(
+    ellipse 50% 60% at 48% 52%,
+    hsl(42 100% 68% / 0.5) 0%,
+    hsl(var(--primary) / 0.22) 38%,
+    hsl(20 100% 72% / 0.1) 58%,
+    transparent 74%
+  );
+  animation-delay: 1.1s;
+}
+
+.stoclaw-voice-glow--peach {
+  background: radial-gradient(
+    ellipse 60% 48% at 52% 48%,
+    hsl(15 100% 72% / 0.45) 0%,
+    hsl(32 100% 65% / 0.2) 40%,
+    hsl(var(--primary) / 0.08) 58%,
+    transparent 75%
+  );
+  animation-delay: 2.2s;
+}
+
+.stoclaw-voice-glow--d1 {
+  animation-delay: 1.1s;
+}
+
+.stoclaw-voice-glow--d2 {
+  animation-delay: 2.2s;
+}
+
+.stoclaw-voice-orb {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  height: 14px;
+  width: 14px;
+  align-items: center;
+  justify-content: center;
+  animation: stoclaw-voice-orb-breathe 2.2s ease-in-out infinite;
+}
+
+.stoclaw-voice-orb-halo {
+  position: absolute;
+  z-index: 9;
+  height: 22px;
+  width: 22px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    hsl(var(--primary) / 0.35) 0%,
+    hsl(38 100% 70% / 0.18) 42%,
+    transparent 72%
+  );
+  filter: blur(3px);
+  animation: stoclaw-voice-orb-breathe 2.2s ease-in-out infinite;
+  animation-delay: 0.08s;
+  pointer-events: none;
+}
+
+.stoclaw-voice-orb-core {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background:
+    radial-gradient(circle at 35% 30%, #fff8f0 0%, transparent 42%),
+    radial-gradient(circle at 50% 55%, hsl(var(--primary)) 0%, hsl(24 100% 52%) 70%, hsl(18 90% 42%) 100%);
+  box-shadow:
+    0 0 0 1px hsl(var(--primary) / 0.25),
+    0 0 10px hsl(var(--primary) / 0.55),
+    0 0 18px hsl(38 100% 65% / 0.35),
+    inset 0 -2px 4px hsl(18 80% 30% / 0.25);
+}
+
+.stoclaw-voice-orb-shine {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  z-index: 2;
+  height: 4px;
+  width: 5px;
+  border-radius: 9999px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.12));
+  opacity: 0.9;
+  pointer-events: none;
+  transform-origin: center;
+  /* 扭动由 JS 随机驱动，不用固定 keyframes */
+  will-change: top, left, transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stoclaw-voice-glow {
+    animation: none;
+    opacity: 0.35;
+    transform: scale(1.1);
+    filter: blur(5px);
+  }
+
+  .stoclaw-voice-glow--gold,
+  .stoclaw-voice-glow--peach {
+    display: none;
+  }
+
+  .stoclaw-voice-orb,
+  .stoclaw-voice-orb-halo {
+    animation: none;
+  }
+
+  .stoclaw-voice-edge-runner,
+  .stoclaw-voice-edge-bar {
+    animation: none;
+  }
+}
+
+/* 语音模式：一小段音波沿上沿从左滚到右，同时高度自由起伏 */
+@keyframes stoclaw-voice-edge-run {
+  from {
+    left: 0;
+    transform: translateX(-100%);
+  }
+
+  to {
+    left: 100%;
+    transform: translateX(0);
+  }
+}
+
+@keyframes stoclaw-voice-edge-bar-pulse {
+  0% {
+    transform: scaleY(0.28);
+    opacity: 0.55;
+  }
+
+  28% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+
+  52% {
+    transform: scaleY(0.42);
+    opacity: 0.7;
+  }
+
+  76% {
+    transform: scaleY(0.88);
+    opacity: 0.95;
+  }
+
+  100% {
+    transform: scaleY(0.28);
+    opacity: 0.55;
+  }
+}
+
+.stoclaw-voice-edge {
+  top: 0;
+  /* 与 rounded-2xl(~16) / rounded-[22px] 对齐，只走顶边直线段 */
+  left: 20px;
+  right: 20px;
+  height: 12px;
+  transform: translateY(calc(-100% + 1px));
+  overflow: hidden;
+  /* 进出两端再淡一点，贴着圆角过渡更自然 */
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 10px,
+    #000 calc(100% - 10px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 10px,
+    #000 calc(100% - 10px),
+    transparent 100%
+  );
+}
+
+.stoclaw-voice-edge-runner {
+  position: absolute;
+  bottom: 0;
+  width: 72px;
+  height: 100%;
+  animation: stoclaw-voice-edge-run 4.8s linear infinite;
+  will-change: left, transform;
+}
+
+.stoclaw-voice-edge-bars {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5px;
+}
+
+.stoclaw-voice-edge-bar {
+  flex: 1 1 0;
+  min-width: 1.5px;
+  max-width: 3px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    180deg,
+    hsl(38 100% 72% / 0.95) 0%,
+    hsl(var(--primary)) 55%,
+    hsl(var(--primary) / 0.9) 100%
+  );
+  box-shadow: 0 0 4px hsl(var(--primary) / 0.3);
+  transform-origin: center bottom;
+  animation-name: stoclaw-voice-edge-bar-pulse;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+
+/* 输入区居中细声线（实时麦音量驱动，无 CSS 起伏动画） */
+.stoclaw-voice-soundline-bar {
+  flex: 0 0 1px;
+  width: 1px;
+  min-width: 1px;
+  max-width: 1px;
+  align-self: center;
+  border-radius: 9999px;
+  background: linear-gradient(
+    180deg,
+    hsl(38 100% 78% / 0.95) 0%,
+    hsl(var(--primary)) 48%,
+    hsl(var(--primary) / 0.7) 100%
+  );
+  box-shadow: 0 0 3px hsl(var(--primary) / 0.22);
+  transform-origin: center center;
+  will-change: height, opacity;
+}
+
+.stoclaw-voice-soundline-bar--live {
+  transition: height 45ms linear, opacity 45ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stoclaw-voice-soundline-bar--live {
+    transition: none;
+  }
+}
+
+/* Glassmorphism toast override */
+[data-sonner-toaster] [data-sonner-toast] {
+  background: hsl(var(--glass-bg) / var(--glass-opacity)) !important;
+  backdrop-filter: blur(var(--glass-blur)) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) !important;
+  border-color: hsl(var(--glass-border)) !important;
+  box-shadow: var(--glass-shadow) !important;
 }

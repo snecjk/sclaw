@@ -278,7 +278,7 @@ export interface ChatModelOption {
   modelId: string;        // ← 原始值（含前缀），用于发给 Gateway / backend
   normalizedId: string;   // ← 截断后的值，用于匹配 selectedModelId
   accountId: string;
-  displayName: string;    // ← 与 Models 页一致的完整模型 ID（UI 展示）
+  displayName: string;    // ← Chat 选择器展示用短名（无供应商前缀）
   subLabel: string;
   /** true = STO 内置等 */
   isBuiltin: boolean;
@@ -300,7 +300,7 @@ export function buildChatModelOptions(providerItems: ProviderListItem[]): ChatMo
           modelId: rawModelId,
           normalizedId,
           accountId: account.id,
-          displayName: rawModelId,
+          displayName: normalizedId,
           subLabel,
           isBuiltin,
         });
