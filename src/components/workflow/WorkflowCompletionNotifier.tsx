@@ -7,6 +7,7 @@ import { getRunViaIpc, runToExecutionState } from '@/lib/workflow-api';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import { getExecutionByRunId, markCompletionNotificationDelivered } from '@/stores/workflow-memory';
 import type { WorkflowRunResponse, WorkflowRunStatus } from '@/types/workflow';
+import { subscribeHostEvent } from '@/lib/host-events';
 import { TestRunDrawer } from '@/pages/WorkflowDesigner/components/test-run-drawer';
 
 interface WorkflowStatusPayload {
@@ -93,8 +94,8 @@ export function WorkflowCompletionNotifier() {
       });
     };
 
-    const unsubscribeStatus = window.electron.ipcRenderer.on('workflow:status-update', onStatus);
-    const unsubscribeOpen = window.electron.ipcRenderer.on('workflow:completion-open', onCompletionOpen);
+    const unsubscribeStatus = subscribeHostEvent('workflow:status-update', onStatus);
+    const unsubscribeOpen = subscribeHostEvent('workflow:completion-open', onCompletionOpen);
     return () => {
       if (typeof unsubscribeStatus === 'function') unsubscribeStatus();
       if (typeof unsubscribeOpen === 'function') unsubscribeOpen();

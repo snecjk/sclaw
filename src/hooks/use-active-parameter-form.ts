@@ -21,7 +21,9 @@ export interface ActiveParameterForm {
 
 export function useActiveParameterForm(): ActiveParameterForm | null {
   const messages = useChatStore((s) => s.messages);
-  const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
+  const pendingWorkflow = useChatStore(
+    (s) => s.workflowChatUiBySessionKey[s.currentSessionKey]?.pendingWorkflow ?? null,
+  );
 
   return useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {

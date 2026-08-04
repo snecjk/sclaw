@@ -80,7 +80,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
 
   // Explicit template pick from picker — fetch schema → send to model.
   if (workflowId) {
-    if (chatState.pendingWorkflow?.templateId !== workflowId) {
+    if (chatState.workflowChatUiBySessionKey[chatState.currentSessionKey]?.pendingWorkflow?.templateId !== workflowId) {
       chatState.clearPendingWorkflow();
     }
     const { sendWithWorkflow } = await import('@/hooks/use-workflow-send');

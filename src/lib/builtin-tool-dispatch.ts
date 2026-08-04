@@ -46,14 +46,13 @@ function messageDedupeKey(msg: BuiltinToolResultMessage): string | null {
   return msg.id || msg.toolCallId || null;
 }
 
-function handleWorkflowSchemaReady(data: WorkflowSchemaReadyData): void {
-  applyWorkflowSchemaReady(data);
+function handleWorkflowSchemaReady(data: WorkflowSchemaReadyData, ctx: BuiltinToolDispatchContext): void {
+  applyWorkflowSchemaReady(data, ctx.sessionKey);
 }
 
-function handleWorkflowCreated(data: WorkflowCreatedData): void {
+function handleWorkflowCreated(data: WorkflowCreatedData, ctx: BuiltinToolDispatchContext): void {
   if (!data.workflowId || !data.templateId) return;
-  const sessionKey = useChatStore.getState().currentSessionKey;
-  saveWorkflowRecord(sessionKey, {
+  saveWorkflowRecord(ctx.sessionKey, {
     workflowId: data.workflowId,
     templateId: data.templateId,
     templateName: data.workflowName ?? data.templateId,
@@ -103,22 +102,23 @@ export async function dispatchBuiltinToolResult(
   msg: BuiltinToolResultMessage,
   ctx?: BuiltinToolDispatchContext,
 ): Promise<boolean> {
-  const dedupeKey = messageDedupeKey(msg);
+  const resolvedCtx = resolveDispatchContext(ctx);
+  const rawDedupeKey = messageDedupeKey(msg);
+  const dedupeKey = rawDedupeKey ? `${resolvedCtx.sessionKey}:${rawDedupeKey}` : null;
   if (dedupeKey) {
     if (processedToolResults.has(dedupeKey)) return false;
     processedToolResults.add(dedupeKey);
   }
 
-  const resolvedCtx = resolveDispatchContext(ctx);
   const envelope = parseStoToolEnvelope(msg.content) ?? parseStoToolEnvelope(msg);
 
   if (envelope?.type === 'workflow_schema_ready' && envelope.success) {
-    handleWorkflowSchemaReady((envelope.data ?? {}) as WorkflowSchemaReadyData);
+    handleWorkflowSchemaReady((envelope.data ?? {}) as WorkflowSchemaReadyData, resolvedCtx);
     return true;
   }
 
   if (envelope?.type === 'workflow_created' && envelope.success) {
-    handleWorkflowCreated((envelope.data ?? {}) as WorkflowCreatedData);
+    handleWorkflowCreated((envelope.data ?? {}) as WorkflowCreatedData, resolvedCtx);
     return true;
   }
 

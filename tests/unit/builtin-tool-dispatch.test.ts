@@ -62,6 +62,7 @@ describe('dispatchBuiltinToolResult', () => {
     expect(handled).toBe(true);
     expect(applyWorkflowSchemaReady).toHaveBeenCalledWith(
       expect.objectContaining({ templateId: 'tpl-1' }),
+      'agent:main:main',
     );
   });
 
@@ -110,6 +111,26 @@ describe('dispatchBuiltinToolResult', () => {
     expect(await dispatchBuiltinToolResult(msg)).toBe(true);
     expect(await dispatchBuiltinToolResult(msg)).toBe(false);
     expect(applyWorkflowSchemaReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not collide identical tool ids across sessions', async () => {
+    const msg = {
+      id: 'tool-same-id',
+      content: JSON.stringify({
+        type: 'workflow_schema_ready',
+        success: true,
+        domain: 'workflow',
+        data: {
+          templateId: 'tpl-1',
+          schemaHash: 'h1',
+          schema: { fields: [], steps: [], nodeId: '', enabled: true },
+        },
+      }),
+    };
+    expect(await dispatchBuiltinToolResult(msg, { sessionKey: 'session-a', agentId: 'main' })).toBe(true);
+    expect(await dispatchBuiltinToolResult(msg, { sessionKey: 'session-b', agentId: 'main' })).toBe(true);
+    expect(applyWorkflowSchemaReady).toHaveBeenNthCalledWith(1, expect.anything(), 'session-a');
+    expect(applyWorkflowSchemaReady).toHaveBeenNthCalledWith(2, expect.anything(), 'session-b');
   });
 
   it('keeps workflow_run_status as a normal tool result without creating a card', async () => {

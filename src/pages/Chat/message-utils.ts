@@ -598,8 +598,10 @@ export function extractParameterForm(
           return null;
         }
 
-        const pendingWorkflow =
-          pendingOverride ?? useChatStore.getState().pendingWorkflow;
+        const state = useChatStore.getState();
+        const pendingWorkflow = pendingOverride
+          ?? state.workflowChatUiBySessionKey[state.currentSessionKey]?.pendingWorkflow
+          ?? null;
         if (
           !pendingWorkflow
           || pendingWorkflow.templateId !== templateId

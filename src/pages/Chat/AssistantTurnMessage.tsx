@@ -144,7 +144,9 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   onEditMessage,
 }: AssistantTurnMessageProps) {
   const sessionMessages = useChatStore((s) => s.messages);
-  const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
+  const pendingWorkflow = useChatStore(
+    (s) => s.workflowChatUiBySessionKey[s.currentSessionKey]?.pendingWorkflow ?? null,
+  );
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const engineType = useChatSessionEngineType();
 

@@ -44,7 +44,6 @@ export function createSessionNavigationActions(
             : state.sessionLastActivity,
           messages: [],
           loading: false,
-          pendingWorkflow: null,
         };
       });
 

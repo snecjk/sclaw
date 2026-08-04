@@ -10,6 +10,10 @@ export const chatRuntimeMigration: SqliteMigration = {
         session_key            TEXT NOT NULL,
         run_id                 TEXT,
         idempotency_key        TEXT NOT NULL,
+        origin                 TEXT NOT NULL DEFAULT 'interactive'
+                               CHECK (origin IN ('interactive','scheduled_task','channel')),
+        owner_id               TEXT,
+        deadline_at            INTEGER,
         engine_type            TEXT NOT NULL CHECK (engine_type IN ('openclaw','claude')),
         phase                  TEXT NOT NULL,
         epoch                  INTEGER NOT NULL DEFAULT 1 CHECK (epoch > 0),
@@ -36,6 +40,10 @@ export const chatRuntimeMigration: SqliteMigration = {
       CREATE INDEX IF NOT EXISTS idx_chat_runtime_run
         ON chat_runtime_runs(session_key, run_id)
         WHERE run_id IS NOT NULL;
+
+      CREATE INDEX IF NOT EXISTS idx_chat_runtime_owner
+        ON chat_runtime_runs(origin, owner_id)
+        WHERE owner_id IS NOT NULL;
     `);
   },
 };

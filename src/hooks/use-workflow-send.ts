@@ -166,6 +166,7 @@ export async function createAndStartWorkflowDirect(
     });
 
     const trackStartMs = Date.now();
+    const userText = buildWorkflowStartUserText(schema, inputs);
     const run = await startWorkflowLocal({
       workflowId: created.workflowId,
       inputs,
@@ -173,9 +174,8 @@ export async function createAndStartWorkflowDirect(
       sessionKey: context.sessionKey,
       triggerType: 'chat',
       engineType: chooseImmediateWorkflowEngine(),
+      chatCard: { title: templateName, paramsSummary: userText },
     });
-
-    const userText = buildWorkflowStartUserText(schema, inputs);
 
     updateWorkflowRunMetadata(context.sessionKey, created.workflowId, {
       lastRunId: run.runId,
@@ -221,7 +221,7 @@ export async function createAndStartWorkflowDirect(
     });
 
     // Clear pending state
-    useChatStore.getState().clearPendingWorkflow();
+    useChatStore.getState().clearPendingWorkflow(context.sessionKey);
 
     return true;
   } catch (err) {
@@ -276,6 +276,11 @@ export async function startExistingWorkflow(
   
 
   try {
+    const displayName = await resolveWorkflowTemplateName(
+      context.sessionKey,
+      workflowId,
+      _templateName,
+    );
     const run = await startWorkflowLocal({
       workflowId,
       inputs,
@@ -283,14 +288,10 @@ export async function startExistingWorkflow(
       sessionKey: context.sessionKey,
       triggerType: 'chat',
       engineType: chooseImmediateWorkflowEngine(),
+      chatCard: { title: displayName, paramsSummary: originalText },
     });
 
     const { isReExecutionIntent } = await import('@/hooks/use-workflow-intent');
-    const displayName = await resolveWorkflowTemplateName(
-      context.sessionKey,
-      workflowId,
-      _templateName,
-    );
     const isReexec = isReExecutionIntent(originalText);
     const { applyWorkflowRunStarted } = await import('@/lib/workflow-run-started');
     return applyWorkflowRunStarted({
@@ -401,7 +402,7 @@ export async function tryResolvePendingWorkflow(
   sendMessage: (msg: string, runId?: string | null, workflowId?: string | null) => Promise<void>,
 ): Promise<boolean> {
   const chatState = useChatStore.getState();
-  const pending = chatState.pendingWorkflow;
+  const pending = chatState.workflowChatUiBySessionKey[chatState.currentSessionKey]?.pendingWorkflow ?? null;
 
   const {
     isReExecutionIntent,
@@ -605,7 +606,7 @@ export async function tryStartRememberedWorkflowSend(
   if (!wantsStart) return false;
 
   const chatState = useChatStore.getState();
-  const pending = chatState.pendingWorkflow;
+  const pending = chatState.workflowChatUiBySessionKey[chatState.currentSessionKey]?.pendingWorkflow ?? null;
 
   const { extractWorkflowIdFromText } = await import('@/hooks/use-workflow-intent');
   const { getLatestWorkflow, getSessionWorkflows, findWorkflowById } = await import(

@@ -116,7 +116,6 @@ function buildSessionSwitchPatch(
       : state.sessionLastActivity,
     messages: [],
     loading: false,
-    pendingWorkflow: null,
   };
 }
 function getCanonicalPrefixFromSessionKey(sessionKey: string): string | null {

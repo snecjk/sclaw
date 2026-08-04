@@ -304,6 +304,11 @@ export interface StartWorkflowLocalParams {
   engineType: 'claude' | 'openclaw';
   /** Explicit chat model to pin for this run, when the caller has one. */
   engineModel?: string;
+  chatCard?: {
+    title?: string | null;
+    paramsSummary?: string | null;
+    anchorUserMessageId?: string | null;
+  };
 }
 
 export interface StartWorkflowLocalResult {
@@ -406,6 +411,7 @@ export async function startWorkflowLocal(
     triggerType: params.triggerType,
     engineType: params.engineType,
     engineModel,
+    chatCard: params.chatCard,
   });
 
   return {

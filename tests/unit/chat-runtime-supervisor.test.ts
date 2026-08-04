@@ -7,6 +7,7 @@ const repository = vi.hoisted(() => ({
   upsert: vi.fn(async () => undefined),
   getByIdempotencyKey: vi.fn(async () => null),
   getLatestForSession: vi.fn(async () => null),
+  getByOwner: vi.fn(async () => null),
 }));
 const engine = vi.hoisted(() => ({
   getAdapterForSession: vi.fn(),
@@ -214,6 +215,46 @@ describe('main chat runtime supervisor', () => {
       await vi.advanceTimersByTimeAsync(15_000);
       expect(events.some((event) => event.type === 'run.failed')).toBe(false);
       expect(supervisor.get('agent:main:session-3')?.phase).toBe('running');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('aborts the engine and publishes interrupted when a policy deadline expires', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-04T05:10:00.000Z'));
+    try {
+      const abortRun = vi.fn(async () => ({ success: true }));
+      engine.getAdapterForSession.mockResolvedValue({ abortRun });
+      const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+      const events: CanonicalChatEvent[] = [];
+      supervisor.on('event', (value) => events.push(value));
+      const deadlineAt = Date.now() + 500;
+
+      await supervisor.begin({
+        sessionKey: 'agent:main:scheduled-deadline',
+        idempotencyKey: 'scheduled-message',
+        engineType: 'openclaw',
+        runtimePolicy: {
+          origin: 'scheduled_task',
+          ownerId: 'schedule-run-1',
+          deadlineAt,
+        },
+      });
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(abortRun).toHaveBeenCalledWith(
+        expect.objectContaining({ gatewayManager: expect.anything() }),
+        { sessionKey: 'agent:main:scheduled-deadline', runId: undefined },
+      );
+      expect(supervisor.get('agent:main:scheduled-deadline')).toMatchObject({
+        phase: 'interrupted',
+        runtimePolicy: { origin: 'scheduled_task', ownerId: 'schedule-run-1', deadlineAt },
+      });
+      expect(events.at(-1)).toMatchObject({
+        type: 'run.interrupted',
+        payload: { reason: 'hard-deadline' },
+      });
     } finally {
       vi.useRealTimers();
     }

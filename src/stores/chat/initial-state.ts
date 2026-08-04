@@ -18,7 +18,7 @@ export const initialChatDataState: Pick<
   | 'thinkingLevel'
   | 'pendingNewSessionModel'
   | 'pendingProjectId'
-  | 'pendingWorkflow'
+  | 'workflowChatUiBySessionKey'
 > = {
   messages: [],
   loading: false,
@@ -34,7 +34,7 @@ export const initialChatDataState: Pick<
   thinkingLevel: null,
   pendingNewSessionModel: null,
   pendingProjectId: null,
-  pendingWorkflow: null,
+  workflowChatUiBySessionKey: {},
 };
 
 export const CHAT_PERSISTENCE_NAME = 'stoclaw-chat-session-labels';

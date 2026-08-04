@@ -982,7 +982,6 @@ export function Sidebar() {
             pendingProjectId: null,
             messages: [],
             loading: false,
-            pendingWorkflow: null,
           });
         }
         return;
@@ -1782,7 +1781,6 @@ export function Sidebar() {
             pendingProjectId: null,
             messages: [],
             loading: false,
-            pendingWorkflow: null,
           });
         } else {
           useChatStore.getState().clearPendingWorkflowMemory();

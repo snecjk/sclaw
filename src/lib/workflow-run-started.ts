@@ -101,7 +101,7 @@ export async function applyWorkflowRunStarted(
     title: templateName,
     paramsSummary: resolvedUserText,
   });
-  useChatStore.getState().clearPendingWorkflow();
+  useChatStore.getState().clearPendingWorkflow(sessionKey);
 
   return true;
 }

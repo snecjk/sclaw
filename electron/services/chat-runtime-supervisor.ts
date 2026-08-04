@@ -11,6 +11,7 @@ import {
   type CanonicalChatEventType,
   type ChatRunPhase,
   type ChatRuntimeSnapshot,
+  type ChatRuntimePolicy,
   isTerminalChatRunPhase,
 } from '../../shared/chat-runtime-protocol';
 import { logger } from '../utils/logger';
@@ -23,6 +24,17 @@ const ERROR_RECOVERY_GRACE_MS = 15_000;
 const RUN_HARD_DEADLINE_MS = 20 * 60_000;
 const HISTORY_POLL_START_DELAY_MS = 1_000;
 const HISTORY_POLL_INTERVAL_MS = 2_000;
+
+function normalizeRuntimePolicy(
+  policy: ChatRuntimePolicy | undefined,
+  startedAt: number,
+): ChatRuntimePolicy {
+  return {
+    origin: policy?.origin ?? 'interactive',
+    ownerId: policy?.ownerId,
+    deadlineAt: policy?.deadlineAt === undefined ? startedAt + RUN_HARD_DEADLINE_MS : policy.deadlineAt,
+  };
+}
 
 type SupervisorEventMap = {
   event: [CanonicalChatEvent];
@@ -163,6 +175,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
   private readonly historyPollTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly projectedTranscriptEvents = new Map<string, Set<string>>();
   private initialized = false;
+  private initializePromise: Promise<void> | null = null;
 
   constructor(private readonly gatewayManager: GatewayManager) {
     super();
@@ -171,7 +184,17 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
-    this.initialized = true;
+    if (this.initializePromise) return this.initializePromise;
+    this.initializePromise = this.initializeFromRepository();
+    try {
+      await this.initializePromise;
+      this.initialized = true;
+    } finally {
+      this.initializePromise = null;
+    }
+  }
+
+  private async initializeFromRepository(): Promise<void> {
     try {
       const active = await getChatRuntimeRepository().listActive();
       const latestBySession = new Map<string, ChatRuntimeSnapshot>();
@@ -191,6 +214,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       for (const stored of latestBySession.values()) {
         const recovered: ChatRuntimeSnapshot = {
           ...stored,
+          runtimePolicy: normalizeRuntimePolicy(stored.runtimePolicy, stored.startedAt),
           phase: 'reconciling',
           epoch: stored.epoch + 1,
           sequence: 0,
@@ -199,6 +223,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         this.snapshots.set(recovered.sessionKey, recovered);
         await this.persist(recovered, true);
         this.scheduleRecovery(recovered.sessionKey, Date.now());
+        this.scheduleHardDeadline(recovered.sessionKey, recovered.epoch);
         this.scheduleHistoryPoll(recovered.sessionKey);
       }
       await getChatRuntimeRepository().prune();
@@ -221,6 +246,28 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     }
   }
 
+  async getByOwner(origin: ChatRuntimePolicy['origin'], ownerId: string): Promise<ChatRuntimeSnapshot | null> {
+    const inMemory = [...this.snapshots.values()].find((snapshot) => (
+      snapshot.runtimePolicy?.origin === origin && snapshot.runtimePolicy.ownerId === ownerId
+    ));
+    return inMemory ?? getChatRuntimeRepository().getByOwner(origin, ownerId);
+  }
+
+  async adoptPolicy(
+    sessionKey: string,
+    idempotencyKey: string,
+    runtimePolicy: ChatRuntimePolicy,
+  ): Promise<ChatRuntimeSnapshot | null> {
+    const current = this.snapshots.get(sessionKey)
+      ?? await getChatRuntimeRepository().getByIdempotencyKey(sessionKey, idempotencyKey);
+    if (!current || current.idempotencyKey !== idempotencyKey) return null;
+    const next = { ...current, runtimePolicy: normalizeRuntimePolicy(runtimePolicy, current.startedAt), updatedAt: Date.now() };
+    this.snapshots.set(sessionKey, next);
+    await this.persist(next, true);
+    if (!isTerminalChatRunPhase(next.phase)) this.scheduleHardDeadline(sessionKey, next.epoch);
+    return next;
+  }
+
   listActive(): ChatRuntimeSnapshot[] {
     return [...this.snapshots.values()].filter((snapshot) => !isTerminalChatRunPhase(snapshot.phase));
   }
@@ -229,6 +276,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     sessionKey: string;
     idempotencyKey: string;
     engineType: AgentEngineType;
+    runtimePolicy?: ChatRuntimePolicy;
   }): Promise<ChatRuntimeSnapshot> {
     await this.initialize();
     let replay: ChatRuntimeSnapshot | null = null;
@@ -254,6 +302,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       sessionKey: input.sessionKey,
       runId: null,
       idempotencyKey: input.idempotencyKey,
+      runtimePolicy: normalizeRuntimePolicy(input.runtimePolicy, now),
       engineType: input.engineType,
       phase: 'dispatching',
       epoch: (prior?.epoch ?? 0) + 1,
@@ -355,6 +404,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         sessionKey,
         runId: event.runId ?? null,
         idempotencyKey: null,
+        runtimePolicy: normalizeRuntimePolicy(undefined, now),
         engineType: engineType ?? inferEngineType(sessionKey),
         phase: 'running',
         epoch: 1,
@@ -425,6 +475,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       sessionKey: snapshot.sessionKey,
       runId: snapshot.runId,
       idempotencyKey: snapshot.idempotencyKey ?? undefined,
+      runtimePolicy: snapshot.runtimePolicy,
       engineType: snapshot.engineType,
       epoch: snapshot.epoch,
       sequence: snapshot.sequence,
@@ -605,16 +656,37 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
 
   private scheduleHardDeadline(sessionKey: string, epoch: number): void {
     this.clearHardDeadline(sessionKey);
+    const snapshot = this.snapshots.get(sessionKey);
+    const deadlineAt = snapshot?.runtimePolicy.deadlineAt;
+    if (deadlineAt == null) return;
+    const delay = Math.max(0, deadlineAt - Date.now());
     const timer = setTimeout(() => {
       this.hardDeadlineTimers.delete(sessionKey);
       const current = this.snapshots.get(sessionKey);
       if (!current || current.epoch !== epoch || isTerminalChatRunPhase(current.phase)) return;
-      void this.publish({
-        ...current,
-        error: 'The run exceeded the maximum wait time and may still be executing in the background.',
-      }, 'run.interrupted', { reason: 'hard-deadline' }, true);
-    }, RUN_HARD_DEADLINE_MS);
+      void this.interruptByPolicy(current, 'hard-deadline');
+    }, delay);
     this.hardDeadlineTimers.set(sessionKey, timer);
+  }
+
+  private async interruptByPolicy(snapshot: ChatRuntimeSnapshot, reason: string): Promise<void> {
+    let abortError: string | undefined;
+    try {
+      const adapter = await getAdapterForSession(snapshot.sessionKey, snapshot.engineType);
+      const result = await adapter.abortRun(
+        { gatewayManager: this.gatewayManager },
+        { sessionKey: snapshot.sessionKey, runId: snapshot.runId ?? undefined },
+      );
+      if (!result.success) abortError = result.error ?? 'engine abort returned non-success';
+    } catch (error) {
+      abortError = error instanceof Error ? error.message : String(error);
+    }
+    const current = this.snapshots.get(snapshot.sessionKey);
+    if (!current || isTerminalChatRunPhase(current.phase) || current.epoch !== snapshot.epoch) return;
+    await this.publish({
+      ...current,
+      error: 'The run exceeded its configured deadline.',
+    }, 'run.interrupted', { reason, ...(abortError ? { abortError } : {}) }, true);
   }
 
   private clearHardDeadline(sessionKey: string): void {

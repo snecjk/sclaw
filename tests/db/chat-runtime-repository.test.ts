@@ -9,6 +9,7 @@ function snapshot(overrides: Partial<ChatRuntimeSnapshot> = {}): ChatRuntimeSnap
     sessionKey: 'agent:main:session-1',
     runId: null,
     idempotencyKey: 'message-1',
+    runtimePolicy: { origin: 'interactive', deadlineAt: 1_200_100 },
     engineType: 'openclaw',
     phase: 'dispatching',
     epoch: 1,
@@ -72,5 +73,39 @@ describe('chat runtime repository', () => {
     }));
     await expect(repository.listActive()).resolves.toEqual([]);
   });
-});
 
+  it('persists scheduled-task ownership and resolves a run by owner', async () => {
+    await repository.upsert(snapshot({
+      runtimePolicy: {
+        origin: 'scheduled_task',
+        ownerId: 'schedule-run-1',
+        deadlineAt: 60_100,
+      },
+    }));
+
+    await expect(repository.getByOwner('scheduled_task', 'schedule-run-1')).resolves.toMatchObject({
+      runtimePolicy: {
+        origin: 'scheduled_task',
+        ownerId: 'schedule-run-1',
+        deadlineAt: 60_100,
+      },
+    });
+  });
+
+  it('prunes terminal overflow with SQLite-compatible limit and offset syntax', async () => {
+    await Promise.all(Array.from({ length: 501 }, (_, index) => repository.upsert(snapshot({
+      sessionKey: `agent:main:terminal-${index}`,
+      idempotencyKey: `message-${index}`,
+      runId: `run-${index}`,
+      phase: 'completed',
+      terminalAt: 10_000 + index,
+      updatedAt: 10_000 + index,
+    }))));
+
+    await expect(repository.prune(20_000)).resolves.toBeUndefined();
+    const row = memory.db.prepare('SELECT COUNT(*) AS count FROM chat_runtime_runs').get() as { count: number };
+    expect(row.count).toBe(500);
+    await expect(repository.getLatestForSession('agent:main:terminal-500')).resolves.not.toBeNull();
+    await expect(repository.getLatestForSession('agent:main:terminal-0')).resolves.toBeNull();
+  });
+});

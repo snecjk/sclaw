@@ -207,7 +207,9 @@ export const ChatMessage = memo(function ChatMessage({
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
-  const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
+  const pendingWorkflow = useChatStore(
+    (s) => s.workflowChatUiBySessionKey[s.currentSessionKey]?.pendingWorkflow ?? null,
+  );
   const sessionKey = useChatStore((s) => s.currentSessionKey);
   const workflowCardStates = EMPTY_WORKFLOW_CARD_STATES;
   const workflowCard = null;

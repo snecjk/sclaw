@@ -2,6 +2,12 @@ export const CHAT_RUNTIME_PROTOCOL_VERSION = 1 as const;
 
 export type ChatEngineType = 'openclaw' | 'claude';
 
+export interface ChatRuntimePolicy {
+  origin: 'interactive' | 'scheduled_task' | 'channel';
+  ownerId?: string;
+  deadlineAt?: number | null;
+}
+
 export type ChatRunPhase =
   | 'dispatching'
   | 'uncertain'
@@ -33,6 +39,7 @@ export interface CanonicalChatEvent {
   sessionKey: string;
   runId: string | null;
   idempotencyKey?: string;
+  runtimePolicy?: ChatRuntimePolicy;
   engineType: ChatEngineType;
   epoch: number;
   sequence: number;
@@ -46,6 +53,7 @@ export interface ChatRuntimeSnapshot {
   sessionKey: string;
   runId: string | null;
   idempotencyKey: string | null;
+  runtimePolicy: ChatRuntimePolicy;
   engineType: ChatEngineType;
   phase: ChatRunPhase;
   epoch: number;
@@ -68,4 +76,3 @@ export const TERMINAL_CHAT_RUN_PHASES: ReadonlySet<ChatRunPhase> = new Set([
 export function isTerminalChatRunPhase(phase: ChatRunPhase): boolean {
   return TERMINAL_CHAT_RUN_PHASES.has(phase);
 }
-

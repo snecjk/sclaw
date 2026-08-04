@@ -10,7 +10,6 @@ import {
 } from './user-message-merge';
 import {
   absorbWorkflowSchemaFromToolResults,
-  mergeParameterFormBlocksFromCurrent,
 } from './parameter-form-recovery';
 import { mergeHistoryWhenShrunk } from './history-merge';
 import type { RawMessage } from './types';
@@ -51,20 +50,14 @@ export function mergeHistoryDisplayMessages(input: {
   getMessageText: (content: unknown) => string;
 }): RawMessage[] {
   const {
-    currentMessages,
     gatewaySessionLabel,
-    getMessageText,
     sessionKey,
     sessionLabels,
     sending,
     userMessageAt,
   } = input;
 
-  let messages = mergeParameterFormBlocksFromCurrent(
-    input.messages,
-    currentMessages,
-    getMessageText,
-  );
+  let messages = input.messages;
   messages = recoverInitialUserFromSessionLabel(
     messages,
     sessionKey,

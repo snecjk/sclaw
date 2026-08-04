@@ -625,7 +625,6 @@ export function createSessionLifecycleActions(
               ? removeSidebarRecentOrderKey(s.sidebarRecentOrder, currentSessionKey)
               : s.sidebarRecentOrder,
             messages: [],
-            pendingWorkflow: null,
           }));
         touchSessionReadAt(DEFAULT_SESSION_KEY);
         clearSessionSendReadiness(DEFAULT_SESSION_KEY);
@@ -705,7 +704,6 @@ export function createSessionLifecycleActions(
           sessionLastActivity: nextSessionLastActivity,
           sidebarRecentOrder: buildInitialSidebarRecentOrder(recentSessions, nextSessionLastActivity),
           messages: [],
-          pendingWorkflow: null,
         };
       });
       // 新建即视为已读，写入已读水位；后续该会话前台完成的迟到事件不会误标未读。

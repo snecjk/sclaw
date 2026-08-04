@@ -1,6 +1,5 @@
 import {
   ensureWorkflowParameterFormInjected,
-  patchLastAssistantWithWorkflowForm,
   reconcilePendingWorkflowForSession,
   recoverParameterFormsOnHistoryLoad,
 } from './parameter-form-recovery';
@@ -185,13 +184,8 @@ export function applyLoadedHistorySnapshot(input: {
     thinkingLevel,
   });
   if (formRecovery.deferSet) {
-    const deferredPatched = patchLastAssistantWithWorkflowForm(
-      formRecovery.messages,
-      getMessageText,
-      { rawMessages: preparedRawMessages },
-    );
     set({
-      messages: deferredPatched,
+      messages: formRecovery.messages,
       thinkingLevel,
       loading: false,
     });
@@ -200,14 +194,13 @@ export function applyLoadedHistorySnapshot(input: {
       get,
       set,
       sessionKey: targetSessionKey,
-      messages: deferredPatched,
+      messages: formRecovery.messages,
       rawMessages: preparedRawMessages,
       patchWorkflowForm: true,
     });
     return;
   }
   finalMessages = formRecovery.messages;
-  finalMessages = patchLastAssistantWithWorkflowForm(finalMessages, getMessageText, { rawMessages: preparedRawMessages });
 
   set({
     messages: finalMessages,

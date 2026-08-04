@@ -5,12 +5,14 @@ import type { AgentMemoryContextBlocks } from '../../shared/agent-memory-prompt'
 import { agentMemoryContextService } from './agent-memory-context-service';
 import { getMemoryTurnCoordinator } from './memory-turn-coordinator';
 import { getChatRuntimeSupervisor } from './chat-runtime-supervisor';
+import type { ChatRuntimePolicy } from '../../shared/chat-runtime-protocol';
 
 type ChatSendResult = { success: boolean; result?: { runId?: string }; error?: string };
 
 export type MainChatSendInput = EngineSendParams & {
   sourceText?: string;
   engineType: AgentEngineType;
+  runtimePolicy?: ChatRuntimePolicy;
 };
 
 export function runMainChatSend(
@@ -25,6 +27,7 @@ export function runMainChatSend(
       sessionKey: input.sessionKey,
       idempotencyKey: input.idempotencyKey,
       engineType: input.engineType,
+      runtimePolicy: input.runtimePolicy,
     });
     if (
       runtime.acceptanceResult

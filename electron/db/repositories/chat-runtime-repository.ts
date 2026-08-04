@@ -31,6 +31,11 @@ function mapRow(row: Record<string, unknown>): ChatRuntimeSnapshot {
     sessionKey: String(row.session_key),
     runId: row.run_id == null ? null : String(row.run_id),
     idempotencyKey: row.idempotency_key == null ? null : String(row.idempotency_key),
+    runtimePolicy: {
+      origin: row.origin === 'scheduled_task' || row.origin === 'channel' ? row.origin : 'interactive',
+      ownerId: row.owner_id == null ? undefined : String(row.owner_id),
+      deadlineAt: row.deadline_at == null ? null : Number(row.deadline_at),
+    },
     engineType: String(row.engine_type) === 'claude' ? 'claude' : 'openclaw',
     phase: String(row.phase) as ChatRunPhase,
     epoch: Number(row.epoch),
@@ -66,6 +71,18 @@ export class ChatRuntimeRepository {
     return row ? mapRow(row as Record<string, unknown>) : null;
   }
 
+  async getByOwner(origin: ChatRuntimeSnapshot['runtimePolicy']['origin'], ownerId: string): Promise<ChatRuntimeSnapshot | null> {
+    const row = await getKyselyDatabase()
+      .selectFrom('chat_runtime_runs')
+      .selectAll()
+      .where('origin', '=', origin)
+      .where('owner_id', '=', ownerId)
+      .orderBy('updated_at', 'desc')
+      .limit(1)
+      .executeTakeFirst();
+    return row ? mapRow(row as Record<string, unknown>) : null;
+  }
+
   async listActive(): Promise<ChatRuntimeSnapshot[]> {
     const rows = await getKyselyDatabase()
       .selectFrom('chat_runtime_runs')
@@ -81,6 +98,12 @@ export class ChatRuntimeRepository {
   async upsert(snapshot: ChatRuntimeSnapshot): Promise<void> {
     const db = getKyselyDatabase();
     const idempotencyKey = snapshot.idempotencyKey ?? `runtime-${snapshot.sessionKey}-${snapshot.startedAt}`;
+    // Records and test fixtures created before protocol policy fields existed must
+    // remain writable during the compatibility window.
+    const runtimePolicy = snapshot.runtimePolicy ?? {
+      origin: 'interactive' as const,
+      deadlineAt: null,
+    };
     const existing = await this.getByIdempotencyKey(snapshot.sessionKey, idempotencyKey);
     const timestamp = new Date(snapshot.updatedAt).toISOString();
     const values = {
@@ -88,6 +111,9 @@ export class ChatRuntimeRepository {
       session_key: snapshot.sessionKey,
       run_id: snapshot.runId,
       idempotency_key: idempotencyKey,
+      origin: runtimePolicy.origin,
+      owner_id: runtimePolicy.ownerId ?? null,
+      deadline_at: runtimePolicy.deadlineAt ?? null,
       engine_type: snapshot.engineType,
       phase: snapshot.phase,
       epoch: snapshot.epoch,
@@ -104,6 +130,9 @@ export class ChatRuntimeRepository {
     if (existing) {
       await db.updateTable('chat_runtime_runs').set({
         run_id: values.run_id,
+        origin: values.origin,
+        owner_id: values.owner_id,
+        deadline_at: values.deadline_at,
         phase: values.phase,
         epoch: values.epoch,
         sequence: values.sequence,
@@ -137,6 +166,9 @@ export class ChatRuntimeRepository {
       .select('id')
       .where('phase', 'in', ['completed', 'failed', 'aborted', 'interrupted'])
       .orderBy('updated_at', 'desc')
+      // SQLite does not allow a bare OFFSET. LIMIT -1 means "all remaining
+      // rows" while retaining the intended top-500 terminal records.
+      .limit(-1)
       .offset(MAX_RECORDS)
       .execute();
     if (overflow.length > 0) {

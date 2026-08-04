@@ -141,6 +141,29 @@ export interface ToolStatus {
   updatedAt: number;
 }
 
+export interface PendingWorkflow {
+  templateId: string;
+  templateName: string;
+  schema: import('@/types/workflow').WorkflowSchema;
+  schemaHash: string;
+  workflowId?: string;
+  collectedInputs?: Record<string, unknown>;
+  dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[];
+  frontendFormInserted?: boolean;
+  modelGuidanceSent?: boolean;
+}
+
+export interface WorkflowFormDecoration {
+  templateId: string;
+  schemaHash: string;
+  assistantMessageId?: string;
+}
+
+export interface WorkflowChatUiSessionState {
+  pendingWorkflow: PendingWorkflow | null;
+  formDecorations: WorkflowFormDecoration[];
+}
+
 export interface ChatState {
   // Messages
   messages: RawMessage[];
@@ -178,25 +201,11 @@ export interface ChatState {
   setPendingProjectId: (projectId: string | null) => void;
 
   // Workflow
-  pendingWorkflow: {
-    templateId: string;
-    templateName: string;
-    schema: import('@/types/workflow').WorkflowSchema;
-    schemaHash: string;
-    workflowId?: string;
-    collectedInputs?: Record<string, unknown>;
-    /** 工作流启动前用户在输入框 @ 的钉钉收件人（随对话上下文注入，由 Agent 按提示词决定是否发送）。 */
-    dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[];
-    /** Set to true when the frontend has already inserted a parameter_form inline.
-     *  Prevents maybeAppendWorkflowParameterForm from double-injecting. */
-    frontendFormInserted?: boolean;
-    /** Set after sendWithWorkflow has sent workflowContext to the model via Gateway. */
-    modelGuidanceSent?: boolean;
-  } | null;
-  setPendingWorkflow: (pending: ChatState['pendingWorkflow']) => void;
+  workflowChatUiBySessionKey: Record<string, WorkflowChatUiSessionState>;
+  setPendingWorkflow: (pending: PendingWorkflow | null, sessionKey?: string) => void;
   /** Drop in-memory pending only; keeps localStorage draft for session restore. */
-  clearPendingWorkflowMemory: () => void;
-  clearPendingWorkflow: () => void;
+  clearPendingWorkflowMemory: (sessionKey?: string) => void;
+  clearPendingWorkflow: (sessionKey?: string) => void;
 
   // Actions
   loadSessions: (options?: { force?: boolean }) => Promise<void>;

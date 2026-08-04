@@ -222,6 +222,8 @@ Chat workflow progress cards are durable SQLite-backed timeline items. A card is
 
 Chat run lifecycle is authoritative in Electron Main. `ChatRuntimeSupervisor` normalizes engine events, persists recovery state, and projects newly persisted current-turn history records into canonical events while a run is active. This keeps OpenClaw reasoning and tool chronology visible during execution even when its live assistant buffer contains only reply text; Renderer does not poll engine runtime state or interpret engine-specific completion rules.
 
+Scheduled chat runs register their task-run owner and optional task deadline with `ChatRuntimeSupervisor`. Schedule status is finalized only from canonical chat terminal events; startup recovery reconciles persisted runtime/history without resending an uncertain message, while the scheduler's stale-run reaper remains an orphan-lease fallback. Workflow starts persist chat-card metadata in the same Main-process transaction that first creates `wf_run`; Renderer registration is an idempotent compatibility repair. Workflow parameter-form state is session-scoped, and tool-result recovery decorates the display model without writing synthetic forms into engine transcript history. `WorkflowCard` retains its compact three-second snapshot polling behavior.
+
 ---
 
 ## Development

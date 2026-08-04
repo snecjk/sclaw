@@ -5,6 +5,9 @@ export interface ChatRuntimeRunsTable {
   session_key: string;
   run_id: string | null;
   idempotency_key: string;
+  origin: 'interactive' | 'scheduled_task' | 'channel';
+  owner_id: string | null;
+  deadline_at: number | null;
   engine_type: 'openclaw' | 'claude';
   phase: string;
   epoch: number;
@@ -18,4 +21,3 @@ export interface ChatRuntimeRunsTable {
   updated_at: string;
   version: Generated<number>;
 }
-
