@@ -34,6 +34,7 @@ import { useAgentsStore } from './stores/agents';
 import { useChatStore } from './stores/chat';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
 import { AccountSwitchFab } from './components/layout/AccountSwitchFab';
+import { UserWatermark } from './components/layout/UserWatermark';
 import { WorkflowCompletionNotifier } from './components/workflow/WorkflowCompletionNotifier';
 
 /**
@@ -364,7 +365,10 @@ function App() {
           />
         ) : null}
         {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
-          <AccountSwitchFab />
+          <>
+            <UserWatermark />
+            <AccountSwitchFab />
+          </>
         ) : null}
       </TooltipProvider>
     </ErrorBoundary>

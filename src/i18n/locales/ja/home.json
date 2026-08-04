@@ -8,8 +8,8 @@
       "placeholder": "本社精算照合表を作成してください"
     }
   },
-  "homeWorkflowCard": {
-    "footerHint": "クリックして起動"
+  "homeRecommend": {
+    "emptyCategory": "このカテゴリにはおすすめがありません"
   },
   "hero": {
     "title": "経営管理をより効率的に",

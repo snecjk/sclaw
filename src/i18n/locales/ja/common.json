@@ -154,7 +154,7 @@
             "authorizeLocalFile": "ローカルファイルを許可",
             "authorizeLocalFileOption": "ファイルを許可",
             "authorizeLocalFolderOption": "フォルダを許可",
-            "usedQuota": "使用済み {{used}} / {{quota}}"
+            "usedQuota": "ストレージ使用量 {{used}}/{{quota}}"
         },
         "drive": {
             "authorizedCount": "{{count}} 件のファイルを許可済み",

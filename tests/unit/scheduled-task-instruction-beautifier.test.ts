@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { isOverCollapsed, pickBeautifyModel, scoreBeautifyModel } from '../../electron/scheduled-tasks/scheduled-task-instruction-beautifier';
+import {
+  isOverCollapsed,
+  pickBeautifyModel,
+  resolveBeautifySystemPrompt,
+  resolveBeautifyType,
+  scoreBeautifyModel,
+} from '../../electron/scheduled-tasks/scheduled-task-instruction-beautifier';
 
 describe('scheduled-task-instruction-beautifier model pick', () => {
   it('prefers turbo over plus models', () => {
@@ -13,6 +19,25 @@ describe('scheduled-task-instruction-beautifier model pick', () => {
 
   it('falls back to preferred model when it is the only candidate', () => {
     expect(pickBeautifyModel(['qwen3.5-plus'], 'qwen3.5-plus')).toBe('qwen3.5-plus');
+  });
+});
+
+describe('beautify instruction type', () => {
+  it('defaults to task', () => {
+    expect(resolveBeautifyType(undefined)).toBe('task');
+    expect(resolveBeautifyType('task')).toBe('task');
+  });
+
+  it('accepts prompt', () => {
+    expect(resolveBeautifyType('prompt')).toBe('prompt');
+  });
+
+  it('uses different system prompts for task vs prompt', () => {
+    const taskPrompt = resolveBeautifySystemPrompt('task');
+    const promptPrompt = resolveBeautifySystemPrompt('prompt');
+    expect(taskPrompt).toContain('定时任务');
+    expect(promptPrompt).toContain('提示词模版');
+    expect(taskPrompt).not.toEqual(promptPrompt);
   });
 });
 
