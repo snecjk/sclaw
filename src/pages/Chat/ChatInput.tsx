@@ -69,7 +69,20 @@ import { inferMimeTypeFromPath } from '@/lib/preview-url';
 
 // ── Types ────────────────────────────────────────────────────────
 
-const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
+export const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
+
+export interface ChatDraftWorkflowMeta {
+  id: string;
+  name: string;
+  source?: string;
+}
+
+export interface ChatEditDraftEventDetail {
+  text?: string;
+  skill?: SkillMeta;
+  workflow?: ChatDraftWorkflowMeta;
+  prefixText?: string;
+}
 
 function logDingTalkMentionClient(message: string, data: unknown): void {
   void hostApiFetch('/api/logs/client', {
@@ -313,12 +326,25 @@ export function ChatInput({
     }
   }, [disabled]);
 
-  const applyEditDraftText = useCallback((rawText: string, skill?: SkillMeta) => {
-    const text = rawText.trim();
-    if (!text && !skill) return;
-    mentionEditorRef.current?.setPlainText(text);
+  const applyEditDraftText = useCallback((detail: ChatEditDraftEventDetail) => {
+    const text = detail.text?.trim() ?? '';
+    const prefixText = detail.prefixText?.trim() ?? '';
+    const skill = detail.skill;
+    const workflow = detail.workflow;
+    if (!text && !prefixText && !skill && !workflow) return;
+
+    mentionEditorRef.current?.setPlainText('');
+    if (prefixText) {
+      mentionEditorRef.current?.setPlainText(prefixText);
+    }
     if (skill) {
       mentionEditorRef.current?.insertSkill(skill.slug, skill.title);
+    }
+    if (workflow) {
+      mentionEditorRef.current?.insertWorkflow(workflow.id, workflow.name, workflow.source);
+    }
+    if (text) {
+      mentionEditorRef.current?.insertPlainText(text);
     }
     mentionEditorRef.current?.focus();
     setAttachments([]);
@@ -333,14 +359,19 @@ export function ChatInput({
 
   useEffect(() => {
     if (!editDraft) return;
-    applyEditDraftText(editDraft.text, editDraft.skill);
+    applyEditDraftText({ text: editDraft.text, skill: editDraft.skill });
     onEditDraftApplied?.();
   }, [applyEditDraftText, editDraft, onEditDraftApplied]);
 
   useEffect(() => {
     const handleEditDraftEvent = (event: Event) => {
-      const detail = (event as CustomEvent<{ text?: unknown; skill?: unknown }>).detail;
-      if (typeof detail?.text !== 'string') return;
+      const detail = (event as CustomEvent<{
+        text?: unknown;
+        skill?: unknown;
+        workflow?: unknown;
+        prefixText?: unknown;
+      }>).detail;
+      if (!detail || typeof detail !== 'object') return;
       const skill = detail.skill;
       const skillMeta =
         skill
@@ -349,7 +380,26 @@ export function ChatInput({
         && typeof (skill as SkillMeta).title === 'string'
           ? (skill as SkillMeta)
           : undefined;
-      applyEditDraftText(detail.text, skillMeta);
+      const workflow = detail.workflow;
+      const workflowMeta =
+        workflow
+        && typeof workflow === 'object'
+        && typeof (workflow as ChatDraftWorkflowMeta).id === 'string'
+        && typeof (workflow as ChatDraftWorkflowMeta).name === 'string'
+          ? {
+              id: (workflow as ChatDraftWorkflowMeta).id,
+              name: (workflow as ChatDraftWorkflowMeta).name,
+              source: typeof (workflow as ChatDraftWorkflowMeta).source === 'string'
+                ? (workflow as ChatDraftWorkflowMeta).source
+                : undefined,
+            }
+          : undefined;
+      applyEditDraftText({
+        text: typeof detail.text === 'string' ? detail.text : undefined,
+        prefixText: typeof detail.prefixText === 'string' ? detail.prefixText : undefined,
+        skill: skillMeta,
+        workflow: workflowMeta,
+      });
     };
 
     window.addEventListener(CHAT_EDIT_DRAFT_EVENT, handleEditDraftEvent);
