@@ -7,7 +7,7 @@ import { logChatFlow } from './chat-flow-log';
 import { useGatewayStore } from '../gateway';
 import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
 import { DEFAULT_SESSION_KEY, type ChatSession, type SendMessageOptions } from './types';
-import { normalizeAppError } from '@/lib/error-model';
+import { AppError, normalizeAppError } from '@/lib/error-model';
 import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
 import { resolveSkillGatewayText } from '@/lib/skill-gateway-text';
 import { appendSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
@@ -199,6 +199,12 @@ export function createSendActions(
 
 
         if (!result.success) {
+          if (result.error?.startsWith('CHAT_RUNTIME_UNAVAILABLE')) {
+            useChatRuntimeV2Store.getState().setError(
+              currentSessionKey,
+              new AppError('GATEWAY', '发送状态暂不可确认，请稍后使用原消息重试。'),
+            );
+          }
           logChatFlow('send.dispatch.failed', {
             sessionKey: currentSessionKey,
             idempotencyKey,

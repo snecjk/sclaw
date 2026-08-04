@@ -40,18 +40,50 @@ function resolveDispatchContext(ctx?: BuiltinToolDispatchContext): BuiltinToolDi
   };
 }
 
-const processedToolResults = new Set<string>();
+const MAX_PROCESSED_TOOL_RESULTS = 2_000;
+const processedToolResults = new Map<string, true>();
 
 function messageDedupeKey(msg: BuiltinToolResultMessage): string | null {
   return msg.id || msg.toolCallId || null;
 }
 
-function handleWorkflowSchemaReady(data: WorkflowSchemaReadyData, ctx: BuiltinToolDispatchContext): void {
-  applyWorkflowSchemaReady(data, ctx.sessionKey);
+function stableSerialize(value: unknown): string {
+  if (value == null || typeof value !== 'object') return JSON.stringify(value) ?? String(value);
+  if (Array.isArray(value)) return `[${value.map(stableSerialize).join(',')}]`;
+  return `{${Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, entry]) => `${JSON.stringify(key)}:${stableSerialize(entry)}`)
+    .join(',')}}`;
 }
 
-function handleWorkflowCreated(data: WorkflowCreatedData, ctx: BuiltinToolDispatchContext): void {
-  if (!data.workflowId || !data.templateId) return;
+function envelopeRevision(value: unknown): string {
+  const input = stableSerialize(value);
+  let hash = 2_166_136_261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16_777_619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function rememberProcessedResult(key: string): void {
+  processedToolResults.delete(key);
+  processedToolResults.set(key, true);
+  while (processedToolResults.size > MAX_PROCESSED_TOOL_RESULTS) {
+    const oldest = processedToolResults.keys().next().value as string | undefined;
+    if (!oldest) break;
+    processedToolResults.delete(oldest);
+  }
+}
+
+function handleWorkflowSchemaReady(data: WorkflowSchemaReadyData, ctx: BuiltinToolDispatchContext): boolean {
+  if (!data.templateId || !data.schemaHash || !data.schema) return false;
+  applyWorkflowSchemaReady(data, ctx.sessionKey);
+  return true;
+}
+
+function handleWorkflowCreated(data: WorkflowCreatedData, ctx: BuiltinToolDispatchContext): boolean {
+  if (!data.workflowId || !data.templateId) return false;
   saveWorkflowRecord(ctx.sessionKey, {
     workflowId: data.workflowId,
     templateId: data.templateId,
@@ -60,19 +92,19 @@ function handleWorkflowCreated(data: WorkflowCreatedData, ctx: BuiltinToolDispat
     collectedInputs: data.values ?? {},
     createdAt: Date.now(),
   });
-
+  return true;
 }
 
 async function handleWorkflowExecutionStarted(
   data: WorkflowExecutionStartedData,
   ctx: BuiltinToolDispatchContext,
-): Promise<void> {
+): Promise<boolean> {
   if (!data.runId || !data.workflowId) {
     toast.error('工作流执行结果缺少 runId 或 workflowId');
-    return;
+    return false;
   }
 
-  await applyWorkflowRunStarted({
+  return applyWorkflowRunStarted({
     sessionKey: ctx.sessionKey,
     agentId: ctx.agentId,
     workflowId: data.workflowId,
@@ -103,47 +135,54 @@ export async function dispatchBuiltinToolResult(
   ctx?: BuiltinToolDispatchContext,
 ): Promise<boolean> {
   const resolvedCtx = resolveDispatchContext(ctx);
-  const rawDedupeKey = messageDedupeKey(msg);
-  const dedupeKey = rawDedupeKey ? `${resolvedCtx.sessionKey}:${rawDedupeKey}` : null;
-  if (dedupeKey) {
-    if (processedToolResults.has(dedupeKey)) return false;
-    processedToolResults.add(dedupeKey);
-  }
-
   const envelope = parseStoToolEnvelope(msg.content) ?? parseStoToolEnvelope(msg);
+  if (!envelope?.success) return false;
+  const recognized = [
+    'workflow_schema_ready',
+    'workflow_created',
+    'workflow_execution_started',
+    'workflow_run_status',
+    'dingtalk_share_picker_opened',
+  ].includes(envelope.type);
+  if (!recognized) return false;
+  const rawDedupeKey = messageDedupeKey(msg);
+  const dedupeKey = rawDedupeKey
+    ? `${resolvedCtx.sessionKey}:${rawDedupeKey}:${envelope.type}:${envelopeRevision(envelope.data)}`
+    : null;
+  if (dedupeKey && processedToolResults.has(dedupeKey)) return false;
 
-  if (envelope?.type === 'workflow_schema_ready' && envelope.success) {
-    handleWorkflowSchemaReady((envelope.data ?? {}) as WorkflowSchemaReadyData, resolvedCtx);
-    return true;
+  let handled = false;
+
+  if (envelope.type === 'workflow_schema_ready') {
+    handled = handleWorkflowSchemaReady((envelope.data ?? {}) as WorkflowSchemaReadyData, resolvedCtx);
   }
 
-  if (envelope?.type === 'workflow_created' && envelope.success) {
-    handleWorkflowCreated((envelope.data ?? {}) as WorkflowCreatedData, resolvedCtx);
-    return true;
+  if (envelope.type === 'workflow_created') {
+    handled = handleWorkflowCreated((envelope.data ?? {}) as WorkflowCreatedData, resolvedCtx);
   }
 
-  if (envelope?.type === 'workflow_execution_started' && envelope.success) {
-    await handleWorkflowExecutionStarted(
+  if (envelope.type === 'workflow_execution_started') {
+    handled = await handleWorkflowExecutionStarted(
       (envelope.data ?? {}) as WorkflowExecutionStartedData,
       resolvedCtx,
     );
-    return true;
   }
 
-  if (envelope?.type === 'workflow_run_status' && envelope.success) {
+  if (envelope.type === 'workflow_run_status') {
     handleWorkflowRunStatus(
       (envelope.data ?? {}) as WorkflowRunStatusData,
       resolvedCtx,
     );
-    return true;
+    handled = true;
   }
 
-  if (envelope?.type === 'dingtalk_share_picker_opened' && envelope.success) {
+  if (envelope.type === 'dingtalk_share_picker_opened') {
     toast.success(envelope.message ?? '已请求打开钉钉；如未登录，请先完成登录后继续选择发送对象');
-    return true;
+    handled = true;
   }
 
-  return false;
+  if (handled && dedupeKey) rememberProcessedResult(dedupeKey);
+  return handled;
 }
 
 /** Test helper */

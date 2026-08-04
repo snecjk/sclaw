@@ -113,6 +113,34 @@ describe('dispatchBuiltinToolResult', () => {
     expect(applyWorkflowSchemaReady).toHaveBeenCalledTimes(1);
   });
 
+  it('does not let an incomplete projection consume the final envelope dedupe key', async () => {
+    expect(await dispatchBuiltinToolResult({ id: 'tool-partial', content: '{"type":' })).toBe(false);
+    expect(await dispatchBuiltinToolResult({
+      id: 'tool-partial',
+      content: JSON.stringify({
+        type: 'workflow_schema_ready',
+        success: true,
+        domain: 'workflow',
+        data: { templateId: 'tpl-final', schemaHash: 'final', schema: { fields: [] } },
+      }),
+    })).toBe(true);
+    expect(applyWorkflowSchemaReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows status revisions from the same tool call id', async () => {
+    const message = (status: string) => ({
+      id: 'tool-status-revision',
+      content: JSON.stringify({
+        type: 'workflow_run_status',
+        success: true,
+        domain: 'workflow',
+        data: { workflowId: 'wf-1', runId: 'run-1', status },
+      }),
+    });
+    expect(await dispatchBuiltinToolResult(message('running'))).toBe(true);
+    expect(await dispatchBuiltinToolResult(message('succeeded'))).toBe(true);
+  });
+
   it('does not collide identical tool ids across sessions', async () => {
     const msg = {
       id: 'tool-same-id',

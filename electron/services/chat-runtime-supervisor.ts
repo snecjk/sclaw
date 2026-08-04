@@ -24,13 +24,15 @@ const DELTA_PERSIST_THROTTLE_MS = 1_000;
 const ERROR_RECOVERY_GRACE_MS = 15_000;
 const RUN_HARD_DEADLINE_MS = 20 * 60_000;
 const HISTORY_POLL_START_DELAY_MS = 1_000;
-const HISTORY_POLL_INTERVAL_MS = 2_000;
+const HISTORY_POLL_BACKOFF_MS = [2_000, 4_000, 8_000] as const;
+const TRANSCRIPT_COMPENSATION_DELAYS_MS = [1_000, 3_000, 7_000] as const;
 const IDEMPOTENCY_REPLAY_WINDOW_MS = 10 * 60_000;
 
 export type BeginRuntimeResult =
   | { kind: 'created'; snapshot: ChatRuntimeSnapshot }
   | { kind: 'replay'; snapshot: ChatRuntimeSnapshot }
-  | { kind: 'expired_key'; snapshot: ChatRuntimeSnapshot };
+  | { kind: 'expired_key'; snapshot: ChatRuntimeSnapshot }
+  | { kind: 'unavailable'; error: string };
 
 function normalizeRuntimePolicy(
   policy: ChatRuntimePolicy | undefined,
@@ -77,14 +79,25 @@ function messageOccurredAt(message: Record<string, unknown> | null): number {
 }
 
 function currentRunTranscriptMessages(snapshot: ChatRuntimeSnapshot, messages: unknown[]): unknown[] {
+  const idempotencyKey = snapshot.idempotencyKey?.trim();
+  if (idempotencyKey) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = getRecord(messages[index]);
+      if (String(message?.role ?? '').toLowerCase() !== 'user') continue;
+      const metadata = getRecord(message?.metadata);
+      const messageKey = message?.idempotencyKey ?? message?.idempotency_key
+        ?? metadata?.idempotencyKey ?? metadata?.idempotency_key;
+      if (messageKey === idempotencyKey) return messages.slice(index + 1);
+    }
+  }
   let currentUserIndex = -1;
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = getRecord(messages[index]);
     if (String(message?.role ?? '').toLowerCase() !== 'user') continue;
     const occurredAt = messageOccurredAt(message);
-    // OpenClaw history normally includes a timestamp. A small allowance keeps
-    // second-rounded timestamps from excluding the user message that began the run.
-    if (occurredAt > 0 && occurredAt < snapshot.startedAt - 2_000) return [];
+    // Legacy transcripts do not carry idempotency metadata. Allow clock skew, but
+    // never project a clearly older turn into the current run.
+    if (occurredAt > 0 && occurredAt < snapshot.startedAt - 60_000) return [];
     currentUserIndex = index;
     break;
   }
@@ -93,11 +106,26 @@ function currentRunTranscriptMessages(snapshot: ChatRuntimeSnapshot, messages: u
 
 function transcriptMessageFingerprint(message: Record<string, unknown>, index: number): string {
   const identity = message.id ?? message.messageId ?? message.toolCallId ?? message.tool_call_id ?? index;
-  try {
-    return `${String(identity)}\u0000${JSON.stringify(message) ?? ''}`;
-  } catch {
-    return `${String(identity)}\u0000${String(message.content ?? message.text ?? '')}`;
-  }
+  const role = String(message.role ?? '');
+  const content = message.content ?? message.text ?? '';
+  const blocks = Array.isArray(content) ? content : [];
+  const text = typeof content === 'string'
+    ? content
+    : blocks.map((block) => String(getRecord(block)?.text ?? '')).join('');
+  const toolStatus = String(message.status ?? message.state ?? message.phase ?? '');
+  const toolRevision = String(message.revision ?? message.updatedAt ?? message.updated_at ?? '');
+  const toolOutput = message.result ?? message.output ?? message.toolResult ?? '';
+  const outputLength = typeof toolOutput === 'string'
+    ? toolOutput.length
+    : Array.isArray(toolOutput) ? toolOutput.length : toolOutput && typeof toolOutput === 'object' ? Object.keys(toolOutput).length : 0;
+  return [identity, role, text.length, blocks.length, toolStatus, toolRevision, outputLength].join('\u0000');
+}
+
+interface RunDiagnostics {
+  polls: number;
+  transcriptRevisions: number;
+  canonicalEvents: number;
+  databaseWrites: number;
 }
 
 function eventTypeForEngineEvent(event: NormalizedEngineEvent): CanonicalChatEventType {
@@ -120,11 +148,14 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
   private readonly errorTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly hardDeadlineTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly historyPollTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly historyPollBackoff = new Map<string, number>();
   private readonly projectedTranscriptEvents = new Map<string, Set<string>>();
   private readonly dirtySnapshots = new Map<string, ChatRuntimeSnapshot>();
   private readonly persistTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly persistOperations = new Map<string, Promise<void>>();
   private readonly transcriptSettleRuns = new Map<string, Promise<void>>();
+  private readonly transcriptCompensationRuns = new Map<string, Promise<void>>();
+  private readonly diagnostics = new Map<string, RunDiagnostics>();
   private initializationState: 'uninitialized' | 'initializing' | 'ready' | 'degraded' = 'uninitialized';
   private initializePromise: Promise<void> | null = null;
   private initializeRetryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -272,15 +303,17 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     try {
       await this.initialize();
     } catch (error) {
-      // Persistence recovery is degraded, but an interactive send can still be
-      // tracked safely in memory while the scheduled initialization retry heals it.
-      logger.warn('[chat-runtime] continuing send with degraded persistence', { error: String(error) });
+      const message = `CHAT_RUNTIME_UNAVAILABLE: ${error instanceof Error ? error.message : String(error)}`;
+      logger.warn('[chat-runtime] send rejected because persistence is unavailable', { error: message });
+      return { kind: 'unavailable', error: message };
     }
-    let replay: ChatRuntimeSnapshot | null = null;
+    let replay: ChatRuntimeSnapshot | null;
     try {
       replay = await getChatRuntimeRepository().getByIdempotencyKey(input.sessionKey, input.idempotencyKey);
     } catch (error) {
-      logger.debug('[chat-runtime] idempotency repository unavailable', { error: String(error) });
+      const message = `CHAT_RUNTIME_UNAVAILABLE: ${error instanceof Error ? error.message : String(error)}`;
+      logger.warn('[chat-runtime] idempotency check unavailable; send rejected', { error: message });
+      return { kind: 'unavailable', error: message };
     }
     if (replay) {
       this.snapshots.set(input.sessionKey, replay);
@@ -314,6 +347,13 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       updatedAt: now,
     };
     this.projectedTranscriptEvents.delete(input.sessionKey);
+    this.historyPollBackoff.delete(input.sessionKey);
+    this.diagnostics.set(input.sessionKey, {
+      polls: 0,
+      transcriptRevisions: 0,
+      canonicalEvents: 0,
+      databaseWrites: 0,
+    });
     this.snapshots.set(input.sessionKey, snapshot);
     await this.publish(snapshot, 'run.dispatching', { idempotencyKey: input.idempotencyKey }, true);
     this.scheduleHardDeadline(input.sessionKey, snapshot.epoch);
@@ -338,8 +378,12 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     engineType: AgentEngineType;
     result?: unknown;
   }): Promise<void> {
-    const current = this.snapshots.get(input.sessionKey)
-      ?? (await this.beginUnlocked(input)).snapshot;
+    let current = this.snapshots.get(input.sessionKey);
+    if (!current) {
+      const beginResult = await this.beginUnlocked(input);
+      if (beginResult.kind === 'unavailable') return;
+      current = beginResult.snapshot;
+    }
     if (current.idempotencyKey !== input.idempotencyKey) return;
     if (isTerminalChatRunPhase(current.phase)) {
       const metadata = patchTerminalRuntimeMetadata(current, {
@@ -488,6 +532,9 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     const payload = 'message' in event ? event.message : getRecord(event)?.runtimeResult;
     const liveMessage = getRecord(payload);
     if (liveMessage && (event.type === 'message.delta' || event.type === 'message.final' || event.type === 'tool.result')) {
+      // Reliable live progress lets history projection back off until a persisted
+      // reasoning/tool revision actually changes.
+      this.historyPollBackoff.set(sessionKey, 1);
       let projected = this.projectedTranscriptEvents.get(sessionKey);
       if (!projected) {
         projected = new Set<string>();
@@ -549,6 +596,8 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       type,
       payload,
     };
+    const diagnostics = this.diagnostics.get(snapshot.sessionKey);
+    if (diagnostics) diagnostics.canonicalEvents += 1;
     this.emit('event', event);
     await this.persist(snapshot, forcePersist || isTerminalChatRunPhase(phase));
     if (isTerminalChatRunPhase(phase)) this.clearRecovery(snapshot.sessionKey);
@@ -569,6 +618,18 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       epoch: snapshot.epoch,
       sequence: snapshot.sequence,
     });
+    if (isTerminalChatRunPhase(phase) && type !== 'transcript.updated') {
+      logger.info('[chat-runtime] run diagnostics', {
+        sessionKey: snapshot.sessionKey,
+        runId: snapshot.runId,
+        ...(this.diagnostics.get(snapshot.sessionKey) ?? {
+          polls: 0,
+          transcriptRevisions: 0,
+          canonicalEvents: 0,
+          databaseWrites: 0,
+        }),
+      });
+    }
   }
 
   private async persist(snapshot: ChatRuntimeSnapshot, force: boolean): Promise<void> {
@@ -606,6 +667,8 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         const current = this.dirtySnapshots.get(sessionKey);
         if (current === snapshot) this.dirtySnapshots.delete(sessionKey);
         this.lastPersistedAt.set(sessionKey, Date.now());
+        const diagnostics = this.diagnostics.get(sessionKey);
+        if (diagnostics && result !== 'stale') diagnostics.databaseWrites += 1;
         if (result === 'stale') {
           logger.debug('[chat-runtime] stale persistence rejected', {
             sessionKey,
@@ -725,8 +788,15 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         this.snapshots.set(sessionKey, next);
         await this.persist(next, true);
       } else if (inspection?.status === 'completed') {
-        if (latest.phase === 'awaiting_transcript') this.startTranscriptSettle(latest, 'reconcile');
-        else await this.publish(latest, 'run.completed', { reconcileReason: 'adapter-inspection' }, true);
+        if (latest.phase !== 'awaiting_transcript') {
+          await this.publish(latest, 'run.awaiting_transcript', {
+            reconcileReason: 'adapter-inspection',
+          }, true);
+        }
+        const awaiting = this.snapshots.get(sessionKey);
+        if (awaiting && !isTerminalChatRunPhase(awaiting.phase)) {
+          this.startTranscriptSettle(awaiting, 'reconcile');
+        }
       } else if (inspection?.status === 'not_started') {
         await this.publish({ ...latest, error: 'The engine did not start this run.' }, 'run.interrupted', {
           reason: 'engine-not-started',
@@ -747,14 +817,15 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     }
   }
 
-  private async projectCurrentTranscript(snapshot: ChatRuntimeSnapshot, messages: unknown[]): Promise<void> {
+  private async projectCurrentTranscript(snapshot: ChatRuntimeSnapshot, messages: unknown[]): Promise<number> {
     const turnMessages = currentRunTranscriptMessages(snapshot, messages);
-    if (turnMessages.length === 0) return;
+    if (turnMessages.length === 0) return 0;
     let seen = this.projectedTranscriptEvents.get(snapshot.sessionKey);
     if (!seen) {
       seen = new Set<string>();
       this.projectedTranscriptEvents.set(snapshot.sessionKey, seen);
     }
+    let projectedCount = 0;
     for (let index = 0; index < turnMessages.length; index += 1) {
       const message = getRecord(turnMessages[index]);
       if (!message) continue;
@@ -765,13 +836,19 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       seen.add(fingerprint);
       if (seen.size > 500) seen.delete(seen.values().next().value as string);
       const latest = this.snapshots.get(snapshot.sessionKey);
-      if (!latest || isTerminalChatRunPhase(latest.phase)) return;
+      if (!latest || isTerminalChatRunPhase(latest.phase)) return projectedCount;
       await this.publish(
         latest,
         role === 'assistant' ? 'message.delta' : 'tool.updated',
         message,
       );
+      projectedCount += 1;
     }
+    if (projectedCount > 0) {
+      const diagnostics = this.diagnostics.get(snapshot.sessionKey);
+      if (diagnostics) diagnostics.transcriptRevisions += projectedCount;
+    }
+    return projectedCount;
   }
 
   private clearRecovery(sessionKey: string): void {
@@ -856,10 +933,20 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       // OpenClaw's live assistant buffer does not always include the persisted
       // reasoning/tool records. Project current-turn history even while deltas
       // are flowing so the canonical overlay stays chronologically complete.
+      const diagnostics = this.diagnostics.get(sessionKey);
+      if (diagnostics) diagnostics.polls += 1;
+      const before = this.projectedTranscriptEvents.get(sessionKey)?.size ?? 0;
       await this.reconcileSession(sessionKey, true);
+      const after = this.projectedTranscriptEvents.get(sessionKey)?.size ?? 0;
+      const changed = after > before;
+      const currentBackoff = this.historyPollBackoff.get(sessionKey) ?? 0;
+      const nextBackoff = changed
+        ? 0
+        : Math.min(currentBackoff + 1, HISTORY_POLL_BACKOFF_MS.length - 1);
+      this.historyPollBackoff.set(sessionKey, nextBackoff);
       const latest = this.snapshots.get(sessionKey);
       if (latest && !isTerminalChatRunPhase(latest.phase)) {
-        this.historyPollTimers.set(sessionKey, setTimeout(poll, HISTORY_POLL_INTERVAL_MS));
+        this.historyPollTimers.set(sessionKey, setTimeout(poll, HISTORY_POLL_BACKOFF_MS[nextBackoff]));
       }
     };
     this.historyPollTimers.set(sessionKey, setTimeout(poll, HISTORY_POLL_START_DELAY_MS));
@@ -915,6 +1002,59 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         reconcileReason: reason,
         transcriptPending: !confirmed,
       }, true);
+      const completed = this.snapshots.get(sessionKey);
+      if (!confirmed && completed?.phase === 'completed') {
+        this.startTranscriptCompensation(completed, reason);
+      }
+    });
+  }
+
+  private startTranscriptCompensation(snapshot: ChatRuntimeSnapshot, reason: string): void {
+    if (this.transcriptCompensationRuns.has(snapshot.sessionKey)) return;
+    const operation = this.compensateTranscript(snapshot.sessionKey, snapshot.epoch, reason);
+    this.transcriptCompensationRuns.set(snapshot.sessionKey, operation);
+    void operation.finally(() => {
+      if (this.transcriptCompensationRuns.get(snapshot.sessionKey) === operation) {
+        this.transcriptCompensationRuns.delete(snapshot.sessionKey);
+      }
+    }).catch(() => undefined);
+  }
+
+  private async compensateTranscript(sessionKey: string, epoch: number, reason: string): Promise<void> {
+    let previousRevision: string | undefined;
+    let latestRevision: string | undefined;
+    let confirmed = false;
+    for (const delay of TRANSCRIPT_COMPENSATION_DELAYS_MS) {
+      await new Promise<void>((resolve) => setTimeout(resolve, delay));
+      const current = this.snapshots.get(sessionKey);
+      if (!current || current.epoch !== epoch || current.phase !== 'completed') return;
+      try {
+        const adapter = await getAdapterForSession(sessionKey, current.engineType);
+        if (!adapter || typeof adapter.inspectRun !== 'function') return;
+        const inspection = await adapter.inspectRun(
+          { gatewayManager: this.gatewayManager },
+          { sessionKey, runId: current.runId, startedAt: current.startedAt, limit: 50 },
+        );
+        if (inspection.status !== 'completed' || !inspection.transcriptRevision) continue;
+        latestRevision = inspection.transcriptRevision;
+        if (previousRevision === latestRevision) {
+          confirmed = true;
+          break;
+        }
+        previousRevision = latestRevision;
+      } catch (error) {
+        logger.debug('[chat-runtime] transcript compensation deferred', { sessionKey, error: String(error) });
+      }
+    }
+    if (!latestRevision) return;
+    await this.enqueueSession(sessionKey, async () => {
+      const current = this.snapshots.get(sessionKey);
+      if (!current || current.epoch !== epoch || current.phase !== 'completed') return;
+      await this.publish(current, 'transcript.updated', {
+        transcriptRevision: latestRevision,
+        reconcileReason: `${reason}-compensation`,
+        confirmed,
+      }, true);
     });
   }
 
@@ -922,6 +1062,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     const timer = this.historyPollTimers.get(sessionKey);
     if (timer) clearTimeout(timer);
     this.historyPollTimers.delete(sessionKey);
+    this.historyPollBackoff.delete(sessionKey);
   }
 }
 

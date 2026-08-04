@@ -21,7 +21,6 @@ import { canStartWorkflow, useWorkflowsStore } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
 import { updateCurrentChatDisplayProjection } from '@/stores/chat/display-selectors';
 import { buildWorkflowStartUserText } from '@/lib/workflow-local-turn';
-import { registerStartedWorkflowChatCard } from '@/lib/workflow-chat-card-registration';
 import { buildWorkflowContextSummary, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
@@ -173,6 +172,7 @@ export async function createAndStartWorkflowDirect(
       inputs,
       idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
       sessionKey: context.sessionKey,
+      agentId: context.agentId,
       triggerType: 'chat',
       engineType: chooseImmediateWorkflowEngine(),
       chatCard: { title: templateName, paramsSummary: userText },
@@ -213,13 +213,6 @@ export async function createAndStartWorkflowDirect(
       '@/components/parameter-form/dismiss-parameter-form'
     );
     dismissWorkflowParameterFormsForTemplate(templateId);
-
-    await registerStartedWorkflowChatCard({
-      runId: run.runId,
-      sessionKey: context.sessionKey,
-      title: templateName,
-      paramsSummary: userText,
-    });
 
     // Clear pending state
     useChatStore.getState().clearPendingWorkflow(context.sessionKey);
@@ -287,6 +280,7 @@ export async function startExistingWorkflow(
       inputs,
       idempotencyKey,
       sessionKey: context.sessionKey,
+      agentId: context.agentId,
       triggerType: 'chat',
       engineType: chooseImmediateWorkflowEngine(),
       chatCard: { title: displayName, paramsSummary: originalText },

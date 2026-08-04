@@ -110,6 +110,67 @@ describe('main chat runtime supervisor', () => {
     }
   });
 
+  it('fails closed when persisted idempotency cannot be checked', async () => {
+    repository.getByIdempotencyKey.mockRejectedValueOnce(new Error('sqlite unavailable'));
+    const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+    const events: CanonicalChatEvent[] = [];
+    supervisor.on('event', (event) => events.push(event));
+
+    const result = await supervisor.begin({
+      sessionKey: 'agent:main:fail-closed',
+      idempotencyKey: 'message-fail-closed',
+      engineType: 'openclaw',
+    });
+
+    expect(result).toMatchObject({ kind: 'unavailable' });
+    expect(supervisor.get('agent:main:fail-closed')).toBeNull();
+    expect(events).toEqual([]);
+  });
+
+  it('publishes transcript.updated after a pending terminal transcript settles late', async () => {
+    vi.useFakeTimers();
+    try {
+      const inspectRun = vi.fn()
+        .mockResolvedValueOnce({ status: 'completed', transcriptRevision: 'r1' })
+        .mockResolvedValueOnce({ status: 'completed', transcriptRevision: 'r2' })
+        .mockResolvedValueOnce({ status: 'completed', transcriptRevision: 'r3' })
+        .mockResolvedValueOnce({ status: 'completed', transcriptRevision: 'r4' })
+        .mockResolvedValueOnce({ status: 'completed', transcriptRevision: 'late' })
+        .mockResolvedValueOnce({ status: 'completed', transcriptRevision: 'late' });
+      engine.getAdapterForSession.mockResolvedValue({
+        chatCapabilities: { requiresHistoryProjection: false },
+        inspectRun,
+      });
+      const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+      const events: CanonicalChatEvent[] = [];
+      supervisor.on('event', (event) => events.push(event));
+      await supervisor.begin({
+        sessionKey: 'agent:main:late-transcript',
+        idempotencyKey: 'message-late-transcript',
+        engineType: 'openclaw',
+      });
+      await supervisor.handleEngineEvent({
+        type: 'turn.completed',
+        sessionKey: 'agent:main:late-transcript',
+        runId: 'run-late-transcript',
+        seq: 1,
+      });
+
+      await vi.advanceTimersByTimeAsync(2_700);
+      expect(events.find((event) => event.type === 'run.completed')?.payload).toMatchObject({
+        transcriptPending: true,
+      });
+      await vi.advanceTimersByTimeAsync(4_000);
+      expect(events.at(-1)).toMatchObject({
+        type: 'transcript.updated',
+        payload: { transcriptRevision: 'late', confirmed: true },
+      });
+      expect(supervisor.get('agent:main:late-transcript')?.phase).toBe('completed');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('hydrates active runs into a new recovery epoch after main restart', async () => {
     vi.useFakeTimers();
     try {

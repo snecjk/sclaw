@@ -27,6 +27,7 @@ export type CanonicalChatEventType =
   | 'message.delta'
   | 'message.final'
   | 'tool.updated'
+  | 'transcript.updated'
   | 'run.awaiting_transcript'
   | 'run.completed'
   | 'run.failed'

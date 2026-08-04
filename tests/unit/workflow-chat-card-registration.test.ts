@@ -11,63 +11,11 @@ vi.mock('@/stores/workflow-chat-cards', () => ({
   refreshWorkflowChatCards: (...args: unknown[]) => refreshWorkflowChatCards(...args),
 }));
 
-vi.mock('@/stores/chat', () => ({
-  useChatStore: {
-    getState: () => ({
-      currentSessionKey: 'session-1',
-    }),
-  },
-}));
+import { attachMissingWorkflowChatCardAnchors } from '@/lib/workflow-chat-card-registration';
 
-vi.mock('@/stores/chat/display-selectors', () => ({
-  getSessionDisplayMessages: () => [
-    { id: 'user-anchor', role: 'user', content: '启动工作流' },
-  ],
-}));
-
-vi.mock('@/stores/chat/runtime-v2-store', () => ({
-  useChatRuntimeV2Store: {
-    getState: () => ({ sessionsByKey: {} }),
-  },
-}));
-
-import {
-  attachMissingWorkflowChatCardAnchors,
-  registerStartedWorkflowChatCard,
-} from '@/lib/workflow-chat-card-registration';
-
-describe('registerStartedWorkflowChatCard', () => {
+describe('workflow chat card anchor repair', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  it('registers against the latest user message and refreshes session refs', async () => {
-    registerChatWorkflowCard.mockResolvedValue(true);
-
-    await expect(registerStartedWorkflowChatCard({
-      runId: 'run-1',
-      sessionKey: 'session-1',
-      title: '天气工作流',
-    })).resolves.toBe(true);
-
-    expect(registerChatWorkflowCard).toHaveBeenCalledWith(expect.objectContaining({
-      runId: 'run-1',
-      sessionKey: 'session-1',
-      anchorUserMessageId: 'user-anchor',
-    }));
-    expect(refreshWorkflowChatCards).toHaveBeenCalledWith('session-1');
-  });
-
-  it('does not cache a card reference when Main cannot register the wf_run row', async () => {
-    registerChatWorkflowCard.mockResolvedValue(false);
-
-    await expect(registerStartedWorkflowChatCard({
-      runId: 'run-race',
-      sessionKey: 'session-1',
-      title: '天气工作流',
-    })).resolves.toBe(false);
-    expect(registerChatWorkflowCard).toHaveBeenCalledTimes(1);
-    expect(refreshWorkflowChatCards).not.toHaveBeenCalled();
   });
 
   it('enriches a standalone card with the latest durable user message before the run', async () => {

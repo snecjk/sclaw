@@ -12,6 +12,7 @@ const TARGET_PHASE: Record<CanonicalChatEventType, ChatRunPhase | null> = {
   'message.delta': 'running',
   'message.final': null,
   'tool.updated': 'running',
+  'transcript.updated': null,
   'run.awaiting_transcript': 'awaiting_transcript',
   'run.completed': 'completed',
   'run.failed': 'failed',

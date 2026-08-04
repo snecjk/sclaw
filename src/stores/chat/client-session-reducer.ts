@@ -34,6 +34,9 @@ export interface ClientSessionSyncState {
   status: 'uninitialized' | 'hydrating' | 'ready' | 'gapped';
   hydrationGeneration: number;
   pendingEvents: CanonicalChatEvent[];
+  retryCount: number;
+  retryAt: number | null;
+  bufferOverflowed: boolean;
 }
 
 export interface ChatMessageDecorations {
@@ -72,7 +75,14 @@ export function createClientSessionState(): ClientSessionState {
     decorations: { projectedMessages: null },
     runtime: null,
     error: null,
-    sync: { status: 'uninitialized', hydrationGeneration: 0, pendingEvents: [] },
+    sync: {
+      status: 'uninitialized',
+      hydrationGeneration: 0,
+      pendingEvents: [],
+      retryCount: 0,
+      retryAt: null,
+      bufferOverflowed: false,
+    },
     updatedAt: 0,
   };
 }
@@ -84,7 +94,9 @@ export function isSnapshotNewer(
   const current = state.runtime;
   if (!current) return true;
   if (snapshot.epoch !== current.epoch) return snapshot.epoch > current.epoch;
-  return snapshot.sequence >= current.sequence;
+  if (snapshot.sequence <= current.sequence) return false;
+  if (isTerminalChatRunPhase(current.phase) && !isTerminalChatRunPhase(snapshot.phase)) return false;
+  return true;
 }
 
 export function applyRuntimeSnapshot(
@@ -109,7 +121,12 @@ export function applyRuntimeSnapshot(
       ...state.overlay,
       awaitingTranscript: snapshot.phase === 'awaiting_transcript',
     },
-    sync: { ...state.sync, status: 'ready' },
+    sync: {
+      ...state.sync,
+      status: 'ready',
+      retryCount: 0,
+      retryAt: null,
+    },
     updatedAt: snapshot.updatedAt,
   };
 }
@@ -122,6 +139,7 @@ function phaseFromEvent(event: CanonicalChatEvent, current: ClientRunState | nul
     case 'message.delta':
     case 'tool.updated': return 'running';
     case 'message.final': return current?.phase ?? 'running';
+    case 'transcript.updated': return current?.phase ?? 'completed';
     case 'run.awaiting_transcript': return 'awaiting_transcript';
     case 'run.completed': return 'completed';
     case 'run.failed': return 'failed';
@@ -146,7 +164,11 @@ export function reduceSessionEvent(
     if (event.epoch === current.epoch && current.runId && event.runId && current.runId !== event.runId) {
       return { state, accepted: false, needsHydration: true };
     }
-    if (event.epoch === current.epoch && isTerminalChatRunPhase(current.phase)) {
+    if (
+      event.epoch === current.epoch
+      && isTerminalChatRunPhase(current.phase)
+      && event.type !== 'transcript.updated'
+    ) {
       return { state, accepted: false, needsHydration: false };
     }
   }
@@ -172,7 +194,13 @@ export function reduceSessionEvent(
   const toolUpdates = message
     ? collectToolUpdates(message, event.type === 'message.delta' ? 'delta' : 'final')
     : [];
-  const preserveCompletedOverlay = phase === 'completed' && Boolean(state.overlay.streamingMessage);
+  const hasLiveOverlay = Boolean(
+    state.overlay.streamingMessage
+    || state.overlay.streamingMessages.length > 0
+    || state.overlay.streamingToolResults.length > 0
+    || state.overlay.streamingTools.length > 0,
+  );
+  const preserveCompletedOverlay = phase === 'completed' && hasLiveOverlay;
   const clearOverlay = phase === 'failed' || phase === 'aborted' || phase === 'interrupted';
 
   return {
@@ -210,7 +238,9 @@ export function reduceSessionEvent(
           : toolUpdates.length > 0
             ? upsertToolStatuses(state.overlay.streamingTools, toolUpdates)
             : state.overlay.streamingTools,
-        awaitingTranscript: preserveCompletedOverlay || (!terminal && awaitingTranscript),
+        awaitingTranscript: event.type === 'transcript.updated'
+          ? false
+          : preserveCompletedOverlay || (!terminal && awaitingTranscript),
       },
       error: errorMessage ? new AppError('GATEWAY', errorMessage) : terminal ? null : state.error,
       updatedAt: event.occurredAt,

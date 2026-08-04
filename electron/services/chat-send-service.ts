@@ -29,6 +29,9 @@ export function runMainChatSend(
       engineType: input.engineType,
       runtimePolicy: input.runtimePolicy,
     });
+    if (beginResult.kind === 'unavailable') {
+      return { success: false, error: beginResult.error };
+    }
     const runtime = beginResult.snapshot;
     if (beginResult.kind === 'expired_key') {
       return { success: false, error: 'IDEMPOTENCY_KEY_EXPIRED: generate a new idempotency key for a new send' };

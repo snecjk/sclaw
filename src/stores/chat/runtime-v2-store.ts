@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { invokeIpc } from '@/lib/api-client';
 import { subscribeHostEvent } from '@/lib/host-events';
+import { AppError } from '@/lib/error-model';
 import type { CanonicalChatEvent, ChatRuntimeSnapshot } from '../../../shared/chat-runtime-protocol';
 import type { RawMessage } from './types';
 import {
@@ -19,6 +20,7 @@ interface ChatRuntimeV2State {
   setDisplayProjection: (sessionKey: string, messages: RawMessage[] | null) => void;
   setOptimisticUserMessage: (sessionKey: string, message: RawMessage | null) => void;
   clearError: (sessionKey: string) => void;
+  setError: (sessionKey: string, error: AppError) => void;
   clearOverlay: (sessionKey: string) => void;
   clearSession: (sessionKey: string) => void;
 }
@@ -27,9 +29,41 @@ let unsubscribe: (() => void) | null = null;
 let initializePromise: Promise<void> | null = null;
 const projectionListeners = new Set<(event: CanonicalChatEvent) => void>();
 const hydratePromises = new Map<string, Promise<void>>();
+const hydrateRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 let bootstrapping = false;
 let bootstrapEvents: CanonicalChatEvent[] = [];
 const MAX_PENDING_EVENTS = 200;
+const HYDRATE_RETRY_DELAYS_MS = [500, 1_000, 2_000, 4_000, 8_000] as const;
+
+function clearHydrateRetry(sessionKey: string): void {
+  const timer = hydrateRetryTimers.get(sessionKey);
+  if (timer) clearTimeout(timer);
+  hydrateRetryTimers.delete(sessionKey);
+}
+
+function scheduleHydrateRetry(sessionKey: string, retryCount: number): void {
+  if (hydrateRetryTimers.has(sessionKey)) return;
+  const delay = HYDRATE_RETRY_DELAYS_MS[Math.min(retryCount, HYDRATE_RETRY_DELAYS_MS.length - 1)];
+  const retryAt = Date.now() + delay;
+  useChatRuntimeV2Store.setState((state) => {
+    const current = state.sessionsByKey[sessionKey];
+    if (!current) return state;
+    return {
+      sessionsByKey: {
+        ...state.sessionsByKey,
+        [sessionKey]: {
+          ...current,
+          sync: { ...current.sync, status: 'gapped', retryAt },
+        },
+      },
+    };
+  });
+  hydrateRetryTimers.set(sessionKey, setTimeout(() => {
+    hydrateRetryTimers.delete(sessionKey);
+    if (!useChatRuntimeV2Store.getState().sessionsByKey[sessionKey]) return;
+    void useChatRuntimeV2Store.getState().hydrate(sessionKey);
+  }, delay));
+}
 
 function notifyProjection(event: CanonicalChatEvent): void {
   for (const listener of projectionListeners) listener(event);
@@ -190,6 +224,16 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
       },
     };
   }),
+  setError: (sessionKey, error) => set((state) => {
+    const current = state.sessionsByKey[sessionKey] ?? createClientSessionState();
+    if (current.error?.message === error.message && current.error.code === error.code) return state;
+    return {
+      sessionsByKey: {
+        ...state.sessionsByKey,
+        [sessionKey]: { ...current, error, updatedAt: Date.now() },
+      },
+    };
+  }),
   clearOverlay: (sessionKey) => set((state) => {
     const current = state.sessionsByKey[sessionKey];
     if (!current) return state;
@@ -209,6 +253,7 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
     const sessionsByKey = { ...state.sessionsByKey };
     delete sessionsByKey[sessionKey];
     hydratePromises.delete(sessionKey);
+    clearHydrateRetry(sessionKey);
     return { sessionsByKey };
   }),
   hydrate: async (sessionKey) => {
@@ -230,18 +275,62 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
       },
     }));
     const operation = (async () => {
-      const snapshot = await invokeIpc<ChatRuntimeSnapshot | null>('chat-runtime:get', sessionKey);
-      const latest = get().sessionsByKey[sessionKey];
-      if (!latest || latest.sync.hydrationGeneration !== generation) return;
-      let hydrated = snapshot ? applyRuntimeSnapshot(latest, snapshot) : latest;
-      const pending = [...hydrated.sync.pendingEvents].sort((a, b) => (
-        a.epoch === b.epoch ? a.sequence - b.sequence : a.epoch - b.epoch
-      ));
-      hydrated = { ...hydrated, sync: { ...hydrated.sync, status: 'ready', pendingEvents: [] } };
-      set((state) => ({ sessionsByKey: { ...state.sessionsByKey, [sessionKey]: hydrated } }));
-      for (const event of pending) {
-        const accepted = get().applyEvent(event);
-        if (accepted) notifyProjection(event);
+      try {
+        const snapshot = await invokeIpc<ChatRuntimeSnapshot | null>('chat-runtime:get', sessionKey);
+        const latest = get().sessionsByKey[sessionKey];
+        if (!latest || latest.sync.hydrationGeneration !== generation) return;
+        let hydrated = snapshot ? applyRuntimeSnapshot(latest, snapshot) : latest;
+        const pending = [...hydrated.sync.pendingEvents].sort((a, b) => (
+          a.epoch === b.epoch ? a.sequence - b.sequence : a.epoch - b.epoch
+        ));
+        const bufferOverflowed = hydrated.sync.bufferOverflowed;
+        hydrated = {
+          ...hydrated,
+          sync: {
+            ...hydrated.sync,
+            status: 'ready',
+            pendingEvents: [],
+            retryCount: 0,
+            retryAt: null,
+            bufferOverflowed: false,
+          },
+        };
+        clearHydrateRetry(sessionKey);
+        set((state) => ({ sessionsByKey: { ...state.sessionsByKey, [sessionKey]: hydrated } }));
+        for (const event of pending) {
+          const accepted = get().applyEvent(event);
+          if (accepted) notifyProjection(event);
+        }
+        if (bufferOverflowed) {
+          void import('./store').then(({ useChatStore }) => (
+            useChatStore.getState().loadHistory(true, true, sessionKey)
+          ));
+        }
+      } catch (error) {
+        const latest = get().sessionsByKey[sessionKey];
+        if (!latest || latest.sync.hydrationGeneration !== generation) return;
+        const retryCount = latest.sync.retryCount + 1;
+        set((state) => ({
+          sessionsByKey: {
+            ...state.sessionsByKey,
+            [sessionKey]: {
+              ...latest,
+              error: latest.error,
+              sync: {
+                ...latest.sync,
+                status: 'gapped',
+                retryCount,
+                retryAt: null,
+              },
+            },
+          },
+        }));
+        console.warn('[chat-runtime] session hydrate failed; retry scheduled', {
+          sessionKey,
+          retryCount,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        scheduleHydrateRetry(sessionKey, retryCount - 1);
       }
     })().finally(() => {
       if (hydratePromises.get(sessionKey) === operation) hydratePromises.delete(sessionKey);
@@ -252,11 +341,16 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
   applyEvent: (event) => {
     const current = get().sessionsByKey[event.sessionKey] ?? createClientSessionState();
     if (current.sync.status === 'gapped' || current.sync.status === 'hydrating') {
-      const pendingEvents = [...current.sync.pendingEvents, event].slice(-MAX_PENDING_EVENTS);
+      const allPendingEvents = [...current.sync.pendingEvents, event];
+      const bufferOverflowed = current.sync.bufferOverflowed || allPendingEvents.length > MAX_PENDING_EVENTS;
+      const pendingEvents = allPendingEvents.slice(-MAX_PENDING_EVENTS);
       set((state) => ({
         sessionsByKey: {
           ...state.sessionsByKey,
-          [event.sessionKey]: { ...current, sync: { ...current.sync, pendingEvents } },
+          [event.sessionKey]: {
+            ...current,
+            sync: { ...current.sync, pendingEvents, bufferOverflowed },
+          },
         },
       }));
       return false;
@@ -268,7 +362,12 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
           ...state.sessionsByKey,
           [event.sessionKey]: {
             ...current,
-            sync: { ...current.sync, status: 'gapped', pendingEvents: [event] },
+            sync: {
+              ...current.sync,
+              status: 'gapped',
+              pendingEvents: [event],
+              retryAt: null,
+            },
           },
         },
       }));

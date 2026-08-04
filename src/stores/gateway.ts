@@ -95,6 +95,10 @@ function handleCanonicalChatEvent(event: CanonicalChatEvent): void {
       }
       case 'run.awaiting_transcript':
         return;
+      case 'transcript.updated': {
+        void state.loadHistory(true, true, event.sessionKey);
+        return;
+      }
       case 'run.completed': {
         if (event.sessionKey === state.currentSessionKey) touchSessionReadAt(event.sessionKey);
         else markSessionUnreadAfterSuccessfulRun(event.sessionKey, state.currentSessionKey, { runId: event.runId });

@@ -318,13 +318,13 @@ function registerWorkflowSubmitHandler(
         inputs: values,
         idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
         sessionKey: chatState.currentSessionKey,
+        agentId: chatState.currentAgentId,
         triggerType: 'chat',
         // Recovery resumes a legacy form submission created before engine choice
         // was persisted, so retain its historical engine explicitly.
         engineType: 'claude',
         chatCard: { title: templateName, paramsSummary: userText },
       });
-      const { registerStartedWorkflowChatCard } = await import('@/lib/workflow-chat-card-registration');
       saveWorkflowExecution({
         sessionKey: chatState.currentSessionKey,
         workflowId: created.workflowId,
@@ -348,12 +348,6 @@ function registerWorkflowSubmitHandler(
         status: 'running',
         paramsSummary: userText,
         collectedInputs: values,
-      });
-      await registerStartedWorkflowChatCard({
-        runId: run.runId,
-        sessionKey: chatState.currentSessionKey,
-        title: templateName,
-        paramsSummary: userText,
       });
       chatState.clearPendingWorkflow(chatState.currentSessionKey);
     } catch (err) {

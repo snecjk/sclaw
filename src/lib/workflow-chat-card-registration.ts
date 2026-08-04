@@ -1,10 +1,7 @@
 import { registerChatWorkflowCard } from '@/lib/workflow-api';
-import { useChatStore } from '@/stores/chat';
-import { getSessionDisplayMessages } from '@/stores/chat/display-selectors';
 import { refreshWorkflowChatCards } from '@/stores/workflow-chat-cards';
 import type { RawMessage } from '@/stores/chat/types';
 import type { ChatWorkflowCardRef } from '@/types/workflow';
-import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 
 const anchorRepairInFlight = new Set<string>();
 
@@ -31,46 +28,6 @@ function timestampMs(value: RawMessage['timestamp']): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
-}
-
-function latestUserMessageId(sessionKey: string): string | null {
-  const state = useChatStore.getState();
-  if (state.currentSessionKey !== sessionKey) return null;
-  const optimistic = useChatRuntimeV2Store.getState().sessionsByKey[sessionKey]?.overlay.optimisticUserMessage;
-  if (optimistic?.id) return optimistic.id;
-  const messages = getSessionDisplayMessages(sessionKey);
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.role === 'user' && message.id) return message.id;
-  }
-  return null;
-}
-
-export async function registerStartedWorkflowChatCard(input: {
-  runId: string;
-  sessionKey: string;
-  title: string;
-  paramsSummary?: string | null;
-  anchorUserMessageId?: string | null;
-}): Promise<boolean> {
-  const metadata = {
-    runId: input.runId,
-    sessionKey: input.sessionKey,
-    anchorUserMessageId: input.anchorUserMessageId ?? latestUserMessageId(input.sessionKey),
-    title: input.title,
-    paramsSummary: input.paramsSummary,
-  };
-  try {
-    const registered = await registerChatWorkflowCard(metadata);
-    if (registered) await refreshWorkflowChatCards(input.sessionKey);
-    return registered;
-  } catch (error) {
-    console.warn('[workflow-chat-card] registration failed', {
-      runId: input.runId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return false;
-  }
 }
 
 /** Enrich visible standalone refs after durable history supplies message IDs. */

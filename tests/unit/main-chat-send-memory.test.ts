@@ -1,11 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearChatSendIdempotencyForTests } from '../../electron/api/routes/chat-send-idempotency';
 
-const { prepareMock, beginMock, bindMock, rejectMock } = vi.hoisted(() => ({
+const {
+  prepareMock,
+  beginMock,
+  bindMock,
+  rejectMock,
+  runtimeBeginMock,
+  runtimeAcceptedMock,
+  runtimeRejectedMock,
+} = vi.hoisted(() => ({
   prepareMock: vi.fn(),
   beginMock: vi.fn(),
   bindMock: vi.fn(),
   rejectMock: vi.fn(),
+  runtimeBeginMock: vi.fn(),
+  runtimeAcceptedMock: vi.fn(),
+  runtimeRejectedMock: vi.fn(),
 }));
 
 vi.mock('../../electron/services/agent-memory-context-service', () => ({
@@ -14,6 +25,14 @@ vi.mock('../../electron/services/agent-memory-context-service', () => ({
 
 vi.mock('../../electron/services/memory-turn-coordinator', () => ({
   getMemoryTurnCoordinator: () => ({ begin: beginMock, bind: bindMock, reject: rejectMock }),
+}));
+
+vi.mock('../../electron/services/chat-runtime-supervisor', () => ({
+  getChatRuntimeSupervisor: () => ({
+    begin: runtimeBeginMock,
+    accepted: runtimeAcceptedMock,
+    rejected: runtimeRejectedMock,
+  }),
 }));
 
 import { runMainChatSend } from '../../electron/services/chat-send-service';
@@ -28,6 +47,26 @@ describe('runMainChatSend memory boundary', () => {
       injectedExecutionMemories: [{ memoryId: 'e1', memory: '经验' }],
     });
     bindMock.mockResolvedValue(undefined);
+    runtimeBeginMock.mockImplementation(async (
+      input: { sessionKey: string; idempotencyKey: string; engineType: 'openclaw' | 'claude' },
+    ) => ({
+      kind: 'created',
+      snapshot: {
+        ...input,
+        protocolVersion: 1,
+        runId: null,
+        runtimePolicy: { origin: 'interactive', deadlineAt: null },
+        phase: 'dispatching',
+        epoch: 1,
+        sequence: 1,
+        startedAt: 1,
+        lastEventAt: 1,
+        terminalAt: null,
+        error: null,
+        acceptanceResult: null,
+        updatedAt: 1,
+      },
+    }));
   });
 
   it('injects OpenClaw memory into the gateway message and binds the returned run', async () => {
@@ -86,5 +125,23 @@ describe('runMainChatSend memory boundary', () => {
     expect(first).toEqual(second);
     expect(prepareMock).toHaveBeenCalledTimes(1);
     expect(dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not prepare memory or dispatch when runtime persistence is unavailable', async () => {
+    runtimeBeginMock.mockResolvedValueOnce({
+      kind: 'unavailable',
+      error: 'CHAT_RUNTIME_UNAVAILABLE: sqlite unavailable',
+    });
+    const dispatch = vi.fn();
+    const result = await runMainChatSend({} as never, {
+      sessionKey: 'agent:main:main',
+      message: '消息',
+      idempotencyKey: 'unavailable-id',
+      engineType: 'openclaw',
+    }, vi.fn((params) => params), dispatch);
+
+    expect(result).toEqual({ success: false, error: 'CHAT_RUNTIME_UNAVAILABLE: sqlite unavailable' });
+    expect(prepareMock).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
   });
 });

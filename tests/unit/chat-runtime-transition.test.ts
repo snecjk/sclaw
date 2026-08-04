@@ -33,6 +33,19 @@ describe('chat runtime transition', () => {
     expect(result).toEqual({ accepted: false, reason: 'terminal-is-immutable' });
   });
 
+  it('allows transcript revision notification without reopening a terminal run', () => {
+    const result = transitionChatRuntime({
+      snapshot: snapshot({ phase: 'completed', terminalAt: 10 }),
+      type: 'transcript.updated',
+      occurredAt: 20,
+    });
+    expect(result.accepted && result.snapshot).toMatchObject({
+      phase: 'completed',
+      sequence: 5,
+      terminalAt: 10,
+    });
+  });
+
   it('rejects a mismatched run id', () => {
     const result = transitionChatRuntime({
       snapshot: snapshot(),
