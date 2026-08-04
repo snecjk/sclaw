@@ -14,7 +14,7 @@ export const DINGTALK_AGENT_SEND_DISCLAIMER_MARKER = 'SClaw 代为发送';
 
 /** 聊天 UI 展示用纯文案（不含 HTML）。 */
 export const DINGTALK_AGENT_SEND_DISCLAIMER_PLAIN_TEXT =
-  '本消息由 S Claw 代为发送，非本人实时回复。';
+  '本消息由 SClaw 代为发送，非本人实时回复。';
 
 /** @deprecated 使用 DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER */
 export const DINGTALK_AGENT_SEND_DISCLAIMER_HTML = DINGTALK_AGENT_SEND_DISCLAIMER_FOOTER;

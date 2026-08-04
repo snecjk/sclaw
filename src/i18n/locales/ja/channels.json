@@ -171,7 +171,7 @@
             ]
         },
         "dingtalk": {
-            "description": "組織共通 DingTalk ボットを QR で紐づけ、Hub 経由で本機 StoClaw に配信",
+            "description": "組織共通 DingTalk ボットを QR で紐づけ、Hub 経由で本機 SClaw に配信",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/Y5eNwiSiZidkLskrwtJc1rUln0b#doxcnDgA78n43DbkiQjI1OqUA7b",
             "fields": {
                 "clientId": {

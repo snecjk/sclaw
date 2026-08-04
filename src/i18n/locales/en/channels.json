@@ -172,7 +172,7 @@
             ]
         },
         "dingtalk": {
-            "description": "Scan to bind the org-wide DingTalk bot; Hub routes messages to this StoClaw",
+            "description": "Scan to bind the org-wide DingTalk bot; Hub routes messages to this SClaw",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/Y5eNwiSiZidkLskrwtJc1rUln0b#doxcnDgA78n43DbkiQjI1OqUA7b",
             "fields": {
                 "clientId": {

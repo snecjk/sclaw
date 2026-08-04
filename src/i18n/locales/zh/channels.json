@@ -172,7 +172,7 @@
             ]
         },
         "dingtalk": {
-            "description": "扫码绑定组织统一钉钉机器人，消息经 Hub 路由到本机 StoClaw",
+            "description": "扫码绑定组织统一钉钉机器人，消息经 Hub 路由到本机 SClaw",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/Y5eNwiSiZidkLskrwtJc1rUln0b#doxcnr8KfaA2mNPeQUeHO83eDPh",
             "fields": {
                 "clientId": {
@@ -207,7 +207,7 @@
                 }
             },
             "instructions": [
-                "打开 StoClaw 频道页，点击钉钉进入扫码绑定",
+                "打开 SClaw 频道页，点击钉钉进入扫码绑定",
                 "使用钉钉扫一扫打开确认页并完成免登确认",
                 "绑定成功后本机自动连接 Hub，可选 Claude / OpenClaw Agent",
                 "无需在本机填写钉钉 AK/SK"
