@@ -419,15 +419,35 @@ export function createWorkflowSpan(
   const span = document.createElement('span');
   span.className = [
     WORKFLOW_SPAN_CLASS,
-    'inline',
-    'text-primary',
+    'inline-flex',
+    'items-center',
+    'gap-0.5',
+    'rounded-[4px]',
+    'bg-[#EEF3FF]',
+    'px-1',
+    'py-0.5',
+    'align-middle',
+    'text-[12px]',
     'font-medium',
+    'leading-4',
+    'text-[#4E6FFF]',
   ].join(' ');
   span.contentEditable = 'false';
   span.dataset.workflowId = workflowId;
   span.dataset.workflowName = name;
   if (source) span.dataset.workflowSource = source;
-  span.textContent = `/${name}`;
+
+  const icon = document.createElement('span');
+  icon.className = 'workflow-token-icon inline-flex h-3 w-3 shrink-0';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.innerHTML =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 4.5V2.5C1.5 1.94772 1.94772 1.5 2.5 1.5H4.5C5.05228 1.5 5.5 1.94772 5.5 2.5V4.5C5.5 5.05228 5.05228 5.5 4.5 5.5H2.5C1.94772 5.5 1.5 5.05228 1.5 4.5Z" stroke="currentColor" stroke-width="1.2"/><path d="M3.5 5.5V7.5C3.5 8.05228 3.94772 8.5 4.5 8.5H6.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M6.5 9.5V7.5C6.5 6.94772 6.94772 6.5 7.5 6.5H9.5C10.0523 6.5 10.5 6.94772 10.5 7.5V9.5C10.5 10.0523 10.0523 10.5 9.5 10.5H7.5C6.94772 10.5 6.5 10.0523 6.5 9.5Z" stroke="currentColor" stroke-width="1.2"/></svg>';
+
+  const label = document.createElement('span');
+  label.className = 'workflow-token-label';
+  label.textContent = name;
+
+  span.append(icon, label);
   return span;
 }
 
