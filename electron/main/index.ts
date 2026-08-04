@@ -341,7 +341,7 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
   // Set window title with environment suffix for non-production builds
   const envCfg = getCurrentEnvConfig();
   if (envCfg.displaySuffix) {
-    win.setTitle(`STO Claw ${envCfg.displaySuffix}`);
+    win.setTitle(`SClaw ${envCfg.displaySuffix}`);
   }
 
   if (saved?.isMaximized) {
