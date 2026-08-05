@@ -37,6 +37,7 @@ import {
 import { Tooltip, TooltipArrow, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { SidebarUpdateNotice } from '@/components/layout/sidebar-update-notice';
 import { useSettingsStore } from '@/stores/settings';
+import { useAppShellLayout } from '@/components/layout/app-shell-layout-context';
 import { SUPPORTED_LANGUAGES } from '@/i18n';
 import { cn } from '@/lib/utils';
 import { closeSclawBrowser, isSclawBrowserOpen } from '@/lib/open-sclaw-browser';
@@ -112,7 +113,6 @@ import {
   toggleGroupExpanded,
 } from '@/lib/sidebar-section-group-expand';
 import { isSidebarPrimaryNavItemVisible } from '@/lib/sidebar-primary-nav';
-import { useWorkflowUiStore } from '@/stores/workflow-ui';
 import {
   sidebarFooterMetaClass,
   sidebarFooterNameClass,
@@ -758,10 +758,9 @@ export function Sidebar() {
     }
   }, []);
 
-  const sidebarCollapsed = useSettingsStore((s) => s.sidebarCollapsed);
-  const setSidebarCollapsed = useSettingsStore((s) => s.setSidebarCollapsed);
-  const workflowEditorActive = useWorkflowUiStore((s) => s.editorActive);
-  const sidebarExpandedBeforeWorkflowRef = useRef<boolean | null>(null);
+  const { snapshot, setUserCollapsed } = useAppShellLayout();
+  const sidebarCollapsed = snapshot.effectiveCollapsed;
+  const setSidebarCollapsed = setUserCollapsed;
   const [taskListSectionOpen, setTaskListSectionOpen] = useState(true);
   const [taskListShowAll, setTaskListShowAll] = useState(false);
   const [taskGroupFirstTriggeredAt, setTaskGroupFirstTriggeredAt] = useState<Record<string, number>>({});
@@ -807,22 +806,6 @@ export function Sidebar() {
       console.error('[session-catalog] sidebar bootstrap failed', error);
     });
   }, [catalogBootstrap]);
-
-  useEffect(() => {
-    if (workflowEditorActive) {
-      const prev = useSettingsStore.getState().sidebarCollapsed;
-      if (sidebarExpandedBeforeWorkflowRef.current === null) {
-        sidebarExpandedBeforeWorkflowRef.current = !prev;
-      }
-      if (!prev) setSidebarCollapsed(true);
-      return;
-    }
-    if (sidebarExpandedBeforeWorkflowRef.current !== null) {
-      const restoreExpanded = sidebarExpandedBeforeWorkflowRef.current;
-      sidebarExpandedBeforeWorkflowRef.current = null;
-      setSidebarCollapsed(!restoreExpanded);
-    }
-  }, [workflowEditorActive, setSidebarCollapsed]);
 
   const revealTaskListAfterOpenRef = useRef(false);
   const suppressNextTaskAutoCollapseRef = useRef(false);
@@ -1779,12 +1762,17 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        'flex h-full shrink-0 flex-col bg-[var(--sto-sidebar-bg)] transition-[width,border-color] duration-200 ease-out',
+        // Grid/flex item：高度约束在 aside，纵向滚动只交给内部 viewport。
+        'flex h-full min-h-0 shrink-0 flex-col overflow-hidden bg-[var(--sto-sidebar-bg)] transition-[width,border-color] duration-200 ease-out',
         isProvincialFullyHidden
-          ? 'pointer-events-none w-0 overflow-hidden border-r-0'
+          ? 'pointer-events-none w-0 border-r-0'
           : cn(
               !isProvincialSidebar && 'border-r border-[var(--sto-sidebar-border)]',
-              sidebarCollapsed ? 'w-[var(--sto-sidebar-w-collapsed)]' : 'w-[var(--sto-sidebar-w-expanded)]',
+              isProvincialSidebar
+                ? 'w-full min-w-0'
+                : sidebarCollapsed
+                  ? 'w-[var(--sto-sidebar-w-collapsed)]'
+                  : 'w-[var(--sto-sidebar-effective-w)]',
             ),
       )}
       aria-hidden={isProvincialFullyHidden}

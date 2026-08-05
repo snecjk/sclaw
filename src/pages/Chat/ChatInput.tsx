@@ -11,18 +11,16 @@ import {
   SendHorizontal,
   Square,
   X,
-  Paperclip,
   FileText,
   Film,
   Music,
   FileArchive,
   File,
   Loader2,
-  AtSign,
   Bot,
-  Workflow,
   ArrowUp,
   Wrench,
+  Mic,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { hostApiFetch } from '@/lib/host-api';
@@ -37,6 +35,8 @@ import {
 import { useGatewayStore } from '@/stores/gateway';
 import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
+import { useVoiceLoopStore } from '@/stores/voice-loop';
 import { getProjectIdFromProjectAgentId } from '../../../shared/project-agent';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import type { AgentSummary } from '@/types/agent';
@@ -45,8 +45,24 @@ import { DingTalkMentionEditor, type DingTalkMentionEditorHandle } from '@/compo
 import { DingTalkMentionPopover } from '@/components/dingtalk/DingTalkMentionPopover';
 import { WorkflowPicker } from '@/components/workflow/WorkflowPicker';
 import { SkillPicker } from '@/components/skill-plaza/SkillPicker';
+import { QuickInputPicker } from '@/components/quick-input/QuickInputPicker';
+import {
+  AttachFileIcon,
+  QuickInputIcon,
+  SkillToolIcon,
+  WorkflowNodesIcon,
+} from '@/components/icons/composer-toolbar-icons';
+import { FlyToTargetLayer } from '@/components/fly-to-target';
+import {
+  Tooltip,
+  TooltipArrow,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 import { useDingTalkMention } from '@/hooks/useDingTalkMention';
+import { useVoiceAsr } from '@/hooks/useVoiceAsr';
+import { VoiceComposerPanel, VoiceTopCrawlWave } from '@/components/chat/VoiceComposerPanel';
 
 import type { ActiveMentionTrigger, MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
 import { extractSkillInlineQuery /*, hasSkillInlineTrigger */ } from '@/lib/dingtalk-mention-composer';
@@ -148,6 +164,27 @@ function FileIcon({ mimeType, className }: { mimeType: string; className?: strin
   return <File className={className} />;
 }
 
+const homeToolbarTooltipClass =
+  'overflow-visible border-none bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white shadow-none';
+
+function HomeToolbarIconTooltip({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip delayDuration={200}>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className={homeToolbarTooltipClass}>
+        {label}
+        <TooltipArrow className="fill-[#1D2129]" width={10} height={5} />
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 /**
  * Read a browser File object as base64 string (without the data URL prefix).
  */
@@ -209,10 +246,13 @@ export function ChatInput({
   const mentionPopoverRef = useRef<HTMLDivElement>(null);
   const workflowPickerRef = useRef<HTMLDivElement>(null);
   const workflowButtonRef = useRef<HTMLButtonElement>(null);
+  const quickInputPickerRef = useRef<HTMLDivElement>(null);
+  const quickInputButtonRef = useRef<HTMLButtonElement>(null);
   const skillPickerRef = useRef<HTMLDivElement>(null);
   const skillButtonRef = useRef<HTMLButtonElement>(null);
   const isComposingRef = useRef(false);
   const [workflowPickerOpen, setWorkflowPickerOpen] = useState(false);
+  const [quickInputPickerOpen, setQuickInputPickerOpen] = useState(false);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const [skillPickerMode, setSkillPickerMode] = useState<'inline' | 'toolbar'>('inline');
   const gatewayStatus = useGatewayStore((s) => s.status);
@@ -263,6 +303,284 @@ export function ChatInput({
     install: installDingTalkMention,
     installing: dingTalkInstalling,
   } = useDingTalkMention(mentionTrigger);
+  const commitVoiceText = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const editor = mentionEditorRef.current;
+    if (!editor) return;
+    const existing = editor.getSnapshot().plainText ?? '';
+    if (!existing.trim()) {
+      editor.setPlainText(trimmed);
+    } else {
+      const sep = /\s$/.test(existing) || /[，。！？；、]$/.test(existing) ? '' : ' ';
+      editor.setPlainText(`${existing}${sep}${trimmed}`);
+    }
+    editor.focus();
+  }, []);
+
+  const VOICE_CONFIRM_MS = 5000;
+  const voiceLoopActive = useVoiceLoopStore((s) => s.active);
+  const voiceLoopBoundSessionKey = useVoiceLoopStore((s) => s.boundSessionKey);
+  const voiceAwaitingAgent = useVoiceLoopStore((s) => s.awaitingAgentReply);
+  const voiceExpectMaterialization = useVoiceLoopStore((s) => s.expectMaterialization);
+  const setVoiceLoopActive = useVoiceLoopStore((s) => s.setActive);
+  const rebindVoiceLoopSession = useVoiceLoopStore((s) => s.rebindSessionKey);
+  const clearVoiceLoop = useVoiceLoopStore((s) => s.clear);
+  const markVoiceExpectMaterialization = useVoiceLoopStore((s) => s.markExpectMaterialization);
+  const markVoiceAwaitingAgent = useVoiceLoopStore((s) => s.markAwaitingAgentReply);
+  const clearVoiceAwaitingAgent = useVoiceLoopStore((s) => s.clearAwaitingAgentReply);
+  const [voiceConfirmText, setVoiceConfirmText] = useState<string | null>(null);
+  const [voiceConfirmEndsAt, setVoiceConfirmEndsAt] = useState<number | null>(null);
+  const [voiceConfirmRemainMs, setVoiceConfirmRemainMs] = useState(0);
+  const prevSendingRef = useRef(sending);
+  const resumeListenAfterAgentRef = useRef(false);
+  const handleSendRef = useRef<() => void>(() => undefined);
+  const voiceConfirming = voiceConfirmText != null && voiceConfirmEndsAt != null;
+
+  const clearVoiceDraftText = useCallback(() => {
+    mentionEditorRef.current?.clear();
+    setComposerSnapshot({
+      plainText: '',
+      mentions: [],
+      isEmpty: true,
+    });
+  }, []);
+
+  const handleVoiceUtteranceFinal = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    mentionEditorRef.current?.setPlainText(trimmed);
+    setVoiceConfirmText(trimmed);
+    setVoiceConfirmEndsAt(Date.now() + VOICE_CONFIRM_MS);
+    setVoiceConfirmRemainMs(VOICE_CONFIRM_MS);
+  }, []);
+
+  const cancelVoiceConfirm = useCallback(() => {
+    setVoiceConfirmText(null);
+    setVoiceConfirmEndsAt(null);
+    setVoiceConfirmRemainMs(0);
+  }, []);
+
+  /** 「取消自动发送」：退出语音循环，保留草稿供手动编辑/发送 */
+  const handleCancelVoiceAutoSend = useCallback(() => {
+    cancelVoiceConfirm();
+    resumeListenAfterAgentRef.current = false;
+    clearVoiceLoop();
+  }, [cancelVoiceConfirm, clearVoiceLoop]);
+
+  const exitVoiceLoop = useCallback(() => {
+    resumeListenAfterAgentRef.current = false;
+    clearVoiceLoop();
+    cancelVoiceConfirm();
+  }, [cancelVoiceConfirm, clearVoiceLoop]);
+
+  const {
+    status: voiceStatus,
+    partialText: voicePartialText,
+    finalsText: voiceFinalsText,
+    isActive: voiceRecording,
+    levels: voiceLevels,
+    start: startVoiceInput,
+    stop: stopVoiceInput,
+  } = useVoiceAsr({
+    disabled: disabled || sending || voiceAwaitingAgent,
+    onCommitText: commitVoiceText,
+    onUtteranceFinal: handleVoiceUtteranceFinal,
+    onSessionFailed: () => {
+      // WS/开麦失败：直接退出语音循环，避免红麦卡住只能手动点退出
+      resumeListenAfterAgentRef.current = false;
+      clearVoiceLoop();
+      cancelVoiceConfirm();
+      clearVoiceDraftText();
+    },
+  });
+
+  const stopVoiceInputRef = useRef(stopVoiceInput);
+  stopVoiceInputRef.current = stopVoiceInput;
+
+  const voicePreviewText = voiceConfirming
+    ? (voiceConfirmText ?? '')
+    : `${voiceFinalsText}${voicePartialText}`.trim();
+
+  const handleMicClick = useCallback(() => {
+    if (disabled) return;
+    if (voiceConfirming) {
+      exitVoiceLoop();
+      clearVoiceDraftText();
+      return;
+    }
+    if (voiceRecording) {
+      exitVoiceLoop();
+      void stopVoiceInput({ commit: true });
+      return;
+    }
+    if (voiceLoopActive) {
+      exitVoiceLoop();
+      return;
+    }
+    if (sending || voiceAwaitingAgent) return;
+    clearVoiceDraftText();
+    setVoiceLoopActive(true, currentSessionKey);
+    void startVoiceInput();
+  }, [
+    clearVoiceDraftText,
+    currentSessionKey,
+    disabled,
+    exitVoiceLoop,
+    sending,
+    setVoiceLoopActive,
+    startVoiceInput,
+    stopVoiceInput,
+    voiceAwaitingAgent,
+    voiceConfirming,
+    voiceLoopActive,
+    voiceRecording,
+  ]);
+
+  // 会话不一致则关闭持续听（仅语音发送触发的 DEFAULT 物化允许 rebind）
+  useEffect(() => {
+    const { active, boundSessionKey, expectMaterialization } = useVoiceLoopStore.getState();
+    if (!active || !boundSessionKey) return;
+    if (boundSessionKey === currentSessionKey) return;
+
+    if (
+      expectMaterialization
+      && boundSessionKey === DEFAULT_SESSION_KEY
+      && currentSessionKey !== DEFAULT_SESSION_KEY
+    ) {
+      rebindVoiceLoopSession(currentSessionKey);
+      return;
+    }
+
+    clearVoiceLoop();
+    cancelVoiceConfirm();
+    clearVoiceDraftText();
+    resumeListenAfterAgentRef.current = false;
+    void stopVoiceInputRef.current({ commit: false, silent: true });
+  }, [
+    cancelVoiceConfirm,
+    clearVoiceDraftText,
+    clearVoiceLoop,
+    currentSessionKey,
+    rebindVoiceLoopSession,
+  ]);
+
+  // 确认倒计时 → 自动发送
+  useEffect(() => {
+    if (!voiceConfirming || voiceConfirmEndsAt == null) return;
+    const tick = window.setInterval(() => {
+      const remain = Math.max(0, voiceConfirmEndsAt - Date.now());
+      setVoiceConfirmRemainMs(remain);
+      if (remain <= 0) {
+        window.clearInterval(tick);
+        setVoiceConfirmText(null);
+        setVoiceConfirmEndsAt(null);
+        setVoiceConfirmRemainMs(0);
+        handleSendRef.current();
+      }
+    }, 50);
+    return () => window.clearInterval(tick);
+  }, [voiceConfirmEndsAt, voiceConfirming]);
+
+  // agent 回完：先清 awaiting，等 disabled 放开后再开麦（避免同帧 start 被 disabled 挡住）
+  useEffect(() => {
+    const wasSending = prevSendingRef.current;
+    prevSendingRef.current = sending;
+    const { active, boundSessionKey } = useVoiceLoopStore.getState();
+    if (
+      wasSending
+      && !sending
+      && active
+      && boundSessionKey === currentSessionKey
+      && !voiceConfirming
+      && !disabled
+    ) {
+      resumeListenAfterAgentRef.current = true;
+      clearVoiceAwaitingAgent();
+    }
+  }, [
+    clearVoiceAwaitingAgent,
+    currentSessionKey,
+    disabled,
+    sending,
+    voiceConfirming,
+  ]);
+
+  useEffect(() => {
+    if (!resumeListenAfterAgentRef.current) return;
+    if (voiceAwaitingAgent || sending || disabled || voiceConfirming || voiceRecording) return;
+    const { active, boundSessionKey } = useVoiceLoopStore.getState();
+    if (!active || boundSessionKey !== currentSessionKey) {
+      resumeListenAfterAgentRef.current = false;
+      return;
+    }
+    resumeListenAfterAgentRef.current = false;
+    void startVoiceInput();
+  }, [
+    currentSessionKey,
+    disabled,
+    sending,
+    startVoiceInput,
+    voiceAwaitingAgent,
+    voiceConfirming,
+    voiceRecording,
+  ]);
+
+  // remount 恢复：等回复 / 物化跳转期间绝不重新开麦
+  useEffect(() => {
+    const { active, boundSessionKey, awaitingAgentReply, expectMaterialization } =
+      useVoiceLoopStore.getState();
+    if (!active || awaitingAgentReply || expectMaterialization) return;
+    if (boundSessionKey && boundSessionKey !== currentSessionKey) return;
+    if (sending || voiceConfirming || voiceRecording || disabled) return;
+    void startVoiceInput();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount recovery only
+  }, []);
+
+  const voiceBoundToCurrentSession = !voiceLoopBoundSessionKey
+    || voiceLoopBoundSessionKey === currentSessionKey
+    || (
+      voiceLoopBoundSessionKey === DEFAULT_SESSION_KEY
+      && currentSessionKey !== DEFAULT_SESSION_KEY
+      && voiceExpectMaterialization
+    );
+  const voiceWaitingUi = Boolean(
+    voiceLoopActive && voiceBoundToCurrentSession && (sending || voiceAwaitingAgent),
+  );
+  const voicePanelOpen = Boolean(
+    voiceBoundToCurrentSession && (voiceRecording || voiceConfirming || voiceWaitingUi),
+  );
+
+  const voiceMode = voiceConfirming
+    ? 'confirm' as const
+    : voiceWaitingUi
+      ? 'waiting' as const
+      : 'listening' as const;
+
+  const voiceStatusLabel = voiceConfirming
+    ? t('composer.voiceConfirmCountdown', {
+        seconds: Math.max(1, Math.ceil(voiceConfirmRemainMs / 1000)),
+      })
+    : voiceWaitingUi
+      ? t('composer.voiceWaitingAgent')
+      : voiceStatus === 'connecting'
+        ? t('composer.voiceConnecting')
+        : voiceStatus === 'stopping'
+          ? t('composer.voiceStopping')
+          : t('composer.voiceListening');
+
+  const voiceButtonTitle = voiceConfirming
+    ? t('composer.voiceConfirmCancelHint')
+    : voiceWaitingUi
+      ? t('composer.voiceWaitingAgent')
+      : voiceStatus === 'connecting'
+        ? t('composer.voiceConnecting')
+        : voiceRecording
+          ? t('composer.voiceListening')
+          : voiceLoopActive && voiceBoundToCurrentSession
+            ? t('composer.voiceExitLoop')
+            : t('composer.voiceInput');
+
   const composerPlaceholder = disabled && engineType === 'openclaw'
     ? t('composer.gatewayDisconnectedPlaceholder')
     : placeholder?.trim() || t('composer.messagePlaceholder', { agent: currentAgentName });
@@ -285,6 +603,7 @@ export function ChatInput({
     setTargetAgentId(null);
     setPickerOpen(false);
     setWorkflowPickerOpen(false);
+    setQuickInputPickerOpen(false);
     setSkillPickerOpen(false);
     setMentionTrigger(null);
     closeDingTalkMention();
@@ -361,6 +680,23 @@ export function ChatInput({
   }, [workflowPickerOpen]);
 
   useEffect(() => {
+    if (!quickInputPickerOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        !quickInputPickerRef.current?.contains(target) &&
+        !quickInputButtonRef.current?.contains(target)
+      ) {
+        setQuickInputPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, [quickInputPickerOpen]);
+
+  useEffect(() => {
     if (!skillPickerOpen) return;
     const handlePointerDown = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -418,12 +754,19 @@ export function ChatInput({
 
   const toggleSkillPickerToolbar = useCallback(() => {
     setWorkflowPickerOpen(false);
+    setQuickInputPickerOpen(false);
     setSkillPickerOpen((open) => {
       if (!open) {
         setSkillPickerMode('toolbar');
       }
       return !open;
     });
+  }, []);
+
+  const toggleQuickInputPicker = useCallback(() => {
+    setSkillPickerOpen(false);
+    setWorkflowPickerOpen(false);
+    setQuickInputPickerOpen((open) => !open);
   }, []);
 
   const applyDingTalkMention = useCallback((item: MentionSearchItem) => {
@@ -596,6 +939,10 @@ export function ChatInput({
       && allReady
       && !disabled;
     if (!canSendNow) return;
+
+    // 确认倒计时中手动发送：立刻结束倒计时，避免 UI 继续走表 / 到期二次自动发送
+    cancelVoiceConfirm();
+
     const attachmentsToSend = readyAttachments.length > 0 ? readyAttachments : undefined;
     const mentionsToSend = snapshot.mentions.length > 0 ? snapshot.mentions : undefined;
     const workflowIdToSend = snapshot.workflowId;
@@ -635,6 +982,16 @@ export function ChatInput({
     mentionEditorRef.current?.clear();
     setAttachments([]);
     setMentionTrigger(null);
+
+    // 语音持续听：标记等回复；新会话 DEFAULT 物化时允许 remount 后 rebind，但等回复期间禁止开麦
+    const voiceLoop = useVoiceLoopStore.getState();
+    if (voiceLoop.active) {
+      markVoiceAwaitingAgent();
+      if (currentSessionKey === DEFAULT_SESSION_KEY) {
+        markVoiceExpectMaterialization();
+      }
+    }
+
     // When AI is responding and queue callback is available, add to queue instead of sending directly
     // but only if no workflow is selected (workflow creation flow needs direct send)
     if (sending && onQueue && !workflowIdToSend) {
@@ -645,9 +1002,26 @@ export function ChatInput({
     setTargetAgentId(null);
     setPickerOpen(false);
     setWorkflowPickerOpen(false);
+    setQuickInputPickerOpen(false);
     setSkillPickerOpen(false);
     closeDingTalkMention();
-  }, [allReady, attachments, closeDingTalkMention, composerSnapshot, disabled, onQueue, onSend, sending, targetAgentId]);
+  }, [
+    allReady,
+    attachments,
+    cancelVoiceConfirm,
+    closeDingTalkMention,
+    composerSnapshot,
+    currentSessionKey,
+    disabled,
+    markVoiceAwaitingAgent,
+    markVoiceExpectMaterialization,
+    onQueue,
+    onSend,
+    sending,
+    targetAgentId,
+  ]);
+
+  handleSendRef.current = handleSend;
 
   const handleStop = useCallback(() => {
     if (!canStop) return;
@@ -692,6 +1066,12 @@ export function ChatInput({
         return;
       }
 
+      if (e.key === 'Escape' && quickInputPickerOpen) {
+        e.preventDefault();
+        setQuickInputPickerOpen(false);
+        return;
+      }
+
       if (e.key === 'Backspace' && composerSnapshot.isEmpty && targetAgentId) {
         setTargetAgentId(null);
         return;
@@ -707,6 +1087,7 @@ export function ChatInput({
             setMentionTrigger(null);
           }
           setSkillPickerOpen(false);
+          setQuickInputPickerOpen(false);
           setWorkflowPickerOpen(true);
         }
       }
@@ -751,6 +1132,7 @@ export function ChatInput({
       moveDingTalkActive,
       skillPickerMode,
       skillPickerOpen,
+      quickInputPickerOpen,
       targetAgentId,
       workflowPickerOpen,
     ],
@@ -811,14 +1193,11 @@ export function ChatInput({
   const isEmbedded = variant === 'embedded';
   const isHomeComposer = composerLayout === 'home';
 
-  const handleOpenDingTalkMention = () => {
-    mentionEditorRef.current?.openMentionPicker();
-  };
-
   const homeToolbarIconBtn = cn(
-    'h-[30px] w-[30px] rounded-[20px] p-0 text-muted-foreground/75',
-    'hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
+    'inline-flex h-[30px] w-[30px] flex-col items-center justify-center rounded-lg px-[1.62px] py-[2.08px]',
+    'text-[#000] hover:bg-[#F0F2F5] dark:text-foreground dark:hover:bg-muted',
   );
+  const homeToolbarIconActive = 'bg-[#F0F2F5] hover:bg-[#F0F2F5] dark:bg-muted dark:hover:bg-muted';
 
   return (
     <div
@@ -832,6 +1211,9 @@ export function ChatInput({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      <FlyToTargetLayer targetRef={quickInputButtonRef}>
+        <QuickInputIcon className="h-full w-full text-foreground" />
+      </FlyToTargetLayer>
       <div className="w-full">
         {/* 单壳：附件缩略图与输入区同在一个圆角边框内（与 memory-center-web 助手输入一致） */}
         <div
@@ -858,6 +1240,7 @@ export function ChatInput({
                 ),
           )}
         >
+          {voicePanelOpen && voiceMode === 'listening' ? <VoiceTopCrawlWave /> : null}
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-2 px-4 pt-3 pb-1">
               {attachments.map((att) => (
@@ -870,7 +1253,7 @@ export function ChatInput({
             </div>
           )}
 
-          {selectedTarget && (
+          {voicePanelOpen ? null : selectedTarget ? (
             <div
               className={cn(
                 'px-4 pb-1',
@@ -887,9 +1270,7 @@ export function ChatInput({
                 <X className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
             </div>
-          )}
-
-
+          ) : null}
 
           <div className={cn(
             'px-4',
@@ -897,11 +1278,30 @@ export function ChatInput({
               ? cn(
                   // flex-1 吸收 min-h-[120px] 剩余高度，避免底栏下方出现额外空白（底栏 pb-3 ≈ 12px）
                   'flex min-h-0 flex-1 flex-col',
-                  attachments.length > 0 ? 'pt-1' : 'pt-3',
+                  attachments.length > 0 || voicePanelOpen ? 'pt-1' : 'pt-3',
                 )
-              : cn(attachments.length > 0 ? 'pt-1.5' : 'pt-2.5'),
+              : cn(attachments.length > 0 || voicePanelOpen ? 'pt-1.5' : 'pt-2.5'),
           )}>
             <div ref={mentionPopoverRef} className="relative flex-1 overflow-visible">
+              {voicePanelOpen ? (
+                <VoiceComposerPanel
+                  mode={voiceMode}
+                  compact={!isHomeComposer}
+                  connecting={voiceStatus === 'connecting' || voiceStatus === 'stopping'}
+                  statusLabel={voiceStatusLabel}
+                  transcript={voicePreviewText}
+                  levels={voiceMode === 'listening' ? voiceLevels : undefined}
+                  confirmSecondsLeft={
+                    voiceConfirming
+                      ? Math.max(1, Math.ceil(voiceConfirmRemainMs / 1000))
+                      : undefined
+                  }
+                  confirmTitle={
+                    voiceConfirming ? t('composer.voiceConfirmPreparing') : undefined
+                  }
+                />
+              ) : null}
+              <div className={cn(voicePanelOpen && 'hidden')}>
               <DingTalkMentionPopover
                 open={dingTalkMentionOpen}
                 items={dingTalkItems}
@@ -925,7 +1325,7 @@ export function ChatInput({
               <DingTalkMentionEditor
                 ref={mentionEditorRef}
                 placeholder={composerPlaceholder}
-                disabled={disabled}
+                disabled={disabled || voicePanelOpen}
                 seedText={seedText}
                 seedSkillSlug={seedSkillSlug}
                 onSnapshotChange={setComposerSnapshot}
@@ -952,48 +1352,40 @@ export function ChatInput({
                   setSkillPickerOpen(false);
                 }}
               />
+              </div>
             </div>
           </div>
 
           {isHomeComposer ? (
             <div className="relative flex shrink-0 items-center justify-between gap-2 px-4 pb-3 pt-1">
               <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  variant="ghost"
-                  type="button"
-                  className={homeToolbarIconBtn}
-                  onClick={pickFiles}
-                  disabled={disabled}
-                  title={t('composer.attachFiles')}
-                >
-                  <Paperclip className="h-4 w-4" aria-hidden />
-                </Button>
+                <HomeToolbarIconTooltip label={t('composer.attachFiles')}>
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    className={homeToolbarIconBtn}
+                    onClick={pickFiles}
+                    disabled={disabled || voicePanelOpen}
+                  >
+                    <AttachFileIcon />
+                  </Button>
+                </HomeToolbarIconTooltip>
 
-                <Button
-                  variant="ghost"
-                  type="button"
-                  className={homeToolbarIconBtn}
-                  onClick={handleOpenDingTalkMention}
-                  disabled={disabled}
-                  title={t('composer.dingTalkMention')}
-                >
-                  <AtSign className="h-4 w-4" aria-hidden />
-                </Button>
-
-                <Button
-                  ref={skillButtonRef}
-                  variant="ghost"
-                  type="button"
-                  className={cn(
-                    homeToolbarIconBtn,
-                    skillPickerOpen && skillPickerMode === 'toolbar' && 'bg-primary/10 text-primary hover:bg-primary/12',
-                  )}
-                  onClick={toggleSkillPickerToolbar}
-                  disabled={disabled}
-                  title={t('composer.pickSkill')}
-                >
-                  <Wrench className="h-4 w-4" aria-hidden />
-                </Button>
+                <HomeToolbarIconTooltip label={t('composer.pickSkill')}>
+                  <Button
+                    ref={skillButtonRef}
+                    variant="ghost"
+                    type="button"
+                    className={cn(
+                      homeToolbarIconBtn,
+                      skillPickerOpen && skillPickerMode === 'toolbar' && homeToolbarIconActive,
+                    )}
+                    onClick={toggleSkillPickerToolbar}
+                    disabled={disabled || voicePanelOpen}
+                  >
+                    <SkillToolIcon />
+                  </Button>
+                </HomeToolbarIconTooltip>
 
                 {showAgentPicker ? (
                   <div ref={pickerRef} className="relative shrink-0">
@@ -1002,7 +1394,7 @@ export function ChatInput({
                       type="button"
                       className={cn(
                         homeToolbarIconBtn,
-                        (pickerOpen || selectedTarget) && 'bg-primary/10 text-primary hover:bg-primary/12',
+                        (pickerOpen || selectedTarget) && homeToolbarIconActive,
                       )}
                       onClick={() => setPickerOpen((open) => !open)}
                       disabled={disabled}
@@ -1036,30 +1428,82 @@ export function ChatInput({
                 ) : null}
 
                 <div ref={workflowPickerRef} className="relative shrink-0">
-                  <Button
-                    ref={workflowButtonRef}
-                    variant="ghost"
-                    type="button"
-                    className={cn(
-                      homeToolbarIconBtn,
-                      workflowPickerOpen && 'bg-primary/10 text-primary hover:bg-primary/12',
-                    )}
-                    onClick={() => {
-                      setSkillPickerOpen(false);
-                      setWorkflowPickerOpen((open) => !open);
-                    }}
-                    disabled={disabled}
-                    title={t('composer.pickWorkflow')}
-                  >
-                    {/* 临时图标，等用户提供 SVG 替换 */}
-                    <Workflow className="h-4 w-4" aria-hidden />
-                  </Button>
+                  <HomeToolbarIconTooltip label={t('composer.pickWorkflow')}>
+                    <Button
+                      ref={workflowButtonRef}
+                      variant="ghost"
+                      type="button"
+                      className={cn(
+                        homeToolbarIconBtn,
+                        workflowPickerOpen && homeToolbarIconActive,
+                      )}
+                      onClick={() => {
+                        setSkillPickerOpen(false);
+                        setQuickInputPickerOpen(false);
+                        setWorkflowPickerOpen((open) => !open);
+                      }}
+                      disabled={disabled || voicePanelOpen}
+                    >
+                      <WorkflowNodesIcon />
+                    </Button>
+                  </HomeToolbarIconTooltip>
+                </div>
+
+                <div className="relative shrink-0">
+                  <HomeToolbarIconTooltip label={t('composer.quickInputTitle')}>
+                    <Button
+                      ref={quickInputButtonRef}
+                      variant="ghost"
+                      type="button"
+                      className={cn(
+                        homeToolbarIconBtn,
+                        quickInputPickerOpen && homeToolbarIconActive,
+                      )}
+                      onClick={toggleQuickInputPicker}
+                      disabled={disabled || voicePanelOpen}
+                    >
+                      <QuickInputIcon />
+                    </Button>
+                  </HomeToolbarIconTooltip>
                 </div>
               </div>
 
               <div className="flex min-w-0 items-center gap-2">
-                {toolbarInlineSelectors}
-                {/* 语音输入暂未接入，先隐藏 Mic 按钮；恢复时还原 ghost Button + Mic 图标 */}
+                {voicePanelOpen ? null : toolbarInlineSelectors}
+                {voiceConfirming ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-[30px] shrink-0 rounded-full px-3 text-[12px]"
+                    onClick={handleCancelVoiceAutoSend}
+                    title={t('composer.voiceConfirmCancel')}
+                  >
+                    {t('composer.voiceConfirmCancel')}
+                  </Button>
+                ) : null}
+                <Button
+                  variant="ghost"
+                  type="button"
+                  size="icon"
+                  className={cn(
+                    'h-[30px] w-[30px] shrink-0 rounded-[16px]',
+                    homeToolbarIconBtn,
+                    voicePanelOpen
+                      ? 'bg-red-500/15 text-red-500 hover:bg-red-500/20 hover:text-red-500'
+                      : undefined,
+                  )}
+                  onClick={handleMicClick}
+                  disabled={disabled || (sending && !voiceLoopActive && !voiceConfirming)}
+                  title={voiceButtonTitle}
+                  aria-pressed={voicePanelOpen}
+                >
+                  {voiceStatus === 'connecting' ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  ) : (
+                    <Mic className="h-4 w-4" aria-hidden />
+                  )}
+                </Button>
                 {sending && canSend ? (
                   <Button
                     onClick={handleSend}
@@ -1108,6 +1552,16 @@ export function ChatInput({
                   mentionEditorRef.current?.focus();
                 }}
               />
+              <QuickInputPicker
+                ref={quickInputPickerRef}
+                open={quickInputPickerOpen}
+                anchorRef={quickInputButtonRef}
+                onClose={() => setQuickInputPickerOpen(false)}
+                onSelect={(item) => {
+                  mentionEditorRef.current?.insertPlainText(item.content);
+                  mentionEditorRef.current?.focus();
+                }}
+              />
             </div>
           ) : (
           <div className="flex items-center justify-between gap-3 px-4 pb-1.5 pt-0.5">
@@ -1117,10 +1571,10 @@ export function ChatInput({
                 type="button"
                 className="h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]"
                 onClick={pickFiles}
-                disabled={disabled}
+                disabled={disabled || voicePanelOpen}
                 title={t('composer.attachFiles')}
               >
-                <Paperclip className="h-3.5 w-3.5" />
+                <AttachFileIcon />
               </Button>
 
               {showAgentPicker && (
@@ -1136,7 +1590,7 @@ export function ChatInput({
                     disabled={disabled}
                     title={t('composer.pickAgent')}
                   >
-                    <AtSign className="h-3.5 w-3.5" />
+                    <Bot className="h-3.5 w-3.5" />
                   </Button>
                   {pickerOpen && (
                     <div className="absolute left-0 bottom-full z-50 mb-2 w-72 overflow-hidden rounded-2xl border border-glass-border glass p-1.5">
@@ -1168,14 +1622,14 @@ export function ChatInput({
                 type="button"
                 className={cn(
                   'h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
-                  skillPickerOpen && skillPickerMode === 'toolbar' && 'bg-primary/10 text-primary hover:bg-primary/12',
+                  skillPickerOpen && skillPickerMode === 'toolbar' && 'bg-black/5 text-foreground hover:bg-black/5 dark:bg-white/[0.06] dark:hover:bg-white/[0.06]',
                 )}
                 onClick={toggleSkillPickerToolbar}
-                disabled={disabled}
+                disabled={disabled || voicePanelOpen}
                 title={t('composer.pickSkill')}
               >
-                <Wrench className="h-3.5 w-3.5" />
-              </Button>
+                  <SkillToolIcon />
+                </Button>
 
               {/* Workflow picker button */}
               <div ref={workflowPickerRef} className="relative shrink-0">
@@ -1185,16 +1639,34 @@ export function ChatInput({
                   type="button"
                   className={cn(
                     'h-8  rounded-full p-4 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
-                    workflowPickerOpen && 'bg-primary/10 text-primary hover:bg-primary/12'
+                    workflowPickerOpen && 'bg-black/5 text-foreground hover:bg-black/5 dark:bg-white/[0.06] dark:hover:bg-white/[0.06]',
                   )}
                   onClick={() => {
                     setSkillPickerOpen(false);
+                    setQuickInputPickerOpen(false);
                     setWorkflowPickerOpen((open) => !open);
                   }}
-                  disabled={disabled}
+                  disabled={disabled || voicePanelOpen}
                   title={t('composer.pickWorkflow')}
                 >
                   <span className="text-[13px] font-medium">{t('composer.pickWorkflow')}</span>
+                </Button>
+              </div>
+
+              <div className="relative shrink-0">
+                <Button
+                  ref={quickInputButtonRef}
+                  variant="ghost"
+                  type="button"
+                  className={cn(
+                    'h-8 w-8 rounded-full p-0 text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
+                    quickInputPickerOpen && 'bg-black/5 text-foreground hover:bg-black/5 dark:bg-white/[0.06] dark:hover:bg-white/[0.06]',
+                  )}
+                  onClick={toggleQuickInputPicker}
+                  disabled={disabled}
+                  title={t('composer.quickInputTitle')}
+                >
+                  <QuickInputIcon />
                 </Button>
               </div>
             </div>
@@ -1213,8 +1685,52 @@ export function ChatInput({
                 mentionEditorRef.current?.focus();
               }}
             />
+            <QuickInputPicker
+              ref={quickInputPickerRef}
+              open={quickInputPickerOpen}
+              anchorRef={quickInputButtonRef}
+              onClose={() => setQuickInputPickerOpen(false)}
+              onSelect={(item) => {
+                mentionEditorRef.current?.insertPlainText(item.content);
+                mentionEditorRef.current?.focus();
+              }}
+            />
 
             {/* When sending: show Send (to queue) if there's input, otherwise show Stop */}
+            <div className="flex items-center gap-1.5">
+              {voiceConfirming ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 shrink-0 rounded-full px-3 text-[12px]"
+                  onClick={handleCancelVoiceAutoSend}
+                  title={t('composer.voiceConfirmCancel')}
+                >
+                  {t('composer.voiceConfirmCancel')}
+                </Button>
+              ) : null}
+              <Button
+                variant="ghost"
+                type="button"
+                size="icon"
+                className={cn(
+                  'h-9 w-9 shrink-0 rounded-full border transition-all',
+                  voicePanelOpen
+                    ? 'border-red-500/40 bg-red-500/15 text-red-500 hover:bg-red-500/20'
+                    : 'border-transparent text-muted-foreground/75 hover:bg-black/5 hover:text-foreground dark:hover:bg-white/[0.06]',
+                )}
+                onClick={handleMicClick}
+                disabled={disabled || (sending && !voiceLoopActive && !voiceConfirming)}
+                title={voiceButtonTitle}
+                aria-pressed={voicePanelOpen}
+              >
+                {voiceStatus === 'connecting' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                ) : (
+                  <Mic className="h-4 w-4" aria-hidden />
+                )}
+              </Button>
             {sending && canSend ? (
               <Button
                 onClick={handleSend}
@@ -1251,6 +1767,7 @@ export function ChatInput({
                 )}
               </Button>
             )}
+            </div>
           </div>
           )}
         </div>

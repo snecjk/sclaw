@@ -1196,6 +1196,30 @@ export class SkillPlazaService {
       const res = await this.client.getCategories(queryParams || undefined);
       const categories = [...(res.categories || [])];
 
+      // Sort categories by Apollo config order when available.
+      // The Apollo "categorys" filter is a comma-separated slug list that also
+      // defines the desired display order for the current user role.
+      const orderParam = queryParams.trim();
+      if (orderParam) {
+        const orderMap = new Map(
+          orderParam
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .map((slug, index) => [slug, index]),
+        );
+        categories.sort((a, b) => {
+          const orderA = orderMap.get(a.slug);
+          const orderB = orderMap.get(b.slug);
+          if (orderA !== undefined && orderB !== undefined) {
+            return orderA - orderB;
+          }
+          if (orderA !== undefined) return -1;
+          if (orderB !== undefined) return 1;
+          return 0;
+        });
+      }
+
       // Inject "办公" category if not already present
       if (!categories.some((c) => c.slug === OFFICE_CATEGORY_SLUG)) {
         categories.push({ slug: OFFICE_CATEGORY_SLUG, label: OFFICE_CATEGORY_LABEL });

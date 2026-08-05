@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Package, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
@@ -6,12 +7,12 @@ import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { useAuthStore } from '@/stores/auth';
 import { useTranslation } from 'react-i18next';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { SkillPlazaHeader } from './SkillPlazaHeader';
-import { SkillPlazaToolbar } from './SkillPlazaToolbar';
+import { SkillPlazaHeader, type SkillPlazaSection } from './SkillPlazaHeader';
 import { SkillPlazaCategoryNav } from './SkillPlazaCategoryNav';
 import { SkillCard } from './SkillCard';
 import { SkillCardList } from './SkillCardList';
 import { SkillDetailModal } from './SkillDetailModal';
+import { ConnectorPanel } from '@/components/connectors/ConnectorPanel';
 import type { SkillSummary } from '@/types/skill-plaza';
 import { cn } from '@/lib/utils';
 import { stoMainInnerShell } from '@/lib/surfaces';
@@ -20,8 +21,37 @@ import {
   resolveMineSkillCategoryCode,
 } from '@/lib/skill-plaza-category';
 
+/** 动态列数：单卡≥240px，最多 4 列（gap-3 = 0.75rem × 3） */
+const SKILL_PLAZA_GRID_STYLE = {
+  gridTemplateColumns:
+    'repeat(auto-fill, minmax(min(100%, max(240px, calc((100% - 2.25rem) / 4))), 1fr))',
+} as const;
+
 export function SkillPlazaPage() {
   const { t } = useTranslation('skills');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sectionParam = searchParams.get('section');
+  const [plazaSection, setPlazaSection] = useState<SkillPlazaSection>(
+    sectionParam === 'connectors' ? 'connectors' : 'skills',
+  );
+
+  useEffect(() => {
+    if (sectionParam === 'connectors') {
+      setPlazaSection('connectors');
+    } else if (sectionParam === 'skills' || sectionParam == null) {
+      // Keep connectors when user toggled in-page without clearing URL only if param says connectors.
+      if (sectionParam === 'skills') setPlazaSection('skills');
+    }
+  }, [sectionParam]);
+
+  const handleSectionChange = useCallback((section: SkillPlazaSection) => {
+    setPlazaSection(section);
+    if (section === 'connectors') {
+      setSearchParams({ section: 'connectors' }, { replace: true });
+    } else {
+      setSearchParams({}, { replace: true });
+    }
+  }, [setSearchParams]);
   // Subscribe (shallow) only to the render-relevant slice so churny state like
   // installing/uninstalling flags does not re-render the whole page.
   const {
@@ -155,12 +185,22 @@ export function SkillPlazaPage() {
         </div>
       )}
         <div className={cn(stoMainInnerShell, 'flex min-h-0 flex-1 flex-col overflow-hidden')}>
-      <SkillPlazaHeader onUploadSuccess={handleUploadSuccess} />
-      <SkillPlazaToolbar />
+      <SkillPlazaHeader
+        section={plazaSection}
+        onSectionChange={handleSectionChange}
+        onUploadSuccess={handleUploadSuccess}
+      />
+
+      {plazaSection === 'connectors' ? (
+        <div className="min-h-0 flex-1 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <ConnectorPanel />
+        </div>
+      ) : (
+        <>
       <SkillPlazaCategoryNav />
 
       {/* Skill list */}
-      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="min-h-0 flex-1 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {syncingUserSkills && skills.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <RefreshCw className="h-8 w-8 mb-4 animate-spin opacity-50" />
@@ -189,12 +229,9 @@ export function SkillPlazaPage() {
             ))}
           </div>
         ) : (
-          /* Grid view (default for plaza tab, grid for mine tab) */
           <div
-            className={cn(
-              'grid gap-3',
-              'grid-cols-1 md:grid-cols-2 lg:grid-cols-3',
-            )}
+            className="grid gap-3"
+            style={SKILL_PLAZA_GRID_STYLE}
           >
             {skills.map((skill) => (
               <SkillCard
@@ -234,6 +271,8 @@ export function SkillPlazaPage() {
         }}
         onCancel={() => setDeleteTarget(null)}
       />
+        </>
+      )}
         </div>
       </div>
     </div>

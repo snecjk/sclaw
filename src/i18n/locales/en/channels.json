@@ -185,7 +185,7 @@
             ]
         },
         "dingtalk": {
-            "description": "Scan to bind the org-wide DingTalk bot; Hub routes messages to this StoClaw",
+            "description": "Scan to bind the org-wide DingTalk bot; Hub routes messages to this SClaw",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/Y5eNwiSiZidkLskrwtJc1rUln0b#doxcnDgA78n43DbkiQjI1OqUA7b",
             "fields": {
                 "clientId": {
@@ -211,7 +211,7 @@
                 "cardTemplateId": {
                     "label": "Interactive Card Template ID (optional)",
                     "placeholder": "Enter your DingTalk interactive card template ID",
-                    "description": "When set, S Claw will automatically enable DingTalk card replies and streaming updates"
+                    "description": "When set, SClaw will automatically enable DingTalk card replies and streaming updates"
                 },
                 "cardTemplateKey": {
                     "label": "Card Content Variable (optional)",

@@ -19,6 +19,13 @@ import { existsSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import {
+  isKnownOldAppBackupName,
+  removeMacAppBundlePath,
+  resolveMacAppInstallTargetPath,
+  scheduleMacAppBundleRelaunch,
+  stageExistingMacAppTarget,
+} from '../utils/cleanup-old-app-bundles';
 
 const execFile = promisify(execFileCb);
 import {
@@ -34,6 +41,37 @@ import { getCurrentEnvConfig } from '../../shared/env-config';
 
 /** OSS base URL determined by build environment (env-config) */
 const OSS_BASE_URL = getCurrentEnvConfig().updateBaseUrl;
+const MAC_APP_BUNDLE_EXTENSION = '.app';
+
+async function resolveMacAppExecutablePath(appBundlePath: string): Promise<string> {
+  const macosDir = path.join(appBundlePath, 'Contents', 'MacOS');
+  const plistPath = path.join(appBundlePath, 'Contents', 'Info.plist');
+
+  try {
+    const plist = await fsp.readFile(plistPath, 'utf-8');
+    const match = plist.match(/<key>CFBundleExecutable<\/key>\s*<string>([^<]+)<\/string>/);
+    const executableName = match?.[1]?.trim();
+    if (executableName) {
+      return path.join(macosDir, executableName);
+    }
+  } catch (error) {
+    logger.warn(`[Updater] resolveMacAppExecutablePath: failed to read ${plistPath}`, error);
+  }
+
+  try {
+    const preferredName = path.basename(appBundlePath, MAC_APP_BUNDLE_EXTENSION);
+    const entries = await fsp.readdir(macosDir);
+    const preferred = entries.find((entry) => entry === preferredName);
+    const fallback = preferred ?? entries.find((entry) => !entry.startsWith('.'));
+    if (fallback) {
+      return path.join(macosDir, fallback);
+    }
+  } catch (error) {
+    logger.warn(`[Updater] resolveMacAppExecutablePath: failed to inspect ${macosDir}`, error);
+  }
+
+  return path.join(macosDir, path.basename(appBundlePath, MAC_APP_BUNDLE_EXTENSION));
+}
 
 /** autoUpdater.checkForUpdates() 超时时间 (ms) */
 const CHECK_UPDATER_TIMEOUT_MS = 30_000;
@@ -167,6 +205,9 @@ export class AppUpdater extends EventEmitter {
    * 服务端回滚版本后若用默认 relaunch，会再次拉起备份中的高版本，需显式指向原路径下的新 .app。
    */
   private _relaunchExecPath: string | null = null;
+
+  /** macOS app bundle path to relaunch after manual install. */
+  private _relaunchAppBundlePath: string | null = null;
 
   /** Delay (ms) after the new version starts before purging the install backup. */
   private static readonly BACKUP_CLEANUP_DELAY_MS = 60_000;
@@ -878,7 +919,7 @@ export class AppUpdater extends EventEmitter {
   }
 
   /**
-   * 手动安装：解压下载好的 zip，把当前 .app 改名备份，把新 .app 放到 /Applications，
+   * 手动安装：解压下载好的 zip，把当前 .app 改名备份，把新 .app 放到安装目录，
    * 移除 com.apple.quarantine（绕开 Gatekeeper），然后切到 'installed' 状态。
    *
    * 完全不调用 Squirrel.Mac，因此不受其代码签名校验影响。
@@ -919,13 +960,13 @@ export class AppUpdater extends EventEmitter {
     const appPath = currentAppPath.endsWith('.app')
       ? currentAppPath
       : path.dirname(path.dirname(path.dirname(process.execPath)));
-    this._relaunchExecPath = path.join(appPath, 'Contents/MacOS', path.basename(process.execPath));
     logger.info(
-      `[Updater] manualInstall: target app path = ${appPath}, relaunch exec = ${this._relaunchExecPath}`,
+      `[Updater] manualInstall: current app path = ${appPath}`,
     );
 
     const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'stoclaw-install-'));
-    let extractedAppPath: string | null = null;
+    let targetAppPath = appPath;
+    let stagedTargetAppPath: string | null = null;
 
     try {
       // 1. 解压 zip 到临时目录
@@ -937,8 +978,19 @@ export class AppUpdater extends EventEmitter {
       if (!appEntry) {
         throw new Error('解压后未在压缩包中找到 .app');
       }
-      extractedAppPath = path.join(tmpDir, appEntry);
+      const extractedAppPath = path.join(tmpDir, appEntry);
       logger.info(`[Updater] manualInstall: extracted app = ${extractedAppPath}`);
+
+      const installDir = path.dirname(appPath);
+      targetAppPath = resolveMacAppInstallTargetPath(installDir, extractedAppPath);
+      logger.info(`[Updater] manualInstall: target app path = ${targetAppPath}`);
+
+      stagedTargetAppPath = await stageExistingMacAppTarget(appPath, targetAppPath);
+      if (stagedTargetAppPath) {
+        logger.info(
+          `[Updater] manualInstall: staged existing target app ${targetAppPath} to ${stagedTargetAppPath}`,
+        );
+      }
 
       // 2. 备份旧 app（同设备 rename 是原子操作，运行中的进程仍可继续）
       const backupPath = `${appPath}.old-${Date.now()}`;
@@ -948,17 +1000,21 @@ export class AppUpdater extends EventEmitter {
         logger.info(`[Updater] manualInstall: backed up old app to ${backupPath}`);
       }
 
-      // 3. 把新 app 放到原位置（跨设备时 rename 会失败，fallback 到 cp -R）
+      // 3. 把新 app 放到目标路径（跨设备时 rename 会失败，fallback 到 cp -R）
       try {
-        await fsp.rename(extractedAppPath, appPath);
+        await fsp.rename(extractedAppPath, targetAppPath);
       } catch (e) {
         logger.warn('[Updater] manualInstall: rename failed, falling back to cp -R', e);
-        await execFile('cp', ['-R', extractedAppPath, appPath]);
+        await execFile('cp', ['-R', extractedAppPath, targetAppPath]);
       }
+
+      this._relaunchExecPath = await resolveMacAppExecutablePath(targetAppPath);
+      this._relaunchAppBundlePath = targetAppPath;
+      logger.info(`[Updater] manualInstall: relaunch exec = ${this._relaunchExecPath}`);
 
       // 4. 移除 quarantine 扩展属性（绕开 Gatekeeper）
       try {
-        await execFile('xattr', ['-rd', 'com.apple.quarantine', appPath]);
+        await execFile('xattr', ['-rd', 'com.apple.quarantine', targetAppPath]);
         logger.info('[Updater] manualInstall: quarantine attribute removed');
       } catch (e) {
         // 没有 quarantine 属性时 xattr 也会 exit 非零，不算致命错误
@@ -981,6 +1037,15 @@ export class AppUpdater extends EventEmitter {
         );
         this._backupAppPath = null;
       }
+      if (stagedTargetAppPath) {
+        await removeMacAppBundlePath(stagedTargetAppPath).catch((e) => {
+          logger.warn(
+            `[Updater] manualInstall: failed to remove staged target app ${stagedTargetAppPath}, will retry on next startup`,
+            e,
+          );
+        });
+        stagedTargetAppPath = null;
+      }
       await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
 
       logger.info('[Updater] manualInstall: success, switching to installed state');
@@ -990,11 +1055,11 @@ export class AppUpdater extends EventEmitter {
       const msg = error instanceof Error ? error.message : String(error);
       logger.error(`[Updater] manualInstall failed: ${msg}`);
 
-      // 回滚：恢复备份的旧 app
+      // 回滚：恢复备份的旧 app 和被暂存的既有目标 app
       if (this._backupAppPath && existsSync(this._backupAppPath)) {
         try {
-          if (existsSync(appPath)) {
-            await fsp.rm(appPath, { recursive: true, force: true });
+          if (existsSync(targetAppPath)) {
+            await removeMacAppBundlePath(targetAppPath);
           }
           await fsp.rename(this._backupAppPath, appPath);
           logger.info(`[Updater] manualInstall: rolled back to backup ${this._backupAppPath}`);
@@ -1003,12 +1068,25 @@ export class AppUpdater extends EventEmitter {
         }
         this._backupAppPath = null;
       }
+      if (stagedTargetAppPath && existsSync(stagedTargetAppPath)) {
+        try {
+          if (existsSync(targetAppPath)) {
+            await removeMacAppBundlePath(targetAppPath);
+          }
+          await fsp.rename(stagedTargetAppPath, targetAppPath);
+          logger.info(`[Updater] manualInstall: restored staged target app ${stagedTargetAppPath}`);
+        } catch (rollbackErr) {
+          logger.error('[Updater] manualInstall: staged target restore failed', rollbackErr);
+        }
+        stagedTargetAppPath = null;
+      }
 
       // 清理临时目录
       await fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
 
       this.updateStatus({ status: 'error', error: `安装失败: ${msg}` });
       this._relaunchExecPath = null;
+      this._relaunchAppBundlePath = null;
       throw error;
     }
   }
@@ -1066,27 +1144,25 @@ export class AppUpdater extends EventEmitter {
    */
   private async cleanupOrphanedBackups(protectedPath: string | null): Promise<void> {
     try {
-      // 推导出当前 app 所在目录和 basename："/Applications" + "S Claw"
+      // 推导出当前 app 所在目录和 basename："/Applications" + "SClaw"
       const currentAppPath = path.dirname(path.dirname(path.dirname(process.execPath)));
       if (!currentAppPath.endsWith('.app')) {
         logger.warn(`[Updater] cleanupOrphanedBackups: unexpected app path ${currentAppPath}`);
         return;
       }
       const appDir = path.dirname(currentAppPath);
-      const appBaseName = path.basename(currentAppPath, '.app');
-      const escapedName = appBaseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const pattern = new RegExp(`^${escapedName}\\.app\\.old-\\d+$`);
+      const currentBundleName = path.basename(currentAppPath);
 
       const entries = await fsp.readdir(appDir);
       for (const entry of entries) {
-        if (!pattern.test(entry)) continue;
+        if (!isKnownOldAppBackupName(currentBundleName, entry)) continue;
         const fullPath = path.join(appDir, entry);
         if (protectedPath && fullPath === protectedPath) {
           // 这一个是 marker 记录的"刚装好的备份"，留给 60s 延迟清理流程处理
           continue;
         }
         logger.info(`[Updater] cleanupOrphanedBackups: removing orphan backup ${fullPath}`);
-        await fsp.rm(fullPath, { recursive: true, force: true }).catch((e) => {
+        await removeMacAppBundlePath(fullPath).catch((e) => {
           logger.warn(`[Updater] cleanupOrphanedBackups: failed to remove ${fullPath}:`, e);
         });
       }
@@ -1190,6 +1266,11 @@ export class AppUpdater extends EventEmitter {
     this.clearRestartCountdownTimer();
     const execPath = this._relaunchExecPath ?? process.execPath;
     logger.info(`[Updater] restartApp: relaunch execPath=${execPath}`);
+    const appBundlePath = this._relaunchAppBundlePath;
+    if (process.platform === 'darwin' && appBundlePath) {
+      logger.info(`[Updater] restartApp: scheduling macOS app bundle relaunch=${appBundlePath}`);
+      scheduleMacAppBundleRelaunch(appBundlePath);
+    }
     const targetVersion = (this.status.info as UpdateInfo | undefined)?.version;
     // 留一点时间让 IPC / 日志 flush；写入 pending marker 供重启后检测更新完成并强制重登
     void (async () => {
@@ -1200,7 +1281,9 @@ export class AppUpdater extends EventEmitter {
         });
       }
       setTimeout(() => {
-        app.relaunch({ execPath });
+        if (!(process.platform === 'darwin' && appBundlePath)) {
+          app.relaunch({ execPath });
+        }
         app.quit();
       }, 100);
     })();

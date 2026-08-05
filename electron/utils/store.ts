@@ -27,7 +27,7 @@ export interface AppSettings {
   language: string;
   startMinimized: boolean;
   launchAtStartup: boolean;
-  /** When true, keep the system awake while S Claw is running. */
+  /** When true, keep the system awake while SClaw is running. */
   preventSystemSleep: boolean;
   telemetryEnabled: boolean;
   machineId: string;
@@ -54,6 +54,8 @@ export interface AppSettings {
 
   // UI State
   sidebarCollapsed: boolean;
+  /** User preferred sidebar width in px (200–400). */
+  sidebarPreferredWidth: number;
   devModeUnlocked: boolean;
 
   // Presets
@@ -120,6 +122,7 @@ function createDefaultSettings(): AppSettings {
 
     // UI State
     sidebarCollapsed: false,
+    sidebarPreferredWidth: 260,
     devModeUnlocked: false,
 
     // Presets
@@ -153,6 +156,16 @@ async function getSettingsStore() {
       store.set('autoDownloadUpdate', true);
       store.set('_updatePrefsMigrationV1', true);
     }
+    if (!store.has('sidebarPreferredWidth')) {
+      store.set('sidebarPreferredWidth', 260);
+    } else {
+      const raw = store.get('sidebarPreferredWidth');
+      if (typeof raw === 'number') {
+        store.set('sidebarPreferredWidth', Math.min(400, Math.max(200, Math.round(raw))));
+      } else {
+        store.set('sidebarPreferredWidth', 260);
+      }
+    }
   }
   return settingsStoreInstance;
 }
@@ -173,6 +186,11 @@ export async function setSetting<K extends keyof AppSettings>(
   value: AppSettings[K]
 ): Promise<void> {
   const store = await getSettingsStore();
+  if (key === 'sidebarPreferredWidth' && typeof value === 'number') {
+    const clamped = Math.min(400, Math.max(200, Math.round(value)));
+    store.set(key, clamped as AppSettings[K]);
+    return;
+  }
   store.set(key, value);
 }
 
