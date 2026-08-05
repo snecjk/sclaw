@@ -54,17 +54,21 @@ import { getSetting } from '../utils/store';
 import { getCurrentEnvConfig } from '../../shared/env-config';
 import { getSqliteDatabaseInfo, initializeSqliteDatabase } from '../db';
 import {
-  LEGACY_MAC_APP_BUNDLE_NAME,
+  isLegacyMacAppBundleName,
+  LEGACY_MAC_APP_BUNDLE_NAMES,
+  registerMacAppBundle,
   RENAMED_MAC_APP_BUNDLE_NAME,
   scheduleMacAppBundleMoveAndRelaunch,
+  scheduleMacAppBundleRelaunch,
+  shouldPreserveCanonicalMacApp,
   stageExistingMacAppTarget,
+  unregisterMacAppBundle,
 } from '../utils/cleanup-old-app-bundles';
 
 _ts('static imports loaded');
 
 const WINDOWS_APP_USER_MODEL_ID = 'app.stoclaw.desktop';
 const LEGACY_USER_DATA_DIR_NAME = 'stoclaw';
-const LEGACY_MAC_APP_BUNDLE_PATH = '/Applications/S Claw.app';
 
 function pinLegacyUserDataPath(): void {
   app.setPath('userData', join(app.getPath('appData'), LEGACY_USER_DATA_DIR_NAME));
@@ -83,27 +87,34 @@ async function promptRemoveLegacyMacAppIfNeeded(win: BrowserWindow): Promise<voi
   const currentAppPath = getCurrentMacAppBundlePath();
   if (!currentAppPath || basename(currentAppPath) !== RENAMED_MAC_APP_BUNDLE_NAME) return;
 
-  const legacyAppPath = resolve(LEGACY_MAC_APP_BUNDLE_PATH);
-  if (resolve(currentAppPath) === legacyAppPath || !existsSync(legacyAppPath)) return;
+  const legacyAppPaths = LEGACY_MAC_APP_BUNDLE_NAMES
+    .map((name) => join(dirname(currentAppPath), name))
+    .filter((candidate) => resolve(currentAppPath) !== resolve(candidate) && existsSync(candidate));
+  if (legacyAppPaths.length === 0) return;
+  const legacyNames = legacyAppPaths.map((legacyPath) => basename(legacyPath)).join('、');
 
   const result = await dialog.showMessageBox(win, {
     type: 'question',
     buttons: ['移到废纸篓', '稍后处理'],
     defaultId: 0,
     cancelId: 1,
-    title: '移除旧版 S Claw？',
-    message: '检测到“应用程序”文件夹中仍有旧版 S Claw。',
-    detail: '当前正在运行 SClaw。为避免 Dock 或 Launchpad 中出现两个应用，建议将旧版 S Claw 移到废纸篓。此操作不会删除 SClaw 的用户数据。',
+    title: '移除旧版 SClaw？',
+    message: `检测到旧版应用：${legacyNames}`,
+    detail: '当前正在运行 SClaw。为避免 Dock 或 Launchpad 中出现多个应用，建议将旧版应用移到废纸篓。此操作不会删除 SClaw 的用户数据。',
   });
 
   if (result.response !== 0) return;
 
-  try {
-    await shell.trashItem(legacyAppPath);
-    logger.info(`[rename] moved legacy macOS app to Trash: ${legacyAppPath}`);
-  } catch (error) {
-    logger.warn(`[rename] failed to move legacy macOS app to Trash: ${legacyAppPath}`, error);
-    await shell.showItemInFolder(legacyAppPath);
+  for (const legacyAppPath of legacyAppPaths) {
+    try {
+      await unregisterMacAppBundle(legacyAppPath);
+      await shell.trashItem(legacyAppPath);
+      logger.info(`[rename] moved legacy macOS app to Trash: ${legacyAppPath}`);
+    } catch (error) {
+      logger.warn(`[rename] failed to move legacy macOS app to Trash: ${legacyAppPath}`, error);
+      await registerMacAppBundle(legacyAppPath);
+      await shell.showItemInFolder(legacyAppPath);
+    }
   }
 }
 
@@ -111,7 +122,7 @@ async function migrateLegacyMacAppBundleIfNeeded(): Promise<boolean> {
   if (process.platform !== 'darwin' || !app.isPackaged) return false;
 
   const currentAppPath = getCurrentMacAppBundlePath();
-  if (!currentAppPath || basename(currentAppPath) !== LEGACY_MAC_APP_BUNDLE_NAME) {
+  if (!currentAppPath || !isLegacyMacAppBundleName(basename(currentAppPath))) {
     return false;
   }
 
@@ -119,11 +130,30 @@ async function migrateLegacyMacAppBundleIfNeeded(): Promise<boolean> {
   let stagedTargetPath: string | null = null;
 
   try {
+    if (
+      existsSync(targetAppPath)
+      && await shouldPreserveCanonicalMacApp(currentAppPath, targetAppPath)
+    ) {
+      logger.info(
+        `[rename] preserving existing canonical macOS app ${targetAppPath}; `
+        + `historical app remains at ${currentAppPath} for post-launch cleanup`,
+      );
+      await registerMacAppBundle(targetAppPath);
+      scheduleMacAppBundleRelaunch(targetAppPath);
+      setQuitting();
+      app.quit();
+      return true;
+    }
+
+    if (existsSync(targetAppPath)) {
+      await unregisterMacAppBundle(targetAppPath);
+    }
     stagedTargetPath = await stageExistingMacAppTarget(currentAppPath, targetAppPath);
     if (stagedTargetPath) {
       logger.info(`[rename] staged existing renamed macOS app ${targetAppPath} to ${stagedTargetPath}`);
     }
 
+    await unregisterMacAppBundle(currentAppPath);
     logger.info(`[rename] scheduling legacy macOS app bundle migration ${currentAppPath} to ${targetAppPath}`);
     scheduleMacAppBundleMoveAndRelaunch(currentAppPath, targetAppPath, stagedTargetPath);
     setQuitting();
@@ -134,10 +164,17 @@ async function migrateLegacyMacAppBundleIfNeeded(): Promise<boolean> {
     if (stagedTargetPath && existsSync(stagedTargetPath) && !existsSync(targetAppPath)) {
       try {
         await rename(stagedTargetPath, targetAppPath);
+        await registerMacAppBundle(targetAppPath);
         logger.info(`[rename] restored staged renamed macOS app ${stagedTargetPath}`);
       } catch (restoreError) {
         logger.warn(`[rename] failed to restore staged renamed macOS app ${stagedTargetPath}`, restoreError);
       }
+    }
+    if (existsSync(currentAppPath)) {
+      await registerMacAppBundle(currentAppPath);
+    }
+    if (existsSync(targetAppPath)) {
+      await registerMacAppBundle(targetAppPath);
     }
     return false;
   }
