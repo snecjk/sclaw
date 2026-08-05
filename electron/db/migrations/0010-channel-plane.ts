@@ -13,6 +13,7 @@ export const channelPlaneMigration: SqliteMigration = {
       device_id           TEXT NOT NULL,
       external_user_id    TEXT,
       provider_account_id TEXT,
+      sto_mobile_channel  TEXT,
 
       bind_status         TEXT NOT NULL DEFAULT 'unbound'
                             CHECK (bind_status IN ('unbound', 'bound', 'revoked')),
