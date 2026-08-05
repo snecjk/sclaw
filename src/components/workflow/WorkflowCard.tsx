@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Circle, Clock, Loader2, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, Circle, Clock, Loader2, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { workflowResultSummaryClass } from '@/lib/surfaces';
@@ -22,6 +22,7 @@ import { buildArtifactCardMenuItems } from '@/lib/artifact-card-menu';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import { getWorkflowProgressDetails } from '@/lib/workflow-card-progress';
 import { getChatWorkflowCard } from '@/lib/workflow-api';
+import { parseWorkflowParamsSummaryGroups } from '@/lib/workflow-form-utils';
 import type { WorkflowExecutionState, WorkflowRunStatus } from '@/types/workflow';
 
 interface WorkflowCardProps {
@@ -192,6 +193,7 @@ export function WorkflowCard({
   const [queryError, setQueryError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
+  const [paramsExpanded, setParamsExpanded] = useState(true);
 
   const resolvedName = (() => {
     if (templateName && !isTemplateIdLabel(templateName)) return templateName;
@@ -290,6 +292,10 @@ export function WorkflowCard({
   const workflowIdentity = display.workflowId
     ? `${resolvedName}（${display.workflowId}）`
     : resolvedName;
+  const confirmedParamGroups = useMemo(
+    () => (paramsSummary ? parseWorkflowParamsSummaryGroups(paramsSummary) : []),
+    [paramsSummary],
+  );
 
   const statusRow = showStatus ? (
     <div
@@ -334,9 +340,39 @@ export function WorkflowCard({
       </div>
 
       {paramsSummary ? (
-        <p className="mt-1 truncate text-[12px] leading-4 text-muted-foreground" title={paramsSummary}>
-          {paramsSummary}
-        </p>
+        <div className="mt-3 border-t border-border/70 pt-2.5">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-md text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-expanded={paramsExpanded}
+            onClick={() => setParamsExpanded((value) => !value)}
+          >
+            {paramsExpanded ? (
+              <ChevronUp className="h-3.5 w-3.5" aria-hidden />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+            )}
+            <span>{t('workflow.confirmedParameters')}</span>
+            <span className="text-[12px] font-normal">{t(paramsExpanded ? 'workflow.collapseParameters' : 'workflow.expandParameters')}</span>
+          </button>
+
+          {paramsExpanded ? (
+            confirmedParamGroups.length > 0 ? (
+              <dl className="mt-2.5 grid gap-2">
+                {confirmedParamGroups.map((group) => (
+                  <div key={`${group.title}-${group.content}`} className="grid gap-0.5">
+                    <dt className="text-[12px] font-medium leading-4 text-foreground/80">{group.title}</dt>
+                    <dd className="m-0 break-words text-[13px] leading-5 text-muted-foreground">{group.content}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : (
+              <p className="mt-2.5 whitespace-pre-wrap break-words text-[13px] leading-5 text-muted-foreground">
+                {paramsSummary}
+              </p>
+            )
+          ) : null}
+        </div>
       ) : null}
 
       {showProgress ? (
