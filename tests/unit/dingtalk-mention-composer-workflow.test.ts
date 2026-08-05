@@ -29,8 +29,8 @@ describe('dingtalk-mention-composer workflow token', () => {
     const spacer = root.lastChild as Text;
     spacer.data = `${spacer.data}/ppt`;
 
-    consumeSlashTriggerText(root, 'ppt');
-    insertWorkflowSpan(root, 'wf_b', 'PPT工作流测试', 'mine');
+    const offset = consumeSlashTriggerText(root, 'ppt');
+    insertWorkflowSpan(root, 'wf_b', 'PPT工作流测试', 'mine', offset ?? undefined);
 
     const snapshot = serializeMentionEditor(root);
     expect(root.querySelectorAll(WORKFLOW_SPAN_SELECTOR)).toHaveLength(1);

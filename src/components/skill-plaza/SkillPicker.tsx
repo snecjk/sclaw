@@ -135,6 +135,7 @@ export const SkillPicker = forwardRef<HTMLDivElement, SkillPickerProps>(
                   key={skill.slug}
                   type="button"
                   role="option"
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
                     onSelect({ slug: skill.slug, title: skill.title });
                     onClose();

@@ -45,6 +45,7 @@ import {
   isWorkflowStartAssistantBoilerplate,
   resolveAssistantCopyShareContent,
   resolveUserBubbleActionText,
+  splitUserBubbleAtTag,
 } from './message-utils';
 import { writeCopyShareTextToClipboard } from '@/lib/copy-share-clipboard';
 import {
@@ -1162,6 +1163,26 @@ function UserWorkflowMessageTag({ workflowName }: { workflowName: string }) {
   );
 }
 
+/** 技能标签按输入框里的落点渲染；无位置信息时退回正文最前。 */
+function UserSkillBubbleContent({
+  text,
+  skillMeta,
+}: {
+  text: string;
+  skillMeta: { slug: string; title: string; tagOffset?: number };
+}) {
+  const { before, after, padBefore, padAfter } = splitUserBubbleAtTag(text, skillMeta.tagOffset);
+  return (
+    <>
+      {before ? renderUserMessageMentionNodes(before) : null}
+      {padBefore ? '\u00A0' : null}
+      <SkillMessageTag title={skillMeta.title} />
+      {padAfter ? '\u00A0' : null}
+      {after ? renderUserMessageMentionNodes(after) : null}
+    </>
+  );
+}
+
 function MessageBubble({
   text,
   skillMeta,
@@ -1266,12 +1287,10 @@ function MessageBubble({
         <p className="whitespace-pre-wrap break-words break-all text-sm font-normal leading-5 text-foreground">
           {userWorkflowDisplay ? (
             <UserWorkflowMessageTag workflowName={userWorkflowDisplay.workflowName} />
+          ) : skillMeta ? (
+            <UserSkillBubbleContent text={text} skillMeta={skillMeta} />
           ) : (
-            <>
-              {skillMeta ? <SkillMessageTag title={skillMeta.title} /> : null}
-              {skillMeta && text.trim().length > 0 ? '\u00A0' : null}
-              {text.trim().length > 0 ? renderUserMessageMentionNodes(text) : null}
-            </>
+            text.trim().length > 0 ? renderUserMessageMentionNodes(text) : null
           )}
         </p>
       ) : (

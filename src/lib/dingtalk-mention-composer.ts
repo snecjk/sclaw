@@ -20,6 +20,8 @@ export interface MentionComposerSnapshot {
   /** 工作流来源：'mine' = 我的工作流-已发布（直接以工作流上下文发送）；缺省 = 模版（走参数表单）。 */
   workflowSource?: string;
   skill?: SkillMeta;
+  /** 技能标签在 plainText 中的插入位置；技能本身不占 plainText 字符，故需单独记录。 */
+  skillOffset?: number;
   isEmpty: boolean;
 }
 
@@ -102,6 +104,7 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
   let workflowName: string | undefined;
   let workflowSource: string | undefined;
   let skill: SkillMeta | undefined;
+  let skillOffset: number | undefined;
 
   const walk = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -121,7 +124,10 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
 
     if (isSkillSpan(node)) {
       const parsed = readSkillFromSpan(node);
-      if (parsed) skill = parsed;
+      if (parsed) {
+        skill = parsed;
+        skillOffset = plainText.length;
+      }
       return;
     }
 
@@ -153,12 +159,16 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
       ?? root.querySelector('span[data-skill-slug]');
     if (skillSpan instanceof HTMLSpanElement) {
       const parsed = readSkillFromSpan(skillSpan);
-      if (parsed) skill = parsed;
+      if (parsed) {
+        skill = parsed;
+        skillOffset = 0;
+      }
     }
   }
 
   let normalized = plainText.replace(/\u00A0/g, ' ');
-  if (skill) {
+  // 技能标签在最前时，它自带的分隔空格不应留在正文里；标签在中间时该空格是正文的一部分。
+  if (skill && skillOffset === 0) {
     normalized = normalized.replace(/^\s+/, '');
   }
   return {
@@ -168,8 +178,23 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
     workflowName,
     workflowSource,
     skill,
+    skillOffset: skill ? Math.min(skillOffset ?? 0, normalized.length) : undefined,
     isEmpty: normalized.trim().length === 0 && mentions.length === 0 && !skill,
   };
+}
+
+/**
+ * 把 snapshot 的技能偏移换算到 `plainText.trim()` 之后的坐标系。
+ * 发送链路统一用 trim 后的文本作为气泡正文，偏移必须同步左移并夹在文本范围内。
+ */
+export function resolveTrimmedSkillOffset(
+  plainText: string,
+  skillOffset: number | undefined,
+): number | undefined {
+  if (skillOffset === undefined) return undefined;
+  const leadingWhitespace = plainText.length - plainText.replace(/^\s+/, '').length;
+  const trimmedLength = plainText.trim().length;
+  return Math.min(Math.max(skillOffset - leadingWhitespace, 0), trimmedLength);
 }
 
 /** 从 plainText 提取 `*` 之后的内联筛选关键词（composer 技能 Picker inline 模式）。 */
@@ -192,38 +217,48 @@ export function hasSkillInlineTrigger(plainText: string): boolean {
 }
 
 /**
- * 移除 editor 中 `*` 及其后的内联筛选文本（选中技能或取消 inline Picker 时调用）。
- * @param explicitQuery 选中技能时传入当前 filter，避免误删 `*` 之后用户已输入的正文
- * @returns 是否成功移除
+ * 移除 editor 中触发符及其后的内联筛选文本，并把光标停在原触发位置。
+ * @returns 触发符在 plainText 中的起始下标；未找到时返回 null
  */
-export function consumeSkillTriggerText(root: HTMLElement, explicitQuery?: string): boolean {
+function consumeTriggerTextAt(
+  root: HTMLElement,
+  triggerChar: '/' | '*',
+  explicitQuery: string | undefined,
+  extractQuery: (plainText: string) => string,
+): number | null {
   const plainText = serializeMentionEditor(root).plainText;
-  const startIdx = plainText.lastIndexOf('*');
-  if (startIdx === -1) return false;
+  const startIdx = plainText.lastIndexOf(triggerChar);
+  if (startIdx === -1) return null;
 
-  const query = explicitQuery ?? extractSkillInlineQuery(plainText);
+  const query = explicitQuery ?? extractQuery(plainText);
   const endIdx = startIdx + 1 + query.length;
 
   const range = buildRangeFromPlainTextOffsets(root, startIdx, endIdx);
-  if (!range) return false;
+  if (!range) return null;
 
   range.deleteContents();
-  return true;
+  // deleteContents 后 range 折叠在删除点；写回 Selection，避免点选浮层失焦后落点漂到开头。
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  return startIdx;
 }
 
-export function consumeSlashTriggerText(root: HTMLElement, explicitQuery?: string): boolean {
-  const plainText = serializeMentionEditor(root).plainText;
-  const startIdx = plainText.lastIndexOf('/');
-  if (startIdx === -1) return false;
+/**
+ * 移除 editor 中 `*` 及其后的内联筛选文本（选中技能或取消 inline Picker 时调用）。
+ * @param explicitQuery 选中技能时传入当前 filter，避免误删 `*` 之后用户已输入的正文
+ * @returns 触发位置下标；未找到时返回 null
+ */
+export function consumeSkillTriggerText(root: HTMLElement, explicitQuery?: string): number | null {
+  return consumeTriggerTextAt(root, '*', explicitQuery, extractSkillInlineQuery);
+}
 
-  const query = explicitQuery ?? extractSlashInlineQuery(plainText);
-  const endIdx = startIdx + 1 + query.length;
-
-  const range = buildRangeFromPlainTextOffsets(root, startIdx, endIdx);
-  if (!range) return false;
-
-  range.deleteContents();
-  return true;
+/**
+ * 移除 editor 中 `/` 及其后的内联筛选文本（slash 组合浮层选中时调用）。
+ * @returns `/` 在 plainText 中的起始下标；未找到时返回 null
+ */
+export function consumeSlashTriggerText(root: HTMLElement, explicitQuery?: string): number | null {
+  return consumeTriggerTextAt(root, '/', explicitQuery, extractSlashInlineQuery);
 }
 
 function collectTextBeforeCaret(root: HTMLElement, range: Range): string {
@@ -240,23 +275,26 @@ function collectTextBeforeCaret(root: HTMLElement, range: Range): string {
   return serializeMentionEditor(container).plainText;
 }
 
+/** 读取当前折叠光标在 plainText 坐标系中的下标；光标不在 editor 内时返回 null。 */
+export function readCaretPlainTextOffset(root: HTMLElement): number | null {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const range = selection.getRangeAt(0);
+  if (!range.collapsed) return null;
+  if (!root.contains(range.startContainer)) return null;
+  return collectTextBeforeCaret(root, range).length;
+}
+
 interface PlainTextBoundary {
   node: Node;
   offset: number;
 }
 
-function rootHasSkillSpan(root: HTMLElement): boolean {
-  return Boolean(
-    root.querySelector(SKILL_SPAN_SELECTOR)
-    ?? root.querySelector('span[data-skill-slug]'),
-  );
-}
-
 function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTextBoundary | null {
   let current = 0;
-  // 与 serializeMentionEditor 一致：有 skill 时 plainText 会剥掉前导空白，
-  // 偏移映射也必须跳过 skill 后的 NBSP/空格，否则 insertMentionAtTrigger 会删错字符留下多余 @。
-  let skippingLeadingWs = rootHasSkillSpan(root);
+  // 与 serializeMentionEditor 一致：技能标签在最前时 plainText 会剥掉它后面的空白，
+  // 偏移映射也必须跳过，否则 insertMentionAtTrigger 会删错字符留下多余 @。
+  let skippingLeadingWs = serializeMentionEditor(root).skillOffset === 0;
 
   const visit = (node: Node): PlainTextBoundary | null => {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -540,29 +578,65 @@ export function removeSkillSpan(root: HTMLElement): void {
   }
 }
 
-export function insertSkillSpan(root: HTMLElement, slug: string, title: string): void {
+/** 当前光标位置；光标不在编辑器内时退回到内容末尾。 */
+function resolveCaretRange(root: HTMLElement): Range {
   const selection = window.getSelection();
-  removeWorkflowSpanFromRoot(root);
-  removeSkillSpan(root);
+  if (selection && selection.rangeCount > 0) {
+    const range = selection.getRangeAt(0);
+    if (root.contains(range.startContainer) && root.contains(range.endContainer)) {
+      return range.cloneRange();
+    }
+  }
+  const fallback = document.createRange();
+  fallback.selectNodeContents(root);
+  fallback.collapse(false);
+  return fallback;
+}
 
-  const span = createSkillSpan(slug, title);
+/** 在光标处插入 token 与其分隔空格，并把光标停在空格之后。 */
+function insertTokenAtCaret(root: HTMLElement, span: HTMLSpanElement): void {
   const space = document.createTextNode('\u00A0');
   const fragment = document.createDocumentFragment();
   fragment.append(span, space);
 
-  const first = root.firstChild;
-  if (first) {
-    root.insertBefore(fragment, first);
-  } else {
-    root.appendChild(fragment);
-  }
+  const range = resolveCaretRange(root);
+  range.deleteContents();
+  range.insertNode(fragment);
 
   const caretRange = document.createRange();
-  caretRange.setStart(space, 1);
+  caretRange.setStart(space, space.length);
   caretRange.collapse(true);
+  const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(caretRange);
   root.focus();
+}
+
+/** 把光标移到 plainText 的指定下标；映射失败时保持原光标。 */
+function moveCaretToPlainTextOffset(root: HTMLElement, offset: number): void {
+  const range = buildRangeFromPlainTextOffsets(root, offset, offset);
+  if (!range) return;
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+/**
+ * @param plainTextOffset 指定落点（编辑重发还原时使用）；缺省则插在当前光标处。
+ */
+export function insertSkillSpan(
+  root: HTMLElement,
+  slug: string,
+  title: string,
+  plainTextOffset?: number,
+): void {
+  removeWorkflowSpanFromRoot(root);
+  removeSkillSpan(root);
+  clearEmptyEditorFillers(root);
+  if (plainTextOffset !== undefined) {
+    moveCaretToPlainTextOffset(root, plainTextOffset);
+  }
+  insertTokenAtCaret(root, createSkillSpan(slug, title));
 }
 
 /** Relabel a rendered skill token in place, so the caret and surrounding text survive. */
@@ -616,40 +690,23 @@ export function insertMentionAtTrigger(
   root.focus();
 }
 
+/**
+ * @param plainTextOffset 指定落点（slash 选中后使用）；缺省则插在当前光标处。
+ */
 export function insertWorkflowSpan(
   root: HTMLElement,
   workflowId: string,
   name: string,
   source?: string,
+  plainTextOffset?: number,
 ): void {
-  const selection = window.getSelection();
   removeSkillSpan(root);
   removeWorkflowSpanFromRoot(root);
-  const snapshot = serializeMentionEditor(root);
-  const text = snapshot.plainText;
-  const lastSlashIndex = text.lastIndexOf('/');
-
-  if (lastSlashIndex >= 0) {
-    const slashRange = buildRangeFromPlainTextOffsets(root, lastSlashIndex, lastSlashIndex + 1);
-    if (slashRange) {
-      slashRange.deleteContents();
-    }
-  }
   clearEmptyEditorFillers(root);
-
-  const span = createWorkflowSpan(workflowId, name, source);
-  const space = document.createTextNode('\u00A0');
-
-  // Insert at the end (or at the slash position if found)
-  root.appendChild(span);
-  root.appendChild(space);
-
-  const caretRange = document.createRange();
-  caretRange.setStart(space, 1);
-  caretRange.collapse(true);
-  selection?.removeAllRanges();
-  selection?.addRange(caretRange);
-  root.focus();
+  if (plainTextOffset !== undefined) {
+    moveCaretToPlainTextOffset(root, plainTextOffset);
+  }
+  insertTokenAtCaret(root, createWorkflowSpan(workflowId, name, source));
 }
 
 export function removeMentionBeforeCaret(root: HTMLElement): boolean {

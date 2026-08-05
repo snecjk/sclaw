@@ -251,6 +251,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
                 <button
                   key={workflow.id}
                   type="button"
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
                     onSelect(workflow.id, workflow.name);
                     onClose();
@@ -334,6 +335,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
                 <button
                   key={workflow.id}
                   type="button"
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
                     onSelect(workflow.id, workflow.name);
                     onClose();
@@ -377,6 +379,7 @@ export const WorkflowPicker = forwardRef<HTMLDivElement, WorkflowPickerProps>(
                   <button
                     key={skill.slug}
                     type="button"
+                    onMouseDown={(event) => event.preventDefault()}
                     onClick={() => {
                       onSelectSkill?.({ slug: skill.slug, title: skill.title });
                       onClose();

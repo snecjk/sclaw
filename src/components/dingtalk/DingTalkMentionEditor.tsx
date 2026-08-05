@@ -18,6 +18,7 @@ import {
   insertWorkflowSpan,
   consumeSkillTriggerText,
   consumeSlashTriggerText,
+  readCaretPlainTextOffset,
   MENTION_SPAN_SELECTOR,
   removeMentionBeforeCaret,
   removeMentionSpan,
@@ -60,11 +61,15 @@ export interface DingTalkMentionEditorHandle {
   insertPlainText: (text: string) => void;
   setMentions: (mentions: DingTalkMention[]) => void;
   insertMention: (mention: DingTalkMention, trigger: ActiveMentionTrigger) => void;
-  insertWorkflow: (workflowId: string, name: string, source?: string) => void;
-  insertSkill: (slug: string, title: string) => void;
-  consumeSkillInlineTrigger: (query?: string) => boolean;
-  consumeSlashTrigger: (query?: string) => boolean;
+  insertWorkflow: (workflowId: string, name: string, source?: string, plainTextOffset?: number) => void;
+  insertSkill: (slug: string, title: string, plainTextOffset?: number) => void;
+  /** @returns 触发符原位置下标；未消费时返回 null */
+  consumeSkillInlineTrigger: (query?: string) => number | null;
+  /** @returns `/` 原位置下标；未消费时返回 null */
+  consumeSlashTrigger: (query?: string) => number | null;
   removeSkill: () => void;
+  /** 记录当前光标位置，供工具栏/浮层选中后恢复插入点 */
+  saveCaret: () => void;
   /** 插入 `@` 并打开钉钉 mention 选择（与手动输入 `@` 等价） */
   openMentionPicker: () => void;
 }
@@ -112,6 +117,25 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
     const appliedSkillSeedRef = useRef<string | undefined>(undefined);
     const lastAppliedSeedRef = useRef<string | undefined>(undefined);
     const isComposingRef = useRef(false);
+    const lastCaretOffsetRef = useRef<number | null>(null);
+
+    const captureCaretOffset = useCallback(() => {
+      const root = editorRef.current;
+      if (!root) return;
+      const offset = readCaretPlainTextOffset(root);
+      if (offset !== null) {
+        lastCaretOffsetRef.current = offset;
+      }
+    }, []);
+
+    const resolveInsertOffset = useCallback((explicitOffset?: number): number | undefined => {
+      if (explicitOffset !== undefined) return explicitOffset;
+      const root = editorRef.current;
+      if (!root) return lastCaretOffsetRef.current ?? undefined;
+      const live = readCaretPlainTextOffset(root);
+      if (live !== null) return live;
+      return lastCaretOffsetRef.current ?? undefined;
+    }, []);
 
     const syncTriggerRafRef = useRef<number | null>(null);
 
@@ -177,41 +201,46 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         syncFromDom();
         onTriggerChange?.(null);
       },
-      insertWorkflow: (workflowId, name, source) => {
+      insertWorkflow: (workflowId, name, source, plainTextOffset) => {
         const root = editorRef.current;
         if (!root) return;
-        insertWorkflowSpan(root, workflowId, name, source);
+        insertWorkflowSpan(root, workflowId, name, source, resolveInsertOffset(plainTextOffset));
         syncFromDom();
+        captureCaretOffset();
       },
-      insertSkill: (slug, title) => {
+      insertSkill: (slug, title, plainTextOffset) => {
         const root = editorRef.current;
         if (!root) return;
-        insertSkillSpan(root, slug, title);
+        insertSkillSpan(root, slug, title, resolveInsertOffset(plainTextOffset));
         syncFromDom();
+        captureCaretOffset();
       },
       consumeSkillInlineTrigger: (query) => {
         const root = editorRef.current;
-        if (!root) return false;
-        const consumed = consumeSkillTriggerText(root, query);
-        if (consumed) {
+        if (!root) return null;
+        const offset = consumeSkillTriggerText(root, query);
+        if (offset !== null) {
           syncFromDom();
         }
-        return consumed;
+        return offset;
       },
       consumeSlashTrigger: (query) => {
         const root = editorRef.current;
-        if (!root) return false;
-        const consumed = consumeSlashTriggerText(root, query);
-        if (consumed) {
+        if (!root) return null;
+        const offset = consumeSlashTriggerText(root, query);
+        if (offset !== null) {
           syncFromDom();
         }
-        return consumed;
+        return offset;
       },
       removeSkill: () => {
         const root = editorRef.current;
         if (!root) return;
         removeSkillSpan(root);
         syncFromDom();
+      },
+      saveCaret: () => {
+        captureCaretOffset();
       },
       openMentionPicker: () => {
         const root = editorRef.current;
@@ -220,7 +249,15 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         syncFromDom();
         onTriggerChange?.(detectActiveMentionTrigger(root));
       },
-    }), [onTriggerChange, removableMentions, syncFromDom]);
+    }), [captureCaretOffset, onTriggerChange, removableMentions, resolveInsertOffset, syncFromDom]);
+
+    useEffect(() => {
+      const onSelectionChange = () => {
+        captureCaretOffset();
+      };
+      document.addEventListener('selectionchange', onSelectionChange);
+      return () => document.removeEventListener('selectionchange', onSelectionChange);
+    }, [captureCaretOffset]);
 
     useEffect(() => {
       const trimmed = seedText?.trim();
@@ -273,7 +310,8 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         onTextInput?.(nativeEvent.data);
       }
       syncFromDom();
-    }, [onTextInput, syncFromDom]);
+      captureCaretOffset();
+    }, [captureCaretOffset, onTextInput, syncFromDom]);
 
     const handleMentionRemove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
       const target = event.target as HTMLElement;
@@ -305,8 +343,9 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
 
     const handleKeyUp = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
       syncFromDom();
+      captureCaretOffset();
       onKeyUp?.(event);
-    }, [onKeyUp, syncFromDom]);
+    }, [captureCaretOffset, onKeyUp, syncFromDom]);
 
     return (
       <div
@@ -327,7 +366,10 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         onKeyUp={handleKeyUp}
         onPaste={onPaste}
         onMouseDown={removableMentions ? handleMentionRemove : undefined}
-        onClick={() => syncFromDom()}
+        onClick={() => {
+          syncFromDom();
+          captureCaretOffset();
+        }}
         onCompositionStart={() => {
           isComposingRef.current = true;
           onCompositionStart?.();
@@ -339,6 +381,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
           isComposingRef.current = false;
           onCompositionEnd?.();
           syncFromDom();
+          captureCaretOffset();
         }}
       />
     );
