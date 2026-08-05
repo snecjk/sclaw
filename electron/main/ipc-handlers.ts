@@ -689,8 +689,15 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
           }
           if (request.action === 'install') {
             data = await import('../utils/dws-cli').then(async (m) => {
-              const result = await m.autoInstallDwsCliIfNeeded((path) => {
-                BrowserWindow.getAllWindows()[0]?.webContents.send('dws:cli-installed', path);
+              const { resolveDwsInstallOptionsForLegacyInstall } = await import(
+                '../connectors/resolve-dws-install'
+              );
+              const installOptions = resolveDwsInstallOptionsForLegacyInstall();
+              const result = await m.autoInstallDwsCliIfNeeded({
+                ...installOptions,
+                notify: (path) => {
+                  BrowserWindow.getAllWindows()[0]?.webContents.send('dws:cli-installed', path);
+                },
               });
               if (result.success) {
                 const { promptGatewayRestartAfterDwsInstall } = await import('../utils/dws-install-notify');

@@ -1,6 +1,6 @@
 {
     "name": "stoclaw",
-    "version": "2026.7.31-GA.1",
+    "version": "2026.8.4-GA.3",
     "pnpm": {
         "onlyBuiltDependencies": [
             "@discordjs/opus",
@@ -13,7 +13,8 @@
         ],
         "overrides": {
             "isbinaryfile": "^5.0.0",
-            "https-proxy-agent": "7.0.6"
+            "https-proxy-agent": "7.0.6",
+            "libsignal": "https://github.com/whiskeysockets/libsignal-node.git#bcea72df9ec34d9d9140ab30619cf479c7c144c7"
         },
         "supportedArchitectures": {
             "os": [
@@ -25,9 +26,9 @@
             ]
         }
     },
-    "description": "S Claw - Graphical AI Assistant based on OpenClaw",
+    "description": "SClaw - Graphical AI Assistant based on OpenClaw",
     "main": "dist-electron/main/index.js",
-    "author": "S Claw Team",
+    "author": "SClaw Team",
     "license": "MIT",
     "private": true,
     "scripts": {

@@ -1,17 +1,25 @@
 import { describe, expect, it } from 'vitest';
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   CLEANUP_RETRY_DELAYS_MS,
   getMacAppBundleInfo,
+  getStaleMacAppTargetPath,
+  isKnownOldAppBackupName,
   isOldAppBackupName,
+  isStaleAppTargetName,
+  resolveMacAppInstallTargetPath,
+  stageExistingMacAppTarget,
 } from '../../electron/utils/cleanup-old-app-bundles';
 
 describe('cleanup-old-app-bundles', () => {
   it('parses macOS app bundle paths', () => {
-    const execPath = '/Applications/S Claw.app/Contents/MacOS/S Claw';
+    const execPath = '/Applications/SClaw.app/Contents/MacOS/SClaw';
     expect(getMacAppBundleInfo(execPath)).toEqual({
       installDir: '/Applications',
-      bundleName: 'S Claw.app',
-      bundlePath: '/Applications/S Claw.app',
+      bundleName: 'SClaw.app',
+      bundlePath: '/Applications/SClaw.app',
     });
   });
 
@@ -20,12 +28,56 @@ describe('cleanup-old-app-bundles', () => {
   });
 
   it('matches Squirrel .old backup names only', () => {
-    const bundle = 'S Claw.app';
-    expect(isOldAppBackupName(bundle, 'S Claw.app.old-1780371448851')).toBe(true);
-    expect(isOldAppBackupName(bundle, 'S Claw.app.old-999')).toBe(true);
-    expect(isOldAppBackupName(bundle, 'S Claw.app')).toBe(false);
-    expect(isOldAppBackupName(bundle, 'S Claw.app.old')).toBe(false);
+    const bundle = 'SClaw.app';
+    expect(isOldAppBackupName(bundle, 'SClaw.app.old-1780371448851')).toBe(true);
+    expect(isOldAppBackupName(bundle, 'SClaw.app.old-999')).toBe(true);
+    expect(isOldAppBackupName(bundle, 'SClaw.app')).toBe(false);
+    expect(isOldAppBackupName(bundle, 'SClaw.app.old')).toBe(false);
     expect(isOldAppBackupName(bundle, 'Other.app.old-123')).toBe(false);
+  });
+
+  it('matches backups from both sides of the macOS bundle rename', () => {
+    expect(isKnownOldAppBackupName('SClaw.app', 'S Claw.app.old-1785859923820')).toBe(true);
+    expect(isKnownOldAppBackupName('SClaw.app', 'SClaw.app.old-1785859923820')).toBe(true);
+    expect(isKnownOldAppBackupName('S Claw.app', 'SClaw.app.old-1785859923820')).toBe(true);
+    expect(isKnownOldAppBackupName('SClaw.app', 'Other.app.old-1785859923820')).toBe(false);
+  });
+
+  it('matches updater-staged stale target names only', () => {
+    const bundle = 'SClaw.app';
+    expect(isStaleAppTargetName(bundle, 'SClaw.app.stale-1780371448851')).toBe(true);
+    expect(isStaleAppTargetName(bundle, 'SClaw.app.stale-1780371448851-1')).toBe(true);
+    expect(isStaleAppTargetName(bundle, 'SClaw.app')).toBe(false);
+    expect(isStaleAppTargetName(bundle, 'SClaw.app.stale')).toBe(false);
+    expect(isStaleAppTargetName(bundle, 'Other.app.stale-123')).toBe(false);
+  });
+
+  it('normalizes legacy extracted app names to the renamed install target', () => {
+    expect(resolveMacAppInstallTargetPath('/Applications', '/tmp/update/S Claw.app')).toBe('/Applications/SClaw.app');
+    expect(resolveMacAppInstallTargetPath('/Applications', '/tmp/update/SClaw.app')).toBe('/Applications/SClaw.app');
+  });
+
+  it('stages an existing renamed install target without deleting it', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'stoclaw-cleanup-test-'));
+    try {
+      const currentAppPath = join(root, 'S Claw.app');
+      const targetAppPath = join(root, 'SClaw.app');
+      const targetResourcePath = join(targetAppPath, 'Contents', 'Resources', 'marker.txt');
+
+      await mkdir(currentAppPath, { recursive: true });
+      await mkdir(join(targetAppPath, 'Contents', 'Resources'), { recursive: true });
+      await writeFile(join(currentAppPath, 'marker.txt'), 'current');
+      await writeFile(targetResourcePath, 'stale');
+
+      const stagedPath = await stageExistingMacAppTarget(currentAppPath, targetAppPath, 1780371448851);
+
+      expect(stagedPath).toBe(getStaleMacAppTargetPath(targetAppPath, 1780371448851));
+      await expect(stat(targetAppPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(stat(join(stagedPath!, 'Contents', 'Resources', 'marker.txt'))).resolves.toBeTruthy();
+      await expect(stat(currentAppPath)).resolves.toBeTruthy();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('retries cleanup while ShipIt may still be renaming backups', () => {

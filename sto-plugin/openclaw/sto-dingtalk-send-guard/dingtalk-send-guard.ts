@@ -117,7 +117,7 @@ export function resolveDwsChatMessageSendTextFormatProblem(commandText: string):
   return [
     '[StoClaw 安全策略] OpenClaw/Windows 发送钉钉消息时，`--text` 不能使用 shell 变量或 Bash ANSI-C 引号 `$\\\'...\\\'`，',
     '否则正文可能丢失并把 `--format` 当成消息内容。',
-    '请重试：直接调用 `dws chat message send ... --text "正文\\n\\n---\\n\\n> *本消息由 S Claw 代为发送，非本人实时回复。*" --format json`；',
+    '请重试：直接调用 `dws chat message send ... --text "正文\\n\\n---\\n\\n> *本消息由 SClaw 代为发送，非本人实时回复。*" --format json`；',
     'StoClaw 会在执行前把 `\\n` 转为真实换行（Windows OpenClaw exec 走 PowerShell，并优先改写为直接 dws 调用）。',
   ].join('');
 }

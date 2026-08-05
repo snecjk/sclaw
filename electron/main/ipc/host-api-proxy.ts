@@ -16,6 +16,11 @@ const SKILL_INSTALL_PATHS = new Set([
   '/api/skill-plaza/upload',
 ]);
 
+/** Connector connect downloads CLI + skill; same budget as legacy dingtalk install. */
+function isConnectorConnectPath(path: string): boolean {
+  return /^\/api\/connectors\/[^/]+\/(connect|token-connect)$/.test(path);
+}
+
 export function resolveHostApiTimeoutMs(path: string): number {
   if (path === '/api/chat/send') {
     return TIMEOUTS.CHAT_SEND;
@@ -23,7 +28,7 @@ export function resolveHostApiTimeoutMs(path: string): number {
   if (path === '/api/auth/login') {
     return TIMEOUTS.AUTH_LOGIN;
   }
-  if (path === '/api/dingtalk/install') {
+  if (path === '/api/dingtalk/install' || isConnectorConnectPath(path)) {
     return TIMEOUTS.DWS_INSTALL;
   }
   if (SKILL_INSTALL_PATHS.has(path)) {

@@ -50,7 +50,7 @@ export function UserWatermark({ mode = 'fixed', className }: UserWatermarkProps)
         {Array.from({ length: TILE_COUNT }, (_, i) => (
           <span
             key={i}
-            className="flex items-center justify-center whitespace-nowrap text-[13px] font-medium tracking-wide text-[#1D2129]/[0.07] dark:text-white/[0.055]"
+            className="flex items-center justify-center whitespace-nowrap text-[13px] font-medium tracking-wide text-[#1D2129]/[0.05] dark:text-white/[0.055]"
           >
             {text}
           </span>

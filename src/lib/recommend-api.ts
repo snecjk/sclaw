@@ -58,6 +58,27 @@ export interface RecommendItemsResult {
   categories: RecommendCategory[];
 }
 
+function isAllRecommendCategory(category: RecommendCategory): boolean {
+  const normalizedCode = category.code.trim().toLowerCase();
+  const normalizedName = category.name.trim().toLowerCase();
+  return (
+    normalizedCode === '' ||
+    normalizedCode === 'all' ||
+    normalizedName === '全部' ||
+    normalizedName === 'all' ||
+    normalizedName === 'すべて'
+  );
+}
+
+function sortRecommendCategories(categories: RecommendCategory[]): RecommendCategory[] {
+  return [...categories].sort((a, b) => {
+    const aIsAll = isAllRecommendCategory(a);
+    const bIsAll = isAllRecommendCategory(b);
+    if (aIsAll === bIsAll) return 0;
+    return aIsAll ? -1 : 1;
+  });
+}
+
 /** 推荐位 position_key 枚举（与 memory-center-web recommendConfig.ts 对齐） */
 export const RECOMMEND_POSITION_KEYS = {
   HOME_CARD: 'home_card',
@@ -90,6 +111,6 @@ export async function fetchRecommendItems(
   });
   return {
     items,
-    categories: res.data.categories ?? [],
+    categories: sortRecommendCategories(res.data.categories ?? []),
   };
 }

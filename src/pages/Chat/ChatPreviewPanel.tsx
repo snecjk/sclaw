@@ -8,7 +8,6 @@ import {
   CloudUpload,
   RefreshCw,
   Download,
-  MonitorPlay,
   Eye,
   ExternalLink,
 } from 'lucide-react';
@@ -122,17 +121,6 @@ export function ChatPreviewPanel({
     }
   }, [activeFile]);
 
-  const handleFullscreen = useCallback(() => {
-    const el = document.querySelector('[data-preview-viewer]') as HTMLElement | null;
-    if (el) {
-      if (!document.fullscreenElement) {
-        el.requestFullscreen().catch(() => {});
-      } else {
-        document.exitFullscreen().catch(() => {});
-      }
-    }
-  }, []);
-
   const handleRefresh = useCallback(() => {
     setRefreshKey((k) => k + 1);
   }, []);
@@ -183,9 +171,6 @@ export function ChatPreviewPanel({
           <div className="flex shrink-0 items-center gap-2">
             {activeFile ? (
               <>
-                <PreviewActionButton onClick={handleFullscreen} aria-label={t('preview.fullscreen')}>
-                  <MonitorPlay className="h-4 w-4" aria-hidden />
-                </PreviewActionButton>
                 <PreviewActionButton onClick={handleRefresh} aria-label={t('preview.refresh')}>
                   <RefreshCw className="h-4 w-4" aria-hidden />
                 </PreviewActionButton>

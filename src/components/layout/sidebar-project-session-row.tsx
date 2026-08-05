@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import {
   sidebarListItemTextClass,
   sidebarRecentSessionActiveClass,
+  sidebarSingleActionRowPaddingClass,
   sidebarSubitemTextIdleClass,
 } from '@/lib/surfaces';
 import type { SidebarChannelSource } from '@/lib/session-channel-source';
@@ -121,7 +122,10 @@ export function SidebarProjectSessionRow({
           onClick={onOpen}
           onDoubleClick={() => handleSidebarSessionDoubleClick(session.key, onStartRename)}
           title={label}
-          className="flex h-8 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-1 pr-12 text-left"
+          className={cn(
+            'flex h-8 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-1 text-left',
+            sidebarSingleActionRowPaddingClass,
+          )}
         >
           <span className="flex min-w-0 flex-1 items-center gap-0">
             <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>

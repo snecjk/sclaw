@@ -67,28 +67,54 @@
     --sto-chat-error-border: #fff1b8;
     --sto-chat-error-icon: #faad14;
 
-    /* S Claw 壳层（归档设计稿对齐）：侧栏与 gutter 共用 #EDEDED */
-    --sto-page-bg: #ededed;
-    --sto-sidebar-bg: #ededed;
-    --sto-sidebar-border: #e8eaef;
+    /* S Claw 壳层 Surface 层级（Stage 4 L0/L1/L2；与 dark 共用所有权） */
+    /* L0 Window/Shell/Sidebar/8px Frame */
+    --sto-shell-bg: #ededed;
+    /* L1 Workspace 主承载面 */
+    --sto-workspace-bg: #fafafa;
+    /* L2 Preview / Composer / 内容卡片 */
+    --sto-panel-bg: #ffffff;
+    /* 共享边缘（弱描边，不用重色相） */
+    --sto-surface-edge: #e8eaef;
+    /* L1 抬升阴影（轻；禁止重黑浮岛） */
+    --sto-workspace-shadow: 0 0 16px rgba(0, 0, 0, 0.01);
+    /* 兼容映射 —— 一律指向语义 Token，禁止组件另写壳层底色 */
+    --sto-page-bg: var(--sto-shell-bg);
+    --sto-sidebar-bg: var(--sto-shell-bg);
+    --sto-sidebar-border: var(--sto-surface-edge);
     --sto-accent: #ff8c00;
     --sto-accent-soft: #fff3e0;
     /* 侧栏主导航选中态：与 docs/sto-design.md Brand-6 一致 */
     --sto-brand-6: #ff6f00;
     --sto-header-h: 52px;
-    --sto-content-header-h: 52px;
+    --sto-content-header-h: 44px;
+    --sto-content-header-control-h: 28px;
+    /* 模式独立垂直节奏：Conversation/Split 0+8；Expanded 0→Surface。 */
+    --sto-conversation-header-to-surface-gap: 0px;
+    --sto-split-header-to-surface-gap: 0px;
+    --sto-workbench-body-content-inset-y: 8px;
+    --sto-workbench-surface-bottom-inset: 8px;
+    --sto-preview-expanded-header-to-surface-gap: 0px;
+    --sto-expanded-preview-inset-x: 12px;
+    --sto-split-preview-surface-inset-end: 12px;
+    --sto-workspace-frame-start: 0px;
     /* ContentHeader 水平内距：左与 body/三栏容器对齐，右与 icon 列对齐 */
     --sto-chrome-traffic-light-pad: 0px;
     --sto-content-header-pad-start: var(--sto-content-pad-x);
     --sto-content-header-pad-end: 8px;
-    /* 省区 AppChrome：折叠钮距窗口顶 12px；行高 = inset + 32px 按钮 */
+    /* Windows/通用 AppChrome；macOS Sidebar 有独立 optical inset。 */
     --sto-chrome-toggle-inset-top: 12px;
     --sto-chrome-h: calc(var(--sto-chrome-toggle-inset-top) + 32px);
+    --sto-sidebar-chrome-toggle-inset-top: 16px;
+    --sto-sidebar-chrome-toggle-size: 28px;
+    --sto-sidebar-chrome-h: calc(var(--sto-sidebar-chrome-toggle-inset-top) + var(--sto-sidebar-chrome-toggle-size));
     --sto-shell-card-gap: 8px;
-    /* MasterGo 2:23107 主内容卡片：18px 圆角 + 无描边 + 轻阴影（#FAFAFA 与壳层 #EDEDED 区分 gutter） */
+    /* Stage 1 AppShell Grid column; runtime overwritten by MainLayout snapshot */
+    --sto-sidebar-effective-w: 260px;
+    /* MasterGo 2:23107 主内容卡片：18px 圆角 + 无描边 + 轻阴影 */
     --sto-main-card-radius: 18px;
-    --sto-main-card-bg: #FAFAFA;
-    --sto-main-card-shadow: 0 0 16px rgba(0, 0, 0, 0.01);
+    --sto-main-card-bg: var(--sto-workspace-bg);
+    --sto-main-card-shadow: var(--sto-workspace-shadow);
     --sto-sidebar-w-expanded: 260px;
     --sto-sidebar-w-collapsed: 72px;
     /* 折叠侧栏主导航项（设计标注：59×28、padding 5px 10px、未选中图标 #7A8494） */
@@ -176,7 +202,7 @@
     --foreground: 220 14% 96%;
     --card: 220 22% 11%;
     --card-foreground: 220 14% 96%;
-    --popover: 220 22% 11%;
+    --popover: 220 18% 15%;
     --popover-foreground: 220 14% 96%;
     --primary: 26 100% 52%;
     --primary-foreground: 0 0% 100%;
@@ -226,20 +252,40 @@
     --sto-chat-error-border: hsl(43 50% 24%);
     --sto-chat-error-icon: hsl(38 90% 52%);
 
-    --sto-page-bg: hsl(207 53% 9%);
-    --sto-sidebar-bg: hsl(208 40% 11%);
-    --sto-sidebar-border: hsl(204 28% 18%);
+    /*
+     * Stage 4 dark Surface：由 L0/L1/L2 全局契约推导（MCP 无 dark Frame）。
+     * 同色相冷中性（220）；以有限明度差分层；Sidebar ≡ Shell（L0），禁止分叉色相。
+     */
+    --sto-shell-bg: hsl(220 24% 9%);
+    --sto-workspace-bg: hsl(220 22% 11%);
+    --sto-panel-bg: hsl(220 20% 13%);
+    --sto-surface-edge: hsl(220 14% 20%);
+    --sto-workspace-shadow: 0 0 12px rgba(0, 0, 0, 0.12);
+    --sto-page-bg: var(--sto-shell-bg);
+    --sto-sidebar-bg: var(--sto-shell-bg);
+    --sto-sidebar-border: var(--sto-surface-edge);
     --sto-accent: #ff9f2e;
     --sto-accent-soft: hsl(32 45% 14%);
     --sto-brand-6: #ff6f00;
     --sto-header-h: 52px;
-    --sto-content-header-h: 52px;
+    --sto-content-header-h: 44px;
+    --sto-split-header-to-surface-gap: 0px;
+    --sto-workbench-surface-bottom-inset: 8px;
+    --sto-preview-expanded-header-to-surface-gap: 0px;
+    --sto-expanded-preview-inset-x: 12px;
+    --sto-split-preview-surface-inset-end: 12px;
+    --sto-workspace-frame-start: 0px;
     --sto-chrome-toggle-inset-top: 12px;
     --sto-chrome-h: calc(var(--sto-chrome-toggle-inset-top) + 32px);
+    --sto-sidebar-chrome-toggle-inset-top: 16px;
+    --sto-sidebar-chrome-toggle-size: 28px;
+    --sto-sidebar-chrome-h: calc(var(--sto-sidebar-chrome-toggle-inset-top) + var(--sto-sidebar-chrome-toggle-size));
     --sto-shell-card-gap: 8px;
+    /* Stage 1 AppShell Grid column; runtime overwritten by MainLayout snapshot */
+    --sto-sidebar-effective-w: 260px;
     --sto-main-card-radius: 18px;
-    --sto-main-card-bg: hsl(var(--card));
-    --sto-main-card-shadow: 0 0 16px rgba(0, 0, 0, 0.2);
+    --sto-main-card-bg: var(--sto-workspace-bg);
+    --sto-main-card-shadow: var(--sto-workspace-shadow);
     --sto-sidebar-w-expanded: 260px;
     --sto-sidebar-w-collapsed: 72px;
     --sto-sidebar-collapsed-nav-item-w: 59px;
@@ -329,16 +375,22 @@
   /** 省区 AppShell：无整行顶栏，全高由壳 + 卡片承担 */
   [data-app-shell='provincial'] {
     --sto-header-h: 0px;
-    --sto-content-header-h: 52px;
+    --sto-content-header-h: 44px;
   }
 
   /**
-   * 侧栏收起时主卡片顶到窗口左缘：ContentHeader + 三栏 split row 共用 pad-start，
-   * 与侧栏列 SidebarProvincialChromeRow 的 pl-20 一致，避免红绿灯遮住展开钮与会话标题。
+   * 侧栏收起时，ContentHeader 单独避让 macOS 原生窗口控件。
+   * Header-only 76px safe start 使 native traffic lights 与 28px Sidebar 展开钮保持 8px 净间距。
+   * 该值不得下放到 Workspace Body / Preview Surface。
    */
   :root[data-platform='darwin'] [data-app-shell='provincial'][data-sidebar-collapsed='true'] {
-    --sto-chrome-traffic-light-pad: 5rem;
+    --sto-chrome-traffic-light-pad: 76px;
     --sto-content-header-pad-start: max(var(--sto-content-pad-x), var(--sto-chrome-traffic-light-pad));
+  }
+
+  /* Stage 2：拖拽热路径关闭 Sidebar width transition，避免跟手延迟 */
+  [data-app-shell][data-sidebar-resizing='true'] aside {
+    transition-property: none !important;
   }
 
   ::selection {
@@ -1060,7 +1112,313 @@ html[data-scrollbar-layout='classic'] .sidebar-scroll-container {
 [data-sonner-toaster].sto-global-toaster
   [data-sonner-toast][data-styled='true']
   [data-button]:not([data-cancel]):focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
-  box-shadow: none;
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+    box-shadow: none;
+}
+
+/* Composer voice mode — sunlight bloom diffusion around listening orb */
+@keyframes stoclaw-voice-glow {
+  0% {
+    transform: scale(0.28) rotate(0deg);
+    opacity: 0.7;
+    filter: blur(2px);
+  }
+
+  45% {
+    opacity: 0.42;
+    filter: blur(6px);
+  }
+
+  100% {
+    transform: scale(1.85) rotate(18deg);
+    opacity: 0;
+    filter: blur(10px);
+  }
+}
+
+@keyframes stoclaw-voice-orb-breathe {
+  0%,
+  100% {
+    transform: scale(0.88);
+    opacity: 0.4;
+  }
+
+  50% {
+    transform: scale(1.28);
+    opacity: 1;
+  }
+}
+
+.stoclaw-voice-glow {
+  position: absolute;
+  inset: -8%;
+  border-radius: 9999px;
+  pointer-events: none;
+  animation: stoclaw-voice-glow 3.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  /* 无描边：柔光色晕，像阳光往四周渗开 */
+  border: none;
+}
+
+.stoclaw-voice-glow--warm {
+  background: radial-gradient(
+    ellipse 55% 50% at 50% 50%,
+    hsl(var(--primary) / 0.55) 0%,
+    hsl(28 100% 62% / 0.28) 32%,
+    hsl(38 100% 70% / 0.12) 55%,
+    transparent 72%
+  );
+}
+
+.stoclaw-voice-glow--gold {
+  background: radial-gradient(
+    ellipse 50% 60% at 48% 52%,
+    hsl(42 100% 68% / 0.5) 0%,
+    hsl(var(--primary) / 0.22) 38%,
+    hsl(20 100% 72% / 0.1) 58%,
+    transparent 74%
+  );
+  animation-delay: 1.1s;
+}
+
+.stoclaw-voice-glow--peach {
+  background: radial-gradient(
+    ellipse 60% 48% at 52% 48%,
+    hsl(15 100% 72% / 0.45) 0%,
+    hsl(32 100% 65% / 0.2) 40%,
+    hsl(var(--primary) / 0.08) 58%,
+    transparent 75%
+  );
+  animation-delay: 2.2s;
+}
+
+.stoclaw-voice-glow--d1 {
+  animation-delay: 1.1s;
+}
+
+.stoclaw-voice-glow--d2 {
+  animation-delay: 2.2s;
+}
+
+.stoclaw-voice-orb {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  height: 14px;
+  width: 14px;
+  align-items: center;
+  justify-content: center;
+  animation: stoclaw-voice-orb-breathe 2.2s ease-in-out infinite;
+}
+
+.stoclaw-voice-orb-halo {
+  position: absolute;
+  z-index: 9;
+  height: 22px;
+  width: 22px;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    hsl(var(--primary) / 0.35) 0%,
+    hsl(38 100% 70% / 0.18) 42%,
+    transparent 72%
+  );
+  filter: blur(3px);
+  animation: stoclaw-voice-orb-breathe 2.2s ease-in-out infinite;
+  animation-delay: 0.08s;
+  pointer-events: none;
+}
+
+.stoclaw-voice-orb-core {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background:
+    radial-gradient(circle at 35% 30%, #fff8f0 0%, transparent 42%),
+    radial-gradient(circle at 50% 55%, hsl(var(--primary)) 0%, hsl(24 100% 52%) 70%, hsl(18 90% 42%) 100%);
+  box-shadow:
+    0 0 0 1px hsl(var(--primary) / 0.25),
+    0 0 10px hsl(var(--primary) / 0.55),
+    0 0 18px hsl(38 100% 65% / 0.35),
+    inset 0 -2px 4px hsl(18 80% 30% / 0.25);
+}
+
+.stoclaw-voice-orb-shine {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  z-index: 2;
+  height: 4px;
+  width: 5px;
+  border-radius: 9999px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.12));
+  opacity: 0.9;
+  pointer-events: none;
+  transform-origin: center;
+  /* 扭动由 JS 随机驱动，不用固定 keyframes */
+  will-change: top, left, transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stoclaw-voice-glow {
+    animation: none;
+    opacity: 0.35;
+    transform: scale(1.1);
+    filter: blur(5px);
+  }
+
+  .stoclaw-voice-glow--gold,
+  .stoclaw-voice-glow--peach {
+    display: none;
+  }
+
+  .stoclaw-voice-orb,
+  .stoclaw-voice-orb-halo {
+    animation: none;
+  }
+
+  .stoclaw-voice-edge-runner,
+  .stoclaw-voice-edge-bar {
+    animation: none;
+  }
+}
+
+/* 语音模式：一小段音波沿上沿从左滚到右，同时高度自由起伏 */
+@keyframes stoclaw-voice-edge-run {
+  from {
+    left: 0;
+    transform: translateX(-100%);
+  }
+
+  to {
+    left: 100%;
+    transform: translateX(0);
+  }
+}
+
+@keyframes stoclaw-voice-edge-bar-pulse {
+  0% {
+    transform: scaleY(0.28);
+    opacity: 0.55;
+  }
+
+  28% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+
+  52% {
+    transform: scaleY(0.42);
+    opacity: 0.7;
+  }
+
+  76% {
+    transform: scaleY(0.88);
+    opacity: 0.95;
+  }
+
+  100% {
+    transform: scaleY(0.28);
+    opacity: 0.55;
+  }
+}
+
+.stoclaw-voice-edge {
+  top: 0;
+  /* 与 rounded-2xl(~16) / rounded-[22px] 对齐，只走顶边直线段 */
+  left: 20px;
+  right: 20px;
+  height: 12px;
+  transform: translateY(calc(-100% + 1px));
+  overflow: hidden;
+  /* 进出两端再淡一点，贴着圆角过渡更自然 */
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 10px,
+    #000 calc(100% - 10px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 10px,
+    #000 calc(100% - 10px),
+    transparent 100%
+  );
+}
+
+.stoclaw-voice-edge-runner {
+  position: absolute;
+  bottom: 0;
+  width: 72px;
+  height: 100%;
+  animation: stoclaw-voice-edge-run 4.8s linear infinite;
+  will-change: left, transform;
+}
+
+.stoclaw-voice-edge-bars {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5px;
+}
+
+.stoclaw-voice-edge-bar {
+  flex: 1 1 0;
+  min-width: 1.5px;
+  max-width: 3px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    180deg,
+    hsl(38 100% 72% / 0.95) 0%,
+    hsl(var(--primary)) 55%,
+    hsl(var(--primary) / 0.9) 100%
+  );
+  box-shadow: 0 0 4px hsl(var(--primary) / 0.3);
+  transform-origin: center bottom;
+  animation-name: stoclaw-voice-edge-bar-pulse;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  will-change: transform, opacity;
+}
+
+/* 输入区居中细声线（实时麦音量驱动，无 CSS 起伏动画） */
+.stoclaw-voice-soundline-bar {
+  flex: 0 0 1px;
+  width: 1px;
+  min-width: 1px;
+  max-width: 1px;
+  align-self: center;
+  border-radius: 9999px;
+  background: linear-gradient(
+    180deg,
+    hsl(38 100% 78% / 0.95) 0%,
+    hsl(var(--primary)) 48%,
+    hsl(var(--primary) / 0.7) 100%
+  );
+  box-shadow: 0 0 3px hsl(var(--primary) / 0.22);
+  transform-origin: center center;
+  will-change: height, opacity;
+}
+
+.stoclaw-voice-soundline-bar--live {
+  transition: height 45ms linear, opacity 45ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stoclaw-voice-soundline-bar--live {
+    transition: none;
+  }
+}
+
+/* Glassmorphism toast override */
+[data-sonner-toaster] [data-sonner-toast] {
+  background: hsl(var(--glass-bg) / var(--glass-opacity)) !important;
+  backdrop-filter: blur(var(--glass-blur)) !important;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) !important;
+  border-color: hsl(var(--glass-border)) !important;
+  box-shadow: var(--glass-shadow) !important;
 }

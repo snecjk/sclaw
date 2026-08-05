@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { installDwsCli, isDwsInstallFetchFailedMessage, loginDingTalk, searchDingTalkMentions } from '@/lib/host-api';
+import { useNavigate } from 'react-router-dom';
+import { loginDingTalk, searchDingTalkMentions } from '@/lib/host-api';
+import { useConnectorsStore } from '@/stores/connectors';
+import { findDingTalkConnectorId } from '../../shared/connectors/find-dingtalk-connector';
+import { SKILL_PLAZA_CONNECTORS_PATH } from '../../shared/connectors/deep-link';
 import type { ActiveMentionTrigger } from '@/lib/dingtalk-mention-composer';
 import type { MentionSearchItem } from '@/types/dingtalk-mention';
 
@@ -29,6 +33,7 @@ function sortMentionItems(items: MentionSearchItem[]): MentionSearchItem[] {
 }
 
 export function useDingTalkMention(trigger: ActiveMentionTrigger | null, enabled = true) {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<MentionSearchItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -142,6 +147,11 @@ export function useDingTalkMention(trigger: ActiveMentionTrigger | null, enabled
     try {
       await loginDingTalk();
       setNeedsAuth(false);
+      try {
+        await useConnectorsStore.getState().fetchList(true);
+      } catch {
+        // plaza refresh is best-effort after login
+      }
       setSearchNonce((value) => value + 1);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -155,21 +165,26 @@ export function useDingTalkMention(trigger: ActiveMentionTrigger | null, enabled
     setInstalling(true);
     setError(null);
     try {
-      const result = await installDwsCli();
-      if (!result.success) {
-        throw new Error(result.error || 'dws install failed');
+      const store = useConnectorsStore.getState();
+      if (store.items.length === 0) {
+        await store.fetchList(true);
       }
+      const connectorId = findDingTalkConnectorId(useConnectorsStore.getState().items);
+      if (!connectorId) {
+        navigate(SKILL_PLAZA_CONNECTORS_PATH);
+        return;
+      }
+      await store.connect(connectorId);
       setNeedsInstall(false);
+      setNeedsAuth(false);
       setSearchNonce((value) => value + 1);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (!isDwsInstallFetchFailedMessage(message)) {
-        setError(message);
-      }
+      setError(message);
     } finally {
       setInstalling(false);
     }
-  }, []);
+  }, [navigate]);
 
   const moveActive = useCallback((delta: number) => {
     setActiveIndex((prev) => {

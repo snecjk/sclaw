@@ -15,6 +15,86 @@ const SAI_CLIENT_ID_VALUE = 'sto-claw';
 // Ensure Agent exec / skill shells inherit client id even if forkEnv was stale.
 process.env.SAI_CLIENT_ID = SAI_CLIENT_ID_VALUE;
 
+type ConnectorAllowlistEntry = {
+  connectorId?: string;
+  allowBinary: string;
+  denyArgs?: string[];
+};
+
+let cachedAllowlist: ConnectorAllowlistEntry[] | null = null;
+let cachedAllowlistMtime = -1;
+let cachedGatedBinaries: string[] | null = null;
+let cachedGatedMtime = -1;
+
+const LEGACY_GATED_BINARIES = ['dws', 'glab', 'qpath'];
+
+function loadConnectorAllowlist(): ConnectorAllowlistEntry[] {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('fs') as typeof import('fs');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const os = require('os') as typeof import('os');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require('path') as typeof import('path');
+    const dir = process.env.STOCLAW_CONNECTORS_DIR?.trim()
+      || path.join(os.homedir(), '.stoclaw', 'connectors');
+    const file = path.join(dir, 'gateway-allowlist.json');
+    if (!fs.existsSync(file)) {
+      cachedAllowlist = [];
+      cachedAllowlistMtime = -1;
+      return cachedAllowlist;
+    }
+    const mtime = fs.statSync(file).mtimeMs;
+    if (cachedAllowlist && mtime === cachedAllowlistMtime) return cachedAllowlist;
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as {
+      entries?: ConnectorAllowlistEntry[];
+    };
+    cachedAllowlist = Array.isArray(raw.entries) ? raw.entries : [];
+    cachedAllowlistMtime = mtime;
+    return cachedAllowlist;
+  } catch {
+    return cachedAllowlist ?? [];
+  }
+}
+
+function loadGatedBinaries(): string[] {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('fs') as typeof import('fs');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const os = require('os') as typeof import('os');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require('path') as typeof import('path');
+    const dir = process.env.STOCLAW_CONNECTORS_DIR?.trim()
+      || path.join(os.homedir(), '.stoclaw', 'connectors');
+    const file = path.join(dir, 'gateway-gated-binaries.json');
+    if (!fs.existsSync(file)) {
+      cachedGatedBinaries = [...LEGACY_GATED_BINARIES];
+      cachedGatedMtime = -1;
+      return cachedGatedBinaries;
+    }
+    const mtime = fs.statSync(file).mtimeMs;
+    if (cachedGatedBinaries && mtime === cachedGatedMtime) return cachedGatedBinaries;
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8')) as { binaries?: string[] };
+    const listed = Array.isArray(raw.binaries)
+      ? raw.binaries
+        .filter((item): item is string => typeof item === 'string')
+        .map((item) => item.trim().toLowerCase().replace(/\.exe$/i, ''))
+        .filter(Boolean)
+      : [];
+    cachedGatedBinaries = listed.length > 0 ? listed : [...LEGACY_GATED_BINARIES];
+    cachedGatedMtime = mtime;
+    return cachedGatedBinaries;
+  } catch {
+    return cachedGatedBinaries ?? [...LEGACY_GATED_BINARIES];
+  }
+}
+
+function normalizeBinaryName(cmd: string): string {
+  const base = cmd.trim().split(/[/\\]/).pop() || cmd.trim();
+  return base.toLowerCase().replace(/\.exe$/i, '');
+}
+
 const DWS_CHAT_MSG_SEND = /dws\s+chat\s+message\s+send\b/i;
 
 function isBlockedDwsSendSpam(cmd: string, argsList: string[]): boolean {
@@ -117,10 +197,45 @@ function upgradeSecurityError(desc: string): Error {
   return securityError(`禁止在应用内执行升级/安装操作：${desc}`);
 }
 
+function resolveConnectorBinaryBlock(cmd: string, argsList: string[]): Error | null {
+  const name = normalizeBinaryName(cmd);
+  const gated = new Set(loadGatedBinaries());
+  if (!gated.has(name)) return null;
+
+  const entries = loadConnectorAllowlist().filter(
+    (entry) => normalizeBinaryName(entry.allowBinary || '') === name,
+  );
+  if (entries.length === 0) {
+    return securityError(
+      `未连接对应链接器，无法执行 ${name}。请先在「技能·连接器」中完成连接。`,
+    );
+  }
+
+  const deny = new Set<string>();
+  for (const entry of entries) {
+    for (const arg of entry.denyArgs || []) deny.add(String(arg).toLowerCase());
+  }
+  if (deny.size === 0) {
+    deny.add('upgrade');
+    deny.add('install');
+  }
+  const joined = argsList.join(' ').toLowerCase();
+  for (const arg of deny) {
+    if (!arg) continue;
+    const re = new RegExp(`(?:^|\\s)${arg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:\\s|$)`, 'i');
+    if (re.test(joined) || argsList.some((item) => String(item).toLowerCase() === arg)) {
+      return upgradeSecurityError(`${cmd} ${argsList.join(' ')}`);
+    }
+  }
+  return null;
+}
+
 function resolveBlockedSpawnError(cmd: string, argsList: string[]): Error | null {
   if (isBlockedDwsSendSpam(cmd, argsList)) {
     return securityError('禁止通过循环或批量命令多次调用 dws chat message send。请一次只发送一条消息。');
   }
+  const connectorBlock = resolveConnectorBinaryBlock(cmd, argsList);
+  if (connectorBlock) return connectorBlock;
   if (isBlockedUpgradeCommand(cmd, argsList)) {
     return upgradeSecurityError(`${cmd} ${argsList.join(' ')}`);
   }

@@ -8,8 +8,10 @@
 
 - [x] Add feedback tokens in `globals.css` (light + dark)
 - [x] Add Sonner CSS overrides in `globals.css` with `.sto-global-toaster` namespace
-- [x] Configure `<Toaster>` directly in `App.tsx` with sidebar-aware `calc()` positioning
+- [x] Configure `<Toaster>` directly in `App.tsx` with sidebar-aware `calc()` positioning (interim; still uses 72/260 debt)
 - [x] Keep `/float-icon` boundary
+- [ ] **FOLLOW-UP (shell Stage 1)** Replace `72/260` hard-coding with `AppShellLayoutSnapshot.effectiveSidebarWidth`; Settings/no-sidebar → 0; provincial collapsed → 0
+- [ ] Verify Toast centers correctly for provincial expanded/collapsed, full legacy collapsed rail, and Settings
 
 ## 3. Chat Error Card (`chat-error-feedback`)
 

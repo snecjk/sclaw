@@ -103,7 +103,7 @@ export function buildProjectWorkspaceContextAgentsMdSection(
   const projectRoot = getProjectRootFromAgentWorkspace(workspaceRoot);
   const projectHint = projectRoot || '..';
   return [
-    '## 📁 项目目录说明（STO Claw）',
+    '## 📁 项目目录说明（SClaw）',
     '',
     `- 当前 OpenClaw workspace（本目录）是用户项目内的 \`${PROJECT_AGENT_RUNTIME_DIRNAME}/\`。`,
     `- 用户真实项目根目录：\`${projectHint}/\`（相对本目录为 \`../\`）。`,

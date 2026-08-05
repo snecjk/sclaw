@@ -14,7 +14,7 @@
         "cronTasks": "Scheduled tasks",
         "myTasks": "My Tasks",
         "dataCenter": "Data Center",
-        "skills": "Skills",
+        "skills": "Skills · Connectors",
         "moreApps": "More Apps",
         "workflow": "Workflows",
         "agents": "Agents",
@@ -53,7 +53,7 @@
         },
         "compactAccountMenu": "Account and settings",
         "supportGroup": {
-            "title": "S Claw Product Support Group",
+            "title": "SClaw Product Support Group",
             "hint": "Scan with DingTalk to join and ask questions",
             "helpAria": "View product support group QR code",
             "loadError": "Failed to load QR code. Please try again later."

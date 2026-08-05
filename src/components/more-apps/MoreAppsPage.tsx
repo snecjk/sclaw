@@ -108,11 +108,23 @@ export function MoreAppsPage() {
     const serverItems =
       categoriesLoading || categoriesError
         ? []
-        : categories.map((c) => ({
-            id: c.id as MarketCategory,
-            label: c.name,
-            count: categoryCounts[c.id] ?? 0,
-          }));
+        : categories
+            // 历史误建的「链接器/连接器」APP 分类不再展示；链接器入口已迁至技能广场页签
+            .filter((c) => {
+              const name = c.name.trim();
+              const id = c.id.trim().toLowerCase();
+              return !(
+                name === '链接器' ||
+                name === '连接器' ||
+                id === 'connectors' ||
+                id === 'connector'
+              );
+            })
+            .map((c) => ({
+              id: c.id as MarketCategory,
+              label: c.name,
+              count: categoryCounts[c.id] ?? 0,
+            }));
     return [featured, ...serverItems];
   }, [categories, categoryCounts, categoriesLoading, categoriesError, marketTotal, t]);
 
@@ -167,7 +179,7 @@ export function MoreAppsPage() {
     }
   }, [banners.length, heroSlideIndex, setHeroSlideIndex]);
 
-  // Hero carousel auto-rotate
+  // Hero carousel auto-rotate — 链接器分类下同样保留 Banner 轮播
   useEffect(() => {
     if (activeTab !== 'market' || banners.length < 2) {
       if (heroTimerRef.current) {

@@ -68,10 +68,12 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
     void refetchLatest();
   }, [showConversation, refetchRecommend, refetchLatest]);
 
-  // 默认选中首个类别；列表变化后若当前选中失效则显示首个
-  const effectiveActiveCategory = recommendCategories.some((c) => c.code === activeCategory)
-    ? activeCategory
-    : (recommendCategories[0]?.code ?? '');
+  // 默认展示首个类别；列表变化后若当前选中失效则回退到首个。
+  const selectedCategory = useMemo(() => {
+    if (recommendCategories.length === 0) return '';
+    if (recommendCategories.some((c) => c.code === activeCategory)) return activeCategory;
+    return recommendCategories[0].code;
+  }, [recommendCategories, activeCategory]);
 
   // displayItems：模版项存在实例时替换为实例项；key 始终用原始模版 id 以保证 refetch 后稳定 reconcile。
   const displayItems = useMemo(() => {
@@ -90,13 +92,28 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
     });
   }, [recommendItems, latestByTemplate]);
 
+  const activeCategoryIsAll = useMemo(() => {
+    const category = recommendCategories.find((c) => c.code === selectedCategory);
+    if (!category) return false;
+    const normalizedCode = category.code.trim().toLowerCase();
+    const normalizedName = category.name.trim().toLowerCase();
+    return (
+      normalizedCode === '' ||
+      normalizedCode === 'all' ||
+      normalizedName === '全部' ||
+      normalizedName === 'all' ||
+      normalizedName === 'すべて'
+    );
+  }, [recommendCategories, selectedCategory]);
+
   // 按选中类别的 code 与条目 recommend_category 精确匹配
   const filteredItems = useMemo(() => {
-    if (!effectiveActiveCategory) return [];
+    if (!selectedCategory) return [];
+    if (activeCategoryIsAll) return displayItems;
     return displayItems.filter(
-      ({ item }) => (item.recommend_category || '').trim() === effectiveActiveCategory,
+      ({ item }) => (item.recommend_category || '').trim() === selectedCategory,
     );
-  }, [displayItems, effectiveActiveCategory]);
+  }, [displayItems, selectedCategory, activeCategoryIsAll]);
 
   const applyRecommendToComposer = (detail: ChatEditDraftEventDetail) => {
     window.dispatchEvent(new CustomEvent<ChatEditDraftEventDetail>(CHAT_EDIT_DRAFT_EVENT, {
@@ -193,7 +210,7 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
       <>
         <RecommendCategoryTabs
           categories={recommendCategories}
-          value={effectiveActiveCategory}
+          value={selectedCategory}
           onChange={setActiveCategory}
         />
         <div className={homeHubCardGridClass}>{renderFilteredRecommendCards()}</div>
@@ -201,26 +218,23 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
     );
   };
 
-  let outerClass: string | undefined = 'flex min-h-0 flex-1 flex-col';
-  if (isSplitGridPassthrough) {
-    outerClass = splitGridPassthroughClass;
-  }
-
-  let bodyClass: string | undefined = 'flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6';
-  if (isSplitGridPassthrough) {
-    bodyClass = splitGridPassthroughClass;
-  } else if (showConversation) {
-    bodyClass = 'flex min-h-0 flex-1 flex-col overflow-hidden';
-  }
-
   return (
     <div
       className={cn(
-        outerClass,
-        !isSplitGridPassthrough && !showConversation && homeHubLandingOuterInsetClass,
+        showConversation
+          ? (splitGridPassthroughClass ?? 'flex min-h-0 flex-1 flex-col')
+          : cn('flex min-h-0 flex-1 flex-col', homeHubLandingOuterInsetClass),
       )}
     >
-      <div className={bodyClass}>
+      <div
+        className={cn(
+          showConversation
+            ? (isSplitGridPassthrough
+              ? splitGridPassthroughClass
+              : 'flex min-h-0 flex-1 flex-col overflow-hidden')
+            : 'flex min-h-0 flex-1 flex-col overflow-hidden px-4 sm:px-6',
+        )}
+      >
         {showConversation ? (
           <HomeMainConversation
             className="min-h-0 flex-1"
