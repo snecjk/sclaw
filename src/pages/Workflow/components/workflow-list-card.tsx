@@ -248,7 +248,7 @@ export interface WorkflowOfficialListCardProps {
   onInstall: () => void;
 }
 
-/** 「官方推荐」卡片：标题+排期+描述+分类标签+预览/安装（流程节点待接口就绪后接入） */
+/** 「官方推荐」卡片：标题+排期+描述+分类标签+预览/去创建（流程节点待接口就绪后接入） */
 export function WorkflowOfficialListCard({
   card,
   onCardClick,
@@ -298,7 +298,7 @@ export function WorkflowOfficialListCard({
             onInstall();
           }}
         >
-          {t('card.install')}
+          {t('card.goCreate')}
         </button>
       </div>
     </WorkflowCardShell>
