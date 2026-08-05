@@ -822,7 +822,6 @@ export function ChatInput({
     if (
       workflowPickerSlashOpenRef.current
       && workflowPickerOpen
-      && !snapshot.workflowId
       && !snapshot.plainText.includes('/')
     ) {
       workflowPickerSlashOpenRef.current = false;
@@ -849,7 +848,7 @@ export function ChatInput({
   }, [navigate]);
 
   const handleTextInput = useCallback((text: string) => {
-    if (text !== '/' || workflowPickerOpen || composerSnapshot.workflowId || isComposingRef.current) {
+    if (text !== '/' || workflowPickerOpen || isComposingRef.current) {
       return;
     }
 
@@ -861,7 +860,7 @@ export function ChatInput({
     setQuickInputPickerOpen(false);
     workflowPickerSlashOpenRef.current = true;
     setWorkflowPickerOpen(true);
-  }, [closeDingTalkMention, composerSnapshot.workflowId, dingTalkMentionOpen, workflowPickerOpen]);
+  }, [closeDingTalkMention, dingTalkMentionOpen, workflowPickerOpen]);
 
   const toggleQuickInputPicker = useCallback(() => {
     setSkillPickerOpen(false);

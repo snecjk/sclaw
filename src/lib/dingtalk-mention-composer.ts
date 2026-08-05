@@ -624,6 +624,7 @@ export function insertWorkflowSpan(
 ): void {
   const selection = window.getSelection();
   removeSkillSpan(root);
+  removeWorkflowSpanFromRoot(root);
   const snapshot = serializeMentionEditor(root);
   const text = snapshot.plainText;
   const lastSlashIndex = text.lastIndexOf('/');

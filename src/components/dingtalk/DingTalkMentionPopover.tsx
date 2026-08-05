@@ -41,14 +41,14 @@ function MentionAvatar({ item }: { item: MentionSearchItem }) {
       <img
         src={avatarSrc}
         alt={item.title}
-        className="h-8 w-8 shrink-0 rounded-[8px] bg-[#DFEDFF] object-cover"
+        className="h-8 w-8 shrink-0 rounded-[8px] bg-[#DFEDFF] object-cover dark:bg-[#1677FF]/15"
         onError={() => setFailed(true)}
       />
     );
   }
 
   return (
-    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#DFEDFF] text-[12px] font-semibold leading-none text-[#1677FF]" aria-hidden>
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#DFEDFF] text-[12px] font-semibold leading-none text-[#1677FF] dark:bg-[#1677FF]/15 dark:text-[#4C9BFF]" aria-hidden>
       {initial}
     </div>
   );
@@ -71,11 +71,11 @@ function MentionSection({
 }) {
   return (
     <div className="space-y-1">
-      <div className="px-2 py-1 text-[12px] font-medium leading-5 text-[#86909C]">
+      <div className="px-2 py-1 text-[12px] font-medium leading-5 text-[#86909C] dark:text-muted-foreground">
         {title}
       </div>
       {items.length === 0 && emptyLabel ? (
-        <div className="px-2 py-1 text-[12px] font-normal leading-5 text-[#C4CDD8]">
+        <div className="px-2 py-1 text-[12px] font-normal leading-5 text-[#C4CDD8] dark:text-muted-foreground/60">
           {emptyLabel}
         </div>
       ) : null}
@@ -86,7 +86,9 @@ function MentionSection({
           data-mention-index={item.sourceIndex}
           className={cn(
             'flex w-full items-center gap-2 rounded-[8px] px-2 py-1.5 text-left transition-colors',
-            item.sourceIndex === activeIndex ? 'bg-[#F0F2F5] text-[#1F2937]' : 'hover:bg-[#F5F7FA]',
+            item.sourceIndex === activeIndex
+              ? 'bg-[#F0F2F5] text-[#1F2937] dark:bg-white/10 dark:text-foreground'
+              : 'hover:bg-[#F5F7FA] dark:hover:bg-white/[0.06]',
           )}
           onMouseEnter={() => onHoverIndex(item.sourceIndex)}
           onMouseDown={(event) => {
@@ -96,9 +98,9 @@ function MentionSection({
         >
           <MentionAvatar item={item} />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[12px] font-normal leading-5 text-[#111827]">{item.title}</div>
+            <div className="truncate text-[12px] font-normal leading-5 text-[#111827] dark:text-foreground">{item.title}</div>
             {item.subtitle && (
-              <div className="truncate text-[10px] font-normal leading-4 text-[#86909C]">{item.subtitle}</div>
+              <div className="truncate text-[10px] font-normal leading-4 text-[#86909C] dark:text-muted-foreground">{item.subtitle}</div>
             )}
           </div>
         </button>
@@ -185,8 +187,8 @@ export function DingTalkMentionPopover({
       : t('composer.dingtalkMentionTitle');
 
   return (
-    <div className="absolute left-0 bottom-full z-50 mb-2 w-[320px] overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-2 shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-border dark:bg-popover">
-      <div className="px-2 py-1 text-[12px] font-medium leading-5 text-[#86909C]">
+    <div className="absolute left-0 bottom-full z-50 mb-2 w-[320px] overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-2 shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-border dark:bg-popover dark:shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
+      <div className="px-2 py-1 text-[12px] font-medium leading-5 text-[#86909C] dark:text-muted-foreground">
         {title}
       </div>
 
@@ -216,13 +218,13 @@ export function DingTalkMentionPopover({
         <div className="px-2 py-1">
           <button
             type="button"
-            className="flex w-full items-center gap-2 rounded-[6px] border border-[#FFD6BA] bg-[#FFF1E8] px-2 py-2 text-left transition-colors hover:bg-[#FFE9DA] disabled:cursor-not-allowed disabled:opacity-70"
+            className="flex w-full items-center gap-2 rounded-[6px] border border-[#FFD6BA] bg-[#FFF1E8] px-2 py-2 text-left transition-colors hover:bg-[#FFE9DA] disabled:cursor-not-allowed disabled:opacity-70 dark:border-primary/30 dark:bg-primary/10 dark:hover:bg-primary/[0.16]"
             onMouseDown={(event) => event.preventDefault()}
             onClick={onLogin}
             disabled={!onLogin || loggingIn}
           >
             <Info className="h-4 w-4 shrink-0 text-[#FF6F00]" strokeWidth={2} aria-hidden />
-            <span className="min-w-0 flex-1 text-[12px] font-normal leading-5 text-[#111827]">
+            <span className="min-w-0 flex-1 text-[12px] font-normal leading-5 text-[#111827] dark:text-foreground">
               {t('composer.dingtalkNeedsAuth')}
             </span>
             <span className="inline-flex shrink-0 items-center text-[12px] font-medium leading-5 text-[#FF6F00]">
@@ -245,7 +247,7 @@ export function DingTalkMentionPopover({
       )}
 
       {!loading && !needsAuth && !needsInstall && !error && !hasVisibleItems && !query.trim() && (
-        <div className="px-2 py-1 text-[12px] text-[#86909C]">
+        <div className="px-2 py-1 text-[12px] text-[#86909C] dark:text-muted-foreground">
           {t('composer.dingtalkNoResults')}
         </div>
       )}
@@ -277,7 +279,7 @@ export function DingTalkMentionPopover({
               {recent && hasMore && !loadingMore && onLoadMore && (
                 <button
                   type="button"
-                  className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-[8px] px-2 py-1.5 text-[12px] font-medium text-[#86909C] transition-colors hover:bg-[#F0F2F5] hover:text-[#111827]"
+                  className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-[8px] px-2 py-1.5 text-[12px] font-medium text-[#86909C] transition-colors hover:bg-[#F0F2F5] hover:text-[#111827] dark:text-muted-foreground dark:hover:bg-white/[0.06] dark:hover:text-foreground"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => onLoadMore()}
                 >
