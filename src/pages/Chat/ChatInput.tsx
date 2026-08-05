@@ -967,6 +967,9 @@ export function ChatInput({
           ? { ...a, status: 'error' as const, error: String(err) }
           : a,
       ));
+    } finally {
+      // 原生文件对话框关闭后焦点会回到触发按钮，Radix Tooltip 会因 focus 再次弹出。
+      (document.activeElement as HTMLElement | null)?.blur?.();
     }
   }, []);
 
@@ -1459,6 +1462,7 @@ export function ChatInput({
                     variant="ghost"
                     type="button"
                     className={homeToolbarIconBtn}
+                    onMouseDown={(event) => event.preventDefault()}
                     onClick={pickFiles}
                     disabled={disabled || voicePanelOpen}
                   >
