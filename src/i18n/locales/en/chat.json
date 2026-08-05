@@ -232,8 +232,6 @@
         "runIdLabel": "Run ID",
         "nameLabel": "Workflow",
         "confirmedParameters": "Confirmed parameters",
-        "collapseParameters": "Collapse",
-        "expandParameters": "Expand",
         "runUnavailable": "Run record unavailable",
         "retryQuery": "Retry",
         "progressLabel": "Workflow execution progress",

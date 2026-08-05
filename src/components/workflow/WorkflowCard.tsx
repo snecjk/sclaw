@@ -296,6 +296,14 @@ export function WorkflowCard({
     () => (paramsSummary ? parseWorkflowParamsSummaryGroups(paramsSummary) : []),
     [paramsSummary],
   );
+  const collapsedParamsPreview = useMemo(() => {
+    const firstGroup = confirmedParamGroups[0];
+    if (firstGroup) return `${firstGroup.title}：${firstGroup.content}`;
+    return paramsSummary
+      ?.split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line && !line.startsWith('已确认以下参数')) ?? '';
+  }, [confirmedParamGroups, paramsSummary]);
 
   const statusRow = showStatus ? (
     <div
@@ -353,7 +361,11 @@ export function WorkflowCard({
               <ChevronDown className="h-3.5 w-3.5" aria-hidden />
             )}
             <span>{t('workflow.confirmedParameters')}</span>
-            <span className="text-[12px] font-normal">{t(paramsExpanded ? 'workflow.collapseParameters' : 'workflow.expandParameters')}</span>
+            {!paramsExpanded && collapsedParamsPreview ? (
+              <span className="max-w-[min(42vw,360px)] truncate text-[12px] font-normal text-muted-foreground" title={collapsedParamsPreview}>
+                {collapsedParamsPreview}
+              </span>
+            ) : null}
           </button>
 
           {paramsExpanded ? (

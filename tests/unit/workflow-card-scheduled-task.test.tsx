@@ -34,8 +34,6 @@ vi.mock('react-i18next', () => ({
       if (key === 'workflow.defaultName') return '工作流';
       if (key === 'workflow.createScheduledTaskAction') return '创建定时任务';
       if (key === 'workflow.confirmedParameters') return '已确认参数';
-      if (key === 'workflow.collapseParameters') return '收起';
-      if (key === 'workflow.expandParameters') return '展开';
       return key;
     },
   }),
@@ -164,13 +162,14 @@ describe('WorkflowCard scheduled task action', () => {
       />,
     );
 
-    const toggle = await screen.findByRole('button', { name: '已确认参数收起' });
+    const toggle = await screen.findByRole('button', { name: '已确认参数' });
     expect(screen.getByText('数据来源')).toBeTruthy();
     expect(screen.getByText('发件基础信息、服务质量信息')).toBeTruthy();
 
     fireEvent.click(toggle);
-    expect(screen.getByRole('button', { name: '已确认参数展开' })).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByText('发件基础信息、服务质量信息')).toBeNull();
+    expect(screen.getByRole('button', { name: /已确认参数/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('数据来源：发件基础信息、服务质量信息')).toBeTruthy();
+    expect(screen.queryByText('异常判断类型')).toBeNull();
   });
 
   it('polls active runs at three seconds and stops after a terminal snapshot', async () => {
