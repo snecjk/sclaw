@@ -565,6 +565,19 @@ export function insertSkillSpan(root: HTMLElement, slug: string, title: string):
   root.focus();
 }
 
+/** Relabel a rendered skill token in place, so the caret and surrounding text survive. */
+export function retitleSkillSpan(root: HTMLElement, slug: string, title: string): boolean {
+  const span = root.querySelector(SKILL_SPAN_SELECTOR)
+    ?? root.querySelector('span[data-skill-slug]');
+  if (!(span instanceof HTMLSpanElement)) return false;
+  if (span.dataset.skillSlug !== slug || span.dataset.skillTitle === title) return false;
+
+  span.dataset.skillTitle = title;
+  const label = span.querySelector('.skill-token-label');
+  if (label) label.textContent = title;
+  return true;
+}
+
 export function removeMentionSpan(root: HTMLElement, span: HTMLSpanElement): void {
   if (!root.contains(span)) return;
 

@@ -22,6 +22,7 @@ import {
   removeMentionBeforeCaret,
   removeMentionSpan,
   removeSkillSpan,
+  retitleSkillSpan,
   readSkillMetaFromEditorRoot,
   serializeMentionEditor,
   setMentionEditorMentions,
@@ -29,7 +30,7 @@ import {
   type ActiveMentionTrigger,
   type MentionComposerSnapshot,
 } from '@/lib/dingtalk-mention-composer';
-import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
+import { resolveSkillFromPlaza, resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
 
 function focusEditorAtEnd(root: HTMLElement): void {
   root.focus();
@@ -250,9 +251,20 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
 
       if (appliedSkillSeedRef.current === slug) return;
       appliedSkillSeedRef.current = slug;
-      const { title } = resolveSkillFromPlaza(slug);
-      insertSkillSpan(root, slug, title);
+      insertSkillSpan(root, slug, resolveSkillFromPlaza(slug).title);
       syncFromDom();
+
+      // A cold plaza cache renders the slug; swap in the real name once it arrives.
+      let cancelled = false;
+      void resolveSkillPrompt(slug).then(({ title }) => {
+        const target = editorRef.current;
+        if (cancelled || !target || appliedSkillSeedRef.current !== slug) return;
+        if (!retitleSkillSpan(target, slug, title)) return;
+        syncFromDom();
+      });
+      return () => {
+        cancelled = true;
+      };
     }, [seedSkillSlug, syncFromDom]);
 
     const handleInput = useCallback((event: React.FormEvent<HTMLDivElement>) => {
