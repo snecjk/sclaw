@@ -9,11 +9,15 @@ import {
 } from '../services/providers/sto-placeholder-utils';
 import { applyStoClaudeInferenceEnv } from '../services/sto-claude-inference-env';
 import { getAgentPreferredModel } from '../utils/agent-config';
+import { getDwsBinDir } from '../utils/dws-cli';
+import { getQpathBinDir } from '../utils/qpath-cli';
+import { prependPathEntry } from '../utils/env-path';
+import { resolveConnectedGitlabHostname } from '../connectors/agent-context';
+import { isBinaryAllowedByConnectors } from '../connectors/gateway-allowlist';
 import { logger } from '../utils/logger';
 import { getClaudeConfigDir } from '../utils/paths';
 import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { getApiKey } from '../utils/secure-storage';
-import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { resolveAvailableClaudeModel } from './claude-model-selection';
 
 type ClaudeAgentSdk = typeof import('@anthropic-ai/claude-agent-sdk');
@@ -123,11 +127,22 @@ async function buildClaudeEnvForAccount(
   accountId: string,
   account?: ProviderAccount | null,
 ): Promise<NodeJS.ProcessEnv> {
-  const base: NodeJS.ProcessEnv = {
+  let base: NodeJS.ProcessEnv = {
     ...process.env,
     CLAUDE_CONFIG_DIR: getClaudeConfigDir(),
   };
+  // Connector CLIs: only inject PATH when the connector is connected (Gateway parity).
+  if (isBinaryAllowedByConnectors('dws')) {
+    base = prependPathEntry(base as Record<string, string | undefined>, getDwsBinDir()).env;
+  }
+  if (isBinaryAllowedByConnectors('qpath')) {
+    base = prependPathEntry(base as Record<string, string | undefined>, getQpathBinDir()).env;
+  }
   applySaiClientIdEnv(base as Record<string, string | undefined>);
+  const gitlabHost = resolveConnectedGitlabHostname();
+  if (gitlabHost) {
+    base.GITLAB_HOST = gitlabHost;
+  }
   const resolvedAccount = account ?? await getProviderAccount(accountId);
   if (!resolvedAccount) return base;
 

@@ -3,33 +3,29 @@
 The Chat page's file preview panel has UX issues that affect daily usage:
 
 1. **Iframe does not reload when switching files**: When multiple HTML/PDF files are attached to a chat session, switching between them in the preview panel leaves the previous file's content visible because React reuses the iframe DOM node.
-2. **No fullscreen/presentation mode**: Users cannot view generated HTML reports (e.g., PPT-style pages) in fullscreen, which is essential for presentation and review scenarios.
-3. **Resize / three-column chrome**: Preview width must stay a persisted percentage (30%–70%, default 50%) on the unified Grid; the old 4px resizer column and short grey divider must be removed in favor of a 0px logical boundary with an overlay transparent hit target **and a `#FFD6BA` / 2px hint edge aligned to the preview left stroke** (hidden by default; visible on hover / dragging / focus-visible). Session tools (search / refresh / thinking) must sit on the chat header column when split (flush to the column's right edge); the preview toggle stays on the preview column. Dark-mode compatibility is required for header icons and the hit shell (no light-only residual fills).
+2. **Preview expand belongs to Workspace shell architecture**: Presentation/expand MUST use in-workspace `PreviewMode.expanded` from `workspace-shell-architecture-upgrade`, **not** the DOM Fullscreen API.
+3. **Resize / three-column chrome ownership moved**: Zero structural seam, Body-only handle, and final Header slot naming (`chatActions + previewActions + layoutMode`) are owned by `workspace-shell-architecture-upgrade`. This Change MUST NOT reintroduce 10px bilateral seams, `row-span-2` + `translate-x(10px)` handles, or a third `panelActions` semantic.
 
 ## What Changes
 
-- Force iframe remount on file switch by adding stable `key` props
-- Add fullscreen toggle to the preview panel toolbar and a floating overlay button inside the iframe container
-- Align resize with `previewSplitPercent` + unified Grid `--sto-split-preview-col`
-- Introduce `panelActions` ContentHeader slot; split Chat/Home header actions
-- Replace layout-width resizer + grey line with shared `SplitPanelResizeHandle` (transparent hit + `#FFD6BA` hint edge)
-- Chat and Home share the same handle / hook behavior (Pointer Events + cleanup)
+- Force iframe remount on file switch by adding stable `key` props (still owned here).
+- **REMOVED direction**: DOM Fullscreen toggle / `requestFullscreen` / `fullscreenchange` as the product expand path — superseded by Workspace `PreviewMode.expanded`.
+- **DEFERRED / SUPERSEDED**: split seam removal, Handle geometry, Header slot rename — tracked in `openspec/changes/workspace-shell-architecture-upgrade` (`workspace-layout-modes`).
+- Keep shared percent persistence (`previewSplitPercent` 30–70) and Pointer resize hook reuse unless the shell Change replaces them.
+- Dark-mode compatibility remains required for any preview chrome this Change still touches.
 
 ## Capabilities
 
 ### New Capabilities
-- `chat-file-preview-fullscreen`: Fullscreen presentation mode for file previews
-- `chat-file-preview-resize`: Draggable width adjustment between chat and preview panels
+- ~~`chat-file-preview-fullscreen`~~ **WITHDRAWN** — expand is `workspace-layout-modes` / `PreviewMode.expanded`
+- `chat-file-preview-resize` — **narrowed**: persistence + hook reuse only; seam/Handle/Header final geometry owned by shell Change
 
 ### Modified Capabilities
 - `chat-file-preview`: Fix iframe reload behavior on file switch
 
 ## Impact
 
-- `src/components/file-preview/FilePreviewViewer.tsx`: iframe key fix + fullscreen button
-- `src/pages/Chat/ChatPreviewPanel.tsx`: toolbar fullscreen button
-- `src/components/layout/content-header-context.tsx` / `ContentHeader.tsx`: `panelActions` slot
-- `src/pages/Chat/ChatSearchBar.tsx`: split conversation vs panel action components
-- `src/pages/Chat/index.tsx` / `src/pages/Home/HomeMainConversation.tsx`: shared handle wiring
-- `src/lib/surfaces.ts` / `src/hooks/use-split-panel-resize.ts`: 0px Grid + Pointer Events
-- `src/components/layout/split-panel-resize-handle.tsx`: shared separator (transparent hit + orange edge)
+- `src/components/file-preview/FilePreviewViewer.tsx`: iframe `key` fix; Fullscreen API path to be removed when shell Stage 3 lands (do not expand Fullscreen further)
+- `src/pages/Chat/ChatPreviewPanel.tsx`: same Fullscreen deprecation
+- Layout/Header/seam files: **owned by** `workspace-shell-architecture-upgrade` — avoid parallel edits here
+- Depends on: `openspec/changes/workspace-shell-architecture-upgrade`

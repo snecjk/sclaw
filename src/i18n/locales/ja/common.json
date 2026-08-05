@@ -14,7 +14,7 @@
         "cronTasks": "定期タスク",
         "myTasks": "マイタスク",
         "dataCenter": "データセンター",
-        "skills": "スキル",
+        "skills": "スキル·コネクタ",
         "moreApps": "アプリ広場",
         "workflow": "ワークフロー",
         "agents": "Agents",
@@ -48,7 +48,7 @@
         "sessionUnread": "未読",
         "compactAccountMenu": "アカウントと設定",
         "supportGroup": {
-            "title": "S Claw 製品相談グループ",
+            "title": "SClaw 製品相談グループ",
             "hint": "DingTalkでスキャンしてグループに参加し、質問してください",
             "helpAria": "製品相談グループのQRコードを表示",
             "loadError": "QRコードの読み込みに失敗しました。後でもう一度お試しください。"
@@ -154,7 +154,7 @@
             "authorizeLocalFile": "ローカルファイルを許可",
             "authorizeLocalFileOption": "ファイルを許可",
             "authorizeLocalFolderOption": "フォルダを許可",
-            "usedQuota": "使用済み {{used}} / {{quota}}"
+            "usedQuota": "ストレージ使用量 {{used}}/{{quota}}"
         },
         "drive": {
             "authorizedCount": "{{count}} 件のファイルを許可済み",

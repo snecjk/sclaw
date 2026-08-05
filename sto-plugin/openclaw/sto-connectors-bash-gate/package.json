@@ -1,0 +1,11 @@
+{
+  "name": "sto-connectors-bash-gate",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.ts",
+  "description": "Block dws/glab/qpath shell tools until connector is connected",
+  "private": true,
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  }
+}

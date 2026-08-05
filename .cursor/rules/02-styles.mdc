@@ -30,6 +30,20 @@ alwaysApply: false
 - 新增或修改可见组件时必须保留 light/dark 可读性；确认为单主题的独立 surface 需标明范围。
 - 优先使用语义 token；只有现有设计需要明确主题差异时才增加 `dark:`。
 
+## AppShell Surface 层级（Stage 4）
+
+省区壳层 light/dark 共用同一所有权；只改 Token 值，不改 Grid / collapse / PreviewMode 状态机。
+
+| 层 | 所有权 | Token |
+| --- | --- | --- |
+| L0 | Window / Shell / Sidebar / 8px Frame | `--sto-shell-bg`（`--sto-page-bg` / `--sto-sidebar-bg` 必须映射到它） |
+| L1 | Workspace / Header base | `--sto-workspace-bg`（`--sto-main-card-bg` 映射到它） |
+| L2 | Preview / Composer / 内容卡片 | `--sto-panel-bg` |
+| 共享 | 弱描边 / 轻抬升阴影 | `--sto-surface-edge` / `--sto-workspace-shadow`（`--sto-main-card-shadow` 映射阴影） |
+| L3 | Toast / Popover / Modal | Toast 专用 token + `--popover`；不得降为 L1 |
+
+禁止：Sidebar 与 Shell 分叉色相；collapsed / expanded 专用背景；用 JSX 或状态机修纯视觉问题。dark 无 MCP Frame 时由 L0/L1/L2 明度契约推导，不得伪称逐像素对齐设计稿。
+
 ## 样式写法
 
 - 新增样式优先 Tailwind utility classes。

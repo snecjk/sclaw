@@ -10,8 +10,10 @@
  * Contents/Resources/app.asar); use `/bin/rm -rf` instead.
  */
 import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { app } from 'electron';
-import { lstat, readdir, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { lstat, readdir, rename, rm } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { logger } from './logger';
@@ -20,6 +22,12 @@ const execFileAsync = promisify(execFile);
 
 /** Retries after launch: ShipIt may still be renaming `.old-*` into a bundle. */
 export const CLEANUP_RETRY_DELAYS_MS = [0, 30_000, 120_000, 300_000] as const;
+export const LEGACY_MAC_APP_BUNDLE_NAME = 'S Claw.app';
+export const RENAMED_MAC_APP_BUNDLE_NAME = 'SClaw.app';
+const MAC_RELAUNCH_DELAY_SECONDS = '0.25';
+const MAC_RELAUNCH_WAIT_ATTEMPTS = '240';
+const MAC_MOVE_RELAUNCH_ATTEMPTS = '60';
+const MAC_MOVE_RELAUNCH_DELAY_SECONDS = '0.25';
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -41,10 +49,122 @@ export function getMacAppBundleInfo(
   };
 }
 
-/** True for Squirrel backup names like `S Claw.app.old-1780371448851`. */
+/** True for Squirrel backup names like `SClaw.app.old-1780371448851`. */
 export function isOldAppBackupName(bundleName: string, entryName: string): boolean {
   const pattern = new RegExp(`^${escapeRegExp(bundleName)}\\.old-\\d+$`);
   return pattern.test(entryName);
+}
+
+/** True for updater-staged stale targets like `SClaw.app.stale-1780371448851`. */
+export function isStaleAppTargetName(bundleName: string, entryName: string): boolean {
+  const pattern = new RegExp(`^${escapeRegExp(bundleName)}\\.stale-\\d+(?:-\\d+)?$`);
+  return pattern.test(entryName);
+}
+
+/** Match updater backups produced before or after the macOS app bundle rename. */
+export function isKnownOldAppBackupName(currentBundleName: string, entryName: string): boolean {
+  return [currentBundleName, LEGACY_MAC_APP_BUNDLE_NAME, RENAMED_MAC_APP_BUNDLE_NAME]
+    .some((bundleName) => isOldAppBackupName(bundleName, entryName));
+}
+
+export function resolveMacAppInstallTargetPath(installDir: string, extractedAppPath: string): string {
+  const extractedName = basename(extractedAppPath);
+  const targetName = extractedName === LEGACY_MAC_APP_BUNDLE_NAME
+    ? RENAMED_MAC_APP_BUNDLE_NAME
+    : extractedName;
+  return join(installDir, targetName);
+}
+
+export function scheduleMacAppBundleRelaunch(appBundlePath: string): void {
+  const child = spawn(
+    '/bin/sh',
+    [
+      '-c',
+      [
+        'parent_pid=$1',
+        'attempts=$2',
+        'delay_seconds=$3',
+        'i=0',
+        'while /bin/kill -0 "$parent_pid" 2>/dev/null && [ "$i" -lt "$attempts" ]; do',
+        '  i=$((i + 1))',
+        '  sleep "$delay_seconds"',
+        'done',
+        'exec /usr/bin/open -n "$4"',
+      ].join('\n'),
+      'sclaw-relaunch',
+      String(process.pid),
+      MAC_RELAUNCH_WAIT_ATTEMPTS,
+      MAC_RELAUNCH_DELAY_SECONDS,
+      appBundlePath,
+    ],
+    {
+      detached: true,
+      stdio: 'ignore',
+    },
+  );
+  child.unref();
+}
+
+export function scheduleMacAppBundleMoveAndRelaunch(
+  sourceAppPath: string,
+  targetAppPath: string,
+  stagedTargetPath: string | null = null,
+): void {
+  const child = spawn(
+    '/bin/sh',
+    [
+      '-c',
+      [
+        'source_path=$1',
+        'target_path=$2',
+        'attempts=$3',
+        'delay_seconds=$4',
+        'parent_pid=$5',
+        'wait_attempts=$6',
+        'i=0',
+        'while [ "$i" -lt "$attempts" ]; do',
+        '  if /bin/mv "$source_path" "$target_path" 2>/dev/null; then',
+        '    i=0',
+        '    while /bin/kill -0 "$parent_pid" 2>/dev/null && [ "$i" -lt "$wait_attempts" ]; do',
+        '      i=$((i + 1))',
+        '      sleep "$delay_seconds"',
+        '    done',
+        '    exec /usr/bin/open -n "$target_path"',
+        '  fi',
+        '  i=$((i + 1))',
+        '  sleep "$delay_seconds"',
+        'done',
+        'staged_path=$7',
+        'if [ -n "$staged_path" ] && [ -e "$staged_path" ] && [ ! -e "$target_path" ]; then',
+        '  /bin/mv "$staged_path" "$target_path" 2>/dev/null',
+        'fi',
+        'i=0',
+        'while /bin/kill -0 "$parent_pid" 2>/dev/null && [ "$i" -lt "$wait_attempts" ]; do',
+        '  i=$((i + 1))',
+        '  sleep "$delay_seconds"',
+        'done',
+        'exec /usr/bin/open -n "$source_path"',
+      ].join('\n'),
+      'sclaw-move-relaunch',
+      sourceAppPath,
+      targetAppPath,
+      MAC_MOVE_RELAUNCH_ATTEMPTS,
+      MAC_MOVE_RELAUNCH_DELAY_SECONDS,
+      String(process.pid),
+      MAC_RELAUNCH_WAIT_ATTEMPTS,
+      stagedTargetPath ?? '',
+    ],
+    {
+      detached: true,
+      stdio: 'ignore',
+    },
+  );
+  child.unref();
+}
+
+function isDisposableAppBundleName(bundleName: string, entryName: string): boolean {
+  return isKnownOldAppBackupName(bundleName, entryName)
+    || isStaleAppTargetName(bundleName, entryName);
 }
 
 async function describeEntry(target: string): Promise<string> {
@@ -60,7 +180,7 @@ async function describeEntry(target: string): Promise<string> {
 }
 
 /** Delete a path on macOS; falls back when Node fs.rm hits ENOTEMPTY on .app bundles. */
-export async function removeMacAppBackupPath(target: string): Promise<void> {
+export async function removeMacAppBundlePath(target: string): Promise<void> {
   if (process.platform === 'darwin') {
     try {
       await execFileAsync('/bin/rm', ['-rf', target]);
@@ -78,7 +198,40 @@ export async function removeMacAppBackupPath(target: string): Promise<void> {
   });
 }
 
-/** Remove all sibling `.app.old-*` backups next to the running app bundle. */
+/** Backward-compatible alias for callers that only remove `.app.old-*` bundles. */
+export const removeMacAppBackupPath = removeMacAppBundlePath;
+
+export function getStaleMacAppTargetPath(targetAppPath: string, timestamp = Date.now(), suffix = 0): string {
+  return suffix > 0 ? `${targetAppPath}.stale-${timestamp}-${suffix}` : `${targetAppPath}.stale-${timestamp}`;
+}
+
+/**
+ * Move an existing install target out of the way before installing a renamed app.
+ * This keeps rollback possible when an old-name bundle (`S Claw.app`) upgrades
+ * into a new-name bundle (`SClaw.app`) while a stale target already exists.
+ */
+export async function stageExistingMacAppTarget(
+  currentAppPath: string,
+  targetAppPath: string,
+  timestamp = Date.now(),
+): Promise<string | null> {
+  if (resolve(currentAppPath) === resolve(targetAppPath) || !existsSync(targetAppPath)) {
+    return null;
+  }
+
+  for (let suffix = 0; suffix < 100; suffix += 1) {
+    const stagedPath = getStaleMacAppTargetPath(targetAppPath, timestamp, suffix);
+    if (existsSync(stagedPath)) {
+      continue;
+    }
+    await rename(targetAppPath, stagedPath);
+    return stagedPath;
+  }
+
+  throw new Error(`无法暂存已有安装目标: ${targetAppPath}`);
+}
+
+/** Remove all sibling `.app.old-*` and `.app.stale-*` bundles next to the running app bundle. */
 export async function cleanupOldMacAppBackups(execPath: string): Promise<string[]> {
   const info = getMacAppBundleInfo(execPath);
   if (!info) {
@@ -94,7 +247,7 @@ export async function cleanupOldMacAppBackups(execPath: string): Promise<string[
     return [];
   }
 
-  const candidates = entries.filter((name) => isOldAppBackupName(info.bundleName, name));
+  const candidates = entries.filter((name) => isDisposableAppBundleName(info.bundleName, name));
   if (candidates.length === 0) {
     return [];
   }
@@ -112,7 +265,7 @@ export async function cleanupOldMacAppBackups(execPath: string): Promise<string[
 
     const kind = await describeEntry(target);
     try {
-      await removeMacAppBackupPath(target);
+      await removeMacAppBundlePath(target);
       removed.push(target);
       logger.info(`[Updater] Removed old app backup (${kind}): ${target}`);
     } catch (error) {
@@ -131,7 +284,7 @@ export async function cleanupOldMacAppBackups(execPath: string): Promise<string[
     logger.info(`[Updater] Cleaned ${removed.length}/${candidates.length} old app backup(s)`);
   } else if (candidates.length > 0) {
     logger.warn(
-      `[Updater] Could not remove any of ${candidates.length} old app backup(s); check permissions or quit other S Claw instances`,
+      `[Updater] Could not remove any of ${candidates.length} old app backup(s); check permissions or quit other SClaw instances`,
     );
   }
 

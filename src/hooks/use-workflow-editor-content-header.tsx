@@ -9,7 +9,11 @@ import { useContentHeader } from '@/components/layout/content-header-context';
 import { openMemoryCenterWorkflowDesigner } from '@/lib/memory-center-web-url';
 import { getWorkflowStoToken } from '@/lib/workflow-api';
 import { cn } from '@/lib/utils';
-import { contentHeaderTitleClass } from '@/lib/surfaces';
+import {
+  contentHeaderActionBtnClass,
+  contentHeaderTextActionBtnClass,
+  contentHeaderTitleClass,
+} from '@/lib/surfaces';
 import { useAuthStore } from '@/stores/auth';
 
 export interface UseWorkflowEditorContentHeaderOptions {
@@ -38,7 +42,7 @@ function truncatePrompt(prompt: string, maxLen = 50): string {
 }
 
 /**
- * 编辑/AI 创建路由挂载：全局 52px 顶栏展示返回 +「编辑工作流 · wf_xxx」+ 在浏览器打开。
+ * 编辑/AI 创建路由挂载：全局 44px 顶栏展示返回 +「编辑工作流 · wf_xxx」+ 在浏览器打开。
  */
 export function useWorkflowEditorContentHeader({
   workflowId,
@@ -78,9 +82,9 @@ export function useWorkflowEditorContentHeader({
           type="button"
           aria-label={t('editor.backAria')}
           onClick={() => onBackRef.current()}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground/80 hover:bg-muted"
+          className={cn(contentHeaderActionBtnClass, 'text-foreground/80 hover:bg-muted')}
         >
-          <ChevronLeft className="h-5 w-5" aria-hidden />
+          <ChevronLeft className="h-4 w-4" aria-hidden />
         </button>
         <p
           className={cn(contentHeaderTitleClass, 'flex min-w-0 items-baseline gap-1')}
@@ -106,13 +110,26 @@ export function useWorkflowEditorContentHeader({
     return (
       <>
         {onTryRun ? (
-          <Button type="button" variant="outline" size="sm" disabled={tryRunDisabled} onClick={onTryRun}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={contentHeaderTextActionBtnClass}
+            disabled={tryRunDisabled}
+            onClick={onTryRun}
+          >
             <Play className="mr-1 h-3.5 w-3.5" aria-hidden />
             {t('builder.tryRun')}
           </Button>
         ) : null}
         {onOpenLocalRunHistory ? (
-          <Button type="button" variant="outline" size="sm" onClick={onOpenLocalRunHistory}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={contentHeaderTextActionBtnClass}
+            onClick={onOpenLocalRunHistory}
+          >
             <History className="mr-1 h-3.5 w-3.5" aria-hidden />
             本地运行记录
           </Button>
@@ -121,6 +138,7 @@ export function useWorkflowEditorContentHeader({
           type="button"
           variant="outline"
           size="sm"
+          className={contentHeaderTextActionBtnClass}
           onClick={() => openMemoryCenterWorkflowDesigner(workflowId, token, promptCacheId, prompt)}
         >
           <ExternalLink className="mr-1 h-3.5 w-3.5" aria-hidden />

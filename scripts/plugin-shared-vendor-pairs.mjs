@@ -60,6 +60,27 @@ export const PLUGIN_SHARED_VENDOR_PAIRS = [
     rootRel: 'shared/dingtalk-send/dingtalk-share.ts',
     vendorRel: 'sto-plugin/openclaw/sto-dingtalk-send-guard/shared/dingtalk-send/dingtalk-share.ts',
   },
+  // sto-connectors-bash-gate
+  {
+    rootRel: 'shared/connectors/bash-gate.ts',
+    vendorRel: 'sto-plugin/openclaw/sto-connectors-bash-gate/shared/connectors/bash-gate.ts',
+  },
+  {
+    rootRel: 'shared/connectors/collect-gated-binaries.ts',
+    vendorRel: 'sto-plugin/openclaw/sto-connectors-bash-gate/shared/connectors/collect-gated-binaries.ts',
+  },
+  {
+    rootRel: 'shared/connectors/deep-link.ts',
+    vendorRel: 'sto-plugin/openclaw/sto-connectors-bash-gate/shared/connectors/deep-link.ts',
+  },
+  {
+    rootRel: 'shared/connectors/load-allowlist-file.ts',
+    vendorRel: 'sto-plugin/openclaw/sto-connectors-bash-gate/shared/connectors/load-allowlist-file.ts',
+  },
+  {
+    rootRel: 'shared/connectors/load-gated-binaries-file.ts',
+    vendorRel: 'sto-plugin/openclaw/sto-connectors-bash-gate/shared/connectors/load-gated-binaries-file.ts',
+  },
   // sto-scheduled-task-tool
   {
     rootRel: 'shared/dingtalk-prompts/scheduled-task/scheduled-task-core.ts',

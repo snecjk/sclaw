@@ -1,52 +1,66 @@
 /**
  * TemplateSelectModal 组件
- * 工作流选择弹窗：展示官方推荐工作流卡片。
- * - 点击「添加」：先将模版实例化为工作流实例，再回调父级用实例 id 打开 TaskCreateModal 创建定时任务。
+ * 官方推荐弹窗：展示推荐位全部类型（工作流模版/实例、技能、提示词），无分类 Tab。
+ * 卡片复用首页 RecommendCard；选中后由父级把内容写入任务描述（技能保留安装/更新）。
  */
 
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Loader2 } from 'lucide-react';
+import { X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { toast } from 'sonner';
-import { myTaskEmptyTemplateCardClass, myTaskEmptyTemplateAddButtonClass } from '@/lib/surfaces';
-import { instantiateWorkflowFromTemplate } from '../lib/instantiate-workflow';
-import type { OfficialWorkflowCard } from '@/pages/Workflow/types';
+import { RecommendCard } from '@/pages/Home/RecommendCard';
+import { useHomeRecommendSkillStatus } from '@/pages/Home/use-home-recommend-skill-status';
+import type { RecommendItem } from '@/lib/recommend-api';
 
 interface TemplateSelectModalProps {
   /** 弹窗是否打开 */
   open: boolean;
   /** 关闭弹窗回调 */
   onClose: () => void;
-  /** 官方推荐工作流列表 */
-  officialCards: OfficialWorkflowCard[];
-  /** 实例化成功回调：父级用实例 id + 模版名打开 TaskCreateModal 创建定时任务 */
-  onInstantiated?: (instanceId: string, templateName: string) => void;
+  /** 推荐位条目（工作流 / 技能 / 提示词等） */
+  items: RecommendItem[];
+  /**
+   * 选中条目回调：父级关闭弹窗并打开 TaskCreateModal，预填任务描述。
+   * 技能在安装/更新完成后也会走此回调。
+   */
+  onSelect: (item: RecommendItem) => void;
+}
+
+/** 由推荐条目生成写入任务描述的文案 */
+export function buildRecommendTaskMessage(item: RecommendItem): string {
+  switch (item.item_type) {
+    case 'workflow_template':
+      return `/${item.title}`.trim();
+    case 'workflow_instance':
+      return `帮我执行 id 为：${item.item_ref_id} 的工作流 【${item.title}】`;
+    case 'prompt':
+      return (item.content || item.title || '').trim();
+    case 'skill':
+      return (item.skill_default_prompt || item.title || '').trim();
+    default:
+      return (item.title || '').trim();
+  }
 }
 
 export function TemplateSelectModal({
   open,
   onClose,
-  officialCards,
-  onInstantiated,
+  items,
+  onSelect,
 }: TemplateSelectModalProps) {
   const { t } = useTranslation('tasks');
-  const [loadingCardId, setLoadingCardId] = useState<string | null>(null);
+  const {
+    skillStatusMap,
+    loading: skillStatusLoading,
+    refreshingSlugs,
+    handleRefresh: handleSkillStatusRefresh,
+  } = useHomeRecommendSkillStatus(open ? items : []);
 
-  const handleSelect = useCallback(
-    async (card: OfficialWorkflowCard) => {
-      setLoadingCardId(card.id);
-      try {
-        const instanceId = await instantiateWorkflowFromTemplate(card.id);
-        onInstantiated?.(instanceId, card.name);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        toast.error(`工作流实例化失败: ${message}`);
-      } finally {
-        setLoadingCardId(null);
-      }
+  const handleNonSkillClick = useCallback(
+    (item: RecommendItem) => {
+      onSelect(item);
     },
-    [onInstantiated],
+    [onSelect],
   );
 
   return (
@@ -90,7 +104,7 @@ export function TemplateSelectModal({
 
             {/* 卡片网格区 */}
             <div className="px-[18px] pb-[18px] flex-1 overflow-y-auto min-h-0">
-              {officialCards.length === 0 ? (
+              {items.length === 0 ? (
                 <div className="flex items-center justify-center py-16">
                   <p className="text-sm text-muted-foreground">{t('myTask.templateModal.empty')}</p>
                 </div>
@@ -100,46 +114,27 @@ export function TemplateSelectModal({
                   aria-label={t('myTask.empty.officialAria')}
                   className="grid grid-cols-1 gap-[clamp(12px,1.4vw,16px)] sm:grid-cols-2 lg:grid-cols-3"
                 >
-                  {officialCards.map((card) => {
-                    const isLoading = loadingCardId === card.id;
+                  {items.map((item) => {
+                    const skillSlug = item.skill_slug || item.item_ref_id;
                     return (
-                    <article key={card.id} role="listitem" className={myTaskEmptyTemplateCardClass}>
-                      <div className="mb-2 flex items-start gap-2">
-                        <svg
-                          className="mt-px shrink-0 text-muted-foreground"
-                          viewBox="0 0 24 24"
-                          width="18"
-                          height="18"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.75"
-                          aria-hidden="true"
-                        >
-                          <circle cx="12" cy="12" r="9" />
-                          <path d="M12 7v5l3 2" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                        <h2 className="m-0 min-w-0 flex-1 text-[15px] font-bold leading-[1.35] tracking-[-0.02em] text-foreground">
-                          {card.name}
-                        </h2>
+                      <div key={`${item.item_type}:${item.item_ref_id}`} role="listitem" className="min-h-0">
+                        <RecommendCard
+                          item={item}
+                          onClick={() => handleNonSkillClick(item)}
+                          onSkillUse={() => onSelect(item)}
+                          onSkillInstalled={() => {
+                            handleSkillStatusRefresh(skillSlug);
+                          }}
+                          skillStatus={
+                            item.item_type === 'skill' ? skillStatusMap[skillSlug] : undefined
+                          }
+                          skillStatusLoading={
+                            item.item_type === 'skill'
+                              ? skillStatusLoading || refreshingSlugs.has(skillSlug)
+                              : false
+                          }
+                        />
                       </div>
-                      <p className="m-0 mb-3 line-clamp-2 flex-1 text-[13px] leading-[1.5] text-muted-foreground">
-                        {card.description}
-                      </p>
-                      <div className="mt-auto flex items-center justify-end gap-3 border-t border-border pt-2.5 text-xs">
-                        <button
-                          type="button"
-                          onClick={() => handleSelect(card)}
-                          disabled={isLoading}
-                          className={myTaskEmptyTemplateAddButtonClass}
-                        >
-                          {isLoading ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                          ) : (
-                            t('myTask.empty.addTemplate')
-                          )}
-                        </button>
-                      </div>
-                    </article>
                     );
                   })}
                 </div>

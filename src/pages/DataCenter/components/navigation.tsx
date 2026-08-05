@@ -48,15 +48,17 @@ export function IconToggle({ active, label, children, onClick }: { active: boole
 
 export function FolderBreadcrumbBar({
   breadcrumbs,
+  rootLabel,
   onBack,
   onOpen,
 }: {
   breadcrumbs: Array<{ entryId: string; name: string }>;
+  rootLabel: string;
   onBack: () => void;
   onOpen: (entryId: string) => void;
 }) {
   const { t } = useTranslation('common');
-  const items = breadcrumbs.slice(1);
+  const items = [{ entryId: 'root', name: rootLabel }, ...breadcrumbs.slice(1)];
   return (
     <div className="mb-3 flex shrink-0 items-center overflow-hidden">
       <button

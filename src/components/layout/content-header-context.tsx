@@ -1,11 +1,14 @@
 /**
- * ContentHeaderContext — 全局内容区 52px 标题栏槽位。
+ * ContentHeaderContext — 全局内容区 44px 标题栏槽位。
  *
- * 各路由页通过 useContentHeader 注入 title / actions；MainLayout 内 ContentHeader 读取渲染。
+ * 各路由页通过 useContentHeader 注入 title / chatActions / previewActions / layoutMode；
+ * MainLayout 内 ContentHeader 读取渲染。
+ *
+ * Stage 3：最终槽位为 chatActions + previewActions + layoutMode。
+ * `actions` / `isSplitLayout` 仅作单向兼容 adapter（写入时归一化）。
  */
 import {
   createContext,
-  useCallback,
   useContext,
   useLayoutEffect,
   useState,
@@ -15,24 +18,45 @@ import { matchPath, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { isSidebarPrimaryNavRoute } from '@/lib/sidebar-primary-nav';
 
+export type ContentHeaderLayoutMode = 'conversation' | 'split' | 'preview-expanded';
+
 export interface ContentHeaderSlot {
   /** 左侧标题（字符串或节点） */
   title: ReactNode;
-  /** 三栏预览打开时：产物 tab 行（与右侧 icon 同高对齐） */
+  /** 三栏 / expanded：产物 tab 行 */
   previewTabs?: ReactNode;
-  /** 会话区操作（搜索/刷新/思考等）：三栏时随对话列头部右对齐，单栏时并入右上角 icon 组 */
+  /** 会话区操作（搜索/刷新/思考等） */
   chatActions?: ReactNode;
-  /** 右侧操作区（icon 组）：预览面板展开/收起等 */
+  /** 预览列操作（展开/收起/预览开关等）；conversation 时亦渲染在右上角 */
+  previewActions?: ReactNode;
+  /**
+   * @deprecated Stage 3：请改用 previewActions；仍传入时单向映射到 previewActions
+   */
   actions?: ReactNode;
-  /** 三栏预览已展开：MainLayout body 去掉水平 px，由 split row 与 header 共用 inset */
+  /** Workbench Header 模板 */
+  layoutMode?: ContentHeaderLayoutMode;
+  /**
+   * @deprecated Stage 3：请改用 layoutMode；true 时映射为 `split`
+   */
   isSplitLayout?: boolean;
   /** 会话标题 chip 关闭；传入时在字符串标题上渲染 pill + × */
   onCloseSession?: () => void;
 }
 
-const ContentHeaderSlotContext = createContext<ContentHeaderSlot | null | undefined>(undefined);
-const ContentHeaderSetterContext = createContext<((slot: ContentHeaderSlot | null) => void) | null>(null);
-const ContentHeaderSplitContext = createContext<boolean | undefined>(undefined);
+interface NormalizedContentHeaderSlot {
+  title: ReactNode;
+  previewTabs?: ReactNode;
+  chatActions?: ReactNode;
+  previewActions?: ReactNode;
+  layoutMode: ContentHeaderLayoutMode;
+  onCloseSession?: () => void;
+}
+
+const ContentHeaderSlotContext = createContext<NormalizedContentHeaderSlot | null | undefined>(undefined);
+const ContentHeaderSetterContext = createContext<
+  ((slot: NormalizedContentHeaderSlot | null) => void) | null
+>(null);
+const ContentHeaderLayoutModeContext = createContext<ContentHeaderLayoutMode | undefined>(undefined);
 
 function resolveDefaultTitle(pathname: string, t: (key: string) => string): string {
   if (pathname === '/') return t('common:sidebar.home');
@@ -51,33 +75,30 @@ function resolveDefaultTitle(pathname: string, t: (key: string) => string): stri
   return t('common:sidebar.home');
 }
 
+function normalizeSlot(input: ContentHeaderSlot): NormalizedContentHeaderSlot {
+  const layoutMode: ContentHeaderLayoutMode =
+    input.layoutMode
+    ?? (input.isSplitLayout ? 'split' : 'conversation');
+  return {
+    title: input.title,
+    previewTabs: input.previewTabs,
+    chatActions: input.chatActions,
+    previewActions: input.previewActions ?? input.actions,
+    layoutMode,
+    onCloseSession: input.onCloseSession,
+  };
+}
+
 export function ContentHeaderProvider({ children }: { children: ReactNode }) {
-  const [slot, setSlotState] = useState<ContentHeaderSlot | null>(null);
-  const setSlot = useCallback((next: ContentHeaderSlot | null) => {
-    setSlotState((prev) => {
-      if (prev === next) return prev;
-      if (prev === null || next === null) return next;
-      if (
-        prev.title === next.title &&
-        prev.previewTabs === next.previewTabs &&
-        prev.chatActions === next.chatActions &&
-        prev.actions === next.actions &&
-        prev.isSplitLayout === next.isSplitLayout &&
-        prev.onCloseSession === next.onCloseSession
-      ) {
-        return prev;
-      }
-      return next;
-    });
-  }, []);
+  const [slot, setSlot] = useState<NormalizedContentHeaderSlot | null>(null);
 
   return (
     <ContentHeaderSetterContext.Provider value={setSlot}>
-      <ContentHeaderSplitContext.Provider value={slot?.isSplitLayout ?? false}>
+      <ContentHeaderLayoutModeContext.Provider value={slot?.layoutMode ?? 'conversation'}>
         <ContentHeaderSlotContext.Provider value={slot}>
           {children}
         </ContentHeaderSlotContext.Provider>
-      </ContentHeaderSplitContext.Provider>
+      </ContentHeaderLayoutModeContext.Provider>
     </ContentHeaderSetterContext.Provider>
   );
 }
@@ -90,12 +111,14 @@ function useContentHeaderRegistry() {
   return setSlot;
 }
 
-/** 当前页面向全局 ContentHeader 注入 title / previewTabs / chatActions / actions；卸载时自动清空 */
+/** 当前页面向全局 ContentHeader 注入槽位；卸载时自动清空 */
 export function useContentHeader({
   title,
   previewTabs,
   chatActions,
+  previewActions,
   actions,
+  layoutMode,
   isSplitLayout = false,
   onCloseSession,
   enabled = true,
@@ -107,22 +130,45 @@ export function useContentHeader({
       setSlot(null);
       return;
     }
-    setSlot({ title, previewTabs, chatActions, actions, isSplitLayout, onCloseSession });
-  }, [title, previewTabs, chatActions, actions, isSplitLayout, onCloseSession, enabled, setSlot]);
+    setSlot(normalizeSlot({
+      title,
+      previewTabs,
+      chatActions,
+      previewActions,
+      actions,
+      layoutMode,
+      isSplitLayout,
+      onCloseSession,
+    }));
+  }, [
+    title,
+    previewTabs,
+    chatActions,
+    previewActions,
+    actions,
+    layoutMode,
+    isSplitLayout,
+    onCloseSession,
+    enabled,
+    setSlot,
+  ]);
 
-  // Dependency changes replace the slot in-place. Clearing in that effect's cleanup
-  // causes an update loop when callers create fresh React nodes on every render:
-  // cleanup -> setSlot(null) -> provider render -> fresh node -> cleanup. Only clear
-  // when the page that owns the slot actually unmounts.
+  // Updating a slot must not clear it first. Some callers create fresh React nodes on
+  // every render; cleanup on every dependency change would cause a provider update loop.
+  // Clear only when the page that owns the slot actually unmounts.
   useLayoutEffect(() => () => setSlot(null), [setSlot]);
 }
 
-/** ContentHeader 组件读取当前应展示的槽位（含路由默认标题） */
+/** ContentHeader / MainLayout 读取当前应展示的槽位（含路由默认标题） */
 export function useContentHeaderDisplay(): {
   title: ReactNode | null;
   previewTabs: ReactNode | null;
   chatActions: ReactNode | null;
+  previewActions: ReactNode | null;
+  /** @deprecated Alias of previewActions for existing consumers. */
   actions: ReactNode | null;
+  layoutMode: ContentHeaderLayoutMode;
+  /** @deprecated 派生自 layoutMode === 'split'；供过渡期 MainLayout / hooks 使用 */
   isSplitLayout: boolean;
   onCloseSession: (() => void) | null;
 } {
@@ -136,22 +182,30 @@ export function useContentHeaderDisplay(): {
 
   // primaryNav 路由：侧栏已标识功能，不展示兜底「首页 / 工作流」等；页面注入的会话 chip 仍走 slot.title
   const title = slot?.title ?? (isSidebarPrimaryNavRoute(pathname) ? null : defaultTitle);
+  const layoutMode = slot?.layoutMode ?? 'conversation';
 
   return {
     title,
     previewTabs: slot?.previewTabs ?? null,
     chatActions: slot?.chatActions ?? null,
-    actions: slot?.actions ?? null,
-    isSplitLayout: slot?.isSplitLayout ?? false,
+    previewActions: slot?.previewActions ?? null,
+    actions: slot?.previewActions ?? null,
+    layoutMode,
+    isSplitLayout: layoutMode === 'split',
     onCloseSession: slot?.onCloseSession ?? null,
   };
 }
 
-/** Layout ancestors subscribe only to the split flag, never to React-node slot contents. */
-export function useContentHeaderSplitLayout(): boolean {
-  const isSplitLayout = useContext(ContentHeaderSplitContext);
-  if (isSplitLayout === undefined) {
+/** Layout ancestors subscribe only to layout mode, never to React-node slot contents. */
+export function useContentHeaderLayoutMode(): ContentHeaderLayoutMode {
+  const layoutMode = useContext(ContentHeaderLayoutModeContext);
+  if (layoutMode === undefined) {
     throw new Error('ContentHeaderContext is missing — wrap MainLayout with ContentHeaderProvider');
   }
-  return isSplitLayout;
+  return layoutMode;
+}
+
+/** @deprecated Use {@link useContentHeaderLayoutMode}; kept for existing layout consumers. */
+export function useContentHeaderSplitLayout(): boolean {
+  return useContentHeaderLayoutMode() === 'split';
 }

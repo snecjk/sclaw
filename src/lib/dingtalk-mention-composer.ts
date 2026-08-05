@@ -210,16 +210,41 @@ interface PlainTextBoundary {
   offset: number;
 }
 
+function rootHasSkillSpan(root: HTMLElement): boolean {
+  return Boolean(
+    root.querySelector(SKILL_SPAN_SELECTOR)
+    ?? root.querySelector('span[data-skill-slug]'),
+  );
+}
+
 function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTextBoundary | null {
   let current = 0;
+  // 与 serializeMentionEditor 一致：有 skill 时 plainText 会剥掉前导空白，
+  // 偏移映射也必须跳过 skill 后的 NBSP/空格，否则 insertMentionAtTrigger 会删错字符留下多余 @。
+  let skippingLeadingWs = rootHasSkillSpan(root);
 
   const visit = (node: Node): PlainTextBoundary | null => {
     if (node.nodeType === Node.TEXT_NODE) {
       const textNode = node as Text;
-      const text = (textNode.data ?? '').replace(/\u00A0/g, ' ');
+      const raw = (textNode.data ?? '').replace(/\u00A0/g, ' ');
+      let text = raw;
+      let nodeStart = 0;
+
+      if (skippingLeadingWs) {
+        const trimmed = raw.replace(/^\s+/, '');
+        const skipped = raw.length - trimmed.length;
+        if (trimmed.length === 0) {
+          // 整段都是 skill 后的前导空白：不计入 plainText 偏移
+          return null;
+        }
+        text = trimmed;
+        nodeStart = skipped;
+        skippingLeadingWs = false;
+      }
+
       const next = current + text.length;
       if (targetOffset <= next) {
-        return { node: textNode, offset: targetOffset - current };
+        return { node: textNode, offset: nodeStart + (targetOffset - current) };
       }
       current = next;
       return null;
@@ -229,6 +254,7 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
       if (isSkillSpan(node)) {
         return null;
       }
+      skippingLeadingWs = false;
       // 与 serializeMentionEditor 保持一致：mention span 用 `@displayName`
       // （不含 removable 模式下 × 删除按钮的字符），否则偏移量会与序列化错位。
       const text = isMentionSpan(node)
@@ -248,6 +274,7 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
 
     if (node instanceof HTMLElement) {
       if (node.tagName === 'BR') {
+        skippingLeadingWs = false;
         const next = current + 1;
         if (targetOffset <= next) {
           const parent = node.parentNode;

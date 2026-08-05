@@ -620,7 +620,10 @@ export function TaskCreateModal({
     <AnimatePresence>
       {open && (
         <TaskCreateModalInner
-          key={job?.id ?? `workflow:${initialValues?.workflowCode ?? '__create__'}`}
+          key={
+            job?.id ??
+            `create:${initialValues?.workflowCode ?? initialValues?.message ?? '__create__'}`
+          }
           job={job}
           onClose={onClose}
           onSave={onSave}
@@ -773,6 +776,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
         method: 'POST',
         body: JSON.stringify({
           instruction: trimmed,
+          type: 'task',
           workflowId: selectedWorkflow || undefined,
           workflowName: selectedWorkflowOption?.label,
         }),

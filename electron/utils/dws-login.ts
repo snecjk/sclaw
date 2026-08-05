@@ -81,6 +81,11 @@ export class DwsLoginManager {
           onClosed: () => {
             cancelledByUser = true;
           },
+        }).catch((error) => {
+          logger.warn(
+            '[DwsLogin] open login window failed:',
+            error instanceof Error ? error.message : String(error),
+          );
         });
       };
 
@@ -221,7 +226,15 @@ export class DwsLoginManager {
       if (!win.isDestroyed()) win.show();
     });
 
-    await win.loadURL(loginUrl);
+    try {
+      await win.loadURL(loginUrl);
+    } catch (error) {
+      // User closed the window (or navigation aborted) — not a fatal main-process error.
+      if (win.isDestroyed()) return;
+      const message = error instanceof Error ? error.message : String(error);
+      if (/ERR_ABORTED|ERR_FAILED|-3\b/i.test(message)) return;
+      throw error;
+    }
   }
 }
 

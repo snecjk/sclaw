@@ -38,14 +38,15 @@ import {
 import { toast } from 'sonner';
 import { TaskCreateModal, type TaskCreateInputWithRun } from './components/TaskCreateModal';
 import { NewTaskDropdownButton } from './components/NewTaskDropdownButton';
-import { TemplateSelectModal } from './components/TemplateSelectModal';
+import {
+  TemplateSelectModal,
+  buildRecommendTaskMessage,
+} from './components/TemplateSelectModal';
 
 import { useMyTaskStore, selectRecordCounts, selectCurrentRecords } from './store';
 import type { TaskView, TaskViewModel, ExecutionRecord } from './types';
-import { pickCoverKeyFromWorkflowId } from '@/pages/Workflow/workflow-mapper';
-import type { OfficialWorkflowCard } from '@/pages/Workflow/types';
 import { useRecommendItems } from '@/hooks/use-recommend-items';
-import { RECOMMEND_POSITION_KEYS } from '@/lib/recommend-api';
+import { RECOMMEND_POSITION_KEYS, type RecommendItem } from '@/lib/recommend-api';
 import { ViewTabs } from './components/ViewTabs';
 import { TaskToolbar } from './components/TaskToolbar';
 import { RecordToolbar } from './components/RecordToolbar';
@@ -158,22 +159,11 @@ export default function MyTask() {
   const { items: recommendItems } = useRecommendItems(
     RECOMMEND_POSITION_KEYS.MY_TASK,
   );
-  const officialCards: OfficialWorkflowCard[] = useMemo(
-    () =>
-      recommendItems
-        .filter((item) => item.item_type === 'workflow_template')
-        .map((item) => ({
-          id: item.item_ref_id,
-          name: item.title,
-          category: item.item_type,
-          description: item.description ?? '',
-          flow: [],
-          coverKey: pickCoverKeyFromWorkflowId(item.item_ref_id),
-        })),
-    [recommendItems],
-  );
-  const [selectedWorkflowCode, setSelectedWorkflowCode] = useState<string | null>(null);
-  const [selectedTemplateName, setSelectedTemplateName] = useState<string | null>(null);
+  /** 从官方推荐选中后预填到创建弹窗的名称 / 任务描述 */
+  const [recommendPrefill, setRecommendPrefill] = useState<{
+    name: string;
+    message: string;
+  } | null>(null);
 
   // ── 初始化加载 ──
   useEffect(() => {
@@ -403,25 +393,14 @@ export default function MyTask() {
     })();
   }, [deleteTarget, deleteJob, t]);
 
-  const handleTemplateSelect = useCallback(
-    (instanceId: string, templateName: string) => {
-      setTemplateOpen(false);
-      setEditingJob(null);
-      setSelectedWorkflowCode(instanceId);
-      setSelectedTemplateName(templateName);
-      setCreateOpen(true);
-    },
-    []
-  );
-	
-  // const handleTemplateInstall = useCallback(
-  //   (card: OfficialWorkflowCard) => {
-  //     navigateToNewSessionWithPrompt(navigate, location.pathname, `/${card.name}`, {
-  //       extraSearchParams: { workflowId: card.id },
-  //     });
-  //   },
-  //   [navigate, location.pathname]
-  // );
+  const handleRecommendSelect = useCallback((item: RecommendItem) => {
+    const message = buildRecommendTaskMessage(item);
+    if (!message) return;
+    setTemplateOpen(false);
+    setEditingJob(null);
+    setRecommendPrefill({ name: item.title || '', message });
+    setCreateOpen(true);
+  }, []);
 
   // ── 渲染 ──
   const isTasksView = activeView === 'tasks';
@@ -551,23 +530,22 @@ export default function MyTask() {
         open={createOpen}
         onClose={() => {
           setCreateOpen(false);
-          setSelectedWorkflowCode(null);
-          setSelectedTemplateName(null);
+          setRecommendPrefill(null);
         }}
         onSave={(input) => handleSave(input)}
         initialValues={
-          selectedWorkflowCode
-            ? { workflowCode: selectedWorkflowCode, name: selectedTemplateName ?? '' }
+          recommendPrefill
+            ? { name: recommendPrefill.name, message: recommendPrefill.message }
             : undefined
         }
       />
 
-      {/* 模版选择弹窗 */}
+      {/* 官方推荐选择弹窗 */}
       <TemplateSelectModal
         open={templateOpen}
         onClose={() => setTemplateOpen(false)}
-        officialCards={officialCards}
-        onInstantiated={handleTemplateSelect}
+        items={recommendItems}
+        onSelect={handleRecommendSelect}
       />
 
       {/* 删除确认弹窗 */}

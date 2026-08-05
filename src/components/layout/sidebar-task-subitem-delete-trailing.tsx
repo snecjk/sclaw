@@ -3,13 +3,17 @@
  * 非 hover：最右侧显示状态（运行中/失败/未读）；
  * hover：删除图标覆盖该槽位。
  *
- * 与「最近」行对齐：`pr-12` 预留 + `right-[10px] w-12` 固定槽位。
+ * 与「最近」行共用 28px、贴右缘的单操作槽位。
  */
 import { Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { cn } from '@/lib/utils';
-import { sidebarUnreadDotClass } from '@/lib/surfaces';
+import {
+  sidebarSingleActionRowPaddingClass,
+  sidebarSingleActionTrailingSlotClass,
+  sidebarUnreadDotClass,
+} from '@/lib/surfaces';
 
 export interface SidebarTaskSubitemDeleteTrailingProps {
   /** 点击删除 */
@@ -23,9 +27,6 @@ export interface SidebarTaskSubitemDeleteTrailingProps {
   className?: string;
 }
 
-/** 与 SidebarRecentSessionRowTrailing 同槽位：right 10px + 宽 48px */
-const SIDEBAR_TASK_SUBITEM_TRAILING_SLOT_CLASS = 'absolute right-[10px] top-1/2 w-12 -translate-y-1/2';
-
 export function SidebarTaskSubitemDeleteTrailing({
   onDelete,
   isActive = false,
@@ -36,7 +37,7 @@ export function SidebarTaskSubitemDeleteTrailing({
   const { t } = useTranslation('common');
 
   return (
-    <div className={cn(SIDEBAR_TASK_SUBITEM_TRAILING_SLOT_CLASS, 'z-[2] flex items-center justify-end', className)}>
+    <div className={cn(sidebarSingleActionTrailingSlotClass, 'z-[2] flex items-center justify-end', className)}>
       <div
         className={cn(
           'pointer-events-none flex h-5 w-full items-center justify-end',
@@ -67,7 +68,7 @@ export function SidebarTaskSubitemDeleteTrailing({
             onDelete();
           }}
           className={cn(
-            'flex items-center justify-center rounded p-0.5',
+            'flex h-7 w-7 items-center justify-center rounded',
             isActive
               ? 'bg-[var(--sto-sidebar-subitem-active-bg)] group-hover:bg-[var(--sto-sidebar-row-hover-bg)]'
               : 'bg-[var(--sto-sidebar-bg)] group-hover:bg-[var(--sto-sidebar-row-hover-bg)]',
@@ -82,4 +83,4 @@ export function SidebarTaskSubitemDeleteTrailing({
 }
 
 /** 子项主行右侧内距，与 trailing 槽位对齐 */
-export const SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS = 'pr-12';
+export const SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS = sidebarSingleActionRowPaddingClass;

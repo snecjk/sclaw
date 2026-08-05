@@ -42,6 +42,20 @@ async function readSsoAuth(ssoAuthPath: string): Promise<SsoAuthInfo> {
 	};
 }
 
+/** Dynamic connectors context written by Electron (not SOUL.md). */
+async function readConnectedConnectorsAgentContext(): Promise<string> {
+	const override = process.env.STOCLAW_CONNECTORS_DIR?.trim();
+	const path = override
+		? join(override, "agent-context.txt")
+		: join(homedir(), ".stoclaw", "connectors", "agent-context.txt");
+	try {
+		const raw = await readFile(path, "utf-8");
+		return raw.trim();
+	} catch {
+		return "";
+	}
+}
+
 /** Resolve absolute workspace path for an agent from openclaw.json (project agents included). */
 async function resolveAgentWorkspaceAbsolutePath(agentId: string | undefined): Promise<string | null> {
 	const id = (agentId ?? "").trim().toLowerCase() || "main";
@@ -114,6 +128,15 @@ export default definePluginEntry({
 				}
 			} catch (err) {
 				api.logger.warn?.(`[${TAG}] before_prompt_build: failed to read SSO auth (${String(err)}), skipping SSO context injection`);
+			}
+
+			// Connected connectors are appended dynamically and never persisted into SOUL.md.
+			const connectorsContext = await readConnectedConnectorsAgentContext();
+			if (connectorsContext) {
+				appendBlocks.push(connectorsContext);
+				api.logger.debug?.(
+					`[${TAG}] before_prompt_build: injected connectors context (${connectorsContext.length} chars)`,
+				);
 			}
 
 			return { appendSystemContext: appendBlocks.join("\n\n") };

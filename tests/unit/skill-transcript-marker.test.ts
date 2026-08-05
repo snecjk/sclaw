@@ -93,7 +93,7 @@ describe('skill-transcript-marker', () => {
     const raw = [
       'Sender (untrusted metadata):',
       '```json',
-      '{"label":"S Claw"}',
+      '{"label":"SClaw"}',
       '```',
       '',
       '[Thu 2026-07-09 13:09 GMT+8] 总部结算对账分析',

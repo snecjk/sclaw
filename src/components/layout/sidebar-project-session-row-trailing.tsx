@@ -19,6 +19,7 @@ import {
   sidebarRecentMenuContentClass,
   sidebarRecentMenuDeleteItemClass,
   sidebarRecentMenuItemClass,
+  sidebarSingleActionTrailingSlotClass,
   sidebarTextIconClass,
   sidebarUnreadDotClass,
 } from '@/lib/surfaces';
@@ -38,8 +39,6 @@ export interface SidebarProjectSessionRowTrailingProps {
   className?: string;
 }
 
-const SIDEBAR_ROW_TRAILING_W_CLASS = 'w-12';
-
 export function SidebarProjectSessionRowTrailing({
   sessionKey,
   isActive = false,
@@ -57,8 +56,8 @@ export function SidebarProjectSessionRowTrailing({
   return (
     <div
       className={cn(
-        'absolute right-[10px] top-1/2 flex -translate-y-1/2 items-center justify-end',
-        SIDEBAR_ROW_TRAILING_W_CLASS,
+        sidebarSingleActionTrailingSlotClass,
+        'flex items-center justify-end',
         className,
       )}
     >

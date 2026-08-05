@@ -12,6 +12,7 @@ describe('Settings Store', () => {
       theme: 'dark',
       language: 'en',
       sidebarCollapsed: false,
+      sidebarPreferredWidth: 260,
       devModeUnlocked: false,
       gatewayAutoStart: true,
       gatewayPort: 18789,
@@ -36,10 +37,55 @@ describe('Settings Store', () => {
     expect(useSettingsStore.getState().theme).toBe('dark');
   });
   
-  it('should toggle sidebar collapsed state', () => {
+  it('should toggle sidebar collapsed state and persist via host api', () => {
+    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
+    invoke.mockResolvedValueOnce({
+      ok: true,
+      data: {
+        status: 200,
+        ok: true,
+        json: { success: true },
+      },
+    });
+
     const { setSidebarCollapsed } = useSettingsStore.getState();
     setSidebarCollapsed(true);
     expect(useSettingsStore.getState().sidebarCollapsed).toBe(true);
+    expect(invoke).toHaveBeenCalledWith(
+      'hostapi:fetch',
+      expect.objectContaining({
+        path: '/api/settings/sidebarCollapsed',
+        method: 'PUT',
+      }),
+    );
+  });
+
+  it('should persist sidebar preferred width via host api and clamp', () => {
+    const invoke = vi.mocked(window.electron.ipcRenderer.invoke);
+    invoke.mockResolvedValue({
+      ok: true,
+      data: {
+        status: 200,
+        ok: true,
+        json: { success: true },
+      },
+    });
+
+    const { setSidebarPreferredWidth } = useSettingsStore.getState();
+    setSidebarPreferredWidth(336.4);
+    expect(useSettingsStore.getState().sidebarPreferredWidth).toBe(336);
+    expect(invoke).toHaveBeenCalledWith(
+      'hostapi:fetch',
+      expect.objectContaining({
+        path: '/api/settings/sidebarPreferredWidth',
+        method: 'PUT',
+      }),
+    );
+
+    setSidebarPreferredWidth(199);
+    expect(useSettingsStore.getState().sidebarPreferredWidth).toBe(200);
+    setSidebarPreferredWidth(401);
+    expect(useSettingsStore.getState().sidebarPreferredWidth).toBe(400);
   });
   
   it('should unlock dev mode', () => {
