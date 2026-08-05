@@ -231,6 +231,7 @@
         "statusUnknown": "Unknown",
         "runIdLabel": "Run ID",
         "nameLabel": "Workflow",
+        "viewWorkflow": "View workflow",
         "confirmedParameters": "Confirmed parameters",
         "runUnavailable": "Run record unavailable",
         "retryQuery": "Retry",

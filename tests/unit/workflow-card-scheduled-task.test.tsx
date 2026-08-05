@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 const { chatState, getChatWorkflowCard } = vi.hoisted(() => ({
   chatState: {
@@ -88,6 +89,30 @@ describe('WorkflowCard scheduled task action', () => {
     );
 
     expect(await screen.findByText('工作流（wf_2496580c）')).toBeTruthy();
+  });
+
+  it('opens the matching workflow list item when its name is clicked', async () => {
+    chatState.workflowCardStates.run_123 = {
+      runId: 'run_123',
+      workflowId: 'wf_abc',
+      status: 'running',
+      progress: 0,
+      steps: [],
+    };
+    const onOpenWorkflow = vi.fn();
+
+    render(
+      <TooltipProvider>
+        <WorkflowCard
+          runId="run_123"
+          templateName="测试工作流"
+          onOpenWorkflow={onOpenWorkflow}
+        />
+      </TooltipProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: '测试工作流（wf_abc）' }));
+    expect(onOpenWorkflow).toHaveBeenCalledWith('wf_abc');
   });
 
   it('hides create scheduled task action while workflow is running', () => {

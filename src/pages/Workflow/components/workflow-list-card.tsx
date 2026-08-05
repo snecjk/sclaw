@@ -41,6 +41,7 @@ interface WorkflowCardShellProps {
   id: string;
   coverKey: WorkflowCoverKey;
   dimmed?: boolean;
+  highlighted?: boolean;
   onCardClick?: () => void;
   children: ReactNode;
 }
@@ -75,13 +76,19 @@ function WorkflowCardShell({
   id,
   coverKey,
   dimmed,
+  highlighted,
   onCardClick,
   children,
 }: WorkflowCardShellProps) {
   return (
     <article
       data-workflow-id={id}
-      className={cn(workflowListCardShellClass, dimmed && 'opacity-[0.82]')}
+      className={cn(
+        workflowListCardShellClass,
+        dimmed && 'opacity-[0.82]',
+        highlighted && 'border-primary/70 ring-2 ring-primary/25',
+      )}
+      tabIndex={highlighted ? -1 : undefined}
       onClick={(e) => {
         // if ((e.target as HTMLElement).closest('button, [role="switch"]')) return;
         if ((e.target as HTMLElement).closest('button')) return;
@@ -99,6 +106,7 @@ function WorkflowCardShell({
 export interface WorkflowMineListCardProps {
   card: WorkflowCardItem;
   isRenaming: boolean;
+  highlighted?: boolean;
   renameRef?: RefObject<HTMLInputElement | null>;
   onRenameCommit: (name: string) => void;
   onCardClick?: () => void;
@@ -114,6 +122,7 @@ export interface WorkflowMineListCardProps {
 export function WorkflowMineListCard({
   card,
   isRenaming,
+  highlighted = false,
   renameRef,
   onRenameCommit,
   onCardClick,
@@ -131,6 +140,7 @@ export function WorkflowMineListCard({
       id={card.id}
       coverKey={card.coverKey}
       dimmed={!card.enabled}
+      highlighted={highlighted}
       onCardClick={onCardClick}
     >
       <div className={workflowListCardMainClass}>

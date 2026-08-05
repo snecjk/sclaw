@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronUp, Circle, Clock, Loader2, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { workflowResultSummaryClass } from '@/lib/surfaces';
 import {
   breakdownWorkflowDurationMs,
@@ -39,6 +44,7 @@ interface WorkflowCardProps {
   section?: 'full' | 'status' | 'results';
   onPreviewArtifact?: (file: AttachedFileMeta) => void;
   onCreateScheduledTask?: (workflowId: string) => void;
+  onOpenWorkflow?: (workflowId: string) => void;
 }
 
 interface StatusTheme {
@@ -187,6 +193,7 @@ export function WorkflowCard({
   section = 'full',
   onPreviewArtifact,
   onCreateScheduledTask,
+  onOpenWorkflow,
 }: WorkflowCardProps) {
   const { t } = useTranslation('chat');
   const [state, setState] = useState<WorkflowExecutionState | null>(null);
@@ -317,9 +324,26 @@ export function WorkflowCard({
 
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="shrink-0 text-muted-foreground">{t('workflow.nameLabel')}</span>
-          <span className="truncate font-medium text-foreground" title={workflowIdentity}>
-            {workflowIdentity}
-          </span>
+          {display.workflowId && onOpenWorkflow ? (
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex max-w-[min(42vw,360px)] truncate rounded-sm px-1 py-0.5 font-medium text-primary transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => onOpenWorkflow(display.workflowId)}
+                >
+                  {workflowIdentity}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={6} className="text-xs">
+                {t('workflow.viewWorkflow')}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <span className="truncate font-medium text-foreground" title={workflowIdentity}>
+              {workflowIdentity}
+            </span>
+          )}
           <span className="shrink-0 text-muted-foreground">{t('workflow.runIdLabel')}</span>
           <code
               className="truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[12px] text-foreground"
