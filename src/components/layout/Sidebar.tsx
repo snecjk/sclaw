@@ -3,11 +3,10 @@
  * 省区布局：展开 260px / 收起 w-0 完全隐藏；折叠钮在侧栏列顶行（无全局顶栏）。
  * 完整布局：展开 260px / 收起 72px 图标轨。
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import {
   Wrench,
-  Clock,
   Settings as SettingsIcon,
   ChevronRight,
   Bookmark,
@@ -23,6 +22,7 @@ import {
 } from 'lucide-react';
 import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg';
 import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg';
+import timerIcon from '@/assets/icons/timer.svg';
 
 import {
   DropdownMenu,
@@ -1735,7 +1735,21 @@ export function Sidebar() {
       badge?: ReactNode;
     }> = [
       { to: '/', end: true, icon: <MessageSquarePlus className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.newChat') },
-      { to: '/my-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myTasks') },
+      {
+        to: '/my-tasks',
+        icon: (
+          <span
+            aria-hidden
+            className="inline-block h-4 w-4 shrink-0 bg-current [mask-image:var(--sto-sidebar-timer-icon)] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-image:var(--sto-sidebar-timer-icon)] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
+            style={
+              {
+                '--sto-sidebar-timer-icon': `url(${timerIcon})`,
+              } as CSSProperties
+            }
+          />
+        ),
+        label: t('common:sidebar.myTasks'),
+      },
       // 工作流列表已并入「我的任务」一级 Tab；编辑路由仍为 /workflow/*
       { to: '/skills', icon: <Wrench className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/more-apps', icon: <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.moreApps') },

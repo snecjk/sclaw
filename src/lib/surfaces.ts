@@ -294,18 +294,20 @@ export function dropdownOptionClass(isActive: boolean): string {
   );
 }
 
-/** 我的任务 / 工作流排期开关轨道 */
+/** 我的任务 / 工作流排期开关轨道（暗色与技能广场开关一致，避免滑块像白点） */
 export function scheduleToggleTrackClass(checked: boolean): string {
   return cn(
     'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-none p-0 transition-colors duration-fast',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-    checked ? 'bg-success dark:bg-success/90' : 'bg-border dark:bg-muted',
+    checked
+      ? 'bg-[#00B54B] dark:bg-[#00B54B]'
+      : 'bg-zinc-200 dark:bg-zinc-600',
   );
 }
 
-/** 排期开关滑块（暗色下用浅底，避免与卡片底色融为一体） */
+/** 排期开关滑块：始终白底，保证开/关与暗色卡片对比清晰 */
 export const scheduleToggleThumbClass = cn(
-  'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-card dark:bg-foreground/80',
+  'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white',
   'shadow-[0_1px_2px_rgba(15,23,42,0.15)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.45)]',
   'transition-transform duration-fast',
 );
