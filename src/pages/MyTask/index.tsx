@@ -465,8 +465,8 @@ export default function MyTask() {
           </div>
 
           {/* 仅内容区滚动 */}
-          <div className="min-h-0 flex-1 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {isWorkflowSection ? (
+          {isWorkflowSection ? (
+            <div className="min-h-0 flex-1 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <div className="pb-10">
                 <WorkflowDashboard
                   embedded
@@ -480,42 +480,42 @@ export default function MyTask() {
                   }
                 />
               </div>
-            ) : (
-              <>
-                {/* 页面标题 */}
-                <header className="mb-6">
-                  <div className="min-w-0">
-                    <h1 className={cn(stoPageTitleClass, 'h-[34px]')}>{t('myTask.pageTitle')}</h1>
-                    <p className={myTaskPageSubtitleClass}>{t('myTask.subtitle')}</p>
-                  </div>
-                </header>
-
-                {/* Tab 行：左侧视图 Tab + 右侧搜索/排序/新建 */}
-                <div className={cn(workflowListToolbarClass, 'mb-[26px]')}>
-                  <ViewTabs activeView={activeView} onViewChange={setActiveView} />
-
-                  {isTasksView ? (
-                    <TaskToolbar
-                      searchQuery={searchQuery}
-                      onSearchChange={setSearchQuery}
-                      sortValue={sortValue}
-                      onSortChange={setSortValue}
-                    >
-                      <NewTaskDropdownButton
-                        onSelfCreate={() => {
-                          setEditingJob(null);
-                          setCreateOpen(true);
-                        }}
-                        onTemplateCreate={() => setTemplateOpen(true)}
-                      />
-                    </TaskToolbar>
-                  ) : (
-                    <RecordToolbar searchQuery={recordSearch} onSearchChange={setRecordSearch} />
-                  )}
+            </div>
+          ) : (
+            <>
+              {/* 标题 + 工具栏固定；仅下方卡片/记录列表滚动 */}
+              <header className="mb-6 shrink-0">
+                <div className="min-w-0">
+                  <h1 className={cn(stoPageTitleClass, 'h-[34px]')}>{t('myTask.pageTitle')}</h1>
+                  <p className={myTaskPageSubtitleClass}>{t('myTask.subtitle')}</p>
                 </div>
+              </header>
 
-                {/* 执行记录状态筛选导航 */}
-                {!isTasksView && (
+              <div className={cn(workflowListToolbarClass, 'mb-[26px] shrink-0')}>
+                <ViewTabs activeView={activeView} onViewChange={setActiveView} />
+
+                {isTasksView ? (
+                  <TaskToolbar
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
+                    sortValue={sortValue}
+                    onSortChange={setSortValue}
+                  >
+                    <NewTaskDropdownButton
+                      onSelfCreate={() => {
+                        setEditingJob(null);
+                        setCreateOpen(true);
+                      }}
+                      onTemplateCreate={() => setTemplateOpen(true)}
+                    />
+                  </TaskToolbar>
+                ) : (
+                  <RecordToolbar searchQuery={recordSearch} onSearchChange={setRecordSearch} />
+                )}
+              </div>
+
+              {!isTasksView ? (
+                <div className="shrink-0">
                   <RecordStatusNav
                     activeStatus={recordStatus}
                     counts={recordCounts}
@@ -524,10 +524,11 @@ export default function MyTask() {
                       fetchRecords(status).catch(() => {});
                     }}
                   />
-                )}
+                </div>
+              ) : null}
 
-                {/* ── 定时任务视图 ── */}
-                {isTasksView && (
+              <div className="min-h-0 flex-1 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {isTasksView ? (
                   <section aria-label={t('myTask.taskView.aria')} className="flex flex-col pb-6">
                     {jobsLoading && safeJobs.length === 0 ? (
                       <div className="flex items-center justify-center py-20">
@@ -564,10 +565,7 @@ export default function MyTask() {
                       </div>
                     )}
                   </section>
-                )}
-
-                {/* ── 执行记录视图 ── */}
-                {!isTasksView && (
+                ) : (
                   <section aria-label={t('myTask.recordView.aria')} className="pb-6">
                     {currentTabLoading ? (
                       <div className="flex items-center justify-center py-20">
@@ -592,9 +590,9 @@ export default function MyTask() {
                     )}
                   </section>
                 )}
-              </>
-            )}
-          </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
