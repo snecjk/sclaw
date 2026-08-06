@@ -51,6 +51,7 @@ import { useNativeScrollbarActivity } from '@/hooks/use-native-scrollbar-activit
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
 import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
+import { myTasksWorkflowListHref } from '@/pages/MyTask/constants';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
 import { useVoiceLoopStore } from '@/stores/voice-loop';
@@ -459,7 +460,7 @@ export function Chat() {
     navigate(`/workflow/${encodeURIComponent(workflowId)}`);
   }, [navigate]);
   const openWorkflowList = useCallback((workflowId: string) => {
-    navigate(`/workflow?highlightWorkflowId=${encodeURIComponent(workflowId)}`);
+    navigate(myTasksWorkflowListHref(workflowId));
   }, [navigate]);
 
   const {

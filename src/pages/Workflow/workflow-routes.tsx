@@ -14,7 +14,7 @@ import { LocalRunHistoryDialog } from '@/pages/WorkflowDesigner/components/local
 import { useDesignerTryRun } from '@/pages/WorkflowDesigner/hooks/use-designer-try-run';
 import { cacheAiWorkflowPrompt, createWorkflowStudio } from '@/lib/workflow-studio-api';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
-import { MY_TASKS_WORKFLOW_LIST_HREF } from '@/pages/MyTask/constants';
+import { MY_TASKS_WORKFLOW_LIST_HREF, myTasksWorkflowListHref } from '@/pages/MyTask/constants';
 
 function useEditorActive(active: boolean) {
   const setEditorActive = useWorkflowUiStore((s) => s.setEditorActive);
@@ -24,9 +24,11 @@ function useEditorActive(active: boolean) {
   }, [active, setEditorActive]);
 }
 
-/** 列表已并入「我的任务 · 工作流」；保留 /workflow 索引以兼容旧链接 */
+/** 列表已并入「自动化 · 工作流」；保留 /workflow 索引以兼容旧链接与高亮参数 */
 function WorkflowListRedirect() {
-  return <Navigate to={MY_TASKS_WORKFLOW_LIST_HREF} replace />;
+  const [searchParams] = useSearchParams();
+  const highlightWorkflowId = searchParams.get('highlightWorkflowId');
+  return <Navigate to={myTasksWorkflowListHref(highlightWorkflowId)} replace />;
 }
 
 /** 手动新建：先打开空画布页（不创建工作流、不加载模板），弹窗在画布页上弹出，用户填完信息确认后才创建并加载真实 MC 画布。 */

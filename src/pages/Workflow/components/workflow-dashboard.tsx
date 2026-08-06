@@ -132,7 +132,18 @@ export function WorkflowDashboard({
         setHighlightedWorkflowId(targetWorkflowId);
         card.scrollIntoView({ behavior: 'smooth', block: 'center' });
         card.focus({ preventScroll: true });
-        navigate({ pathname: location.pathname }, { replace: true });
+        navigate(
+          {
+            pathname: location.pathname,
+            search: (() => {
+              const next = new URLSearchParams(location.search);
+              next.delete('highlightWorkflowId');
+              const q = next.toString();
+              return q ? `?${q}` : '';
+            })(),
+          },
+          { replace: true },
+        );
         return;
       }
       attempts += 1;
@@ -144,7 +155,7 @@ export function WorkflowDashboard({
       window.cancelAnimationFrame(frame);
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
-  }, [location.pathname, mineLoading, navigate, tab, targetWorkflowId]);
+  }, [location.pathname, location.search, mineLoading, navigate, tab, targetWorkflowId]);
 
   useEffect(() => {
     if (!highlightedWorkflowId) return;

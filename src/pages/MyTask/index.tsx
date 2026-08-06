@@ -32,12 +32,10 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { cn } from '@/lib/utils';
 import {
-  myTaskPageHeaderRowClass,
   myTaskPageSubtitleClass,
   stoMainInnerShell,
   stoPageTitleClass,
   workflowListToolbarClass,
-  workflowPageContentClass,
   workflowPageRootClass,
 } from '@/lib/surfaces';
 import { toast } from 'sonner';
@@ -439,49 +437,56 @@ export default function MyTask() {
   const isWorkflowSection = activeSection === 'workflow';
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <div
         className={cn(
-          'relative flex-1 overflow-y-auto px-6 py-6 flex flex-col [scrollbar-gutter:stable]',
+          'relative flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-6',
           isWorkflowSection && workflowPageRootClass,
         )}
       >
         {isWorkflowSection ? <WorkflowPageShading /> : null}
         <div
           className={cn(
-            isWorkflowSection && workflowPageContentClass,
-            'relative z-[1] flex flex-1 flex-col',
+            stoMainInnerShell,
+            'relative z-[1] flex min-h-0 flex-1 flex-col overflow-hidden',
           )}
         >
-          <div className={cn(stoMainInnerShell, 'flex flex-1 flex-col', isWorkflowSection && 'pb-10')}>
+          {/* 一级 Tab 固定顶栏（布局对齐技能广场） */}
+          <div className="mb-6 flex flex-shrink-0 flex-wrap items-center gap-3">
             <SectionTabs
               activeSection={activeSection}
               onSectionChange={handleSectionChange}
-              className="mb-6"
             />
+            {!isWorkflowSection ? (
+              <div className="ml-auto flex min-w-0 items-center">
+                <TaskRunGuardBar />
+              </div>
+            ) : null}
+          </div>
 
+          {/* 仅内容区滚动 */}
+          <div className="min-h-0 flex-1 overflow-y-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {isWorkflowSection ? (
-              <WorkflowDashboard
-                embedded
-                viewState={workflowViewState}
-                onManualCreate={() => navigate('/workflow/new')}
-                onGenerate={(prompt) => {
-                  navigate('/workflow/generate', { state: { prompt } });
-                }}
-                onEditCard={(workflowId) =>
-                  navigate(`/workflow/${encodeURIComponent(workflowId)}`)
-                }
-              />
+              <div className="pb-10">
+                <WorkflowDashboard
+                  embedded
+                  viewState={workflowViewState}
+                  onManualCreate={() => navigate('/workflow/new')}
+                  onGenerate={(prompt) => {
+                    navigate('/workflow/generate', { state: { prompt } });
+                  }}
+                  onEditCard={(workflowId) =>
+                    navigate(`/workflow/${encodeURIComponent(workflowId)}`)
+                  }
+                />
+              </div>
             ) : (
               <>
-                {/* 页面标题 + 右侧运行保障控件 */}
+                {/* 页面标题 */}
                 <header className="mb-6">
-                  <div className={myTaskPageHeaderRowClass}>
-                    <div className="min-w-0">
-                      <h1 className={cn(stoPageTitleClass, 'h-[34px]')}>{t('myTask.pageTitle')}</h1>
-                      <p className={myTaskPageSubtitleClass}>{t('myTask.subtitle')}</p>
-                    </div>
-                    <TaskRunGuardBar />
+                  <div className="min-w-0">
+                    <h1 className={cn(stoPageTitleClass, 'h-[34px]')}>{t('myTask.pageTitle')}</h1>
+                    <p className={myTaskPageSubtitleClass}>{t('myTask.subtitle')}</p>
                   </div>
                 </header>
 
@@ -523,7 +528,7 @@ export default function MyTask() {
 
                 {/* ── 定时任务视图 ── */}
                 {isTasksView && (
-                  <section aria-label={t('myTask.taskView.aria')} className="flex-1 flex flex-col">
+                  <section aria-label={t('myTask.taskView.aria')} className="flex flex-col pb-6">
                     {jobsLoading && safeJobs.length === 0 ? (
                       <div className="flex items-center justify-center py-20">
                         <LoadingSpinner size="lg" />
@@ -563,7 +568,7 @@ export default function MyTask() {
 
                 {/* ── 执行记录视图 ── */}
                 {!isTasksView && (
-                  <section aria-label={t('myTask.recordView.aria')}>
+                  <section aria-label={t('myTask.recordView.aria')} className="pb-6">
                     {currentTabLoading ? (
                       <div className="flex items-center justify-center py-20">
                         <LoadingSpinner size="lg" />
