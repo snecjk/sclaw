@@ -25,6 +25,11 @@ import {
 } from './claude-session-recovery';
 import { mergeClaudeExecutionEntries, parseClaudeExecutionTurn, type ClaudeExecutionEntryBatch } from './claude-execution-snapshot';
 import { inspectTranscript } from './chat-runtime-inspection';
+import {
+  applyClaudeStreamEvent,
+  ClaudeStreamContentAccumulator,
+  extractClaudeToolResultMessages,
+} from './claude-stream-content';
 
 /**
  * Minimal event sink used to forward Claude streaming events to the renderer.
@@ -43,6 +48,9 @@ type ActiveClaudeQuery = {
   sessionId: string;
   sessionKey: string;
 };
+
+const CLAUDE_TOOL_INPUT_DELTA_INTERVAL_MS = 400;
+const CLAUDE_PARTIAL_TOOL_INPUT_PREVIEW_CHARS = 4_096;
 
 const activeClaudeQueries = new Map<string, ActiveClaudeQuery>();
 const liveClaudeMessages = new Map<string, Array<{
@@ -656,9 +664,12 @@ export async function consumeClaudeQuery(
   // (matching the OpenClaw Gateway's delta shape), producing token-by-token
   // appending output. Reset on message_start and when the complete assistant
   // message is emitted as 'final'.
-  let streamText = '';
   let streamThinking = '';
-  let streamToolName = '';
+  const streamContent = new ClaudeStreamContentAccumulator();
+  const toolNamesById = new Map<string, string>();
+  let pendingToolInputDeltaTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingToolInputDelta = false;
+  let lastToolInputDeltaAt = 0;
 
   const emitEngineEvent = (event: NormalizedEngineEvent) => {
     if (!eventSink) return;
@@ -668,17 +679,16 @@ export async function consumeClaudeQuery(
     if (!eventSink) return;
     eventSink.emit('notification', { method: 'agent', params: { phase: 'completed', runId, sessionKey } });
   };
-  const emitStreamingDelta = () => {
+  const emitStreamingDelta = (options?: { partialToolInput?: boolean }) => {
     const content: Array<Record<string, unknown>> = [];
     if (streamThinking) {
       content.push({ type: 'thinking', thinking: streamThinking });
     }
-    if (streamToolName) {
-      content.push({ type: 'tool_use', name: streamToolName, id: `stream-tool-${runId}` });
-    }
-    if (streamText) {
-      content.push({ type: 'text', text: streamText });
-    }
+    content.push(...streamContent.buildContentArray(
+      options?.partialToolInput
+        ? { maxPartialInputChars: CLAUDE_PARTIAL_TOOL_INPUT_PREVIEW_CHARS }
+        : undefined,
+    ));
     if (content.length === 0) return;
     emitEngineEvent({
       type: 'message.delta',
@@ -688,6 +698,32 @@ export async function consumeClaudeQuery(
         content,
       },
     });
+  };
+  const clearPendingToolInputDelta = () => {
+    if (pendingToolInputDeltaTimer) {
+      clearTimeout(pendingToolInputDeltaTimer);
+      pendingToolInputDeltaTimer = null;
+    }
+    pendingToolInputDelta = false;
+  };
+  const flushPendingToolInputDelta = () => {
+    if (!pendingToolInputDelta) return;
+    clearPendingToolInputDelta();
+    lastToolInputDeltaAt = Date.now();
+    emitStreamingDelta({ partialToolInput: true });
+  };
+  const queueToolInputDelta = () => {
+    pendingToolInputDelta = true;
+    const elapsed = Date.now() - lastToolInputDeltaAt;
+    if (elapsed >= CLAUDE_TOOL_INPUT_DELTA_INTERVAL_MS) {
+      flushPendingToolInputDelta();
+      return;
+    }
+    if (pendingToolInputDeltaTimer) return;
+    pendingToolInputDeltaTimer = setTimeout(() => {
+      pendingToolInputDeltaTimer = null;
+      flushPendingToolInputDelta();
+    }, CLAUDE_TOOL_INPUT_DELTA_INTERVAL_MS - elapsed);
   };
 
   try {
@@ -707,13 +743,17 @@ export async function consumeClaudeQuery(
         if (event) {
           if (event.type === 'message_start') {
             // A new assistant message begins — reset the accumulator.
-            streamText = '';
+            clearPendingToolInputDelta();
             streamThinking = '';
-            streamToolName = '';
+            applyClaudeStreamEvent(streamContent, event);
           } else if (event.type === 'content_block_start') {
-            const block = event.content_block as { type?: string; name?: string } | undefined;
+            flushPendingToolInputDelta();
+            const block = event.content_block as { type?: string; id?: string; name?: string } | undefined;
+            applyClaudeStreamEvent(streamContent, event);
             if (block?.type === 'tool_use' && typeof block.name === 'string' && block.name) {
-              streamToolName = block.name;
+              if (typeof block.id === 'string' && block.id) {
+                toolNamesById.set(block.id, block.name);
+              }
               emitStreamingDelta();
               eventSink?.emit('notification', {
                 method: 'agent',
@@ -731,28 +771,30 @@ export async function consumeClaudeQuery(
               type?: string;
               text?: string;
               thinking?: string;
+              partial_json?: string;
             } | undefined;
             if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
-              streamText += delta.text;
-              emitEngineEvent({
-                type: 'message.delta',
-                message: {
-                  role: 'assistant',
-                  id: runId,
-                  content: [{ type: 'text', text: streamText }],
-                },
-              });
+              flushPendingToolInputDelta();
+              applyClaudeStreamEvent(streamContent, event);
               emitStreamingDelta();
             } else if (delta?.type === 'thinking_delta' && typeof delta.thinking === 'string') {
+              flushPendingToolInputDelta();
               streamThinking += delta.thinking;
               emitStreamingDelta();
+            } else if (delta?.type === 'input_json_delta' && typeof delta.partial_json === 'string') {
+              applyClaudeStreamEvent(streamContent, event);
+              queueToolInputDelta();
             }
+          } else if (event.type === 'content_block_stop' || event.type === 'message_stop') {
+            flushPendingToolInputDelta();
           }
         }
         continue;
       }
 
       if (message.type === 'result') {
+        flushPendingToolInputDelta();
+        clearPendingToolInputDelta();
         claudeRuntimeResults.set(sessionKey, toClaudeRuntimeResult(message));
         seenResult = true;
         // Terminal signal: the renderer's isClaudeRunFragment guard keeps the run
@@ -770,6 +812,12 @@ export async function consumeClaudeQuery(
           // skips the tail onMessage path, so surface the message to observers
           // first (UI / history / workflow tool_result indexing).
           await onMessage?.(message);
+          for (const toolResult of extractClaudeToolResultMessages(
+            (message as { message?: unknown }).message,
+            toolNamesById,
+          )) {
+            emitEngineEvent({ type: 'tool.result', message: toolResult });
+          }
           const workflowToolResult = extractWorkflowToolResult((message as { message?: unknown }).message);
           if (workflowToolResult) {
             const nextEntry = {
@@ -818,7 +866,9 @@ export async function consumeClaudeQuery(
         // isClaudeRunFragment guard keeps these non-terminal (sending stays true)
         // until the 'result' -> agent completed notification finalizes the run.
         if (liveMessage.type === 'assistant') {
-          streamText = '';
+          clearPendingToolInputDelta();
+          streamContent.reset();
+          streamThinking = '';
           emitEngineEvent({
             type: 'message.final',
             message: {
@@ -862,6 +912,8 @@ export async function consumeClaudeQuery(
     }
     throw error;
   } finally {
+    flushPendingToolInputDelta();
+    clearPendingToolInputDelta();
     activeClaudeQueries.delete(sessionKey);
     // If the loop ended without a result and without an error, the query was
     // closed (e.g. user abort) — emit 'aborted' so the renderer finalizes.
