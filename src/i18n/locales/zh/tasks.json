@@ -41,6 +41,11 @@
     "pageTitle": "我的任务",
     "subtitle": "通过定时任务自动化AI工作流",
     "newTask": "+ 新建定时任务",
+    "sectionTabs": {
+      "tasks": "定时任务",
+      "workflow": "工作流",
+      "aria": "我的任务分区"
+    },
     "viewTabs": {
       "tasks": "定时任务",
       "records": "执行记录",

@@ -153,7 +153,25 @@ export const stoPageTitleClass =
 /**
  * 我的任务页标题行：标题与右侧操作同一高度对齐。
  */
-export const myTaskPageHeaderRowClass = 'flex min-w-0 items-center justify-between gap-4';
+export const myTaskPageHeaderRowClass = 'flex min-w-0 items-start justify-between gap-4';
+
+/** 我的任务页副标题（标题下方说明） */
+export const myTaskPageSubtitleClass =
+  'm-0 mt-1.5 text-sm font-normal leading-5 text-muted-foreground';
+
+/** 我的任务一级 Tab 轨道（胶囊分段） */
+export const myTaskSectionTabsTrackClass =
+  'inline-flex items-center rounded-full bg-[#F2F3F5] p-1 dark:bg-muted';
+
+/** 我的任务一级 Tab 按钮 */
+export function myTaskSectionTabClass(active: boolean): string {
+  return cn(
+    'inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[13px] font-medium transition-colors duration-fast',
+    active
+      ? 'bg-card text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
+      : 'bg-transparent text-muted-foreground hover:text-foreground',
+  );
+}
 
 /**
  * 我的任务页「新建定时任务」：Grey-4（border）底 + Grey-10 文字 + 10px 圆角。

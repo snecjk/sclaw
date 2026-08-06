@@ -41,6 +41,11 @@
     "pageTitle": "マイタスク",
     "subtitle": "定期タスクで AI ワークフローを自動化",
     "newTask": "+ 新規定期タスク",
+    "sectionTabs": {
+      "tasks": "定期タスク",
+      "workflow": "ワークフロー",
+      "aria": "マイタスクの区画"
+    },
     "viewTabs": {
       "tasks": "定期タスク",
       "records": "実行記録",

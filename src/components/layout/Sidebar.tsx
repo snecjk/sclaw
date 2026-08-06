@@ -17,7 +17,6 @@ import {
   Bot,
   Radio,
   ChevronDown,
-  Workflow,
   Check,
   LayoutGrid,
   Database,
@@ -1737,7 +1736,7 @@ export function Sidebar() {
     }> = [
       { to: '/', end: true, icon: <MessageSquarePlus className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.newChat') },
       { to: '/my-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myTasks') },
-      { to: '/workflow', icon: <Workflow className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.workflow') },
+      // 工作流列表已并入「我的任务」一级 Tab；编辑路由仍为 /workflow/*
       { to: '/skills', icon: <Wrench className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/more-apps', icon: <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.moreApps') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
@@ -1910,9 +1909,13 @@ export function Sidebar() {
   
   const dataCenterSection = new URLSearchParams(location.search).get('section') || DATA_CENTER_DEFAULT_SECTION;
   const isDataCenterItem = item.to === '/data-center';
+  const myTasksActiveOverride =
+    item.to === '/my-tasks' && location.pathname.startsWith('/workflow')
+      ? true
+      : undefined;
   const itemActiveOverride = isDataCenterItem
     ? false
-    : homeIsActiveOverride;
+    : myTasksActiveOverride ?? homeIsActiveOverride;
 
   if (isDataCenterItem && !sidebarCollapsed) {
     return (
