@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { WorkflowCard } from '@/components/workflow/WorkflowCard';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 const { chatState, getChatWorkflowCard } = vi.hoisted(() => ({
   chatState: {
@@ -33,6 +34,7 @@ vi.mock('react-i18next', () => ({
       }
       if (key === 'workflow.defaultName') return '工作流';
       if (key === 'workflow.createScheduledTaskAction') return '创建定时任务';
+      if (key === 'workflow.confirmedParameters') return '已确认参数';
       return key;
     },
   }),
@@ -87,6 +89,30 @@ describe('WorkflowCard scheduled task action', () => {
     );
 
     expect(await screen.findByText('工作流（wf_2496580c）')).toBeTruthy();
+  });
+
+  it('opens the matching workflow list item when its name is clicked', async () => {
+    chatState.workflowCardStates.run_123 = {
+      runId: 'run_123',
+      workflowId: 'wf_abc',
+      status: 'running',
+      progress: 0,
+      steps: [],
+    };
+    const onOpenWorkflow = vi.fn();
+
+    render(
+      <TooltipProvider>
+        <WorkflowCard
+          runId="run_123"
+          templateName="测试工作流"
+          onOpenWorkflow={onOpenWorkflow}
+        />
+      </TooltipProvider>,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: '测试工作流（wf_abc）' }));
+    expect(onOpenWorkflow).toHaveBeenCalledWith('wf_abc');
   });
 
   it('hides create scheduled task action while workflow is running', () => {
@@ -150,6 +176,25 @@ describe('WorkflowCard scheduled task action', () => {
 
     expect(await screen.findByText('出行报告.html')).toBeTruthy();
     expect(screen.getByText('天气数据.json')).toBeTruthy();
+  });
+
+  it('expands confirmed parameters by default and supports collapsing them', async () => {
+    render(
+      <WorkflowCard
+        runId="run_123"
+        templateName="测试工作流"
+        paramsSummary={'已确认以下参数：\n【数据来源】\n发件基础信息、服务质量信息\n【异常判断类型】\n单量波动'}
+      />,
+    );
+
+    const toggle = await screen.findByRole('button', { name: '已确认参数' });
+    expect(screen.getByText('数据来源')).toBeTruthy();
+    expect(screen.getByText('发件基础信息、服务质量信息')).toBeTruthy();
+
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: /已确认参数/ })).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('数据来源：发件基础信息、服务质量信息')).toBeTruthy();
+    expect(screen.queryByText('异常判断类型')).toBeNull();
   });
 
   it('polls active runs at three seconds and stops after a terminal snapshot', async () => {
