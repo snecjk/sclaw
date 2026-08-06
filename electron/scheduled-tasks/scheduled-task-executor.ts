@@ -137,6 +137,7 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
     const input: MainChatSendInput = {
       sessionKey,
       message,
+      displayText: task.prompt,
       deliver: true,
       idempotencyKey: run.idempotencyKey,
       systemPromptAppend,

@@ -28,6 +28,16 @@ const HISTORY_POLL_BACKOFF_MS = [2_000, 4_000, 8_000] as const;
 const TRANSCRIPT_COMPENSATION_DELAYS_MS = [1_000, 3_000, 7_000] as const;
 const IDEMPOTENCY_REPLAY_WINDOW_MS = 10 * 60_000;
 
+interface ChatDispatchPayload {
+  idempotencyKey: string;
+  optimisticUserMessage?: {
+    id: string;
+    role: 'user';
+    content: string;
+    timestamp: number;
+  };
+}
+
 export type BeginRuntimeResult =
   | { kind: 'created'; snapshot: ChatRuntimeSnapshot }
   | { kind: 'replay'; snapshot: ChatRuntimeSnapshot }
@@ -290,6 +300,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     idempotencyKey: string;
     engineType: AgentEngineType;
     runtimePolicy?: ChatRuntimePolicy;
+    displayText?: string;
   }): Promise<BeginRuntimeResult> {
     return this.enqueueSession(input.sessionKey, () => this.beginUnlocked(input));
   }
@@ -299,6 +310,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     idempotencyKey: string;
     engineType: AgentEngineType;
     runtimePolicy?: ChatRuntimePolicy;
+    displayText?: string;
   }): Promise<BeginRuntimeResult> {
     try {
       await this.initialize();
@@ -355,7 +367,19 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       databaseWrites: 0,
     });
     this.snapshots.set(input.sessionKey, snapshot);
-    await this.publish(snapshot, 'run.dispatching', { idempotencyKey: input.idempotencyKey }, true);
+    const displayText = input.displayText?.trim();
+    const dispatchPayload: ChatDispatchPayload = {
+      idempotencyKey: input.idempotencyKey,
+      ...(displayText ? {
+        optimisticUserMessage: {
+          id: input.idempotencyKey,
+          role: 'user' as const,
+          content: displayText,
+          timestamp: now / 1_000,
+        },
+      } : {}),
+    };
+    await this.publish(snapshot, 'run.dispatching', dispatchPayload, true);
     this.scheduleHardDeadline(input.sessionKey, snapshot.epoch);
     this.scheduleHistoryPoll(input.sessionKey);
     return { kind: 'created', snapshot: this.snapshots.get(input.sessionKey) as ChatRuntimeSnapshot };

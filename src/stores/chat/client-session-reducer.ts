@@ -9,6 +9,11 @@ import type { AttachedFileMeta, RawMessage, ToolStatus } from './types';
 import { collectToolUpdates, isToolResultRole, upsertToolStatuses } from './helpers';
 import { appendStreamingAssistantSnapshot } from './streaming-state';
 
+interface ChatDispatchPayload {
+  idempotencyKey: string;
+  optimisticUserMessage?: RawMessage;
+}
+
 export interface ChatTurnOverlay {
   optimisticUserMessage: RawMessage | null;
   streamingMessage: RawMessage | null;
@@ -183,13 +188,24 @@ export function reduceSessionEvent(
     : event.type === 'tool.updated'
       ? event.payload as RawMessage | null
     : null;
-  const errorMessage = event.type === 'run.failed' || event.type === 'run.interrupted'
+  const isSupersededInterruption = event.type === 'run.interrupted'
+    && payload?.reason === 'superseded';
+  const errorMessage = (event.type === 'run.failed' || event.type === 'run.interrupted')
+    && !isSupersededInterruption
     ? String(payload?.error ?? payload?.reason ?? 'Chat run failed')
     : null;
   const awaitingTranscript = event.type === 'message.final'
     || event.type === 'run.awaiting_transcript'
     || (phase === 'awaiting_transcript' && event.type !== 'message.delta');
   const startsNewRun = event.type === 'run.dispatching';
+  const dispatchUserMessage = startsNewRun
+    ? (payload as ChatDispatchPayload | null)?.optimisticUserMessage ?? null
+    : null;
+  const currentOptimisticBelongsToRun = startsNewRun
+    && Boolean(event.idempotencyKey)
+    && state.overlay.optimisticUserMessage?.id === event.idempotencyKey;
+  const preserveExistingOptimistic = currentOptimisticBelongsToRun
+    || (event.runtimePolicy?.origin !== 'scheduled_task' && Boolean(state.overlay.optimisticUserMessage));
   const isToolResult = Boolean(message && isToolResultRole(message.role));
   const toolUpdates = message
     ? collectToolUpdates(message, event.type === 'message.delta' ? 'delta' : 'final')
@@ -220,6 +236,11 @@ export function reduceSessionEvent(
       },
       overlay: {
         ...state.overlay,
+        optimisticUserMessage: startsNewRun
+          ? preserveExistingOptimistic
+            ? state.overlay.optimisticUserMessage
+            : dispatchUserMessage ?? state.overlay.optimisticUserMessage
+          : state.overlay.optimisticUserMessage,
         streamingMessage: startsNewRun || clearOverlay
           ? null
           : isToolResult
@@ -242,7 +263,13 @@ export function reduceSessionEvent(
           ? false
           : preserveCompletedOverlay || (!terminal && awaitingTranscript),
       },
-      error: errorMessage ? new AppError('GATEWAY', errorMessage) : terminal ? null : state.error,
+      error: startsNewRun
+        ? null
+        : errorMessage
+          ? new AppError('GATEWAY', errorMessage)
+          : terminal
+            ? null
+            : state.error,
       updatedAt: event.occurredAt,
     },
   };

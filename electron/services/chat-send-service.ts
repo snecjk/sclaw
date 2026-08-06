@@ -11,6 +11,8 @@ type ChatSendResult = { success: boolean; result?: { runId?: string }; error?: s
 
 export type MainChatSendInput = EngineSendParams & {
   sourceText?: string;
+  /** User-visible text before memory/system prompt decoration. */
+  displayText?: string;
   engineType: AgentEngineType;
   runtimePolicy?: ChatRuntimePolicy;
 };
@@ -28,6 +30,7 @@ export function runMainChatSend(
       idempotencyKey: input.idempotencyKey,
       engineType: input.engineType,
       runtimePolicy: input.runtimePolicy,
+      displayText: input.displayText?.trim() || input.sourceText?.trim() || input.message,
     });
     if (beginResult.kind === 'unavailable') {
       return { success: false, error: beginResult.error };

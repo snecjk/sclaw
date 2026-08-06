@@ -71,6 +71,7 @@ describe('main chat runtime supervisor', () => {
       sessionKey: 'agent:main:session-1',
       idempotencyKey: 'message-1',
       engineType: 'openclaw',
+      displayText: 'question',
     });
     await supervisor.accepted({
       sessionKey: 'agent:main:session-1',
@@ -99,6 +100,12 @@ describe('main chat runtime supervisor', () => {
       'run.completed',
     ]);
     expect(events.map((value) => value.sequence)).toEqual([1, 2, 3, 4, 5]);
+    expect(events[0]?.payload).toMatchObject({
+      idempotencyKey: 'message-1',
+      optimisticUserMessage: {
+        id: 'message-1', role: 'user', content: 'question',
+      },
+    });
     expect(supervisor.get('agent:main:session-1')).toMatchObject({
       phase: 'completed',
       runId: 'run-1',

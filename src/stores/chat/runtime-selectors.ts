@@ -81,10 +81,21 @@ export function buildChatSessionRuntimeView(
   const runtime = session?.runtime ?? null;
   const sending = Boolean(runtime && ACTIVE_PHASES.has(runtime.phase));
   const lastUser = [...(session?.transcript ?? [])].reverse().find((message) => message.role === 'user');
-  const userTimestamp = session?.overlay.optimisticUserMessage?.timestamp ?? lastUser?.timestamp;
-  const lastUserMessageAt = sending && typeof userTimestamp === 'number' && Number.isFinite(userTimestamp)
-    ? userTimestamp < 1_000_000_000_000 ? userTimestamp * 1_000 : userTimestamp
+  const optimisticTimestamp = session?.overlay.optimisticUserMessage?.timestamp;
+  const transcriptTimestamp = lastUser?.timestamp;
+  const toMilliseconds = (value: number | undefined): number | null => (
+    typeof value === 'number' && Number.isFinite(value)
+      ? value < 1_000_000_000_000 ? value * 1_000 : value
+      : null
+  );
+  const optimisticAt = toMilliseconds(optimisticTimestamp);
+  const transcriptAt = toMilliseconds(transcriptTimestamp);
+  // A background run may become active before its user turn reaches history.
+  // Do not attach that run's activity to the previous transcript turn.
+  const currentTranscriptAt = runtime && transcriptAt !== null && transcriptAt >= runtime.startedAt - 2_000
+    ? transcriptAt
     : null;
+  const lastUserMessageAt = sending ? optimisticAt ?? currentTranscriptAt : null;
   const view: ChatSessionRuntimeView = {
     sending,
     activeRunId: sending ? runtime?.runId ?? null : null,

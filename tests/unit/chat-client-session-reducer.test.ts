@@ -68,6 +68,113 @@ describe('canonical chat client session reducer', () => {
     expect(recovered.state.runtime).toMatchObject({ epoch: 2, sequence: 1, startedAt: 200 });
   });
 
+  it('treats a superseded interruption as an internal run replacement', () => {
+    const running = reduceSessionEvent(createClientSessionState(), event({
+      type: 'run.dispatching',
+    })).state;
+    const superseded = reduceSessionEvent(running, event({
+      eventId: 'event-2',
+      sequence: 2,
+      type: 'run.interrupted',
+      payload: { reason: 'superseded' },
+    })).state;
+
+    expect(superseded.runtime?.phase).toBe('interrupted');
+    expect(superseded.error).toBeNull();
+
+    const replacement = reduceSessionEvent(superseded, event({
+      eventId: 'event-3',
+      runId: null,
+      idempotencyKey: 'message-2',
+      epoch: 2,
+      sequence: 1,
+      occurredAt: 200,
+      type: 'run.dispatching',
+    })).state;
+
+    expect(replacement.runtime).toMatchObject({
+      phase: 'dispatching',
+      idempotencyKey: 'message-2',
+      epoch: 2,
+      sequence: 1,
+    });
+    expect(replacement.error).toBeNull();
+  });
+
+  it('keeps real interruptions visible and clears them when a new run dispatches', () => {
+    const running = reduceSessionEvent(createClientSessionState(), event({
+      type: 'run.dispatching',
+    })).state;
+    const interrupted = reduceSessionEvent(running, event({
+      eventId: 'event-2',
+      sequence: 2,
+      type: 'run.interrupted',
+      payload: { reason: 'recovery-timeout' },
+    })).state;
+
+    expect(interrupted.error?.message).toBe('recovery-timeout');
+
+    const replacement = reduceSessionEvent(interrupted, event({
+      eventId: 'event-3',
+      runId: null,
+      idempotencyKey: 'message-2',
+      epoch: 2,
+      sequence: 1,
+      occurredAt: 200,
+      type: 'run.dispatching',
+    })).state;
+
+    expect(replacement.runtime?.phase).toBe('dispatching');
+    expect(replacement.error).toBeNull();
+  });
+
+  it('fills a missing optimistic user turn from dispatch without overriding normal chat', () => {
+    const scheduled = reduceSessionEvent(createClientSessionState(), event({
+      type: 'run.dispatching',
+      runtimePolicy: { origin: 'scheduled_task' },
+      payload: {
+        idempotencyKey: 'message-1',
+        optimisticUserMessage: {
+          id: 'message-1', role: 'user', content: 'scheduled prompt', timestamp: 0.1,
+        },
+      },
+    })).state;
+    expect(scheduled.overlay.optimisticUserMessage).toMatchObject({ content: 'scheduled prompt' });
+
+    const interactive = createClientSessionState();
+    interactive.overlay.optimisticUserMessage = {
+      id: 'renderer-message', role: 'user', content: 'normal chat', timestamp: 0.05,
+    };
+    const dispatched = reduceSessionEvent(interactive, event({
+      type: 'run.dispatching',
+      payload: {
+        idempotencyKey: 'message-1',
+        optimisticUserMessage: {
+          id: 'message-1', role: 'user', content: 'gateway text', timestamp: 0.1,
+        },
+      },
+    })).state;
+    expect(dispatched.overlay.optimisticUserMessage).toBe(interactive.overlay.optimisticUserMessage);
+
+    const stale = createClientSessionState();
+    stale.overlay.optimisticUserMessage = {
+      id: 'previous-message', role: 'user', content: 'previous run', timestamp: 0.01,
+    };
+    const replaced = reduceSessionEvent(stale, event({
+      type: 'run.dispatching',
+      runtimePolicy: { origin: 'scheduled_task' },
+      payload: {
+        idempotencyKey: 'message-1',
+        optimisticUserMessage: {
+          id: 'message-1', role: 'user', content: 'scheduled prompt', timestamp: 0.1,
+        },
+      },
+    })).state;
+    expect(replaced.overlay.optimisticUserMessage).toMatchObject({
+      id: 'message-1', content: 'scheduled prompt',
+    });
+  });
+
   it('rejects events from an older epoch', () => {
     const current = reduceSessionEvent(createClientSessionState(), event({ epoch: 2 })).state;
     expect(reduceSessionEvent(current, event({ epoch: 1, sequence: 99 })).accepted).toBe(false);

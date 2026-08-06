@@ -84,6 +84,9 @@ describe('runMainChatSend memory boundary', () => {
     }, prepareInjection, dispatch);
     expect(result.success).toBe(true);
     expect(prepareMock).toHaveBeenCalledWith('原始问题');
+    expect(runtimeBeginMock).toHaveBeenCalledWith(expect.objectContaining({
+      displayText: '原始问题',
+    }));
     expect(prepareInjection).toHaveBeenCalledTimes(1);
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
       message: expect.stringContaining('StoClaw-Agent-Execution-Memory'),

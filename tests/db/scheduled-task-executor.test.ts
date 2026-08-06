@@ -171,6 +171,7 @@ describe('EngineScheduledTaskDispatcher', () => {
       idempotencyKey: 'idem-1',
       permissionProfile: 'workspace-write',
       systemPromptAppend: '[dingtalk recipients]',
+      displayText: 'run report',
     });
     expect(passedInput.message).toBe('[dingtalk recipients]\n\nrun report');
 

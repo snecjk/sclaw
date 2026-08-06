@@ -60,6 +60,17 @@ describe('canonical chat runtime selectors', () => {
     expect(buildChatSessionRuntimeView(state).lastUserMessageAt).toBeNull();
   });
 
+  it('does not anchor a new background run to the previous transcript user turn', () => {
+    const state = createClientSessionState();
+    state.transcript = [{ role: 'user', content: 'previous question', timestamp: 1 }];
+    state.runtime = {
+      phase: 'dispatching', runId: null, idempotencyKey: 'scheduled-1', engineType: 'openclaw',
+      epoch: 2, sequence: 1, startedAt: 10_000, lastEventAt: 10_000,
+    };
+
+    expect(buildChatSessionRuntimeView(state).lastUserMessageAt).toBeNull();
+  });
+
   it('keeps the final overlay until history contains the current turn', () => {
     const state = createClientSessionState();
     state.runtime = {
