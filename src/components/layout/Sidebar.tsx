@@ -477,15 +477,19 @@ function SidebarTaskGroup({
             />
           ) : null}
           {SIDEBAR_SHOW_TASK_GROUP_CHEVRON ? (
-            <ChevronDown
-              className={cn(
-                'h-4 w-4 shrink-0 transition-transform',
-                sidebarTextIconClass,
-                isOpen ? 'rotate-180' : '',
-              )}
-              aria-hidden
-              strokeWidth={2}
-            />
+            isOpen ? (
+              <ChevronDown
+                className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
+                aria-hidden
+                strokeWidth={2}
+              />
+            ) : (
+              <ChevronRight
+                className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
+                aria-hidden
+                strokeWidth={2}
+              />
+            )
           ) : null}
         </span>
       </button>
@@ -562,15 +566,19 @@ function SidebarScheduledTaskGroup({
           ) : null}
         </span>
         {SIDEBAR_SHOW_TASK_GROUP_CHEVRON ? (
-          <ChevronDown
-            className={cn(
-              'h-4 w-4 shrink-0 transition-transform',
-              sidebarTextIconClass,
-              isOpen ? 'rotate-180' : '',
-            )}
-            aria-hidden
-            strokeWidth={2}
-          />
+          isOpen ? (
+            <ChevronDown
+              className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
+              aria-hidden
+              strokeWidth={2}
+            />
+          ) : (
+            <ChevronRight
+              className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
+              aria-hidden
+              strokeWidth={2}
+            />
+          )
         ) : null}
       </button>
       {isOpen && visibleSessions.length > 0 ? (
