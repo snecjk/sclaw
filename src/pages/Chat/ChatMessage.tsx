@@ -1136,17 +1136,35 @@ function previewUrlTransform(url: string): string {
 interface WorkflowRunDisplayMeta {
   workflowId: string;
   workflowName: string;
+  /** 标签前的用户文案 */
+  beforeText?: string;
+  /** 标签后的用户文案（如「帮我执行这个工作流」） */
+  accompanyingText?: string;
 }
 
 function parseWorkflowRunDisplayText(text: string): WorkflowRunDisplayMeta | null {
-  const match = text.trim().match(
-    /^帮我执行\s*id\s*为\s*[:：]?\s*([A-Za-z0-9_-]+)\s*的工作流\s*(?:【([^】]+)】|(.+))?\s*$/,
+  const trimmed = text.trim();
+  // 允许执行指令前后保留用户原文，气泡按「前文 + 标签 + 后文」还原。
+  const execMatch = trimmed.match(
+    /^(.*?)帮我执行\s*id\s*为\s*[:：]?\s*([A-Za-z0-9_-]+)\s*的工作流\s*(?:【([^】]*)】)?\s*([\s\S]*)$/,
   );
-  if (!match) return null;
-  const workflowId = match[1]?.trim();
-  const workflowName = (match[2] ?? match[3] ?? '').trim() || workflowId;
-  if (!workflowId || !workflowName) return null;
-  return { workflowId, workflowName };
+  if (!execMatch) return null;
+
+  const beforeText = (execMatch[1] ?? '').trim() || undefined;
+  const workflowId = execMatch[2]?.trim();
+  if (!workflowId) return null;
+
+  const bracketName = (execMatch[3] ?? '').trim();
+  let accompanyingText = (execMatch[4] ?? '').trim() || undefined;
+  let workflowName = bracketName || workflowId;
+
+  if (!bracketName && accompanyingText) {
+    // 兼容旧格式：无【】时整段视为名称
+    workflowName = accompanyingText;
+    accompanyingText = undefined;
+  }
+
+  return { workflowId, workflowName, beforeText, accompanyingText };
 }
 
 function UserWorkflowMessageTag({ workflowName }: { workflowName: string }) {
@@ -1286,7 +1304,21 @@ function MessageBubble({
       {isUser ? (
         <p className="whitespace-pre-wrap break-words break-all text-sm font-normal leading-5 text-foreground">
           {userWorkflowDisplay ? (
-            <UserWorkflowMessageTag workflowName={userWorkflowDisplay.workflowName} />
+            <>
+              {userWorkflowDisplay.beforeText ? (
+                <>
+                  {renderUserMessageMentionNodes(userWorkflowDisplay.beforeText)}
+                  {'\u00A0'}
+                </>
+              ) : null}
+              <UserWorkflowMessageTag workflowName={userWorkflowDisplay.workflowName} />
+              {userWorkflowDisplay.accompanyingText ? (
+                <>
+                  {'\u00A0'}
+                  {renderUserMessageMentionNodes(userWorkflowDisplay.accompanyingText)}
+                </>
+              ) : null}
+            </>
           ) : skillMeta ? (
             <UserSkillBubbleContent text={text} skillMeta={skillMeta} />
           ) : (

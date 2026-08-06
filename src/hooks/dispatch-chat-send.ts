@@ -23,6 +23,31 @@ export interface DispatchChatSendOptions {
   skillMeta?: SkillMeta;
 }
 
+/**
+ * Composer 序列化会把工作流标签的可见名称写入 plainText。
+ * 发送前按名称切开，得到标签前 / 标签后的用户文案（不含标签名本身）。
+ */
+function extractWorkflowSurroundingText(
+  plainText: string,
+  workflowName: string,
+): { before: string; after: string } {
+  const text = plainText.replace(/\u00A0/g, ' ');
+  const name = workflowName.trim();
+  if (!name) {
+    const trimmed = text.trim();
+    return { before: trimmed, after: '' };
+  }
+  const idx = text.indexOf(name);
+  if (idx < 0) {
+    const trimmed = text.trim();
+    return { before: trimmed, after: '' };
+  }
+  return {
+    before: text.slice(0, idx).trim(),
+    after: text.slice(idx + name.length).trim(),
+  };
+}
+
 async function materializeDefaultSessionForWorkflowShortcut(): Promise<{
   sessionKey: string;
   agentId: string;
@@ -82,12 +107,16 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
   // 我的工作流-已发布：与「我的工作流」卡片「立即运行」保持一致，
   // 直接发送一句「帮我执行 id 为：xxx 的工作流 【名称】」让模型按 workflowId 执行，
   // 不走模版 schema 取数与参数表单，也不注入额外上下文。
+  // 用户在标签前/后的文案按原顺序拼在执行指令两侧，供气泡还原展示。
   if (workflowId && workflowSource === 'mine') {
     chatState.clearPendingWorkflow();
     const name = workflowName?.trim() || '';
-    const execText = `帮我执行 id 为：${workflowId} 的工作流 ${name ? `【${name}】` : ''}`.trim();
+    const { before, after } = extractWorkflowSurroundingText(text, name);
+    const label = name || workflowId;
+    const execText = `帮我执行 id 为：${workflowId} 的工作流 【${label}】`;
+    const messageText = [before, execText, after].filter(Boolean).join(' ');
     await sendMessage({
-      text: execText,
+      text: messageText,
       attachments,
       targetAgentId,
       dingTalkMentions,

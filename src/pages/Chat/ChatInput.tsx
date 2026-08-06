@@ -88,6 +88,8 @@ export interface ChatEditDraftEventDetail {
   skill?: SkillMeta;
   workflow?: ChatDraftWorkflowMeta;
   prefixText?: string;
+  /** 插入在 skill / workflow 标签之后的提示文案 */
+  suffixText?: string;
 }
 
 function logDingTalkMentionClient(message: string, data: unknown): void {
@@ -613,9 +615,10 @@ export function ChatInput({
   const applyEditDraftText = useCallback((detail: ChatEditDraftEventDetail) => {
     const text = detail.text?.trim() ?? '';
     const prefixText = detail.prefixText?.trim() ?? '';
+    const suffixText = detail.suffixText?.trim() ?? '';
     const skill = detail.skill;
     const workflow = detail.workflow;
-    if (!text && !prefixText && !skill && !workflow) return;
+    if (!text && !prefixText && !suffixText && !skill && !workflow) return;
 
     mentionEditorRef.current?.setPlainText('');
     if (prefixText) {
@@ -631,6 +634,10 @@ export function ChatInput({
     }
     if (workflow) {
       mentionEditorRef.current?.insertWorkflow(workflow.id, workflow.name, workflow.source);
+    }
+    // 标签落位后再追加后缀，保证「标签 + 执行提示」顺序。
+    if (suffixText) {
+      mentionEditorRef.current?.insertPlainText(suffixText);
     }
     mentionEditorRef.current?.focus();
     setAttachments([]);
@@ -656,6 +663,7 @@ export function ChatInput({
         skill?: unknown;
         workflow?: unknown;
         prefixText?: unknown;
+        suffixText?: unknown;
       }>).detail;
       if (!detail || typeof detail !== 'object') return;
       const skill = detail.skill;
@@ -683,6 +691,7 @@ export function ChatInput({
       applyEditDraftText({
         text: typeof detail.text === 'string' ? detail.text : undefined,
         prefixText: typeof detail.prefixText === 'string' ? detail.prefixText : undefined,
+        suffixText: typeof detail.suffixText === 'string' ? detail.suffixText : undefined,
         skill: skillMeta,
         workflow: workflowMeta,
       });
