@@ -139,7 +139,10 @@ describe('canonical chat client session reducer', () => {
         },
       },
     })).state;
-    expect(scheduled.overlay.optimisticUserMessage).toMatchObject({ content: 'scheduled prompt' });
+    expect(scheduled.overlay.optimisticUserMessage).toMatchObject({
+      content: 'scheduled prompt',
+      _scheduledTaskOptimistic: true,
+    });
 
     const interactive = createClientSessionState();
     interactive.overlay.optimisticUserMessage = {
@@ -155,6 +158,7 @@ describe('canonical chat client session reducer', () => {
       },
     })).state;
     expect(dispatched.overlay.optimisticUserMessage).toBe(interactive.overlay.optimisticUserMessage);
+    expect(dispatched.overlay.optimisticUserMessage?._scheduledTaskOptimistic).toBeUndefined();
 
     const stale = createClientSessionState();
     stale.overlay.optimisticUserMessage = {
@@ -171,7 +175,7 @@ describe('canonical chat client session reducer', () => {
       },
     })).state;
     expect(replaced.overlay.optimisticUserMessage).toMatchObject({
-      id: 'message-1', content: 'scheduled prompt',
+      id: 'message-1', content: 'scheduled prompt', _scheduledTaskOptimistic: true,
     });
   });
 

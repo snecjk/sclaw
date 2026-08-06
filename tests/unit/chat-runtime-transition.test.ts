@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { transitionChatRuntime } from '../../electron/services/chat-runtime-transition';
+import {
+  transitionChatRuntime,
+  transitionChatRuntimePhase,
+} from '../../electron/services/chat-runtime-transition';
+import type { ChatRunPhase } from '../../shared/chat-runtime-protocol';
 import type { ChatRuntimeSnapshot } from '../../shared/chat-runtime-protocol';
 
 function snapshot(overrides: Partial<ChatRuntimeSnapshot> = {}): ChatRuntimeSnapshot {
@@ -63,5 +67,40 @@ describe('chat runtime transition', () => {
       occurredAt: 20,
     });
     expect(result.accepted && result.snapshot.phase).toBe('running');
+  });
+
+  it.each<ChatRunPhase>([
+    'dispatching',
+    'uncertain',
+    'running',
+    'awaiting_transcript',
+    'reconciling',
+  ])('allows a user stop to enter aborting from %s', (phase) => {
+    const result = transitionChatRuntimePhase({
+      snapshot: snapshot({ phase }),
+      phase: 'aborting',
+      occurredAt: 20,
+    });
+
+    expect(result.accepted && result.snapshot.phase).toBe('aborting');
+  });
+
+  it.each<ChatRunPhase>([
+    'dispatching',
+    'uncertain',
+    'running',
+    'awaiting_transcript',
+    'reconciling',
+  ])('accepts an engine abort acknowledgement from %s', (phase) => {
+    const result = transitionChatRuntime({
+      snapshot: snapshot({ phase }),
+      type: 'run.aborted',
+      occurredAt: 20,
+    });
+
+    expect(result.accepted && result.snapshot).toMatchObject({
+      phase: 'aborted',
+      terminalAt: 20,
+    });
   });
 });

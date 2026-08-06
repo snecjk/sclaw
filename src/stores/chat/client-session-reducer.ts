@@ -198,8 +198,14 @@ export function reduceSessionEvent(
     || event.type === 'run.awaiting_transcript'
     || (phase === 'awaiting_transcript' && event.type !== 'message.delta');
   const startsNewRun = event.type === 'run.dispatching';
-  const dispatchUserMessage = startsNewRun
-    ? (payload as ChatDispatchPayload | null)?.optimisticUserMessage ?? null
+  const dispatchPayload = startsNewRun ? payload as ChatDispatchPayload | null : null;
+  const dispatchUserMessage = dispatchPayload?.optimisticUserMessage
+    ? {
+        ...dispatchPayload.optimisticUserMessage,
+        ...(event.runtimePolicy?.origin === 'scheduled_task'
+          ? { _scheduledTaskOptimistic: true }
+          : {}),
+      }
     : null;
   const currentOptimisticBelongsToRun = startsNewRun
     && Boolean(event.idempotencyKey)

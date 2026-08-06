@@ -414,6 +414,29 @@ describe('EngineScheduledTaskDispatcher', () => {
     }
   });
 
+  it('canonical user abort → cancelled without retry', async () => {
+    const { task, run } = await seedRun({
+      retryPolicy: { maxAttempts: 2, backoffSec: 3600 },
+    });
+    runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-1' } });
+    const { dispatcher } = makeDispatcher();
+
+    await dispatcher.dispatch({ task, run });
+    expect((await runRepo.getRun(run.runId))?.status).toBe('running');
+
+    await dispatcher.handleCanonicalEvent(canonicalTerminal(
+      task,
+      { ...run, sessionKey: 'sched:t1:20240101' },
+      'run.aborted',
+      { reason: 'user-abort' },
+    ));
+
+    const after = await runRepo.getRun(run.runId);
+    expect(after?.status).toBe('cancelled');
+    expect(after?.runtimeResult).toMatchObject({ stopReason: 'user-abort', isError: false });
+    expect((await runRepo.listRuns(task.id)).filter((item) => item.triggerSource === 'recovery')).toHaveLength(0);
+  });
+
   it('finalizes run succeeded on terminal without dws fallback', async () => {
     const { task, run } = await seedRun({
       dingtalkRecipients: [{ type: 'user', userId: 'u1', displayName: 'U1' }],

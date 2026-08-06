@@ -22,14 +22,14 @@ const TARGET_PHASE: Record<CanonicalChatEventType, ChatRunPhase | null> = {
 
 const ALLOWED: Record<ChatRunPhase, ReadonlySet<ChatRunPhase>> = {
   dispatching: new Set([
-    'dispatching', 'uncertain', 'running', 'awaiting_transcript',
+    'dispatching', 'uncertain', 'running', 'awaiting_transcript', 'aborting',
     'completed', 'failed', 'aborted', 'interrupted',
   ]),
-  uncertain: new Set(['uncertain', 'running', 'reconciling', 'failed', 'interrupted']),
-  running: new Set(['running', 'awaiting_transcript', 'aborting', 'reconciling', 'completed', 'failed', 'interrupted']),
-  awaiting_transcript: new Set(['awaiting_transcript', 'running', 'reconciling', 'completed', 'failed', 'interrupted']),
+  uncertain: new Set(['uncertain', 'running', 'aborting', 'reconciling', 'failed', 'aborted', 'interrupted']),
+  running: new Set(['running', 'awaiting_transcript', 'aborting', 'reconciling', 'completed', 'failed', 'aborted', 'interrupted']),
+  awaiting_transcript: new Set(['awaiting_transcript', 'running', 'aborting', 'reconciling', 'completed', 'failed', 'aborted', 'interrupted']),
   aborting: new Set(['aborting', 'running', 'completed', 'aborted', 'interrupted']),
-  reconciling: new Set(['reconciling', 'running', 'awaiting_transcript', 'completed', 'failed', 'interrupted']),
+  reconciling: new Set(['reconciling', 'running', 'awaiting_transcript', 'aborting', 'completed', 'failed', 'aborted', 'interrupted']),
   completed: new Set(['completed']),
   failed: new Set(['failed']),
   aborted: new Set(['aborted']),

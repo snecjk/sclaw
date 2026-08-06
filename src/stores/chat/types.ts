@@ -70,6 +70,8 @@ export interface RawMessage {
   _attachedFiles?: AttachedFileMeta[];
   /** Local-only: skill plaza tag metadata for user message bubble rendering */
   _skillMeta?: SkillMeta;
+  /** Local-only: the optimistic bubble was synthesized from a scheduled-task dispatch event. */
+  _scheduledTaskOptimistic?: boolean;
 }
 
 /** Content block inside a message */

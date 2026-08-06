@@ -49,6 +49,59 @@ export async function prepareHistoryToolEffects(input: {
   return getCurrentSessionKey() === sessionKey;
 }
 
+const SCHEDULED_ECHO_EARLY_SKEW_MS = 2_000;
+const SCHEDULED_ECHO_LATE_WINDOW_MS = 120_000;
+
+export function hasOptimisticUserEcho(input: {
+  finalMessages: RawMessage[];
+  cachedOptimistic: RawMessage | null;
+  userMsgAt: number | null;
+  toMs: (ts: unknown) => number;
+}): boolean {
+  const { finalMessages, cachedOptimistic, userMsgAt, toMs } = input;
+  if (!cachedOptimistic) return false;
+
+  const optimisticRefAt = userMsgAt
+    ?? (cachedOptimistic.timestamp ? toMs(cachedOptimistic.timestamp) : 0);
+  if (!cachedOptimistic._scheduledTaskOptimistic) {
+    if (optimisticRefAt > 0) {
+      return finalMessages.some((message) => (
+        isSameUserMessage(message, cachedOptimistic, optimisticRefAt)
+      ));
+    }
+
+    const cachedNorm = normalizeUserMessageText(cachedOptimistic.content);
+    return (
+      cachedNorm.length > 0
+      && finalMessages.some((message) => (
+        message.role === 'user'
+        && normalizeUserMessageText(message.content) === cachedNorm
+      ))
+    );
+  }
+
+  if (optimisticRefAt > 0) {
+    return finalMessages.some((message) => {
+      if (message.role !== 'user') return false;
+      if (message.id && cachedOptimistic.id && message.id === cachedOptimistic.id) return true;
+      const messageAt = typeof message.timestamp === 'number' ? toMs(message.timestamp) : NaN;
+      return Number.isFinite(messageAt)
+        && messageAt >= optimisticRefAt - SCHEDULED_ECHO_EARLY_SKEW_MS
+        && messageAt <= optimisticRefAt + SCHEDULED_ECHO_LATE_WINDOW_MS
+        && isSameUserMessage(message, cachedOptimistic, optimisticRefAt);
+    });
+  }
+
+  const cachedNorm = normalizeUserMessageText(cachedOptimistic.content);
+  return (
+    cachedNorm.length > 0
+    && finalMessages.some((m) => (
+      m.role === 'user'
+      && normalizeUserMessageText(m.content) === cachedNorm
+    ))
+  );
+}
+
 function clearOptimisticUserIfEchoed(input: {
   targetSessionKey: string;
   finalMessages: RawMessage[];
@@ -56,27 +109,8 @@ function clearOptimisticUserIfEchoed(input: {
   userMsgAt: number | null;
   toMs: (ts: unknown) => number;
 }): void {
-  const { targetSessionKey, finalMessages, cachedOptimistic, userMsgAt, toMs } = input;
-  if (!cachedOptimistic) return;
-
-  const optimisticRefAt = userMsgAt
-    ?? (cachedOptimistic.timestamp ? toMs(cachedOptimistic.timestamp) : 0);
-  if (
-    optimisticRefAt > 0
-    && finalMessages.some((m) => isSameUserMessage(m, cachedOptimistic, optimisticRefAt))
-  ) {
-    useChatRuntimeV2Store.getState().setOptimisticUserMessage(targetSessionKey, null);
-    return;
-  }
-
-  const cachedNorm = normalizeUserMessageText(cachedOptimistic.content);
-  if (
-    cachedNorm.length > 0
-    && finalMessages.some((m) => (
-      m.role === 'user'
-      && normalizeUserMessageText(m.content) === cachedNorm
-    ))
-  ) {
+  const { targetSessionKey, ...echoInput } = input;
+  if (hasOptimisticUserEcho(echoInput)) {
     useChatRuntimeV2Store.getState().setOptimisticUserMessage(targetSessionKey, null);
   }
 }
