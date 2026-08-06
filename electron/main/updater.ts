@@ -20,11 +20,14 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
+  isSafeMacAppBackupPath,
   isKnownOldAppBackupName,
+  registerMacAppBundle,
   removeMacAppBundlePath,
   resolveMacAppInstallTargetPath,
   scheduleMacAppBundleRelaunch,
   stageExistingMacAppTarget,
+  unregisterMacAppBundle,
 } from '../utils/cleanup-old-app-bundles';
 
 const execFile = promisify(execFileCb);
@@ -985,6 +988,9 @@ export class AppUpdater extends EventEmitter {
       targetAppPath = resolveMacAppInstallTargetPath(installDir, extractedAppPath);
       logger.info(`[Updater] manualInstall: target app path = ${targetAppPath}`);
 
+      if (path.resolve(targetAppPath) !== path.resolve(appPath) && existsSync(targetAppPath)) {
+        await unregisterMacAppBundle(targetAppPath);
+      }
       stagedTargetAppPath = await stageExistingMacAppTarget(appPath, targetAppPath);
       if (stagedTargetAppPath) {
         logger.info(
@@ -995,6 +1001,7 @@ export class AppUpdater extends EventEmitter {
       // 2. 备份旧 app（同设备 rename 是原子操作，运行中的进程仍可继续）
       const backupPath = `${appPath}.old-${Date.now()}`;
       if (existsSync(appPath)) {
+        await unregisterMacAppBundle(appPath);
         await fsp.rename(appPath, backupPath);
         this._backupAppPath = backupPath;
         logger.info(`[Updater] manualInstall: backed up old app to ${backupPath}`);
@@ -1020,6 +1027,7 @@ export class AppUpdater extends EventEmitter {
         // 没有 quarantine 属性时 xattr 也会 exit 非零，不算致命错误
         logger.warn('[Updater] manualInstall: xattr remove returned non-zero (may be normal)', e);
       }
+      await registerMacAppBundle(targetAppPath);
 
       // 5. 不立即删备份，写一个 marker 到 userData，新版本启动后 60s 再清理。
       //    这样万一新版本启动崩溃，用户可以手动把 .app.old-* rename 回去恢复。
@@ -1079,6 +1087,12 @@ export class AppUpdater extends EventEmitter {
           logger.error('[Updater] manualInstall: staged target restore failed', rollbackErr);
         }
         stagedTargetAppPath = null;
+      }
+      const restoredPaths = new Set([appPath, targetAppPath]);
+      for (const restoredPath of restoredPaths) {
+        if (existsSync(restoredPath)) {
+          await registerMacAppBundle(restoredPath);
+        }
       }
 
       // 清理临时目录
@@ -1181,7 +1195,17 @@ export class AppUpdater extends EventEmitter {
    */
   async cleanupPendingBackup(): Promise<void> {
     if (process.platform !== 'darwin') return;
-    const marker = await this.readBackupMarker();
+    let marker = await this.readBackupMarker();
+    if (marker) {
+      const currentAppPath = path.dirname(path.dirname(path.dirname(process.execPath)));
+      if (!isSafeMacAppBackupPath(currentAppPath, marker.backupPath)) {
+        logger.warn(
+          `[Updater] cleanupPendingBackup: refusing invalid backup marker path ${marker.backupPath}`,
+        );
+        await this.deleteBackupMarker();
+        marker = null;
+      }
+    }
 
     // 先把孤立备份立刻清掉（marker 记录的那个会被保护，不会误删）
     await this.cleanupOrphanedBackups(marker?.backupPath ?? null);
@@ -1217,7 +1241,7 @@ export class AppUpdater extends EventEmitter {
       void (async () => {
         try {
           if (existsSync(marker.backupPath)) {
-            await fsp.rm(marker.backupPath, { recursive: true, force: true });
+            await removeMacAppBundlePath(marker.backupPath);
             logger.info(`[Updater] cleanupPendingBackup: removed backup ${marker.backupPath}`);
           }
           await this.deleteBackupMarker();
