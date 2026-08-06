@@ -130,6 +130,7 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
           slug,
           title: item.title || slug,
         },
+        suffixText: '帮我执行这个技能',
       });
       return;
     }
@@ -148,6 +149,7 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
           name: item.title,
           source: 'mine',
         },
+        suffixText: '帮我执行这个工作流',
       });
       return;
     }
@@ -159,6 +161,7 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
           id: item.item_ref_id,
           name: item.title,
         },
+        suffixText: '帮我执行这个工作流',
       });
     }
   };
