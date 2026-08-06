@@ -159,17 +159,17 @@ export const myTaskPageHeaderRowClass = 'flex min-w-0 items-start justify-betwee
 export const myTaskPageSubtitleClass =
   'm-0 mt-1.5 text-sm font-normal leading-5 text-muted-foreground';
 
-/** 我的任务一级 Tab 轨道（胶囊分段） */
+/** 我的任务一级 Tab 轨道（与技能广场「技能/连接器」分段同款） */
 export const myTaskSectionTabsTrackClass =
-  'inline-flex items-center rounded-full bg-[#F2F3F5] p-1 dark:bg-muted';
+  'inline-flex h-9 w-fit flex-shrink-0 items-center gap-0.5 rounded-[12px] bg-[#F2F3F5] p-0.5 dark:bg-muted';
 
-/** 我的任务一级 Tab 按钮 */
+/** 我的任务一级 Tab 按钮（选中灰底白字，与技能广场分区 Tab 一致） */
 export function myTaskSectionTabClass(active: boolean): string {
   return cn(
-    'inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[13px] font-medium transition-colors duration-fast',
+    "inline-flex h-full items-center gap-1.5 rounded-[10px] px-3.5 font-['PingFang_SC'] text-[14px] font-medium leading-none transition-colors duration-150",
     active
-      ? 'bg-card text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.08)]'
-      : 'bg-transparent text-muted-foreground hover:text-foreground',
+      ? 'bg-[#4E5969] text-white'
+      : 'bg-transparent text-[#4E5969] hover:bg-[#E5E6EB] hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-white/[0.06] dark:hover:text-foreground',
   );
 }
 

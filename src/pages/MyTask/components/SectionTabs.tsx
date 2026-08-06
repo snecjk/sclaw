@@ -1,6 +1,6 @@
 /**
  * SectionTabs：我的任务一级 Tab（定时任务 / 工作流）
- * 胶囊分段样式对齐设计稿；切换由父级同步到 URL ?tab=
+ * 样式对齐技能广场「技能 / 连接器」分区 Tab；切换由父级同步到 URL ?tab=
  */
 
 import { Clock, Workflow } from 'lucide-react';
@@ -45,7 +45,7 @@ export function SectionTabs({ activeSection, onSectionChange, className }: Secti
               onClick={() => onSectionChange(tab.value)}
               className={myTaskSectionTabClass(isActive)}
             >
-              <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} aria-hidden />
+              <Icon className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.75} aria-hidden />
               {t(tab.i18nKey)}
             </button>
           );
