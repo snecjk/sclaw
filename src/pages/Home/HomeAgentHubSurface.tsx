@@ -3,7 +3,6 @@
  * 有推荐位数据时展示推荐卡片，无数据时降级展示静态 AGENT_HUB_CARDS。
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
@@ -19,9 +18,8 @@ import { useHomeRecommendSkillStatus } from './use-home-recommend-skill-status';
 import { StaticFallbackCards } from './agent-hub-static-cards';
 import { useRecommendItems } from '@/hooks/use-recommend-items';
 import { RECOMMEND_POSITION_KEYS, type RecommendItem } from '@/lib/recommend-api';
-import { navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
-import { workflowSessionTitle } from '@/lib/workflow-session';
 import { useLatestWorkflowsByTemplates } from '@/hooks/use-latest-workflows-by-templates';
+import { CHAT_EDIT_DRAFT_EVENT, type ChatEditDraftEventDetail } from '@/pages/Chat/ChatInput';
 import {
   homeHubCardGridClass,
   homeHubCardScrollClass,
@@ -33,7 +31,6 @@ import {
 
 export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: string; seedSkillSlug?: string }) {
   const { t } = useTranslation('home');
-  const navigate = useNavigate();
   const showConversation = useHomeConversationActive();
   const { isSplitGridPassthrough, splitGridPassthroughClass } =
     useSplitGridPassthroughClass(showConversation);
@@ -118,48 +115,51 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
     );
   }, [displayItems, selectedCategory, activeCategoryIsAll]);
 
-  /** 推荐卡片点击：按 item_type 分发（技能点击在 RecommendCard 内部处理） */
+  const applyRecommendToComposer = (detail: ChatEditDraftEventDetail) => {
+    window.dispatchEvent(new CustomEvent<ChatEditDraftEventDetail>(CHAT_EDIT_DRAFT_EVENT, {
+      detail,
+    }));
+  };
+
+  /** 推荐卡片点击：只带入输入框，等待用户确认发送 */
   const handleRecommendClick = (item: RecommendItem) => {
     if (item.item_type === 'skill') {
+      const slug = item.skill_slug || item.item_ref_id;
+      applyRecommendToComposer({
+        skill: {
+          slug,
+          title: item.title || slug,
+        },
+      });
       return;
     }
 
     if (item.item_type === 'prompt') {
       const text = (item.content || item.title || '').trim();
       if (!text) return;
-      navigateToNewSessionWithPrompt(navigate, '/home', text, {
-        sessionTitle: item.title || undefined,
-      });
+      applyRecommendToComposer({ text });
       return;
     }
 
     if (item.item_type === 'workflow_instance') {
-      // 工作流实例：立即运行（复用"我的工作流"的立即运行逻辑）
-      navigateToNewSessionWithPrompt(
-        navigate,
-        '/home',
-        `帮我执行 id 为：${item.item_ref_id} 的工作流 【${item.title}】`,
-        {
-          workflowRun: true,
-          workflowEngine: 'claude',
-          workflowSession: {
-            workflowId: item.item_ref_id,
-            engineType: 'claude',
-            sessionTitle: workflowSessionTitle(item.title, 'claude'),
-          },
+      applyRecommendToComposer({
+        workflow: {
+          id: item.item_ref_id,
+          name: item.title,
+          source: 'mine',
         },
-      );
+      });
       return;
     }
 
     if (item.item_type === 'workflow_template') {
-      // 工作流模版：安装（参考官方推荐模版的安装逻辑）
-      navigateToNewSessionWithPrompt(
-        navigate,
-        '/home',
-        `/${item.title}`,
-        { extraSearchParams: { workflowId: item.item_ref_id } },
-      );
+      applyRecommendToComposer({
+        prefixText: '安装',
+        workflow: {
+          id: item.item_ref_id,
+          name: item.title,
+        },
+      });
     }
   };
 
@@ -183,6 +183,8 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
           onSkillInstalled={() => {
             handleSkillStatusRefresh(skillSlug);
           }}
+          onSkillUse={() => handleRecommendClick(item)}
+          skillClickMode="use-only"
           skillStatus={isSkill ? skillStatusMap[skillSlug] : undefined}
           skillStatusLoading={isSkill ? skillStatusLoading || refreshingSlugs.has(skillSlug) : false}
         />

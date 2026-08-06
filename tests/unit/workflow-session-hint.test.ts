@@ -104,6 +104,20 @@ describe('subagent session label helpers', () => {
     expect(label).toBe('网点面单报价');
   });
 
+  it('titles skill turns from the marker instead of the injected prompt body', () => {
+    const withPrompt = '按网点维度统计增量报价明细，输出对比表\n<!-- SClaw-Skill {"slug":"site-quotation-increment","title":"网点增量报价参考"} -->';
+    expect(deriveSessionLabelFromUserText(withPrompt)).toBe('网点增量报价参考');
+
+    // Cold plaza cache degrades the prompt body to the bare slug.
+    const withSlugBody = 'site-quotation-increment\n<!-- SClaw-Skill {"slug":"site-quotation-increment","title":"网点增量报价参考"} -->';
+    expect(deriveSessionLabelFromUserText(withSlugBody)).toBe('网点增量报价参考');
+  });
+
+  it('prefers the user-typed text over the skill title in derived labels', () => {
+    const withUserText = '网点增量报价参考\n\n查一下上海\n<!-- SClaw-Skill {"slug":"site-quotation-increment","title":"网点增量报价参考","userText":"查一下上海"} -->';
+    expect(deriveSessionLabelFromUserText(withUserText)).toBe('查一下上海');
+  });
+
   it('treats persisted SClaw-Skill marker titles as corrupted so they get re-derived', () => {
     expect(isCorruptedSessionLabel('网点面单报价 <!-- SClaw-Skill {"slug":"si…')).toBe(true);
     expect(normalizeDerivedSessionLabel('网点面单报价 <!-- SClaw-Skill {"slug":"si…')).toBeUndefined();
