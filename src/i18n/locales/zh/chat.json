@@ -240,6 +240,8 @@
         "statusUnknown": "状态未知",
         "runIdLabel": "运行 ID",
         "nameLabel": "工作流",
+        "viewWorkflow": "查看工作流",
+        "confirmedParameters": "已确认参数",
         "runUnavailable": "运行记录不可用",
         "retryQuery": "重试",
         "progressLabel": "工作流执行进度",

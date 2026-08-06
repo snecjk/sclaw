@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -107,6 +107,50 @@ export function WorkflowDashboard({
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<WorkflowCardItem | null>(null);
   const [runTarget, setRunTarget] = useState<Pick<WorkflowCardItem, 'id' | 'name'> | null>(null);
+  const [highlightedWorkflowId, setHighlightedWorkflowId] = useState<string | null>(null);
+  const targetWorkflowId = new URLSearchParams(location.search).get('highlightWorkflowId');
+
+  useEffect(() => {
+    if (!targetWorkflowId) return;
+    const frame = window.requestAnimationFrame(() => {
+      setTab('mine');
+      setSearch('');
+      setMineFilter(cardsByKind.draft.some((card) => card.id === targetWorkflowId) ? 'draft' : 'published');
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [cardsByKind.draft, setMineFilter, setTab, targetWorkflowId]);
+
+  useEffect(() => {
+    if (!targetWorkflowId || tab !== 'mine' || mineLoading) return;
+
+    let attempts = 0;
+    let retryTimer: number | undefined;
+    const focusTarget = () => {
+      const card = Array.from(document.querySelectorAll<HTMLElement>('[data-workflow-id]'))
+        .find((element) => element.dataset.workflowId === targetWorkflowId);
+      if (card) {
+        setHighlightedWorkflowId(targetWorkflowId);
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.focus({ preventScroll: true });
+        navigate({ pathname: location.pathname }, { replace: true });
+        return;
+      }
+      attempts += 1;
+      if (attempts < 10) retryTimer = window.setTimeout(focusTarget, 150);
+    };
+
+    const frame = window.requestAnimationFrame(focusTarget);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+    };
+  }, [location.pathname, mineLoading, navigate, tab, targetWorkflowId]);
+
+  useEffect(() => {
+    if (!highlightedWorkflowId) return;
+    const timer = window.setTimeout(() => setHighlightedWorkflowId(null), 4_000);
+    return () => window.clearTimeout(timer);
+  }, [highlightedWorkflowId]);
 
   /** 快捷提示词 i18n label 映射 */
   const chipLabels: Record<(typeof EXAMPLE_CHIPS)[number], string> = {
@@ -399,6 +443,7 @@ export function WorkflowDashboard({
                 <WorkflowMineListCard
                   key={card.id}
                   card={card}
+                  highlighted={card.id === highlightedWorkflowId}
                   isRenaming={renamingId === card.id}
                   renameRef={renameRef}
                   onRenameCommit={async (name) => {
