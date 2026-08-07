@@ -1,6 +1,6 @@
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
-import { skillComposerTagClass } from '@/lib/surfaces';
+import { saiInterfaceComposerTagClass, skillComposerTagClass } from '@/lib/surfaces';
 
 export const MENTION_SPAN_CLASS = 'dingtalk-mention-token';
 export const MENTION_SPAN_SELECTOR = `span.${MENTION_SPAN_CLASS}`;
@@ -10,6 +10,9 @@ export const WORKFLOW_SPAN_SELECTOR = `span.${WORKFLOW_SPAN_CLASS}`;
 
 export const SKILL_SPAN_CLASS = 'skill-token';
 export const SKILL_SPAN_SELECTOR = `span.${SKILL_SPAN_CLASS}`;
+
+export const SAI_INTERFACE_SPAN_CLASS = 'sai-interface-token';
+export const SAI_INTERFACE_SPAN_SELECTOR = `span.${SAI_INTERFACE_SPAN_CLASS}`;
 
 export interface MentionComposerSnapshot {
   plainText: string;
@@ -42,6 +45,16 @@ function isWorkflowSpan(node: Node | null): boolean {
 function isSkillSpan(node: Node | null): boolean {
   return node instanceof HTMLSpanElement
     && (node.classList.contains(SKILL_SPAN_CLASS) || Boolean(node.dataset.skillSlug));
+}
+
+function isSaiInterfaceSpan(node: Node | null): boolean {
+  return node instanceof HTMLSpanElement
+    && (node.classList.contains(SAI_INTERFACE_SPAN_CLASS) || Boolean(node.dataset.saiPath));
+}
+
+function formatSaiInterfacePlainText(name: string, path: string): string {
+  if (name && path) return `「${name}」(${path})`;
+  return name || path;
 }
 
 function readSkillFromSpan(span: HTMLSpanElement): SkillMeta | null {
@@ -109,6 +122,14 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
     if (isSkillSpan(node)) {
       const parsed = readSkillFromSpan(node);
       if (parsed) skill = parsed;
+      return;
+    }
+
+    if (isSaiInterfaceSpan(node)) {
+      const span = node as HTMLSpanElement;
+      const name = span.dataset.saiName ?? span.textContent?.trim() ?? '';
+      const path = span.dataset.saiPath ?? '';
+      plainText += formatSaiInterfacePlainText(name, path);
       return;
     }
 
@@ -225,7 +246,10 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
       return null;
     }
 
-    if (node instanceof HTMLElement && (isMentionSpan(node) || isWorkflowSpan(node) || isSkillSpan(node))) {
+    if (
+      node instanceof HTMLElement
+      && (isMentionSpan(node) || isWorkflowSpan(node) || isSkillSpan(node) || isSaiInterfaceSpan(node))
+    ) {
       if (isSkillSpan(node)) {
         return null;
       }
@@ -233,7 +257,12 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
       // （不含 removable 模式下 × 删除按钮的字符），否则偏移量会与序列化错位。
       const text = isMentionSpan(node)
         ? `@${node.dataset.mentionName ?? ''}`
-        : (node.textContent ?? '');
+        : isSaiInterfaceSpan(node)
+          ? formatSaiInterfacePlainText(
+            node.dataset.saiName ?? node.textContent?.trim() ?? '',
+            node.dataset.saiPath ?? '',
+          )
+          : (node.textContent ?? '');
       const next = current + text.length;
       // span 不可拆分：严格落在 (current, next) 内部才视为非法返回 null。
       // targetOffset === next 表示"紧贴 span 之后"的合法边界，必须推进 current
@@ -432,6 +461,61 @@ export function createSkillSpan(slug: string, title: string): HTMLSpanElement {
   return span;
 }
 
+export function createSaiInterfaceSpan(path: string, name: string): HTMLSpanElement {
+  const span = document.createElement('span');
+  span.className = saiInterfaceComposerTagClass;
+  span.contentEditable = 'false';
+  span.dataset.saiPath = path;
+  span.dataset.saiName = name;
+  span.title = path;
+  span.textContent = name;
+  return span;
+}
+
+/**
+ * Insert a sai-cli interface chip at the caret (supports multiple).
+ * `preferredRange` restores caret after picker clicks steal focus.
+ */
+export function insertSaiInterfaceSpan(
+  root: HTMLElement,
+  path: string,
+  name: string,
+  preferredRange?: Range | null,
+): void {
+  const selection = window.getSelection();
+  root.focus();
+
+  let range: Range | null = null;
+  if (preferredRange && root.contains(preferredRange.startContainer)) {
+    range = preferredRange.cloneRange();
+  } else if (
+    selection
+    && selection.rangeCount > 0
+    && selection.anchorNode
+    && root.contains(selection.anchorNode)
+  ) {
+    range = selection.getRangeAt(0).cloneRange();
+  } else {
+    range = document.createRange();
+    range.selectNodeContents(root);
+    range.collapse(false);
+  }
+
+  range.deleteContents();
+  const span = createSaiInterfaceSpan(path, name);
+  const space = document.createTextNode('\u00A0');
+  const fragment = document.createDocumentFragment();
+  fragment.append(span, space);
+  range.insertNode(fragment);
+
+  const caretRange = document.createRange();
+  caretRange.setStart(space, 1);
+  caretRange.collapse(true);
+  selection?.removeAllRanges();
+  selection?.addRange(caretRange);
+  root.focus();
+}
+
 function removeWorkflowSpanFromRoot(root: HTMLElement): void {
   const existing = root.querySelector(WORKFLOW_SPAN_SELECTOR);
   if (!(existing instanceof HTMLSpanElement)) return;
@@ -567,7 +651,10 @@ export function removeMentionBeforeCaret(root: HTMLElement): boolean {
   if (startContainer.nodeType === Node.TEXT_NODE) {
     const textNode = startContainer as Text;
     const prev = textNode.previousSibling;
-    if (prev && (isMentionSpan(prev) || isWorkflowSpan(prev) || isSkillSpan(prev))) {
+    if (
+      prev
+      && (isMentionSpan(prev) || isWorkflowSpan(prev) || isSkillSpan(prev) || isSaiInterfaceSpan(prev))
+    ) {
       const text = textNode.data ?? '';
       const trailingSeparator = text === '\u00A0' || text === ' ';
       if (startOffset === 0 || (trailingSeparator && startOffset <= text.length)) {
@@ -587,7 +674,12 @@ export function removeMentionBeforeCaret(root: HTMLElement): boolean {
   if (startContainer instanceof HTMLElement) {
     const index = startOffset - 1;
     const prev = startContainer.childNodes[index] ?? null;
-    if (isMentionSpan(prev) || isWorkflowSpan(prev) || isSkillSpan(prev)) {
+    if (
+      isMentionSpan(prev)
+      || isWorkflowSpan(prev)
+      || isSkillSpan(prev)
+      || isSaiInterfaceSpan(prev)
+    ) {
       prev.remove();
       const next = startContainer.childNodes[index] ?? null;
       if (next?.nodeType === Node.TEXT_NODE && (next.textContent === '\u00A0' || next.textContent === '')) {

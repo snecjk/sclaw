@@ -13,6 +13,7 @@ import {
   detectActiveMentionTrigger,
   insertAtTriggerCharacter,
   insertMentionAtTrigger,
+  insertSaiInterfaceSpan,
   insertSkillSpan,
   insertPlainTextAtCaret,
   insertWorkflowSpan,
@@ -60,6 +61,10 @@ export interface DingTalkMentionEditorHandle {
   insertMention: (mention: DingTalkMention, trigger: ActiveMentionTrigger) => void;
   insertWorkflow: (workflowId: string, name: string, source?: string) => void;
   insertSkill: (slug: string, title: string) => void;
+  /** 在光标处插入 sai-cli 接口 chip（中文高亮，可多次） */
+  insertSaiInterface: (path: string, name: string) => void;
+  /** 打开浮层前保存光标，避免点击列表后插入跑到末尾 */
+  rememberCaret: () => void;
   consumeSkillInlineTrigger: (query?: string) => boolean;
   removeSkill: () => void;
   /** 插入 `@` 并打开钉钉 mention 选择（与手动输入 `@` 等价） */
@@ -107,8 +112,18 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
     const appliedSkillSeedRef = useRef<string | undefined>(undefined);
     const lastAppliedSeedRef = useRef<string | undefined>(undefined);
     const isComposingRef = useRef(false);
+    const lastCaretRangeRef = useRef<Range | null>(null);
 
     const syncTriggerRafRef = useRef<number | null>(null);
+
+    const rememberCaret = useCallback(() => {
+      const root = editorRef.current;
+      const selection = window.getSelection();
+      if (!root || !selection || selection.rangeCount === 0) return;
+      const range = selection.getRangeAt(0);
+      if (!root.contains(range.commonAncestorContainer)) return;
+      lastCaretRangeRef.current = range.cloneRange();
+    }, []);
 
     const syncFromDom = useCallback((syncTrigger = true) => {
       const root = editorRef.current;
@@ -134,6 +149,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         const root = editorRef.current;
         if (!root) return;
         clearMentionEditor(root);
+        lastCaretRangeRef.current = null;
         syncFromDom();
       },
       getSnapshot: () => {
@@ -182,8 +198,17 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         const root = editorRef.current;
         if (!root) return;
         insertSkillSpan(root, slug, title);
+        rememberCaret();
         syncFromDom();
       },
+      insertSaiInterface: (path, name) => {
+        const root = editorRef.current;
+        if (!root) return;
+        insertSaiInterfaceSpan(root, path, name, lastCaretRangeRef.current);
+        rememberCaret();
+        syncFromDom(false);
+      },
+      rememberCaret,
       consumeSkillInlineTrigger: (query) => {
         const root = editorRef.current;
         if (!root) return false;
@@ -203,10 +228,11 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         const root = editorRef.current;
         if (!root) return;
         insertAtTriggerCharacter(root);
+        rememberCaret();
         syncFromDom();
         onTriggerChange?.(detectActiveMentionTrigger(root));
       },
-    }), [onTriggerChange, removableMentions, syncFromDom]);
+    }), [onTriggerChange, rememberCaret, removableMentions, syncFromDom]);
 
     useEffect(() => {
       const trimmed = seedText?.trim();
@@ -243,8 +269,9 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
     }, [seedSkillSlug, syncFromDom]);
 
     const handleInput = useCallback(() => {
+      rememberCaret();
       syncFromDom();
-    }, [syncFromDom]);
+    }, [rememberCaret, syncFromDom]);
 
     const handleMentionRemove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
       const target = event.target as HTMLElement;
@@ -275,9 +302,10 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
     }, [onKeyDown, syncFromDom]);
 
     const handleKeyUp = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+      rememberCaret();
       syncFromDom();
       onKeyUp?.(event);
-    }, [onKeyUp, syncFromDom]);
+    }, [onKeyUp, rememberCaret, syncFromDom]);
 
     return (
       <div
@@ -298,7 +326,11 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         onKeyUp={handleKeyUp}
         onPaste={onPaste}
         onMouseDown={removableMentions ? handleMentionRemove : undefined}
-        onClick={() => syncFromDom()}
+        onClick={() => {
+          rememberCaret();
+          syncFromDom();
+        }}
+        onBlur={rememberCaret}
         onCompositionStart={() => {
           isComposingRef.current = true;
           onCompositionStart?.();
@@ -309,6 +341,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         onCompositionEnd={() => {
           isComposingRef.current = false;
           onCompositionEnd?.();
+          rememberCaret();
           syncFromDom();
         }}
       />

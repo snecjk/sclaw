@@ -1140,6 +1140,14 @@ export const skillComposerTagClass = cn(
 
 export const skillMessageTagClass = skillComposerTagClass;
 
+/** Composer 接口清单 chip（中文名高亮，与技能橙区分） */
+export const saiInterfaceComposerTagClass = cn(
+  'sai-interface-token',
+  'inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium align-middle',
+  'bg-[rgba(22,119,255,0.12)] text-[#1677FF]',
+  'dark:bg-[rgba(76,155,255,0.18)] dark:text-[#4C9BFF]',
+);
+
 /** Composer 技能 Picker 浮层容器（glass + 圆角，对齐 WorkflowPicker） */
 export const skillPickerShellClass = cn(
   'absolute left-0 bottom-full z-50 mb-2 w-80 overflow-hidden rounded-2xl border border-glass-border glass p-2',

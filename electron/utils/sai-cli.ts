@@ -136,17 +136,103 @@ export async function saiWhoami(): Promise<SaiCliResult> {
   return runSai(['whoami']);
 }
 
-export async function saiDiscover(context?: string): Promise<SaiCliResult> {
-  const args = ['discover'];
-  if (context) args.push('--context', context);
+export async function saiDiscover(
+  query?: string,
+  options?: { limit?: number },
+): Promise<SaiCliResult> {
+  const trimmed = query?.trim();
+  if (!trimmed) {
+    return {
+      ok: false,
+      error: 'discover query is required',
+      exitCode: 1,
+    };
+  }
+  const args = ['discover', trimmed];
+  const limit = options?.limit;
+  if (typeof limit === 'number' && Number.isFinite(limit) && limit > 0) {
+    args.push('--limit', String(Math.floor(limit)));
+  }
   return runSai(args);
 }
 
-export async function saiList(filter?: { product?: string; module?: string }): Promise<SaiCliResult> {
+export async function saiList(options?: {
+  product?: string;
+  module?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<SaiCliResult> {
   const args = ['list'];
-  if (filter?.product) args.push('--product', filter.product);
-  if (filter?.module) args.push('--module', filter.module);
+  if (options?.product) args.push('--product', options.product);
+  if (options?.module) args.push('--module', options.module);
+  if (typeof options?.page === 'number' && Number.isFinite(options.page) && options.page > 0) {
+    args.push('--page', String(Math.floor(options.page)));
+  }
+  if (
+    typeof options?.pageSize === 'number'
+    && Number.isFinite(options.pageSize)
+    && options.pageSize > 0
+  ) {
+    args.push('--page-size', String(Math.floor(options.pageSize)));
+  }
   return runSai(args);
+}
+
+/** 翻页拉全量 list（默认每页 100；CLI 无业务搜索词参数）。 */
+export async function saiListAll(options?: {
+  product?: string;
+  module?: string;
+  pageSize?: number;
+}): Promise<SaiCliResult> {
+  const pageSize = Math.min(
+    Math.max(Math.floor(options?.pageSize ?? 100), 1),
+    100,
+  );
+  const commands: unknown[] = [];
+  let total = Number.POSITIVE_INFINITY;
+  let lastData: Record<string, unknown> | null = null;
+
+  for (let page = 1; page <= 50; page += 1) {
+    const result = await saiList({
+      product: options?.product,
+      module: options?.module,
+      page,
+      pageSize,
+    });
+    if (!result.ok) return result;
+
+    const data = (result.data && typeof result.data === 'object')
+      ? (result.data as Record<string, unknown>)
+      : {};
+    lastData = data;
+    const pageCommands = Array.isArray(data.commands)
+      ? data.commands
+      : Array.isArray(data.items)
+        ? data.items
+        : [];
+    commands.push(...pageCommands);
+
+    if (typeof data.total === 'number' && Number.isFinite(data.total)) {
+      total = data.total;
+    } else if (pageCommands.length < pageSize) {
+      total = commands.length;
+    }
+
+    if (commands.length >= total || pageCommands.length === 0) break;
+  }
+
+  return {
+    ok: true,
+    data: {
+      ...(lastData ?? {}),
+      commands,
+      count: commands.length,
+      page: 1,
+      pageSize: commands.length,
+      total: typeof lastData?.total === 'number' ? lastData.total : commands.length,
+    },
+    exitCode: 0,
+  };
 }
 
 // ── Dynamic command execution ───────────────────────────────────────────────

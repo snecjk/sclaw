@@ -11,6 +11,7 @@ import {
 } from '@/lib/sclaw-browser-host-api';
 import { resolveSclawEmbedWindowOpenAction } from '../../../shared/sclaw-embed-browser-window-open';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
+import { PREVIEW_NETWORK_CAPTURE_SCRIPT } from '@/lib/app-dev-preview-console';
 
 const isElectron = Boolean(window.electron);
 
@@ -42,6 +43,15 @@ interface SclawBrowserFrameProps {
    * Prefer Main setWindowOpenHandler → sclaw-browser:open-url for Electron 40+.
    */
   onOpenWindow?: (url: string) => void;
+  /**
+   * Guest console lines (Electron webview). Host should filter before surfacing.
+   */
+  onConsoleMessage?: (info: { level: number; message: string; sourceId?: string; line?: number }) => void;
+  /**
+   * When set, inject a silent fetch hook so network failures always reach
+   * console-message (page UI often swallows them; no Claw console module needed).
+   */
+  captureGuestNetworkFailures?: boolean;
 }
 
 type EmbedWebviewElement = HTMLElement & {
@@ -52,6 +62,7 @@ type EmbedWebviewElement = HTMLElement & {
   reload?: () => void;
   reloadIgnoringCache?: () => void;
   canGoBack?: () => boolean;
+  executeJavaScript?: (code: string, userGesture?: boolean) => Promise<unknown>;
   addEventListener: (type: string, listener: EventListener) => void;
   removeEventListener: (type: string, listener: EventListener) => void;
 };
@@ -99,6 +110,8 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       onPageUrl,
       onNavStateChange,
       onOpenWindow,
+      onConsoleMessage,
+      captureGuestNetworkFailures = false,
     },
     ref,
   ) {
@@ -111,11 +124,15 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
     const onPageUrlRef = useRef(onPageUrl);
     const onNavStateChangeRef = useRef(onNavStateChange);
     const onOpenWindowRef = useRef(onOpenWindow);
+    const onConsoleMessageRef = useRef(onConsoleMessage);
+    const captureNetworkRef = useRef(captureGuestNetworkFailures);
     onPageFaviconRef.current = onPageFavicon;
     onPageTitleRef.current = onPageTitle;
     onPageUrlRef.current = onPageUrl;
     onNavStateChangeRef.current = onNavStateChange;
     onOpenWindowRef.current = onOpenWindow;
+    onConsoleMessageRef.current = onConsoleMessage;
+    captureNetworkRef.current = captureGuestNetworkFailures;
 
     const publishNavState = () => {
       const canGoBack = safeCanGoBack(webviewRef.current);
@@ -222,12 +239,18 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
 
       let domReady = false;
 
+      const injectNetworkCapture = () => {
+        if (!captureNetworkRef.current) return;
+        void el.executeJavaScript?.(PREVIEW_NETWORK_CAPTURE_SCRIPT).catch(() => undefined);
+      };
+
       const bindAfterDomReady = () => {
         if (!active) return;
         const webContentsId = safeGetWebContentsId(el);
         if (!webContentsId) return;
 
         domReady = true;
+        injectNetworkCapture();
 
         const pageUrl = safeGetWebviewUrl(el, url);
         markPolicyAuthedFromUrl(pageUrl);
@@ -252,6 +275,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
           void updateSclawBrowserPageState({ runtimeId: embedRuntimeId, pageUrl });
         }
         publishNavState();
+        injectNetworkCapture();
       };
 
       const onFinishLoad = () => {
@@ -291,6 +315,23 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         if (nextTitle) onPageTitleRef.current?.(nextTitle);
       };
 
+      const onConsoleMessage = (event: Event) => {
+        const detail = event as Event & {
+          level?: number;
+          message?: string;
+          sourceId?: string;
+          line?: number;
+        };
+        const message = typeof detail.message === 'string' ? detail.message : '';
+        if (!message.trim()) return;
+        onConsoleMessageRef.current?.({
+          level: typeof detail.level === 'number' ? detail.level : 3,
+          message,
+          sourceId: typeof detail.sourceId === 'string' ? detail.sourceId : undefined,
+          line: typeof detail.line === 'number' ? detail.line : undefined,
+        });
+      };
+
       el.addEventListener('dom-ready', bindAfterDomReady);
       el.addEventListener('did-navigate', onNavigate);
       el.addEventListener('did-navigate-in-page', onNavigate);
@@ -299,6 +340,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       el.addEventListener('new-window', onNewWindow);
       el.addEventListener('page-favicon-updated', onFaviconUpdated);
       el.addEventListener('page-title-updated', onTitleUpdated);
+      el.addEventListener('console-message', onConsoleMessage);
 
       window.requestAnimationFrame(() => {
         if (active && !domReady && safeGetWebContentsId(el)) {
@@ -317,6 +359,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         el.removeEventListener('new-window', onNewWindow);
         el.removeEventListener('page-favicon-updated', onFaviconUpdated);
         el.removeEventListener('page-title-updated', onTitleUpdated);
+        el.removeEventListener('console-message', onConsoleMessage);
       };
     }, [embedRuntimeId, url, active]);
 

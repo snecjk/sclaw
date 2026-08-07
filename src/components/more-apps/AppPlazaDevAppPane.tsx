@@ -165,6 +165,8 @@ function WorkbenchChatPane({
           onBeforeSend={onBeforeSend}
           showDisclaimer={false}
           footerAlign="center"
+          hideDingTalkMention
+          showInterfaceCatalog
         />
       </div>
     </div>
@@ -312,10 +314,24 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   }, [sending, workspaceId]);
 
   const handleFixErrors = () => {
-    const text = `预览出现了以下报错，请帮我修复：\n\n${pendingErrors.slice(-10).join('\n')}`;
+    const text = [
+      '下面是预览里「页面上看不到、只在后台/控制台出现」的失败信息，请据此修复：',
+      '',
+      ...pendingErrors.slice(-10),
+    ].join('\n');
     setPendingErrors([]);
     setComposerSeed((prev) => ({ text, version: (prev?.version ?? 0) + 1 }));
     setChatOpen(true);
+  };
+
+  const handlePreviewRuntimeError = (formattedLine: string) => {
+    const line = formattedLine.trim();
+    if (!line) return;
+    setPendingErrors((prev) => {
+      if (prev.includes(line)) return prev;
+      const next = [...prev, line];
+      return next.length > 20 ? next.slice(-20) : next;
+    });
   };
 
   const handleFillComposerFromDiagnostics = (text: string) => {
@@ -480,6 +496,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
             job={deploy.job}
             onOpenDialog={() => setDeployOpen(true)}
             onClearTerminalJob={deploy.clear}
+            onFillComposer={handleFillComposerFromDiagnostics}
           />
 
           <Button
@@ -520,6 +537,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           pendingErrors={pendingErrors}
           onFixErrors={handleFixErrors}
           onDismissErrors={() => setPendingErrors([])}
+          onPreviewRuntimeError={handlePreviewRuntimeError}
           onRetryStart={() => void runControl.start()}
           onFillComposerFromDiagnostics={handleFillComposerFromDiagnostics}
           sourceRevision={sourceRevision}

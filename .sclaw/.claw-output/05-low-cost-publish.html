@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>05 · 低成本发布</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            width: 1280px;
+            height: 720px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%);
+            display: flex;
+            flex-direction: column;
+            padding: 48px 60px;
+            position: relative;
+        }
+        .header {
+            margin-bottom: 32px;
+        }
+        .section-tag {
+            font-size: 13px;
+            color: #4a90d9;
+            font-weight: 600;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+        .title {
+            font-size: 32px;
+            font-weight: 700;
+            color: #1a2332;
+            line-height: 1.3;
+        }
+        .title-line {
+            width: 60px;
+            height: 4px;
+            background: linear-gradient(90deg, #4a90d9, #6ab0e8);
+            margin-top: 12px;
+            border-radius: 2px;
+        }
+        
+        .content {
+            display: flex;
+            gap: 32px;
+            flex: 1;
+        }
+        
+        .left-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .panel-card {
+            background: white;
+            border-radius: 16px;
+            padding: 28px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            border: 2px solid #e8ecf1;
+            flex: 1;
+        }
+        
+        .panel-card h3 {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1a2332;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .panel-card h3 .icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #4a90d9, #6ab0e8);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 16px;
+        }
+        
+        .feature-list {
+            list-style: none;
+            margin-top: 16px;
+        }
+        
+        .feature-list li {
+            font-size: 14px;
+            color: #4a5568;
+            line-height: 1.8;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f2f5;
+            position: relative;
+            padding-left: 28px;
+        }
+        
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+        
+        .feature-list li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #34c759;
+            font-weight: 700;
+        }
+        
+        .flow-diagram {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8fafc;
+            border-radius: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .flow-item {
+            padding: 10px 16px;
+            background: white;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #1a2332;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            border: 2px solid #e8ecf1;
+            white-space: nowrap;
+        }
+        
+        .flow-item.highlight {
+            border-color: #4a90d9;
+            background: linear-gradient(135deg, #f0f7ff, #ffffff);
+        }
+        
+        .flow-arrow {
+            color: #4a90d9;
+            font-size: 16px;
+            font-weight: 700;
+        }
+        
+        .highlight-box {
+            margin-top: 20px;
+            padding: 16px 20px;
+            background: linear-gradient(90deg, rgba(52,199,89,0.1), rgba(52,199,89,0.03));
+            border-radius: 12px;
+            border-left: 4px solid #34c759;
+        }
+        
+        .highlight-box p {
+            font-size: 14px;
+            color: #2d3a4a;
+            line-height: 1.8;
+        }
+        
+        .highlight-box strong {
+            color: #1a2332;
+        }
+        
+        .cost-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #34c759;
+            color: white;
+            font-size: 14px;
+            border-radius: 20px;
+            font-weight: 700;
+            margin-top: 12px;
+        }
+        
+        /* 页脚 */
+        .footer {
+            position: absolute;
+            bottom: 24px;
+            left: 60px;
+            right: 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .footer-left {
+            font-size: 12px;
+            color: #9aa5b3;
+        }
+        .footer-right {
+            font-size: 14px;
+            color: #9aa5b3;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="section-tag">05 · 第三步 发布应用</div>
+        <div class="title">我们的方案：零服务器成本，按访问计费</div>
+        <div class="title-line"></div>
+    </div>
+    
+    <div class="content">
+        <div class="left-panel">
+            <div class="panel-card">
+                <h3><span class="icon">🚀</span> 自动化发布流程</h3>
+                <div class="flow-diagram">
+                    <div class="flow-item highlight">代码推送</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-item">DevOps</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-item">自动构建</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-item">静态部署</div>
+                    <span class="flow-arrow">→</span>
+                    <div class="flow-item highlight">域名分配</div>
+                </div>
+                
+                <ul class="feature-list">
+                    <li>一键推送代码到 Git 仓库</li>
+                    <li>DevOps 流水线自动触发构建</li>
+                    <li>构建产物自动部署到静态托管</li>
+                    <li>域名自动分配，HTTPS 自动配置</li>
+                    <li>失败自动诊断，AI 辅助修复</li>
+                    <li>回滚到任意版本只需一键</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="right-panel">
+            <div class="panel-card">
+                <h3><span class="icon">💰</span> 我们的成本优势</h3>
+                
+                <div class="highlight-box">
+                    <p><strong>零服务器成本：</strong>采用静态托管方案，无需购买和维护服务器。无用户访问时不产生任何费用，真正实现「用多少付多少」。</p>
+                </div>
+                
+                <ul class="feature-list">
+                    <li>无需购买云服务器</li>
+                    <li>无需配置运维环境</li>
+                    <li>按访问流量计费，无访问不收费</li>
+                    <li>配合 CDN 加速，全球访问速度快</li>
+                    <li>适合低频访问的内部应用</li>
+                </ul>
+                
+                <div class="cost-badge">💰 起步成本：¥0</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="footer">
+        <div class="footer-left">应用广场 · 用户应用开发 · 周会同步</div>
+        <div class="footer-right">05</div>
+    </div>
+</body>
+</html>

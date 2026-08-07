@@ -728,13 +728,31 @@ function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
             break;
           }
           if (request.action === 'discover') {
-            const payload = request.payload as { context?: string } | undefined;
-            data = await import('../utils/sai-cli').then((m) => m.saiDiscover(payload?.context));
+            const payload = request.payload as
+              | { query?: string; context?: string; limit?: number }
+              | undefined;
+            const query = payload?.query?.trim() || payload?.context?.trim() || '';
+            data = await import('../utils/sai-cli').then((m) =>
+              m.saiDiscover(query, { limit: payload?.limit }),
+            );
             break;
           }
           if (request.action === 'list') {
-            const payload = request.payload as { product?: string; module?: string } | undefined;
-            data = await import('../utils/sai-cli').then((m) => m.saiList(payload));
+            const payload = request.payload as
+              | {
+                  product?: string;
+                  module?: string;
+                  page?: number;
+                  pageSize?: number;
+                  /** 翻页拉全量，供接口清单使用 */
+                  all?: boolean;
+                }
+              | undefined;
+            data = await import('../utils/sai-cli').then((m) =>
+              payload?.all
+                ? m.saiListAll(payload)
+                : m.saiList(payload),
+            );
             break;
           }
           if (request.action === 'execute') {

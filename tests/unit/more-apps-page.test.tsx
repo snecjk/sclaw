@@ -44,6 +44,61 @@ vi.mock('@/lib/more-apps-api', () => ({
   migrateMoreAppsRegistry: vi.fn(async (registry) => ({ migrated: true, registry })),
 }));
 
+const refreshDevAppsMock = vi.fn(async () => undefined);
+let mockDevApps: Array<{
+  workspaceId: string;
+  name: string;
+  projectType: string;
+  path: string;
+  createdAt: number;
+  updatedAt: number;
+}> = [];
+
+vi.mock('@/stores/app-dev-catalog', () => ({
+  useAppDevCatalogStore: Object.assign(
+    (selector: (state: { apps: typeof mockDevApps; refresh: typeof refreshDevAppsMock }) => unknown) =>
+      selector({ apps: mockDevApps, refresh: refreshDevAppsMock }),
+    {
+      getState: () => ({
+        apps: mockDevApps,
+        refresh: refreshDevAppsMock,
+        registerWorkspaceId: vi.fn(),
+      }),
+    },
+  ),
+}));
+
+vi.mock('@/lib/session-catalog-api', () => ({
+  pickProjectFolder: vi.fn(async () => null),
+}));
+
+vi.mock('@/lib/app-dev-api', () => ({
+  importUserApp: vi.fn(),
+}));
+
+vi.mock('@/stores/session-catalog', () => ({
+  useSessionCatalogStore: Object.assign(
+    (selector: (state: { refreshWorkspaces: () => Promise<void> }) => unknown) =>
+      selector({ refreshWorkspaces: vi.fn(async () => undefined) }),
+    {
+      getState: () => ({
+        refreshWorkspaces: vi.fn(async () => undefined),
+      }),
+    },
+  ),
+}));
+
+vi.mock('@/stores/app-plaza-shell', () => ({
+  useAppPlazaShellStore: Object.assign(
+    () => ({}),
+    {
+      getState: () => ({
+        openOrFocusDevAppTab: vi.fn(),
+      }),
+    },
+  ),
+}));
+
 import { MoreAppsPage } from '@/components/more-apps/MoreAppsPage';
 import { useMoreAppsStore } from '@/stores/more-apps';
 
@@ -94,6 +149,8 @@ describe('MoreAppsPage server catalog', () => {
   beforeEach(() => {
     localStorage.clear();
     resetStore();
+    mockDevApps = [];
+    refreshDevAppsMock.mockReset().mockResolvedValue(undefined);
     openInSclawBrowserMock.mockReset();
     fetchSkipLoginLinkMock.mockReset();
     hasStoPolicyAuthInEmbedSessionMock.mockReset().mockResolvedValue(false);
@@ -549,6 +606,7 @@ describe('MoreAppsPage server catalog', () => {
     expect(screen.getByRole('button', { name: '精选' })).toHaveTextContent('精选13');
     expect(screen.getByRole('tab', { name: '应用广场' })).toHaveTextContent(/^应用广场$/);
     expect(screen.getByRole('tab', { name: '我的应用' })).toHaveTextContent(/^我的应用$/);
+    expect(screen.getByRole('tab', { name: '开发应用' })).toHaveTextContent(/^开发应用$/);
   });
 
   it('shows the app link in my apps when a favorited server app has no recent usage', async () => {
@@ -610,6 +668,35 @@ describe('MoreAppsPage server catalog', () => {
     expect(await screen.findByRole('tab', { name: '我的应用' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('tab', { name: '我的应用' }));
     expect(screen.getByText('还没有收藏或安装应用，去应用广场看看')).toBeInTheDocument();
+  });
+
+  it('keeps developing apps on a dedicated tab instead of 我的应用', async () => {
+    mockDevApps = [{
+      workspaceId: 'ws-dev-1',
+      name: 'test-app080503',
+      projectType: 'react-a2ui',
+      path: '/tmp/test-app080503',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }];
+    fetchRegistryMock.mockResolvedValueOnce({
+      version: 1,
+      externalApps: [],
+      installedIds: [],
+      favoriteIds: ['org-relation'],
+    });
+
+    render(<MoreAppsPage />);
+    expect(await screen.findByRole('tab', { name: '开发应用' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '我的应用' }));
+    expect(screen.getByText('客户关系')).toBeInTheDocument();
+    expect(screen.queryByText('test-app080503')).not.toBeInTheDocument();
+    expect(screen.queryByText('开发应用', { selector: 'h2' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: '开发应用' }));
+    expect(screen.getByText('test-app080503')).toBeInTheDocument();
+    expect(screen.queryByText('客户关系')).not.toBeInTheDocument();
   });
 
   it('keeps the APP list available when banners fail', async () => {

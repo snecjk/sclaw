@@ -54,7 +54,7 @@ export interface AppItem {
   order?: number;
 }
 
-export type MoreAppsTab = 'market' | 'installed';
+export type MoreAppsTab = 'market' | 'installed' | 'dev-apps';
 
 export type MoreAppsSortMode = 'default' | 'name';
 

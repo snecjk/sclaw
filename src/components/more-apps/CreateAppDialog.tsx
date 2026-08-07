@@ -57,7 +57,7 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
       const result = await createUserApp({
         name: trimmed,
         parentDir: parentDir || undefined,
-        projectType,
+        projectType: projectType === 'fullstack' ? 'frontend' : projectType,
       });
       useAppDevCatalogStore.getState().registerWorkspaceId(result.workspaceId);
       await useSessionCatalogStore.getState().refreshWorkspaces().catch(() => undefined);
@@ -71,9 +71,19 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
     }
   };
 
-  const typeOptions: Array<{ value: ProjectType; label: string; hint: string }> = [
+  const typeOptions: Array<{
+    value: ProjectType;
+    label: string;
+    hint: string;
+    disabled?: boolean;
+  }> = [
     { value: 'frontend', label: '前端应用', hint: '页面应用，创建后立即可预览' },
-    { value: 'fullstack', label: '前端 + 后端', hint: '后端能力即将开放，会先为你预留目录' },
+    {
+      value: 'fullstack',
+      label: '前端 + 后端',
+      hint: '后端能力即将开放，会先为你预留目录',
+      disabled: true,
+    },
   ];
 
   return createPortal(
@@ -104,22 +114,40 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
 
         <label className="mb-2 block text-sm font-medium text-foreground">应用类型</label>
         <div className="mb-5 grid grid-cols-2 gap-2">
-          {typeOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setProjectType(option.value)}
-              className={cn(
-                'rounded-xl border px-3 py-3 text-left transition-colors',
-                projectType === option.value
-                  ? 'border-[var(--sto-brand-6)] bg-[var(--sto-brand-6)]/5'
-                  : 'border-border bg-muted/40 hover:bg-muted',
-              )}
-            >
-              <span className="block text-sm font-medium text-foreground">{option.label}</span>
-              <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{option.hint}</span>
-            </button>
-          ))}
+          {typeOptions.map((option) => {
+            const selected = !option.disabled && projectType === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                disabled={option.disabled}
+                aria-disabled={option.disabled || undefined}
+                title={option.disabled ? '即将开放' : undefined}
+                onClick={() => {
+                  if (option.disabled) return;
+                  setProjectType(option.value);
+                }}
+                className={cn(
+                  'rounded-xl border px-3 py-3 text-left transition-colors',
+                  option.disabled && 'cursor-not-allowed border-border/70 bg-muted/30 opacity-50',
+                  !option.disabled && selected && 'border-[var(--sto-brand-6)] bg-[var(--sto-brand-6)]/5',
+                  !option.disabled && !selected && 'border-border bg-muted/40 hover:bg-muted',
+                )}
+              >
+                <span
+                  className={cn(
+                    'block text-sm font-medium',
+                    option.disabled ? 'text-muted-foreground' : 'text-foreground',
+                  )}
+                >
+                  {option.label}
+                </span>
+                <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
+                  {option.hint}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         <label className="mb-2 block text-sm font-medium text-foreground">存放位置</label>

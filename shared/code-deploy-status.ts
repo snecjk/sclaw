@@ -134,9 +134,13 @@ export function pickCodeDeployFields(data: unknown): CodeDeployRecordFields {
 }
 
 /** Prompt seeded into the app-dev chat composer when deploy ends in FAILED/CANCELLED. */
-export function formatCodeDeployFailurePrompt(fields: CodeDeployRecordFields): string {
+export function formatCodeDeployFailurePrompt(
+  fields: CodeDeployRecordFields,
+  options?: { fallbackMessage?: string },
+): string {
   const status = normalizeCodeDeployStatus(fields.status) || 'FAILED';
   const label = codeDeployStatusLabel(status);
+  const failureMessage = fields.failureMessage || options?.fallbackMessage?.trim() || undefined;
   const lines = [
     '应用发布失败，请帮我分析原因并修复后重新发布。',
     '',
@@ -147,7 +151,7 @@ export function formatCodeDeployFailurePrompt(fields: CodeDeployRecordFields): s
   if (fields.applicationId) lines.push(`applicationId：${fields.applicationId}`);
   if (fields.pipelineInstanceId) lines.push(`流水线实例：${fields.pipelineInstanceId}`);
   if (fields.failureStage) lines.push(`失败阶段：${fields.failureStage}`);
-  if (fields.failureMessage) lines.push(`失败原因：${fields.failureMessage}`);
+  if (failureMessage) lines.push(`失败原因：${failureMessage}`);
   lines.push('', '请先定位是代码/构建配置问题还是流水线配置问题，给出可执行的修复建议。');
   return lines.join('\n');
 }

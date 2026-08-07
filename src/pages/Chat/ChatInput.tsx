@@ -23,6 +23,7 @@ import {
   Workflow,
   ArrowUp,
   Wrench,
+  ListTree,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { hostApiFetch } from '@/lib/host-api';
@@ -45,6 +46,7 @@ import { DingTalkMentionEditor, type DingTalkMentionEditorHandle } from '@/compo
 import { DingTalkMentionPopover } from '@/components/dingtalk/DingTalkMentionPopover';
 import { WorkflowPicker } from '@/components/workflow/WorkflowPicker';
 import { SkillPicker } from '@/components/skill-plaza/SkillPicker';
+import { AppDevInterfaceCatalogPicker } from '@/components/app-dev/AppDevInterfaceCatalogPicker';
 
 import { useDingTalkMention } from '@/hooks/useDingTalkMention';
 
@@ -128,6 +130,10 @@ interface ChatInputProps {
   composerLayout?: 'default' | 'home';
   /** 首页工具栏右侧：内联 ChatEngineSelector / ChatModelSelector */
   toolbarInlineSelectors?: ReactNode;
+  /** 应用开发工作台：隐藏钉钉 @ 提及按钮 */
+  hideDingTalkMention?: boolean;
+  /** 应用开发工作台：展示「接口清单」（sai-cli list 缓存） */
+  showInterfaceCatalog?: boolean;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -193,6 +199,8 @@ export function ChatInput({
   className,
   composerLayout = 'default',
   toolbarInlineSelectors,
+  hideDingTalkMention = false,
+  showInterfaceCatalog = false,
 }: ChatInputProps) {
   const { t } = useTranslation('chat');
   const [composerSnapshot, setComposerSnapshot] = useState<MentionComposerSnapshot>({
@@ -204,6 +212,7 @@ export function ChatInput({
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
   const [targetAgentId, setTargetAgentId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [interfaceCatalogOpen, setInterfaceCatalogOpen] = useState(false);
   const mentionEditorRef = useRef<DingTalkMentionEditorHandle>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const mentionPopoverRef = useRef<HTMLDivElement>(null);
@@ -211,6 +220,8 @@ export function ChatInput({
   const workflowButtonRef = useRef<HTMLButtonElement>(null);
   const skillPickerRef = useRef<HTMLDivElement>(null);
   const skillButtonRef = useRef<HTMLButtonElement>(null);
+  const interfaceCatalogRef = useRef<HTMLDivElement>(null);
+  const interfaceCatalogButtonRef = useRef<HTMLButtonElement>(null);
   const isComposingRef = useRef(false);
   const [workflowPickerOpen, setWorkflowPickerOpen] = useState(false);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
@@ -378,6 +389,28 @@ export function ChatInput({
       document.removeEventListener('mousedown', handlePointerDown);
     };
   }, [skillPickerMode, skillPickerOpen]);
+
+  useEffect(() => {
+    if (!interfaceCatalogOpen) return;
+    let removeListener: (() => void) | null = null;
+    // 推迟绑定，避免打开按钮的同一次点击被当成「点外部」立刻关掉
+    const timer = window.setTimeout(() => {
+      const handlePointerDown = (event: MouseEvent) => {
+        const target = event.target as Node;
+        if (interfaceCatalogRef.current?.contains(target)) return;
+        if (interfaceCatalogButtonRef.current?.contains(target)) return;
+        setInterfaceCatalogOpen(false);
+      };
+      document.addEventListener('mousedown', handlePointerDown, true);
+      removeListener = () => {
+        document.removeEventListener('mousedown', handlePointerDown, true);
+      };
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      removeListener?.();
+    };
+  }, [interfaceCatalogOpen]);
 
   // 暂时关闭 `*` 触发技能列表；恢复时取消下方注释
   // useEffect(() => {
@@ -956,7 +989,10 @@ export function ChatInput({
           </div>
 
           {isHomeComposer ? (
-            <div className="relative flex shrink-0 items-center justify-between gap-2 px-4 pb-3 pt-1">
+            <div
+              data-composer-toolbar="true"
+              className="relative flex shrink-0 items-center justify-between gap-2 px-4 pb-3 pt-1"
+            >
               <div className="flex shrink-0 items-center gap-2">
                 <Button
                   variant="ghost"
@@ -969,16 +1005,38 @@ export function ChatInput({
                   <Paperclip className="h-4 w-4" aria-hidden />
                 </Button>
 
-                <Button
-                  variant="ghost"
-                  type="button"
-                  className={homeToolbarIconBtn}
-                  onClick={handleOpenDingTalkMention}
-                  disabled={disabled}
-                  title={t('composer.dingTalkMention')}
-                >
-                  <AtSign className="h-4 w-4" aria-hidden />
-                </Button>
+                {hideDingTalkMention ? null : (
+                  <Button
+                    variant="ghost"
+                    type="button"
+                    className={homeToolbarIconBtn}
+                    onClick={handleOpenDingTalkMention}
+                    disabled={disabled}
+                    title={t('composer.dingTalkMention')}
+                  >
+                    <AtSign className="h-4 w-4" aria-hidden />
+                  </Button>
+                )}
+
+                {showInterfaceCatalog ? (
+                  <Button
+                    ref={interfaceCatalogButtonRef}
+                    variant="ghost"
+                    type="button"
+                    className={cn(
+                      homeToolbarIconBtn,
+                      interfaceCatalogOpen && 'bg-primary/10 text-primary hover:bg-primary/12',
+                    )}
+                    onClick={() => {
+                      mentionEditorRef.current?.rememberCaret();
+                      setInterfaceCatalogOpen((open) => !open);
+                    }}
+                    disabled={disabled}
+                    title="接口清单"
+                  >
+                    <ListTree className="h-4 w-4" aria-hidden />
+                  </Button>
+                ) : null}
 
                 <Button
                   ref={skillButtonRef}
@@ -1094,6 +1152,20 @@ export function ChatInput({
                   </Button>
                 )}
               </div>
+
+              {showInterfaceCatalog ? (
+                <AppDevInterfaceCatalogPicker
+                  ref={interfaceCatalogRef}
+                  open={interfaceCatalogOpen}
+                  anchorRef={interfaceCatalogButtonRef}
+                  onClose={() => setInterfaceCatalogOpen(false)}
+                  onSelect={(item) => {
+                    mentionEditorRef.current?.insertSaiInterface(item.path, item.name);
+                    setInterfaceCatalogOpen(false);
+                    mentionEditorRef.current?.focus();
+                  }}
+                />
+              ) : null}
 
               <WorkflowPicker
                 ref={workflowPickerRef}

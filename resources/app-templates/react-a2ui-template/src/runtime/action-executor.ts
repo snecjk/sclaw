@@ -1,3 +1,5 @@
+import { request, RequestError } from '@/lib/request';
+
 export type A2uiMessage = Record<string, unknown>;
 
 export type ActionDefinition = {
@@ -5,6 +7,7 @@ export type ActionDefinition = {
   title?: string;
   description?: string;
   method?: string;
+  /** Prefer relative `/proxy/<key>/...` (dev: Vite proxy; prod: request.ts → absolute target). */
   url?: string;
   mockResponse?: unknown;
 };
@@ -86,29 +89,22 @@ export async function executeAction(
 
   try {
     const method = (def.method ?? 'GET').toUpperCase();
-    const init: RequestInit = { method, headers: { Accept: 'application/json' } };
-    if (method !== 'GET' && method !== 'HEAD') {
-      init.headers = { ...init.headers, 'Content-Type': 'application/json' };
-      init.body = JSON.stringify(payload.context ?? {});
-    }
-    const response = await fetch(url, init);
-    const text = await response.text();
-    let data: unknown = text;
-    try {
-      data = text ? JSON.parse(text) : null;
-    } catch {
-      // keep text
-    }
-    if (!response.ok) {
+    const data =
+      method === 'GET' || method === 'HEAD' ? undefined : (payload.context ?? {});
+    const result = await request(url, {
+      method: method as 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+      data,
+    });
+    return { actionId, ok: true, data: result };
+  } catch (err) {
+    if (err instanceof RequestError) {
       return {
         actionId,
         ok: false,
-        error: `HTTP ${response.status}`,
-        data,
+        error: err.message || `HTTP ${err.status}`,
+        data: err.payload,
       };
     }
-    return { actionId, ok: true, data };
-  } catch (err) {
     return {
       actionId,
       ok: false,

@@ -41,7 +41,10 @@ import {
 
 /** Remote React A2UI template (OSS). Unpackaged/dev prefers local checkout. */
 const REACT_TEMPLATE_ZIP_URL =
-  'http://ali-sto-tps.oss-cn-shanghai.aliyuncs.com/D935F6FF-BB2D-49-react-a2ui-template.zip';
+  'http://ali-sto-tps.oss-cn-shanghai.aliyuncs.com/54693265-EFAE-4C-react-a2ui-template.zip';
+
+/** TEMP debug: always scaffold from local checkout; skip OSS download/cache. Flip to false before release. */
+const FORCE_LOCAL_REACT_TEMPLATE = true;
 
 export interface AppDevStatus {
   workspaceId: string;
@@ -119,6 +122,18 @@ function buildAppDevAgentsContextBlock(vars: { name: string }): string {
 - 新功能或跨模块改动：先读 \`openspec/skills/\`，再按 OpenSpec（proposal → design → specs → tasks → apply）推进
 - 保持页面简洁可用；改动后用简短中文说明「改了什么、用户会看到什么」
 - 不要提交密钥到代码里；鉴权方式以接口文档为准
+
+## 自然语言建页与接口（强制）
+- 用户用自然语言生成页面时：若页面**需要调业务接口**（查询/列表/看板取数等），且用户**尚未指定**要用的 sai-cli 指令或接口：
+  - **先引导用户指定 CLI 接口**，再生成并绑定真实取数；未指定前不要臆造 URL / 命令路径去接真接口
+  - 引导话术示例：「这个页面需要接业务数据。请告诉我要用哪条 sai-cli 指令（例如：一口价运费查询），指定后我再按该指令的参数和字段生成搜索/列表。」
+  - 若用户说不清命令名，可协助执行 \`sai-cli discover "<业务词>"\`，把结果列出来**请用户指定一条**；仍以用户指定为准
+- 用户已指定 CLI 后：\`sai-cli help\` → 若有绝对 HTTP 地址，先执行 \`node scripts/ensure-dev-proxy.mjs "<绝对URL>"\`，把输出的 \`relativeUrl\`（\`/proxy/<key>/...\`）写入 action-registry 或页面；**禁止**页面直连 \`https://*.sto.cn\`（本地 CORS）
+- 取数约定：代码里统一写 \`/proxy/<key>/...\`；**开发**由 Vite proxy 转发，**生产**由 \`src/lib/request.ts\` 按 \`contracts/dev-proxy.v1.json\` 还原为真实域名（禁止把 \`/proxy\` 当生产静态路径）
+- 预览出现 CORS/直连失败：对报错 URL 再跑 ensure-dev-proxy，改 url 为 relativeUrl，并重启预览
+- 生产 Network 若仍请求 \`https://page-*.sto.cn/proxy/...\`：检查是否未走 request 封装或缺 proxy 合约 key
+- 用户明确只要布局、先不接真接口：可用 mock 出页，并说明稍后指定 CLI 再接入
+- 详细步骤见 \`openspec/skills/nl-page-from-sai/SKILL.md\`（若已启用）
 <!-- /sclaw-app-dev-context -->`;
 }
 
@@ -192,6 +207,7 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
 
   await writeAppDevBootstrap(appPath, { name, projectType });
   await ensureAppOpenspecScaffold(appPath);
+  await ensureDefaultAppDevAssistSkills(appPath);
   // Refresh already-enabled package skills from updated catalog copy.
   try {
     const skillsDir = join(appPath, 'openspec', 'skills');
@@ -199,7 +215,8 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
     if (existsSync(skillsDir)) {
       const entries = await readdir(skillsDir, { withFileTypes: true });
       for (const entry of entries) {
-        if (!entry.isDirectory() || !entry.name.startsWith('pkg-')) continue;
+        if (!entry.isDirectory()) continue;
+        if (!entry.name.startsWith('pkg-') && entry.name !== 'nl-page-from-sai') continue;
         const src = join(catalogRoot, entry.name);
         if (existsSync(join(src, 'SKILL.md'))) {
           await cp(src, join(skillsDir, entry.name), { recursive: true });
@@ -212,20 +229,32 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
   }
 }
 
-function bundledTemplateDir(): string | null {
-  // Local checkout only — packaged builds must not rely on bundled app-templates.
-  if (app.isPackaged) return null;
-  return join(process.cwd(), 'resources', 'app-templates', 'react-a2ui-template');
-}
-
-function cachedTemplateDir(): string {
-  return join(app.getPath('userData'), 'app-templates', 'react-a2ui-template');
-}
-
 /** Single-package (root package.json + src) or legacy monorepo (frontend/package.json). */
 function isValidReactTemplate(dir: string): boolean {
   if (existsSync(join(dir, 'frontend', 'package.json'))) return true;
   return existsSync(join(dir, 'package.json')) && existsSync(join(dir, 'src'));
+}
+
+function resolveLocalReactTemplateDir(): string | null {
+  const candidates = [
+    join(process.cwd(), 'resources', 'app-templates', 'react-a2ui-template'),
+    join(app.getAppPath(), 'resources', 'app-templates', 'react-a2ui-template'),
+  ];
+  for (const dir of candidates) {
+    if (isValidReactTemplate(dir)) return dir;
+  }
+  return null;
+}
+
+function bundledTemplateDir(): string | null {
+  // Local checkout only — packaged builds must not rely on bundled app-templates,
+  // unless FORCE_LOCAL_REACT_TEMPLATE is on for debugging.
+  if (!FORCE_LOCAL_REACT_TEMPLATE && app.isPackaged) return null;
+  return resolveLocalReactTemplateDir();
+}
+
+function cachedTemplateDir(): string {
+  return join(app.getPath('userData'), 'app-templates', 'react-a2ui-template');
 }
 
 /** npm / vite cwd for a user app (root package or legacy frontend/). */
@@ -242,6 +271,10 @@ function templateMetaPath(dir: string): string {
 
 /** Sync path for OpenSpec helpers: prefer OSS cache, then local checkout (dev only). */
 function templateDir(): string {
+  if (FORCE_LOCAL_REACT_TEMPLATE) {
+    const local = resolveLocalReactTemplateDir();
+    if (local) return local;
+  }
   const cached = cachedTemplateDir();
   if (isValidReactTemplate(cached)) return cached;
   const bundled = bundledTemplateDir();
@@ -278,6 +311,15 @@ async function ensureReactTemplateDir(): Promise<string> {
 
   ensureTemplatePromise = (async () => {
     const bundled = bundledTemplateDir();
+    if (FORCE_LOCAL_REACT_TEMPLATE) {
+      if (bundled) {
+        logger.info(`[app-dev] FORCE_LOCAL_REACT_TEMPLATE using local dir=${bundled}`);
+        return bundled;
+      }
+      throw new Error(
+        'FORCE_LOCAL_REACT_TEMPLATE 已开启，但未找到本地模板 resources/app-templates/react-a2ui-template',
+      );
+    }
     if (!app.isPackaged && bundled && isValidReactTemplate(bundled)) {
       logger.info(`[app-dev] using local A2UI template dir=${bundled}`);
       return bundled;
@@ -484,14 +526,10 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
     logger.warn(`[app-dev] sto-app create skipped name=${name} appPath=${appPath}:`, err);
   }
 
-  // Ensure openspec exists even if an older template missed it; bake OpenSpec skill.
+  // Ensure openspec exists even if an older template missed it; bake default assist skills.
   try {
     await ensureAppOpenspecScaffold(appPath);
-    if (!existsSync(join(appPath, 'openspec', 'skills', 'openspec', 'SKILL.md'))) {
-      await installAppDevAssistSkill(appPath, 'openspec');
-    } else {
-      await syncOpenspecSkillsIntoAgents(appPath);
-    }
+    await ensureDefaultAppDevAssistSkills(appPath);
   } catch (err) {
     logger.warn('[app-dev] openspec scaffold skipped:', err);
   }
@@ -582,11 +620,7 @@ export async function importUserApp(input: {
   });
   try {
     await ensureAppOpenspecScaffold(appPath);
-    if (!existsSync(join(appPath, 'openspec', 'skills', 'openspec', 'SKILL.md'))) {
-      await installAppDevAssistSkill(appPath, 'openspec');
-    } else {
-      await syncOpenspecSkillsIntoAgents(appPath);
-    }
+    await ensureDefaultAppDevAssistSkills(appPath);
   } catch (err) {
     logger.warn(`[app-dev] openspec scaffold on import skipped appPath=${appPath}:`, err);
   }
@@ -736,6 +770,7 @@ export async function cloneDevApp(input: {
 
   try {
     await ensureAppOpenspecScaffold(appPath);
+    await ensureDefaultAppDevAssistSkills(appPath);
   } catch (err) {
     logger.warn('[app-dev] openspec scaffold after clone skipped:', err);
   }
@@ -1539,6 +1574,21 @@ export async function listAppDevAssistSkills(appPath: string): Promise<AppDevAss
         installed: existsSync(join(installedDir, id, 'SKILL.md')),
       };
     });
+}
+
+/** Bake default assist skills into a user app (idempotent). */
+async function ensureDefaultAppDevAssistSkills(appPath: string): Promise<void> {
+  const defaults = ['openspec', 'nl-page-from-sai'] as const;
+  for (const skillId of defaults) {
+    const installed = join(appPath, 'openspec', 'skills', skillId, 'SKILL.md');
+    if (existsSync(installed)) continue;
+    const catalogSkill = join(appOpenspecCatalogRoot(appPath), skillId, 'SKILL.md');
+    if (!existsSync(catalogSkill)) continue;
+    await installAppDevAssistSkill(appPath, skillId);
+  }
+  if (existsSync(join(appPath, 'openspec', 'skills', 'openspec', 'SKILL.md'))) {
+    await syncOpenspecSkillsIntoAgents(appPath);
+  }
 }
 
 /** Enable a catalog skill into the app's openspec/skills/<id> (same app tree). */

@@ -68,6 +68,10 @@ export interface HomeComposerProps {
   footerAlign?: 'center' | 'right';
   /** 新对话落地页：输入框下展示「进入项目工作」选择条 */
   showProjectPicker?: boolean;
+  /** 应用开发工作台：隐藏 @ */
+  hideDingTalkMention?: boolean;
+  /** 应用开发工作台：接口清单 */
+  showInterfaceCatalog?: boolean;
 }
 
 export function HomeComposer({
@@ -83,6 +87,8 @@ export function HomeComposer({
   showDisclaimer = true,
   footerAlign = 'center',
   showProjectPicker = false,
+  hideDingTalkMention = false,
+  showInterfaceCatalog = false,
 }: HomeComposerProps) {
   const { t } = useTranslation('home');
   const agents = useAgentsStore((s) => s.agents);
@@ -163,6 +169,8 @@ export function HomeComposer({
               composerLayout="home"
               toolbarInlineSelectors={inlineToolbarSelectors}
               engineType={resolvedEngineType}
+              hideDingTalkMention={hideDingTalkMention}
+              showInterfaceCatalog={showInterfaceCatalog}
             />
             <HomeProjectWorkPicker />
           </div>
@@ -172,6 +180,8 @@ export function HomeComposer({
             composerLayout="home"
             toolbarInlineSelectors={inlineToolbarSelectors}
             engineType={resolvedEngineType}
+            hideDingTalkMention={hideDingTalkMention}
+            showInterfaceCatalog={showInterfaceCatalog}
           />
         )}
       </section>

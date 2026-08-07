@@ -11,6 +11,11 @@
       "description": "优先阅读 docs/api，校验接口调用与字段契约，避免臆造 URL 与字段。"
     },
     {
+      "id": "nl-page-from-sai",
+      "name": "自然语言建页（指定 CLI 接口）",
+      "description": "建页需接口时引导指定 sai-cli；help 后 ensure-dev-proxy；代码写 /proxy/<key>，生产由 request 还原真实域名。"
+    },
+    {
       "id": "ui-checklist",
       "name": "UI 验收清单",
       "description": "页面改动后的浅色/深色、加载/空态/错误态验收清单。"

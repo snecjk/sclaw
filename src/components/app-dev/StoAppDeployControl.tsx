@@ -6,13 +6,26 @@ import {
   isStoAppDeployRunning,
   type StoAppDeployJob,
 } from '@/hooks/use-sto-app-deploy';
-import { codeDeployStatusLabel } from '../../../shared/code-deploy-status';
+import {
+  codeDeployStatusLabel,
+  formatCodeDeployFailurePrompt,
+} from '../../../shared/code-deploy-status';
 
 interface StoAppDeployControlProps {
   canDeploy: boolean;
   job: StoAppDeployJob | null;
   onOpenDialog: () => void;
   onClearTerminalJob?: () => void;
+  /** One-click fill the latest failure/timeout details into the AI composer. */
+  onFillComposer?: (text: string) => void;
+}
+
+export function resolveStoAppDeployAskAiPrompt(job: StoAppDeployJob): string {
+  const trimmedPrompt = job.prompt?.trim();
+  if (trimmedPrompt) return trimmedPrompt;
+  return formatCodeDeployFailurePrompt(job.fields, {
+    fallbackMessage: job.error || job.label,
+  });
 }
 
 export function StoAppDeployControl({
@@ -20,6 +33,7 @@ export function StoAppDeployControl({
   job,
   onOpenDialog,
   onClearTerminalJob,
+  onFillComposer,
 }: StoAppDeployControlProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -141,7 +155,24 @@ export function StoAppDeployControl({
           </dl>
 
           {!running ? (
-            <div className="mt-3 flex justify-end gap-2">
+            <div className="mt-3 flex flex-wrap justify-end gap-2">
+              {onFillComposer
+                && (job.phase === 'failed' || job.phase === 'error' || job.phase === 'timeout')
+                ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      onFillComposer(resolveStoAppDeployAskAiPrompt(job));
+                      setPanelOpen(false);
+                    }}
+                  >
+                    填入 AI 会话
+                  </Button>
+                )
+                : null}
               {canDeploy ? (
                 <Button
                   type="button"

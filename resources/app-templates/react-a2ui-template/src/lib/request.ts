@@ -1,4 +1,6 @@
 import { captureStoTokenFromUrl, getStoToken } from './auth-token';
+import { proxiesFromContract, resolveApiUrl } from './resolve-api-url';
+import devProxyContract from '../../contracts/dev-proxy.v1.json';
 
 export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -30,6 +32,8 @@ export class RequestError extends Error {
   }
 }
 
+const DEV_PROXIES = proxiesFromContract(devProxyContract);
+
 function buildUrl(url: string, params?: RequestOptions['params']): string {
   if (!params) return url;
   const base = url.startsWith('http') ? new URL(url) : new URL(url, window.location.origin);
@@ -54,6 +58,7 @@ function resolveStoToken(explicit?: string | null): string | null {
  * Browser fetch wrapper:
  * - credentials include cookies by default
  * - URL / session stoToken written to `stoToken` + `stotoken` headers
+ * - `/proxy/<key>/...` kept in DEV (Vite); rewritten to absolute target in PROD
  */
 export async function request<T = unknown>(
   url: string,
@@ -94,8 +99,12 @@ export async function request<T = unknown>(
   const onAbort = () => controller.abort();
   signal?.addEventListener('abort', onAbort);
 
+  const envResolved = resolveApiUrl(url, { proxies: DEV_PROXIES });
+  const resolvedUrl = buildUrl(envResolved, params);
+  const isAbsoluteHttp = /^https?:\/\//i.test(resolvedUrl);
+
   try {
-    const response = await fetch(buildUrl(url, params), {
+    const response = await fetch(resolvedUrl, {
       ...rest,
       method,
       headers,
@@ -114,10 +123,20 @@ export async function request<T = unknown>(
         payload && typeof payload === 'object' && 'message' in payload
           ? String((payload as { message?: unknown }).message ?? response.statusText)
           : response.statusText || `HTTP ${response.status}`;
+      // eslint-disable-next-line no-console -- surfaced to SClaw preview error banner via console-message
+      console.error(`[sclaw-app-request] ${method} ${resolvedUrl} HTTP ${response.status}: ${message}`);
       throw new RequestError(message, response.status, payload);
     }
 
     return payload as T;
+  } catch (err) {
+    if (!(err instanceof RequestError)) {
+      const detail = err instanceof Error ? err.message : String(err);
+      const tag = isAbsoluteHttp ? 'CORS_OR_NETWORK' : 'NETWORK';
+      // eslint-disable-next-line no-console -- surfaced to SClaw preview error banner via console-message
+      console.error(`[sclaw-app-request] ${tag} ${method} ${resolvedUrl} failed: ${detail}`);
+    }
+    throw err;
   } finally {
     window.clearTimeout(timer);
     signal?.removeEventListener('abort', onAbort);

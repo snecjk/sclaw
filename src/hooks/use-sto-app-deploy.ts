@@ -8,6 +8,7 @@ import {
 } from '@/lib/sto-app-deploy-flow';
 import {
   codeDeployStatusLabel,
+  formatCodeDeployFailurePrompt,
   type CodeDeployRecordFields,
 } from '../../shared/code-deploy-status';
 
@@ -134,14 +135,18 @@ export function useStoAppDeploy(input: {
         if (runId !== runIdRef.current) return;
         await refreshSto();
         const message = error instanceof Error ? error.message : '发布失败';
+        const fields = { env: opts.env, applicationId: input.applicationId };
+        const prompt = formatCodeDeployFailurePrompt(fields, { fallbackMessage: message });
         setJob({
           phase: 'error',
           label: message,
-          fields: { env: opts.env, applicationId: input.applicationId },
+          fields,
           startedAt: Date.now(),
           error: message,
+          prompt,
         });
         toast.error(message);
+        input.onFailedPrompt?.(prompt);
       }
     })();
   };

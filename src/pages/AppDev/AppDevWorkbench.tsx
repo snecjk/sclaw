@@ -378,13 +378,13 @@ export default function AppDevWorkbench() {
         <button
           type="button"
           onClick={() => {
-            useMoreAppsStore.getState().setActiveTab('installed');
+            useMoreAppsStore.getState().setActiveTab('dev-apps');
             navigate('/more-apps');
           }}
           className="flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
-          我的应用
+          开发应用
         </button>
         <div className="h-4 w-px bg-border" aria-hidden />
         <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{appName}</h1>
@@ -452,6 +452,7 @@ export default function AppDevWorkbench() {
           job={deploy.job}
           onOpenDialog={() => setDeployOpen(true)}
           onClearTerminalJob={deploy.clear}
+          onFillComposer={handleFillComposerFromDiagnostics}
         />
 
         <Button

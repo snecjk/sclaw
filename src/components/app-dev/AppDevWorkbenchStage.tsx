@@ -42,8 +42,17 @@ import {
   type AppSourceFileEntry,
   type AppSourceSearchHit,
 } from '@/lib/app-dev-api';
+import {
+  injectAppDevPreviewStoToken,
+  stripAppDevPreviewStoToken,
+} from '@/lib/app-dev-preview-url';
+import {
+  formatHiddenPreviewFailureForAgent,
+  isHiddenPreviewFailureMessage,
+} from '@/lib/app-dev-preview-console';
 import { openExternalUrl } from '@/lib/preview-url';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/stores/auth';
 import '@/components/more-apps/app-plaza-shell.css';
 import '@/components/sclaw-browser/sclaw-browser-overlay.css';
 
@@ -75,6 +84,8 @@ interface AppDevWorkbenchStageProps {
   pendingErrors: string[];
   onFixErrors: () => void;
   onDismissErrors: () => void;
+  /** Preview guest console / network errors worth fixing. */
+  onPreviewRuntimeError?: (formattedLine: string) => void;
   onRetryStart: () => void;
   /** Monaco diagnostics → fill chat composer (no auto-send). */
   onFillComposerFromDiagnostics?: (text: string) => void;
@@ -98,6 +109,7 @@ export function AppDevWorkbenchStage({
   pendingErrors,
   onFixErrors,
   onDismissErrors,
+  onPreviewRuntimeError,
   onRetryStart,
   onFillComposerFromDiagnostics,
   sourceRevision = 0,
@@ -135,14 +147,18 @@ export function AppDevWorkbenchStage({
    */
   const [previewMountUrl, setPreviewMountUrl] = useState('');
   const [previewReloadNonce, setPreviewReloadNonce] = useState(0);
+  const stoToken = useAuthStore((s) => s.user?.stoToken?.trim() ?? '');
+
+  const withPreviewAuth = (url: string) => injectAppDevPreviewStoToken(url, stoToken);
 
   useEffect(() => {
     const next = status?.previewUrl ?? '';
-    setPreviewAddress(next);
-    setPreviewMountUrl(next);
+    // Address bar shows a clean URL; mount URL carries stoToken for the app template.
+    setPreviewAddress(stripAppDevPreviewStoToken(next) || next);
+    setPreviewMountUrl(withPreviewAuth(next));
     setPreviewCanGoBack(false);
     setPreviewReloadNonce(0);
-  }, [status?.previewUrl]);
+  }, [status?.previewUrl, stoToken]);
 
   useEffect(() => {
     openPathsRef.current = new Set(tabs.map((t) => t.path));
@@ -232,9 +248,11 @@ export function AppDevWorkbenchStage({
       previewFrameRef.current?.reload();
       return;
     }
-    // Remount at the current URL (including hash) so soft SPA reloads cannot no-op.
-    setPreviewMountUrl(current);
-    setPreviewAddress(current);
+    // Remount with a fresh stoToken so sessionStorage capture runs again if needed.
+    const base = stripAppDevPreviewStoToken(current) || current;
+    const authed = withPreviewAuth(base);
+    setPreviewMountUrl(authed);
+    setPreviewAddress(base);
     setPreviewCanGoBack(false);
     setPreviewReloadNonce((value) => value + 1);
   };
@@ -242,11 +260,19 @@ export function AppDevWorkbenchStage({
   const commitPreviewAddress = () => {
     const next = previewAddress.trim();
     if (!next) {
-      setPreviewAddress(previewMountUrl || status?.previewUrl || '');
+      setPreviewAddress(
+        stripAppDevPreviewStoToken(previewMountUrl || status?.previewUrl || '')
+          || previewMountUrl
+          || status?.previewUrl
+          || '',
+      );
       return;
     }
-    setPreviewMountUrl(next);
-    previewFrameRef.current?.loadURL(next);
+    const base = stripAppDevPreviewStoToken(next) || next;
+    const authed = withPreviewAuth(base);
+    setPreviewAddress(base);
+    setPreviewMountUrl(authed);
+    previewFrameRef.current?.loadURL(authed);
   };
 
   const openPreviewInSystemBrowser = () => {
@@ -259,7 +285,8 @@ export function AppDevWorkbenchStage({
       toast.message('预览还没准备好，稍后再试');
       return;
     }
-    openExternalUrl(current);
+    const base = stripAppDevPreviewStoToken(current) || current;
+    openExternalUrl(withPreviewAuth(base));
   };
 
   const refreshOpenCodeFromDisk = async (opts?: { force?: boolean }) => {
@@ -439,12 +466,15 @@ export function AppDevWorkbenchStage({
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-[var(--sto-functional-warning)]/10 px-4 py-2">
           <p className="flex min-w-0 items-center gap-2 text-sm text-foreground">
             <AlertCircle className="h-4 w-4 shrink-0 text-[var(--sto-functional-warning)]" aria-hidden />
-            <span className="truncate">页面运行出现了一点问题</span>
+            <span className="truncate">
+              页面上看起来正常，但后台有请求失败。要交给 AI 处理吗？
+              {pendingErrors.length > 1 ? `（${pendingErrors.length} 条）` : ''}
+            </span>
           </p>
           <div className="flex shrink-0 items-center gap-2">
             <Button type="button" size="sm" className="gap-1 text-xs" onClick={onFixErrors}>
               <Wand2 className="h-3.5 w-3.5" aria-hidden />
-              让 AI 修复
+              交给 AI
             </Button>
             <button type="button" className="text-xs text-muted-foreground underline" onClick={onDismissErrors}>
               忽略
@@ -495,20 +525,21 @@ export function AppDevWorkbenchStage({
                       || previewMountUrl
                       || status.previewUrl
                       || '';
-                    if (previewAddress.trim() && previewAddress.trim() !== current) {
+                    const display = stripAppDevPreviewStoToken(current) || current;
+                    if (previewAddress.trim() && previewAddress.trim() !== display) {
                       commitPreviewAddress();
                     } else {
-                      setPreviewAddress(current);
+                      setPreviewAddress(display);
                     }
                   }}
                   onKeyDown={(event) => {
                     if (event.key === 'Escape') {
-                      setPreviewAddress(
+                      const current =
                         previewFrameRef.current?.getURL()
                         || previewMountUrl
                         || status.previewUrl
-                        || '',
-                      );
+                        || '';
+                      setPreviewAddress(stripAppDevPreviewStoToken(current) || current);
                       (event.target as HTMLInputElement).blur();
                     }
                   }}
@@ -531,11 +562,24 @@ export function AppDevWorkbenchStage({
               <SclawBrowserFrame
                 key={`${previewMountUrl || status.previewUrl}:${previewRevision}:${previewReloadNonce}`}
                 ref={previewFrameRef}
-                url={previewMountUrl || status.previewUrl}
+                url={previewMountUrl || withPreviewAuth(status.previewUrl)}
                 title={appName}
                 embedRuntimeId={null}
+                captureGuestNetworkFailures
                 onNavStateChange={({ canGoBack }) => setPreviewCanGoBack(canGoBack)}
-                onPageUrl={(pageUrl) => setPreviewAddress(pageUrl)}
+                onPageUrl={(pageUrl) =>
+                  setPreviewAddress(stripAppDevPreviewStoToken(pageUrl) || pageUrl)
+                }
+                onConsoleMessage={({ message }) => {
+                  if (!onPreviewRuntimeError) return;
+                  if (!isHiddenPreviewFailureMessage(message)) return;
+                  const pageUrl =
+                    previewFrameRef.current?.getURL()
+                    || previewAddress
+                    || status.previewUrl
+                    || '';
+                  onPreviewRuntimeError(formatHiddenPreviewFailureForAgent(message, pageUrl));
+                }}
               />
             </div>
           </div>

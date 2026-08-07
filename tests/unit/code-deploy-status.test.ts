@@ -49,6 +49,17 @@ describe('code-deploy-status', () => {
     expect(prompt).toContain('npm run build failed');
   });
 
+  it('uses fallbackMessage when failureMessage is missing', () => {
+    const prompt = formatCodeDeployFailurePrompt(
+      { env: 'daily', applicationId: 'app-1' },
+      { fallbackMessage: 'registry request failed: 403 Forbidden' },
+    );
+    expect(prompt).toContain('FAILED');
+    expect(prompt).toContain('daily');
+    expect(prompt).toContain('app-1');
+    expect(prompt).toContain('registry request failed: 403 Forbidden');
+  });
+
   it('unwraps sai-cli create/list envelopes to the deploy record', () => {
     const fields = pickCodeDeployFields({
       input: { applicationId: 'app-1', env: 'daily' },

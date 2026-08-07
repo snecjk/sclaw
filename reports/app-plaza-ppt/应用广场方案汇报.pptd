@@ -1,0 +1,37 @@
+version: v2
+title: 应用广场 · 用户应用开发 周会同步
+theme:
+  colors:
+    bg: "#EDF1F7"
+    ink: "#1C2B5A"
+    accent: "#4E9FE6"
+    text: "#2A3140"
+    muted: "#687085"
+    hairline: "#C4CDDD"
+    pale: "#DCE4F0"
+    faint: "#9AA6C0"
+  textStyles:
+    kicker:
+      fontSize: 12
+      color: $accent
+      letterSpacing: 3
+      bold: true
+    pagetitle:
+      fontSize: 27
+      color: $ink
+      bold: true
+    body:
+      fontSize: 15
+      color: $text
+      lineHeight: 1.7
+    small:
+      fontSize: 12
+      color: $muted
+      lineHeight: 1.5
+size: [960, 540]
+pages:
+  - pages/01_plan_map.page
+  - pages/04_create.page
+  - pages/05_a2ui.page
+  - pages/06_catalog_cli.page
+  - pages/07_publish.page
