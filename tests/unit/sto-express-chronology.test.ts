@@ -114,7 +114,6 @@ describe('STO express chronology', () => {
     ];
 
     const live = parseThinkingTurnLayout(messages, { isLiveStream: true });
-    const labels = segmentLabels(live.segments);
     console.log('segments detail', live.segments.map((s) =>
       s.kind === 'phase-text'
         ? { kind: 'phase', key: s.key, text: s.text.slice(0, 30) }
@@ -168,4 +167,42 @@ describe('STO express chronology', () => {
     ]);
     expect(live.finalReplyText).toBeNull();
   });
+
+  it.each(['claude', 'openclaw'] as const)(
+    'keeps a supplemental live tool after the committed tool group for %s',
+    (engineProfile) => {
+      const messages = [
+        {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: '加载数据' },
+            { type: 'tool_use', id: 'skill-1', name: 'Skill', input: { skill: 'finance' } },
+          ],
+        },
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: '数据已拿到。现在生成 HTML 报告。' }],
+        },
+      ];
+
+      const live = parseThinkingTurnLayout(messages, {
+        isLiveStream: true,
+        engineProfile,
+        streamingTools: [
+          {
+            id: 'write-1',
+            name: 'Write',
+            status: 'running',
+            input: '{"file_path":"report.html","content":"<html>',
+          },
+        ],
+      });
+
+      expect(segmentLabels(live.segments)).toEqual([
+        'GROUP[Skill]',
+        'PHASE:数据已拿到。现在生成 H',
+        'GROUP[Write]',
+      ]);
+    },
+  );
 });

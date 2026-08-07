@@ -264,34 +264,6 @@ function TimelineBody({
   const skills = useSkillsStore((state) => state.skills);
   const ThinkingIcon = resolveChatThinkingIcon();
 
-  const mergedTimeline = useMemo(() => {
-    if (!isLiveStream || streamingTools.length === 0) return timeline;
-
-    const knownKeys = new Set(
-      timeline
-        .filter((item): item is Extract<ThinkingTimelineItem, { type: 'tool' }> => item.type === 'tool')
-        .map(toolRowKey),
-    );
-
-    const extras: ThinkingTimelineItem[] = [];
-    let nextIndex = timeline.filter((item) => item.type === 'tool').length;
-
-    for (const tool of streamingTools) {
-      const key = streamingToolKey(tool);
-      if (knownKeys.has(key)) continue;
-      nextIndex += 1;
-      extras.push({
-        type: 'tool',
-        index: nextIndex,
-        id: key,
-        name: tool.name,
-        input: undefined,
-      });
-    }
-
-    return extras.length > 0 ? [...timeline, ...extras] : timeline;
-  }, [timeline, streamingTools, isLiveStream]);
-
   const streamingStatusByKey = useMemo(() => {
     const map = new Map<string, StreamingTool['status']>();
     for (const tool of streamingTools) {
@@ -301,7 +273,7 @@ function TimelineBody({
   }, [streamingTools]);
 
   const { markBlockRevealFinished, getBlockRevealState, sequentialIndex } = useSequentialTypewriterQueue(
-    mergedTimeline,
+    timeline,
     enableProcessTypewriter,
   );
 
@@ -309,7 +281,7 @@ function TimelineBody({
 
   return (
     <div className={cn(isLiveStream ? 'space-y-3' : 'space-y-3 pb-1 pt-1')}>
-      {mergedTimeline.map((item, i) => {
+      {timeline.map((item, i) => {
         const blockResetKey = timelineBlockResetKey(item, i);
         const reveal = getBlockRevealState(i, blockResetKey);
         if (!reveal.isVisible) return null;
@@ -321,7 +293,7 @@ function TimelineBody({
           );
           const collapse = resolveTimelineBlockCollapseState(
             i,
-            mergedTimeline.length,
+            timeline.length,
             isLiveStream,
             batchIsCompleted,
             sequentialIndex,
@@ -352,7 +324,7 @@ function TimelineBody({
         const toolStatus = streamingStatusByKey.get(key);
         const collapse = resolveTimelineBlockCollapseState(
           i,
-          mergedTimeline.length,
+          timeline.length,
           isLiveStream,
           batchIsCompleted,
           sequentialIndex,
@@ -553,8 +525,6 @@ function ThinkingToolGroupPanel({
     segment.key,
     segment.timeline,
     isLiveStream,
-    streamingTools,
-    isActive && streamingTools.length > 0,
   );
   const [expanded, setExpanded] = useState(false);
   const [collapseAnimationEnabled, setCollapseAnimationEnabled] = useState(false);
