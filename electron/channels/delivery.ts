@@ -2,6 +2,10 @@ import type { GatewayManager } from '../gateway/manager';
 import { logger } from '../utils/logger';
 import { hubReplyStream } from './hub-api';
 import { getSclawHubClient } from './hub-client';
+import {
+  resolveStreamContentKind,
+  type StreamContentKind,
+} from './stream-content-kind';
 
 const STATUS_MAX_CHARS = 3500;
 const MIN_PUSH_INTERVAL_MS = 450;
@@ -71,26 +75,28 @@ function pushReply(
   chatUid: string,
   content: string,
   finalize: boolean,
-  sessionKey?: string,
+  sessionKey: string | undefined,
+  contentKind: StreamContentKind,
 ): void {
   const client = getSclawHubClient();
-  const ok = client.sendDelta(chatUid, content, finalize, { sessionKey });
+  const ok = client.sendDelta(chatUid, content, finalize, { sessionKey, contentKind });
   if (ok) {
     logger.info('[SclawDelivery] ws reply', {
       chatUid,
       finalize,
+      contentKind,
       contentLen: content.length,
       sessionKey: sessionKey ?? null,
     });
     if (finalize) {
-      void hubReplyStream({ chatUid, content, finalize: true }).catch((error) => {
+      void hubReplyStream({ chatUid, content, finalize: true, contentKind }).catch((error) => {
         logger.warn('[SclawDelivery] HTTP finalize backup failed', error);
       });
     }
     return;
   }
-  logger.warn('[SclawDelivery] ws not connected, HTTP reply', { chatUid, finalize });
-  void hubReplyStream({ chatUid, content, finalize }).catch((error) => {
+  logger.warn('[SclawDelivery] ws not connected, HTTP reply', { chatUid, finalize, contentKind });
+  void hubReplyStream({ chatUid, content, finalize, contentKind }).catch((error) => {
     logger.warn('[SclawDelivery] HTTP reply fallback failed', error);
   });
 }
@@ -123,6 +129,7 @@ export function attachStreamingDelivery(input: {
   let lastAnswer = '';
   let lastStatus = '正在分析你的问题...';
   let lastSent = '';
+  let lastSentKind: StreamContentKind | null = null;
   let lastPushAt = 0;
   let cleaned = false;
   let pendingTimer: NodeJS.Timeout | null = null;
@@ -154,10 +161,16 @@ export function attachStreamingDelivery(input: {
       pendingTimer = null;
     }
     const content = visibleContent(finalize);
-    if (!finalize && content === lastSent) return;
+    const contentKind = resolveStreamContentKind({
+      finalize,
+      answer: lastAnswer,
+    });
+    // 同文案但 kind 变化（如占位→正文）仍需再推，避免 App 分不出语义
+    if (!finalize && content === lastSent && contentKind === lastSentKind) return;
     lastSent = content;
+    lastSentKind = contentKind;
     lastPushAt = Date.now();
-    pushReply(chatUid, content, finalize, sessionKey);
+    pushReply(chatUid, content, finalize, sessionKey, contentKind);
   };
 
   const schedulePush = () => {
@@ -307,7 +320,7 @@ export function attachStreamingDelivery(input: {
   gatewayManager.on('chat:message', onChat);
   gatewayManager.on('notification', onNotification);
   flush(false);
-  logger.info('[SclawDelivery] attached (content-only)', { sessionKey, chatUid, engineType });
+  logger.info('[SclawDelivery] attached', { sessionKey, chatUid, engineType });
 
   return cleanup;
 }

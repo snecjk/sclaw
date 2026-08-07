@@ -1,5 +1,13 @@
+import { randomUUID } from 'node:crypto';
+import { DEFAULT_WORKSPACE_ID } from '../db/models/domain/session-catalog';
+import { getCatalogSessionRepository } from '../db/repositories/catalog-session-repository';
 import type { GatewayManager } from '../gateway/manager';
+import { upsertCatalogSession } from '../services/session-catalog-service';
 import { logger } from '../utils/logger';
+import {
+  deriveChannelSessionTitle,
+  isBlankOrPlaceholderChannelTitle,
+} from './channel-session-title';
 import { getSclawHubClient, type SclawInboundEnvelope } from './hub-client';
 import { attachStreamingDelivery } from './delivery';
 import {
@@ -13,7 +21,6 @@ import {
 } from './session-facade';
 import { isDingTalkNewSessionCommand } from './session-lifecycle';
 import type { PlatformChannelType } from './session-key';
-import { randomUUID } from 'node:crypto';
 
 let gatewayManagerRef: GatewayManager | null = null;
 const peerQueues = new Map<string, Promise<void>>();
@@ -24,6 +31,27 @@ export function setChannelGatewayManager(gm: GatewayManager | null): void {
 
 export function getChannelGatewayManager(): GatewayManager | null {
   return gatewayManagerRef;
+}
+
+/**
+ * Fill catalog title once from inbound prompt when missing/placeholder.
+ * Does not overwrite a real user/engine title on续聊.
+ */
+export async function ensureChannelSessionTitleFromPrompt(
+  sessionKey: string,
+  prompt: string,
+): Promise<void> {
+  const title = deriveChannelSessionTitle(prompt);
+  if (!title) return;
+
+  const row = await getCatalogSessionRepository().findBySessionKey(sessionKey);
+  if (!isBlankOrPlaceholderChannelTitle(row?.title)) return;
+
+  await upsertCatalogSession({
+    workspaceId: row?.workspaceId ?? DEFAULT_WORKSPACE_ID,
+    sessionKey,
+    title,
+  });
 }
 
 function enqueuePeer(queueKey: string, task: () => Promise<void>): void {
@@ -184,6 +212,14 @@ export function handleSclawInbound(msg: SclawInboundEnvelope): void {
         });
         return;
       }
+
+      // history.list 读 catalog_sessions.title；通道入站此前不写标题 → App 全是「新对话」
+      await ensureChannelSessionTitleFromPrompt(handle.sessionKey, prompt).catch((error) => {
+        logger.warn('[SclawIngress] ensure session title failed', {
+          sessionKey: handle.sessionKey,
+          error: String(error),
+        });
+      });
 
       const detach = attachStreamingDelivery({
         gatewayManager: gm,

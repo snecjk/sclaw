@@ -5,6 +5,7 @@ import { getStoToken } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import { resolveSclawHubBaseUrl } from './hub-config';
 import { getLocalDeviceId } from './binding-service';
+import type { StreamContentKind } from './stream-content-kind';
 
 interface HubApiEnvelope<T> {
   success?: boolean;
@@ -202,6 +203,8 @@ export async function hubReplyStream(input: {
   chatUid: string;
   content: string;
   finalize?: boolean;
+  /** 与 WS delta 对齐；Hub 应透传到 App */
+  contentKind?: StreamContentKind;
 }): Promise<void> {
   await hubFetch('POST', '/api/sclaw/desktop/reply/stream', input);
 }

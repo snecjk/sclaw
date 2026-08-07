@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import { logger } from '../utils/logger';
 import { resolveSclawHubWsUrl } from './hub-config';
 import { touchSharedHubOnline } from './binding-service';
+import type { StreamContentKind } from './stream-content-kind';
 
 /** Hub → Desktop 多模态分片（url 可直接下载） */
 export interface SclawInboundMediaPart {
@@ -100,7 +101,11 @@ export class SclawHubClient extends EventEmitter {
     chatUid: string,
     content: string,
     finalize = false,
-    extras?: { sessionKey?: string },
+    extras?: {
+      sessionKey?: string;
+      /** App 区分过程态 vs 正文；缺省由接收方当 answer */
+      contentKind?: StreamContentKind;
+    },
   ): boolean {
     return this.send({
       type: finalize ? 'done' : 'delta',
@@ -108,6 +113,7 @@ export class SclawHubClient extends EventEmitter {
       content,
       finalize,
       ...(extras?.sessionKey ? { sessionKey: extras.sessionKey } : {}),
+      ...(extras?.contentKind ? { contentKind: extras.contentKind } : {}),
     });
   }
 

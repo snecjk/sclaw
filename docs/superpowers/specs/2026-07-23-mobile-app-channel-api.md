@@ -313,6 +313,19 @@ wss://{hub-host}/ws/sclaw-app
   "payload": {
     "sessionKey": "agent:main:mobile:...",
     "content": "增量文本",
+    "contentKind": "answer",
+    "channelTraceId": "..."
+  }
+}
+```
+
+```json
+{
+  "type": "mobile.delta",
+  "payload": {
+    "sessionKey": "agent:main:mobile:...",
+    "content": "先分析用户意图…",
+    "contentKind": "think",
     "channelTraceId": "..."
   }
 }
@@ -324,16 +337,27 @@ wss://{hub-host}/ws/sclaw-app
   "payload": {
     "sessionKey": "agent:main:mobile:...",
     "content": "",
+    "contentKind": "answer",
     "channelTraceId": "..."
   }
 }
 ```
 
+| `payload` 字段 | 说明 |
+|----------------|------|
+| `content` | 展示文案。Desktop 对同会话多为**整段快照覆盖**（非字级增量）。 |
+| `contentKind` | 可选。`think` = 思考/过程占位（含工具状态文案）；`answer` = 正文；**缺省视为 `answer`**（兼容旧包）。`tool` 预留，V1 Desktop 过程态统一发 `think`。 |
+| `sessionKey` | 本轮会话 key；`done` 时 App MUST 覆盖本地 sessionKey。 |
+
 **App 处理要点：**
 
-1. **以 `delta` 的 `content` 拼接展示气泡**；`done` 只作为本轮结束信号，**不要依赖** `done.content`（可为空，忽略即可）。  
-2. 收到 `done` 后，用 `payload.sessionKey` **覆盖**当前页 sessionKey。  
-3. 同会话连发：服务端会 **排队**；UI 可显示「处理中」，勿假定并行。
+1. **`contentKind=think`（或 `tool`）**：写入过程/思考区，**覆盖**该区域上次内容；**MUST NOT** 拼进答案气泡。  
+2. **`contentKind=answer` 或字段缺失**：按正文处理；Desktop 发的是累计快照时建议**覆盖**答案区，勿与 think 混拼。  
+3. **`done` 只作为本轮结束信号**，**不要依赖** `done.content`（可为空，忽略即可）；过程区可收起。  
+4. 收到 `done` 后，用 `payload.sessionKey` **覆盖**当前页 sessionKey。  
+5. 同会话连发：服务端会 **排队**；UI 可显示「处理中」，勿假定并行。
+
+> Hub MUST 透传 Desktop 上行的 `contentKind` 到 `mobile.delta` / `mobile.done`（含 HTTP reply/stream 兜底），不得丢弃。
 
 ---
 
