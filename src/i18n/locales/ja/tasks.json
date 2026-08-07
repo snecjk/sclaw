@@ -164,7 +164,7 @@
       "running": "実行中…",
       "edit": "タスクを編集",
       "delete": "タスクを削除",
-      "workflowBadge": "ワークフロー",
+      "workflowBadge": "ワークフロータスク",
       "nextRunNow": "まもなく実行",
       "nextRunMinutes": "{{count}}分後に実行",
       "nextRunHours": "{{count}}時間後に実行",

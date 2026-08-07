@@ -164,7 +164,7 @@
       "running": "Running…",
       "edit": "Edit task",
       "delete": "Delete task",
-      "workflowBadge": "Workflow",
+      "workflowBadge": "Workflow task",
       "nextRunNow": "Running soon",
       "nextRunMinutes": "Next run in {{count}} min",
       "nextRunHours": "Next run in {{count}} hr",

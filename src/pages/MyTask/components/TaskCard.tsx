@@ -1,11 +1,9 @@
 /**
  * TaskCard 组件
- * 我的任务 — 定时任务卡片（MasterGo 容器 7377）
- *
- * 结构：顶栏开关 + 更多菜单 → 标题/描述 → 弹性间距（≥18px）→ 底栏计划时间 + 下次执行
+ * 我的任务 — 定时任务卡片（图示：图标+标题+开关 / 描述 / 计划时间+立即运行+更多）
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Clock, Loader2, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -14,13 +12,15 @@ import {
   myTaskCardBodyClass,
   myTaskCardDescriptionClass,
   myTaskCardDetailFooterGapClass,
+  myTaskCardFooterActionsClass,
   myTaskCardFooterClass,
   myTaskCardMenuClass,
   myTaskCardMenuItemClass,
-  myTaskCardNextRunClass,
+  myTaskCardRunButtonClass,
   myTaskCardScheduleRowClass,
   myTaskCardShellClass,
   myTaskCardTitleClass,
+  myTaskCardTitleRowClass,
   myTaskCardTopRowClass,
   myTaskWorkflowBadgeClass,
   scheduleToggleThumbClass,
@@ -49,38 +49,11 @@ interface TaskCardProps {
   onClick?: (task: TaskCardData) => void;
 }
 
-/** 将接口 nextRunAt 格式化为设计稿底栏文案（含分钟级精度） */
-function formatNextRunLabel(nextRunAt: string | null, enabled: boolean, t: (key: string, options?: Record<string, unknown>) => string): string | null {
-  if (!enabled || nextRunAt === null) return null;
-  const diffMs = new Date(nextRunAt).getTime() - Date.now();
-  if (Number.isNaN(diffMs)) return null;
-  if (diffMs <= 0) return t('myTask.card.nextRunNow');
-
-  const totalMinutes = Math.ceil(diffMs / (1000 * 60));
-  if (totalMinutes < 1) return t('myTask.card.nextRunNow');
-  if (totalMinutes < 60) return t('myTask.card.nextRunMinutes', { count: totalMinutes });
-  const totalHours = Math.ceil(totalMinutes / 60);
-  if (totalHours < 24) return t('myTask.card.nextRunHours', { count: totalHours });
-  const days = Math.ceil(totalHours / 24);
-  return t('myTask.card.nextRunDays', { count: days });
-}
-
 export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: TaskCardProps) {
   const { t } = useTranslation('tasks');
   const [menuOpen, setMenuOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  // 定时刷新 nextRunLabel：每 30 秒重新计算，确保"X分钟后"随时间递减
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    if (!task.enabled || task.nextRunAt === null) return;
-    const id = setInterval(() => setTick((t) => t + 1), 30_000);
-    return () => clearInterval(id);
-  }, [task.enabled, task.nextRunAt]);
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const nextRunLabel = useCallback(() => formatNextRunLabel(task.nextRunAt, task.enabled, t), [task.nextRunAt, task.enabled, tick, t])();
 
   // 点击外部关闭菜单
   useEffect(() => {
@@ -101,8 +74,20 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
     onClick?.(task);
   };
 
+  const handleRun = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (running) return;
+    setRunning(true);
+    try {
+      await onRun?.(task);
+    } finally {
+      setRunning(false);
+      setMenuOpen(false);
+    }
+  };
+
   const scheduleLabel = task.scheduleText ?? parseScheduleToLabel(task.cronExpr);
-  /** 关联工作流 code，用于显示"工作流"badge */
+  /** 关联工作流 code，用于显示「工作流任务」badge */
   const workflowId = task.workflowCode ?? null;
 
   return (
@@ -110,8 +95,22 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
       className={cn(myTaskCardShellClass, 'cursor-pointer', menuOpen && 'z-30')}
       onClick={handleCardClick}
     >
-      {/* 顶栏：开关（左）+ 未读红点 + 更多（右） */}
+      {/* 顶栏：时钟图标 + 标题 + badge | 开关 */}
       <div className={myTaskCardTopRowClass}>
+        <div className={myTaskCardTitleRowClass}>
+          <Clock
+            className="h-4 w-4 shrink-0 text-[#4E5969]"
+            strokeWidth={1.75}
+            aria-hidden
+          />
+          <h3 className={myTaskCardTitleClass}>{task.name}</h3>
+          {workflowId ? (
+            <span className={myTaskWorkflowBadgeClass}>
+              {t('myTask.card.workflowBadge')}
+            </span>
+          ) : null}
+        </div>
+
         <button
           type="button"
           role="switch"
@@ -128,107 +127,87 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
             className={cn(scheduleToggleThumbClass, task.enabled && 'translate-x-4')}
           />
         </button>
-
-        <div className="flex items-center gap-1.5 shrink-0">
-
-        <div className="relative shrink-0" ref={menuRef} data-menu>
-          <button
-            type="button"
-            aria-label={t('myTask.card.moreAria')}
-            aria-haspopup="menu"
-            aria-expanded={menuOpen}
-            onClick={(e) => {
-              e.stopPropagation();
-              setMenuOpen(!menuOpen);
-            }}
-            className="inline-flex h-5 w-5 items-center justify-center rounded-[10px] border-0 bg-transparent p-0 text-muted-foreground transition-colors duration-fast hover:bg-muted hover:text-foreground"
-          >
-            <MoreHorizontal className="h-4 w-4" aria-hidden />
-          </button>
-          {menuOpen ? (
-            <div className={myTaskCardMenuClass} role="menu">
-              <button
-                type="button"
-                role="menuitem"
-                disabled={running}
-                onClick={async (e) => {
-                  e.stopPropagation();
-                  if (running) return;
-                  setRunning(true);
-                  try {
-                    await onRun?.(task);
-                  } finally {
-                    setRunning(false);
-                    setMenuOpen(false);
-                  }
-                }}
-                className={cn(myTaskCardMenuItemClass(), running && 'opacity-50')}
-              >
-                {running ? (
-                  <span className="inline-flex items-center gap-1.5">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                    {t('myTask.card.running')}
-                  </span>
-                ) : (
-                  t('myTask.card.runNow')
-                )}
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMenuOpen(false);
-                  onEdit?.(task);
-                }}
-                className={myTaskCardMenuItemClass()}
-              >
-                {t('myTask.card.edit')}
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMenuOpen(false);
-                  onDelete?.(task);
-                }}
-                className={myTaskCardMenuItemClass(true)}
-              >
-                {t('myTask.card.delete')}
-              </button>
-            </div>
-          ) : null}
-        </div>
-        </div>
       </div>
 
-      {/* 标题 + 描述 */}
-      <div className={myTaskCardBodyClass}>
-        <h3 className={cn(myTaskCardTitleClass, 'flex items-center gap-0')}>
-          <span className="truncate">{task.name}</span>
-          {workflowId && (
-            <span className={myTaskWorkflowBadgeClass}>
-              <svg className="w-[11px] h-[11px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="6" cy="6" r="2.1" /><circle cx="18" cy="18" r="2.1" /><path d="M8 6h6.5a3 3 0 0 1 3 3v6.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-              {t('myTask.card.workflowBadge')}
-            </span>
-          )}
-        </h3>
-        {task.description ? (
+      {/* 描述 */}
+      {task.description ? (
+        <div className={myTaskCardBodyClass}>
           <p className={myTaskCardDescriptionClass}>{task.description}</p>
-        ) : null}
-      </div>
+        </div>
+      ) : (
+        <div className={myTaskCardBodyClass} aria-hidden />
+      )}
 
       {/* 详情与底栏之间：最小 18px，同行等高时由此吸收高度差 */}
       <div className={myTaskCardDetailFooterGapClass} aria-hidden />
 
-      {/* 底栏：计划时间 + 下次执行（贴壳层底，保留 p-4 底边距） */}
+      {/* 底栏：计划时间 | 立即运行 + 更多 */}
       <div className={myTaskCardFooterClass}>
         <span className={myTaskCardScheduleRowClass} title={scheduleLabel}>
-          <Clock className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden />
-          <span className="truncate">{scheduleLabel}</span>
+          {scheduleLabel}
         </span>
-        {nextRunLabel ? <span className={myTaskCardNextRunClass}>{nextRunLabel}</span> : null}
+
+        <div className={myTaskCardFooterActionsClass}>
+          <button
+            type="button"
+            disabled={running}
+            onClick={handleRun}
+            className={myTaskCardRunButtonClass}
+          >
+            {running ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                {t('myTask.card.running')}
+              </span>
+            ) : (
+              t('myTask.card.runNow')
+            )}
+          </button>
+
+          <div className="relative shrink-0" ref={menuRef} data-menu>
+            <button
+              type="button"
+              aria-label={t('myTask.card.moreAria')}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen(!menuOpen);
+              }}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-[8px] border-0 bg-transparent p-0 text-muted-foreground transition-colors duration-fast hover:bg-muted hover:text-foreground"
+            >
+              <MoreHorizontal className="h-4 w-4" aria-hidden />
+            </button>
+            {menuOpen ? (
+              <div className={myTaskCardMenuClass} role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                    onEdit?.(task);
+                  }}
+                  className={myTaskCardMenuItemClass()}
+                >
+                  {t('myTask.card.edit')}
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                    onDelete?.(task);
+                  }}
+                  className={myTaskCardMenuItemClass(true)}
+                >
+                  {t('myTask.card.delete')}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
       </div>
     </article>
   );

@@ -159,33 +159,33 @@ export const myTaskPageHeaderRowClass = 'flex min-w-0 items-start justify-betwee
 export const myTaskPageSubtitleClass =
   'm-0 mt-1.5 text-sm font-normal leading-5 text-muted-foreground';
 
-/** 我的任务一级 Tab 轨道（与技能广场「技能/连接器」分段同款） */
+/** 我的任务 / 技能·连接器一级 Tab 轨道（图二：#EDEDED 胶囊轨） */
 export const myTaskSectionTabsTrackClass =
-  'inline-flex h-9 w-fit flex-shrink-0 items-center gap-0.5 rounded-[12px] bg-[#F2F3F5] p-0.5 dark:bg-muted';
+  'inline-flex w-fit flex-shrink-0 items-center gap-0.5 rounded-[12px] bg-[#EDEDED] p-0.5 dark:bg-muted';
 
-/** 我的任务一级 Tab 按钮（选中灰底白字，与技能广场分区 Tab 一致） */
+/** 我的任务 / 技能·连接器一级 Tab 按钮（图二：选中白底深字） */
 export function myTaskSectionTabClass(active: boolean): string {
   return cn(
-    "inline-flex h-full items-center gap-1.5 rounded-[10px] px-3.5 font-['PingFang_SC'] text-[14px] font-medium leading-none transition-colors duration-150",
+    "inline-flex items-center gap-1.5 rounded-[10px] px-3.5 py-[7px] font-['PingFang_SC'] text-[14px] font-medium leading-none transition-colors duration-150",
     active
-      ? 'bg-[#4E5969] text-white'
-      : 'bg-transparent text-[#4E5969] hover:bg-[#E5E6EB] hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-white/[0.06] dark:hover:text-foreground',
+      ? 'bg-white text-[#1A1A1A] dark:bg-background dark:text-foreground'
+      : 'bg-transparent text-[#4E5969] hover:bg-black/[0.04] hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-white/[0.06] dark:hover:text-foreground',
   );
 }
 
 /**
- * 我的任务页「新建定时任务」：Grey-4（border）底 + Grey-10 文字 + 10px 圆角。
+ * 我的任务页「新建定时任务」：白底 + #E8EAEF 描边 + 12px 圆角。
  */
 export const myTaskCreateButtonClass = cn(
   'inline-flex shrink-0 items-center gap-1.5 h-[34px] px-3.5 text-sm font-medium',
-  'rounded-[10px] bg-border text-foreground',
-  'transition-colors duration-fast hover:bg-black/[0.04] dark:hover:bg-white/[0.06] active:scale-[0.98]',
+  'rounded-[12px] border border-[#E8EAEF] bg-white text-foreground',
+  'transition-colors duration-fast hover:bg-black/[0.04] dark:border-border dark:bg-card dark:hover:bg-white/[0.06] active:scale-[0.98]',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
 
-/** 我的任务卡片外框（MasterGo 容器 7377）：18px 圆角 + 16px 内距 + #E9EAEB 描边，无阴影；等高网格内 h-full */
+/** 我的任务卡片外框：18px 圆角 + 0.8px #E5E6EB 描边 + 白底；等高网格内 h-full */
 export const myTaskCardShellClass = cn(
-  'relative flex h-full min-w-0 flex-col rounded-[18px] border border-[#E9EAEB] bg-card p-4 dark:border-border dark:bg-secondary',
+  'relative flex h-full min-w-0 flex-col rounded-[18px] border-[0.8px] border-[#E5E6EB] bg-white p-4 dark:border-border dark:bg-secondary',
   'transition-[border-color] duration-base',
 );
 
@@ -194,31 +194,47 @@ export const myTaskRunGuardBarShellClass = cn(
   'inline-flex shrink-0 items-center gap-2',
 );
 
-/** 我的任务卡片顶栏：开关左、更多右（与开关同高，保证开关→标题 18px） */
-export const myTaskCardTopRowClass = 'flex shrink-0 items-start justify-between gap-3';
+/** 我的任务卡片顶栏：左标题区、右开关 */
+export const myTaskCardTopRowClass = 'flex shrink-0 items-center justify-between gap-3';
 
-/** 我的任务卡片标题区：距顶栏开关 18px；标题与描述间距 6px */
-export const myTaskCardBodyClass = 'mt-[18px] flex shrink-0 flex-col gap-1.5';
+/** 我的任务卡片标题区（图标 + 标题 + badge）；图标与标题间距 6px */
+export const myTaskCardTitleRowClass = 'flex min-w-0 flex-1 items-center gap-1.5';
+
+/** 我的任务卡片描述区：顶栏下方 12px；描述两行 */
+export const myTaskCardBodyClass = 'mt-3 flex shrink-0 flex-col';
 
 /** 详情与底栏之间的弹性占位：最小 18px；同行卡片等高时多余高度落在此处 */
 export const myTaskCardDetailFooterGapClass = 'min-h-[18px] flex-1';
 
 /** 我的任务卡片标题：14px / 行高 18 / Medium */
-export const myTaskCardTitleClass = 'm-0 text-sm font-medium leading-[18px] text-foreground';
+export const myTaskCardTitleClass = 'm-0 min-w-0 truncate text-sm font-medium leading-[18px] text-[#1A1A1A] dark:text-foreground';
 
-/** 我的任务卡片描述：12px / 行高 18 / 两行截断 */
+/** 我的任务卡片描述：12px / Regular / #8B9099 / 两行截断 */
 export const myTaskCardDescriptionClass =
-  'm-0 line-clamp-2 text-xs leading-[18px] text-muted-foreground';
+  'm-0 line-clamp-2 text-xs font-normal leading-[18px] text-[#8B9099]';
 
-/** 我的任务卡片底栏：计划时间左、下次执行右；贴壳层底部，与卡片底边固定 16px（壳层 p-4） */
+/** 我的任务卡片底栏：计划时间左、立即运行+更多右 */
 export const myTaskCardFooterClass =
   'flex shrink-0 items-center justify-between gap-3';
 
 /** 我的任务卡片计划时间行 */
 export const myTaskCardScheduleRowClass =
-  'inline-flex min-w-0 items-center gap-1 text-xs leading-[14px] text-foreground/80';
+  'min-w-0 truncate text-xs leading-[14px] text-[#4E5969]';
 
-/** 我的任务卡片下次执行文案 */
+/** 我的任务卡片底栏操作组 */
+export const myTaskCardFooterActionsClass = 'inline-flex shrink-0 items-center gap-2';
+
+/** 我的任务卡片「立即运行」：白底 + #E5E6EB 描边 + 8px 圆角；12px Medium #1D2129 */
+export const myTaskCardRunButtonClass = cn(
+  'inline-flex items-center justify-center rounded-[8px] border border-[#E5E6EB] bg-white',
+  'px-3 py-1.5 text-xs font-medium leading-none text-[#1D2129]',
+  'transition-colors duration-fast hover:bg-black/[0.02] active:scale-[0.98]',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+  'disabled:pointer-events-none disabled:opacity-50',
+  'dark:border-border dark:bg-card dark:text-foreground dark:hover:bg-white/[0.06]',
+);
+
+/** 我的任务卡片下次执行文案（保留 token，当前图示底栏不再展示） */
 export const myTaskCardNextRunClass = 'shrink-0 text-xs leading-[14px] text-muted-foreground';
 
 /** 我的任务卡片更多菜单（图2） */
@@ -294,10 +310,10 @@ export function dropdownOptionClass(isActive: boolean): string {
   );
 }
 
-/** 我的任务 / 工作流排期开关轨道（暗色与技能广场开关一致，避免滑块像白点） */
+/** 我的任务 / 工作流排期开关轨道（32×16，启用 #00B54B，圆角 80px） */
 export function scheduleToggleTrackClass(checked: boolean): string {
   return cn(
-    'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-none p-0 transition-colors duration-fast',
+    'relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-[80px] border-none p-0 transition-colors duration-fast',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
     checked
       ? 'bg-[#00B54B] dark:bg-[#00B54B]'
@@ -305,18 +321,18 @@ export function scheduleToggleTrackClass(checked: boolean): string {
   );
 }
 
-/** 排期开关滑块：始终白底，保证开/关与暗色卡片对比清晰 */
+/** 排期开关滑块：12×12，始终白底；开启位移 16px */
 export const scheduleToggleThumbClass = cn(
-  'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white',
+  'absolute top-0.5 left-0.5 h-3 w-3 rounded-full bg-white',
   'shadow-[0_1px_2px_rgba(15,23,42,0.15)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.45)]',
   'transition-transform duration-fast',
 );
 
-/** 我的任务卡片：关联工作流 badge（复用 cover purple token） */
+/** 我的任务卡片：关联工作流 badge（#F0F4FF 底 + 6px 圆角 + #6171DB 字） */
 export const myTaskWorkflowBadgeClass = cn(
-  'ml-[6px] inline-flex shrink-0 items-center gap-[4px] whitespace-nowrap rounded-full',
-  'border border-[var(--sto-wf-cover-purple-accent)] bg-[var(--sto-wf-cover-purple-bg)]',
-  'px-[7px] py-[1px] text-[11px] font-medium leading-[1.55] text-[var(--sto-wf-cover-purple-icon)]',
+  'inline-flex shrink-0 items-center gap-[4px] whitespace-nowrap rounded-[6px]',
+  'bg-[#F0F4FF] px-1.5 py-[3px] text-xs font-medium leading-none text-[#6171DB]',
+  'dark:bg-primary/15 dark:text-primary',
 );
 
 /** 执行记录单行：暗色用 secondary 与主卡片底色分层 */
@@ -1030,6 +1046,15 @@ export const workflowListSearchInputClass = cn(
   'h-[34px] w-[184px] rounded-[8px] border border-border bg-card py-0 pl-[30px] pr-[10px]',
   'text-[13px] placeholder:text-muted-foreground',
   listSearchFocusClass,
+);
+
+/**
+ * 我的任务页「搜索任务名称」：184×34，白底 + #E8EAEF 描边 + 12px 圆角；focus 无阴影。
+ */
+export const myTaskSearchInputClass = cn(
+  'h-[34px] w-[184px] rounded-[12px] border border-[#E8EAEF] bg-white py-0 pl-[30px] pr-[10px]',
+  'text-[13px] placeholder:text-muted-foreground dark:border-border dark:bg-card',
+  'focus:outline-none focus:ring-0 focus:shadow-none',
 );
 
 /**

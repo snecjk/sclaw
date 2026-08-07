@@ -11,6 +11,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { flushSync } from 'react-dom';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { Search } from 'lucide-react';
 import { useCronStore } from '@/stores/cron';
 import type { ManagedLocalTask } from '@/stores/cron';
 import { forgetOptimisticDeletedSessionKey } from '@/lib/deleted-session-filter';
@@ -35,6 +36,9 @@ import {
   myTaskPageSubtitleClass,
   stoMainInnerShell,
   stoPageTitleClass,
+  workflowListSearchIconWrapClass,
+  workflowListSearchLabelClass,
+  myTaskSearchInputClass,
   workflowListToolbarClass,
   workflowPageRootClass,
 } from '@/lib/surfaces';
@@ -451,15 +455,40 @@ export default function MyTask() {
             'relative z-[1] flex min-h-0 flex-1 flex-col overflow-hidden',
           )}
         >
-          {/* 一级 Tab 固定顶栏（布局对齐技能广场） */}
-          <div className="mb-6 flex flex-shrink-0 flex-wrap items-center gap-3">
+          {/* 一级 Tab 固定顶栏：左分段；右为运行保障 + 搜索/新建 */}
+          <div className="mb-[38px] flex flex-shrink-0 flex-wrap items-center gap-3">
             <SectionTabs
               activeSection={activeSection}
               onSectionChange={handleSectionChange}
             />
             {!isWorkflowSection ? (
-              <div className="ml-auto flex min-w-0 items-center">
+              <div className="ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
                 <TaskRunGuardBar />
+                {isTasksView ? (
+                  <>
+                    <label className={workflowListSearchLabelClass}>
+                      <span className="sr-only">{t('myTask.toolbar.searchSrOnly')}</span>
+                      <span className={workflowListSearchIconWrapClass} aria-hidden="true">
+                        <Search className="h-3.5 w-3.5" />
+                      </span>
+                      <input
+                        type="search"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className={myTaskSearchInputClass}
+                        placeholder={t('myTask.toolbar.searchPlaceholder')}
+                        autoComplete="off"
+                      />
+                    </label>
+                    <NewTaskDropdownButton
+                      onSelfCreate={() => {
+                        setEditingJob(null);
+                        setCreateOpen(true);
+                      }}
+                      onTemplateCreate={() => setTemplateOpen(true)}
+                    />
+                  </>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -484,31 +513,18 @@ export default function MyTask() {
           ) : (
             <>
               {/* 标题 + 工具栏固定；仅下方卡片/记录列表滚动 */}
-              <header className="mb-6 shrink-0">
+              <header className="mb-[30px] shrink-0">
                 <div className="min-w-0">
                   <h1 className={cn(stoPageTitleClass, 'h-[34px]')}>{t('myTask.pageTitle')}</h1>
                   <p className={myTaskPageSubtitleClass}>{t('myTask.subtitle')}</p>
                 </div>
               </header>
 
-              <div className={cn(workflowListToolbarClass, 'mb-[26px] shrink-0')}>
+              <div className={cn(workflowListToolbarClass, 'mb-[18px] shrink-0')}>
                 <ViewTabs activeView={activeView} onViewChange={setActiveView} />
 
                 {isTasksView ? (
-                  <TaskToolbar
-                    searchQuery={searchQuery}
-                    onSearchChange={setSearchQuery}
-                    sortValue={sortValue}
-                    onSortChange={setSortValue}
-                  >
-                    <NewTaskDropdownButton
-                      onSelfCreate={() => {
-                        setEditingJob(null);
-                        setCreateOpen(true);
-                      }}
-                      onTemplateCreate={() => setTemplateOpen(true)}
-                    />
-                  </TaskToolbar>
+                  <TaskToolbar sortValue={sortValue} onSortChange={setSortValue} />
                 ) : (
                   <RecordToolbar searchQuery={recordSearch} onSearchChange={setRecordSearch} />
                 )}

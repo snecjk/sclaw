@@ -1,6 +1,6 @@
 /**
  * SectionTabs：我的任务一级 Tab（定时任务 / 工作流）
- * 样式对齐技能广场「技能 / 连接器」分区 Tab；切换由父级同步到 URL ?tab=
+ * 样式与技能·连接器分区 Tab 共用 surfaces token；切换由父级同步到 URL ?tab=
  */
 
 import { Clock, Workflow } from 'lucide-react';

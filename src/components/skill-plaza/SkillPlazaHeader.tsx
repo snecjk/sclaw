@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Search, Wrench, Unplug, Plus, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { invokeIpc } from '@/lib/api-client';
+import { myTaskSectionTabClass, myTaskSectionTabsTrackClass } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
 import { useSkillPlazaStore } from '@/stores/skill-plaza';
 import { useConnectorsStore } from '@/stores/connectors';
@@ -87,7 +88,7 @@ export function SkillPlazaHeader({
     <div className="mb-2">
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div
-          className="inline-flex h-9 w-fit flex-shrink-0 items-center gap-0.5 rounded-[12px] bg-[#F2F3F5] p-0.5"
+          className={myTaskSectionTabsTrackClass}
           role="tablist"
           aria-label={t('plaza.sectionAria', { defaultValue: '技能广场分区' })}
         >
@@ -101,12 +102,7 @@ export function SkillPlazaHeader({
                 role="tab"
                 aria-selected={active}
                 onClick={() => onSectionChange(item.key)}
-                className={cn(
-                  "inline-flex h-full items-center gap-1.5 rounded-[10px] px-3.5 font-['PingFang_SC'] text-[14px] font-medium leading-none transition-colors duration-150",
-                  active
-                    ? 'bg-[#4E5969] text-white'
-                    : 'bg-transparent text-[#4E5969] hover:bg-[#E5E6EB] hover:text-[#1D2129]',
-                )}
+                className={myTaskSectionTabClass(active)}
               >
                 <Icon className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.75} aria-hidden />
                 {item.label}

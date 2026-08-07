@@ -160,11 +160,11 @@
     "card": {
       "toggleAria": "启用或暂停任务",
       "moreAria": "更多",
-      "runNow": "立即执行",
+      "runNow": "立即运行",
       "running": "执行中…",
       "edit": "编辑任务",
       "delete": "删除任务",
-      "workflowBadge": "工作流",
+      "workflowBadge": "工作流任务",
       "nextRunNow": "即将执行",
       "nextRunMinutes": "下次执行{{count}}分钟后",
       "nextRunHours": "下次执行{{count}}小时后",
