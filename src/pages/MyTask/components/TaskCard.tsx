@@ -99,7 +99,7 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
       <div className={myTaskCardTopRowClass}>
         <div className={myTaskCardTitleRowClass}>
           <Clock
-            className="h-4 w-4 shrink-0 text-[#4E5969]"
+            className="h-4 w-4 shrink-0 text-[#4E5969] dark:text-[#C9CDD4]"
             strokeWidth={1.75}
             aria-hidden
           />

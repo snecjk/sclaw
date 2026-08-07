@@ -328,11 +328,10 @@ export const scheduleToggleThumbClass = cn(
   'transition-transform duration-fast',
 );
 
-/** 我的任务卡片：关联工作流 badge（#F0F4FF 底 + 6px 圆角 + #6171DB 字） */
+/** 我的任务卡片：关联工作流 badge（浅/暗色均用 #F0F4FF 底 + #6171DB 字） */
 export const myTaskWorkflowBadgeClass = cn(
   'inline-flex shrink-0 items-center gap-[4px] whitespace-nowrap rounded-[6px]',
   'bg-[#F0F4FF] px-1.5 py-[3px] text-xs font-medium leading-none text-[#6171DB]',
-  'dark:bg-primary/15 dark:text-primary',
 );
 
 /** 执行记录单行：暗色用 secondary 与主卡片底色分层 */
