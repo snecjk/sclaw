@@ -94,6 +94,21 @@ export function isAppDevWorkspaceRoot(appPath: string): boolean {
   return existsSync(appDevMarkerPath(appPath));
 }
 
+/**
+ * App files deleted but workspace row left behind: root only has `.sclaw`
+ * (artifact/agent shell). Still treat as 开发应用 for sidebar filtering.
+ */
+async function isAbandonedAppDevShell(appPath: string): Promise<boolean> {
+  if (!appPath || !existsSync(appPath) || !statSync(appPath).isDirectory()) return false;
+  if (!existsSync(join(appPath, '.sclaw'))) return false;
+  try {
+    const entries = (await readdir(appPath)).filter((name) => name !== '.DS_Store');
+    return entries.length === 1 && entries[0] === '.sclaw';
+  } catch {
+    return false;
+  }
+}
+
 function buildAppDevAgentsContextBlock(vars: { name: string }): string {
   return `<!-- sclaw-app-dev-context -->
 你正在帮助用户开发一个名为「${vars.name}」的业务应用（SClaw 开发应用）。
@@ -729,10 +744,61 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
   return apps.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-/** Workspace ids that belong to 开发应用 — used to hide them from the sidebar. */
+/**
+ * Workspace ids that belong to 开发应用 — used to hide them from the sidebar.
+ *
+ * Sources (union):
+ * 1. Local marker `.sclaw/app-dev.json` on the workspace root
+ * 2. Abandoned shells that only keep `.sclaw` after app files were removed
+ * 3. Workspaces under the default apps parent (`~/SClawApps`)
+ * 4. sto-app bindings (workspaceId / localPath)
+ *
+ * Do not rely on cloud `listDevApps`: CLI/login failures must not leak apps
+ * into 侧栏「项目」(入口只在应用广场).
+ */
 export async function listDevAppWorkspaceIds(): Promise<string[]> {
-  const apps = await listDevApps().catch(() => [] as DevAppSummary[]);
-  return apps.filter((app) => app.localReady && app.workspaceId).map((app) => app.workspaceId);
+  const [workspaces, bindings] = await Promise.all([
+    listUserWorkspaces(),
+    listStoAppBindings(),
+  ]);
+
+  const ids = new Set<string>();
+  const workspaceIdByRoot = new Map<string, string>();
+  const defaultAppsRoot = resolve(DEFAULT_APPS_PARENT_DIR);
+
+  for (const workspace of workspaces) {
+    const root = workspace.rootPath?.trim();
+    if (!root) continue;
+    const resolvedRoot = resolve(root);
+    workspaceIdByRoot.set(resolvedRoot, workspace.id);
+
+    const underDefaultApps =
+      resolvedRoot === defaultAppsRoot
+      || resolvedRoot.startsWith(`${defaultAppsRoot}${sep}`);
+
+    if (
+      isAppDevWorkspaceRoot(resolvedRoot)
+      || underDefaultApps
+      || await isAbandonedAppDevShell(resolvedRoot)
+    ) {
+      ids.add(workspace.id);
+    }
+  }
+
+  for (const binding of bindings) {
+    const boundWorkspaceId = binding.workspaceId?.trim();
+    if (boundWorkspaceId) {
+      ids.add(boundWorkspaceId);
+    }
+    const localPath = binding.localPath?.trim();
+    if (!localPath) continue;
+    const matchedId = workspaceIdByRoot.get(resolve(localPath));
+    if (matchedId) {
+      ids.add(matchedId);
+    }
+  }
+
+  return [...ids];
 }
 
 /**
