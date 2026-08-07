@@ -1,5 +1,13 @@
 import { cn } from '@/lib/utils';
 
+/**
+ * 列表/广场卡片 hover 描边 + 阴影：与首页推荐卡一致
+ *（RecommendCard：hover:border-[#C9CDD4] + hover:shadow-[0px_0px_16px_0px_rgba(0,0,0,0.12)]）
+ */
+export const listCardHoverBorderShadowClass = cn(
+  'hover:border-[#C9CDD4] hover:shadow-[0px_0px_16px_0px_rgba(0,0,0,0.12)] dark:hover:border-border',
+);
+
 /** Page section surface (Models page, Settings proxy, etc.) — glass gradient + blur */
 export const glassSectionSurface = cn(
   'rounded-2xl border border-border p-6',
@@ -186,7 +194,8 @@ export const myTaskCreateButtonClass = cn(
 /** 我的任务卡片外框：18px 圆角 + 0.8px #E5E6EB 描边 + 白底；等高网格内 h-full */
 export const myTaskCardShellClass = cn(
   'relative flex h-full min-w-0 flex-col rounded-[18px] border-[0.8px] border-[#E5E6EB] bg-white p-4 dark:border-border dark:bg-secondary',
-  'transition-[border-color] duration-base',
+  'transition-[border-color,box-shadow] duration-base',
+  listCardHoverBorderShadowClass,
 );
 
 /** 我的任务运行保障控件：标题行右侧紧凑排布（文案 + 问号 + 开关） */
@@ -337,7 +346,9 @@ export const myTaskWorkflowBadgeClass = cn(
 /** 执行记录单行：暗色用 secondary 与主卡片底色分层 */
 export const myTaskRecordItemShellClass = cn(
   'flex items-center gap-3.5 rounded-[12px] border border-border bg-card p-[14px_16px]',
+  'transition-[border-color,box-shadow] duration-base',
   'dark:bg-secondary',
+  listCardHoverBorderShadowClass,
 );
 
 /** 执行记录「查看详情」 */
@@ -1099,7 +1110,8 @@ export const workflowListCardGridClass =
 /** 工作流列表卡片外框 */
 export const workflowListCardShellClass = cn(
   'flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[#E9EAEB] bg-card dark:border-border dark:bg-secondary',
-  'transition-[border-color] duration-base',
+  'transition-[border-color,box-shadow] duration-base',
+  listCardHoverBorderShadowClass,
 );
 
 /** 工作流卡片头图：距卡片边框上/左/右 4px（设计稿） */
