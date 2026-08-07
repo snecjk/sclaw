@@ -4,6 +4,7 @@
  * with markdown, thinking sections, images, and tool cards.
  */
 import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, CircleCheck } from 'lucide-react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
@@ -15,8 +16,7 @@ import { ChatToolCallCard } from '@/components/chat/chat-tool-call-card';
 import { ChatProcessLoadingEllipsis } from '@/components/chat/chat-process-loading-ellipsis';
 import { useTypewriterReveal } from '@/hooks/use-typewriter-reveal';
 import { cn } from '@/lib/utils';
-import { assistantChatCardBg, chatProcessTitleRowClass, chatToolCallShellClass, userChatBubbleSurfaceClass, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
-import { ChatProcessContentRail } from '@/components/chat/chat-process-block';
+import { assistantChatCardBg, userChatBubbleSurfaceClass, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
 import {
   isCurrentUserTurnIncomplete,
   isLastUserMessage,
@@ -38,7 +38,6 @@ import {
   extractDisplayFileNameHints,
   isPreviewableFile,
   PREVIEWABLE_FILE_EXTS,
-  extractWorkflowCard,
   useLocalPathExistence,
   resolvePreviewCandidate,
   unwrapPreviewablePathMarkdown,
@@ -46,6 +45,7 @@ import {
   isWorkflowStartAssistantBoilerplate,
   resolveAssistantCopyShareContent,
   resolveUserBubbleActionText,
+  splitUserBubbleAtTag,
 } from './message-utils';
 import { writeCopyShareTextToClipboard } from '@/lib/copy-share-clipboard';
 import {
@@ -54,9 +54,6 @@ import {
   isLastAssistantAfterUserTurn,
   resolveParameterFormForAssistantMessage,
 } from '@/stores/chat/parameter-form-recovery';
-import { WorkflowCard } from '@/components/workflow/WorkflowCard';
-import { RUN_ID_IN_TEXT, sessionHasParamsConfirmedWorkflowForRun } from '@/lib/workflow-card-injection';
-import { getExecutionByRunId } from '@/stores/workflow-memory';
 import {
   artifactToPreviewFile,
   inferMimeTypeFromUrl,
@@ -66,6 +63,9 @@ import {
   resolvePreviewLinkTarget,
   toMarkdownPreviewPath,
 } from '@/lib/preview-url';
+import type { WorkflowExecutionState } from '@/types/workflow';
+
+const EMPTY_WORKFLOW_CARD_STATES: Record<string, WorkflowExecutionState> = {};
 import {
   coerceHrefForMarkdownTransform,
   resolvePreviewHrefAction,
@@ -100,6 +100,8 @@ import type { SkillMeta } from '@/types/skill-meta';
 import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessPanel';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import { ShareMessageIcon } from '@/components/icons/ShareMessageIcon';
+import { QuickInputIcon, WorkflowNodesIcon } from '@/components/icons/composer-toolbar-icons';
+import { SaveAsQuickInputButton } from '@/components/quick-input/SaveAsQuickInputButton';
 import {
   buildConversationShareDialogDraft,
   type DingTalkShareDialogDraft,
@@ -160,7 +162,6 @@ export const ChatMessage = memo(function ChatMessage({
   isStreaming = false,
   streamingTools = [],
   onPreviewFile,
-  onCreateScheduledTask,
   onEditMessage,
   hideThinkingPanel = false,
   suppressToolCards = false,
@@ -211,30 +212,9 @@ export const ChatMessage = memo(function ChatMessage({
   const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
   const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
   const sessionKey = useChatStore((s) => s.currentSessionKey);
-  const workflowCardStates = useChatStore((s) => s.workflowCardStates);
-  const workflowCard = useMemo(() => {
-    if (isUser) return null;
-    const fromBlock = extractWorkflowCard(message);
-    const resolveCard = (card: { runId: string; templateName: string }) => {
-      if (
-        !/参数已确认/.test(text)
-        && sessionHasParamsConfirmedWorkflowForRun(sessionMessages, card.runId, message.id)
-      ) {
-        return null;
-      }
-      return card;
-    };
-    if (fromBlock) return resolveCard(fromBlock);
-    const runIds = [...text.matchAll(RUN_ID_IN_TEXT)].map((m) => m[1]).filter(Boolean);
-    for (let i = runIds.length - 1; i >= 0; i -= 1) {
-      const runId = runIds[i]!;
-      if (!workflowCardStates[runId]) continue;
-      const exec = getExecutionByRunId(runId, sessionKey);
-      const card = { runId, templateName: exec?.templateName ?? '工作流' };
-      return resolveCard(card);
-    }
-    return null;
-  }, [isUser, message, text, workflowCardStates, sessionKey, sessionMessages]);
+  const workflowCardStates = EMPTY_WORKFLOW_CARD_STATES;
+  const workflowCard = null;
+  const isWorkflowCompletionMessage = false;
   const parameterForm = useMemo(() => {
     if (isUser) return null;
     return resolveParameterFormForAssistantMessage(message, {
@@ -281,6 +261,7 @@ export const ChatMessage = memo(function ChatMessage({
   const workflowArtifactUrls = useMemo(() => {
     const urls = new Set<string>();
     for (const state of Object.values(workflowCardStatesForRefs)) {
+      if (state?.status !== 'completed') continue;
       for (const artifact of state?.result?.artifacts ?? []) {
         if (artifact.url?.startsWith('http')) urls.add(artifact.url);
       }
@@ -322,14 +303,14 @@ export const ChatMessage = memo(function ChatMessage({
   const displayNameHints = useMemo(() => extractDisplayFileNameHints(text), [text]);
 
   const previewFiles = useMemo(
-    () => applyDisplayNameHints(
+    () => isWorkflowCompletionMessage ? [] : applyDisplayNameHints(
       mergePreviewFileLists(
         attachedFiles,
         extractedRefs.map((ref) => ({ ...ref, fileSize: 0, preview: null })),
       ),
       displayNameHints,
     ),
-    [attachedFiles, extractedRefs, displayNameHints],
+    [isWorkflowCompletionMessage, attachedFiles, extractedRefs, displayNameHints],
   );
 
   useEffect(() => {
@@ -404,7 +385,7 @@ export const ChatMessage = memo(function ChatMessage({
   const showAssistantParamsFold =
     !isUser && workflowCard !== null && /参数已确认/.test(text);
   const assistantBubbleText =
-    showAssistantParamsFold && isWorkflowStartAssistantBoilerplate(text) ? '' : text;
+    (showAssistantParamsFold && isWorkflowStartAssistantBoilerplate(text)) || isWorkflowCompletionMessage ? '' : text;
   const showAssistantTextBubble = assistantBubbleText.trim().length > 0;
   const assistantCopyShareContent = useMemo(
     () => {
@@ -795,27 +776,6 @@ export const ChatMessage = memo(function ChatMessage({
           ) : null
         ) : null}
 
-        {/* B4：助手侧「参数已确认」折叠块（图一：标题 + 左竖线文案 + 工作流卡） */}
-        {showAssistantParamsFold && workflowCard ? (
-          <ParamsConfirmedFoldRow
-            statusMessage={text.trim()}
-            runId={workflowCard.runId}
-            templateName={workflowCard.templateName}
-            onPreviewArtifact={onPreviewFile}
-            onCreateScheduledTask={onCreateScheduledTask}
-          />
-        ) : null}
-
-        {/* Workflow execution card（非参数已确认场景单独展示） */}
-        {workflowCard && !showAssistantParamsFold ? (
-          <WorkflowCard
-            runId={workflowCard.runId}
-            templateName={workflowCard.templateName}
-            onPreviewArtifact={onPreviewFile}
-            onCreateScheduledTask={onCreateScheduledTask}
-          />
-        ) : null}
-
         {/* B3：表单待提交等待指示；工作流已提交/执行后不再展示 */}
         {parameterForm && workflowCard === null && !showAssistantParamsFold ? (
           <AwaitingReplyIndicator className="px-0.5" />
@@ -1041,6 +1001,10 @@ function UserMessageMetaRow({
           {formatTimestamp(timestamp)}
         </span>
       ) : null}
+
+      <SaveAsQuickInputButton content={copyText} className={MESSAGE_META_ICON_BUTTON_CLASS}>
+        <QuickInputIcon className={cn(MESSAGE_META_SHARE_ICON_CLASS, 'text-current')} />
+      </SaveAsQuickInputButton>
       <Button
         type="button"
         variant="ghost"
@@ -1169,6 +1133,74 @@ function previewUrlTransform(url: string): string {
 
 // ── Message Bubble ──────────────────────────────────────────────
 
+interface WorkflowRunDisplayMeta {
+  workflowId: string;
+  workflowName: string;
+  /** 标签前的用户文案 */
+  beforeText?: string;
+  /** 标签后的用户文案（如「帮我执行这个工作流」） */
+  accompanyingText?: string;
+}
+
+function parseWorkflowRunDisplayText(text: string): WorkflowRunDisplayMeta | null {
+  const trimmed = text.trim();
+  // 允许执行指令前后保留用户原文，气泡按「前文 + 标签 + 后文」还原。
+  const execMatch = trimmed.match(
+    /^(.*?)帮我执行\s*id\s*为\s*[:：]?\s*([A-Za-z0-9_-]+)\s*的工作流\s*(?:【([^】]*)】)?\s*([\s\S]*)$/,
+  );
+  if (!execMatch) return null;
+
+  const beforeText = (execMatch[1] ?? '').trim() || undefined;
+  const workflowId = execMatch[2]?.trim();
+  if (!workflowId) return null;
+
+  const bracketName = (execMatch[3] ?? '').trim();
+  let accompanyingText = (execMatch[4] ?? '').trim() || undefined;
+  let workflowName = bracketName || workflowId;
+
+  if (!bracketName && accompanyingText) {
+    // 兼容旧格式：无【】时整段视为名称
+    workflowName = accompanyingText;
+    accompanyingText = undefined;
+  }
+
+  return { workflowId, workflowName, beforeText, accompanyingText };
+}
+
+function UserWorkflowMessageTag({ workflowName }: { workflowName: string }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-0.5 rounded-[4px] bg-[#EEF3FF] px-1 py-0.5 align-middle',
+        'text-[12px] font-medium leading-4 text-[#4E6FFF]',
+      )}
+    >
+      <WorkflowNodesIcon className="h-3 w-3 shrink-0 text-current" />
+      <span className="workflow-token-label">{workflowName}</span>
+    </span>
+  );
+}
+
+/** 技能标签按输入框里的落点渲染；无位置信息时退回正文最前。 */
+function UserSkillBubbleContent({
+  text,
+  skillMeta,
+}: {
+  text: string;
+  skillMeta: { slug: string; title: string; tagOffset?: number };
+}) {
+  const { before, after, padBefore, padAfter } = splitUserBubbleAtTag(text, skillMeta.tagOffset);
+  return (
+    <>
+      {before ? renderUserMessageMentionNodes(before) : null}
+      {padBefore ? '\u00A0' : null}
+      <SkillMessageTag title={skillMeta.title} />
+      {padAfter ? '\u00A0' : null}
+      {after ? renderUserMessageMentionNodes(after) : null}
+    </>
+  );
+}
+
 function MessageBubble({
   text,
   skillMeta,
@@ -1195,6 +1227,7 @@ function MessageBubble({
   const isReplyStream = isStreaming && !isUser && !workflowGuidanceShell;
   const wasReplyStreamRef = useRef(false);
   const [enableReplyTypewriter, setEnableReplyTypewriter] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const justStarted = isReplyStream && !wasReplyStreamRef.current;
@@ -1219,7 +1252,8 @@ function MessageBubble({
     isReplyStream && (enableReplyTypewriter || isReplyTypewriterAnimating);
   const bubbleText = useReplyTypewriter ? typewriterText : text;
 
-  const workflowCardStates = useChatStore((s) => s.workflowCardStates);
+  const workflowCardStates = EMPTY_WORKFLOW_CARD_STATES;
+  const userWorkflowDisplay = isUser ? parseWorkflowRunDisplayText(text) : null;
   const markdownSource = useMemo(
     () => (onPreviewFile ? preprocessTextForPreviewLinks(bubbleText) : bubbleText),
     [bubbleText, onPreviewFile],
@@ -1269,9 +1303,27 @@ function MessageBubble({
     >
       {isUser ? (
         <p className="whitespace-pre-wrap break-words break-all text-sm font-normal leading-5 text-foreground">
-          {skillMeta ? <SkillMessageTag title={skillMeta.title} /> : null}
-          {skillMeta && text.trim().length > 0 ? '\u00A0' : null}
-          {text.trim().length > 0 ? renderUserMessageMentionNodes(text) : null}
+          {userWorkflowDisplay ? (
+            <>
+              {userWorkflowDisplay.beforeText ? (
+                <>
+                  {renderUserMessageMentionNodes(userWorkflowDisplay.beforeText)}
+                  {'\u00A0'}
+                </>
+              ) : null}
+              <UserWorkflowMessageTag workflowName={userWorkflowDisplay.workflowName} />
+              {userWorkflowDisplay.accompanyingText ? (
+                <>
+                  {'\u00A0'}
+                  {renderUserMessageMentionNodes(userWorkflowDisplay.accompanyingText)}
+                </>
+              ) : null}
+            </>
+          ) : skillMeta ? (
+            <UserSkillBubbleContent text={text} skillMeta={skillMeta} />
+          ) : (
+            text.trim().length > 0 ? renderUserMessageMentionNodes(text) : null
+          )}
         </p>
       ) : (
         <div
@@ -1326,6 +1378,22 @@ function MessageBubble({
                 const action = resolvePreviewHrefAction(
                   rawHref.startsWith('preview://') ? rawHref : rawHref,
                 );
+
+                if (action.action === 'navigate-app') {
+                  return (
+                    <a
+                      href={`#${action.path.startsWith('/') ? action.path : `/${action.path}`}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        navigate(action.path);
+                      }}
+                      className="inline cursor-pointer break-all break-words font-inherit text-link underline-offset-2 hover:underline"
+                    >
+                      {children}
+                    </a>
+                  );
+                }
 
                 if (action.action === 'open-external') {
                   return (
@@ -1465,7 +1533,14 @@ function preprocessTextForPreviewLinks(text: string): string {
   // Protect existing markdown links [text](url) — keep http(s) URLs intact (preview://https:// breaks ReactMarkdown).
   const mdLinks: string[] = [];
   text = text.replace(/\[([^\]]*)\]\(([^)]+)\)/g, (match, linkText, href) => {
-    if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('preview://')) {
+    if (
+      href.startsWith('http://')
+      || href.startsWith('https://')
+      || href.startsWith('preview://')
+      || href.startsWith('/skills')
+      || href.startsWith('#/skills')
+      || href.toLowerCase().startsWith('stoclaw://')
+    ) {
       mdLinks.push(match);
     } else {
       mdLinks.push(`[${linkText}](${href})`);
@@ -1728,42 +1803,6 @@ function ImageLightbox({
 
 // ── 参数已确认折叠面板（图二：按步骤分组、无白底、与对话流同宽）──
 
-interface ParamsConfirmedHeaderProps {
-  /** i18n 标题，默认「参数已确认」 */
-  label: string;
-  expanded: boolean;
-  onToggle: () => void;
-}
-
-/** 与深度思考 ChatProcessBlock 标题行对齐：16px icon + 13px 文案 + chevron */
-function ParamsConfirmedHeader({
-  label,
-  expanded,
-  onToggle,
-}: ParamsConfirmedHeaderProps) {
-  return (
-    <button
-      type="button"
-      className={cn(
-        chatProcessTitleRowClass,
-        'w-full text-left transition-colors duration-150 hover:text-foreground',
-      )}
-      onClick={onToggle}
-      aria-expanded={expanded}
-    >
-      <CircleCheck className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      <ChevronDown
-        className={cn(
-          'h-3.5 w-3.5 shrink-0 opacity-70 transition-transform duration-200 ease-[ease]',
-          expanded ? 'rotate-180' : '-rotate-90',
-        )}
-        aria-hidden
-      />
-    </button>
-  );
-}
-
 interface ParamsConfirmedGroupedBodyProps {
   groups: Array<{ title: string; content: string }>;
   fallbackText: string;
@@ -1805,63 +1844,6 @@ function ParamsConfirmedGroupedBody({
           ) : null}
         </div>
       ))}
-    </div>
-  );
-}
-
-interface ParamsConfirmedFoldRowProps {
-  /** 助手 boilerplate 全文（工作流已在后台启动…） */
-  statusMessage: string;
-  runId: string;
-  templateName: string;
-  onPreviewArtifact?: (file: AttachedFileMeta) => void;
-  onCreateScheduledTask?: (workflowId: string) => void;
-}
-
-/**
- * B4：助手侧「参数已确认」折叠块（MasterGo 148:049849）
- * 折叠区内：左竖线 + 启动说明 + 状态行；摘要/产物/操作与折叠块平级（无左竖线缩进）。
- */
-function ParamsConfirmedFoldRow({
-  statusMessage,
-  runId,
-  templateName,
-  onPreviewArtifact,
-  onCreateScheduledTask,
-}: ParamsConfirmedFoldRowProps) {
-  const { t } = useTranslation('chat');
-  const [expanded, setExpanded] = useState(true);
-  const showStatusLine =
-    statusMessage.length > 0
-    && (isWorkflowStartAssistantBoilerplate(statusMessage)
-      || !/^参数已确认$/.test(statusMessage.trim()));
-
-  const workflowCardProps = {
-    runId,
-    templateName,
-    layout: 'inline' as const,
-    onPreviewArtifact,
-    onCreateScheduledTask,
-  };
-
-  return (
-    <div className={cn(chatToolCallShellClass, 'text-[13px] leading-5')}>
-      <ParamsConfirmedHeader
-        label={t('streaming.paramsConfirmedLabel')}
-        expanded={expanded}
-        onToggle={() => setExpanded((v) => !v)}
-      />
-      {expanded ? (
-        <ChatProcessContentRail>
-          <div className="flex flex-col gap-2">
-            {showStatusLine ? (
-              <p className="font-normal text-muted-foreground">{statusMessage}</p>
-            ) : null}
-            <WorkflowCard {...workflowCardProps} section="status" />
-          </div>
-        </ChatProcessContentRail>
-      ) : null}
-      <WorkflowCard {...workflowCardProps} section="results" />
     </div>
   );
 }

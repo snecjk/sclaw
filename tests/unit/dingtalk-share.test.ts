@@ -5,7 +5,7 @@ import {
   DINGTALK_SHARE_APPLINK_HOST,
   DINGTALK_SHARE_APPLINK_PATH,
   DINGTALK_SHARE_DEEPLINK_ORIGIN,
-} from '../../shared/dingtalk-share';
+} from '../../shared/dingtalk-send/dingtalk-share';
 import {
   buildArtifactShareDialogDraft,
   buildArtifactShareDraft,

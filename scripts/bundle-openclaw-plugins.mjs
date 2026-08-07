@@ -112,6 +112,7 @@ const PLUGINS = [
   { type: 'local', localDir: 'sto-skill-call-monitor', pluginId: 'sto-skill-call-monitor' },
   { type: 'local', localDir: 'sto-media-understanding', pluginId: 'sto-media-understanding' },
   { type: 'local', localDir: 'sto-dingtalk-send-guard', pluginId: 'sto-dingtalk-send-guard' },
+  { type: 'local', localDir: 'sto-connectors-bash-gate', pluginId: 'sto-connectors-bash-gate' },
   { type: 'local', localDir: 'sto-workflow-tool', pluginId: 'sto-workflow-tool' },
   { type: 'local', localDir: 'sto-browser-bridge', pluginId: 'sto-browser-bridge' },
 ];

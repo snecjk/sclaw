@@ -8,8 +8,8 @@
       "placeholder": "Help me prepare an HQ settlement reconciliation sheet"
     }
   },
-  "homeWorkflowCard": {
-    "footerHint": "Click to start"
+  "homeRecommend": {
+    "emptyCategory": "No recommendations in this category"
   },
   "hero": {
     "title": "Smarter business management",
@@ -22,7 +22,7 @@
     "dataAnalysis": "Data analysis",
     "workflow": "Workflow",
     "send": "Send",
-    "footerDisclaimer": "S Claw is AI-assisted; verify important information with your team before acting.",
+    "footerDisclaimer": "SClaw is AI-assisted; verify important information with your team before acting.",
     "gatewayRequired": "Connect the gateway before sending.",
     "sendFailed": "Could not send. Open Chat for details."
   },
@@ -45,7 +45,6 @@
     "modeMulti": "Multi-assistant collaboration",
     "headline": "What can I do for you?",
     "subline": "Chat, call tools, collaborate, and keep work moving forward in one place.",
-    "functionTag": "Feature",
     "cardTasksTitle": "Handle tasks",
     "cardTasksDesc": "Work through task-oriented requests.",
     "cardExecTitle": "Keep executing",

@@ -297,7 +297,7 @@ export function WorkflowDetailModal({
                   }}
                 >
                   <Download className="mr-1.5 hidden h-4 w-4" aria-hidden />
-                  {t('card.install')}
+                  {t('card.goCreate')}
                 </Button>
               </>
             ) : mode === 'draft' ? (

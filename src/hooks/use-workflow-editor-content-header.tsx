@@ -1,16 +1,17 @@
 /**
- * 工作流 MC 编辑/AI 创建：将返回、单行标题、外链按钮注入全局 ContentHeader（方案 B）。
+ * 工作流 MC 编辑/AI 创建：将返回、单行标题和本地操作注入全局 ContentHeader（方案 B）。
  */
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ExternalLink } from 'lucide-react';
+import { ChevronLeft, History, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useContentHeader } from '@/components/layout/content-header-context';
-import { openMemoryCenterWorkflowDesigner } from '@/lib/memory-center-web-url';
-import { getWorkflowStoToken } from '@/lib/workflow-api';
 import { cn } from '@/lib/utils';
-import { contentHeaderTitleClass } from '@/lib/surfaces';
-import { useAuthStore } from '@/stores/auth';
+import {
+  contentHeaderActionBtnClass,
+  contentHeaderTextActionBtnClass,
+  contentHeaderTitleClass,
+} from '@/lib/surfaces';
 
 export interface UseWorkflowEditorContentHeaderOptions {
   /** 工作流 ID（展示在标题行次要段） */
@@ -23,8 +24,13 @@ export interface UseWorkflowEditorContentHeaderOptions {
   promptCacheId?: string;
   /** 为 false 时不占用 ContentHeader（如创建中 loading） */
   enabled?: boolean;
-  /** 手动新建空画布页：标题用「新建工作流」，无次级 id、无外链按钮 */
+  /** 手动新建空画布页：标题用「新建工作流」，无次级 id */
   create?: boolean;
+  /** 客户端本地试运行入口，由编辑路由提供，和 iframe 内画布交互解耦。 */
+  onTryRun?: () => void;
+  tryRunDisabled?: boolean;
+  /** 打开当前工作流的客户端本地运行记录。 */
+  onOpenLocalRunHistory?: () => void;
 }
 
 function truncatePrompt(prompt: string, maxLen = 50): string {
@@ -33,7 +39,7 @@ function truncatePrompt(prompt: string, maxLen = 50): string {
 }
 
 /**
- * 编辑/AI 创建路由挂载：全局 52px 顶栏展示返回 +「编辑工作流 · wf_xxx」+ 在浏览器打开。
+ * 编辑/AI 创建路由挂载：全局 44px 顶栏展示返回、工作流标题和本地操作。
  */
 export function useWorkflowEditorContentHeader({
   workflowId,
@@ -42,10 +48,11 @@ export function useWorkflowEditorContentHeader({
   promptCacheId,
   enabled = true,
   create = false,
+  onTryRun,
+  tryRunDisabled = false,
+  onOpenLocalRunHistory,
 }: UseWorkflowEditorContentHeaderOptions): void {
   const { t } = useTranslation('workflow');
-  const stoToken = useAuthStore((s) => s.user?.stoToken);
-  const token = useMemo(() => stoToken?.trim() || getWorkflowStoToken() || '', [stoToken]);
   const onBackRef = useRef(onBack);
   useEffect(() => {
     onBackRef.current = onBack;
@@ -70,9 +77,9 @@ export function useWorkflowEditorContentHeader({
           type="button"
           aria-label={t('editor.backAria')}
           onClick={() => onBackRef.current()}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-foreground/80 hover:bg-muted"
+          className={cn(contentHeaderActionBtnClass, 'text-foreground/80 hover:bg-muted')}
         >
-          <ChevronLeft className="h-5 w-5" aria-hidden />
+          <ChevronLeft className="h-4 w-4" aria-hidden />
         </button>
         <p
           className={cn(contentHeaderTitleClass, 'flex min-w-0 items-baseline gap-1')}
@@ -96,17 +103,35 @@ export function useWorkflowEditorContentHeader({
     if (!enabled || !workflowId) return null;
 
     return (
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => openMemoryCenterWorkflowDesigner(workflowId, token, promptCacheId, prompt)}
-      >
-        <ExternalLink className="mr-1 h-3.5 w-3.5" aria-hidden />
-        {t('editor.openInBrowser')}
-      </Button>
+      <>
+        {onTryRun ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={contentHeaderTextActionBtnClass}
+            disabled={tryRunDisabled}
+            onClick={onTryRun}
+          >
+            <Play className="mr-1 h-3.5 w-3.5" aria-hidden />
+            {t('builder.tryRun')}
+          </Button>
+        ) : null}
+        {onOpenLocalRunHistory ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={contentHeaderTextActionBtnClass}
+            onClick={onOpenLocalRunHistory}
+          >
+            <History className="mr-1 h-3.5 w-3.5" aria-hidden />
+            本地运行记录
+          </Button>
+        ) : null}
+      </>
     );
-  }, [enabled, prompt, promptCacheId, t, token, workflowId]);
+  }, [enabled, onOpenLocalRunHistory, onTryRun, t, tryRunDisabled, workflowId]);
 
   useContentHeader({
     title,

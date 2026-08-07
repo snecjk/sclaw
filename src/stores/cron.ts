@@ -1,57 +1,33 @@
 /**
- * Cron State Store
- * Manages scheduled task state for local (Gateway) execution.
+ * Scheduled Task Store
+ * 管理统一 ScheduleTask（openclaw + claude 两引擎合一，自带 engineType）。
+ * 全部 hit /api/scheduled-tasks/*。
  */
 import { create } from 'zustand';
 import { hostApiFetch } from '@/lib/host-api';
 import type {
-  CronJob,
-  CronJobCreateInput,
-  CronJobUpdateInput,
-} from '../types/cron';
-import type {
-  ClaudeScheduledTask,
-  ClaudeScheduledTaskCreateInput,
-  ClaudeScheduledTaskRunRecord,
-  ClaudeScheduledTaskUpdateInput,
+  ScheduleTask,
+  CreateScheduleTaskInput,
+  UpdateScheduleTaskInput,
+  ScheduleTaskRunRecord,
   TaskTriggerExecutionMeta,
 } from '../types/scheduled-task';
-import {
-  applyCronDeletedTombstones,
-  rememberDeletedCronJob,
-} from './cron-deleted-tombstones';
 
-export type ManagedLocalTask =
-  | ({ engineType: 'openclaw' } & CronJob)
-  | ({ engineType: 'claude' } & ClaudeScheduledTask);
+/** @deprecated 旧名，新代码直接用 ScheduleTask。 */
+export type ManagedLocalTask = ScheduleTask;
 
 interface CronState {
-  jobs: ManagedLocalTask[];
+  jobs: ScheduleTask[];
   loading: boolean;
   error: string | null;
 
-  // Actions
   fetchJobs: () => Promise<void>;
-  createJob: (
-    input:
-      | { engineType: 'openclaw'; payload: CronJobCreateInput }
-      | { engineType: 'claude'; payload: ClaudeScheduledTaskCreateInput },
-  ) => Promise<ManagedLocalTask>;
-  updateJob: (
-    id: string,
-    input:
-      | { engineType: 'openclaw'; payload: CronJobUpdateInput }
-      | { engineType: 'claude'; payload: ClaudeScheduledTaskUpdateInput },
-  ) => Promise<void>;
-  deleteJob: (id: string, engineType: 'openclaw' | 'claude') => Promise<void>;
-  toggleJob: (id: string, enabled: boolean, engineType: 'openclaw' | 'claude') => Promise<void>;
-  triggerJob: (id: string, engineType: 'openclaw' | 'claude') => Promise<
-    | (CronJob & TaskTriggerExecutionMeta)
-    | (ClaudeScheduledTaskRunRecord & TaskTriggerExecutionMeta)
-    | TaskTriggerExecutionMeta
-    | void
-  >;
-  setJobs: (jobs: ManagedLocalTask[]) => void;
+  createJob: (input: CreateScheduleTaskInput) => Promise<ScheduleTask>;
+  updateJob: (id: string, input: UpdateScheduleTaskInput) => Promise<void>;
+  deleteJob: (id: string) => Promise<void>;
+  toggleJob: (id: string, enabled: boolean) => Promise<void>;
+  triggerJob: (id: string) => Promise<(ScheduleTaskRunRecord & TaskTriggerExecutionMeta) | void>;
+  setJobs: (jobs: ScheduleTask[]) => void;
 }
 
 export const useCronStore = create<CronState>((set) => ({
@@ -62,164 +38,92 @@ export const useCronStore = create<CronState>((set) => ({
   fetchJobs: async () => {
     set({ loading: true, error: null });
     try {
-      const [openclawJobs, claudeTasks] = await Promise.all([
-        hostApiFetch<CronJob[]>('/api/cron/jobs').catch(() => []),
-        hostApiFetch<ClaudeScheduledTask[]>('/api/claude-scheduled-tasks').catch(() => []),
-      ]);
-      const jobs = applyCronDeletedTombstones([
-        ...openclawJobs.map((job) => ({ ...job, engineType: 'openclaw' as const })),
-        ...claudeTasks.map((task) => ({ ...task, engineType: 'claude' as const })),
-      ]);
+      const jobs = await hostApiFetch<ScheduleTask[]>('/api/scheduled-tasks').catch(
+        () => [] as ScheduleTask[],
+      );
       set({ jobs, loading: false });
     } catch (error) {
       set({ error: String(error), loading: false });
     }
   },
 
-  // Local job operations (Gateway)
   createJob: async (input) => {
     try {
-      if (input.engineType === 'claude') {
-        const task = await hostApiFetch<ClaudeScheduledTask>('/api/claude-scheduled-tasks', {
-          method: 'POST',
-          body: JSON.stringify(input.payload),
-        });
-        const managedTask: ManagedLocalTask = { ...task, engineType: 'claude' };
-        set((state) => ({ jobs: [...state.jobs, managedTask] }));
-        return managedTask;
-      }
-      const job = await hostApiFetch<CronJob>('/api/cron/jobs', {
+      const task = await hostApiFetch<ScheduleTask>('/api/scheduled-tasks', {
         method: 'POST',
-        body: JSON.stringify(input.payload),
+        body: JSON.stringify(input),
       });
-      const managedJob: ManagedLocalTask = { ...job, engineType: 'openclaw' };
-      set((state) => ({ jobs: [...state.jobs, managedJob] }));
-      return managedJob;
+      set((state) => ({ jobs: [...state.jobs, task] }));
+      return task;
     } catch (error) {
-      console.error('Failed to create cron job:', error);
+      console.error('Failed to create scheduled task:', error);
       throw error;
     }
   },
 
   updateJob: async (id, input) => {
     try {
-      if (input.engineType === 'claude') {
-        const payload = input.payload;
-        const body: Record<string, unknown> = {};
-        if (payload.name !== undefined) body.name = payload.name;
-        if (payload.enabled !== undefined) body.enabled = payload.enabled;
-        if (payload.cronExpr !== undefined) body.cronExpr = payload.cronExpr;
-        if (payload.promptTemplate !== undefined) body.promptTemplate = payload.promptTemplate;
-        if (payload.agentId !== undefined) body.agentId = payload.agentId;
-        if (payload.workspacePath !== undefined) body.workspacePath = payload.workspacePath;
-        if (payload.providerAccountId !== undefined) body.providerAccountId = payload.providerAccountId;
-        if (payload.model !== undefined) body.model = payload.model;
-        if (payload.permissionProfile !== undefined) body.permissionProfile = payload.permissionProfile;
-        if (payload.timeoutSec !== undefined) body.timeoutSec = payload.timeoutSec;
-        if (payload.workflowCode !== undefined) body.workflowCode = payload.workflowCode;
-        const updated = await hostApiFetch<ClaudeScheduledTask>(`/api/claude-scheduled-tasks/${encodeURIComponent(id)}`, {
+      const updated = await hostApiFetch<ScheduleTask>(
+        `/api/scheduled-tasks/${encodeURIComponent(id)}`,
+        {
           method: 'PUT',
-          body: JSON.stringify(body),
-        });
-        set((state) => ({
-          jobs: state.jobs.map((job) =>
-            job.id === id && job.engineType === 'claude'
-              ? { ...job, ...updated, engineType: 'claude' as const }
-              : job
-          ),
-        }));
-        return;
-      }
-      await hostApiFetch(`/api/cron/jobs/${encodeURIComponent(id)}`, {
-        method: 'PUT',
-        body: JSON.stringify(input.payload),
-      });
+          body: JSON.stringify(input),
+        },
+      );
       set((state) => ({
-        jobs: state.jobs.map((job) =>
-          job.id === id && job.engineType === 'openclaw'
-            ? { ...job, ...input.payload, updatedAt: new Date().toISOString() }
-            : job
-        ),
+        jobs: state.jobs.map((job) => (job.id === id ? { ...job, ...updated } : job)),
       }));
     } catch (error) {
-      console.error('Failed to update cron job:', error);
+      console.error('Failed to update scheduled task:', error);
       throw error;
     }
   },
 
-  deleteJob: async (id, engineType) => {
+  deleteJob: async (id) => {
     try {
-      await hostApiFetch(engineType === 'claude'
-        ? `/api/claude-scheduled-tasks/${encodeURIComponent(id)}`
-        : `/api/cron/jobs/${encodeURIComponent(id)}`, {
+      await hostApiFetch(`/api/scheduled-tasks/${encodeURIComponent(id)}`, {
         method: 'DELETE',
       });
-      rememberDeletedCronJob(id, engineType);
-      set((state) => ({
-        jobs: state.jobs.filter((job) => !(job.id === id && job.engineType === engineType)),
-      }));
+      set((state) => ({ jobs: state.jobs.filter((job) => job.id !== id) }));
     } catch (error) {
-      console.error('Failed to delete cron job:', error);
+      console.error('Failed to delete scheduled task:', error);
       throw error;
     }
   },
 
-  toggleJob: async (id, enabled, engineType) => {
+  toggleJob: async (id, enabled) => {
     try {
-      if (engineType === 'claude') {
-        await hostApiFetch(`/api/claude-scheduled-tasks/${encodeURIComponent(id)}`, {
-          method: 'PUT',
-          body: JSON.stringify({ enabled }),
-        });
-      } else {
-        await hostApiFetch('/api/cron/toggle', {
-          method: 'POST',
-          body: JSON.stringify({ id, enabled }),
-        });
-      }
-      set((state) => ({
-        jobs: state.jobs.map((job) =>
-          job.id === id && job.engineType === engineType ? { ...job, enabled } : job
-        ),
-      }));
-    } catch (error) {
-      console.error('Failed to toggle cron job:', error);
-      throw error;
-    }
-  },
-
-  triggerJob: async (id, engineType) => {
-    try {
-      if (engineType === 'claude') {
-        const result = await hostApiFetch<ClaudeScheduledTaskRunRecord & TaskTriggerExecutionMeta>(
-          `/api/claude-scheduled-tasks/${encodeURIComponent(id)}/trigger`,
-          { method: 'POST' },
-        );
-        return result;
-      }
-      const result = await hostApiFetch<TaskTriggerExecutionMeta & Record<string, unknown>>('/api/cron/trigger', {
+      await hostApiFetch(`/api/scheduled-tasks/${encodeURIComponent(id)}/set-enabled`, {
         method: 'POST',
-        body: JSON.stringify({ id }),
+        body: JSON.stringify({ enabled }),
       });
-      
-      // Refresh jobs after trigger to update lastRun/nextRun state
+      set((state) => ({
+        jobs: state.jobs.map((job) => (job.id === id ? { ...job, enabled } : job)),
+      }));
+    } catch (error) {
+      console.error('Failed to toggle scheduled task:', error);
+      throw error;
+    }
+  },
+
+  triggerJob: async (id) => {
+    try {
+      const result = await hostApiFetch<ScheduleTaskRunRecord & TaskTriggerExecutionMeta>(
+        `/api/scheduled-tasks/${encodeURIComponent(id)}/trigger`,
+        { method: 'POST' },
+      );
+      // 刷新任务列表以更新 lastRun/nextRun 状态
       try {
-        const [openclawJobs, claudeTasks] = await Promise.all([
-          hostApiFetch<CronJob[]>('/api/cron/jobs').catch(() => []),
-          hostApiFetch<ClaudeScheduledTask[]>('/api/claude-scheduled-tasks').catch(() => []),
-        ]);
-        set({
-          jobs: applyCronDeletedTombstones([
-            ...openclawJobs.map((job) => ({ ...job, engineType: 'openclaw' as const })),
-            ...claudeTasks.map((task) => ({ ...task, engineType: 'claude' as const })),
-          ]),
-        });
+        const jobs = await hostApiFetch<ScheduleTask[]>('/api/scheduled-tasks').catch(
+          () => [] as ScheduleTask[],
+        );
+        set({ jobs });
       } catch {
-        // Ignore refresh error
+        // 忽略刷新错误
       }
       return result;
     } catch (error) {
-      console.error('Failed to trigger cron job:', error);
+      console.error('Failed to trigger scheduled task:', error);
       throw error;
     }
   },

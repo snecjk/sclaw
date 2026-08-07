@@ -1,11 +1,15 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, ArrowDown, Loader2 } from 'lucide-react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AlertTriangle, ArrowDown, Loader2, X } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useChatStore, type RawMessage } from '@/stores/chat';
 import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
-import { useWorkflowCompletion } from '@/hooks/use-workflow-completion';
+import {
+  EMPTY_WORKFLOW_CHAT_CARD_REFS,
+  useWorkflowChatCardsStore,
+} from '@/stores/workflow-chat-cards';
+import { WorkflowCard } from '@/components/workflow/WorkflowCard';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
@@ -16,20 +20,23 @@ import {
 } from '@/pages/Chat/chat-message-search';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
-import { ChatConversationHeaderActions, ChatPreviewToggleHeaderAction } from '@/pages/Chat/ChatSearchBar';
+import { ChatConversationHeaderActions, ChatPreviewWorkspaceHeaderActions } from '@/pages/Chat/ChatSearchBar';
 import { ChatPreviewHeaderTabs } from '@/pages/Chat/ChatPreviewHeaderTabs';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
 import { useMinLoading } from '@/hooks/use-min-loading';
 import { cn } from '@/lib/utils';
 import { useSettingsStore } from '@/stores/settings';
 import { ChatConversationColumn } from '@/components/chat/chat-conversation-column';
+import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import {
   stoChatColumnContentTrackClass,
   stoChatScrollContentClass,
   stoChatScrollPaneClass,
   stoChatScrollPaneSplitClass,
+  stoOverlayScrollHostClass,
   stoSplitGridBodyChatClass,
   stoSplitGridBodyPreviewClass,
+  stoPreviewExpandedBodyClass,
   stoSplitRowContentsClass,
 } from '@/lib/surfaces';
 import { useSplitPanelResize } from '@/hooks/use-split-panel-resize';
@@ -44,6 +51,7 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
+import { attachMissingWorkflowChatCardAnchors } from '@/lib/workflow-chat-card-registration';
 
 /**
  * Main-agent conversation thread on the home route (replaces the old `/chat` welcome + messages UI).
@@ -88,7 +96,28 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
   const clearError = useChatStore((s) => s.clearError);
 
-  useWorkflowCompletion(currentSessionKey);
+  const workflowCards = useWorkflowChatCardsStore(
+    (state) => state.refsBySessionKey[currentSessionKey],
+  ) ?? EMPTY_WORKFLOW_CHAT_CARD_REFS;
+  const loadWorkflowCards = useWorkflowChatCardsStore((state) => state.loadSession);
+
+  useEffect(() => {
+    void loadWorkflowCards(currentSessionKey);
+  }, [currentSessionKey, loadWorkflowCards]);
+
+  useEffect(() => {
+    if (!currentSessionKey || sending) return;
+    void loadWorkflowCards(currentSessionKey, true);
+  }, [currentSessionKey, sending, loadWorkflowCards]);
+
+  useEffect(() => {
+    if (!currentSessionKey || workflowCards.every((card) => card.anchorUserMessageId)) return;
+    void attachMissingWorkflowChatCardAnchors({
+      sessionKey: currentSessionKey,
+      messages,
+      cards: workflowCards,
+    });
+  }, [currentSessionKey, messages, workflowCards]);
 
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -140,6 +169,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     sending,
     pendingFinal,
     showThinking,
+    workflowCards,
     lastChatEventAt,
     streamMsg,
     streamText,
@@ -274,7 +304,10 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   }, [messages, streamMsg]);
 
   const {
+    previewMode,
     showPreviewPanel,
+    isPreviewSplit,
+    isPreviewExpanded,
     activePreviewFilePath,
     setActivePreviewFilePath,
     previewableFiles,
@@ -282,6 +315,8 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     openArtifactPreview,
     openPreviewPanel,
     closePreviewPanel,
+    expandPreview,
+    restorePreview,
     dismissPreviewFile,
     showEditWorkflow,
     workflowId: sessionWorkflowId,
@@ -289,6 +324,9 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
 
   const openWorkflowPreview = useCallback((workflowId: string) => {
     navigate(`/workflow/${encodeURIComponent(workflowId)}`);
+  }, [navigate]);
+  const openWorkflowList = useCallback((workflowId: string) => {
+    navigate(`/workflow?highlightWorkflowId=${encodeURIComponent(workflowId)}`);
   }, [navigate]);
 
   const {
@@ -356,18 +394,29 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     ],
   );
 
-  const previewToggleAction = useMemo(
+  const previewHeaderActions = useMemo(
     () => (
-      <ChatPreviewToggleHeaderAction
+      <ChatPreviewWorkspaceHeaderActions
         canShowPreviewPanel={canShowPreviewPanel}
         isPreviewPanelOpen={showPreviewPanel}
+        isWorkspaceExpanded={isPreviewExpanded}
+        onExpandWorkspace={expandPreview}
+        onRestoreWorkspace={restorePreview}
         onTogglePreview={() => {
           if (showPreviewPanel) closePreviewPanel();
           else openPreviewPanel();
         }}
       />
     ),
-    [canShowPreviewPanel, showPreviewPanel, closePreviewPanel, openPreviewPanel],
+    [
+      canShowPreviewPanel,
+      showPreviewPanel,
+      isPreviewExpanded,
+      expandPreview,
+      restorePreview,
+      closePreviewPanel,
+      openPreviewPanel,
+    ],
   );
 
   const previewHeaderTabs = useMemo(
@@ -390,15 +439,23 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     ],
   );
 
+  const headerLayoutMode =
+    !canShowPreviewPanel || previewMode === 'closed'
+      ? 'conversation'
+      : previewMode === 'expanded'
+        ? 'preview-expanded'
+        : 'split';
+
   useContentHeader({
     title: sessionTitle,
     previewTabs: previewHeaderTabs,
     chatActions: conversationHeaderActions,
-    actions: previewToggleAction,
-    isSplitLayout: canShowPreviewPanel && showPreviewPanel,
+    previewActions: previewHeaderActions,
+    layoutMode: headerLayoutMode,
   });
 
-  const isSplitChatLayout = canShowPreviewPanel && showPreviewPanel;
+  const isSplitChatLayout = isPreviewSplit;
+  const showPreviewSurface = canShowPreviewPanel && showPreviewPanel;
 
   const showLoadingPlaceholder = useMemo(
     () => loading && messages.length === 0,
@@ -411,15 +468,21 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
       ref={splitRowRef}
       className={cn(
         'relative min-h-0 flex-1 overflow-hidden',
-        isSplitChatLayout ? stoSplitRowContentsClass : 'flex flex-row',
+        isSplitChatLayout
+          ? stoSplitRowContentsClass
+          : isPreviewExpanded
+            ? 'flex min-h-0 flex-1 flex-col'
+            : 'flex flex-row',
         className,
       )}
     >
       <ChatConversationColumn
         variant="home"
         isSplitLayout={isSplitChatLayout}
+        isPreviewExpanded={isPreviewExpanded}
         splitGridChatClass={isSplitChatLayout ? stoSplitGridBodyChatClass : undefined}
       >
+      <div className={stoOverlayScrollHostClass}>
       <div
         ref={scrollRef}
         className={isSplitChatLayout ? stoChatScrollPaneSplitClass : stoChatScrollPaneClass}
@@ -438,6 +501,19 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
           ) : (
             <>
               {staticItems.map((item) => {
+                if (item.type === 'workflow-run') {
+                  return (
+                    <WorkflowCard
+                      key={item.key}
+                      runId={item.card.runId}
+                      templateName={item.card.title}
+                      paramsSummary={item.card.paramsSummary}
+                      onPreviewArtifact={openArtifactPreview}
+                      onCreateScheduledTask={openWorkflowCronTaskModal}
+                      onOpenWorkflow={openWorkflowList}
+                    />
+                  );
+                }
                 if (item.type === 'assistant-turn') {
                   return (
                     <AssistantTurnMessage
@@ -490,22 +566,31 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
           )}
         </div>
       </div>
+      <OverlayScrollbar viewportRef={scrollRef} contentRef={contentRef} />
+      </div>
 
       <div className="relative z-10 w-full shrink-0">
         <div className={stoChatColumnContentTrackClass('home', isSplitChatLayout)}>
       {error ? (
-        <div className="shrink-0 border-t border-destructive/20 bg-destructive/10 py-2">
-          <div className="flex items-center justify-between">
-            <p className="flex items-center gap-2 text-sm text-destructive">
-              <AlertCircle className="h-4 w-4 shrink-0" aria-hidden />
+        <div
+          role="alert"
+          className="mb-3.5 shrink-0 overflow-hidden rounded-[10px] border border-[var(--sto-chat-error-border)] bg-[var(--sto-chat-error-bg)]"
+        >
+          <div className="flex items-start gap-2 p-2">
+            <AlertTriangle
+              className="mt-0.5 h-4 w-4 shrink-0 text-[var(--sto-chat-error-icon)]"
+              aria-hidden
+            />
+            <p className="max-h-40 min-w-0 flex-1 overflow-y-auto break-words text-[13px] leading-5 text-foreground">
               {error}
             </p>
             <button
               type="button"
               onClick={() => clearError()}
-              className="text-xs text-destructive/60 underline hover:text-destructive"
+              aria-label={t('common:actions.close')}
+              className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm text-foreground transition-colors hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
             >
-              {t('common:actions.dismiss')}
+              <X className="h-4 w-4" aria-hidden />
             </button>
           </div>
         </div>
@@ -550,39 +635,34 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
       ) : null}
       </ChatConversationColumn>
 
-    {/* Resize handle — 0px track; hit + hint edge align preview left stroke */}
-    {canShowPreviewPanel && showPreviewPanel && (
-      <SplitPanelResizeHandle
-        valuePercent={previewPanelPercent}
-        isResizing={isResizing}
-        onResizeStart={startResize}
-        onKeyboardAdjust={adjustPreviewPercent}
-      />
-    )}
-
-    {/* Right: Preview Panel */}
-    <AnimatePresence>
-      {canShowPreviewPanel && showPreviewPanel && (
-        <motion.div
-          ref={previewPanelRef}
-          layout={false}
-          initial={{ opacity: 0, x: 40 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 40 }}
-          transition={{ duration: 0.25, ease: 'easeInOut' }}
-          className={stoSplitGridBodyPreviewClass}
-        >
-          <ChatPreviewPanel
-            files={previewableFiles}
-            activeFilePath={activePreviewFilePath}
-            showEditWorkflow={showEditWorkflow}
-            workflowId={sessionWorkflowId}
-            onEditWorkflow={openWorkflowPreview}
-            className="h-full w-full"
+    {/* Resize handle — Preview 侧 Body Row overlay；仅 split 渲染 */}
+    {/* Preview surface — expanded 时 Conversation 仍挂载；禁止 DOM Fullscreen */}
+    {showPreviewSurface ? (
+      <div
+        ref={previewPanelRef}
+        className={cn(
+          isSplitChatLayout && stoSplitGridBodyPreviewClass,
+          isPreviewExpanded && stoPreviewExpandedBodyClass,
+        )}
+      >
+        {isSplitChatLayout ? (
+          <SplitPanelResizeHandle
+            valuePercent={previewPanelPercent}
+            isResizing={isResizing}
+            onResizeStart={startResize}
+            onKeyboardAdjust={adjustPreviewPercent}
           />
-        </motion.div>
-      )}
-    </AnimatePresence>
+        ) : null}
+        <ChatPreviewPanel
+          files={previewableFiles}
+          activeFilePath={activePreviewFilePath}
+          showEditWorkflow={showEditWorkflow}
+          workflowId={sessionWorkflowId}
+          onEditWorkflow={openWorkflowPreview}
+          className="h-full w-full"
+        />
+      </div>
+    ) : null}
   </div>
   <TaskCreateModal
     open={workflowCronModalOpen}

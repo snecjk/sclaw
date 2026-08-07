@@ -113,7 +113,7 @@ export function createNodeFromTemplate(name: string, id: string): WorkflowNodeDa
           label: '推送渠道（多选）',
           type: 'multi',
           value: '',
-          options: ['S Claw', '钉钉', '邮件', '企业微信'],
+          options: ['SClaw', '钉钉', '邮件', '企业微信'],
         },
       ],
     };

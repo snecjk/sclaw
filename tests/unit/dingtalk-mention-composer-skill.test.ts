@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   createSkillSpan,
   consumeSkillTriggerText,
+  insertMentionAtTrigger,
   insertSkillSpan,
+  MENTION_SPAN_CLASS,
   serializeMentionEditor,
 } from '@/lib/dingtalk-mention-composer';
 
@@ -55,5 +57,33 @@ describe('dingtalk-mention-composer skill token', () => {
     const snapshot = serializeMentionEditor(root);
     expect(snapshot.skill).toEqual({ slug: 'hq-settlement', title: '总部结算对账' });
     expect(snapshot.plainText).not.toContain('*');
+  });
+
+  it('insertMention after skill does not leave a stray @ from offset mismatch', () => {
+    const root = document.createElement('div');
+    insertSkillSpan(root, 'outbound-fee', '网点出港派费');
+    // skill 插入后尾随 NBSP；用户在同一文本节点继续输入 @（与真实 contenteditable 一致）
+    const spacer = root.childNodes[1] as Text;
+    spacer.data = `${spacer.data}@`;
+
+    insertMentionAtTrigger(
+      root,
+      { query: '', startOffset: 0, endOffset: 1 },
+      {
+        type: 'group',
+        displayName: '虎盾2.9替代OpenVPN答疑群',
+        openConversationId: 'cid-1',
+      },
+    );
+
+    const snapshot = serializeMentionEditor(root);
+    expect(snapshot.skill?.slug).toBe('outbound-fee');
+    expect(snapshot.mentions).toHaveLength(1);
+    expect(snapshot.plainText.replace(/\s+$/, '')).toBe('@虎盾2.9替代OpenVPN答疑群');
+    expect(root.querySelectorAll(`span.${MENTION_SPAN_CLASS}`)).toHaveLength(1);
+    const leftoverAt = Array.from(root.childNodes).some(
+      (node) => node.nodeType === Node.TEXT_NODE && (node.textContent ?? '').includes('@'),
+    );
+    expect(leftoverAt).toBe(false);
   });
 });

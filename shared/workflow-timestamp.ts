@@ -18,3 +18,25 @@ export function parseWorkflowTimestampMs(value?: string | null): number | null {
   const ms = Date.parse(normalizeWorkflowTimestamp(value));
   return Number.isFinite(ms) ? ms : null;
 }
+
+export function formatShanghaiIso(value: Date | number = new Date()): string {
+  const date = value instanceof Date ? value : new Date(value);
+  const shanghai = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  const pad = (n: number, width = 2) => String(n).padStart(width, '0');
+  return [
+    shanghai.getUTCFullYear(),
+    '-',
+    pad(shanghai.getUTCMonth() + 1),
+    '-',
+    pad(shanghai.getUTCDate()),
+    'T',
+    pad(shanghai.getUTCHours()),
+    ':',
+    pad(shanghai.getUTCMinutes()),
+    ':',
+    pad(shanghai.getUTCSeconds()),
+    '.',
+    pad(shanghai.getUTCMilliseconds(), 3),
+    '+08:00',
+  ].join('');
+}

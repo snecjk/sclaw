@@ -5,7 +5,7 @@
  */
 import type { RefObject } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, Folder } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -48,11 +48,19 @@ import { useSidebarDeleteConfirmStore } from '@/stores/sidebar-delete-confirm';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import {
   Tooltip,
+  TooltipArrow,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { invokeIpc } from '@/lib/api-client';
 import type { WorkspaceDto } from '@/lib/session-catalog-api';
+
+const SIDEBAR_TOOLTIP_CLASS = cn(
+  'overflow-visible rounded-lg border-0 bg-[#1D2129] px-2.5 py-1.5 text-xs font-medium text-white',
+  'shadow-[0_6px_20px_rgba(0,0,0,0.16)]',
+  'dark:bg-[#2E3038] dark:text-white dark:shadow-[0_8px_24px_rgba(0,0,0,0.4)]',
+);
+const SIDEBAR_TOOLTIP_ARROW_CLASS = 'fill-[#1D2129] dark:fill-[#2E3038]';
 
 interface SidebarProjectsSectionProps {
   collapsed: boolean;
@@ -322,7 +330,6 @@ export function SidebarProjectsSection({
   return (
     <>
       <SidebarCollapsibleSectionLabel
-        className="mt-4"
         open={open}
         onToggle={onToggle}
         label={t('sidebar.projects')}
@@ -365,10 +372,11 @@ export function SidebarProjectsSection({
                     )}
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="right" className="text-xs">
+                <TooltipContent side="right" className={SIDEBAR_TOOLTIP_CLASS}>
                   {projectGroupsAllExpanded
                     ? t('sidebar.collapseAllGroups')
                     : t('sidebar.expandAllGroups')}
+                  <TooltipArrow className={SIDEBAR_TOOLTIP_ARROW_CLASS} />
                 </TooltipContent>
               </Tooltip>
             ) : null}
@@ -391,8 +399,9 @@ export function SidebarProjectsSection({
                   />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right" className="text-xs">
+              <TooltipContent side="right" className={SIDEBAR_TOOLTIP_CLASS}>
                 {t('sidebar.newProject')}
+                <TooltipArrow className={SIDEBAR_TOOLTIP_ARROW_CLASS} />
               </TooltipContent>
             </Tooltip>
           </>
@@ -400,9 +409,9 @@ export function SidebarProjectsSection({
       />
 
       {open ? (
-        <div className="mt-0.5 flex flex-col gap-0.5 pb-1">
+        <div className="mt-0.5 flex flex-col gap-0.5 pb-2">
           {sortedWorkspaces.length === 0 ? (
-            <div className="flex h-9 min-w-0 items-center gap-2 px-[10px]">
+            <div className="flex h-8 min-w-0 items-center gap-2 px-[10px]">
               <Folder className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
               <p
                 className={cn(
@@ -438,7 +447,7 @@ export function SidebarProjectsSection({
                       onBlur={() => {
                         void commitProjectRename();
                       }}
-                      className="w-full rounded-[8px] border border-[var(--sto-brand-6)] bg-card px-[10px] py-[6px] pr-16 text-left text-sm leading-5 text-foreground outline-none"
+                      className="h-8 w-full rounded-[8px] border border-[var(--sto-brand-6)] bg-card px-[10px] py-[3px] pr-16 text-left text-[13px] leading-5 text-foreground outline-none"
                     />
                   ) : (
                     <>
@@ -454,7 +463,7 @@ export function SidebarProjectsSection({
                           startProjectRename(workspace);
                         }}
                         className={cn(
-                          'flex h-9 min-w-0 w-full flex-1 items-center gap-2 rounded-lg px-[10px] py-2 pr-16 text-left transition-colors',
+                          'flex h-8 min-w-0 w-full flex-1 items-center gap-2 rounded-lg px-[10px] py-1 pr-16 text-left transition-colors',
                           sidebarSubitemTextIdleClass,
                         )}
                       >
@@ -464,15 +473,19 @@ export function SidebarProjectsSection({
                             {workspace.name}
                           </span>
                           {canExpand ? (
-                            <ChevronDown
-                              className={cn(
-                                'h-4 w-4 shrink-0 transition-transform',
-                                sidebarTextIconClass,
-                                isExpanded ? 'rotate-180' : '',
-                              )}
-                              strokeWidth={2}
-                              aria-hidden
-                            />
+                            isExpanded ? (
+                              <ChevronDown
+                                className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
+                                strokeWidth={2}
+                                aria-hidden
+                              />
+                            ) : (
+                              <ChevronRight
+                                className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
+                                strokeWidth={2}
+                                aria-hidden
+                              />
+                            )
                           ) : null}
                         </span>
                       </button>
@@ -491,7 +504,7 @@ export function SidebarProjectsSection({
                 </div>
 
                 {isExpanded && projectSessions.length > 0 ? (
-                  <div className="mb-0.5 flex flex-col gap-0.5">
+                  <div className="mt-0.5 mb-0.5 flex flex-col gap-0.5">
                     {projectSessions.map((session) => {
                       const label = getSessionLabel(session.key, session.displayName, session.label);
                       const isActive = isOnHome

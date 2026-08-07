@@ -79,6 +79,10 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
       ? { label: t('plaza.tag.mine', { defaultValue: '自建' }), bg: '#FFF5E6', text: '#D95700' }
       : null;
 
+  const promptTag = liveSkill.skillKind === 'prompt'
+    ? { label: t('plaza.tag.prompt', { defaultValue: 'Prompt' }), bg: '#E8F1FF', text: '#2563eb' }
+    : null;
+
   // Optional workflow steps from skill data (future backend support)
   const workflowSteps = (liveSkill as unknown as Record<string, unknown>).workflowSteps as string[] | undefined;
 
@@ -120,6 +124,14 @@ export function SkillDetailModal({ skill, open, onClose }: SkillDetailModalProps
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h2 className="text-base font-semibold text-foreground">{liveSkill.title}</h2>
+                    {promptTag && (
+                      <span
+                        className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium"
+                        style={{ backgroundColor: promptTag.bg, color: promptTag.text }}
+                      >
+                        {promptTag.label}
+                      </span>
+                    )}
                     {tag && (
                       <span
                         className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium"

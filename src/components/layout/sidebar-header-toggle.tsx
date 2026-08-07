@@ -16,6 +16,8 @@ export interface SidebarHeaderToggleProps {
   collapseLabel: string;
   /** 展开操作的无障碍文案 */
   expandLabel: string;
+  /** ContentHeader 与 Sidebar chrome 分别消费各自的 28px 尺寸 Token。 */
+  isContentHeaderCompact?: boolean;
   className?: string;
 }
 
@@ -24,6 +26,7 @@ export function SidebarHeaderToggle({
   onToggle,
   collapseLabel,
   expandLabel,
+  isContentHeaderCompact = false,
   className,
 }: SidebarHeaderToggleProps) {
   const label = isCollapsed ? expandLabel : collapseLabel;
@@ -38,7 +41,10 @@ export function SidebarHeaderToggle({
       data-sclaw-browser-sidebar-preserve="true"
       onClick={onToggle}
       className={cn(
-        'no-drag flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-[#86909C]',
+        'no-drag flex shrink-0 items-center justify-center rounded-md text-[#86909C]',
+        isContentHeaderCompact
+          ? 'h-[var(--sto-content-header-control-h,28px)] w-[var(--sto-content-header-control-h,28px)]'
+          : 'h-[var(--sto-sidebar-chrome-toggle-size,28px)] w-[var(--sto-sidebar-chrome-toggle-size,28px)]',
         'transition-colors hover:bg-black/[0.04] hover:text-[#4E5969]',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         className,

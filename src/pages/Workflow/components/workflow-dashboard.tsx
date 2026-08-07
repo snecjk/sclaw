@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { Plus, Search } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -24,6 +24,7 @@ import {
   workflowListToolbarClass,
 } from '@/lib/surfaces';
 import { WorkflowDeleteConfirm } from '@/pages/Workflow/components/workflow-delete-confirm';
+import { WorkflowEngineSelectDialog } from '@/pages/Workflow/components/workflow-engine-select-dialog';
 // TODO: 预览/详情弹窗暂不启用
 // import {
 //   WorkflowDetailModal,
@@ -46,6 +47,7 @@ import { Button } from '@/components/ui/button';
 import { useWorkflowList } from '@/pages/Workflow/use-workflow-list';
 import { renameWorkflow, deleteWorkflow } from '@/lib/workflow-api';
 import { navigateToNewSessionWithPrompt } from '@/lib/main-chat-navigation';
+import { workflowSessionTitle } from '@/lib/workflow-session';
 import { WorkflowComposer } from '@/pages/Workflow/components/workflow-composer';
 import { useRecommendItems } from '@/hooks/use-recommend-items';
 import { RECOMMEND_POSITION_KEYS } from '@/lib/recommend-api';
@@ -101,6 +103,51 @@ export function WorkflowDashboard({
   const [renameLoading, setRenameLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<WorkflowCardItem | null>(null);
+  const [runTarget, setRunTarget] = useState<Pick<WorkflowCardItem, 'id' | 'name'> | null>(null);
+  const [highlightedWorkflowId, setHighlightedWorkflowId] = useState<string | null>(null);
+  const targetWorkflowId = new URLSearchParams(location.search).get('highlightWorkflowId');
+
+  useEffect(() => {
+    if (!targetWorkflowId) return;
+    const frame = window.requestAnimationFrame(() => {
+      setTab('mine');
+      setSearch('');
+      setMineFilter(cardsByKind.draft.some((card) => card.id === targetWorkflowId) ? 'draft' : 'published');
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [cardsByKind.draft, setMineFilter, setTab, targetWorkflowId]);
+
+  useEffect(() => {
+    if (!targetWorkflowId || tab !== 'mine' || mineLoading) return;
+
+    let attempts = 0;
+    let retryTimer: number | undefined;
+    const focusTarget = () => {
+      const card = Array.from(document.querySelectorAll<HTMLElement>('[data-workflow-id]'))
+        .find((element) => element.dataset.workflowId === targetWorkflowId);
+      if (card) {
+        setHighlightedWorkflowId(targetWorkflowId);
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.focus({ preventScroll: true });
+        navigate({ pathname: location.pathname }, { replace: true });
+        return;
+      }
+      attempts += 1;
+      if (attempts < 10) retryTimer = window.setTimeout(focusTarget, 150);
+    };
+
+    const frame = window.requestAnimationFrame(focusTarget);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+    };
+  }, [location.pathname, mineLoading, navigate, tab, targetWorkflowId]);
+
+  useEffect(() => {
+    if (!highlightedWorkflowId) return;
+    const timer = window.setTimeout(() => setHighlightedWorkflowId(null), 4_000);
+    return () => window.clearTimeout(timer);
+  }, [highlightedWorkflowId]);
 
   /** 快捷提示词 i18n label 映射 */
   const chipLabels: Record<(typeof EXAMPLE_CHIPS)[number], string> = {
@@ -161,14 +208,22 @@ export function WorkflowDashboard({
     return list;
   })();
 
-  /** 立即运行：按标题复用已有会话，否则新建并命名，再跳转首页自动发送。 */
+  /** 立即运行：先选择本次工作流引擎，再跳转首页自动发送。 */
   const runWorkflowInChat = useCallback(
-    (card: Pick<WorkflowCardItem, 'id' | 'name'>) => {
+    (card: Pick<WorkflowCardItem, 'id' | 'name'>, engineType: 'claude' | 'openclaw') => {
       navigateToNewSessionWithPrompt(
         navigate,
         location.pathname,
         `帮我执行 id 为：${card.id} 的工作流 【${card.name}】`,
-        { sessionTitle: `执行${card.name}工作流` }
+        {
+          workflowRun: true,
+          workflowEngine: engineType,
+          workflowSession: {
+            workflowId: card.id,
+            engineType,
+            sessionTitle: workflowSessionTitle(card.name, engineType),
+          },
+        }
       );
     },
     [navigate, location.pathname]
@@ -383,6 +438,7 @@ export function WorkflowDashboard({
                 <WorkflowMineListCard
                   key={card.id}
                   card={card}
+                  highlighted={card.id === highlightedWorkflowId}
                   isRenaming={renamingId === card.id}
                   renameRef={renameRef}
                   onRenameCommit={async (name) => {
@@ -410,7 +466,7 @@ export function WorkflowDashboard({
                   // }}
                   // TODO: 等待后端 API 对接 — onCardClick 暂不启用
                   // onCardClick={() => openDetailForMine(card)}
-                  onRun={() => runWorkflowInChat(card)}
+                  onRun={() => setRunTarget({ id: card.id, name: card.name })}
                   onEdit={() => onEditCard(card.id)}
                   isRenameDisabled={renameLoading}
                   isDeleteDisabled={deleteLoading}
@@ -537,6 +593,15 @@ export function WorkflowDashboard({
         workflowName={deleteTarget?.name ?? ''}
         onCancel={() => setDeleteTarget(null)}
         onConfirm={confirmDelete}
+      />
+      <WorkflowEngineSelectDialog
+        open={Boolean(runTarget)}
+        workflowName={runTarget?.name ?? ''}
+        onCancel={() => setRunTarget(null)}
+        onConfirm={(engineType) => {
+          if (runTarget) runWorkflowInChat(runTarget, engineType);
+          setRunTarget(null);
+        }}
       />
     </div>
   );

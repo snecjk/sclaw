@@ -33,7 +33,7 @@ const AGENT_RUNTIME_FILES = [
 /* TEMP: 暂时停用英文 Long Output / Thinking Language 注入（压缩初始上下文），勿删，恢复时取消注释
 const LONG_OUTPUT_CONSTRAINT = [
   '',
-  '## 📄 Long Output Rule (STO Claw)',
+  '## 📄 Long Output Rule (SClaw)',
   '',
   'When generating content for the user, **ALWAYS use the `write` tool to save long outputs to a file** instead of dumping the full content into the chat message.',
   '',
@@ -67,7 +67,7 @@ const LONG_OUTPUT_CONSTRAINT = [
 
 const CHINESE_THINKING_CONSTRAINT = [
   '',
-  '## 🧠 Thinking Language Rule (STO Claw)',
+  '## 🧠 Thinking Language Rule (SClaw)',
   '',
   '**All your internal reasoning and thinking processes MUST be written in Chinese (中文).**',
   'Even when analyzing English content or code, your step-by-step thoughts, plans, and reflections should be expressed in Chinese.',
@@ -524,7 +524,7 @@ export async function ensureLongOutputConstraint(_workspacePath: string): Promis
   return;
   /*
   const agentsMdPath = join(workspacePath, 'AGENTS.md');
-  const marker = '## 📄 Long Output Rule (STO Claw)';
+  const marker = '## 📄 Long Output Rule (SClaw)';
 
   try {
     let content = '';
@@ -549,7 +549,7 @@ export async function ensureChineseThinkingConstraint(_workspacePath: string): P
   return;
   /*
   const agentsMdPath = join(workspacePath, 'AGENTS.md');
-  const marker = '## 🧠 Thinking Language Rule (STO Claw)';
+  const marker = '## 🧠 Thinking Language Rule (SClaw)';
 
   try {
     let content = '';
@@ -819,6 +819,20 @@ export async function createAgentWithId(
     const existsOnDisk = diskIds.has(id);
 
     if (existsInConfig) {
+      // `skipBootstrap` was written by older StoClaw versions but is not part
+      // of the current OpenClaw agent schema. Remove it while repairing the
+      // entry so a Gateway reload can start successfully.
+      const existingAgent = entries.find((entry) => entry.id === id)!;
+      const { skipBootstrap: _legacySkipBootstrap, ...agentWithoutLegacyBootstrap } = existingAgent;
+      if (options?.workspace || _legacySkipBootstrap !== undefined) {
+        const index = entries.findIndex((entry) => entry.id === id);
+        entries[index] = {
+          ...agentWithoutLegacyBootstrap,
+          ...(options.workspace ? { workspace: options.workspace.trim() } : {}),
+        };
+        config.agents = { ...agentsConfig, list: entries };
+        await writeOpenClawConfig(config);
+      }
       logger.info('createAgentWithId: agent already in config (idempotent)', { agentId: id });
       return await buildSnapshotFromConfig(config);
     }
@@ -846,7 +860,9 @@ export async function createAgentWithId(
       list: nextEntries,
     };
 
-    await provisionAgentFilesystem(config, newAgent, { inheritWorkspace: options?.inheritWorkspace });
+    await provisionAgentFilesystem(config, newAgent, {
+      inheritWorkspace: options?.inheritWorkspace,
+    });
     await writeOpenClawConfig(config);
 
     const features = await readAgentFeatures();

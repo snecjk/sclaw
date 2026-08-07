@@ -683,7 +683,7 @@ function ensureSaiBinInUnixPath(): void {
       const content = readFileSync(rcFile, 'utf-8');
       if (content.includes(SAI_BIN_DIR)) continue;
 
-      appendFileSync(rcFile, `\n# Added by STO Claw\n${exportLine}\n`);
+      appendFileSync(rcFile, `\n# Added by SClaw\n${exportLine}\n`);
       logger.info(`Added ${SAI_BIN_DIR} to ${rcFile}`);
     } catch (err) {
       logger.warn(`Failed to update ${rcFile}:`, err);

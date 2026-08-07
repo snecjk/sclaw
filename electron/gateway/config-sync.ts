@@ -43,9 +43,12 @@ import { buildProxyEnv, resolveProxySettings } from '../utils/proxy';
 import { syncProxyConfigToOpenClaw } from '../utils/openclaw-proxy';
 import { logger } from '../utils/logger';
 import { getDwsBinDir } from '../utils/dws-cli';
+import { getQpathBinDir } from '../utils/qpath-cli';
 import { prependPathEntry, prependNodePathEntry } from '../utils/env-path';
+import { resolveConnectedGitlabHostname } from '../connectors/agent-context';
 import { copyPluginFromNodeModules, fixupPluginManifest } from '../utils/plugin-install';
 import { SAI_CLIENT_ID_VALUE, applySaiClientIdEnv } from '../utils/sai-client-id';
+import { prepareWorkflowOpenClawRuntimeForGatewayLaunch } from '../services/workflow-runtime/agent-runner-openclaw';
 
 export interface GatewayLaunchContext {
   appSettings: Awaited<ReturnType<typeof getAllSettings>>;
@@ -300,6 +303,11 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
   const appSettings = await getAllSettings();
   await syncGatewayConfigBeforeLaunch(appSettings);
 
+  // The workflow runtime is a fixed Gateway agent. It must exist before the
+  // child process reads the agent registry; workflow execution must never
+  // reload/restart a live Gateway merely to register this agent.
+  await prepareWorkflowOpenClawRuntimeForGatewayLaunch();
+
   if (!existsSync(entryScript)) {
     throw new Error(`OpenClaw entry script not found at: ${entryScript}`);
   }
@@ -331,12 +339,14 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     ? prependPathEntry(baseEnvRecord, binPath).env
     : baseEnvRecord;
   baseEnvPatched = prependPathEntry(baseEnvPatched, getDwsBinDir()).env;
+  baseEnvPatched = prependPathEntry(baseEnvPatched, getQpathBinDir()).env;
 
   const mainWorkspace = await getAgentWorkspacePath('main')
     ?? getDefaultAgentWorkspacePath();
   const mainOutputDir = ensureWorkspaceArtifactOutputDir(mainWorkspace)
     ?? join(mainWorkspace, WORKSPACE_ARTIFACT_OUTPUT_DIRNAME);
 
+  const gitlabHost = resolveConnectedGitlabHostname();
   const forkEnv: Record<string, string | undefined> = prependNodePathEntry({
     ...baseEnvPatched,
     ...providerEnv,
@@ -351,6 +361,7 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     STOCLAW_WORKSPACE: mainWorkspace,
     STOCLAW_OUTPUT_DIR: mainOutputDir,
     SAI_CLIENT_ID: SAI_CLIENT_ID_VALUE,
+    ...(gitlabHost ? { GITLAB_HOST: gitlabHost } : {}),
   }, getOpenClawNodeModulesPath());
 
   return {

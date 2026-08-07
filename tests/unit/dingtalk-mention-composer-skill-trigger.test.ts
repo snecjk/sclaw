@@ -25,7 +25,7 @@ describe('dingtalk-mention-composer skill inline trigger', () => {
     root.appendChild(document.createTextNode('*异常'));
     root.appendChild(document.createTextNode('补充说明'));
 
-    expect(consumeSkillTriggerText(root, '异常')).toBe(true);
+    expect(consumeSkillTriggerText(root, '异常')).toBe(0);
     expect(serializeMentionEditor(root).plainText).toBe('补充说明');
   });
 
@@ -33,22 +33,22 @@ describe('dingtalk-mention-composer skill inline trigger', () => {
     const root = document.createElement('div');
     root.appendChild(document.createTextNode('*异常'));
 
-    expect(consumeSkillTriggerText(root)).toBe(true);
+    expect(consumeSkillTriggerText(root)).toBe(0);
     expect(serializeMentionEditor(root).plainText).toBe('');
   });
 
-  it('consumeSkillTriggerText returns false when no asterisk', () => {
+  it('consumeSkillTriggerText returns null when no asterisk', () => {
     const root = document.createElement('div');
     root.appendChild(document.createTextNode('plain text'));
-    expect(consumeSkillTriggerText(root)).toBe(false);
+    expect(consumeSkillTriggerText(root)).toBeNull();
   });
 
   it('picker select flow: consume trigger then insert skill leaves clean plainText', () => {
     const root = document.createElement('div');
     root.appendChild(document.createTextNode('*异常'));
 
-    consumeSkillTriggerText(root, '异常');
-    insertSkillSpan(root, 'skill-a', '异常客户跟踪');
+    const offset = consumeSkillTriggerText(root, '异常');
+    insertSkillSpan(root, 'skill-a', '异常客户跟踪', offset ?? undefined);
     root.appendChild(document.createTextNode('帮我查一下'));
 
     const snapshot = serializeMentionEditor(root);

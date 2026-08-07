@@ -8,8 +8,8 @@
       "placeholder": "帮我做一份客户异常监控"
     }
   },
-  "homeWorkflowCard": {
-    "footerHint": "点击启动"
+  "homeRecommend": {
+    "emptyCategory": "该分类暂无推荐"
   },
   "hero": {
     "title": "让经营管理更高效",
@@ -45,7 +45,6 @@
     "modeMulti": "多助手协作",
     "headline": "我能为你做些什么？",
     "subline": "在一个界面里完成对话、调用工具、协作处理和持续执行。",
-    "functionTag": "功能",
     "cardTasksTitle": "处理任务",
     "cardTasksDesc": "处理面向任务的请求",
     "cardExecTitle": "持续执行",
@@ -58,7 +57,7 @@
     "collabValue": "多助手",
     "toolsLabel": "工具",
     "toolsValue": "可调用",
-    "inputPlaceholder": "给 Main Agent 发送消息，输入 @ 搜索钉钉联系人或群",
+    "inputPlaceholder": "今天能帮你做些什么？@钉钉联系或群，/调用工作流和技能",
     "claudeLineConnected": "Claude Agent 已就绪",
     "gatewayLineConnected": "网关已连接 | 端口：{{port}} | 进程：{{pid}}",
     "gatewayLineConnecting": "网关连接中 | 端口：{{port}}",

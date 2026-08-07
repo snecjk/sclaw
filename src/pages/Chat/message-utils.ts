@@ -22,6 +22,8 @@ import {
   stripDingTalkMentionContextForDisplay,
 } from '@/lib/dingtalk-mention-context';
 import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
+import { isVirtualTaskSessionKey } from '@/stores/chat/cron-session-utils';
+import { enrichScheduledTaskArtifactProvenance } from '@/lib/scheduled-task-artifact-provenance';
 import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay, WORKFLOW_COMPLETE_TAG } from '@/lib/workflow-context';
 import { stripSclawBrowserEmbedContextForDisplay } from '@/lib/sclaw-browser-embed-context';
 import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
@@ -44,7 +46,8 @@ import {
   urlPathHasFileExtension,
 } from '@/lib/preview-url';
 import { normalizePreviewFileKey, previewFileRefsMatch } from '@/lib/preview-file-path';
-import { sanitizeLocalFileRefsForCopy } from '../../../shared/dingtalk-share-text';
+import type { DataCenterArtifactProvenance } from '@/types/data-center';
+import { sanitizeLocalFileRefsForCopy } from '../../../shared/dingtalk-send/dingtalk-share-text';
 import type { WorkflowExecutionState } from '@/types/workflow';
 
 /** OpenClaw injects queued system events as `System: [timestamp] ...` lines before user text. */
@@ -52,6 +55,20 @@ const GATEWAY_SYSTEM_EVENT_LINE =
   /^\s*System:\s*(?:\[[^\]]+\]\s*)?[^\n]*(?:\n|$)/gim;
 
 const AT_MENTION_DISPLAY_NAME_PATTERN = /@([^\s@\n]+)/g;
+
+function resolveArtifactSourceType(sessionKey: string): DataCenterArtifactProvenance['sourceType'] {
+  return isVirtualTaskSessionKey(sessionKey) ? 'scheduled_task_artifact' : 'chat_artifact';
+}
+
+function resolveWorkflowArtifactSourceType(sessionKey: string): DataCenterArtifactProvenance['sourceType'] {
+  return isVirtualTaskSessionKey(sessionKey) ? 'scheduled_task_artifact' : 'workflow_artifact';
+}
+
+function buildArtifactProvenance(
+  provenance: DataCenterArtifactProvenance,
+): DataCenterArtifactProvenance {
+  return enrichScheduledTaskArtifactProvenance(provenance);
+}
 
 /**
  * Clean Gateway metadata from user message text for display.
@@ -313,8 +330,8 @@ function isAssistantMessageRole(role: unknown): boolean {
 }
 
 export function messageHasWorkflowCard(msg: RawMessage): boolean {
-  return Array.isArray(msg.content)
-    && (msg.content as ContentBlock[]).some((block) => block.type === 'workflow_card');
+  void msg;
+  return false;
 }
 
 export function messageHasParameterFormBlock(msg: RawMessage): boolean {
@@ -367,8 +384,10 @@ export function resolveAssistantCopyShareContent(options: {
 
   if (workflowCard) {
     const state = workflowCardStates[workflowCard.runId];
-    const summary = state?.result?.summary?.trim() ?? '';
-    for (const artifact of state?.result?.artifacts ?? []) {
+    const summary = typeof state?.result?.summary === 'string'
+      ? state.result.summary.trim()
+      : '';
+    for (const artifact of state?.status === 'completed' ? state.result?.artifacts ?? [] : []) {
       if (!isUserFacingArtifactUrl(artifact.url)) continue;
       addFile(artifactToPreviewFile(artifact));
     }
@@ -616,22 +635,16 @@ export function extractParameterForm(
  * Extract workflow_card block from a message's content field.
  */
 export function extractWorkflowCard(message: RawMessage | unknown): { runId: string; templateName: string } | null {
-  if (!message || typeof message !== 'object') return null;
-  const msg = message as Record<string, unknown>;
-  const content = msg.content;
+  void message;
+  return null;
+}
 
-  if (!Array.isArray(content)) return null;
-
-  let latest: { runId: string; templateName: string } | null = null;
-  for (const block of content as import('@/stores/chat').ContentBlock[]) {
-    if (block.type === 'workflow_card' && block.runId) {
-      latest = {
-        runId: block.runId,
-        templateName: block.templateName ?? '工作流',
-      };
-    }
-  }
-  return latest;
+/** Legacy workflow tools may return a Markdown status report after completion.
+ * It is transport text; the hydrated WorkflowCard is the user-facing result. */
+export function isWorkflowCompletionTranscript(text: string): boolean {
+  return /run_[\w-]+/.test(text)
+    && /(执行状态|生成产物|预览链接)/.test(text)
+    && /(工作流.*(?:已执行完成|执行完成)|状态[：:])/.test(text);
 }
 
 /** Latest workflow_card across assistant snapshots in a turn (newest message / block wins). */
@@ -709,12 +722,40 @@ export function extractText(message: RawMessage | unknown): string {
  */
 export function resolveUserBubbleActionText(
   bodyText: string,
-  skillMeta?: { title?: string } | null,
+  skillMeta?: { title?: string; tagOffset?: number } | null,
 ): string {
   const body = (bodyText ?? '').trim();
   const title = (skillMeta?.title ?? '').trim();
-  if (title && body) return `${title} ${body}`;
-  return title || body;
+  if (!title || !body) return title || body;
+  const { before, after } = splitUserBubbleAtTag(body, skillMeta?.tagOffset);
+  return [before.trim(), title, after.trim()].filter(Boolean).join(' ');
+}
+
+export interface UserBubbleTagSplit {
+  before: string;
+  after: string;
+  /** 标签左侧是否需要补一个分隔空格。 */
+  padBefore: boolean;
+  /** 标签右侧是否需要补一个分隔空格。 */
+  padAfter: boolean;
+}
+
+/**
+ * 按技能标签的插入位置切分气泡正文。
+ *
+ * `tagOffset` 缺省（history 回写、旧消息）时退回 0，即标签渲染在正文最前，
+ * 与引入位置信息之前的行为一致。
+ */
+export function splitUserBubbleAtTag(text: string, tagOffset?: number): UserBubbleTagSplit {
+  const offset = Math.min(Math.max(tagOffset ?? 0, 0), text.length);
+  const before = text.slice(0, offset);
+  const after = text.slice(offset);
+  return {
+    before,
+    after,
+    padBefore: before.length > 0 && !/\s$/.test(before),
+    padAfter: after.length > 0 && !/^\s/.test(after),
+  };
 }
 
 /**
@@ -1363,10 +1404,10 @@ export function useLocalPathExistence(paths: string[]): Record<string, boolean> 
  * - unresolvable → null (do not render a preview entry).
  */
 export function resolvePreviewCandidate(
-  file: { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null },
+  file: AttachedFileMeta & { filePath: string },
   exists: boolean | undefined,
   workflowCardStates?: Record<string, WorkflowExecutionState>,
-): { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null } | null {
+): (AttachedFileMeta & { filePath: string }) | null {
   if (isHttpUrl(file.filePath)) return file;
   if (exists === true) return file;
   if (exists === undefined) return null;
@@ -1392,12 +1433,13 @@ export function resolvePreviewCandidate(
 export function usePreviewableFiles(
   messages: Array<unknown & { _attachedFiles?: Array<{ mimeType: string; filePath?: string; fileName: string }>; content?: unknown; role?: string }>,
   workflowCardStates?: Record<string, WorkflowExecutionState>,
+  sessionKey?: string,
 ) {
   const candidates = useMemo(() => {
     const seen = new Set<string>();
-    const result: Array<{ mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }> = [];
+    const result: Array<AttachedFileMeta & { filePath: string }> = [];
 
-    function addItem(item: { mimeType: string; filePath: string; fileName: string; fileSize: number; preview: string | null }) {
+    function addItem(item: AttachedFileMeta & { filePath: string }) {
       const key = normalizePreviewFileKey(item.filePath, item.fileName);
       if (!key || seen.has(key)) return;
       seen.add(key);
@@ -1407,6 +1449,7 @@ export function usePreviewableFiles(
     // Structured workflow artifacts first — authoritative OSS URLs win dedup.
     if (workflowCardStates) {
       for (const state of Object.values(workflowCardStates)) {
+        if (state.status !== 'completed') continue;
         for (const artifact of state.result?.artifacts ?? []) {
           if (!isPreviewableArtifactUrl(artifact.url, artifact.type)) continue;
           const previewFile = artifactToPreviewFile(artifact);
@@ -1417,6 +1460,14 @@ export function usePreviewableFiles(
             fileName: previewFile.fileName,
             fileSize: previewFile.fileSize,
             preview: previewFile.preview,
+            artifactProvenance: sessionKey ? buildArtifactProvenance({
+              sourceType: resolveWorkflowArtifactSourceType(sessionKey),
+              sessionId: sessionKey,
+              artifactKey: artifact.id || previewFile.filePath,
+              runId: state.runId,
+              workflowTemplateId: state.workflowId,
+              workflowRunId: state.runId,
+            }) : undefined,
           });
         }
       }
@@ -1436,6 +1487,12 @@ export function usePreviewableFiles(
             fileName: file.fileName,
             fileSize: (file as { fileSize?: number }).fileSize ?? 0,
             preview: (file as { preview?: string | null }).preview ?? null,
+            artifactProvenance: (file as AttachedFileMeta).artifactProvenance ?? (sessionKey ? buildArtifactProvenance({
+              sourceType: resolveArtifactSourceType(sessionKey),
+              sessionId: sessionKey,
+              artifactKey: fp,
+              messageId: typeof (msg as { id?: unknown }).id === 'string' ? (msg as { id: string }).id : undefined,
+            }) : undefined),
           });
         }
       }
@@ -1452,13 +1509,19 @@ export function usePreviewableFiles(
             fileName: ref.fileName,
             fileSize: 0,
             preview: null,
+            artifactProvenance: sessionKey ? buildArtifactProvenance({
+              sourceType: resolveArtifactSourceType(sessionKey),
+              sessionId: sessionKey,
+              artifactKey: ref.filePath,
+              messageId: typeof (msg as { id?: unknown }).id === 'string' ? (msg as { id: string }).id : undefined,
+            }) : undefined,
           });
         }
       }
     }
 
     return result;
-  }, [messages, workflowCardStates]);
+  }, [messages, workflowCardStates, sessionKey]);
 
   // Verify non-http candidates against the local filesystem; cloud-runtime paths
   // resolve to their artifact OSS URL or are dropped (never rendered as broken cards).

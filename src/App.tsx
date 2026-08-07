@@ -8,6 +8,8 @@ import type { ErrorInfo, ReactNode } from 'react';
 import { Toaster, toast } from 'sonner';
 import i18n from './i18n';
 import { MainLayout } from './components/layout/MainLayout';
+import { AppShellLayoutProvider, useAppShellLayout } from '@/components/layout/app-shell-layout-context';
+import { computeToastLayoutOffsetPx } from '@/lib/app-shell-metrics';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Models } from './pages/Models';
 import { Agents } from './pages/Agents';
@@ -32,6 +34,9 @@ import { useProviderStore } from './stores/providers';
 import { useAgentsStore } from './stores/agents';
 import { useChatStore } from './stores/chat';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
+import { AccountSwitchFab } from './components/layout/AccountSwitchFab';
+import { UserWatermark } from './components/layout/UserWatermark';
+import { WorkflowCompletionNotifier } from './components/workflow/WorkflowCompletionNotifier';
 
 /**
  * Error Boundary to catch and display React rendering errors
@@ -302,44 +307,75 @@ function App() {
   return (
     <ErrorBoundary>
       <TooltipProvider delayDuration={300}>
-        <Routes>
-          {/* SSO Login page */}
-          <Route path="/login" element={<Login />} />
+      <AppShellLayoutProvider>
+        <WorkflowCompletionNotifier />
+          <Routes>
+            {/* SSO Login page */}
+            <Route path="/login" element={<Login />} />
 
-          {/* Setup wizard (shown on first launch) */}
-          <Route path="/setup/*" element={<Setup />} />
+            {/* Setup wizard (shown on first launch) */}
+            <Route path="/setup/*" element={<Setup />} />
 
-          {/* Desktop sprite (floating assistant window) */}
-          <Route path="/sprite" element={<Sprite />} />
+            {/* Desktop sprite (floating assistant window) */}
+            <Route path="/sprite" element={<Sprite />} />
 
-          {/* Desktop float icon (floating launcher) */}
-          <Route path="/float-icon" element={<FloatIcon />} />
+            {/* Desktop float icon (floating launcher) */}
+            <Route path="/float-icon" element={<FloatIcon />} />
 
-          {/* Main application routes */}
-          <Route element={<MainLayout />}>
-            <Route path="/" element={<Home />} />
-            <Route path="/tasks/:taskId/:entryId" element={<TaskDetail />} />
-            <Route path="/tasks/:taskId" element={<TaskDetail />} />
-            <Route path="/chat" element={<Navigate to="/" replace />} />
-            <Route path="/models" element={<Models />} />
-            <Route path="/agents" element={<Agents />} />
-            <Route path="/channels" element={<Channels />} />
-            <Route path="/skills" element={<SkillPlazaPage />} />
-            <Route path="/more-apps" element={<AppPlazaRouteSlot />} />
-            <Route path="/subscriptions" element={<Subscriptions />} />
-            <Route path="/my-tasks" element={<MyTask />} />
-            <Route path="/data-center" element={<DataCenter />} />
-            <Route path="/workflow/*" element={<WorkflowTestPage />} />
-            <Route path="/settings/*" element={<Settings />} />
-          </Route>
-        </Routes>
+            {/* Main application routes */}
+            <Route element={<MainLayout />}>
+              <Route path="/" element={<Home />} />
+              <Route path="/tasks/:taskId/:entryId" element={<TaskDetail />} />
+              <Route path="/tasks/:taskId" element={<TaskDetail />} />
+              <Route path="/chat" element={<Navigate to="/" replace />} />
+              <Route path="/models" element={<Models />} />
+              <Route path="/agents" element={<Agents />} />
+              <Route path="/channels" element={<Channels />} />
+              <Route path="/skills" element={<SkillPlazaPage />} />
+              <Route path="/more-apps" element={<AppPlazaRouteSlot />} />
+              <Route path="/subscriptions" element={<Subscriptions />} />
+              <Route path="/my-tasks" element={<MyTask />} />
+              <Route path="/data-center" element={<DataCenter />} />
+              <Route path="/workflow/*" element={<WorkflowTestPage />} />
+              <Route path="/settings/*" element={<Settings />} />
+            </Route>
+          </Routes>
 
-        {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
-        {location.pathname !== '/float-icon' ? (
-          <Toaster position="bottom-center" richColors closeButton style={{ zIndex: 99999 }} />
-        ) : null}
+{/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
+          {location.pathname !== '/float-icon' ? <AppShellToaster /> : null}
+          {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
+            <>
+              <UserWatermark />
+              <AccountSwitchFab />
+            </>
+          ) : null}
+        </AppShellLayoutProvider>
       </TooltipProvider>
     </ErrorBoundary>
+  );
+}
+
+/** Toaster reads AppShell effective width — no hard-coded 72/260. */
+function AppShellToaster() {
+  const { snapshot } = useAppShellLayout();
+  const toastOffsetPx = computeToastLayoutOffsetPx(snapshot);
+  const toastCenterX = `calc(50% + ${toastOffsetPx / 2}px)`;
+
+  return (
+    <Toaster
+      className="sto-global-toaster"
+      position="top-center"
+      richColors
+      offset={23}
+      gap={12}
+      visibleToasts={3}
+      style={{
+        left: toastCenterX,
+        right: 'auto',
+        transform: 'translateX(-50%)',
+        zIndex: 99999,
+      }}
+    />
   );
 }
 

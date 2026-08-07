@@ -122,7 +122,7 @@ export function resolveSessionLabel(input: ResolveSessionLabelInput): string {
   if (isTemporaryAgentSessionKey(key)) {
     return t('common:sidebar.newChat');
   }
-  // Non-main sessions without a derived title: avoid agent displayName (e.g. "S Claw").
+  // Non-main sessions without a derived title: avoid agent displayName (e.g. "SClaw").
   return t('common:sidebar.newChat');
 }
 

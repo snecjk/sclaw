@@ -2,6 +2,7 @@ import { flushSync } from 'react-dom';
 import type { NavigateFunction, To } from 'react-router-dom';
 import { useChatStore } from '@/stores/chat';
 import { findSessionKeyByTitle } from '@/lib/session-label';
+import type { WorkflowExecutionEngine } from '@/lib/workflow-session';
 
 export function isMainChatHomePath(pathname: string): boolean {
   return pathname === '/';
@@ -16,6 +17,16 @@ export interface NavigateToSessionWithPromptOptions {
   createIfMissing?: boolean;
   /** Extra query params forwarded to Home (e.g. workflowId). */
   extraSearchParams?: Record<string, string>;
+  /** Mark this auto-send as a workflow run so Home can choose its execution engine. */
+  workflowRun?: boolean;
+  /** Explicit workflow execution engine selected before navigating to chat. */
+  workflowEngine?: WorkflowExecutionEngine;
+  /** Workflow execution metadata. Every start creates a fresh chat session. */
+  workflowSession?: {
+    workflowId: string;
+    engineType: WorkflowExecutionEngine;
+    sessionTitle: string;
+  };
 }
 
 /**
@@ -64,6 +75,16 @@ function prepareSessionForPrompt(options: NavigateToSessionWithPromptOptions): v
     renameSession,
   } = useChatStore.getState();
 
+  const workflowSession = options.workflowSession;
+  if (workflowSession?.workflowId.trim()) {
+    if (createIfMissing) {
+      newSession();
+      const createdSessionKey = useChatStore.getState().currentSessionKey;
+      renameSession(createdSessionKey, workflowSession.sessionTitle.trim());
+      return;
+    }
+  }
+
   const trimmedKey = sessionKey?.trim();
   if (trimmedKey) {
     const existsLocally = sessions.some((session) => session.key === trimmedKey);
@@ -106,7 +127,10 @@ function normalizePromptNavigationOptions(
     !('sessionKey' in options)
     && !('sessionTitle' in options)
     && !('createIfMissing' in options)
-    && !('extraSearchParams' in options);
+    && !('extraSearchParams' in options)
+    && !('workflowRun' in options)
+    && !('workflowEngine' in options)
+    && !('workflowSession' in options);
   if (isLegacyExtraSearchParamsOnly) {
     return { ...defaults, extraSearchParams: options as Record<string, string> };
   }
@@ -130,8 +154,13 @@ export function navigateToSessionWithPrompt(
   options?: NavigateToSessionWithPromptOptions | Record<string, string>,
 ): void {
   const normalized = normalizePromptNavigationOptions(options);
-  const { extraSearchParams, ...sessionOptions } = normalized;
-  const params = new URLSearchParams({ q: prompt, ...extraSearchParams });
+  const { extraSearchParams, workflowRun, workflowEngine, ...sessionOptions } = normalized;
+  const params = new URLSearchParams({
+    q: prompt,
+    ...extraSearchParams,
+    ...(workflowRun ? { workflowRun: '1' } : {}),
+    ...(workflowEngine ? { workflowEngine } : {}),
+  });
   navigateToMainChatHome(
     navigate,
     pathname,
@@ -159,4 +188,56 @@ export function navigateToNewSessionWithPrompt(
     prompt,
     normalizePromptNavigationOptions(options, { createIfMissing: true }),
   );
+}
+
+/**
+ * One-shot composer draft carried via router `state` (connector “去试试”).
+ *
+ * Unlike `navigateToNewSessionWithPrompt`, this MUST NOT use `?q=` — Home
+ * auto-sends `q`, while a draft only seeds the input box for the user to
+ * review, edit and send manually.
+ */
+export interface MainChatDraftState {
+  /** Draft text seeded into the main chat input (multi-line Unicode preserved). */
+  mainChatDraft: string;
+  /** Unique token for this draft navigation; guarantees one-time consumption. */
+  mainChatDraftToken: string;
+}
+
+/** Parse and validate router `location.state` as a one-shot composer draft. */
+export function readMainChatDraftState(state: unknown): MainChatDraftState | null {
+  if (!state || typeof state !== 'object') return null;
+  const record = state as Record<string, unknown>;
+  const draft = typeof record.mainChatDraft === 'string' ? record.mainChatDraft.trim() : '';
+  if (!draft) return null;
+  const token =
+    typeof record.mainChatDraftToken === 'string' ? record.mainChatDraftToken.trim() : '';
+  return { mainChatDraft: draft, mainChatDraftToken: token };
+}
+
+/**
+ * Create a new empty main-chat session and navigate to `/` carrying a
+ * one-shot composer draft in router state. Home seeds the focused input box
+ * with the draft and clears the state right after consumption, so refresh,
+ * back or re-renders can never re-seed it. Returns false (and does nothing)
+ * for an empty/whitespace-only draft.
+ */
+export function navigateToNewSessionWithDraft(
+  navigate: NavigateFunction,
+  draft: string,
+): boolean {
+  const trimmed = draft.trim();
+  if (!trimmed) return false;
+  const state: MainChatDraftState = {
+    mainChatDraft: trimmed,
+    mainChatDraftToken: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+  };
+  // Same flushSync rationale as navigateToMainChatHome: commit session switch
+  // and route change together. We always navigate (even from `/`) because the
+  // draft travels in location.state and must produce a fresh location.
+  flushSync(() => {
+    useChatStore.getState().newSession();
+    navigate('/', { state });
+  });
+  return true;
 }

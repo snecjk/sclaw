@@ -32,6 +32,12 @@ export interface ArtifactShareDialogProps {
   onShared: () => void;
   onCancel: () => void;
   onError?: (error: unknown) => void;
+  /** Override default title derived from draft.kind */
+  title?: string;
+  /** Override default description derived from draft.kind */
+  description?: string;
+  /** Overlay z-index / positioning class when nested above other modals */
+  overlayClassName?: string;
 }
 
 export function ArtifactShareDialog({
@@ -40,6 +46,9 @@ export function ArtifactShareDialog({
   onShared,
   onCancel,
   onError,
+  title: titleOverride,
+  description: descriptionOverride,
+  overlayClassName,
 }: ArtifactShareDialogProps) {
   const { t } = useTranslation('chat');
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -111,7 +120,10 @@ export function ArtifactShareDialog({
   if (step === 'too_long') {
     return createPortal(
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)]"
+        className={cn(
+          'fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)]',
+          overlayClassName,
+        )}
         role="dialog"
         aria-modal="true"
         aria-labelledby="artifact-share-too-long-title"
@@ -152,18 +164,23 @@ export function ArtifactShareDialog({
   }
 
   const isArtifact = draft.kind === 'artifact';
-  const title = isArtifact
-    ? t('preview.shareDialog.artifactTitle')
-    : t('preview.shareDialog.conversationTitle');
-  const description = isArtifact
-    ? t('preview.shareDialog.artifactDescription')
-    : t('preview.shareDialog.conversationDescription');
+  const title = titleOverride
+    ?? (isArtifact
+      ? t('preview.shareDialog.artifactTitle')
+      : t('preview.shareDialog.conversationTitle'));
+  const description = descriptionOverride
+    ?? (isArtifact
+      ? t('preview.shareDialog.artifactDescription')
+      : t('preview.shareDialog.conversationDescription'));
 
   const artifactCard = isArtifact ? draft : null;
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)]"
+      className={cn(
+        'fixed inset-0 z-50 flex items-center justify-center bg-[rgba(15,23,42,0.42)]',
+        overlayClassName,
+      )}
       role="dialog"
       aria-modal="true"
       aria-labelledby="artifact-share-dialog-title"

@@ -169,6 +169,39 @@ export function getWorkspaceDefaultRawModelId(
 }
 
 /**
+ * Pick the highest available Qwen 3.x Plus model from enabled provider accounts.
+ * Workflow sessions use this as their Claude Agent model override.
+ */
+export function selectHighestQwenPlusModel(
+  accounts: ProviderAccount[],
+): { modelId: string; accountId: string } | null {
+  const candidates: Array<{ modelId: string; accountId: string; version: number }> = [];
+
+  for (const account of accounts) {
+    if (!account.enabled) continue;
+    const modelIds = [
+      ...(account.metadata?.customModels ?? []),
+      ...(account.model?.trim() ? [account.model.trim()] : []),
+    ];
+    for (const modelId of modelIds) {
+      const match = modelId.trim().match(/(?:^|\/)qwen3\.(\d+)-plus$/i);
+      if (!match || HIDDEN_PROVIDER_IDS.has(modelId)) continue;
+      candidates.push({
+        modelId: modelId.trim(),
+        accountId: account.id,
+        version: Number(match[1]),
+      });
+    }
+  }
+
+  candidates.sort((left, right) => right.version - left.version);
+  const selected = candidates[0];
+  return selected
+    ? { modelId: selected.modelId, accountId: selected.accountId }
+    : null;
+}
+
+/**
  * Resolve toolbar selected model.
  * - Session override (toolbar switch) wins when still in the live catalog.
  * - Workspace default (Settings) wins over inherited agent default.
@@ -245,7 +278,7 @@ export interface ChatModelOption {
   modelId: string;        // ← 原始值（含前缀），用于发给 Gateway / backend
   normalizedId: string;   // ← 截断后的值，用于匹配 selectedModelId
   accountId: string;
-  displayName: string;    // ← 与 Models 页一致的完整模型 ID（UI 展示）
+  displayName: string;    // ← Chat 选择器展示用短名（无供应商前缀）
   subLabel: string;
   /** true = STO 内置等 */
   isBuiltin: boolean;
@@ -267,7 +300,7 @@ export function buildChatModelOptions(providerItems: ProviderListItem[]): ChatMo
           modelId: rawModelId,
           normalizedId,
           accountId: account.id,
-          displayName: rawModelId,
+          displayName: normalizedId,
           subLabel,
           isBuiltin,
         });

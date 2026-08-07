@@ -18,10 +18,13 @@ import {
   insertPlainTextAtCaret,
   insertWorkflowSpan,
   consumeSkillTriggerText,
+  consumeSlashTriggerText,
+  readCaretPlainTextOffset,
   MENTION_SPAN_SELECTOR,
   removeMentionBeforeCaret,
   removeMentionSpan,
   removeSkillSpan,
+  retitleSkillSpan,
   readSkillMetaFromEditorRoot,
   serializeMentionEditor,
   setMentionEditorMentions,
@@ -29,7 +32,7 @@ import {
   type ActiveMentionTrigger,
   type MentionComposerSnapshot,
 } from '@/lib/dingtalk-mention-composer';
-import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
+import { resolveSkillFromPlaza, resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
 
 function focusEditorAtEnd(root: HTMLElement): void {
   root.focus();
@@ -59,14 +62,19 @@ export interface DingTalkMentionEditorHandle {
   insertPlainText: (text: string) => void;
   setMentions: (mentions: DingTalkMention[]) => void;
   insertMention: (mention: DingTalkMention, trigger: ActiveMentionTrigger) => void;
-  insertWorkflow: (workflowId: string, name: string, source?: string) => void;
-  insertSkill: (slug: string, title: string) => void;
+  insertWorkflow: (workflowId: string, name: string, source?: string, plainTextOffset?: number) => void;
+  insertSkill: (slug: string, title: string, plainTextOffset?: number) => void;
   /** 在光标处插入 sai-cli 接口 chip（中文高亮，可多次） */
   insertSaiInterface: (path: string, name: string) => void;
   /** 打开浮层前保存光标，避免点击列表后插入跑到末尾 */
   rememberCaret: () => void;
-  consumeSkillInlineTrigger: (query?: string) => boolean;
+  /** @returns 触发符原位置下标；未消费时返回 null */
+  consumeSkillInlineTrigger: (query?: string) => number | null;
+  /** @returns `/` 原位置下标；未消费时返回 null */
+  consumeSlashTrigger: (query?: string) => number | null;
   removeSkill: () => void;
+  /** 记录当前光标位置，供工具栏/浮层选中后恢复插入点 */
+  saveCaret: () => void;
   /** 插入 `@` 并打开钉钉 mention 选择（与手动输入 `@` 等价） */
   openMentionPicker: () => void;
 }
@@ -79,6 +87,7 @@ interface DingTalkMentionEditorProps {
   onTriggerChange?: (trigger: ActiveMentionTrigger | null) => void;
   onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   onKeyUp?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
+  onTextInput?: (text: string) => void;
   onPaste?: (event: React.ClipboardEvent<HTMLDivElement>) => void;
   onCompositionStart?: () => void;
   onCompositionEnd?: () => void;
@@ -99,6 +108,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       onTriggerChange,
       onKeyDown,
       onKeyUp,
+      onTextInput,
       onPaste,
       onCompositionStart,
       onCompositionEnd,
@@ -112,9 +122,17 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
     const appliedSkillSeedRef = useRef<string | undefined>(undefined);
     const lastAppliedSeedRef = useRef<string | undefined>(undefined);
     const isComposingRef = useRef(false);
+    const lastCaretOffsetRef = useRef<number | null>(null);
     const lastCaretRangeRef = useRef<Range | null>(null);
 
-    const syncTriggerRafRef = useRef<number | null>(null);
+    const captureCaretOffset = useCallback(() => {
+      const root = editorRef.current;
+      if (!root) return;
+      const offset = readCaretPlainTextOffset(root);
+      if (offset !== null) {
+        lastCaretOffsetRef.current = offset;
+      }
+    }, []);
 
     const rememberCaret = useCallback(() => {
       const root = editorRef.current;
@@ -124,6 +142,17 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
       if (!root.contains(range.commonAncestorContainer)) return;
       lastCaretRangeRef.current = range.cloneRange();
     }, []);
+
+    const resolveInsertOffset = useCallback((explicitOffset?: number): number | undefined => {
+      if (explicitOffset !== undefined) return explicitOffset;
+      const root = editorRef.current;
+      if (!root) return lastCaretOffsetRef.current ?? undefined;
+      const live = readCaretPlainTextOffset(root);
+      if (live !== null) return live;
+      return lastCaretOffsetRef.current ?? undefined;
+    }, []);
+
+    const syncTriggerRafRef = useRef<number | null>(null);
 
     const syncFromDom = useCallback((syncTrigger = true) => {
       const root = editorRef.current;
@@ -188,18 +217,20 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         syncFromDom();
         onTriggerChange?.(null);
       },
-      insertWorkflow: (workflowId, name, source) => {
+      insertWorkflow: (workflowId, name, source, plainTextOffset) => {
         const root = editorRef.current;
         if (!root) return;
-        insertWorkflowSpan(root, workflowId, name, source);
+        insertWorkflowSpan(root, workflowId, name, source, resolveInsertOffset(plainTextOffset));
         syncFromDom();
+        captureCaretOffset();
       },
-      insertSkill: (slug, title) => {
+      insertSkill: (slug, title, plainTextOffset) => {
         const root = editorRef.current;
         if (!root) return;
-        insertSkillSpan(root, slug, title);
-        rememberCaret();
+        insertSkillSpan(root, slug, title, resolveInsertOffset(plainTextOffset));
         syncFromDom();
+        captureCaretOffset();
+        rememberCaret();
       },
       insertSaiInterface: (path, name) => {
         const root = editorRef.current;
@@ -207,22 +238,35 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         insertSaiInterfaceSpan(root, path, name, lastCaretRangeRef.current);
         rememberCaret();
         syncFromDom(false);
+        captureCaretOffset();
       },
       rememberCaret,
       consumeSkillInlineTrigger: (query) => {
         const root = editorRef.current;
-        if (!root) return false;
-        const consumed = consumeSkillTriggerText(root, query);
-        if (consumed) {
+        if (!root) return null;
+        const offset = consumeSkillTriggerText(root, query);
+        if (offset !== null) {
           syncFromDom();
         }
-        return consumed;
+        return offset;
+      },
+      consumeSlashTrigger: (query) => {
+        const root = editorRef.current;
+        if (!root) return null;
+        const offset = consumeSlashTriggerText(root, query);
+        if (offset !== null) {
+          syncFromDom();
+        }
+        return offset;
       },
       removeSkill: () => {
         const root = editorRef.current;
         if (!root) return;
         removeSkillSpan(root);
         syncFromDom();
+      },
+      saveCaret: () => {
+        captureCaretOffset();
       },
       openMentionPicker: () => {
         const root = editorRef.current;
@@ -232,7 +276,15 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         syncFromDom();
         onTriggerChange?.(detectActiveMentionTrigger(root));
       },
-    }), [onTriggerChange, rememberCaret, removableMentions, syncFromDom]);
+    }), [captureCaretOffset, onTriggerChange, rememberCaret, removableMentions, resolveInsertOffset, syncFromDom]);
+
+    useEffect(() => {
+      const onSelectionChange = () => {
+        captureCaretOffset();
+      };
+      document.addEventListener('selectionchange', onSelectionChange);
+      return () => document.removeEventListener('selectionchange', onSelectionChange);
+    }, [captureCaretOffset]);
 
     useEffect(() => {
       const trimmed = seedText?.trim();
@@ -263,15 +315,31 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
 
       if (appliedSkillSeedRef.current === slug) return;
       appliedSkillSeedRef.current = slug;
-      const { title } = resolveSkillFromPlaza(slug);
-      insertSkillSpan(root, slug, title);
+      insertSkillSpan(root, slug, resolveSkillFromPlaza(slug).title);
       syncFromDom();
+
+      // A cold plaza cache renders the slug; swap in the real name once it arrives.
+      let cancelled = false;
+      void resolveSkillPrompt(slug).then(({ title }) => {
+        const target = editorRef.current;
+        if (cancelled || !target || appliedSkillSeedRef.current !== slug) return;
+        if (!retitleSkillSpan(target, slug, title)) return;
+        syncFromDom();
+      });
+      return () => {
+        cancelled = true;
+      };
     }, [seedSkillSlug, syncFromDom]);
 
-    const handleInput = useCallback(() => {
+    const handleInput = useCallback((event: React.FormEvent<HTMLDivElement>) => {
+      const nativeEvent = event.nativeEvent as InputEvent;
+      if (typeof nativeEvent.data === 'string' && nativeEvent.data.length > 0) {
+        onTextInput?.(nativeEvent.data);
+      }
       rememberCaret();
       syncFromDom();
-    }, [rememberCaret, syncFromDom]);
+      captureCaretOffset();
+    }, [captureCaretOffset, onTextInput, rememberCaret, syncFromDom]);
 
     const handleMentionRemove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
       const target = event.target as HTMLElement;
@@ -304,8 +372,9 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
     const handleKeyUp = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
       rememberCaret();
       syncFromDom();
+      captureCaretOffset();
       onKeyUp?.(event);
-    }, [onKeyUp, rememberCaret, syncFromDom]);
+    }, [captureCaretOffset, onKeyUp, rememberCaret, syncFromDom]);
 
     return (
       <div
@@ -329,6 +398,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         onClick={() => {
           rememberCaret();
           syncFromDom();
+          captureCaretOffset();
         }}
         onBlur={rememberCaret}
         onCompositionStart={() => {
@@ -341,8 +411,8 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         onCompositionEnd={() => {
           isComposingRef.current = false;
           onCompositionEnd?.();
-          rememberCaret();
           syncFromDom();
+          captureCaretOffset();
         }}
       />
     );

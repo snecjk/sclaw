@@ -6,6 +6,8 @@ import {
 
 const applyWorkflowSchemaReady = vi.fn();
 const ensureWorkflowParameterFormInjected = vi.fn(() => false);
+const saveWorkflowExecution = vi.fn();
+const updateExecutionStatus = vi.fn();
 
 vi.mock('@/stores/chat/parameter-form-recovery', () => ({
   applyWorkflowSchemaReady: (...args: unknown[]) => applyWorkflowSchemaReady(...args),
@@ -14,6 +16,10 @@ vi.mock('@/stores/chat/parameter-form-recovery', () => ({
 
 vi.mock('@/stores/workflow-memory', () => ({
   saveWorkflowRecord: vi.fn(),
+  saveWorkflowExecution: (...args: unknown[]) => saveWorkflowExecution(...args),
+  updateExecutionStatus: (...args: unknown[]) => updateExecutionStatus(...args),
+  getExecutionByRunId: vi.fn(() => undefined),
+  listSessionExecutions: vi.fn(() => []),
 }));
 
 vi.mock('@/stores/chat', () => ({
@@ -104,5 +110,31 @@ describe('dispatchBuiltinToolResult', () => {
     expect(await dispatchBuiltinToolResult(msg)).toBe(true);
     expect(await dispatchBuiltinToolResult(msg)).toBe(false);
     expect(applyWorkflowSchemaReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps workflow_run_status as a normal tool result without creating a card', async () => {
+    const handled = await dispatchBuiltinToolResult({
+      id: 'tool-status-1',
+      content: JSON.stringify({
+        type: 'workflow_run_status',
+        success: true,
+        domain: 'workflow',
+        data: {
+          id: 'run_status_1',
+          workflowId: 'wf_status_1',
+          status: 'running',
+          startedAt: '2026-07-24T10:00:00.000Z',
+          nodeRuns: [
+            { id: 'node-1', nodeId: 'fetch', status: 'completed' },
+            { id: 'node-2', nodeId: 'report', status: 'running' },
+          ],
+        },
+      }),
+    });
+
+    expect(handled).toBe(true);
+    expect(saveWorkflowExecution).not.toHaveBeenCalled();
+    expect(updateExecutionStatus).not.toHaveBeenCalled();
+    expect(applyWorkflowRunStarted).not.toHaveBeenCalled();
   });
 });

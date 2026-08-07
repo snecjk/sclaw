@@ -192,10 +192,7 @@ export function Channels() {
     /** 被其他设备抢走时的提示（打开频道页时展示在条目副文案） */
     replaceHint?: 'other_device' | 'unbound' | null;
   } | null>(null);
-  /** 切换引擎后若当前 Agent 不兼容，先本地记下引擎，等用户显式选 Agent 再保存 */
-  const [pendingDingTalkEngine, setPendingDingTalkEngine] = useState<'claude' | 'openclaw' | null>(
-    null,
-  );
+  const [, setPendingDingTalkEngine] = useState<'claude' | 'openclaw' | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showDingTalkHubModal, setShowDingTalkHubModal] = useState(false);
   const [selectedChannelType, setSelectedChannelType] = useState<ChannelType | null>(null);

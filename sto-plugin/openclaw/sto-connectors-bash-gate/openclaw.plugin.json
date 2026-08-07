@@ -1,0 +1,13 @@
+{
+  "id": "sto-connectors-bash-gate",
+  "name": "StoClaw 连接器 CLI 门禁",
+  "description": "未连接连接器时拦截 exec/bash 中的 dws/glab/qpath，引导用户去连接器页面绑定",
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

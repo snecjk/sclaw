@@ -1,5 +1,5 @@
-export type { DingTalkMention } from '../../shared/dingtalk-mention';
-import type { DingTalkMention } from '../../shared/dingtalk-mention';
+export type { DingTalkMention } from '../../shared/dingtalk-send/dingtalk-mention';
+import type { DingTalkMention } from '../../shared/dingtalk-send/dingtalk-mention';
 
 export interface MentionSearchItem {
   type: 'user' | 'group';

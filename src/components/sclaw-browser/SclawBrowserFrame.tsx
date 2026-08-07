@@ -189,8 +189,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
           try {
             iframe.contentWindow?.location.reload();
           } catch {
-            const current = iframe.src;
-            iframe.src = current;
+iframe.setAttribute('src', iframe.src);
           }
         }
       },
@@ -369,7 +368,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
           ref={webviewRef as React.RefObject<HTMLElement>}
           src={url}
           partition={SCLAW_EMBED_BROWSER_PARTITION}
-          allowpopups="true"
+          allowpopups={true}
           className="sclaw-browser-drawer__frame sclaw-browser-drawer__frame--webview"
         />
       );

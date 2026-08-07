@@ -65,6 +65,8 @@ export interface CronJobCreateInput {
   dingTalkMentions?: DingTalkMention[];
   workflowCode?: string;
   workflowName?: string;
+  myArtifactFolderPath?: string | null;
+  sharedArtifactFolderPath?: string | null;
 }
 
 /**
@@ -78,6 +80,8 @@ export interface CronJobUpdateInput {
   agentId?: string;
   dingTalkMentions?: DingTalkMention[];
   workflowCode?: string;
+  myArtifactFolderPath?: string | null;
+  sharedArtifactFolderPath?: string | null;
 }
 
 /**

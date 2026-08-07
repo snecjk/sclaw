@@ -51,7 +51,7 @@ import {
   hasReadyStoModelCatalog,
   type ProviderListItem,
 } from '@/lib/provider-accounts';
-import { getWorkspaceDefaultModelId } from '@/lib/chat-model-options';
+import { getWorkspaceDefaultModelId, normalizeModelIdForChat } from '@/lib/chat-model-options';
 import { syncWorkspaceDefaultModelToChat } from '@/lib/sync-workspace-default-to-chat';
 import { cn } from '@/lib/utils';
 import { glassNestedCard } from '@/lib/surfaces';
@@ -565,7 +565,7 @@ function StoModelRow({
           </div>
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-semibold text-[15px]">{modelId}</span>
+              <span className="font-semibold text-[15px]">{normalizeModelIdForChat(modelId) || modelId}</span>
               <span className="inline-flex items-center rounded-md border border-[hsl(var(--link)/0.35)] bg-link-muted px-2 py-0.5 text-[10px] font-semibold text-link shadow-sm dark:border-[hsl(var(--link)/0.25)] dark:bg-[hsl(var(--link-muted))] dark:text-[hsl(var(--link))]">
                 {t('aiProviders.card.builtin', '内置')}
               </span>

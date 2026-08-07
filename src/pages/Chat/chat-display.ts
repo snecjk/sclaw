@@ -1,4 +1,5 @@
 import type { RawMessage } from '@/stores/chat';
+import type { ChatWorkflowCardRef } from '@/types/workflow';
 import { isStableToolId } from '@/lib/thinking-timeline-active';
 import {
   extractText,
@@ -13,6 +14,7 @@ import {
 
 export type ChatDisplayItem =
   | { type: 'single'; message: RawMessage; key: string }
+  | { type: 'workflow-run'; card: ChatWorkflowCardRef; key: string }
   | {
       type: 'assistant-turn';
       messages: RawMessage[];
@@ -20,6 +22,80 @@ export type ChatDisplayItem =
       precedingUserMessage?: RawMessage;
       key: string;
     };
+
+function displayItemTimestamp(item: ChatDisplayItem): number {
+  if (item.type === 'workflow-run') return Date.parse(item.card.startedAt) || 0;
+  const value = item.type === 'single'
+    ? item.message.timestamp
+    : item.messages[0]?.timestamp ?? item.precedingUserMessage?.timestamp;
+  if (typeof value === 'number') return value < 1e12 ? value * 1000 : value;
+  if (typeof value === 'string') return Date.parse(value) || 0;
+  return 0;
+}
+
+function resolveWorkflowCardNameFromAnchor(
+  card: ChatWorkflowCardRef,
+  items: ChatDisplayItem[],
+): ChatWorkflowCardRef {
+  if (!/^wf_[\w-]+$/i.test(card.title.trim()) || !card.anchorUserMessageId) return card;
+  const anchor = items.find((item) => (
+    item.type === 'single'
+    && item.message.role === 'user'
+    && item.message.id === card.anchorUserMessageId
+  ));
+  if (anchor?.type !== 'single') return card;
+
+  const matchedName = extractText(anchor.message).match(/工作流\s*【([^】]+)】/)?.[1]?.trim();
+  return matchedName ? { ...card, title: matchedName } : card;
+}
+
+export function mergeWorkflowCardsIntoDisplayItems(
+  baseItems: ChatDisplayItem[],
+  cards: ChatWorkflowCardRef[],
+): ChatDisplayItem[] {
+  const merged = [...baseItems];
+  const sorted = [...cards].sort((left, right) => (
+    (Date.parse(left.startedAt) || 0) - (Date.parse(right.startedAt) || 0)
+    || left.runId.localeCompare(right.runId)
+  ));
+
+  for (const card of sorted) {
+    if (merged.some((item) => item.type === 'workflow-run' && item.card.runId === card.runId)) continue;
+    const displayCard = resolveWorkflowCardNameFromAnchor(card, baseItems);
+    const cardItem: ChatDisplayItem = {
+      type: 'workflow-run',
+      card: displayCard,
+      key: `workflow-run:${displayCard.runId}`,
+    };
+    let insertAt = -1;
+    if (displayCard.anchorUserMessageId) {
+      const userIndex = merged.findIndex((item) => (
+        item.type === 'single'
+        && item.message.role === 'user'
+        && item.message.id === displayCard.anchorUserMessageId
+      ));
+      if (userIndex >= 0) {
+        insertAt = userIndex + 1;
+        while (insertAt < merged.length) {
+          const item = merged[insertAt];
+          if (item.type === 'single' && item.message.role === 'user') break;
+          if (
+            item.type === 'workflow-run'
+            && item.card.anchorUserMessageId !== displayCard.anchorUserMessageId
+          ) break;
+          insertAt += 1;
+        }
+      }
+    }
+    if (insertAt < 0) {
+      const startedAt = Date.parse(displayCard.startedAt) || 0;
+      insertAt = merged.findIndex((item) => displayItemTimestamp(item) > startedAt);
+      if (insertAt < 0) insertAt = merged.length;
+    }
+    merged.splice(insertAt, 0, cardItem);
+  }
+  return merged;
+}
 
 function normalizeRole(role: unknown): string {
   return typeof role === 'string' ? role.toLowerCase() : '';

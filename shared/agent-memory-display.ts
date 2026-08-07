@@ -2,6 +2,7 @@ import {
   AGENT_EXECUTION_MEMORY_CONTEXT_MARKER,
   AGENT_MEMORY_CONTEXT_MARKER,
 } from './agent-memory-prompt';
+import { CONNECTOR_AGENT_CONTEXT_MARKER } from './connectors/agent-context-marker';
 
 export function stripAgentMemoryContextByMarker(message: string, marker: string): string {
   const startIndex = message.indexOf(marker);
@@ -18,7 +19,10 @@ export function stripAgentMemoryContextByMarker(message: string, marker: string)
 
 export function stripAgentMemoryContexts(message: string): string {
   return stripAgentMemoryContextByMarker(
-    stripAgentMemoryContextByMarker(message, AGENT_EXECUTION_MEMORY_CONTEXT_MARKER),
+    stripAgentMemoryContextByMarker(
+      stripAgentMemoryContextByMarker(message, CONNECTOR_AGENT_CONTEXT_MARKER),
+      AGENT_EXECUTION_MEMORY_CONTEXT_MARKER,
+    ),
     AGENT_MEMORY_CONTEXT_MARKER,
   );
 }

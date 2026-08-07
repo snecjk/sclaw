@@ -11,8 +11,14 @@ import {
   installOrUpdateDwsCli,
   runDws,
 } from '../../utils/dws-cli';
+import {
+  getCachedDwsAuthenticated,
+  getCachedDwsInstalled,
+  invalidateDwsStatusCache,
+} from '../../utils/dws-status-cache';
 import { promptGatewayRestartAfterDwsInstall } from '../../utils/dws-install-notify';
 import { fetchDingTalkAvatar } from '../../utils/dingtalk-avatar';
+import { logger } from '../../utils/logger';
 import { getSetting } from '../../utils/store';
 import {
   dedupeRecentMentionRows,
@@ -22,8 +28,7 @@ import {
   mapUnreadConversationItem,
   sortConversationsByLastMsg,
   type RecentMentionRow,
-} from '../../../shared/dingtalk-recent-mentions';
-
+} from '../../../shared/dingtalk-send/dingtalk-recent-mentions';
 interface MentionSearchRequest {
   query?: string;
   limit?: number;
@@ -41,37 +46,6 @@ interface MentionSearchItem {
 }
 
 const RECENT_MENTION_PAGE_SIZE = 10;
-const DWS_STATUS_CACHE_TTL_MS = 180_000;
-
-type DwsInstalledStatus = Awaited<ReturnType<typeof dwsCheckInstalled>>;
-
-let installedStatusCache: { value: DwsInstalledStatus; expiresAt: number } | null = null;
-let authStatusCache: { value: boolean; expiresAt: number } | null = null;
-
-function invalidateDwsStatusCache(): void {
-  installedStatusCache = null;
-  authStatusCache = null;
-}
-
-async function getCachedDwsInstalled(): Promise<DwsInstalledStatus> {
-  const now = Date.now();
-  if (installedStatusCache && installedStatusCache.expiresAt > now) {
-    return installedStatusCache.value;
-  }
-  const value = await dwsCheckInstalled();
-  installedStatusCache = { value, expiresAt: now + DWS_STATUS_CACHE_TTL_MS };
-  return value;
-}
-
-async function getCachedDwsAuthenticated(): Promise<boolean> {
-  const now = Date.now();
-  if (authStatusCache && authStatusCache.expiresAt > now) {
-    return authStatusCache.value;
-  }
-  const value = await isDwsAuthenticated();
-  authStatusCache = { value, expiresAt: now + DWS_STATUS_CACHE_TTL_MS };
-  return value;
-}
 
 function extractDwsRows(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
@@ -501,7 +475,7 @@ export async function handleDingTalkRoutes(
       return true;
     }
 
-    const installed = await getCachedDwsInstalled();
+    const installed = await getCachedDwsInstalled(() => dwsCheckInstalled());
     if (!installed.installed) {
       sendJson(res, 503, { success: false, error: 'dws is not installed', needsInstall: true });
       return true;
@@ -515,7 +489,19 @@ export async function handleDingTalkRoutes(
         return true;
       }
       invalidateDwsStatusCache();
-      const authenticated = await getCachedDwsAuthenticated();
+      const authenticated = await getCachedDwsAuthenticated(() => isDwsAuthenticated());
+      if (authenticated) {
+        try {
+          const { getConnectorService } = await import('../../connectors');
+          await getConnectorService().markDwsConnectedAfterAuth();
+        } catch (error) {
+          // Login already succeeded; plaza sync is best-effort.
+          logger.warn(
+            '[dingtalk] sync connector after login failed:',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
       sendJson(res, 200, { success: true, authenticated });
       return true;
     } catch (error) {
@@ -526,10 +512,17 @@ export async function handleDingTalkRoutes(
 
   if (url.pathname === '/api/dingtalk/install' && req.method === 'POST') {
     try {
-      const result = await installOrUpdateDwsCli((path) => {
-        if (_ctx.mainWindow && !_ctx.mainWindow.isDestroyed()) {
-          _ctx.mainWindow.webContents.send('dws:cli-installed', path);
-        }
+      const { resolveDwsInstallOptionsForLegacyInstall } = await import(
+        '../../connectors/resolve-dws-install'
+      );
+      const installOptions = resolveDwsInstallOptionsForLegacyInstall();
+      const result = await installOrUpdateDwsCli({
+        ...installOptions,
+        notify: (path) => {
+          if (_ctx.mainWindow && !_ctx.mainWindow.isDestroyed()) {
+            _ctx.mainWindow.webContents.send('dws:cli-installed', path);
+          }
+        },
       });
       if (!result.success) {
         sendJson(res, 500, {
@@ -554,8 +547,8 @@ export async function handleDingTalkRoutes(
   }
 
   if (url.pathname === '/api/dingtalk/status' && req.method === 'GET') {
-    const installed = await getCachedDwsInstalled();
-    const authenticated = installed.installed ? await getCachedDwsAuthenticated() : false;
+    const installed = await getCachedDwsInstalled(() => dwsCheckInstalled());
+    const authenticated = installed.installed ? await getCachedDwsAuthenticated(() => isDwsAuthenticated()) : false;
     sendJson(res, 200, {
       installed: installed.installed,
       version: installed.version ?? null,
@@ -574,13 +567,13 @@ export async function handleDingTalkRoutes(
       ? body.types.map((t) => (t === 'group' ? 'conversation' : t))
       : ['user', 'conversation'];
 
-    const installed = await getCachedDwsInstalled();
+    const installed = await getCachedDwsInstalled(() => dwsCheckInstalled());
     if (!installed.installed) {
       sendJson(res, 200, { items: [], needsInstall: true, needsAuth: false });
       return true;
     }
 
-    const authenticated = await getCachedDwsAuthenticated();
+    const authenticated = await getCachedDwsAuthenticated(() => isDwsAuthenticated());
     if (!authenticated) {
       sendJson(res, 200, { items: [], needsInstall: false, needsAuth: true });
       return true;

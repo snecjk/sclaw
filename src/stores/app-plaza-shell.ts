@@ -540,7 +540,6 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
           url: resolvedUrl,
           registryAppId: tab.registryAppId,
           systemCode: tab.systemCode,
-          skipLoginEligible: tab.skipLoginEligible,
           excludeTabId: tabId,
         });
         if (existing) {

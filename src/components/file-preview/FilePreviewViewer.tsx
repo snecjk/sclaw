@@ -19,6 +19,7 @@ import {
   isPreviewHttpFetchMessage,
   preparePreviewSrcDoc,
 } from '@/lib/preview-srcdoc';
+import { UserWatermark } from '@/components/layout/UserWatermark';
 // @ts-ignore — highlight.js v10 ships without bundled .d.ts
 import hljs from 'highlight.js';
 import 'highlight.js/styles/atom-one-dark.css';
@@ -42,6 +43,22 @@ function isHtmlFileType(mimeType: string, fileName: string, filePath?: string): 
   if (filePath && /\.html?(?:\?|#|$)/i.test(filePath)) return true;
   if (filePath && isHttpUrl(filePath) && isExtensionlessWebUrl(filePath)) return true;
   return false;
+}
+
+function isImageFileType(mimeType: string): boolean {
+  return mimeType.startsWith('image/');
+}
+
+async function fetchRemotePreviewText(filePath: string): Promise<string> {
+  const result = await previewBridgeHttpFetch({
+    url: filePath,
+    allowedOrigin: new URL(filePath).origin,
+  });
+  if (!result.ok || !result.bodyBase64) {
+    throw new Error(result.error || `HTTP ${result.status ?? 'error'}`);
+  }
+  const bytes = Uint8Array.from(atob(result.bodyBase64), (char) => char.charCodeAt(0));
+  return new TextDecoder('utf-8').decode(bytes);
 }
 
 /** Map file extension to highlight.js language name. */
@@ -168,7 +185,9 @@ export function FilePreviewViewer({
 
   useEffect(() => {
     const handler = () => {
-      setIsFullscreen(!!document.fullscreenElement);
+      const fs = document.fullscreenElement;
+      const el = containerRef.current;
+      setIsFullscreen(!!fs && !!el && (fs === el || fs.contains(el)));
     };
     document.addEventListener('fullscreenchange', handler);
     return () => document.removeEventListener('fullscreenchange', handler);
@@ -295,9 +314,7 @@ export function FilePreviewViewer({
 
     void (async () => {
       try {
-        const response = await fetch(filePath);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const content = await response.text();
+        const content = await fetchRemotePreviewText(filePath);
         if (cancelled) return;
         setHtmlContent(content);
       } catch {
@@ -333,9 +350,7 @@ export function FilePreviewViewer({
 
     void (async () => {
       try {
-        const response = await fetch(filePath);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const content = await response.text();
+        const content = await fetchRemotePreviewText(filePath);
         if (cancelled) return;
         setTextContent(content);
       } catch (e) {
@@ -598,6 +613,10 @@ img{max-width:100%}
         );
       }
 
+      if (isImageFileType(effectiveMime)) {
+        return <ImagePreview src={filePath} fileName={fileName} className={className} />;
+      }
+
       if (effectiveMime === 'application/pdf') {
         return (
           <iframe
@@ -665,6 +684,10 @@ img{max-width:100%}
           <OpenExternalButton filePath={filePath} />
         </div>
       );
+    }
+
+    if (isImageFileType(effectiveMime)) {
+      return <ImagePreview src={toServeUrl(filePath)} fileName={fileName} className={className} />;
     }
 
     if (effectiveMime === 'application/pdf') {
@@ -814,6 +837,8 @@ img{max-width:100%}
   return (
     <div ref={containerRef} className="relative h-full w-full">
       {content}
+      {/* Fullscreen leaves the app shell; keep a local copy so artifacts stay watermarked. */}
+      {isFullscreen ? <UserWatermark mode="absolute" /> : null}
       <button
         onClick={toggleFullscreen}
         title={isFullscreen ? '退出全屏' : '全屏放映'}
@@ -824,6 +849,19 @@ img{max-width:100%}
       >
         {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
       </button>
+    </div>
+  );
+}
+
+function ImagePreview({ src, fileName, className }: { src: string; fileName: string; className?: string }) {
+  return (
+    <div className={cn('flex h-full w-full items-center justify-center overflow-auto bg-white p-6 dark:bg-[#0d1117]', className)}>
+      <img
+        src={src}
+        alt={fileName}
+        className="max-h-full max-w-full object-contain"
+        draggable={false}
+      />
     </div>
   );
 }

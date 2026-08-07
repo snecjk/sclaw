@@ -190,7 +190,7 @@ StoClaw employs a **dual-process architecture** with a unified host API layer. T
 ### Process Model & Gateway Troubleshooting
 
 - StoClaw is an Electron app, so **one app instance normally appears as multiple OS processes** (main/renderer/zygote/utility). This is expected.
-- Single-instance protection uses Electron's lock plus a local process-file lock fallback, preventing duplicate app launch in environments where desktop IPC/session bus is unstable. On Windows, stale file locks are recovered by verifying that the recorded PID still belongs to S Claw; an unreadable or undeletable stale lock falls back to Electron's OS lock instead of permanently blocking startup.
+- Single-instance protection uses Electron's lock plus a local process-file lock fallback, preventing duplicate app launch in environments where desktop IPC/session bus is unstable. On Windows, stale file locks are recovered by verifying that the recorded PID still belongs to SClaw; an unreadable or undeletable stale lock falls back to Electron's OS lock instead of permanently blocking startup.
 - During rolling upgrades, mixed old/new app versions can still have asymmetric protection behavior. For best reliability, upgrade all desktop clients to the same version.
 - The OpenClaw Gateway listener should still be **single-owner**: only one process should listen on `127.0.0.1:18789`.
 - To verify the active listener:
@@ -213,6 +213,10 @@ Integrate AI into your development workflow. Use agents to review code, generate
 
 ### 🔄 Workflow Automation
 Chain multiple skills together to create sophisticated automation pipelines. Process data, transform content, and trigger actions—all orchestrated visually.
+
+Workflow agents use an artifact-first delivery contract. A task may return small structured data directly or create one or more files in any task-appropriate format. Files are declared by node-relative resource paths; the desktop runtime validates the workspace boundary, records canonical artifact metadata, and passes only compact references downstream. Individual payload strings larger than 1 KiB must be delivered as files so generated content is not duplicated in workflow records or later model prompts.
+
+Chat workflow progress cards are durable SQLite-backed timeline items. A card is registered only when a new run starts in its originating chat session; asking for an existing run's status remains an ordinary tool response. The renderer discovers card references by session and each mounted card polls a compact `wf_run` snapshot through the Main-process API, so switching sessions or reloading history does not depend on transient workflow status events or synthetic message content.
 
 ---
 

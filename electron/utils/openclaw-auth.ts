@@ -27,9 +27,11 @@ import { PORTS } from './config';
 import { resolveStoBaseUrl } from './sto-domain';
 import { getOpenClawConfigDir } from './paths';
 import { RETIRED_PLUGIN_IDS } from '../../shared/retired-skills';
+import { PORTS } from './config';
 
 const AUTH_STORE_VERSION = 1;
 const AUTH_PROFILE_FILENAME = 'auth-profiles.json';
+const LOCAL_HOST_API_BASE_URL = `http://127.0.0.1:${PORTS.CLAWX_HOST_API}`;
 
 function getOAuthPluginId(provider: string): string {
   return `${provider}-auth`;
@@ -1456,8 +1458,12 @@ function ensureDingTalkSendGuardPluginConfig(plugins: Record<string, unknown>): 
     modified = true;
   }
   const current = entries[DINGTALK_SEND_GUARD_PLUGIN_ID];
-  if (!current || current.enabled !== true) {
-    entries[DINGTALK_SEND_GUARD_PLUGIN_ID] = { enabled: true, config: {} };
+  const desiredDingTalkSendGuard = {
+    enabled: true,
+    config: {},
+  };
+  if (JSON.stringify(current) !== JSON.stringify(desiredDingTalkSendGuard)) {
+    entries[DINGTALK_SEND_GUARD_PLUGIN_ID] = desiredDingTalkSendGuard;
     modified = true;
   }
   if (modified) {
@@ -1553,7 +1559,7 @@ export async function syncStoPluginsToOpenClaw(): Promise<boolean> {
         allow.push(pluginId);
       }
     }
-    // sto-scheduled-task-tool is temporarily disabled; cloud scheduled tasks are not live this release
+    // sto-scheduled-task-tool：NL 建任务 → HostApi /api/scheduled-tasks（见 sync 下方 tools.deny）
     plugins.allow = allow.filter((id) => !RETIRED_PLUGIN_IDS.includes(id as typeof RETIRED_PLUGIN_IDS[number]));
 
     const entries = (plugins.entries || {}) as Record<string, unknown>;
@@ -1581,11 +1587,18 @@ export async function syncStoPluginsToOpenClaw(): Promise<boolean> {
         },
       },
     };
-    entries['sto-scheduled-task-tool'] = { enabled: true, config: {} };
+    entries['sto-scheduled-task-tool'] = {
+      enabled: true,
+      config: {
+        hostApiHost: '127.0.0.1',
+        hostApiPort: PORTS.CLAWX_HOST_API,
+        timeoutMs: 60_000,
+      },
+    };
     entries['sto-workflow-tool'] = {
       enabled: true,
       config: {
-        baseUrl: stoBaseUrl,
+        baseUrl: LOCAL_HOST_API_BASE_URL,
         ssoAuthPath: '~/.stoclaw/openclaw/sso-auth.json',
         timeoutMs: 30000,
       },
@@ -1628,19 +1641,18 @@ export async function syncStoPluginsToOpenClaw(): Promise<boolean> {
     plugins.entries = entries;
     config.plugins = plugins;
 
-    // Deny create_scheduled_task so natural-language requests do not route to the cloud flow.
-    // The built-in "cron" tool is left available for local scheduled jobs if the runtime provides it.
     const tools = (config.tools || {}) as Record<string, unknown>;
     const deny = Array.isArray(tools.deny) ? [...(tools.deny as string[])] : [];
-    if (!deny.includes('create_scheduled_task')) {
-      deny.push('create_scheduled_task');
-    }
     // NL workflow creation uses inline parameter form + HostApi; model must not create with defaults.
     if (!deny.includes('create_workflow')) {
       deny.push('create_workflow');
     }
-    // Remove the old 'cron' deny so local cron creation is possible again
-    tools.deny = deny.filter((t) => t !== 'cron');
+    // 切断 Gateway cron 双写：内置 cron 工具直写 jobs.json，必须 deny。
+    // openclaw NL 建任务改走插件 create_scheduled_task → HostApi /api/scheduled-tasks。
+    if (!deny.includes('cron')) {
+      deny.push('cron');
+    }
+    tools.deny = deny.filter((t) => t !== 'create_scheduled_task');
     config.tools = tools;
 
     return writeOpenClawJson(config);

@@ -9,9 +9,11 @@ function _ts(label: string): void {
   console.log(`[STARTUP] ${label}: +${Date.now() - _startupT0}ms`);
 }
 
-import { app, BrowserWindow, nativeImage, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, nativeImage, session, shell } from 'electron';
 import type { Server } from 'node:http';
-import { join } from 'path';
+import { basename, dirname, join, resolve } from 'path';
+import { existsSync } from 'node:fs';
+import { rename } from 'node:fs/promises';
 
 // Type-only imports for lazy-loaded modules (zero runtime cost).
 // The actual classes are loaded dynamically in initialize() to avoid
@@ -51,10 +53,132 @@ import {
 import { getSetting } from '../utils/store';
 import { getCurrentEnvConfig } from '../../shared/env-config';
 import { getSqliteDatabaseInfo, initializeSqliteDatabase } from '../db';
+import {
+  isLegacyMacAppBundleName,
+  LEGACY_MAC_APP_BUNDLE_NAMES,
+  registerMacAppBundle,
+  RENAMED_MAC_APP_BUNDLE_NAME,
+  scheduleMacAppBundleMoveAndRelaunch,
+  scheduleMacAppBundleRelaunch,
+  shouldPreserveCanonicalMacApp,
+  stageExistingMacAppTarget,
+  unregisterMacAppBundle,
+} from '../utils/cleanup-old-app-bundles';
 
 _ts('static imports loaded');
 
 const WINDOWS_APP_USER_MODEL_ID = 'app.stoclaw.desktop';
+const LEGACY_USER_DATA_DIR_NAME = 'stoclaw';
+
+function pinLegacyUserDataPath(): void {
+  app.setPath('userData', join(app.getPath('appData'), LEGACY_USER_DATA_DIR_NAME));
+}
+
+pinLegacyUserDataPath();
+
+function getCurrentMacAppBundlePath(): string | null {
+  const bundlePath = resolve(process.execPath, '..', '..', '..');
+  return bundlePath.endsWith('.app') ? bundlePath : null;
+}
+
+async function promptRemoveLegacyMacAppIfNeeded(win: BrowserWindow): Promise<void> {
+  if (process.platform !== 'darwin' || !app.isPackaged) return;
+
+  const currentAppPath = getCurrentMacAppBundlePath();
+  if (!currentAppPath || basename(currentAppPath) !== RENAMED_MAC_APP_BUNDLE_NAME) return;
+
+  const legacyAppPaths = LEGACY_MAC_APP_BUNDLE_NAMES
+    .map((name) => join(dirname(currentAppPath), name))
+    .filter((candidate) => resolve(currentAppPath) !== resolve(candidate) && existsSync(candidate));
+  if (legacyAppPaths.length === 0) return;
+  const legacyNames = legacyAppPaths.map((legacyPath) => basename(legacyPath)).join('、');
+
+  const result = await dialog.showMessageBox(win, {
+    type: 'question',
+    buttons: ['移到废纸篓', '稍后处理'],
+    defaultId: 0,
+    cancelId: 1,
+    title: '移除旧版 SClaw？',
+    message: `检测到旧版应用：${legacyNames}`,
+    detail: '当前正在运行 SClaw。为避免 Dock 或 Launchpad 中出现多个应用，建议将旧版应用移到废纸篓。此操作不会删除 SClaw 的用户数据。',
+  });
+
+  if (result.response !== 0) return;
+
+  for (const legacyAppPath of legacyAppPaths) {
+    try {
+      await unregisterMacAppBundle(legacyAppPath);
+      await shell.trashItem(legacyAppPath);
+      logger.info(`[rename] moved legacy macOS app to Trash: ${legacyAppPath}`);
+    } catch (error) {
+      logger.warn(`[rename] failed to move legacy macOS app to Trash: ${legacyAppPath}`, error);
+      await registerMacAppBundle(legacyAppPath);
+      await shell.showItemInFolder(legacyAppPath);
+    }
+  }
+}
+
+async function migrateLegacyMacAppBundleIfNeeded(): Promise<boolean> {
+  if (process.platform !== 'darwin' || !app.isPackaged) return false;
+
+  const currentAppPath = getCurrentMacAppBundlePath();
+  if (!currentAppPath || !isLegacyMacAppBundleName(basename(currentAppPath))) {
+    return false;
+  }
+
+  const targetAppPath = join(dirname(currentAppPath), RENAMED_MAC_APP_BUNDLE_NAME);
+  let stagedTargetPath: string | null = null;
+
+  try {
+    if (
+      existsSync(targetAppPath)
+      && await shouldPreserveCanonicalMacApp(currentAppPath, targetAppPath)
+    ) {
+      logger.info(
+        `[rename] preserving existing canonical macOS app ${targetAppPath}; `
+        + `historical app remains at ${currentAppPath} for post-launch cleanup`,
+      );
+      await registerMacAppBundle(targetAppPath);
+      scheduleMacAppBundleRelaunch(targetAppPath);
+      setQuitting();
+      app.quit();
+      return true;
+    }
+
+    if (existsSync(targetAppPath)) {
+      await unregisterMacAppBundle(targetAppPath);
+    }
+    stagedTargetPath = await stageExistingMacAppTarget(currentAppPath, targetAppPath);
+    if (stagedTargetPath) {
+      logger.info(`[rename] staged existing renamed macOS app ${targetAppPath} to ${stagedTargetPath}`);
+    }
+
+    await unregisterMacAppBundle(currentAppPath);
+    logger.info(`[rename] scheduling legacy macOS app bundle migration ${currentAppPath} to ${targetAppPath}`);
+    scheduleMacAppBundleMoveAndRelaunch(currentAppPath, targetAppPath, stagedTargetPath);
+    setQuitting();
+    app.quit();
+    return true;
+  } catch (error) {
+    logger.warn(`[rename] failed to migrate legacy macOS app bundle ${currentAppPath} to ${targetAppPath}`, error);
+    if (stagedTargetPath && existsSync(stagedTargetPath) && !existsSync(targetAppPath)) {
+      try {
+        await rename(stagedTargetPath, targetAppPath);
+        await registerMacAppBundle(targetAppPath);
+        logger.info(`[rename] restored staged renamed macOS app ${stagedTargetPath}`);
+      } catch (restoreError) {
+        logger.warn(`[rename] failed to restore staged renamed macOS app ${stagedTargetPath}`, restoreError);
+      }
+    }
+    if (existsSync(currentAppPath)) {
+      await registerMacAppBundle(currentAppPath);
+    }
+    if (existsSync(targetAppPath)) {
+      await registerMacAppBundle(targetAppPath);
+    }
+    return false;
+  }
+}
 
 /**
  * Send startup progress message to the splash screen
@@ -126,6 +250,10 @@ app.commandLine.appendSwitch('renderer-process-limit', '1');
 
 _ts('app flags set');
 
+// Dock / menu bar display name (Launchpad permanent name still comes from
+// electron-builder productName → CFBundleName after rebuild+reinstall).
+app.setName('SClaw');
+
 // On Linux, set CHROME_DESKTOP so Chromium can find the correct .desktop file.
 // On Wayland this maps the running window to stoclaw.desktop (icon + app grouping);
 // on X11 it supplements the StartupWMClass matching.
@@ -190,7 +318,7 @@ if (gotElectronLock) {
           );
         } else {
           console.info(
-            `[StoClaw] Another S Claw instance holds process lock (${fileLock.lockPath}, ${ownerDescriptor}); exiting duplicate process`,
+            `[StoClaw] Another SClaw instance holds process lock (${fileLock.lockPath}, ${ownerDescriptor}); exiting duplicate process`,
           );
           app.exit(0);
         }
@@ -278,7 +406,14 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
       webviewTag: true, // Enable <webview> for embedding OpenClaw Control UI
     },
     titleBarStyle: isMac ? 'hiddenInset' : useCustomTitleBar ? 'hidden' : 'default',
-    trafficLightPosition: isMac ? { x: 16, y: 18 } : undefined,
+    trafficLightPosition: isMac
+      ? {
+          // 最新原生 chrome 光学基线：x=16 / y=20；不再从 ContentHeader centerY 反推。
+          // 权威值：src/lib/content-header-metrics.ts → MACOS_TRAFFIC_LIGHT_POSITION
+          x: 16,
+          y: 20,
+        }
+      : undefined,
     frame: isMac || !useCustomTitleBar,
     show: false,  // We call show() manually below — before loading content
     backgroundColor: '#0f1525',  // Match splash screen background
@@ -296,7 +431,9 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
   // Set window title with environment suffix for non-production builds
   const envCfg = getCurrentEnvConfig();
   if (envCfg.displaySuffix) {
-    win.setTitle(`STO Claw ${envCfg.displaySuffix}`);
+    win.setTitle(`SClaw ${envCfg.displaySuffix}`);
+  } else {
+    win.setTitle('SClaw');
   }
 
   if (saved?.isMaximized) {
@@ -480,7 +617,6 @@ async function initialize(): Promise<void> {
     { ensureClawXContext, repairClawXOnlyBootstrapFiles },
     { autoInstallCliIfNeeded, generateCompletionCache, installCompletionToProfile },
     { autoInstallSaiCliIfNeeded },
-    { autoInstallDwsCliIfNeeded },
     { ensureBuiltinSkillsInstalled, ensurePreinstalledSkillsInstalled, watchLocalSkillsForDev },
     { cleanupRetiredSkillsAndPlugins },
     { ensureLongOutputConstraint, ensureChineseThinkingConstraint, getAgentWorkspacePath },
@@ -505,7 +641,6 @@ async function initialize(): Promise<void> {
     import('../utils/openclaw-workspace'),
     import('../utils/openclaw-cli'),
     import('../utils/sai-cli'),
-    import('../utils/dws-cli'),
     import('../utils/skill-config'),
     import('../utils/retired-skills-cleanup'),
     import('../utils/agent-config'),
@@ -589,21 +724,28 @@ async function initialize(): Promise<void> {
     () => mainWindow,
   );
 
+  // Workflow runtime（客户端执行下沉）：收口在途 run + 起 outbox flushLoop
+  const { startWorkflowRuntimeOnLaunch } = await import('../services/workflow-runtime/bootstrap');
+  startWorkflowRuntimeOnLaunch();
+
   // Register form IPC handlers
   const { registerFormHandlers } = await import('./ipc/form-handlers');
   registerFormHandlers();
 
-  const { getClaudeScheduledTaskService } = await import('../services/claude-scheduled-task-service');
-  const claudeScheduledTaskService = getClaudeScheduledTaskService();
-  // Inject the gateway event sink before the scheduler starts ticking so that
-  // Claude scheduled-task runs (including 立即运行) stream to the renderer.
-  claudeScheduledTaskService.setEventSink(gm);
-  claudeScheduledTaskService.startScheduler();
-  void claudeScheduledTaskService.refreshSchedule().catch((error) => {
-    logger.warn('[claude-task] initial schedule refresh failed:', error);
+  // 引擎无关通用定时任务：setGatewayManager 注入 dispatcher + eventSink →
+  // 一次性迁移遗留 claude definitions.json + openclaw jobs.json → schedule_tasks（源文件只读保留）→
+  // startScheduler（discard→start）。迁移幂等（marker + per-row 存在检查，崩溃可重跑续传）。
+  const { getScheduledTaskService } = await import('../scheduled-tasks/scheduled-task-service');
+  const { runScheduledTasksMigration } = await import('../scripts/migrate-scheduled-tasks');
+  const scheduledTaskService = getScheduledTaskService();
+  scheduledTaskService.setGatewayManager(gm);
+  await runScheduledTasksMigration(gm, scheduledTaskService);
+  scheduledTaskService.startScheduler();
+  void scheduledTaskService.refreshSchedule().catch((error) => {
+    logger.warn('[scheduled-task] initial schedule refresh failed:', error);
   });
   app.on('before-quit', () => {
-    claudeScheduledTaskService.stopScheduler();
+    scheduledTaskService.stopScheduler();
   });
 
   hostApiServer = startHostApiServer({
@@ -638,6 +780,10 @@ async function initialize(): Promise<void> {
   // Defer heavy file-copy maintenance until after first paint so first-launch
   // startup is responsive on Windows and avoids blank/unresponsive cold starts.
   schedulePostFirstPaintWork(window, async () => {
+    void promptRemoveLegacyMacAppIfNeeded(window).catch((error) => {
+      logger.warn('Failed to prompt for legacy macOS app cleanup:', error);
+    });
+
     logger.info('Running deferred startup maintenance tasks');
 
     await cleanupRetiredSkillsAndPlugins({ skipPluginDirs: true }).catch((error) => {
@@ -703,18 +849,16 @@ async function initialize(): Promise<void> {
       logger.warn('SAI CLI auto-install failed:', message);
       mainWindow?.webContents.send('sai:cli-install-failed', message);
     });
-    await autoInstallDwsCliIfNeeded((installedPath) => {
-      mainWindow?.webContents.send('dws:cli-installed', installedPath);
-    }).then(async (result) => {
-      if (result.success) {
-        const { promptGatewayRestartAfterDwsInstall } = await import('../utils/dws-install-notify');
-        await promptGatewayRestartAfterDwsInstall(gm, mainWindow, result);
-      }
-    }).catch((error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.warn('dws auto-install failed:', message);
-      mainWindow?.webContents.send('dws:cli-install-failed', message);
-    });
+    // dws 静默强装已取消：改为用户在应用广场「链接器」一键连接时安装。
+    // 启动时仅同步已安装/已授权状态到 connectors state，重建 Gateway 白名单。
+    void import('../connectors')
+      .then(({ getConnectorService }) => getConnectorService().syncProbes())
+      .catch((error) => {
+        logger.warn(
+          'connectors syncProbes failed:',
+          error instanceof Error ? error.message : String(error),
+        );
+      });
   });
 
   // Bridge gateway and host-side events before any auto-start logic runs, so
@@ -906,6 +1050,9 @@ if (gotTheLock) {
   // Application lifecycle
   app.whenReady().then(async () => {
     _ts('app.whenReady() resolved');
+    if (await migrateLegacyMacAppBundleIfNeeded()) {
+      return;
+    }
     void import('../utils/cleanup-old-app-bundles').then(({ scheduleOldAppBackupCleanup }) =>
       scheduleOldAppBackupCleanup(),
     );

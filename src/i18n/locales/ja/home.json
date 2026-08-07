@@ -8,8 +8,8 @@
       "placeholder": "本社精算照合表を作成してください"
     }
   },
-  "homeWorkflowCard": {
-    "footerHint": "クリックして起動"
+  "homeRecommend": {
+    "emptyCategory": "このカテゴリにはおすすめがありません"
   },
   "hero": {
     "title": "経営管理をより効率的に",
@@ -22,7 +22,7 @@
     "dataAnalysis": "データ分析",
     "workflow": "ワークフロー",
     "send": "送信",
-    "footerDisclaimer": "S Claw は AI 補助です。重要な情報は業務で確認のうえご利用ください。",
+    "footerDisclaimer": "SClaw は AI 補助です。重要な情報は業務で確認のうえご利用ください。",
     "gatewayRequired": "送信前にゲートウェイを接続してください。",
     "sendFailed": "送信に失敗しました。チャット画面で確認してください。"
   },
@@ -45,7 +45,6 @@
     "modeMulti": "マルチエージェント連携",
     "headline": "今日は何をお手伝いしますか？",
     "subline": "会話・ツール呼び出し・共同作業・継続実行を、ひとつの画面で進められます。",
-    "functionTag": "機能",
     "cardTasksTitle": "タスク処理",
     "cardTasksDesc": "タスク指向の依頼に対応します。",
     "cardExecTitle": "継続実行",

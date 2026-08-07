@@ -117,6 +117,8 @@ describe('evaluateDingTalkSendGuard', () => {
     const t0 = 1_000_000;
     for (const sessionKey of [
       'claude-task-run:abc',
+      'claude-task:task-1:2026-06-25',
+      'claude-task:task-1',
       'scheduled-task:xyz',
       'agent:foo:cron:bar:baz',
       '[cron:nightly]',
@@ -233,7 +235,7 @@ describe('evaluateDingTalkSendGuard', () => {
   it('blocks Bash ANSI-C quoted --text before it reaches Windows exec', () => {
     const params = {
       command:
-        "dws chat message send --user u1 --title \"消息\" --text $'你好\\n\\n---\\n\\n> *本消息由 S Claw 代为发送，非本人实时回复。*' --format json",
+        "dws chat message send --user u1 --title \"消息\" --text $'你好\\n\\n---\\n\\n> *本消息由 SClaw 代为发送，非本人实时回复。*' --format json",
     };
     const result = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
     expect(result.allowed).toBe(false);
@@ -247,7 +249,7 @@ describe('evaluateDingTalkSendGuard', () => {
   it('blocks shell variable --text because it can collapse to --format', () => {
     const params = {
       command:
-        'powershell -NoProfile -Command "$nl = [Environment]::NewLine; $text = \'你好\' + $nl + $nl + \'---\' + $nl + $nl + \'> *本消息由 S Claw 代为发送，非本人实时回复。*\'; dws chat message send --user u1 --title \'消息\' --text $text --format json"',
+        'powershell -NoProfile -Command "$nl = [Environment]::NewLine; $text = \'你好\' + $nl + $nl + \'---\' + $nl + $nl + \'> *本消息由 SClaw 代为发送，非本人实时回复。*\'; dws chat message send --user u1 --title \'消息\' --text $text --format json"',
     };
     const result = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
     expect(result.allowed).toBe(false);
@@ -257,7 +259,7 @@ describe('evaluateDingTalkSendGuard', () => {
   it('allows direct quoted text with literal newline escapes for gateway argv normalization', () => {
     const params = {
       command:
-        'dws chat message send --user u1 --title "消息" --text "你好\\n\\n---\\n\\n> *本消息由 S Claw 代为发送，非本人实时回复。*" --format json',
+        'dws chat message send --user u1 --title "消息" --text "你好\\n\\n---\\n\\n> *本消息由 SClaw 代为发送，非本人实时回复。*" --format json',
     };
     const result = evaluateDingTalkSendGuard({ toolName: 'exec', params, sessionKey: 'sess-1' });
     expect(result.allowed).toBe(true);
@@ -277,10 +279,22 @@ describe('resolveDwsChatMessageSendFileProtocolInText', () => {
     const result = evaluateDingTalkSendGuard({ toolName: 'exec', params: { command: cmd }, sessionKey: 'sess-1' });
     expect(result.allowed).toBe(false);
     if (!result.allowed) {
-      expect(result.reason).toContain('file://');
+      expect(result.reason).toContain('本地产物路径');
       expect(result.reason).toContain('dws drive upload');
-      expect(result.reason).toContain('newCSpaceIdIM');
       expect(result.reason).toContain('docUrl');
+      expect(result.reason).toContain('encodeURI');
+    }
+  });
+
+  it('blocks bare absolute .claw-output path in --text', () => {
+    const cmd =
+      'dws chat message send --user u1 --text "报告：/Users/yaolei/.stoclaw/workspace/.claw-output/客户异常监控20260724_151406.html" --format json';
+    expect(resolveDwsChatMessageSendFileProtocolInText(cmd)).not.toBeNull();
+    const result = evaluateDingTalkSendGuard({ toolName: 'exec', params: { command: cmd }, sessionKey: 'sess-1' });
+    expect(result.allowed).toBe(false);
+    if (!result.allowed) {
+      expect(result.reason).toContain('本地产物路径');
+      expect(result.reason).toContain('drive upload');
     }
   });
 
@@ -318,5 +332,11 @@ describe('resolveDwsChatMessageSendFileProtocolInText', () => {
       sessionKey: 'scheduled-task:job-1',
     });
     expect(result.allowed).toBe(true);
+  });
+
+  it('does not false-positive when chained upload uses file:// --file and send text is clean', () => {
+    const cmd =
+      'dws drive upload --file file:///Users/yaolei/.claw-output/report.html -y --format json && dws chat message send --user u1 --text "报告：https://dingtalk.doc/url" --format json';
+    expect(resolveDwsChatMessageSendFileProtocolInText(cmd)).toBeNull();
   });
 });

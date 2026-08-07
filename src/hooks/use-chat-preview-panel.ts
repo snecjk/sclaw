@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AttachedFileMeta, RawMessage } from '@/stores/chat';
-import { useChatStore } from '@/stores/chat';
 import { useSessionWorkflowPreview } from '@/hooks/use-session-workflow-preview';
 import { filterSessionWorkflowCardStates } from '@/lib/session-workflow-context';
 import { usePreviewableFiles } from '@/pages/Chat/message-utils';
 import { logFilePreview } from '@/lib/file-preview-debug';
 
-export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: string) {
-  const workflowCardStates = useChatStore((s) => s.workflowCardStates);
+/** Workbench 预览布局：closed 双栏 / split 三栏 / expanded 预览占满 Workspace（非 DOM Fullscreen） */
+export type PreviewMode = 'closed' | 'split' | 'expanded';
 
-  const [showPreviewPanel, setShowPreviewPanel] = useState(false);
+export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: string) {
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('closed');
   const [activePreviewFilePath, setActivePreviewFilePath] = useState<string | null>(null);
   /** Files opened on demand (e.g. workflow fallback URL) — not always present in message scan. */
   const [extraPreviewFiles, setExtraPreviewFiles] = useState<AttachedFileMeta[]>([]);
@@ -17,11 +17,11 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
   const [dismissedFilePaths, setDismissedFilePaths] = useState<Set<string>>(() => new Set());
 
   const sessionWorkflowCardStates = useMemo(
-    () => filterSessionWorkflowCardStates(allMessages, workflowCardStates),
-    [allMessages, workflowCardStates],
+    () => filterSessionWorkflowCardStates(allMessages, {}),
+    [allMessages],
   );
 
-  const previewableFiles = usePreviewableFiles(allMessages, sessionWorkflowCardStates);
+  const previewableFiles = usePreviewableFiles(allMessages, sessionWorkflowCardStates, sessionKey);
 
   const previewFiles = useMemo(() => {
     const byPath = new Map<string, AttachedFileMeta>();
@@ -52,20 +52,23 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
   } = useSessionWorkflowPreview(allMessages, sessionKey);
 
   const canShowPreviewPanel = visiblePreviewFiles.length > 0;
+  const showPreviewPanel = previewMode !== 'closed';
+  const isPreviewSplit = previewMode === 'split';
+  const isPreviewExpanded = previewMode === 'expanded';
 
   const prevSessionKeyRef = useRef(sessionKey);
 
   useEffect(() => {
     if (prevSessionKeyRef.current === sessionKey) return;
     prevSessionKeyRef.current = sessionKey;
-    setShowPreviewPanel(false);
+    setPreviewMode('closed');
     setActivePreviewFilePath(null);
     setExtraPreviewFiles([]);
     setDismissedFilePaths(new Set());
   }, [sessionKey]);
 
   useEffect(() => {
-    if (!showPreviewPanel) return;
+    if (previewMode === 'closed') return;
 
     if (
       activePreviewFilePath !== null
@@ -73,19 +76,21 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
     ) {
       const latest = visiblePreviewFiles[visiblePreviewFiles.length - 1];
       if (latest?.filePath) {
+        // 产物列表收缩时把活跃 tab 同步到仍存在的文件。
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- sync active tab when file list shrinks
         setActivePreviewFilePath(latest.filePath);
         return;
       }
-      setShowPreviewPanel(false);
+      setPreviewMode('closed');
       setActivePreviewFilePath(null);
     }
-  }, [showPreviewPanel, activePreviewFilePath, visiblePreviewFiles]);
+  }, [previewMode, activePreviewFilePath, visiblePreviewFiles]);
 
   const openPreviewPanel = useCallback(() => {
     const latestFile = visiblePreviewFiles[visiblePreviewFiles.length - 1];
     if (!latestFile?.filePath) return;
     setActivePreviewFilePath(latestFile.filePath);
-    setShowPreviewPanel(true);
+    setPreviewMode('split');
   }, [visiblePreviewFiles]);
 
   const openArtifactPreview = useCallback((file: AttachedFileMeta) => {
@@ -105,11 +110,21 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
       prev.some((item) => item.filePath === file.filePath) ? prev : [...prev, file]
     ));
     setActivePreviewFilePath(file.filePath);
-    setShowPreviewPanel(true);
+    setPreviewMode('split');
   }, []);
 
   const closePreviewPanel = useCallback(() => {
-    setShowPreviewPanel(false);
+    setPreviewMode('closed');
+  }, []);
+
+  /** split → expanded；不改写 previewSplitPercent */
+  const expandPreview = useCallback(() => {
+    setPreviewMode((mode) => (mode === 'split' ? 'expanded' : mode));
+  }, []);
+
+  /** expanded → split；恢复上次持久化的 split percent（由 settings store 持有） */
+  const restorePreview = useCallback(() => {
+    setPreviewMode((mode) => (mode === 'expanded' ? 'split' : mode));
   }, []);
 
   const dismissPreviewFile = useCallback((filePath: string) => {
@@ -137,9 +152,13 @@ export function useChatPreviewPanel(allMessages: RawMessage[], sessionKey: strin
   }, [closePreviewPanel, previewFiles]);
 
   return {
+    previewMode,
     showPreviewPanel,
-    setShowPreviewPanel,
+    isPreviewSplit,
+    isPreviewExpanded,
     openPreviewPanel,
+    expandPreview,
+    restorePreview,
     activePreviewFilePath,
     setActivePreviewFilePath,
     previewableFiles: visiblePreviewFiles,
