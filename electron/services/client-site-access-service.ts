@@ -4,6 +4,7 @@
 
 import {
   CLIENT_SITE_CLIENT_CODE,
+  requiresClientSiteAccessCheck,
   type ClientSiteAccessCheckResult,
 } from '../../shared/client-site-access';
 import { buildStoMemoryCenterAuthHeaders } from '../utils/sto-memory-api-auth';
@@ -12,6 +13,11 @@ import { logger } from '../utils/logger';
 
 const ACCESS_CHECK_PATH = `/agent/v1/client-site-configs/${encodeURIComponent(CLIENT_SITE_CLIENT_CODE)}/access-check`;
 const FETCH_TIMEOUT_MS = 15_000;
+
+export type CheckAccessOptions = {
+  /** 传入时：非网点组织本地直接放行，不请求接口 */
+  categoryCode?: string | null;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -53,13 +59,35 @@ export function parseClientSiteAccessResponse(payload: unknown): ClientSiteAcces
 }
 
 export class ClientSiteAccessService {
-  async checkAccess(stoToken: string): Promise<ClientSiteAccessCheckResult> {
+  async checkAccess(
+    stoToken: string,
+    options?: CheckAccessOptions,
+  ): Promise<ClientSiteAccessCheckResult> {
     const token = (stoToken || '').trim();
     if (!token) {
       return {
         allowed: false,
         errCode: '401',
         errMessage: '缺少 stoToken',
+      };
+    }
+
+    // 仅当显式传入 categoryCode 且判定为非网点时跳过；未传则保守走接口
+    if (
+      options !== undefined &&
+      'categoryCode' in options &&
+      !requiresClientSiteAccessCheck(options.categoryCode)
+    ) {
+      const categoryCode = options.categoryCode ?? null;
+      logger.info(
+        `[ClientSiteAccessService] skip access-check for non-site category=${categoryCode ?? ''}`,
+      );
+      return {
+        allowed: true,
+        clientCode: CLIENT_SITE_CLIENT_CODE,
+        categoryCode,
+        errCode: '200',
+        errMessage: 'OK',
       };
     }
 
