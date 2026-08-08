@@ -12,9 +12,16 @@ const SOURCE_FROM_CATALOG: Record<string, SidebarChannelSource> = {
   wechat: 'wechat',
   'openclaw-weixin': 'wechat',
   app: 'app',
+  mobile: 'app',
+  'sto-mobile': 'app',
 };
 
-const SOURCE_FROM_KEY = new Set<string>(['dingtalk', 'wechat', 'app']);
+const SOURCE_FROM_KEY: Record<string, SidebarChannelSource> = {
+  dingtalk: 'dingtalk',
+  wechat: 'wechat',
+  app: 'app',
+  mobile: 'app',
+};
 
 export function resolveSidebarChannelSource(
   sessionKey: string,
@@ -24,8 +31,8 @@ export function resolveSidebarChannelSource(
   if (fromCatalog) return fromCatalog;
 
   const parts = sessionKey.trim().split(':');
-  if (parts[0] === 'agent' && parts.length >= 4 && SOURCE_FROM_KEY.has(parts[2])) {
-    return parts[2] as SidebarChannelSource;
+  if (parts[0] === 'agent' && parts.length >= 4) {
+    return SOURCE_FROM_KEY[parts[2]] ?? null;
   }
   return null;
 }
