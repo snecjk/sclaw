@@ -8,7 +8,7 @@ import { useGatewayStore } from '../gateway';
 import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
 import { DEFAULT_SESSION_KEY, type ChatSession, type SendMessageOptions } from './types';
 import { AppError, normalizeAppError } from '@/lib/error-model';
-import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
+import { resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
 import { resolveSkillGatewayText } from '@/lib/skill-gateway-text';
 import { appendSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
 import { awaitSessionSendReadiness } from '@/lib/session-send-readiness';
@@ -66,13 +66,7 @@ export function createSendActions(
         skillMeta,
       } = options;
       const userDisplayText = text.trim();
-      const skillGatewayText = skillMeta
-        ? resolveSkillGatewayText(resolveSkillFromPlaza(skillMeta.slug).defaultPrompt, userDisplayText)
-        : userDisplayText;
-      const gatewayText = skillMeta
-        ? appendSkillTranscriptMarker(skillGatewayText, skillMeta, userDisplayText)
-        : skillGatewayText;
-      if (!gatewayText && (!attachments || attachments.length === 0) && !skillMeta) return;
+      if (!skillMeta && !userDisplayText && (!attachments || attachments.length === 0)) return;
 
       // DEFAULT_SESSION_KEY is a UI placeholder. Materialize it before target
       // resolution so a fresh home/project conversation always gets a unique
@@ -132,6 +126,17 @@ export function createSendActions(
         });
         return;
       }
+
+      const gatewayText = skillMeta
+        ? appendSkillTranscriptMarker(
+          resolveSkillGatewayText(
+            (await resolveSkillPrompt(skillMeta.slug)).defaultPrompt,
+            userDisplayText,
+          ),
+          skillMeta,
+          userDisplayText,
+        )
+        : userDisplayText;
 
       const preparedContext = await prepareSendContext({
         trimmedText: gatewayText,

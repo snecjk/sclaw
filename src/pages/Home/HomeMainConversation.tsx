@@ -327,6 +327,9 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   const openWorkflowPreview = useCallback((workflowId: string) => {
     navigate(`/workflow/${encodeURIComponent(workflowId)}`);
   }, [navigate]);
+  const openWorkflowList = useCallback((workflowId: string) => {
+    navigate(`/workflow?highlightWorkflowId=${encodeURIComponent(workflowId)}`);
+  }, [navigate]);
 
   const {
     open: workflowCronModalOpen,
@@ -510,6 +513,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
                       paramsSummary={item.card.paramsSummary}
                       onPreviewArtifact={openArtifactPreview}
                       onCreateScheduledTask={openWorkflowCronTaskModal}
+                      onOpenWorkflow={openWorkflowList}
                     />
                   );
                 }

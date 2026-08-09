@@ -1,32 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { ChevronRight, Info, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getHostApiBase } from '@/lib/host-api';
 import { cn } from '@/lib/utils';
 import type { MentionSearchItem } from '@/types/dingtalk-mention';
+import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 
-const AVATAR_COLORS = ['#1677FF', '#13C2C2', '#52C41A', '#FA8C16', '#722ED1', '#EB2F96', '#2F54EB'];
-
-function hashSeed(seed: string): number {
-  let hash = 0;
-  for (const ch of seed) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
-  return hash;
-}
-
-function getAvatarColor(seed: string): string {
-  return AVATAR_COLORS[hashSeed(seed) % AVATAR_COLORS.length];
-}
+type IndexedMentionSearchItem = MentionSearchItem & { sourceIndex: number };
 
 function getAvatarInitial(item: MentionSearchItem): string {
   const title = item.title.trim();
   if (!title) return '?';
-  if (item.type === 'group') {
-    return title.charAt(0);
+  const chineseChars = title.match(/[\u4e00-\u9fff]/g);
+  if (item.type === 'user') {
+    if (chineseChars?.length) return chineseChars.slice(-2).join('');
+    return title.slice(0, 2).toUpperCase();
   }
-  if (/[\u4e00-\u9fff]/.test(title)) {
-    return title.slice(-1);
+  if (chineseChars?.length) {
+    return chineseChars.slice(0, 2).join('');
   }
-  return title.charAt(0).toUpperCase();
+  return title.slice(0, 2).toUpperCase();
 }
 
 function resolveAvatarSrc(avatar?: string | null): string | null {
@@ -42,26 +35,76 @@ function MentionAvatar({ item }: { item: MentionSearchItem }) {
   const [failed, setFailed] = useState(false);
   const avatarSrc = resolveAvatarSrc(item.avatar);
   const initial = getAvatarInitial(item);
-  const color = getAvatarColor(item.id || item.title);
 
   if (avatarSrc && !failed) {
     return (
       <img
         src={avatarSrc}
         alt={item.title}
-        className="h-8 w-8 shrink-0 rounded-full object-cover bg-muted"
+        className="h-8 w-8 shrink-0 rounded-[8px] bg-[#DFEDFF] object-cover dark:bg-[#1677FF]/15"
         onError={() => setFailed(true)}
       />
     );
   }
 
   return (
-    <div
-      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[13px] font-semibold text-white"
-      style={{ backgroundColor: color }}
-      aria-hidden
-    >
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#DFEDFF] text-[12px] font-semibold leading-none text-[#1677FF] dark:bg-[#1677FF]/15 dark:text-[#4C9BFF]" aria-hidden>
       {initial}
+    </div>
+  );
+}
+
+function MentionSection({
+  title,
+  items,
+  emptyLabel,
+  activeIndex,
+  onHoverIndex,
+  onSelect,
+}: {
+  title: string;
+  items: IndexedMentionSearchItem[];
+  emptyLabel?: string;
+  activeIndex: number;
+  onHoverIndex: (index: number) => void;
+  onSelect: (item: MentionSearchItem) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="px-2 py-1 text-[12px] font-medium leading-5 text-[#86909C] dark:text-muted-foreground">
+        {title}
+      </div>
+      {items.length === 0 && emptyLabel ? (
+        <div className="px-2 py-1 text-[12px] font-normal leading-5 text-[#C4CDD8] dark:text-muted-foreground/60">
+          {emptyLabel}
+        </div>
+      ) : null}
+      {items.map((item) => (
+        <button
+          key={`${item.type}:${item.id}`}
+          type="button"
+          data-mention-index={item.sourceIndex}
+          className={cn(
+            'flex w-full items-center gap-2 rounded-[8px] px-2 py-1.5 text-left transition-colors',
+            item.sourceIndex === activeIndex
+              ? 'bg-[#F0F2F5] text-[#1F2937] dark:bg-white/10 dark:text-foreground'
+              : 'hover:bg-[#F5F7FA] dark:hover:bg-white/[0.06]',
+          )}
+          onMouseEnter={() => onHoverIndex(item.sourceIndex)}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            onSelect(item);
+          }}
+        >
+          <MentionAvatar item={item} />
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[12px] font-normal leading-5 text-[#111827] dark:text-foreground">{item.title}</div>
+            {item.subtitle && (
+              <div className="truncate text-[10px] font-normal leading-4 text-[#86909C] dark:text-muted-foreground">{item.subtitle}</div>
+            )}
+          </div>
+        </button>
+      ))}
     </div>
   );
 }
@@ -110,6 +153,7 @@ export function DingTalkMentionPopover({
   const { t } = useTranslation('chat');
   const loadMoreLockRef = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const listContentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open || items.length === 0) return;
@@ -132,14 +176,20 @@ export function DingTalkMentionPopover({
 
   if (!open) return null;
 
+  const indexedItems = items.map((item, index) => ({ ...item, sourceIndex: index }));
+  const contactItems = indexedItems.filter((item) => item.type === 'user');
+  const groupItems = indexedItems.filter((item) => item.type === 'group');
+  const hasVisibleItems = indexedItems.length > 0;
+  const title = recent
+    ? t('composer.dingtalkRecentTitle')
+    : query.trim()
+      ? t('composer.dingtalkSearchTitle')
+      : t('composer.dingtalkMentionTitle');
+
   return (
-    <div className="absolute left-0 bottom-full z-50 mb-2 w-[22rem] overflow-hidden rounded-2xl border border-glass-border glass p-1.5 shadow-lg">
-      <div className="px-3 py-2 text-[11px] font-medium text-muted-foreground/80">
-        {recent
-          ? t('composer.dingtalkRecentTitle')
-          : query.trim()
-            ? t('composer.dingtalkMentionSearchTitle', { query: query.trim() })
-            : t('composer.dingtalkMentionTitle')}
+    <div className="absolute left-0 bottom-full z-50 mb-2 w-[320px] overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-2 shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-border dark:bg-popover dark:shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
+      <div className="px-2 py-1 text-[12px] font-medium leading-5 text-[#86909C] dark:text-muted-foreground">
+        {title}
       </div>
 
       {needsInstall && (
@@ -165,21 +215,23 @@ export function DingTalkMentionPopover({
       )}
 
       {needsAuth && !needsInstall && (
-        <div className="space-y-2 px-3 py-2">
-          <div className="text-sm text-muted-foreground">
-            {t('composer.dingtalkNeedsAuth')}
-          </div>
-          {onLogin && (
-            <button
-              type="button"
-              className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={onLogin}
-              disabled={loggingIn}
-            >
+        <div className="px-2 py-1">
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-[6px] border border-[#FFD6BA] bg-[#FFF1E8] px-2 py-2 text-left transition-colors hover:bg-[#FFE9DA] disabled:cursor-not-allowed disabled:opacity-70 dark:border-primary/30 dark:bg-primary/10 dark:hover:bg-primary/[0.16]"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={onLogin}
+            disabled={!onLogin || loggingIn}
+          >
+            <Info className="h-4 w-4 shrink-0 text-[#FF6F00]" strokeWidth={2} aria-hidden />
+            <span className="min-w-0 flex-1 text-[12px] font-normal leading-5 text-[#111827] dark:text-foreground">
+              {t('composer.dingtalkNeedsAuth')}
+            </span>
+            <span className="inline-flex shrink-0 items-center text-[12px] font-medium leading-5 text-[#FF6F00]">
               {loggingIn ? t('composer.dingtalkLoggingIn') : t('composer.dingtalkLogin')}
-            </button>
-          )}
+              {!loggingIn && <ChevronRight className="ml-0.5 h-4 w-4" strokeWidth={2} aria-hidden />}
+            </span>
+          </button>
         </div>
       )}
 
@@ -194,58 +246,55 @@ export function DingTalkMentionPopover({
         <div className="px-3 py-2 text-sm text-destructive">{error}</div>
       )}
 
-      {!loading && !needsAuth && !needsInstall && !error && items.length === 0 && (
-        <div className="px-3 py-2 text-sm text-muted-foreground">
+      {!loading && !needsAuth && !needsInstall && !error && !hasVisibleItems && !query.trim() && (
+        <div className="px-2 py-1 text-[12px] text-[#86909C] dark:text-muted-foreground">
           {t('composer.dingtalkNoResults')}
         </div>
       )}
 
-      {!loading && items.length > 0 && (
-        <div
-          ref={listRef}
-          className="max-h-72 min-h-[12.5rem] overflow-y-auto overscroll-contain"
-          onScroll={handleScroll}
-        >
-          {items.map((item, index) => (
-            <button
-              key={`${item.type}:${item.id}`}
-              type="button"
-              data-mention-index={index}
-              className={cn(
-                'flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition-colors',
-                index === activeIndex ? 'bg-primary/10 text-foreground' : 'hover:bg-muted/60',
+      {!loading && !needsAuth && !needsInstall && !error && (hasVisibleItems || query.trim()) && (
+        <div className="relative max-h-[336px] overflow-hidden">
+          <div
+            ref={listRef}
+            className="sto-overlay-scroll-viewport max-h-[336px] overflow-y-auto overscroll-contain"
+            onScroll={handleScroll}
+          >
+            <div ref={listContentRef}>
+              <MentionSection
+                title={t('composer.dingtalkContactsTitle')}
+                items={contactItems}
+                emptyLabel={query.trim() ? t('composer.dingtalkNoContacts') : undefined}
+                activeIndex={activeIndex}
+                onHoverIndex={onHoverIndex}
+                onSelect={onSelect}
+              />
+              <MentionSection
+                title={t('composer.dingtalkGroupsTitle')}
+                items={groupItems}
+                emptyLabel={query.trim() ? t('composer.dingtalkNoGroups') : undefined}
+                activeIndex={activeIndex}
+                onHoverIndex={onHoverIndex}
+                onSelect={onSelect}
+              />
+              {recent && hasMore && !loadingMore && onLoadMore && (
+                <button
+                  type="button"
+                  className="mt-1 flex w-full items-center justify-center gap-1.5 rounded-[8px] px-2 py-1.5 text-[12px] font-medium text-[#86909C] transition-colors hover:bg-[#F0F2F5] hover:text-[#111827] dark:text-muted-foreground dark:hover:bg-white/[0.06] dark:hover:text-foreground"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => onLoadMore()}
+                >
+                  {t('composer.dingtalkLoadMore')}
+                </button>
               )}
-              onMouseEnter={() => onHoverIndex(index)}
-              onMouseDown={(event) => {
-                event.preventDefault();
-                onSelect(item);
-              }}
-            >
-              <MentionAvatar item={item} />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-foreground">{item.title}</div>
-                {item.subtitle && (
-                  <div className="truncate text-xs text-muted-foreground">{item.subtitle}</div>
-                )}
-              </div>
-            </button>
-          ))}
-          {recent && hasMore && !loadingMore && onLoadMore && (
-            <button
-              type="button"
-              className="flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => onLoadMore()}
-            >
-              {t('composer.dingtalkLoadMore')}
-            </button>
-          )}
-          {recent && loadingMore && (
-            <div className="flex items-center justify-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              <span>{t('composer.dingtalkLoadingMore')}</span>
+              {recent && loadingMore && (
+                <div className="flex items-center justify-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>{t('composer.dingtalkLoadingMore')}</span>
+                </div>
+              )}
             </div>
-          )}
+          </div>
+          <OverlayScrollbar viewportRef={listRef} contentRef={listContentRef} />
         </div>
       )}
     </div>

@@ -22,6 +22,23 @@ function stripSkillTranscriptMarkerForLabel(text: string): string {
   return text.replace(SKILL_TRANSCRIPT_MARKER_RE, '').trimEnd();
 }
 
+/**
+ * The body around the marker is the injected defaultPrompt, which users never see —
+ * the skill name they recognize only exists inside the marker payload.
+ */
+function readSkillTranscriptLabel(text: string): string | undefined {
+  const match = SKILL_TRANSCRIPT_MARKER_RE.exec(text);
+  if (!match) return undefined;
+  try {
+    const parsed = JSON.parse(match[1]) as { slug?: string; title?: string; userText?: string };
+    const slug = parsed.slug?.trim();
+    if (!slug) return undefined;
+    return parsed.userText?.trim() || parsed.title?.trim() || slug;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface WorkflowCreationTemplateHint {
   id: string;
   label: string;
@@ -134,6 +151,8 @@ export function stripWorkflowSessionHintForDisplay(message: string): string {
 export function deriveSessionLabelFromUserText(rawText: string): string {
   const subagentTask = extractSubagentTaskLabel(rawText);
   if (subagentTask) return subagentTask;
+  const skillLabel = readSkillTranscriptLabel(rawText);
+  if (skillLabel) return skillLabel;
   const stripped = stripDingTalkMentionContextForDisplay(
     stripWorkflowContextForDisplay(
       stripWorkflowSessionHintForDisplay(stripSkillTranscriptMarkerForLabel(rawText)),
