@@ -1243,10 +1243,16 @@ function mergeEventsFromChronologicalTurn(
   const merged: RawTurnEvent[] = [];
   const seenToolKeys = new Set<string>();
   const seenStableIds = new Set<string>();
+  const mergedAssistantRefs = new Set<RawMessage>();
+  const mergedAssistantIds = new Set<string>();
 
   for (const entry of chronologicalEntries) {
     if (entry.kind === 'assistant') {
       if (!chronologicalAssistantInPickedTurn(entry.message, picked)) continue;
+      mergedAssistantRefs.add(entry.message);
+      if (typeof entry.message.id === 'string' && entry.message.id.length > 0) {
+        mergedAssistantIds.add(entry.message.id);
+      }
       const events = rebalanceBundledThinkingTools(
         extractOrderedEventsFromMessage(entry.message),
       );
@@ -1256,6 +1262,19 @@ function mergeEventsFromChronologicalTurn(
 
     const toolEvents = extractToolEventsFromToolResultMessage(entry.message);
     mergeRawTurnEvents(merged, toolEvents, seenToolKeys, seenStableIds);
+  }
+
+  // During a live run the persisted session chronology can lag behind the
+  // canonical streaming overlay. Chronology enriches ordering with tool_result
+  // rows, but it must never become an allow-list that drops newer assistant
+  // snapshots. Append picked live messages that history has not observed yet;
+  // mergeRawTurnEvents keeps tool/text snapshots deduplicated for both engines.
+  for (const message of pickedMessages) {
+    const alreadyMerged = mergedAssistantRefs.has(message)
+      || (typeof message.id === 'string' && message.id.length > 0 && mergedAssistantIds.has(message.id));
+    if (alreadyMerged) continue;
+    const events = rebalanceBundledThinkingTools(extractOrderedEventsFromMessage(message));
+    mergeRawTurnEvents(merged, events, seenToolKeys, seenStableIds);
   }
 
   return merged;

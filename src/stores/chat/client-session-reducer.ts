@@ -254,7 +254,14 @@ export function reduceSessionEvent(
             : message ?? state.overlay.streamingMessage,
         streamingMessages: startsNewRun || clearOverlay
           ? []
-          : appendStreamingAssistantSnapshot(state.overlay.streamingMessages, message),
+          // Keep only committed assistant messages in the chronological buffer.
+          // The current growing delta already lives in streamingMessage. Mixing
+          // it into this array makes a reused run id jump back to its first
+          // position across multi-message runs and leaves rendering one message
+          // behind until transcript reload.
+          : event.type === 'message.final'
+            ? appendStreamingAssistantSnapshot(state.overlay.streamingMessages, message)
+            : state.overlay.streamingMessages,
         streamingToolResults: startsNewRun || clearOverlay
           ? []
           : isToolResult && message

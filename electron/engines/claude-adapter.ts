@@ -655,7 +655,15 @@ export async function consumeClaudeQuery(
   let title: string | undefined;
   let seq = recoveryOptions?.initialSeq ?? 0;
   let seenResult = false;
+  let completionEmitted = false;
+  let completionDeferred = false;
   let errorThrown = false;
+  // Claude can finish the current main-agent turn while background subagents
+  // are still running. Their task notifications can then trigger another main
+  // turn on the same query. A `result` therefore is terminal for the app run
+  // only when no SDK task remains outstanding.
+  const pendingTaskIds = new Set<string>();
+  const ignoredAmbientTaskIds = new Set<string>();
   // Accumulated streaming text for the current assistant message. The SDK yields
   // content_block_delta/text_delta *fragments* (not a growing snapshot), and each
   // stream_event carries a per-event uuid (not a stable message id), so we must
@@ -676,6 +684,8 @@ export async function consumeClaudeQuery(
     eventSink.emit('chat:message', toLegacyChatMessagePayload({ ...event, runId, sessionKey, seq: seq++ }));
   };
   const emitAgentCompleted = () => {
+    if (completionEmitted) return;
+    completionEmitted = true;
     if (!eventSink) return;
     eventSink.emit('notification', { method: 'agent', params: { phase: 'completed', runId, sessionKey } });
   };
@@ -735,6 +745,35 @@ export async function consumeClaudeQuery(
 
     for await (const message of query) {
       const messageSessionId = typeof message.session_id === 'string' ? message.session_id : sessionId;
+
+      if (message.type === 'system') {
+        const taskMessage = message as {
+          subtype?: string;
+          task_id?: string;
+          skip_transcript?: boolean;
+          patch?: { status?: string };
+        };
+        const taskId = typeof taskMessage.task_id === 'string' ? taskMessage.task_id : '';
+        if (taskId && taskMessage.subtype === 'task_started') {
+          if (taskMessage.skip_transcript) {
+            ignoredAmbientTaskIds.add(taskId);
+          } else {
+            pendingTaskIds.add(taskId);
+          }
+        } else if (taskId && taskMessage.subtype === 'task_updated') {
+          if (!ignoredAmbientTaskIds.has(taskId)) {
+            const status = taskMessage.patch?.status;
+            if (status === 'completed' || status === 'failed' || status === 'killed') {
+              pendingTaskIds.delete(taskId);
+            } else if (status === 'pending' || status === 'running' || status === 'paused') {
+              pendingTaskIds.add(taskId);
+            }
+          }
+        } else if (taskId && taskMessage.subtype === 'task_notification') {
+          pendingTaskIds.delete(taskId);
+          ignoredAmbientTaskIds.delete(taskId);
+        }
+      }
 
       // Partial streaming events (only yielded when includePartialMessages is on).
       // Forward text + thinking deltas as live 'delta' chat events (钉钉 progress/content).
@@ -797,11 +836,26 @@ export async function consumeClaudeQuery(
         clearPendingToolInputDelta();
         claudeRuntimeResults.set(sessionKey, toClaudeRuntimeResult(message));
         seenResult = true;
-        // Terminal signal: the renderer's isClaudeRunFragment guard keeps the run
-        // active until this 'completed' notification fires
-        // scheduleCompletedRunFinalization, which sets sending=false and
-        // reconciles history.
-        emitAgentCompleted();
+        // A main-agent result may merely mean "waiting for background tasks".
+        // Keep the same app run alive so task_notification/auto-continuation
+        // messages remain visible. A later result after all tasks settle is the
+        // actual terminal signal.
+        if (pendingTaskIds.size === 0) {
+          if (completionDeferred) {
+            logger.debug('[claude-adapter] completing resumed run after background tasks settled', {
+              sessionKey,
+              runId,
+            });
+          }
+          emitAgentCompleted();
+        } else {
+          completionDeferred = true;
+          logger.debug('[claude-adapter] deferring run completion for background tasks', {
+            sessionKey,
+            runId,
+            pendingTaskIds: [...pendingTaskIds],
+          });
+        }
       }
       if (!title && message.type === 'user' && 'message' in message && !shouldHideClaudeUserMessage(message, (message as { message?: unknown }).message)) {
         title = stringifyClaudeContent((message as { message?: unknown }).message);
@@ -915,6 +969,12 @@ export async function consumeClaudeQuery(
     flushPendingToolInputDelta();
     clearPendingToolInputDelta();
     activeClaudeQueries.delete(sessionKey);
+    // Some SDK task modes settle the outstanding task and then close the
+    // iterator without producing another result. At iterator EOF all observed
+    // tasks are terminal, so finalize the already-seen result here.
+    if (seenResult && !completionEmitted && pendingTaskIds.size === 0) {
+      emitAgentCompleted();
+    }
     // If the loop ended without a result and without an error, the query was
     // closed (e.g. user abort) — emit 'aborted' so the renderer finalizes.
     if (!seenResult && !errorThrown) {

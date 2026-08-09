@@ -134,6 +134,28 @@ describe('main chat runtime supervisor', () => {
     expect(events).toEqual([]);
   });
 
+  it('uses a six-hour hard deadline for an ordinary chat', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-07T08:00:00.000Z'));
+    try {
+      const startedAt = Date.now();
+      const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+
+      await supervisor.begin({
+        sessionKey: 'agent:main:ordinary-six-hour-deadline',
+        idempotencyKey: 'ordinary-message',
+        engineType: 'claude',
+      });
+
+      expect(supervisor.get('agent:main:ordinary-six-hour-deadline')?.runtimePolicy).toMatchObject({
+        origin: 'interactive',
+        deadlineAt: startedAt + 6 * 60 * 60_000,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('publishes transcript.updated after a pending terminal transcript settles late', async () => {
     vi.useFakeTimers();
     try {

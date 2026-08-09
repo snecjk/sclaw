@@ -50,6 +50,39 @@ describe('canonical chat client session reducer', () => {
     expect(completed.state.overlay.awaitingTranscript).toBe(true);
   });
 
+  it('keeps committed messages chronological while the current delta stays separate', () => {
+    const started = reduceSessionEvent(createClientSessionState(), event()).state;
+    const firstDelta = reduceSessionEvent(started, event({
+      eventId: 'event-2',
+      sequence: 2,
+      type: 'message.delta',
+      payload: { id: 'run-1', role: 'assistant', content: 'first partial' },
+    })).state;
+    expect(firstDelta.overlay.streamingMessages).toEqual([]);
+    expect(firstDelta.overlay.streamingMessage).toMatchObject({ content: 'first partial' });
+
+    const firstFinal = reduceSessionEvent(firstDelta, event({
+      eventId: 'event-3',
+      sequence: 3,
+      type: 'message.final',
+      payload: { id: 'assistant-1', role: 'assistant', content: 'first committed' },
+    })).state;
+    expect(firstFinal.overlay.streamingMessages.map((message) => message.id)).toEqual([
+      'assistant-1',
+    ]);
+
+    const secondDelta = reduceSessionEvent(firstFinal, event({
+      eventId: 'event-4',
+      sequence: 4,
+      type: 'message.delta',
+      payload: { id: 'run-1', role: 'assistant', content: 'second partial' },
+    })).state;
+    expect(secondDelta.overlay.streamingMessages.map((message) => message.id)).toEqual([
+      'assistant-1',
+    ]);
+    expect(secondDelta.overlay.streamingMessage).toMatchObject({ content: 'second partial' });
+  });
+
   it('rejects duplicates and requests hydration for sequence gaps', () => {
     const started = reduceSessionEvent(createClientSessionState(), event()).state;
     expect(reduceSessionEvent(started, event()).accepted).toBe(false);

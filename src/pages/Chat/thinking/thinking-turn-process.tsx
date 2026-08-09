@@ -43,14 +43,13 @@ import {
 import { dedupePhaseTextsAgainstFinalReply } from '@/pages/Chat/thinking/classify-text';
 import { classifyTextOverlap } from '@/pages/Chat/thinking/text-ownership';
 import {
-  mergeSegmentsMonotonic,
   mergeTurnSegmentMonotonic,
   readGlobalStableSegments,
   readGlobalStableTimeline,
+  resolveLiveProjection,
   writeGlobalStableSegments,
   writeGlobalStableTimeline,
 } from '@/pages/Chat/thinking/segment-merge';
-import { isChronologicallyOrderedLayout } from '@/pages/Chat/thinking/done-segment-normalize';
 import {
   resolveProcessStatusLabelKey,
   shouldShowProcessStatusLoading,
@@ -404,9 +403,24 @@ function useStableThinkingTimeline(
     const globalCached = readGlobalStableTimeline(turnStableKey, segmentKey);
     const localCached = cacheRef.current.get(segmentKey) ?? [];
     const cached = globalCached.length >= localCached.length ? globalCached : localCached;
+
+    // Live parse output is the canonical view. A parser rebundle can legitimately
+    // contain fewer rows while carrying newer tool input; using cached length as
+    // an authority here freezes the UI on the older, longer timeline. Keep the
+    // cache only as a hand-off fallback for a momentary empty projection.
+    const liveProjection = resolveLiveProjection(incoming, cached, isLiveStream);
+    if (liveProjection) {
+      const next = liveProjection;
+      if (next.length > 0) {
+        cacheRef.current.set(segmentKey, next);
+        writeGlobalStableTimeline(turnStableKey, segmentKey, next);
+      }
+      return next;
+    }
+
     const merged = mergeTimelineMonotonic(cached, incoming);
 
-    if (merged.length >= cached.length || !isLiveStream) {
+    if (merged.length >= cached.length) {
       if (merged.length > 0 || incoming.length > 0) {
         const next = merged.length > 0 ? merged : incoming;
         cacheRef.current.set(segmentKey, next);
@@ -455,35 +469,25 @@ function useStableThinkingSegments(
       return cached.length > 0 ? cached : segments;
     }
 
+    // As with the per-group timeline, live segments must follow the newest
+    // parser projection even when regrouping reduces the segment count. The
+    // cache records that projection for live→done hand-off but never overrides
+    // it while the run is active.
+    const liveProjection = resolveLiveProjection(segments, cached, isLiveStream);
+    if (liveProjection) {
+      return finalize(liveProjection);
+    }
+
     // 完成态以解析器 segment 结构为准，仅按 key 单调合并 timeline，避免流式双摘要缓存残留
-    if (!isLiveStream) {
-      const cachedByKey = new Map(cached.map((segment) => [segment.key, segment]));
-      const reconciled = segments.map((segment) => {
-        const previous = cachedByKey.get(segment.key);
-        return previous ? mergeTurnSegmentMonotonic(previous, segment) : segment;
-      });
-      relocateInterruptPhaseBetweenAdjacentToolGroups(reconciled);
-      mergeAdjacentOrphanedThinkingAndToolGroups(reconciled);
-      pruneDuplicateToolOnlyGroups(reconciled);
-      return finalize(reconciled);
-    }
-
-    // live：解析器产出交替结构时以 incoming 为准，避免 cache append 把 phase-text 堆到末尾
-    if (isLiveStream && isChronologicallyOrderedLayout(segments)) {
-      const cachedByKey = new Map(cached.map((segment) => [segment.key, segment]));
-      const reconciled = segments.map((segment) => {
-        const previous = cachedByKey.get(segment.key);
-        return previous ? mergeTurnSegmentMonotonic(previous, segment) : segment;
-      });
-      relocateInterruptPhaseBetweenAdjacentToolGroups(reconciled);
-      mergeAdjacentOrphanedThinkingAndToolGroups(reconciled);
-      pruneDuplicateToolOnlyGroups(reconciled);
-      return finalize(reconciled);
-    }
-
-    const merged =
-      cached.length === 0 ? segments : mergeSegmentsMonotonic(cached, segments);
-    return finalize(merged);
+    const cachedByKey = new Map(cached.map((segment) => [segment.key, segment]));
+    const reconciled = segments.map((segment) => {
+      const previous = cachedByKey.get(segment.key);
+      return previous ? mergeTurnSegmentMonotonic(previous, segment) : segment;
+    });
+    relocateInterruptPhaseBetweenAdjacentToolGroups(reconciled);
+    mergeAdjacentOrphanedThinkingAndToolGroups(reconciled);
+    pruneDuplicateToolOnlyGroups(reconciled);
+    return finalize(reconciled);
   }, [turnStableKey, segments, isLiveStream, finalReplyText]);
 }
 

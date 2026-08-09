@@ -1,6 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { consumeClaudeQuery } from '../../electron/engines/claude-adapter';
 import type { LegacyChatMessagePayload } from '../../electron/gateway/normalized-engine-event';
+
+vi.mock('../../electron/engines/session-registry', () => ({
+  deleteEngineSessionRegistryEntry: vi.fn(),
+  getEngineSessionRegistryEntry: vi.fn(async () => null),
+  listEngineSessionRegistryEntries: vi.fn(async () => []),
+  patchEngineSessionRegistryEntry: vi.fn(),
+  upsertEngineSessionRegistryEntry: vi.fn(),
+}));
 
 function createQuery(messages: Array<Record<string, unknown>>) {
   return {
@@ -13,12 +21,19 @@ function createQuery(messages: Array<Record<string, unknown>>) {
 
 function createSink() {
   const chatEvents: LegacyChatMessagePayload[] = [];
+  const notifications: Array<Record<string, unknown>> = [];
+  const emissions: Array<{ event: string; payload: unknown }> = [];
   return {
     chatEvents,
+    notifications,
+    emissions,
     sink: {
       emit(event: string, payload: unknown) {
+        emissions.push({ event, payload });
         if (event === 'chat:message') {
           chatEvents.push(payload as LegacyChatMessagePayload);
+        } else if (event === 'notification') {
+          notifications.push(payload as Record<string, unknown>);
         }
         return true;
       },
@@ -157,5 +172,129 @@ describe('consumeClaudeQuery stream projection', () => {
       const content = (lastMessage.message as { content: Array<{ input?: unknown }> }).content;
       expect(String(content[0]?.input).length).toBeLessThanOrEqual(4_096);
     }
+  });
+
+  it('keeps the run active until background subagents and the resumed main turn finish', async () => {
+    const { chatEvents, notifications, emissions, sink } = createSink();
+    await consumeClaudeQuery(
+      'agent:test:session:subagents',
+      'session-subagents',
+      'D:\\workspace',
+      createQuery([
+        {
+          type: 'system',
+          subtype: 'task_started',
+          task_id: 'task-child',
+          session_id: 'session-subagents',
+        },
+        {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'session-subagents',
+          result: 'Waiting for the child agent.',
+        },
+        {
+          type: 'system',
+          subtype: 'task_notification',
+          task_id: 'task-child',
+          status: 'completed',
+          session_id: 'session-subagents',
+        },
+        {
+          type: 'assistant',
+          uuid: 'resumed-main-message',
+          session_id: 'session-subagents',
+          origin: { kind: 'auto-continuation' },
+          message: { content: [{ type: 'text', text: 'Child result merged.' }] },
+        },
+        {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'session-subagents',
+          origin: { kind: 'auto-continuation' },
+          result: 'Done.',
+        },
+      ]),
+      sink,
+      'run-subagents',
+    );
+
+    expect(chatEvents.some((event) => (
+      event.engineEvent.type === 'message.final'
+      && (event.engineEvent.message as { id?: string }).id === 'resumed-main-message'
+    ))).toBe(true);
+    expect(notifications).toEqual([
+      {
+        method: 'agent',
+        params: {
+          phase: 'completed',
+          runId: 'run-subagents',
+          sessionKey: 'agent:test:session:subagents',
+        },
+      },
+    ]);
+    const resumedMessageIndex = emissions.findIndex(({ event, payload }) => (
+      event === 'chat:message'
+      && (payload as LegacyChatMessagePayload).engineEvent.type === 'message.final'
+      && ((payload as LegacyChatMessagePayload).engineEvent.message as { id?: string }).id === 'resumed-main-message'
+    ));
+    const completionIndex = emissions.findIndex(({ event }) => event === 'notification');
+    expect(resumedMessageIndex).toBeGreaterThan(-1);
+    expect(completionIndex).toBeGreaterThan(resumedMessageIndex);
+  });
+
+  it('still completes a normal main-agent-only result immediately', async () => {
+    const { notifications, sink } = createSink();
+    await consumeClaudeQuery(
+      'agent:test:session:main-only',
+      'session-main-only',
+      'D:\\workspace',
+      createQuery([
+        {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'session-main-only',
+          result: 'Done.',
+        },
+      ]),
+      sink,
+      'run-main-only',
+    );
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      params: { phase: 'completed', runId: 'run-main-only' },
+    });
+  });
+
+  it('does not keep the chat run open for ambient SDK housekeeping tasks', async () => {
+    const { notifications, sink } = createSink();
+    await consumeClaudeQuery(
+      'agent:test:session:ambient-task',
+      'session-ambient-task',
+      'D:\\workspace',
+      createQuery([
+        {
+          type: 'system',
+          subtype: 'task_started',
+          task_id: 'task-housekeeping',
+          skip_transcript: true,
+          session_id: 'session-ambient-task',
+        },
+        {
+          type: 'result',
+          subtype: 'success',
+          session_id: 'session-ambient-task',
+          result: 'Done.',
+        },
+      ]),
+      sink,
+      'run-ambient-task',
+    );
+
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({
+      params: { phase: 'completed', runId: 'run-ambient-task' },
+    });
   });
 });

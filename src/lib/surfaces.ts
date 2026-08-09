@@ -1403,7 +1403,7 @@ export const chatToolCallContentShellClass = chatProcessContentTextWrapClass;
 
 /** 工具入参正文（规范 §4.4：13px 灰色 pre-wrap） */
 export const chatToolCallInputPreClass = cn(
-  'm-0 max-h-[min(42vh,400px)] overflow-y-auto whitespace-pre-wrap break-words',
+  'sto-chat-content-scrollbar m-0 max-h-[min(42vh,400px)] overflow-y-auto whitespace-pre-wrap break-words',
   'text-[13px] leading-5 font-normal text-[#86909C]',
 );
 
@@ -1421,7 +1421,8 @@ export const chatThinkingSegmentSummaryHeaderClass = cn(
 );
 
 /** 思考/工具过程次要正文（规范 §4.3 / §4.4 内容区） */
-export const chatProcessSecondaryTextClass = 'text-[13px] leading-5 font-normal text-[#86909C]';
+export const chatProcessSecondaryTextClass =
+  'sto-chat-content-scrollbar text-[13px] leading-5 font-normal text-[#86909C]';
 
 /** Loading 等待文案（chat-interaction-style-spec §2.1 text-muted / §4.6） */
 export const chatProcessLoadingTextClass = 'text-[13px] leading-[18px] font-normal text-[#6B737D]';

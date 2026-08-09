@@ -455,6 +455,25 @@ export function collectTurnAssistantSources(
   const startIndex = findTurnStartIndex(sessionMessages, precedingUserMessage);
   const sources: RawMessage[] = [];
 
+  const mergeSource = (message: RawMessage) => {
+    if (!isAssistantRole(message.role)) return;
+
+    if (message.id) {
+      const existingIndex = sources.findIndex((source) => source.id === message.id);
+      if (existingIndex >= 0) {
+        // Runtime snapshots with a stable id are replacements, not additional
+        // timeline rows. Keep their original position while accepting the
+        // newest payload (notably a growing tool input).
+        sources[existingIndex] = message;
+        return;
+      }
+    } else if (sources.includes(message)) {
+      return;
+    }
+
+    sources.push(message);
+  };
+
   if (startIndex > 0) {
     for (let i = startIndex; i < sessionMessages.length; i += 1) {
       const message = sessionMessages[i]!;
@@ -462,21 +481,32 @@ export function collectTurnAssistantSources(
       if (normalizeRole(message.role) === 'toolresult' || normalizeRole(message.role) === 'tool_result') {
         continue;
       }
-      if (!isAssistantRole(message.role)) continue;
-      sources.push(message);
+      mergeSource(message);
     }
   }
 
-  if (sources.length === 0) {
-    sources.push(...turnMessages);
+  // Persisted history is only the baseline. During a long run it commonly
+  // trails the canonical overlay by several completed assistant messages.
+  // Always merge the live turn sources so a newer message cannot disappear
+  // until the next transcript refresh.
+  for (const message of turnMessages) {
+    mergeSource(message);
   }
 
   if (streamMessage) {
+    const sameIdIndex = streamMessage.id
+      ? sources.findIndex((source) => source.id === streamMessage.id)
+      : -1;
+    if (sameIdIndex >= 0) {
+      sources[sameIdIndex] = streamMessage;
+      return sources;
+    }
+
     const last = sources[sources.length - 1];
     if (last && shouldReplaceStreamSnapshot(last, streamMessage)) {
       sources[sources.length - 1] = streamMessage;
     } else {
-      sources.push(streamMessage);
+      mergeSource(streamMessage);
     }
   }
 
