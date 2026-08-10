@@ -730,7 +730,10 @@ export function MoreAppsPage() {
       <div className="more-apps-main">
         <div className="more-apps-grid">
           {filteredDevApps.map((app) => (
-            <DevAppCard key={app.workspaceId} app={app} />
+            <DevAppCard
+              key={app.workspaceId || app.applicationId || `${app.name}:${app.appPath}`}
+              app={app}
+            />
           ))}
         </div>
       </div>

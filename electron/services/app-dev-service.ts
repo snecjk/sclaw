@@ -730,7 +730,7 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
     }
 
     apps.push({
-      workspaceId: '',
+      workspaceId: workspaceId || '',
       name: cloud.applicationName,
       appPath: localPath || '',
       projectType: 'frontend',
