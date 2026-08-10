@@ -17,7 +17,8 @@ export function buildWorkflowNodePrompt(
   const ports = Array.isArray(node?.config?.branches)
     ? node.config.branches.map((branch: any) => branch?.branchKey ?? branch?.key).filter(Boolean)
     : [];
-  const { payload: inputPayload, artifacts: inputArtifacts } = splitWorkflowInput(ctx.resolvedInputs);
+  const promptInputs = omitMaterializedStartupInputs(ctx.resolvedInputs, node, ctx.definition);
+  const { payload: inputPayload, artifacts: inputArtifacts } = splitWorkflowInput(promptInputs);
   const inputPacket = {
     protocolVersion: WORKFLOW_PACKET_VERSION,
     status: 'succeeded',
@@ -67,7 +68,10 @@ function buildDataFetchPrompt(
     ?? node?.config?.outputContract?.schema
     ?? spec.completionContract?.outputJsonSchema
     ?? { type: 'object' };
-  const inputPacket = createDataFetchInputPacket(ctx);
+  const inputPacket = createDataFetchInputPacket({
+    ...ctx,
+    resolvedInputs: omitMaterializedStartupInputs(ctx.resolvedInputs, node, ctx.definition),
+  });
 
   const taskGoal = spec.task?.goal ?? node?.config?.goal ?? node?.config?.instruction ?? '';
   const instruction = spec.task?.instruction ?? '';
@@ -157,6 +161,80 @@ function splitWorkflowInput(value: unknown): { payload: Record<string, unknown>;
   const raw = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
   const { [WORKFLOW_PACKET_ARTIFACTS_KEY]: upstreamArtifacts, ...payload } = raw;
   return { payload, artifacts: toUpstreamArtifacts(upstreamArtifacts) };
+}
+
+/**
+ * Startup values already rendered into startupMaterialization.text belong to
+ * the dynamic prompt. Remove their duplicate JSON representation from the
+ * WorkflowPacket while retaining uploads, unbound parameters, and upstream
+ * business outputs.
+ */
+export function omitMaterializedStartupInputs(value: unknown, node: any, definition: any): unknown {
+  const fieldKeys: string[] = Array.isArray(node?.config?.startupMaterialization?.fieldKeys)
+    ? node.config.startupMaterialization.fieldKeys
+      .map((key: unknown) => String(key ?? '').trim())
+      .filter(Boolean)
+    : [];
+  if (!fieldKeys.length || !value || typeof value !== 'object' || Array.isArray(value)) return value;
+
+  const cloned = clonePromptInput(value) as Record<string, unknown>;
+  const startupCarrierIds = new Set<string>(
+    (Array.isArray(definition?.nodes) ? definition.nodes : [])
+      .filter((candidate: any) => candidate?.type === 'trigger' || candidate?.type === 'startup_config')
+      .map((candidate: any) => String(candidate.id ?? '').trim())
+      .filter(Boolean),
+  );
+
+  // Some input modes expose run inputs directly; others nest them under the
+  // trigger/startup node id or the compatibility trigger/user carriers.
+  removeFieldPaths(cloned, fieldKeys);
+  for (const carrierKey of [...startupCarrierIds, 'trigger', 'user']) {
+    const carrier = cloned[carrierKey];
+    if (!carrier || typeof carrier !== 'object' || Array.isArray(carrier)) continue;
+    removeFieldPaths(carrier as Record<string, unknown>, fieldKeys);
+    if (Object.keys(carrier as Record<string, unknown>).length === 0) delete cloned[carrierKey];
+  }
+  return cloned;
+}
+
+function clonePromptInput(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(clonePromptInput);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([key, child]) => [key, clonePromptInput(child)]),
+  );
+}
+
+function removeFieldPaths(target: Record<string, unknown>, fieldKeys: string[]): void {
+  for (const fieldKey of fieldKeys) {
+    delete target[fieldKey];
+    const parts = fieldKey.split('.').filter(Boolean);
+    if (parts.length < 2) {
+      delete target[parts[0]];
+      continue;
+    }
+    let current: Record<string, unknown> | undefined = target;
+    const parents: Array<{ value: Record<string, unknown>; key: string }> = [];
+    for (const part of parts.slice(0, -1)) {
+      const next = current?.[part];
+      if (!next || typeof next !== 'object' || Array.isArray(next)) {
+        current = undefined;
+        break;
+      }
+      parents.push({ value: current, key: part });
+      current = next as Record<string, unknown>;
+    }
+    if (!current) continue;
+    delete current[parts.at(-1)!];
+    for (const parent of parents.reverse()) {
+      const child = parent.value[parent.key];
+      if (child && typeof child === 'object' && !Array.isArray(child)
+        && Object.keys(child as Record<string, unknown>).length === 0) {
+        delete parent.value[parent.key];
+      }
+    }
+  }
 }
 
 function toUpstreamArtifacts(value: unknown): Array<Record<string, unknown>> {
