@@ -24,6 +24,7 @@ import {
   isMissingClaudeConversationError,
 } from './claude-session-recovery';
 import { mergeClaudeExecutionEntries, parseClaudeExecutionTurn, type ClaudeExecutionEntryBatch } from './claude-execution-snapshot';
+import { inspectTranscript } from './chat-runtime-inspection';
 
 /**
  * Minimal event sink used to forward Claude streaming events to the renderer.
@@ -1174,6 +1175,37 @@ export async function deleteClaudeSessionByKey(sessionKey: string): Promise<void
 
 export const claudeAdapter: EngineAdapter = {
   type: 'claude',
+  chatCapabilities: {
+    hasReliableRuntimeStatus: true,
+    hasStructuredReasoningEvents: true,
+    hasStructuredToolEvents: true,
+    requiresHistoryProjection: false,
+  },
+
+  classifyFinalMessage({ message, phase }) {
+    if (phase === 'completed') return 'completed';
+    return message == null ? 'awaiting_transcript' : 'progress';
+  },
+
+  async inspectRun(_ctx, params) {
+    const active = activeClaudeQueries.get(params.sessionKey);
+    if (active) return { status: 'active', runId: active.runId };
+    const entry = await getEngineSessionRegistryEntry(params.sessionKey);
+    if (!entry?.cwd || (!entry.sessionId && !(entry.archivedClaudeSessionIds?.length))) {
+      return { status: 'not_started', runId: params.runId ?? undefined };
+    }
+    try {
+      const history = await buildHistory(params.sessionKey, entry.sessionId ?? '', entry.cwd);
+      return inspectTranscript({
+        messages: history.messages,
+        startedAt: params.startedAt,
+        isRunning: history.isRunning,
+        runId: params.runId,
+      });
+    } catch (error) {
+      return { status: 'unknown', runId: params.runId ?? undefined, reason: String(error) };
+    }
+  },
 
   prepareMemoryInjection(params, memory) {
     const memorySystemPrompt = [memory.preference, memory.execution].filter(Boolean).join('\n\n');

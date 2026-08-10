@@ -20,6 +20,7 @@ import {
   getWorkflowDetail,
   submitWorkflowInput,
 } from '@/lib/workflow-api';
+import { subscribeHostEvent } from '@/lib/host-events';
 import {
   isActiveWorkflowRunStatus,
   isTerminalWorkflowRunStatus,
@@ -144,9 +145,7 @@ export function useDesignerTryRun({
   // Status transitions update immediately; stream events are coalesced so an
   // Agent text delta cannot cause a local DB read for every token.
   useEffect(() => {
-    const ipc = window.electron?.ipcRenderer;
-    if (!ipc?.on) return;
-    const unsubscribe = ipc.on('workflow:status-update', (payload: unknown) => {
+    const unsubscribe = subscribeHostEvent('workflow:status-update', (payload: unknown) => {
       const data = payload as StatusUpdatePayload | null;
       if (!data || data.sessionKey !== DESIGNER_TRY_RUN_SESSION_KEY) return;
       if (data.runId !== runIdRef.current) return; // stale broadcast for a different run
@@ -156,7 +155,7 @@ export function useDesignerTryRun({
         setIsCancelling(false);
       }
     });
-    const unsubscribeEvent = ipc.on('workflow:event', (payload: unknown) => {
+    const unsubscribeEvent = subscribeHostEvent('workflow:event', (payload: unknown) => {
       const data = payload as RuntimeEventPayload | null;
       if (!data || !data.runId || data.runId !== runIdRef.current) return;
       scheduleEventHydration(data.runId);
@@ -191,6 +190,7 @@ export function useDesignerTryRun({
           inputs,
           idempotencyKey: `designer-run-${Date.now()}`,
           sessionKey: DESIGNER_TRY_RUN_SESSION_KEY,
+          agentId: 'main',
           triggerType: 'designer_test',
           runMode: 'trial',
           workflowVersionId: snapshot?.workflowVersionId ?? workflowVersionId,

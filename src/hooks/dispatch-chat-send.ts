@@ -9,6 +9,7 @@ import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
+import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 
 export interface DispatchChatSendOptions {
   text: string;
@@ -102,7 +103,9 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
   };
 
   const chatState = useChatStore.getState();
-  const failed = () => Boolean(useChatStore.getState().error);
+  const failed = () => Boolean(
+    useChatRuntimeV2Store.getState().sessionsByKey[useChatStore.getState().currentSessionKey]?.error,
+  );
 
   // 我的工作流-已发布：与「我的工作流」卡片「立即运行」保持一致，
   // 直接发送一句「帮我执行 id 为：xxx 的工作流 【名称】」让模型按 workflowId 执行，
@@ -131,8 +134,11 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
   if (workflowId) {
     const workflowSession = await materializeDefaultSessionForWorkflowShortcut();
     const workflowChatState = useChatStore.getState();
-    if (workflowChatState.pendingWorkflow?.templateId !== workflowId) {
-      workflowChatState.clearPendingWorkflow();
+    if (
+      workflowChatState.workflowChatUiBySessionKey[workflowSession.sessionKey]?.pendingWorkflow?.templateId
+      !== workflowId
+    ) {
+      workflowChatState.clearPendingWorkflow(workflowSession.sessionKey);
     }
     const { sendWithWorkflow } = await import('@/hooks/use-workflow-send');
     const ok = await sendWithWorkflow(text, workflowId, {

@@ -702,7 +702,7 @@ export const stoAppShellBodyClass =
   'sto-app-shell-body flex min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-hidden';
 
 /**
- * 省区 AppShell 两列 Grid：Sidebar | Workspace。
+ * 省区 AppShell 三列 Grid：Sidebar | L0 Gap | Workspace。
  * 第一列宽度由 `--sto-sidebar-effective-w` 驱动；拖拽命中区是 Workspace
  * 内的 absolute overlay，不占布局宽度。必须显式单行 `minmax(0,1fr)`，
  * 否则隐式 auto row 会被长内容撑开并滚动整个 Grid。
@@ -710,11 +710,11 @@ export const stoAppShellBodyClass =
 export const stoAppShellGridProvincialClass = cn(
   'sto-app-shell-body sto-app-shell-grid no-drag box-border',
   'grid min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-hidden',
-  'grid-cols-[var(--sto-sidebar-effective-w)_minmax(0,1fr)]',
+  'grid-cols-[var(--sto-sidebar-effective-w)_var(--sto-shell-card-gap)_minmax(0,1fr)]',
   'grid-rows-[minmax(0,1fr)]',
 );
 
-/** @deprecated 旧三列 Gap 的兼容类；新的 AppShell 不再渲染该布局列。 */
+/** Sidebar 与 Workspace 之间的固定 L0 间隔列。 */
 export const stoAppShellSidebarGapClass = 'sto-sidebar-gap min-h-0 min-w-0';
 
 /**

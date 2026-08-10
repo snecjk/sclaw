@@ -26,11 +26,79 @@ export interface RuntimeHandlers {
   retrySync: (runId?: string) => Promise<void>;
 }
 
+export type WorkflowStartAcceptance =
+  | { accepted: true; runId: string; replay: boolean }
+  | { accepted: false; runId: string; error: string };
+
 export type WorkflowRunView = 'status' | 'detail' | 'diagnostic';
 
 export function registerWorkflowRuntimeHandlers(deps: EngineDeps): RuntimeHandlers {
   const engine = createEngine(deps);
   const repo = deps.repo;
+  const startAcceptances = new Map<string, Promise<WorkflowStartAcceptance>>();
+  const acceptWorkflowStart = (args: StartWorkflowArgs): Promise<WorkflowStartAcceptance> => {
+    const runId = args?.runId?.trim() ?? '';
+    const existingOperation = startAcceptances.get(runId);
+    if (existingOperation) return existingOperation;
+    const operation = (async (): Promise<WorkflowStartAcceptance> => {
+      try {
+        if (!runId || !args.workflowId?.trim() || !args.versionId?.trim()) {
+          return { accepted: false, runId, error: 'workflow start identity is incomplete' };
+        }
+        if (!Number.isSafeInteger(args.runDatabaseId) || args.runDatabaseId <= 0) {
+          return { accepted: false, runId, error: 'workflow runDatabaseId must be a positive JavaScript-safe integer' };
+        }
+        const existing = await repo.getRun(runId);
+        if (existing) {
+          const sameIdentity = String(existing.workflow_id) === args.workflowId
+            && String(existing.version_id) === args.versionId
+            && String(existing.session_key ?? '') === String(args.sessionKey ?? '');
+          return sameIdentity
+            ? { accepted: true, runId, replay: true }
+            : { accepted: false, runId, error: 'workflow runId is already bound to a different workflow identity' };
+        }
+        await repo.upsertRun({
+          id: args.runDatabaseId,
+          run_id: runId,
+          workflow_id: args.workflowId,
+          version_id: args.versionId,
+          workflow_version: args.workflowVersion ?? null,
+          status: 'RUNNING',
+          mode: 'CLIENT_LOCAL',
+          source: 'client',
+          trigger_type: args.triggerType ?? (args.chatCard ? 'chat' : 'workflow_manual'),
+          input_json: JSON.stringify(args.input ?? {}),
+          definition_json: '{}',
+          started_at: args.startedAt,
+          session_key: args.sessionKey,
+          engine_type: args.engineType,
+          engine_model: args.engineModel ?? null,
+          chat_card_visible: args.chatCard ? 1 : 0,
+          chat_anchor_user_message_id: args.chatCard?.anchorUserMessageId ?? null,
+          chat_card_title: args.chatCard?.title ?? null,
+          chat_params_summary: args.chatCard?.paramsSummary ?? null,
+        });
+        void engine.startWorkflow(args).catch((error) => {
+          workflowExecLog('error', 'ipc-start-failed', 'workflow runtime start failed', {
+            runId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
+        return { accepted: true, runId, replay: false };
+      } catch (error) {
+        return {
+          accepted: false,
+          runId,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    })();
+    startAcceptances.set(runId, operation);
+    void operation.finally(() => {
+      if (startAcceptances.get(runId) === operation) startAcceptances.delete(runId);
+    });
+    return operation;
+  };
   const loadRun = async (runId: string, options: { view?: WorkflowRunView } = {}) => {
     const view = options.view ?? 'status';
     const diagnostic = view === 'diagnostic';
@@ -64,12 +132,7 @@ export function registerWorkflowRuntimeHandlers(deps: EngineDeps): RuntimeHandle
       sessionKey: a?.sessionKey,
       requestedExecEngine: a?.engineType,
     });
-    void engine.startWorkflow(a).catch((error) => {
-      workflowExecLog('error', 'ipc-start-failed', 'workflow runtime start failed', {
-        runId: a?.runId, error: error instanceof Error ? error.message : String(error),
-      });
-    });
-    return { accepted: true, runId: a?.runId };
+    return acceptWorkflowStart(a);
   });
   ipcMain.handle('workflow-runtime:takeDatabaseId', async () => takeWorkflowDatabaseId());
   ipcMain.handle('workflow-runtime:resume', async (_e, runId: string) => {
@@ -105,23 +168,12 @@ export function registerWorkflowRuntimeHandlers(deps: EngineDeps): RuntimeHandle
     paramsSummary?: string | null;
   }) => {
     if (!arg?.runId || !arg?.sessionKey) return { registered: false };
-    // startWorkflow acknowledges before its asynchronous DSL fetch creates
-    // wf_run. Wait at the SQLite boundary so slow plan generation cannot make
-    // a successfully started card disappear.
-    let registered = false;
-    for (let attempt = 0; attempt <= 120; attempt += 1) {
-      const run = await repo.getRun(arg.runId);
-      if (run) {
-        registered = await repo.registerChatRunCard(arg.runId, {
-          sessionKey: arg.sessionKey,
-          anchorUserMessageId: arg.anchorUserMessageId,
-          title: arg.title,
-          paramsSummary: arg.paramsSummary,
-        });
-        break;
-      }
-      if (attempt < 120) await new Promise((resolve) => setTimeout(resolve, 250));
-    }
+    const registered = await repo.registerChatRunCard(arg.runId, {
+      sessionKey: arg.sessionKey,
+      anchorUserMessageId: arg.anchorUserMessageId,
+      title: arg.title,
+      paramsSummary: arg.paramsSummary,
+    });
     return { registered };
   });
   ipcMain.handle('workflow-runtime:listChatCards', async (_e, sessionKey: unknown) => {
@@ -164,7 +216,10 @@ export function registerWorkflowRuntimeHandlers(deps: EngineDeps): RuntimeHandle
   });
   return {
     start: (a) => engine.startRun(a),
-    startWorkflow: (a) => engine.startWorkflow(a),
+    startWorkflow: async (a) => {
+      const acceptance = await acceptWorkflowStart(a);
+      if (!acceptance.accepted) throw new Error(acceptance.error);
+    },
     getRun: loadRun,
     resume: (runId) => engine.resumeRun(runId),
     cancel: (runId, nodeId) => engine.cancel(runId, nodeId),

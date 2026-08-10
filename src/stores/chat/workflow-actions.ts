@@ -1,14 +1,23 @@
 import type { ChatGet, ChatSet, WorkflowActions } from './store-api';
-import type { ChatState } from './types';
+import type { PendingWorkflow } from './types';
 
 /** Workflow state mutations and draft persistence. */
 export function createWorkflowActions(set: ChatSet, get: ChatGet): WorkflowActions {
   return {
-    setPendingWorkflow: (pending: ChatState['pendingWorkflow']) => {
-      set({ pendingWorkflow: pending });
+    setPendingWorkflow: (pending: PendingWorkflow | null, requestedSessionKey?: string) => {
+      const sessionKey = requestedSessionKey ?? get().currentSessionKey;
+      set((state) => ({
+        workflowChatUiBySessionKey: {
+          ...state.workflowChatUiBySessionKey,
+          [sessionKey]: {
+            pendingWorkflow: pending,
+            formDecorations: pending?.schemaHash
+              ? [{ templateId: pending.templateId, schemaHash: pending.schemaHash }]
+              : [],
+          },
+        },
+      }));
       if (!pending) return;
-
-      const sessionKey = get().currentSessionKey;
       void import('@/stores/workflow-memory').then(({ savePendingWorkflowDraft }) => {
         savePendingWorkflowDraft(sessionKey, {
           templateId: pending.templateId,
@@ -19,13 +28,24 @@ export function createWorkflowActions(set: ChatSet, get: ChatGet): WorkflowActio
         });
       });
     },
-    clearPendingWorkflowMemory: () => {
-      set({ pendingWorkflow: null });
+    clearPendingWorkflowMemory: (requestedSessionKey?: string) => {
+      const sessionKey = requestedSessionKey ?? get().currentSessionKey;
+      set((state) => ({
+        workflowChatUiBySessionKey: {
+          ...state.workflowChatUiBySessionKey,
+          [sessionKey]: { pendingWorkflow: null, formDecorations: [] },
+        },
+      }));
     },
-    clearPendingWorkflow: () => {
-      const sessionKey = get().currentSessionKey;
-      const templateId = get().pendingWorkflow?.templateId;
-      set({ pendingWorkflow: null });
+    clearPendingWorkflow: (requestedSessionKey?: string) => {
+      const sessionKey = requestedSessionKey ?? get().currentSessionKey;
+      const templateId = get().workflowChatUiBySessionKey[sessionKey]?.pendingWorkflow?.templateId;
+      set((state) => ({
+        workflowChatUiBySessionKey: {
+          ...state.workflowChatUiBySessionKey,
+          [sessionKey]: { pendingWorkflow: null, formDecorations: [] },
+        },
+      }));
       void import('@/stores/workflow-memory').then(({ clearPendingWorkflowDraft }) => {
         clearPendingWorkflowDraft(sessionKey, templateId);
       });

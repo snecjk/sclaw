@@ -43,19 +43,20 @@ import { WorkflowCompletionNotifier } from './components/workflow/WorkflowComple
  */
 class ErrorBoundary extends Component<
   { children: ReactNode },
-  { hasError: boolean; error: Error | null }
+  { hasError: boolean; error: Error | null; componentStack: string | null }
 > {
   constructor(props: { children: ReactNode }) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, componentStack: null };
   }
 
   static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
+    return { hasError: true, error, componentStack: null };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('React Error Boundary caught error:', error, info);
+    this.setState({ componentStack: info.componentStack ?? null });
   }
 
   render() {
@@ -84,10 +85,11 @@ class ErrorBoundary extends Component<
             {this.state.error?.message}
             {'\n\n'}
             {this.state.error?.stack}
+            {this.state.componentStack ? `\n\nReact component stack:\n${this.state.componentStack}` : ''}
           </pre>
           <button
             onClick={() => {
-              this.setState({ hasError: false, error: null });
+              this.setState({ hasError: false, error: null, componentStack: null });
               window.location.reload();
             }}
             style={{
@@ -208,7 +210,6 @@ function App() {
       });
       // Clear both top-level and session-level chat errors so the error bar
       // doesn't persist after re-login
-      useChatStore.setState({ error: null });
       useChatStore.getState().clearError();
     };
 

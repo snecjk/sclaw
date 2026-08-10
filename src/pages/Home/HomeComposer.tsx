@@ -10,6 +10,7 @@ import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { useCurrentChatDisplayMessageCount } from '@/stores/chat/display-selectors';
 import { useMessageQueueStore } from '@/stores/message-queue';
 import { cn } from '@/lib/utils';
 import {
@@ -86,7 +87,7 @@ export function HomeComposer({
   const currentAgentId = useChatStore((s) => s.currentAgentId);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessions = useChatStore((s) => s.sessions);
-  const messagesLength = useChatStore((s) => s.messages.length);
+  const messagesLength = useCurrentChatDisplayMessageCount();
   const { handleHubSend, handleHubQueue } = useHomeChatEntrySend();
 
   const queue = useMessageQueueStore((s) => s.getQueue(currentSessionKey));
