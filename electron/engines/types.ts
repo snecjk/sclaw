@@ -1,5 +1,6 @@
 import type { GatewayManager } from '../gateway/manager';
 import type { AgentMemoryContextBlocks } from '../../shared/agent-memory-prompt';
+import type { ChatRuntimePolicy } from '../../shared/chat-runtime-protocol';
 import type { ExecutionSnapshot } from './execution-snapshot';
 
 export type AgentEngineType = 'openclaw' | 'claude';
@@ -42,6 +43,8 @@ export interface EngineSendParams {
   deliver?: boolean;
   idempotencyKey: string;
   systemPromptAppend?: string;
+  /** 发送来源语义；adapter 据此选择引擎原生 system prompt 或用户消息兼容封装。 */
+  runtimePolicy?: ChatRuntimePolicy;
   /** 定时任务执行时由 executor 透传；交互式 chat 不设（undefined）以保留引擎默认。 */
   permissionProfile?: EnginePermissionProfile;
 }

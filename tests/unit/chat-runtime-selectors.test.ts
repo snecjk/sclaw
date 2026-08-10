@@ -3,6 +3,7 @@ import { buildChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 import { createClientSessionState } from '@/stores/chat/client-session-reducer';
 import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 import { getSessionDisplayMessages } from '@/stores/chat/display-selectors';
+import { DINGTALK_RECIPIENTS_MARKER } from '../../shared/dingtalk-send/dingtalk-mention';
 
 describe('canonical chat runtime selectors', () => {
   it('derives active UI state from explicit non-terminal phases', () => {
@@ -97,6 +98,49 @@ describe('canonical chat runtime selectors', () => {
     ]);
     expect(useChatRuntimeV2Store.getState().sessionsByKey.session.overlay.streamingMessage).toBeNull();
     expect(useChatRuntimeV2Store.getState().sessionsByKey.session.overlay.optimisticUserMessage).toBeNull();
+  });
+
+  it('does not settle a scheduled run from an older identical user turn', () => {
+    const state = createClientSessionState();
+    state.runtime = {
+      phase: 'completed', runId: 'run-2', idempotencyKey: 'scheduled-2', engineType: 'openclaw',
+      epoch: 2, sequence: 4, startedAt: 100_000, lastEventAt: 110_000,
+    };
+    state.overlay.optimisticUserMessage = {
+      id: 'scheduled-2',
+      role: 'user',
+      content: 'repeat scheduled prompt',
+      timestamp: 100,
+      _scheduledTaskOptimistic: true,
+    };
+    state.overlay.streamingMessage = { role: 'assistant', content: 'current answer' };
+    state.overlay.awaitingTranscript = true;
+    useChatRuntimeV2Store.setState({ sessionsByKey: { scheduled: state } });
+
+    useChatRuntimeV2Store.getState().setTranscript('scheduled', [
+      { id: 'old-user', role: 'user', content: 'repeat scheduled prompt', timestamp: 10 },
+      { id: 'old-answer', role: 'assistant', content: 'old answer', timestamp: 20 },
+    ]);
+
+    const afterOldHistory = useChatRuntimeV2Store.getState().sessionsByKey.scheduled;
+    expect(afterOldHistory.overlay.optimisticUserMessage).toMatchObject({ id: 'scheduled-2' });
+    expect(afterOldHistory.overlay.streamingMessage).toMatchObject({ content: 'current answer' });
+
+    useChatRuntimeV2Store.getState().setTranscript('scheduled', [
+      { id: 'old-user', role: 'user', content: 'repeat scheduled prompt', timestamp: 10 },
+      { id: 'old-answer', role: 'assistant', content: 'old answer', timestamp: 20 },
+      {
+        id: 'server-current-user',
+        role: 'user',
+        content: `${DINGTALK_RECIPIENTS_MARKER}\n{}\n\n---\n\n用户消息：\nrepeat scheduled prompt`,
+        timestamp: 106,
+      },
+      { id: 'current-answer', role: 'assistant', content: 'current answer', timestamp: 108 },
+    ]);
+
+    const settled = useChatRuntimeV2Store.getState().sessionsByKey.scheduled;
+    expect(settled.overlay.optimisticUserMessage).toBeNull();
+    expect(settled.overlay.streamingMessage).toBeNull();
   });
 
   it('keeps store and session references stable for an identical transcript', () => {

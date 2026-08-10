@@ -10,6 +10,7 @@ import {
   normalizeUserMessageText,
   traceLoadHistoryUserReconciliation,
 } from './user-message-merge';
+import { isScheduledTaskUserEcho } from './scheduled-task-user-echo';
 import {
   mergeHistoryDisplayMessages,
   prepareHistoryMessages,
@@ -49,9 +50,6 @@ export async function prepareHistoryToolEffects(input: {
   return getCurrentSessionKey() === sessionKey;
 }
 
-const SCHEDULED_ECHO_EARLY_SKEW_MS = 2_000;
-const SCHEDULED_ECHO_LATE_WINDOW_MS = 120_000;
-
 export function hasOptimisticUserEcho(input: {
   finalMessages: RawMessage[];
   cachedOptimistic: RawMessage | null;
@@ -80,26 +78,9 @@ export function hasOptimisticUserEcho(input: {
     );
   }
 
-  if (optimisticRefAt > 0) {
-    return finalMessages.some((message) => {
-      if (message.role !== 'user') return false;
-      if (message.id && cachedOptimistic.id && message.id === cachedOptimistic.id) return true;
-      const messageAt = typeof message.timestamp === 'number' ? toMs(message.timestamp) : NaN;
-      return Number.isFinite(messageAt)
-        && messageAt >= optimisticRefAt - SCHEDULED_ECHO_EARLY_SKEW_MS
-        && messageAt <= optimisticRefAt + SCHEDULED_ECHO_LATE_WINDOW_MS
-        && isSameUserMessage(message, cachedOptimistic, optimisticRefAt);
-    });
-  }
-
-  const cachedNorm = normalizeUserMessageText(cachedOptimistic.content);
-  return (
-    cachedNorm.length > 0
-    && finalMessages.some((m) => (
-      m.role === 'user'
-      && normalizeUserMessageText(m.content) === cachedNorm
-    ))
-  );
+  return finalMessages.some((message) => (
+    isScheduledTaskUserEcho(message, cachedOptimistic, optimisticRefAt)
+  ));
 }
 
 function clearOptimisticUserIfEchoed(input: {

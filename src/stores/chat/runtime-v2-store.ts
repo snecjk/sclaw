@@ -4,6 +4,7 @@ import { subscribeHostEvent } from '@/lib/host-events';
 import { AppError } from '@/lib/error-model';
 import type { CanonicalChatEvent, ChatRuntimeSnapshot } from '../../../shared/chat-runtime-protocol';
 import type { RawMessage } from './types';
+import { isScheduledTaskUserEcho } from './scheduled-task-user-echo';
 import {
   applyRuntimeSnapshot,
   createClientSessionState,
@@ -123,7 +124,16 @@ function transcriptContainsCompletedTurn(
   let currentUserIndex = optimistic?.id
     ? transcript.findIndex((message) => message.role === 'user' && message.id === optimistic.id)
     : -1;
-  if (currentUserIndex < 0 && optimistic) {
+  if (currentUserIndex < 0 && optimistic?._scheduledTaskOptimistic) {
+    const optimisticAt = messageTimestampMs(optimistic);
+    const referenceMs = optimisticAt > 0
+      ? optimisticAt
+      : current.runtime?.startedAt ?? 0;
+    currentUserIndex = findLastMessageIndex(transcript, (message) => (
+      isScheduledTaskUserEcho(message, optimistic, referenceMs)
+    ));
+    if (currentUserIndex < 0) return false;
+  } else if (currentUserIndex < 0 && optimistic) {
     const expected = comparableContent(optimistic.content);
     currentUserIndex = findLastMessageIndex(transcript,
       (message) => message.role === 'user' && comparableContent(message.content) === expected,

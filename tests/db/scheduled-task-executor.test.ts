@@ -162,7 +162,7 @@ describe('EngineScheduledTaskDispatcher', () => {
 
     await dispatcher.dispatch({ task, run });
 
-    // send 被调一次；Claude + append → message prepend 收件人规则，systemPromptAppend 仍保留。
+    // send 被调一次；Claude 原生使用 systemPromptAppend，用户历史保持原始 prompt。
     expect(runMainChatSendMock).toHaveBeenCalledTimes(1);
     const passedInput = runMainChatSendMock.mock.calls[0][1];
     expect(passedInput).toMatchObject({
@@ -171,9 +171,10 @@ describe('EngineScheduledTaskDispatcher', () => {
       idempotencyKey: 'idem-1',
       permissionProfile: 'workspace-write',
       systemPromptAppend: '[dingtalk recipients]',
+      sourceText: 'run report',
       displayText: 'run report',
     });
-    expect(passedInput.message).toBe('[dingtalk recipients]\n\nrun report');
+    expect(passedInput.message).toBe('run report');
 
     // send resolve 只表 run 启动——run 仍 running，不在此置 succeeded。
     const mid = await runRepo.getRun(run.runId);
@@ -215,7 +216,7 @@ describe('EngineScheduledTaskDispatcher', () => {
     expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');
   });
 
-  it('openclaw keeps prompt as message; append stays for adapter merge (no double prepend)', async () => {
+  it('passes engine-neutral scheduled prompt context to openclaw adapter', async () => {
     const { task, run } = await seedRun({ engineType: 'openclaw' });
     runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-oc' } });
     const { dispatcher } = makeDispatcher({ systemPromptAppend: '[dingtalk recipients]' });
@@ -225,6 +226,7 @@ describe('EngineScheduledTaskDispatcher', () => {
     const passedInput = runMainChatSendMock.mock.calls[0][1];
     expect(passedInput.message).toBe('run report');
     expect(passedInput.systemPromptAppend).toBe('[dingtalk recipients]');
+    expect(passedInput.runtimePolicy).toMatchObject({ origin: 'scheduled_task', ownerId: run.runId });
 
     await dispatcher.handleCanonicalEvent(canonicalTerminal(task, { ...run, sessionKey: 'sched:t1:20240101' }, 'run.completed'));
     expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');
