@@ -80,6 +80,38 @@ describe('chat runtime repository', () => {
       .resolves.toMatchObject({ epoch: 2, sequence: 8, phase: 'completed' });
   });
 
+  it('lets a terminal snapshot repair a same-sequence active row', async () => {
+    await expect(repository.upsertIfNewer(snapshot({
+      runId: 'run-1',
+      phase: 'running',
+      sequence: 14,
+      lastEventAt: 140,
+      updatedAt: 140,
+    }))).resolves.toBe('inserted');
+
+    await expect(repository.upsertIfNewer(snapshot({
+      runId: 'run-1',
+      phase: 'completed',
+      sequence: 14,
+      lastEventAt: 150,
+      terminalAt: 150,
+      updatedAt: 150,
+    }))).resolves.toBe('updated');
+
+    await expect(repository.upsertIfNewer(snapshot({
+      runId: 'run-1',
+      phase: 'running',
+      sequence: 14,
+      lastEventAt: 160,
+      updatedAt: 160,
+    }))).resolves.toBe('stale');
+
+    await expect(repository.getByIdempotencyKey('agent:main:session-1', 'message-1'))
+      .resolves.toMatchObject({
+        phase: 'completed', sequence: 14, terminalAt: 150,
+      });
+  });
+
   it('uses a stable internal key for externally-started runs', async () => {
     const external = snapshot({ idempotencyKey: null, runId: 'run-external', phase: 'running' });
     await repository.upsert(external);

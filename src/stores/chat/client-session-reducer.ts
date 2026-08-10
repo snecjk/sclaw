@@ -99,7 +99,10 @@ export function isSnapshotNewer(
   const current = state.runtime;
   if (!current) return true;
   if (snapshot.epoch !== current.epoch) return snapshot.epoch > current.epoch;
-  if (snapshot.sequence <= current.sequence) return false;
+  if (snapshot.sequence < current.sequence) return false;
+  if (snapshot.sequence === current.sequence) {
+    return isTerminalChatRunPhase(snapshot.phase) && !isTerminalChatRunPhase(current.phase);
+  }
   if (isTerminalChatRunPhase(current.phase) && !isTerminalChatRunPhase(snapshot.phase)) return false;
   return true;
 }
@@ -158,11 +161,17 @@ export function reduceSessionEvent(
   event: CanonicalChatEvent,
 ): SessionEventReduction {
   const current = state.runtime;
+  const phase = phaseFromEvent(event, current);
   if (current) {
     if (event.epoch < current.epoch) return { state, accepted: false, needsHydration: false };
-    if (event.epoch === current.epoch && event.sequence <= current.sequence) {
+    if (event.epoch === current.epoch && event.sequence < current.sequence) {
       return { state, accepted: false, needsHydration: false };
     }
+    if (
+      event.epoch === current.epoch
+      && event.sequence === current.sequence
+      && (!isTerminalChatRunPhase(phase) || isTerminalChatRunPhase(current.phase))
+    ) return { state, accepted: false, needsHydration: false };
     if (event.epoch === current.epoch && event.sequence > current.sequence + 1) {
       return { state, accepted: false, needsHydration: true };
     }
@@ -178,7 +187,6 @@ export function reduceSessionEvent(
     }
   }
 
-  const phase = phaseFromEvent(event, current);
   const terminal = phase === 'completed' || phase === 'failed' || phase === 'aborted' || phase === 'interrupted';
   const payload = event.payload && typeof event.payload === 'object'
     ? event.payload as Record<string, unknown>

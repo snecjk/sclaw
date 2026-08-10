@@ -246,7 +246,10 @@ export function createSendActions(
       );
       if (!runtime.sending) return true;
       try {
-        await useGatewayStore.getState().rpc(
+        const result = await useGatewayStore.getState().rpc<{
+          aborted?: boolean;
+          runIds?: unknown[];
+        }>(
           'chat.abort',
           {
             sessionKey,
@@ -257,6 +260,9 @@ export function createSendActions(
             ),
           },
         );
+        if (result?.aborted === false && Array.isArray(result.runIds) && result.runIds.length === 0) {
+          await useChatRuntimeV2Store.getState().hydrate(sessionKey);
+        }
         return true;
       } catch {
         return false;

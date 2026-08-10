@@ -117,6 +117,96 @@ describe('main chat runtime supervisor', () => {
     }
   });
 
+  it('serializes transcript projection with a live event waiting on its adapter', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveInspection!: (value: {
+        status: 'completed';
+        transcriptRevision: string;
+        currentTurnMessages: Array<Record<string, unknown>>;
+      }) => void;
+      const firstInspection = new Promise<{
+        status: 'completed';
+        transcriptRevision: string;
+        currentTurnMessages: Array<Record<string, unknown>>;
+      }>((resolve) => { resolveInspection = resolve; });
+      let resolveLiveAdapter!: (value: Record<string, unknown>) => void;
+      const liveAdapter = new Promise<Record<string, unknown>>((resolve) => { resolveLiveAdapter = resolve; });
+      const adapter = {
+        chatCapabilities: { requiresHistoryProjection: false },
+        classifyFinalMessage: ({ phase }: { phase?: string }) => (
+          phase === 'completed' ? 'completed' as const : 'progress' as const
+        ),
+        inspectRun: vi.fn()
+          .mockImplementationOnce(() => firstInspection)
+          .mockResolvedValue({
+            status: 'completed',
+            transcriptRevision: 'stable',
+            currentTurnMessages: [],
+          }),
+      };
+      let adapterCalls = 0;
+      engine.getAdapterForSession.mockImplementation(() => {
+        adapterCalls += 1;
+        return adapterCalls === 3 ? liveAdapter : Promise.resolve(adapter);
+      });
+
+      const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+      const events: CanonicalChatEvent[] = [];
+      supervisor.on('event', (event) => events.push(event));
+      await supervisor.begin({
+        sessionKey: 'agent:main:serialized-settle',
+        idempotencyKey: 'message-serialized-settle',
+        engineType: 'openclaw',
+      });
+      await supervisor.handleEngineEvent({
+        type: 'turn.completed',
+        sessionKey: 'agent:main:serialized-settle',
+        runId: 'run-serialized-settle',
+        seq: 1,
+      });
+      await Promise.resolve();
+
+      const liveEvent = supervisor.handleEngineEvent({
+        type: 'message.delta',
+        sessionKey: 'agent:main:serialized-settle',
+        runId: 'run-serialized-settle',
+        seq: 2,
+        message: { id: 'live', role: 'assistant', content: 'live delta' },
+      });
+      await Promise.resolve();
+      resolveInspection({
+        status: 'completed',
+        transcriptRevision: 'stable',
+        currentTurnMessages: [
+          { id: 'user', role: 'user', content: 'question', timestamp: Date.now() },
+          { id: 'history', role: 'assistant', content: 'history projection' },
+        ],
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      resolveLiveAdapter(adapter);
+      await liveEvent;
+      await vi.advanceTimersByTimeAsync(300);
+
+      const sequences = events.map((event) => event.sequence);
+      expect(new Set(sequences).size).toBe(sequences.length);
+      expect(sequences).toEqual(sequences.map((_, index) => index + 1));
+      expect(events.map((event) => event.type)).toEqual([
+        'run.dispatching',
+        'run.awaiting_transcript',
+        'message.delta',
+        'message.delta',
+        'run.completed',
+      ]);
+      expect(supervisor.get('agent:main:serialized-settle')).toMatchObject({
+        phase: 'completed', sequence: 5,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('fails closed when persisted idempotency cannot be checked', async () => {
     repository.getByIdempotencyKey.mockRejectedValueOnce(new Error('sqlite unavailable'));
     const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);

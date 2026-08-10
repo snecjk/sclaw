@@ -89,6 +89,41 @@ describe('canonical chat client session reducer', () => {
     expect(reduceSessionEvent(started, event({ sequence: 3 })).needsHydration).toBe(true);
   });
 
+  it('accepts a same-sequence terminal event and terminal hydration snapshot', () => {
+    const running = reduceSessionEvent(createClientSessionState(), event({
+      sequence: 14,
+      type: 'message.delta',
+      payload: { role: 'assistant', content: 'done' },
+    })).state;
+
+    const completed = reduceSessionEvent(running, event({
+      eventId: 'event-terminal',
+      sequence: 14,
+      type: 'run.completed',
+    }));
+    expect(completed.accepted).toBe(true);
+    expect(completed.state.runtime?.phase).toBe('completed');
+
+    const hydrated = applyRuntimeSnapshot(running, {
+      protocolVersion: 1,
+      sessionKey: event().sessionKey,
+      runId: 'run-1',
+      idempotencyKey: 'message-1',
+      runtimePolicy: { origin: 'interactive', deadlineAt: null },
+      engineType: 'openclaw',
+      phase: 'completed',
+      epoch: 1,
+      sequence: 14,
+      startedAt: 1,
+      lastEventAt: 2,
+      terminalAt: 2,
+      error: null,
+      acceptanceResult: null,
+      updatedAt: 2,
+    });
+    expect(hydrated.runtime?.phase).toBe('completed');
+  });
+
   it('accepts a new epoch after main-process recovery', () => {
     const old = reduceSessionEvent(createClientSessionState(), event({ sequence: 4 })).state;
     const recovered = reduceSessionEvent(old, event({

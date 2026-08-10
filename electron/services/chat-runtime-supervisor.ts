@@ -1006,7 +1006,15 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
           { sessionKey, runId: current.runId, startedAt: current.startedAt, limit: 50 },
         );
         if (inspection.currentTurnMessages?.length) {
-          await this.projectCurrentTranscript(current, inspection.currentTurnMessages);
+          // Transcript settling runs independently from live Gateway delivery.
+          // Commit projected messages through the same per-session queue as
+          // handleEngineEvent; otherwise both paths can derive the same next
+          // sequence from a stale snapshot and publish conflicting events.
+          await this.enqueueSession(sessionKey, async () => {
+            const latest = this.snapshots.get(sessionKey);
+            if (!latest || latest.epoch !== epoch || isTerminalChatRunPhase(latest.phase)) return;
+            await this.projectCurrentTranscript(latest, inspection.currentTurnMessages ?? []);
+          });
         }
         if (inspection.status === 'completed' && inspection.transcriptRevision) {
           if (previousRevision === inspection.transcriptRevision) {

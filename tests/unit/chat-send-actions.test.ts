@@ -129,4 +129,24 @@ describe('chat send action acceptance state', () => {
     expect(useChatRuntimeV2Store.getState().sessionsByKey['agent:main:main']?.runtime?.runId).toBe('run-active');
     rpc.mockRestore();
   });
+
+  it('hydrates local runtime when Gateway reports no active run to abort', async () => {
+    const { actions } = createHarness();
+    const session = createClientSessionState();
+    session.runtime = {
+      phase: 'running', runId: 'run-stale', idempotencyKey: 'message-1', engineType: 'openclaw',
+      epoch: 1, sequence: 14, startedAt: 1, lastEventAt: 1,
+    };
+    useChatRuntimeV2Store.setState({ sessionsByKey: { 'agent:main:main': session } });
+    const hydrate = vi.spyOn(useChatRuntimeV2Store.getState(), 'hydrate').mockResolvedValueOnce();
+    const rpc = vi.spyOn(useGatewayStore.getState(), 'rpc').mockResolvedValueOnce({
+      ok: true, aborted: false, runIds: [],
+    });
+
+    await expect(actions.abortRun()).resolves.toBe(true);
+
+    expect(hydrate).toHaveBeenCalledWith('agent:main:main');
+    hydrate.mockRestore();
+    rpc.mockRestore();
+  });
 });
