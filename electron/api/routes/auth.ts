@@ -184,14 +184,13 @@ export async function handleAuthRoutes(
           return true;
         }
 
-        const accessCheck = await getClientSiteAccessService().checkAccess(token);
+        const accessCheck = await getClientSiteAccessService().checkAccess(token, {
+          categoryCode: state.user?.categoryCode,
+        });
         if (!accessCheck.allowed) {
           await clearAuthAfterAccessDenied();
           logger.info(
-            '[auth] Client site access denied on status check: category=%s company=%s err=%s',
-            accessCheck.categoryCode,
-            accessCheck.companyCode,
-            accessCheck.errMessage,
+            `[auth] Client site access denied on status check: category=${accessCheck.categoryCode} company=${accessCheck.companyCode} err=${accessCheck.errMessage}`,
           );
           sendJson(res, 200, {
             isAuthenticated: false,
@@ -230,14 +229,12 @@ export async function handleAuthRoutes(
 
       const user = await ssoLoginManager.startLogin(env, ctx.mainWindow);
 
-      const accessCheck = await getClientSiteAccessService().checkAccess(user.stoToken ?? '');
+      const accessCheck = await getClientSiteAccessService().checkAccess(user.stoToken ?? '', {
+        categoryCode: user.categoryCode,
+      });
       if (!accessCheck.allowed) {
         logger.info(
-          '[auth] Client site access denied on login: user=%s category=%s company=%s err=%s',
-          user.code,
-          accessCheck.categoryCode,
-          accessCheck.companyCode,
-          accessCheck.errMessage,
+          `[auth] Client site access denied on login: user=${user.code} category=${accessCheck.categoryCode} company=${accessCheck.companyCode} err=${accessCheck.errMessage}`,
         );
         sendJson(res, 200, {
           success: false,
@@ -477,7 +474,9 @@ export async function handleAuthRoutes(
 
       const newUser = await switchAccountViaMemoryCenter(token, targetCode);
 
-      const accessCheck = await getClientSiteAccessService().checkAccess(newUser.stoToken ?? '');
+      const accessCheck = await getClientSiteAccessService().checkAccess(newUser.stoToken ?? '', {
+        categoryCode: newUser.categoryCode,
+      });
       if (!accessCheck.allowed) {
         if (!existingOrigin) {
           await clearImpersonationOrigin();
