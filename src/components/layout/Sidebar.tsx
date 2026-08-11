@@ -477,15 +477,19 @@ function SidebarTaskGroup({
             />
           ) : null}
           {SIDEBAR_SHOW_TASK_GROUP_CHEVRON ? (
-            <ChevronDown
-              className={cn(
-                'h-4 w-4 shrink-0 transition-transform',
-                sidebarTextIconClass,
-                isOpen ? 'rotate-180' : '',
-              )}
-              aria-hidden
-              strokeWidth={2}
-            />
+            isOpen ? (
+              <ChevronDown
+                className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
+                aria-hidden
+                strokeWidth={2}
+              />
+            ) : (
+              <ChevronRight
+                className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
+                aria-hidden
+                strokeWidth={2}
+              />
+            )
           ) : null}
         </span>
       </button>
@@ -562,15 +566,19 @@ function SidebarScheduledTaskGroup({
           ) : null}
         </span>
         {SIDEBAR_SHOW_TASK_GROUP_CHEVRON ? (
-          <ChevronDown
-            className={cn(
-              'h-4 w-4 shrink-0 transition-transform',
-              sidebarTextIconClass,
-              isOpen ? 'rotate-180' : '',
-            )}
-            aria-hidden
-            strokeWidth={2}
-          />
+          isOpen ? (
+            <ChevronDown
+              className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
+              aria-hidden
+              strokeWidth={2}
+            />
+          ) : (
+            <ChevronRight
+              className={cn('h-4 w-4 shrink-0', sidebarTextIconClass)}
+              aria-hidden
+              strokeWidth={2}
+            />
+          )
         ) : null}
       </button>
       {isOpen && visibleSessions.length > 0 ? (
@@ -1737,8 +1745,8 @@ export function Sidebar() {
     }> = [
       { to: '/', end: true, icon: <MessageSquarePlus className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.newChat') },
       { to: '/my-tasks', icon: <Clock className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myTasks') },
-      { to: '/skills', icon: <Wrench className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/workflow', icon: <Workflow className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.workflow') },
+      { to: '/skills', icon: <Wrench className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.skills') },
       { to: '/more-apps', icon: <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.moreApps') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
       { to: '/data-center', icon: <Database className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.dataCenter') },

@@ -45,6 +45,7 @@ import {
   isWorkflowStartAssistantBoilerplate,
   resolveAssistantCopyShareContent,
   resolveUserBubbleActionText,
+  splitUserBubbleAtTag,
 } from './message-utils';
 import { writeCopyShareTextToClipboard } from '@/lib/copy-share-clipboard';
 import {
@@ -99,7 +100,7 @@ import type { SkillMeta } from '@/types/skill-meta';
 import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessPanel';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import { ShareMessageIcon } from '@/components/icons/ShareMessageIcon';
-import { QuickInputIcon } from '@/components/icons/composer-toolbar-icons';
+import { QuickInputIcon, WorkflowNodesIcon } from '@/components/icons/composer-toolbar-icons';
 import { SaveAsQuickInputButton } from '@/components/quick-input/SaveAsQuickInputButton';
 import {
   buildConversationShareDialogDraft,
@@ -1132,6 +1133,74 @@ function previewUrlTransform(url: string): string {
 
 // ── Message Bubble ──────────────────────────────────────────────
 
+interface WorkflowRunDisplayMeta {
+  workflowId: string;
+  workflowName: string;
+  /** 标签前的用户文案 */
+  beforeText?: string;
+  /** 标签后的用户文案（如「帮我执行这个工作流」） */
+  accompanyingText?: string;
+}
+
+function parseWorkflowRunDisplayText(text: string): WorkflowRunDisplayMeta | null {
+  const trimmed = text.trim();
+  // 允许执行指令前后保留用户原文，气泡按「前文 + 标签 + 后文」还原。
+  const execMatch = trimmed.match(
+    /^(.*?)帮我执行\s*id\s*为\s*[:：]?\s*([A-Za-z0-9_-]+)\s*的工作流\s*(?:【([^】]*)】)?\s*([\s\S]*)$/,
+  );
+  if (!execMatch) return null;
+
+  const beforeText = (execMatch[1] ?? '').trim() || undefined;
+  const workflowId = execMatch[2]?.trim();
+  if (!workflowId) return null;
+
+  const bracketName = (execMatch[3] ?? '').trim();
+  let accompanyingText = (execMatch[4] ?? '').trim() || undefined;
+  let workflowName = bracketName || workflowId;
+
+  if (!bracketName && accompanyingText) {
+    // 兼容旧格式：无【】时整段视为名称
+    workflowName = accompanyingText;
+    accompanyingText = undefined;
+  }
+
+  return { workflowId, workflowName, beforeText, accompanyingText };
+}
+
+function UserWorkflowMessageTag({ workflowName }: { workflowName: string }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-0.5 rounded-[4px] bg-[#EEF3FF] px-1 py-0.5 align-middle',
+        'text-[12px] font-medium leading-4 text-[#4E6FFF]',
+      )}
+    >
+      <WorkflowNodesIcon className="h-3 w-3 shrink-0 text-current" />
+      <span className="workflow-token-label">{workflowName}</span>
+    </span>
+  );
+}
+
+/** 技能标签按输入框里的落点渲染；无位置信息时退回正文最前。 */
+function UserSkillBubbleContent({
+  text,
+  skillMeta,
+}: {
+  text: string;
+  skillMeta: { slug: string; title: string; tagOffset?: number };
+}) {
+  const { before, after, padBefore, padAfter } = splitUserBubbleAtTag(text, skillMeta.tagOffset);
+  return (
+    <>
+      {before ? renderUserMessageMentionNodes(before) : null}
+      {padBefore ? '\u00A0' : null}
+      <SkillMessageTag title={skillMeta.title} />
+      {padAfter ? '\u00A0' : null}
+      {after ? renderUserMessageMentionNodes(after) : null}
+    </>
+  );
+}
+
 function MessageBubble({
   text,
   skillMeta,
@@ -1184,6 +1253,7 @@ function MessageBubble({
   const bubbleText = useReplyTypewriter ? typewriterText : text;
 
   const workflowCardStates = EMPTY_WORKFLOW_CARD_STATES;
+  const userWorkflowDisplay = isUser ? parseWorkflowRunDisplayText(text) : null;
   const markdownSource = useMemo(
     () => (onPreviewFile ? preprocessTextForPreviewLinks(bubbleText) : bubbleText),
     [bubbleText, onPreviewFile],
@@ -1233,9 +1303,27 @@ function MessageBubble({
     >
       {isUser ? (
         <p className="whitespace-pre-wrap break-words break-all text-sm font-normal leading-5 text-foreground">
-          {skillMeta ? <SkillMessageTag title={skillMeta.title} /> : null}
-          {skillMeta && text.trim().length > 0 ? '\u00A0' : null}
-          {text.trim().length > 0 ? renderUserMessageMentionNodes(text) : null}
+          {userWorkflowDisplay ? (
+            <>
+              {userWorkflowDisplay.beforeText ? (
+                <>
+                  {renderUserMessageMentionNodes(userWorkflowDisplay.beforeText)}
+                  {'\u00A0'}
+                </>
+              ) : null}
+              <UserWorkflowMessageTag workflowName={userWorkflowDisplay.workflowName} />
+              {userWorkflowDisplay.accompanyingText ? (
+                <>
+                  {'\u00A0'}
+                  {renderUserMessageMentionNodes(userWorkflowDisplay.accompanyingText)}
+                </>
+              ) : null}
+            </>
+          ) : skillMeta ? (
+            <UserSkillBubbleContent text={text} skillMeta={skillMeta} />
+          ) : (
+            text.trim().length > 0 ? renderUserMessageMentionNodes(text) : null
+          )}
         </p>
       ) : (
         <div
