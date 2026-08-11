@@ -44,7 +44,7 @@ export interface WorkflowMcIframeEditorHandle {
 // The iframe persists the exact canvas snapshot before replying. Allow enough
 // time for a real cloud save (including slower VPN/network conditions).
 const DRAFT_REQUEST_TIMEOUT_MS = 30_000;
-const IFRAME_LOAD_TIMEOUT_MS = 30_000;
+const IFRAME_LOAD_TIMEOUT_MS = 60_000;
 
 /** 编辑/AI 创建流程：iframe 嵌入 MC /workflows-workbench/{workflowId}（顶栏由 useWorkflowEditorContentHeader 注入） */
 export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, WorkflowMcIframeEditorProps>(function WorkflowMcIframeEditor({
