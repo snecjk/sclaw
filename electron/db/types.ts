@@ -19,6 +19,7 @@ import type {
 import type { ChannelConnectionTable } from './models/tables/channel-connection-table';
 import type { ScheduleTaskRunsTable, ScheduleTasksTable } from './models/tables/schedule-task-tables';
 import type { ArtifactSaveRecordsTable } from './models/tables/artifact-save-record-table';
+import type { ChatRuntimeRunsTable } from './models/tables/chat-runtime-table';
 
 // One migration file corresponds to one schema version.
 export interface SqliteMigration {
@@ -74,4 +75,5 @@ export interface SqliteDbSchema {
   schedule_tasks: ScheduleTasksTable;
   schedule_task_runs: ScheduleTaskRunsTable;
   artifact_save_records: ArtifactSaveRecordsTable;
+  chat_runtime_runs: ChatRuntimeRunsTable;
 }

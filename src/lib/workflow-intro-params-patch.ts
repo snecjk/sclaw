@@ -5,7 +5,7 @@ import { PARAM_FORM_MARKER_REGEX } from '@/lib/parameter-form-marker';
 import {
   isWorkflowParameterIntroText,
 } from '@/lib/workflow-form-utils';
-import { useChatStore } from '@/stores/chat';
+import { updateCurrentChatDisplayProjection } from '@/stores/chat/display-selectors';
 import type { ContentBlock, RawMessage } from '@/stores/chat/types';
 
 function assistantMessageMatchesWorkflowTemplate(
@@ -120,10 +120,10 @@ export function patchWorkflowIntroInChatStore(
   paramsSummary: string,
 ): boolean {
   let patched = false;
-  useChatStore.setState((s) => {
-    const messages = [...s.messages];
+  updateCurrentChatDisplayProjection((current) => {
+    const messages = [...current];
     patched = replaceWorkflowIntroWithParamsSummary(messages, templateId, paramsSummary);
-    return patched ? { messages } : {};
+    return patched ? messages : current;
   });
   return patched;
 }

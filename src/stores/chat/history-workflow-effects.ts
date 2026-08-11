@@ -1,10 +1,10 @@
 import {
   isWorkflowFormInjectionAllowed,
-  patchLastAssistantWithWorkflowForm,
 } from './parameter-form-recovery';
 import { getMessageText } from './helpers';
 import type { ChatGet, ChatSet } from './store-api';
 import type { RawMessage } from './types';
+import { getSessionDisplayMessages } from './display-selectors';
 
 export function restorePendingWorkflowDraftInBackground(input: {
   get: ChatGet;
@@ -12,8 +12,8 @@ export function restorePendingWorkflowDraftInBackground(input: {
   sessionKey: string;
   rawMessages: RawMessage[];
 }): void {
-  const { get, rawMessages, sessionKey, set } = input;
-  if (get().pendingWorkflow) return;
+  const { get, rawMessages, sessionKey } = input;
+  if (get().workflowChatUiBySessionKey[sessionKey]?.pendingWorkflow) return;
 
   void import('@/stores/workflow-memory').then(({
     clearPendingWorkflowDraft,
@@ -30,7 +30,7 @@ export function restorePendingWorkflowDraftInBackground(input: {
     void import('@/lib/workflow-api').then(({ getStartupSchema }) => {
       getStartupSchema(draft.templateId).then((startup) => {
         if (get().currentSessionKey !== sessionKey) return;
-        const msgs = get().messages;
+        const msgs = getSessionDisplayMessages(sessionKey);
         if (
           !isWorkflowFormInjectionAllowed(
             draft.templateId,
@@ -50,13 +50,7 @@ export function restorePendingWorkflowDraftInBackground(input: {
           schemaHash: startup.schemaHash,
           collectedInputs: draft.collectedInputs ?? {},
           modelGuidanceSent: draft.modelGuidanceSent,
-        });
-        const patched = patchLastAssistantWithWorkflowForm(msgs, getMessageText, {
-          rawMessages,
-        });
-        if (patched !== msgs) {
-          set({ messages: patched });
-        }
+        }, sessionKey);
       }).catch(() => {});
     });
   });

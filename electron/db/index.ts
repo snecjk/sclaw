@@ -65,4 +65,8 @@ export {
   WorkspaceRepository,
   getWorkspaceRepository,
 } from './repositories/workspace-repository';
+export {
+  ChatRuntimeRepository,
+  getChatRuntimeRepository,
+} from './repositories/chat-runtime-repository';
 export type { SqliteDatabaseInfo, SqliteMigration, SqliteMigrationRecord, SqliteRecordTimestamps } from './types';

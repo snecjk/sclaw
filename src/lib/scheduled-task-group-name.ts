@@ -118,7 +118,7 @@ export type SessionRuntimeActivityHint = {
 };
 
 export type SessionActivitySortOptions = {
-  runtimeBySessionKey?: Record<string, SessionRuntimeActivityHint | undefined>;
+  runtimeActivityBySessionKey?: Record<string, SessionRuntimeActivityHint | undefined>;
   currentSessionKey?: string | null;
   currentSessionSending?: boolean;
   activatingScheduledSessionAt?: Record<string, number>;
@@ -132,7 +132,7 @@ function resolveActiveSessionActivityBoost(
   hasPreciseActivity: boolean,
   options?: SessionActivitySortOptions,
 ): number {
-  const runtime = options?.runtimeBySessionKey?.[sessionKey];
+  const runtime = options?.runtimeActivityBySessionKey?.[sessionKey];
   const runtimeActive = Boolean(runtime?.sending || runtime?.activeRunId);
   const isCurrentSession = options?.currentSessionKey === sessionKey;
   const activatingAt = options?.activatingScheduledSessionAt?.[sessionKey] ?? 0;

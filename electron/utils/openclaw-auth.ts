@@ -1532,14 +1532,6 @@ export async function syncStoPluginsToOpenClaw(): Promise<boolean> {
     const stoBaseUrl = await resolveStoBaseUrl();
     const config = await readOpenClawJson();
 
-    upsertOpenClawProviderEntry(config, 'sto-dynamic-agent-route', {
-      baseUrl: `${stoBaseUrl}/agent/v1/biz-agent`,
-      api: 'openai-completions',
-      apiKeyEnv: 'sk-your-model-api-key',
-      modelIds: ['sto-route-model'],
-      defaultModelInput: ['text', 'image'],
-    });
-
     const plugins = (config.plugins || {}) as Record<string, unknown>;
     plugins.enabled = true;
 
@@ -1565,10 +1557,7 @@ export async function syncStoPluginsToOpenClaw(): Promise<boolean> {
     const entries = (plugins.entries || {}) as Record<string, unknown>;
     entries['sto-dynamic-agent-route'] = {
       enabled: true,
-      config: {
-        routeApiUrl: `${stoBaseUrl}/agent/v1/biz-agent/resolve`,
-        providerBaseUrl: `${stoBaseUrl}/agent/v1/biz-agent`,
-      },
+      config: {},
     };
     entries['sto-agent-telemetry'] = {
       enabled: true,
@@ -1660,8 +1649,8 @@ export async function syncStoPluginsToOpenClaw(): Promise<boolean> {
 }
 
 /**
- * Configure the sto-dynamic-agent-route plugin in openclaw.json after SSO login.
- * Adds models.providers entry and plugins.allow/entries with environment-specific URLs.
+ * Configure the STO runtime-context plugin in openclaw.json after SSO login.
+ * The legacy plugin ID is retained for installation and stored-config compatibility.
  */
 export async function syncStoDynamicRoutePluginToOpenClaw(): Promise<void> {
   await syncStoPluginsToOpenClaw();
@@ -1676,8 +1665,8 @@ export async function syncStoAgentTelemetryPluginToOpenClaw(): Promise<void> {
 }
 
 /**
- * Disable the sto-dynamic-agent-route plugin in openclaw.json on logout or token expiry.
- * Sets enabled=false and removes the provider entry, but preserves plugin config for re-login.
+ * Disable the legacy-ID STO runtime-context plugin on logout or token expiry.
+ * Also removes any stale provider entry left by versions that handled models.
  */
 export async function removeStoDynamicRoutePluginFromOpenClaw(): Promise<void> {
   return withConfigLock(async () => {

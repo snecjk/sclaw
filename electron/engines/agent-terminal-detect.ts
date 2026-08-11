@@ -1,6 +1,6 @@
 /**
  * Agent 终态检测谓词（engine-agnostic）。渠道卡片推送（`delivery.ts`）与
- * 定时任务 run watcher（`scheduled-task-run-watcher.ts`）共用，避免两套漂移。
+ * legacy delivery 路径使用；定时任务终态已改由 ChatRuntimeSupervisor canonical event 驱动。
  *
  * 终态语义与 `gateway/normalized-engine-event.ts` 对齐——真终态只认 agent
  * notification（或同源的 chat `done`/`error`/`aborted`），**绝不在 `final`

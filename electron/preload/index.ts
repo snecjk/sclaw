@@ -22,6 +22,8 @@ const electronAPI = {
         'gateway:restart',
         'gateway:rpc',
         'gateway:httpProxy',
+        'chat-runtime:get',
+        'chat-runtime:listActive',
         'hostapi:fetch',
         'agent-memory:status',
         'agent-memory:bootstrap',
@@ -225,8 +227,7 @@ const electronAPI = {
       const validChannels = [
         'gateway:status-changed',
         'gateway:message',
-        'gateway:notification',
-        'gateway:engine-event',
+        'chat-runtime:event',
         'gateway:channel-status',
         'channel:whatsapp-qr',
         'channel:whatsapp-success',
@@ -291,8 +292,7 @@ const electronAPI = {
       const validChannels = [
         'gateway:status-changed',
         'gateway:message',
-        'gateway:notification',
-        'gateway:engine-event',
+        'chat-runtime:event',
         'gateway:channel-status',
         'channel:whatsapp-qr',
         'channel:whatsapp-success',

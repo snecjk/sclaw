@@ -42,4 +42,37 @@ describe('history-pipeline', () => {
 
     expect(merged.map((message) => message.id)).toEqual(['user-1', 'assistant-1']);
   });
+
+  it('does not copy synthetic parameter forms from the current display into history', () => {
+    const loaded: RawMessage[] = [
+      { id: 'user-1', role: 'user', content: '创建工作流', timestamp: 1 },
+      { id: 'assistant-1', role: 'assistant', content: '请确认参数', timestamp: 2 },
+    ];
+    const current: RawMessage[] = [
+      loaded[0],
+      {
+        ...loaded[1],
+        content: [
+          { type: 'text', text: '请确认参数' },
+          {
+            type: 'parameter_form',
+            formId: 'workflow:tpl-1',
+            formConfig: { fields: [] },
+            formContext: { source: 'workflow', sourceId: 'tpl-1' },
+          },
+        ],
+      },
+    ];
+
+    const merged = mergeHistoryDisplayMessages({
+      messages: loaded,
+      currentMessages: current,
+      sessionKey: 'agent:main:main',
+      sessionLabels: {},
+      userMessageAt: 1_000,
+      getMessageText: (content) => String(content ?? ''),
+    });
+
+    expect(merged[1].content).toBe('请确认参数');
+  });
 });

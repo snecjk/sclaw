@@ -5,8 +5,11 @@ let eventSource: EventSource | null = null;
 const HOST_EVENT_TO_IPC_CHANNEL: Record<string, string> = {
   'gateway:status': 'gateway:status-changed',
   'gateway:error': 'gateway:error',
-  'gateway:notification': 'gateway:notification',
-  'gateway:engine-event': 'gateway:engine-event',
+  'chat-runtime:event': 'chat-runtime:event',
+  'workflow:status-update': 'workflow:status-update',
+  'workflow:event': 'workflow:event',
+  'workflow-runtime:recover': 'workflow-runtime:recover',
+  'workflow:completion-open': 'workflow:completion-open',
   'gateway:channel-status': 'gateway:channel-status',
   'gateway:exit': 'gateway:exit',
   'oauth:code': 'oauth:code',
