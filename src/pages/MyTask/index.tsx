@@ -69,6 +69,8 @@ import { WorkflowDashboard } from '@/pages/Workflow/components/workflow-dashboar
 import { WorkflowPageShading } from '@/pages/Workflow/components/workflow-page-shading';
 import { useWorkflowListViewState } from '@/pages/Workflow/hooks/use-workflow-list-view-state';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
+import { useAppShellLayout } from '@/components/layout/app-shell-layout-context';
+import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
 
 // ──── 工具函数 ────
 
@@ -127,6 +129,8 @@ export default function MyTask() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useTranslation('tasks');
+  const { t: tCommon } = useTranslation('common');
+  const { snapshot, setUserCollapsed } = useAppShellLayout();
 
   const activeSection = parseMyTaskSection(searchParams.get('tab'));
   const workflowViewState = useWorkflowListViewState();
@@ -448,6 +452,15 @@ export default function MyTask() {
           isWorkflowSection && workflowPageRootClass,
         )}
       >
+        {snapshot.canUserRestoreSidebar ? (
+          <SidebarHeaderToggle
+            isCollapsed
+            onToggle={() => setUserCollapsed(false)}
+            collapseLabel={tCommon('sidebar.toggleSidebarCollapse')}
+            expandLabel={tCommon('sidebar.toggleSidebarExpand')}
+            className="absolute left-[calc(var(--sto-content-header-pad-start)-var(--sto-content-pad-x))] top-2 z-20"
+          />
+        ) : null}
         {isWorkflowSection ? <WorkflowPageShading /> : null}
         <div
           className={cn(
