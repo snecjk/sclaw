@@ -5,6 +5,7 @@ import { isWorkflowSessionTitle } from '@/lib/workflow-session';
 import {
   isCorruptedSessionLabel,
   isPlaceholderSessionLabel,
+  truncateSessionLabel,
 } from '@/lib/workflow-session-hint';
 import {
   formatChatSessionTraceLine,
@@ -470,7 +471,10 @@ function historyHasOpeningUserTurn(messages: RawMessage[], openingLabel: string 
       if (!display) return message._skillMeta.title === openingLabel;
       return display === openingLabel || message._skillMeta.title === openingLabel;
     }
-    return display === openingLabel;
+    // Session labels are capped at 50 characters. Treat the same truncated
+    // form of a real history user turn as the opener; otherwise label recovery
+    // synthesizes a second user bubble beside the complete history message.
+    return display === openingLabel || truncateSessionLabel(display) === openingLabel;
   });
 }
 

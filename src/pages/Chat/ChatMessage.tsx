@@ -18,6 +18,7 @@ import { useTypewriterReveal } from '@/hooks/use-typewriter-reveal';
 import { cn } from '@/lib/utils';
 import { assistantChatCardBg, userChatBubbleSurfaceClass, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
 import {
+  isChatResponsePending,
   isCurrentUserTurnIncomplete,
   isLastUserMessage,
   isMessageInCurrentUserTurn,
@@ -418,29 +419,6 @@ export const ChatMessage = memo(function ChatMessage({
   /** 与 AwaitingReplyIndicator 同口径：表单待提交时轮次未结束 */
   const isAwaitingUserToContinue =
     parameterForm !== null && workflowCard === null && !showAssistantParamsFold;
-  const currentUserTurnIncomplete = useMemo(
-    () =>
-      isCurrentUserTurnIncomplete({
-        sessionMessages,
-        sending,
-        lastUserMessageAt,
-        pendingFinal,
-        activeRunId,
-        workflowCardStates,
-        hasPendingWorkflowSchema: pendingWorkflow?.schema != null,
-        sessionKey,
-      }),
-    [
-      sessionMessages,
-      sending,
-      lastUserMessageAt,
-      pendingFinal,
-      activeRunId,
-      workflowCardStates,
-      pendingWorkflow?.schema,
-      sessionKey,
-    ],
-  );
   /** 工作流 / 填表阻塞（不含 sending 等 runtime 字段，供 TurnLifecycle 分层） */
   const hasWorkflowBlockers = useMemo(
     () =>
@@ -494,7 +472,15 @@ export const ChatMessage = memo(function ChatMessage({
   const showUserMessageMeta =
     (hasText || Boolean(skillMeta))
     && !showUserParamsFold
-    && !(isLastUserInTurn && currentUserTurnIncomplete);
+    // A background workflow can keep the turn non-terminal after the assistant
+    // has acknowledged the start. Keep user shortcuts available in that state;
+    // hide them only while the chat response itself is still in flight.
+    && !(isLastUserInTurn && isChatResponsePending({
+      sending,
+      lastUserMessageAt,
+      pendingFinal,
+      activeRunId,
+    }));
 
   const showRenderDebugPanel = !isUser && isFilePreviewDebugEnabled();
   const debugMarkdownSource = useMemo(
