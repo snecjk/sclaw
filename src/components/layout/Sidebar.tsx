@@ -3,7 +3,7 @@
  * 省区布局：展开 260px / 收起 w-0 完全隐藏；折叠钮在侧栏列顶行（无全局顶栏）。
  * 完整布局：展开 260px / 收起 72px 图标轨。
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate, matchPath } from 'react-router-dom';
 import {
   Wrench,
@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg';
 import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg';
-import timerIcon from '@/assets/icons/timer.svg';
+import { SidebarTimerIcon } from '@/components/layout/sidebar-timer-icon';
 
 import {
   DropdownMenu,
@@ -662,8 +662,8 @@ function SidebarNavLink({
           'mx-auto box-border min-h-0 shrink-0 justify-center gap-0 rounded-[8px] text-sm font-normal leading-5',
           'h-[var(--sto-sidebar-collapsed-nav-item-h)] w-[var(--sto-sidebar-collapsed-nav-item-w)] max-w-[calc(100%-10px)] py-[var(--sto-sidebar-collapsed-nav-py)] px-[var(--sto-sidebar-collapsed-nav-px)]',
           isActive
-            ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]'
-            : 'text-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]',
+            ? 'bg-[var(--sto-brand-6)] text-white shadow-sm hover:bg-[#ff8d2a] active:bg-[#d95700] [&_svg]:stroke-white [&_svg]:text-white dark:bg-[var(--sto-brand-6)] dark:text-white dark:hover:bg-[#ff8d2a]'
+            : 'text-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] [&_svg]:text-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08]',
         )
       : cn(
           'shrink-0 gap-[10px] text-[13px] leading-5',
@@ -1681,17 +1681,7 @@ export function Sidebar() {
       { to: '/', end: true, icon: <MessageSquarePlus className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.newChat') },
       {
         to: '/my-tasks',
-        icon: (
-          <span
-            aria-hidden
-            className="inline-block h-4 w-4 shrink-0 bg-current [mask-image:var(--sto-sidebar-timer-icon)] [mask-position:center] [mask-repeat:no-repeat] [mask-size:contain] [-webkit-mask-image:var(--sto-sidebar-timer-icon)] [-webkit-mask-position:center] [-webkit-mask-repeat:no-repeat] [-webkit-mask-size:contain]"
-            style={
-              {
-                '--sto-sidebar-timer-icon': `url(${timerIcon})`,
-              } as CSSProperties
-            }
-          />
-        ),
+        icon: <SidebarTimerIcon />,
         label: t('common:sidebar.myTasks'),
       },
       // 工作流列表已并入「我的任务」一级 Tab；编辑路由仍为 /workflow/*
