@@ -16,6 +16,7 @@ import {
   getWorkflowPacketFailureMessage,
   isRetryableWorkflowPacketFailure,
   normalizeStructuredOutputPacket,
+  normalizeWorkflowArtifactDrafts,
   unwrapClaudeStructuredOutputEnvelope,
   validateWorkflowPacket,
   workflowPacketJsonSchema,
@@ -284,7 +285,8 @@ export async function runAgentNodeWithRetry(
       ? { packet: result.output, unwrapped: false }
       : unwrapClaudeStructuredOutputEnvelope(result.output);
     const structuredOutput = normalizeStructuredOutputPacket(claudeEnvelope.packet);
-    const packet = structuredOutput.packet;
+    const artifactDrafts = normalizeWorkflowArtifactDrafts(structuredOutput.packet);
+    const packet = artifactDrafts.packet;
     if (!packet) {
       lastError = `${PACKET_OUTPUT_MISSING}：模型未返回 SDK 结构化结果`;
       lastFailure = { source: 'agent', error: lastError };
@@ -296,6 +298,19 @@ export async function runAgentNodeWithRetry(
     }
     if (structuredOutput.normalized) {
       await ctx.emit('completion.output_normalized', { attempt, reason: 'payload_json_string_normalized' }, node.id);
+    }
+    if (artifactDrafts.normalized) {
+      await ctx.emit('completion.output_normalized', {
+        attempt,
+        reason: 'artifact_host_metadata_stripped',
+        artifacts: artifactDrafts.stripped,
+      }, node.id);
+      workflowExecLog('info', 'agent-output-normalized', 'host-owned artifact metadata stripped from model draft', {
+        runId: ctx.runId,
+        nodeId: node.id,
+        attempt,
+        artifacts: artifactDrafts.stripped,
+      });
     }
     const ports = Array.isArray(node.config?.branches)
       ? node.config.branches.map((branch: any) => branch?.branchKey ?? branch?.key).filter(Boolean)
