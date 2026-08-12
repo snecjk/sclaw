@@ -28,6 +28,7 @@ vi.mock('@/stores/agents', () => ({
 vi.mock('@/stores/session-catalog', () => ({
   useSessionCatalogStore: {
     getState: () => ({ bindSession: bindSessionMock }),
+    setState: vi.fn(),
   },
 }));
 
@@ -68,6 +69,7 @@ describe('chat target routing', () => {
 
     invokeIpcMock.mockReset();
     invokeIpcMock.mockImplementation(async (channel: string, ...args: unknown[]) => {
+      if (channel === 'chat-runtime:listActive') return [];
       if (channel === 'gateway:rpc') {
         const [method] = args as [string];
         if (method === 'chat.history') {
@@ -119,12 +121,19 @@ describe('chat target routing', () => {
 
   it('switches to the selected agent main session before sending text', async () => {
     const { useChatStore } = await import('@/stores/chat');
+    const { getSessionDisplayMessages } = await import('@/stores/chat/display-selectors');
+    const { useChatRuntimeV2Store } = await import('@/stores/chat/runtime-v2-store');
+
+    useChatRuntimeV2Store.getState().clearSession('agent:main:main');
+    useChatRuntimeV2Store.getState().clearSession('agent:research:desk');
+    useChatRuntimeV2Store.getState().setTranscript('agent:main:main', [
+      { role: 'assistant', content: 'Existing main history' },
+    ]);
 
     useChatStore.setState({
       currentSessionKey: 'agent:main:main',
       currentAgentId: 'main',
       sessions: [{ key: 'agent:main:main' }],
-      messages: [{ role: 'assistant', content: 'Existing main history' }],
       sessionLabels: {},
       sessionLastActivity: {},
       sending: false,
@@ -147,7 +156,7 @@ describe('chat target routing', () => {
     expect(state.currentSessionKey).toBe('agent:research:desk');
     expect(state.currentAgentId).toBe('research');
     expect(state.sessions.some((session) => session.key === 'agent:research:desk')).toBe(true);
-    expect(state.messages.at(-1)?.content).toBe('Hello direct agent');
+    expect(getSessionDisplayMessages('agent:research:desk').at(-1)?.content).toBe('Hello direct agent');
     const historyCall = invokeIpcMock.mock.calls.find(
       ([channel, method]) => channel === 'gateway:rpc' && method === 'chat.history',
     );
@@ -176,7 +185,6 @@ describe('chat target routing', () => {
       currentSessionKey: newSessionKey,
       currentAgentId: 'research',
       sessions: [{ key: newSessionKey, engineType: 'claude' }],
-      messages: [],
       sessionLabels: {},
       sessionLastActivity: {},
       sending: false,
@@ -221,13 +229,8 @@ describe('chat target routing', () => {
       pendingProjectId: null,
       pendingNewSessionModel: 'dashscope/test-model',
       sessions: [],
-      messages: [],
       sessionLabels: {},
       sessionLastActivity: {},
-      runtimeBySessionKey: {},
-      sending: false,
-      activeRunId: null,
-      error: null,
       loading: false,
     });
 
@@ -262,7 +265,6 @@ describe('chat target routing', () => {
       currentSessionKey: 'agent:main:main',
       currentAgentId: 'main',
       sessions: [{ key: 'agent:main:main' }],
-      messages: [],
       sessionLabels: {},
       sessionLastActivity: {},
       sending: false,

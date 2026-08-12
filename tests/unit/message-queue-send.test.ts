@@ -1,10 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useChatStore } from '@/stores/chat';
-import { createIdleSessionRuntimeState } from '@/stores/chat/session-runtime';
+import { createClientSessionState } from '@/stores/chat/client-session-reducer';
+import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 import { sendImmediately, useMessageQueueStore } from '@/stores/message-queue';
 
 const TARGET = 'agent:writer:queued';
 const originalChatState = useChatStore.getState();
+
+function setRunningTarget(): void {
+  const session = createClientSessionState();
+  session.runtime = {
+    phase: 'running', runId: 'run-old', idempotencyKey: 'message-old', engineType: 'openclaw',
+    epoch: 1, sequence: 1, startedAt: 1, lastEventAt: 1,
+  };
+  useChatRuntimeV2Store.setState({ sessionsByKey: { [TARGET]: session } });
+}
 
 describe('message queue delivery targeting', () => {
   beforeEach(() => {
@@ -15,10 +25,10 @@ describe('message queue delivery targeting', () => {
     useChatStore.setState({
       currentSessionKey: originalChatState.currentSessionKey,
       currentAgentId: originalChatState.currentAgentId,
-      runtimeBySessionKey: originalChatState.runtimeBySessionKey,
       abortRun: originalChatState.abortRun,
       sendMessage: originalChatState.sendMessage,
     });
+    useChatRuntimeV2Store.setState({ sessionsByKey: {} });
     useMessageQueueStore.getState().clearAll();
   });
 
@@ -26,12 +36,10 @@ describe('message queue delivery targeting', () => {
     const sendMessage = vi.fn().mockResolvedValue(undefined);
     useChatStore.setState({
       currentSessionKey: 'agent:main:visible',
-      runtimeBySessionKey: {
-        [TARGET]: { ...createIdleSessionRuntimeState(), sending: true, activeRunId: 'run-old' },
-      },
       abortRun: vi.fn().mockResolvedValue(false),
       sendMessage,
     });
+    setRunningTarget();
     useMessageQueueStore.getState().enqueue(TARGET, 'queued text');
     const item = useMessageQueueStore.getState().getQueue(TARGET)[0];
 
@@ -45,12 +53,10 @@ describe('message queue delivery targeting', () => {
     const sendMessage = vi.fn().mockResolvedValue(undefined);
     useChatStore.setState({
       currentSessionKey: 'agent:main:visible',
-      runtimeBySessionKey: {
-        [TARGET]: { ...createIdleSessionRuntimeState(), sending: true, activeRunId: 'run-old' },
-      },
       abortRun: vi.fn().mockResolvedValue(true),
       sendMessage,
     });
+    setRunningTarget();
     useMessageQueueStore.getState().enqueue(TARGET, 'queued text');
     const item = useMessageQueueStore.getState().getQueue(TARGET)[0];
 

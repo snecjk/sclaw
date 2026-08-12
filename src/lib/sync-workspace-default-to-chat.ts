@@ -19,6 +19,8 @@ import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-
 import type { ChatEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { resolveAgentById, useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
+import { buildChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 import { useProviderStore } from '@/stores/providers';
 import type { ProviderAccount } from '@/lib/providers';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
@@ -78,7 +80,9 @@ export async function syncWorkspaceDefaultModelToChat(opts: {
   if (current === target) return;
 
   try {
-    if (chat.sending) {
+    if (buildChatSessionRuntimeView(
+      useChatRuntimeV2Store.getState().sessionsByKey[currentSessionKey],
+    ).sending) {
       // Model switch aborts the active run; don't let that abort auto-fire queued messages.
       const { suspendAutoSend } = await import('@/stores/message-queue');
       suspendAutoSend(currentSessionKey);

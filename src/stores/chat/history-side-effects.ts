@@ -4,6 +4,7 @@ import { getMessageText } from './helpers';
 import { loadMissingPreviews } from './media-preview-cache';
 import type { ChatGet, ChatSet } from './store-api';
 import type { RawMessage } from './types';
+import { useChatRuntimeV2Store } from './runtime-v2-store';
 
 export function maybeDeriveSessionLabel(input: {
   get: ChatGet;
@@ -70,17 +71,15 @@ export function loadMissingPreviewsInBackground(input: {
   sessionKey: string;
   messages: RawMessage[];
 }): void {
-  const { get, messages, sessionKey, set } = input;
+  const { get, messages, sessionKey } = input;
   loadMissingPreviews(messages).then((updated) => {
     if (get().currentSessionKey !== sessionKey) return;
     if (!updated) return;
 
-    set({
-      messages: messages.map(msg =>
+    useChatRuntimeV2Store.getState().setDisplayProjection(sessionKey, messages.map(msg =>
         msg._attachedFiles
           ? { ...msg, _attachedFiles: msg._attachedFiles.map(f => ({ ...f })) }
           : msg
-      ),
-    });
+      ));
   });
 }

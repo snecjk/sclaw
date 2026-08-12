@@ -27,13 +27,19 @@ vi.mock('@/stores/chat', async (importOriginal) => {
     ...actual,
     useChatStore: {
       getState: () => ({
-        pendingWorkflow: {
-          templateId: 'tpl-1',
-          templateName: '客户异常监控',
-          schemaHash: 'hash-1',
-          schema: { fields: [], steps: [] },
-          collectedInputs: {},
-          modelGuidanceSent: true,
+        currentSessionKey: 'agent:main:main',
+        workflowChatUiBySessionKey: {
+          'agent:main:main': {
+            pendingWorkflow: {
+              templateId: 'tpl-1',
+              templateName: '客户异常监控',
+              schemaHash: 'hash-1',
+              schema: { fields: [], steps: [] },
+              collectedInputs: {},
+              modelGuidanceSent: true,
+            },
+            formDecorations: [],
+          },
         },
         sending: false,
       }),

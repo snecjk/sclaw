@@ -6,6 +6,7 @@
  */
 import { useMemo } from 'react';
 import { useChatStore } from '@/stores/chat';
+import { useCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
 import { extractParameterForm } from '@/pages/Chat/message-utils';
 import { hasParameterFormHandler } from '@/components/parameter-form/form-handlers';
 
@@ -20,8 +21,10 @@ export interface ActiveParameterForm {
 }
 
 export function useActiveParameterForm(): ActiveParameterForm | null {
-  const messages = useChatStore((s) => s.messages);
-  const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
+  const messages = useCurrentChatDisplayMessages();
+  const pendingWorkflow = useChatStore(
+    (s) => s.workflowChatUiBySessionKey[s.currentSessionKey]?.pendingWorkflow ?? null,
+  );
 
   return useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {

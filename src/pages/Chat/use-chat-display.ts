@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useChatStore, type RawMessage } from '@/stores/chat';
+import type { RawMessage } from '@/stores/chat';
 import {
   buildTurnStableKey,
   buildChatDisplayItems,
@@ -74,6 +74,7 @@ export function useChatDisplay(params: {
   streamingMessages: RawMessage[];
   streamingToolResults: RawMessage[];
   streamingTools: StreamingTool[];
+  lastUserMessageAt: number | null;
   workflowCards?: ChatWorkflowCardRef[];
 }) {
   const {
@@ -88,8 +89,8 @@ export function useChatDisplay(params: {
     streamingToolResults = [],
     streamingTools = [],
     workflowCards = [],
+    lastUserMessageAt,
   } = params;
-  const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
 
   const [, staleTick] = useState(0);
   useEffect(() => {

@@ -1,8 +1,7 @@
 import { upgradeWorkflowParamUserMessages } from '@/lib/workflow-param-messages';
-import { getMessageText } from './helpers';
-import { patchLastAssistantWithWorkflowForm } from './parameter-form-recovery';
 import type { ChatGet, ChatSet } from './store-api';
 import type { RawMessage } from './types';
+import { useChatRuntimeV2Store } from './runtime-v2-store';
 
 export function localizeAndHydrateWorkflowForms(input: {
   get: ChatGet;
@@ -20,26 +19,23 @@ export function localizeAndHydrateWorkflowForms(input: {
     patchWorkflowForm = false,
     rawMessages,
     sessionKey,
-    set,
+    set: _set,
   } = input;
+  void _set;
 
   void (async () => {
     const localized = await upgradeWorkflowParamUserMessages(messages, sessionKey);
     if (get().currentSessionKey !== sessionKey) return;
 
-    const nextMessages = localized !== messages ? localized : messages;
     if (localized !== messages) {
-      set({ messages: localized });
+      useChatRuntimeV2Store.getState().setDisplayProjection(sessionKey, localized);
       onLocalized?.(localized);
     }
 
-    if (patchWorkflowForm) {
-      const patched = patchLastAssistantWithWorkflowForm(nextMessages, getMessageText, { rawMessages });
-      if (patched !== nextMessages) {
-        set({ messages: patched });
-        onLocalized?.(patched);
-      }
-    }
+    // Parameter forms are display decorations resolved by ChatMessage. History
+    // localization must never write synthetic blocks back into ChatStore.messages.
+    void patchWorkflowForm;
+    void rawMessages;
 
   })();
 }

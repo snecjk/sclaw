@@ -5,7 +5,7 @@
  */
 import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, CircleCheck } from 'lucide-react';
+import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
 import { createPortal } from 'react-dom';
@@ -18,6 +18,7 @@ import { useTypewriterReveal } from '@/hooks/use-typewriter-reveal';
 import { cn } from '@/lib/utils';
 import { assistantChatCardBg, userChatBubbleSurfaceClass, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
 import {
+  isChatResponsePending,
   isCurrentUserTurnIncomplete,
   isLastUserMessage,
   isMessageInCurrentUserTurn,
@@ -27,6 +28,7 @@ import { canShowAssistantTurnMeta, resolveCurrentTurnLifecycleForMeta } from '@/
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
+import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 import {
   extractText,
   extractPlainTextFromContent,
@@ -111,6 +113,7 @@ const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
 
 interface ChatMessageProps {
   message: RawMessage;
+  sessionMessages: RawMessage[];
   showThinking: boolean;
   /** 搜索稳定键：写入 data-chat-search-key，供索引/高亮/滚动定位 */
   searchMessageKey?: string;
@@ -155,6 +158,7 @@ function imageSrc(img: ExtractedImage): string | null {
 
 export const ChatMessage = memo(function ChatMessage({
   message,
+  sessionMessages,
   showThinking,
   searchMessageKey,
   isSearchMatch = false,
@@ -195,7 +199,6 @@ export const ChatMessage = memo(function ChatMessage({
     () => dedupeAttachedFiles(message._attachedFiles || []),
     [message._attachedFiles],
   );
-  const sessionMessages = useChatStore((s) => s.messages);
   const messageIndex = useMemo(
     () => (message.id ? sessionMessages.findIndex((m) => m.id === message.id) : -1),
     [message.id, sessionMessages],
@@ -210,7 +213,9 @@ export const ChatMessage = memo(function ChatMessage({
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
-  const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
+  const pendingWorkflow = useChatStore(
+    (s) => s.workflowChatUiBySessionKey[s.currentSessionKey]?.pendingWorkflow ?? null,
+  );
   const sessionKey = useChatStore((s) => s.currentSessionKey);
   const workflowCardStates = EMPTY_WORKFLOW_CARD_STATES;
   const workflowCard = null;
@@ -251,7 +256,7 @@ export const ChatMessage = memo(function ChatMessage({
         .filter((ref) => !attachedFiles.some((f) => previewFileRefsMatch(f, ref)))
         .filter((ref) => isPreviewableFile(ref)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [text, message._attachedFiles],
+    [text, message.id, message._attachedFiles],
   );
   const candidateLocalPaths = useMemo(
     () => candidateRefs.filter((ref) => !isHttpUrl(ref.filePath)).map((ref) => ref.filePath),
@@ -298,7 +303,7 @@ export const ChatMessage = memo(function ChatMessage({
       result.push({ filePath: resolved.filePath, fileName: resolved.fileName, mimeType: resolved.mimeType });
     }
     return result;
-  }, [candidateRefs, refExistence, workflowCardStatesForRefs, workflowArtifactUrls]);
+  }, [candidateRefs, refExistence, workflowCardStatesForRefs, workflowArtifactUrls, message.id]);
 
   const displayNameHints = useMemo(() => extractDisplayFileNameHints(text), [text]);
 
@@ -405,10 +410,7 @@ export const ChatMessage = memo(function ChatMessage({
   );
   const showUserParamsFold = isUser && hasText && isWorkflowParamsUserText(text);
 
-  const sending = useChatStore((s) => s.sending);
-  const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
-  const pendingFinal = useChatStore((s) => s.pendingFinal);
-  const activeRunId = useChatStore((s) => s.activeRunId);
+  const { sending, pendingFinal, activeRunId, lastUserMessageAt } = useChatSessionRuntimeView(sessionKey);
   const isLastAssistantInTurn = !isUser && (
     isTurnDisplayReply || isTurnDisplayAssistantMessage(message, sessionMessages)
   );
@@ -417,29 +419,6 @@ export const ChatMessage = memo(function ChatMessage({
   /** 与 AwaitingReplyIndicator 同口径：表单待提交时轮次未结束 */
   const isAwaitingUserToContinue =
     parameterForm !== null && workflowCard === null && !showAssistantParamsFold;
-  const currentUserTurnIncomplete = useMemo(
-    () =>
-      isCurrentUserTurnIncomplete({
-        sessionMessages,
-        sending,
-        lastUserMessageAt,
-        pendingFinal,
-        activeRunId,
-        workflowCardStates,
-        hasPendingWorkflowSchema: pendingWorkflow?.schema != null,
-        sessionKey,
-      }),
-    [
-      sessionMessages,
-      sending,
-      lastUserMessageAt,
-      pendingFinal,
-      activeRunId,
-      workflowCardStates,
-      pendingWorkflow?.schema,
-      sessionKey,
-    ],
-  );
   /** 工作流 / 填表阻塞（不含 sending 等 runtime 字段，供 TurnLifecycle 分层） */
   const hasWorkflowBlockers = useMemo(
     () =>
@@ -493,7 +472,15 @@ export const ChatMessage = memo(function ChatMessage({
   const showUserMessageMeta =
     (hasText || Boolean(skillMeta))
     && !showUserParamsFold
-    && !(isLastUserInTurn && currentUserTurnIncomplete);
+    // A background workflow can keep the turn non-terminal after the assistant
+    // has acknowledged the start. Keep user shortcuts available in that state;
+    // hide them only while the chat response itself is still in flight.
+    && !(isLastUserInTurn && isChatResponsePending({
+      sending,
+      lastUserMessageAt,
+      pendingFinal,
+      activeRunId,
+    }));
 
   const showRenderDebugPanel = !isUser && isFilePreviewDebugEnabled();
   const debugMarkdownSource = useMemo(
@@ -1232,15 +1219,12 @@ function MessageBubble({
   useEffect(() => {
     const justStarted = isReplyStream && !wasReplyStreamRef.current;
     wasReplyStreamRef.current = isReplyStream;
-
-    if (!isReplyStream) {
-      setEnableReplyTypewriter(false);
-      return;
-    }
-    if (justStarted) {
-      // 重进会话时正文已落盘 → 不打字
-      setEnableReplyTypewriter(text.length === 0);
-    }
+    const nextValue = !isReplyStream ? false : justStarted ? text.length === 0 : null;
+    if (nextValue === null) return undefined;
+    const frameId = window.requestAnimationFrame(() => {
+      setEnableReplyTypewriter((current) => current === nextValue ? current : nextValue);
+    });
+    return () => window.cancelAnimationFrame(frameId);
   }, [isReplyStream, text.length]);
 
   const { text: typewriterText, isAnimating: isReplyTypewriterAnimating } = useTypewriterReveal(

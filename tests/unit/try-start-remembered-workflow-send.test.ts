@@ -9,7 +9,9 @@ function resetChat() {
     messages: [],
     currentSessionKey: SESSION_KEY,
     currentAgentId: 'test',
-    pendingWorkflow: null,
+    workflowChatUiBySessionKey: {
+      [SESSION_KEY]: { pendingWorkflow: null, formDecorations: [] },
+    },
   });
 }
 

@@ -41,6 +41,11 @@
     "pageTitle": "My Tasks",
     "subtitle": "Automate AI workflows with scheduled tasks",
     "newTask": "+ New Scheduled Task",
+    "sectionTabs": {
+      "tasks": "Scheduled Tasks",
+      "workflow": "Workflows",
+      "aria": "My Tasks sections"
+    },
     "viewTabs": {
       "tasks": "Scheduled Tasks",
       "records": "Execution Records",
@@ -159,7 +164,7 @@
       "running": "Running…",
       "edit": "Edit task",
       "delete": "Delete task",
-      "workflowBadge": "Workflow",
+      "workflowBadge": "Workflow task",
       "nextRunNow": "Running soon",
       "nextRunMinutes": "Next run in {{count}} min",
       "nextRunHours": "Next run in {{count}} hr",

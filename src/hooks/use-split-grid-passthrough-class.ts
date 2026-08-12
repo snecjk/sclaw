@@ -1,4 +1,4 @@
-import { useContentHeaderDisplay } from '@/components/layout/content-header-context';
+import { useContentHeaderLayoutMode } from '@/components/layout/content-header-context';
 import { cn } from '@/lib/utils';
 import { stoSplitGridContentsClass } from '@/lib/surfaces';
 
@@ -12,7 +12,8 @@ const conversationShellClass =
  * Preview expanded 使用 flex 填满，不使用 contents，也不叠加 pt。
  */
 export function useSplitGridPassthroughClass(enabled = true) {
-  const { layoutMode, isSplitLayout } = useContentHeaderDisplay();
+  const layoutMode = useContentHeaderLayoutMode();
+  const isSplitLayout = layoutMode === 'split';
   const isSplitGridPassthrough = enabled && isSplitLayout;
   const isPreviewExpanded = enabled && layoutMode === 'preview-expanded';
 
