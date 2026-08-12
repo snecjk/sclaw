@@ -12,7 +12,6 @@ import {
   useCallback,
   useContext,
   useLayoutEffect,
-  useMemo,
   useState,
   type ReactNode,
 } from 'react';
@@ -54,12 +53,10 @@ interface NormalizedContentHeaderSlot {
   onCloseSession?: () => void;
 }
 
-interface ContentHeaderContextValue {
-  slot: NormalizedContentHeaderSlot | null;
-  setSlot: (slot: NormalizedContentHeaderSlot | null) => void;
-}
+type SetContentHeaderSlot = (slot: NormalizedContentHeaderSlot | null) => void;
 
-const ContentHeaderContext = createContext<ContentHeaderContextValue | null>(null);
+const ContentHeaderSlotContext = createContext<NormalizedContentHeaderSlot | null | undefined>(undefined);
+const ContentHeaderRegistrationContext = createContext<SetContentHeaderSlot | null>(null);
 
 function resolveDefaultTitle(pathname: string, t: (key: string) => string): string {
   if (pathname === '/') return t('common:sidebar.home');
@@ -112,21 +109,29 @@ export function ContentHeaderProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const value = useMemo(() => ({ slot, setSlot }), [slot, setSlot]);
-
   return (
-    <ContentHeaderContext.Provider value={value}>
-      {children}
-    </ContentHeaderContext.Provider>
+    <ContentHeaderRegistrationContext.Provider value={setSlot}>
+      <ContentHeaderSlotContext.Provider value={slot}>
+        {children}
+      </ContentHeaderSlotContext.Provider>
+    </ContentHeaderRegistrationContext.Provider>
   );
 }
 
-function useContentHeaderRegistry() {
-  const ctx = useContext(ContentHeaderContext);
-  if (!ctx) {
+function useContentHeaderRegistration() {
+  const setSlot = useContext(ContentHeaderRegistrationContext);
+  if (!setSlot) {
     throw new Error('ContentHeaderContext is missing — wrap MainLayout with ContentHeaderProvider');
   }
-  return ctx;
+  return setSlot;
+}
+
+function useRegisteredContentHeaderSlot() {
+  const slot = useContext(ContentHeaderSlotContext);
+  if (slot === undefined) {
+    throw new Error('ContentHeaderContext is missing — wrap MainLayout with ContentHeaderProvider');
+  }
+  return slot;
 }
 
 /** 当前页面向全局 ContentHeader 注入槽位；卸载时自动清空 */
@@ -141,7 +146,7 @@ export function useContentHeader({
   onCloseSession,
   enabled = true,
 }: ContentHeaderSlot & { enabled?: boolean }) {
-  const { setSlot } = useContentHeaderRegistry();
+  const setSlot = useContentHeaderRegistration();
 
   useLayoutEffect(() => {
     if (!enabled) {
@@ -184,7 +189,7 @@ export function useContentHeaderDisplay(): {
   isSplitLayout: boolean;
   onCloseSession: (() => void) | null;
 } {
-  const { slot } = useContentHeaderRegistry();
+  const slot = useRegisteredContentHeaderSlot();
   const { pathname } = useLocation();
   const { t } = useTranslation();
   const defaultTitle = resolveDefaultTitle(pathname, t);

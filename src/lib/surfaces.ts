@@ -772,6 +772,7 @@ export const stoMainCardShellClass = cn(
 export const stoMainCardBodyClass = cn(
   'min-h-0 min-w-0 flex-1 overflow-auto overscroll-y-contain',
   'px-[var(--sto-content-pad-x)] pb-5 pt-0 [scrollbar-gutter:stable]',
+  'has-[.sto-workflow-mc-editor]:pb-0',
 );
 
 /**
@@ -1442,10 +1443,11 @@ export const workflowBuilderShell = cn(
 
 /**
  * MC iframe 工作流编辑：顶栏由 useWorkflowEditorContentHeader 注入 ContentHeader；
- * 仅抵消水平 main 内距，iframe 占满 ContentHeader 下方剩余高度。
+ * 仅抵消水平 main 内距，iframe 占满 ContentHeader 下方剩余高度；
+ * marker 仅取消该页面继承的主内容区 20px 底部 padding，保留 AppShell 的 8px Frame。
  */
 export const workflowMcEditorShell = cn(
-  '-mx-[var(--sto-content-pad-x)] flex min-h-0 min-w-0 flex-1 flex-col',
+  'sto-workflow-mc-editor -mx-[var(--sto-content-pad-x)] flex min-h-0 min-w-0 flex-1 flex-col',
 );
 
 /**

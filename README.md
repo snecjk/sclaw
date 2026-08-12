@@ -218,6 +218,12 @@ Workflow agents use an artifact-first delivery contract. A task may return small
 
 Chat workflow progress cards are durable SQLite-backed timeline items. A card is registered only when a new run starts in its originating chat session; asking for an existing run's status remains an ordinary tool response. The renderer discovers card references by session and each mounted card polls a compact `wf_run` snapshot through the Main-process API, so switching sessions or reloading history does not depend on transient workflow status events or synthetic message content.
 
+### Embedded Workflow Editor Integration
+
+When a compatible `memory-center-web` editor is embedded, the Web editor owns the single 52px workflow business header while StoClaw retains native window chrome, confirmation/startup UI, and local execution. Capability negotiation controls this layout: before the required capabilities are ready, StoClaw keeps its existing Host header as a safe fallback, and standalone or incompatible Web sessions do not expose the local trial-run action.
+
+After the user confirms a trial run, StoClaw asks the Web editor to persist the current canvas through the existing workflow PUT contract. Local execution starts only with the draft version ID returned by that successful save. Existing drafts are updated in place; saving from a published version creates a draft without replacing the active published version. Save failure, timeout, invalid response, iframe reset, or route change terminates the attempt and never falls back to a stale version.
+
 ---
 
 ## Development
