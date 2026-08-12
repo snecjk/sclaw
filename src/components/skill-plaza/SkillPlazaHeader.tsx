@@ -86,10 +86,9 @@ export function SkillPlazaHeader({
 
   return (
     <div className="mb-2">
-      {/* ContentHeader 缺位时的 drag-region：顶内边距空白可拖窗 */}
-      <div className="drag-region mb-6 flex flex-wrap items-center gap-3 pt-6">
+      <div className="mb-6 flex flex-wrap items-center gap-3">
         <div
-          className={cn(myTaskSectionTabsTrackClass, 'no-drag')}
+          className={myTaskSectionTabsTrackClass}
           role="tablist"
           aria-label={t('plaza.sectionAria', { defaultValue: '技能广场分区' })}
         >
@@ -113,7 +112,7 @@ export function SkillPlazaHeader({
         </div>
 
         {isSkills ? (
-          <div className="no-drag ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
+          <div className="ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
             <label className="flex h-9 min-w-[200px] max-w-[320px] flex-1 items-center gap-2 rounded-[12px] border border-border bg-white px-3">
               <Search className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
               <input
@@ -145,7 +144,7 @@ export function SkillPlazaHeader({
             </button>
           </div>
         ) : (
-          <div className="no-drag ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2">
             <button
               type="button"
               onClick={() => void connectorsFetchList(true)}
@@ -161,7 +160,7 @@ export function SkillPlazaHeader({
 
       {isSkills ? (
         <div
-          className="no-drag flex items-center gap-5"
+          className="flex items-center gap-5"
           role="tablist"
           aria-label={t('plaza.skillTabsAria', { defaultValue: '技能列表切换' })}
         >
