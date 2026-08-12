@@ -32,6 +32,37 @@ function buildTextToolInterleaveFixture() {
 }
 
 describe('live/history turn layout parity (§5.4 / Phase 2)', () => {
+  it('keeps live assistant events when persisted chronology is behind', () => {
+    const persisted = {
+      id: 'assistant-history-1',
+      role: 'assistant',
+      content: [
+        { type: 'thinking', thinking: '先获取行情数据。' },
+        { type: 'tool_use', id: 'tool-1', name: 'Bash', input: { command: 'query' } },
+      ],
+    };
+    const liveFinal = {
+      id: 'assistant-live-2',
+      role: 'assistant',
+      content: [
+        { type: 'text', text: '现在我看到正确的字段了。让我生成完整的 HTML 报告。' },
+      ],
+    };
+
+    const events = buildMergedRawTurnEvents(
+      [persisted, liveFinal],
+      {
+        isLiveStream: true,
+        chronologicalEntries: [{ kind: 'assistant', message: persisted }],
+      },
+    );
+
+    expect(events).toContainEqual({
+      type: 'text',
+      text: '现在我看到正确的字段了。让我生成完整的 HTML 报告。',
+    });
+  });
+
   it('live and done produce the same segment kind sequence for text→tool→text interleave', () => {
     const { messages } = buildTextToolInterleaveFixture();
 

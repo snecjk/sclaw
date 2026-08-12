@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { listLocalWorkflowRuns, type LocalWorkflowRunSummary } from '@/lib/workflow-api';
 import { cn } from '@/lib/utils';
+import { subscribeHostEvent } from '@/lib/host-events';
 import {
   formatLocalRunDuration,
   formatLocalRunTime,
@@ -56,9 +57,7 @@ export function LocalRunHistoryDialog({ open, workflowId, workflowName, onClose,
 
   useEffect(() => {
     if (!open) return;
-    const ipc = window.electron?.ipcRenderer;
-    if (!ipc?.on) return;
-    return ipc.on('workflow:status-update', () => void loadRuns());
+    return subscribeHostEvent('workflow:status-update', () => void loadRuns());
   }, [loadRuns, open]);
 
   const handleSelect = async (runId: string) => {

@@ -3,6 +3,7 @@ import {
   assistantMessageHasVisibleReplyBody,
   findLastUserMessageIndex,
   findTurnDisplayAssistantMessage,
+  isChatResponsePending,
   isCurrentUserTurnIncomplete,
   isLastAssistantInUserTurn,
   isLastUserMessage,
@@ -58,6 +59,28 @@ describe('chat-turn-meta', () => {
         lastUserMessageAt: null,
         workflowCardStates: {},
         hasPendingWorkflowSchema: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('keeps user shortcuts available after chat settles while a workflow continues', () => {
+    expect(
+      isChatResponsePending({
+        sending: false,
+        lastUserMessageAt: null,
+        pendingFinal: false,
+        activeRunId: null,
+      }),
+    ).toBe(false);
+  });
+
+  it('hides user shortcuts while the chat response is still pending', () => {
+    expect(
+      isChatResponsePending({
+        sending: false,
+        lastUserMessageAt: null,
+        pendingFinal: true,
+        activeRunId: 'chat-run-1',
       }),
     ).toBe(true);
   });

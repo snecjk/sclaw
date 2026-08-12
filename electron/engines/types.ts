@@ -1,5 +1,6 @@
 import type { GatewayManager } from '../gateway/manager';
 import type { AgentMemoryContextBlocks } from '../../shared/agent-memory-prompt';
+import type { ChatRuntimePolicy } from '../../shared/chat-runtime-protocol';
 import type { ExecutionSnapshot } from './execution-snapshot';
 
 export type AgentEngineType = 'openclaw' | 'claude';
@@ -42,6 +43,8 @@ export interface EngineSendParams {
   deliver?: boolean;
   idempotencyKey: string;
   systemPromptAppend?: string;
+  /** 发送来源语义；adapter 据此选择引擎原生 system prompt 或用户消息兼容封装。 */
+  runtimePolicy?: ChatRuntimePolicy;
   /** 定时任务执行时由 executor 透传；交互式 chat 不设（undefined）以保留引擎默认。 */
   permissionProfile?: EnginePermissionProfile;
 }
@@ -58,8 +61,32 @@ export interface EngineAdapterContext {
   gatewayManager: GatewayManager;
 }
 
+export interface EngineRuntimeInspection {
+  status: 'active' | 'completed' | 'not_started' | 'unknown';
+  runId?: string;
+  currentTurnMessages?: unknown[];
+  transcriptRevision?: string;
+  reason?: string;
+}
+
+export interface EngineChatCapabilities {
+  hasReliableRuntimeStatus: boolean;
+  hasStructuredReasoningEvents: boolean;
+  hasStructuredToolEvents: boolean;
+  requiresHistoryProjection: boolean;
+}
+
 export interface EngineAdapter {
   type: AgentEngineType;
+  chatCapabilities: EngineChatCapabilities;
+  inspectRun(
+    ctx: EngineAdapterContext,
+    params: { sessionKey: string; runId?: string | null; startedAt: number; limit?: number },
+  ): Promise<EngineRuntimeInspection>;
+  classifyFinalMessage(input: {
+    message: unknown;
+    phase?: string;
+  }): 'completed' | 'awaiting_transcript' | 'progress';
   prepareMemoryInjection(params: EngineSendParams, memory: AgentMemoryContextBlocks): EngineSendParams;
   abortRun(ctx: EngineAdapterContext, params: EngineAbortParams): Promise<{ success: boolean; error?: string }>;
   getHistory(

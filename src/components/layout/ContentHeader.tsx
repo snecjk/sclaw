@@ -50,9 +50,10 @@ export function ContentHeader() {
   const appPlazaVisible = useAppPlazaShellStore((s) => s.routeActive);
   const windowsChromeOwner = useWindowsChromeOwner();
   const skillsPlazaVisible = pathname.startsWith('/skills');
+  const myTasksVisible = pathname.startsWith('/my-tasks');
 
-  // Drawer / App Plaza / 技能广场自带页顶栏，不占 44px ContentHeader。
-  if (browserOverlayOpen || appPlazaVisible || skillsPlazaVisible) {
+  // Drawer / App Plaza / 技能广场 / 自动化页自带页顶栏，不占 44px ContentHeader。
+  if (browserOverlayOpen || appPlazaVisible || skillsPlazaVisible || myTasksVisible) {
     return null;
   }
 

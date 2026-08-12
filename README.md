@@ -141,6 +141,7 @@ StoClaw employs a **dual-process architecture** with a unified host API layer. T
 │  │              Electron Main Process                          │  │
 │  │  • Window & application lifecycle management               │  │
 │  │  • Gateway process supervision                              │  │
+│  │  • Authoritative chat-run lifecycle & recovery               │  │
 │  │  • System integration (tray, notifications, keychain)       │  │
 │  │  • Auto-update orchestration                                │  │
 │  └────────────────────────────────────────────────────────────┘  │
@@ -184,6 +185,7 @@ StoClaw employs a **dual-process architecture** with a unified host API layer. T
 - **Single Entry for Frontend Calls**: Renderer requests go through host-api/api-client; protocol details are hidden behind a stable interface
 - **Main-Process Transport Ownership**: Electron Main controls WS/HTTP usage and fallback to IPC for reliability
 - **Graceful Recovery**: Built-in reconnect, timeout, and backoff logic handles transient failures automatically
+- **Authoritative Chat Runtime**: Main normalizes OpenClaw/Claude events into a versioned `chat-runtime:event` stream, persists minimal run metadata in SQLite, and exposes `chat-runtime:get` / `chat-runtime:listActive` snapshots for renderer and process-restart recovery. Transcripts remain engine-owned; optimistic and streaming content stay in a replaceable renderer overlay.
 - **Secure Storage**: API keys and sensitive data leverage the operating system's native secure storage mechanisms
 - **CORS-Safe by Design**: Local HTTP access is proxied by Main, preventing renderer-side CORS issues
 
@@ -217,6 +219,12 @@ Chain multiple skills together to create sophisticated automation pipelines. Pro
 Workflow agents use an artifact-first delivery contract. A task may return small structured data directly or create one or more files in any task-appropriate format. Files are declared by node-relative resource paths; the desktop runtime validates the workspace boundary, records canonical artifact metadata, and passes only compact references downstream. Individual payload strings larger than 1 KiB must be delivered as files so generated content is not duplicated in workflow records or later model prompts.
 
 Chat workflow progress cards are durable SQLite-backed timeline items. A card is registered only when a new run starts in its originating chat session; asking for an existing run's status remains an ordinary tool response. The renderer discovers card references by session and each mounted card polls a compact `wf_run` snapshot through the Main-process API, so switching sessions or reloading history does not depend on transient workflow status events or synthetic message content.
+
+Chat run lifecycle is authoritative in Electron Main. `ChatRuntimeSupervisor` applies an irreversible per-session state machine, serializes competing lifecycle inputs, and persists only monotonically newer `(epoch, sequence)` snapshots. Engine adapters expose runtime inspection and history-projection capabilities, so OpenClaw/Claude completion differences no longer leak into the supervisor or Renderer. Engine completion first enters `awaiting_transcript`; a bounded transcript-settle pass projects the final reasoning/tool chronology before the canonical completed event, and a late stable revision emits `transcript.updated` so the Renderer refreshes without user intervention. Renderer hydration retries with bounded backoff, buffers startup/gap events, and rejects stale or terminal-regressing snapshots.
+
+Renderer chat content is session-scoped: immutable engine transcript, optimistic/streaming overlay, and display-only decorations are stored separately. UI messages are built from that model instead of a second top-level message array. History failures retain the last successful transcript, forced refreshes trail an in-flight request, and background sessions can hydrate without mutating foreground UI. A send idempotency key is single-use: retries inside ten minutes replay the original outcome, while expired keys are rejected instead of silently dispatching the engine again. If persisted idempotency state is unavailable, Main fails closed before memory preparation or engine dispatch.
+
+Scheduled chat runs register their task-run owner and optional task deadline with `ChatRuntimeSupervisor`. Schedule status is finalized only from canonical chat terminal events; startup recovery reconciles persisted runtime/history without resending an uncertain message, while the scheduler's stale-run reaper remains an orphan-lease fallback. Workflow start acceptance is returned only after the minimal `wf_run` identity and chat-card metadata are durable; duplicate identities replay, while conflicts are rejected. Renderer no longer performs a second workflow-card registration after durable acceptance; it only repairs a missing message anchor after persisted history supplies one. Workflow parameter-form state is session-scoped, tool-result dedupe is revision-aware, and target-session agent/model selection never falls back to the visible conversation. `WorkflowCard` retains its compact three-second snapshot polling behavior.
 
 ---
 

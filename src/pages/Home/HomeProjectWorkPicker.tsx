@@ -17,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useChatStore } from '@/stores/chat';
+import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { getBaseAgentIdFromProjectAgentId } from '../../../shared/project-agent';
@@ -40,8 +41,8 @@ function clearProjectDraft(): void {
   useChatStore.setState({
     currentSessionKey: DEFAULT_SESSION_KEY,
     currentAgentId: baseAgentId,
-    messages: [],
   });
+  useChatRuntimeV2Store.getState().clearSession(DEFAULT_SESSION_KEY);
   void useSessionCatalogStore.getState().selectProject(null);
 }
 

@@ -20,6 +20,8 @@ import {
   normalizeMineCategoryBucket,
   resolveMineSkillCategoryCode,
 } from '@/lib/skill-plaza-category';
+import { useAppShellLayout } from '@/components/layout/app-shell-layout-context';
+import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
 
 /** 动态列数：单卡≥240px，最多 4 列（gap-3 = 0.75rem × 3） */
 const SKILL_PLAZA_GRID_STYLE = {
@@ -29,6 +31,8 @@ const SKILL_PLAZA_GRID_STYLE = {
 
 export function SkillPlazaPage() {
   const { t } = useTranslation('skills');
+  const { t: tCommon } = useTranslation('common');
+  const { snapshot, setUserCollapsed } = useAppShellLayout();
   const [searchParams, setSearchParams] = useSearchParams();
   const sectionParam = searchParams.get('section');
   const [plazaSection, setPlazaSection] = useState<SkillPlazaSection>(
@@ -176,6 +180,15 @@ export function SkillPlazaPage() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-6">
+      {snapshot.canUserRestoreSidebar ? (
+        <SidebarHeaderToggle
+          isCollapsed
+          onToggle={() => setUserCollapsed(false)}
+          collapseLabel={tCommon('sidebar.toggleSidebarCollapse')}
+          expandLabel={tCommon('sidebar.toggleSidebarExpand')}
+          className="absolute left-[calc(var(--sto-content-header-pad-start)-var(--sto-content-pad-x))] top-2 z-20"
+        />
+      ) : null}
       {showUploadSuccess && (
         <div className="pointer-events-none absolute left-1/2 top-6 z-50 -translate-x-1/2">
           <div className="inline-flex items-center gap-2 rounded-md bg-[#00B54B] px-4 py-2 text-sm font-semibold text-white shadow-lg">

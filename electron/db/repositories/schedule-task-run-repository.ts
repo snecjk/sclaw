@@ -113,6 +113,21 @@ export class ScheduleTaskRunRepository {
     return row ? mapRow(row) : null;
   }
 
+  async getBySessionAndIdempotencyKey(
+    sessionKey: string,
+    idempotencyKey: string,
+  ): Promise<ScheduleTaskRun | null> {
+    const row = await getKyselyDatabase()
+      .selectFrom('schedule_task_runs')
+      .selectAll()
+      .where('session_key', '=', sessionKey)
+      .where('idempotency_key', '=', idempotencyKey)
+      .where('deleted_at', 'is', null)
+      .orderBy('created_at', 'desc')
+      .executeTakeFirst();
+    return row ? mapRow(row) : null;
+  }
+
   async listRuns(
     taskId: string,
     options: ListScheduleTaskRunsOptions = {},
@@ -227,6 +242,24 @@ export class ScheduleTaskRunRepository {
         version: sql<number>`version + 1`,
       })
       .where('status', 'in', ['queued', 'running'])
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return Number(result.numUpdatedRows ?? 0n);
+  }
+
+  async cancelAllQueuedRuns(actor?: string | null): Promise<number> {
+    const db = getKyselyDatabase();
+    const timestamp = nowIso();
+    const result = await db
+      .updateTable('schedule_task_runs')
+      .set({
+        status: 'cancelled',
+        completed_at: timestamp,
+        updated_at: timestamp,
+        updated_by: actor ?? null,
+        version: sql<number>`version + 1`,
+      })
+      .where('status', '=', 'queued')
       .where('deleted_at', 'is', null)
       .executeTakeFirst();
     return Number(result.numUpdatedRows ?? 0n);

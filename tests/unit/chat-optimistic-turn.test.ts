@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { insertOptimisticUserTurn } from '@/stores/chat/optimistic-turn';
 import { initialChatDataState } from '@/stores/chat/initial-state';
-import { createIdleSessionRuntimeState } from '@/stores/chat/session-runtime';
+import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 import type { ChatState } from '@/stores/chat/types';
 import type { ChatSet } from '@/stores/chat/store-api';
 
@@ -12,12 +12,11 @@ describe('optimistic user turns', () => {
       ...initialChatDataState,
       currentSessionKey: 'agent:main:visible',
       currentAgentId: 'main',
-      messages: [visibleMessage],
       sessionLabels: {},
-      runtimeBySessionKey: {
-        'agent:writer:queued': createIdleSessionRuntimeState(),
-      },
     } as unknown as ChatState;
+    useChatRuntimeV2Store.getState().clearSession('agent:main:visible');
+    useChatRuntimeV2Store.getState().clearSession('agent:writer:queued');
+    useChatRuntimeV2Store.getState().setTranscript('agent:main:visible', [visibleMessage]);
     const get = () => state;
     const set: ChatSet = (partial) => {
       state = { ...state, ...(typeof partial === 'function' ? partial(state) : partial) };
@@ -31,10 +30,9 @@ describe('optimistic user turns', () => {
       gatewayMessage: 'queued text',
     });
 
-    expect(state.messages).toEqual([visibleMessage]);
-    expect(state.runtimeBySessionKey['agent:writer:queued']).toMatchObject({
-      sending: true,
-      optimisticUserMessage: result,
-    });
+    expect(useChatRuntimeV2Store.getState().sessionsByKey['agent:main:visible']?.transcript)
+      .toEqual([visibleMessage]);
+    expect(useChatRuntimeV2Store.getState().sessionsByKey['agent:writer:queued']?.overlay.optimisticUserMessage)
+      .toEqual(result);
   });
 });

@@ -1,5 +1,4 @@
-import { appendWorkflowParameterFormToMessage } from './parameter-form-recovery';
-import { getMessageText, isToolResultRole } from './helpers';
+import { isToolResultRole } from './helpers';
 import type { ContentBlock, RawMessage } from './types';
 
 export function isToolOnlyMessage(message: RawMessage | undefined): boolean {
@@ -27,7 +26,7 @@ export function isToolOnlyMessage(message: RawMessage | undefined): boolean {
 }
 
 export function maybeAppendWorkflowParameterForm(message: RawMessage): RawMessage {
-  return appendWorkflowParameterFormToMessage(message, getMessageText, { allowLivePending: true }) ?? message;
+  return message;
 }
 
 export function hasNonToolAssistantContent(message: RawMessage | undefined): boolean {

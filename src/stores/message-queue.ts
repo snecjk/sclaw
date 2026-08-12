@@ -11,6 +11,8 @@ import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import { getAgentIdFromSessionKey } from './chat/session-identity';
+import { useChatRuntimeV2Store } from './chat/runtime-v2-store';
+import { buildChatSessionRuntimeView } from './chat/runtime-selectors';
 
 const QUEUE_MAX_PER_SESSION = 10;
 
@@ -183,29 +185,25 @@ const prevSendingByKey = new Map<string, boolean>();
 
 function isSessionSending(
   sessionKey: string,
-  state: ReturnType<typeof useChatStore.getState>,
 ): boolean {
-  const isCurrent = state.currentSessionKey === sessionKey;
-  const runtime = state.runtimeBySessionKey[sessionKey];
-  return Boolean(
-    runtime?.sending
-    || runtime?.activeRunId
-    || (isCurrent && (state.sending || state.activeRunId)),
-  );
+  return buildChatSessionRuntimeView(
+    useChatRuntimeV2Store.getState().sessionsByKey[sessionKey],
+  ).sending;
 }
 
 function sessionRunError(
   sessionKey: string,
-  state: ReturnType<typeof useChatStore.getState>,
 ): string | null | undefined {
-  const isCurrent = state.currentSessionKey === sessionKey;
-  const runtime = state.runtimeBySessionKey[sessionKey];
-  if (isCurrent) return state.error;
-  return runtime?.error;
+  return buildChatSessionRuntimeView(
+    useChatRuntimeV2Store.getState().sessionsByKey[sessionKey],
+  ).error;
 }
 
-function collectWatchedSessionKeys(state: ReturnType<typeof useChatStore.getState>): string[] {
-  const keys = new Set<string>([state.currentSessionKey, ...Object.keys(state.runtimeBySessionKey)]);
+function collectWatchedSessionKeys(): string[] {
+  const keys = new Set<string>([
+    useChatStore.getState().currentSessionKey,
+    ...Object.keys(useChatRuntimeV2Store.getState().sessionsByKey),
+  ]);
   for (const sessionKey of useMessageQueueStore.getState().queues.keys()) {
     keys.add(sessionKey);
   }
@@ -237,7 +235,7 @@ function tryDrainSessionQueue(sessionKey: string, onAutoSend?: AutoSendCallback)
 
 async function abortSessionRun(sessionKey: string): Promise<boolean> {
   const chatState = useChatStore.getState();
-  if (!isSessionSending(sessionKey, chatState)) return true;
+  if (!isSessionSending(sessionKey)) return true;
   return await chatState.abortRun(sessionKey);
 }
 
@@ -249,7 +247,7 @@ async function abortSessionRun(sessionKey: string): Promise<boolean> {
 export async function sendImmediately(sessionKey: string, itemId: string): Promise<boolean> {
   const item = useMessageQueueStore.getState().getQueue(sessionKey).find((entry) => entry.id === itemId);
   if (!item) return false;
-  const wasSending = isSessionSending(sessionKey, useChatStore.getState());
+  const wasSending = isSessionSending(sessionKey);
   if (wasSending) suppressedSessions.add(sessionKey);
   const stopped = await abortSessionRun(sessionKey);
   // The true→false transition consumes this flag synchronously. Delete it as a
@@ -336,8 +334,9 @@ function deliverQueuedMessage(sessionKey: string, msg: QueuedMessage): void {
  */
 export function suspendAutoSend(sessionKey?: string): void {
   const state = useChatStore.getState();
-  if (!state.sending) return;
-  suppressedSessions.add(sessionKey ?? state.currentSessionKey);
+  const targetSessionKey = sessionKey ?? state.currentSessionKey;
+  if (!isSessionSending(targetSessionKey)) return;
+  suppressedSessions.add(targetSessionKey);
 }
 
 /**
@@ -356,14 +355,14 @@ export function createAutoSendWatcher(onAutoSend?: AutoSendCallback): () => void
   watcherRefCount += 1;
 
   if (!storeUnsub) {
-    storeUnsub = useChatStore.subscribe((state) => {
-      for (const sessionKey of collectWatchedSessionKeys(state)) {
-        const sending = isSessionSending(sessionKey, state);
+    storeUnsub = useChatRuntimeV2Store.subscribe(() => {
+      for (const sessionKey of collectWatchedSessionKeys()) {
+        const sending = isSessionSending(sessionKey);
         const wasSending = prevSendingByKey.get(sessionKey) ?? false;
         prevSendingByKey.set(sessionKey, sending);
         if (!wasSending || sending) continue;
         if (suppressedSessions.delete(sessionKey)) continue;
-        if (sessionRunError(sessionKey, state)) continue;
+        if (sessionRunError(sessionKey)) continue;
         tryDrainSessionQueue(sessionKey);
       }
     });

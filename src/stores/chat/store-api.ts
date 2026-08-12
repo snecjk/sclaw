@@ -24,7 +24,7 @@ export type SessionActions = Pick<
 export type HistoryActions = Pick<ChatState, 'loadHistory'>;
 export type RuntimeActions = Pick<
   ChatState,
-  'sendMessage' | 'abortRun' | 'handleChatEvent' | 'toggleThinking' | 'refresh' | 'clearError'
+  'sendMessage' | 'abortRun' | 'toggleThinking' | 'refresh' | 'clearError'
 >;
 export type WorkflowActions = Pick<
   ChatState,

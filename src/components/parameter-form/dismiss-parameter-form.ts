@@ -1,7 +1,7 @@
 /**
  * Remove inline parameter forms from chat messages after successful submit.
  */
-import { useChatStore } from '@/stores/chat';
+import { updateCurrentChatDisplayProjection } from '@/stores/chat/display-selectors';
 import type { ContentBlock } from '@/stores/chat';
 import { PARAM_FORM_MARKER_REGEX } from '@/lib/parameter-form-marker';
 import { resolveParameterFormId } from './form-handlers';
@@ -23,8 +23,7 @@ function parseWorkflowTemplateId(formId: string): string | null {
 
 /** Hide all inline forms for a workflow template (e.g. after text-based confirmation). */
 export function dismissWorkflowParameterFormsForTemplate(templateId: string): void {
-  useChatStore.setState((s) => ({
-    messages: s.messages.map((msg) => {
+  updateCurrentChatDisplayProjection((messages) => messages.map((msg) => {
       if (msg.role !== 'assistant' || !Array.isArray(msg.content)) return msg;
 
       let changed = false;
@@ -56,8 +55,7 @@ export function dismissWorkflowParameterFormsForTemplate(templateId: string): vo
       }
 
       return changed ? { ...msg, content: nextContent } : msg;
-    }),
-  }));
+    }));
 }
 
 /** Strip parameter_form blocks and ParameterForm markers for a submitted workflow form. */
@@ -65,8 +63,7 @@ export function dismissParameterFormInChat(formId: string): void {
   const resolvedId = resolveParameterFormId(formId);
   const templateId = parseWorkflowTemplateId(resolvedId) ?? parseWorkflowTemplateId(formId);
 
-  useChatStore.setState((s) => ({
-    messages: s.messages.map((msg) => {
+  updateCurrentChatDisplayProjection((messages) => messages.map((msg) => {
       if (msg.role !== 'assistant' || !Array.isArray(msg.content)) return msg;
 
       let changed = false;
@@ -94,6 +91,5 @@ export function dismissParameterFormInChat(formId: string): void {
       }
 
       return changed ? { ...msg, content: nextContent } : msg;
-    }),
-  }));
+    }));
 }

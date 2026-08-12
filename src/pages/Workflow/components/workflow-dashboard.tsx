@@ -59,6 +59,8 @@ interface WorkflowDashboardProps {
   onManualCreate: () => void;
   onGenerate: (prompt: string) => void;
   onEditCard: (workflowId: string) => void;
+  /** 嵌入「我的任务」时去掉外层 page shell，避免双重 stoMainInnerShell */
+  embedded?: boolean;
 }
 
 type OfficialFilter = 'all' | string;
@@ -69,6 +71,7 @@ export function WorkflowDashboard({
   onManualCreate,
   onGenerate,
   onEditCard,
+  embedded = false,
 }: WorkflowDashboardProps) {
   const { t } = useTranslation('workflow');
   const navigate = useNavigate();
@@ -129,7 +132,18 @@ export function WorkflowDashboard({
         setHighlightedWorkflowId(targetWorkflowId);
         card.scrollIntoView({ behavior: 'smooth', block: 'center' });
         card.focus({ preventScroll: true });
-        navigate({ pathname: location.pathname }, { replace: true });
+        navigate(
+          {
+            pathname: location.pathname,
+            search: (() => {
+              const next = new URLSearchParams(location.search);
+              next.delete('highlightWorkflowId');
+              const q = next.toString();
+              return q ? `?${q}` : '';
+            })(),
+          },
+          { replace: true },
+        );
         return;
       }
       attempts += 1;
@@ -141,7 +155,7 @@ export function WorkflowDashboard({
       window.cancelAnimationFrame(frame);
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
-  }, [location.pathname, mineLoading, navigate, tab, targetWorkflowId]);
+  }, [location.pathname, location.search, mineLoading, navigate, tab, targetWorkflowId]);
 
   useEffect(() => {
     if (!highlightedWorkflowId) return;
@@ -284,11 +298,13 @@ export function WorkflowDashboard({
   };
 
   return (
-    <div className={cn(stoMainInnerShell, 'pb-10')}>
-      <header className="sr-only">
-        <h1>{t('title')}</h1>
-        <p>{t('subtitle')}</p>
-      </header>
+    <div className={cn(!embedded && stoMainInnerShell, !embedded && 'pb-10', embedded && 'min-w-0')}>
+      {!embedded ? (
+        <header className="sr-only">
+          <h1>{t('title')}</h1>
+          <p>{t('subtitle')}</p>
+        </header>
+      ) : null}
 
       {/* 一句话生成：标题 + 输入复合框 + 快捷提示 */}
       <section className={workflowHeroSectionClass} aria-labelledby="workflow-hero-heading">

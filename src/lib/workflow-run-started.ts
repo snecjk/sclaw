@@ -10,7 +10,6 @@ import {
   updateWorkflowRunMetadata,
 } from '@/stores/workflow-memory';
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
-import { registerStartedWorkflowChatCard } from '@/lib/workflow-chat-card-registration';
 
 export type WorkflowRunPresentation = 'local_turn' | 'patch_assistant';
 
@@ -95,13 +94,7 @@ export async function applyWorkflowRunStarted(
     });
   }
 
-  await registerStartedWorkflowChatCard({
-    runId,
-    sessionKey,
-    title: templateName,
-    paramsSummary: resolvedUserText,
-  });
-  useChatStore.getState().clearPendingWorkflow();
+  useChatStore.getState().clearPendingWorkflow(sessionKey);
 
   return true;
 }

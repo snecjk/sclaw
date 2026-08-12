@@ -4,7 +4,25 @@
  * 文案通过 i18n (tasks:myTask.*) 管理，此处仅保留 value 与 i18n key 映射
  */
 
-import type { RecordStatus } from './types';
+import type { MyTaskSection, RecordStatus } from './types';
+
+/** 「我的任务 · 工作流」列表入口（编辑/新建仍走 /workflow/*） */
+export const MY_TASKS_WORKFLOW_LIST_HREF = '/my-tasks?tab=workflow';
+
+/** 工作流列表 URL；可附带高亮某条卡片 */
+export function myTasksWorkflowListHref(highlightWorkflowId?: string | null): string {
+  if (!highlightWorkflowId) return MY_TASKS_WORKFLOW_LIST_HREF;
+  const params = new URLSearchParams({
+    tab: 'workflow',
+    highlightWorkflowId,
+  });
+  return `/my-tasks?${params.toString()}`;
+}
+
+/** 从 URL search 解析一级 Tab；非法值回落定时任务 */
+export function parseMyTaskSection(tab: string | null): MyTaskSection {
+  return tab === 'workflow' ? 'workflow' : 'tasks';
+}
 
 /** 排序选项（label 通过 i18n key 渲染） */
 export const SORT_OPTIONS = [
