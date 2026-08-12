@@ -18,6 +18,23 @@ interface WorkflowStatusPayload {
   error?: string;
 }
 
+const MAX_DELIVERED_COMPLETION_NOTIFICATIONS = 500;
+const deliveredCompletionNotifications = new Set<string>();
+
+function completionNotificationId(sessionKey: string, runId: string): string {
+  return `workflow-completion:${sessionKey}:${runId}`;
+}
+
+function claimCompletionNotification(id: string): boolean {
+  if (deliveredCompletionNotifications.has(id)) return false;
+  deliveredCompletionNotifications.add(id);
+  if (deliveredCompletionNotifications.size > MAX_DELIVERED_COMPLETION_NOTIFICATIONS) {
+    const oldest = deliveredCompletionNotifications.values().next().value;
+    if (typeof oldest === 'string') deliveredCompletionNotifications.delete(oldest);
+  }
+  return true;
+}
+
 export function WorkflowCompletionNotifier() {
   const { t } = useTranslation('chat');
   const navigate = useNavigate();
@@ -78,6 +95,8 @@ export function WorkflowCompletionNotifier() {
       if (!data?.runId || !data.sessionKey || !isTerminalWorkflowRunStatus(data.status)) return;
       if (data.status !== 'completed' && data.status !== 'failed') return;
 
+      const notificationId = completionNotificationId(data.sessionKey, data.runId);
+      if (!claimCompletionNotification(notificationId)) return;
       const execution = getExecutionByRunId(data.runId, data.sessionKey);
       if (execution?.completionNotificationDeliveredAt) return;
       markCompletionNotificationDelivered(data.sessionKey, data.runId);
@@ -89,6 +108,7 @@ export function WorkflowCompletionNotifier() {
         : t('workflow.notificationViewDetails');
       const show = completed ? toast.success : toast.error;
       show(completed ? t('workflow.notificationCompleted', { workflowName }) : t('workflow.notificationFailed', { workflowName }), {
+        id: notificationId,
         description: completed ? t('workflow.notificationCompletedDescription') : (data.error || t('workflow.notificationFailedDescription')),
         action: { label: actionLabel, onClick: () => void openDetails(data.sessionKey, data.runId, workflowName) },
       });
