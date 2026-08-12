@@ -3,7 +3,7 @@ import { dispatchChatRequest } from './dispatch-chat-request';
 import { insertOptimisticUserTurn } from './optimistic-turn';
 import { prepareSendContext } from './prepare-send-context';
 import { resolveSendTarget } from './resolve-send-target';
-import { logChatFlow } from './chat-flow-log';
+import { logChatFlow, logUserQuestion } from './chat-flow-log';
 import { useGatewayStore } from '../gateway';
 import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
 import { DEFAULT_SESSION_KEY, type ChatSession, type SendMessageOptions } from './types';
@@ -64,9 +64,14 @@ export function createSendActions(
         workflowContext,
         embedBrowserContext,
         skillMeta,
+        skillMetas,
+        gatewayText: preBakedGatewayText,
+        composerSegments,
       } = options;
       const userDisplayText = text.trim();
-      if (!skillMeta && !userDisplayText && (!attachments || attachments.length === 0)) return;
+      const resolvedSkillMetas = skillMetas ?? (skillMeta ? [skillMeta] : []);
+      const primarySkillMeta = resolvedSkillMetas[0];
+      if (!primarySkillMeta && !userDisplayText && (!attachments || attachments.length === 0)) return;
 
       // DEFAULT_SESSION_KEY is a UI placeholder. Materialize it before target
       // resolution so a fresh home/project conversation always gets a unique
@@ -127,16 +132,21 @@ export function createSendActions(
         return;
       }
 
-      const gatewayText = skillMeta
-        ? appendSkillTranscriptMarker(
-          resolveSkillGatewayText(
-            (await resolveSkillPrompt(skillMeta.slug)).defaultPrompt,
+      let gatewayText = preBakedGatewayText?.trim();
+      if (!gatewayText) {
+        if (primarySkillMeta) {
+          gatewayText = appendSkillTranscriptMarker(
+            resolveSkillGatewayText(
+              (await resolveSkillPrompt(primarySkillMeta.slug)).defaultPrompt,
+              userDisplayText,
+            ),
+            primarySkillMeta,
             userDisplayText,
-          ),
-          skillMeta,
-          userDisplayText,
-        )
-        : userDisplayText;
+          );
+        } else {
+          gatewayText = userDisplayText;
+        }
+      }
 
       const preparedContext = await prepareSendContext({
         trimmedText: gatewayText,
@@ -147,7 +157,9 @@ export function createSendActions(
         clearPendingWorkflow: get().clearPendingWorkflow,
       });
       const { messageWithContext } = preparedContext;
-      const displayText = skillMeta ? userDisplayText : preparedContext.displayText;
+      const displayText = preBakedGatewayText || resolvedSkillMetas.length
+        ? userDisplayText
+        : preparedContext.displayText;
       logChatFlow('send.context.prepared', {
         sessionKey: currentSessionKey,
         engineType: currentSessionEngineType,
@@ -164,14 +176,21 @@ export function createSendActions(
         displayText,
         gatewayMessage: messageWithContext,
         attachments,
-        skillMeta,
+        skillMeta: primarySkillMeta,
+        skillMetas: resolvedSkillMetas.length ? resolvedSkillMetas : undefined,
+        composerSegments,
       });
       const idempotencyKey = userMsg.id || crypto.randomUUID();
-      logChatFlow('send.optimistic.inserted', {
+      logUserQuestion('send-optimistic-inserted', {
         sessionKey: currentSessionKey,
         optimisticId: userMsg.id,
+        displayText,
+        gatewayText: messageWithContext,
         displayLength: displayText.length,
+        gatewayLength: messageWithContext.length,
         attachmentCount: attachments?.length ?? 0,
+        skillMetas: resolvedSkillMetas,
+        composerSegmentCount: composerSegments?.length ?? 0,
       });
 
       try {
@@ -192,7 +211,7 @@ export function createSendActions(
         const result = await dispatchChatRequest({
           sessionKey: currentSessionKey,
           message: hasMedia ? messageWithContext || '' : messageWithContext,
-          sourceText: userDisplayText || skillMeta?.title,
+          sourceText: userDisplayText || primarySkillMeta?.title,
           idempotencyKey,
           engineType: currentSessionEngineType,
           attachments: hasMedia ? attachments : undefined,

@@ -28,7 +28,11 @@ import type { AgentSummary } from '@/types/agent';
 import { useTranslation } from 'react-i18next';
 import { DingTalkMentionEditor } from '@/components/dingtalk/DingTalkMentionEditor';
 import { DingTalkMentionPopover } from '@/components/dingtalk/DingTalkMentionPopover';
-import { AttachmentChips, type FileAttachment } from '@/components/attachments';
+import type { FileAttachment } from '@/components/attachments';
+import { buildComposerGatewayPayload } from '@/lib/composer-gateway-text';
+import { EMPTY_MENTION_COMPOSER_SNAPSHOT } from '@/lib/dingtalk-mention-composer';
+import { resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
+import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import { FlyToTargetLayer } from '@/components/fly-to-target';
 import { QuickInputIcon } from '@/components/icons/composer-toolbar-icons';
 import {
@@ -70,6 +74,13 @@ function logDingTalkMentionClient(message: string, data: unknown): void {
   }).catch(() => undefined);
 }
 
+export type ChatSendExtras = {
+  skillMetas?: SkillMeta[];
+  workflows?: Array<{ id: string; name: string; source?: string }>;
+  composerSegments?: PersistedComposerSegment[];
+  gatewayText?: string;
+};
+
 /** Chat 装配层 props：发送胶水 + 场景 chrome（底栏/项目选择器/内联选择器） */
 interface ChatInputProps {
   onSend: (
@@ -81,6 +92,7 @@ interface ChatInputProps {
     workflowSource?: string | null,
     workflowName?: string | null,
     skillMeta?: SkillMeta,
+    extras?: ChatSendExtras,
   ) => void;
   onStop?: () => void;
   onQueue?: (
@@ -90,6 +102,7 @@ interface ChatInputProps {
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
     skillMeta?: SkillMeta,
+    extras?: ChatSendExtras,
   ) => void;
   disabled?: boolean;
   sending?: boolean;
@@ -105,6 +118,8 @@ interface ChatInputProps {
   editDraft?: {
     text: string;
     skill?: SkillMeta;
+    segments?: PersistedComposerSegment[];
+    attachments?: Array<Partial<FileAttachment> & { id: string; fileName: string; mimeType: string }>;
     version: number;
   } | null;
   onEditDraftApplied?: () => void;
@@ -177,6 +192,7 @@ export function ChatInput({
 
   const core = useInputComposerCore({
     submitMode: 'send',
+    inlineAttachments: true,
     disabled,
     onSubmit: () => handleSendRef.current(),
     onKeyDownExtra: (e) => {
@@ -200,8 +216,9 @@ export function ChatInput({
     attachments,
     allReady,
     clearAttachments,
+    setAttachmentsSilent,
     pickFiles,
-    removeAttachment,
+    handleAttachmentRemoveFromEditor,
     dragOver,
     dingTalkPopoverProps,
     setComposerSnapshot,
@@ -250,8 +267,10 @@ export function ChatInput({
     mentionEditorRef,
     editDraft,
     onEditDraftApplied,
+    onApplyAttachments: (draftAttachments) => {
+      setAttachmentsSilent(draftAttachments);
+    },
     onAfterApply: () => {
-      clearAttachments();
       setTargetAgentId(null);
       setPickerOpen(false);
       pickerMutex.closeAll();
@@ -293,6 +312,9 @@ export function ChatInput({
   }, [pickerOpen]);
 
   const canSend = ((!composerSnapshot.isEmpty && composerSnapshot.plainText.trim().length > 0)
+    || (composerSnapshot.skills?.length ?? 0) > 0
+    || (composerSnapshot.workflows?.length ?? 0) > 0
+    || (composerSnapshot.attachmentIds?.length ?? 0) > 0
     || composerSnapshot.skill != null
     || attachments.length > 0)
     && allReady
@@ -302,67 +324,100 @@ export function ChatInput({
   const handleSend = useCallback(() => {
     const readyAttachments = attachments.filter((a) => a.status === 'ready');
     const snapshot = getSnapshot();
-    const skillMetaToSend = snapshot.skill
+    const skillMetaToSend = snapshot.skills[0]
       ? {
-        ...snapshot.skill,
+        ...snapshot.skills[0],
         tagOffset: resolveTrimmedSkillOffset(snapshot.plainText, snapshot.skillOffset),
       }
       : composerSnapshot.skill ?? mentionEditorRef.current?.readSkillMeta();
-    const textToSend = snapshot.plainText.trim();
-    const canSendNow = (textToSend.length > 0 || skillMetaToSend != null || readyAttachments.length > 0)
-      && allReady
-      && !disabled;
-    if (!canSendNow) return;
 
-    cancelVoiceConfirm();
+    void (async () => {
+      const payload = await buildComposerGatewayPayload({
+        segments: snapshot.segments ?? [],
+        plainText: snapshot.plainText,
+        attachments: readyAttachments,
+        resolveSkillPrompt,
+      });
 
-    const attachmentsToSend = readyAttachments.length > 0 ? readyAttachments : undefined;
-    const mentionsToSend = snapshot.mentions.length > 0 ? snapshot.mentions : undefined;
-    const workflowIdToSend = snapshot.workflowId;
-    const workflowSourceToSend = snapshot.workflowSource ?? null;
-    const workflowNameToSend = snapshot.workflowName ?? null;
+      const displayText = payload.displayText;
+      const canSendNow = (
+        displayText.length > 0
+        || payload.skillMetas.length > 0
+        || payload.workflows.length > 0
+        || payload.attachments.length > 0
+      ) && allReady && !disabled;
+      if (!canSendNow) return;
 
-    logDingTalkMentionClient('[dingtalk-mention] chat-input: send snapshot', {
-      textLength: textToSend.length,
-      mentionCount: snapshot.mentions.length,
-      targetAgentId: targetAgentId ?? null,
-      attachmentCount: readyAttachments.length,
-      hasWorkflowId: Boolean(workflowIdToSend),
-      hasSkill: Boolean(skillMetaToSend),
-      queued: Boolean(sending && onQueue && !workflowIdToSend),
-    });
+      cancelVoiceConfirm();
 
-    mentionEditorRef.current?.clear();
-    clearAttachments();
-    setMentionTrigger(null);
-    setComposerSnapshot({ plainText: '', mentions: [], isEmpty: true });
+      const attachmentsToSend = payload.attachments.length > 0 ? payload.attachments : undefined;
+      const mentionsToSend = snapshot.mentions.length > 0 ? snapshot.mentions : undefined;
+      const workflowIdToSend = snapshot.workflowId ?? payload.workflows[0]?.id ?? null;
+      const workflowSourceToSend = snapshot.workflowSource ?? payload.workflows[0]?.source ?? null;
+      const workflowNameToSend = snapshot.workflowName ?? payload.workflows[0]?.name ?? null;
+      const extras: ChatSendExtras = {
+        skillMetas: payload.skillMetas.length ? payload.skillMetas : undefined,
+        workflows: payload.workflows.length ? payload.workflows : undefined,
+        composerSegments: payload.persistedSegments.length ? payload.persistedSegments : undefined,
+        gatewayText: payload.gatewayText,
+      };
 
-    const voiceLoop = useVoiceLoopStore.getState();
-    if (voiceLoop.active) {
-      markVoiceAwaitingAgent();
-      if (currentSessionKey === DEFAULT_SESSION_KEY) {
-        markVoiceExpectMaterialization();
+      logDingTalkMentionClient('[dingtalk-mention] chat-input: send snapshot', {
+        textLength: displayText.length,
+        mentionCount: snapshot.mentions.length,
+        targetAgentId: targetAgentId ?? null,
+        attachmentCount: payload.attachments.length,
+        workflowCount: payload.workflows.length,
+        skillCount: payload.skillMetas.length,
+        queued: Boolean(sending && onQueue),
+      });
+
+      mentionEditorRef.current?.clear();
+      clearAttachments();
+      setMentionTrigger(null);
+      setComposerSnapshot(EMPTY_MENTION_COMPOSER_SNAPSHOT);
+
+      const voiceLoop = useVoiceLoopStore.getState();
+      if (voiceLoop.active) {
+        markVoiceAwaitingAgent();
+        if (currentSessionKey === DEFAULT_SESSION_KEY) {
+          markVoiceExpectMaterialization();
+        }
       }
-    }
 
-    if (sending && onQueue && !workflowIdToSend) {
-      onQueue(textToSend, attachmentsToSend, targetAgentId, mentionsToSend, workflowIdToSend, skillMetaToSend);
-    } else {
-      onSend(
-        textToSend,
-        attachmentsToSend,
-        targetAgentId,
-        mentionsToSend,
-        workflowIdToSend,
-        workflowSourceToSend,
-        workflowNameToSend,
-        skillMetaToSend,
-      );
-    }
-    setTargetAgentId(null);
-    setPickerOpen(false);
-    pickerMutex.closeAll();
-    closeDingTalkMention();
+      const nonMineWorkflows = payload.workflows.filter((wf) => wf.source !== 'mine');
+      const templateOnlyWorkflow = nonMineWorkflows.length === 1
+        && !payload.workflows.some((wf) => wf.source === 'mine')
+        && payload.skillMetas.length === 0;
+
+      if (sending && onQueue && !templateOnlyWorkflow) {
+        onQueue(
+          displayText,
+          attachmentsToSend,
+          targetAgentId,
+          mentionsToSend,
+          workflowIdToSend,
+          skillMetaToSend,
+          extras,
+        );
+      } else {
+        onSend(
+          displayText,
+          attachmentsToSend,
+          targetAgentId,
+          mentionsToSend,
+          workflowIdToSend,
+          workflowSourceToSend,
+          workflowNameToSend,
+          skillMetaToSend,
+          extras,
+        );
+      }
+      setTargetAgentId(null);
+      setPickerOpen(false);
+      pickerMutex.closeAll();
+      closeDingTalkMention();
+    })();
   }, [
     allReady,
     attachments,
@@ -420,7 +475,7 @@ export function ChatInput({
       ref={composerShellRef}
       layout={layout}
       dragOver={dragOver}
-      hasChips={attachments.length > 0}
+      hasChips={false}
       overlayOpen={voicePanelOpen}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -429,12 +484,7 @@ export function ChatInput({
         voicePanelOpen && voiceMode === 'listening' ? <VoiceTopCrawlWave /> : null
       }
       mentionPopover={<DingTalkMentionPopover {...dingTalkPopoverProps} />}
-      chips={(
-        <AttachmentChips
-          attachments={attachments}
-          onRemove={removeAttachment}
-        />
-      )}
+      chips={null}
       aboveEditor={
         voicePanelOpen || !selectedTarget ? null : (
           <div
@@ -487,6 +537,7 @@ export function ChatInput({
               onTextInput={workflowPicker.handleTextInput}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
+              onAttachmentRemove={handleAttachmentRemoveFromEditor}
               onCompositionStart={() => {
                 isComposingRef.current = true;
               }}

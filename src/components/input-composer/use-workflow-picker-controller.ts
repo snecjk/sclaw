@@ -63,12 +63,14 @@ export function useWorkflowPickerController({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
 
-  const query = useMemo(
-    () => (slashOpenRef.current ? extractSlashInlineQuery(plainText) : ''),
+  const query = useMemo(() => {
+    if (!slashOpenRef.current) return '';
+    // 相对光标截取：中间插入 `/` 时不能把光标后的正文当成 filter（否则列表被滤空）
+    const caret = mentionEditorRef.current?.getCaretPlainTextOffset() ?? null;
+    return extractSlashInlineQuery(plainText, caret);
     // slashOpenRef 变化不触发 render；依赖 plainText + open 以在打开后刷新 query
     // eslint-disable-next-line react-hooks/exhaustive-deps -- slashOpenRef is a ref
-    [plainText, open],
-  );
+  }, [plainText, open, mentionEditorRef]);
 
   const mode = slashOpenRef.current ? 'slash' : 'toolbar';
 

@@ -35,7 +35,7 @@ import { useChatStore } from '@/stores/chat';
 import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
 import { useGatewayStore } from '@/stores/gateway';
 import { suspendAutoSend } from '@/stores/message-queue';
-import type { FileAttachment } from '@/pages/Chat/ChatInput';
+import type { ChatSendExtras, FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 
@@ -50,7 +50,7 @@ export interface ChatInputBindingsOptions {
     workflowSource?: string | null,
     workflowName?: string | null,
     skillMeta?: SkillMeta,
-    workflowContext?: import('@/stores/chat').WorkflowContextBlock | null,
+    extras?: ChatSendExtras,
   ) => void;
   /** 排队消息回调 */
   onQueue: (
@@ -60,6 +60,7 @@ export interface ChatInputBindingsOptions {
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
     skillMeta?: SkillMeta,
+    extras?: ChatSendExtras,
   ) => void;
   /**
    * 场景标记：`embedded` 表示首页 hub 装配。

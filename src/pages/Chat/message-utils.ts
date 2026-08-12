@@ -28,6 +28,7 @@ import { enrichScheduledTaskArtifactProvenance } from '@/lib/scheduled-task-arti
 import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay, WORKFLOW_COMPLETE_TAG } from '@/lib/workflow-context';
 import { stripSclawBrowserEmbedContextForDisplay } from '@/lib/sclaw-browser-embed-context';
 import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
+import { stripComposerGatewayPlaceholders } from '@/lib/user-message-display';
 import {
   isWorkflowGuidanceAssistantText,
   isWorkflowParameterIntroText,
@@ -96,12 +97,15 @@ function cleanUserText(text: string): string {
     .replace(/\n*Current time:\s*[^\n]+/gi, '')
     .replace(/\n*Reference UTC:\s*[^\n]+/gi, '')
     .trim();
-  return stripDingTalkMentionContextForDisplay(
-    stripWorkflowCompleteForDisplay(
-      stripWorkflowSessionHintForDisplay(
-        stripSclawBrowserEmbedContextForDisplay(
-          stripWorkflowContextForDisplay(
-            stripCronTriggerTextForDisplay(cleaned),
+  // Stage-6 `[文件:]` / `[技能:]` 仅 gateway 侧；保留工作流执行句供 chip 解析。
+  return stripComposerGatewayPlaceholders(
+    stripDingTalkMentionContextForDisplay(
+      stripWorkflowCompleteForDisplay(
+        stripWorkflowSessionHintForDisplay(
+          stripSclawBrowserEmbedContextForDisplay(
+            stripWorkflowContextForDisplay(
+              stripCronTriggerTextForDisplay(cleaned),
+            ),
           ),
         ),
       ),

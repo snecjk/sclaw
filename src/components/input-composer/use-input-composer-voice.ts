@@ -13,7 +13,7 @@ import type { DingTalkMentionEditorHandle } from '@/components/dingtalk/DingTalk
 import { useVoiceAsr } from '@/hooks/useVoiceAsr';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import { useVoiceLoopStore } from '@/stores/voice-loop';
-import type { MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
+import { EMPTY_MENTION_COMPOSER_SNAPSHOT, type MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
 
 const VOICE_CONFIRM_MS = 5000;
 
@@ -64,11 +64,7 @@ export function useInputComposerVoice({
 
   const clearVoiceDraftText = useCallback(() => {
     mentionEditorRef.current?.clear();
-    setComposerSnapshot({
-      plainText: '',
-      mentions: [],
-      isEmpty: true,
-    });
+    setComposerSnapshot(EMPTY_MENTION_COMPOSER_SNAPSHOT);
   }, [mentionEditorRef, setComposerSnapshot]);
 
   const commitVoiceText = useCallback((text: string) => {

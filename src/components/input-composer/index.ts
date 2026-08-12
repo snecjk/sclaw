@@ -94,3 +94,13 @@ export type {
   ChatEditDraftEventDetail,
   UseInputComposerEditDraftOptions,
 } from './use-input-composer-edit-draft';
+
+/** 用户气泡 segments 渲染（乐观 / history / 编辑同源） */
+export {
+  UserComposerSegmentsContent,
+  UserComposerFileChip,
+  UserWorkflowMessageTag,
+  synthesizeComposerSegments,
+  parseWorkflowRunDisplayText,
+} from './user-composer-segments';
+export type { WorkflowRunDisplayMeta } from './user-composer-segments';

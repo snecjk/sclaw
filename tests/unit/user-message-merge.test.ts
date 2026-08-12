@@ -578,7 +578,8 @@ describe('user-message-merge', () => {
       {
         id: 'history-user',
         role: 'user',
-        content: '请帮我完成网点出库运费流程',
+        // 首轮回显常带 defaultPrompt 前缀；软后缀证据仍须能配对。
+        content: '请帮我完成网点出库运费流程\n\n查网点432100的',
         timestamp: 1710000001,
       },
       {

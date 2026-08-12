@@ -214,8 +214,7 @@ describe('DingTalkMentionEditor CSS auto-height (no JS inline height)', () => {
     const editor = screen.getByRole('textbox');
     expectNoInlineHeight(editor);
     expect(editor.querySelector('.workflow-token')).not.toBeNull();
-    // skill/workflow are mutually exclusive in the composer
-    expect(editor.querySelector('.skill-token')).toBeNull();
+    expect(editor.querySelector('.skill-token')).not.toBeNull();
 
     const snapshot = editorRef.current?.getSnapshot();
     expect(snapshot?.isEmpty).toBe(false);

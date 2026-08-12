@@ -6,6 +6,8 @@ import {
 import {
   dedupeRedundantUserMessages,
   ensureOpeningUserMessageFirst,
+  mergeOptimisticUserIntoHistory,
+  reapplyComposerUiFromPreviousDisplay,
   recoverInitialUserFromSessionLabel,
 } from './user-message-merge';
 import {
@@ -53,6 +55,8 @@ export function mergeHistoryDisplayMessages(input: {
   userMessageAt: number | null;
   sending: boolean;
   getMessageText: (content: unknown) => string;
+  /** Overlay 乐观用户消息——把 segments/展示写到 history 回显上。 */
+  cachedOptimistic?: RawMessage | null;
 }): RawMessage[] {
   const {
     gatewaySessionLabel,
@@ -60,9 +64,22 @@ export function mergeHistoryDisplayMessages(input: {
     sessionLabels,
     sending,
     userMessageAt,
+    cachedOptimistic,
   } = input;
 
   let messages = input.messages;
+  messages = mergeOptimisticUserIntoHistory(messages, input.currentMessages, {
+    userMessageAt,
+    sending,
+    sessionKey,
+    cachedOptimistic,
+  });
+  // 中途 history 重载会清掉 overlay 乐观消息；从上一帧投影保留 segments。
+  messages = reapplyComposerUiFromPreviousDisplay(
+    messages,
+    input.currentMessages,
+    userMessageAt,
+  );
   messages = recoverInitialUserFromSessionLabel(
     messages,
     sessionKey,

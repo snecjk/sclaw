@@ -63,10 +63,11 @@ export function useSkillPickerController({
   const pickerRef = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<CSSProperties | undefined>(undefined);
 
-  const inlineQuery = useMemo(
-    () => (mode === 'inline' ? extractSkillInlineQuery(plainText) : ''),
-    [mode, plainText],
-  );
+  const inlineQuery = useMemo(() => {
+    if (mode !== 'inline') return '';
+    const caret = mentionEditorRef.current?.getCaretPlainTextOffset() ?? null;
+    return extractSkillInlineQuery(plainText, caret);
+  }, [mode, plainText, mentionEditorRef]);
 
   const close = useCallback(() => {
     if (mode === 'inline') {

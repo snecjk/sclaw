@@ -5,6 +5,7 @@ import { AppError } from '@/lib/error-model';
 import type { CanonicalChatEvent, ChatRuntimeSnapshot } from '../../../shared/chat-runtime-protocol';
 import type { RawMessage } from './types';
 import { isScheduledTaskUserEcho } from './scheduled-task-user-echo';
+import { findHistoryUserEcho } from './user-message-merge';
 import {
   applyRuntimeSnapshot,
   createClientSessionState,
@@ -156,13 +157,23 @@ export const useChatRuntimeV2Store = create<ChatRuntimeV2State>((set, get) => ({
   initialized: false,
   setTranscript: (sessionKey, transcript) => set((state) => {
     const current = state.sessionsByKey[sessionKey] ?? createClientSessionState();
-    const echoedId = current.overlay.optimisticUserMessage?.id;
-    const optimisticEchoed = Boolean(echoedId && transcript.some((message) => message.id === echoedId));
+    const optimistic = current.overlay.optimisticUserMessage;
+    const echoedId = optimistic?.id;
+    const optimisticEchoedById = Boolean(echoedId && transcript.some((message) => message.id === echoedId));
+    const optimisticRefAt = optimistic
+      ? (current.runtime?.startedAt
+        ?? (typeof optimistic.timestamp === 'number' ? messageTimestampMs(optimistic) : 0))
+      : 0;
+    const optimisticEchoedByPairing = Boolean(
+      optimistic
+      && !optimisticEchoedById
+      && findHistoryUserEcho(transcript, optimistic, optimisticRefAt),
+    );
     const transcriptSettled = current.runtime?.phase === 'completed'
       && transcriptContainsCompletedTurn(transcript, current);
-    const nextOptimistic = optimisticEchoed || transcriptSettled
+    const nextOptimistic = optimisticEchoedById || optimisticEchoedByPairing || transcriptSettled
       ? null
-      : current.overlay.optimisticUserMessage;
+      : optimistic;
     const transcriptUnchanged = messagesEqual(current.transcript, transcript);
     const overlayUnchanged = nextOptimistic === current.overlay.optimisticUserMessage
       && (!transcriptSettled || (

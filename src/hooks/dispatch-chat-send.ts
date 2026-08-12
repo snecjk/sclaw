@@ -7,6 +7,7 @@ import { useChatStore } from '@/stores/chat';
 import { awaitSessionSendReadiness } from '@/lib/session-send-readiness';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
+import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
@@ -22,31 +23,10 @@ export interface DispatchChatSendOptions {
   /** 工作流名称（mine 来源时用于上下文块）。 */
   workflowName?: string | null;
   skillMeta?: SkillMeta;
-}
-
-/**
- * Composer 序列化会把工作流标签的可见名称写入 plainText。
- * 发送前按名称切开，得到标签前 / 标签后的用户文案（不含标签名本身）。
- */
-function extractWorkflowSurroundingText(
-  plainText: string,
-  workflowName: string,
-): { before: string; after: string } {
-  const text = plainText.replace(/\u00A0/g, ' ');
-  const name = workflowName.trim();
-  if (!name) {
-    const trimmed = text.trim();
-    return { before: trimmed, after: '' };
-  }
-  const idx = text.indexOf(name);
-  if (idx < 0) {
-    const trimmed = text.trim();
-    return { before: trimmed, after: '' };
-  }
-  return {
-    before: text.slice(0, idx).trim(),
-    after: text.slice(idx + name.length).trim(),
-  };
+  skillMetas?: SkillMeta[];
+  workflows?: Array<{ id: string; name: string; source?: string }>;
+  composerSegments?: PersistedComposerSegment[];
+  gatewayText?: string;
 }
 
 async function materializeDefaultSessionForWorkflowShortcut(): Promise<{
@@ -80,9 +60,23 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     workflowSource,
     workflowName,
     skillMeta,
+    skillMetas,
+    workflows,
+    composerSegments,
+    gatewayText,
   } = options;
 
   const sendMessage = useChatStore.getState().sendMessage;
+  const resolvedSkillMetas = skillMetas ?? (skillMeta ? [skillMeta] : []);
+  const resolvedWorkflows = workflows ?? (
+    workflowId
+      ? [{
+        id: workflowId,
+        name: workflowName?.trim() || workflowId,
+        source: workflowSource ?? undefined,
+      }]
+      : []
+  );
 
   const sendWithWorkflowContext = async (
     textToSend: string,
@@ -92,13 +86,17 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
   ) => {
     await sendMessage({
       text: textToSend,
+      gatewayText,
       attachments,
       targetAgentId,
       dingTalkMentions,
       workflowId: wfId || undefined,
       runId: _runId || undefined,
       workflowContext: ctx as import('@/stores/chat').WorkflowContextBlock | undefined,
-      skillMeta,
+      skillMeta: resolvedSkillMetas[0],
+      skillMetas: resolvedSkillMetas.length ? resolvedSkillMetas : undefined,
+      workflows: resolvedWorkflows.length ? resolvedWorkflows : undefined,
+      composerSegments,
     });
   };
 
@@ -107,41 +105,25 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     useChatRuntimeV2Store.getState().sessionsByKey[useChatStore.getState().currentSessionKey]?.error,
   );
 
-  // 我的工作流-已发布：与「我的工作流」卡片「立即运行」保持一致，
-  // 直接发送一句「帮我执行 id 为：xxx 的工作流 【名称】」让模型按 workflowId 执行，
-  // 不走模版 schema 取数与参数表单，也不注入额外上下文。
-  // 用户在标签前/后的文案按原顺序拼在执行指令两侧，供气泡还原展示。
-  if (workflowId && workflowSource === 'mine') {
-    chatState.clearPendingWorkflow();
-    const name = workflowName?.trim() || '';
-    const { before, after } = extractWorkflowSurroundingText(text, name);
-    const label = name || workflowId;
-    const execText = `帮我执行 id 为：${workflowId} 的工作流 【${label}】`;
-    const messageText = [before, execText, after].filter(Boolean).join(' ');
-    await sendMessage({
-      text: messageText,
-      attachments,
-      targetAgentId,
-      dingTalkMentions,
-    });
-    if (failed()) {
-      toast.error('发送失败，请重试');
-    }
-    return;
-  }
+  const nonMineWorkflows = resolvedWorkflows.filter((wf) => wf.source !== 'mine');
+  const hasMineWorkflow = resolvedWorkflows.some((wf) => wf.source === 'mine');
+  const useTemplateWorkflowPath = !gatewayText
+    && resolvedSkillMetas.length === 0
+    && nonMineWorkflows.length === 1
+    && !hasMineWorkflow;
 
-  // Explicit template pick from picker — fetch schema → send to model.
-  if (workflowId) {
+  if (useTemplateWorkflowPath) {
+    const templateWorkflow = nonMineWorkflows[0];
     const workflowSession = await materializeDefaultSessionForWorkflowShortcut();
     const workflowChatState = useChatStore.getState();
     if (
       workflowChatState.workflowChatUiBySessionKey[workflowSession.sessionKey]
-        ?.pendingWorkflow?.templateId !== workflowId
+        ?.pendingWorkflow?.templateId !== templateWorkflow.id
     ) {
       workflowChatState.clearPendingWorkflow();
     }
     const { sendWithWorkflow } = await import('@/hooks/use-workflow-send');
-    const ok = await sendWithWorkflow(text, workflowId, {
+    const ok = await sendWithWorkflow(text, templateWorkflow.id, {
       sessionKey: workflowSession.sessionKey,
       agentId: workflowSession.agentId,
     }, sendWithWorkflowContext, dingTalkMentions);
@@ -149,19 +131,35 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     return;
   }
 
-  // Re-run / start remembered workflow without waiting for model execute_workflow.
-  const { tryStartRememberedWorkflowSend, tryResolvePendingWorkflow } = await import(
-    '@/hooks/use-workflow-send'
+  const hasSegmentBake = Boolean(
+    gatewayText
+    || resolvedSkillMetas.length > 0
+    || resolvedWorkflows.length > 0
+    || composerSegments?.length,
   );
 
-  // Skill sends preserve their metadata and bypass workflow-intent routing.
-  if (skillMeta) {
-    await sendMessage({ text, attachments, targetAgentId, dingTalkMentions, skillMeta });
+  if (hasSegmentBake) {
+    chatState.clearPendingWorkflow();
+    await sendMessage({
+      text,
+      gatewayText,
+      attachments,
+      targetAgentId,
+      dingTalkMentions,
+      skillMeta: resolvedSkillMetas[0],
+      skillMetas: resolvedSkillMetas.length ? resolvedSkillMetas : undefined,
+      workflows: resolvedWorkflows.length ? resolvedWorkflows : undefined,
+      composerSegments,
+    });
     if (failed()) {
       toast.error('发送失败，请重试');
     }
     return;
   }
+
+  const { tryStartRememberedWorkflowSend, tryResolvePendingWorkflow } = await import(
+    '@/hooks/use-workflow-send'
+  );
 
   const startedRemembered = await tryStartRememberedWorkflowSend({
     text,
@@ -177,19 +175,32 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
         dingTalkMentions,
         workflowId: wfId ?? undefined,
         runId: runId ?? undefined,
-        skillMeta,
+        skillMeta: resolvedSkillMetas[0],
       });
     },
   });
   if (startedRemembered) return;
 
-  // In-flight parameter_form confirm / cancel only — creation & search go through model tools.
   const resolved = await tryResolvePendingWorkflow(text, async (msg, runId, wfId) => {
-    await sendMessage({ text: msg, attachments, targetAgentId, dingTalkMentions, workflowId: wfId, runId, skillMeta });
+    await sendMessage({
+      text: msg,
+      attachments,
+      targetAgentId,
+      dingTalkMentions,
+      workflowId: wfId,
+      runId,
+      skillMeta: resolvedSkillMetas[0],
+    });
   });
   if (resolved) return;
 
-  await sendMessage({ text, attachments, targetAgentId, dingTalkMentions, skillMeta });
+  await sendMessage({
+    text,
+    attachments,
+    targetAgentId,
+    dingTalkMentions,
+    skillMeta: resolvedSkillMetas[0],
+  });
   if (failed()) {
     toast.error('发送失败，请重试');
   }

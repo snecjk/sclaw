@@ -20,7 +20,7 @@ import {
   QuickInputPickerPanel,
   useInputComposerCore,
 } from '@/components/input-composer';
-import type { MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
+import { EMPTY_MENTION_COMPOSER_SNAPSHOT, type MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 
 /**
@@ -85,6 +85,7 @@ export function TaskInstructionComposer({
     disabled,
     onSnapshotChange: handleSnapshot,
     initialSnapshot: {
+      ...EMPTY_MENTION_COMPOSER_SNAPSHOT,
       plainText: value,
       mentions: initialMentions ?? [],
       isEmpty: !value.trim(),

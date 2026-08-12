@@ -2,7 +2,13 @@ import { useCallback, useState } from 'react';
 import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { inferMimeTypeFromPath } from '@/lib/preview-url';
-import type { FileAttachment } from './types';
+import type { FileAttachment, FileProvenance } from './types';
+
+export type { FileProvenance };
+
+export interface UseAttachmentStagerOptions {
+  onAttachmentUpsert?: (att: FileAttachment) => void;
+}
 
 /**
  * Read a browser File object as base64 string (without the data URL prefix).
@@ -28,13 +34,44 @@ function readFileAsBase64(file: globalThis.File): Promise<string> {
   });
 }
 
+const LOCAL_PROVENANCE: FileProvenance = { kind: 'local' };
+
 /**
  * 双入口附件 stager：
  * - dialog → filePaths → /api/files/stage-paths
  * - 粘贴/拖拽 File[] → /api/files/stage-buffer
  */
-export function useAttachmentStager() {
+export function useAttachmentStager(options?: UseAttachmentStagerOptions) {
+  const { onAttachmentUpsert } = options ?? {};
   const [attachments, setAttachments] = useState<FileAttachment[]>([]);
+
+  const notifyUpsert = useCallback((att: FileAttachment) => {
+    onAttachmentUpsert?.(att);
+  }, [onAttachmentUpsert]);
+
+  const upsertAttachment = useCallback((att: FileAttachment) => {
+    setAttachments((prev) => {
+      const idx = prev.findIndex((item) => item.id === att.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = att;
+        return next;
+      }
+      return [...prev, att];
+    });
+    notifyUpsert(att);
+  }, [notifyUpsert]);
+
+  const replaceAttachments = useCallback((next: FileAttachment[]) => {
+    setAttachments(next);
+    for (const att of next) {
+      notifyUpsert(att);
+    }
+  }, [notifyUpsert]);
+
+  const setAttachmentsSilent = useCallback((next: FileAttachment[]) => {
+    setAttachments(next);
+  }, []);
 
   const pickFiles = useCallback(async () => {
     try {
@@ -48,15 +85,16 @@ export function useAttachmentStager() {
         const tempId = crypto.randomUUID();
         tempIds.push(tempId);
         const fileName = filePath.split(/[\\/]/).pop() || 'file';
-        setAttachments((prev) => [...prev, {
+        upsertAttachment({
           id: tempId,
           fileName,
           mimeType: '',
           fileSize: 0,
           stagedPath: '',
           preview: null,
-          status: 'staging' as const,
-        }]);
+          status: 'staging',
+          provenance: LOCAL_PROVENANCE,
+        });
       }
 
       const staged = await hostApiFetch<Array<{
@@ -71,54 +109,59 @@ export function useAttachmentStager() {
         body: JSON.stringify({ filePaths: result.filePaths }),
       });
 
-      setAttachments((prev) => {
-        let updated = [...prev];
-        for (let i = 0; i < tempIds.length; i++) {
-          const tempId = tempIds[i];
-          const data = staged[i];
-          if (data) {
-            updated = updated.map((a) =>
-              a.id === tempId
-                ? { ...data, status: 'ready' as const }
-                : a,
-            );
-          } else {
-            console.warn(`[pickFiles] No staged data for tempId=${tempId} at index ${i}`);
-            updated = updated.map((a) =>
-              a.id === tempId
-                ? { ...a, status: 'error' as const, error: 'Staging failed' }
-                : a,
-            );
-          }
+      for (let i = 0; i < tempIds.length; i += 1) {
+        const tempId = tempIds[i];
+        const data = staged[i];
+        if (data) {
+          // 保留客户端 tempId，使注册表与行内 token 保持 1:1（API 会返回新 id）。
+          upsertAttachment({
+            ...data,
+            id: tempId,
+            status: 'ready',
+            provenance: LOCAL_PROVENANCE,
+          });
+        } else {
+          console.warn(`[pickFiles] No staged data for tempId=${tempId} at index ${i}`);
+          setAttachments((prev) => {
+            const existing = prev.find((item) => item.id === tempId);
+            if (!existing) return prev;
+            const updated: FileAttachment = {
+              ...existing,
+              status: 'error',
+              error: 'Staging failed',
+            };
+            notifyUpsert(updated);
+            return prev.map((item) => (item.id === tempId ? updated : item));
+          });
         }
-        return updated;
-      });
+      }
     } catch (err) {
       console.error('[pickFiles] Failed to stage files:', err);
-      setAttachments((prev) => prev.map((a) =>
-        a.status === 'staging'
-          ? { ...a, status: 'error' as const, error: String(err) }
-          : a,
-      ));
+      setAttachments((prev) => prev.map((item) => {
+        if (item.status !== 'staging') return item;
+        const updated: FileAttachment = { ...item, status: 'error', error: String(err) };
+        notifyUpsert(updated);
+        return updated;
+      }));
     } finally {
-      // 原生文件对话框关闭后焦点会回到触发按钮，Radix Tooltip 会因 focus 再次弹出。
       (document.activeElement as HTMLElement | null)?.blur?.();
     }
-  }, []);
+  }, [notifyUpsert, upsertAttachment]);
 
   const stageBufferFiles = useCallback(async (files: globalThis.File[]) => {
     for (const file of files) {
       const tempId = crypto.randomUUID();
       const mimeType = file.type || inferMimeTypeFromPath(file.name);
-      setAttachments((prev) => [...prev, {
+      upsertAttachment({
         id: tempId,
         fileName: file.name,
         mimeType,
         fileSize: file.size,
         stagedPath: '',
         preview: null,
-        status: 'staging' as const,
-      }]);
+        status: 'staging',
+        provenance: LOCAL_PROVENANCE,
+      });
 
       try {
         const base64 = await readFileAsBase64(file);
@@ -137,22 +180,31 @@ export function useAttachmentStager() {
             mimeType,
           }),
         });
-        setAttachments((prev) => prev.map((a) =>
-          a.id === tempId ? { ...staged, status: 'ready' as const } : a,
-        ));
+        upsertAttachment({
+          ...staged,
+          id: tempId,
+          status: 'ready',
+          provenance: LOCAL_PROVENANCE,
+        });
       } catch (err) {
         console.error(`[stageBuffer] Error staging ${file.name}:`, err);
-        setAttachments((prev) => prev.map((a) =>
-          a.id === tempId
-            ? { ...a, status: 'error' as const, error: String(err) }
-            : a,
-        ));
+        setAttachments((prev) => {
+          const existing = prev.find((item) => item.id === tempId);
+          if (!existing) return prev;
+          const updated: FileAttachment = { ...existing, status: 'error', error: String(err) };
+          notifyUpsert(updated);
+          return prev.map((item) => (item.id === tempId ? updated : item));
+        });
       }
     }
+  }, [notifyUpsert, upsertAttachment]);
+
+  const stageDataCenterFiles = useCallback(async (_entries: unknown[]) => {
+    console.warn('[stageDataCenterFiles] not implemented yet');
   }, []);
 
   const removeAttachment = useCallback((id: string) => {
-    setAttachments((prev) => prev.filter((a) => a.id !== id));
+    setAttachments((prev) => prev.filter((item) => item.id !== id));
   }, []);
 
   const clearAttachments = useCallback(() => {
@@ -170,6 +222,10 @@ export function useAttachmentStager() {
     attachments,
     pickFiles,
     stageBufferFiles,
+    stageDataCenterFiles,
+    upsertAttachment,
+    replaceAttachments,
+    setAttachmentsSilent,
     removeAttachment,
     clearAttachments,
     clearFailedAttachments,

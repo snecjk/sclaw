@@ -16,14 +16,14 @@
 
 当前 Composer 附件按钮直接调本地 `dialog:open` → `/api/files/stage-paths`，无法从数据中心选文件。
 
-目标：把「从多种来源添加附件」做成 **Chat / 任务共用的底层公共能力**。
+目标：把「从多种来源添加附件」做成底层公共能力；**优先接 Chat**（依赖内联方案已落地），Task 可随后跟进。
 
 ### 1.1 本次做
 
 - 点击附件图标 → 四项来源菜单（对齐设计稿）
 - 三类数据中心选文件弹窗（树 + 搜索 + 多选文件）
 - 确认后下载并 stage 成现有 `FileAttachment`，经 **`insertAttachment` 插入光标处**（依赖 [`Composer内联混排-Segment模型与多SkillWorkflow透传.md`](./Composer内联混排-Segment模型与多SkillWorkflow透传.md) 已落地的 inline token；不再挂顶部 chips）
-- Chat 输入框与任务描述 Composer 同时支持
+- Chat 输入框优先支持；任务描述 Composer **可延后**（须等 Chat 主路径 inline 完成且 Task 装配跟进后再接，或本菜单迭代仅挂 Chat）
 - 写入可选 `provenance`（`drive` / `qa_artifact` / `site_shared_artifact`），供溯源；发送仍只认 `stagedPath`
 
 ### 1.2 本次不做

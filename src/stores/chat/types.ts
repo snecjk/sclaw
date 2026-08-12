@@ -1,5 +1,6 @@
 import type { DataCenterArtifactProvenance } from '@/types/data-center';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
+import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import type { SkillMeta } from '@/types/skill-meta';
 
 export interface SendMessageOptions {
@@ -23,6 +24,14 @@ export interface SendMessageOptions {
   embedBrowserContext?: import('@/lib/sclaw-browser-embed-context').SclawBrowserEmbedContextBlock | null;
   /** Skill plaza context — UI tag + Gateway defaultPrompt injection */
   skillMeta?: SkillMeta;
+  /** 多技能元数据（存在时优先于 skillMeta） */
+  skillMetas?: SkillMeta[];
+  /** 按 segment 顺序的多工作流元数据 */
+  workflows?: Array<{ id: string; name: string; source?: string }>;
+  /** 预烘焙的 Gateway 消息正文（技能 prompt + 工作流执行句已应用） */
+  gatewayText?: string;
+  /** 本地乐观 / 编辑往返用的 segments */
+  composerSegments?: PersistedComposerSegment[];
 }
 
 /** Hidden context block describing a workflow for AI parameter guidance */
@@ -70,6 +79,10 @@ export interface RawMessage {
   _attachedFiles?: AttachedFileMeta[];
   /** Local-only: skill plaza tag metadata for user message bubble rendering */
   _skillMeta?: SkillMeta;
+  /** 仅本地：行内 segment 气泡用的多技能元数据 */
+  _skillMetas?: SkillMeta[];
+  /** 仅本地：有序 composer segments，用于行内气泡渲染 / 编辑往返 */
+  _composerSegments?: PersistedComposerSegment[];
   /** Local-only: the optimistic bubble was synthesized from a scheduled-task dispatch event. */
   _scheduledTaskOptimistic?: boolean;
 }

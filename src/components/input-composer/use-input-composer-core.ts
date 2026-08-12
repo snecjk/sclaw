@@ -1,11 +1,6 @@
 /**
  * 输入能力核心 hook：聚合 snapshot、附件、钉钉 @、三 picker、paste/DnD、基础键盘。
  * Chat / Task 按需挂载；不含语音、发送队列、Gateway。
- *
- * ## Types
- * - `InputComposerSubmitMode` — `'send'`（Enter 提交）| `'newline'`（Enter 换行，Task 用）
- * - `UseInputComposerCoreOptions` — 能力开关、提交回调、初始 snapshot、额外键盘处理
- * - `InputComposerCore` — hook 返回值（refs / snapshot / pickers / 事件 handler）
  */
 import {
   useCallback,
@@ -16,7 +11,11 @@ import {
 } from 'react';
 import type { DingTalkMentionEditorHandle } from '@/components/dingtalk/DingTalkMentionEditor';
 import { useAttachmentStager } from '@/components/attachments';
-import type { MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
+import type { FileAttachment } from '@/components/attachments/types';
+import {
+  EMPTY_MENTION_COMPOSER_SNAPSHOT,
+  type MentionComposerSnapshot,
+} from '@/lib/dingtalk-mention-composer';
 import { useComposerDingTalkMention } from './use-composer-dingtalk-mention';
 import { useInputComposerPickers } from './use-input-composer-pickers';
 
@@ -25,30 +24,18 @@ export type InputComposerSubmitMode = 'send' | 'newline';
 
 /** Core 挂载选项；`enable*` 控制能力是否接线 */
 export interface UseInputComposerCoreOptions {
-  /** Enter：`'send'` 提交 / `'newline'` 换行 */
   submitMode: InputComposerSubmitMode;
-  /** 是否启用附件（粘贴 / DnD / 选文件） */
   enableAttachments?: boolean;
-  /** 是否启用技能 picker */
   enableSkill?: boolean;
-  /** 是否启用工作流 picker */
   enableWorkflow?: boolean;
-  /** 是否启用快捷输入 picker */
   enableQuickInput?: boolean;
-  /** 是否启用钉钉 @ 提及 */
   enableDingTalkMention?: boolean;
-  /** 禁用编辑与交互 */
+  /** Chat：附件 inline 插入编辑器；Task 等保持顶部 chips */
+  inlineAttachments?: boolean;
   disabled?: boolean;
-  /** send 模式：Enter（无 Shift）触发 */
   onSubmit?: () => void;
-  /** 编辑器 snapshot 变化回调 */
   onSnapshotChange?: (snapshot: MentionComposerSnapshot) => void;
-  /**
-   * 在 core 处理提及导航 / Escape / Enter-send 之后调用。
-   * 返回 true 表示已处理，不再继续。
-   */
   onKeyDownExtra?: (e: React.KeyboardEvent) => boolean;
-  /** 初始 snapshot（如表单预填文案） */
   initialSnapshot?: MentionComposerSnapshot;
 }
 
@@ -59,6 +46,7 @@ export function useInputComposerCore({
   enableWorkflow = true,
   enableQuickInput = true,
   enableDingTalkMention = true,
+  inlineAttachments = false,
   disabled = false,
   onSubmit,
   onSnapshotChange,
@@ -69,26 +57,67 @@ export function useInputComposerCore({
   const composerShellRef = useRef<HTMLDivElement>(null);
   const mentionPopoverHostRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
+  const insertedAttachmentIdsRef = useRef<Set<string>>(new Set());
   const [composerSnapshot, setComposerSnapshot] = useState<MentionComposerSnapshot>(
-    () => initialSnapshot ?? {
-      plainText: '',
-      mentions: [],
-      isEmpty: true,
-    },
+    () => initialSnapshot ?? EMPTY_MENTION_COMPOSER_SNAPSHOT,
   );
   const [dragOver, setDragOver] = useState(false);
 
-  const stager = useAttachmentStager();
+  const handleAttachmentUpsert = useCallback((att: FileAttachment) => {
+    if (!inlineAttachments) return;
+    if (!insertedAttachmentIdsRef.current.has(att.id)) {
+      mentionEditorRef.current?.insertAttachment({
+        id: att.id,
+        fileName: att.fileName,
+        mimeType: att.mimeType,
+        fileSize: att.fileSize,
+        status: att.status,
+        preview: att.preview,
+      });
+      insertedAttachmentIdsRef.current.add(att.id);
+      return;
+    }
+    mentionEditorRef.current?.updateAttachmentStatus(att.id, att.status, {
+      stagedPath: att.stagedPath,
+      error: att.error,
+    });
+  }, [inlineAttachments]);
+
+  const stager = useAttachmentStager(
+    inlineAttachments ? { onAttachmentUpsert: handleAttachmentUpsert } : undefined,
+  );
   const {
     attachments,
     pickFiles,
     stageBufferFiles,
-    removeAttachment,
+    stageDataCenterFiles,
+    upsertAttachment,
+    replaceAttachments,
+    setAttachmentsSilent,
+    removeAttachment: removeAttachmentFromRegistry,
     clearAttachments,
     clearFailedAttachments,
     allReady,
     hasFailedAttachments,
   } = stager;
+
+  const removeAttachment = useCallback((id: string) => {
+    removeAttachmentFromRegistry(id);
+    if (inlineAttachments) {
+      mentionEditorRef.current?.removeAttachment(id);
+      insertedAttachmentIdsRef.current.delete(id);
+    }
+  }, [inlineAttachments, removeAttachmentFromRegistry]);
+
+  const clearAttachmentsAndTokens = useCallback(() => {
+    clearAttachments();
+    insertedAttachmentIdsRef.current.clear();
+  }, [clearAttachments]);
+
+  const handleAttachmentRemoveFromEditor = useCallback((id: string) => {
+    removeAttachmentFromRegistry(id);
+    insertedAttachmentIdsRef.current.delete(id);
+  }, [removeAttachmentFromRegistry]);
 
   const dingTalkMention = useComposerDingTalkMention({
     mentionEditorRef,
@@ -134,16 +163,12 @@ export function useInputComposerCore({
 
   const clearComposer = useCallback(() => {
     mentionEditorRef.current?.clear();
-    clearAttachments();
+    clearAttachmentsAndTokens();
     setMentionTrigger(null);
-    setComposerSnapshot({
-      plainText: '',
-      mentions: [],
-      isEmpty: true,
-    });
+    setComposerSnapshot(EMPTY_MENTION_COMPOSER_SNAPSHOT);
     pickerMutex.closeAll();
     closeDingTalkMention();
-  }, [clearAttachments, closeDingTalkMention, pickerMutex, setMentionTrigger]);
+  }, [clearAttachmentsAndTokens, closeDingTalkMention, pickerMutex, setMentionTrigger]);
 
   const getSnapshot = useCallback((): MentionComposerSnapshot => {
     return mentionEditorRef.current?.getSnapshot() ?? composerSnapshot;
@@ -164,7 +189,6 @@ export function useInputComposerCore({
         e.preventDefault();
         onSubmit?.();
       }
-      // newline 模式：不 preventDefault Enter
     },
     [
       closePickersOnEscape,
@@ -244,11 +268,17 @@ export function useInputComposerCore({
     attachments,
     pickFiles,
     stageBufferFiles,
+    stageDataCenterFiles,
+    upsertAttachment,
+    replaceAttachments,
+    setAttachmentsSilent,
     removeAttachment,
-    clearAttachments,
+    handleAttachmentRemoveFromEditor,
+    clearAttachments: clearAttachmentsAndTokens,
     clearFailedAttachments,
     allReady,
     hasFailedAttachments,
+    inlineAttachments,
     enableAttachments,
     enableSkill,
     enableWorkflow,

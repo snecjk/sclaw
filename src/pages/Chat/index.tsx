@@ -119,6 +119,12 @@ export function Chat() {
   const [editDraft, setEditDraft] = useState<{
     text: string;
     skill?: import('@/types/skill-meta').SkillMeta;
+    segments?: import('@/lib/dingtalk-mention-composer').PersistedComposerSegment[];
+    attachments?: Array<Partial<import('./ChatInput').FileAttachment> & {
+      id: string;
+      fileName: string;
+      mimeType: string;
+    }>;
     version: number;
   } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -356,6 +362,7 @@ export function Chat() {
     workflowSource?: string | null,
     workflowName?: string | null,
     skillMeta?: import('@/types/skill-meta').SkillMeta,
+    extras?: import('./ChatInput').ChatSendExtras,
   ) => {
     beginSendScroll();
     const { dispatchChatSend } = await import('@/hooks/dispatch-chat-send');
@@ -368,6 +375,10 @@ export function Chat() {
       workflowSource,
       workflowName,
       skillMeta,
+      skillMetas: extras?.skillMetas,
+      workflows: extras?.workflows,
+      composerSegments: extras?.composerSegments,
+      gatewayText: extras?.gatewayText,
     });
   }, [beginSendScroll]);
 
@@ -378,9 +389,19 @@ export function Chat() {
     dingTalkMentions?: DingTalkMention[],
     workflowId?: string | null,
     skillMeta?: import('@/types/skill-meta').SkillMeta,
+    extras?: import('./ChatInput').ChatSendExtras,
   ) => {
     const { currentSessionKey } = useChatStore.getState();
-    useMessageQueueStore.getState().enqueue(currentSessionKey, text, attachments, targetAgentId, dingTalkMentions, workflowId, skillMeta);
+    useMessageQueueStore.getState().enqueue(
+      currentSessionKey,
+      text,
+      attachments,
+      targetAgentId,
+      dingTalkMentions,
+      workflowId,
+      skillMeta,
+      extras,
+    );
   }, []);
 
   // Stop: suppress the auto-send that the abort's sending→false would otherwise trigger,
@@ -398,10 +419,32 @@ export function Chat() {
   }, [abortRun, activeTurn?.turnStableKey]);
 
   const handleEditMessage = useCallback(
-    (text: string, skillMeta?: import('@/types/skill-meta').SkillMeta) => {
+    (
+      text: string,
+      skillMeta?: import('@/types/skill-meta').SkillMeta,
+      options?: {
+        segments?: import('@/lib/dingtalk-mention-composer').PersistedComposerSegment[];
+        attachments?: import('@/stores/chat').AttachedFileMeta[];
+      },
+    ) => {
       const trimmed = text.trim();
-      if (!trimmed && !skillMeta) return;
-      setEditDraft({ text: trimmed, skill: skillMeta, version: Date.now() });
+      if (!trimmed && !skillMeta && !options?.segments?.length) return;
+      setEditDraft({
+        text: trimmed,
+        skill: skillMeta,
+        segments: options?.segments,
+        attachments: options?.attachments?.map((file) => ({
+          id: crypto.randomUUID(),
+          fileName: file.fileName,
+          mimeType: file.mimeType,
+          fileSize: file.fileSize,
+          preview: file.preview,
+          filePath: file.filePath,
+          stagedPath: file.filePath,
+          status: file.filePath ? 'ready' as const : 'error' as const,
+        })),
+        version: Date.now(),
+      });
     },
     [],
   );

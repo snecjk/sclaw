@@ -1,60 +1,149 @@
 /**
  * 编辑重发草稿：监听 `CHAT_EDIT_DRAFT_EVENT` + `editDraft` prop，写入 MentionEditor。
- * Chat 按需挂载；Task 不挂。
- *
- * ## Types
- * - `ChatDraftWorkflowMeta` — 草稿里附带的工作流元数据（id/name/source）
- * - `ChatEditDraftEventDetail` — 自定义事件 detail（text/skill/workflow/前后缀）
- * - `UseInputComposerEditDraftOptions` — editor ref、editDraft prop、应用后回调
  */
 import { useCallback, useEffect, type RefObject } from 'react';
 import type { DingTalkMentionEditorHandle } from '@/components/dingtalk/DingTalkMentionEditor';
+import type { FileAttachment } from '@/components/attachments/types';
+import type {
+  AttachmentLookupEntry,
+  ComposerSegment,
+  PersistedComposerSegment,
+} from '@/lib/dingtalk-mention-composer';
 import type { SkillMeta } from '@/types/skill-meta';
+import { stripComposerGatewayPlaceholders } from '@/lib/user-message-display';
 
 /** window 自定义事件名，与 ChatMessage 派发侧保持一致 */
 export const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
 
 /** 草稿中的工作流片段 */
 export interface ChatDraftWorkflowMeta {
-  /** 工作流 id */
   id: string;
-  /** 展示名 */
   name: string;
-  /** 来源标识（可选） */
   source?: string;
 }
 
+export type ChatEditDraftAttachment = Partial<FileAttachment> & {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  filePath?: string;
+};
+
 /** `CHAT_EDIT_DRAFT_EVENT` 的 detail；字段均可选，有则按序写入编辑器 */
 export interface ChatEditDraftEventDetail {
-  /** 主正文 */
   text?: string;
-  /** 附带技能 chip */
   skill?: SkillMeta;
-  /** 附带工作流 chip */
   workflow?: ChatDraftWorkflowMeta;
-  /** 插在正文前的纯文本 */
   prefixText?: string;
-  /** 插在正文后的纯文本 */
   suffixText?: string;
+  segments?: PersistedComposerSegment[];
+  attachments?: ChatEditDraftAttachment[];
 }
 
 /** editDraft prop 与事件共用的接线选项 */
 export interface UseInputComposerEditDraftOptions {
-  /** MentionEditor 句柄 */
   mentionEditorRef: RefObject<DingTalkMentionEditorHandle | null>;
-  /** 受控草稿；`version` 变化触发回填 */
   editDraft?: {
-    /** 草稿正文 */
     text: string;
-    /** 可选技能 */
     skill?: SkillMeta;
-    /** 变更版本号，用于同一 text 重复应用 */
+    segments?: PersistedComposerSegment[];
+    attachments?: ChatEditDraftAttachment[];
     version: number;
   } | null;
-  /** 受控草稿应用完成后通知父层（可清 editDraft） */
   onEditDraftApplied?: () => void;
-  /** 写入草稿后的清理（关 picker、清附件等） */
   onAfterApply?: () => void;
+  onApplyAttachments?: (attachments: FileAttachment[]) => void;
+}
+
+function sanitizeEditPlainText(text: string): string {
+  return stripComposerGatewayPlaceholders(text)
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function takePreferredAttachment(
+  seg: Extract<PersistedComposerSegment, { type: 'file' }>,
+  preferred: ChatEditDraftAttachment[] | undefined,
+  used: Set<number>,
+): ChatEditDraftAttachment | undefined {
+  if (!preferred?.length) return undefined;
+  const byName = preferred.findIndex((item, index) => (
+    !used.has(index) && item.fileName === seg.fileName
+  ));
+  if (byName >= 0) {
+    used.add(byName);
+    return preferred[byName];
+  }
+  const byOrder = preferred.findIndex((_, index) => !used.has(index));
+  if (byOrder >= 0) {
+    used.add(byOrder);
+    return preferred[byOrder];
+  }
+  return undefined;
+}
+
+/**
+ * 把持久化气泡 segments 转为可编辑的 composer segments。
+ * 文件 segment 的 `attachmentId` 必须与注册表附件 `id` 对齐——
+ * 否则重建/发送会跳过文件（出现「根据  和  生成…」空缺）。
+ */
+export function persistedSegmentsToComposer(
+  segments: PersistedComposerSegment[],
+  preferredAttachments?: ChatEditDraftAttachment[],
+): {
+  segments: ComposerSegment[];
+  attachments: FileAttachment[];
+  attachmentsById: Record<string, AttachmentLookupEntry>;
+} {
+  const attachments: FileAttachment[] = [];
+  const attachmentsById: Record<string, AttachmentLookupEntry> = {};
+  const composerSegments: ComposerSegment[] = [];
+  const usedPreferred = new Set<number>();
+
+  for (const seg of segments) {
+    if (seg.type !== 'file') {
+      // 禁止通过脏 text segment 再次插入 stage-6 占位符。
+      if (seg.type === 'text') {
+        const cleaned = stripComposerGatewayPlaceholders(seg.text);
+        if (!cleaned) continue;
+        composerSegments.push({ type: 'text', text: cleaned });
+        continue;
+      }
+      composerSegments.push(seg);
+      continue;
+    }
+
+    const preferred = takePreferredAttachment(seg, preferredAttachments, usedPreferred);
+    const id = preferred?.id ?? crypto.randomUUID();
+    const stagedPath = preferred?.stagedPath
+      ?? preferred?.filePath
+      ?? seg.stagedPath
+      ?? seg.filePath
+      ?? '';
+    const att: FileAttachment = {
+      id,
+      fileName: preferred?.fileName ?? seg.fileName,
+      mimeType: preferred?.mimeType ?? seg.mimeType,
+      fileSize: preferred?.fileSize ?? seg.fileSize,
+      stagedPath,
+      preview: preferred?.preview ?? seg.preview,
+      status: stagedPath ? 'ready' : 'error',
+      error: stagedPath ? undefined : 'File unavailable — please re-attach',
+      provenance: preferred?.provenance ?? seg.provenance,
+    };
+    attachments.push(att);
+    attachmentsById[id] = {
+      id,
+      fileName: att.fileName,
+      mimeType: att.mimeType,
+      fileSize: att.fileSize,
+      status: att.status,
+      preview: att.preview,
+    };
+    composerSegments.push({ type: 'file', attachmentId: id });
+  }
+
+  return { segments: composerSegments, attachments, attachmentsById };
 }
 
 export function useInputComposerEditDraft({
@@ -62,14 +151,27 @@ export function useInputComposerEditDraft({
   editDraft = null,
   onEditDraftApplied,
   onAfterApply,
+  onApplyAttachments,
 }: UseInputComposerEditDraftOptions) {
   const applyEditDraftText = useCallback((detail: ChatEditDraftEventDetail) => {
-    const text = detail.text?.trim() ?? '';
-    const prefixText = detail.prefixText?.trim() ?? '';
-    const suffixText = detail.suffixText?.trim() ?? '';
+    const text = sanitizeEditPlainText(detail.text ?? '');
+    const prefixText = sanitizeEditPlainText(detail.prefixText ?? '');
+    const suffixText = sanitizeEditPlainText(detail.suffixText ?? '');
     const skill = detail.skill;
     const workflow = detail.workflow;
-    if (!text && !prefixText && !suffixText && !skill && !workflow) return;
+    const hasSegments = Boolean(detail.segments?.length);
+
+    if (!hasSegments && !text && !prefixText && !suffixText && !skill && !workflow) return;
+
+    if (hasSegments && detail.segments) {
+      // DOM span 与附件注册表共用同一 ID 空间（preferred 仅补充路径）。
+      const converted = persistedSegmentsToComposer(detail.segments, detail.attachments);
+      onApplyAttachments?.(converted.attachments);
+      mentionEditorRef.current?.setSegments(converted.segments, converted.attachmentsById);
+      mentionEditorRef.current?.focus();
+      onAfterApply?.();
+      return;
+    }
 
     mentionEditorRef.current?.setPlainText('');
     if (prefixText) {
@@ -89,11 +191,16 @@ export function useInputComposerEditDraft({
     }
     mentionEditorRef.current?.focus();
     onAfterApply?.();
-  }, [mentionEditorRef, onAfterApply]);
+  }, [mentionEditorRef, onAfterApply, onApplyAttachments]);
 
   useEffect(() => {
     if (!editDraft) return;
-    applyEditDraftText({ text: editDraft.text, skill: editDraft.skill });
+    applyEditDraftText({
+      text: editDraft.text,
+      skill: editDraft.skill,
+      segments: editDraft.segments,
+      attachments: editDraft.attachments,
+    });
     onEditDraftApplied?.();
   }, [applyEditDraftText, editDraft, onEditDraftApplied]);
 
@@ -105,6 +212,8 @@ export function useInputComposerEditDraft({
         workflow?: unknown;
         prefixText?: unknown;
         suffixText?: unknown;
+        segments?: unknown;
+        attachments?: unknown;
       }>).detail;
       if (!detail || typeof detail !== 'object') return;
       const skill = detail.skill;
@@ -135,6 +244,12 @@ export function useInputComposerEditDraft({
         suffixText: typeof detail.suffixText === 'string' ? detail.suffixText : undefined,
         skill: skillMeta,
         workflow: workflowMeta,
+        segments: Array.isArray(detail.segments)
+          ? detail.segments as PersistedComposerSegment[]
+          : undefined,
+        attachments: Array.isArray(detail.attachments)
+          ? detail.attachments as ChatEditDraftAttachment[]
+          : undefined,
       });
     };
 
