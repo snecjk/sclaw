@@ -23,6 +23,10 @@ import {
 import { deriveWorkflowNodeSessionId } from './node-session';
 import { canonicalizeWorkflowArtifacts, validateInlinePayload } from './artifact-output';
 import { workflowExecLog } from './logging';
+import {
+  resolveWorkflowAgentDeadlineMs,
+  resolveWorkflowAgentNoProgressMs,
+} from '../../../shared/workflow-agent-timeouts';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const backoff = (a: number) => Math.min(30_000, 1000 * 2 ** (a - 1));
@@ -190,6 +194,7 @@ export async function runAgentNodeWithRetry(
       // 调用Agent
       let toolCalls = 0;
       const toolNamesByCallId = new Map<string, { toolId?: string; toolName?: string }>();
+      const noProgressMs = resolveWorkflowAgentNoProgressMs(spec.guardrails?.timeoutMs);
       result = await invokeAgent({
         ctx,
         prompt,
@@ -197,8 +202,8 @@ export async function runAgentNodeWithRetry(
         attempt,
         agentSessionId,
         resumeSession,
-        noProgressMs: spec.guardrails?.timeoutMs,
-        deadlineMs: spec.guardrails?.timeoutMs ? Math.max(spec.guardrails.timeoutMs * 2, spec.guardrails.timeoutMs + 60_000) : undefined,
+        noProgressMs,
+        deadlineMs: resolveWorkflowAgentDeadlineMs(),
         allowedTools: spec.allowedTools,
       permissionMode: spec.permissionPolicy?.mode,
       model: spec.target.model,
