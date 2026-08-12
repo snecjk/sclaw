@@ -68,9 +68,7 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
     }
   }, [menuOpen]);
 
-  const handleCardClick = (e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-    if (target.closest('button') || target.closest('[data-menu]')) return;
+  const handleBodyClick = () => {
     onClick?.(task);
   };
 
@@ -91,10 +89,7 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
   const workflowId = task.workflowCode ?? null;
 
   return (
-    <article
-      className={cn(myTaskCardShellClass, 'cursor-pointer', menuOpen && 'z-30')}
-      onClick={handleCardClick}
-    >
+    <article className={cn(myTaskCardShellClass, menuOpen && 'z-30')}>
       {/* 顶栏：时钟图标 + 标题 + badge | 开关 */}
       <div className={myTaskCardTopRowClass}>
         <div className={myTaskCardTitleRowClass}>
@@ -129,13 +124,20 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
         </button>
       </div>
 
-      {/* 描述 */}
+      {/* 描述 — 点击打开编辑 */}
       {task.description ? (
-        <div className={myTaskCardBodyClass}>
+        <div
+          className={cn(myTaskCardBodyClass, onClick && 'cursor-pointer')}
+          onClick={onClick ? handleBodyClick : undefined}
+        >
           <p className={myTaskCardDescriptionClass}>{task.description}</p>
         </div>
       ) : (
-        <div className={myTaskCardBodyClass} aria-hidden />
+        <div
+          className={cn(myTaskCardBodyClass, onClick && 'cursor-pointer')}
+          aria-hidden={!onClick}
+          onClick={onClick ? handleBodyClick : undefined}
+        />
       )}
 
       {/* 详情与底栏之间：最小 18px，同行等高时由此吸收高度差 */}

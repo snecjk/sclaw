@@ -561,23 +561,28 @@ export default function MyTask() {
                       />
                     ) : (
                       <div className="grid grid-cols-1 items-stretch sm:grid-cols-2 lg:grid-cols-3 gap-[clamp(12px,1.4vw,16px)]">
-                        {filteredTasks.map((task) => (
-                          <TaskCard
-                            key={`${task.engineType}:${task.id}`}
-                            task={task}
-                            onToggle={(enabled) => handleToggle(task, enabled)}
-                            onEdit={() => {
-                              const job = safeJobs.find((j) => j.id === task.id) ?? null;
-                              setEditingJob(job);
-                              setCreateOpen(true);
-                            }}
-                            onDelete={() => {
-                              const job = safeJobs.find((j) => j.id === task.id) ?? null;
-                              if (job) setDeleteTarget(job);
-                            }}
-                            onRun={() => handleTrigger(task)}
-                          />
-                        ))}
+                        {filteredTasks.map((task) => {
+                          const openTaskEdit = () => {
+                            const job = safeJobs.find((j) => j.id === task.id) ?? null;
+                            setEditingJob(job);
+                            setCreateOpen(true);
+                          };
+
+                          return (
+                            <TaskCard
+                              key={`${task.engineType}:${task.id}`}
+                              task={task}
+                              onToggle={(enabled) => handleToggle(task, enabled)}
+                              onClick={openTaskEdit}
+                              onEdit={openTaskEdit}
+                              onDelete={() => {
+                                const job = safeJobs.find((j) => j.id === task.id) ?? null;
+                                if (job) setDeleteTarget(job);
+                              }}
+                              onRun={() => handleTrigger(task)}
+                            />
+                          );
+                        })}
                       </div>
                     )}
                   </section>
