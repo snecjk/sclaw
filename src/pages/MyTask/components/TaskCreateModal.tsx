@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Loader2, ChevronDown, Check, Sparkles, Folder, FolderPlus, ArrowLeft } from 'lucide-react';
+import { X, Loader2, ChevronDown, Check, Folder, FolderPlus, ArrowLeft } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
@@ -9,7 +9,11 @@ import {
   cronToScheduleValue,
   defaultScheduleValue,
 } from '../lib/schedule-utils';
-import { DingTalkRecipientField } from '@/components/dingtalk/DingTalkRecipientField';
+import {
+  stripInstructionFromTaskMessage,
+  resolveScheduledTaskMentions,
+  prepareDingTalkAgentTurnMessage,
+} from '@/lib/scheduled-task-recipients';
 import { useMyTaskStore } from '../store';
 import { cn } from '@/lib/utils';
 import {
@@ -21,19 +25,16 @@ import {
   invertedPrimarySurfaceClass,
   modalPrimarySubmitButtonClass,
 } from '@/lib/surfaces';
-import {
-  stripInstructionFromTaskMessage,
-  resolveScheduledTaskMentions,
-} from '@/lib/scheduled-task-recipients';
 import type { CronJobCreateInput } from '@/types/cron';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { ClaudeTaskPermissionProfile } from '@/types/scheduled-task';
 import type { ManagedLocalTask } from '@/stores/cron';
-import { hostApiFetch } from '@/lib/host-api';
 import { createDataCenterFolder, deleteDataCenterEntry, getDataCenterEntry, getDataCenterSpaces, listDataCenterEntries, renameDataCenterEntry } from '@/lib/data-center-api';
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import type { DataCenterEntry, DataCenterSpace, DataCenterSpaceType } from '@/types/data-center';
 import { toast } from 'sonner';
+import { TaskInstructionComposer } from '@/components/task/TaskInstructionComposer';
+import type { MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
 
 type TaskEngineType = 'openclaw' | 'claude';
 
@@ -79,7 +80,11 @@ function computeInitialValues(
       name: job.name || '',
       instructions: stripInstructionFromTaskMessage(job.prompt || ''),
       schedule: cronToScheduleValue(job.cronExpr),
-      recipients: job.dingtalkRecipients ?? resolveScheduledTaskMentions(job.prompt || ''),
+      recipients: (() => {
+        const fromPrompt = resolveScheduledTaskMentions(job.prompt || '');
+        if (fromPrompt.length > 0) return fromPrompt;
+        return job.dingtalkRecipients ?? [];
+      })(),
       engineType: job.engineType,
       selectedWorkflow: job.workflowCode || '',
       saveToDataCenter: !!(job.myArtifactFolderPath || job.sharedArtifactFolderPath),
@@ -663,8 +668,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   const [instructions, setInstructions] = useState(correctedInstructions);
   const [schedule, setSchedule] = useState<ScheduleValue>(init.schedule);
   const [saving, setSaving] = useState(false);
-  const [beautifying, setBeautifying] = useState(false);
-  const [recipients, setRecipients] = useState<DingTalkMention[]>(init.recipients);
+  const [instructionMentions, setInstructionMentions] = useState<DingTalkMention[]>(init.recipients);
   const [errors, setErrors] = useState<{ name?: string; instructions?: string; dataCenterTarget?: string }>({});
   const [engineType, setEngineType] = useState<TaskEngineType>(init.engineType);
   const [saveToDataCenter, setSaveToDataCenter] = useState(init.saveToDataCenter);
@@ -754,61 +758,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
 
   const isEditing = !!job;
 
-  const handleBeautify = async () => {
-    const trimmed = instructions.trim();
-    if (!trimmed) {
-      setErrors((prev) => ({ ...prev, instructions: t('myTask.createModal.instructionsRequired') }));
-      return;
-    }
-
-    const selectedWorkflowOption = selectedWorkflow
-      ? workflowOptions.find((option) => option.value === selectedWorkflow)
-      : undefined;
-
-    setBeautifying(true);
-    try {
-      const result = await hostApiFetch<{
-        instruction: string;
-        changed: boolean;
-        source: 'model' | 'rules-fallback';
-        model?: string;
-      }>('/api/scheduled-tasks/beautify-instruction', {
-        method: 'POST',
-        body: JSON.stringify({
-          instruction: trimmed,
-          type: 'task',
-          workflowId: selectedWorkflow || undefined,
-          workflowName: selectedWorkflowOption?.label,
-        }),
-      });
-
-      setInstructions(result.instruction);
-      if (errors.instructions) {
-        setErrors((prev) => ({ ...prev, instructions: undefined }));
-      }
-
-      if (!result.changed) {
-        toast.info(t('myTask.createModal.beautifyNoChange'));
-        return;
-      }
-
-      if (result.source === 'rules-fallback') {
-        toast.warning(t('myTask.createModal.beautifyFallback'));
-        return;
-      }
-
-      toast.success(
-        result.model
-          ? t('myTask.createModal.beautifySuccessWithModel', { model: result.model })
-          : t('myTask.createModal.beautifySuccess'),
-      );
-    } catch (err) {
-      toast.error(String(err) || t('myTask.createModal.beautifyFailed'));
-    } finally {
-      setBeautifying(false);
-    }
-  };
-
   const handleSubmit = async () => {
     const newErrors: typeof errors = {};
     if (!name.trim()) newErrors.name = t('myTask.createModal.nameRequired');
@@ -826,10 +775,14 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
     try {
       await onSave({
         name: name.trim(),
-        message: instructions.trim(),
+        message: prepareDingTalkAgentTurnMessage(
+          instructions.trim(),
+          instructionMentions,
+          { scenario: 'scheduled-task' },
+        ),
         schedule: scheduleValueToCron(schedule),
         enabled: true,
-        dingTalkMentions: recipients.length > 0 ? recipients : undefined,
+        dingTalkMentions: instructionMentions.length > 0 ? instructionMentions : undefined,
         workflowCode: selectedWorkflow || undefined,
         engineType,
         claudeWorkspacePath: undefined,
@@ -1007,45 +960,25 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
             <label className="block text-sm font-semibold text-foreground">
               {t('myTask.createModal.instructionsLabel')}
             </label>
-            <div className="relative">
-              <textarea
-                value={instructions}
-                onChange={(e) => {
-                  setInstructions(e.target.value);
-                  if (errors.instructions) setErrors((p) => ({ ...p, instructions: undefined }));
-                }}
-                rows={8}
-                disabled={workflowDisabled}
-                placeholder={t('myTask.createModal.instructionsPlaceholder')}
-                className={cn(
-                  'w-full resize-none rounded-[10px] border bg-background px-3.5 pt-2.5 pb-11 text-sm leading-relaxed transition-colors placeholder:text-muted-foreground',
-                  formFieldFocusClass,
-                  errors.instructions ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]' : 'border-border',
-                  workflowDisabled && 'cursor-not-allowed bg-muted opacity-70',
-                )}
-              />
-              <button
-                type="button"
-                onClick={() => { void handleBeautify(); }}
-                disabled={workflowDisabled || !instructions.trim() || beautifying}
-                className={cn(
-                  'absolute bottom-2.5 right-2.5 inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-medium transition-colors',
-                  'border border-[#FFD7A3] bg-[#FFF5E6] text-[#C2410C]',
-                  'hover:bg-[#FFEDD5] hover:border-[#FFC17A]',
-                  'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#FFF5E6]',
-                )}
-                aria-label={t('myTask.createModal.beautifyAria')}
-              >
-                {beautifying ? (
-                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden />
-                ) : (
-                  <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                )}
-                {beautifying
-                  ? t('myTask.createModal.beautifying')
-                  : t('myTask.createModal.beautifyButton')}
-              </button>
-            </div>
+            <TaskInstructionComposer
+              value={instructions}
+              initialMentions={instructionMentions}
+              onChange={(text) => {
+                setInstructions(text);
+                if (errors.instructions) setErrors((p) => ({ ...p, instructions: undefined }));
+              }}
+              onSnapshotChange={(snapshot: MentionComposerSnapshot) => {
+                setInstructionMentions(snapshot.mentions);
+              }}
+              disabled={workflowDisabled}
+              invalid={Boolean(errors.instructions)}
+              placeholder={t('myTask.createModal.instructionsPlaceholder')}
+              enableAttachments
+              enableSkill
+              enableWorkflow
+              enableQuickInput
+              enableDingTalkMention
+            />
             {errors.instructions && <p className="text-xs text-destructive">{errors.instructions}</p>}
             {workflowDisabled ? (
               <p className="text-xs text-muted-foreground">{t('myTask.createModal.workflowAutoHint')}</p>
@@ -1055,11 +988,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
           <div className="flex flex-col gap-2">
             <span className="block text-sm font-semibold text-foreground">{t('myTask.createModal.scheduleLabel')}</span>
             <SchedulePicker value={schedule} onChange={setSchedule} />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.recipientsLabel')}</label>
-            <DingTalkRecipientField value={recipients} onChange={setRecipients} />
           </div>
 
           <div

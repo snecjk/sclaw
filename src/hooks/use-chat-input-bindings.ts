@@ -61,7 +61,10 @@ export interface ChatInputBindingsOptions {
     workflowId?: string | null,
     skillMeta?: SkillMeta,
   ) => void;
-  /** ChatInput 变体：default（标准）或 embedded（嵌入式，如首页） */
+  /**
+   * 场景标记：`embedded` 表示首页 hub 装配。
+   * 不再控制 Gateway 底栏或外层 max-width；排版请用 className。
+   */
   variant?: 'default' | 'embedded';
   /** 是否为空会话（控制是否显示欢迎页） */
   isEmpty?: boolean;

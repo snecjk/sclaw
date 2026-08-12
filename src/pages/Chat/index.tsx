@@ -145,16 +145,6 @@ export function Chat() {
   );
   const composerRequiresGateway = currentEngineType === 'openclaw';
   const composerDisabled = composerRequiresGateway && !isGatewayRunning;
-  const composerStatusText = currentEngineType === 'claude'
-    ? t('composer.claudeReadyDetail')
-    : t('composer.gatewayStatus', {
-        state: gatewayStatus.state === 'running'
-          ? t('composer.gatewayConnected')
-          : gatewayStatus.state,
-        port: gatewayStatus.port,
-        pid: gatewayStatus.pid ? `| pid: ${gatewayStatus.pid}` : '',
-      });
-  const composerStatusTone = currentEngineType === 'claude' || isGatewayRunning ? 'ready' : 'warning';
 
   // Load data when gateway is running.
   // When the store already holds messages for this session (i.e. the user
@@ -774,8 +764,6 @@ export function Chat() {
         sending={sending}
         isEmpty={isEmpty}
         engineType={currentEngineType}
-        statusText={composerStatusText}
-        statusTone={composerStatusTone}
         editDraft={editDraft}
         onEditDraftApplied={handleEditDraftApplied}
         composerLayout="home"
