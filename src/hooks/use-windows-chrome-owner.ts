@@ -18,14 +18,7 @@ export function resolveWindowsChromeOwner(input: {
   if (!input.isProvincial) return 'none';
   if (input.browserOverlayOpen) return 'shell-fallback';
   if (input.appPlazaVisible) return 'app-plaza';
-  // ContentHeader 对这些路由返回 null，改由 Shell fallback 挂载 Windows 控件
-  if (
-    input.pathname.startsWith('/settings')
-    || input.pathname.startsWith('/skills')
-    || input.pathname.startsWith('/my-tasks')
-  ) {
-    return 'shell-fallback';
-  }
+  if (input.pathname.startsWith('/settings')) return 'shell-fallback';
   return 'content-header';
 }
 

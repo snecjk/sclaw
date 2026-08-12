@@ -69,8 +69,6 @@ import { WorkflowDashboard } from '@/pages/Workflow/components/workflow-dashboar
 import { WorkflowPageShading } from '@/pages/Workflow/components/workflow-page-shading';
 import { useWorkflowListViewState } from '@/pages/Workflow/hooks/use-workflow-list-view-state';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
-import { useAppShellLayout } from '@/components/layout/app-shell-layout-context';
-import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
 
 // ──── 工具函数 ────
 
@@ -129,8 +127,6 @@ export default function MyTask() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useTranslation('tasks');
-  const { t: tCommon } = useTranslation('common');
-  const { snapshot, setUserCollapsed } = useAppShellLayout();
 
   const activeSection = parseMyTaskSection(searchParams.get('tab'));
   const workflowViewState = useWorkflowListViewState();
@@ -448,20 +444,10 @@ export default function MyTask() {
     <div className="flex h-full min-h-0 flex-col">
       <div
         className={cn(
-          // pt 并入顶栏 drag-region，空白区可拖窗；交互控件各自 no-drag
           'relative flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-0',
           isWorkflowSection && workflowPageRootClass,
         )}
       >
-        {snapshot.canUserRestoreSidebar ? (
-          <SidebarHeaderToggle
-            isCollapsed
-            onToggle={() => setUserCollapsed(false)}
-            collapseLabel={tCommon('sidebar.toggleSidebarCollapse')}
-            expandLabel={tCommon('sidebar.toggleSidebarExpand')}
-            className="absolute left-[calc(var(--sto-content-header-pad-start)-var(--sto-content-pad-x))] top-2 z-20"
-          />
-        ) : null}
         {isWorkflowSection ? <WorkflowPageShading /> : null}
         <div
           className={cn(
@@ -469,15 +455,14 @@ export default function MyTask() {
             'relative z-[1] flex min-h-0 flex-1 flex-col overflow-hidden',
           )}
         >
-          {/* 一级 Tab 固定顶栏（兼 ContentHeader 缺位时的 drag-region）：左分段；右为运行保障 + 搜索/新建 */}
-          <div className="drag-region mb-[38px] flex flex-shrink-0 flex-wrap items-center gap-3 pt-6">
+          {/* 一级 Tab 固定顶栏：左分段；右为运行保障 + 搜索/新建 */}
+          <div className="mb-[38px] flex flex-shrink-0 flex-wrap items-center gap-3">
             <SectionTabs
               activeSection={activeSection}
               onSectionChange={handleSectionChange}
-              className="no-drag"
             />
             {!isWorkflowSection ? (
-              <div className="no-drag ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
+              <div className="ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
                 <TaskRunGuardBar />
                 {isTasksView ? (
                   <>
@@ -576,23 +561,28 @@ export default function MyTask() {
                       />
                     ) : (
                       <div className="grid grid-cols-1 items-stretch sm:grid-cols-2 lg:grid-cols-3 gap-[clamp(12px,1.4vw,16px)]">
-                        {filteredTasks.map((task) => (
-                          <TaskCard
-                            key={`${task.engineType}:${task.id}`}
-                            task={task}
-                            onToggle={(enabled) => handleToggle(task, enabled)}
-                            onEdit={() => {
-                              const job = safeJobs.find((j) => j.id === task.id) ?? null;
-                              setEditingJob(job);
-                              setCreateOpen(true);
-                            }}
-                            onDelete={() => {
-                              const job = safeJobs.find((j) => j.id === task.id) ?? null;
-                              if (job) setDeleteTarget(job);
-                            }}
-                            onRun={() => handleTrigger(task)}
-                          />
-                        ))}
+                        {filteredTasks.map((task) => {
+                          const openTaskEdit = () => {
+                            const job = safeJobs.find((j) => j.id === task.id) ?? null;
+                            setEditingJob(job);
+                            setCreateOpen(true);
+                          };
+
+                          return (
+                            <TaskCard
+                              key={`${task.engineType}:${task.id}`}
+                              task={task}
+                              onToggle={(enabled) => handleToggle(task, enabled)}
+                              onClick={openTaskEdit}
+                              onEdit={openTaskEdit}
+                              onDelete={() => {
+                                const job = safeJobs.find((j) => j.id === task.id) ?? null;
+                                if (job) setDeleteTarget(job);
+                              }}
+                              onRun={() => handleTrigger(task)}
+                            />
+                          );
+                        })}
                       </div>
                     )}
                   </section>
