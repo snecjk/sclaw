@@ -179,7 +179,8 @@ export function SkillPlazaPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-6">
+      {/* pt 并入顶栏 drag-region，空白区可拖窗；交互控件各自 no-drag */}
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-0">
       {snapshot.canUserRestoreSidebar ? (
         <SidebarHeaderToggle
           isCollapsed
