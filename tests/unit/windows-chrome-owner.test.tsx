@@ -48,6 +48,20 @@ describe('provincial Windows Chrome owner', () => {
 
     expect(resolveWindowsChromeOwner({
       isProvincial: true,
+      pathname: '/skills',
+      browserOverlayOpen: false,
+      appPlazaVisible: false,
+    })).toBe('shell-fallback');
+
+    expect(resolveWindowsChromeOwner({
+      isProvincial: true,
+      pathname: '/my-tasks',
+      browserOverlayOpen: false,
+      appPlazaVisible: false,
+    })).toBe('shell-fallback');
+
+    expect(resolveWindowsChromeOwner({
+      isProvincial: true,
       pathname: '/more-apps',
       browserOverlayOpen: true,
       appPlazaVisible: true,

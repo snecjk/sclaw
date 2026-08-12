@@ -448,7 +448,8 @@ export default function MyTask() {
     <div className="flex h-full min-h-0 flex-col">
       <div
         className={cn(
-          'relative flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-6',
+          // pt 并入顶栏 drag-region，空白区可拖窗；交互控件各自 no-drag
+          'relative flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-0',
           isWorkflowSection && workflowPageRootClass,
         )}
       >
@@ -468,14 +469,15 @@ export default function MyTask() {
             'relative z-[1] flex min-h-0 flex-1 flex-col overflow-hidden',
           )}
         >
-          {/* 一级 Tab 固定顶栏：左分段；右为运行保障 + 搜索/新建 */}
-          <div className="mb-[38px] flex flex-shrink-0 flex-wrap items-center gap-3">
+          {/* 一级 Tab 固定顶栏（兼 ContentHeader 缺位时的 drag-region）：左分段；右为运行保障 + 搜索/新建 */}
+          <div className="drag-region mb-[38px] flex flex-shrink-0 flex-wrap items-center gap-3 pt-6">
             <SectionTabs
               activeSection={activeSection}
               onSectionChange={handleSectionChange}
+              className="no-drag"
             />
             {!isWorkflowSection ? (
-              <div className="ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
+              <div className="no-drag ml-auto flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
                 <TaskRunGuardBar />
                 {isTasksView ? (
                   <>
