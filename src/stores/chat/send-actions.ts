@@ -69,9 +69,16 @@ export function createSendActions(
         composerSegments,
       } = options;
       const userDisplayText = text.trim();
+      /** 正式坐标：skillMetas；skillMeta 仅 deprecated 兼容派生 */
       const resolvedSkillMetas = skillMetas ?? (skillMeta ? [skillMeta] : []);
       const primarySkillMeta = resolvedSkillMetas[0];
-      if (!primarySkillMeta && !userDisplayText && (!attachments || attachments.length === 0)) return;
+      if (
+        resolvedSkillMetas.length === 0
+        && !userDisplayText
+        && (!attachments || attachments.length === 0)
+      ) {
+        return;
+      }
 
       // DEFAULT_SESSION_KEY is a UI placeholder. Materialize it before target
       // resolution so a fresh home/project conversation always gets a unique

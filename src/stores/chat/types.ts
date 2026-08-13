@@ -22,9 +22,9 @@ export interface SendMessageOptions {
   workflowContext?: WorkflowContextBlock | null;
   /** Hidden embed-browser page snapshot for in-app preview chat */
   embedBrowserContext?: import('@/lib/sclaw-browser-embed-context').SclawBrowserEmbedContextBlock | null;
-  /** Skill plaza context — UI tag + Gateway defaultPrompt injection */
+  /** @deprecated 单技能兼容；正式坐标为 skillMetas，仅作派生 */
   skillMeta?: SkillMeta;
-  /** 多技能元数据（存在时优先于 skillMeta） */
+  /** 多技能元数据（正式坐标；存在时优先于 skillMeta） */
   skillMetas?: SkillMeta[];
   /** 按 segment 顺序的多工作流元数据 */
   workflows?: Array<{ id: string; name: string; source?: string }>;

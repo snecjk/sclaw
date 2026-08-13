@@ -27,6 +27,8 @@ export interface UseInputComposerPickersOptions {
   composerShellRef: RefObject<HTMLElement | null>;
   /** 开 workflow slash 时由装配层注入（如关钉钉 mention） */
   closeOthers?: () => void;
+  /** Chat：选工作流时清 pending workflow；Task 不传 */
+  onClearPendingWorkflow?: () => void;
   /** 是否挂载技能 picker；默认 true */
   enableSkill?: boolean;
   /** 是否挂载工作流 picker；默认 true */
@@ -42,6 +44,7 @@ export function useInputComposerPickers({
   isComposingRef,
   composerShellRef,
   closeOthers,
+  onClearPendingWorkflow,
   enableSkill = true,
   enableWorkflow = true,
   enableQuickInput = true,
@@ -71,6 +74,7 @@ export function useInputComposerPickers({
     isComposingRef,
     composerShellRef,
     closeOthers,
+    onClearPendingWorkflow,
   });
 
   const quickInputPicker = useQuickInputPickerController({

@@ -22,6 +22,7 @@ export interface DispatchChatSendOptions {
   workflowSource?: string | null;
   /** 工作流名称（mine 来源时用于上下文块）。 */
   workflowName?: string | null;
+  /** @deprecated 单技能兼容；正式坐标为 skillMetas，仅作派生 */
   skillMeta?: SkillMeta;
   skillMetas?: SkillMeta[];
   workflows?: Array<{ id: string; name: string; source?: string }>;
@@ -67,7 +68,9 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
   } = options;
 
   const sendMessage = useChatStore.getState().sendMessage;
+  /** 正式坐标：skillMetas；skillMeta 仅 deprecated 兼容派生 */
   const resolvedSkillMetas = skillMetas ?? (skillMeta ? [skillMeta] : []);
+  const deprecatedSkillMeta = resolvedSkillMetas[0];
   const resolvedWorkflows = workflows ?? (
     workflowId
       ? [{
@@ -93,7 +96,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
       workflowId: wfId || undefined,
       runId: _runId || undefined,
       workflowContext: ctx as import('@/stores/chat').WorkflowContextBlock | undefined,
-      skillMeta: resolvedSkillMetas[0],
+      skillMeta: deprecatedSkillMeta,
       skillMetas: resolvedSkillMetas.length ? resolvedSkillMetas : undefined,
       workflows: resolvedWorkflows.length ? resolvedWorkflows : undefined,
       composerSegments,
@@ -146,7 +149,7 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
       attachments,
       targetAgentId,
       dingTalkMentions,
-      skillMeta: resolvedSkillMetas[0],
+      skillMeta: deprecatedSkillMeta,
       skillMetas: resolvedSkillMetas.length ? resolvedSkillMetas : undefined,
       workflows: resolvedWorkflows.length ? resolvedWorkflows : undefined,
       composerSegments,
@@ -175,7 +178,8 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
         dingTalkMentions,
         workflowId: wfId ?? undefined,
         runId: runId ?? undefined,
-        skillMeta: resolvedSkillMetas[0],
+        skillMeta: deprecatedSkillMeta,
+        skillMetas: resolvedSkillMetas.length ? resolvedSkillMetas : undefined,
       });
     },
   });
@@ -189,7 +193,8 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
       dingTalkMentions,
       workflowId: wfId,
       runId,
-      skillMeta: resolvedSkillMetas[0],
+      skillMeta: deprecatedSkillMeta,
+      skillMetas: resolvedSkillMetas.length ? resolvedSkillMetas : undefined,
     });
   });
   if (resolved) return;
@@ -199,7 +204,8 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
     attachments,
     targetAgentId,
     dingTalkMentions,
-    skillMeta: resolvedSkillMetas[0],
+    skillMeta: deprecatedSkillMeta,
+    skillMetas: resolvedSkillMetas.length ? resolvedSkillMetas : undefined,
   });
   if (failed()) {
     toast.error('发送失败，请重试');

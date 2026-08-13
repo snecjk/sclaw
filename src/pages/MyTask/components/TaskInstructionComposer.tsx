@@ -54,7 +54,7 @@ export function TaskInstructionComposer({
   invalid = false,
   className,
   editorClassName,
-  enableAttachments = true,
+  enableAttachments = false,
   enableSkill = true,
   enableWorkflow = true,
   enableQuickInput = true,

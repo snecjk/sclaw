@@ -737,9 +737,15 @@ async function initialize(): Promise<void> {
   // startScheduler（discard→start）。迁移幂等（marker + per-row 存在检查，崩溃可重跑续传）。
   const { getScheduledTaskService } = await import('../scheduled-tasks/scheduled-task-service');
   const { runScheduledTasksMigration } = await import('../scripts/migrate-scheduled-tasks');
+  const { runDingTalkRecipientsToComposerSegmentsMigration } = await import(
+    '../scripts/migrate-dingtalk-recipients-to-composer-segments'
+  );
   const scheduledTaskService = getScheduledTaskService();
   scheduledTaskService.setGatewayManager(gm);
   await runScheduledTasksMigration(gm, scheduledTaskService);
+  await runDingTalkRecipientsToComposerSegmentsMigration(scheduledTaskService).catch((error) => {
+    logger.warn('[scheduled-task] dingtalk→composerSegments migration failed:', error);
+  });
   scheduledTaskService.startScheduler();
   void scheduledTaskService.refreshSchedule().catch((error) => {
     logger.warn('[scheduled-task] initial schedule refresh failed:', error);

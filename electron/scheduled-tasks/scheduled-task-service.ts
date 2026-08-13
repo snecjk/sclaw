@@ -25,6 +25,7 @@ import {
   SCHEDULED_TASK_DINGTALK_RULES,
 } from '../../shared/dingtalk-prompts';
 import {
+  planComposerSegmentsRecipientsMigration,
   planDingTalkRecipientsLift,
   resolveScheduledTaskDingTalkRecipients,
 } from '../../shared/dingtalk-send/scheduled-task-dingtalk-lift';
@@ -242,6 +243,7 @@ export class ScheduledTaskService {
    * 可选一次性回填：列空且 prompt 含可解析收件人块 → 写入 `dingtalk_recipients_json`。
    * 默认 dryRun；`stripPromptBlock` 为 true 时同步剥掉 prompt 内规则大块。
    * 不改 package.json；由调用方（开发者 / 运维）显式触发。
+   * @deprecated 优先用 migrateDingTalkRecipientsToComposerSegments
    */
   async liftDingTalkRecipientsFromPrompts(options?: {
     dryRun?: boolean;
@@ -306,6 +308,84 @@ export class ScheduledTaskService {
     return {
       scanned: tasks.length,
       lifted,
+      skipped,
+      dryRun,
+      details,
+    };
+  }
+
+  /**
+   * 收件人列 / prompt 块 → `extra.composerSegments` mention segment。
+   * 写回 extra + 干净 prompt，清空 `dingtalk_recipients_json`。
+   * 默认 dryRun；生产启动由 migrate 脚本带 marker 调用 dryRun:false。
+   */
+  async migrateDingTalkRecipientsToComposerSegments(options?: {
+    dryRun?: boolean;
+  }): Promise<{
+    scanned: number;
+    migrated: number;
+    skipped: number;
+    dryRun: boolean;
+    details: Array<{
+      taskId: string;
+      name: string;
+      action: string;
+      reason: string;
+      stripped?: boolean;
+    }>;
+  }> {
+    const dryRun = options?.dryRun !== false;
+    const tasks = await this.listTasks();
+    const details: Array<{
+      taskId: string;
+      name: string;
+      action: string;
+      reason: string;
+      stripped?: boolean;
+    }> = [];
+    let migrated = 0;
+    let skipped = 0;
+
+    for (const task of tasks) {
+      const plan = planComposerSegmentsRecipientsMigration(task);
+      if (plan.action === 'skip') {
+        skipped += 1;
+        details.push({
+          taskId: task.id,
+          name: task.name,
+          action: 'skip',
+          reason: plan.reason,
+        });
+        continue;
+      }
+
+      if (!dryRun) {
+        await this.updateTask(task.id, {
+          prompt: plan.prompt,
+          dingtalkRecipients: null,
+          extra: plan.extra,
+        });
+      }
+      migrated += 1;
+      details.push({
+        taskId: task.id,
+        name: task.name,
+        action: dryRun ? 'would_migrate' : 'migrate',
+        reason: plan.reason,
+        stripped: plan.stripped,
+      });
+    }
+
+    logger.info('[scheduled-task] dingtalk recipients → composerSegments', {
+      dryRun,
+      scanned: tasks.length,
+      migrated,
+      skipped,
+    });
+
+    return {
+      scanned: tasks.length,
+      migrated,
       skipped,
       dryRun,
       details,

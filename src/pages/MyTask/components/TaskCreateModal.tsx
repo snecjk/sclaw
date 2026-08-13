@@ -33,7 +33,7 @@ import { createDataCenterFolder, deleteDataCenterEntry, getDataCenterEntry, getD
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import type { DataCenterEntry, DataCenterSpace, DataCenterSpaceType } from '@/types/data-center';
 import { toast } from 'sonner';
-import { TaskInstructionComposer } from '@/components/task/TaskInstructionComposer';
+import { TaskInstructionComposer } from './TaskInstructionComposer';
 import type { MentionComposerSnapshot } from '@/lib/dingtalk-mention-composer';
 
 type TaskEngineType = 'openclaw' | 'claude';
@@ -973,7 +973,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
               disabled={workflowDisabled}
               invalid={Boolean(errors.instructions)}
               placeholder={t('myTask.createModal.instructionsPlaceholder')}
-              enableAttachments
+              enableAttachments={false}
               enableSkill
               enableWorkflow
               enableQuickInput

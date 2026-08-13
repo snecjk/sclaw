@@ -200,6 +200,9 @@ export function ChatInput({
     inlineAttachments: true,
     disabled,
     onSubmit: () => handleSendRef.current(),
+    onClearPendingWorkflow: () => {
+      useChatStore.getState().clearPendingWorkflow();
+    },
     onKeyDownExtra: (e) => {
       if (e.key !== 'Backspace' || !targetAgentIdRef.current) return false;
       const snap = coreRef.current?.getSnapshot();
@@ -326,7 +329,6 @@ export function ChatInput({
     || (composerSnapshot.skills?.length ?? 0) > 0
     || (composerSnapshot.workflows?.length ?? 0) > 0
     || (composerSnapshot.attachmentIds?.length ?? 0) > 0
-    || composerSnapshot.skill != null
     || attachments.length > 0)
     && allReady
     && !disabled;
@@ -335,12 +337,6 @@ export function ChatInput({
   const handleSend = useCallback(() => {
     const readyAttachments = attachments.filter((a) => a.status === 'ready');
     const snapshot = getSnapshot();
-    const skillMetaToSend = snapshot.skills[0]
-      ? {
-        ...snapshot.skills[0],
-        tagOffset: resolveTrimmedSkillOffset(snapshot.plainText, snapshot.skillOffset),
-      }
-      : composerSnapshot.skill ?? mentionEditorRef.current?.readSkillMeta();
 
     void (async () => {
       const payload = await buildComposerGatewayPayload({
@@ -366,6 +362,16 @@ export function ChatInput({
       const workflowIdToSend = snapshot.workflowId ?? payload.workflows[0]?.id ?? null;
       const workflowSourceToSend = snapshot.workflowSource ?? payload.workflows[0]?.source ?? null;
       const workflowNameToSend = snapshot.workflowName ?? payload.workflows[0]?.name ?? null;
+      /** @deprecated 单字段兼容派生；正式坐标为 extras.skillMetas */
+      const skillMetaToSend = payload.skillMetas[0]
+        ? {
+          ...payload.skillMetas[0],
+          tagOffset: resolveTrimmedSkillOffset(
+            snapshot.plainText,
+            snapshot.skillOffset,
+          ),
+        }
+        : undefined;
       const extras: ChatSendExtras = {
         skillMetas: payload.skillMetas.length ? payload.skillMetas : undefined,
         workflows: payload.workflows.length ? payload.workflows : undefined,

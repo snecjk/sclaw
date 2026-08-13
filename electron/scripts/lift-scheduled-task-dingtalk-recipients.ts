@@ -2,6 +2,9 @@
  * 可选运维入口：把 schedule_tasks 中「列空 + prompt 含 Recipients 块」的任务回填到
  * `dingtalk_recipients_json`。默认 dry-run。
  *
+ * @deprecated 优先使用 migrate-dingtalk-recipients-to-composer-segments.ts
+ * （列/块 → extra.composerSegments，并清空列）。
+ *
  * 用法（在已启动的 Electron/主进程上下文，或通过测试注入 service）：
  *   const { getScheduledTaskService } = await import('../scheduled-tasks/scheduled-task-service');
  *   await getScheduledTaskService().liftDingTalkRecipientsFromPrompts({ dryRun: true });
@@ -14,5 +17,6 @@
  */
 export {
   planDingTalkRecipientsLift,
+  planComposerSegmentsRecipientsMigration,
   resolveScheduledTaskDingTalkRecipients,
 } from '../../shared/dingtalk-send/scheduled-task-dingtalk-lift';

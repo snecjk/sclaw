@@ -45,6 +45,11 @@ export interface UseWorkflowPickerControllerOptions {
   composerShellRef: RefObject<HTMLElement | null>;
   /** 开 slash 时由装配层注入（如关 dingTalk mention） */
   closeOthers?: () => void;
+  /**
+   * 选中工作流后清除 pending workflow（Chat 注入 useChatStore.clearPendingWorkflow）。
+   * Task 等非 Chat 场景不传，避免误碰 Chat store。
+   */
+  onClearPendingWorkflow?: () => void;
 }
 
 export function useWorkflowPickerController({
@@ -59,6 +64,7 @@ export function useWorkflowPickerController({
   isComposingRef,
   composerShellRef,
   closeOthers,
+  onClearPendingWorkflow,
 }: UseWorkflowPickerControllerOptions) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -140,7 +146,7 @@ export function useWorkflowPickerController({
   );
 
   const handleSelect = useCallback(
-    async (id: string, name: string) => {
+    (id: string, name: string) => {
       const shouldConsumeSlash = slashOpenRef.current;
       slashOpenRef.current = false;
       setOpen(false);
@@ -149,12 +155,11 @@ export function useWorkflowPickerController({
         const offset = mentionEditorRef.current?.consumeSlashTrigger(query);
         if (typeof offset === 'number') insertAt = offset;
       }
-      const { useChatStore } = await import('@/stores/chat');
-      useChatStore.getState().clearPendingWorkflow();
+      onClearPendingWorkflow?.();
       mentionEditorRef.current?.insertWorkflow(id, name, 'mine', insertAt);
       mentionEditorRef.current?.focus();
     },
-    [mentionEditorRef, query, setOpen, slashOpenRef],
+    [mentionEditorRef, onClearPendingWorkflow, query, setOpen, slashOpenRef],
   );
 
   const handleSelectSkill = useCallback(
