@@ -7,7 +7,7 @@ import {
   useState,
   type RefObject,
 } from 'react';
-import { Loader2 } from 'lucide-react';
+import { ChevronLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   buildMemoryCenterWorkflowDesignerEmbedUrl,
@@ -106,6 +106,7 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
   const [handshakeRequestId] = useState(createWorkflowBridgeNonce);
   const iframeCreatedAtRef = useRef<number | null>(null);
   const editorReadyRef = useRef(false);
+  const [headerOwnerIframeSrc, setHeaderOwnerIframeSrc] = useState<string | null>(null);
   const persistedManagerRef = useRef<WorkflowIframeRequestManager<WorkflowSavedDraftSnapshot> | null>(null);
   const persistedRequestIdRef = useRef<string | null>(null);
   const legacyManagerRef = useRef<WorkflowIframeRequestManager<WorkflowDraftSnapshot> | null>(null);
@@ -134,6 +135,7 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
     ),
     [workflowId, token, ssoEnvironment, promptCacheId, prompt, bridgeNonce, bridgeParentOrigin],
   );
+  const editorOwnsHeader = headerOwnerIframeSrc === iframeSrc;
 
   useEffect(() => {
     iframeCreatedAtRef.current = performance.now();
@@ -274,6 +276,7 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
         disposeLegacyRequests: () => legacyManagerRef.current?.dispose(),
         resetCapabilities: () => {
           editorReadyRef.current = false;
+          setHeaderOwnerIframeSrc(null);
           callbacksRef.current.onEditorCapabilitiesChange?.(false);
         },
       });
@@ -328,6 +331,7 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
         handshakeRequestId,
       })) {
         editorReadyRef.current = true;
+        setHeaderOwnerIframeSrc(iframeSrc);
         callbacksRef.current.onEditorCapabilitiesChange?.(true);
         return;
       }
@@ -365,7 +369,7 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
     return () => {
       window.removeEventListener('message', onMessage);
     };
-  }, [bridgeNonce, expectedOrigin, handshakeRequestId, workflowId]);
+  }, [bridgeNonce, expectedOrigin, handshakeRequestId, iframeSrc, workflowId]);
 
   useImperativeHandle(ref, () => ({
     requestLegacyDraftSnapshot,
@@ -381,6 +385,7 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
       disposeLegacyRequests: () => legacyManagerRef.current?.dispose(),
       resetCapabilities: () => {
         editorReadyRef.current = false;
+        setHeaderOwnerIframeSrc(null);
         callbacksRef.current.onEditorCapabilitiesChange?.(false);
       },
     });
@@ -399,6 +404,17 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
   return (
     <div className={workflowMcEditorShell}>
       <div className="relative min-h-0 flex-1">
+        {editorOwnsHeader && onBackRequest ? (
+          <button
+            type="button"
+            className="no-drag absolute left-0 top-0 z-20 flex h-11 w-11 cursor-pointer items-center justify-center bg-transparent text-transparent outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            aria-label="返回工作流列表"
+            title="返回工作流列表"
+            onClick={onBackRequest}
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden />
+          </button>
+        ) : null}
         {/* key 随 src 变化重挂载，loading 态自动重置为 true，无需 effect */}
         <McEditorIframe
           key={iframeSrc}
