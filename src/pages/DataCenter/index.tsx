@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -109,12 +109,28 @@ export function DataCenter() {
   const [uploading, setUploading] = useState(false);
   const [driveTab, setDriveTab] = useState<DriveTab>('local');
   const [associationFilter, setAssociationFilter] = useState<AssociationFilter>('all');
+  const [qrCodePinned, setQrCodePinned] = useState(false);
+  const qrCodeTriggerRef = useRef<HTMLButtonElement>(null);
+  const qrCodeContentRef = useRef<HTMLDivElement>(null);
   const isDriveSection = store.section === 'drive';
   const isLocalDriveTab = isDriveSection && driveTab === 'local';
   const isUploadDriveTab = isDriveSection && driveTab === 'upload';
   const isSharedArtifactSpace = store.section === 'qa_artifact' && store.spaceType === 'site_shared_artifact';
   const isMyArtifactSpace = store.section === 'qa_artifact' && store.spaceType === 'qa_artifact';
   const canCreateFolder = isUploadDriveTab || (!isDriveSection && (!isSharedArtifactSpace || Boolean(store.spaceId)));
+
+  useEffect(() => {
+    if (!qrCodePinned) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (qrCodeTriggerRef.current?.contains(target) || qrCodeContentRef.current?.contains(target)) return;
+      setQrCodePinned(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [qrCodePinned]);
   const baseVisibleItems: DataCenterUiEntry[] = isLocalDriveTab
     ? localStore.items.map(localEntryToUiEntry)
     : store.items;
@@ -759,17 +775,21 @@ export function DataCenter() {
               <Info className="h-4 w-4 shrink-0 text-[#6B8CFF]" />
               <span className="truncate">{t('dataCenterPage.toolbar.sharedArtifactsMobileTip')}</span>
             </span>
-            <Tooltip delayDuration={150}>
+            <Tooltip open={qrCodePinned}>
               <TooltipTrigger asChild>
                 <button
+                  ref={qrCodeTriggerRef}
                   type="button"
                   aria-label={t('dataCenterPage.toolbar.sharedArtifactsQrCode')}
+                  aria-expanded={qrCodePinned}
                   className="shrink-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-[#6B8CFF] focus-visible:ring-offset-1"
+                  onClick={() => setQrCodePinned((pinned) => !pinned)}
                 >
                   <img src={qrCodeIcon} alt="" className="h-[21px] w-[21px] dark:invert" />
                 </button>
               </TooltipTrigger>
               <TooltipContent
+                ref={qrCodeContentRef}
                 side="right"
                 align="start"
                 sideOffset={8}
