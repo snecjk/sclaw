@@ -73,6 +73,7 @@ export interface WorkflowMcIframeEditorHandle {
 // The iframe persists the exact canvas snapshot before replying. Allow enough
 // time for a real cloud save (including slower VPN/network conditions).
 const DRAFT_REQUEST_TIMEOUT_MS = 30_000;
+const IFRAME_LOAD_TIMEOUT_MS = 60_000;
 
 function createPersistedRequestManager(): WorkflowIframeRequestManager<WorkflowSavedDraftSnapshot> {
   return createWorkflowIframeRequestManager({ timeoutMs: DRAFT_REQUEST_TIMEOUT_MS });
@@ -431,11 +432,22 @@ function McEditorIframe({
   token: string;
   onIframeLoad: () => void;
 }) {
-  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadIssue, setLoadIssue] = useState<'timeout' | 'error' | null>(null);
   const [iframeLoading, setIframeLoading] = useState(true);
+  const [loadAttempt, setLoadAttempt] = useState(0);
+
+  useEffect(() => {
+    if (!iframeLoading || loadIssue) return;
+    const timer = window.setTimeout(() => {
+      setIframeLoading(false);
+      setLoadIssue('timeout');
+    }, IFRAME_LOAD_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [iframeLoading, loadAttempt, loadIssue]);
 
   const handleIframeLoad = () => {
     setIframeLoading(false);
+    setLoadIssue(null);
     onIframeLoad();
     if (src.includes('/workflows-workbench/')) {
       markMcWebAuthedInSession();
@@ -453,17 +465,36 @@ function McEditorIframe({
         </div>
       ) : null}
 
-      {loadFailed ? (
+      {loadIssue ? (
         <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
           <p className="text-sm text-muted-foreground">
-            无法在应用内加载{prompt || promptCacheId ? ' AI 创建面板' : '网页版编辑器'}（可能被安全策略拦截）。请在浏览器中打开。
+            {loadIssue === 'timeout'
+              ? `${prompt || promptCacheId ? 'AI 创建面板' : '编辑器'}加载时间过长，请检查网络后重试。`
+              : `无法在应用内加载${prompt || promptCacheId ? ' AI 创建面板' : '网页版编辑器'}，可能被安全策略拦截。`}
           </p>
-          <Button type="button" onClick={() => openMemoryCenterWorkflowDesigner(workflowId, token, promptCacheId, prompt)}>
-            在浏览器打开
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              onClick={() => {
+                setLoadIssue(null);
+                setIframeLoading(true);
+                setLoadAttempt((attempt) => attempt + 1);
+              }}
+            >
+              重新加载
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => openMemoryCenterWorkflowDesigner(workflowId, token, promptCacheId, prompt)}
+            >
+              在浏览器打开
+            </Button>
+          </div>
         </div>
       ) : (
         <iframe
+          key={loadAttempt}
           ref={iframeRef}
           title="AI 记忆中心工作流编辑器"
           src={src}
@@ -471,7 +502,7 @@ function McEditorIframe({
           onLoad={handleIframeLoad}
           onError={() => {
             setIframeLoading(false);
-            setLoadFailed(true);
+            setLoadIssue('error');
           }}
         />
       )}

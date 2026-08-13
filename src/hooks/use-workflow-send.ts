@@ -21,6 +21,7 @@ import { canStartWorkflow, useWorkflowsStore } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
 import { updateCurrentChatDisplayProjection } from '@/stores/chat/display-selectors';
 import { buildWorkflowStartUserText } from '@/lib/workflow-local-turn';
+import { refreshStartedWorkflowChatCards } from '@/lib/workflow-run-started';
 import { buildWorkflowContextSummary, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
@@ -216,6 +217,7 @@ export async function createAndStartWorkflowDirect(
 
     // Clear pending state
     useChatStore.getState().clearPendingWorkflow(context.sessionKey);
+    await refreshStartedWorkflowChatCards(context.sessionKey, run.runId);
 
     return true;
   } catch (err) {
