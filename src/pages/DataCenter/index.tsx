@@ -5,10 +5,12 @@ import {
   AlertCircle,
   ChevronDown,
   Database,
+  Folder,
   FolderPlus,
   Grid2X2,
   List,
   Loader2,
+  PanelsTopLeft,
   Plus,
   Search,
   ShieldCheck,
@@ -40,12 +42,14 @@ import {
   type DingTalkShareDialogDraft,
 } from '@/lib/dingtalk-share';
 import {
+  myTaskSectionTabClass,
+  myTaskSectionTabsTrackClass,
   stoMainInnerShell,
   stoPageTitleClass,
   workflowListToolbarClass,
 } from '@/lib/surfaces';
 import { cn } from '@/lib/utils';
-import { useDataCenterStore } from '@/stores/data-center';
+import { useDataCenterStore, type DataCenterSection } from '@/stores/data-center';
 import { useLocalAuthorizedFilesStore } from '@/stores/local-authorized-files';
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
@@ -141,6 +145,11 @@ export function DataCenter() {
     if (isUploadDriveTab) return t('dataCenterPage.feedback.uploadDriveEmptyDescription');
     return t('dataCenterPage.feedback.driveEmptyDescription');
   })();
+
+  const handleSectionChange = (section: DataCenterSection) => {
+    if (section === store.section) return;
+    setSearchParams({ section });
+  };
 
   useEffect(() => {
     const rawSection = searchParams.get('section');
@@ -538,8 +547,33 @@ export function DataCenter() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--sto-main-bg)]">
-      <div className="flex min-h-0 flex-1 flex-col overflow-x-auto overflow-y-auto px-6 py-6 [scrollbar-gutter:stable]">
+      <div className="flex min-h-0 flex-1 flex-col overflow-x-auto overflow-y-auto px-6 pb-6 pt-0 [scrollbar-gutter:stable]">
         <main className={cn(stoMainInnerShell, 'flex min-h-0 min-w-[620px] flex-1 flex-col')}>
+          <div className="mb-[38px] flex shrink-0 flex-wrap items-center gap-3">
+            <div className={myTaskSectionTabsTrackClass} role="tablist" aria-label={t('dataCenterPage.title')}>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={store.section === 'qa_artifact'}
+                onClick={() => handleSectionChange('qa_artifact')}
+                className={myTaskSectionTabClass(store.section === 'qa_artifact')}
+              >
+                <PanelsTopLeft className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.75} aria-hidden />
+                {t('dataCenterPage.sections.qaArtifact')}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={store.section === 'drive'}
+                onClick={() => handleSectionChange('drive')}
+                className={myTaskSectionTabClass(store.section === 'drive')}
+              >
+                <Folder className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.75} aria-hidden />
+                {t('dataCenterPage.sections.drive')}
+              </button>
+            </div>
+          </div>
+
           <header className="mb-6 shrink-0">
             <h1 className={stoPageTitleClass}>
               {store.section === 'qa_artifact' ? t('dataCenterPage.sections.qaArtifact') : store.section === 'drive' ? t('dataCenterPage.sections.drive') : t('dataCenterPage.sections.dataSource')}
