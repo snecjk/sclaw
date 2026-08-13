@@ -186,12 +186,6 @@ const SIDEBAR_COLLAPSED_SESSION_LIMIT = 40;
 const SIDEBAR_TASK_LIST_INITIAL_ROW_LIMIT = 8;
 /** 旧版按日期分桶渲染（today/yesterday/…）— 保留逻辑，UI 已合并为「最近」单列表 */
 const USE_LEGACY_SESSION_DATE_BUCKETS = false;
-const DATA_CENTER_DEFAULT_SECTION = 'qa_artifact';
-const DATA_CENTER_SECTIONS = [
-  { id: 'qa_artifact', labelKey: 'dataCenterPage.sections.qaArtifact' },
-  { id: 'drive', labelKey: 'dataCenterPage.sections.drive' },
-] as const;
-
 /** 侧栏收起态：展开按钮 */
 const SIDEBAR_COLLAPSED_EXPAND_BTN_CLASS =
   'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card';
@@ -760,7 +754,6 @@ export function Sidebar() {
   const [recentOpen, setRecentOpen] = useState(true);
   const [projectsSectionOpen, setProjectsSectionOpen] = useState(true);
   const [workspaceSectionOpen, setWorkspaceSectionOpen] = useState(true);
-  const [dataCenterSectionOpen, setDataCenterSectionOpen] = useState(false);
   const [bucketOpen, setBucketOpen] = useState<Record<SessionBucketKey, boolean>>({
     today: true,
     yesterday: true,
@@ -1788,60 +1781,11 @@ export function Sidebar() {
       }
     : undefined;
   
-  const dataCenterSection = new URLSearchParams(location.search).get('section') || DATA_CENTER_DEFAULT_SECTION;
-  const isDataCenterItem = item.to === '/data-center';
   const myTasksActiveOverride =
     item.to === '/my-tasks' && location.pathname.startsWith('/workflow')
       ? true
       : undefined;
-  const itemActiveOverride = isDataCenterItem
-    ? false
-    : myTasksActiveOverride ?? homeIsActiveOverride;
-
-  if (isDataCenterItem && !sidebarCollapsed) {
-    return (
-      <div key={item.to} className="min-w-0">
-        <button
-          type="button"
-          aria-expanded={dataCenterSectionOpen}
-          onClick={() => setDataCenterSectionOpen((open) => !open)}
-          className={cn(
-            'relative flex w-full shrink-0 items-center justify-start gap-[10px] text-left text-[13px] leading-5 transition-[color,background-color,border-radius] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
-            sidebarNavExpandedIdleClass,
-          )}
-        >
-          <span className="flex shrink-0 items-center justify-center">{item.icon}</span>
-          <span className="min-w-0 flex-1 truncate">{item.label}</span>
-          <ChevronDown
-            className={cn(
-              'h-3.5 w-3.5 text-muted-foreground transition-transform',
-              !dataCenterSectionOpen && '-rotate-90',
-            )}
-          />
-        </button>
-        {dataCenterSectionOpen ? (
-          <div className="ml-[17px] mt-0.5 flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-1.5 dark:border-border">
-            {DATA_CENTER_SECTIONS.map((section) => {
-              const active = location.pathname === '/data-center' && dataCenterSection === section.id;
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() => navigate(`/data-center?section=${section.id}`)}
-                  className={cn(
-                    'relative inline-flex h-8 w-full min-w-0 items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
-                    active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
-                  )}
-                >
-                  <span className="min-w-0 flex-1 truncate">{t(`common:${section.labelKey}`)}</span>
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
+  const itemActiveOverride = myTasksActiveOverride ?? homeIsActiveOverride;
 
   return (
     <div key={item.to} className="min-w-0">
@@ -1854,13 +1798,7 @@ export function Sidebar() {
         onClick={
           item.to === '/'
             ? () => handleHomeClick?.()
-            : isDataCenterItem
-              ? (e) => {
-                  e.preventDefault();
-                  setSidebarCollapsed(false);
-                  setDataCenterSectionOpen(true);
-                }
-              : undefined
+            : undefined
         }
         isActiveOverride={itemActiveOverride}
         badge={item.badge}
