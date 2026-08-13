@@ -413,15 +413,21 @@ export function WorkflowCard({
 
       {showProgress ? (
         <div className="mt-2.5">
-          <div className="h-1 overflow-hidden rounded-full bg-muted" aria-label={t('workflow.progressLabel')}>
+          <div
+            className="h-1 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-label={t('workflow.progressLabel')}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progressDetails.progressPercent}
+          >
             {/* 动态进度宽：Tailwind 无法静态表达百分比，保留 inline width */}
             <div
               className={cn(
-                'h-full rounded-full transition-all duration-500',
+                'h-full rounded-full transition-[width] duration-200 ease-out motion-reduce:transition-none',
                 theme.progressClass,
-                display.progress === 0 && 'animate-pulse',
               )}
-              style={{ width: `${display.progress > 0 ? Math.max(display.progress, 8) : 28}%` }}
+              style={{ width: `${progressDetails.progressPercent}%` }}
             />
           </div>
           {progressDetails.helperText ? (
