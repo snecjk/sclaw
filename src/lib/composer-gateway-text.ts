@@ -92,7 +92,8 @@ export async function buildComposerGatewayPayload(input: {
         bodyParts.push(formatSkillPlaceholder(seg.title, seg.slug));
         const { defaultPrompt } = await resolveSkillPrompt(seg.slug);
         const prompt = defaultPrompt.trim();
-        if (prompt) skillPrompts.push(prompt);
+        // 禁止把 slug 本身当 prompt 前置（编辑重发后会变成气泡里单独一行 `html`）。
+        if (prompt && prompt !== seg.slug) skillPrompts.push(prompt);
         break;
       }
       case 'workflow': {

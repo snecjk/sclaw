@@ -17,6 +17,10 @@ import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint'
 const GATEWAY_SYSTEM_EVENT_LINE =
   /^\s*System:\s*(?:\[[^\]]+\]\s*)?[^\n]*(?:\n|$)/gim;
 
+/** Gateway 注入的时间戳前缀，如 `[Thu 2026-08-13 10:17 GMT+8]`。 */
+const GATEWAY_TIMESTAMP_PREFIX_RE =
+  /^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+[^\]]+\]\s*/i;
+
 /** 烘焙进 gatewayText 的行内文件/技能占位符（Composer stage 6）。 */
 const COMPOSER_FILE_PLACEHOLDER_RE = /\[文件:\s*[^\]]*\]/g;
 const COMPOSER_SKILL_PLACEHOLDER_RE = /\[技能:\s*[^\]]*\]/g;
@@ -25,18 +29,50 @@ const COMPOSER_SKILL_PLACEHOLDER_RE = /\[技能:\s*[^\]]*\]/g;
 const WORKFLOW_EXEC_SENTENCE_RE =
   /帮我执行\s*id\s*为\s*[:：]?\s*[A-Za-z0-9_-]+\s*的工作流\s*(?:【[^】]*】)?/g;
 
+/** 剥掉行首 Gateway 时间戳（可叠多层）。 */
+export function stripGatewayTimestampPrefix(text: string): string {
+  let result = text;
+  for (let i = 0; i < 3; i += 1) {
+    const next = result.replace(GATEWAY_TIMESTAMP_PREFIX_RE, '').trimStart();
+    if (next === result) break;
+    result = next;
+  }
+  return result;
+}
+
 function stripGatewayUserMetadata(text: string): string {
-  return text
-    .replace(GATEWAY_SYSTEM_EVENT_LINE, '')
-    .replace(/^Sender\s*\([^)]*\):\s*```[a-z]*\n[\s\S]*?```\s*/im, '')
-    .replace(/\s*\[media attached:[^\]]*\]/g, '')
-    .replace(/\s*\[message_id:\s*[^\]]+\]/g, '')
-    .replace(/^Conversation info\s*\([^)]*\):\s*```[a-z]*\n[\s\S]*?```\s*/i, '')
-    .replace(/^Conversation info\s*\([^)]*\):\s*\{[\s\S]*?\}\s*/i, '')
-    .replace(/^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+[^\]]+\]\s*/i, '')
-    .replace(/\n*Current time:\s*[^\n]+/gi, '')
-    .replace(/\n*Reference UTC:\s*[^\n]+/gi, '')
-    .trim();
+  return stripGatewayTimestampPrefix(
+    text
+      .replace(GATEWAY_SYSTEM_EVENT_LINE, '')
+      .replace(/^Sender\s*\([^)]*\):\s*```[a-z]*\n[\s\S]*?```\s*/im, '')
+      .replace(/\s*\[media attached:[^\]]*\]/g, '')
+      .replace(/\s*\[message_id:\s*[^\]]+\]/g, '')
+      .replace(/^Conversation info\s*\([^)]*\):\s*```[a-z]*\n[\s\S]*?```\s*/i, '')
+      .replace(/^Conversation info\s*\([^)]*\):\s*\{[\s\S]*?\}\s*/i, '')
+      .replace(/\n*Current time:\s*[^\n]+/gi, '')
+      .replace(/\n*Reference UTC:\s*[^\n]+/gi, ''),
+  ).trim();
+}
+
+/**
+ * 剥离 gateway / 钉钉等噪声，但保留 stage-6 `[文件:]`/`[技能:]` 与工作流执行句。
+ * 顺序：先抽 `用户消息：` 等外层块，再剥时间戳——否则 `[Thu …]` 嵌在用户段内时 `^` 匹配不到。
+ */
+export function stripUserNoiseKeepComposerBake(text: string): string {
+  const withoutWrappers = stripSkillTranscriptMarker(
+    stripCronTriggerTextForDisplay(
+      stripWorkflowContextForDisplay(
+        stripSclawBrowserEmbedContextForDisplay(
+          stripWorkflowSessionHintForDisplay(
+            stripWorkflowCompleteForDisplay(
+              stripDingTalkMentionContextForDisplay(text),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  return stripGatewayUserMetadata(withoutWrappers).trim();
 }
 
 /** 剥离 stage-6 `[文件:]` / `[技能:]` 占位符（仅 gateway 侧）。 */
@@ -60,19 +96,7 @@ export function stripComposerModelBakeForDisplay(text: string): string {
 }
 
 function stripAllUserDisplayNoise(text: string): string {
-  return stripDingTalkMentionContextForDisplay(
-    stripWorkflowCompleteForDisplay(
-      stripWorkflowSessionHintForDisplay(
-        stripSclawBrowserEmbedContextForDisplay(
-          stripWorkflowContextForDisplay(
-            stripCronTriggerTextForDisplay(
-              stripSkillTranscriptMarker(stripGatewayUserMetadata(text)),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
+  return stripUserNoiseKeepComposerBake(text);
 }
 
 /** 配对用：把换行与连续空白统一压成单空格。 */
@@ -95,19 +119,5 @@ export function normalizeUserMessageForDisplay(text: string): string {
 
 /** 为技能 transcript 解析剥离 Gateway 元数据；保留换行以便区分 prompt/用户正文。 */
 export function stripGatewayUserMetadataPreservingLines(text: string): string {
-  return stripComposerModelBakeForDisplay(
-    stripDingTalkMentionContextForDisplay(
-      stripWorkflowCompleteForDisplay(
-        stripWorkflowSessionHintForDisplay(
-          stripSclawBrowserEmbedContextForDisplay(
-            stripWorkflowContextForDisplay(
-              stripCronTriggerTextForDisplay(
-                stripSkillTranscriptMarker(stripGatewayUserMetadata(text)),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
-  ).trim();
+  return stripComposerModelBakeForDisplay(stripUserNoiseKeepComposerBake(text)).trim();
 }

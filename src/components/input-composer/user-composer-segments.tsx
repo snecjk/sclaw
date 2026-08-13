@@ -13,7 +13,19 @@ import { WorkflowNodesIcon } from '@/components/icons/composer-toolbar-icons';
 import { FileIcon, formatFileSize } from '@/components/attachments';
 import { ATTACHMENT_SPAN_CLASS } from '@/lib/dingtalk-mention-composer';
 import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
-import { stripComposerGatewayPlaceholders } from '@/lib/user-message-display';
+import {
+  normalizeUserMessageForDisplay,
+  stripComposerGatewayPlaceholders,
+  stripUserNoiseKeepComposerBake,
+} from '@/lib/user-message-display';
+import {
+  deriveSkillUserDisplayText,
+  parseSkillTranscriptMarker,
+  stripSkillGatewayPrefix,
+  stripSkillTranscriptMarker,
+} from '@/lib/skill-transcript-marker';
+import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
+import { getMessageText } from '@/stores/chat/helpers';
 import type { AttachedFileMeta } from '@/stores/chat/types';
 import type { SkillMeta } from '@/types/skill-meta';
 import type { RawMessage } from '@/stores/chat/types';
@@ -62,6 +74,53 @@ export function UserWorkflowMessageTag({ workflowName }: { workflowName: string 
       <span className="workflow-token-label">{workflowName}</span>
     </span>
   );
+}
+
+/**
+ * 将持久化 segments 展成复制 / 快捷输入用的纯文本：按 inline 顺序保留
+ * 文件名、技能名、工作流名、@提及，避免仅用 displayText 时 chip 位变空、技能标题被前置。
+ */
+export function serializePersistedComposerSegmentsToActionText(
+  segments: PersistedComposerSegment[],
+): string {
+  const parts: string[] = [];
+
+  const appendLabel = (label: string) => {
+    const next = label.trim();
+    if (!next) return;
+    const prev = parts.join('');
+    const padBefore = prev.length > 0 && !/\s$/.test(prev) ? ' ' : '';
+    // 尾随空格对齐气泡里 chip 后的 NBSP，避免与后文粘连
+    parts.push(`${padBefore}${next} `);
+  };
+
+  for (const seg of segments) {
+    switch (seg.type) {
+      case 'text':
+        parts.push((seg.text ?? '').replace(/\u00A0/g, ' '));
+        break;
+      case 'mention':
+        appendLabel(`@${seg.mention.displayName}`);
+        break;
+      case 'skill':
+        appendLabel(seg.title);
+        break;
+      case 'workflow':
+        appendLabel(seg.name);
+        break;
+      case 'file':
+        appendLabel(seg.fileName);
+        break;
+      default:
+        break;
+    }
+  }
+
+  return parts
+    .join('')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }
 
 /** 渲染已持久化的 composer segments（mention → DingTalkMentionTag 蓝色 token）。 */
@@ -150,10 +209,24 @@ function cleanTextForSynth(text: string): string {
   return stripComposerGatewayPlaceholders(text).replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').trim();
 }
 
+const COMPOSER_BAKE_EVIDENCE_RE =
+  /\[文件:\s*[^\]]*\]|\[技能:\s*[^\]]*\]|帮我执行\s*id\s*为\s*[:：]?\s*[A-Za-z0-9_-]+\s*的工作流/;
+
+function fileLabelMatches(file: AttachedFileMeta, label: string): boolean {
+  const normalizedLabel = label.replace(/］/g, ']').trim();
+  if (!normalizedLabel) return false;
+  const name = (file.fileName || '').replace(/］/g, ']').trim();
+  if (name === normalizedLabel) return true;
+  const base = name.split(/[/\\]/).pop() ?? name;
+  if (base === normalizedLabel) return true;
+  const pathBase = (file.filePath || '').split(/[/\\]/).pop() ?? '';
+  return Boolean(pathBase) && pathBase === normalizedLabel;
+}
+
 /**
  * 缺少 `_composerSegments` 时构建气泡 segments（旧数据 / 未 patch 的 history）。
  * 文本 segment 中不得残留 stage-6 `[文件:]` / `[技能:]`。
- * 优先按占位符重建顺序；否则文件 chip 可能前置（顺序未知），但正文须剥离占位符。
+ * 优先按占位符 + 工作流执行句重建顺序；否则文件 chip 可能前置（顺序未知），但正文须剥离占位符。
  */
 export function synthesizeComposerSegments(
   message: RawMessage,
@@ -170,8 +243,9 @@ export function synthesizeComposerSegments(
   const skillMetas = message._skillMetas ?? (skillMeta ? [skillMeta] : []);
   const hasFilePlaceholders = /\[文件:\s*[^\]]*\]/.test(text);
   const hasSkillPlaceholders = /\[技能:\s*[^\]]*\]/.test(text);
+  const hasWorkflowBake = /帮我执行\s*id\s*为\s*[:：]?\s*[A-Za-z0-9_-]+\s*的工作流/.test(text);
 
-  if (hasFilePlaceholders || hasSkillPlaceholders) {
+  if (hasFilePlaceholders || hasSkillPlaceholders || hasWorkflowBake) {
     const reconstructed = reconstructSegmentsFromGatewayPlaceholders(
       text,
       attachedFiles,
@@ -231,14 +305,15 @@ export function synthesizeComposerSegments(
 }
 
 /**
- * 遍历 gateway bake 文本，按 `[文件:]` / `[技能:]` 标记重建行内顺序。
+ * 遍历 gateway bake 文本，按 `[文件:]` / `[技能:]` / 工作流执行句重建行内顺序。
  */
 function reconstructSegmentsFromGatewayPlaceholders(
   text: string,
   attachedFiles: AttachedFileMeta[],
   skillMetas: SkillMeta[],
 ): PersistedComposerSegment[] | null {
-  const tokenRe = /\[文件:\s*([^\]]*)\]|\[技能:\s*([^\]]*)\]/g;
+  const tokenRe =
+    /\[文件:\s*([^\]]*)\]|\[技能:\s*([^\]]*)\]|帮我执行\s*id\s*为\s*[:：]?\s*([A-Za-z0-9_-]+)\s*的工作流\s*(?:【([^】]*)】)?/g;
   const segments: PersistedComposerSegment[] = [];
   const unusedFiles = [...attachedFiles];
   const unusedSkills = [...skillMetas];
@@ -252,20 +327,32 @@ function reconstructSegmentsFromGatewayPlaceholders(
 
     if (match[1] !== undefined) {
       const label = match[1].trim();
-      const fileIndex = unusedFiles.findIndex((file) => file.fileName === label
-        || file.fileName.replace(/］/g, ']') === label.replace(/］/g, ']'));
+      const fileIndex = unusedFiles.findIndex((file) => fileLabelMatches(file, label));
       const file = fileIndex >= 0
         ? unusedFiles.splice(fileIndex, 1)[0]
         : unusedFiles.shift();
       if (file) {
+        const displayName = label
+          || file.fileName.split(/[/\\]/).pop()
+          || file.fileName;
         segments.push({
           type: 'file',
-          fileName: file.fileName,
+          fileName: displayName,
           mimeType: file.mimeType,
           fileSize: file.fileSize,
           preview: file.preview,
           filePath: file.filePath,
           stagedPath: file.filePath,
+        });
+      } else if (label) {
+        segments.push({
+          type: 'file',
+          fileName: label,
+          mimeType: 'application/octet-stream',
+          fileSize: 0,
+          preview: null,
+          filePath: '',
+          stagedPath: '',
         });
       }
     } else if (match[2] !== undefined) {
@@ -278,7 +365,18 @@ function reconstructSegmentsFromGatewayPlaceholders(
         : unusedSkills.shift();
       if (skill) {
         segments.push({ type: 'skill', slug: skill.slug, title: skill.title });
+      } else if (label) {
+        segments.push({ type: 'skill', slug: label, title: label });
       }
+    } else if (match[3] !== undefined) {
+      const workflowId = match[3].trim();
+      const workflowName = (match[4] ?? '').trim() || workflowId;
+      segments.push({
+        type: 'workflow',
+        id: workflowId,
+        name: workflowName,
+        source: 'mine',
+      });
     }
 
     lastIndex = match.index + match[0].length;
@@ -305,4 +403,61 @@ function reconstructSegmentsFromGatewayPlaceholders(
   }
 
   return segments.length ? segments : null;
+}
+
+export function prepareGatewayTextForComposerSynth(raw: string, skillMeta?: SkillMeta | null): string {
+  let text = stripUserNoiseKeepComposerBake(raw);
+  if (!skillMeta) return text;
+  const { defaultPrompt, title: plazaTitle } = resolveSkillFromPlaza(skillMeta.slug);
+  const title = (skillMeta.title?.trim() || plazaTitle).trim();
+  const prompt = defaultPrompt.trim() || title;
+  return stripSkillGatewayPrefix(text, prompt, title, skillMeta.slug);
+}
+
+/**
+ * history 加载后、把 skill content 收缩成 displayText 之前：
+ * 从仍含 bake 的 gateway 原文重建 `_composerSegments`，避免切会话后 chip 前置 / 工作流丢失。
+ */
+export function hydrateComposerSegmentsOnMessages(messages: RawMessage[]): RawMessage[] {
+  return messages.map((message) => {
+    if (message.role !== 'user') return message;
+    if (message._composerSegments?.length) return message;
+
+    const raw = getMessageText(message.content);
+    if (!raw || !COMPOSER_BAKE_EVIDENCE_RE.test(raw)) return message;
+
+    const skillMeta = message._skillMeta ?? parseSkillTranscriptMarker(raw) ?? undefined;
+    const skillMetas = message._skillMetas
+      ?? (skillMeta ? [skillMeta] : undefined);
+    const attachedFiles = message._attachedFiles ?? [];
+    const synthText = prepareGatewayTextForComposerSynth(raw, skillMeta);
+    const segments = synthesizeComposerSegments(
+      {
+        ...message,
+        _composerSegments: undefined,
+        _skillMeta: skillMeta,
+        _skillMetas: skillMetas,
+      },
+      synthText,
+      skillMeta,
+      attachedFiles,
+    );
+    if (!segments?.length) return message;
+
+    const displayContent = skillMeta
+      ? deriveSkillUserDisplayText(
+        stripSkillTranscriptMarker(raw),
+        skillMeta.slug,
+        skillMeta.title,
+      )
+      : normalizeUserMessageForDisplay(raw);
+
+    return {
+      ...message,
+      _skillMeta: skillMeta ?? message._skillMeta,
+      _skillMetas: skillMetas ?? message._skillMetas,
+      _composerSegments: segments,
+      content: displayContent,
+    };
+  });
 }

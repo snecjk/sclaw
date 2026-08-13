@@ -12,7 +12,12 @@ import {
 } from '@/stores/chat/user-message-merge';
 import { buildChatDisplayModel } from '@/stores/chat/display-model';
 import { createClientSessionState } from '@/stores/chat/client-session-reducer';
-import { synthesizeComposerSegments } from '@/components/input-composer/user-composer-segments';
+import { synthesizeComposerSegments, hydrateComposerSegmentsOnMessages } from '@/components/input-composer/user-composer-segments';
+import { sanitizePersistedTextSegmentForEdit } from '@/components/input-composer/use-input-composer-edit-draft';
+import { restoreSkillMetaOnMessages } from '@/lib/skill-message-meta-cache';
+import { stripUserNoiseKeepComposerBake, stripGatewayTimestampPrefix } from '@/lib/user-message-display';
+import { stripSkillGatewayPrefix } from '@/lib/skill-transcript-marker';
+import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
 import type { RawMessage } from '@/stores/chat/types';
 
 describe('composer echo pairing & display', () => {
@@ -357,5 +362,140 @@ describe('composer echo pairing & display', () => {
     };
 
     expect(isSameUserMessage(historyUser, optimistic, 1710000000000)).toBe(true);
+  });
+
+  it('hydrates inline file/skill/workflow order from gateway bake without optimistic donor', () => {
+    const gatewayContent = [
+      '姚磊html网页设计',
+      '',
+      '根据 [文件: 客户流向.xlsx] 和 [文件: output_song.md] 使用 [技能: 姚磊html网页设计] 去生成一份 html 网页，并把结果发送给 @申通sclaw123 ,然后 帮我执行 id 为：wf_78f13449 的工作流 【七夕问候语】 发送给 @申通sclaw123',
+      '<!-- SClaw-Skill {"slug":"html","title":"姚磊html网页设计","userText":"根据 和 使用 去生成一份 html 网页，并把结果发送给 @申通sclaw123 ,然后  发送给 @申通sclaw123"} -->',
+      '[media attached: /tmp/a.xlsx (application/octet-stream) | /tmp/a.xlsx]',
+      '[media attached: /tmp/b.md (text/markdown) | /tmp/b.md]',
+    ].join('\n');
+
+    const historyUser = {
+      id: 'history-mixed',
+      role: 'user',
+      content: gatewayContent,
+      timestamp: 1710000002,
+      _attachedFiles: [
+        {
+          fileName: '客户流向.xlsx',
+          mimeType: 'application/octet-stream',
+          fileSize: 35229,
+          preview: null,
+          filePath: '/tmp/a.xlsx',
+        },
+        {
+          fileName: '/tmp/b.md',
+          mimeType: 'text/markdown',
+          fileSize: 297,
+          preview: null,
+          filePath: '/tmp/b.md',
+        },
+      ],
+    } as RawMessage;
+
+    // 切会话回载：无 previousDisplay / optimistic donor
+    const hydrated = hydrateComposerSegmentsOnMessages([historyUser]);
+    const restored = restoreSkillMetaOnMessages(hydrated, 'agent:main:test', null);
+    const user = restored[0];
+
+    expect(user?._composerSegments?.map((s) => s.type)).toEqual([
+      'text',
+      'file',
+      'text',
+      'file',
+      'text',
+      'skill',
+      'text',
+      'workflow',
+      'text',
+    ]);
+    expect(user?._composerSegments?.find((s) => s.type === 'workflow')).toMatchObject({
+      id: 'wf_78f13449',
+      name: '七夕问候语',
+    });
+    expect(user?._composerSegments?.filter((s) => s.type === 'file').map((s) => (
+      s.type === 'file' ? s.fileName : ''
+    ))).toEqual(['客户流向.xlsx', 'output_song.md']);
+    const firstText = user?._composerSegments?.[0];
+    expect(firstText?.type).toBe('text');
+    if (firstText?.type === 'text') {
+      expect(firstText.text).toContain('根据');
+    }
+    expect(String(user?.content)).not.toContain('[文件:');
+    expect(String(user?.content)).not.toContain('帮我执行');
+    expect(user?._skillMeta?.slug).toBe('html');
+  });
+
+  it('strips nested gateway timestamp + skill slug when hydrating after edit resend', () => {
+    const gatewayContent = [
+      '[STOCLAW:DINGTALK_RECIPIENTS:v1]',
+      '```json',
+      '{"version":1,"source":"stoclaw-input-mention","recipients":[]}',
+      '```',
+      '',
+      '## StoClaw DingTalk Recipients',
+      '',
+      '用户消息：',
+      '[Thu 2026-08-13 10:17 GMT+8] html',
+      '',
+      '根据 [文件: a.xlsx] 使用 [技能: 姚磊html网页设计] 去生成一份 html 网页，并把结果发送给 @申通sclaw123 ,然后 帮我执行 id 为：wf_78f13449 的工作流 【七夕问候语】 发送给 @申通sclaw123',
+      '<!-- SClaw-Skill {"slug":"html","title":"姚磊html网页设计"} -->',
+      '[media attached: /tmp/a.xlsx (application/octet-stream) | /tmp/a.xlsx]',
+    ].join('\n');
+
+    // 噪声层先剥时间戳；slug 留给 stripSkillGatewayPrefix / hydrate。
+    expect(stripUserNoiseKeepComposerBake(gatewayContent)).not.toMatch(/\[Thu /);
+    expect(stripUserNoiseKeepComposerBake(gatewayContent).startsWith('html')).toBe(true);
+    expect(stripSkillGatewayPrefix(
+      stripGatewayTimestampPrefix('html\n\n根据 [文件: a.xlsx] 去生成'),
+      '姚磊html网页设计',
+      '姚磊html网页设计',
+      'html',
+    )).toBe('根据 [文件: a.xlsx] 去生成');
+
+    const historyUser = {
+      id: 'history-edit-resend',
+      role: 'user',
+      content: gatewayContent,
+      timestamp: 1710000002,
+      _attachedFiles: [{
+        fileName: 'a.xlsx',
+        mimeType: 'application/octet-stream',
+        fileSize: 10,
+        preview: null,
+        filePath: '/tmp/a.xlsx',
+      }],
+    } as RawMessage;
+
+    const [user] = restoreSkillMetaOnMessages(
+      hydrateComposerSegmentsOnMessages([historyUser]),
+      'agent:main:test',
+      null,
+    );
+
+    const joinedText = (user?._composerSegments ?? [])
+      .filter((s): s is { type: 'text'; text: string } => s.type === 'text')
+      .map((s) => s.text)
+      .join('');
+    expect(joinedText).not.toContain('[Thu');
+    expect(joinedText).not.toMatch(/^\s*html\b/);
+    expect(joinedText).toContain('根据');
+    expect(user?._composerSegments?.some((s) => s.type === 'workflow')).toBe(true);
+    expect(user?._composerSegments?.[0]).toMatchObject({ type: 'text' });
+    if (user?._composerSegments?.[0]?.type === 'text') {
+      expect(user._composerSegments[0].text.trim().startsWith('根据')).toBe(true);
+    }
+  });
+
+  it('sanitizes dirty text segments when converting edit draft', () => {
+    expect(sanitizePersistedTextSegmentForEdit(
+      '[Thu 2026-08-13 10:17 GMT+8] html\n根据 ',
+      { slug: 'html', title: '姚磊html网页设计' },
+    )).toBe('根据');
+    expect(resolveSkillFromPlaza('missing-skill-xyz').defaultPrompt).toBe('');
   });
 });

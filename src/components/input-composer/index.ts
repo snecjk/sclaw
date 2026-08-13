@@ -88,6 +88,8 @@ export type {
 export {
   useInputComposerEditDraft,
   CHAT_EDIT_DRAFT_EVENT,
+  persistedSegmentsToComposer,
+  sanitizePersistedTextSegmentForEdit,
 } from './use-input-composer-edit-draft';
 export type {
   ChatDraftWorkflowMeta,
@@ -101,6 +103,9 @@ export {
   UserComposerFileChip,
   UserWorkflowMessageTag,
   synthesizeComposerSegments,
+  hydrateComposerSegmentsOnMessages,
+  prepareGatewayTextForComposerSynth,
+  serializePersistedComposerSegmentsToActionText,
   parseWorkflowRunDisplayText,
 } from './user-composer-segments';
 export type { WorkflowRunDisplayMeta } from './user-composer-segments';

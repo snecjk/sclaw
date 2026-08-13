@@ -25,6 +25,7 @@ import {
 } from './claude-session-recovery';
 import { mergeClaudeExecutionEntries, parseClaudeExecutionTurn, type ClaudeExecutionEntryBatch } from './claude-execution-snapshot';
 import { inspectTranscript } from './chat-runtime-inspection';
+import { logUserSend } from '../../shared/user-send-log';
 import {
   applyClaudeStreamEvent,
   ClaudeStreamContentAccumulator,
@@ -1070,6 +1071,17 @@ async function startClaudeQuery(
       sessionKey,
       userPromptChars: typeof prompt === 'string' ? prompt.length : null,
       userPrompt: userPromptPreview,
+    });
+    const userMessageForLog = typeof prompt === 'string'
+      ? prompt
+      : (options?.userPrompt ?? '(stream/non-string prompt)');
+    logUserSend({
+      engine: 'claude',
+      sessionKey,
+      message: userMessageForLog,
+      messageLength: userMessageForLog.length,
+      systemPromptAppend: systemPromptAppend || null,
+      systemPromptAppendLength: systemPromptAppend.length,
     });
     // 权限档位：定时任务带 permissionProfile 时按档映射（dangerous-bypass→bypass；
     // 其余→默认受约束）；交互式 chat（undefined）保留既有 bypass 默认，不改变行为。

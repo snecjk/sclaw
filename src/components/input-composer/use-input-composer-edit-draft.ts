@@ -10,7 +10,11 @@ import type {
   PersistedComposerSegment,
 } from '@/lib/dingtalk-mention-composer';
 import type { SkillMeta } from '@/types/skill-meta';
-import { stripComposerGatewayPlaceholders } from '@/lib/user-message-display';
+import {
+  stripComposerGatewayPlaceholders,
+  stripGatewayTimestampPrefix,
+} from '@/lib/user-message-display';
+import { stripSkillGatewayPrefix } from '@/lib/skill-transcript-marker';
 
 /** window 自定义事件名，与 ChatMessage 派发侧保持一致 */
 export const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
@@ -55,10 +59,39 @@ export interface UseInputComposerEditDraftOptions {
   onApplyAttachments?: (attachments: FileAttachment[]) => void;
 }
 
-function sanitizeEditPlainText(text: string): string {
-  return stripComposerGatewayPlaceholders(text)
-    .replace(/\s+/g, ' ')
-    .trim();
+function sanitizeEditPlainText(text: string, skill?: SkillMeta): string {
+  let cleaned = stripComposerGatewayPlaceholders(text);
+  cleaned = stripGatewayTimestampPrefix(cleaned);
+  if (skill?.slug || skill?.title) {
+    cleaned = stripSkillGatewayPrefix(
+      cleaned,
+      '',
+      skill.title ?? '',
+      skill.slug,
+    );
+  }
+  return cleaned.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * 编辑回填：去掉 Gateway 时间戳、技能 slug/title 脏前缀、stage-6 占位符，
+ * 避免「编辑 → 再发」把 `[Thu …]` / `html` 再次写进 gateway。
+ */
+export function sanitizePersistedTextSegmentForEdit(
+  text: string,
+  skill?: Pick<SkillMeta, 'slug' | 'title'>,
+): string {
+  let cleaned = stripComposerGatewayPlaceholders(text);
+  cleaned = stripGatewayTimestampPrefix(cleaned.trimStart());
+  if (skill?.slug || skill?.title) {
+    cleaned = stripSkillGatewayPrefix(
+      cleaned,
+      '',
+      skill.title ?? '',
+      skill.slug,
+    );
+  }
+  return cleaned.replace(/\n{3,}/g, '\n\n');
 }
 
 function takePreferredAttachment(
@@ -99,12 +132,16 @@ export function persistedSegmentsToComposer(
   const attachmentsById: Record<string, AttachmentLookupEntry> = {};
   const composerSegments: ComposerSegment[] = [];
   const usedPreferred = new Set<number>();
+  const skillSeg = segments.find((seg) => seg.type === 'skill');
+  const skillForSanitize = skillSeg
+    ? { slug: skillSeg.slug, title: skillSeg.title }
+    : undefined;
 
   for (const seg of segments) {
     if (seg.type !== 'file') {
-      // 禁止通过脏 text segment 再次插入 stage-6 占位符。
+      // 禁止通过脏 text segment 再次插入 stage-6 占位符 / Gateway 前缀。
       if (seg.type === 'text') {
-        const cleaned = stripComposerGatewayPlaceholders(seg.text);
+        const cleaned = sanitizePersistedTextSegmentForEdit(seg.text, skillForSanitize);
         if (!cleaned) continue;
         composerSegments.push({ type: 'text', text: cleaned });
         continue;
@@ -154,10 +191,10 @@ export function useInputComposerEditDraft({
   onApplyAttachments,
 }: UseInputComposerEditDraftOptions) {
   const applyEditDraftText = useCallback((detail: ChatEditDraftEventDetail) => {
-    const text = sanitizeEditPlainText(detail.text ?? '');
-    const prefixText = sanitizeEditPlainText(detail.prefixText ?? '');
-    const suffixText = sanitizeEditPlainText(detail.suffixText ?? '');
     const skill = detail.skill;
+    const text = sanitizeEditPlainText(detail.text ?? '', skill);
+    const prefixText = sanitizeEditPlainText(detail.prefixText ?? '', skill);
+    const suffixText = sanitizeEditPlainText(detail.suffixText ?? '', skill);
     const workflow = detail.workflow;
     const hasSegments = Boolean(detail.segments?.length);
 

@@ -2,6 +2,12 @@ export function logChatFlow(stage: string, data?: Record<string, unknown>): void
   console.info('[chat-flow]', stage, data ?? {});
 }
 
+/**
+ * `[USER-SEND]` 由主进程在 adapter 最终出口打印（见 openclaw/claude adapter），
+ * 含 memory 注入、systemPromptAppend 合并、`[media attached:]` 等之后的正文。
+ * 渲染进程的 `[USER-QUESTION]` 只覆盖气泡/配对，不代表模型最终可见内容。
+ */
+
 /** 用户提问调试日志的统一控制台前缀——搜索：`[USER-QUESTION]` */
 export const USER_QUESTION_LOG_PREFIX = '[USER-QUESTION]';
 

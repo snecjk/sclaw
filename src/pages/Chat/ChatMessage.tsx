@@ -112,6 +112,8 @@ import { CHAT_EDIT_DRAFT_EVENT } from '@/components/input-composer';
 import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import {
   parseWorkflowRunDisplayText,
+  prepareGatewayTextForComposerSynth,
+  serializePersistedComposerSegmentsToActionText,
   synthesizeComposerSegments,
   UserComposerSegmentsContent,
   UserWorkflowMessageTag,
@@ -193,11 +195,6 @@ export const ChatMessage = memo(function ChatMessage({
   const skillMeta = message._skillMeta ?? message._skillMetas?.[0];
   const hasText = text.trim().length > 0;
   const showUserSkillBubble = isUser && Boolean(skillMeta);
-  /** Text for copy/share on a user bubble (skill title + body); see helper. */
-  const userActionText = useMemo(
-    () => resolveUserBubbleActionText(text, skillMeta),
-    [text, skillMeta],
-  );
   const [systemExpanded, setSystemExpanded] = useState(false);
   const images = extractImages(message);
   const tools = extractToolUse(message);
@@ -212,9 +209,31 @@ export const ChatMessage = memo(function ChatMessage({
     () => dedupeAttachedFiles(message._attachedFiles || []),
     [message._attachedFiles],
   );
-  const composerSegmentsForRender = useMemo(
-    () => synthesizeComposerSegments(message, text, skillMeta, attachedFiles),
-    [message, text, skillMeta, attachedFiles],
+  const composerSegmentsForRender = useMemo(() => {
+    if (!isUser) return null;
+    // 优先已回写 / hydrate 的 segments；否则尽量用仍含 bake 的原文重建（extractText 会剥掉占位符）。
+    if (message._composerSegments?.length) {
+      return message._composerSegments;
+    }
+    const raw = typeof message.content === 'string'
+      ? message.content
+      : extractPlainTextFromContent(message.content);
+    const hasBake = /\[文件:\s*[^\]]*\]|\[技能:\s*[^\]]*\]|帮我执行\s*id\s*为/.test(raw);
+    return synthesizeComposerSegments(
+      message,
+      hasBake ? prepareGatewayTextForComposerSynth(raw, skillMeta) : text,
+      skillMeta,
+      attachedFiles,
+    );
+  }, [isUser, message, text, skillMeta, attachedFiles]);
+  /** 复制 / 保存快捷输入：有 segments 时按 chip 原位展开，避免空位与技能名前置 */
+  const userActionText = useMemo(
+    () => (
+      composerSegmentsForRender?.length
+        ? serializePersistedComposerSegmentsToActionText(composerSegmentsForRender)
+        : resolveUserBubbleActionText(text, skillMeta)
+    ),
+    [composerSegmentsForRender, text, skillMeta],
   );
   const useSegmentBubble = isUser && Boolean(composerSegmentsForRender?.length);
   const messageIndex = useMemo(

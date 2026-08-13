@@ -10,10 +10,12 @@ export interface ResolvedSkillPrompt {
 
 function toResolvedPrompt(skill: SkillSummary): ResolvedSkillPrompt {
   const title = skill.title?.trim() || skill.slug;
+  const fromSkill = skill.defaultPrompt?.trim() || '';
   return {
     slug: skill.slug,
     title,
-    defaultPrompt: skill.defaultPrompt?.trim() || title,
+    // 有真实指令用指令；否则仅在 title≠slug 时用标题。禁止用裸 slug 当 prompt（会污染气泡）。
+    defaultPrompt: fromSkill || (title !== skill.slug ? title : ''),
   };
 }
 
@@ -27,7 +29,8 @@ function lookupCachedSkill(slug: string): SkillSummary | undefined {
 export function resolveSkillFromPlaza(slug: string): ResolvedSkillPrompt {
   const skill = lookupCachedSkill(slug);
   if (!skill) {
-    return { slug, title: slug, defaultPrompt: slug };
+    // 禁止用 slug 冒充 defaultPrompt——会写进 gateway 再回显成气泡脏前缀（如单独一行 `html`）。
+    return { slug, title: slug, defaultPrompt: '' };
   }
   return toResolvedPrompt(skill);
 }
@@ -47,6 +50,7 @@ export async function resolveSkillPrompt(slug: string): Promise<ResolvedSkillPro
     useSkillPlazaStore.getState().setSkillDetailCache(slug, detail);
     return toResolvedPrompt(detail);
   } catch {
-    return { slug, title: slug, defaultPrompt: slug };
+    // 与 sync fallback 一致：宁可缺 prompt，也不要把 slug 当指令/UI 前缀发出去。
+    return { slug, title: slug, defaultPrompt: '' };
   }
 }

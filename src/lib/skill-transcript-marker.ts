@@ -44,29 +44,44 @@ export function parseSkillTranscriptMarker(text: string): SkillMeta | null {
   }
 }
 
-function stripSkillGatewayPrefix(body: string, prompt: string, title: string): string {
+/** 去掉 gateway 前缀的技能 defaultPrompt / 标题 / slug；保留后续 `[文件:]` 等 bake。 */
+export function stripSkillGatewayPrefix(
+  body: string,
+  prompt: string,
+  title: string,
+  slug?: string,
+): string {
   let text = body.trim();
   if (!text) return '';
 
-  for (const prefix of [prompt, title]) {
-    if (!prefix || text !== prefix) continue;
-    return '';
-  }
+  const prefixes = [...new Set(
+    [prompt, title, slug]
+      .map((value) => value?.trim())
+      .filter((value): value is string => Boolean(value)),
+  )];
+  if (!prefixes.length) return text;
 
-  for (const prefix of [prompt, title]) {
-    if (!prefix) continue;
-    for (const separator of ['\n\n', '\n', ' ']) {
-      const lead = `${prefix}${separator}`;
-      if (text.startsWith(lead)) {
-        text = text.slice(lead.length).trim();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const prefix of prefixes) {
+      if (text === prefix) return '';
+      for (const separator of ['\n\n', '\n', ' ']) {
+        const lead = `${prefix}${separator}`;
+        if (text.startsWith(lead)) {
+          text = text.slice(lead.length).trim();
+          changed = true;
+          break;
+        }
+      }
+      if (changed) break;
+      const lines = text.split('\n');
+      if (lines.length > 1 && lines[0]?.trim() === prefix) {
+        text = lines.slice(1).join('\n').trim();
+        changed = true;
         break;
       }
     }
-  }
-
-  const lines = text.split('\n').map((line) => line.trim());
-  if (lines.length > 1 && lines[0] === title) {
-    text = lines.slice(1).join('\n').trim();
   }
 
   return text;
@@ -83,7 +98,7 @@ export function deriveSkillUserDisplayText(
   const { defaultPrompt, title: plazaTitle } = resolveSkillFromPlaza(slug);
   const title = (skillTitle?.trim() || plazaTitle).trim();
   const prompt = defaultPrompt.trim() || title;
-  const userText = stripSkillGatewayPrefix(body, prompt, title);
+  const userText = stripSkillGatewayPrefix(body, prompt, title, slug);
   return normalizeSkillBubbleDisplayText(title, userText);
 }
 
@@ -104,11 +119,18 @@ export function normalizeSkillBubbleDisplayText(skillTitle: string, displayText:
 
 export function applySkillTranscriptMetaToMessages(messages: RawMessage[]): RawMessage[] {
   return messages.map((message) => {
-    if (message.role !== 'user' || message._skillMeta) return message;
+    if (message.role !== 'user') return message;
     const raw = getMessageText(message.content);
-    const skillMeta = parseSkillTranscriptMarker(raw);
+    const skillMeta = message._skillMeta ?? parseSkillTranscriptMarker(raw);
     if (!skillMeta) return message;
 
+    // 已有 segments（hydrate / 乐观回写）：只补 _skillMeta，勿再破坏结构。
+    if (message._composerSegments?.length) {
+      if (message._skillMeta) return message;
+      return { ...message, _skillMeta: skillMeta };
+    }
+
+    // 无 segments：收缩为 displayText（hydrate 应已先跑；此处为无 bake 可重建时的兜底）。
     const withoutMarker = stripSkillTranscriptMarker(raw);
     const displayText = deriveSkillUserDisplayText(withoutMarker, skillMeta.slug, skillMeta.title);
     return {
