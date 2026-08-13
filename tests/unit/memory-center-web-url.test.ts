@@ -9,6 +9,7 @@ import {
   isMcWebAuthedInSession,
   markMcWebAuthedInSession,
   MC_WEB_TEST_BASE,
+  resolveWorkflowBridgeParentOrigin,
 } from '@/lib/memory-center-web-url';
 
 describe('memory-center-web-url', () => {
@@ -97,6 +98,27 @@ describe('memory-center-web-url', () => {
     expect(isMcWebAuthedInSession()).toBe(true);
     expect(buildMemoryCenterWorkflowDesignerEmbedUrl('wf_123', 'tok-abc', 'daily-external')).toBe(
       'https://front-test.sto.cn/group/memory-center-web/workflows-workbench/wf_123?embedded=stoclaw&inClaw=1',
+    );
+  });
+
+  it.each(['null', 'http://localhost:5173'])('adds the explicit bridge parent origin %s to an embed url', (parentOrigin) => {
+    const url = buildMemoryCenterWorkflowDesignerEmbedUrl(
+      'wf_123',
+      undefined,
+      'daily-external',
+      undefined,
+      undefined,
+      'nonce-1',
+      parentOrigin,
+    );
+
+    expect(new URL(url).searchParams.get('bridgeParentOrigin')).toBe(parentOrigin);
+  });
+
+  it('maps packaged file and browser locations to their raw message origins', () => {
+    expect(resolveWorkflowBridgeParentOrigin('null', 'file:')).toBe('null');
+    expect(resolveWorkflowBridgeParentOrigin('https://desktop.example.com', 'https:')).toBe(
+      'https://desktop.example.com',
     );
   });
 });
