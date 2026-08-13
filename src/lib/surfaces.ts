@@ -1594,7 +1594,8 @@ export const sidebarScrollOverlayHostClass = stoOverlayScrollHostClass;
 export const sidebarNavExpandedIdleClass = cn(
   'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5',
   sidebarTextDefaultClass,
-  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
+  // stroke：Lucide；text：内联填充图标（如 timer）的 currentColor，避免吃到正文色
+  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)] [&_svg]:text-[var(--sto-sidebar-text-icon)]',
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
@@ -1603,7 +1604,7 @@ export const sidebarNavExpandedActiveClass = cn(
   'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
   'bg-[var(--sto-sidebar-nav-active-bg)]',
   sidebarTextDefaultClass,
-  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
+  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)] [&_svg]:text-[var(--sto-sidebar-text-icon)]',
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
