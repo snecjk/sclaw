@@ -39,6 +39,8 @@ export type WorkflowPacketValidation =
   | { ok: false; code: string; message: string };
 
 const ROOT_KEYS = new Set(['protocolVersion', 'status', 'producer', 'payload', 'artifacts', 'control', 'diagnostics']);
+const ARTIFACT_DRAFT_KEYS = new Set(['resourceId', 'kind', 'name', 'contentType']);
+const ARTIFACT_HOST_METADATA_KEYS = new Set(['artifactId', 'uri', 'size', 'checksum']);
 
 export function createWorkflowPacket(input: {
   runId: string; nodeId: string; nodeType: string; attempt?: number; payload?: unknown;
@@ -107,18 +109,30 @@ export function validateWorkflowPacket(value: unknown, opts: {
       return { ok: false, code: 'RESULT_DIAGNOSTIC_INVALID', message: `diagnostics.errors[${index}] 缺少合法的 code、category、message 或 retryable` };
     }
   }
-  for (const artifact of packet.artifacts) {
+  for (const [index, artifact] of packet.artifacts.entries()) {
     if (!artifact || typeof artifact !== 'object') {
-      return { ok: false, code: 'ARTIFACT_INVALID', message: '产物声明必须是对象' };
+      return { ok: false, code: 'ARTIFACT_INVALID', message: `artifacts[${index}] 产物声明必须是对象` };
     }
     if (opts.artifactMode === 'draft') {
-      const keys = new Set(['resourceId', 'kind', 'name', 'contentType']);
-      if (typeof artifact.resourceId !== 'string' || !artifact.resourceId.trim()
-        || (artifact.kind !== undefined && !['OUTPUT', 'INTERMEDIATE'].includes(artifact.kind))
-        || (artifact.name !== undefined && typeof artifact.name !== 'string')
-        || (artifact.contentType !== undefined && typeof artifact.contentType !== 'string')
-        || Object.keys(artifact).some((key) => !keys.has(key))) {
-        return { ok: false, code: 'ARTIFACT_DRAFT_INVALID', message: '产物草稿只允许 resourceId、kind、name、contentType，且 resourceId 必填' };
+      if (typeof artifact.resourceId !== 'string' || !artifact.resourceId.trim()) {
+        return { ok: false, code: 'ARTIFACT_DRAFT_INVALID', message: `artifacts[${index}].resourceId 必须是非空字符串` };
+      }
+      if (artifact.kind !== undefined && !['OUTPUT', 'INTERMEDIATE'].includes(artifact.kind)) {
+        return { ok: false, code: 'ARTIFACT_DRAFT_INVALID', message: `artifacts[${index}].kind 只允许 OUTPUT 或 INTERMEDIATE` };
+      }
+      if (artifact.name !== undefined && typeof artifact.name !== 'string') {
+        return { ok: false, code: 'ARTIFACT_DRAFT_INVALID', message: `artifacts[${index}].name 必须是字符串` };
+      }
+      if (artifact.contentType !== undefined && typeof artifact.contentType !== 'string') {
+        return { ok: false, code: 'ARTIFACT_DRAFT_INVALID', message: `artifacts[${index}].contentType 必须是字符串` };
+      }
+      const unsupportedKeys = Object.keys(artifact).filter((key) => !ARTIFACT_DRAFT_KEYS.has(key));
+      if (unsupportedKeys.length > 0) {
+        return {
+          ok: false,
+          code: 'ARTIFACT_DRAFT_INVALID',
+          message: `artifacts[${index}] 包含不允许字段: ${unsupportedKeys.join(', ')}；只允许 resourceId、kind、name、contentType`,
+        };
       }
     } else if (!artifact.artifactId || !artifact.kind || !artifact.name || !artifact.contentType) {
       return { ok: false, code: 'ARTIFACT_INVALID', message: '产物引用缺少必要元数据' };
@@ -136,6 +150,36 @@ export function validateWorkflowPacket(value: unknown, opts: {
   if (opts.requireSelectedPort && (!port || typeof port !== 'string')) return { ok: false, code: 'RESULT_ROUTE_MISSING', message: '条件节点缺少 selectedPort' };
   if (port && (!opts.allowedPorts || !opts.allowedPorts.includes(port))) return { ok: false, code: 'RESULT_ROUTE_INVALID', message: `selectedPort 未声明: ${port}` };
   return { ok: true, packet: typedPacket, outcome: 'succeeded' };
+}
+
+/**
+ * Removes metadata that belongs to the host-generated canonical artifact
+ * reference when a model copies one into its draft response. Unknown fields
+ * remain untouched so strict draft validation can reject protocol drift.
+ */
+export function normalizeWorkflowArtifactDrafts(value: unknown): {
+  packet: unknown;
+  normalized: boolean;
+  stripped: Array<{ index: number; fields: string[] }>;
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { packet: value, normalized: false, stripped: [] };
+  }
+  const packet = value as Record<string, unknown>;
+  if (!Array.isArray(packet.artifacts)) return { packet: value, normalized: false, stripped: [] };
+
+  const stripped: Array<{ index: number; fields: string[] }> = [];
+  const artifacts = packet.artifacts.map((artifact, index) => {
+    if (!artifact || typeof artifact !== 'object' || Array.isArray(artifact)) return artifact;
+    const source = artifact as Record<string, unknown>;
+    const fields = Object.keys(source).filter((key) => ARTIFACT_HOST_METADATA_KEYS.has(key));
+    if (fields.length === 0) return artifact;
+    stripped.push({ index, fields });
+    return Object.fromEntries(Object.entries(source).filter(([key]) => !ARTIFACT_HOST_METADATA_KEYS.has(key)));
+  });
+  return stripped.length > 0
+    ? { packet: { ...packet, artifacts }, normalized: true, stripped }
+    : { packet: value, normalized: false, stripped };
 }
 
 export function packetPayload(value: unknown): unknown {

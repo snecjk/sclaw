@@ -13,6 +13,10 @@ import { cleanupWorkflowOpenClawSession } from './openclaw-workflow-session-clea
 import { isWorkflowPacket } from './workflow-packet';
 import { workflowGatewaySessionKey } from './node-session';
 import { prepareWorkflowSkills } from './skill-loader';
+import {
+  WORKFLOW_AGENT_HARD_DEADLINE_MS,
+  WORKFLOW_AGENT_NO_PROGRESS_TIMEOUT_MS,
+} from '../../../shared/workflow-agent-timeouts';
 
 const AGENT_ID = 'workflow-runtime';
 const activeSessions = new Map<string, { gateway: GatewayManager; sessionKey: string; runId?: string }>();
@@ -118,7 +122,7 @@ export async function invokeOpenClawWorkflowAgent(args: {
   workflowExecLog('debug', 'agent-input', args.prompt, {
     runId: args.ctx.runId, nodeId: args.ctx.nodeId, execEngine: 'openclaw', sessionKey, model: args.model,
   });
-  const timeoutMs = args.deadlineMs ?? 960_000;
+  const timeoutMs = args.deadlineMs ?? WORKFLOW_AGENT_HARD_DEADLINE_MS;
   return new Promise<InvokeResult>((resolve) => {
     let rawText = ''; let settled = false; let lastProgress = Date.now(); let runId = '';
     const finish = (result: InvokeResult) => {
@@ -184,7 +188,7 @@ export async function invokeOpenClawWorkflowAgent(args: {
       else if (event.type === 'turn.completed' && !finishPacket()) finishMissingPacket('turn.completed');
     };
     const watchdog = setInterval(() => {
-      if (Date.now() - lastProgress > (args.noProgressMs ?? 300_000)) {
+      if (Date.now() - lastProgress > (args.noProgressMs ?? WORKFLOW_AGENT_NO_PROGRESS_TIMEOUT_MS)) {
         void args.gateway.rpc('chat.abort', { sessionKey, ...(runId ? { runId } : {}) }).catch(() => undefined);
         finish({ status: 'failed', rawText, error: '节点执行超时(无进度看门狗)' });
       }
