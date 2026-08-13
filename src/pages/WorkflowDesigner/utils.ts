@@ -287,6 +287,43 @@ export function defaultNodeConfig(
     };
   }
 
+  if (type === 'browser_task') {
+    return {
+      ...base,
+      goal: '描述要在浏览器中完成的操作',
+      instruction: '',
+      embedRuntimeId: '',
+      sessionFrom: '',
+      url: '',
+      sessionId: '',
+      maxSteps: 20,
+      timeoutMs: 300_000,
+    };
+  }
+
+  if (type === 'browser_validate') {
+    return {
+      ...base,
+      embedRuntimeId: '',
+      sessionFrom: '',
+      url: '',
+      sessionId: '',
+      onFail: 'fail',
+      validators: [{ type: 'elementText', expectedText: '提交成功' }],
+    };
+  }
+
+  if (type === 'browser_human_gate') {
+    return {
+      ...base,
+      reason: '请完成验证码或人工确认后继续',
+      embedRuntimeId: '',
+      sessionFrom: 'browser',
+      url: '',
+      sessionId: '',
+    };
+  }
+
   if (type === 'action') {
     return {
       ...base,
