@@ -41,9 +41,12 @@ export const stoSettingsContentPanelBodyClass = cn(
   'min-h-0 flex-1 overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
 );
 
-/** 设置页右侧内容主列（MasterGo 容器 7361：862×958、left 145px 于卡片内、top 72px、gap 36px） */
+/**
+ * 设置页右侧内容主列（MasterGo 容器 7361：862×958、left 145px 于卡片内、top 72px、gap 36px）
+ * SettingsShell 已占用顶部 `--sto-chrome-h` 作为 drag-region，此处扣减以保持标题距卡片顶仍约 72px。
+ */
 export const stoSettingsContentInnerClass = cn(
-  'mx-auto box-border flex w-full max-w-[862px] flex-col gap-[36px] pt-[72px] pb-10',
+  'mx-auto box-border flex w-full max-w-[862px] flex-col gap-[36px] pt-[calc(72px-var(--sto-chrome-h))] pb-10',
   'px-6 min-[974px]:px-0',
 );
 
