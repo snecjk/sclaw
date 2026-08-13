@@ -159,6 +159,10 @@
             "authorizeLocalFile": "Authorize local files",
             "authorizeLocalFileOption": "Authorize files",
             "authorizeLocalFolderOption": "Authorize folder",
+            "sharedArtifactsMobileTip": "Scan with DingTalk mobile to view branch shared artifacts in Branch VIP.",
+            "sharedArtifactsQrCode": "Branch shared artifacts QR code",
+            "sharedArtifactsQrTitle": "Scan to view shared artifacts",
+            "sharedArtifactsQrHint": "Scan with DingTalk mobile and view in Branch VIP",
             "usedQuota": "Storage used {{used}}/{{quota}}"
         },
         "drive": {

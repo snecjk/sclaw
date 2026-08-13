@@ -7,6 +7,7 @@ import {
   Database,
   FolderPlus,
   Grid2X2,
+  Info,
   List,
   Loader2,
   Plus,
@@ -14,6 +15,9 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import qrCodeIcon from '@/assets/icons/qr-code-icon.svg';
+import vipH5ProdQrCode from '@/assets/vip-h5-prod-qr-code.png';
+import vipH5TestQrCode from '@/assets/vip-h5-test-qr-code.png';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +26,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   DATA_CENTER_API_NOT_FOUND,
   createDataCenterFolder,
@@ -51,6 +56,7 @@ import { useAuthStore, isSiteUser } from '@/stores/auth';
 import { useChatStore } from '@/stores/chat';
 import type { DataCenterTempUrl } from '@/types/data-center';
 import type { LocalAuthorizeSelectionType } from '@/types/local-authorized-file';
+import { getAppEnv } from '../../../shared/env-config';
 import { EntryGrid, EntryList, FeedbackState } from './components/entries';
 import { DataCenterModal, MoveEntryDialog, PreviewModal, TextPromptModal, TraceChatMissingDialog, UploadToSharedFolderDialog } from './components/modals';
 import { FolderBreadcrumbBar, IconToggle, TabButton } from './components/navigation';
@@ -68,6 +74,11 @@ import {
 } from './utils';
 
 type AssociationFilter = 'all' | 'task';
+
+const appEnv = getAppEnv();
+const vipH5QrCode = appEnv === 'development' || appEnv === 'test'
+  ? vipH5TestQrCode
+  : vipH5ProdQrCode;
 
 function formatQuotaBytes(bytes: number): string {
   return formatBytes(bytes).replace(/\s+/g, '');
@@ -657,7 +668,7 @@ export function DataCenter() {
               </div>
             </div>
           ) : (
-            <div className={cn(workflowListToolbarClass, 'mb-[18px] shrink-0')}>
+            <div className={cn(workflowListToolbarClass, isSharedArtifactSpace ? 'mb-2' : 'mb-[18px]', 'shrink-0')}>
               <div className="flex h-9 items-center gap-6">
                 {store.section === 'qa_artifact' ? (
                   <>
@@ -707,6 +718,46 @@ export function DataCenter() {
               ) : null}
             </div>
           )}
+
+        {isSharedArtifactSpace ? (
+          <div className="mb-[18px] flex h-8 shrink-0 items-center justify-between rounded-md border border-[#C9D4FF] bg-[#F2F5FF] px-2 text-xs text-[#86909C] dark:border-blue-900 dark:bg-blue-950/40 dark:text-muted-foreground">
+            <span className="flex min-w-0 items-center gap-1.5">
+              <Info className="h-4 w-4 shrink-0 text-[#6B8CFF]" />
+              <span className="truncate">{t('dataCenterPage.toolbar.sharedArtifactsMobileTip')}</span>
+            </span>
+            <Tooltip delayDuration={150}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={t('dataCenterPage.toolbar.sharedArtifactsQrCode')}
+                  className="shrink-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-[#6B8CFF] focus-visible:ring-offset-1"
+                >
+                  <img src={qrCodeIcon} alt="" className="h-[21px] w-[21px] dark:invert" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent
+                side="right"
+                align="start"
+                sideOffset={8}
+                className="w-[314px] rounded-xl border border-[#E5E6EB] !bg-white p-3 text-[#1D2129] shadow-lg backdrop-blur-none dark:border-border dark:!bg-popover dark:text-popover-foreground"
+              >
+                <div className="mb-2 text-xs font-semibold">
+                  {t('dataCenterPage.toolbar.sharedArtifactsQrTitle')}
+                </div>
+                <div className="rounded-lg border border-[#E5E6EB] bg-white p-2 dark:border-border">
+                  <img
+                    src={vipH5QrCode}
+                    alt={t('dataCenterPage.toolbar.sharedArtifactsQrCode')}
+                    className="aspect-square w-full object-contain"
+                  />
+                </div>
+                <div className="mt-2 text-center text-[10px] leading-4 text-[#A8B0BD]">
+                  {t('dataCenterPage.toolbar.sharedArtifactsQrHint')}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        ) : null}
 
         {store.section !== 'data_source' ? (
           <>
