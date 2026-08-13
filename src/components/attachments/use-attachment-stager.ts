@@ -2,9 +2,11 @@ import { useCallback, useState } from 'react';
 import { hostApiFetch } from '@/lib/host-api';
 import { invokeIpc } from '@/lib/api-client';
 import { inferMimeTypeFromPath } from '@/lib/preview-url';
+import type { DataCenterStagedFile } from '@/components/data-center-file-picker';
 import type { FileAttachment, FileProvenance } from './types';
 
 export type { FileProvenance };
+export type { DataCenterStagedFile };
 
 export interface UseAttachmentStagerOptions {
   onAttachmentUpsert?: (att: FileAttachment) => void;
@@ -37,9 +39,10 @@ function readFileAsBase64(file: globalThis.File): Promise<string> {
 const LOCAL_PROVENANCE: FileProvenance = { kind: 'local' };
 
 /**
- * 双入口附件 stager：
+ * 多入口附件 stager：
  * - dialog → filePaths → /api/files/stage-paths
  * - 粘贴/拖拽 File[] → /api/files/stage-buffer
+ * - 数据中心：弹窗确认已 stage，这里只接入带 stagedPath 的结果
  */
 export function useAttachmentStager(options?: UseAttachmentStagerOptions) {
   const { onAttachmentUpsert } = options ?? {};
@@ -199,9 +202,33 @@ export function useAttachmentStager(options?: UseAttachmentStagerOptions) {
     }
   }, [notifyUpsert, upsertAttachment]);
 
-  const stageDataCenterFiles = useCallback(async (_entries: unknown[]) => {
-    console.warn('[stageDataCenterFiles] not implemented yet');
-  }, []);
+  /**
+   * 接入数据中心弹窗已 stage 的本地文件（不再在此 download）。
+   * `files[i].stagedPath` 已是 outbound 本地路径。
+   */
+  const stageDataCenterFiles = useCallback(async (files: DataCenterStagedFile[]) => {
+    if (!files.length) return;
+
+    for (const file of files) {
+      const tempId = crypto.randomUUID();
+      const provenance: FileProvenance = {
+        kind: 'data_center',
+        spaceType: file.spaceType,
+        spaceId: file.spaceId ?? null,
+        entryId: file.entryId,
+      };
+      upsertAttachment({
+        id: tempId,
+        fileName: file.fileName,
+        mimeType: file.mimeType,
+        fileSize: file.fileSize,
+        stagedPath: file.stagedPath,
+        preview: file.preview,
+        status: 'ready',
+        provenance,
+      });
+    }
+  }, [upsertAttachment]);
 
   const removeAttachment = useCallback((id: string) => {
     setAttachments((prev) => prev.filter((item) => item.id !== id));
@@ -215,7 +242,7 @@ export function useAttachmentStager(options?: UseAttachmentStagerOptions) {
     setAttachments((prev) => prev.filter((att) => att.status !== 'error'));
   }, []);
 
-  const allReady = attachments.length === 0 || attachments.every((a) => a.status === 'ready');
+  const allReady = !attachments.some((a) => a.status === 'staging');
   const hasFailedAttachments = attachments.some((a) => a.status === 'error');
 
   return {

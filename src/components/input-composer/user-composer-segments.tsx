@@ -10,12 +10,17 @@ import {
 } from '@/components/dingtalk/DingTalkMentionTag';
 import { SkillMessageTag } from '@/components/skill-plaza/SkillMessageTag';
 import { WorkflowNodesIcon } from '@/components/icons/composer-toolbar-icons';
-import { FileIcon, formatFileSize } from '@/components/attachments';
+import { FileIcon } from '@/components/attachments';
+import {
+  ATTACHMENT_CHIP_SURFACE_CLASS,
+  middleEllipsisFileName,
+} from '@/components/attachments/file-type-icon';
 import { ATTACHMENT_SPAN_CLASS } from '@/lib/dingtalk-mention-composer';
 import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import {
   normalizeUserMessageForDisplay,
   stripComposerGatewayPlaceholders,
+  stripGatewayMediaAttached,
   stripUserNoiseKeepComposerBake,
 } from '@/lib/user-message-display';
 import {
@@ -40,7 +45,6 @@ export interface WorkflowRunDisplayMeta {
 export function UserComposerFileChip({
   fileName,
   mimeType,
-  fileSize,
 }: {
   fileName: string;
   mimeType: string;
@@ -48,16 +52,11 @@ export function UserComposerFileChip({
 }) {
   return (
     <span
-      className={cn(
-        ATTACHMENT_SPAN_CLASS,
-        'inline-flex max-w-[200px] items-center gap-0.5 rounded-[4px] bg-muted/60 px-1.5 py-0.5 align-middle text-[12px] leading-4 text-foreground/80',
-      )}
+      className={cn(ATTACHMENT_SPAN_CLASS, ATTACHMENT_CHIP_SURFACE_CLASS, 'w-max')}
+      title={fileName}
     >
-      <FileIcon mimeType={mimeType} className="h-3 w-3 shrink-0 text-muted-foreground" />
-      <span className="truncate">{fileName}</span>
-      {fileSize && fileSize > 0 ? (
-        <span className="shrink-0 text-[10px] text-muted-foreground">{formatFileSize(fileSize)}</span>
-      ) : null}
+      <FileIcon fileName={fileName} mimeType={mimeType} />
+      <span className="min-w-0 flex-1 truncate whitespace-nowrap">{middleEllipsisFileName(fileName)}</span>
     </span>
   );
 }
@@ -97,7 +96,7 @@ export function serializePersistedComposerSegmentsToActionText(
   for (const seg of segments) {
     switch (seg.type) {
       case 'text':
-        parts.push((seg.text ?? '').replace(/\u00A0/g, ' '));
+        parts.push(stripGatewayMediaAttached((seg.text ?? '').replace(/\u00A0/g, ' ')));
         break;
       case 'mention':
         appendLabel(`@${seg.mention.displayName}`);
@@ -133,10 +132,12 @@ export function UserComposerSegmentsContent({
     <>
       {segments.map((seg, index) => {
         switch (seg.type) {
-          case 'text':
-            return seg.text
-              ? <span key={`seg-${index}`}>{renderUserMessageMentionNodes(seg.text)}</span>
+          case 'text': {
+            const cleaned = stripGatewayMediaAttached(seg.text ?? '').replace(/\u00A0/g, ' ');
+            return cleaned
+              ? <span key={`seg-${index}`}>{renderUserMessageMentionNodes(cleaned)}</span>
               : null;
+          }
           case 'mention':
             return (
               <span key={`seg-${index}`}>
@@ -206,7 +207,10 @@ export function parseWorkflowRunDisplayText(text: string): WorkflowRunDisplayMet
 }
 
 function cleanTextForSynth(text: string): string {
-  return stripComposerGatewayPlaceholders(text).replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').trim();
+  return stripGatewayMediaAttached(stripComposerGatewayPlaceholders(text))
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
 }
 
 const COMPOSER_BAKE_EVIDENCE_RE =

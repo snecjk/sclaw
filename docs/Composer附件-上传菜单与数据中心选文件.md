@@ -1,7 +1,7 @@
 # Composer 附件：上传菜单 + 数据中心选文件
 
-> 状态：方案定稿（待实现）  
-> 日期：2026-08-11  
+> 状态：**Chat 主路径已实现**；Task 装配后置  
+> 日期：2026-08-13  
 > 相关：
 > - [`src/components/attachments/`](../src/components/attachments/)
 > - [`src/components/input-composer/`](../src/components/input-composer/)
@@ -14,7 +14,7 @@
 
 ## 1. 背景与目标
 
-当前 Composer 附件按钮直接调本地 `dialog:open` → `/api/files/stage-paths`，无法从数据中心选文件。
+Composer 附件按钮从「直接选本地文件」升级为「四项来源菜单」，支持从数据中心选择文件。
 
 目标：把「从多种来源添加附件」做成底层公共能力；**优先接 Chat**（依赖内联方案已落地），Task 可随后跟进。
 
@@ -22,20 +22,22 @@
 
 - 点击附件图标 → 四项来源菜单（对齐设计稿）
 - 三类数据中心选文件弹窗（树 + 搜索 + 多选文件）
-- 确认后下载并 stage 成现有 `FileAttachment`，经 **`insertAttachment` 插入光标处**（依赖 [`Composer内联混排-Segment模型与多SkillWorkflow透传.md`](./Composer内联混排-Segment模型与多SkillWorkflow透传.md) 已落地的 inline token；不再挂顶部 chips）
-- Chat 输入框优先支持；任务描述 Composer **可延后**（须等 Chat 主路径 inline 完成且 Task 装配跟进后再接，或本菜单迭代仅挂 Chat）
+- 确认后 download → 现有 `/api/files/stage-buffer` → `FileAttachment`，经 **`insertAttachment` 插入光标处**（不再挂顶部 chips）
+- Chat 输入框优先支持；任务描述 Composer **后置**
 - 写入可选 `provenance`（`drive` / `qa_artifact` / `site_shared_artifact`），供溯源；发送仍只认 `stagedPath`
+- 文件 chip 视觉统一：设计稿 SVG 类型图标 + `#F0F2F5` 容器 + max 280px + 中间省略（输入 token / 气泡一致）
 
 ### 1.2 本次不做
 
 - 技能 bake / 任务侧技能落库
-- 任务 cron 附件持久化字段改造（本次只让任务弹窗能选到并挂在 composer 上，与 Chat 同一套 stage 模型）
+- 任务 cron 附件持久化字段改造
 - 扩展 Gateway 远程直传（不改发送链路：仍 download → stage）
-- **重做 inline 混排 / segment 模型**（须先完成本文依赖的内联方案；本菜单只接已有 `insertAttachment` 出口）
+- **重做 inline 混排 / segment 模型**
+- Task 四源菜单接线（后置）
 
 ### 1.3 与内联方案的交接
 
-内联方案迭代应已预留：`provenance?`、`stageDataCenterFiles` 签名、Toolbar `onAttach` 菜单回调位、统一 `insertAttachment`。本菜单迭代只填菜单 + 弹窗 + download/stage，**不再改** segment / Gateway bake。
+内联方案已预留：`provenance?`、`stageDataCenterFiles` 签名、Toolbar `onAttach` 回调位、统一 `insertAttachment`。本菜单迭代只填菜单 + 弹窗 + download/stage，**不再改** segment / Gateway bake。
 
 ---
 
@@ -54,10 +56,10 @@ flowchart LR
   online --> pickerDrive["FilePickerModal spaceType=drive"]
   myArt --> pickerQa["FilePickerModal spaceType=qa_artifact"]
   shared --> pickerShared["FilePickerModal spaceType=site_shared_artifact"]
-  pickerDrive --> stage[download + stage]
+  pickerDrive --> stage[downloadUrl + stage-buffer]
   pickerQa --> stage
   pickerShared --> stage
-  stage --> chips[AttachmentChips]
+  stage --> inline[insertAttachment token]
 ```
 
 ### 2.2 菜单项与数据中心映射
@@ -78,27 +80,42 @@ flowchart LR
 - 弹窗挂 portal / document，避免被 Task modal、composer overflow 裁切
 - 附件图标 `onMouseDown` 继续 `preventDefault`，避免抢编辑器焦点
 - 网点共享无 `spaceId` 时：打开前拉 spaces；失败 toast，不打开空树
+- 文件 chip：`h-[26px]` / `rounded-[6px]` / `bg-[#F0F2F5]` / `gap-2` / `p-1` / `max-w-[280px]`；文字 12px `#1D2129`；过长中间省略；多文件靠 inline 换行
 
 ---
 
 ## 3. 架构落点（公共能力）
 
-新建共享模块放在 `attachments` 旁，**不**拖进 DataCenter 页面目录：
-
 | 文件 | 职责 |
 |------|------|
 | `src/components/attachments/ComposerAttachMenu.tsx` | 锚点旁浮层菜单（四项） |
-| `src/components/attachments/DataCenterFilePickerModal.tsx` | 通用选文件弹窗（树 / 搜索 / 多选） |
+| `src/components/data-center-file-picker/` | **公用**选文件弹窗：只传 `type`；内置 list / spaces；样式固化 |
 | `src/components/attachments/use-composer-attach-source.ts` | 菜单 open、打开哪种 picker、确认后 stage |
-| 扩展 `src/components/attachments/use-attachment-stager.ts` | 新增 `stageDataCenterFiles(entries)` |
+| `src/components/attachments/use-attachment-stager.ts` | `stageDataCenterFiles(entries)` |
+| `src/components/attachments/file-type-icon.ts` | 类型图标映射 + 中间省略 + chip 表面 class |
 
-列表数据复用：
+列表数据复用（**现成**，内置进公用弹窗，不新增）：
 
 - `listDataCenterEntries`
-- `getDataCenterSpaces`
-- `getDataCenterDownloadUrl`
+- `getDataCenterSpaces`（仅 `site_shared_artifact`）
+- `getDataCenterDownloadUrl`（stage 阶段）
 
-树展开策略参考 `SaveArtifactDialog`（按 parent 懒加载），勾选对象改为 **file**，文件夹只负责展开。
+调用示例：
+
+```tsx
+<DataCenterFilePickerModal
+  open={open}
+  type="drive" // | 'qa_artifact' | 'site_shared_artifact'
+  onClose={...}
+  onConfirm={(files) => {
+    // files[i].stagedPath 已是本地 outbound 路径（确认时组件内 download+stage）
+  }}
+/>
+```
+
+确认时内置：`getDataCenterDownloadUrl` → fetch → `/api/files/stage-buffer`。
+
+树展开策略参考 `SaveArtifactDialog`（按 parent 懒加载），勾选对象为 **file**，文件夹只负责展开。
 
 ---
 
@@ -106,15 +123,11 @@ flowchart LR
 
 Chat 发送只认本地 `stagedPath`，因此确认后：
 
-1. 对每个选中 `entryId` 调 `getDataCenterDownloadUrl`
-2. 经 Electron / host 把 tempUrl 落到可 stage 的本地路径，或 buffer → `/api/files/stage-buffer`  
-   - 优先复用现有 stage API  
-   - 必要时在 `electron/api/routes/files.ts` 增加「URL → stage」小接口
-3. 写入 `FileAttachment`（`status: 'ready'`），走现有 chips  
-   - Chat：`onSend(..., attachments, ...)`  
-   - Task：composer 本地 chips（与 Chat 同模型）
+1. 对每个选中 `entryId` 调现成 `getDataCenterDownloadUrl`
+2. 拉取 `tempUrl` 字节 → 现有 `/api/files/stage-buffer`
+3. 写入 `FileAttachment`（`status: 'ready'` + `provenance`），经 `onAttachmentUpsert` → `insertAttachment`
 
-**不**给 `FileAttachment` 增加 `entryId` / `spaceType` 字段，避免改 gateway 发送链路。
+**不**新增 host stage API；**不**给发送契约强绑 `entryId`；溯源走可选 `provenance`。
 
 ---
 
@@ -122,38 +135,34 @@ Chat 发送只认本地 `stagedPath`，因此确认后：
 
 ### 5.1 `InputComposerToolbar`
 
-当前 `onAttach` 直接 `pickFiles`。改为：
-
 - 附件按钮打开 **菜单**（不再直接选本地文件）
-- 由装配层使用 `useComposerAttachSource`（或等价回调）处理菜单项
+- 提供 `attachButtonRef` 作为菜单锚点
 
 ### 5.2 装配层
 
-`ChatInput.tsx` 与 `TaskInstructionComposer.tsx`：
-
-- 挂载 `ComposerAttachMenu` + `DataCenterFilePickerModal`（按来源切换 `spaceType`）
-- 本地项 → 现有 `pickFiles`
-- 弹窗确认 → `stageDataCenterFiles`
+- **ChatInput**：已挂 `ComposerAttachMenu` + `DataCenterFilePickerModal` + `useComposerAttachSource`
+- **TaskInstructionComposer**：后置（仍直接 `pickFiles` + 顶部 chips）
 
 ---
 
 ## 6. 实现检查清单
 
-- [ ] `ComposerAttachMenu` + 工具栏改为打开菜单
-- [ ] `DataCenterFilePickerModal`（`drive` / `qa_artifact` / `site_shared_artifact`）
-- [ ] stager：`download → stage → FileAttachment`
-- [ ] `ChatInput` 与 `TaskInstructionComposer` 共用接线
-- [ ] 非站点用户隐藏「网点共享产物」
-- [ ] Chat：三类来源确认后 chips 可发送
-- [ ] 任务：三类来源确认后 chips 可见（cron 持久化不在本次）
-- [ ] 技能相关逻辑零改动
+- [x] `ComposerAttachMenu` + Chat 工具栏改为打开菜单
+- [x] `DataCenterFilePickerModal` 公用组件（`type` 驱动；内置 list/spaces）
+- [x] stager：`getDataCenterDownloadUrl → stage-buffer → FileAttachment`
+- [x] 非站点用户隐藏「网点共享产物」
+- [x] Chat：三类来源确认后 inline token 可发送
+- [x] 文件 chip 设计稿样式（输入 / 气泡）
+- [ ] Task：四源菜单接线（后置）
+- [x] 技能相关逻辑零改动
 
 ---
 
 ## 7. 验收
 
-1. Chat / 任务：点附件 → 见菜单（非站点用户无「网点共享」）
-2. 本地文件：行为与现网一致
-3. 三类弹窗：能搜、展开文件夹、多选文件、确认后 chips 出现
+1. Chat：点附件 → 见菜单（非站点用户无「网点共享」）
+2. 本地文件：行为与现网一致（插入光标处）
+3. 三类弹窗：能搜、展开文件夹、多选文件、确认后 inline chip 出现
 4. Chat 带数据中心附件可正常发送
 5. 技能选择/落库行为与改前一致
+6. 输入框 / 气泡文件 chip 图标与样式一致

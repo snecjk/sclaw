@@ -12,6 +12,7 @@ import type {
 import type { SkillMeta } from '@/types/skill-meta';
 import {
   stripComposerGatewayPlaceholders,
+  stripGatewayMediaAttached,
   stripGatewayTimestampPrefix,
 } from '@/lib/user-message-display';
 import { stripSkillGatewayPrefix } from '@/lib/skill-transcript-marker';
@@ -61,6 +62,7 @@ export interface UseInputComposerEditDraftOptions {
 
 function sanitizeEditPlainText(text: string, skill?: SkillMeta): string {
   let cleaned = stripComposerGatewayPlaceholders(text);
+  cleaned = stripGatewayMediaAttached(cleaned);
   cleaned = stripGatewayTimestampPrefix(cleaned);
   if (skill?.slug || skill?.title) {
     cleaned = stripSkillGatewayPrefix(
@@ -74,15 +76,21 @@ function sanitizeEditPlainText(text: string, skill?: SkillMeta): string {
 }
 
 /**
- * 编辑回填：去掉 Gateway 时间戳、技能 slug/title 脏前缀、stage-6 占位符，
- * 避免「编辑 → 再发」把 `[Thu …]` / `html` 再次写进 gateway。
+ * 编辑回填：去掉 Gateway 时间戳、`[media attached:]`、技能脏前缀、stage-6 占位符，
+ * 避免「编辑 → 再发」把元数据再次写进 gateway / 输入框。
  */
 export function sanitizePersistedTextSegmentForEdit(
   text: string,
   skill?: Pick<SkillMeta, 'slug' | 'title'>,
 ): string {
   let cleaned = stripComposerGatewayPlaceholders(text);
-  cleaned = stripGatewayTimestampPrefix(cleaned.trimStart());
+  cleaned = stripGatewayMediaAttached(cleaned);
+  // 仅当确有时间戳前缀时才 trimStart，避免吃掉 chip 两侧故意保留的空格。
+  const trimmedStart = cleaned.trimStart();
+  const withoutTimestamp = stripGatewayTimestampPrefix(trimmedStart);
+  if (withoutTimestamp !== trimmedStart) {
+    cleaned = withoutTimestamp;
+  }
   if (skill?.slug || skill?.title) {
     cleaned = stripSkillGatewayPrefix(
       cleaned,

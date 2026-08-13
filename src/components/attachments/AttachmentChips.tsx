@@ -1,6 +1,11 @@
-import { File, FileArchive, FileText, Film, Loader2, Music, X } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FileAttachment } from './types';
+import {
+  ATTACHMENT_CHIP_SURFACE_CLASS,
+  middleEllipsisFileName,
+  resolveFileTypeIconSrc,
+} from './file-type-icon';
 
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -9,24 +14,26 @@ export function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-export function FileIcon({ mimeType, className }: { mimeType: string; className?: string }) {
-  if (mimeType.startsWith('video/')) return <Film className={className} />;
-  if (mimeType.startsWith('audio/')) return <Music className={className} />;
-  if (mimeType.startsWith('text/') || mimeType === 'application/json' || mimeType === 'application/xml') {
-    return <FileText className={className} />;
-  }
-  if (
-    mimeType.includes('zip')
-    || mimeType.includes('compressed')
-    || mimeType.includes('archive')
-    || mimeType.includes('tar')
-    || mimeType.includes('rar')
-    || mimeType.includes('7z')
-  ) {
-    return <FileArchive className={className} />;
-  }
-  if (mimeType === 'application/pdf') return <FileText className={className} />;
-  return <File className={className} />;
+/** 按扩展名 / mime 展示设计稿文件类型图标。 */
+export function FileIcon({
+  fileName,
+  mimeType,
+  className,
+}: {
+  fileName?: string;
+  mimeType?: string;
+  className?: string;
+}) {
+  const src = resolveFileTypeIconSrc(fileName || '', mimeType);
+  return (
+    <img
+      src={src}
+      alt=""
+      aria-hidden="true"
+      className={cn('h-4 w-4 shrink-0 object-contain', className)}
+      draggable={false}
+    />
+  );
 }
 
 function AttachmentPreview({
@@ -39,9 +46,9 @@ function AttachmentPreview({
   const isImage = attachment.mimeType.startsWith('image/') && attachment.preview;
 
   return (
-    <div className="relative group rounded-md overflow-hidden border border-border">
+    <div className="relative group overflow-hidden">
       {isImage ? (
-        <div className="h-12 w-12 shrink-0">
+        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-md border border-border">
           <img
             src={attachment.preview!}
             alt={attachment.fileName}
@@ -49,26 +56,23 @@ function AttachmentPreview({
           />
         </div>
       ) : (
-        <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 max-w-[200px]">
-          <FileIcon mimeType={attachment.mimeType} className="h-5 w-5 shrink-0 text-muted-foreground" />
-          <div className="min-w-0 overflow-hidden">
-            <p className="text-xs font-medium truncate">{attachment.fileName}</p>
-            <p className="text-[10px] text-muted-foreground">
-              {attachment.fileSize > 0 ? formatFileSize(attachment.fileSize) : '...'}
-            </p>
-          </div>
+        <div className={cn(ATTACHMENT_CHIP_SURFACE_CLASS, 'w-max')}>
+          <FileIcon fileName={attachment.fileName} mimeType={attachment.mimeType} />
+          <span className="min-w-0 flex-1 truncate whitespace-nowrap" title={attachment.fileName}>
+            {middleEllipsisFileName(attachment.fileName)}
+          </span>
         </div>
       )}
 
       {attachment.status === 'staging' && (
-        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-          <Loader2 className="h-4 w-4 text-white animate-spin" />
+        <div className="absolute inset-0 flex items-center justify-center rounded-[6px] bg-black/40">
+          <Loader2 className="h-4 w-4 animate-spin text-white" />
         </div>
       )}
 
       {attachment.status === 'error' && (
-        <div className="absolute inset-0 bg-destructive/20 flex items-center justify-center">
-          <span className="text-[10px] text-destructive font-medium px-1">Error</span>
+        <div className="absolute inset-0 flex items-center justify-center rounded-[6px] bg-destructive/20">
+          <span className="px-1 text-[10px] font-medium text-destructive">Error</span>
         </div>
       )}
 
@@ -76,7 +80,7 @@ function AttachmentPreview({
         type="button"
         onClick={onRemove}
         className={cn(
-          'absolute right-1 top-1 z-10 flex h-5 w-5 items-center justify-center rounded-full',
+          'absolute right-0 top-0 z-10 flex h-5 w-5 items-center justify-center rounded-full',
           'bg-destructive text-destructive-foreground shadow-sm ring-2 ring-background',
           'opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100',
         )}
@@ -94,7 +98,7 @@ export interface AttachmentChipsProps {
   className?: string;
 }
 
-/** 输入框顶部附件 chips 行 */
+/** 输入框顶部附件 chips 行（Task 等非 inline 场景；多文件换行）。 */
 export function AttachmentChips({ attachments, onRemove, className }: AttachmentChipsProps) {
   if (attachments.length === 0) return null;
 

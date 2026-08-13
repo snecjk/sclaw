@@ -56,6 +56,8 @@ export interface InputComposerToolbarProps {
   workflowButtonRef?: RefObject<HTMLButtonElement | null>;
   /** 快捷输入按钮 ref（FlyTo 目标等） */
   quickInputButtonRef?: RefObject<HTMLButtonElement | null>;
+  /** 附件按钮 ref（来源菜单锚点） */
+  attachButtonRef?: RefObject<HTMLButtonElement | null>;
   /** 是否显示附件按钮；默认 true */
   showAttach?: boolean;
   /** 是否显示技能按钮；默认 true */
@@ -96,6 +98,7 @@ export function InputComposerToolbar({
   skillButtonRef,
   workflowButtonRef,
   quickInputButtonRef,
+  attachButtonRef,
   showAttach = true,
   showSkill = true,
   showWorkflow = true,
@@ -110,6 +113,7 @@ export function InputComposerToolbar({
         {showAttach ? (
           <InputComposerToolbarIconTooltip label={labels.attach}>
             <Button
+              ref={attachButtonRef}
               variant="ghost"
               type="button"
               className={homeIconBtn}
@@ -182,9 +186,11 @@ export function InputComposerToolbar({
     <>
       {showAttach ? (
         <Button
+          ref={attachButtonRef}
           variant="ghost"
           type="button"
           className={defaultIconBtn}
+          onMouseDown={(event) => event.preventDefault()}
           onClick={onAttach}
           disabled={disabled}
           title={labels.attach}

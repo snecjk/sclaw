@@ -20,3 +20,10 @@ export interface FileAttachment {
   /** 可选溯源；本地上传可省略或写 `{ kind: 'local' }`。 */
   provenance?: FileProvenance;
 }
+
+/** @deprecated 请从 `@/components/data-center-file-picker` 导入 */
+export type {
+  DataCenterPickerSelection,
+  DataCenterStagedFile,
+} from '@/components/data-center-file-picker';
+

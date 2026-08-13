@@ -29,6 +29,11 @@ import { useTranslation } from 'react-i18next';
 import { DingTalkMentionEditor } from '@/components/dingtalk/DingTalkMentionEditor';
 import { DingTalkMentionPopover } from '@/components/dingtalk/DingTalkMentionPopover';
 import type { FileAttachment } from '@/components/attachments';
+import {
+  ComposerAttachMenu,
+  useComposerAttachSource,
+} from '@/components/attachments';
+import { DataCenterFilePickerModal } from '@/components/data-center-file-picker';
 import { buildComposerGatewayPayload } from '@/lib/composer-gateway-text';
 import { EMPTY_MENTION_COMPOSER_SNAPSHOT } from '@/lib/dingtalk-mention-composer';
 import { resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
@@ -218,6 +223,7 @@ export function ChatInput({
     clearAttachments,
     setAttachmentsSilent,
     pickFiles,
+    stageDataCenterFiles,
     handleAttachmentRemoveFromEditor,
     dragOver,
     dingTalkPopoverProps,
@@ -236,6 +242,11 @@ export function ChatInput({
     handleDragLeave,
     handleDrop,
   } = core;
+
+  const attachSource = useComposerAttachSource({
+    pickFiles,
+    stageDataCenterFiles,
+  });
 
   const voice = useInputComposerVoice({
     mentionEditorRef,
@@ -570,7 +581,7 @@ export function ChatInput({
             workflow: t('composer.pickWorkflow'),
             quickInput: t('composer.quickInputTitle'),
           }}
-          onAttach={() => { void pickFiles(); }}
+          onAttach={attachSource.openAttachMenu}
           onSkill={skillPicker.toggleToolbar}
           onWorkflow={workflowPicker.toggleToolbar}
           onQuickInput={quickInputPicker.toggle}
@@ -581,6 +592,7 @@ export function ChatInput({
           skillButtonRef={skillPicker.buttonRef}
           workflowButtonRef={workflowPicker.buttonRef}
           quickInputButtonRef={quickInputPicker.buttonRef}
+          attachButtonRef={attachSource.attachButtonRef}
           extra={agentPickerExtra}
         />
       )}
@@ -661,6 +673,25 @@ export function ChatInput({
       ) : (
         shell
       )}
+      <ComposerAttachMenu
+        open={attachSource.menuOpen}
+        onOpenChange={attachSource.setMenuOpen}
+        anchorRef={attachSource.attachButtonRef}
+        showSharedArtifact={attachSource.showSharedArtifact}
+        onSelect={attachSource.handleMenuSelect}
+        labels={{
+          local: t('composer.attachLocal'),
+          drive: t('composer.attachDrive'),
+          qaArtifact: t('composer.attachQaArtifact'),
+          siteSharedArtifact: t('composer.attachSiteShared'),
+        }}
+      />
+      <DataCenterFilePickerModal
+        open={attachSource.pickerOpen}
+        type={attachSource.pickerType}
+        onClose={attachSource.closePicker}
+        onConfirm={(files) => { void attachSource.handlePickerConfirm(files); }}
+      />
     </div>
   );
 }

@@ -45,13 +45,18 @@ function stripGatewayUserMetadata(text: string): string {
     text
       .replace(GATEWAY_SYSTEM_EVENT_LINE, '')
       .replace(/^Sender\s*\([^)]*\):\s*```[a-z]*\n[\s\S]*?```\s*/im, '')
-      .replace(/\s*\[media attached:[^\]]*\]/g, '')
+      .replace(/\s*\[media attached:[^\]]*\]/gi, '')
       .replace(/\s*\[message_id:\s*[^\]]+\]/g, '')
       .replace(/^Conversation info\s*\([^)]*\):\s*```[a-z]*\n[\s\S]*?```\s*/i, '')
       .replace(/^Conversation info\s*\([^)]*\):\s*\{[\s\S]*?\}\s*/i, '')
       .replace(/\n*Current time:\s*[^\n]+/gi, '')
       .replace(/\n*Reference UTC:\s*[^\n]+/gi, ''),
   ).trim();
+}
+
+/** 仅剥离 Gateway `[media attached: …]`（气泡 / 编辑回填共用）。 */
+export function stripGatewayMediaAttached(text: string): string {
+  return text.replace(/\s*\[media attached:[^\]]*\]/gi, '');
 }
 
 /**

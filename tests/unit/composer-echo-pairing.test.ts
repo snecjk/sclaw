@@ -496,6 +496,9 @@ describe('composer echo pairing & display', () => {
       '[Thu 2026-08-13 10:17 GMT+8] html\n根据 ',
       { slug: 'html', title: '姚磊html网页设计' },
     )).toBe('根据');
+    expect(sanitizePersistedTextSegmentForEdit(
+      '帮我分析\n\n[media attached: /Users/yaolei/.stoclaw/openclaw/media/outbound/a.html (text/html) | /Users/yaolei/.stoclaw/openclaw/media/outbound/a.html]',
+    )).toBe('帮我分析');
     expect(resolveSkillFromPlaza('missing-skill-xyz').defaultPrompt).toBe('');
   });
 });

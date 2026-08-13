@@ -75,6 +75,31 @@ describe('edit draft file id alignment', () => {
     expect(payload.persistedSegments.filter((seg) => seg.type === 'file')).toHaveLength(2);
   });
 
+  it('strips media-attached metadata from text segments and marks missing paths as error', () => {
+    const segments: PersistedComposerSegment[] = [
+      {
+        type: 'file',
+        fileName: '看板.html',
+        mimeType: 'text/html',
+        fileSize: 10,
+        preview: null,
+      },
+      {
+        type: 'text',
+        text: '更新数据 [media attached: /Users/yaolei/.stoclaw/x.html (text/html) | /Users/yaolei/.stoclaw/x.html]',
+      },
+    ];
+
+    const converted = persistedSegmentsToComposer(segments);
+    expect(converted.attachments).toHaveLength(1);
+    expect(converted.attachments[0]?.status).toBe('error');
+    expect(converted.attachments[0]?.stagedPath).toBe('');
+    expect(converted.segments).toEqual([
+      { type: 'file', attachmentId: converted.attachments[0]!.id },
+      { type: 'text', text: '更新数据' },
+    ]);
+  });
+
   it('does not drop files when registry ids diverge from segment attachmentIds (regression)', async () => {
     const segments: PersistedComposerSegment[] = [
       { type: 'text', text: '根据 ' },

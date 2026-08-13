@@ -1,4 +1,9 @@
 import type { FileProvenance } from '@/components/attachments/types';
+import {
+  ATTACHMENT_CHIP_SURFACE_CLASS,
+  middleEllipsisFileName,
+  resolveFileTypeIconSrc,
+} from '@/components/attachments/file-type-icon';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import { skillComposerTagClass } from '@/lib/surfaces';
@@ -304,16 +309,18 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
   }
 
   let normalized = plainText.replace(/\u00A0/g, ' ');
-  const firstSkillOffset = skillOffsets[0];
-  const startsWithInlineToken = segments[0]?.type === 'file'
-    || segments[0]?.type === 'skill'
-    || segments[0]?.type === 'workflow'
-    || segments[0]?.type === 'mention';
+  const startsWithInlineToken = composerStartsWithInlineToken(segments);
   // 首个 inline token 在最前时，它自带的分隔空格不应留在正文里。
-  if ((skills.length > 0 && firstSkillOffset === 0) || (startsWithInlineToken && (firstSkillOffset === undefined || firstSkillOffset === 0))) {
+  // 注意：file 后再跟 skill 时 skillOffset 往往是中间 NBSP 长度（>0），仍必须剥前导空白，
+  // 否则与 findPlainTextBoundary 的跳过策略错位，insertMentionAtTrigger 会静默失败。
+  if (startsWithInlineToken) {
     const trimmed = normalized.replace(/^\s+/, '');
-    if (trimmed.length !== normalized.length) {
+    const lead = normalized.length - trimmed.length;
+    if (lead > 0) {
       normalized = trimmed;
+      for (let i = 0; i < skillOffsets.length; i += 1) {
+        skillOffsets[i] = Math.max(0, skillOffsets[i] - lead);
+      }
       for (const seg of segments) {
         if (seg.type === 'text') {
           seg.text = seg.text.replace(/^\s+/, '').replace(/\u00A0/g, ' ');
@@ -509,13 +516,20 @@ interface PlainTextBoundary {
   offset: number;
 }
 
+function composerStartsWithInlineToken(segments: ComposerSegment[]): boolean {
+  const first = segments[0]?.type;
+  return first === 'file'
+    || first === 'skill'
+    || first === 'workflow'
+    || first === 'mention';
+}
+
 function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTextBoundary | null {
   let current = 0;
   // 与 serializeMentionEditor 一致：首个 inline token 在最前时 plainText 会剥掉它后面的空白，
   // 偏移映射也必须跳过，否则 insertMentionAtTrigger 会删错字符留下多余 @。
   const editorSnapshot = serializeMentionEditor(root);
-  let skippingLeadingWs = editorSnapshot.skillOffset === 0
-    || editorSnapshot.segments[0]?.type === 'file';
+  let skippingLeadingWs = composerStartsWithInlineToken(editorSnapshot.segments);
 
   const visit = (node: Node): PlainTextBoundary | null => {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -752,18 +766,7 @@ export function createWorkflowSpan(
 
 const ATTACHMENT_SPAN_BASE_CLASS = [
   ATTACHMENT_SPAN_CLASS,
-  'inline-flex',
-  'max-w-[200px]',
-  'items-center',
-  'gap-0.5',
-  'rounded-[4px]',
-  'bg-muted/60',
-  'px-1.5',
-  'py-0.5',
-  'align-middle',
-  'text-[12px]',
-  'leading-4',
-  'text-foreground/80',
+  ATTACHMENT_CHIP_SURFACE_CLASS,
 ].join(' ');
 
 const ATTACHMENT_REMOVE_BTN_CLASS = [
@@ -777,10 +780,10 @@ const ATTACHMENT_REMOVE_BTN_CLASS = [
   'rounded-full',
   'text-[11px]',
   'leading-none',
-  'text-foreground/50',
+  'text-[#86909C]',
   'transition-colors',
-  'hover:bg-foreground/10',
-  'hover:text-foreground/80',
+  'hover:bg-black/5',
+  'hover:text-[#1D2129]',
 ].join(' ');
 
 export interface AttachmentSpanInput {
@@ -801,10 +804,18 @@ export function createAttachmentSpan(att: AttachmentSpanInput): HTMLSpanElement 
   span.dataset.mimeType = att.mimeType;
   if (att.fileSize !== undefined) span.dataset.fileSize = String(att.fileSize);
   if (att.status) span.dataset.status = att.status;
+  span.title = att.fileName;
+
+  const icon = document.createElement('img');
+  icon.className = 'attachment-token-icon h-4 w-4 shrink-0 object-contain';
+  icon.src = resolveFileTypeIconSrc(att.fileName, att.mimeType);
+  icon.alt = '';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.draggable = false;
 
   const label = document.createElement('span');
-  label.className = 'attachment-token-label truncate';
-  label.textContent = att.fileName;
+  label.className = 'attachment-token-label min-w-0 flex-1 truncate whitespace-nowrap';
+  label.textContent = middleEllipsisFileName(att.fileName);
 
   const removeBtn = document.createElement('button');
   removeBtn.type = 'button';
@@ -813,7 +824,7 @@ export function createAttachmentSpan(att: AttachmentSpanInput): HTMLSpanElement 
   removeBtn.className = ATTACHMENT_REMOVE_BTN_CLASS;
   removeBtn.textContent = '×';
 
-  span.append(label, removeBtn);
+  span.append(icon, label, removeBtn);
   return span;
 }
 

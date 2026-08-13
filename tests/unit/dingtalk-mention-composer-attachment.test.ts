@@ -66,16 +66,21 @@ describe('dingtalk-mention-composer attachment token', () => {
     expect(serializeMentionEditor(root).isEmpty).toBe(true);
   });
 
-  it('createAttachmentSpan includes remove button and dataset', () => {
+  it('createAttachmentSpan includes icon, remove button and dataset', () => {
+    const longName = '店铺库存与销售汇总表_2026年第一季度完整导出数据需要中间省略.docx';
     const span = createAttachmentSpan({
       id: 'att-2',
-      fileName: '长文件名应该被截断显示.docx',
+      fileName: longName,
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       status: 'staging',
     });
     expect(span.dataset.attachmentId).toBe('att-2');
     expect(span.querySelector('[data-attachment-remove]')).not.toBeNull();
-    expect(span.querySelector('.attachment-token-label')?.textContent).toBe('长文件名应该被截断显示.docx');
+    expect(span.querySelector('.attachment-token-icon')).not.toBeNull();
+    const label = span.querySelector('.attachment-token-label')?.textContent ?? '';
+    expect(label.length).toBeLessThan(longName.length);
+    expect(label).toContain('…');
+    expect(span.title).toBe(longName);
   });
 
   it('setMentionEditorSegments rebuilds mixed content from segments', () => {
