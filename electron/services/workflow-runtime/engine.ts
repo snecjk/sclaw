@@ -830,7 +830,16 @@ export function createEngine(deps: EngineDeps) {
   };
 
   async function completeWaitingNode(runId: string, nodeId: string, nodeType: string, output: any): Promise<void> {
-    const packet = createWorkflowPacket({ runId, nodeId, nodeType, status: 'succeeded', payload: output });
+    const existing = await repo.getNodeRun(runId, nodeId);
+    const existingOutput = existing?.output_json ? parseJson(existing.output_json) : null;
+    let payload = output;
+    if (isWorkflowPacket(existingOutput) && existingOutput.payload && typeof existingOutput.payload === 'object' && !Array.isArray(existingOutput.payload)) {
+      const previousPayload = existingOutput.payload as Record<string, unknown>;
+      if (previousPayload.browser) {
+        payload = { ...previousPayload, ...output };
+      }
+    }
+    const packet = createWorkflowPacket({ runId, nodeId, nodeType, status: 'succeeded', payload });
     const payload = { run_id: runId, node_id: nodeId, node_type: nodeType, status: 'SUCCEEDED', output_json: stringifyJson(packet), completed_at: nowIso() };
     await repo.upsertNodeRun(payload);
     await repo.enqueueOutbox(runId, 'node_run', `${runId}:${nodeId}`, payload, 'progress');

@@ -4,11 +4,18 @@ import type { AgentRunSpec, RunCtx } from '../types';
 import { workspacePath } from '../workspace-paths';
 import { normalizeArtifactFirstPayloadSchema } from '../artifact-output';
 
+import type { BrowserTaskResumeContext } from './resume-context';
+
 export function compileBrowserAgentSpec(
   node: any,
   ctx: RunCtx,
   versionId: unknown,
-  browserContext: { sessionId: string; baRunId: string; sessionPayload: BrowserWorkflowPayload },
+  browserContext: {
+    sessionId: string;
+    baRunId: string;
+    sessionPayload: BrowserWorkflowPayload;
+    resume?: BrowserTaskResumeContext;
+  },
 ): AgentRunSpec {
   const config = node?.config ?? {};
   const agent = config.agentConfig ?? {};

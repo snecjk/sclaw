@@ -136,6 +136,27 @@ export class BrowserAutomationRepository {
       .execute();
   }
 
+  async getRun(runId: string): Promise<Record<string, unknown> | undefined> {
+    const db = getKyselyDatabase();
+    return db.selectFrom('ba_run').selectAll().where('run_id', '=', runId).executeTakeFirst();
+  }
+
+  async findLatestRunForWorkflow(
+    workflowRunId: string,
+    sessionId?: string,
+  ): Promise<Record<string, unknown> | undefined> {
+    const db = getKyselyDatabase();
+    let query = db.selectFrom('ba_run')
+      .selectAll()
+      .where('workflow_run_id', '=', workflowRunId)
+      .where('status', '=', 'RUNNING')
+      .orderBy('started_at desc');
+    if (sessionId) {
+      query = query.where('session_id', '=', sessionId);
+    }
+    return query.executeTakeFirst();
+  }
+
   async completeRun(runId: string, status: string, error?: string | null): Promise<void> {
     const db = getKyselyDatabase();
     await db.updateTable('ba_run').set({

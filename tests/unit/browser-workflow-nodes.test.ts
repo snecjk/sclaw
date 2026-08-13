@@ -147,4 +147,48 @@ describe('buildBrowserTaskPrompt', () => {
     expect(prompt).toContain('ba_observe');
     expect(prompt).toContain('填写表单并提交');
   });
+
+  it('includes resume instructions when checkpoint exists', () => {
+    const spec: AgentRunSpec = {
+      schemaVersion: 'agent-run-spec/v1',
+      workflowId: 'wf-1',
+      workflowVersion: 'v1',
+      runId: 'run-1',
+      nodeId: 'n1',
+      task: { goal: '继续提交表单' },
+      target: { provider: 'client_local', kind: 'browser_task' },
+      inputs: {},
+      allowedSkills: [],
+      allowedTools: [...BROWSER_AGENT_ALLOWED_TOOLS],
+      outputSchema: '',
+      metadata: {},
+      runtimeContext: {
+        browserAutomation: {
+          sessionId: 'embed-app-1',
+          baRunId: 'ba-run-1',
+          resume: {
+            isResume: true,
+            baRunId: 'ba-run-1',
+            stepsCompleted: 2,
+            lastStep: { action: 'click', status: 'SUCCEEDED' },
+          },
+        },
+      },
+      permissionPolicy: { mode: 'readonly' },
+      limits: { maxToolCalls: 15 },
+      completionContract: { dataJsonSchema: { type: 'object' } },
+      guardrails: {},
+      prompt: '',
+    };
+    const ctx: RunCtx = {
+      runId: 'run-1',
+      workflowId: 'wf-1',
+      versionId: 'v1',
+      emit: async () => {},
+    };
+    const prompt = buildWorkflowNodePrompt(spec, { id: 'n1', type: 'browser_task' }, ctx);
+    expect(prompt).toContain('恢复执行');
+    expect(prompt).toContain('已完成 2 步');
+    expect(prompt).toContain('ba_observe');
+  });
 });

@@ -115,6 +115,7 @@ function buildBrowserTaskPrompt(
     diagnostics: { warnings: [], errors: [] },
   };
   const browserContext = (spec.runtimeContext as Record<string, unknown> | undefined)?.browserAutomation ?? {};
+  const resume = (browserContext as Record<string, unknown>).resume as Record<string, unknown> | undefined;
   const taskGoal = spec.task?.goal ?? node?.config?.goal ?? node?.config?.instruction ?? '';
   const instruction = spec.task?.instruction ?? '';
   const allowedTools = Array.isArray(spec.allowedTools) && spec.allowedTools.length
@@ -134,6 +135,15 @@ function buildBrowserTaskPrompt(
       `- 类型：${node?.type ?? 'browser_task'}`,
     ].join('\n')),
     promptSection('浏览器会话', `\`\`\`json\n${JSON.stringify(browserContext)}\n\`\`\``),
+    resume?.isResume
+      ? promptSection('恢复执行', [
+        `这是从 checkpoint 恢复的执行，已完成 ${resume.stepsCompleted ?? 0} 步。`,
+        resume.lastStep
+          ? `上一步：${resume.lastStep.action}（${resume.lastStep.status}${resume.lastStep.error ? `，${resume.lastStep.error}` : ''}）`
+          : '',
+        '不要重复已完成操作；先 ba_observe 确认当前页面状态，再从断点继续。',
+      ].filter(Boolean).join('\n'))
+      : '',
     promptSection('任务目标', taskGoal || '未配置浏览器任务目标。'),
     instruction ? promptSection('动态提示词', instruction) : '',
     promptSection('输入数据', `仅使用以下 WorkflowPacket，不得猜测未提供的数据。\n\n\`\`\`json\n${JSON.stringify(inputPacket)}\n\`\`\``),

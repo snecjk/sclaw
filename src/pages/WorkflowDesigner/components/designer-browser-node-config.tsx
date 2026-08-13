@@ -177,6 +177,15 @@ export function DesignerBrowserNodeConfig({
             onChange={(event) => patch({ maxSteps: Number(event.target.value) || 20 })}
           />
         </Field>
+        <Field label="恢复策略" hint="工作流中断或重跑节点时，是否复用已有 ba_run checkpoint。">
+          <Select
+            value={config.resume === false ? 'new' : 'resume'}
+            onChange={(event) => patch({ resume: event.target.value !== 'new' })}
+          >
+            <option value="resume">从 checkpoint 继续</option>
+            <option value="new">重新开始</option>
+          </Select>
+        </Field>
       </>
     );
   }

@@ -6,6 +6,7 @@ import {
   buildBrowserSuccessPacket,
   resolveBrowserSession,
 } from './session-resolver';
+import { resolveBaRunForBrowserTask } from './resume-context';
 import { browserAutomationService } from '../../browser-automation/service';
 import { browserAutomationRepository } from '../../../db/repositories/browser-automation-repository';
 import { getWorkflowPacketFailureMessage, isWorkflowPacket } from '../workflow-packet';
@@ -27,15 +28,24 @@ export async function executeBrowserTaskNode(
     runId: ctx.runId,
   });
 
-  const inheritedBaRunId = sessionPayload.baRunId;
-  const baRunId = inheritedBaRunId && node?.config?.resume !== false
-    ? inheritedBaRunId
-    : await browserAutomationService.startRun(sessionId, { workflowRunId: ctx.runId });
+  const resume = await resolveBaRunForBrowserTask({
+    workflowRunId: ctx.runId,
+    sessionId,
+    sessionPayload,
+    forceNew: node?.config?.resume === false,
+  });
+  const baRunId = resume.baRunId;
 
   const spec = compileBrowserAgentSpec(node, ctx, deps.versionId, {
     sessionId,
     baRunId,
-    sessionPayload,
+    sessionPayload: {
+      ...sessionPayload,
+      baRunId,
+      stepsCompleted: resume.stepsCompleted,
+      lastObservation: resume.lastObservation ?? sessionPayload.lastObservation,
+    },
+    resume,
   });
 
   const agentResult = await runAgentNodeWithRetry(ctx, node, spec, {
