@@ -28,7 +28,7 @@ export function buildSclawBrowserEmbedContextText(
   options?: { longSessionNotice?: string | null },
 ): string {
   const payload = {
-    version: 3,
+    version: 4,
     source: 'stoclaw-embed-browser',
     embedRuntimeId: context.embedRuntimeId,
     bridgeSessionId: context.bridgeSessionId,
@@ -45,6 +45,16 @@ export function buildSclawBrowserEmbedContextText(
       navigate: 'bridge_navigate',
       screenshot: 'bridge_screenshot',
       listSessions: 'bridge_list_sessions',
+    },
+    automationTools: {
+      observe: 'ba_observe',
+      act: 'ba_act',
+      wait: 'ba_wait',
+      validate: 'ba_validate',
+      startRun: 'ba_start_run',
+      createSession: 'ba_create_session',
+      sessionId: context.bridgeSessionId,
+      embedRuntimeId: context.embedRuntimeId,
     },
   };
 
@@ -67,9 +77,10 @@ export function buildSclawBrowserEmbedContextText(
     '【应用内嵌预览上下文】用户正在 SClaw 应用广场左侧**内置浏览器（webview）**中操作，不是外部 Chrome。',
     '左侧页面已通过 Browser Bridge 连接，bridgeSessionId 见下方 JSON。',
     '',
-    '**必须遵守：**',
-    `- 所有页面操作只用 bridge_* 工具，且每次调用必须传 sessionId: "${context.bridgeSessionId}"`,
-    '- 典型流程：bridge_snapshot({ sessionId }) → bridge_click({ sessionId, name: "菜单文案" }) 或 bridge_click({ sessionId, ref: "@e5" })',
+    '**必须遵守（浏览器自动化 Step 1）：**',
+    `- 长链路/多步页面操作优先使用 ba_* 工具（ba_observe → ba_act → ba_validate），sessionId: "${context.bridgeSessionId}" 或 embedRuntimeId: "${context.embedRuntimeId}"`,
+    '- ba_* 支持 wait、validate 与 runId 步级 checkpoint；每步只做一次 ba_act',
+    `- 简单单步操作仍可用 bridge_*，且必须传 sessionId: "${context.bridgeSessionId}"`,
     '- 禁止 browser 工具（会单独打开托管 Chrome，不是左侧预览）',
     '- 禁止 shell:openExternal、exec open、curl 调 sclaw-browser API',
     '- 禁止引用本地 workspace 源码，除非用户明确要求',

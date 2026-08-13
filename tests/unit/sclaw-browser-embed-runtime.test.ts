@@ -70,6 +70,7 @@ describe('sclaw-browser-embed-context', () => {
     expect(text).toContain('embedRuntimeId');
     expect(text).toContain('br-test');
     expect(text).toContain('bridge_snapshot');
+    expect(text).toContain('ba_observe');
     expect(text).toContain('embed-br-test');
     expect(text).toContain('业务量完成率');
   });
