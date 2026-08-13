@@ -5,7 +5,7 @@
  */
 import { useState, useCallback, useEffect, useMemo, useRef, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle, CircleCheck } from 'lucide-react';
+import { Copy, Check, Pencil, ChevronDown, ChevronRight, Wrench, File, X, FolderOpen, ZoomIn, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import { chatRemarkPlugins } from '@/lib/remark-gfm-chat';
 import { createPortal } from 'react-dom';
@@ -18,6 +18,7 @@ import { useTypewriterReveal } from '@/hooks/use-typewriter-reveal';
 import { cn } from '@/lib/utils';
 import { assistantChatCardBg, userChatBubbleSurfaceClass, workflowParamsSummaryCardClass, workflowParamsSummaryGroupClass, workflowParamsSummaryGroupContentClass, workflowParamsSummaryGroupTitleClass, workflowParamsSummaryGroupsClass } from '@/lib/surfaces';
 import {
+  isChatResponsePending,
   isCurrentUserTurnIncomplete,
   isLastUserMessage,
   isMessageInCurrentUserTurn,
@@ -27,6 +28,7 @@ import { canShowAssistantTurnMeta, resolveCurrentTurnLifecycleForMeta } from '@/
 import { invokeIpc } from '@/lib/api-client';
 import type { RawMessage, AttachedFileMeta } from '@/stores/chat';
 import { useChatStore } from '@/stores/chat';
+import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 import {
   extractText,
   extractPlainTextFromContent,
@@ -45,6 +47,7 @@ import {
   isWorkflowStartAssistantBoilerplate,
   resolveAssistantCopyShareContent,
   resolveUserBubbleActionText,
+  splitUserBubbleAtTag,
 } from './message-utils';
 import { writeCopyShareTextToClipboard } from '@/lib/copy-share-clipboard';
 import {
@@ -99,7 +102,7 @@ import type { SkillMeta } from '@/types/skill-meta';
 import { AwaitingReplyIndicator, ThinkingProcessPanel } from './ThinkingProcessPanel';
 import { ArtifactShareDialog } from '@/components/file-preview/ArtifactShareDialog';
 import { ShareMessageIcon } from '@/components/icons/ShareMessageIcon';
-import { QuickInputIcon } from '@/components/icons/composer-toolbar-icons';
+import { QuickInputIcon, WorkflowNodesIcon } from '@/components/icons/composer-toolbar-icons';
 import { SaveAsQuickInputButton } from '@/components/quick-input/SaveAsQuickInputButton';
 import {
   buildConversationShareDialogDraft,
@@ -110,6 +113,7 @@ const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
 
 interface ChatMessageProps {
   message: RawMessage;
+  sessionMessages: RawMessage[];
   showThinking: boolean;
   /** 搜索稳定键：写入 data-chat-search-key，供索引/高亮/滚动定位 */
   searchMessageKey?: string;
@@ -154,6 +158,7 @@ function imageSrc(img: ExtractedImage): string | null {
 
 export const ChatMessage = memo(function ChatMessage({
   message,
+  sessionMessages,
   showThinking,
   searchMessageKey,
   isSearchMatch = false,
@@ -194,7 +199,6 @@ export const ChatMessage = memo(function ChatMessage({
     () => dedupeAttachedFiles(message._attachedFiles || []),
     [message._attachedFiles],
   );
-  const sessionMessages = useChatStore((s) => s.messages);
   const messageIndex = useMemo(
     () => (message.id ? sessionMessages.findIndex((m) => m.id === message.id) : -1),
     [message.id, sessionMessages],
@@ -209,7 +213,9 @@ export const ChatMessage = memo(function ChatMessage({
   const [lightboxImg, setLightboxImg] = useState<{ src: string; fileName: string; filePath?: string; base64?: string; mimeType?: string } | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareDraft, setShareDraft] = useState<DingTalkShareDialogDraft | null>(null);
-  const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
+  const pendingWorkflow = useChatStore(
+    (s) => s.workflowChatUiBySessionKey[s.currentSessionKey]?.pendingWorkflow ?? null,
+  );
   const sessionKey = useChatStore((s) => s.currentSessionKey);
   const workflowCardStates = EMPTY_WORKFLOW_CARD_STATES;
   const workflowCard = null;
@@ -250,7 +256,7 @@ export const ChatMessage = memo(function ChatMessage({
         .filter((ref) => !attachedFiles.some((f) => previewFileRefsMatch(f, ref)))
         .filter((ref) => isPreviewableFile(ref)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [text, message._attachedFiles],
+    [text, message.id, message._attachedFiles],
   );
   const candidateLocalPaths = useMemo(
     () => candidateRefs.filter((ref) => !isHttpUrl(ref.filePath)).map((ref) => ref.filePath),
@@ -297,7 +303,7 @@ export const ChatMessage = memo(function ChatMessage({
       result.push({ filePath: resolved.filePath, fileName: resolved.fileName, mimeType: resolved.mimeType });
     }
     return result;
-  }, [candidateRefs, refExistence, workflowCardStatesForRefs, workflowArtifactUrls]);
+  }, [candidateRefs, refExistence, workflowCardStatesForRefs, workflowArtifactUrls, message.id]);
 
   const displayNameHints = useMemo(() => extractDisplayFileNameHints(text), [text]);
 
@@ -404,10 +410,7 @@ export const ChatMessage = memo(function ChatMessage({
   );
   const showUserParamsFold = isUser && hasText && isWorkflowParamsUserText(text);
 
-  const sending = useChatStore((s) => s.sending);
-  const lastUserMessageAt = useChatStore((s) => s.lastUserMessageAt);
-  const pendingFinal = useChatStore((s) => s.pendingFinal);
-  const activeRunId = useChatStore((s) => s.activeRunId);
+  const { sending, pendingFinal, activeRunId, lastUserMessageAt } = useChatSessionRuntimeView(sessionKey);
   const isLastAssistantInTurn = !isUser && (
     isTurnDisplayReply || isTurnDisplayAssistantMessage(message, sessionMessages)
   );
@@ -416,29 +419,6 @@ export const ChatMessage = memo(function ChatMessage({
   /** 与 AwaitingReplyIndicator 同口径：表单待提交时轮次未结束 */
   const isAwaitingUserToContinue =
     parameterForm !== null && workflowCard === null && !showAssistantParamsFold;
-  const currentUserTurnIncomplete = useMemo(
-    () =>
-      isCurrentUserTurnIncomplete({
-        sessionMessages,
-        sending,
-        lastUserMessageAt,
-        pendingFinal,
-        activeRunId,
-        workflowCardStates,
-        hasPendingWorkflowSchema: pendingWorkflow?.schema != null,
-        sessionKey,
-      }),
-    [
-      sessionMessages,
-      sending,
-      lastUserMessageAt,
-      pendingFinal,
-      activeRunId,
-      workflowCardStates,
-      pendingWorkflow?.schema,
-      sessionKey,
-    ],
-  );
   /** 工作流 / 填表阻塞（不含 sending 等 runtime 字段，供 TurnLifecycle 分层） */
   const hasWorkflowBlockers = useMemo(
     () =>
@@ -492,7 +472,15 @@ export const ChatMessage = memo(function ChatMessage({
   const showUserMessageMeta =
     (hasText || Boolean(skillMeta))
     && !showUserParamsFold
-    && !(isLastUserInTurn && currentUserTurnIncomplete);
+    // A background workflow can keep the turn non-terminal after the assistant
+    // has acknowledged the start. Keep user shortcuts available in that state;
+    // hide them only while the chat response itself is still in flight.
+    && !(isLastUserInTurn && isChatResponsePending({
+      sending,
+      lastUserMessageAt,
+      pendingFinal,
+      activeRunId,
+    }));
 
   const showRenderDebugPanel = !isUser && isFilePreviewDebugEnabled();
   const debugMarkdownSource = useMemo(
@@ -1132,6 +1120,74 @@ function previewUrlTransform(url: string): string {
 
 // ── Message Bubble ──────────────────────────────────────────────
 
+interface WorkflowRunDisplayMeta {
+  workflowId: string;
+  workflowName: string;
+  /** 标签前的用户文案 */
+  beforeText?: string;
+  /** 标签后的用户文案（如「帮我执行这个工作流」） */
+  accompanyingText?: string;
+}
+
+function parseWorkflowRunDisplayText(text: string): WorkflowRunDisplayMeta | null {
+  const trimmed = text.trim();
+  // 允许执行指令前后保留用户原文，气泡按「前文 + 标签 + 后文」还原。
+  const execMatch = trimmed.match(
+    /^(.*?)帮我执行\s*id\s*为\s*[:：]?\s*([A-Za-z0-9_-]+)\s*的工作流\s*(?:【([^】]*)】)?\s*([\s\S]*)$/,
+  );
+  if (!execMatch) return null;
+
+  const beforeText = (execMatch[1] ?? '').trim() || undefined;
+  const workflowId = execMatch[2]?.trim();
+  if (!workflowId) return null;
+
+  const bracketName = (execMatch[3] ?? '').trim();
+  let accompanyingText = (execMatch[4] ?? '').trim() || undefined;
+  let workflowName = bracketName || workflowId;
+
+  if (!bracketName && accompanyingText) {
+    // 兼容旧格式：无【】时整段视为名称
+    workflowName = accompanyingText;
+    accompanyingText = undefined;
+  }
+
+  return { workflowId, workflowName, beforeText, accompanyingText };
+}
+
+function UserWorkflowMessageTag({ workflowName }: { workflowName: string }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-0.5 rounded-[4px] bg-[#EEF3FF] px-1 py-0.5 align-middle',
+        'text-[12px] font-medium leading-4 text-[#4E6FFF]',
+      )}
+    >
+      <WorkflowNodesIcon className="h-3 w-3 shrink-0 text-current" />
+      <span className="workflow-token-label">{workflowName}</span>
+    </span>
+  );
+}
+
+/** 技能标签按输入框里的落点渲染；无位置信息时退回正文最前。 */
+function UserSkillBubbleContent({
+  text,
+  skillMeta,
+}: {
+  text: string;
+  skillMeta: { slug: string; title: string; tagOffset?: number };
+}) {
+  const { before, after, padBefore, padAfter } = splitUserBubbleAtTag(text, skillMeta.tagOffset);
+  return (
+    <>
+      {before ? renderUserMessageMentionNodes(before) : null}
+      {padBefore ? '\u00A0' : null}
+      <SkillMessageTag title={skillMeta.title} />
+      {padAfter ? '\u00A0' : null}
+      {after ? renderUserMessageMentionNodes(after) : null}
+    </>
+  );
+}
+
 function MessageBubble({
   text,
   skillMeta,
@@ -1163,15 +1219,12 @@ function MessageBubble({
   useEffect(() => {
     const justStarted = isReplyStream && !wasReplyStreamRef.current;
     wasReplyStreamRef.current = isReplyStream;
-
-    if (!isReplyStream) {
-      setEnableReplyTypewriter(false);
-      return;
-    }
-    if (justStarted) {
-      // 重进会话时正文已落盘 → 不打字
-      setEnableReplyTypewriter(text.length === 0);
-    }
+    const nextValue = !isReplyStream ? false : justStarted ? text.length === 0 : null;
+    if (nextValue === null) return undefined;
+    const frameId = window.requestAnimationFrame(() => {
+      setEnableReplyTypewriter((current) => current === nextValue ? current : nextValue);
+    });
+    return () => window.cancelAnimationFrame(frameId);
   }, [isReplyStream, text.length]);
 
   const { text: typewriterText, isAnimating: isReplyTypewriterAnimating } = useTypewriterReveal(
@@ -1184,6 +1237,7 @@ function MessageBubble({
   const bubbleText = useReplyTypewriter ? typewriterText : text;
 
   const workflowCardStates = EMPTY_WORKFLOW_CARD_STATES;
+  const userWorkflowDisplay = isUser ? parseWorkflowRunDisplayText(text) : null;
   const markdownSource = useMemo(
     () => (onPreviewFile ? preprocessTextForPreviewLinks(bubbleText) : bubbleText),
     [bubbleText, onPreviewFile],
@@ -1233,9 +1287,27 @@ function MessageBubble({
     >
       {isUser ? (
         <p className="whitespace-pre-wrap break-words break-all text-sm font-normal leading-5 text-foreground">
-          {skillMeta ? <SkillMessageTag title={skillMeta.title} /> : null}
-          {skillMeta && text.trim().length > 0 ? '\u00A0' : null}
-          {text.trim().length > 0 ? renderUserMessageMentionNodes(text) : null}
+          {userWorkflowDisplay ? (
+            <>
+              {userWorkflowDisplay.beforeText ? (
+                <>
+                  {renderUserMessageMentionNodes(userWorkflowDisplay.beforeText)}
+                  {'\u00A0'}
+                </>
+              ) : null}
+              <UserWorkflowMessageTag workflowName={userWorkflowDisplay.workflowName} />
+              {userWorkflowDisplay.accompanyingText ? (
+                <>
+                  {'\u00A0'}
+                  {renderUserMessageMentionNodes(userWorkflowDisplay.accompanyingText)}
+                </>
+              ) : null}
+            </>
+          ) : skillMeta ? (
+            <UserSkillBubbleContent text={text} skillMeta={skillMeta} />
+          ) : (
+            text.trim().length > 0 ? renderUserMessageMentionNodes(text) : null
+          )}
         </p>
       ) : (
         <div

@@ -5,7 +5,6 @@
  */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { markSessionUnreadAfterSuccessfulRun } from '@/lib/session-unread-notify';
 import { useSessionUnreadStore } from '@/stores/session-unread';
 import { useAgentsStore } from '../agents';
 import {
@@ -20,12 +19,6 @@ import {
 } from './types';
 import type { ChatSet } from './store-api';
 import { scrubCorruptedSessionLabels } from '@/lib/session-label';
-import {
-  buildSessionSwitchPatch as buildSessionSwitchPatchFromRuntime,
-} from './session-runtime';
-import { applyRuntimePatch } from './runtime-controller';
-import { createBackgroundSessionEventHandler } from './background-session-events';
-import type { BackgroundChatEvent } from './background-session-events';
 import { initialChatDataState } from './initial-state';
 import { createRuntimeUiActions } from './runtime-ui-actions';
 import { createSessionUiActions } from './session-ui-actions';
@@ -34,26 +27,11 @@ import { createWorkflowActions } from './workflow-actions';
 import { createSessionLifecycleActions } from './session-lifecycle-actions';
 import { createHistoryLoadActions } from './history-load-actions';
 import { createSendActions } from './send-actions';
-import { createForegroundEventActions } from './foreground-event-actions';
-import { buildTerminalRuntimePatch } from './turn-state-machine';
-import { buildTerminalTurnEffects, executeTurnEffects } from './turn-effects';
-// Ensure Vite HMR of run-completion also invalidates this store module.
-import './run-completion';
-import {
-  clearErrorRecoveryTimer,
-  clearHistoryPoll,
-  hasErrorRecoveryTimer,
-  setErrorRecoveryTimer,
-  setHistoryPollTimer,
-  clearStuckCheckTimer,
-  setStuckCheckTimer,
-} from './runtime-timers';
-import {
-  isToolOnlyMessage,
-} from './message-content';
 import {
   buildFallbackMainSessionKey,
+  clearSessionEntryFromMap,
   getAgentIdFromSessionKey,
+  isTemporaryAgentSessionKey,
   normalizeAgentId,
 } from './session-identity';
 import {
@@ -64,8 +42,8 @@ import {
   toMs,
 } from './store-helpers';
 import type { ResolveChatSessionEngineTypeOptions } from '@/lib/resolve-chat-session-engine-type';
-import { recordTerminalRun } from './run-lifecycle';
 import { getBaseAgentIdFromProjectAgentId } from '../../../shared/project-agent';
+import { getSessionDisplayMessages } from './display-selectors';
 
 export type {
   AttachedFileMeta,
@@ -116,25 +94,29 @@ function ensureSessionEntry(sessions: ChatSession[], sessionKey: string): ChatSe
 }
 
 function buildSessionSwitchPatch(
-  state: Parameters<typeof buildSessionSwitchPatchFromRuntime>[0],
+  state: ChatState,
   nextSessionKey: string,
 ): Partial<ChatState> {
-  return buildSessionSwitchPatchFromRuntime(
-    state,
-    nextSessionKey,
-    (sessionKey) => ensureSessionEntry([], sessionKey)[0]?.engineType,
-  );
-}
-function handleBackgroundSessionEvent(
-  set: ChatSet,
-  event: BackgroundChatEvent,
-): void {
-  createBackgroundSessionEventHandler({
-    get: () => useChatStore.getState(),
-    resolveEngineType: resolveEngineTypeForSession,
-    isToolOnlyMessage,
-    markUnreadAfterRun: markSessionUnreadAfterSuccessfulRun,
-  })(set, event);
+  const leavingEmpty = isTemporaryAgentSessionKey(state.currentSessionKey)
+    && getSessionDisplayMessages(state.currentSessionKey).length === 0
+    && !state.sessionLastActivity[state.currentSessionKey]
+    && !state.sessionLabels[state.currentSessionKey];
+  const sessions = leavingEmpty
+    ? state.sessions.filter((session) => session.key !== state.currentSessionKey)
+    : state.sessions;
+  return {
+    currentSessionKey: nextSessionKey,
+    currentAgentId: getAgentIdFromSessionKey(nextSessionKey),
+    pendingProjectId: null,
+    sessions: ensureSessionEntry(sessions, nextSessionKey),
+    sessionLabels: leavingEmpty
+      ? clearSessionEntryFromMap(state.sessionLabels, state.currentSessionKey)
+      : state.sessionLabels,
+    sessionLastActivity: leavingEmpty
+      ? clearSessionEntryFromMap(state.sessionLastActivity, state.currentSessionKey)
+      : state.sessionLastActivity,
+    loading: false,
+  };
 }
 function getCanonicalPrefixFromSessionKey(sessionKey: string): string | null {
   if (!sessionKey.startsWith('agent:')) return null;
@@ -160,7 +142,6 @@ export const useChatStore = create<ChatState>()(
 
   ...createHistoryLoadActions(set, get, {
     toMs,
-    clearHistoryPoll,
     resolveEngineTypeForSession,
   }),
 
@@ -169,20 +150,6 @@ export const useChatStore = create<ChatState>()(
     resolveMainSessionKeyForAgent,
     buildSessionSwitchPatch,
     resolveEngineTypeForSession,
-    clearErrorRecoveryTimer,
-    clearHistoryPoll,
-    setHistoryPollTimer,
-    clearStuckCheckTimer,
-    setStuckCheckTimer,
-  }),
-
-  ...createForegroundEventActions(set, get, {
-    resolveEngineTypeForSession,
-    handleBackgroundSessionEvent,
-    clearHistoryPoll,
-    clearErrorRecoveryTimer,
-    setErrorRecoveryTimer,
-    hasErrorRecoveryTimer,
   }),
 
   // Local UI/session metadata actions are composed from dedicated modules.
@@ -210,44 +177,3 @@ export const useChatStore = create<ChatState>()(
     };
   },
 }));
-
-/** OpenClaw has no Claude-style runtimeResult; agent.completed is the terminal signal. */
-export function finalizeOpenClawRunAfterAgentCompleted(sessionKey: string | null, runId?: string | null): void {
-  const state = useChatStore.getState();
-  const targetKey = sessionKey ?? state.currentSessionKey;
-  const engineType = resolveEngineTypeForSession(state.sessions, targetKey, state.currentAgentId);
-  // Finalize on agent.completed for both agentic engines. Claude runs whose
-  // terminal 'final' event lacks phase=completed are treated as non-terminal
-  // fragments (see resolveAssistantFinalTerminalState), so they rely on this
-  // path to clear sending. Without it the spinner stays stuck after the run.
-  if (engineType !== 'openclaw' && engineType !== 'claude') return;
-
-  // Agentic 'final' chat events lack phase=completed. agent.completed is the
-  // real terminal point used to clear runtime state and finalize visible output.
-  const resolvedRunId = runId ?? state.activeRunId ?? undefined;
-  const agentId = getAgentIdFromSessionKey(targetKey);
-
-  const targetRuntime = state.runtimeBySessionKey[targetKey];
-  if (runId && targetRuntime?.activeRunId && targetRuntime.activeRunId !== runId) return;
-  clearHistoryPoll(targetKey);
-  clearErrorRecoveryTimer(targetKey);
-  clearStuckCheckTimer(targetKey);
-  useChatStore.setState((prev) => {
-    const latestRuntime = prev.runtimeBySessionKey[targetKey];
-    if (runId && latestRuntime?.activeRunId && latestRuntime.activeRunId !== runId) return {};
-    return applyRuntimePatch(prev, targetKey, buildTerminalRuntimePatch(null));
-  });
-  recordTerminalRun(targetKey, resolvedRunId);
-  executeTurnEffects(buildTerminalTurnEffects({
-    agentId,
-    runId: resolvedRunId,
-    sessionKey: targetKey,
-    engineType,
-    finalizeVisibleMessages: targetKey === state.currentSessionKey,
-  }), {
-    get: () => useChatStore.getState(),
-    set: (partial) => {
-      useChatStore.setState(partial);
-    },
-  });
-}

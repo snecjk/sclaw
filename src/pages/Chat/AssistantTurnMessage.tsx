@@ -47,6 +47,8 @@ import {
 } from '@/pages/Chat/thinking/classify-text';
 
 type StreamingTool = ToolStatus;
+const EMPTY_STREAMING_TOOLS: StreamingTool[] = [];
+const EMPTY_STREAMING_TOOL_RESULTS: RawMessage[] = [];
 
 type BakedStreamingToolLike = {
   id?: string;
@@ -86,6 +88,7 @@ export interface ActiveTurnStream {
 
 interface AssistantTurnMessageProps {
   turnMessages: RawMessage[];
+  sessionMessages: RawMessage[];
   turnToolResults?: RawMessage[];
   precedingUserMessage?: RawMessage | null;
   /** 与 buildChatDisplayItems 的 turn key 对齐，流式→完成 remount 时保留 timeline 缓存 */
@@ -132,6 +135,7 @@ function collectActiveTurnStreamSources(
 
 export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   turnMessages,
+  sessionMessages,
   turnToolResults = [],
   precedingUserMessage = null,
   turnStableKey,
@@ -143,14 +147,15 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
   onCreateScheduledTask,
   onEditMessage,
 }: AssistantTurnMessageProps) {
-  const sessionMessages = useChatStore((s) => s.messages);
-  const pendingWorkflow = useChatStore((s) => s.pendingWorkflow);
+  const pendingWorkflow = useChatStore(
+    (s) => s.workflowChatUiBySessionKey[s.currentSessionKey]?.pendingWorkflow ?? null,
+  );
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const engineType = useChatSessionEngineType();
 
   const isStreaming = !!activeStream;
-  const streamingTools = activeStream?.streamingTools ?? [];
-  const streamingToolResults = activeStream?.streamingToolResults ?? [];
+  const streamingTools = activeStream?.streamingTools ?? EMPTY_STREAMING_TOOLS;
+  const streamingToolResults = activeStream?.streamingToolResults ?? EMPTY_STREAMING_TOOL_RESULTS;
 
   const [wasInterrupted, setWasInterrupted] = useState(false);
   useEffect(() => {
@@ -560,6 +565,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
           <ChatMessage
             key={preambleMessage.id ?? searchKey}
             message={preambleMessage}
+            sessionMessages={sessionMessages}
             showThinking={false}
             searchMessageKey={searchKey}
             isSearchMatch={!!matchedMessageKeys?.has(searchKey)}
@@ -581,6 +587,7 @@ export const AssistantTurnMessage = memo(function AssistantTurnMessage({
             return (
             <ChatMessage
               message={chatDisplayMessageWithTimestamp}
+              sessionMessages={sessionMessages}
               showThinking={false}
               searchMessageKey={replySearchKey}
               isSearchMatch={!!matchedMessageKeys?.has(replySearchKey)}

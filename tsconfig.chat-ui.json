@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src"],
+  "exclude": [
+    "dist",
+    "dist-electron",
+    "release",
+    "node_modules"
+  ],
+  "references": []
+}

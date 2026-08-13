@@ -1,41 +1,27 @@
 /**
  * TaskToolbar 组件
- * 定时任务视图工具栏：搜索 + 排序（靠右对齐）
+ * 定时任务视图二级工具栏：仅排序（靠右）；搜索/新建已上移至一级顶栏
  */
 
 import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, ChevronDown, Check } from 'lucide-react';
+import { ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   dropdownOptionClass,
   dropdownPanelRoundedClass,
   myTaskSortTriggerClass,
-  workflowListSearchIconWrapClass,
-  workflowListSearchInputClass,
-  workflowListSearchLabelClass,
 } from '@/lib/surfaces';
 import { SORT_OPTIONS } from '../constants';
 
 interface TaskToolbarProps {
-  /** 搜索关键词 */
-  searchQuery: string;
-  /** 搜索变化回调 */
-  onSearchChange: (query: string) => void;
   /** 当前排序值 */
   sortValue: string;
   /** 排序变化回调 */
   onSortChange: (value: string) => void;
-  children?: React.ReactNode;
 }
 
-export function TaskToolbar({
-  searchQuery,
-  onSearchChange,
-  sortValue,
-  onSortChange,
-	children,
-}: TaskToolbarProps) {
+export function TaskToolbar({ sortValue, onSortChange }: TaskToolbarProps) {
   const { t } = useTranslation('tasks');
   const [sortOpen, setSortOpen] = useState(false);
   const sortRef = useRef<HTMLDivElement>(null);
@@ -57,21 +43,6 @@ export function TaskToolbar({
 
   return (
     <div className="ml-auto flex shrink-0 items-center gap-3">
-      <label className={workflowListSearchLabelClass}>
-        <span className="sr-only">{t('myTask.toolbar.searchSrOnly')}</span>
-        <span className={workflowListSearchIconWrapClass} aria-hidden="true">
-          <Search className="h-3.5 w-3.5" />
-        </span>
-        <input
-          type="search"
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className={workflowListSearchInputClass}
-          placeholder={t('myTask.toolbar.searchPlaceholder')}
-          autoComplete="off"
-        />
-      </label>
-
       <div className="relative" ref={sortRef}>
         <button
           type="button"
@@ -117,7 +88,7 @@ export function TaskToolbar({
                       dropdownOptionClass(isSelected),
                     )}
                   >
-                      <span className="min-w-0 flex-1 text-left">{t(opt.i18nKey)}</span>
+                    <span className="min-w-0 flex-1 text-left">{t(opt.i18nKey)}</span>
                     <Check className={cn('h-4 w-4 shrink-0 text-primary', isSelected ? 'opacity-100' : 'opacity-0')} />
                   </button>
                 );
@@ -126,7 +97,6 @@ export function TaskToolbar({
           </div>
         )}
       </div>
-			{ children }
     </div>
   );
 }

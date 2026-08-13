@@ -32,6 +32,7 @@
  */
 import { useMemo } from 'react';
 import { useChatStore } from '@/stores/chat';
+import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
 import { useGatewayStore } from '@/stores/gateway';
 import { suspendAutoSend } from '@/stores/message-queue';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
@@ -111,7 +112,7 @@ export interface ChatInputBindingsResult {
  */
 export function useChatInputBindings(options: ChatInputBindingsOptions): ChatInputBindingsResult {
   const abortRun = useChatStore((s) => s.abortRun);
-  const sending = useChatStore((s) => s.sending);
+  const { sending } = useCurrentChatRuntimeView();
   const gatewayStatus = useGatewayStore((s) => s.status);
   const isGatewayRunning = gatewayStatus.state === 'running';
   const requiresGateway = options.engineType !== 'claude';

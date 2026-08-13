@@ -9,7 +9,7 @@ import 'zx/globals';
 
 const TARGET = /use-chat-display|HomeMainConversation|TaskSubitemChatSurface|stores\/gateway\.ts/;
 
-const result = await $`pnpm run typecheck`.nothrow();
+const result = await $`pnpm exec tsc --project tsconfig.chat-ui.json --noEmit --pretty false`.nothrow();
 const output = `${result.stdout}\n${result.stderr}`;
 const chatUiErrors = output
   .split('\n')

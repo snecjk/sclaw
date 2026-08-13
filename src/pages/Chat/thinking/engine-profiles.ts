@@ -17,7 +17,7 @@ export type EngineProfile = {
 export const OPENCLAW_ENGINE_PROFILE: EngineProfile = {
   name: 'openclaw',
   flushOnIntraSnapshotText: true,
-  useStreamingToolSupplement: false,
+  useStreamingToolSupplement: true,
   preBatchTextStrategy: 'opening-only',
 };
 

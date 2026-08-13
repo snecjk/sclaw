@@ -19,6 +19,7 @@ import { isProjectNewChatDraftKey } from '@/stores/chat/types';
 import { useChatStore } from '@/stores/chat';
 import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 import { handleSidebarSessionDoubleClick } from '@/lib/sidebar-project-session-navigation';
+import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 
 export interface SidebarProjectSessionRowProps {
   session: ChatSession;
@@ -55,21 +56,11 @@ export function SidebarProjectSessionRow({
 }: SidebarProjectSessionRowProps) {
   const { t } = useTranslation('common');
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
-  const runtime = useChatStore((s) => s.runtimeBySessionKey[session.key]);
-  const currentSessionSending = useChatStore((s) => s.sending);
-  const currentSessionActiveRunId = useChatStore((s) => s.activeRunId);
-  const currentSessionError = useChatStore((s) => s.error);
+  const runtime = useChatSessionRuntimeView(session.key);
   const unreadKeys = useSessionUnreadStore((s) => s.unreadKeys);
   const isCurrentSession = currentSessionKey === session.key;
-  const isRunning = Boolean(
-    runtime?.sending
-    || runtime?.activeRunId
-    || (isCurrentSession && (currentSessionSending || currentSessionActiveRunId)),
-  );
-  const hasError = Boolean(
-    (runtime?.error != null && runtime.error !== '')
-    || (isCurrentSession && currentSessionError != null && currentSessionError !== ''),
-  );
+  const isRunning = runtime.sending;
+  const hasError = Boolean(runtime.error);
   const showUnreadDot = !isCurrentSession
     && !isRunning
     && !hasError

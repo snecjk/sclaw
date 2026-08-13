@@ -37,6 +37,8 @@ import {
 } from './scheduled-task-executor';
 import type { GatewayManager } from '../gateway/manager';
 import { logger } from '../utils/logger';
+import { getChatRuntimeSupervisor } from '../services/chat-runtime-supervisor';
+import type { CanonicalChatEvent } from '../../shared/chat-runtime-protocol';
 
 /**
  * 引擎无关的定时报表层。在 `ScheduledTaskScheduler`（触发 + claim 单飞）之上，
@@ -71,6 +73,8 @@ export class ScheduledTaskService {
    * gateway 适配 sink（emit 到 `GatewayManager`，经 IPC 透给 renderer）。
    */
   private eventSink: ScheduledTaskEventSink = loggingEventSink;
+  private runtimeDispatcher: EngineScheduledTaskDispatcher | null = null;
+  private runtimeEventListener: ((event: CanonicalChatEvent) => void) | null = null;
 
   async createTask(input: CreateScheduleTaskInput): Promise<ScheduleTask> {
     this.validateTaskInput(input);
@@ -140,22 +144,38 @@ export class ScheduledTaskService {
    * import；sessionKey 构造与 dingtalk 烘焙仍是本 service 的单一职责。
    */
   setGatewayManager(gatewayManager: GatewayManager): void {
+    if (this.gatewayManager && this.runtimeEventListener) {
+      getChatRuntimeSupervisor(this.gatewayManager).off('event', this.runtimeEventListener);
+    }
     this.gatewayManager = gatewayManager;
     this.eventSink = {
       emit: (event, payload) => {
         this.gatewayManager?.emit(event, payload);
       },
     };
-    this.scheduler.setDispatcher(
-      new EngineScheduledTaskDispatcher({
+    this.runtimeDispatcher = new EngineScheduledTaskDispatcher({
         runRepo: this.runRepo,
         taskRepo: this.taskRepo,
         getGatewayManager: () => this.gatewayManager,
         ensureDatedSession: (task, date) => this.ensureDatedSessionPlaceholder(task, date),
         buildSystemPromptAppend: (task) => this.buildExecutionSystemPromptAppend(task),
         getEventSink: () => this.eventSink,
-      }),
-    );
+      });
+    this.scheduler.setDispatcher(this.runtimeDispatcher);
+    const supervisor = getChatRuntimeSupervisor(gatewayManager);
+    this.scheduler.setCanReapRun(async (run) => {
+      const snapshot = await supervisor.getByOwner('scheduled_task', run.runId);
+      return snapshot == null;
+    });
+    this.runtimeEventListener = (event) => {
+      void this.runtimeDispatcher?.handleCanonicalEvent(event).catch((error) => {
+        logger.warn('[scheduled-task] canonical terminal handling failed', {
+          eventId: event.eventId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+    };
+    supervisor.on('event', this.runtimeEventListener);
   }
 
   /**
@@ -164,7 +184,18 @@ export class ScheduledTaskService {
    * `setGatewayManager` 之后调用——否则 dispatcher 还是 noop，claim 的 run 停在 queued。
    */
   startScheduler(): void {
-    void this.scheduler.discardMissedOnStartup().finally(() => this.scheduler.start());
+    const supervisor = this.gatewayManager ? getChatRuntimeSupervisor(this.gatewayManager) : null;
+    void (async () => {
+      if (supervisor) {
+        await supervisor.initialize();
+        await this.runtimeDispatcher?.recoverActiveRuns(supervisor);
+      }
+      await this.scheduler.discardMissedOnStartup();
+    })().catch((error) => {
+      logger.warn('[scheduled-task] startup recovery failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }).finally(() => this.scheduler.start());
   }
 
   stopScheduler(): void {

@@ -7,7 +7,7 @@ import { AlertCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { SidebarRunningIcon } from '@/components/layout/sidebar-running-icon';
-import { useChatStore } from '@/stores/chat';
+import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 
 export interface SidebarRecentSessionStatusProps {
   /** OpenClaw session key */
@@ -23,22 +23,9 @@ export function SidebarRecentSessionStatus({
   className,
 }: SidebarRecentSessionStatusProps) {
   const { t } = useTranslation('common');
-  const runtime = useChatStore((s) => s.runtimeBySessionKey[sessionKey]);
-  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
-  const currentSessionSending = useChatStore((s) => s.sending);
-  const currentSessionActiveRunId = useChatStore((s) => s.activeRunId);
-  const currentSessionError = useChatStore((s) => s.error);
-
-  const isCurrentSession = currentSessionKey === sessionKey;
-  const isRunning = Boolean(
-    runtime?.sending
-    || runtime?.activeRunId
-    || (isCurrentSession && (currentSessionSending || currentSessionActiveRunId)),
-  );
-  const hasError = Boolean(
-    (runtime?.error != null && runtime.error !== '')
-    || (isCurrentSession && currentSessionError != null && currentSessionError !== ''),
-  );
+  const runtime = useChatSessionRuntimeView(sessionKey);
+  const isRunning = runtime.sending;
+  const hasError = Boolean(runtime.error);
 
   if (isRunning) {
     return (

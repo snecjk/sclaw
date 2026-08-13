@@ -358,6 +358,9 @@ export async function prepareGatewayLaunchContext(port: number): Promise<Gateway
     OPENCLAW_NO_RESPAWN: '1',
     OPENCLAW_STATE_DIR: getOpenClawConfigDir(),
     OPENCLAW_PACKAGE_ROOT: getOpenClawPackageRootEnv(),
+    // 定时任务已统一到 StoClaw ScheduledTaskScheduler（SQLite schedule_tasks）。
+    // 禁用 Gateway 内置 CronService，避免迁移后 jobs.json 残留导致双调度。
+    OPENCLAW_SKIP_CRON: '1',
     STOCLAW_WORKSPACE: mainWorkspace,
     STOCLAW_OUTPUT_DIR: mainOutputDir,
     SAI_CLIENT_ID: SAI_CLIENT_ID_VALUE,

@@ -4,9 +4,12 @@
  */
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
+import { awaitSessionSendReadiness } from '@/lib/session-send-readiness';
+import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
+import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 
 export interface DispatchChatSendOptions {
   text: string;
@@ -19,6 +22,52 @@ export interface DispatchChatSendOptions {
   /** 工作流名称（mine 来源时用于上下文块）。 */
   workflowName?: string | null;
   skillMeta?: SkillMeta;
+}
+
+/**
+ * Composer 序列化会把工作流标签的可见名称写入 plainText。
+ * 发送前按名称切开，得到标签前 / 标签后的用户文案（不含标签名本身）。
+ */
+function extractWorkflowSurroundingText(
+  plainText: string,
+  workflowName: string,
+): { before: string; after: string } {
+  const text = plainText.replace(/\u00A0/g, ' ');
+  const name = workflowName.trim();
+  if (!name) {
+    const trimmed = text.trim();
+    return { before: trimmed, after: '' };
+  }
+  const idx = text.indexOf(name);
+  if (idx < 0) {
+    const trimmed = text.trim();
+    return { before: trimmed, after: '' };
+  }
+  return {
+    before: text.slice(0, idx).trim(),
+    after: text.slice(idx + name.length).trim(),
+  };
+}
+
+async function materializeDefaultSessionForWorkflowShortcut(): Promise<{
+  sessionKey: string;
+  agentId: string;
+}> {
+  const state = useChatStore.getState();
+  if (state.currentSessionKey === DEFAULT_SESSION_KEY) {
+    state.newSession(
+      state.pendingProjectId
+        ? { projectId: state.pendingProjectId, materialize: true }
+        : undefined,
+    );
+  }
+
+  const nextState = useChatStore.getState();
+  await awaitSessionSendReadiness(nextState.currentSessionKey);
+  return {
+    sessionKey: nextState.currentSessionKey,
+    agentId: nextState.currentAgentId,
+  };
 }
 
 export async function dispatchChatSend(options: DispatchChatSendOptions): Promise<void> {
@@ -54,17 +103,23 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
   };
 
   const chatState = useChatStore.getState();
-  const failed = () => Boolean(useChatStore.getState().error);
+  const failed = () => Boolean(
+    useChatRuntimeV2Store.getState().sessionsByKey[useChatStore.getState().currentSessionKey]?.error,
+  );
 
   // 我的工作流-已发布：与「我的工作流」卡片「立即运行」保持一致，
   // 直接发送一句「帮我执行 id 为：xxx 的工作流 【名称】」让模型按 workflowId 执行，
   // 不走模版 schema 取数与参数表单，也不注入额外上下文。
+  // 用户在标签前/后的文案按原顺序拼在执行指令两侧，供气泡还原展示。
   if (workflowId && workflowSource === 'mine') {
     chatState.clearPendingWorkflow();
     const name = workflowName?.trim() || '';
-    const execText = `帮我执行 id 为：${workflowId} 的工作流 ${name ? `【${name}】` : ''}`.trim();
+    const { before, after } = extractWorkflowSurroundingText(text, name);
+    const label = name || workflowId;
+    const execText = `帮我执行 id 为：${workflowId} 的工作流 【${label}】`;
+    const messageText = [before, execText, after].filter(Boolean).join(' ');
     await sendMessage({
-      text: execText,
+      text: messageText,
       attachments,
       targetAgentId,
       dingTalkMentions,
@@ -77,13 +132,18 @@ export async function dispatchChatSend(options: DispatchChatSendOptions): Promis
 
   // Explicit template pick from picker — fetch schema → send to model.
   if (workflowId) {
-    if (chatState.pendingWorkflow?.templateId !== workflowId) {
-      chatState.clearPendingWorkflow();
+    const workflowSession = await materializeDefaultSessionForWorkflowShortcut();
+    const workflowChatState = useChatStore.getState();
+    if (
+      workflowChatState.workflowChatUiBySessionKey[workflowSession.sessionKey]
+        ?.pendingWorkflow?.templateId !== workflowId
+    ) {
+      workflowChatState.clearPendingWorkflow();
     }
     const { sendWithWorkflow } = await import('@/hooks/use-workflow-send');
     const ok = await sendWithWorkflow(text, workflowId, {
-      sessionKey: chatState.currentSessionKey,
-      agentId: chatState.currentAgentId,
+      sessionKey: workflowSession.sessionKey,
+      agentId: workflowSession.agentId,
     }, sendWithWorkflowContext, dingTalkMentions);
     if (!ok) return;
     return;

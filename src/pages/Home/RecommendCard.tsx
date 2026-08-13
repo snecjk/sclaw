@@ -37,6 +37,8 @@ export interface RecommendCardProps {
    * MyTask 等场景传入后：安装/更新完成或已安装点击时走该回调，不再跳转对话。
    */
   onSkillUse?: () => void;
+  /** 首页推荐位：点击技能只带入输入框，不触发安装/更新。 */
+  skillClickMode?: 'install-then-use' | 'use-only';
   skillStatus?: {
     installed: boolean;
     enabled?: boolean;
@@ -52,6 +54,7 @@ export function RecommendCard({
   onClick,
   onSkillInstalled,
   onSkillUse,
+  skillClickMode = 'install-then-use',
   skillStatus,
   skillStatusLoading = false,
 }: RecommendCardProps) {
@@ -119,6 +122,10 @@ export function RecommendCard({
 
   const handleCardClick = useCallback(() => {
     if (isSkill) {
+      if (skillClickMode === 'use-only' && onSkillUse) {
+        onSkillUse();
+        return;
+      }
       if (isSkillDisabled || skillStatusLoading || isInstalling) return;
       if (!isSkillInstalled || isSkillUpdateAvailable) {
         handleSkillInstallThenUse();
@@ -135,8 +142,10 @@ export function RecommendCard({
     isInstalling,
     isSkillInstalled,
     isSkillUpdateAvailable,
+    skillClickMode,
     handleSkillInstallThenUse,
     handleSkillUse,
+    onSkillUse,
     onClick,
   ]);
 
@@ -146,8 +155,8 @@ export function RecommendCard({
       : item.title;
 
   const description = (item.description ?? '').trim();
-  const busy = isSkill && (isInstalling || skillStatusLoading);
-  const disabled = isSkill && (isSkillDisabled || busy);
+  const busy = isSkill && skillClickMode !== 'use-only' && (isInstalling || skillStatusLoading);
+  const disabled = isSkill && skillClickMode !== 'use-only' && (isSkillDisabled || busy);
 
   return (
     <Tooltip delayDuration={200}>

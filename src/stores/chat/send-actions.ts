@@ -1,59 +1,26 @@
 import { cacheUploadedAttachments } from './media-preview-cache';
-import { setRuntimePatch } from './runtime-controller';
 import { dispatchChatRequest } from './dispatch-chat-request';
 import { insertOptimisticUserTurn } from './optimistic-turn';
 import { prepareSendContext } from './prepare-send-context';
 import { resolveSendTarget } from './resolve-send-target';
-import { scheduleSendWatchdogs } from './send-watchdogs';
 import { logChatFlow } from './chat-flow-log';
 import { useGatewayStore } from '../gateway';
 import type { ChatGet, ChatSet, RuntimeActions } from './store-api';
-import { DEFAULT_SESSION_KEY, type ChatSession, type SendMessageOptions, type SessionRuntimeState } from './types';
-import { getSessionRuntimeState } from './session-runtime';
-import { normalizeAppError } from '@/lib/error-model';
-import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
+import { DEFAULT_SESSION_KEY, type ChatSession, type SendMessageOptions } from './types';
+import { AppError, normalizeAppError } from '@/lib/error-model';
+import { resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
 import { resolveSkillGatewayText } from '@/lib/skill-gateway-text';
 import { appendSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
 import { awaitSessionSendReadiness } from '@/lib/session-send-readiness';
 import { releaseSendAttempt, tryAcquireSendAttempt } from './send-attempt-lock';
-import { recordTerminalRun } from './run-lifecycle';
-import { buildTerminalRuntimePatch } from './turn-state-machine';
 import { getAgentIdFromSessionKey } from './session-identity';
+import { initializeChatRuntimeV2, useChatRuntimeV2Store } from './runtime-v2-store';
+import { buildChatSessionRuntimeView } from './runtime-selectors';
+import { getSessionDisplayMessages } from './display-selectors';
 
 export function isUncertainDispatchError(error: unknown): boolean {
   const code = normalizeAppError(error).code;
   return code === 'TIMEOUT' || code === 'NETWORK';
-}
-
-export function buildUncertainAcceptancePatch(
-  runtime: SessionRuntimeState,
-  idempotencyKey: string,
-): Partial<SessionRuntimeState> {
-  if (!runtime.sendAcceptance || runtime.sendAcceptance.idempotencyKey !== idempotencyKey) return {};
-  return {
-    sending: true,
-    error: null,
-    sendAcceptance: { ...runtime.sendAcceptance, status: 'uncertain' },
-  };
-}
-
-function failSendTurn(input: {
-  set: ChatSet;
-  clearHistoryPoll: (sessionKey: string) => void;
-  clearStuckCheckTimer?: (sessionKey: string) => void;
-  sessionKey: string;
-  error: string;
-}): void {
-  input.clearHistoryPoll(input.sessionKey);
-  input.clearStuckCheckTimer?.(input.sessionKey);
-  setRuntimePatch(input.set, input.sessionKey, {
-    sending: false,
-    aborting: false,
-    activeRunId: null,
-    sendAcceptance: null,
-    pendingFinal: false,
-    error: input.error,
-  });
 }
 
 export interface SendActionsDeps {
@@ -66,11 +33,6 @@ export interface SendActionsDeps {
     currentAgentId?: string | null,
     options?: { messageCount?: number },
   ) => ChatSession['engineType'] | undefined;
-  clearErrorRecoveryTimer: (sessionKey: string) => void;
-  clearHistoryPoll: (sessionKey: string) => void;
-  setHistoryPollTimer: (sessionKey: string, timer: ReturnType<typeof setTimeout> | null) => void;
-  clearStuckCheckTimer: (sessionKey: string) => void;
-  setStuckCheckTimer: (sessionKey: string, timer: ReturnType<typeof setTimeout> | null) => void;
 }
 
 export function createSendActions(
@@ -83,17 +45,13 @@ export function createSendActions(
     resolveMainSessionKeyForAgent,
     buildSessionSwitchPatch,
     resolveEngineTypeForSession,
-    clearErrorRecoveryTimer,
-    clearHistoryPoll,
-    setHistoryPollTimer,
-    clearStuckCheckTimer,
-    setStuckCheckTimer,
   } = deps;
 
   return {
     // ── Send message ──
 
     sendMessage: async (...args: unknown[]) => {
+      await initializeChatRuntimeV2();
       const options = normalizeSendMessageOptions(args);
       const {
         text,
@@ -108,13 +66,7 @@ export function createSendActions(
         skillMeta,
       } = options;
       const userDisplayText = text.trim();
-      const skillGatewayText = skillMeta
-        ? resolveSkillGatewayText(resolveSkillFromPlaza(skillMeta.slug).defaultPrompt, userDisplayText)
-        : userDisplayText;
-      const gatewayText = skillMeta
-        ? appendSkillTranscriptMarker(skillGatewayText, skillMeta, userDisplayText)
-        : skillGatewayText;
-      if (!gatewayText && (!attachments || attachments.length === 0) && !skillMeta) return;
+      if (!skillMeta && !userDisplayText && (!attachments || attachments.length === 0)) return;
 
       // DEFAULT_SESSION_KEY is a UI placeholder. Materialize it before target
       // resolution so a fresh home/project conversation always gets a unique
@@ -151,7 +103,9 @@ export function createSendActions(
         attachmentCount: attachments?.length ?? 0,
         hasDingTalkMentions: Boolean(dingTalkMentions?.length),
       });
-      if (getSessionRuntimeState(get().runtimeBySessionKey, currentSessionKey).sending) {
+      if (buildChatSessionRuntimeView(
+        useChatRuntimeV2Store.getState().sessionsByKey[currentSessionKey],
+      ).sending) {
         logChatFlow('send.blocked.active-runtime', { sessionKey: currentSessionKey });
         return;
       }
@@ -170,14 +124,24 @@ export function createSendActions(
           sessionKey: currentSessionKey,
           error: normalized.message,
         });
-        setRuntimePatch(set, currentSessionKey, { error: normalized.message });
         return;
       }
+
+      const gatewayText = skillMeta
+        ? appendSkillTranscriptMarker(
+          resolveSkillGatewayText(
+            (await resolveSkillPrompt(skillMeta.slug)).defaultPrompt,
+            userDisplayText,
+          ),
+          skillMeta,
+          userDisplayText,
+        )
+        : userDisplayText;
 
       const preparedContext = await prepareSendContext({
         trimmedText: gatewayText,
         sessionKey: currentSessionKey,
-        messages: get().currentSessionKey === currentSessionKey ? get().messages : [],
+        messages: get().currentSessionKey === currentSessionKey ? getSessionDisplayMessages(currentSessionKey) : [],
         workflowContext,
         embedBrowserContext,
         clearPendingWorkflow: get().clearPendingWorkflow,
@@ -203,33 +167,11 @@ export function createSendActions(
         skillMeta,
       });
       const idempotencyKey = userMsg.id || crypto.randomUUID();
-      setRuntimePatch(set, currentSessionKey, {
-        sending: true,
-        aborting: false,
-        activeRunId: null,
-        error: null,
-        sendAcceptance: {
-          idempotencyKey,
-          status: 'pending',
-          startedAt: Date.now(),
-        },
-      });
       logChatFlow('send.optimistic.inserted', {
         sessionKey: currentSessionKey,
         optimisticId: userMsg.id,
         displayLength: displayText.length,
         attachmentCount: attachments?.length ?? 0,
-      });
-
-      scheduleSendWatchdogs({
-        get,
-        set,
-        sessionKey: currentSessionKey,
-        clearErrorRecoveryTimer,
-        clearHistoryPoll,
-        setHistoryPollTimer,
-        clearStuckCheckTimer,
-        setStuckCheckTimer,
       });
 
       try {
@@ -262,16 +204,16 @@ export function createSendActions(
 
 
         if (!result.success) {
+          if (result.error?.startsWith('CHAT_RUNTIME_UNAVAILABLE')) {
+            useChatRuntimeV2Store.getState().setError(
+              currentSessionKey,
+              new AppError('GATEWAY', '发送状态暂不可确认，请稍后使用原消息重试。'),
+            );
+          }
           logChatFlow('send.dispatch.failed', {
             sessionKey: currentSessionKey,
             idempotencyKey,
             error: result.error ?? null,
-          });
-          failSendTurn({
-            set,
-            clearHistoryPoll,
-            sessionKey: currentSessionKey,
-            error: result.error || 'Failed to send message',
           });
         } else if (result.result?.runId) {
           logChatFlow('send.dispatch.accepted', {
@@ -279,16 +221,6 @@ export function createSendActions(
             idempotencyKey,
             runId: result.result.runId,
           });
-          setRuntimePatch(set, currentSessionKey, (runtime) => (
-            runtime.sendAcceptance?.idempotencyKey === idempotencyKey
-              ? {
-                  sending: true,
-                  activeRunId: result.result?.runId ?? null,
-                  error: null,
-                  sendAcceptance: { ...runtime.sendAcceptance, status: 'accepted' },
-                }
-              : {}
-          ));
         }
       } catch (err) {
         const normalized = normalizeAppError(err);
@@ -297,18 +229,8 @@ export function createSendActions(
           error: normalized.message,
           code: normalized.code,
         });
-        if (isUncertainDispatchError(normalized)) {
-          setRuntimePatch(set, currentSessionKey, (runtime) => (
-            buildUncertainAcceptancePatch(runtime, idempotencyKey)
-          ));
-        } else {
-          failSendTurn({
-            set,
-            clearHistoryPoll,
-            sessionKey: currentSessionKey,
-            error: normalized.message,
-          });
-        }
+        // Main's supervisor owns uncertain/failed dispatch transitions and
+        // broadcasts the canonical snapshot used by the Renderer.
       }
       } finally {
         releaseSendAttempt(currentSessionKey);
@@ -319,13 +241,15 @@ export function createSendActions(
 
     abortRun: async (requestedSessionKey?: string) => {
       const sessionKey = requestedSessionKey?.trim() || get().currentSessionKey;
-      const runtime = getSessionRuntimeState(get().runtimeBySessionKey, sessionKey);
+      const runtime = buildChatSessionRuntimeView(
+        useChatRuntimeV2Store.getState().sessionsByKey[sessionKey],
+      );
       if (!runtime.sending) return true;
-      if (runtime.aborting) return false;
-      const activeRunId = runtime.activeRunId;
-      setRuntimePatch(set, sessionKey, { aborting: true, error: null });
       try {
-        await useGatewayStore.getState().rpc(
+        const result = await useGatewayStore.getState().rpc<{
+          aborted?: boolean;
+          runIds?: unknown[];
+        }>(
           'chat.abort',
           {
             sessionKey,
@@ -336,30 +260,11 @@ export function createSendActions(
             ),
           },
         );
-        const latestRuntime = getSessionRuntimeState(get().runtimeBySessionKey, sessionKey);
-        // An aborted event may have already finalized this run and triggered the
-        // next queued turn while the RPC acknowledgement was still in flight.
-        if (activeRunId && latestRuntime.activeRunId && latestRuntime.activeRunId !== activeRunId) {
-          return false;
+        if (result?.aborted === false && Array.isArray(result.runIds) && result.runIds.length === 0) {
+          await useChatRuntimeV2Store.getState().hydrate(sessionKey);
         }
-        if (!latestRuntime.aborting) {
-          recordTerminalRun(sessionKey, activeRunId);
-          return true;
-        }
-        clearHistoryPoll(sessionKey);
-        clearErrorRecoveryTimer(sessionKey);
-        clearStuckCheckTimer(sessionKey);
-        setRuntimePatch(set, sessionKey, buildTerminalRuntimePatch(null));
-        recordTerminalRun(sessionKey, activeRunId);
         return true;
-      } catch (err) {
-        // The engine may still be running. Keep the run bound so subsequent
-        // delta/final events remain valid and the user can retry stopping it.
-        setRuntimePatch(set, sessionKey, (latestRuntime) => {
-          if (!latestRuntime.aborting) return {};
-          if (activeRunId && latestRuntime.activeRunId && latestRuntime.activeRunId !== activeRunId) return {};
-          return { aborting: false, error: String(err) };
-        });
+      } catch {
         return false;
       }
     },

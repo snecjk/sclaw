@@ -4,8 +4,6 @@ import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
-import { WorkflowDashboard } from '@/pages/Workflow/components/workflow-dashboard';
-import { WorkflowPageShading } from '@/pages/Workflow/components/workflow-page-shading';
 import { CreateWorkflowModal } from '@/pages/Workflow/components/create-workflow-modal';
 import { WorkflowMcIframeEditor, type WorkflowMcIframeEditorHandle } from '@/pages/Workflow/components/workflow-mc-iframe-editor';
 import { useWorkflowEditorContentHeader } from '@/hooks/use-workflow-editor-content-header';
@@ -16,12 +14,8 @@ import { useDesignerTryRun } from '@/pages/WorkflowDesigner/hooks/use-designer-t
 import { useEmbeddedWorkflowTryRun } from '@/pages/Workflow/hooks/use-embedded-workflow-try-run';
 import { createEmbeddedTrialRunDrawerActions } from '@/pages/Workflow/workflow-embedded-trial-run-actions';
 import { cacheAiWorkflowPrompt, createWorkflowStudio } from '@/lib/workflow-studio-api';
-import { workflowPageContentClass, workflowPageRootClass } from '@/lib/surfaces';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
-import {
-  useWorkflowListViewState,
-  type WorkflowListViewState,
-} from '@/pages/Workflow/hooks/use-workflow-list-view-state';
+import { MY_TASKS_WORKFLOW_LIST_HREF, myTasksWorkflowListHref } from '@/pages/MyTask/constants';
 
 function useEditorActive(active: boolean) {
   const setEditorActive = useWorkflowUiStore((s) => s.setEditorActive);
@@ -31,25 +25,11 @@ function useEditorActive(active: boolean) {
   }, [active, setEditorActive]);
 }
 
-function WorkflowListRoute({ viewState }: { viewState: WorkflowListViewState }) {
-  useEditorActive(false);
-  const navigate = useNavigate();
-
-  return (
-    <div className={workflowPageRootClass}>
-      <WorkflowPageShading />
-      <div className={workflowPageContentClass}>
-        <WorkflowDashboard
-          viewState={viewState}
-          onManualCreate={() => navigate('/workflow/new')}
-          onGenerate={(prompt) => {
-            navigate('/workflow/generate', { state: { prompt } });
-          }}
-          onEditCard={(workflowId) => navigate(`/workflow/${encodeURIComponent(workflowId)}`)}
-        />
-      </div>
-    </div>
-  );
+/** 列表已并入「自动化 · 工作流」；保留 /workflow 索引以兼容旧链接与高亮参数 */
+function WorkflowListRedirect() {
+  const [searchParams] = useSearchParams();
+  const highlightWorkflowId = searchParams.get('highlightWorkflowId');
+  return <Navigate to={myTasksWorkflowListHref(highlightWorkflowId)} replace />;
 }
 
 /** 手动新建：先打开空画布页（不创建工作流、不加载模板），弹窗在画布页上弹出，用户填完信息确认后才创建并加载真实 MC 画布。 */
@@ -60,7 +40,7 @@ function WorkflowNewRoute() {
   const [searchParams] = useSearchParams();
   const templateId = searchParams.get('templateId') ?? 'blank';
   const name = searchParams.get('name') ?? '';
-  const handleBack = useCallback(() => navigate('/workflow'), [navigate]);
+  const handleBack = useCallback(() => navigate(MY_TASKS_WORKFLOW_LIST_HREF), [navigate]);
 
   useWorkflowEditorContentHeader({
     workflowId: '',
@@ -78,7 +58,7 @@ function WorkflowNewRoute() {
       <CreateWorkflowModal
         open
         initialValues={{ templateId, name }}
-        onClose={() => navigate('/workflow')}
+        onClose={() => navigate(MY_TASKS_WORKFLOW_LIST_HREF)}
       />
     </>
   );
@@ -265,10 +245,10 @@ function WorkflowGenerateRoute() {
       });
   }, [prompt, workflowId, navigate]);
 
-  const handleBack = useCallback(() => navigate('/workflow'), [navigate]);
+  const handleBack = useCallback(() => navigate(MY_TASKS_WORKFLOW_LIST_HREF), [navigate]);
 
   if (!prompt.trim() && !workflowId) {
-    return <Navigate to="/workflow" replace />;
+    return <Navigate to={MY_TASKS_WORKFLOW_LIST_HREF} replace />;
   }
 
   if (!workflowId) {
@@ -307,10 +287,10 @@ function WorkflowEditRoute() {
   useEditorActive(true);
   const navigate = useNavigate();
   const { workflowId } = useParams<{ workflowId: string }>();
-  const handleBack = useCallback(() => navigate('/workflow'), [navigate]);
+  const handleBack = useCallback(() => navigate(MY_TASKS_WORKFLOW_LIST_HREF), [navigate]);
 
   if (!workflowId) {
-    return <Navigate to="/workflow" replace />;
+    return <Navigate to={MY_TASKS_WORKFLOW_LIST_HREF} replace />;
   }
 
   return (
@@ -321,10 +301,9 @@ function WorkflowEditRoute() {
 }
 
 export function WorkflowRoutes() {
-  const viewState = useWorkflowListViewState();
   return (
     <Routes>
-      <Route index element={<WorkflowListRoute viewState={viewState} />} />
+      <Route index element={<WorkflowListRedirect />} />
       <Route path="new" element={<WorkflowNewRoute />} />
       <Route path="generate" element={<WorkflowGenerateRoute />} />
       <Route path=":workflowId" element={<WorkflowEditRoute />} />

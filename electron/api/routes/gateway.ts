@@ -12,6 +12,7 @@ import { uploadFileToTempOSS } from '../../utils/oss-temp-upload';
 import { runMainChatSend } from '../../services/chat-send-service';
 import { sanitizeMemoryFromChatPayload } from '../../../shared/agent-memory-display';
 import { getMemoryTurnCoordinator } from '../../services/memory-turn-coordinator';
+import { getChatRuntimeSupervisor } from '../../services/chat-runtime-supervisor';
 
 type ChatSendRouteBody = {
   sessionKey: string;
@@ -301,16 +302,26 @@ export async function handleGatewayRoutes(
   if (url.pathname === '/api/chat/abort' && req.method === 'POST') {
     try {
       const body = await parseJsonBody<{ sessionKey: string; engineType?: AgentEngineType }>(req);
+      const runtimeSupervisor = getChatRuntimeSupervisor(ctx.gatewayManager);
       const adapter = await getAdapterForSession(body.sessionKey, parseEngineType(body.engineType));
-      const result = await adapter.abortRun(
-        { gatewayManager: ctx.gatewayManager },
-        { sessionKey: body.sessionKey },
-      );
+      await runtimeSupervisor.aborting(body.sessionKey);
+      let result;
+      try {
+        result = await adapter.abortRun(
+          { gatewayManager: ctx.gatewayManager },
+          { sessionKey: body.sessionKey },
+        );
+      } catch (error) {
+        await runtimeSupervisor.abortFailed(body.sessionKey, String(error));
+        throw error;
+      }
       if (!result.success) {
+        await runtimeSupervisor.abortFailed(body.sessionKey, result.error || 'chat.abort failed');
         sendJson(res, 500, result);
         return true;
       }
       await getMemoryTurnCoordinator(ctx.gatewayManager).aborted(body.sessionKey, null);
+      await runtimeSupervisor.aborted(body.sessionKey, null);
       sendJson(res, 200, result);
     } catch (error) {
       sendJson(res, 500, { success: false, error: String(error) });

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { hostApiFetch } from '@/lib/host-api';
 import { tracePreviewExtract } from '@/lib/preview-extract-trace';
 import { useChatStore } from '@/stores/chat';
+import { getCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
 import { sessionHasWorkflowExecution } from '@/stores/workflow-memory';
 import { buildWorkflowFormConfig, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import {
@@ -565,7 +566,7 @@ export function extractParameterForm(
         sourceId: string;
         schemaHash?: string;
       };
-      const sessionMessages = useChatStore.getState().messages;
+      const sessionMessages = getCurrentChatDisplayMessages();
       if (currentUserTurnHasWorkflowSubmission(sessionMessages)) {
         return null;
       }
@@ -590,7 +591,7 @@ export function extractParameterForm(
       if (parsed) {
         const { templateId, schemaHash } = parsed;
         const sessionKey = useChatStore.getState().currentSessionKey;
-        const sessionMessages = useChatStore.getState().messages;
+        const sessionMessages = getCurrentChatDisplayMessages();
         if (currentUserTurnHasWorkflowSubmission(sessionMessages)) {
           return null;
         }
@@ -598,8 +599,10 @@ export function extractParameterForm(
           return null;
         }
 
-        const pendingWorkflow =
-          pendingOverride ?? useChatStore.getState().pendingWorkflow;
+        const state = useChatStore.getState();
+        const pendingWorkflow = pendingOverride
+          ?? state.workflowChatUiBySessionKey[state.currentSessionKey]?.pendingWorkflow
+          ?? null;
         if (
           !pendingWorkflow
           || pendingWorkflow.templateId !== templateId
@@ -722,12 +725,40 @@ export function extractText(message: RawMessage | unknown): string {
  */
 export function resolveUserBubbleActionText(
   bodyText: string,
-  skillMeta?: { title?: string } | null,
+  skillMeta?: { title?: string; tagOffset?: number } | null,
 ): string {
   const body = (bodyText ?? '').trim();
   const title = (skillMeta?.title ?? '').trim();
-  if (title && body) return `${title} ${body}`;
-  return title || body;
+  if (!title || !body) return title || body;
+  const { before, after } = splitUserBubbleAtTag(body, skillMeta?.tagOffset);
+  return [before.trim(), title, after.trim()].filter(Boolean).join(' ');
+}
+
+export interface UserBubbleTagSplit {
+  before: string;
+  after: string;
+  /** 标签左侧是否需要补一个分隔空格。 */
+  padBefore: boolean;
+  /** 标签右侧是否需要补一个分隔空格。 */
+  padAfter: boolean;
+}
+
+/**
+ * 按技能标签的插入位置切分气泡正文。
+ *
+ * `tagOffset` 缺省（history 回写、旧消息）时退回 0，即标签渲染在正文最前，
+ * 与引入位置信息之前的行为一致。
+ */
+export function splitUserBubbleAtTag(text: string, tagOffset?: number): UserBubbleTagSplit {
+  const offset = Math.min(Math.max(tagOffset ?? 0, 0), text.length);
+  const before = text.slice(0, offset);
+  const after = text.slice(offset);
+  return {
+    before,
+    after,
+    padBefore: before.length > 0 && !/\s$/.test(before),
+    padAfter: after.length > 0 && !/^\s/.test(after),
+  };
 }
 
 /**

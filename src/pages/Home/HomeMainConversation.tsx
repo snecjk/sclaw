@@ -4,6 +4,8 @@ import { AlertTriangle, ArrowDown, Loader2, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useChatStore, type RawMessage } from '@/stores/chat';
+import { useCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
+import { useCurrentChatRuntimeView } from '@/stores/chat/runtime-selectors';
 import { useChatPreviewPanel } from '@/hooks/use-chat-preview-panel';
 import {
   EMPTY_WORKFLOW_CHAT_CARD_REFS,
@@ -45,13 +47,17 @@ import { ChatPreviewPanel } from '@/pages/Chat/ChatPreviewPanel';
 import { useWorkflowCronTaskModal } from '@/hooks/use-workflow-cron-task-modal';
 import { useStoTaskSubitemEntry } from '@/hooks/use-sto-task-subitem-entry';
 import { TaskCreateModal } from '@/pages/MyTask/components/TaskCreateModal';
+import { myTasksWorkflowListHref } from '@/pages/MyTask/constants';
 import { HomeComposer } from '@/pages/Home/HomeComposer';
 import type { FileAttachment } from '@/pages/Chat/ChatInput';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { resolveSessionLabel } from '@/lib/session-label';
-import { attachMissingWorkflowChatCardAnchors } from '@/lib/workflow-chat-card-registration';
+import {
+  attachMissingWorkflowChatCardAnchors,
+  workflowAnchorRepairRevision,
+} from '@/lib/workflow-chat-card-registration';
 
 /**
  * Main-agent conversation thread on the home route (replaces the old `/chat` welcome + messages UI).
@@ -81,19 +87,23 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const sessions = useChatStore((s) => s.sessions);
   const sessionLabels = useChatStore((s) => s.sessionLabels);
-  const messages = useChatStore((s) => s.messages);
+  const messages = useCurrentChatDisplayMessages();
   const loading = useChatStore((s) => s.loading);
-  const sending = useChatStore((s) => s.sending);
-  const error = useChatStore((s) => s.error);
+  const {
+    sending,
+    pendingFinal,
+    lastEventAt: canonicalLastEventAt,
+    lastUserMessageAt,
+    streamingMessage,
+    streamingMessages,
+    streamingToolResults,
+    streamingTools,
+    error,
+  } = useCurrentChatRuntimeView();
   const showThinking = useChatStore((s) => s.showThinking);
   const toggleThinking = useChatStore((s) => s.toggleThinking);
   const refresh = useChatStore((s) => s.refresh);
-  const streamingMessage = useChatStore((s) => s.streamingMessage);
-  const streamingMessages = useChatStore((s) => s.streamingMessages);
-  const streamingToolResults = useChatStore((s) => s.streamingToolResults);
-  const streamingTools = useChatStore((s) => s.streamingTools);
-  const pendingFinal = useChatStore((s) => s.pendingFinal);
-  const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
+  const lastChatEventAt = canonicalLastEventAt;
   const clearError = useChatStore((s) => s.clearError);
 
   const workflowCards = useWorkflowChatCardsStore(
@@ -110,6 +120,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     void loadWorkflowCards(currentSessionKey, true);
   }, [currentSessionKey, sending, loadWorkflowCards]);
 
+  const anchorRepairRevision = workflowAnchorRepairRevision(messages, workflowCards);
   useEffect(() => {
     if (!currentSessionKey || workflowCards.every((card) => card.anchorUserMessageId)) return;
     void attachMissingWorkflowChatCardAnchors({
@@ -117,7 +128,9 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
       messages,
       cards: workflowCards,
     });
-  }, [currentSessionKey, messages, workflowCards]);
+    // The compact revision captures only anchor-relevant message/card changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSessionKey, anchorRepairRevision]);
 
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -176,6 +189,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     streamingMessages,
     streamingToolResults,
     streamingTools,
+    lastUserMessageAt,
   });
 
   useEffect(() => {
@@ -217,21 +231,10 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
     return searchableMessages.filter((entry) => entry.text.toLocaleLowerCase().includes(normalizedQuery));
   }, [deferredSearchQuery, searchableMessages]);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setActiveSearchIndex(0);
-  }, [deferredSearchQuery]);
-
-  useEffect(() => {
-    if (searchMatches.length === 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setActiveSearchIndex(0);
-      return;
-    }
-    setActiveSearchIndex((currentIndex) => Math.min(currentIndex, searchMatches.length - 1));
-  }, [searchMatches]);
-
-  const activeSearchMatch = searchMatches[activeSearchIndex] ?? null;
+  const boundedActiveSearchIndex = searchMatches.length > 0
+    ? Math.min(activeSearchIndex, searchMatches.length - 1)
+    : 0;
+  const activeSearchMatch = searchMatches[boundedActiveSearchIndex] ?? null;
   const matchedMessageKeys = useMemo(
     () => new Set(searchMatches.map((entry) => entry.key)),
     [searchMatches],
@@ -256,13 +259,13 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
 
   const handleSearchNext = useCallback(() => {
     if (searchMatches.length === 0) return;
-    setActiveSearchIndex((currentIndex) => (currentIndex + 1) % searchMatches.length);
-  }, [searchMatches.length]);
+    setActiveSearchIndex((boundedActiveSearchIndex + 1) % searchMatches.length);
+  }, [boundedActiveSearchIndex, searchMatches.length]);
 
   const handleSearchPrevious = useCallback(() => {
     if (searchMatches.length === 0) return;
-    setActiveSearchIndex((currentIndex) => (currentIndex - 1 + searchMatches.length) % searchMatches.length);
-  }, [searchMatches.length]);
+    setActiveSearchIndex((boundedActiveSearchIndex - 1 + searchMatches.length) % searchMatches.length);
+  }, [boundedActiveSearchIndex, searchMatches.length]);
 
   const handleSearchClear = useCallback(() => {
     setSearchQuery('');
@@ -325,6 +328,9 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
   const openWorkflowPreview = useCallback((workflowId: string) => {
     navigate(`/workflow/${encodeURIComponent(workflowId)}`);
   }, [navigate]);
+  const openWorkflowList = useCallback((workflowId: string) => {
+    navigate(myTasksWorkflowListHref(workflowId));
+  }, [navigate]);
 
   const {
     open: workflowCronModalOpen,
@@ -363,6 +369,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
           value: searchQuery,
           onChange: (value) => {
             setSearchQuery(value);
+            setActiveSearchIndex(0);
             if (!isSearchOpen) {
               setIsSearchOpen(true);
             }
@@ -371,7 +378,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
           onPrevious: handleSearchPrevious,
           onClear: handleSearchClear,
           resultCount: searchMatches.length,
-          activeIndex: searchMatches.length > 0 ? activeSearchIndex : 0,
+          activeIndex: boundedActiveSearchIndex,
         }}
       />
     ),
@@ -387,7 +394,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
       handleSearchPrevious,
       handleSearchClear,
       searchMatches.length,
-      activeSearchIndex,
+      boundedActiveSearchIndex,
     ],
   );
 
@@ -507,6 +514,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
                       paramsSummary={item.card.paramsSummary}
                       onPreviewArtifact={openArtifactPreview}
                       onCreateScheduledTask={openWorkflowCronTaskModal}
+                      onOpenWorkflow={openWorkflowList}
                     />
                   );
                 }
@@ -514,6 +522,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
                   return (
                     <AssistantTurnMessage
                       key={item.key}
+                      sessionMessages={messages}
                       turnMessages={item.messages}
                       turnToolResults={item.toolResults}
                       precedingUserMessage={item.precedingUserMessage}
@@ -534,6 +543,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
                   <ChatMessage
                     key={item.key}
                     message={item.message}
+                    sessionMessages={messages}
                     showThinking={showThinking}
                     searchMessageKey={searchMessageKey}
                     isSearchMatch={matchedMessageKeys.has(searchMessageKey)}
@@ -546,6 +556,7 @@ export function HomeMainConversation({ className, seedText, seedSkillSlug, onSen
               {activeTurn ? (
                 <AssistantTurnMessage
                   key="active-turn"
+                  sessionMessages={messages}
                   turnMessages={activeTurn.turnMessages}
                   turnToolResults={activeTurn.turnToolResults}
                   precedingUserMessage={activeTurn.precedingUserMessage}
