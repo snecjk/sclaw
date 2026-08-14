@@ -23,6 +23,7 @@ describe('browser automation observe script', () => {
     const script = buildObserveScript(42);
     expect(script).toContain('var ELEMENT_LIMIT = 42');
     expect(script).toContain('__stoBrowserAutomation');
+    expect(script).toContain('resolveTargetForInput');
   });
 });
 

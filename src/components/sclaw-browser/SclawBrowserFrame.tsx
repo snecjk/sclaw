@@ -31,6 +31,8 @@ interface SclawBrowserFrameProps {
   onPageFavicon?: (faviconUrl: string) => void;
   /** Chrome-like: document title updates. */
   onPageTitle?: (title: string) => void;
+  /** Chrome-like: live document URL after in-webview navigation. */
+  onPageUrl?: (pageUrl: string) => void;
   /** Fired when history back availability changes. */
   onNavStateChange?: (state: { canGoBack: boolean }) => void;
   /**
@@ -91,6 +93,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       active = true,
       onPageFavicon,
       onPageTitle,
+      onPageUrl,
       onNavStateChange,
       onOpenWindow,
     },
@@ -102,10 +105,12 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
     const embedRuntimeId = embedRuntimeIdProp !== undefined ? embedRuntimeIdProp : overlayRuntimeId;
     const onPageFaviconRef = useRef(onPageFavicon);
     const onPageTitleRef = useRef(onPageTitle);
+    const onPageUrlRef = useRef(onPageUrl);
     const onNavStateChangeRef = useRef(onNavStateChange);
     const onOpenWindowRef = useRef(onOpenWindow);
     onPageFaviconRef.current = onPageFavicon;
     onPageTitleRef.current = onPageTitle;
+    onPageUrlRef.current = onPageUrl;
     onNavStateChangeRef.current = onNavStateChange;
     onOpenWindowRef.current = onOpenWindow;
 
@@ -174,6 +179,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
           webContentsId,
           pageUrl,
         });
+        onPageUrlRef.current?.(pageUrl);
         publishNavState();
       };
 
@@ -182,6 +188,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         const pageUrl = safeGetWebviewUrl(el, url);
         markPolicyAuthedFromUrl(pageUrl);
         void updateSclawBrowserPageState({ runtimeId: embedRuntimeId, pageUrl });
+        onPageUrlRef.current?.(pageUrl);
         publishNavState();
       };
 

@@ -840,9 +840,9 @@ export function createEngine(deps: EngineDeps) {
       }
     }
     const packet = createWorkflowPacket({ runId, nodeId, nodeType, status: 'succeeded', payload });
-    const payload = { run_id: runId, node_id: nodeId, node_type: nodeType, status: 'SUCCEEDED', output_json: stringifyJson(packet), completed_at: nowIso() };
-    await repo.upsertNodeRun(payload);
-    await repo.enqueueOutbox(runId, 'node_run', `${runId}:${nodeId}`, payload, 'progress');
+    const nodeRunRecord = { run_id: runId, node_id: nodeId, node_type: nodeType, status: 'SUCCEEDED', output_json: stringifyJson(packet), completed_at: nowIso() };
+    await repo.upsertNodeRun(nodeRunRecord);
+    await repo.enqueueOutbox(runId, 'node_run', `${runId}:${nodeId}`, nodeRunRecord, 'progress');
     const seq = await repo.nextEventSequence(runId);
     const event = { run_id: runId, sequence: seq, type: nodeType === 'human_approval' ? 'approval.decided' : 'user_input.submitted', node_id: nodeId, message: stringifyJson(packet) };
     await repo.insertEvent(event);

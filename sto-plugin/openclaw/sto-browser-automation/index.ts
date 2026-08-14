@@ -30,8 +30,8 @@ const RUN_ID_PARAM = Type.Optional(
 const BA_SYSTEM_PROMPT = [
 	"浏览器自动化工具（ba_*，Step 1）：",
 	"- 应用广场内嵌预览：优先传 sessionId=embed-<runtimeId> 或 embedRuntimeId。",
-	"- 推荐循环：ba_observe → ba_act（单步）→ ba_validate（关键步骤）→ 必要时 ba_wait。",
-	"- 每步只做一个动作；不要一次规划整条链路。",
+	"- **简单单步点击/打开**：用 bridge_click，不要用 ba_observe + ba_act。",
+	"- **需要用户输入**：ba_observe 定位 ref → ba_act fill（CDP 真实输入，填后校验）→ ba_validate。",
 	"- ref 来自 ba_observe 返回的 @eN；也可使用 name 按可见文案匹配。",
 	"- 无登录态的外部站点：先 ba_create_session(url) 创建 managed 会话。",
 ].join("\n");
@@ -100,7 +100,7 @@ export default definePluginEntry({
 			domain: "browser-automation",
 			resultType: "browser_automation_act",
 			label: "执行浏览器动作",
-			description: "执行单步 click/fill/select/navigate/scroll/press。ref 来自 ba_observe。",
+			description: "执行单步 click/fill/select/navigate/scroll/press。fill/press 走 CDP 真实输入并校验填后值。ref 来自 ba_observe。",
 			parameters: Type.Object({
 				sessionId: SESSION_ID_PARAM,
 				embedRuntimeId: EMBED_RUNTIME_ID_PARAM,

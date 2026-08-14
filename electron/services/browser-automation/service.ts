@@ -12,6 +12,7 @@ import { browserAutomationRepository } from '../../db/repositories/browser-autom
 import { BrowserAutomationCdpSession } from './cdp-session';
 import { observePage } from './observer';
 import { actOnPage, validateOnPage } from './actor';
+import { actFillOrType, actPressKey } from './input';
 import { waitAfterAction, waitForCondition, type WaitEngineDeps } from './wait-engine';
 import {
   buildEmbedSessionId,
@@ -142,12 +143,30 @@ export class BrowserAutomationService {
     let result: BrowserAutomationActResult;
     if (payload.action === 'navigate' && payload.url) {
       await navigateWebContents(deps.webContents, payload.url);
-      await waitAfterAction(deps.waitDeps);
+      await waitAfterAction(deps.waitDeps, { source: session.source, action: 'navigate' });
       result = { success: true, action: 'navigate' };
+    } else if (payload.action === 'fill') {
+      result = await actFillOrType({
+        cdp: deps.cdp,
+        executeJavaScript: deps.executeJavaScript,
+        payload,
+      });
+      if (result.success) {
+        await waitAfterAction(deps.waitDeps, { source: session.source, action: payload.action });
+      }
+    } else if (payload.action === 'press') {
+      result = await actPressKey({
+        cdp: deps.cdp,
+        executeJavaScript: deps.executeJavaScript,
+        payload,
+      });
+      if (result.success) {
+        await waitAfterAction(deps.waitDeps, { source: session.source, action: payload.action });
+      }
     } else {
       result = await actOnPage(deps.executeJavaScript, payload);
       if (result.success) {
-        await waitAfterAction(deps.waitDeps);
+        await waitAfterAction(deps.waitDeps, { source: session.source, action: payload.action });
       }
     }
 

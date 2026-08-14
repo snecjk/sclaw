@@ -30,6 +30,9 @@ export async function ensureAutomationSession(
 	params: { sessionId?: string; embedRuntimeId?: string; url?: string },
 ): Promise<string> {
 	if (params.sessionId) {
+		if (params.sessionId.startsWith('embed-')) {
+			return params.sessionId;
+		}
 		const sessions = await listAutomationSessions(cfg);
 		if (sessions.some((session) => session.sessionId === params.sessionId)) {
 			return params.sessionId;

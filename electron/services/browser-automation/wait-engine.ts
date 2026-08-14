@@ -69,12 +69,19 @@ export async function waitForCondition(
       }
     }
 
-    await sleep(200);
+    await sleep(50);
   }
 
   return { success: false, message: `Wait timed out after ${timeoutMs}ms (${condition.type})` };
 }
 
-export async function waitAfterAction(deps: WaitEngineDeps): Promise<void> {
+export async function waitAfterAction(
+  deps: WaitEngineDeps,
+  options?: { source?: 'embed' | 'managed'; action?: string },
+): Promise<void> {
+  if (options?.source === 'embed' && options.action === 'click') {
+    await waitForCondition(deps, { type: 'navigation', timeoutMs: 3000 });
+    return;
+  }
   await waitForCondition(deps, { type: 'networkIdle', timeoutMs: 15_000 });
 }

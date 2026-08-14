@@ -206,10 +206,89 @@ export const BROWSER_AUTOMATION_OBSERVE_SCRIPT = `(function() {
     return { success: false, error: 'Unsupported action: ' + action };
   }
 
+  function readTargetValue(target) {
+    var el = target.node;
+    if ('value' in el) return String(el.value || '');
+    if (el.isContentEditable) return (el.textContent || '').trim();
+    return (el.textContent || '').trim();
+  }
+
+  function fillWithNativeSetter(el, value) {
+    var text = value == null ? '' : String(value);
+    if (typeof el.focus === 'function') el.focus();
+    if (el.isContentEditable) {
+      el.textContent = text;
+    } else if ('value' in el) {
+      var proto = el instanceof HTMLTextAreaElement
+        ? HTMLTextAreaElement.prototype
+        : (el instanceof HTMLInputElement ? HTMLInputElement.prototype : null);
+      if (proto) {
+        var descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
+        if (descriptor && descriptor.set) descriptor.set.call(el, text);
+        else el.value = text;
+      } else {
+        el.value = text;
+      }
+    }
+    try {
+      el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
+    } catch (err) {
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function resolveTargetForInput(payload) {
+    var target = resolveTarget(payload);
+    if (!target) return { found: false, error: 'Element not found' };
+    var el = target.node;
+    el.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
+    var rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      return { found: false, error: 'Element is not visible' };
+    }
+    var ref = null;
+    for (var pair of refMap.entries()) {
+      if (pair[1].node === el) {
+        ref = pair[0];
+        break;
+      }
+    }
+    return {
+      found: true,
+      ref: ref,
+      stableKey: target.stableKey,
+      centerX: rect.left + rect.width / 2,
+      centerY: rect.top + rect.height / 2,
+      value: readTargetValue(target),
+      editable: !!(el.matches && el.matches('input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="textbox"]')),
+    };
+  }
+
+  function readTargetInputValue(payload) {
+    var target = resolveTarget(payload);
+    if (!target) return { found: false, error: 'Element not found' };
+    return { found: true, value: readTargetValue(target), stableKey: target.stableKey };
+  }
+
+  function nativeFillTarget(payload) {
+    var target = resolveTarget(payload);
+    if (!target) return { success: false, error: 'Element not found' };
+    fillWithNativeSetter(target.node, payload.value || '');
+    return {
+      success: true,
+      value: readTargetValue(target),
+      stableKey: target.stableKey,
+    };
+  }
+
   window.__stoBrowserAutomation = {
     buildObservation: buildObservation,
     act: act,
     resolveTarget: resolveTarget,
+    resolveTargetForInput: resolveTargetForInput,
+    readTargetInputValue: readTargetInputValue,
+    nativeFillTarget: nativeFillTarget,
   };
 
   return buildObservation();
