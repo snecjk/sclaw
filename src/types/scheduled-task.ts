@@ -6,10 +6,10 @@
  * 全量用 ScheduleTask；旧 ClaudeScheduledTask* 型保留予会话渲染流（遗留 store 仍吐该形状）。
  */
 import type { DingTalkMention } from './dingtalk-mention';
+import type { AgentEngineType } from '../../shared/agent-engine';
+export type { AgentEngineType } from '../../shared/agent-engine';
 
 /** 引擎类型 — 镜像 electron/utils/agent-config.ts AgentEngineType。 */
-export type AgentEngineType = 'openclaw' | 'claude';
-
 export type ScheduleTaskPermissionProfile =
   | 'readonly-safe'
   | 'workspace-write'

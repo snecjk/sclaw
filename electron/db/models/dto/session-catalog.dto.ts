@@ -70,6 +70,7 @@ export interface UpsertEngineBindingInput {
   accountId?: string;
   archivedClaudeSessionIds?: string[];
   pendingHistoryBridge?: boolean;
+  piSessionFile?: string;
   actor?: string | null;
 }
 

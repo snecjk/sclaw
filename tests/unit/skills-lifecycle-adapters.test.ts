@@ -8,6 +8,7 @@ const roots = vi.hoisted(() => ({
   store: '',
   openclaw: '',
   claude: '',
+  pi: '',
 }));
 
 vi.mock('../../electron/utils/paths', async () => {
@@ -32,6 +33,8 @@ vi.mock('../../electron/utils/paths', async () => {
       join(roots.openclaw, 'agents', agentId, 'agent', 'skills'),
     getClaudeConfigDir: () => roots.claude,
     getClaudeSkillsDir: () => join(roots.claude, 'skills'),
+    getPiSkillsDir: () => join(roots.pi, 'skills'),
+    getPiAgentSkillsDir: (agentId: string) => join(roots.pi, 'agents', agentId, 'skills'),
     getClawXConfigDir: () => join(roots.store, '..'),
   };
 });
@@ -76,9 +79,11 @@ describe('skill lifecycle adapters + manager', () => {
     roots.store = join(tempRoot, 'skills-store');
     roots.openclaw = join(tempRoot, 'openclaw');
     roots.claude = join(tempRoot, '.claude');
+    roots.pi = join(tempRoot, 'pi');
     await mkdir(roots.store, { recursive: true });
     await mkdir(join(roots.openclaw, 'skills'), { recursive: true });
     await mkdir(join(roots.claude, 'skills'), { recursive: true });
+    await mkdir(join(roots.pi, 'skills'), { recursive: true });
   });
 
   afterEach(async () => {
@@ -119,6 +124,39 @@ describe('skill lifecycle adapters + manager', () => {
     expect(second.mirrored).toEqual([]);
     const after = await stat(join(roots.claude, 'skills', 'pdf', 'SKILL.md'));
     expect(after.mtimeMs).toBe(before.mtimeMs);
+  });
+
+  it('projects Pi skills only into Pi-owned global and agent directories', async () => {
+    const { PiSkillAdapter } = await import(
+      '../../electron/services/skills/adapters/pi-skill-adapter'
+    );
+    const globalSource = join(roots.store, 'global', 'pdf');
+    const agentSource = join(roots.store, 'agents', 'sales', 'skills', 'orders');
+    await writeSkill(globalSource, 'pdf');
+    await writeSkill(agentSource, 'orders');
+
+    const adapter = new PiSkillAdapter();
+    await adapter.reconcile([
+      {
+        slug: 'pdf',
+        sourceDir: globalSource,
+        version: '1.0.0',
+        enabled: true,
+        scope: 'global' as const,
+      },
+      {
+        slug: 'orders',
+        sourceDir: agentSource,
+        version: '1.0.0',
+        enabled: true,
+        scope: 'agent' as const,
+        agentId: 'sales',
+      },
+    ], { userCode: 'u1', agentId: 'sales' });
+
+    expect(existsSync(join(roots.pi, 'skills', 'pdf', 'SKILL.md'))).toBe(true);
+    expect(existsSync(join(roots.pi, 'agents', 'sales', 'skills', 'orders', 'SKILL.md'))).toBe(true);
+    expect(existsSync(join(roots.openclaw, 'skills', 'pdf', 'SKILL.md'))).toBe(false);
   });
 
   it('keeps canonical install when an adapter projection fails', async () => {

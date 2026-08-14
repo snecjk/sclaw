@@ -16,7 +16,7 @@ async function loadScheduledTaskNameMaps(): Promise<ScheduledTaskNameMaps> {
   // 统一源 /api/scheduled-tasks 自带 engineType，按引擎分流进 cron(openclaw)/claude map。
   try {
     const tasks = await hostApiFetch<
-      Array<{ id: string; name: string; engineType: 'openclaw' | 'claude' }>
+      Array<{ id: string; name: string; engineType: 'openclaw' | 'claude' | 'pi' }>
     >('/api/scheduled-tasks');
     for (const task of tasks) {
       if (!task.id || !task.name?.trim()) continue;

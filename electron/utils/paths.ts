@@ -157,6 +157,25 @@ export function getClaudeConfigDir(): string {
   return join(getClawXConfigDir(), '.claude');
 }
 
+/** StoClaw-managed Pi SDK state (sessions only; credentials stay in secure storage). */
+export function getPiConfigDir(): string {
+  return join(getStoClawHomeDir(), 'pi');
+}
+
+export function getPiSessionsDir(): string {
+  return join(getPiConfigDir(), 'sessions');
+}
+
+/** Skills projected specifically for the Pi runtime. */
+export function getPiSkillsDir(): string {
+  return join(getPiConfigDir(), 'skills');
+}
+
+/** Agent-scoped skills projected specifically for the Pi runtime. */
+export function getPiAgentSkillsDir(agentId: string): string {
+  return join(getPiConfigDir(), 'agents', agentId, 'skills');
+}
+
 /**
  * Get Claude skills directory managed by StoClaw.
  */

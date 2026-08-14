@@ -303,6 +303,7 @@ export async function syncSessionEngineBindingCwd(sessionKey: string): Promise<v
       ? extra.archivedClaudeSessionIds.map(String)
       : undefined,
     pendingHistoryBridge: extra.pendingHistoryBridge === true ? true : undefined,
+    piSessionFile: typeof extra.piSessionFile === 'string' ? extra.piSessionFile : undefined,
     updatedAt: Date.now(),
   });
 }
@@ -502,6 +503,7 @@ export async function upsertEngineBinding(entry: EngineSessionRegistryEntry) {
     accountId: entry.accountId,
     archivedClaudeSessionIds: entry.archivedClaudeSessionIds,
     pendingHistoryBridge: entry.pendingHistoryBridge,
+    piSessionFile: entry.piSessionFile,
   });
   const catalogRepo = getCatalogSessionRepository();
   const existingCatalog = await catalogRepo.findBySessionKey(entry.sessionKey);

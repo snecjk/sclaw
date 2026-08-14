@@ -1,6 +1,7 @@
 import type { DataCenterArtifactProvenance } from '@/types/data-center';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
+import type { AgentEngineType } from '../../../shared/agent-engine';
 
 export interface SendMessageOptions {
   text: string;
@@ -121,7 +122,7 @@ export interface ChatSession {
   thinkingLevel?: string;
   model?: string;
   updatedAt?: number;
-  engineType?: 'openclaw' | 'claude';
+  engineType?: AgentEngineType;
   /**
    * Owning agent for this session. Required for `claude-task:*` keys which do not
    * embed agentId in the session key (key-derived fallback would wrongly be `main`).

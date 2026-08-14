@@ -46,9 +46,10 @@ export async function handleGatewayRoutes(
   ctx: HostApiContext,
 ): Promise<boolean> {
   const parseEngineType = (value: string | null | undefined): AgentEngineType | undefined => (
-    value === 'claude' || value === 'openclaw' ? value : undefined
+    value === 'claude' || value === 'openclaw' || value === 'pi' ? value : undefined
   );
   const getAgentIdFromSessionKey = (sessionKey: string): string => {
+    if (sessionKey.startsWith('pi:')) return (sessionKey.split(':')[1] || 'main').trim().toLowerCase();
     if (!sessionKey.startsWith('agent:')) return 'main';
     const [, agentId] = sessionKey.split(':');
     return (agentId || 'main').trim().toLowerCase();

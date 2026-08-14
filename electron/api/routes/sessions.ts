@@ -2,8 +2,9 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { join } from 'node:path';
 import { getOpenClawConfigDir } from '../../utils/paths';
 import { deleteClaudeSessionByKey } from '../../engines/claude-adapter';
+import { deletePiSession } from '../../engines/pi-adapter';
 import { applyClaudeSessionModelSwitch } from '../../engines/claude-session-model';
-import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry } from '../../engines/session-registry';
+import { deleteEngineSessionRegistryEntry, getEngineSessionRegistryEntry, upsertEngineSessionRegistryEntry } from '../../engines/session-registry';
 import { getAgentIdFromSessionKey, rememberSessionEngineType, resolveSessionEngineType } from '../../engines/session-engine';
 import { getAgentPreferredModel } from '../../utils/agent-config';
 import { resolveSessionToolCwd } from '../../services/session-catalog-service';
@@ -112,7 +113,7 @@ export async function handleSessionRoutes(
         model: string;
         accountId?: string;
         agentId?: string;
-        engineType?: 'openclaw' | 'claude';
+        engineType?: 'openclaw' | 'claude' | 'pi';
       }>(req);
       const sessionKey = (body.sessionKey ?? '').trim();
       const rawModel = (body.model ?? '').trim();
@@ -127,7 +128,7 @@ export async function handleSessionRoutes(
       // Route strictly by explicit engineType when provided. Claude and OpenClaw use
       // different backends (registry vs Gateway sessions.patch); registry inference alone
       // can mis-route OpenClaw requests after Claude in-session model switches.
-      const requestedEngine = body.engineType === 'claude' || body.engineType === 'openclaw'
+      const requestedEngine = body.engineType === 'claude' || body.engineType === 'openclaw' || body.engineType === 'pi'
         ? body.engineType
         : undefined;
       const sessionEngineType = requestedEngine
@@ -162,6 +163,28 @@ export async function handleSessionRoutes(
           modelOverride: model,
           changedModel: modelChanged,
         });
+        return true;
+      }
+      if (sessionEngineType === 'pi') {
+        const existing = await getEngineSessionRegistryEntry(sessionKey);
+        const agentId = body.agentId?.trim() || existing?.agentId || getAgentIdFromSessionKey(sessionKey);
+        const preferred = await getAgentPreferredModel(agentId);
+        const accountId = body.accountId?.trim() || existing?.accountId || preferred.accountId;
+        if (!accountId) {
+          sendJson(res, 400, { success: false, error: 'Pi model selection requires an accountId' });
+          return true;
+        }
+        await upsertEngineSessionRegistryEntry({
+          ...existing,
+          sessionKey,
+          engineType: 'pi',
+          agentId,
+          cwd: existing?.cwd || await resolveSessionToolCwd(sessionKey, agentId) || undefined,
+          model: rawModel,
+          accountId,
+          updatedAt: Date.now(),
+        });
+        sendJson(res, 200, { success: true, sessionKey, model: rawModel, modelOverride: rawModel, changedModel: true });
         return true;
       }
 
@@ -202,7 +225,7 @@ export async function handleSessionRoutes(
 
   if (url.pathname === '/api/sessions/delete' && req.method === 'POST') {
     try {
-      const body = await parseJsonBody<{ sessionKey: string; engineType?: 'openclaw' | 'claude' }>(req);
+      const body = await parseJsonBody<{ sessionKey: string; engineType?: 'openclaw' | 'claude' | 'pi' }>(req);
       const sessionKey = body.sessionKey;
       if (!sessionKey) {
         sendJson(res, 400, { success: false, error: `Invalid sessionKey: ${sessionKey}` });
@@ -218,6 +241,12 @@ export async function handleSessionRoutes(
         // (scheduled-task sessions use store[sessionKey] = entry in agents/{agentId}/sessions/sessions.json)
         await cleanupAgentSessionsJson(sessionKey);
         // Mark as deleted so virtual generators skip it on next refresh
+        await persistSessionDeletion(sessionKey);
+        sendJson(res, 200, { success: true });
+        return true;
+      }
+      if (sessionEngineType === 'pi') {
+        await deletePiSession(sessionKey);
         await persistSessionDeletion(sessionKey);
         sendJson(res, 200, { success: true });
         return true;

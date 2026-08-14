@@ -42,6 +42,7 @@ import {
 } from './adapters/engine-skill-adapter';
 import { OpenClawSkillAdapter } from './adapters/openclaw-skill-adapter';
 import { ClaudeSkillAdapter } from './adapters/claude-skill-adapter';
+import { PiSkillAdapter } from './adapters/pi-skill-adapter';
 
 export const PREINSTALLED_MARKER_NAME = '.stoclaw-preinstalled.json';
 export const USER_UPLOAD_MARKER_NAME = '.stoclaw-user-upload.json';
@@ -73,7 +74,7 @@ function ensureAdaptersRegistered(): void {
     initialized = true;
     return;
   }
-  setEngineSkillAdapters([new OpenClawSkillAdapter(), new ClaudeSkillAdapter()]);
+  setEngineSkillAdapters([new OpenClawSkillAdapter(), new ClaudeSkillAdapter(), new PiSkillAdapter()]);
   initialized = true;
 }
 

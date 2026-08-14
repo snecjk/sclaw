@@ -1,6 +1,8 @@
 export const CHAT_RUNTIME_PROTOCOL_VERSION = 1 as const;
 
-export type ChatEngineType = 'openclaw' | 'claude';
+import type { AgentEngineType } from './agent-engine';
+
+export type ChatEngineType = AgentEngineType;
 
 export interface ChatRuntimePolicy {
   origin: 'interactive' | 'scheduled_task' | 'channel';

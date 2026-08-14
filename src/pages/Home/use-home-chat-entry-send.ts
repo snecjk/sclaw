@@ -10,6 +10,7 @@ import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
 import { getCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
+import { chatEngineRequiresGateway } from '@/hooks/use-chat-input-bindings';
 
 /**
  * 首页入口（省区工作台 / Agent Hub）与聊天页保持一致：
@@ -54,7 +55,7 @@ export function useHomeChatEntrySend() {
           currentSessionKey,
           { messageCount: messages.length },
         );
-      if (targetEngineType !== 'claude' && !isGatewayRunning) {
+      if (chatEngineRequiresGateway(targetEngineType) && !isGatewayRunning) {
         toast.error(t('assistant.gatewayRequired'));
         return;
       }

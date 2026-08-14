@@ -112,9 +112,9 @@ function sortTasks(tasks: TaskViewModel[], sort: string): TaskViewModel[] {
 
 /** 解析首选 Agent（与 Cron 页面一致，不按引擎过滤） */
 function resolvePreferredAgentByEngine(
-  agents: Array<{ id: string; engineType?: 'openclaw' | 'claude'; workspace: string }>,
+  agents: Array<{ id: string; engineType?: 'openclaw' | 'claude' | 'pi'; workspace: string }>,
   defaultAgentId: string,
-  _engineType: 'openclaw' | 'claude'
+  _engineType: 'openclaw' | 'claude' | 'pi'
 ) {
   if (agents.length === 0) return null;
   return agents.find((agent) => agent.id === defaultAgentId) ?? agents[0] ?? null;
@@ -286,6 +286,9 @@ export default function MyTask() {
         if (task.engineType === 'claude') {
           return `claude-task:${task.id}:${y}-${m}-${d}`;
         }
+        if (task.engineType === 'pi') {
+          return `pi-task:${task.id}:${y}-${m}-${d}`;
+        }
         return `agent:${task.agentId ?? 'main'}:cron:${task.id}:${y}-${m}-${d}`;
       };
 
@@ -351,8 +354,9 @@ export default function MyTask() {
     async (input: TaskCreateInputWithRun) => {
       const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, input.engineType);
       const isClaude = input.engineType === 'claude';
+      const needsWorkspace = isClaude || input.engineType === 'pi';
       try {
-        if (isClaude && !selectedAgent?.id) {
+        if (needsWorkspace && !selectedAgent?.id) {
           throw new Error(
             editingJob
               ? t('myTask.error.claudeAgentNoWorkspaceUpdate')
@@ -369,16 +373,18 @@ export default function MyTask() {
           myArtifactFolderPath: input.myArtifactFolderPath ?? null,
           sharedArtifactFolderPath: input.sharedArtifactFolderPath ?? null,
         };
-        const claudeFields = isClaude
+        const runtimeFields = needsWorkspace
           ? {
               workspacePath: input.claudeWorkspacePath || selectedAgent?.workspace || null,
-              permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
+              permissionProfile: input.engineType === 'pi'
+                ? 'workspace-write' as const
+                : input.claudePermissionProfile || 'dangerous-bypass',
             }
           : {};
         if (editingJob) {
           await updateJob(editingJob.id, {
             ...base,
-            ...claudeFields,
+            ...runtimeFields,
           });
           toast.success(t('myTask.toast.updated'));
         } else {
@@ -387,7 +393,7 @@ export default function MyTask() {
             enabled: input.enabled,
             engineType: input.engineType,
             agentId: selectedAgent?.id || 'main',
-            ...claudeFields,
+            ...runtimeFields,
           });
           toast.success(t('myTask.toast.created'));
         }

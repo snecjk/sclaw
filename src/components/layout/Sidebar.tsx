@@ -980,7 +980,9 @@ export function Sidebar() {
 
       const state = useChatStore.getState();
       const currentSession = state.sessions.find((session) => session.key === state.currentSessionKey);
-      const shouldLoadHistory = isGatewayRunning || currentSession?.engineType === 'claude';
+      const shouldLoadHistory = isGatewayRunning
+        || currentSession?.engineType === 'claude'
+        || currentSession?.engineType === 'pi';
       if (!shouldLoadHistory) {
         return;
       }
@@ -1114,7 +1116,11 @@ export function Sidebar() {
         updatedAt: existing?.updatedAt
           ?? (typeof activityMs === 'number' && Number.isFinite(activityMs) ? activityMs : undefined),
         engineType: existing?.engineType
-          ?? (row.sessionType === 'claude_task' ? 'claude' as const : 'openclaw' as const),
+          ?? (row.sessionType === 'claude_task'
+            ? 'claude' as const
+            : row.sessionKey.startsWith('pi-task:')
+              ? 'pi' as const
+              : 'openclaw' as const),
         model: existing?.model,
         thinkingLevel: existing?.thinkingLevel,
         spawnedBy: existing?.spawnedBy,
@@ -1126,6 +1132,7 @@ export function Sidebar() {
   const normalSessions = useMemo(
     () => visibleSessions.filter((s) => (
       !isAnyCronSessionKey(s.key)
+      && !s.key.startsWith('pi-task:')
       && !parseClaudeScheduledTaskRunSessionKey(s.key)
       && !parseClaudeScheduledTaskSessionKey(s.key)  // excludes base & dated
     )),
@@ -1190,6 +1197,13 @@ export function Sidebar() {
           taskId: catalogRow.taskId,
           sessions: [],
         };
+      } else if (catalogRow?.sessionType === 'scheduled_task' && catalogRow.taskId && session.key.startsWith('pi-task:')) {
+        draft = {
+          key: `pi-task:${catalogRow.taskId}`,
+          kind: 'cron',
+          taskId: catalogRow.taskId,
+          sessions: [],
+        };
       } else {
         // Fallback: key parse（catalog 缺 task_id 时）
         const cronParsed = parseCronSessionKey(session.key);
@@ -1211,6 +1225,11 @@ export function Sidebar() {
             taskId: claudeTaskRunParsed.taskId,
             sessions: [],
           };
+        } else if (session.key.startsWith('pi-task:')) {
+          const taskId = session.key.split(':')[1];
+          if (taskId) {
+            draft = { key: `pi-task:${taskId}`, kind: 'cron', taskId, sessions: [] };
+          }
         }
       }
 

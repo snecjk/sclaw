@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { GatewayManager } from '../gateway/manager';
 import type { NormalizedEngineEvent } from '../gateway/normalized-engine-event';
 import { getAdapterForSession } from '../engines/manager';
@@ -60,6 +60,7 @@ type SupervisorEventMap = {
 };
 
 function inferEngineType(sessionKey: string): AgentEngineType {
+  if (sessionKey.startsWith('pi:') || sessionKey.startsWith('pi-task:')) return 'pi';
   return sessionKey.startsWith('claude:') || sessionKey.startsWith('claude-task:')
     ? 'claude'
     : 'openclaw';
@@ -69,6 +70,15 @@ function getRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+function engineEventSourceIdentity(event: NormalizedEngineEvent): string {
+  if (event.seq != null) return String(event.seq);
+  const serialized = JSON.stringify('message' in event ? event.message : event) ?? '';
+  // Engines such as Pi do not supply a sequence number. Hash the complete
+  // snapshot: truncating the JSON makes every delta after a long thinking
+  // prefix look identical and silently drops the rest of the live turn.
+  return createHash('sha256').update(serialized).digest('base64url');
 }
 
 function messageOccurredAt(message: Record<string, unknown> | null): number {
@@ -147,6 +157,7 @@ function eventTypeForEngineEvent(event: NormalizedEngineEvent): CanonicalChatEve
     case 'turn.completed': return 'run.completed';
     case 'turn.failed': return 'run.failed';
     case 'turn.aborted': return 'run.aborted';
+    case 'turn.interrupted': return 'run.interrupted';
   }
 }
 
@@ -381,7 +392,6 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     };
     await this.publish(snapshot, 'run.dispatching', dispatchPayload, true);
     this.scheduleHardDeadline(input.sessionKey, snapshot.epoch);
-    this.scheduleHistoryPoll(input.sessionKey);
     return { kind: 'created', snapshot: this.snapshots.get(input.sessionKey) as ChatRuntimeSnapshot };
   }
 
@@ -425,6 +435,14 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       acceptanceResult: input.result ?? null,
       error: null,
     }, 'run.accepted', input.result, true);
+    const accepted = this.snapshots.get(input.sessionKey);
+    if (accepted && !isTerminalChatRunPhase(accepted.phase)) {
+      // Do not inspect history while the send is still dispatching. A slow
+      // pre-dispatch step (notably Memory injection) otherwise lets the poll
+      // observe the previous completed engine turn and terminate the new epoch
+      // before the engine has even accepted its prompt.
+      this.scheduleHistoryPoll(input.sessionKey);
+    }
   }
 
   async rejected(input: {
@@ -515,9 +533,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     if (!sessionKey) return;
     if (isWorkflowOpenClawSessionKey(sessionKey)) return;
     const eventType = eventTypeForEngineEvent(event);
-    const sourceIdentity = event.seq != null
-      ? String(event.seq)
-      : String(JSON.stringify('message' in event ? event.message : event) ?? '').slice(0, 2_000);
+    const sourceIdentity = engineEventSourceIdentity(event);
     const dedupeKey = `${sessionKey}\u0000${event.runId ?? ''}\u0000${sourceIdentity}\u0000${eventType}`;
     if (this.seenEvents.has(dedupeKey)) return;
     this.seenEvents.add(dedupeKey);
@@ -551,6 +567,9 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     if (event.type === 'turn.failed') {
       this.scheduleErrorFinalization(sessionKey, event.runId ?? current.runId, event.errorMessage);
       return;
+    }
+    if (event.type === 'turn.interrupted') {
+      this.clearErrorFinalization(sessionKey);
     }
     this.clearErrorFinalization(sessionKey);
     const payload = 'message' in event ? event.message : getRecord(event)?.runtimeResult;

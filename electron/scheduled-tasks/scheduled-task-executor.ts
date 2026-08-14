@@ -136,7 +136,12 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
       deliver: true,
       idempotencyKey: run.idempotencyKey,
       systemPromptAppend,
-      permissionProfile: task.permissionProfile ?? undefined,
+      permissionProfile: task.engineType === 'pi' ? 'workspace-write' : task.permissionProfile ?? undefined,
+      allowedRoots: task.engineType === 'pi'
+        ? [task.workspacePath, task.myArtifactFolderPath, task.sharedArtifactFolderPath]
+            .filter((value): value is string => Boolean(value?.trim()))
+        : undefined,
+      cwdOverride: task.engineType === 'pi' ? task.workspacePath ?? undefined : undefined,
       engineType: adapter.type,
       runtimePolicy: {
         origin: 'scheduled_task',

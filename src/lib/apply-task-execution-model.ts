@@ -6,7 +6,7 @@ export function applyTaskExecutionModelToChatSession(opts: {
   sessionKey: string;
   model?: string | null;
   agentId?: string | null;
-  engineType?: 'openclaw' | 'claude';
+  engineType?: 'openclaw' | 'claude' | 'pi';
 }): void {
   const sessionKey = opts.sessionKey.trim();
   const model = opts.model?.trim();

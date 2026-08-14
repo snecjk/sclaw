@@ -148,6 +148,15 @@ describe('chat runtime repository', () => {
     });
   });
 
+  it('persists Pi as an immutable runtime engine snapshot', async () => {
+    await repository.upsert(snapshot({
+      sessionKey: 'pi:main:session-1',
+      engineType: 'pi',
+    }));
+    await expect(repository.getByIdempotencyKey('pi:main:session-1', 'message-1'))
+      .resolves.toMatchObject({ engineType: 'pi' });
+  });
+
   it('prunes terminal overflow with SQLite-compatible limit and offset syntax', async () => {
     await Promise.all(Array.from({ length: 501 }, (_, index) => repository.upsert(snapshot({
       sessionKey: `agent:main:terminal-${index}`,

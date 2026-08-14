@@ -2,8 +2,9 @@ import type { GatewayManager } from '../gateway/manager';
 import type { AgentMemoryContextBlocks } from '../../shared/agent-memory-prompt';
 import type { ChatRuntimePolicy } from '../../shared/chat-runtime-protocol';
 import type { ExecutionSnapshot } from './execution-snapshot';
+import type { AgentEngineType } from '../../shared/agent-engine';
 
-export type AgentEngineType = 'openclaw' | 'claude';
+export type { AgentEngineType } from '../../shared/agent-engine';
 
 export interface EngineSessionSummary {
   key: string;
@@ -47,6 +48,10 @@ export interface EngineSendParams {
   runtimePolicy?: ChatRuntimePolicy;
   /** 定时任务执行时由 executor 透传；交互式 chat 不设（undefined）以保留引擎默认。 */
   permissionProfile?: EnginePermissionProfile;
+  /** 定时任务允许访问的根目录；仅受限运行时使用，交互式会话不设置。 */
+  allowedRoots?: string[];
+  /** 受限任务的固定 cwd；普通对话不设置。 */
+  cwdOverride?: string;
 }
 
 export interface EngineSendWithMediaParams extends EngineSendParams {
@@ -58,7 +63,16 @@ export interface EngineAbortParams {
 }
 
 export interface EngineAdapterContext {
-  gatewayManager: GatewayManager;
+  gatewayManager?: GatewayManager;
+  /** 引擎无关事件出口；迁移期未设置时 adapter 可复用 gatewayManager。 */
+  eventSink?: { emit(event: string, payload: unknown): unknown };
+  /** Main 提供的通用运行时服务集合，避免 adapter 强依赖 Gateway。 */
+  runtimeServices?: Record<string, unknown>;
+}
+
+export function requireGatewayManager(ctx: EngineAdapterContext): GatewayManager {
+  if (!ctx.gatewayManager) throw new Error('ENGINE_RUNTIME_UNAVAILABLE: GatewayManager is required');
+  return ctx.gatewayManager;
 }
 
 export interface EngineRuntimeInspection {
@@ -88,7 +102,11 @@ export interface EngineAdapter {
     phase?: string;
   }): 'completed' | 'awaiting_transcript' | 'progress';
   prepareMemoryInjection(params: EngineSendParams, memory: AgentMemoryContextBlocks): EngineSendParams;
-  abortRun(ctx: EngineAdapterContext, params: EngineAbortParams): Promise<{ success: boolean; error?: string }>;
+  abortRun(ctx: EngineAdapterContext, params: EngineAbortParams): Promise<{
+    success: boolean;
+    error?: string;
+    result?: { aborted?: boolean; runIds?: unknown[] };
+  }>;
   getHistory(
     ctx: EngineAdapterContext,
     params: { sessionKey: string; limit: number },

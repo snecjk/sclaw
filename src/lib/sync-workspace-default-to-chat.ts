@@ -146,18 +146,32 @@ export async function persistSessionModelToGateway(opts: {
   return persisted;
 }
 
-/** Shared helpers for toolbar model switch (OpenClaw / Claude). */
-export async function applyClaudeSessionModel(params: {
+/** Shared entry point for session-scoped model switches across all engines. */
+export async function applySessionModel(params: {
   currentSessionKey: string;
   modelId: string;
   accountId?: string;
   currentAgentId: string;
+  engineType: ChatEngineType;
 }): Promise<string> {
   return persistSessionModelToGateway({
     sessionKey: params.currentSessionKey,
     model: params.modelId,
     accountId: params.accountId?.trim() || '',
     agentId: params.currentAgentId,
+    engineType: params.engineType,
+  });
+}
+
+/** Compatibility helpers for existing engine-specific callers. */
+export async function applyClaudeSessionModel(params: {
+  currentSessionKey: string;
+  modelId: string;
+  accountId?: string;
+  currentAgentId: string;
+}): Promise<string> {
+  return applySessionModel({
+    ...params,
     engineType: 'claude',
   });
 }
@@ -168,12 +182,21 @@ export async function applyOpenClawSessionModel(params: {
   accountId?: string;
   currentAgentId: string;
 }): Promise<string> {
-  return persistSessionModelToGateway({
-    sessionKey: params.currentSessionKey,
-    model: params.modelId,
-    accountId: params.accountId?.trim() || '',
-    agentId: params.currentAgentId,
+  return applySessionModel({
+    ...params,
     engineType: 'openclaw',
+  });
+}
+
+export async function applyPiSessionModel(params: {
+  currentSessionKey: string;
+  modelId: string;
+  accountId?: string;
+  currentAgentId: string;
+}): Promise<string> {
+  return applySessionModel({
+    ...params,
+    engineType: 'pi',
   });
 }
 

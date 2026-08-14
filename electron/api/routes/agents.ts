@@ -181,7 +181,7 @@ export async function handleAgentRoutes(
 
     if (parts.length === 2 && parts[1] === 'engine') {
       try {
-        const body = await parseJsonBody<{ engineType: 'openclaw' | 'claude' }>(req);
+        const body = await parseJsonBody<{ engineType: 'openclaw' | 'claude' | 'pi' }>(req);
         const agentId = decodeURIComponent(parts[0]);
         const snapshot = await setAgentEngineType(agentId, body.engineType);
         sendJson(res, 200, { success: true, ...snapshot });

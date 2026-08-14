@@ -43,12 +43,12 @@ export function shouldStartNewDingTalkSession(input: {
  */
 export function shouldForceNewDingTalkSessionForEngine(input: {
   forceNew?: boolean;
-  boundEngineType: 'claude' | 'openclaw';
-  registeredEngineType?: 'claude' | 'openclaw' | null;
+  boundEngineType: 'claude' | 'openclaw' | 'pi';
+  registeredEngineType?: 'claude' | 'openclaw' | 'pi' | null;
 }): boolean {
   if (input.forceNew) return true;
   const registered = input.registeredEngineType;
-  if (registered === 'claude' || registered === 'openclaw') {
+  if (registered === 'claude' || registered === 'openclaw' || registered === 'pi') {
     return registered !== input.boundEngineType;
   }
   return false;

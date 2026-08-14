@@ -39,6 +39,7 @@ import type { GatewayManager } from '../gateway/manager';
 import { logger } from '../utils/logger';
 import { getChatRuntimeSupervisor } from '../services/chat-runtime-supervisor';
 import type { CanonicalChatEvent } from '../../shared/chat-runtime-protocol';
+import { parseAgentEngineType } from '../../shared/agent-engine';
 
 /**
  * 引擎无关的定时报表层。在 `ScheduledTaskScheduler`（触发 + claim 单飞）之上，
@@ -86,6 +87,13 @@ export class ScheduledTaskService {
   }
 
   async updateTask(id: string, input: UpdateScheduleTaskInput): Promise<ScheduleTask | null> {
+    const existing = await this.taskRepo.getById(id);
+    if (existing?.engineType === 'pi' && input.workflowCode?.trim()) {
+      throw new Error('UNSUPPORTED_ENGINE: Pi does not support workflows');
+    }
+    if (existing?.engineType === 'pi' && input.workspacePath !== undefined && !input.workspacePath?.trim()) {
+      throw new Error('Pi scheduled tasks require workspacePath');
+    }
     if (input.cronExpr !== undefined) {
       validateCronExpr(input.cronExpr);
     }
@@ -101,7 +109,9 @@ export class ScheduledTaskService {
     if (input.timeoutSec !== undefined && input.timeoutSec !== null && input.timeoutSec < 1) {
       throw new Error('timeoutSec must be a positive number of seconds');
     }
-    const updated = await this.taskRepo.update(id, input);
+    const updated = await this.taskRepo.update(id, existing?.engineType === 'pi'
+      ? { ...input, permissionProfile: 'workspace-write' }
+      : input);
     if (!updated) return null;
     await this.scheduler.refreshSchedule();
     return this.taskRepo.getById(id) ?? updated;
@@ -315,11 +325,20 @@ export class ScheduledTaskService {
   // ---- 内部：校验 / 默认值 / session key ----
 
   private validateTaskInput(input: CreateScheduleTaskInput): void {
+    if (!parseAgentEngineType(input.engineType)) {
+      throw new Error(`UNSUPPORTED_ENGINE: ${String(input.engineType)}`);
+    }
     this.assertRequired(input.name, 'name');
     this.assertRequired(input.prompt, 'prompt');
     this.assertRequired(input.agentId, 'agentId');
     this.assertRequired(input.cronExpr, 'cronExpr');
     validateCronExpr(input.cronExpr);
+    if (input.engineType === 'pi' && input.workflowCode?.trim()) {
+      throw new Error('UNSUPPORTED_ENGINE: Pi does not support workflows');
+    }
+    if (input.engineType === 'pi' && !input.workspacePath?.trim()) {
+      throw new Error('Pi scheduled tasks require workspacePath');
+    }
     if (input.permissionProfile != null) {
       this.assertPermissionProfile(input.permissionProfile);
     }
@@ -337,6 +356,7 @@ export class ScheduledTaskService {
   private normalizeDefaults(input: CreateScheduleTaskInput): CreateScheduleTaskInput {
     return {
       ...input,
+      permissionProfile: input.engineType === 'pi' ? 'workspace-write' : input.permissionProfile,
       retryPolicy: input.retryPolicy ?? { maxAttempts: 1, backoffSec: 30 },
       failurePolicy: input.failurePolicy ?? { pauseAfterConsecutiveFailures: 3 },
     };
@@ -371,9 +391,9 @@ export class ScheduledTaskService {
 
   private buildDatedSessionKey(task: ScheduleTask, date: Date): string {
     const ymd = this.formatLocalYmd(date);
-    return task.engineType === 'claude'
-      ? `claude-task:${task.id}:${ymd}`
-      : `agent:${task.agentId}:cron:${task.id}:${ymd}`;
+    if (task.engineType === 'claude') return `claude-task:${task.id}:${ymd}`;
+    if (task.engineType === 'pi') return `pi-task:${task.id}:${ymd}`;
+    return `agent:${task.agentId}:cron:${task.id}:${ymd}`;
   }
 
   /** 本地时区 YYYY-MM-DD（内联，避免额外 util 依赖）。 */

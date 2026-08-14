@@ -27,7 +27,7 @@ import {
 } from '@/lib/chat-model-options';
 import { hostApiFetch } from '@/lib/host-api';
 import {
-  applyClaudeSessionModel,
+  applySessionModel,
   applyOpenClawSessionModel,
 } from '@/lib/sync-workspace-default-to-chat';
 import { isMainChatHomePath } from '@/lib/main-chat-navigation';
@@ -211,10 +211,24 @@ function isStoBuiltinModelOption(option: ChatModelOption | undefined): boolean {
   return option?.isBuiltin === true && option.accountId === 'sto';
 }
 
+function applySessionModelForEngine(params: {
+  currentSessionKey: string;
+  modelId: string;
+  accountId?: string;
+  currentAgentId: string;
+  engineType: 'openclaw' | 'claude' | 'pi';
+}): Promise<string> {
+  return applySessionModel({
+    ...params,
+    engineType: params.engineType,
+  });
+}
+
 /** Sync catalog then remap session to workspace default (delisted STO models). */
 async function repairStoCatalogAndRemapToWorkspaceDefault(params: {
   currentSessionKey: string;
   currentAgentId: string;
+  engineType: 'openclaw' | 'claude' | 'pi';
 }): Promise<string> {
   await hostApiFetch('/api/sto-model-sync', { method: 'POST' });
   await useProviderStore.getState().refreshProviderSnapshot();
@@ -233,11 +247,12 @@ async function repairStoCatalogAndRemapToWorkspaceDefault(params: {
   const options = buildChatModelOptions(providerItems);
   const option = options.find((item) => item.modelId === fallbackModelId)
     ?? options.find((item) => item.normalizedId === normalizeModelIdForChat(fallbackModelId));
-  return applyOpenClawSessionModel({
+  return applySessionModelForEngine({
     currentSessionKey: params.currentSessionKey,
     modelId: option?.modelId ?? fallbackModelId,
     accountId: option?.accountId,
     currentAgentId: params.currentAgentId,
+    engineType: params.engineType,
   });
 }
 
@@ -322,8 +337,8 @@ export function ChatEngineSelector({
     currentSessionKey,
     { messageCount: messages.length },
   );
-  const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
-  const currentSessionEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : 'OpenClaw';
+  const agentDefaultEngineLabel = agentDefaultEngineType === 'claude' ? 'Claude Agent' : agentDefaultEngineType === 'pi' ? 'Pi Agent' : 'OpenClaw';
+  const currentSessionEngineLabel = currentEngineType === 'claude' ? 'Claude Agent' : currentEngineType === 'pi' ? 'Pi Agent' : 'OpenClaw';
   const displayEngineLabel = canSwitchEngine
     ? agentDefaultEngineLabel
     : currentSessionEngineLabel;
@@ -333,7 +348,7 @@ export function ChatEngineSelector({
 
   const [engineSaving, setEngineSaving] = useState(false);
 
-  const handleEngineSwitch = async (engineType: 'openclaw' | 'claude') => {
+  const handleEngineSwitch = async (engineType: 'openclaw' | 'claude' | 'pi') => {
     if (!canSwitchEngine || engineType === agentDefaultEngineType) return;
     setEngineSaving(true);
     try {
@@ -352,7 +367,7 @@ export function ChatEngineSelector({
         });
       }
       await fetchAgents();
-      toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : 'OpenClaw'} 引擎`);
+      toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : engineType === 'pi' ? 'Pi Agent' : 'OpenClaw'} 引擎`);
     } catch (err) {
       toast.error(`切换引擎失败: ${String(err)}`);
     } finally {
@@ -367,9 +382,10 @@ export function ChatEngineSelector({
     : isSclawBrowserEmbedChatSessionKey(currentSessionKey)
       ? '历史会话不可切换引擎（可切换模型）'
       : '当前会话不可切换引擎';
-  const engineOptions: SelectorMenuOption<'openclaw' | 'claude'>[] = [
+  const engineOptions: SelectorMenuOption<'openclaw' | 'claude' | 'pi'>[] = [
     { key: 'openclaw', value: 'openclaw', label: 'OpenClaw' },
     { key: 'claude', value: 'claude', label: 'Claude Agent' },
+    { key: 'pi', value: 'pi', label: 'Pi Agent' },
   ];
 
   if (variant === 'inline') {
@@ -563,7 +579,7 @@ export function ChatModelSelector({
       && !isTaskExecutionSessionKey(currentSessionKey)
       && !delistRemapInFlight.current
       && !remappedDelistedSessionKeys.has(currentSessionKey)
-      && (currentEngineType === 'claude' ? Boolean(currentAgentId) : isGatewayRunning)
+      && (currentEngineType === 'openclaw' ? isGatewayRunning : Boolean(currentAgentId))
     ) {
       const fallbackRaw = getWorkspaceDefaultRawModelId(accounts, defaultAccountId);
       if (!fallbackRaw) return;
@@ -571,19 +587,13 @@ export function ChatModelSelector({
       delistRemapInFlight.current = true;
       const option = modelOptions.find((item) => item.modelId === fallbackRaw)
         ?? modelOptions.find((item) => item.normalizedId === normalizeModelIdForChat(fallbackRaw));
-      const persist = currentEngineType === 'claude'
-        ? applyClaudeSessionModel({
-          currentSessionKey,
-          modelId: option?.modelId ?? fallbackRaw,
-          accountId: option?.accountId,
-          currentAgentId,
-        })
-        : applyOpenClawSessionModel({
-          currentSessionKey,
-          modelId: option?.modelId ?? fallbackRaw,
-          accountId: option?.accountId,
-          currentAgentId,
-        });
+      const persist = applySessionModelForEngine({
+        currentSessionKey,
+        modelId: option?.modelId ?? fallbackRaw,
+        accountId: option?.accountId,
+        currentAgentId,
+        engineType: currentEngineType,
+      });
       void persist
         .then((persisted) => {
           useChatStore.setState((state) => ({
@@ -697,12 +707,13 @@ export function ChatModelSelector({
 
     setModelSaving(true);
     try {
-      if (currentEngineType === 'claude' && currentAgentId) {
-        const persisted = await applyClaudeSessionModel({
+      if ((currentEngineType === 'claude' || currentEngineType === 'pi') && currentAgentId) {
+        const persisted = await applySessionModelForEngine({
           currentSessionKey,
           modelId: rawModelId,
           accountId: option?.accountId,
           currentAgentId,
+          engineType: currentEngineType,
         });
         await fetchAgents();
         useChatStore.setState((state) => ({
@@ -729,6 +740,7 @@ export function ChatModelSelector({
           appliedModelId = await repairStoCatalogAndRemapToWorkspaceDefault({
             currentSessionKey,
             currentAgentId,
+            engineType: currentEngineType,
           });
           toast.message(t('toolbar.modelRemappedToDefault', {
             model: normalizeModelIdForChat(appliedModelId) || appliedModelId,

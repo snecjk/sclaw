@@ -12,7 +12,7 @@ export type SessionListEntry = {
   key: string;
   label?: string;
   displayName?: string;
-  engineType?: 'claude' | 'openclaw';
+  engineType?: 'claude' | 'openclaw' | 'pi';
   model?: string;
   updatedAt?: number;
 };

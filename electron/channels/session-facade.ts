@@ -43,7 +43,7 @@ export async function createOrGetSession(
   // Channel 会话只用 base agent，避免 sessionKey / currentAgentId 带上 proj-… 从而命中输入框项目名规则
   const agentId = resolveChannelBaseAgentId(params.agentId);
   const engineType: AgentEngineType =
-    params.engineType === 'openclaw' || params.engineType === 'claude'
+    params.engineType === 'openclaw' || params.engineType === 'claude' || params.engineType === 'pi'
       ? params.engineType
       : 'claude';
   const now = new Date();

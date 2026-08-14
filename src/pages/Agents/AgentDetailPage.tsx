@@ -291,7 +291,7 @@ function InfoTab({ agent }: { agent: AgentSummary }) {
     } finally { setSavingName(false); }
   };
 
-  const handleSetEngine = async (engineType: 'openclaw' | 'claude') => {
+  const handleSetEngine = async (engineType: 'openclaw' | 'claude' | 'pi') => {
     if ((agent.engineType ?? 'openclaw') === engineType) return;
     setSavingEngine(true);
     try {
@@ -300,7 +300,7 @@ function InfoTab({ agent }: { agent: AgentSummary }) {
         body: JSON.stringify({ engineType }),
       });
       await fetchAgents();
-      toast.success(`已切换到 ${engineType === 'claude' ? 'Claude Agent' : 'OpenClaw'} 引擎`);
+      toast.success(`已切换到 ${engineType === 'claude' ? 'Claude Agent' : engineType === 'pi' ? 'Pi Agent' : 'OpenClaw'} 引擎`);
     } catch (err) {
       toast.error(`切换引擎失败: ${String(err)}`);
     } finally {
@@ -383,9 +383,18 @@ function InfoTab({ agent }: { agent: AgentSummary }) {
             >
               Claude Agent
             </Button>
+            <Button
+              type="button"
+              variant={(agent.engineType ?? 'openclaw') === 'pi' ? 'default' : 'outline'}
+              disabled={savingEngine}
+              onClick={() => void handleSetEngine('pi')}
+              className="h-9 rounded-md px-4 text-[13px]"
+            >
+              Pi Agent
+            </Button>
           </div>
           <p className="text-[12px] text-muted-foreground">
-            Claude 适配器骨架已接入；当前仓库策略禁止我自动安装 SDK，切到 Claude 后需要你手动补依赖再完成 adapter。
+            Pi 普通对话继承当前用户权限；定时任务使用受限目录策略。Pi 暂不支持工作流。
           </p>
         </div>
       </div>

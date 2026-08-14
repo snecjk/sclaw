@@ -117,6 +117,101 @@ describe('main chat runtime supervisor', () => {
     }
   });
 
+  it('does not dedupe unsequenced Pi snapshots that differ after a long thinking prefix', async () => {
+    vi.useFakeTimers();
+    try {
+      engine.getAdapterForSession.mockResolvedValue({
+        chatCapabilities: { requiresHistoryProjection: true },
+        classifyFinalMessage: () => 'progress',
+      });
+      const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+      const events: CanonicalChatEvent[] = [];
+      supervisor.on('event', (value) => events.push(value));
+      await supervisor.begin({
+        sessionKey: 'pi:main:long-follow-up',
+        idempotencyKey: 'message-long-follow-up',
+        engineType: 'pi',
+      });
+      await supervisor.accepted({
+        sessionKey: 'pi:main:long-follow-up',
+        idempotencyKey: 'message-long-follow-up',
+        runId: 'pi-run-2',
+        engineType: 'pi',
+        result: { runId: 'pi-run-2' },
+      });
+      const thinking = 't'.repeat(2_200);
+      await supervisor.handleEngineEvent({
+        type: 'message.delta',
+        sessionKey: 'pi:main:long-follow-up',
+        runId: 'pi-run-2',
+        message: { role: 'assistant', content: [{ type: 'thinking', thinking }, { type: 'text', text: 'first' }] },
+      });
+      await supervisor.handleEngineEvent({
+        type: 'message.delta',
+        sessionKey: 'pi:main:long-follow-up',
+        runId: 'pi-run-2',
+        message: { role: 'assistant', content: [{ type: 'thinking', thinking }, { type: 'text', text: 'second' }] },
+      });
+
+      expect(events.filter((event) => event.type === 'message.delta')).toHaveLength(2);
+      expect(events.at(-1)?.payload).toMatchObject({
+        content: [{ type: 'thinking', thinking }, { type: 'text', text: 'second' }],
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not reconcile the previous Pi transcript before a slow dispatch is accepted', async () => {
+    vi.useFakeTimers();
+    try {
+      const inspectRun = vi.fn(async () => ({
+        status: 'completed' as const,
+        runId: 'previous-run',
+        transcriptRevision: 'previous-stable',
+        currentTurnMessages: [
+          { role: 'user', content: 'previous question', timestamp: 1 },
+          { role: 'assistant', content: 'previous answer', timestamp: 2 },
+        ],
+      }));
+      engine.getAdapterForSession.mockResolvedValue({
+        chatCapabilities: { requiresHistoryProjection: true },
+        inspectRun,
+      });
+      const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+      const events: CanonicalChatEvent[] = [];
+      supervisor.on('event', (value) => events.push(value));
+
+      await supervisor.begin({
+        sessionKey: 'pi:main:slow-memory-dispatch',
+        idempotencyKey: 'follow-up-message',
+        engineType: 'pi',
+        displayText: 'follow up',
+      });
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      expect(inspectRun).not.toHaveBeenCalled();
+      expect(supervisor.get('pi:main:slow-memory-dispatch')).toMatchObject({
+        phase: 'dispatching', runId: null,
+      });
+
+      await supervisor.accepted({
+        sessionKey: 'pi:main:slow-memory-dispatch',
+        idempotencyKey: 'follow-up-message',
+        runId: 'new-run',
+        engineType: 'pi',
+        result: { runId: 'new-run' },
+      });
+
+      expect(supervisor.get('pi:main:slow-memory-dispatch')).toMatchObject({
+        phase: 'running', runId: 'new-run',
+      });
+      expect(events.map((event) => event.type)).toEqual(['run.dispatching', 'run.accepted']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('serializes transcript projection with a live event waiting on its adapter', async () => {
     vi.useFakeTimers();
     try {

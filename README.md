@@ -306,6 +306,33 @@ pnpm run comms:compare
 ```
 
 `comms-regression` in CI enforces required scenarios and threshold checks.
+
+### Pi Agent engine (phase 1)
+
+SClaw can run `@earendil-works/pi-coding-agent@0.84.1` in a persistent Electron
+`utilityProcess` without opening a network port. Pi chat sessions use the selected
+workspace as their default working directory and otherwise inherit the desktop
+user's operating-system permissions, including access to files outside the
+workspace when requested.
+
+Pi scheduled tasks reuse the canonical scheduler and chat runtime, but restrict
+file tools to the task workspace and configured personal/shared artifact folders.
+The Bash restriction is an application policy, not an operating-system sandbox.
+Pi does not support workflows in phase 1. It loads only SClaw-managed enabled
+global and agent-scoped skills projected from the engine-neutral skills store into
+Pi-owned `~/.stoclaw/pi/skills` and `~/.stoclaw/pi/agents/{agentId}/skills`
+directories. It does not read OpenClaw or Claude skill directories. Project `.pi`
+packages, project-local skill discovery,
+extensions, MCP, prompt templates, and subagents remain disabled. Provider credentials
+are not persisted in Pi auth files. Set
+`STO_PI_ENGINE_ENABLED=false` to reject new Pi runs without deleting Pi sessions.
+On worker startup SClaw syncs its Pi-specific `resources/context/PI.md` into the
+managed `~/.stoclaw/pi/AGENTS.md`; Pi loads only this managed context and does not
+discover project or parent-directory context files.
+Stopping a Pi run signals the official session abort immediately, publishes the
+canonical aborted state without waiting for tool cleanup, and keeps that session
+serialized until the underlying model/tool operation is fully idle.
+
 ### Tech Stack
 
 | Layer | Technology |

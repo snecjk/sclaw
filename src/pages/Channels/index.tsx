@@ -56,7 +56,7 @@ interface ChannelGroupItem {
 interface AgentItem {
   id: string;
   name: string;
-  engineType?: 'claude' | 'openclaw';
+  engineType?: 'claude' | 'openclaw' | 'pi';
 }
 
 interface DeleteTarget {
@@ -185,14 +185,14 @@ export function Channels() {
   const [channelGroups, setChannelGroups] = useState<ChannelGroupItem[]>([]);
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [dingTalkBinding, setDingTalkBinding] = useState<{
-    engineType?: 'claude' | 'openclaw' | null;
+    engineType?: 'claude' | 'openclaw' | 'pi' | null;
     agentId?: string | null;
     /** Hub 本机绑定状态 */
     bindStatus?: string | null;
     /** 被其他设备抢走时的提示（打开频道页时展示在条目副文案） */
     replaceHint?: 'other_device' | 'unbound' | null;
   } | null>(null);
-  const [, setPendingDingTalkEngine] = useState<'claude' | 'openclaw' | null>(null);
+  const [, setPendingDingTalkEngine] = useState<'claude' | 'openclaw' | 'pi' | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [showDingTalkHubModal, setShowDingTalkHubModal] = useState(false);
   const [selectedChannelType, setSelectedChannelType] = useState<ChannelType | null>(null);
@@ -239,7 +239,7 @@ export function Channels() {
       const remote = dingTalkStatusRes?.success ? dingTalkStatusRes.remote : null;
       const localDeviceId = dingTalkStatusRes?.success ? dingTalkStatusRes.deviceId : undefined;
       const engineType =
-        local?.engineType === 'openclaw' || local?.engineType === 'claude'
+        local?.engineType === 'openclaw' || local?.engineType === 'claude' || local?.engineType === 'pi'
           ? local.engineType
           : null;
       let replaceHint: 'other_device' | 'unbound' | null = null;
@@ -340,7 +340,7 @@ export function Channels() {
   };
 
   const handleDingTalkBindingChange = async (next: {
-    engineType: 'claude' | 'openclaw';
+    engineType: 'claude' | 'openclaw' | 'pi';
     agentId: string;
   }) => {
     if (!next.agentId) {
@@ -368,7 +368,9 @@ export function Channels() {
     try {
       if (channelType === 'dingtalk') {
         const agent = agents.find((item) => item.id === agentId);
-        const engineType = agent?.engineType === 'openclaw' ? 'openclaw' : 'claude';
+        const engineType = agent?.engineType === 'openclaw' || agent?.engineType === 'pi'
+          ? agent.engineType
+          : 'claude';
         await handleDingTalkBindingChange({ engineType, agentId });
         return;
       } else if (!agentId) {
@@ -502,10 +504,10 @@ export function Channels() {
                       ? 'Claude'
                       : null;
                 const boundAgentName = boundAgent?.name;
-                const resolveAgentEngine = (agent: AgentItem): 'claude' | 'openclaw' =>
-                  agent.engineType === 'claude' ? 'claude' : 'openclaw';
-                const dingTalkEngine: 'claude' | 'openclaw' =
-                  boundEngineType === 'openclaw' ? 'openclaw' : 'claude';
+                const resolveAgentEngine = (agent: AgentItem): 'claude' | 'openclaw' | 'pi' =>
+                  agent.engineType === 'claude' || agent.engineType === 'pi' ? agent.engineType : 'openclaw';
+                const dingTalkEngine: 'claude' | 'openclaw' | 'pi' =
+                  boundEngineType === 'openclaw' || boundEngineType === 'pi' ? boundEngineType : 'claude';
                 const mainAgent = agents.find((agent) => agent.id === 'main');
                 const engineMatchedAgents = agents.filter(
                   (agent) => resolveAgentEngine(agent) === dingTalkEngine,
@@ -584,10 +586,11 @@ export function Channels() {
                               options={[
                                 { value: 'claude', label: 'Claude' },
                                 { value: 'openclaw', label: 'OpenClaw' },
+                                { value: 'pi', label: 'Pi Agent' },
                               ]}
                               onChange={(nextValue) => {
                                 const nextEngine =
-                                  nextValue === 'openclaw' ? 'openclaw' : 'claude';
+                                  nextValue === 'openclaw' || nextValue === 'pi' ? nextValue : 'claude';
                                 const matched = agents.filter(
                                   (agent) => resolveAgentEngine(agent) === nextEngine,
                                 );

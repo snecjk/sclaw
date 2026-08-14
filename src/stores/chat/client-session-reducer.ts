@@ -28,7 +28,7 @@ export interface ClientRunState {
   phase: ChatRunPhase;
   runId: string | null;
   idempotencyKey: string | null;
-  engineType: 'openclaw' | 'claude';
+  engineType: 'openclaw' | 'claude' | 'pi';
   epoch: number;
   sequence: number;
   startedAt: number;

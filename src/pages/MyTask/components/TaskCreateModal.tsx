@@ -35,7 +35,7 @@ import { useAuthStore, isSiteUser } from '@/stores/auth';
 import type { DataCenterEntry, DataCenterSpace, DataCenterSpaceType } from '@/types/data-center';
 import { toast } from 'sonner';
 
-type TaskEngineType = 'openclaw' | 'claude';
+type TaskEngineType = 'openclaw' | 'claude' | 'pi';
 
 export type TaskCreateInputWithRun = CronJobCreateInput & {
   engineType: TaskEngineType;
@@ -692,6 +692,9 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
 
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState<string>(init.selectedWorkflow);
+  useEffect(() => {
+    if (engineType === 'pi' && selectedWorkflow) setSelectedWorkflow('');
+  }, [engineType, selectedWorkflow]);
   const workflowRef = useRef<HTMLDivElement>(null);
 
   const workflowDisabled = !!selectedWorkflow;
@@ -925,13 +928,16 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
             >
               <option value="openclaw">OpenClaw</option>
               <option value="claude">Claude Agent</option>
+              <option value="pi">Pi Agent</option>
             </select>
             <p className="text-[11.5px] text-muted-foreground">
               {isEditing
                 ? t('myTask.createModal.engineEditHint')
                 : engineType === 'claude'
                   ? t('myTask.createModal.engineClaudeHint')
-                  : t('myTask.createModal.engineOpenclawHint')}
+                  : engineType === 'pi'
+                    ? 'Pi 定时任务仅可访问工作空间与已配置的产物目录，暂不支持工作流。'
+                    : t('myTask.createModal.engineOpenclawHint')}
             </p>
           </div>
 
@@ -940,7 +946,8 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
             <div className="relative w-full" ref={workflowRef}>
               <button
                 type="button"
-                onClick={() => setWorkflowOpen(!workflowOpen)}
+                onClick={() => engineType !== 'pi' && setWorkflowOpen(!workflowOpen)}
+                disabled={engineType === 'pi'}
                 className={cn(
                   'flex h-[42px] w-full cursor-pointer items-center justify-between gap-1.5 rounded-[10px] border bg-background px-3.5 pr-2.5 text-sm font-medium outline-none transition-colors',
                   workflowOpen ? formFieldOpenClass : cn('border-border', formFieldHoverBorderClass),

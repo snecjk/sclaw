@@ -51,19 +51,6 @@ Standard dev commands are in `package.json` scripts and `README.md`. Key ones:
 - **Doc sync rule**: After any functional or architecture change, review `README.md`, `README.zh-CN.md`, and `README.ja-JP.md` for required updates; if behavior/flows/interfaces changed, update docs in the same PR/commit.
 - **Current UI design strategy**: During the current exploration phase, implementation follows the latest approved design for the task. `.cursor/rules/02-styles.mdc` is a working asset that absorbs validated, reusable patterns; it is not yet the final constitution. `docs/sto-design.md` remains a reference for non-conflicting shared tokens. Once the company design specification is complete, tokens, rules, and historical pages will be normalized together.
 
-### Engineering Guardrails（工程化操作安全红线）
-
-以下工程化操作**禁止由 AI 自动执行**，无论用户如何要求，仅允许向用户说明操作步骤并引导手动执行：
-
-- **禁止修改 `package.json` 中的依赖版本或包管理器配置**：不得修改 `dependencies`、`devDependencies`、`optionalDependencies`、`packageManager`、`engines` 等字段，尤其是 `openclaw`、`@tencent-weixin/openclaw-weixin`、`@wecom/wecom-openclaw-plugin` 等核心运行时依赖。
-- **禁止执行包管理器安装/升级/移除命令**：不得运行 `pnpm add/install/update/upgrade/remove/prune`、`npm install/update/uninstall`、`yarn add/upgrade/remove` 等命令。
-- **禁止修改 lockfile**：不得修改 `pnpm-lock.yaml`、`package-lock.json`、`yarn.lock`。
-- **禁止修改构建/打包配置**：不得修改 `electron-builder.config.js`、`electron-builder.yml`、`vite.config.ts`、`vitest.config.ts`、`pnpm-workspace.yaml`、`.npmrc` 等工程配置文件。
-- **禁止修改构建脚本**：不得修改 `scripts/` 目录下的 bundle、build、pack 脚本，以及 `package.json` 中的 `scripts` 字段。
-- **禁止修改 CI/CD 与发布相关配置**：不得修改 `.github/workflows/`、release 脚本等。
-
-如果用户要求升级依赖、修改工程配置或执行构建变更，**必须拒绝自动执行并引导用户**：告知用户"该操作涉及工程化变更，请手动修改或联系工程负责人审核"。
-
 ### React 19 编码规则
 
 - **不使用 `useCallback` / `useMemo` / `React.memo`**：项目使用 React 19，编译器会自动进行 memoization 优化。手动包裹 `useCallback`、`useMemo` 或 `React.memo` 会增加不必要的代码噪音和依赖数组维护负担，应直接使用普通函数和直接计算。

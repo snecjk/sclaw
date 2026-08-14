@@ -36,6 +36,10 @@ export type NormalizedEngineEvent =
     })
   | (EngineEventBase & {
       type: 'turn.aborted';
+    })
+  | (EngineEventBase & {
+      type: 'turn.interrupted';
+      errorMessage?: string;
     });
 
 export type LegacyChatMessagePayload = {
@@ -164,5 +168,7 @@ export function toLegacyChatMessagePayload(event: NormalizedEngineEvent): Legacy
       return legacyPayload(event, withCommonFields({ state: 'error', errorMessage: event.errorMessage }, event));
     case 'turn.aborted':
       return legacyPayload(event, withCommonFields({ state: 'aborted' }, event));
+    case 'turn.interrupted':
+      return legacyPayload(event, withCommonFields({ state: 'error', phase: 'interrupted', errorMessage: event.errorMessage }, event));
   }
 }

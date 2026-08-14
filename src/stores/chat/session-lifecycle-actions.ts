@@ -393,7 +393,7 @@ export function createSessionLifecycleActions(
             // startTask 异步时本地占位可能缺 displayName，侧栏会降级成技术 ID。
             try {
               const tasks = await hostApiFetch<
-                Array<{ id: string; name: string; engineType: 'openclaw' | 'claude' }>
+                Array<{ id: string; name: string; engineType: 'openclaw' | 'claude' | 'pi' }>
               >('/api/scheduled-tasks');
               const openclawNames = new Map<string, string>();
               const claudeNames = new Map<string, string>();
@@ -412,9 +412,12 @@ export function createSessionLifecycleActions(
                 }
                 const taskId =
                   parseClaudeScheduledTaskSessionKey(session.key)?.taskId
-                  ?? parseClaudeScheduledTaskRunSessionKey(session.key)?.taskId;
+                  ?? parseClaudeScheduledTaskRunSessionKey(session.key)?.taskId
+                  ?? (session.key.startsWith('pi-task:') ? session.key.split(':')[1] : undefined);
                 if (!taskId) continue;
-                const name = claudeNames.get(taskId);
+                const name = session.key.startsWith('pi-task:')
+                  ? openclawNames.get(taskId)
+                  : claudeNames.get(taskId);
                 if (name) session.displayName = name;
               }
             } catch {
@@ -653,7 +656,8 @@ export function createSessionLifecycleActions(
             ?? getCanonicalPrefixFromSessions(sessions)
             ?? DEFAULT_CANONICAL_PREFIX
         }:session-${Date.now()}`);
-      const newKey = createTemporaryAgentSessionKey(newAgentId);
+      const newEngineType = getAgentEngineType(newAgentId);
+      const newKey = createTemporaryAgentSessionKey(newAgentId, Date.now(), newEngineType);
       // Carry over model from home/default session or Claude agent toolbar selection
       let currentSessionModel = get().pendingNewSessionModel
         ?? (currentSessionKey !== DEFAULT_SESSION_KEY
@@ -670,7 +674,7 @@ export function createSessionLifecycleActions(
       const newSessionEntry: ChatSession = {
         key: newKey,
         label: NEW_SESSION_TEMP_LABEL,
-        engineType: getAgentEngineType(newAgentId),
+        engineType: newEngineType,
         ...(currentSessionModel ? { model: currentSessionModel } : {}),
       };
       const createdAtMs = Date.now();

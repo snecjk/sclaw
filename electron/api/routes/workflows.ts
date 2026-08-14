@@ -78,7 +78,7 @@ function requireWorkflowChatSessionKey(sessionKey: unknown): string {
  * choice while creating the immutable workflow-run snapshot.
  */
 export function resolveWorkflowStartEngine(engineType: unknown): {
-  engineType: AgentEngineType;
+  engineType: Extract<AgentEngineType, 'openclaw' | 'claude'>;
   source: 'request' | 'legacy-default';
 } {
   if (engineType === 'openclaw' || engineType === 'claude') {

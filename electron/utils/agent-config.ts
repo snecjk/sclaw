@@ -12,6 +12,8 @@ import {
 import * as logger from './logger';
 import { OPENCLAW_WECHAT_CHANNEL_TYPE, toUiChannelType } from './channel-alias';
 import { applyWeChatChannelAccountEnabled } from './channel-config';
+import { parseAgentEngineType, type AgentEngineType } from '../../shared/agent-engine';
+export type { AgentEngineType } from '../../shared/agent-engine';
 
 const MAIN_AGENT_ID = 'main';
 const MAIN_AGENT_NAME = 'Main Agent';
@@ -152,8 +154,6 @@ export interface AgentsSnapshot {
 
 // ── Agent Features (stored outside openclaw.json to avoid schema violations) ──
 
-export type AgentEngineType = 'openclaw' | 'claude';
-
 interface AgentFeatures {
   fileTransformByOSS?: Record<string, boolean>;
   engineType?: Record<string, AgentEngineType>;
@@ -167,8 +167,7 @@ function getDefaultAgentEngineType(): AgentEngineType {
 }
 
 function normalizeAgentEngineType(value: unknown, fallback: AgentEngineType = getDefaultAgentEngineType()): AgentEngineType {
-  if (value === 'claude' || value === 'openclaw') return value;
-  return fallback;
+  return parseAgentEngineType(value) ?? fallback;
 }
 
 interface AgentPreferredModel {

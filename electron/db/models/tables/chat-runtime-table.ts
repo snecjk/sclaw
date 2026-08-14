@@ -8,7 +8,7 @@ export interface ChatRuntimeRunsTable {
   origin: 'interactive' | 'scheduled_task' | 'channel';
   owner_id: string | null;
   deadline_at: number | null;
-  engine_type: 'openclaw' | 'claude';
+  engine_type: 'openclaw' | 'claude' | 'pi';
   phase: string;
   epoch: number;
   sequence: number;

@@ -15,13 +15,17 @@ import {
 } from '../../utils/openclaw-auth';
 import { logger } from '../../utils/logger';
 import { STO_CANONICAL_ACCOUNT_ID } from './sto-placeholder-utils';
+import {
+  DEFAULT_MODEL_CONTEXT_WINDOW,
+  DEFAULT_MODEL_MAX_TOKENS,
+} from '../../../shared/model-runtime-defaults';
 
 const GOOGLE_OAUTH_RUNTIME_PROVIDER = 'google-gemini-cli';
 const GOOGLE_OAUTH_DEFAULT_MODEL_REF = `${GOOGLE_OAUTH_RUNTIME_PROVIDER}/gemini-3-pro-preview`;
 const OPENAI_OAUTH_RUNTIME_PROVIDER = 'openai-codex';
 const OPENAI_OAUTH_DEFAULT_MODEL_REF = `${OPENAI_OAUTH_RUNTIME_PROVIDER}/gpt-5.3-codex`;
-export const STO_MODEL_DEFAULT_CONTEXT_WINDOW = 256_000;
-export const STO_MODEL_DEFAULT_MAX_TOKENS = 32_000;
+export const STO_MODEL_DEFAULT_CONTEXT_WINDOW = DEFAULT_MODEL_CONTEXT_WINDOW;
+export const STO_MODEL_DEFAULT_MAX_TOKENS = DEFAULT_MODEL_MAX_TOKENS;
 
 function buildStoRuntimeModels(modelIds: string[], input?: string[]) {
   return modelIds.map((id) => ({

@@ -9,7 +9,7 @@ export function looksLikeTechnicalTaskGroupLabel(value: string, sessionKey?: str
   if (sessionKey && v === sessionKey) return true;
   if (looksLikeTechnicalSessionDisplay(v)) return true;
   if (AGENT_TASK_KEY_PATTERN.test(v)) return true;
-  if (/^(claude-task|claude-task-run|scheduled-task):/.test(v)) return true;
+  if (/^(claude-task|claude-task-run|pi-task|scheduled-task):/.test(v)) return true;
   if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return true;
   if (/^\d{4}年\d{2}月\d{2}日/.test(v)) return true;
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) return true;

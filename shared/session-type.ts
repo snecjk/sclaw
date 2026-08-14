@@ -92,6 +92,14 @@ export function inferSessionCatalogMeta(sessionKey: string): InferredSessionMeta
     };
   }
 
+  if (trimmedKey.startsWith('pi-task:')) {
+    return {
+      sessionType: 'scheduled_task',
+      taskId: trimmedKey.split(':')[1] || null,
+      appId: null,
+    };
+  }
+
   return {
     sessionType: 'chat',
     taskId: null,

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import type { ChatRuntimeSnapshot, ChatRunPhase } from '../../../shared/chat-runtime-protocol';
 import { isTerminalChatRunPhase } from '../../../shared/chat-runtime-protocol';
+import { parseAgentEngineType } from '../../../shared/agent-engine';
 import { getKyselyDatabase } from '../connection';
 
 const TERMINAL_RETENTION_MS = 24 * 60 * 60 * 1000;
@@ -25,6 +26,12 @@ function safeStringifyJson(value: unknown): string | null {
   }
 }
 
+function requireStoredEngineType(value: unknown): ChatRuntimeSnapshot['engineType'] {
+  const engineType = parseAgentEngineType(value);
+  if (!engineType) throw new Error(`UNSUPPORTED_ENGINE: ${String(value)}`);
+  return engineType;
+}
+
 function mapRow(row: Record<string, unknown>): ChatRuntimeSnapshot {
   return {
     protocolVersion: 1,
@@ -36,7 +43,7 @@ function mapRow(row: Record<string, unknown>): ChatRuntimeSnapshot {
       ownerId: row.owner_id == null ? undefined : String(row.owner_id),
       deadlineAt: row.deadline_at == null ? null : Number(row.deadline_at),
     },
-    engineType: String(row.engine_type) === 'claude' ? 'claude' : 'openclaw',
+    engineType: requireStoredEngineType(row.engine_type),
     phase: String(row.phase) as ChatRunPhase,
     epoch: Number(row.epoch),
     sequence: Number(row.sequence),

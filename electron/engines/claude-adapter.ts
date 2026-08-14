@@ -1398,7 +1398,9 @@ export const claudeAdapter: EngineAdapter = {
 
   async sendMessage(ctx: EngineAdapterContext, params) {
     return startClaudeQuery(params.sessionKey, params.message, {
-      eventSink: ctx.gatewayManager,
+      eventSink: ctx.eventSink
+        ? { emit: (event, payload) => Boolean(ctx.eventSink?.emit(event, payload)) }
+        : ctx.gatewayManager ?? null,
       userPrompt: params.message,
       systemPromptAppend: params.systemPromptAppend,
       permissionProfile: params.permissionProfile,
@@ -1415,7 +1417,9 @@ export const claudeAdapter: EngineAdapter = {
     const prompt = await buildClaudeUserMessage(params.message, params.media ?? []);
     return startClaudeQuery(params.sessionKey, toClaudePromptStream(prompt), {
       additionalDirectories,
-      eventSink: ctx.gatewayManager,
+      eventSink: ctx.eventSink
+        ? { emit: (event, payload) => Boolean(ctx.eventSink?.emit(event, payload)) }
+        : ctx.gatewayManager ?? null,
       userPrompt: params.message,
       systemPromptAppend: params.systemPromptAppend,
       permissionProfile: params.permissionProfile,
@@ -1425,10 +1429,10 @@ export const claudeAdapter: EngineAdapter = {
   async abortRun(_ctx, params) {
     const active = activeClaudeQueries.get(params.sessionKey);
     if (!active) {
-      return { success: true };
+      return { success: true, result: { aborted: false, runIds: [] } };
     }
     active.close();
     activeClaudeQueries.delete(params.sessionKey);
-    return { success: true };
+    return { success: true, result: { aborted: true, runIds: [params.runId ?? params.sessionKey] } };
   },
 };

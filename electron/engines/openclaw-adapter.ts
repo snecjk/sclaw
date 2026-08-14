@@ -8,6 +8,7 @@ import type {
   EngineSendWithMediaParams,
   EngineSessionSummary,
 } from './types';
+import { requireGatewayManager } from './types';
 import { ensureProjectAgentForSessionKey } from '../services/project-agent-service';
 import { isWorkflowOpenClawSessionKey } from '../../shared/workflow-openclaw-session';
 import { logger } from '../utils/logger';
@@ -208,7 +209,7 @@ export const openClawAdapter: EngineAdapter = {
 
   async inspectRun(ctx, params) {
     try {
-      const result = await ctx.gatewayManager.rpc<Record<string, unknown>>('chat.history', {
+      const result = await requireGatewayManager(ctx).rpc<Record<string, unknown>>('chat.history', {
         sessionKey: params.sessionKey,
         limit: params.limit ?? 50,
       });
@@ -237,7 +238,7 @@ export const openClawAdapter: EngineAdapter = {
   async listSessions(ctx: EngineAdapterContext) {
     const metadataByKey = await loadOpenClawSessionStoreMetadata();
     try {
-      const result = await ctx.gatewayManager.rpc<Record<string, unknown>>('sessions.list', {});
+      const result = await requireGatewayManager(ctx).rpc<Record<string, unknown>>('sessions.list', {});
       const sessions: EngineSessionSummary[] = Array.isArray(result.sessions)
         ? result.sessions
           .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
@@ -276,7 +277,7 @@ export const openClawAdapter: EngineAdapter = {
 
   async getHistory(ctx: EngineAdapterContext, params: { sessionKey: string; limit: number }) {
     try {
-      const result = await ctx.gatewayManager.rpc<Record<string, unknown>>('chat.history', {
+      const result = await requireGatewayManager(ctx).rpc<Record<string, unknown>>('chat.history', {
         sessionKey: params.sessionKey,
         limit: params.limit,
       });
@@ -294,7 +295,7 @@ export const openClawAdapter: EngineAdapter = {
 
   async getExecutionSnapshot(ctx: EngineAdapterContext, params: { sessionKey: string; limit: number }) {
     try {
-      const result = await ctx.gatewayManager.rpc<Record<string, unknown>>('chat.history', {
+      const result = await requireGatewayManager(ctx).rpc<Record<string, unknown>>('chat.history', {
         sessionKey: params.sessionKey,
         limit: params.limit,
       });
@@ -312,7 +313,7 @@ export const openClawAdapter: EngineAdapter = {
       const sessionKey = params.sessionKey;
       const projectAgentResult = await ensureProjectAgentForSessionKey(sessionKey);
       if (projectAgentResult.created || projectAgentResult.workspaceUpdated) {
-        await ctx.gatewayManager.debouncedReload();
+        await requireGatewayManager(ctx).debouncedReload();
       }
       const message = resolveOpenClawSendMessage(params);
       if (params.systemPromptAppend?.trim()) {
@@ -331,7 +332,7 @@ export const openClawAdapter: EngineAdapter = {
         deliver: params.deliver,
         idempotencyKey: params.idempotencyKey,
       };
-      const result = await ctx.gatewayManager.rpc<{ runId?: string }>('chat.send', rpcParams, 120000);
+      const result = await requireGatewayManager(ctx).rpc<{ runId?: string }>('chat.send', rpcParams, 120000);
       return { success: true, result };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -343,7 +344,7 @@ export const openClawAdapter: EngineAdapter = {
       const sessionKey = params.sessionKey;
       const projectAgentResult = await ensureProjectAgentForSessionKey(sessionKey);
       if (projectAgentResult.created || projectAgentResult.workspaceUpdated) {
-        await ctx.gatewayManager.debouncedReload();
+        await requireGatewayManager(ctx).debouncedReload();
       }
 
       let message = resolveOpenClawSendMessage(params);
@@ -387,7 +388,7 @@ export const openClawAdapter: EngineAdapter = {
         rpcParams.attachments = imageAttachments;
       }
 
-      const result = await ctx.gatewayManager.rpc<{ runId?: string }>('chat.send', rpcParams, 120000);
+      const result = await requireGatewayManager(ctx).rpc<{ runId?: string }>('chat.send', rpcParams, 120000);
       return { success: true, result };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -396,8 +397,11 @@ export const openClawAdapter: EngineAdapter = {
 
   async abortRun(ctx: EngineAdapterContext, params) {
     try {
-      await ctx.gatewayManager.rpc('chat.abort', { sessionKey: params.sessionKey });
-      return { success: true };
+      const result = await requireGatewayManager(ctx).rpc<{ aborted?: boolean; runIds?: unknown[] }>(
+        'chat.abort',
+        { sessionKey: params.sessionKey },
+      );
+      return { success: true, result };
     } catch (error) {
       return { success: false, error: String(error) };
     }

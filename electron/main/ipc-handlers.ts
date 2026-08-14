@@ -181,7 +181,7 @@ export function registerIpcHandlers(
 }
 
 function parseEngineType(value: unknown): AgentEngineType | undefined {
-  return value === 'claude' || value === 'openclaw' ? value : undefined;
+  return value === 'claude' || value === 'openclaw' || value === 'pi' ? value : undefined;
 }
 
 function registerUnifiedRequestHandlers(gatewayManager: GatewayManager): void {
@@ -1048,7 +1048,7 @@ function registerGatewayHandlers(
         const { getMemoryTurnCoordinator } = await import('../services/memory-turn-coordinator');
         await getMemoryTurnCoordinator(gatewayManager).aborted(body.sessionKey ?? '', null);
         await chatRuntimeSupervisor.aborted(body.sessionKey ?? '', null);
-        return { success: true };
+        return { success: true, result: result.result };
       }
 
       const result = await gatewayManager.rpc(method, rpcParams, timeoutMs);

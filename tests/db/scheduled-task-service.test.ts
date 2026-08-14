@@ -55,6 +55,24 @@ describe('ScheduledTaskService', () => {
       ).rejects.toThrow(/Invalid permissionProfile/);
     });
 
+    it('fixes Pi permissions and rejects missing workspace or workflows', async () => {
+      await expect(svc.createTask({ ...baseCreateInput, engineType: 'pi' }))
+        .rejects.toThrow(/workspacePath/);
+      await expect(svc.createTask({
+        ...baseCreateInput,
+        engineType: 'pi',
+        workspacePath: '/workspace',
+        workflowCode: 'wf-1',
+      })).rejects.toThrow(/does not support workflows/);
+      const task = await svc.createTask({
+        ...baseCreateInput,
+        engineType: 'pi',
+        workspacePath: '/workspace',
+        permissionProfile: 'dangerous-bypass',
+      });
+      expect(task.permissionProfile).toBe('workspace-write');
+    });
+
     it('rejects invalid retry/failure/timeout policies', async () => {
       await expect(
         svc.createTask({ ...baseCreateInput, retryPolicy: { maxAttempts: 0, backoffSec: 30 } }),
@@ -85,6 +103,17 @@ describe('ScheduledTaskService', () => {
       expect(claudeSession.sessionType).toBe('claude_task');
       expect(claudeSession.taskId).toBe(claudeTask.id);
       expect(claudeSession.sessionKey).toMatch(/^claude-task:[^:]+:/);
+
+      const piTask = await svc.createTask({
+        ...baseCreateInput,
+        name: 'Pi Task',
+        engineType: 'pi',
+        workspacePath: '/workspace',
+      });
+      const piSession = await svc.ensureDatedSessionPlaceholder(piTask, date);
+      expect(piSession.sessionType).toBe('scheduled_task');
+      expect(piSession.taskId).toBe(piTask.id);
+      expect(piSession.sessionKey).toMatch(/^pi-task:[^:]+:/);
     });
 
     it('is idempotent: re-upserting the same date reuses the same session row', async () => {
