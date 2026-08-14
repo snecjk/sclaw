@@ -5,9 +5,13 @@ import { TutorialViewer } from '@/components/learning-center/TutorialViewer';
 describe('TutorialViewer', () => {
   it('renders supported content, indentation and complete signed URL query', () => {
     const url = 'https://oss.example.com/tutorial.png?Expires=123&Signature=a%2Bb%3D';
-    render(<TutorialViewer html={`<h2 data-indent="2">标题</h2><ol><li>步骤</li></ol><blockquote>提示</blockquote><pre><code>const a = 1</code></pre><img src="${url}" alt="教程图">`} />);
+    render(<TutorialViewer html={`<h2 data-indent="2">标题</h2><p><span style="font-size: 20px; color: #ff6500; background-color: #ffedd5; font-family: SimHei">重点</span></p><ol><li>步骤</li></ol><blockquote>提示</blockquote><pre><code>const a = 1</code></pre><img src="${url}" alt="教程图" data-width="65" style="width: 65%">`} />);
     expect(screen.getByRole('heading', { name: '标题' }).getAttribute('data-indent')).toBe('2');
-    expect(screen.getByRole('img', { name: '教程图' }).getAttribute('src')).toBe(url);
+    const image = screen.getByRole('img', { name: '教程图' });
+    expect(image.getAttribute('src')).toBe(url);
+    expect(image.getAttribute('data-width')).toBe('65');
+    expect(image.style.width).toBe('65%');
+    expect(screen.getByText('重点').getAttribute('style')).toContain('font-size: 20px');
     expect(screen.getByText('步骤')).toBeTruthy();
   });
 
