@@ -46,6 +46,7 @@ import {
   isAuthenticatedWorkflowIframeEvent,
   isReadyWorkflowIframeEvent,
   resetWorkflowIframeSessionResources,
+  shouldMaskWorkflowIframe,
   shouldResendWorkflowHostInit,
 } from '@/pages/Workflow/components/workflow-iframe-session';
 
@@ -58,8 +59,10 @@ export interface WorkflowMcIframeEditorProps {
   onEditorCapabilitiesChange?: (ready: boolean) => void;
   onTryRunRequest?: (requestId: string) => void;
   onBackRequest?: () => void;
+  onLocalRunHistoryRequest?: () => void;
   /** Synchronously invalidates Host attempts before iframe request managers reject on reset. */
   onEditorSessionReset?: () => void;
+  onEditorHandshakeFallback?: () => void;
 }
 
 export interface WorkflowMcIframeEditorHandle {
@@ -74,6 +77,7 @@ export interface WorkflowMcIframeEditorHandle {
 // time for a real cloud save (including slower VPN/network conditions).
 const DRAFT_REQUEST_TIMEOUT_MS = 30_000;
 const IFRAME_LOAD_TIMEOUT_MS = 60_000;
+const BRIDGE_HANDSHAKE_TIMEOUT_MS = 8_000;
 
 function createPersistedRequestManager(): WorkflowIframeRequestManager<WorkflowSavedDraftSnapshot> {
   return createWorkflowIframeRequestManager({ timeoutMs: DRAFT_REQUEST_TIMEOUT_MS });
@@ -96,7 +100,9 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
   onEditorCapabilitiesChange,
   onTryRunRequest,
   onBackRequest,
+  onLocalRunHistoryRequest,
   onEditorSessionReset,
+  onEditorHandshakeFallback,
 }, ref) {
   const ssoEnvironment = useAuthStore((s) => s.ssoEnvironment);
   const stoToken = useAuthStore((s) => s.user?.stoToken);
@@ -115,7 +121,9 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
     onEditorCapabilitiesChange,
     onTryRunRequest,
     onBackRequest,
+    onLocalRunHistoryRequest,
     onEditorSessionReset,
+    onEditorHandshakeFallback,
   });
   const expectedOrigin = useMemo(() => new URL(getMemoryCenterWebBase(ssoEnvironment)).origin, [ssoEnvironment]);
   const bridgeParentOrigin = useMemo(
@@ -147,9 +155,11 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
       onEditorCapabilitiesChange,
       onTryRunRequest,
       onBackRequest,
+      onLocalRunHistoryRequest,
       onEditorSessionReset,
+      onEditorHandshakeFallback,
     };
-  }, [onBackRequest, onEditorCapabilitiesChange, onEditorSessionReset, onTryRunRequest]);
+  }, [onBackRequest, onEditorCapabilitiesChange, onEditorHandshakeFallback, onEditorSessionReset, onLocalRunHistoryRequest, onTryRunRequest]);
 
   const getPersistedManager = () => {
     persistedManagerRef.current ??= createPersistedRequestManager();
@@ -425,6 +435,8 @@ export const WorkflowMcIframeEditor = forwardRef<WorkflowMcIframeEditorHandle, W
           workflowId={workflowId}
           token={token}
           onIframeLoad={handleIframeLoad}
+          editorReady={editorOwnsHeader}
+          onHandshakeFallback={() => callbacksRef.current.onEditorHandshakeFallback?.()}
         />
       </div>
     </div>
@@ -439,6 +451,8 @@ function McEditorIframe({
   workflowId,
   token,
   onIframeLoad,
+  editorReady,
+  onHandshakeFallback,
 }: {
   src: string;
   iframeRef: RefObject<HTMLIFrameElement | null>;
@@ -447,22 +461,43 @@ function McEditorIframe({
   workflowId: string;
   token: string;
   onIframeLoad: () => void;
+  editorReady: boolean;
+  onHandshakeFallback: () => void;
 }) {
   const [loadIssue, setLoadIssue] = useState<'timeout' | 'error' | null>(null);
   const [iframeLoading, setIframeLoading] = useState(true);
+  const [iframeLoaded, setIframeLoaded] = useState(false);
+  const [handshakeFallback, setHandshakeFallback] = useState(false);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const onHandshakeFallbackRef = useRef(onHandshakeFallback);
+
+  useEffect(() => {
+    onHandshakeFallbackRef.current = onHandshakeFallback;
+  }, [onHandshakeFallback]);
 
   useEffect(() => {
     if (!iframeLoading || loadIssue) return;
     const timer = window.setTimeout(() => {
       setIframeLoading(false);
       setLoadIssue('timeout');
+      setHandshakeFallback(true);
+      onHandshakeFallbackRef.current();
     }, IFRAME_LOAD_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
   }, [iframeLoading, loadAttempt, loadIssue]);
 
+  useEffect(() => {
+    if (!iframeLoaded || editorReady || handshakeFallback || loadIssue) return;
+    const timer = window.setTimeout(() => {
+      setHandshakeFallback(true);
+      onHandshakeFallbackRef.current();
+    }, BRIDGE_HANDSHAKE_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [editorReady, handshakeFallback, iframeLoaded, loadIssue]);
+
   const handleIframeLoad = () => {
     setIframeLoading(false);
+    setIframeLoaded(true);
     setLoadIssue(null);
     onIframeLoad();
     if (src.includes('/workflows-workbench/')) {
@@ -470,9 +505,15 @@ function McEditorIframe({
     }
   };
 
+  const maskIframe = !loadIssue && shouldMaskWorkflowIframe({
+    iframeLoading,
+    editorReady,
+    handshakeFallback,
+  });
+
   return (
     <>
-      {iframeLoading ? (
+      {maskIframe ? (
         <div className="absolute inset-0 z-[1] flex flex-col items-center justify-center gap-2 bg-background/80">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
@@ -494,6 +535,8 @@ function McEditorIframe({
               onClick={() => {
                 setLoadIssue(null);
                 setIframeLoading(true);
+                setIframeLoaded(false);
+                setHandshakeFallback(false);
                 setLoadAttempt((attempt) => attempt + 1);
               }}
             >
@@ -519,6 +562,8 @@ function McEditorIframe({
           onError={() => {
             setIframeLoading(false);
             setLoadIssue('error');
+            setHandshakeFallback(true);
+            onHandshakeFallbackRef.current();
           }}
         />
       )}

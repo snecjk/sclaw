@@ -222,7 +222,7 @@ Chat workflow progress cards are durable SQLite-backed timeline items. A card is
 
 ### Embedded Workflow Editor Integration
 
-When a compatible `memory-center-web` editor is embedded, the Web editor owns the single 52px workflow business header while StoClaw retains native window chrome, confirmation/startup UI, and local execution. Capability negotiation controls this layout: before the required capabilities are ready, StoClaw keeps its existing Host header as a safe fallback, and standalone or incompatible Web sessions do not expose the local trial-run action.
+When a compatible `memory-center-web` editor is embedded, the Web editor owns the single 52px workflow business header while StoClaw retains native window chrome, confirmation/startup UI, local execution, and local-run history. During capability negotiation StoClaw masks the iframe and suppresses the legacy Host header, then reveals the complete Web-owned header in one step. A timeout or incompatible Web session restores the Host header as a safe fallback. The Web header can open StoClaw's existing local-run history dialog through an authenticated bridge intent; standalone Web sessions never read client-local run data.
 
 After the user confirms a trial run, StoClaw asks the Web editor to persist the current canvas through the existing workflow PUT contract. Local execution starts only with the draft version ID returned by that successful save. Existing drafts are updated in place; saving from a published version creates a draft without replacing the active published version. Save failure, timeout, invalid response, iframe reset, or route change terminates the attempt and never falls back to a stale version.
 

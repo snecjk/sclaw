@@ -72,10 +72,15 @@ export function WorkflowEditorSessionBoundary({
   children: ReactNode;
 }) {
   const setEmbeddedHeaderOwned = useWorkflowUiStore((state) => state.setEmbeddedHeaderOwned);
+  const setEmbeddedHeaderNegotiating = useWorkflowUiStore((state) => state.setEmbeddedHeaderNegotiating);
   useLayoutEffect(() => {
     setEmbeddedHeaderOwned(false);
-    return () => setEmbeddedHeaderOwned(false);
-  }, [setEmbeddedHeaderOwned, workflowId]);
+    setEmbeddedHeaderNegotiating(true);
+    return () => {
+      setEmbeddedHeaderOwned(false);
+      setEmbeddedHeaderNegotiating(false);
+    };
+  }, [setEmbeddedHeaderNegotiating, setEmbeddedHeaderOwned, workflowId]);
 
   return <Fragment key={workflowId}>{children}</Fragment>;
 }
@@ -93,7 +98,9 @@ function WorkflowEditorSession({
 }) {
   const editorRef = useRef<WorkflowMcIframeEditorHandle>(null);
   const embeddedHeaderOwned = useWorkflowUiStore((state) => state.embeddedHeaderOwned);
+  const embeddedHeaderNegotiating = useWorkflowUiStore((state) => state.embeddedHeaderNegotiating);
   const setEmbeddedHeaderOwned = useWorkflowUiStore((state) => state.setEmbeddedHeaderOwned);
+  const setEmbeddedHeaderNegotiating = useWorkflowUiStore((state) => state.setEmbeddedHeaderNegotiating);
   const [editorCapabilitySession, setEditorCapabilitySession] = useState({ ready: false, generation: 0 });
   const [localRunHistoryOpen, setLocalRunHistoryOpen] = useState(false);
   const handleOpenLocalRunHistory = useCallback(() => setLocalRunHistoryOpen(true), []);
@@ -126,6 +133,7 @@ function WorkflowEditorSession({
   });
   const handleEditorCapabilitiesChange = (ready: boolean) => {
     setEmbeddedHeaderOwned(ready);
+    setEmbeddedHeaderNegotiating(!ready);
     setEditorCapabilitySession((current) => ({
       ready,
       generation: current.generation + 1,
@@ -133,7 +141,12 @@ function WorkflowEditorSession({
   };
   const handleEditorSessionReset = () => {
     setEmbeddedHeaderOwned(false);
+    setEmbeddedHeaderNegotiating(true);
     embeddedTryRun.invalidateSession();
+  };
+  const handleEditorHandshakeFallback = () => {
+    setEmbeddedHeaderOwned(false);
+    setEmbeddedHeaderNegotiating(false);
   };
 
   useWorkflowEditorContentHeader({
@@ -141,7 +154,7 @@ function WorkflowEditorSession({
     onBack,
     prompt,
     promptCacheId,
-    enabled: !embeddedHeaderOwned,
+    enabled: !embeddedHeaderOwned && !embeddedHeaderNegotiating,
     onTryRun: embeddedTryRun.requestFromHostFallback,
     tryRunDisabled: embeddedTryRun.requestInFlight || tryRun.isStarting || tryRun.isRunActive,
     onOpenLocalRunHistory: handleOpenLocalRunHistory,
@@ -156,8 +169,10 @@ function WorkflowEditorSession({
         promptCacheId={promptCacheId}
         onEditorCapabilitiesChange={handleEditorCapabilitiesChange}
         onEditorSessionReset={handleEditorSessionReset}
+        onEditorHandshakeFallback={handleEditorHandshakeFallback}
         onTryRunRequest={embeddedTryRun.requestFromWeb}
         onBackRequest={onBack}
+        onLocalRunHistoryRequest={handleOpenLocalRunHistory}
       />
       <ConfirmDialog
         open={embeddedTryRun.confirmOpen}

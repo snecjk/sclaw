@@ -9,6 +9,7 @@ export const WORKFLOW_SAVE_DRAFT_REQUEST = 'workflow-save-draft-request';
 export const WORKFLOW_SAVE_DRAFT_RESPONSE = 'workflow-save-draft-response';
 export const WORKFLOW_SAVE_DRAFT_ERROR = 'workflow-save-draft-error';
 export const WORKFLOW_BACK_REQUEST = 'workflow-back-request';
+export const WORKFLOW_LOCAL_RUN_HISTORY_REQUEST = 'workflow-local-run-history-request';
 export const WORKFLOW_DRAFT_REQUEST = 'workflow-draft-request';
 export const WORKFLOW_DRAFT_RESPONSE = 'workflow-draft-response';
 export const WORKFLOW_DRAFT_ERROR = 'workflow-draft-error';
@@ -24,7 +25,7 @@ export type WorkflowTryRunState =
   | 'failed'
   | 'completed'
   | 'error';
-export type WorkflowHostCapability = 'localTrialRun' | 'hostBack';
+export type WorkflowHostCapability = 'localTrialRun' | 'hostBack' | 'localRunHistory';
 export type WorkflowEditorCapability = 'ownsHeader' | 'persistBeforeTrialRun';
 
 export interface WorkflowBridgeStartupFieldOption {
@@ -123,6 +124,10 @@ export interface WorkflowSaveDraftErrorMessage extends WorkflowBridgeEnvelope {
 
 export interface WorkflowBackRequestMessage extends WorkflowBridgeEnvelope {
   type: typeof WORKFLOW_BACK_REQUEST;
+}
+
+export interface WorkflowLocalRunHistoryRequestMessage extends WorkflowBridgeEnvelope {
+  type: typeof WORKFLOW_LOCAL_RUN_HISTORY_REQUEST;
 }
 
 export type WorkflowPerformanceStage =
@@ -287,6 +292,10 @@ export function isWorkflowTryRunRequest(value: unknown): value is WorkflowTryRun
 
 export function isWorkflowBackRequest(value: unknown): value is WorkflowBackRequestMessage {
   return isWorkflowBridgeEnvelope(value) && value.type === WORKFLOW_BACK_REQUEST;
+}
+
+export function isWorkflowLocalRunHistoryRequest(value: unknown): value is WorkflowLocalRunHistoryRequestMessage {
+  return isWorkflowBridgeEnvelope(value) && value.type === WORKFLOW_LOCAL_RUN_HISTORY_REQUEST;
 }
 
 export function isWorkflowSaveDraftResponse(value: unknown): value is WorkflowSaveDraftResponseMessage {

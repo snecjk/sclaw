@@ -10,21 +10,30 @@ describe('embedded workflow header ownership', () => {
     useWorkflowUiStore.setState({
       editorActive: false,
       embeddedHeaderOwned: false,
+      embeddedHeaderNegotiating: false,
     });
   });
 
-  it('hides the Host header only after negotiated ownership', () => {
+  it('hides the Host header while negotiating and after Web ownership', () => {
     expect(shouldHideWorkflowContentHeader({
       editorActive: true,
       embeddedHeaderOwned: false,
+      embeddedHeaderNegotiating: true,
+    })).toBe(true);
+    expect(shouldHideWorkflowContentHeader({
+      editorActive: true,
+      embeddedHeaderOwned: false,
+      embeddedHeaderNegotiating: false,
     })).toBe(false);
     expect(shouldHideWorkflowContentHeader({
       editorActive: true,
       embeddedHeaderOwned: true,
+      embeddedHeaderNegotiating: false,
     })).toBe(true);
     expect(shouldHideWorkflowContentHeader({
       editorActive: false,
       embeddedHeaderOwned: true,
+      embeddedHeaderNegotiating: false,
     })).toBe(false);
   });
 

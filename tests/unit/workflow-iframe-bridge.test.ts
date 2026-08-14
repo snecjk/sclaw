@@ -4,11 +4,13 @@ import {
   WORKFLOW_BACK_REQUEST,
   WORKFLOW_EDITOR_READY,
   WORKFLOW_IFRAME_BRIDGE_PROTOCOL,
+  WORKFLOW_LOCAL_RUN_HISTORY_REQUEST,
   WORKFLOW_SAVE_DRAFT_ERROR,
   WORKFLOW_SAVE_DRAFT_RESPONSE,
   WORKFLOW_TRY_RUN_REQUEST,
   isWorkflowBackRequest,
   isWorkflowEditorReady,
+  isWorkflowLocalRunHistoryRequest,
   isWorkflowSaveDraftError,
   isWorkflowSaveDraftResponse,
   isWorkflowTryRunRequest,
@@ -84,6 +86,7 @@ describe('workflow iframe bridge v1 business messages', () => {
     ['editor ready', { ...envelope, type: WORKFLOW_EDITOR_READY, capabilities: ['ownsHeader'] }, isWorkflowEditorReady],
     ['try run', { ...envelope, type: WORKFLOW_TRY_RUN_REQUEST }, isWorkflowTryRunRequest],
     ['back', { ...envelope, type: WORKFLOW_BACK_REQUEST }, isWorkflowBackRequest],
+    ['local run history', { ...envelope, type: WORKFLOW_LOCAL_RUN_HISTORY_REQUEST }, isWorkflowLocalRunHistoryRequest],
     [
       'save response',
       {

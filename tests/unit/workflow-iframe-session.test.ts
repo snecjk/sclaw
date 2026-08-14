@@ -6,11 +6,13 @@ import {
   isAuthenticatedWorkflowIframeEvent,
   isReadyWorkflowIframeEvent,
   resetWorkflowIframeSessionResources,
+  shouldMaskWorkflowIframe,
   shouldResendWorkflowHostInit,
 } from '@/pages/Workflow/components/workflow-iframe-session';
 import {
   WORKFLOW_EDITOR_READY,
   WORKFLOW_IFRAME_BRIDGE_PROTOCOL,
+  WORKFLOW_LOCAL_RUN_HISTORY_REQUEST,
   WORKFLOW_TRY_RUN_REQUEST,
 } from '@/lib/workflow-iframe-bridge';
 
@@ -55,7 +57,7 @@ describe('workflow iframe session identity', () => {
       workflowId: 'wf_123',
       nonce: 'nonce-1',
       requestId: 'handshake-1',
-      capabilities: ['localTrialRun', 'hostBack'],
+      capabilities: ['localTrialRun', 'hostBack', 'localRunHistory'],
     });
   });
 
@@ -134,6 +136,7 @@ describe('workflow iframe session identity', () => {
   it('dispatches try-run and back only after the exact ready handshake', () => {
     const onTryRunRequest = vi.fn();
     const onBackRequest = vi.fn();
+    const onLocalRunHistoryRequest = vi.fn();
     const context = {
       expectedOrigin: 'https://mc.example.com',
       expectedSource: window,
@@ -147,12 +150,15 @@ describe('workflow iframe session identity', () => {
       requestId: 'run-1',
     };
     const back = { ...tryRun, type: 'workflow-back-request', requestId: 'back-1' };
-    const callbacks = { onTryRunRequest, onBackRequest };
+    const history = { ...tryRun, type: WORKFLOW_LOCAL_RUN_HISTORY_REQUEST, requestId: 'history-1' };
+    const callbacks = { onTryRunRequest, onBackRequest, onLocalRunHistoryRequest };
 
     expect(dispatchReadyWorkflowIframeIntent(eventFor(tryRun), context, false, callbacks)).toBe(false);
     expect(dispatchReadyWorkflowIframeIntent(eventFor(back), context, false, callbacks)).toBe(false);
+    expect(dispatchReadyWorkflowIframeIntent(eventFor(history), context, false, callbacks)).toBe(false);
     expect(onTryRunRequest).not.toHaveBeenCalled();
     expect(onBackRequest).not.toHaveBeenCalled();
+    expect(onLocalRunHistoryRequest).not.toHaveBeenCalled();
 
     const wrongReady = {
       ...tryRun,
@@ -172,8 +178,17 @@ describe('workflow iframe session identity', () => {
 
     expect(dispatchReadyWorkflowIframeIntent(eventFor(tryRun), context, true, callbacks)).toBe(true);
     expect(dispatchReadyWorkflowIframeIntent(eventFor(back), context, true, callbacks)).toBe(true);
+    expect(dispatchReadyWorkflowIframeIntent(eventFor(history), context, true, callbacks)).toBe(true);
     expect(onTryRunRequest).toHaveBeenCalledOnce();
     expect(onTryRunRequest).toHaveBeenCalledWith('run-1');
     expect(onBackRequest).toHaveBeenCalledOnce();
+    expect(onLocalRunHistoryRequest).toHaveBeenCalledOnce();
+  });
+
+  it('masks loaded iframe content until the header handshake succeeds or falls back', () => {
+    expect(shouldMaskWorkflowIframe({ iframeLoading: true, editorReady: false, handshakeFallback: false })).toBe(true);
+    expect(shouldMaskWorkflowIframe({ iframeLoading: false, editorReady: false, handshakeFallback: false })).toBe(true);
+    expect(shouldMaskWorkflowIframe({ iframeLoading: false, editorReady: true, handshakeFallback: false })).toBe(false);
+    expect(shouldMaskWorkflowIframe({ iframeLoading: false, editorReady: false, handshakeFallback: true })).toBe(false);
   });
 });

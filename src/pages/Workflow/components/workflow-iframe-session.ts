@@ -3,6 +3,7 @@ import {
   WORKFLOW_IFRAME_BRIDGE_PROTOCOL,
   isWorkflowBackRequest,
   isWorkflowEditorReady,
+  isWorkflowLocalRunHistoryRequest,
   isWorkflowPerformanceMetric,
   isWorkflowTryRunRequest,
   type WorkflowHostInitMessage,
@@ -55,7 +56,7 @@ export function createWorkflowHostInitMessage(
     workflowId: identity.workflowId,
     nonce: identity.nonce,
     requestId: identity.handshakeRequestId,
-    capabilities: ['localTrialRun', 'hostBack'],
+    capabilities: ['localTrialRun', 'hostBack', 'localRunHistory'],
   };
 }
 
@@ -113,6 +114,7 @@ export function dispatchReadyWorkflowIframeIntent(
   callbacks: {
     onTryRunRequest?: (requestId: string) => void;
     onBackRequest?: () => void;
+    onLocalRunHistoryRequest?: () => void;
   },
 ): boolean {
   if (!editorReady || !isAuthenticatedWorkflowIframeEvent(event, identity)) return false;
@@ -124,5 +126,21 @@ export function dispatchReadyWorkflowIframeIntent(
     callbacks.onBackRequest?.();
     return true;
   }
+  if (isWorkflowLocalRunHistoryRequest(event.data)) {
+    callbacks.onLocalRunHistoryRequest?.();
+    return true;
+  }
   return false;
+}
+
+export function shouldMaskWorkflowIframe({
+  iframeLoading,
+  editorReady,
+  handshakeFallback,
+}: {
+  iframeLoading: boolean;
+  editorReady: boolean;
+  handshakeFallback: boolean;
+}): boolean {
+  return iframeLoading || (!editorReady && !handshakeFallback);
 }
