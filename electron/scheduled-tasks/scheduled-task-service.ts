@@ -91,10 +91,32 @@ export class ScheduledTaskService {
   private runtimeDispatcher: EngineScheduledTaskDispatcher | null = null;
   private runtimeEventListener: ((event: CanonicalChatEvent) => void) | null = null;
 
+  /**
+   * 创建定时任务（UI Modal 保存、NL 工具建任务都走这里）。
+   *
+   * 步骤：
+   * 1. 校验必填（name/prompt/agentId/cron）及 permission/retry/failure/timeout
+   * 2. 补默认 retryPolicy / failurePolicy
+   * 3. NL 回填：读会话最近用户消息，把模型漏传的附件/技能/工作流/收件人并入入参
+   *    （UI 已 bake 的 extra.composerSegments 会原样保留）
+   * 4. 对齐 Composer 模型（alignScheduledTaskCreateToComposerModel）：
+   *    - 合并 attachments + prompt 里的 `[media attached:]` / outbound 裸路径 → extra.composerAttachments
+   *    - 剥 prompt 中的 media 行、outbound 绝对路径、`<!-- SClaw-Skill -->`
+   *    - 技能/工作流/钉钉收件人只写 extra.composerSegments；三列恒 null
+   *    - UI：保留已 bake 的交错 segments；NL：按 prompt 占位重建 segments
+   * 5. 插入 `schedule_tasks` 行（此时附件 sourcePath 仍指向
+   *    `~/.stoclaw/openclaw/media/outbound/` 等 staging 路径）
+   * 6. persistComposerAttachmentsForTask：copyFile 到
+   *    `~/.stoclaw/scheduled-tasks/{taskId}/attachments/{id}-{fileName}`，
+   *    回写 persistentPath 与 file segment 路径
+   * 7. 刷新 cron 调度；再读库返回（含第 6 步回写后的 extra）
+   */
   async createTask(input: CreateScheduleTaskInput): Promise<ScheduleTask> {
+    // 1. 校验
     this.validateTaskInput(input);
+    // 2. 默认策略
     const normalized = this.normalizeDefaults(input);
-    // 模型常只写 prompt、漏传结构化字段：从 prompt + 会话最近用户消息回填
+    // 3. NL 回填：模型常只写 prompt、漏传结构化字段
     const sessionHint = await readLatestOpenClawUserMessageText(input.sessionKey);
     const enriched = mergeComposerHintsIntoCreateInput({
       ...normalized,
@@ -104,7 +126,9 @@ export class ScheduledTaskService {
       recipients: input.recipients,
       sessionKey: undefined,
     }, [sessionHint]);
+    // 4. 对齐 extra.composerSegments / composerAttachments；prompt 变干净
     const aligned = alignScheduledTaskCreateToComposerModel(enriched);
+    // 5. 落库（附件此时仍是 outbound staging 路径）
     const created = await this.taskRepo.create({
       ...aligned,
       // extra 真源：三列恒 null
@@ -112,13 +136,35 @@ export class ScheduledTaskService {
       skillCode: null,
       workflowCode: null,
     });
+    // 6. 把 outbound 文件拷到任务专属目录并回写 extra
     const withAttachments = await this.persistComposerAttachmentsForTask(created);
+    // 7. 让 scheduler 立刻看到新任务
     await this.scheduler.refreshSchedule();
     const reloaded = await this.taskRepo.getById(withAttachments.id);
     return reloaded ?? withAttachments;
   }
 
+  /**
+   * 更新定时任务（UI 编辑保存、NL 改任务、部分内部迁移曾误走这里）。
+   *
+   * 步骤：
+   * 1. 只校验本次传入的 cron / permission / retry / failure / timeout
+   * 2. extra 浅合并已有 extra（保留 createdVia 等未改字段）
+   * 3. 若改了 prompt 或 extra：prepareScheduledTaskAttachmentsForSave
+   *    - 合并 extra.composerAttachments + prompt 内 media/outbound 路径
+   *    - 剥 prompt 里的 `[media attached:]` 与 outbound 绝对路径
+   *    - 同步 file segment 的 sourcePath（仍可能是 outbound）
+   * 4. 剥 `<!-- SClaw-Skill -->`（技能真源在 segments）
+   * 5. 更新 `schedule_tasks` 行
+   * 6. persistComposerAttachmentsForTask：把新附件 copyFile 到
+   *    `~/.stoclaw/scheduled-tasks/{taskId}/attachments/`，删掉不再引用的旧文件，
+   *    回写 persistentPath
+   * 7. 刷新 cron 调度；再读库返回
+   *
+   * 注意：启动期列→segments 迁移不应走本方法，否则会再次剥路径并可能改/删附件。
+   */
   async updateTask(id: string, input: UpdateScheduleTaskInput): Promise<ScheduleTask | null> {
+    // 1. 按字段校验
     if (input.cronExpr !== undefined) {
       validateCronExpr(input.cronExpr);
     }
@@ -135,10 +181,12 @@ export class ScheduledTaskService {
       throw new Error('timeoutSec must be a positive number of seconds');
     }
     const updatePayload: UpdateScheduleTaskInput = { ...input };
+    // 2. extra 与库存浅合并
     if (input.extra !== undefined && input.extra !== null) {
       const existing = await this.taskRepo.getById(id);
       updatePayload.extra = mergeScheduledTaskExtra(existing?.extra, input.extra);
     }
+    // 3. 整理附件元数据（尚未 copyFile）
     const prepared = (updatePayload.extra !== undefined || input.prompt !== undefined)
       ? prepareScheduledTaskAttachmentsForSave({
         prompt: input.prompt ?? '',
@@ -146,7 +194,7 @@ export class ScheduledTaskService {
       })
       : null;
     if (prepared && input.prompt !== undefined) {
-      // 手动编辑保存：gatewayText 可能仍带 SClaw-Skill marker；任务以 segments 为 skill 真源。
+      // 4. 手动编辑保存：gatewayText 可能仍带 SClaw-Skill marker；任务以 segments 为 skill 真源。
       updatePayload.prompt = stripSkillTranscriptMarkers(prepared.prompt).trim();
     }
     if (prepared && (input.extra !== undefined || prepared.extra)) {
@@ -155,9 +203,12 @@ export class ScheduledTaskService {
         updatePayload.extra = prepared.extra;
       }
     }
+    // 5. 落库
     const updated = await this.taskRepo.update(id, updatePayload);
     if (!updated) return null;
+    // 6. 拷到任务目录 / 清理不再引用的旧附件
     const withAttachments = await this.persistComposerAttachmentsForTask(updated);
+    // 7. 刷新调度
     await this.scheduler.refreshSchedule();
     return this.taskRepo.getById(id) ?? withAttachments;
   }
