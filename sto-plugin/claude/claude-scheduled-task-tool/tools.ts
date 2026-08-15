@@ -31,7 +31,7 @@ export const CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT = [
   '',
   '【任务指令与结构化字段（与 UI Modal 同构）】',
   '- promptTemplate 只能包含定时执行时要完成的干净业务指令；可用 `@真实展示名`、`[文件: 真实文件名]`、`[技能: 真实技能标题]`（必须是会话里出现过的真实值，**禁止**照抄 `<…>` / `文件名` / `标题` 这类文档占位符）。',
-  '- 不要写入 cron 时间、任务管理步骤、StoClaw DingTalk Recipients JSON、钉钉发送规则块或 `[media attached:…]` 行。',
+  '- 不要写入 cron 时间、任务管理步骤、SClaw DingTalk Recipients JSON、钉钉发送规则块或 `[media attached:…]` 行。',
   '- **结构化字段强制（禁止只写进 promptTemplate；全部进 extra.composerSegments，可多个）**：',
   '- recipients：用户 @ 选人时必须原样传入；**不写** dingtalk_recipients_json 列。',
   '- attachments：本轮附图时必须传入 sourcePath（复制用户消息 `[media attached: path (mime) | …]`）；系统复制到任务持久目录。',

@@ -8,6 +8,7 @@ import {
   looksLikeDingTalkMentionSendIntent,
   parseDingTalkRecipientsFromText,
   stripDingTalkMentionContextForDisplay,
+  messageHasDingTalkRecipientContext,
 } from '../../shared/dingtalk-prompts/dingtalk-mention-context';
 import { hasResolvedDingTalkMentions } from '../../shared/dingtalk-send/dingtalk-mention';
 
@@ -34,6 +35,7 @@ describe('dingtalk mention context', () => {
     ]);
 
     expect(message.startsWith('[STOCLAW:DINGTALK_RECIPIENTS:v1]')).toBe(true);
+    expect(message).toContain('## SClaw DingTalk Recipients（对话 @ 已选定对象）');
     expect(message).toContain('"userId": "uid-1"');
     expect(message).toContain('"userId": "uid-2"');
     expect(message).toContain('dws chat message send --user uid-1');
@@ -50,7 +52,7 @@ describe('dingtalk mention context', () => {
     ]);
 
     expect(message).toContain('本轮禁止发送');
-    expect(message).toContain('只在 StoClaw 对话中回复');
+    expect(message).toContain('只在 SClaw 对话中回复');
     expect(message).toContain('dws chat message list --group');
     expect(message).not.toContain('dws chat message send --group cid-dev');
     expect(message).not.toContain('钉钉发送格式规则');
@@ -84,6 +86,11 @@ describe('dingtalk mention context', () => {
 
   it('returns empty when only the system marker is present', () => {
     expect(stripDingTalkMentionContextForDisplay('[STOCLAW:DINGTALK_RECIPIENTS:v1]\n')).toBe('');
+  });
+
+  it('recognizes both SClaw and legacy StoClaw recipient headings', () => {
+    expect(messageHasDingTalkRecipientContext('## SClaw DingTalk Recipients（对话 @ 已选定对象）')).toBe(true);
+    expect(messageHasDingTalkRecipientContext('## StoClaw DingTalk Recipients（对话 @ 已选定对象）')).toBe(true);
   });
 
   it('builds rpc extras only for resolved mentions', () => {

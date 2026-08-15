@@ -109,7 +109,7 @@ function stripRecipientBlockLenient(message: string): string {
     }
     if (line.includes('[STOCLAW:DINGTALK_RECIPIENTS:v1]')) continue;
     if (line.includes('<!-- StoClaw-DingTalk-Recipients: do-not-search -->')) continue;
-    if (/^##\s+StoClaw DingTalk Recipients/.test(line)) continue;
+    if (/^##\s+(?:SClaw|StoClaw) DingTalk Recipients/.test(line)) continue;
     if (/^```json\b/.test(line.trim())) {
       if (line.trim().endsWith('```') && line.trim().length > '```json```'.length) {
         continue;

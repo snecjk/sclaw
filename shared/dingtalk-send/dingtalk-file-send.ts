@@ -37,7 +37,7 @@ export function buildDingTalkFileSendWorkflowContext(
 
   return [
     '',
-    '## StoClaw DingTalk 文件发送（钉盘流程，本条含非图片附件）',
+    '## SClaw DingTalk 文件发送（钉盘流程，本条含非图片附件）',
     '',
     '**仅当需要把附件发给上述 @ 收件人时启用**；纯文字消息仍用 `--text`（正文 Markdown + 底栏代发说明，见上文发送格式规则），不要套用本流程。',
     '',
