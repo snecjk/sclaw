@@ -24,7 +24,9 @@ import {
   buildScheduledTaskDingTalkPromptAppend,
   SCHEDULED_TASK_DINGTALK_RULES,
 } from '../../shared/dingtalk-prompts';
+import { stripSkillTranscriptMarkers } from '../../shared/skill-transcript-marker';
 import {
+  planComposerColumnsToSegmentsMigration,
   planComposerSegmentsRecipientsMigration,
   planDingTalkRecipientsLift,
   resolveScheduledTaskDingTalkRecipients,
@@ -40,6 +42,18 @@ import type { GatewayManager } from '../gateway/manager';
 import { logger } from '../utils/logger';
 import { getChatRuntimeSupervisor } from '../services/chat-runtime-supervisor';
 import type { CanonicalChatEvent } from '../../shared/chat-runtime-protocol';
+import {
+  persistScheduledTaskAttachments,
+  prepareScheduledTaskAttachmentsForSave,
+  rewriteComposerSegmentFilePaths,
+  type TaskComposerAttachmentRecord,
+} from './scheduled-task-attachments';
+import { mergeScheduledTaskExtra } from '../../shared/scheduled-task-extra';
+import { alignScheduledTaskCreateToComposerModel } from './scheduled-task-nl-create';
+import {
+  mergeComposerHintsIntoCreateInput,
+  readLatestOpenClawUserMessageText,
+} from './scheduled-task-nl-hints';
 
 /**
  * 引擎无关的定时报表层。在 `ScheduledTaskScheduler`（触发 + claim 单飞）之上，
@@ -80,10 +94,28 @@ export class ScheduledTaskService {
   async createTask(input: CreateScheduleTaskInput): Promise<ScheduleTask> {
     this.validateTaskInput(input);
     const normalized = this.normalizeDefaults(input);
-    const created = await this.taskRepo.create(normalized);
+    // 模型常只写 prompt、漏传结构化字段：从 prompt + 会话最近用户消息回填
+    const sessionHint = await readLatestOpenClawUserMessageText(input.sessionKey);
+    const enriched = mergeComposerHintsIntoCreateInput({
+      ...normalized,
+      attachments: input.attachments,
+      skills: input.skills,
+      workflowName: input.workflowName,
+      recipients: input.recipients,
+      sessionKey: undefined,
+    }, [sessionHint]);
+    const aligned = alignScheduledTaskCreateToComposerModel(enriched);
+    const created = await this.taskRepo.create({
+      ...aligned,
+      // extra 真源：三列恒 null
+      dingtalkRecipients: null,
+      skillCode: null,
+      workflowCode: null,
+    });
+    const withAttachments = await this.persistComposerAttachmentsForTask(created);
     await this.scheduler.refreshSchedule();
-    const reloaded = await this.taskRepo.getById(created.id);
-    return reloaded ?? created;
+    const reloaded = await this.taskRepo.getById(withAttachments.id);
+    return reloaded ?? withAttachments;
   }
 
   async updateTask(id: string, input: UpdateScheduleTaskInput): Promise<ScheduleTask | null> {
@@ -102,10 +134,64 @@ export class ScheduledTaskService {
     if (input.timeoutSec !== undefined && input.timeoutSec !== null && input.timeoutSec < 1) {
       throw new Error('timeoutSec must be a positive number of seconds');
     }
-    const updated = await this.taskRepo.update(id, input);
+    const updatePayload: UpdateScheduleTaskInput = { ...input };
+    if (input.extra !== undefined && input.extra !== null) {
+      const existing = await this.taskRepo.getById(id);
+      updatePayload.extra = mergeScheduledTaskExtra(existing?.extra, input.extra);
+    }
+    const prepared = (updatePayload.extra !== undefined || input.prompt !== undefined)
+      ? prepareScheduledTaskAttachmentsForSave({
+        prompt: input.prompt ?? '',
+        extra: updatePayload.extra,
+      })
+      : null;
+    if (prepared && input.prompt !== undefined) {
+      // 手动编辑保存：gatewayText 可能仍带 SClaw-Skill marker；任务以 segments 为 skill 真源。
+      updatePayload.prompt = stripSkillTranscriptMarkers(prepared.prompt).trim();
+    }
+    if (prepared && (input.extra !== undefined || prepared.extra)) {
+      // prompt 里若带 media 行且未显式传 extra，也写入 composerAttachments
+      if (input.extra !== undefined || (input.prompt !== undefined && prepared.extra)) {
+        updatePayload.extra = prepared.extra;
+      }
+    }
+    const updated = await this.taskRepo.update(id, updatePayload);
     if (!updated) return null;
+    const withAttachments = await this.persistComposerAttachmentsForTask(updated);
     await this.scheduler.refreshSchedule();
-    return this.taskRepo.getById(id) ?? updated;
+    return this.taskRepo.getById(id) ?? withAttachments;
+  }
+
+  /**
+   * 把 extra.composerAttachments 的 staging 文件复制到任务专属目录，
+   * 回写 persistentPath 与 file segment 路径。
+   */
+  private async persistComposerAttachmentsForTask(task: ScheduleTask): Promise<ScheduleTask> {
+    const extra = task.extra && typeof task.extra === 'object' ? { ...task.extra } : null;
+    if (!extra) return task;
+    const rawAttachments = extra.composerAttachments;
+    if (!Array.isArray(rawAttachments) || rawAttachments.length === 0) {
+      // 编辑保存清空附件时仍清理旧文件
+      if (Array.isArray(rawAttachments)) {
+        await persistScheduledTaskAttachments(task.id, []);
+      }
+      return task;
+    }
+
+    const persisted = await persistScheduledTaskAttachments(
+      task.id,
+      rawAttachments as TaskComposerAttachmentRecord[],
+    );
+    extra.composerAttachments = persisted;
+    if (Array.isArray(extra.composerSegments)) {
+      extra.composerSegments = rewriteComposerSegmentFilePaths(
+        extra.composerSegments,
+        persisted,
+      ) as unknown[];
+    }
+
+    const rewritten = await this.taskRepo.update(task.id, { extra });
+    return rewritten ?? { ...task, extra };
   }
 
   async deleteTask(id: string, actor?: string | null): Promise<void> {
@@ -315,9 +401,87 @@ export class ScheduledTaskService {
   }
 
   /**
-   * 收件人列 / prompt 块 → `extra.composerSegments` mention segment。
-   * 写回 extra + 干净 prompt，清空 `dingtalk_recipients_json`。
+   * 收件人 / skill_code / workflow_code 列 → `extra.composerSegments`，三列清空。
    * 默认 dryRun；生产启动由 migrate 脚本带 marker 调用 dryRun:false。
+   */
+  async migrateComposerColumnsToSegments(options?: {
+    dryRun?: boolean;
+  }): Promise<{
+    scanned: number;
+    migrated: number;
+    skipped: number;
+    dryRun: boolean;
+    details: Array<{
+      taskId: string;
+      name: string;
+      action: string;
+      reason: string;
+      stripped?: boolean;
+    }>;
+  }> {
+    const dryRun = options?.dryRun !== false;
+    const tasks = await this.listTasks();
+    const details: Array<{
+      taskId: string;
+      name: string;
+      action: string;
+      reason: string;
+      stripped?: boolean;
+    }> = [];
+    let migrated = 0;
+    let skipped = 0;
+
+    for (const task of tasks) {
+      const plan = planComposerColumnsToSegmentsMigration(task);
+      if (plan.action === 'skip') {
+        skipped += 1;
+        details.push({
+          taskId: task.id,
+          name: task.name,
+          action: 'skip',
+          reason: plan.reason,
+        });
+        continue;
+      }
+
+      if (!dryRun) {
+        await this.updateTask(task.id, {
+          prompt: plan.prompt,
+          dingtalkRecipients: null,
+          skillCode: null,
+          workflowCode: null,
+          extra: plan.extra,
+        });
+      }
+      migrated += 1;
+      details.push({
+        taskId: task.id,
+        name: task.name,
+        action: dryRun ? 'would_migrate' : 'migrate',
+        reason: plan.reason,
+        stripped: plan.stripped,
+      });
+    }
+
+    logger.info('[scheduled-task] columns → composerSegments', {
+      dryRun,
+      scanned: tasks.length,
+      migrated,
+      skipped,
+    });
+
+    return {
+      scanned: tasks.length,
+      migrated,
+      skipped,
+      dryRun,
+      details,
+    };
+  }
+
+  /**
+   * 收件人列 / prompt 块 → `extra.composerSegments` mention segment。
+   * @deprecated 使用 migrateComposerColumnsToSegments（含技能/工作流列）。
    */
   async migrateDingTalkRecipientsToComposerSegments(options?: {
     dryRun?: boolean;

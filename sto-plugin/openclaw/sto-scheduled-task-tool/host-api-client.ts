@@ -4,6 +4,18 @@ export type ScheduledTaskToolPluginConfig = {
 	timeoutMs?: number;
 };
 
+export type ScheduledTaskAttachmentInput = {
+	fileName?: string;
+	mimeType?: string;
+	/** Chat outbound / staging 绝对路径（~/.stoclaw/...） */
+	sourcePath: string;
+};
+
+export type ScheduledTaskSkillInput = {
+	slug: string;
+	title?: string;
+};
+
 export type CreateScheduledTaskRequest = {
 	name: string;
 	cronExpr: string;
@@ -12,7 +24,12 @@ export type CreateScheduledTaskRequest = {
 	agentId: string;
 	enabled?: boolean;
 	workflowCode?: string | null;
-	/** 与 DingTalkMention[] 同构；落 schedule_tasks.dingtalk_recipients_json */
+	workflowName?: string | null;
+	skillCode?: string | null;
+	skills?: ScheduledTaskSkillInput[] | null;
+	/**
+	 * @deprecated 收件人改写 extra.composerSegments；Host 会强制写 null。
+	 */
 	dingtalkRecipients?: Array<{
 		type: 'user' | 'group';
 		displayName: string;
@@ -20,6 +37,23 @@ export type CreateScheduledTaskRequest = {
 		openConversationId?: string;
 		corpId?: string;
 	}> | null;
+	/** 钉钉收件人 → extra.composerSegments */
+	recipients?: Array<{
+		type: 'user' | 'group';
+		displayName: string;
+		userId?: string;
+		openConversationId?: string;
+		corpId?: string;
+	}> | null;
+	/** 含 composerSegments 等；可空，Host 会按结构化字段重建 */
+	extra?: Record<string, unknown> | null;
+	/**
+	 * Chat 本轮附图的 outbound 路径；Host 拷贝到
+	 * ~/.stoclaw/scheduled-tasks/{id}/attachments/
+	 */
+	attachments?: ScheduledTaskAttachmentInput[] | null;
+	/** OpenClaw sessionKey；Host 可读最近用户消息回填结构化字段 */
+	sessionKey?: string | null;
 };
 
 export type CreateScheduledTaskResponse = {
@@ -31,6 +65,8 @@ export type CreateScheduledTaskResponse = {
 	enabled: boolean;
 	nextRunAt?: string | null;
 	prompt?: string;
+	skillCode?: string | null;
+	workflowCode?: string | null;
 };
 
 const DEFAULT_HOST = '127.0.0.1';

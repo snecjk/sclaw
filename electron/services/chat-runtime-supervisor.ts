@@ -367,7 +367,13 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       databaseWrites: 0,
     });
     this.snapshots.set(input.sessionKey, snapshot);
-    const displayText = input.displayText?.trim();
+    // 定时任务不注入乐观 user 消息（X2）：任务会话的 user 气泡完全由 server echo 渲染，
+    // 避免乐观消息携带 gateway 原文（[文件:] 占位符 / 字面 \n）直接上屏。
+    // chat 链路行为不变：渲染侧已有同 id 乐观消息，dispatch 携带的本来就会被
+    // currentOptimisticBelongsToRun 忽略。
+    const displayText = snapshot.runtimePolicy.origin === 'scheduled_task'
+      ? ''
+      : input.displayText?.trim();
     const dispatchPayload: ChatDispatchPayload = {
       idempotencyKey: input.idempotencyKey,
       ...(displayText ? {

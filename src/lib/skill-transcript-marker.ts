@@ -1,14 +1,19 @@
 /**
  * Hidden skill marker embedded in Gateway user message text.
  * Persisted in OpenClaw session transcripts (.jsonl) — survives app restart and localStorage clears.
+ *
+ * 剥除 / 解析正则 SSOT：`shared/skill-transcript-marker.ts`（定时任务入库也用同一套）。
  */
+import {
+  parseSkillTranscriptMarkers,
+  stripSkillGatewayPrefix,
+  stripSkillTranscriptMarkers,
+} from '../../shared/skill-transcript-marker';
 import { resolveSkillFromPlaza } from '@/lib/skill-plaza-resolve';
 import { stripGatewayUserMetadataPreservingLines } from '@/lib/user-message-display';
 import { getMessageText } from '@/stores/chat/helpers';
 import type { RawMessage } from '@/stores/chat/types';
 import type { SkillMeta } from '@/types/skill-meta';
-
-const SKILL_MARKER_RE = /<!--\s*SClaw-Skill\s+(\{[\s\S]*?\})\s*-->/;
 
 export function appendSkillTranscriptMarker(
   gatewayText: string,
@@ -25,67 +30,15 @@ export function appendSkillTranscriptMarker(
 }
 
 export function stripSkillTranscriptMarker(text: string): string {
-  return text.replace(SKILL_MARKER_RE, '').trimEnd();
+  return stripSkillTranscriptMarkers(text);
 }
 
 export function parseSkillTranscriptMarker(text: string): SkillMeta | null {
-  const match = SKILL_MARKER_RE.exec(text);
-  if (!match) return null;
-  try {
-    const parsed = JSON.parse(match[1]) as { slug?: string; title?: string };
-    if (!parsed.slug?.trim()) return null;
-    const slug = parsed.slug.trim();
-    return {
-      slug,
-      title: (parsed.title?.trim() || slug),
-    };
-  } catch {
-    return null;
-  }
+  const [first] = parseSkillTranscriptMarkers(text);
+  return first ?? null;
 }
 
-/** 去掉 gateway 前缀的技能 defaultPrompt / 标题 / slug；保留后续 `[文件:]` 等 bake。 */
-export function stripSkillGatewayPrefix(
-  body: string,
-  prompt: string,
-  title: string,
-  slug?: string,
-): string {
-  let text = body.trim();
-  if (!text) return '';
-
-  const prefixes = [...new Set(
-    [prompt, title, slug]
-      .map((value) => value?.trim())
-      .filter((value): value is string => Boolean(value)),
-  )];
-  if (!prefixes.length) return text;
-
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const prefix of prefixes) {
-      if (text === prefix) return '';
-      for (const separator of ['\n\n', '\n', ' ']) {
-        const lead = `${prefix}${separator}`;
-        if (text.startsWith(lead)) {
-          text = text.slice(lead.length).trim();
-          changed = true;
-          break;
-        }
-      }
-      if (changed) break;
-      const lines = text.split('\n');
-      if (lines.length > 1 && lines[0]?.trim() === prefix) {
-        text = lines.slice(1).join('\n').trim();
-        changed = true;
-        break;
-      }
-    }
-  }
-
-  return text;
-}
+export { stripSkillGatewayPrefix };
 
 /** Strip injected defaultPrompt prefix; keep only user-typed text for bubble display. */
 export function deriveSkillUserDisplayText(

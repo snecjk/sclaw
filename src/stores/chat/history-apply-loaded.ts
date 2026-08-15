@@ -11,7 +11,6 @@ import {
   normalizeUserMessageText,
   traceLoadHistoryUserReconciliation,
 } from './user-message-merge';
-import { isScheduledTaskUserEcho } from './scheduled-task-user-echo';
 import {
   mergeHistoryDisplayMessages,
   prepareHistoryMessages,
@@ -60,12 +59,6 @@ function findOptimisticUserEcho(input: {
   const { finalMessages, cachedOptimistic, userMsgAt, toMs } = input;
   const optimisticRefAt = userMsgAt
     ?? (cachedOptimistic.timestamp ? toMs(cachedOptimistic.timestamp) : 0);
-
-  if (cachedOptimistic._scheduledTaskOptimistic) {
-    return finalMessages.find((message) => (
-      isScheduledTaskUserEcho(message, cachedOptimistic, optimisticRefAt)
-    ));
-  }
 
   const byPairing = findHistoryUserEcho(finalMessages, cachedOptimistic, optimisticRefAt);
   if (byPairing) return byPairing;

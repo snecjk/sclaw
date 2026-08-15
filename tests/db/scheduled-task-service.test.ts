@@ -159,6 +159,28 @@ describe('ScheduledTaskService', () => {
     });
   });
 
+  describe('updateTask extra merge', () => {
+    it('preserves extra.createdVia when incoming extra omits it', async () => {
+      const created = await svc.createTask({
+        ...baseCreateInput,
+        extra: {
+          createdVia: 'nl',
+          composerSegments: [{ type: 'text', text: 'old' }],
+        },
+      });
+      expect(created.extra?.createdVia).toBe('nl');
+
+      const updated = await svc.updateTask(created.id, {
+        prompt: 'new prompt',
+        extra: {
+          composerSegments: [{ type: 'text', text: 'new' }],
+        },
+      });
+      expect(updated?.extra?.createdVia).toBe('nl');
+      expect(updated?.extra?.composerSegments).toEqual([{ type: 'text', text: 'new' }]);
+    });
+  });
+
   describe('setEnabled / deleteTask', () => {
     it('toggling enabled off nulls nextRunAt and back on recomputes it', async () => {
       const task = await svc.createTask(baseCreateInput);

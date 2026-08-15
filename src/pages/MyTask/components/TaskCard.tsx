@@ -87,8 +87,8 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
   };
 
   const scheduleLabel = task.scheduleText ?? parseScheduleToLabel(task.cronExpr);
-  /** 关联工作流 code，用于显示「工作流任务」badge */
-  const workflowId = task.workflowCode ?? null;
+  // 卡片只标「工作流任务」；技能留在 composer 内，不占卡片徽标
+  const showWorkflowBadge = Boolean(task.hasWorkflow);
 
   return (
     <article
@@ -104,7 +104,7 @@ export function TaskCard({ task, onEdit, onDelete, onRun, onToggle, onClick }: T
             aria-hidden
           />
           <h3 className={myTaskCardTitleClass}>{task.name}</h3>
-          {workflowId ? (
+          {showWorkflowBadge ? (
             <span className={myTaskWorkflowBadgeClass}>
               {t('myTask.card.workflowBadge')}
             </span>

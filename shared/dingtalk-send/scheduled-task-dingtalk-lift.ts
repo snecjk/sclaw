@@ -190,3 +190,146 @@ export function planComposerSegmentsRecipientsMigration(
     mentions,
   };
 }
+
+// ──── extra 真源：列 → composerSegments（收件人 + 技能 + 工作流）────
+
+export type ComposerColumnLiftSource = ScheduledTaskDingTalkSource & {
+  skillCode?: string | null;
+  workflowCode?: string | null;
+  workflowName?: string | null;
+};
+
+export type ComposerColumnsMigrationPlan =
+  | {
+      action: 'skip';
+      reason: 'already_clean';
+    }
+  | {
+      action: 'migrate';
+      reason: string;
+      prompt: string;
+      stripped: boolean;
+      skillCode: null;
+      workflowCode: null;
+      dingtalkRecipients: null;
+      extra: Record<string, unknown>;
+    };
+
+function segmentsOf(extra: Record<string, unknown> | null | undefined): unknown[] {
+  return Array.isArray(extra?.composerSegments)
+    ? [...(extra!.composerSegments as unknown[])]
+    : [];
+}
+
+function hasSkillSegment(segments: unknown[], slug: string): boolean {
+  const key = slug.trim().toLowerCase();
+  if (!key) return false;
+  return segments.some((seg) => {
+    if (!seg || typeof seg !== 'object') return false;
+    const record = seg as { type?: string; slug?: string };
+    return record.type === 'skill' && (record.slug ?? '').trim().toLowerCase() === key;
+  });
+}
+
+function hasWorkflowSegment(segments: unknown[], id: string): boolean {
+  const key = id.trim();
+  if (!key) return false;
+  return segments.some((seg) => {
+    if (!seg || typeof seg !== 'object') return false;
+    const record = seg as { type?: string; id?: string };
+    return record.type === 'workflow' && (record.id ?? '').trim() === key;
+  });
+}
+
+/**
+ * 规划列 → extra.composerSegments 合并迁移（收件人 / skill_code / workflow_code）。
+ * 已有对应 segment 则只清列；缺 segment 则从列补齐后再清列。
+ */
+export function planComposerColumnsToSegmentsMigration(
+  task: ComposerColumnLiftSource,
+): ComposerColumnsMigrationPlan {
+  const reasons: string[] = [];
+  let prompt = task.prompt ?? '';
+  let stripped = false;
+  let extra: Record<string, unknown> =
+    task.extra && typeof task.extra === 'object' ? { ...task.extra } : {};
+  let segments = segmentsOf(extra);
+  let changed = false;
+
+  // —— 收件人 ——
+  const existingMentions = extractDingTalkMentionsFromComposerSegments(extra);
+  if (!existingMentions) {
+    const fromColumn = hasResolvedDingTalkMentions(task.dingtalkRecipients)
+      ? (task.dingtalkRecipients ?? null)
+      : null;
+    const fromPrompt = parseDingTalkRecipientsFromText(task.prompt ?? '');
+    const promptResolved =
+      fromPrompt && hasResolvedDingTalkMentions(fromPrompt) ? fromPrompt : null;
+    const mentions = fromColumn ?? promptResolved;
+    if (mentions?.length) {
+      extra = mergeMentionSegmentsIntoExtra(extra, mentions);
+      segments = segmentsOf(extra);
+      const cleaned = stripDingTalkMentionContextForDisplay(prompt).trim();
+      if (cleaned && cleaned !== prompt.trim()) {
+        prompt = cleaned;
+        stripped = true;
+      }
+      reasons.push(fromColumn ? 'recipients_column' : 'recipients_prompt');
+      changed = true;
+    }
+  }
+  if (task.dingtalkRecipients != null) {
+    reasons.push('clear_recipients_column');
+    changed = true;
+  }
+
+  // —— 技能 ——
+  const skillCode = task.skillCode?.trim() || '';
+  if (skillCode) {
+    if (!hasSkillSegment(segments, skillCode)) {
+      segments = [
+        ...segments,
+        { type: 'skill', slug: skillCode, title: skillCode },
+      ];
+      extra = { ...extra, composerSegments: segments };
+      reasons.push('skill_column');
+      changed = true;
+    } else {
+      reasons.push('clear_skill_column');
+      changed = true;
+    }
+  }
+
+  // —— 工作流 ——
+  const workflowCode = task.workflowCode?.trim() || '';
+  if (workflowCode) {
+    if (!hasWorkflowSegment(segments, workflowCode)) {
+      const name = task.workflowName?.trim() || workflowCode;
+      segments = [
+        ...segments,
+        { type: 'workflow', id: workflowCode, name, source: 'mine' },
+      ];
+      extra = { ...extra, composerSegments: segments };
+      reasons.push('workflow_column');
+      changed = true;
+    } else {
+      reasons.push('clear_workflow_column');
+      changed = true;
+    }
+  }
+
+  if (!changed) {
+    return { action: 'skip', reason: 'already_clean' };
+  }
+
+  return {
+    action: 'migrate',
+    reason: reasons.join('+'),
+    prompt,
+    stripped,
+    skillCode: null,
+    workflowCode: null,
+    dingtalkRecipients: null,
+    extra,
+  };
+}

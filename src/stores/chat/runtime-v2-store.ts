@@ -4,7 +4,6 @@ import { subscribeHostEvent } from '@/lib/host-events';
 import { AppError } from '@/lib/error-model';
 import type { CanonicalChatEvent, ChatRuntimeSnapshot } from '../../../shared/chat-runtime-protocol';
 import type { RawMessage } from './types';
-import { isScheduledTaskUserEcho } from './scheduled-task-user-echo';
 import { findHistoryUserEcho } from './user-message-merge';
 import {
   applyRuntimeSnapshot,
@@ -125,25 +124,25 @@ function transcriptContainsCompletedTurn(
   let currentUserIndex = optimistic?.id
     ? transcript.findIndex((message) => message.role === 'user' && message.id === optimistic.id)
     : -1;
-  if (currentUserIndex < 0 && optimistic?._scheduledTaskOptimistic) {
-    const optimisticAt = messageTimestampMs(optimistic);
-    const referenceMs = optimisticAt > 0
-      ? optimisticAt
-      : current.runtime?.startedAt ?? 0;
-    currentUserIndex = findLastMessageIndex(transcript, (message) => (
-      isScheduledTaskUserEcho(message, optimistic, referenceMs)
-    ));
-    if (currentUserIndex < 0) return false;
-  } else if (currentUserIndex < 0 && optimistic) {
+  if (currentUserIndex < 0 && optimistic) {
     const expected = comparableContent(optimistic.content);
     currentUserIndex = findLastMessageIndex(transcript,
       (message) => message.role === 'user' && comparableContent(message.content) === expected,
     );
   }
   if (currentUserIndex < 0) {
+    // 兜底：按 startedAt 之后的首条 user 消息判定。定时任务无乐观消息，走此路径。
+    // 容差 2s（仅在无乐观消息时生效，即定时任务场景）：echo user 的 timestamp 可能
+    // 因数据库写入顺序/时钟偏移略早于 startedAt，严格 `>=` 会漏过导致误判「未完成」
+    // （见 §5.7 时钟边界）。有乐观消息的 chat 链路保持严格 `>=`，避免把上一轮 user
+    // 误当作当前 run 的回显而提前清掉 streaming overlay。
+    const startedAt = current.runtime?.startedAt ?? Number.MAX_SAFE_INTEGER;
+    const lowerBound = !optimistic && startedAt !== Number.MAX_SAFE_INTEGER
+      ? startedAt - 2_000
+      : startedAt;
     currentUserIndex = findLastMessageIndex(transcript, (message) => (
       message.role === 'user'
-      && messageTimestampMs(message) >= (current.runtime?.startedAt ?? Number.MAX_SAFE_INTEGER)
+      && messageTimestampMs(message) >= lowerBound
     ));
   }
   if (currentUserIndex < 0) return false;

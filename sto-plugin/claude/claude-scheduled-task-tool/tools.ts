@@ -29,10 +29,15 @@ export const CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT = [
   '- 默认使用当前 Claude 对话的 agentId、workspacePath、模型和供应商账号；用户未明确指定时省略这些字段，让工具自动继承当前会话配置。',
   '- 用户明确指定其他 agent、工作区、模型、供应商账号、超时时间或启用状态时，按用户提供的值传入；禁止编造 ID、路径或账号。',
   '',
-  '【任务指令与钉钉收件人】',
-  '- promptTemplate 只能包含定时执行时要完成的干净、完整、可独立理解的业务指令；不要写入 cron 时间、任务管理步骤、StoClaw DingTalk Recipients JSON 或钉钉发送规则块。',
-  '- 创建任务时，如果当前消息包含用户通过 @ 选择产生的 StoClaw DingTalk Recipients JSON，必须将其中所有有效收件人原样传给 recipients；禁止遗漏、猜测、搜索替换或写入 promptTemplate。',
-  '- 当前更新工具不支持修改 recipients。用户要求修改已有任务的钉钉收件人时，应明确说明当前能力限制，不得通过改写 promptTemplate 伪造收件人配置，也不得擅自删除并重建任务。',
+  '【任务指令与结构化字段（与 UI Modal 同构）】',
+  '- promptTemplate 只能包含定时执行时要完成的干净业务指令；可用 `@真实展示名`、`[文件: 真实文件名]`、`[技能: 真实技能标题]`（必须是会话里出现过的真实值，**禁止**照抄 `<…>` / `文件名` / `标题` 这类文档占位符）。',
+  '- 不要写入 cron 时间、任务管理步骤、StoClaw DingTalk Recipients JSON、钉钉发送规则块或 `[media attached:…]` 行。',
+  '- **结构化字段强制（禁止只写进 promptTemplate；全部进 extra.composerSegments，可多个）**：',
+  '- recipients：用户 @ 选人时必须原样传入；**不写** dingtalk_recipients_json 列。',
+  '- attachments：本轮附图时必须传入 sourcePath（复制用户消息 `[media attached: path (mime) | …]`）；系统复制到任务持久目录。',
+  '- skills / skillCode：必须传 slug（及 title）；可多个；**不写** skill_code 列。',
+  '- workflowCode / workflowName：任务含执行工作流时**必须**传；可多个；**不写** workflow_code 列。',
+  '- 当前更新工具暂不支持改 recipients/attachments/skills。用户要求改已有任务的这些字段时，应说明能力限制，不得改写 promptTemplate 伪造，也不得擅自删建。',
   '',
   '【工具边界与结果处理】',
   '- 禁止使用旧版 CronCreate、CronUpdate、CronDelete、CronList、Cron 等工具管理 Claude 定时任务。',
@@ -111,6 +116,7 @@ async function resolveConversationDefaults(sessionKey: string): Promise<{
   accountId?: string;
   agentId: string;
   model?: string;
+  sessionKey: string;
   workspacePath?: string;
 }> {
   const entry = await getEngineSessionRegistryEntry(sessionKey);
@@ -121,6 +127,7 @@ async function resolveConversationDefaults(sessionKey: string): Promise<{
     accountId: entry?.accountId,
     agentId,
     model: entry?.model,
+    sessionKey,
     workspacePath,
   };
 }
@@ -128,7 +135,7 @@ async function resolveConversationDefaults(sessionKey: string): Promise<{
 function requireNonEmpty(value: string | undefined, field: string): string {
   const normalized = value?.trim() || '';
   if (!normalized) {
-    throw new Error(`${field} is required`);
+    throw new Error(`${field} 为必填`);
   }
   return normalized;
 }
@@ -144,14 +151,14 @@ async function resolveTaskByIdentity(input: {
   if (taskId) {
     const byId = tasks.find((task) => task.id === taskId);
     if (!byId) {
-      throw new Error(`Claude scheduled task "${taskId}" not found`);
+      throw new Error(`未找到 Claude 定时任务「${taskId}」`);
     }
     return byId;
   }
 
   const taskName = input.taskName?.trim();
   if (!taskName) {
-    throw new Error('taskId or taskName is required');
+    throw new Error('必须提供 taskId 或 taskName');
   }
 
   const exactMatches = tasks.filter((task) => task.name === taskName);
@@ -159,10 +166,10 @@ async function resolveTaskByIdentity(input: {
     return exactMatches[0]!;
   }
   if (exactMatches.length > 1) {
-    throw new Error(`Multiple Claude scheduled tasks are named "${taskName}". Use taskId instead.`);
+    throw new Error(`存在多个名为「${taskName}」的 Claude 定时任务，请改用 taskId。`);
   }
 
-  throw new Error(`Claude scheduled task "${taskName}" not found`);
+  throw new Error(`未找到名为「${taskName}」的 Claude 定时任务`);
 }
 
 async function resolveTaskSummary(taskId: string): Promise<ScheduleTask | null> {
@@ -170,10 +177,63 @@ async function resolveTaskSummary(taskId: string): Promise<ScheduleTask | null> 
   return tasks.find((task) => task.id === taskId) ?? null;
 }
 
+function normalizeAttachments(raw: unknown): Array<{
+  fileName?: string;
+  mimeType?: string;
+  sourcePath: string;
+}> {
+  if (!Array.isArray(raw)) return [];
+  const out: Array<{ fileName?: string; mimeType?: string; sourcePath: string }> = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const sourcePath = typeof record.sourcePath === 'string' ? record.sourcePath.trim() : '';
+    if (!sourcePath || seen.has(sourcePath)) continue;
+    seen.add(sourcePath);
+    out.push({
+      sourcePath,
+      fileName: typeof record.fileName === 'string' && record.fileName.trim()
+        ? record.fileName.trim()
+        : undefined,
+      mimeType: typeof record.mimeType === 'string' && record.mimeType.trim()
+        ? record.mimeType.trim()
+        : undefined,
+    });
+  }
+  return out;
+}
+
+function normalizeSkills(
+  raw: unknown,
+  skillCode?: string,
+): Array<{ slug: string; title?: string }> {
+  const out: Array<{ slug: string; title?: string }> = [];
+  const seen = new Set<string>();
+  const push = (slug: string, title?: string) => {
+    const s = slug.trim();
+    if (!s || seen.has(s)) return;
+    seen.add(s);
+    out.push({ slug: s, title: title?.trim() || undefined });
+  };
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (!item || typeof item !== 'object') continue;
+      const record = item as Record<string, unknown>;
+      if (typeof record.slug === 'string') {
+        push(record.slug, typeof record.title === 'string' ? record.title : undefined);
+      }
+    }
+  }
+  if (skillCode?.trim()) push(skillCode.trim());
+  return out;
+}
+
 function toCreateInput(
   defaults: Awaited<ReturnType<typeof resolveConversationDefaults>>,
   input: {
     agentId?: string;
+    attachments?: unknown;
     cronExpr: string;
     enabled?: boolean;
     model?: string;
@@ -181,16 +241,24 @@ function toCreateInput(
     promptTemplate: string;
     providerAccountId?: string;
     recipients?: unknown;
+    skillCode?: string;
+    skills?: unknown;
     timeoutSec?: number;
+    workflowCode?: string;
+    workflowName?: string;
     workspacePath?: string;
   },
 ): CreateScheduleTaskInput {
   const workspacePath = input.workspacePath?.trim() || defaults.workspacePath;
   if (!workspacePath) {
-    throw new Error('workspacePath is required and could not be inferred from the current conversation');
+    throw new Error('workspacePath 为必填，且无法从当前会话推断');
   }
 
   const recipients = normalizeDingTalkMentions(input.recipients);
+  const attachments = normalizeAttachments(input.attachments);
+  const skills = normalizeSkills(input.skills, input.skillCode);
+  const workflowCode = input.workflowCode?.trim() || null;
+  const workflowName = input.workflowName?.trim() || null;
 
   return {
     engineType: 'claude',
@@ -204,7 +272,15 @@ function toCreateInput(
     accountId: input.providerAccountId?.trim() || defaults.accountId,
     timeoutSec: input.timeoutSec,
     workspacePath,
-    dingtalkRecipients: recipients.length > 0 ? recipients : null,
+    // 与 OpenClaw / Modal 同构：列清空，结构化字段交 createTask align
+    dingtalkRecipients: null,
+    recipients: recipients.length > 0 ? recipients : null,
+    attachments: attachments.length > 0 ? attachments : null,
+    skills: skills.length > 0 ? skills : null,
+    skillCode: skills[0]?.slug ?? null,
+    workflowCode,
+    workflowName,
+    sessionKey: defaults.sessionKey ?? null,
   };
 }
 
@@ -244,22 +320,24 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
   const createClaudeScheduledTask = tool(
     'create_claude_scheduled_task',
     [
-      'Create a Claude local scheduled task immediately from confirmed user intent.',
-      'Pass a standard 5-field cronExpr.',
-      'If agentId or workspacePath is omitted, the current Claude conversation defaults will be used.',
-      'promptTemplate must be a clean business instruction (do not bake DingTalk recipient rule blocks).',
-      'When the user @-picked DingTalk recipients, pass them as recipients; they are stored in dingtalk_recipients_json.',
+      '根据用户已确认的意图立即创建 Claude 本地定时任务。',
+      '传入标准 5 段 cronExpr。',
+      '若省略 agentId 或 workspacePath，将使用当前 Claude 会话的默认值。',
+      'promptTemplate 必须是干净的业务指令（不要写入钉钉发送规则块或 [media attached:] 行）。',
+      '用户 @ 选钉钉收件人时传入 recipients（写入 extra.composerSegments，不写列）。',
+      '用户附图时传入 attachments，sourcePath 为 outbound 绝对路径。',
+      '用到技能/工作流时传入 skills/skillCode 与 workflowCode/workflowName（与 UI Modal 同构）。',
     ].join('\n'),
     {
-      name: z.string().min(1).describe('User-facing task name'),
-      promptTemplate: z.string().min(1).describe('Prompt that the scheduled Claude task should execute'),
-      cronExpr: z.string().min(1).describe('Standard 5-field cron expression, for example "0 9 * * *"'),
-      agentId: z.string().optional().describe('Optional target Claude agent id; defaults to the current conversation agent'),
-      workspacePath: z.string().optional().describe('Optional workspace root; defaults to the current conversation workspace'),
-      providerAccountId: z.string().optional().describe('Optional provider account id override'),
-      model: z.string().optional().describe('Optional model override'),
-      timeoutSec: z.number().int().min(1).max(86_400).optional().describe('Optional timeout in seconds'),
-      enabled: z.boolean().optional().describe('Whether the task should be enabled immediately; default true'),
+      name: z.string().min(1).describe('任务短标题'),
+      promptTemplate: z.string().min(1).describe('到点由 Claude 执行的干净业务指令'),
+      cronExpr: z.string().min(1).describe('标准 5 段 cron 表达式，例如 "0 9 * * *"'),
+      agentId: z.string().optional().describe('可选目标 Claude agent id；缺省为当前会话 agent'),
+      workspacePath: z.string().optional().describe('可选工作区根路径；缺省为当前会话工作区'),
+      providerAccountId: z.string().optional().describe('可选供应商账号 id 覆盖'),
+      model: z.string().optional().describe('可选模型覆盖'),
+      timeoutSec: z.number().int().min(1).max(86_400).optional().describe('可选超时秒数'),
+      enabled: z.boolean().optional().describe('是否立即启用；缺省 true'),
       recipients: z
         .array(
           z.object({
@@ -271,7 +349,29 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
           }),
         )
         .optional()
-        .describe('Optional DingTalk recipients (DingTalkMention[]); required when user @-picked people/groups'),
+        .describe('钉钉收件人（DingTalkMention[]）；用户 @ 选人/群时必传；写入 extra.composerSegments'),
+      attachments: z
+        .array(
+          z.object({
+            sourcePath: z.string().min(1).describe('本地 outbound 绝对路径，通常在 ~/.stoclaw/ 下'),
+            fileName: z.string().optional(),
+            mimeType: z.string().optional(),
+          }),
+        )
+        .optional()
+        .describe('附图。来自 [media attached: path (mime) | …] 时必须传 sourcePath；系统复制到任务附件目录'),
+      skillCode: z.string().optional().describe('主技能 slug'),
+      skills: z
+        .array(
+          z.object({
+            slug: z.string().min(1),
+            title: z.string().optional(),
+          }),
+        )
+        .optional()
+        .describe('任务用到的技能（slug + title）'),
+      workflowCode: z.string().optional().describe('工作流实例 id（如 wf_xxx）'),
+      workflowName: z.string().optional().describe('工作流展示名'),
     },
     async (input) => runScheduledTaskTool('claude_scheduled_task_created', async () => {
       const defaults = await resolveConversationDefaults(config.sessionKey);
@@ -284,14 +384,14 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
           workspacePath: !input.workspacePath,
         },
       };
-    }),
+    }, '已创建定时任务。'),
   );
 
   const listClaudeScheduledTasks = tool(
     'list_claude_scheduled_tasks',
-    'List Claude local scheduled tasks available in StoClaw.',
+    '列出 StoClaw 中的 Claude 本地定时任务。',
     {
-      enabledOnly: z.boolean().optional().describe('If true, return only enabled tasks'),
+      enabledOnly: z.boolean().optional().describe('为 true 时只返回已启用的任务'),
     },
     async ({ enabledOnly }) => runScheduledTaskTool('claude_scheduled_task_list', async () => {
       const tasks = await getScheduledTaskService().listTasks();
@@ -303,10 +403,10 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
 
   const getClaudeScheduledTask = tool(
     'get_claude_scheduled_task',
-    'Get one Claude local scheduled task by taskId or exact taskName.',
+    '按 taskId 或精确任务名获取一条 Claude 本地定时任务。',
     {
-      taskId: z.string().optional().describe('Exact task id'),
-      taskName: z.string().optional().describe('Exact task name when taskId is unknown'),
+      taskId: z.string().optional().describe('精确任务 id'),
+      taskName: z.string().optional().describe('未知 taskId 时使用精确任务名'),
     },
     async ({ taskId, taskName }) => runScheduledTaskTool('claude_scheduled_task_details', async () => {
       return {
@@ -318,22 +418,22 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
   const updateClaudeScheduledTask = tool(
     'update_claude_scheduled_task',
     [
-      'Update a Claude local scheduled task by taskId or exact taskName.',
-      'Pass only the fields that should change.',
-      'Use a 5-field cronExpr when changing the schedule.',
+      '按 taskId 或精确任务名更新 Claude 本地定时任务。',
+      '只传需要修改的字段。',
+      '修改执行时间时使用 5 段 cronExpr。',
     ].join('\n'),
     {
-      taskId: z.string().optional().describe('Exact task id'),
-      taskName: z.string().optional().describe('Exact task name when taskId is unknown'),
-      name: z.string().optional().describe('New task name'),
-      promptTemplate: z.string().optional().describe('New task prompt'),
-      cronExpr: z.string().optional().describe('New standard 5-field cron expression'),
-      enabled: z.boolean().optional().describe('Enable or disable the task'),
-      agentId: z.string().optional().describe('Optional target Claude agent id'),
-      workspacePath: z.string().optional().describe('Optional workspace root'),
-      providerAccountId: z.string().optional().describe('Optional provider account id override'),
-      model: z.string().optional().describe('Optional model override'),
-      timeoutSec: z.number().int().min(1).max(86_400).optional().describe('Optional timeout in seconds'),
+      taskId: z.string().optional().describe('精确任务 id'),
+      taskName: z.string().optional().describe('未知 taskId 时使用精确任务名'),
+      name: z.string().optional().describe('新的任务名称'),
+      promptTemplate: z.string().optional().describe('新的任务指令'),
+      cronExpr: z.string().optional().describe('新的标准 5 段 cron 表达式'),
+      enabled: z.boolean().optional().describe('启用或停用任务'),
+      agentId: z.string().optional().describe('可选目标 Claude agent id'),
+      workspacePath: z.string().optional().describe('可选工作区根路径'),
+      providerAccountId: z.string().optional().describe('可选供应商账号 id 覆盖'),
+      model: z.string().optional().describe('可选模型覆盖'),
+      timeoutSec: z.number().int().min(1).max(86_400).optional().describe('可选超时秒数'),
     },
     async ({ taskId, taskName, ...patch }) => runScheduledTaskTool('claude_scheduled_task_updated', async () => {
       const existing = await resolveTaskByIdentity({ taskId, taskName });
@@ -351,10 +451,10 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
 
   const deleteClaudeScheduledTask = tool(
     'delete_claude_scheduled_task',
-    'Delete a Claude local scheduled task by taskId or exact taskName.',
+    '按 taskId 或精确任务名删除 Claude 本地定时任务。',
     {
-      taskId: z.string().optional().describe('Exact task id'),
-      taskName: z.string().optional().describe('Exact task name when taskId is unknown'),
+      taskId: z.string().optional().describe('精确任务 id'),
+      taskName: z.string().optional().describe('未知 taskId 时使用精确任务名'),
     },
     async ({ taskId, taskName }) => runScheduledTaskTool('claude_scheduled_task_deleted', async () => {
       const task = await resolveTaskByIdentity({ taskId, taskName });
@@ -370,10 +470,10 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
 
   const triggerClaudeScheduledTask = tool(
     'trigger_claude_scheduled_task',
-    'Trigger a Claude local scheduled task immediately by taskId or exact taskName.',
+    '按 taskId 或精确任务名立即触发 Claude 本地定时任务。',
     {
-      taskId: z.string().optional().describe('Exact task id'),
-      taskName: z.string().optional().describe('Exact task name when taskId is unknown'),
+      taskId: z.string().optional().describe('精确任务 id'),
+      taskName: z.string().optional().describe('未知 taskId 时使用精确任务名'),
     },
     async ({ taskId, taskName }) => runScheduledTaskTool('claude_scheduled_task_triggered', async () => {
       const task = await resolveTaskByIdentity({ taskId, taskName });

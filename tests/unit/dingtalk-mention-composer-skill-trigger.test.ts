@@ -122,4 +122,32 @@ describe('dingtalk-mention-composer block newlines', () => {
     const textSeg = snapshot.segments.find((seg) => seg.type === 'text');
     expect(textSeg?.type === 'text' ? textSeg.text : '').toContain('\n- 总发件量');
   });
+
+  it('serializeMentionEditor keeps a newline between root inline chips and the first DIV', () => {
+    const root = document.createElement('div');
+    root.appendChild(document.createTextNode('发送给'));
+    const mention = document.createElement('span');
+    mention.className = 'dingtalk-mention-token';
+    mention.dataset.mentionType = 'user';
+    mention.dataset.mentionName = '侯正亚';
+    mention.dataset.userId = 'u1';
+    mention.textContent = '@侯正亚';
+    root.appendChild(mention);
+
+    const blank = document.createElement('div');
+    blank.appendChild(document.createElement('br'));
+    const next = document.createElement('div');
+    next.textContent = '另外再 查询上海青浦的天气';
+    const last = document.createElement('div');
+    last.textContent = '将结果发送给群';
+    root.append(blank, next, last);
+
+    const snapshot = serializeMentionEditor(root);
+    expect(snapshot.plainText).toBe([
+      '发送给@侯正亚',
+      '',
+      '另外再 查询上海青浦的天气',
+      '将结果发送给群',
+    ].join('\n'));
+  });
 });

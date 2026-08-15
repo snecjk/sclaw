@@ -76,6 +76,13 @@ import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
 
 /** 将 ScheduleTask 转换为页面 TaskViewModel */
 function managedTaskToViewModel(task: ManagedLocalTask): TaskViewModel {
+  const segments = Array.isArray(task.extra?.composerSegments)
+    ? (task.extra!.composerSegments as Array<{ type?: string }>)
+    : [];
+  const hasWorkflow = segments.some((seg) => seg?.type === 'workflow')
+    || Boolean(task.workflowCode); // 迁移前短暂兼容列
+  const hasSkill = segments.some((seg) => seg?.type === 'skill')
+    || Boolean(task.skillCode);
   return {
     id: task.id,
     name: task.name,
@@ -83,7 +90,8 @@ function managedTaskToViewModel(task: ManagedLocalTask): TaskViewModel {
     cronExpr: task.cronExpr,
     enabled: task.enabled,
     nextRunAt: task.nextRunAt ?? null,
-    workflowCode: task.workflowCode || undefined,
+    hasWorkflow,
+    hasSkill,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
     agentId: task.agentId,
@@ -363,13 +371,15 @@ export default function MyTask() {
               : t('myTask.error.claudeAgentNoWorkspaceCreate'),
           );
         }
-        // 统一模型：prompt 干净（执行期由 executor 烘焙 dingtalk），dingtalkRecipients 走列。
+        // prompt 干净；技能/工作流/收件人只进 extra.composerSegments；附件由 service 持久化。
         const base = {
           name: input.name,
           cronExpr: input.schedule,
           prompt: input.message,
-          dingtalkRecipients: input.dingTalkMentions ?? null,
-          workflowCode: input.workflowCode ?? null,
+          dingtalkRecipients: null,
+          skillCode: null,
+          workflowCode: null,
+          extra: input.extra ?? null,
           myArtifactFolderPath: input.myArtifactFolderPath ?? null,
           sharedArtifactFolderPath: input.sharedArtifactFolderPath ?? null,
         };
@@ -380,9 +390,14 @@ export default function MyTask() {
             }
           : {};
         if (editingJob) {
+          const engineChanged = input.engineType !== editingJob.engineType;
           await updateJob(editingJob.id, {
             ...base,
             ...claudeFields,
+            engineType: input.engineType,
+            ...(engineChanged
+              ? { agentId: selectedAgent?.id || 'main' }
+              : {}),
           });
           toast.success(t('myTask.toast.updated'));
         } else {

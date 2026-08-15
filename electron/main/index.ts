@@ -25,7 +25,6 @@ import type { HostEventBus } from '../api/event-bus';
 import { createMenu } from './menu';
 import { getWindowState, trackWindowState } from './window';
 import { logger } from '../utils/logger';
-import { sanitizeMemoryFromChatPayload } from '../../shared/agent-memory-display';
 import { warmupNetworkOptimization } from '../utils/uv-env';
 import { applySaiClientIdEnv } from '../utils/sai-client-id';
 import { isQuitting, setQuitting } from './app-state';
@@ -737,14 +736,14 @@ async function initialize(): Promise<void> {
   // startScheduler（discard→start）。迁移幂等（marker + per-row 存在检查，崩溃可重跑续传）。
   const { getScheduledTaskService } = await import('../scheduled-tasks/scheduled-task-service');
   const { runScheduledTasksMigration } = await import('../scripts/migrate-scheduled-tasks');
-  const { runDingTalkRecipientsToComposerSegmentsMigration } = await import(
-    '../scripts/migrate-dingtalk-recipients-to-composer-segments'
+  const { runComposerColumnsToSegmentsMigration } = await import(
+    '../scripts/migrate-composer-columns-to-segments'
   );
   const scheduledTaskService = getScheduledTaskService();
   scheduledTaskService.setGatewayManager(gm);
   await runScheduledTasksMigration(gm, scheduledTaskService);
-  await runDingTalkRecipientsToComposerSegmentsMigration(scheduledTaskService).catch((error) => {
-    logger.warn('[scheduled-task] dingtalk→composerSegments migration failed:', error);
+  await runComposerColumnsToSegmentsMigration(scheduledTaskService).catch((error) => {
+    logger.warn('[scheduled-task] columns→composerSegments migration failed:', error);
   });
   scheduledTaskService.startScheduler();
   void scheduledTaskService.refreshSchedule().catch((error) => {

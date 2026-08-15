@@ -16,6 +16,7 @@ import {
   stripGatewayTimestampPrefix,
 } from '@/lib/user-message-display';
 import { stripSkillGatewayPrefix } from '@/lib/skill-transcript-marker';
+import { unescapeLiteralNewlines } from '../../../shared/text-escape';
 
 /** window 自定义事件名，与 ChatMessage 派发侧保持一致 */
 export const CHAT_EDIT_DRAFT_EVENT = 'stoclaw:chat-edit-draft';
@@ -72,12 +73,42 @@ function sanitizeEditPlainText(text: string, skill?: SkillMeta): string {
       skill.slug,
     );
   }
-  return cleaned.replace(/\s+/g, ' ').trim();
+  // 换行策略与 sanitizePersistedTextSegmentForEdit / normalizeUserMessageForDisplay 对齐：
+  // 折叠行内空白为单空格、保留换行、3+ 换行压成 2 换行、trim。
+  // 消除 chat 冷读编辑降级路径与 task 描述框的行为差（多行文本不再被压成单行）。
+  return cleaned
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ ?\n ?/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+export { sanitizeEditPlainText };
+
+/** 判断清洗后的正文是否以技能 slug/title 开头（才值得跑 stripSkillGatewayPrefix）。 */
+function textLooksLikeSkillGatewayPrefix(
+  text: string,
+  skill: Pick<SkillMeta, 'slug' | 'title'>,
+): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  for (const prefix of [skill.title, skill.slug]) {
+    const token = prefix?.trim();
+    if (!token) continue;
+    if (trimmed === token) return true;
+    if (trimmed.startsWith(`${token}\n`) || trimmed.startsWith(`${token} `)) return true;
+  }
+  return false;
 }
 
 /**
  * 编辑回填：去掉 Gateway 时间戳、`[media attached:]`、技能脏前缀、stage-6 占位符，
  * 避免「编辑 → 再发」把元数据再次写进 gateway / 输入框。
+ *
+ * **换行保真**：`persistedSegmentsToComposer` 会对每个 text segment 传入任务级 skill。
+ * `stripSkillGatewayPrefix` 内部 `body.trim()` 会吃掉段首/段尾 `\n`，并把纯 `\n\n`
+ * 段落分隔变成空串（随后被 `if (!cleaned) continue` 丢弃），表现为「再编辑换行丢失」。
+ * 因此仅当正文看起来真有技能前缀时才剥；剥前缀时仍恢复两侧换行。
  */
 export function sanitizePersistedTextSegmentForEdit(
   text: string,
@@ -91,13 +122,16 @@ export function sanitizePersistedTextSegmentForEdit(
   if (withoutTimestamp !== trimmedStart) {
     cleaned = withoutTimestamp;
   }
-  if (skill?.slug || skill?.title) {
-    cleaned = stripSkillGatewayPrefix(
+  if ((skill?.slug || skill?.title) && textLooksLikeSkillGatewayPrefix(cleaned, skill)) {
+    const leadNl = cleaned.match(/^\r?\n*/)?.[0] ?? '';
+    const trailNl = cleaned.match(/\r?\n*$/)?.[0] ?? '';
+    const stripped = stripSkillGatewayPrefix(
       cleaned,
       '',
       skill.title ?? '',
       skill.slug,
     );
+    cleaned = `${leadNl}${stripped}${trailNl}`;
   }
   return cleaned.replace(/\n{3,}/g, '\n\n');
 }
@@ -127,15 +161,21 @@ function takePreferredAttachment(
  * 把持久化气泡 segments 转为可编辑的 composer segments。
  * 文件 segment 的 `attachmentId` 必须与注册表附件 `id` 对齐——
  * 否则重建/发送会跳过文件（出现「根据  和  生成…」空缺）。
+ *
+ * `unescapeLiteralNewlines`：仅对 NL 创建的任务开启——把 segments text 里的字面
+ * `\n`/`\r`/`\t` 还原成真换行/制表，再走既有清洗。UI 创建的任务可能故意含字面
+ * `\n`（正则/代码示例），不应误转，故默认 false。
  */
 export function persistedSegmentsToComposer(
   segments: PersistedComposerSegment[],
   preferredAttachments?: ChatEditDraftAttachment[],
+  options?: { unescapeLiteralNewlines?: boolean },
 ): {
   segments: ComposerSegment[];
   attachments: FileAttachment[];
   attachmentsById: Record<string, AttachmentLookupEntry>;
 } {
+  const unescape = options?.unescapeLiteralNewlines ?? false;
   const attachments: FileAttachment[] = [];
   const attachmentsById: Record<string, AttachmentLookupEntry> = {};
   const composerSegments: ComposerSegment[] = [];
@@ -149,7 +189,8 @@ export function persistedSegmentsToComposer(
     if (seg.type !== 'file') {
       // 禁止通过脏 text segment 再次插入 stage-6 占位符 / Gateway 前缀。
       if (seg.type === 'text') {
-        const cleaned = sanitizePersistedTextSegmentForEdit(seg.text, skillForSanitize);
+        const rawText = unescape ? unescapeLiteralNewlines(seg.text) : seg.text;
+        const cleaned = sanitizePersistedTextSegmentForEdit(rawText, skillForSanitize);
         if (!cleaned) continue;
         composerSegments.push({ type: 'text', text: cleaned });
         continue;

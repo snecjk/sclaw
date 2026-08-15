@@ -15,6 +15,8 @@ import type { CanonicalChatEvent, ChatRuntimeSnapshot } from '../../shared/chat-
 import { isTerminalChatRunPhase } from '../../shared/chat-runtime-protocol';
 import type { ChatRuntimeSupervisor } from '../services/chat-runtime-supervisor';
 import { resolveScheduledTaskDingTalkRecipients } from '../../shared/dingtalk-send/scheduled-task-dingtalk-lift';
+import { buildMediaFromComposerAttachments } from './scheduled-task-attachments';
+import { access } from 'node:fs/promises';
 import { collectArtifactsFromAssistantMessages } from '../services/data-center-artifact-sync/artifact-collector';
 import {
   resolveDataCenterTargetsFromUris,
@@ -109,6 +111,19 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
     // executor 只传递定时任务语义；system prompt 的实际承载方式由各引擎 adapter 决定。
     const recipients = resolveScheduledTaskDingTalkRecipients(task);
     const message = task.prompt;
+    const mediaCandidates = buildMediaFromComposerAttachments(task.extra);
+    const media: Array<{ filePath: string; mimeType: string; fileName: string }> = [];
+    for (const item of mediaCandidates) {
+      try {
+        await access(item.filePath);
+        media.push(item);
+      } catch {
+        logger.warn('[scheduled-task] skip missing attachment', {
+          taskId: task.id,
+          filePath: item.filePath,
+        });
+      }
+    }
 
     logger.info('[scheduled-task] dingtalk message assembled', {
       taskId: task.id,
@@ -116,6 +131,7 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
       engineType: task.engineType,
       promptChars: task.prompt.length,
       messageChars: message.length,
+      mediaCount: media.length,
       recipientCount: recipients?.length ?? 0,
       recipients: (recipients ?? []).map((r) => ({
         type: r.type,
@@ -132,12 +148,12 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
       sessionKey,
       message,
       sourceText: task.prompt,
-      displayText: task.prompt,
       deliver: true,
       idempotencyKey: run.idempotencyKey,
       systemPromptAppend,
       permissionProfile: task.permissionProfile ?? undefined,
       engineType: adapter.type,
+      media: media.length ? media : undefined,
       runtimePolicy: {
         origin: 'scheduled_task',
         ownerId: run.runId,
@@ -150,7 +166,15 @@ export class EngineScheduledTaskDispatcher implements ScheduledTaskDispatcher {
         gatewayManager,
         input,
         (params, memory) => adapter.prepareMemoryInjection(params, memory),
-        (prepared) => adapter.sendMessage(ctx, prepared),
+        (prepared) => {
+          if (input.media && input.media.length > 0) {
+            return adapter.sendMessageWithMedia(ctx, {
+              ...prepared,
+              media: input.media,
+            });
+          }
+          return adapter.sendMessage(ctx, prepared);
+        },
       );
 
       if (!result.success) {

@@ -126,6 +126,7 @@ export function useInputComposerCore({
     mentionEditorRef,
     enabled: enableDingTalkMention,
     isComposingRef,
+    mentionPopoverHostRef,
   });
   const {
     setMentionTrigger,

@@ -94,6 +94,18 @@ export interface CreateScheduleTaskInput {
   retryPolicy?: ScheduleTaskRetryPolicy | null;
   failurePolicy?: ScheduleTaskFailurePolicy | null;
   extra?: Record<string, unknown> | null;
+  /** NL：Chat outbound staging 路径，create 时拷到任务持久目录 */
+  attachments?: Array<{
+    id?: string;
+    fileName?: string;
+    mimeType?: string;
+    sourcePath: string;
+  }> | null;
+  skills?: Array<{ slug: string; title?: string }> | null;
+  workflowName?: string | null;
+  recipients?: DingTalkMention[] | null;
+  /** NL：OpenClaw sessionKey，用于回填附件/技能/工作流 */
+  sessionKey?: string | null;
   actor?: string | null;
 }
 
@@ -102,7 +114,9 @@ export interface UpdateScheduleTaskInput {
   name?: string;
   enabled?: boolean;
   cronExpr?: string;
+  engineType?: AgentEngineType;
   prompt?: string;
+  agentId?: string;
   workflowCode?: string | null;
   skillCode?: string | null;
   dingtalkRecipients?: DingTalkMention[] | null;

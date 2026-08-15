@@ -21,12 +21,18 @@ export interface UseComposerDingTalkMentionOptions {
   enabled?: boolean;
   /** IME 组合输入中标记（组合期不抢键盘） */
   isComposingRef?: RefObject<boolean>;
+  /**
+   * 浮层锚定元素：有则透传给 DingTalkMentionPopover.anchorRef，触发 portal + fixed
+   * 定位，避免被 Modal / 输入壳 overflow 裁切（问题一）。
+   */
+  mentionPopoverHostRef?: RefObject<HTMLElement | null>;
 }
 
 export function useComposerDingTalkMention({
   mentionEditorRef,
   enabled = true,
   isComposingRef,
+  mentionPopoverHostRef,
 }: UseComposerDingTalkMentionOptions) {
   const [mentionTrigger, setMentionTrigger] = useState<ActiveMentionTrigger | null>(null);
   const dingTalk = useDingTalkMention(mentionTrigger, enabled);
@@ -166,6 +172,7 @@ export function useComposerDingTalkMention({
       onLogin: loginDingTalkMention,
       onInstall: installDingTalkMention,
       onLoadMore: loadMoreDingTalkMentions,
+      anchorRef: mentionPopoverHostRef,
     },
   };
 }

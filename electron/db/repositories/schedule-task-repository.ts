@@ -178,7 +178,9 @@ export class ScheduleTaskRepository {
         enabled:
           input.enabled !== undefined ? (input.enabled ? 1 : 0) : existing.enabled ? 1 : 0,
         cron_expr: input.cronExpr !== undefined ? input.cronExpr : existing.cronExpr,
+        engine_type: input.engineType !== undefined ? input.engineType : existing.engineType,
         prompt: input.prompt !== undefined ? input.prompt : existing.prompt,
+        agent_id: input.agentId !== undefined ? input.agentId : existing.agentId,
         workflow_code:
           input.workflowCode !== undefined ? input.workflowCode : existing.workflowCode,
         skill_code: input.skillCode !== undefined ? input.skillCode : existing.skillCode,

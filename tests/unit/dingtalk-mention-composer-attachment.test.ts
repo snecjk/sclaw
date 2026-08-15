@@ -106,4 +106,26 @@ describe('dingtalk-mention-composer attachment token', () => {
     expect(snapshot.plainText.trim()).toBe('正文');
     expect(snapshot.skills[0]?.slug).toBe('s1');
   });
+
+  it('setMentionEditorSegments round-trips paragraph breaks next to chips', () => {
+    const root = document.createElement('div');
+    setMentionEditorSegments(root, [
+      { type: 'text', text: '发送给' },
+      {
+        type: 'mention',
+        mention: { type: 'user', displayName: '侯正亚', userId: 'u1' },
+      },
+      { type: 'text', text: '\n\n另外再 查询上海青浦的天气\n将结果发送给群' },
+    ]);
+
+    const snapshot = serializeMentionEditor(root);
+    expect(snapshot.plainText).toContain('@侯正亚');
+    expect(snapshot.plainText.replace(/[ \t]+\n/g, '\n')).toBe([
+      '发送给@侯正亚',
+      '',
+      '另外再 查询上海青浦的天气',
+      '将结果发送给群',
+    ].join('\n'));
+    expect(root.querySelectorAll('br').length).toBeGreaterThanOrEqual(2);
+  });
 });

@@ -7,56 +7,7 @@ const toMs = (value: unknown): number => {
   return timestamp < 1_000_000_000_000 ? timestamp * 1_000 : timestamp;
 };
 
-const optimistic: RawMessage = {
-  id: 'current-run',
-  role: 'user',
-  content: 'repeat scheduled prompt',
-  timestamp: 100,
-  _scheduledTaskOptimistic: true,
-};
-
 describe('loaded history optimistic user reconciliation', () => {
-  it('keeps the current optimistic turn when only an older identical task prompt exists', () => {
-    expect(hasOptimisticUserEcho({
-      finalMessages: [{
-        id: 'previous-run',
-        role: 'user',
-        content: 'repeat scheduled prompt',
-        timestamp: 10,
-      }],
-      cachedOptimistic: optimistic,
-      userMsgAt: 100_000,
-      toMs,
-    })).toBe(false);
-  });
-
-  it('clears the optimistic turn when the current task echo is persisted after a delay', () => {
-    expect(hasOptimisticUserEcho({
-      finalMessages: [{
-        id: 'server-current-run',
-        role: 'user',
-        content: 'repeat scheduled prompt',
-        timestamp: 106,
-      }],
-      cachedOptimistic: optimistic,
-      userMsgAt: 100_000,
-      toMs,
-    })).toBe(true);
-  });
-
-  it('accepts an id echo even when its timestamp is unavailable', () => {
-    expect(hasOptimisticUserEcho({
-      finalMessages: [{
-        id: 'current-run',
-        role: 'user',
-        content: 'decorated gateway prompt',
-      }],
-      cachedOptimistic: optimistic,
-      userMsgAt: 100_000,
-      toMs,
-    })).toBe(true);
-  });
-
   it('keeps normal-chat echo reconciliation when Gateway omits the timestamp', () => {
     expect(hasOptimisticUserEcho({
       finalMessages: [{
@@ -69,9 +20,44 @@ describe('loaded history optimistic user reconciliation', () => {
         role: 'user',
         content: 'normal chat',
         timestamp: 100,
-      },
+      } as RawMessage,
       userMsgAt: 100_000,
       toMs,
     })).toBe(true);
+  });
+
+  it('clears a normal-chat optimistic turn by id match once the server echo arrives', () => {
+    expect(hasOptimisticUserEcho({
+      finalMessages: [{
+        id: 'renderer-message',
+        role: 'user',
+        content: 'normal chat',
+        timestamp: 106,
+      }],
+      cachedOptimistic: {
+        id: 'renderer-message',
+        role: 'user',
+        content: 'normal chat',
+        timestamp: 100,
+      } as RawMessage,
+      userMsgAt: 100_000,
+      toMs,
+    })).toBe(true);
+  });
+
+  it('returns false for scheduled tasks (no optimistic message to reconcile, X2)', () => {
+    // X2: 定时任务不再注入乐观 user 消息，cachedOptimistic 恒为 null，
+    // hasOptimisticUserEcho 直接返回 false——任务会话的 user 气泡由 server echo 渲染。
+    expect(hasOptimisticUserEcho({
+      finalMessages: [{
+        id: 'server-current-run',
+        role: 'user',
+        content: 'scheduled prompt',
+        timestamp: 106,
+      }],
+      cachedOptimistic: null,
+      userMsgAt: 100_000,
+      toMs,
+    })).toBe(false);
   });
 });

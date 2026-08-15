@@ -59,10 +59,12 @@ describe('buildClaudeRuntimeOptions', () => {
     expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('Claude 本地定时任务工具使用规则');
     expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【意图分流】');
     expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【时间规则】');
-    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【任务指令与钉钉收件人】');
-    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('当前更新工具不支持修改 recipients');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【任务指令与结构化字段');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('当前更新工具暂不支持改 recipients');
     expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('`dws chat message send` 是普通钉钉消息发送');
     expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).not.toContain('Claude scheduled task tools:');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).not.toContain('【仅创建、当前会话不执行】');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).not.toContain('当前会话不要执行');
   });
 
   it('injects oral send guard for ordinary chat without pending mentions', async () => {

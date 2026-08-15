@@ -121,6 +121,21 @@ function appendTextSegment(segments: ComposerSegment[], text: string): void {
   }
 }
 
+/** 把 segment / 纯文本里的 `\n` 还原成 `<br>`，避免 contenteditable 把换行压成空格。 */
+function appendTextWithLineBreaks(parent: ParentNode, text: string): void {
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  if (!normalized) return;
+  const parts = normalized.split('\n');
+  parts.forEach((part, index) => {
+    if (index > 0) {
+      parent.appendChild(document.createElement('br'));
+    }
+    if (part) {
+      parent.appendChild(document.createTextNode(part));
+    }
+  });
+}
+
 function isEmptyEditorFillerNode(node: Node): boolean {
   if (node.nodeType === Node.TEXT_NODE) {
     return (node.textContent ?? '').trim() === '';
@@ -274,11 +289,14 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
   const rootChildren = Array.from(root.childNodes);
   const hasBlockChildren = rootChildren.some(isEditorBlockElement);
   if (hasBlockChildren) {
-    // contenteditable 回车常生成块级 DIV；块与块之间补 `\n`，否则气泡会丢换行。
+    // contenteditable 回车常生成块级 DIV。
+    // 先插入 chip 再打字时，首段会留在根上（inline），后续行才是 DIV；
+    // 不能只在「块与块之间」补 `\n`，否则第一个 DIV 前的换行会丢光。
     let emittedBlocks = 0;
+    let emittedInline = false;
     for (const child of rootChildren) {
       if (isEditorBlockElement(child)) {
-        if (emittedBlocks > 0) {
+        if (emittedBlocks > 0 || emittedInline) {
           plainText += '\n';
           appendTextSegment(segments, '\n');
         }
@@ -290,6 +308,7 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
         continue;
       }
       walk(child);
+      emittedInline = true;
     }
   } else {
     rootChildren.forEach(walk);
@@ -314,7 +333,8 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
   // 注意：file 后再跟 skill 时 skillOffset 往往是中间 NBSP 长度（>0），仍必须剥前导空白，
   // 否则与 findPlainTextBoundary 的跳过策略错位，insertMentionAtTrigger 会静默失败。
   if (startsWithInlineToken) {
-    const trimmed = normalized.replace(/^\s+/, '');
+    // 只剥 chip 自带的行内分隔空格，不能用 \s 连换行一起吃掉。
+    const trimmed = normalized.replace(/^[ \t\u00A0]+/, '');
     const lead = normalized.length - trimmed.length;
     if (lead > 0) {
       normalized = trimmed;
@@ -323,7 +343,7 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
       }
       for (const seg of segments) {
         if (seg.type === 'text') {
-          seg.text = seg.text.replace(/^\s+/, '').replace(/\u00A0/g, ' ');
+          seg.text = seg.text.replace(/^[ \t\u00A0]+/, '').replace(/\u00A0/g, ' ');
           break;
         }
       }
@@ -893,7 +913,7 @@ export function setMentionEditorSegments(
   for (const seg of segments) {
     switch (seg.type) {
       case 'text':
-        fragment.appendChild(document.createTextNode(seg.text));
+        appendTextWithLineBreaks(fragment, seg.text);
         break;
       case 'mention':
         fragment.appendChild(createMentionSpan(seg.mention));
@@ -1140,7 +1160,8 @@ export function clearMentionEditor(root: HTMLElement): void {
 }
 
 export function setMentionEditorPlainText(root: HTMLElement, text: string): void {
-  root.textContent = text;
+  root.replaceChildren();
+  appendTextWithLineBreaks(root, text);
 }
 
 export function insertPlainTextAtCaret(root: HTMLElement, text: string): void {

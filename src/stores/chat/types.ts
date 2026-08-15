@@ -83,8 +83,6 @@ export interface RawMessage {
   _skillMetas?: SkillMeta[];
   /** 仅本地：有序 composer segments，用于行内气泡渲染 / 编辑往返 */
   _composerSegments?: PersistedComposerSegment[];
-  /** Local-only: the optimistic bubble was synthesized from a scheduled-task dispatch event. */
-  _scheduledTaskOptimistic?: boolean;
 }
 
 /** Content block inside a message */
