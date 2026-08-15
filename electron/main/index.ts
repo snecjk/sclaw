@@ -732,7 +732,7 @@ async function initialize(): Promise<void> {
   registerFormHandlers();
 
   // 引擎无关通用定时任务：setGatewayManager 注入 dispatcher + eventSink →
-  // 一次性迁移遗留 claude definitions.json + openclaw jobs.json → schedule_tasks（源文件只读保留）→
+  // 一次性迁移遗留 claude definitions.json + openclaw jobs.json → schedule_tasks（jobs.json 迁后清空、definitions.json 保留）→
   // startScheduler（discard→start）。迁移幂等（marker + per-row 存在检查，崩溃可重跑续传）。
   const { getScheduledTaskService } = await import('../scheduled-tasks/scheduled-task-service');
   const { runScheduledTasksMigration } = await import('../scripts/migrate-scheduled-tasks');

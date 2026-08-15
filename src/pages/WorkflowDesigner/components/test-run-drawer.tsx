@@ -27,8 +27,13 @@ import { Textarea } from '@/components/ui/textarea';
 import type { WorkflowExecutionState, WorkflowRunArtifact, WorkflowRunResponse } from '@/types/workflow';
 import { invokeIpc } from '@/lib/api-client';
 import { isHttpUrl, openExternalUrl } from '@/lib/preview-url';
+import {
+  buildTrialRunTimeline,
+  collectTrialRunArtifacts,
+} from '@/pages/WorkflowDesigner/components/test-run-drawer-model';
+import { TrialRunDrawerView } from '@/pages/WorkflowDesigner/components/test-run-trial-view';
 
-interface TestRunDrawerProps {
+export interface TestRunDrawerProps {
   variant?: 'trial' | 'detail';
   open: boolean;
   workflowName?: string | null;
@@ -344,6 +349,16 @@ export function TestRunDrawer(props: TestRunDrawerProps) {
   const workflowVersionLabel = formatWorkflowVersion(workflowVersion);
   const isDetail = props.variant === 'detail';
   const runLabel = isDetail ? '本次运行' : '本次试运行';
+
+  if (!isDetail) {
+    return (
+      <TrialRunDrawerView
+        {...props}
+        timeline={buildTrialRunTimeline(props.run, props.executionState)}
+        artifacts={collectTrialRunArtifacts(props.run, props.executionState)}
+      />
+    );
+  }
 
   return (
       <Sheet open={props.open} onOpenChange={(open) => { if (!open) props.onClose(); }}>

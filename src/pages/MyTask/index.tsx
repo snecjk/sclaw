@@ -69,8 +69,6 @@ import { WorkflowDashboard } from '@/pages/Workflow/components/workflow-dashboar
 import { WorkflowPageShading } from '@/pages/Workflow/components/workflow-page-shading';
 import { useWorkflowListViewState } from '@/pages/Workflow/hooks/use-workflow-list-view-state';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
-import { useAppShellLayout } from '@/components/layout/app-shell-layout-context';
-import { SidebarHeaderToggle } from '@/components/layout/sidebar-header-toggle';
 
 // ──── 工具函数 ────
 
@@ -137,8 +135,6 @@ export default function MyTask() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { t } = useTranslation('tasks');
-  const { t: tCommon } = useTranslation('common');
-  const { snapshot, setUserCollapsed } = useAppShellLayout();
 
   const activeSection = parseMyTaskSection(searchParams.get('tab'));
   const workflowViewState = useWorkflowListViewState();
@@ -463,19 +459,10 @@ export default function MyTask() {
     <div className="flex h-full min-h-0 flex-col">
       <div
         className={cn(
-          'relative flex min-h-0 flex-1 flex-col overflow-hidden px-6 py-6',
+          'relative flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-0',
           isWorkflowSection && workflowPageRootClass,
         )}
       >
-        {snapshot.canUserRestoreSidebar ? (
-          <SidebarHeaderToggle
-            isCollapsed
-            onToggle={() => setUserCollapsed(false)}
-            collapseLabel={tCommon('sidebar.toggleSidebarCollapse')}
-            expandLabel={tCommon('sidebar.toggleSidebarExpand')}
-            className="absolute left-[calc(var(--sto-content-header-pad-start)-var(--sto-content-pad-x))] top-2 z-20"
-          />
-        ) : null}
         {isWorkflowSection ? <WorkflowPageShading /> : null}
         <div
           className={cn(
@@ -589,23 +576,28 @@ export default function MyTask() {
                       />
                     ) : (
                       <div className="grid grid-cols-1 items-stretch sm:grid-cols-2 lg:grid-cols-3 gap-[clamp(12px,1.4vw,16px)]">
-                        {filteredTasks.map((task) => (
-                          <TaskCard
-                            key={`${task.engineType}:${task.id}`}
-                            task={task}
-                            onToggle={(enabled) => handleToggle(task, enabled)}
-                            onEdit={() => {
-                              const job = safeJobs.find((j) => j.id === task.id) ?? null;
-                              setEditingJob(job);
-                              setCreateOpen(true);
-                            }}
-                            onDelete={() => {
-                              const job = safeJobs.find((j) => j.id === task.id) ?? null;
-                              if (job) setDeleteTarget(job);
-                            }}
-                            onRun={() => handleTrigger(task)}
-                          />
-                        ))}
+                        {filteredTasks.map((task) => {
+                          const openTaskEdit = () => {
+                            const job = safeJobs.find((j) => j.id === task.id) ?? null;
+                            setEditingJob(job);
+                            setCreateOpen(true);
+                          };
+
+                          return (
+                            <TaskCard
+                              key={`${task.engineType}:${task.id}`}
+                              task={task}
+                              onToggle={(enabled) => handleToggle(task, enabled)}
+                              onClick={openTaskEdit}
+                              onEdit={openTaskEdit}
+                              onDelete={() => {
+                                const job = safeJobs.find((j) => j.id === task.id) ?? null;
+                                if (job) setDeleteTarget(job);
+                              }}
+                              onRun={() => handleTrigger(task)}
+                            />
+                          );
+                        })}
                       </div>
                     )}
                   </section>

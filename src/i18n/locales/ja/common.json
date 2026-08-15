@@ -154,6 +154,10 @@
             "authorizeLocalFile": "ローカルファイルを許可",
             "authorizeLocalFileOption": "ファイルを許可",
             "authorizeLocalFolderOption": "フォルダを許可",
+            "sharedArtifactsMobileTip": "DingTalk モバイル版でスキャンすると、「拠点 VIP」で拠点共有成果物を確認できます。",
+            "sharedArtifactsQrCode": "拠点共有成果物の QR コード",
+            "sharedArtifactsQrTitle": "スキャンして拠点共有成果物を表示",
+            "sharedArtifactsQrHint": "DingTalk モバイル版でスキャンし、「拠点 VIP」で確認",
             "usedQuota": "ストレージ使用量 {{used}}/{{quota}}"
         },
         "drive": {

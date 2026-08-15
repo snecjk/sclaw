@@ -41,9 +41,12 @@ export const stoSettingsContentPanelBodyClass = cn(
   'min-h-0 flex-1 overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
 );
 
-/** 设置页右侧内容主列（MasterGo 容器 7361：862×958、left 145px 于卡片内、top 72px、gap 36px） */
+/**
+ * 设置页右侧内容主列（MasterGo 容器 7361：862×958、left 145px 于卡片内、top 72px、gap 36px）
+ * SettingsShell 已占用顶部 `--sto-chrome-h` 作为 drag-region，此处扣减以保持标题距卡片顶仍约 72px。
+ */
 export const stoSettingsContentInnerClass = cn(
-  'mx-auto box-border flex w-full max-w-[862px] flex-col gap-[36px] pt-[72px] pb-10',
+  'mx-auto box-border flex w-full max-w-[862px] flex-col gap-[36px] pt-[calc(72px-var(--sto-chrome-h))] pb-10',
   'px-6 min-[974px]:px-0',
 );
 
@@ -818,6 +821,7 @@ export const stoMainCardShellClass = cn(
 export const stoMainCardBodyClass = cn(
   'min-h-0 min-w-0 flex-1 overflow-auto overscroll-y-contain',
   'px-[var(--sto-content-pad-x)] pb-5 pt-0 [scrollbar-gutter:stable]',
+  'has-[.sto-workflow-mc-editor]:pb-0',
 );
 
 /**
@@ -1500,10 +1504,11 @@ export const workflowBuilderShell = cn(
 
 /**
  * MC iframe 工作流编辑：顶栏由 useWorkflowEditorContentHeader 注入 ContentHeader；
- * 仅抵消水平 main 内距，iframe 占满 ContentHeader 下方剩余高度。
+ * 仅抵消水平 main 内距，iframe 占满 ContentHeader 下方剩余高度；
+ * marker 仅取消该页面继承的主内容区 20px 底部 padding，保留 AppShell 的 8px Frame。
  */
 export const workflowMcEditorShell = cn(
-  '-mx-[var(--sto-content-pad-x)] flex min-h-0 min-w-0 flex-1 flex-col',
+  'sto-workflow-mc-editor -mx-[var(--sto-content-pad-x)] flex min-h-0 min-w-0 flex-1 flex-col',
 );
 
 /**
@@ -1594,7 +1599,8 @@ export const sidebarScrollOverlayHostClass = stoOverlayScrollHostClass;
 export const sidebarNavExpandedIdleClass = cn(
   'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5',
   sidebarTextDefaultClass,
-  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
+  // stroke：Lucide；text：内联填充图标（如 timer）的 currentColor，避免吃到正文色
+  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)] [&_svg]:text-[var(--sto-sidebar-text-icon)]',
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
@@ -1603,7 +1609,7 @@ export const sidebarNavExpandedActiveClass = cn(
   'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
   'bg-[var(--sto-sidebar-nav-active-bg)]',
   sidebarTextDefaultClass,
-  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
+  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)] [&_svg]:text-[var(--sto-sidebar-text-icon)]',
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
