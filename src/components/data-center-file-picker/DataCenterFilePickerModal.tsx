@@ -56,7 +56,7 @@ const STYLES = {
   overlay: 'fixed inset-0 z-[130] flex items-center justify-center bg-black/45 px-4',
   /** 弹窗壳 */
   panel:
-    'flex w-[460px] flex-col overflow-hidden rounded-[18px] bg-white p-4 opacity-100 shadow-2xl dark:bg-background',
+    'flex max-h-[560px] w-[460px] flex-col overflow-hidden rounded-[18px] bg-white p-4 opacity-100 shadow-2xl dark:bg-background',
   /** 顶栏 */
   header: 'flex  items-center justify-between pb-4',
   title:
@@ -86,9 +86,9 @@ const STYLES = {
   mutedInline: 'flex items-center gap-2 py-3 text-[12px] text-[#86909C]',
   /** 底栏 */
   footer: 'flex shrink-0 items-center justify-end',
-  cancelBtn: 'w-[60px] rounded-[12px] px-0 text-[12px] font-normal',
+  cancelBtn: 'rounded-[12px] text-[12px] font-normal',
   confirmBtn:
-    'w-[60px] rounded-[12px] bg-[#1D2129] px-0 text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground',
+    'rounded-[12px] bg-[#1D2129] text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground',
 } as const;
 
 // ---------------------------------------------------------------------------
