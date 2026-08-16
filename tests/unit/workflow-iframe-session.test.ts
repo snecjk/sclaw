@@ -148,6 +148,7 @@ describe('workflow iframe session identity', () => {
       workflowId: 'wf_123',
       nonce: 'nonce-1',
       requestId: 'run-1',
+      preparation: { mode: 'persist-draft' },
     };
     const back = { ...tryRun, type: 'workflow-back-request', requestId: 'back-1' };
     const history = { ...tryRun, type: WORKFLOW_LOCAL_RUN_HISTORY_REQUEST, requestId: 'history-1' };
@@ -180,9 +181,36 @@ describe('workflow iframe session identity', () => {
     expect(dispatchReadyWorkflowIframeIntent(eventFor(back), context, true, callbacks)).toBe(true);
     expect(dispatchReadyWorkflowIframeIntent(eventFor(history), context, true, callbacks)).toBe(true);
     expect(onTryRunRequest).toHaveBeenCalledOnce();
-    expect(onTryRunRequest).toHaveBeenCalledWith('run-1');
+    expect(onTryRunRequest).toHaveBeenCalledWith('run-1', { mode: 'persist-draft' });
     expect(onBackRequest).toHaveBeenCalledOnce();
     expect(onLocalRunHistoryRequest).toHaveBeenCalledOnce();
+  });
+
+  it('defaults a legacy Web try-run request to draft persistence', () => {
+    const onTryRunRequest = vi.fn();
+    const context = {
+      expectedOrigin: 'https://mc.example.com',
+      expectedSource: window,
+      ...identity,
+    };
+    const legacyTryRun = {
+      protocol: WORKFLOW_IFRAME_BRIDGE_PROTOCOL,
+      type: WORKFLOW_TRY_RUN_REQUEST,
+      workflowId: 'wf_123',
+      nonce: 'nonce-1',
+      requestId: 'legacy-run-1',
+    };
+
+    expect(dispatchReadyWorkflowIframeIntent(
+      eventFor(legacyTryRun),
+      context,
+      true,
+      { onTryRunRequest },
+    )).toBe(true);
+    expect(onTryRunRequest).toHaveBeenCalledWith(
+      'legacy-run-1',
+      { mode: 'persist-draft' },
+    );
   });
 
   it('masks loaded iframe content until the header handshake succeeds or falls back', () => {

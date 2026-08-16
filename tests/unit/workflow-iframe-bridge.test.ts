@@ -82,6 +82,39 @@ describe('workflow iframe bridge v1 business messages', () => {
     expect(isWorkflowEditorReady({ ...message, capabilities: 'ownsHeader' })).toBe(false);
   });
 
+  it('accepts valid trial-run preparation and the legacy missing-field fallback', () => {
+    const persistDraft = {
+      ...envelope,
+      type: WORKFLOW_TRY_RUN_REQUEST,
+      preparation: { mode: 'persist-draft' },
+    };
+    const currentPublished = {
+      ...envelope,
+      type: WORKFLOW_TRY_RUN_REQUEST,
+      preparation: {
+        mode: 'use-current-published',
+        snapshot: {
+          workflowId: 'wf_123',
+          workflowVersionId: 'published-7',
+          schemaVersion: 'workflow/v2',
+          versionStatus: 'published',
+          startup: { schema: null, defaultValues: {} },
+        },
+      },
+    };
+
+    expect(isWorkflowTryRunRequest(persistDraft)).toBe(true);
+    expect(isWorkflowTryRunRequest(currentPublished)).toBe(true);
+    expect(isWorkflowTryRunRequest(withoutField(persistDraft, 'preparation'))).toBe(true);
+    expect(isWorkflowTryRunRequest({
+      ...currentPublished,
+      preparation: {
+        ...currentPublished.preparation,
+        snapshot: { ...currentPublished.preparation.snapshot, versionStatus: 'draft' },
+      },
+    })).toBe(false);
+  });
+
   it.each([
     ['editor ready', { ...envelope, type: WORKFLOW_EDITOR_READY, capabilities: ['ownsHeader'] }, isWorkflowEditorReady],
     ['try run', { ...envelope, type: WORKFLOW_TRY_RUN_REQUEST }, isWorkflowTryRunRequest],

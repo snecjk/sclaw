@@ -7,6 +7,7 @@ import {
   isWorkflowPerformanceMetric,
   isWorkflowTryRunRequest,
   type WorkflowHostInitMessage,
+  type WorkflowTryRunPreparation,
 } from '@/lib/workflow-iframe-bridge';
 
 export interface WorkflowIframeSessionIdentity {
@@ -112,14 +113,17 @@ export function dispatchReadyWorkflowIframeIntent(
   identity: WorkflowIframeEventIdentity,
   editorReady: boolean,
   callbacks: {
-    onTryRunRequest?: (requestId: string) => void;
+    onTryRunRequest?: (requestId: string, preparation: WorkflowTryRunPreparation) => void;
     onBackRequest?: () => void;
     onLocalRunHistoryRequest?: () => void;
   },
 ): boolean {
   if (!editorReady || !isAuthenticatedWorkflowIframeEvent(event, identity)) return false;
   if (isWorkflowTryRunRequest(event.data)) {
-    callbacks.onTryRunRequest?.(event.data.requestId);
+    callbacks.onTryRunRequest?.(
+      event.data.requestId,
+      event.data.preparation ?? { mode: 'persist-draft' },
+    );
     return true;
   }
   if (isWorkflowBackRequest(event.data)) {

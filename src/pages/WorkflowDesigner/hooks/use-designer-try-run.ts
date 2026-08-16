@@ -230,7 +230,7 @@ export function useDesignerTryRun({
     void (async () => {
       snapshotRef.current = snapshot ?? null;
       setRunWorkflowVersion(undefined);
-      setIsDraftSnapshot(snapshot != null);
+      setIsDraftSnapshot(snapshot?.versionStatus === 'draft');
       // The draft snapshot only carries canvas data. Fetch the workflow detail
       // on every launch so the startup form is initialized from this user's
       // current default preset, just like the web-side trial run.

@@ -33,6 +33,7 @@ import {
   isWorkflowSaveDraftResponse,
   type WorkflowDraftSnapshot,
   type WorkflowSavedDraftSnapshot,
+  type WorkflowTryRunPreparation,
   type WorkflowTryRunState,
 } from '@/lib/workflow-iframe-bridge';
 import { getMemoryCenterWebBase } from '@/lib/memory-center-web-url';
@@ -57,7 +58,7 @@ export interface WorkflowMcIframeEditorProps {
   /** AI 创建模式：MC 后端缓存 prompt 换得的短 ID，拼进 iframe/外链 URL 供 MC 取回 */
   promptCacheId?: string;
   onEditorCapabilitiesChange?: (ready: boolean) => void;
-  onTryRunRequest?: (requestId: string) => void;
+  onTryRunRequest?: (requestId: string, preparation: WorkflowTryRunPreparation) => void;
   onBackRequest?: () => void;
   onLocalRunHistoryRequest?: () => void;
   /** Synchronously invalidates Host attempts before iframe request managers reject on reset. */
