@@ -1,12 +1,16 @@
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import { BookOpen, Layers3, RefreshCw, Sparkles } from 'lucide-react';
+import { useEffect, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
+import { ChevronRight, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import categoryOrganization from '@/assets/learning-center/category-organization.png';
+import categoryQuotation from '@/assets/learning-center/category-quotation.png';
+import categoryReconciliation from '@/assets/learning-center/category-reconciliation.png';
+import categoryProfitLoss from '@/assets/learning-center/category-profit-loss.png';
+import categoryAdvanced from '@/assets/learning-center/category-advanced.png';
 import { FeedbackState } from '@/components/common/FeedbackState';
-import { useContentHeader } from '@/components/layout/content-header-context';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { dispatchLearningCaseAction } from '@/lib/learning-case-action';
@@ -29,8 +33,44 @@ import { CaseDetailDialog } from './CaseDetailDialog';
 import { LearningCaseCard } from './LearningCaseCard';
 import { LearningResourcePagination } from './LearningResourcePagination';
 import { TutorialPanel } from './TutorialPanel';
+import './LearningCenterPage.css';
 
 const CONTENT_PAGE_SIZE = 6;
+const STEP_COUNT_PATTERN = /(\d+\s*步)/;
+const CATEGORY_ILLUSTRATIONS = [
+  categoryOrganization,
+  categoryQuotation,
+  categoryReconciliation,
+  categoryProfitLoss,
+  categoryAdvanced,
+];
+
+const CATEGORY_ILLUSTRATION_RULES: Array<{ pattern: RegExp; source: string }> = [
+  { pattern: /组织|organization|\borg\b/i, source: categoryOrganization },
+  { pattern: /客户报价|报价|quotation|quote/i, source: categoryQuotation },
+  { pattern: /对账|reconciliation|reconcile/i, source: categoryReconciliation },
+  { pattern: /损益|profit|loss/i, source: categoryProfitLoss },
+  { pattern: /对总|进阶|advanced|overall/i, source: categoryAdvanced },
+];
+
+function resolveCategoryIllustration(category: LearningCategory, index: number): string {
+  const identity = `${category.categoryCode} ${category.name} ${category.title}`;
+  return CATEGORY_ILLUSTRATION_RULES.find(({ pattern }) => pattern.test(identity))?.source
+    || CATEGORY_ILLUSTRATIONS[index]
+    || categoryAdvanced;
+}
+
+function renderDomainTitle(title: string) {
+  return title.split(STEP_COUNT_PATTERN).map((part, index) => (
+    /^\d+\s*步$/.test(part)
+      ? <em key={index} className="learning-center-hero__emphasis">{part}</em>
+      : part
+  ));
+}
+
+function categoryIndexLabel(index: number) {
+  return String(index + 1).padStart(2, '0');
+}
 
 type LearningCenterPageState =
   | { status: 'loading' }
@@ -99,9 +139,7 @@ export function LearningCenterPage() {
   const detailReturnFocusRef = useRef<HTMLElement | null>(null);
   const caseReturnFocusRef = useRef<HTMLElement | null>(null);
   const caseUseInFlightRef = useRef(false);
-  const contentRegionRef = useRef<HTMLElement | null>(null);
-
-  useContentHeader({ title: t('pageTitle') });
+  const contentRegionRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -215,11 +253,21 @@ export function LearningCenterPage() {
   );
 
   const selectedCategoryId = state.status === 'ready' ? state.selectedCategoryId : null;
+  const domainTitle = state.status === 'ready'
+    ? (state.domain.mainTitle || state.domain.name || t('fallbackTitle'))
+    : t('fallbackTitle');
+  const tutorialOffset = tutorials.status === 'ready'
+    ? (tutorials.pageNum - 1) * tutorials.pageSize
+    : 0;
+  const visibleTutorialCount = tutorials.status === 'ready'
+    ? Math.min(tutorials.items.length, CONTENT_PAGE_SIZE)
+    : 0;
+  const tutorialSectionHeight = 250 + Math.max(0, visibleTutorialCount - 3) * 52;
 
   return (
     <>
-      <main className={`h-full min-h-0 overflow-y-auto bg-background px-4 py-5 sm:px-6 lg:px-8 ${tutorialId ? 'lg:pr-[580px]' : ''}`}>
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
+      <main className={`learning-center-page h-full min-h-0 overflow-y-auto bg-background px-4 py-5 sm:px-6 lg:px-8 ${tutorialId ? 'lg:pr-[580px]' : ''}`}>
+        <div className="learning-center-page__inner flex flex-col gap-8">
           {state.status === 'loading' && (
             <Card aria-busy="true"><FeedbackState state="loading" title={t('loadingTitle')} description={t('loadingDescription')} /></Card>
           )}
@@ -232,114 +280,129 @@ export function LearningCenterPage() {
 
           {state.status === 'ready' && (
             <>
-              <section className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-primary/5 px-5 py-6 shadow-sm sm:px-8 sm:py-8">
-                <div className="pointer-events-none absolute -right-10 -top-16 h-44 w-44 rounded-full border border-primary/10 bg-primary/5" aria-hidden />
-                <div className="relative flex min-w-0 items-center justify-between gap-6">
-                  <div className="min-w-0 max-w-3xl">
-                    <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-card/80 px-3 py-1 text-xs font-medium text-primary">
-                      <Sparkles className="h-3.5 w-3.5" aria-hidden />{t('eyebrow')}
-                    </div>
-                    <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{state.domain.mainTitle || state.domain.name || t('fallbackTitle')}</h1>
-                    <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">{state.domain.subTitle || state.domain.description || t('fallbackSubtitle')}</p>
-                  </div>
-                  {state.domain.coverImageUrl && <img src={state.domain.coverImageUrl} alt="" className="hidden h-24 w-36 shrink-0 rounded-xl border border-primary/15 object-cover shadow-sm md:block" />}
-                </div>
+              <section className="learning-center-hero">
+                <h1 className="learning-center-hero__title">{renderDomainTitle(domainTitle)}</h1>
+                <p className="learning-center-hero__subtitle">{state.domain.subTitle || state.domain.description || t('fallbackSubtitle')}</p>
               </section>
 
-              <Card>
-                <CardHeader className="pb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><Layers3 className="h-5 w-5" aria-hidden /></div>
-                    <div><CardTitle className="text-base">{t('categoriesTitle')}</CardTitle><CardDescription>{state.domain.description || t('contentDescription')}</CardDescription></div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {state.categories.length === 0 ? (
-                    <FeedbackState state="empty" title={t('emptyCategoryTitle')} description={t('emptyCategoryDescription')} />
-                  ) : (
-                    <Tabs value={state.selectedCategoryId ?? undefined} onValueChange={selectCategory}>
-                      <TabsList aria-label={t('categoriesAria')} className="h-auto max-w-full justify-start overflow-x-auto bg-muted/60 p-1.5">
-                        {state.categories.map((category) => (
-                          <TabsTrigger key={category.id} value={category.id} className="min-h-9 px-4">{category.title || category.name}</TabsTrigger>
+              {state.categories.length === 0 ? (
+                <FeedbackState state="empty" title={t('emptyCategoryTitle')} description={t('emptyCategoryDescription')} />
+              ) : (
+                <section
+                  className="learning-center-steps"
+                  aria-label={t('categoriesTitle')}
+                  style={{ '--lc-steps-height': `${tutorialSectionHeight}px` } as CSSProperties}
+                >
+                  <Tabs value={state.selectedCategoryId ?? undefined} onValueChange={selectCategory}>
+                    <div className="learning-center-steps__scroller">
+                      <TabsList
+                        aria-label={t('categoriesAria')}
+                        className="learning-center-steps__tabs grid h-auto min-h-[3.25rem] rounded-none border-0 p-0 shadow-none"
+                        style={{ gridTemplateColumns: `repeat(${state.categories.length}, minmax(7.25rem, 1fr))` }}
+                      >
+                        {state.categories.map((category, index) => (
+                          <TabsTrigger
+                            key={category.id}
+                            value={category.id}
+                            aria-label={category.title || category.name}
+                            className="learning-center-steps__tab rounded-none shadow-none"
+                          >
+                            <span className="learning-center-steps__index" aria-hidden>{categoryIndexLabel(index)}</span>
+                            <span className="truncate">{category.title || category.name}</span>
+                            {category.id === selectedCategoryId ? (
+                              <img
+                                src={resolveCategoryIllustration(category, index)}
+                                alt=""
+                                className="learning-center-steps__art"
+                              />
+                            ) : null}
+                          </TabsTrigger>
                         ))}
                       </TabsList>
-                    </Tabs>
-                  )}
-                </CardContent>
-              </Card>
+                    </div>
+                  </Tabs>
 
-              {selectedCategoryId && (
-                <section ref={contentRegionRef} tabIndex={-1} aria-labelledby="learning-center-content-heading" className="outline-none">
-                  <div className="mb-3">
-                    <h2 id="learning-center-content-heading" className="text-lg font-semibold">{t('contentTitle')}</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">{t('contentDescription')}</p>
-                  </div>
-                  <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-                    <Card className="min-w-0">
-                      <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><BookOpen className="h-4 w-4 text-primary" aria-hidden />{t('tutorialsTitle')}</CardTitle></CardHeader>
-                      <CardContent aria-live="polite" aria-busy={tutorials.status === 'loading'}>
-                        {tutorials.status === 'loading' && <FeedbackState state="loading" title={t('tutorialsLoading')} />}
-                        {tutorials.status === 'error' && <FeedbackState state="error" title={t('tutorialsErrorTitle')} description={tutorials.message || t('sectionErrorDescription')} action={<Button size="sm" onClick={() => requestTutorialPage(selectedCategoryId, tutorials.pageNum)}>{t('retry')}</Button>} />}
-                        {tutorials.status === 'ready' && tutorials.items.length === 0 && <FeedbackState state="empty" title={t('tutorialsEmptyTitle')} description={t('tutorialsEmptyDescription')} />}
-                        {tutorials.status === 'ready' && tutorials.items.length > 0 && (
-                          <>
-                            <ul className="divide-y" aria-label={t('tutorialsTitle')}>
-                              {tutorials.items.map((tutorial) => (
-                                <li key={tutorial.id} className="flex min-w-0 items-start justify-between gap-3 py-4 first:pt-1 last:pb-1">
-                                  <div className="min-w-0 flex-1">
-                                    <p className="truncate text-sm font-medium" title={tutorial.title || tutorial.name}>{tutorial.title || tutorial.name}</p>
-                                    {(tutorial.subTitle || tutorial.description) && <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{tutorial.subTitle || tutorial.description}</p>}
-                                  </div>
-                                  <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={(event) => {
+                  {selectedCategoryId && (
+                    <div
+                      ref={contentRegionRef}
+                      tabIndex={-1}
+                      aria-labelledby="learning-center-content-heading"
+                      aria-live="polite"
+                      aria-busy={tutorials.status === 'loading'}
+                      className="learning-center-steps__panel outline-none"
+                    >
+                      <h2 id="learning-center-content-heading" className="sr-only">{t('tutorialsTitle')}</h2>
+                      {tutorials.status === 'loading' && <FeedbackState state="loading" title={t('tutorialsLoading')} />}
+                      {tutorials.status === 'error' && <FeedbackState state="error" title={t('tutorialsErrorTitle')} description={tutorials.message || t('sectionErrorDescription')} action={<Button size="sm" onClick={() => requestTutorialPage(selectedCategoryId, tutorials.pageNum)}>{t('retry')}</Button>} />}
+                      {tutorials.status === 'ready' && tutorials.items.length === 0 && <FeedbackState state="empty" title={t('tutorialsEmptyTitle')} description={t('tutorialsEmptyDescription')} />}
+                      {tutorials.status === 'ready' && tutorials.items.length > 0 && (
+                        <>
+                          <ul className="learning-center-tutorial-list" aria-label={t('tutorialsTitle')}>
+                            {tutorials.items.slice(0, CONTENT_PAGE_SIZE).map((tutorial, index) => (
+                              <li key={tutorial.id} className="learning-center-tutorial-item">
+                                <span className="learning-center-tutorial-index" aria-hidden>{tutorialOffset + index + 1}</span>
+                                <div className="learning-center-tutorial-copy">
+                                  <p className="truncate text-xs font-semibold leading-4" title={tutorial.title || tutorial.name}>{tutorial.title || tutorial.name}</p>
+                                  {(tutorial.subTitle || tutorial.description) && <p className="line-clamp-1 text-[0.6875rem] leading-4 text-muted-foreground">{tutorial.subTitle || tutorial.description}</p>}
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="link"
+                                  className="learning-center-tutorial-link"
+                                  style={{ color: '#FF6700' }}
+                                  onClick={(event) => {
                                     detailReturnFocusRef.current = event.currentTarget;
                                     setDetailCase(null);
                                     setPendingUseCase(null);
                                     setTutorialId(tutorial.id);
-                                  }}>{t('viewTutorial')}</Button>
-                                </li>
-                              ))}
-                            </ul>
-                            <LearningResourcePagination pageNum={tutorials.pageNum} pageSize={tutorials.pageSize} total={tutorials.total} previousLabel={t('previousPage')} nextLabel={t('nextPage')} summaryLabel={t('paginationSummary', { page: tutorials.pageNum, total: tutorials.total })} onPageChange={(pageNum) => requestTutorialPage(selectedCategoryId, pageNum)} />
-                          </>
-                        )}
-                      </CardContent>
-                    </Card>
+                                  }}
+                                >
+                                  {t('viewTutorial')}
+                                  <ChevronRight className="h-4 w-4" aria-hidden />
+                                </Button>
+                              </li>
+                            ))}
+                          </ul>
+                          <LearningResourcePagination pageNum={tutorials.pageNum} pageSize={tutorials.pageSize} total={tutorials.total} previousLabel={t('previousPage')} nextLabel={t('nextPage')} summaryLabel={t('paginationSummary', { page: tutorials.pageNum, total: tutorials.total })} onPageChange={(pageNum) => requestTutorialPage(selectedCategoryId, pageNum)} />
+                        </>
+                      )}
+                    </div>
+                  )}
+                </section>
+              )}
 
-                    <Card className="min-w-0">
-                      <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base"><Sparkles className="h-4 w-4 text-primary" aria-hidden />{t('casesTitle')}</CardTitle></CardHeader>
-                      <CardContent aria-live="polite" aria-busy={cases.status === 'loading'}>
-                        {cases.status === 'loading' && <FeedbackState state="loading" title={t('casesLoading')} />}
-                        {cases.status === 'error' && <FeedbackState state="error" title={t('casesErrorTitle')} description={cases.message || t('sectionErrorDescription')} action={<Button size="sm" onClick={() => requestCasePage(selectedCategoryId, cases.pageNum)}>{t('retry')}</Button>} />}
-                        {cases.status === 'ready' && cases.items.length === 0 && <FeedbackState state="empty" title={t('casesEmptyTitle')} description={t('casesEmptyDescription')} />}
-                        {cases.status === 'ready' && cases.items.length > 0 && (
-                          <>
-                            <ul className="grid min-w-0 gap-4 pt-1 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2" aria-label={t('casesTitle')}>
-                              {cases.items.map((item) => (
-                                <li key={item.id} className="min-w-0">
-                                  <LearningCaseCard
-                                    item={item}
-                                    onViewDetail={(target, trigger) => {
-                                      caseReturnFocusRef.current = trigger;
-                                      setTutorialId(null);
-                                      setPendingUseCase(null);
-                                      setDetailCase(target);
-                                    }}
-                                    onUse={(target, trigger) => {
-                                      caseReturnFocusRef.current = trigger;
-                                      setTutorialId(null);
-                                      setDetailCase(null);
-                                      setPendingUseCase(target);
-                                    }}
-                                  />
-                                </li>
-                              ))}
-                            </ul>
-                            <LearningResourcePagination pageNum={cases.pageNum} pageSize={cases.pageSize} total={cases.total} previousLabel={t('previousPage')} nextLabel={t('nextPage')} summaryLabel={t('paginationSummary', { page: cases.pageNum, total: cases.total })} onPageChange={(pageNum) => requestCasePage(selectedCategoryId, pageNum)} />
-                          </>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
+              {selectedCategoryId && (
+                <section className="learning-center-cases" aria-labelledby="learning-center-cases-heading" aria-live="polite" aria-busy={cases.status === 'loading'}>
+                  <h2 id="learning-center-cases-heading" className="learning-center-cases__title">{t('casesTitle')}</h2>
+                  {cases.status === 'loading' && <FeedbackState state="loading" title={t('casesLoading')} />}
+                  {cases.status === 'error' && <FeedbackState state="error" title={t('casesErrorTitle')} description={cases.message || t('sectionErrorDescription')} action={<Button size="sm" onClick={() => requestCasePage(selectedCategoryId, cases.pageNum)}>{t('retry')}</Button>} />}
+                  {cases.status === 'ready' && cases.items.length === 0 && <FeedbackState state="empty" title={t('casesEmptyTitle')} description={t('casesEmptyDescription')} />}
+                  {cases.status === 'ready' && cases.items.length > 0 && (
+                    <>
+                      <ul className="learning-center-cases__grid" aria-label={t('casesTitle')}>
+                        {cases.items.map((item) => (
+                          <li key={item.id} className="min-w-0">
+                            <LearningCaseCard
+                              item={item}
+                              onViewDetail={(target, trigger) => {
+                                caseReturnFocusRef.current = trigger;
+                                setTutorialId(null);
+                                setPendingUseCase(null);
+                                setDetailCase(target);
+                              }}
+                              onUse={(target, trigger) => {
+                                caseReturnFocusRef.current = trigger;
+                                setTutorialId(null);
+                                setDetailCase(null);
+                                setPendingUseCase(target);
+                              }}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                      <LearningResourcePagination pageNum={cases.pageNum} pageSize={cases.pageSize} total={cases.total} previousLabel={t('previousPage')} nextLabel={t('nextPage')} summaryLabel={t('paginationSummary', { page: cases.pageNum, total: cases.total })} onPageChange={(pageNum) => requestCasePage(selectedCategoryId, pageNum)} />
+                    </>
+                  )}
                 </section>
               )}
             </>

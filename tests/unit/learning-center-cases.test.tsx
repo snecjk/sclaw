@@ -120,7 +120,7 @@ describe('LearningCenterPage cases', () => {
     renderPage();
     expect(await screen.findByText('周报自动汇总')).toBeInTheDocument();
     expect(screen.getByText('案例副标题')).toBeInTheDocument();
-    expect(screen.getByText('已被使用 7 次')).toBeInTheDocument();
+    expect(screen.getByLabelText('已被使用 7 次')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '查看详情' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '立即使用' })).toBeInTheDocument();
     expect(screen.getByAltText('周报自动汇总 封面')).toHaveAttribute('src', caseItem.coverImageUrl);
@@ -130,7 +130,7 @@ describe('LearningCenterPage cases', () => {
     casesMock.mockResolvedValue({ items: [], total: 0, pageNum: 1, pageSize: 6 });
     renderPage();
     expect(await screen.findByText('暂无实践案例')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '查看' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '查看教程' })).toBeInTheDocument();
   });
 
   it('falls back to a placeholder when the cover fails to load', async () => {
@@ -148,7 +148,7 @@ describe('LearningCenterPage cases', () => {
     expect(screen.getByText('案例简介')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '教程正文' })).toBeInTheDocument();
     expect(useCaseMock).not.toHaveBeenCalled();
-    expect(screen.getByText('已被使用 7 次')).toBeInTheDocument();
+    expect(screen.getByLabelText('已被使用 7 次')).toBeInTheDocument();
   });
 
   it('retries case details locally after a failure', async () => {
@@ -196,7 +196,7 @@ describe('LearningCenterPage cases', () => {
     const dialog = await openConfirmDialog();
     fireEvent.click(within(dialog).getByRole('button', { name: '立即使用' }));
 
-    expect(await screen.findByText('已被使用 8 次')).toBeInTheDocument();
+    expect(await screen.findByLabelText('已被使用 8 次')).toBeInTheDocument();
     expect(dispatchMock).toHaveBeenCalledWith(caseAction, expect.objectContaining({ navigate: expect.any(Function) }));
     expect(toastSuccess).toHaveBeenCalledWith('已为你打开案例入口');
   });
@@ -209,12 +209,12 @@ describe('LearningCenterPage cases', () => {
 
     await waitFor(() => expect(toastError).toHaveBeenCalledWith('案例已下线'));
     expect(dispatchMock).not.toHaveBeenCalled();
-    expect(screen.getByText('已被使用 7 次')).toBeInTheDocument();
+    expect(screen.getByLabelText('已被使用 7 次')).toBeInTheDocument();
   });
 
   it('keeps learning center overlays mutually exclusive', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: '查看' }));
+    fireEvent.click(await screen.findByRole('button', { name: '查看教程' }));
     expect(await screen.findByRole('dialog', { name: '入门教程' })).toBeInTheDocument();
 
     // The tutorial sheet is non-modal, so the case card stays clickable while reading.
@@ -225,7 +225,7 @@ describe('LearningCenterPage cases', () => {
     fireEvent.click(screen.getByRole('button', { name: '关闭' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '周报自动汇总' })).not.toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole('button', { name: '查看' }));
+    fireEvent.click(screen.getByRole('button', { name: '查看教程' }));
     expect(await screen.findByRole('dialog', { name: '入门教程' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '立即使用' }));
     await screen.findByRole('dialog', { name: '确认使用这个案例？' });
@@ -240,6 +240,6 @@ describe('LearningCenterPage cases', () => {
 
     await waitFor(() => expect(toastError).toHaveBeenCalledWith('暂不支持这个案例的跳转类型，请联系管理员。'));
     expect(toastSuccess).not.toHaveBeenCalled();
-    expect(await screen.findByText('已被使用 8 次')).toBeInTheDocument();
+    expect(await screen.findByLabelText('已被使用 8 次')).toBeInTheDocument();
   });
 });

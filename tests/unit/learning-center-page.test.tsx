@@ -102,8 +102,25 @@ describe('LearningCenterPage', () => {
     expect(screen.getByRole('tab', { name: '快速开始' })).toHaveAttribute('data-state', 'active');
     expect(await screen.findByText('十分钟上手')).toBeInTheDocument();
     expect(screen.getByText('案例副标题')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '学习分类' })).toHaveStyle('--lc-steps-height: 250px');
     expect(tutorialsMock).toHaveBeenCalledWith(category.id, { pageNum: 1, pageSize: 6 });
     expect(casesMock).toHaveBeenCalledWith(category.id, { pageNum: 1, pageSize: 6 });
+  });
+
+  it('shows at most six tutorials and grows by each forty-pixel row plus its gap', async () => {
+    const items = Array.from({ length: 7 }, (_, index) => ({
+      ...tutorial,
+      id: `tutorial-${index + 1}`,
+      title: `教程 ${index + 1}`,
+      subTitle: '',
+    }));
+    tutorialsMock.mockResolvedValue(tutorialPage(items, 1, items.length));
+
+    renderPage();
+
+    expect(await screen.findByText('教程 6')).toBeInTheDocument();
+    expect(screen.queryByText('教程 7')).not.toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '学习分类' })).toHaveStyle('--lc-steps-height: 406px');
   });
 
   it('shows a domain empty state without requesting descendants', async () => {
@@ -190,7 +207,7 @@ describe('LearningCenterPage', () => {
   it('opens tutorial details and clears the panel when the category changes', async () => {
     categoriesMock.mockResolvedValue({ items: [category, categoryTwo], total: 2, pageNum: 1, pageSize: 100 });
     renderPage();
-    const viewButton = await screen.findByRole('button', { name: '查看' });
+    const viewButton = await screen.findByRole('button', { name: '查看教程' });
     fireEvent.click(viewButton);
     expect(await screen.findByRole('heading', { name: '教程正文' })).toBeInTheDocument();
     activateTab('进阶实践', true);
@@ -200,7 +217,7 @@ describe('LearningCenterPage', () => {
   it('shows a forbidden detail state without rendering tutorial content', async () => {
     tutorialDetailMock.mockRejectedValue(new LearningCenterApiError('没有教程权限', '403'));
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: '查看' }));
+    fireEvent.click(await screen.findByRole('button', { name: '查看教程' }));
     expect(await screen.findByText('没有教程权限')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '教程正文' })).not.toBeInTheDocument();
   });
@@ -208,7 +225,7 @@ describe('LearningCenterPage', () => {
   it('retries tutorial details locally and restores focus after closing', async () => {
     tutorialDetailMock.mockRejectedValueOnce(new Error('详情网络错误')).mockResolvedValueOnce(tutorial);
     renderPage();
-    const viewButton = await screen.findByRole('button', { name: '查看' });
+    const viewButton = await screen.findByRole('button', { name: '查看教程' });
     fireEvent.click(viewButton);
     expect(await screen.findByText('详情网络错误')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '重新加载' }));
