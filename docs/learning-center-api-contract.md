@@ -16,6 +16,13 @@ Successful responses use:
 Business failures use `success: false` with `errCode` and `errMessage`. Transport
 failures can be thrown by `hostApiFetch` before an envelope reaches the adapter.
 
+The Electron host (`electron/api/routes/learning-center.ts`) proxies the seven
+client routes to memory-center `/api/v1/learning-center/*` and forwards `data`
+untouched, so request IDs stay strings. Upstream failures are re-enveloped as
+HTTP 200 `{ success: false, errCode }` responses because `hostApiFetch` throws
+on non-2xx before the adapter could read `errCode` (the adapter needs it to
+distinguish `403` forbidden content from generic errors).
+
 Paged data has `items`, `total`, `pageNum`, and `pageSize`. The client accepts
 snake_case aliases and legacy `records`/`list` only at the adapter boundary.
 

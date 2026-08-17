@@ -20,7 +20,6 @@ import {
   Loader2,
   Bot,
   ArrowUp,
-  Wrench,
   Mic,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';

@@ -49,7 +49,7 @@ export function LearningCaseCard({ item, onViewDetail, onUse }: LearningCaseCard
           {summary && <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{summary}</p>}
         </div>
 
-        <div className="mt-auto flex min-w-0 items-center justify-between gap-2">
+        <div className="mt-auto flex min-w-0 flex-wrap items-center justify-between gap-2">
           <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
             <Users className="h-3.5 w-3.5" aria-hidden />
             {t('caseUseCount', { value: item.useCount })}

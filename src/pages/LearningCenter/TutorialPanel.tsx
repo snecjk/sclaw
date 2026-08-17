@@ -55,8 +55,8 @@ export function TutorialPanel({ tutorialId, returnFocusRef, onClose }: TutorialP
     <Sheet modal={false} open={Boolean(tutorialId)} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent
         side="right"
-        className="flex w-full max-w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[564px]"
-        overlayClassName="lg:hidden"
+        className="flex w-full max-w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[564px] motion-reduce:animate-none motion-reduce:transition-none"
+        overlayClassName="lg:hidden motion-reduce:animate-none"
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           returnFocusRef.current?.focus();

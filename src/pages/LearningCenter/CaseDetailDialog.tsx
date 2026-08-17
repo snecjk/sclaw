@@ -77,7 +77,7 @@ export function CaseDetailDialog({ caseId, fallbackTitle, returnFocusRef, onClos
           <X className="h-4 w-4" aria-hidden />
         </Button>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5" aria-busy={state.status === 'loading'}>
           {state.status === 'loading' && (
             <FeedbackState state="loading" title={t('caseDetailLoading')} description={t('caseDetailLoadingDescription')} />
           )}

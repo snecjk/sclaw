@@ -7,6 +7,7 @@ import { LearningCenterPage } from '@/pages/LearningCenter/LearningCenterPage';
 import { dispatchLearningCaseAction } from '@/lib/learning-case-action';
 import {
   getCaseDetail,
+  getTutorialDetail,
   pageLearningCases,
   pageLearningCategories,
   pageLearningDomains,
@@ -46,6 +47,7 @@ const domainsMock = vi.mocked(pageLearningDomains);
 const categoriesMock = vi.mocked(pageLearningCategories);
 const tutorialsMock = vi.mocked(pageLearningTutorials);
 const casesMock = vi.mocked(pageLearningCases);
+const tutorialDetailMock = vi.mocked(getTutorialDetail);
 const caseDetailMock = vi.mocked(getCaseDetail);
 const useCaseMock = vi.mocked(useLearningCase);
 const dispatchMock = vi.mocked(dispatchLearningCaseAction);
@@ -108,6 +110,7 @@ describe('LearningCenterPage cases', () => {
     categoriesMock.mockResolvedValue({ items: [category], total: 1, pageNum: 1, pageSize: 100 });
     tutorialsMock.mockResolvedValue({ items: [tutorial], total: 1, pageNum: 1, pageSize: 6 });
     casesMock.mockResolvedValue({ items: [caseItem], total: 1, pageNum: 1, pageSize: 6 });
+    tutorialDetailMock.mockResolvedValue(tutorial);
     caseDetailMock.mockResolvedValue(caseDetail);
     useCaseMock.mockResolvedValue(caseAction);
     dispatchMock.mockReturnValue({ ok: true, navigatedTo: '/', draftApplied: true });
@@ -207,6 +210,26 @@ describe('LearningCenterPage cases', () => {
     await waitFor(() => expect(toastError).toHaveBeenCalledWith('案例已下线'));
     expect(dispatchMock).not.toHaveBeenCalled();
     expect(screen.getByText('已被使用 7 次')).toBeInTheDocument();
+  });
+
+  it('keeps learning center overlays mutually exclusive', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '查看' }));
+    expect(await screen.findByRole('dialog', { name: '入门教程' })).toBeInTheDocument();
+
+    // The tutorial sheet is non-modal, so the case card stays clickable while reading.
+    fireEvent.click(screen.getByRole('button', { name: '查看详情' }));
+    await screen.findByRole('dialog', { name: '周报自动汇总' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '入门教程' })).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '周报自动汇总' })).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: '查看' }));
+    expect(await screen.findByRole('dialog', { name: '入门教程' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '立即使用' }));
+    await screen.findByRole('dialog', { name: '确认使用这个案例？' });
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '入门教程' })).not.toBeInTheDocument());
   });
 
   it('surfaces a degraded action without pretending the case opened', async () => {

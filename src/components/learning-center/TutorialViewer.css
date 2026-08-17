@@ -6,7 +6,7 @@
 .tutorial-viewer ul { margin: .7em 0; padding-left: 1.75rem; list-style: disc; }
 .tutorial-viewer ol { margin: .7em 0; padding-left: 1.75rem; list-style: decimal; }
 .tutorial-viewer li + li { margin-top: .25em; }
-.tutorial-viewer blockquote { margin: 1em 0; padding: .25em 0 .25em 1em; border-left: 3px solid #ff7417; color: color-mix(in srgb, currentColor 68%, transparent); }
+.tutorial-viewer blockquote { margin: 1em 0; padding: .25em 0 .25em 1em; border-left: 3px solid hsl(var(--primary)); color: color-mix(in srgb, currentColor 68%, transparent); }
 .tutorial-viewer pre { margin: 1em 0; padding: 12px 14px; overflow-x: auto; border-radius: 8px; background: color-mix(in srgb, currentColor 7%, transparent); }
 .tutorial-viewer code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .tutorial-viewer :not(pre) > code { padding: .15em .35em; border-radius: 4px; background: color-mix(in srgb, currentColor 7%, transparent); }

@@ -292,6 +292,8 @@ export function LearningCenterPage() {
                                   </div>
                                   <Button type="button" size="sm" variant="outline" className="shrink-0" onClick={(event) => {
                                     detailReturnFocusRef.current = event.currentTarget;
+                                    setDetailCase(null);
+                                    setPendingUseCase(null);
                                     setTutorialId(tutorial.id);
                                   }}>{t('viewTutorial')}</Button>
                                 </li>
@@ -318,10 +320,14 @@ export function LearningCenterPage() {
                                     item={item}
                                     onViewDetail={(target, trigger) => {
                                       caseReturnFocusRef.current = trigger;
+                                      setTutorialId(null);
+                                      setPendingUseCase(null);
                                       setDetailCase(target);
                                     }}
                                     onUse={(target, trigger) => {
                                       caseReturnFocusRef.current = trigger;
+                                      setTutorialId(null);
+                                      setDetailCase(null);
                                       setPendingUseCase(target);
                                     }}
                                   />
