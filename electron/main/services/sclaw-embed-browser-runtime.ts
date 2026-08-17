@@ -278,6 +278,8 @@ export function setSclawEmbedBrowserPointerPassthrough(runtimeId: string, passth
   if (!entry?.webContentsId) return false;
   const wc = resolveWebContents(entry);
   if (!wc) return false;
+  // <webview> guest WebContents does not implement setIgnoreMouseEvents (BrowserWindow API only).
+  if (typeof wc.setIgnoreMouseEvents !== 'function') return false;
   if (passthrough) {
     wc.setIgnoreMouseEvents(true, { forward: true });
   } else {

@@ -5,9 +5,9 @@ import type {
 } from '../../../shared/browser-automation/types';
 import {
   buildObserveScript,
-  BROWSER_AUTOMATION_MAX_ELEMENTS,
 } from '../../../shared/browser-automation/observe-script';
-import type { BrowserAutomationCdpSession } from './cdp-session';
+import { BROWSER_AUTOMATION_MAX_ELEMENTS } from '../../../shared/browser-automation/types';
+import { BrowserAutomationCdpSession } from './cdp-session';
 
 interface ResolvedInputTarget {
   found: boolean;
