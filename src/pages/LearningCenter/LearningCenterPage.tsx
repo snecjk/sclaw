@@ -268,7 +268,10 @@ export function LearningCenterPage() {
 
   return (
     <>
-      <main ref={pageRootRef} className={`learning-center-page h-full min-h-0 overflow-y-auto bg-background px-4 py-5 sm:px-6 lg:px-8 ${tutorialId ? 'lg:pr-[580px]' : ''}`}>
+      <main
+        ref={pageRootRef}
+        className={`learning-center-page h-full min-h-0 overflow-y-auto bg-background px-4 py-5 sm:px-6 lg:px-8${tutorialId ? ' learning-center-page--detail-open' : ''}`}
+      >
         <div className="learning-center-page__inner flex flex-col gap-8">
           {state.status === 'loading' && (
             <Card aria-busy="true"><FeedbackState state="loading" title={t('loadingTitle')} description={t('loadingDescription')} /></Card>

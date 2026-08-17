@@ -4,9 +4,10 @@
   right: var(--sto-shell-card-gap, 0.5rem);
   bottom: var(--sto-shell-card-gap, 0.5rem);
   left: auto;
-  width: 100%;
+  box-sizing: border-box;
+  width: 35.25rem;
   height: auto;
-  max-width: 35.25rem;
+  max-width: calc(100% - 1rem);
   border: 0.8px solid #e5e6eb;
   border-radius: var(--sto-main-card-radius, 1.125rem);
   background: #ffffff;

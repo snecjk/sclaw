@@ -8,12 +8,62 @@
   --lc-step-art-size: 7.75rem;
   --lc-steps-bg: #f5f5f5;
   --lc-panel-bg: #ffffff;
+  --lc-detail-content-w: 33.5rem; /* 536px */
+  --lc-detail-panel-w: 35.25rem; /* 564px */
+  --lc-detail-gap: 0.75rem;
 }
 
 .learning-center-page__inner {
   width: 100%;
   max-width: 53.875rem;
   margin-inline: auto;
+}
+
+/* Open tutorial detail: left content 536px, right panel 564px. */
+@media (min-width: 64rem) {
+  .learning-center-page--detail-open {
+    box-sizing: border-box;
+    padding-right: calc(var(--lc-detail-panel-w) + var(--sto-shell-card-gap, 0.5rem) + var(--lc-detail-gap));
+  }
+
+  .learning-center-page--detail-open .learning-center-page__inner {
+    width: var(--lc-detail-content-w);
+    max-width: var(--lc-detail-content-w);
+    margin-inline: 0;
+  }
+
+  .learning-center-page--detail-open .learning-center-steps {
+    max-width: 100%;
+  }
+
+  .learning-center-page--detail-open {
+    --lc-step-art-size: 5.5rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-steps__tab {
+    min-width: 0;
+    padding-inline: 0.5rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-steps__tab[data-state='active'] {
+    padding-right: 3rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-steps__art {
+    right: -3.75rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-cases__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .learning-center-page--detail-open .learning-center-hero__title {
+    font-size: 1.5rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-hero__subtitle {
+    max-width: 100%;
+  }
 }
 
 .learning-center-hero {

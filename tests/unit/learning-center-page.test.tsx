@@ -209,14 +209,18 @@ describe('LearningCenterPage', () => {
     renderPage();
     const viewButton = await screen.findByRole('button', { name: '查看教程' });
     fireEvent.click(viewButton);
+    const page = document.querySelector('.learning-center-page');
+    expect(page).toHaveClass('learning-center-page--detail-open');
     const panel = screen.getByRole('dialog');
     expect(panel.style.position).toBe('absolute');
+    expect(panel.style.width).toBe('35.25rem');
     expect(panel.style.top).toBe('var(--sto-shell-card-gap, 0.5rem)');
     expect(panel.style.right).toBe('var(--sto-shell-card-gap, 0.5rem)');
     expect(panel.style.bottom).toBe('var(--sto-shell-card-gap, 0.5rem)');
     expect(await screen.findByRole('heading', { name: '教程正文' })).toBeInTheDocument();
     activateTab('进阶实践', true);
     await waitFor(() => expect(screen.queryByRole('heading', { name: '教程正文' })).not.toBeInTheDocument());
+    expect(document.querySelector('.learning-center-page')).not.toHaveClass('learning-center-page--detail-open');
   });
 
   it('shows a forbidden detail state without rendering tutorial content', async () => {

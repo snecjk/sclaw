@@ -57,7 +57,7 @@ export function TutorialPanel({ tutorialId, portalContainer, returnFocusRef, onC
     <Sheet modal={false} open={Boolean(tutorialId)} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent
         side="right"
-        className="learning-center-tutorial-sheet flex w-full max-w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[564px] motion-reduce:animate-none motion-reduce:transition-none"
+        className="learning-center-tutorial-sheet flex w-full max-w-full flex-col gap-0 overflow-hidden p-0 motion-reduce:animate-none motion-reduce:transition-none"
         portalContainer={portalContainer}
         overlayClassName="learning-center-tutorial-sheet__overlay lg:hidden motion-reduce:animate-none"
         style={{
@@ -66,6 +66,8 @@ export function TutorialPanel({ tutorialId, portalContainer, returnFocusRef, onC
           right: 'var(--sto-shell-card-gap, 0.5rem)',
           bottom: 'var(--sto-shell-card-gap, 0.5rem)',
           left: 'auto',
+          width: '35.25rem',
+          maxWidth: 'calc(100% - 1rem)',
           height: 'auto',
         }}
         onCloseAutoFocus={(event) => {
