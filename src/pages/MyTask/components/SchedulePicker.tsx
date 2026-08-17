@@ -1,6 +1,6 @@
-import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback, type RefObject } from 'react';
+import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback, type ReactNode, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check } from 'lucide-react';
+import { Check, Minus, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   dropdownOptionClass,
@@ -8,13 +8,16 @@ import {
   schedulePickerDropdownPanelClass,
   schedulePickerTriggerClass,
 } from '@/lib/surfaces';
+import {
+  MAX_SCHEDULE_TIMES,
+  nextSuggestedTime,
+  normalizeMonthDays,
+  validateScheduleMonthDays,
+  validateScheduleTimes,
+  type ScheduleValue,
+} from '../lib/schedule-utils';
 
-export interface ScheduleValue {
-  frequency: 'daily' | 'weekly' | 'monthly';
-  weekDays: number[];     // 多选星期: 0=周日, 1=周一
-  monthDay?: number;      // 1-31
-  time: string;           // "HH:mm"
-}
+export type { ScheduleValue };
 
 /** 下拉弹出方向 */
 type DropDirection = 'down' | 'up';
@@ -45,12 +48,6 @@ function dropdownPositionClass(dir: DropDirection): string {
   return dir === 'up'
     ? 'absolute bottom-[calc(100%+6px)] left-0 z-20'
     : 'absolute top-[calc(100%+6px)] left-0 z-20';
-}
-
-function dropdownPositionClassRight(dir: DropDirection): string {
-  return dir === 'up'
-    ? 'absolute bottom-[calc(100%+6px)] right-0 z-20'
-    : 'absolute top-[calc(100%+6px)] right-0 z-20';
 }
 
 /** 频率选项 i18n key 映射 */
@@ -261,21 +258,33 @@ function WeekdaysPicker({
   );
 }
 
-// ─── 每月日期选择器（7列 grid） ─────────────────────────────────────────────
+// ─── 每月日期选择器（7列 grid + 月末） ─────────────────────────────────────
 function MonthDayPicker({
-  monthDay,
+  monthDays,
+  monthLastDay,
   onChange,
   onOpenChange,
 }: {
-  monthDay: number;
-  onChange: (d: number) => void;
+  monthDays: number[];
+  monthLastDay: boolean;
+  onChange: (next: { monthDays: number[]; monthLastDay: boolean }) => void;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { t } = useTranslation('tasks');
+  const { t, i18n } = useTranslation('tasks');
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const dir = useDropdownDirection(ref, open);
-  const displayLabel = t('myTask.schedule.monthDay', { day: monthDay });
+  const days = normalizeMonthDays(monthDays);
+  const empty = days.length === 0 && !monthLastDay;
+  const hasShortMonthDay = days.some((d) => d >= 29);
+  const separator = i18n.language?.startsWith('zh') || i18n.language?.startsWith('ja') ? '、' : ', ';
+
+  const displayLabel = useMemo(() => {
+    if (empty) return t('myTask.schedule.pleaseSelect');
+    const parts = days.map((d) => t('myTask.schedule.monthDay', { day: d }));
+    if (monthLastDay) parts.push(t('myTask.schedule.monthLastDay'));
+    return parts.join(separator);
+  }, [days, empty, monthLastDay, separator, t]);
 
   const toggle = () => {
     const next = !open;
@@ -296,37 +305,69 @@ function MonthDayPicker({
     }
   }, [open, onOpenChange]);
 
+  function toggleDay(day: number) {
+    const nextDays = days.includes(day)
+      ? days.filter((d) => d !== day)
+      : normalizeMonthDays([...days, day]);
+    onChange({ monthDays: nextDays, monthLastDay });
+  }
+
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={toggle}
-        className={cn(schedulePickerTriggerClass, 'tabular-nums', open && formFieldOpenClass)}
+        className={cn(
+          schedulePickerTriggerClass,
+          'tabular-nums',
+          empty ? 'text-muted-foreground' : 'text-foreground',
+          open && formFieldOpenClass,
+        )}
       >
         <span className="truncate">{displayLabel}</span>
         <span className="shrink-0 text-muted-foreground"><ChevronDownIcon /></span>
       </button>
       {open && (
         <div className={cn(dir === 'up' ? 'absolute bottom-[calc(100%+6px)] left-0 z-20' : 'absolute top-[calc(100%+6px)] left-0 z-20', 'w-[min(280px,calc(100vw-48px))]')}>
-          <div className={cn(schedulePickerDropdownPanelClass, 'grid grid-cols-7 gap-1 p-3')}>
-            {MONTH_DAYS.map(d => {
-              const selected = d === monthDay;
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() => { onChange(d); setOpen(false); onOpenChange(false); }}
-                  className={cn(
-                    'flex h-[34px] items-center justify-center rounded-lg text-[12px] tabular-nums transition-colors',
-                    selected
-                      ? 'bg-primary font-semibold text-primary-foreground'
-                      : scheduleCalendarDayHoverClass,
-                  )}
-                >
-                  {d}
-                </button>
-              );
-            })}
+          <div className={cn(schedulePickerDropdownPanelClass, 'flex flex-col gap-2 p-3')}>
+            <div className="grid grid-cols-7 gap-1">
+              {MONTH_DAYS.map((d) => {
+                const selected = days.includes(d);
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => toggleDay(d)}
+                    className={cn(
+                      'flex h-[34px] items-center justify-center rounded-lg text-[12px] tabular-nums transition-colors',
+                      selected
+                        ? 'bg-primary font-semibold text-primary-foreground'
+                        : scheduleCalendarDayHoverClass,
+                    )}
+                  >
+                    {d}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() => onChange({ monthDays: days, monthLastDay: !monthLastDay })}
+              className={cn(
+                'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-[12px]',
+                dropdownOptionClass(monthLastDay),
+              )}
+            >
+              <span>{t('myTask.schedule.monthLastDay')}</span>
+              <span className={cn('flex h-4 w-4 shrink-0 text-primary', !monthLastDay && 'opacity-0')}>
+                <Check className="h-4 w-4" />
+              </span>
+            </button>
+            {hasShortMonthDay && (
+              <p className="text-[11px] leading-4 text-muted-foreground">
+                {t('myTask.schedule.shortMonthSkipHint')}
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -396,20 +437,20 @@ function TimePicker({
   }
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative min-w-0 flex-1" ref={ref}>
       <button
         type="button"
         onClick={toggle}
         className={cn(schedulePickerTriggerClass, 'tabular-nums', open && formFieldOpenClass)}
       >
-        <span className="flex items-center gap-1.5 truncate">
+        <span className="flex min-w-0 items-center gap-1.5 truncate">
           <span className="shrink-0 text-muted-foreground"><ClockIcon /></span>
           {time}
         </span>
         <span className="shrink-0 text-muted-foreground"><ChevronDownIcon /></span>
       </button>
       {open && (
-        <div className={cn(dropdownPositionClassRight(dir), 'min-w-[200px]')}>
+        <div className={cn(dropdownPositionClass(dir), 'w-full min-w-[200px]')}>
           <div className={cn(schedulePickerDropdownPanelClass, 'flex overflow-hidden')}>
             {/* Hour column */}
             <div ref={hourRef} className="scrollbar-thin max-h-[228px] min-w-0 flex-1 overflow-y-auto px-1 py-1.5">
@@ -466,59 +507,138 @@ function TimePicker({
   );
 }
 
+function TimeRowAction({
+  label,
+  onClick,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className={cn(
+        schedulePickerTriggerClass,
+        'h-[42px] w-[42px] shrink-0 justify-center px-0 text-[#1D2129]',
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 // ─── SchedulePicker 主组件 ─────────────────────────────────────────────────
 export function SchedulePicker({ value, onChange }: SchedulePickerProps) {
-   
+  const { t } = useTranslation('tasks');
   const [_, setAnyOpen] = useState(false);
   const handleOpenChange = useCallback((_open: boolean) => {
     setAnyOpen(_open);
   }, []);
 
+  const times = value.times?.length ? value.times : ['09:00'];
+  const timesError = validateScheduleTimes(times);
+  const monthDaysError = value.frequency === 'monthly'
+    ? validateScheduleMonthDays(value)
+    : null;
+
   function update(partial: Partial<ScheduleValue>) {
     onChange({ ...value, ...partial });
   }
 
+  function replaceTime(index: number, nextTime: string) {
+    const next = [...times];
+    next[index] = nextTime;
+    update({ times: next });
+  }
+
+  function removeTime(index: number) {
+    if (times.length <= 1) return;
+    update({ times: times.filter((_, i) => i !== index) });
+  }
+
+  function addTime() {
+    if (times.length >= MAX_SCHEDULE_TIMES) return;
+    const suggested = nextSuggestedTime(times);
+    if (times.includes(suggested)) return;
+    update({ times: [...times, suggested] });
+  }
+
   return (
-    <div className="flex flex-nowrap items-stretch gap-2.5 w-full">
-      {/* 频率：固定 1/3 宽 */}
-      <div className="flex-[0_0_33.333%] w-1/3 max-w-[33.333%] min-w-0">
-        <FrequencyPicker
-          value={value.frequency}
-          onChange={(freq) => update({ frequency: freq })}
-          onOpenChange={handleOpenChange}
-        />
-      </div>
-
-      {/* 星期多选（仅 frequency=weekly） */}
-      {value.frequency === 'weekly' && (
-        <div className="flex-1 min-w-0">
-          <WeekdaysPicker
-            weekDays={value.weekDays}
-            onChange={(days) => update({ weekDays: days })}
+    <div className="flex w-full flex-col gap-2">
+      <div className="flex w-full items-start gap-2.5">
+        {/* 频率：与时刻列顶对齐，新增时刻只在右侧向下叠 */}
+        <div className="w-1/3 min-w-0 max-w-[33.333%] flex-[0_0_33.333%]">
+          <FrequencyPicker
+            value={value.frequency}
+            onChange={(freq) => update({ frequency: freq })}
             onOpenChange={handleOpenChange}
           />
         </div>
-      )}
 
-      {/* 每月日期（仅 frequency=monthly） */}
-      {value.frequency === 'monthly' && (
-        <div className="flex-1 min-w-0">
-          <MonthDayPicker
-            monthDay={value.monthDay ?? 1}
-            onChange={(d) => update({ monthDay: d })}
-            onOpenChange={handleOpenChange}
-          />
+        {value.frequency === 'weekly' && (
+          <div className="min-w-0 flex-1">
+            <WeekdaysPicker
+              weekDays={value.weekDays}
+              onChange={(days) => update({ weekDays: days })}
+              onOpenChange={handleOpenChange}
+            />
+          </div>
+        )}
+
+        {value.frequency === 'monthly' && (
+          <div className="min-w-0 flex-1">
+            <MonthDayPicker
+              monthDays={value.monthDays ?? [1]}
+              monthLastDay={Boolean(value.monthLastDay)}
+              onChange={(next) => update(next)}
+              onOpenChange={handleOpenChange}
+            />
+          </div>
+        )}
+
+        <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+          {times.map((time, index) => {
+            const isLast = index === times.length - 1;
+            const showAdd = isLast && times.length < MAX_SCHEDULE_TIMES;
+            const showRemove = times.length > 1;
+            return (
+              <div key={index} className="flex items-stretch gap-2.5">
+                <TimePicker
+                  time={time}
+                  onChange={(next) => replaceTime(index, next)}
+                  onOpenChange={handleOpenChange}
+                />
+                {showRemove && (
+                  <TimeRowAction
+                    label={t('myTask.schedule.removeTime')}
+                    onClick={() => removeTime(index)}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </TimeRowAction>
+                )}
+                {showAdd && (
+                  <TimeRowAction
+                    label={t('myTask.schedule.addTime')}
+                    onClick={addTime}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </TimeRowAction>
+                )}
+              </div>
+            );
+          })}
         </div>
-      )}
-
-      {/* 时间选择器：始终显示 */}
-      <div className="flex-1 min-w-0">
-        <TimePicker
-          time={value.time}
-          onChange={(t) => update({ time: t })}
-          onOpenChange={handleOpenChange}
-        />
       </div>
+      {timesError === 'empty' && (
+        <p className="text-xs text-destructive">{t('myTask.schedule.timesRequired')}</p>
+      )}
+      {monthDaysError === 'empty' && (
+        <p className="text-xs text-destructive">{t('myTask.schedule.monthDaysRequired')}</p>
+      )}
     </div>
   );
 }

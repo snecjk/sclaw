@@ -189,7 +189,14 @@
       "everyDay": "每天",
       "workday": "工作日",
       "pleaseSelect": "请选择",
-      "monthDay": "{{day}} 号"
+      "monthDay": "{{day}} 号",
+      "monthLastDay": "当月最后一个自然日",
+      "monthDaysRequired": "请至少选择一个日期或当月最后一个自然日",
+      "shortMonthSkipHint": "所选日期在部分月份不存在时将自动跳过",
+      "addTime": "添加时间",
+      "removeTime": "删除该时间",
+      "timesRequired": "请至少选择一个执行时间",
+      "tooComplexToEdit": "计划较复杂，无法在 UI 编辑，请重建"
     },
     "sort": {
       "createdDesc": "按创建时间倒序",

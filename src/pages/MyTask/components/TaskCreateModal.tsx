@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
 import {
   scheduleValueToCron,
-  cronToScheduleValue,
+  tryCronToScheduleValue,
   defaultScheduleValue,
+  validateScheduleMonthDays,
+  validateScheduleTimes,
 } from '../lib/schedule-utils';
 import {
   stripInstructionFromTaskMessage,
@@ -201,10 +203,13 @@ function computeInitialValues(
     // C-4：NL 创建的存量任务 prompt 可能含字面 `\n`（C-2 之前入库），读取时显示侧
     // 归一化（幂等，不回写；用户保存时自然固化）。UI 创建任务不误转。
     const instructions = createdViaNl ? unescapeLiteralNewlines(rawInstructions) : rawInstructions;
+    const decoded = tryCronToScheduleValue(job.cronExpr);
     return {
       name: job.name || '',
       instructions,
-      schedule: cronToScheduleValue(job.cronExpr),
+      schedule: decoded ?? defaultScheduleValue(),
+      scheduleLocked: decoded === null,
+      originalCronExpr: typeof job.cronExpr === 'string' ? job.cronExpr : null,
       recipients,
       composerSegments: enrichedSegments,
       engineType: job.engineType,
@@ -232,12 +237,16 @@ function computeInitialValues(
             || workflowLabelResolver?.(initialValues.workflowCode),
         )
         : '');
+    const decoded = initialValues.schedule
+      ? tryCronToScheduleValue(initialValues.schedule)
+      : defaultScheduleValue();
+    const scheduleLocked = Boolean(initialValues.schedule) && decoded === null;
     return {
       name: initialValues.name || '',
       instructions,
-      schedule: initialValues.schedule
-        ? cronToScheduleValue(initialValues.schedule)
-        : defaultScheduleValue(),
+      schedule: decoded ?? defaultScheduleValue(),
+      scheduleLocked,
+      originalCronExpr: scheduleLocked ? initialValues.schedule ?? null : null,
       recipients: [] as DingTalkMention[],
       composerSegments: seededWorkflow,
       engineType: 'claude' as TaskEngineType,
@@ -253,6 +262,8 @@ function computeInitialValues(
     name: '',
     instructions: '',
     schedule: defaultScheduleValue(),
+    scheduleLocked: false,
+    originalCronExpr: null as string | null,
     recipients: [] as DingTalkMention[],
     composerSegments: null as PersistedComposerSegment[] | null,
     engineType: 'claude' as TaskEngineType,
@@ -799,12 +810,14 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   const [name, setName] = useState(init.name);
   const [instructions, setInstructions] = useState(init.instructions);
   const [schedule, setSchedule] = useState<ScheduleValue>(init.schedule);
+  const scheduleLocked = init.scheduleLocked;
+  const originalCronExpr = init.originalCronExpr;
   const [saving, setSaving] = useState(false);
   const [instructionMentions] = useState<DingTalkMention[]>(init.recipients);
   const composerSnapshotRef = useRef<TaskComposerSnapshot | null>(null);
   const initialComposerSegments = init.composerSegments;
   const initialCreatedViaNl = init.createdViaNl;
-  const [errors, setErrors] = useState<{ name?: string; instructions?: string }>({});
+  const [errors, setErrors] = useState<{ name?: string; instructions?: string; schedule?: string }>({});
   const [engineType, setEngineType] = useState<TaskEngineType>(init.engineType);
   const [saveToMyArtifact, setSaveToMyArtifact] = useState(init.saveToMyArtifact);
   const [saveToSharedArtifact, setSaveToSharedArtifact] = useState(init.saveToSharedArtifact);
@@ -886,6 +899,15 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
       || (snapshot?.mentions?.length ?? 0) > 0,
     );
     if (!hasComposerContent) newErrors.instructions = t('myTask.createModal.instructionsRequired');
+    if (!scheduleLocked) {
+      const timesError = validateScheduleTimes(schedule.times);
+      if (timesError === 'empty') newErrors.schedule = t('myTask.schedule.timesRequired');
+      if (schedule.frequency === 'monthly' && validateScheduleMonthDays(schedule) === 'empty') {
+        newErrors.schedule = t('myTask.schedule.monthDaysRequired');
+      }
+    } else if (!originalCronExpr?.trim()) {
+      newErrors.schedule = t('myTask.schedule.tooComplexToEdit');
+    }
     const shouldSaveToSharedArtifact = isSite && saveToSharedArtifact;
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -913,7 +935,9 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
       await onSave({
         name: name.trim(),
         message: payload.gatewayText.trim() || instructions.trim(),
-        schedule: scheduleValueToCron(schedule),
+        schedule: scheduleLocked && originalCronExpr
+          ? originalCronExpr
+          : scheduleValueToCron(schedule),
         enabled: true,
         dingTalkMentions: payload.persistedSegments
           .filter((seg): seg is Extract<PersistedComposerSegment, { type: 'mention' }> => seg.type === 'mention')
@@ -956,7 +980,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
       transition={{ duration: 0.2, ease: 'easeInOut' }}
     >
       <motion.div
-        className="w-full max-w-[min(820px,100%)] bg-[#FFFFFF] rounded-[18px] border border-border shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
+        className="w-full max-w-[min(728px,100%)] bg-[#FFFFFF] rounded-[18px] border border-border shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
         initial={{ opacity: 0, scale: 0.96, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 8 }}
@@ -981,7 +1005,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
           </button>
         </div>
 
-        <div className="px-[18px] pb-[16px] flex flex-col gap-5 flex-1 overflow-y-auto min-h-0">
+        <div className="sto-hide-scrollbar px-[18px] pb-[16px] flex flex-col gap-5 flex-1 overflow-y-auto min-h-0">
           <div className="flex flex-col gap-2">
             <label className={taskCreateFormLabelClass}>{t('myTask.createModal.nameLabel')}</label>
             <input
@@ -1051,7 +1075,33 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
 
           <div className="flex flex-col gap-2">
             <span className={taskCreateFormLabelClass}>{t('myTask.createModal.scheduleLabel')}</span>
-            <SchedulePicker value={schedule} onChange={setSchedule} />
+            {scheduleLocked ? (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-xs text-muted-foreground">{t('myTask.schedule.tooComplexToEdit')}</p>
+                {originalCronExpr ? (
+                  <code className="block overflow-x-auto rounded-[8px] border border-[#E5E6EB] bg-[#F7F8FA] px-3 py-2 text-[12px] text-foreground">
+                    {originalCronExpr}
+                  </code>
+                ) : null}
+                {errors.schedule && (
+                  <p className="text-xs text-destructive">{errors.schedule}</p>
+                )}
+              </div>
+            ) : (
+              <SchedulePicker
+                value={schedule}
+                onChange={(next) => {
+                  setSchedule(next);
+                  if (errors.schedule) {
+                    setErrors((p) => {
+                      const nextErrors = { ...p };
+                      delete nextErrors.schedule;
+                      return nextErrors;
+                    });
+                  }
+                }}
+              />
+            )}
           </div>
 
           <div className="flex flex-col gap-2">

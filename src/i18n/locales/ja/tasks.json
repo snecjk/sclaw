@@ -189,7 +189,14 @@
       "everyDay": "毎日",
       "workday": "営業日",
       "pleaseSelect": "選択",
-      "monthDay": "{{day}}日"
+      "monthDay": "{{day}}日",
+      "monthLastDay": "当月の最終自然日",
+      "monthDaysRequired": "日付または当月の最終自然日を1つ以上選択してください",
+      "shortMonthSkipHint": "一部の月に存在しない日付はスキップされます",
+      "addTime": "時刻を追加",
+      "removeTime": "この時刻を削除",
+      "timesRequired": "実行時刻を1つ以上選択してください",
+      "tooComplexToEdit": "この予定は UI で編集できません。タスクを作り直してください。"
     },
     "sort": {
       "createdDesc": "作成日（最新）",

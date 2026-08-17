@@ -66,6 +66,59 @@ describe('ScheduledTaskScheduler', () => {
       expect(() => validateCronExpr('0 9 31 2 *')).toThrow(/scan horizon/);
     });
 
+    it('accepts last-day-of-month L and mixed 1,L', () => {
+      expect(() => validateCronExpr('0 9 L * *')).not.toThrow();
+      expect(() => validateCronExpr('0 9 1,L * *')).not.toThrow();
+      expect(() => validateCronExpr('0 9 30 * *')).not.toThrow();
+    });
+
+    it('computes L as the last day and skips 30/31 in short months', () => {
+      const fromFeb = new Date(2026, 1, 1, 8, 0, 0);
+      const lastFeb = new Date(computeNextRunAt('0 9 L * *', fromFeb));
+      expect(lastFeb.getFullYear()).toBe(2026);
+      expect(lastFeb.getMonth()).toBe(1);
+      expect(lastFeb.getDate()).toBe(28);
+
+      const fromApr = new Date(2026, 3, 1, 8, 0, 0);
+      const may31 = new Date(computeNextRunAt('0 9 31 * *', fromApr));
+      expect(may31.getMonth()).toBe(4);
+      expect(may31.getDate()).toBe(31);
+
+      const fromJan = new Date(2026, 0, 1, 8, 0, 0);
+      const jan30 = new Date(computeNextRunAt('0 9 30 * *', fromJan));
+      expect(jan30.getMonth()).toBe(0);
+      expect(jan30.getDate()).toBe(30);
+
+      const mar30 = new Date(computeNextRunAt('0 9 30 * *', fromFeb));
+      expect(mar30.getMonth()).toBe(2);
+      expect(mar30.getDate()).toBe(30);
+    });
+
+    it('accepts semicolon-joined 5-field expressions', () => {
+      expect(() => validateCronExpr('0 9 * * *;30 15 * * *')).not.toThrow();
+    });
+
+    it('rejects a bad part in a semicolon-joined expression without treating the whole string as one cron', () => {
+      expect(() => validateCronExpr('0 9 * * *;0 9 * * * *')).toThrow(/5-field cron/);
+      expect(() => validateCronExpr('0 9 * * *;0 9 31 2 *')).toThrow(/scan horizon/);
+    });
+
+    it('picks the earliest next hit across semicolon-joined crons', () => {
+      const beforeNine = new Date(2024, 5, 15, 8, 30, 0);
+      const afterNine = new Date(2024, 5, 15, 9, 0, 0);
+      const expr = '0 9 * * *;30 15 * * *';
+
+      const nextMorning = new Date(computeNextRunAt(expr, beforeNine));
+      expect(nextMorning.getHours()).toBe(9);
+      expect(nextMorning.getMinutes()).toBe(0);
+      expect(nextMorning.getDate()).toBe(15);
+
+      const nextAfternoon = new Date(computeNextRunAt(expr, afterNine));
+      expect(nextAfternoon.getHours()).toBe(15);
+      expect(nextAfternoon.getMinutes()).toBe(30);
+      expect(nextAfternoon.getDate()).toBe(15);
+    });
+
     it('stores nextRunAt as UTC ISO while matching host-local cron fields', () => {
       // 08:30 本机墙钟 → 当天 09:00 本机墙钟；ISO 带 Z 只是存储，不把 9 点当成 UTC 9 点。
       const from = new Date(2024, 5, 15, 8, 30, 0);
@@ -149,6 +202,31 @@ describe('ScheduledTaskScheduler', () => {
       await scheduler.tick(new Date('2024-01-01T00:02:30.000Z'));
       expect(dispatched).toHaveLength(1);
       expect((await taskRepo.getById('sf'))?.nextRunAt).toBe('2024-01-01T00:03:00.000Z');
+    });
+
+    it('dispatches a multi-cron task once and advances to the earlier remaining slot', async () => {
+      const { dispatcher, dispatched } = makeRecordingDispatcher();
+      const scheduler = new ScheduledTaskScheduler(taskRepo, runRepo, dispatcher);
+      await taskRepo.create({
+        id: 'multi',
+        name: 'M',
+        enabled: true,
+        ...baseTaskInput,
+        cronExpr: '0 9 * * *;30 15 * * *',
+      });
+
+      const beforeNine = new Date(2024, 5, 15, 8, 30, 0);
+      await scheduler.refreshSchedule(beforeNine);
+      const nextBefore = (await taskRepo.getById('multi'))?.nextRunAt;
+      expect(new Date(nextBefore!).getHours()).toBe(9);
+      expect(new Date(nextBefore!).getMinutes()).toBe(0);
+
+      await scheduler.tick(new Date(2024, 5, 15, 9, 0, 30));
+      expect(dispatched).toHaveLength(1);
+      const after = await taskRepo.getById('multi');
+      expect(new Date(after!.nextRunAt!).getHours()).toBe(15);
+      expect(new Date(after!.nextRunAt!).getMinutes()).toBe(30);
+      expect(new Date(after!.nextRunAt!).getDate()).toBe(15);
     });
 
     it('does not dispatch a not-yet-due task', async () => {

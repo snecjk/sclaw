@@ -189,7 +189,14 @@
       "everyDay": "Every day",
       "workday": "Workdays",
       "pleaseSelect": "Select",
-      "monthDay": "Day {{day}}"
+      "monthDay": "Day {{day}}",
+      "monthLastDay": "Last calendar day of the month",
+      "monthDaysRequired": "Select at least one day or the last calendar day",
+      "shortMonthSkipHint": "Dates that don't exist in some months will be skipped",
+      "addTime": "Add time",
+      "removeTime": "Remove this time",
+      "timesRequired": "Select at least one run time",
+      "tooComplexToEdit": "This schedule is too complex to edit in the UI. Please recreate the task."
     },
     "sort": {
       "createdDesc": "Created (latest)",

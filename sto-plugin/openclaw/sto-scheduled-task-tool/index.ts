@@ -15,6 +15,21 @@ import {
 
 const TAG = 'sto-scheduled-task-tool';
 
+/** 与 UI / cron-math 的最多离散时刻数对齐 */
+const MAX_CRON_EXPR_PARTS = 12;
+
+const CRON_EXPR_FIELD_DESCRIPTION =
+	'5 段 cron（分钟 小时 日 月 星期），或用分号拼接最多 12 条独立 5 段。例：每天 9:00 为 "0 9 * * *"；每天 9:00 和 15:30 为 "0 9 * * *;30 15 * * *"；每月最后一天为 "0 9 L * *"。';
+
+function looksLikeCronExprParam(expr: string): boolean {
+	const parts = expr
+		.split(';')
+		.map((part) => part.trim())
+		.filter((part) => part.length > 0);
+	if (parts.length === 0 || parts.length > MAX_CRON_EXPR_PARTS) return false;
+	return parts.every((part) => part.split(/\s+/).length === 5);
+}
+
 /**
  * 普通会话：引导 NL 走 HostApi 统一建任务。
  * 落库字段与 Modal bake 对齐（skill_code / workflow_code / extra.composerSegments / attachments）。
@@ -23,7 +38,8 @@ const SCHEDULED_TASK_CREATION_SYSTEM_PROMPT = [
 	'定时任务创建（重要）：',
 	'- 用户要求创建/安排定时或周期性任务时，必须调用 `create_scheduled_task`。',
 	'- **禁止**调用内置 `cron` 工具（系统已禁用；会写入 Gateway jobs.json 造成双调度）。',
-	'- 必填：name（短标题）、cronExpr（标准 5 段，如 `0 9 * * *`）、prompt（到点执行的**干净业务指令**）。',
+	'- 必填：name（短标题）、cronExpr、prompt（到点执行的**干净业务指令**）。',
+	'- cronExpr：标准 5 段 `分钟 小时 日 月 星期`，按主机本地时区。一天多个独立时刻用 `;` 拼接（最多 12 条，从早到晚，各段日/星期必须相同），如每天 09:00 和 15:30 → `0 9 * * *;30 15 * * *`；不要写成笛卡尔积 `0,30 9,15 * * *`（会多跑 09:30、15:00）。每周多选如 `0 9 * * 1,3`；每月多选如 `0 9 1,15 * *`；当月最后一个自然日用 `L`（`0 9 L * *`，与日期同时选 `0 9 1,L * *`）。只要 30 号就写 `30`，不要用 L。',
 	'- prompt 规则：只写到点要做的业务正文；可用 `@真实展示名`、`[文件: 真实文件名]`、`[技能: 真实技能标题]`（必须是会话里出现过的真实值，**禁止**照抄 `<…>` / `文件名` / `标题` 这类文档占位符）。**禁止**把收件人规则大块、`[media attached:…]`、调度说明塞进 prompt。',
 	'- **结构化字段强制（与 UI Modal 同构；写入 extra.composerSegments，可多个）**：',
 	'  · recipients：用户 @ 的钉钉人/群（完整 JSON）；**不写** dingtalk_recipients_json 列。',
@@ -156,6 +172,7 @@ export default definePluginEntry({
 			label: '创建定时任务',
 			description: [
 				'创建 OpenClaw 本地定时任务（立即生效，写入 StoClaw 统一 schedule_tasks）。',
+				'cronExpr 为单条 5 段，或用分号拼接最多 12 条独立 5 段（一天多个时刻；每月最后一天用 L）。',
 				'落库与 UI Modal 同构：prompt 干净；recipients→extra.composerSegments；attachments 持久化；skills→skill_code；workflowCode→workflow_code。',
 				'若用户消息含文件/技能/工作流：必须传 attachments（media 绝对路径）、skills/skillCode、workflowCode/workflowName；禁止只写进 prompt。',
 				'禁止使用内置 cron 工具。',
@@ -163,7 +180,7 @@ export default definePluginEntry({
 			parameters: Type.Object({
 				name: Type.String({ description: '任务短标题，例如「生成周报」' }),
 				cronExpr: Type.String({
-					description: '标准 5 段 cron，例如 "0 9 * * *"（每天 9:00）',
+					description: CRON_EXPR_FIELD_DESCRIPTION,
 				}),
 				prompt: Type.String({
 					description:
@@ -246,12 +263,11 @@ export default definePluginEntry({
 					});
 				}
 
-				const cronParts = cronExpr.split(/\s+/);
-				if (cronParts.length !== 5) {
+				if (!looksLikeCronExprParam(cronExpr)) {
 					return toolResult({
 						type: 'scheduled_task_created',
 						success: false,
-						error: 'cronExpr 必须是标准 5 段表达式',
+						error: 'cronExpr 必须是标准 5 段，多个独立时刻用分号拼接（最多 12 条）',
 						cronExpr,
 					});
 				}
