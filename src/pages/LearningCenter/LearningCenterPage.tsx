@@ -258,13 +258,14 @@ export function LearningCenterPage() {
   const domainTitle = state.status === 'ready'
     ? (state.domain.mainTitle || state.domain.name || t('fallbackTitle'))
     : t('fallbackTitle');
-  const tutorialOffset = tutorials.status === 'ready'
-    ? (tutorials.pageNum - 1) * tutorials.pageSize
-    : 0;
   const visibleTutorialCount = tutorials.status === 'ready'
     ? Math.min(tutorials.items.length, CONTENT_PAGE_SIZE)
     : 0;
-  const tutorialSectionHeight = 250 + Math.max(0, visibleTutorialCount - 3) * 52;
+  // Design row: 40px item + 12px gap; panel padding 18*2.
+  // ≤3 rows keep a fixed visual height; 4-6 grow to fit; never taller than content.
+  const tutorialRowCount = Math.min(Math.max(visibleTutorialCount, 3), CONTENT_PAGE_SIZE);
+  const tutorialPanelHeight = 36 + tutorialRowCount * 40 + Math.max(0, tutorialRowCount - 1) * 12;
+  const tutorialSectionHeight = 54 + tutorialPanelHeight + 4;
 
   return (
     <>
@@ -296,7 +297,10 @@ export function LearningCenterPage() {
                 <section
                   className="learning-center-steps"
                   aria-label={t('categoriesTitle')}
-                  style={{ '--lc-steps-height': `${tutorialSectionHeight}px` } as CSSProperties}
+                  style={{
+                    '--lc-steps-height': `${tutorialSectionHeight}px`,
+                    '--lc-panel-height': `${tutorialPanelHeight}px`,
+                  } as CSSProperties}
                 >
                   <Tabs value={state.selectedCategoryId ?? undefined} onValueChange={selectCategory}>
                     <div className="learning-center-steps__scroller">
@@ -341,43 +345,40 @@ export function LearningCenterPage() {
                       {tutorials.status === 'error' && <FeedbackState state="error" title={t('tutorialsErrorTitle')} description={tutorials.message || t('sectionErrorDescription')} action={<Button size="sm" onClick={() => requestTutorialPage(selectedCategoryId, tutorials.pageNum)}>{t('retry')}</Button>} />}
                       {tutorials.status === 'ready' && tutorials.items.length === 0 && <FeedbackState state="empty" title={t('tutorialsEmptyTitle')} description={t('tutorialsEmptyDescription')} />}
                       {tutorials.status === 'ready' && tutorials.items.length > 0 && (
-                        <>
-                          <ul className="learning-center-tutorial-list" aria-label={t('tutorialsTitle')}>
-                            {tutorials.items.slice(0, CONTENT_PAGE_SIZE).map((tutorial, index) => (
-                              <li key={tutorial.id} className="learning-center-tutorial-item">
-                                <span className="learning-center-tutorial-index" aria-hidden>{tutorialOffset + index + 1}</span>
-                                <div className="learning-center-tutorial-copy">
-                                  <p className="truncate text-xs font-semibold leading-4" title={tutorial.title || tutorial.name}>{tutorial.title || tutorial.name}</p>
-                                  {(tutorial.subTitle || tutorial.description) && (
-                                    <p
-                                      className="truncate text-[0.6875rem] leading-4 text-muted-foreground"
-                                      title={tutorial.subTitle || tutorial.description}
-                                    >
-                                      {tutorial.subTitle || tutorial.description}
-                                    </p>
-                                  )}
-                                </div>
-                                <Button
-                                  type="button"
-                                  variant="link"
-                                  className="learning-center-tutorial-link"
-                                  style={{ color: '#FF6700' }}
-                                  onClick={(event) => {
-                                    detailReturnFocusRef.current = event.currentTarget;
-                                    setTutorialPanelContainer(pageRootRef.current?.parentElement?.closest('main') ?? null);
-                                    setDetailCase(null);
-                                    setPendingUseCase(null);
-                                    setTutorialId(tutorial.id);
-                                  }}
-                                >
-                                  {t('viewTutorial')}
-                                  <ChevronRight className="h-4 w-4" aria-hidden />
-                                </Button>
-                              </li>
-                            ))}
-                          </ul>
-                          <LearningResourcePagination pageNum={tutorials.pageNum} pageSize={tutorials.pageSize} total={tutorials.total} previousLabel={t('previousPage')} nextLabel={t('nextPage')} summaryLabel={t('paginationSummary', { page: tutorials.pageNum, total: tutorials.total })} onPageChange={(pageNum) => requestTutorialPage(selectedCategoryId, pageNum)} />
-                        </>
+                        <ul className="learning-center-tutorial-list" aria-label={t('tutorialsTitle')}>
+                          {tutorials.items.slice(0, CONTENT_PAGE_SIZE).map((tutorial, index) => (
+                            <li key={tutorial.id} className="learning-center-tutorial-item">
+                              <span className="learning-center-tutorial-index" aria-hidden>{index + 1}</span>
+                              <div className="learning-center-tutorial-copy">
+                                <p className="truncate text-xs font-semibold leading-4" title={tutorial.title || tutorial.name}>{tutorial.title || tutorial.name}</p>
+                                {(tutorial.subTitle || tutorial.description) && (
+                                  <p
+                                    className="truncate text-[0.6875rem] leading-4 text-muted-foreground"
+                                    title={tutorial.subTitle || tutorial.description}
+                                  >
+                                    {tutorial.subTitle || tutorial.description}
+                                  </p>
+                                )}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="link"
+                                className="learning-center-tutorial-link"
+                                style={{ color: '#FF6700' }}
+                                onClick={(event) => {
+                                  detailReturnFocusRef.current = event.currentTarget;
+                                  setTutorialPanelContainer(pageRootRef.current?.parentElement?.closest('main') ?? null);
+                                  setDetailCase(null);
+                                  setPendingUseCase(null);
+                                  setTutorialId(tutorial.id);
+                                }}
+                              >
+                                {t('viewTutorial')}
+                                <ChevronRight className="h-4 w-4" aria-hidden />
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
                       )}
                     </div>
                   )}

@@ -102,7 +102,8 @@ describe('LearningCenterPage', () => {
     expect(screen.getByRole('tab', { name: '快速开始' })).toHaveAttribute('data-state', 'active');
     expect(await screen.findByText('十分钟上手')).toBeInTheDocument();
     expect(screen.getByText('案例副标题')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: '学习分类' })).toHaveStyle('--lc-steps-height: 250px');
+    expect(screen.getByRole('region', { name: '学习分类' })).toHaveStyle('--lc-steps-height: 238px');
+    expect(screen.getByRole('region', { name: '学习分类' })).toHaveStyle('--lc-panel-height: 180px');
     expect(tutorialsMock).toHaveBeenCalledWith(category.id, { pageNum: 1, pageSize: 6 });
     expect(casesMock).toHaveBeenCalledWith(category.id, { pageNum: 1, pageSize: 6 });
   });
@@ -120,7 +121,9 @@ describe('LearningCenterPage', () => {
 
     expect(await screen.findByText('教程 6')).toBeInTheDocument();
     expect(screen.queryByText('教程 7')).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: '学习分类' })).toHaveStyle('--lc-steps-height: 406px');
+    expect(screen.getByRole('region', { name: '学习分类' })).toHaveStyle('--lc-panel-height: 336px');
+    expect(screen.getByRole('region', { name: '学习分类' })).toHaveStyle('--lc-steps-height: 394px');
+    expect(screen.queryByRole('button', { name: '下一页' })).not.toBeInTheDocument();
   });
 
   it('shows a domain empty state without requesting descendants', async () => {
@@ -179,19 +182,21 @@ describe('LearningCenterPage', () => {
     expect(casesMock).toHaveBeenCalledTimes(caseCalls);
   });
 
-  it('paginates tutorials without changing the case page', async () => {
-    tutorialsMock.mockImplementation((_categoryId, request) => Promise.resolve(
-      request.pageNum === 2 ? tutorialPage([{ ...tutorial, id: 't2', title: '第二页教程', subTitle: '' }], 2, 7) : tutorialPage([tutorial], 1, 7),
+  it('paginates cases without showing tutorial pagination', async () => {
+    tutorialsMock.mockResolvedValue(tutorialPage([tutorial], 1, 7));
+    casesMock.mockImplementation((_categoryId, request) => Promise.resolve(
+      request.pageNum === 2
+        ? casePage([{ ...caseItem, id: 'c2', title: '第二页案例', subTitle: '' }], 2, 7)
+        : casePage([caseItem], 1, 7),
     ));
-    casesMock.mockResolvedValue(casePage([caseItem], 1, 7));
     renderPage();
     await screen.findByText('十分钟上手');
-    const nextButtons = screen.getAllByRole('button', { name: '下一页' });
-    fireEvent.click(nextButtons[0]);
-    expect(await screen.findByText('第二页教程')).toBeInTheDocument();
-    expect(tutorialsMock).toHaveBeenLastCalledWith(category.id, { pageNum: 2, pageSize: 6 });
-    expect(casesMock).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('案例副标题')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: '下一页' })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }));
+    expect(await screen.findByText('第二页案例')).toBeInTheDocument();
+    expect(casesMock).toHaveBeenLastCalledWith(category.id, { pageNum: 2, pageSize: 6 });
+    expect(tutorialsMock).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('十分钟上手')).toBeInTheDocument();
   });
 
   it('keeps cases usable when tutorials fail and retries tutorials locally', async () => {
