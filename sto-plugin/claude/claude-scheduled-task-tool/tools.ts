@@ -9,7 +9,19 @@ import type {
 import type { ScheduleTask } from '../../../electron/db/models/domain/schedule-task';
 import { getEngineSessionRegistryEntry } from '../../../electron/engines/session-registry';
 import { getAgentWorkspacePath } from '../../../electron/utils/agent-config';
+import { getAuthState } from '../../../electron/utils/auth-store';
 import { normalizeDingTalkMentions } from '../../../shared/dingtalk-send/dingtalk-mention';
+
+/** 写入 created_by / updated_by；与 Host API resolveActor 一致。 */
+async function resolveActor(): Promise<string | null> {
+  try {
+    const { user } = await getAuthState();
+    const code = user?.code?.trim();
+    return code ? code : null;
+  } catch {
+    return null;
+  }
+}
 
 export const CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT = [
   'Claude 本地定时任务工具使用规则：',
@@ -375,7 +387,10 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
     },
     async (input) => runScheduledTaskTool('claude_scheduled_task_created', async () => {
       const defaults = await resolveConversationDefaults(config.sessionKey);
-      const created = await getScheduledTaskService().createTask(toCreateInput(defaults, input));
+      const created = await getScheduledTaskService().createTask({
+        ...toCreateInput(defaults, input),
+        actor: await resolveActor(),
+      });
       const summary = await resolveTaskSummary(created.id);
       return {
         task: summary ?? created,
@@ -440,7 +455,10 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
       const defaults = await resolveConversationDefaults(config.sessionKey);
       const updated = await getScheduledTaskService().updateTask(
         existing.id,
-        toUpdateInput(defaults, patch),
+        {
+          ...toUpdateInput(defaults, patch),
+          actor: await resolveActor(),
+        },
       );
       const summary = await resolveTaskSummary(existing.id);
       return {
@@ -458,7 +476,7 @@ export function createClaudeScheduledTaskTools(config: ScheduledTaskToolConfig) 
     },
     async ({ taskId, taskName }) => runScheduledTaskTool('claude_scheduled_task_deleted', async () => {
       const task = await resolveTaskByIdentity({ taskId, taskName });
-      await getScheduledTaskService().deleteTask(task.id);
+      await getScheduledTaskService().deleteTask(task.id, await resolveActor());
       return {
         deletedTask: {
           id: task.id,

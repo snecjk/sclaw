@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setupInMemoryDb, type InMemoryDb } from './helpers';
 import {
   ScheduledTaskService,
@@ -6,6 +6,11 @@ import {
 } from '../../electron/scheduled-tasks/scheduled-task-service';
 import { SCHEDULED_TASK_DINGTALK_RULES } from '../../shared/dingtalk-prompts';
 import type { DingTalkMention } from '../../shared/dingtalk-send/dingtalk-mention';
+
+const getAuthState = vi.fn(async () => ({ user: null as { code: string } | null }));
+vi.mock('../../electron/utils/auth-store', () => ({
+  getAuthState: () => getAuthState(),
+}));
 
 const baseCreateInput = {
   name: 'Daily standup',
@@ -22,6 +27,8 @@ describe('ScheduledTaskService', () => {
   beforeEach(() => {
     env = setupInMemoryDb();
     svc = new ScheduledTaskService();
+    getAuthState.mockReset();
+    getAuthState.mockResolvedValue({ user: null });
   });
 
   afterEach(() => env.teardown());
@@ -35,6 +42,20 @@ describe('ScheduledTaskService', () => {
       expect(task.cronExprSnapshot).toBe('0 9 * * *');
       expect(task.nextRunAt).toBeTruthy();
       expect(new Date(task.nextRunAt!).getTime()).toBeGreaterThan(Date.now() - 60_000);
+    });
+
+    it('fills createdBy/updatedBy from auth when actor is omitted (Claude NL path)', async () => {
+      getAuthState.mockResolvedValue({ user: { code: '1165828' } });
+      const task = await svc.createTask(baseCreateInput);
+      expect(task.createdBy).toBe('1165828');
+      expect(task.updatedBy).toBe('1165828');
+    });
+
+    it('keeps explicit actor null (migration / Host API unauthenticated)', async () => {
+      getAuthState.mockResolvedValue({ user: { code: '1165828' } });
+      const task = await svc.createTask({ ...baseCreateInput, actor: null });
+      expect(task.createdBy).toBeNull();
+      expect(task.updatedBy).toBeNull();
     });
 
     it('rejects missing required fields', async () => {

@@ -40,6 +40,7 @@ import {
 } from './scheduled-task-executor';
 import type { GatewayManager } from '../gateway/manager';
 import { logger } from '../utils/logger';
+import { getAuthState } from '../utils/auth-store';
 import { getChatRuntimeSupervisor } from '../services/chat-runtime-supervisor';
 import type { CanonicalChatEvent } from '../../shared/chat-runtime-protocol';
 import {
@@ -55,6 +56,24 @@ import {
   readLatestOpenClawUserMessageText,
 } from './scheduled-task-nl-hints';
 
+/**
+ * Host API 路由会显式写入 actor（可为 null）；Claude NL 工具等直调 service 时常漏传。
+ * - `undefined`：从当前登录态补全梧桐工号
+ * - `null` / 非空字符串：尊重调用方（迁移可显式传 null）
+ */
+async function resolveScheduleTaskActor(
+  actor: string | null | undefined,
+): Promise<string | null> {
+  if (actor !== undefined) return actor;
+  try {
+    const { user } = await getAuthState();
+    const code = user?.code?.trim();
+    return code ? code : null;
+  } catch (error) {
+    logger.warn('[scheduled-task] resolve actor from auth failed:', error);
+    return null;
+  }
+}
 /**
  * 引擎无关的定时报表层。在 `ScheduledTaskScheduler`（触发 + claim 单飞）之上，
  * 承担「CRUD + 校验 + 占位会话 + dingtalk 上下文烘焙」——这些都是两引擎共用、
@@ -128,9 +147,11 @@ export class ScheduledTaskService {
     }, [sessionHint]);
     // 4. 对齐 extra.composerSegments / composerAttachments；prompt 变干净
     const aligned = alignScheduledTaskCreateToComposerModel(enriched);
+    const actor = await resolveScheduleTaskActor(input.actor);
     // 5. 落库（附件此时仍是 outbound staging 路径）
     const created = await this.taskRepo.create({
       ...aligned,
+      actor,
       // extra 真源：三列恒 null
       dingtalkRecipients: null,
       skillCode: null,
@@ -203,6 +224,7 @@ export class ScheduledTaskService {
         updatePayload.extra = prepared.extra;
       }
     }
+    updatePayload.actor = await resolveScheduleTaskActor(input.actor);
     // 5. 落库
     const updated = await this.taskRepo.update(id, updatePayload);
     if (!updated) return null;
@@ -246,12 +268,16 @@ export class ScheduledTaskService {
   }
 
   async deleteTask(id: string, actor?: string | null): Promise<void> {
-    await this.taskRepo.softDelete(id, actor);
+    await this.taskRepo.softDelete(id, await resolveScheduleTaskActor(actor));
     await this.scheduler.refreshSchedule();
   }
 
   async setEnabled(id: string, enabled: boolean, actor?: string | null): Promise<ScheduleTask | null> {
-    const updated = await this.taskRepo.setEnabled(id, enabled, actor);
+    const updated = await this.taskRepo.setEnabled(
+      id,
+      enabled,
+      await resolveScheduleTaskActor(actor),
+    );
     await this.scheduler.refreshSchedule();
     return updated ? this.taskRepo.getById(id) ?? updated : null;
   }
