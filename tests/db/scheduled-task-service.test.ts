@@ -6,6 +6,7 @@ import {
 } from '../../electron/scheduled-tasks/scheduled-task-service';
 import { SCHEDULED_TASK_DINGTALK_RULES } from '../../shared/dingtalk-prompts';
 import type { DingTalkMention } from '../../shared/dingtalk-send/dingtalk-mention';
+import { ScheduleTaskRunRepository } from '../../electron/db/repositories/schedule-task-run-repository';
 
 const getAuthState = vi.fn(async () => ({ user: null as { code: string } | null }));
 vi.mock('../../electron/utils/auth-store', () => ({
@@ -219,6 +220,38 @@ describe('ScheduledTaskService', () => {
       await svc.deleteTask(task.id);
       expect(await svc.getTask(task.id)).toBeNull();
       expect(await svc.listTasks()).toHaveLength(0);
+    });
+
+    it('disabling cancels queued runs and nulls nextRunAt', async () => {
+      const task = await svc.createTask(baseCreateInput);
+      const runRepo = new ScheduleTaskRunRepository();
+      const run = await runRepo.createRun({
+        taskId: task.id,
+        triggerSource: 'schedule',
+        idempotencyKey: `${task.id}:queued-disable`,
+        status: 'queued',
+      });
+
+      await svc.setEnabled(task.id, false);
+
+      expect((await runRepo.getRun(run.runId))?.status).toBe('cancelled');
+      expect((await svc.getTask(task.id))?.nextRunAt).toBeNull();
+    });
+
+    it('deleting cancels queued runs', async () => {
+      const task = await svc.createTask(baseCreateInput);
+      const runRepo = new ScheduleTaskRunRepository();
+      const run = await runRepo.createRun({
+        taskId: task.id,
+        triggerSource: 'schedule',
+        idempotencyKey: `${task.id}:queued-delete`,
+        status: 'queued',
+      });
+
+      await svc.deleteTask(task.id);
+
+      expect((await runRepo.getRun(run.runId))?.status).toBe('cancelled');
+      expect((await runRepo.getRun(run.runId))?.error).toBe('task deleted');
     });
   });
 });

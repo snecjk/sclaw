@@ -230,7 +230,10 @@ export class ScheduledTaskService {
     if (!updated) return null;
     // 6. 拷到任务目录 / 清理不再引用的旧附件
     const withAttachments = await this.persistComposerAttachmentsForTask(updated);
-    // 7. 刷新调度
+    // 7. 刷新调度；若本次关掉任务，取消在途 run
+    if (input.enabled === false) {
+      await this.stopActiveRunsForTask(id, 'task disabled');
+    }
     await this.scheduler.refreshSchedule();
     return this.taskRepo.getById(id) ?? withAttachments;
   }
@@ -269,6 +272,7 @@ export class ScheduledTaskService {
 
   async deleteTask(id: string, actor?: string | null): Promise<void> {
     await this.taskRepo.softDelete(id, await resolveScheduleTaskActor(actor));
+    await this.stopActiveRunsForTask(id, 'task deleted');
     await this.scheduler.refreshSchedule();
   }
 
@@ -278,8 +282,49 @@ export class ScheduledTaskService {
       enabled,
       await resolveScheduleTaskActor(actor),
     );
+    if (updated && !enabled) {
+      await this.stopActiveRunsForTask(id, 'task disabled');
+    }
     await this.scheduler.refreshSchedule();
     return updated ? this.taskRepo.getById(id) ?? updated : null;
+  }
+
+  /**
+   * 关闭 / 删除后：尽力 abort 正在跑的引擎，并把 queued/running 租约标 cancelled。
+   * abort 失败不阻断 DB 取消——dispatch 重读库时仍会拒发。
+   */
+  private async stopActiveRunsForTask(taskId: string, reason: string): Promise<void> {
+    const active = await this.runRepo.getActiveRun(taskId);
+    if (active?.status === 'running' && active.sessionKey && this.gatewayManager) {
+      try {
+        const task = await this.taskRepo.getById(taskId, { includeDeleted: true });
+        if (task) {
+          const gatewayManager = this.gatewayManager;
+          const supervisor = getChatRuntimeSupervisor(gatewayManager);
+          await supervisor.aborting(active.sessionKey);
+          const { getAdapter } = await import('../engines/manager');
+          const result = await getAdapter(task.engineType).abortRun(
+            { gatewayManager },
+            { sessionKey: active.sessionKey },
+          );
+          if (!result.success) {
+            await supervisor.abortFailed(active.sessionKey, result.error || 'scheduled-task abort failed');
+          } else {
+            await supervisor.aborted(active.sessionKey, null);
+          }
+        }
+      } catch (error) {
+        logger.warn('[scheduled-task] abort running engine failed', {
+          taskId,
+          runId: active.runId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    const cancelled = await this.runRepo.cancelActiveRunsForTask(taskId, { error: reason });
+    if (cancelled > 0) {
+      logger.info('[scheduled-task] cancelled active runs', { taskId, cancelled, reason });
+    }
   }
 
   async listTasks(): Promise<ScheduleTask[]> {

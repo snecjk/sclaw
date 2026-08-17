@@ -7,7 +7,11 @@ import { Cron } from 'croner';
  * 自研实现。行为契约保持不变：
  * - 5 字段强制（拒 3/4/6 字段），区间越界 throw；
  * - 永不命中（如 `0 9 31 2 *` Feb 31）throw scan-horizon；
- * - host-local 时区（不传 `timezone`，与旧 `getHours()` 一致）；
+ * - host-local 时区（不传 `timezone`，与旧 `getHours()` 一致）。
+ *   表字段 `next_run_at` / `created_at` 存 UTC ISO（`Date#toISOString`），
+ *   这只是存储格式：cron 五段按本机墙钟匹配，再把那个瞬间写成 UTC。
+ *   自然创建与手动创建走同一条 `computeNextRunAt`，不会因 UTC 存储而平移触发时刻；
+ *   「立即执行」不走 cron，用当前瞬间的 UTC ISO 作为 `scheduled_for`。
  * - DOM/DOW Vixie OR（`domAndDow` 默认 false）；
  * - `nextRun(from)` 排他（严格晚于 from），等价旧 `roundUpToNextMinute(from)`+扫描。
  *
@@ -38,7 +42,8 @@ export function validateCronExpr(expr: string): void {
 }
 
 /**
- * 计算从 `from` 之后首个 cron 命中时刻（ISO）。
+ * 计算从 `from` 之后首个 cron 命中时刻（UTC ISO）。
+ * 匹配用本机时区；`toISOString()` 只把该瞬间序列化成 UTC，不改墙钟。
  * croner `nextRun` 排他语义等价旧 `roundUpToNextMinute(from)`+扫描，无需额外 round-up。
  */
 export function computeNextRunAt(expr: string, from: Date = new Date()): string {

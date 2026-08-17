@@ -6,7 +6,7 @@ import {
   ScheduledTaskScheduler,
   type ScheduledTaskDispatcher,
 } from '../../electron/scheduled-tasks/scheduled-task-scheduler';
-import { validateCronExpr } from '../../electron/scheduled-tasks/cron-math';
+import { validateCronExpr, computeNextRunAt } from '../../electron/scheduled-tasks/cron-math';
 import type { ScheduleTask, ScheduleTaskRun } from '../../electron/db/models/domain/schedule-task';
 
 function makeRecordingDispatcher() {
@@ -64,6 +64,18 @@ describe('ScheduledTaskScheduler', () => {
 
     it('rejects expressions that never match within the scan horizon (e.g. Feb 31)', () => {
       expect(() => validateCronExpr('0 9 31 2 *')).toThrow(/scan horizon/);
+    });
+
+    it('stores nextRunAt as UTC ISO while matching host-local cron fields', () => {
+      // 08:30 本机墙钟 → 当天 09:00 本机墙钟；ISO 带 Z 只是存储，不把 9 点当成 UTC 9 点。
+      const from = new Date(2024, 5, 15, 8, 30, 0);
+      const next = computeNextRunAt('0 9 * * *', from);
+      expect(next).toMatch(/Z$/);
+      const parsed = new Date(next);
+      expect(parsed.getHours()).toBe(9);
+      expect(parsed.getMinutes()).toBe(0);
+      expect(parsed.getDate()).toBe(15);
+      expect(parsed.getMonth()).toBe(5);
     });
   });
 
@@ -148,6 +160,33 @@ describe('ScheduledTaskScheduler', () => {
       await scheduler.tick(new Date('2024-01-01T00:00:45.000Z')); // not due
       expect(dispatched).toHaveLength(0);
       expect((await taskRepo.getById('future'))?.nextRunAt).toBe('2024-01-01T00:01:00.000Z');
+    });
+
+    it('still dispatches when due within the stale grace window', async () => {
+      const { dispatcher, dispatched } = makeRecordingDispatcher();
+      const scheduler = new ScheduledTaskScheduler(taskRepo, runRepo, dispatcher);
+      await taskRepo.create({ id: 'grace', name: 'G', enabled: true, ...baseTaskInput });
+      await scheduler.refreshSchedule(new Date('2024-01-01T00:00:30.000Z')); // nextRunAt=00:01:00
+
+      // 20s late < default 60s grace → still fire
+      await scheduler.tick(new Date('2024-01-01T00:01:20.000Z'));
+      expect(dispatched).toHaveLength(1);
+      expect(dispatched[0].run.scheduledFor).toBe('2024-01-01T00:01:00.000Z');
+    });
+
+    it('discards a due slot that is older than the stale grace window', async () => {
+      const { dispatcher, dispatched } = makeRecordingDispatcher();
+      const scheduler = new ScheduledTaskScheduler(taskRepo, runRepo, dispatcher);
+      await taskRepo.create({ id: 'stale', name: 'S', enabled: true, ...baseTaskInput });
+      await scheduler.refreshSchedule(new Date('2024-01-01T00:00:30.000Z')); // nextRunAt=00:01:00
+
+      // 4 minutes late > 60s grace → skip, advance from now
+      const now = new Date('2024-01-01T00:05:00.000Z');
+      await scheduler.tick(now);
+      expect(dispatched).toHaveLength(0);
+      const after = await taskRepo.getById('stale');
+      expect(after?.nextRunAt).toBe('2024-01-01T00:06:00.000Z');
+      expect(after?.lastRecoveredAt).toBe(now.toISOString());
     });
   });
 

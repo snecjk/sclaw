@@ -260,6 +260,8 @@ OpenClaw / Claude 的 create 工具：
 ## 五、阶段三：云端同步（仅计划，待客户端测试完毕后开发）
 
 > **本阶段仅制定计划，暂不编码。等阶段二客户端任务全部测试完毕后，再进行开发。**
+>
+> **策略真源（2026-08-17）**：历史归属认领、登录后首次上云检测、手动拉取、日常「先远程后本地 await」等产品策略，见 [`docs/定时任务云端同步与历史归属.md`](./定时任务云端同步与历史归属.md)。下文 §3.1–3.3 仍描述 memory-center 表结构与路由骨架；冲突/触发时机以策略文档为准。
 
 ### 3.1 云端 schema（memory-center）
 
@@ -296,11 +298,14 @@ OpenClaw / Claude 的 create 工具：
 
 `src/pages/MyTask/index.tsx`（或 `TaskToolbar`）新增按钮：
 
-- 「同步到云端」：读本地 SQLite 全量任务 → POST `/scheduled-tasks/cloud/batch-upsert` → 提示成功/失败数
-- 「从云端拉取」：GET `/scheduled-tasks/cloud/list` → 本地 upsert（按 `id` 匹配，`version` 冲突提示）
+- 「同步到云端」：读本地 SQLite 全量任务 → POST `/scheduled-tasks/cloud/batch-upsert` → 提示成功/失败数（**手动兜底**；正常首次上云见策略文档登录后检测）
+- 「从云端拉取」：GET `/scheduled-tasks/cloud/list` → 本地 upsert（按 `id` + `version` 合并；**仅此入口自动恢复，登录后不自动 pull**）
+  - **显隐**：进入「我的任务」时调 Host `sync-status`；仅当存在「云端比本地新」（缺本地 id 或云端 version 更大）时显示按钮，详见 [`定时任务云端同步与历史归属.md`](./定时任务云端同步与历史归属.md) §5.3
 - host-api 调用经 `electron/api/routes/scheduled-tasks.ts` 代理到 memory-center（需在 `electron/main/ipc/host-api-proxy.ts` 增加路由透传）
 - 同步状态：loading / 成功 toast / 失败明细
 - 拉取时附件持久目录重建：若 `extra.composerAttachments[].persistentPath` 文件不存在，标记 error chip（不阻塞任务保存）
+
+另见策略文档：登录后归属认领 + 首次上云检测（后台、不挡进首页）；日常 CRUD 先远程后本地 await。
 
 ### 2.10 测试与文档
 
@@ -321,7 +326,7 @@ OpenClaw / Claude 的 create 工具：
 **文档：**
 
 - `docs/Composer附件-上传菜单与数据中心选文件.md`：勾选 Task 四源菜单；注明执行期 media 重建
-- 新建 `docs/定时任务云端同步.md`：表结构 / 路由 / 同步语义 / 冲突策略（阶段三开发时写）
+- [`docs/定时任务云端同步与历史归属.md`](./定时任务云端同步与历史归属.md)：归属认领 / 首次上云检测 / 手动拉取 / 日常双写 / version 与账号隔离（阶段三策略真源）
 - 更新 NL 工具说明：收件人写 extra.composerSegments
 
 ---
