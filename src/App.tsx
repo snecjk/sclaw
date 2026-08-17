@@ -375,6 +375,10 @@ function AppShellToaster() {
         right: 'auto',
         transform: 'translateX(-50%)',
         zIndex: 99999,
+        // Radix modal drawers disable pointer events on `body`. The global
+        // toaster sits outside their dismissable layer, so it must opt back
+        // in or the first click only dismisses the drawer beneath it.
+        pointerEvents: 'auto',
       }}
     />
   );

@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { invokeIpc } from '@/lib/api-client';
 import { isHttpUrl, openExternalUrl } from '@/lib/preview-url';
 import type { TestRunDrawerProps } from '@/pages/WorkflowDesigner/components/test-run-drawer';
+import { isGlobalToastInteractionTarget } from '@/lib/global-toast-interaction';
 import {
   formatTrialRunTime,
   formatTrialRunVersion,
@@ -235,7 +236,16 @@ export function TrialRunDrawerView(props: TrialRunDrawerViewProps) {
 
   return (
     <Sheet open={props.open} onOpenChange={(open) => { if (!open) props.onClose(); }}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 border-l border-border bg-background p-0 text-foreground sm:max-w-[min(500px,100vw)]">
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-0 border-l border-border bg-background p-0 text-foreground sm:max-w-[min(500px,100vw)]"
+        onPointerDownOutside={(event) => {
+          // Keep the trial drawer mounted until the toast action reaches its
+          // onClick handler. That handler coordinates closing this drawer and
+          // opening the result drawer in a single interaction.
+          if (isGlobalToastInteractionTarget(event.target)) event.preventDefault();
+        }}
+      >
         <header data-testid="trial-run-header" className="flex h-[52px] shrink-0 items-center justify-between px-3">
           <SheetTitle className="text-sm font-semibold">{t('run.resultTitle')}</SheetTitle>
           <SheetDescription className="sr-only">{t('run.resultDescription')}</SheetDescription>
