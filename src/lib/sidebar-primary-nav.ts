@@ -14,6 +14,7 @@ const SIDEBAR_PRIMARY_NAV_ROUTE_MATCHERS: ReadonlyArray<{ path: string; end?: bo
   { path: '/more-apps' },
   { path: '/models' },
   { path: '/data-center' },
+  { path: '/learning-center' },
 ];
 
 export interface SidebarPrimaryNavVisibilityOptions {

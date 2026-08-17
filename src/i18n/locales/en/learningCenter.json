@@ -1,0 +1,23 @@
+{
+  "pageTitle": "Learning Center",
+  "eyebrow": "Learn and practice",
+  "fallbackTitle": "Learning Center",
+  "fallbackSubtitle": "Explore tutorials and practical examples to make new capabilities part of your daily work.",
+  "loadingTitle": "Loading Learning Center",
+  "loadingDescription": "Fetching the learning content available to you",
+  "loadErrorTitle": "Unable to load Learning Center",
+  "loadErrorDescription": "Check your connection and try again.",
+  "retry": "Try again",
+  "emptyDomainTitle": "No learning content available",
+  "emptyDomainDescription": "Your account does not have access to a learning domain yet. Contact an administrator for access.",
+  "categoriesTitle": "Learning categories",
+  "categoriesAria": "Learning categories",
+  "emptyCategoryTitle": "No categories in this learning domain",
+  "emptyCategoryDescription": "Published categories will appear here.",
+  "contentTitle": "Featured content",
+  "contentDescription": "Start with a tutorial, then apply the capability in a practical example.",
+  "tutorialsTitle": "Tutorials",
+  "casesTitle": "Practical examples",
+  "categoryContentPending": "“{{category}}” selected",
+  "categoryContentPendingDescription": "Tutorials and examples will be connected in the next implementation stage."
+}

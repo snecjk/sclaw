@@ -19,6 +19,7 @@ import {
   Check,
   LayoutGrid,
   Database,
+  BookOpen,
 } from 'lucide-react';
 import sidebarCollapseAllGroupsIcon from '@/assets/icons/sidebar-collapse-all-groups.svg';
 import sidebarExpandAllGroupsIcon from '@/assets/icons/sidebar-expand-all-groups.svg';
@@ -1689,6 +1690,7 @@ export function Sidebar() {
       { to: '/more-apps', icon: <LayoutGrid className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.moreApps') },
       { to: '/models', icon: <BarChart3 className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.myData') },
       { to: '/data-center', icon: <Database className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.dataCenter') },
+      { to: '/learning-center', icon: <BookOpen className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.learningCenter') },
     ];
     return all.filter((item) => isSidebarPrimaryNavItemVisible(item.to, {
       primaryMyData: sidebarVis.primaryMyData,

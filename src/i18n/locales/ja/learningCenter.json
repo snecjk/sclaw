@@ -1,0 +1,23 @@
+{
+  "pageTitle": "ラーニングセンター",
+  "eyebrow": "学習と実践",
+  "fallbackTitle": "ラーニングセンター",
+  "fallbackSubtitle": "チュートリアルと実践例から、新しい機能を日々の業務に取り入れましょう。",
+  "loadingTitle": "ラーニングセンターを読み込み中",
+  "loadingDescription": "閲覧可能な学習コンテンツを取得しています",
+  "loadErrorTitle": "ラーニングセンターを読み込めません",
+  "loadErrorDescription": "ネットワークを確認して再試行してください。",
+  "retry": "再読み込み",
+  "emptyDomainTitle": "表示できる学習コンテンツがありません",
+  "emptyDomainDescription": "このアカウントにはまだ学習ドメインへのアクセス権がありません。管理者にお問い合わせください。",
+  "categoriesTitle": "学習カテゴリ",
+  "categoriesAria": "学習カテゴリ",
+  "emptyCategoryTitle": "この学習ドメインにはカテゴリがありません",
+  "emptyCategoryDescription": "公開されたカテゴリがここに表示されます。",
+  "contentTitle": "おすすめコンテンツ",
+  "contentDescription": "チュートリアルで学び、実践例で業務に活用しましょう。",
+  "tutorialsTitle": "チュートリアル",
+  "casesTitle": "実践例",
+  "categoryContentPending": "「{{category}}」を選択しました",
+  "categoryContentPendingDescription": "チュートリアルと実践例は次の実装段階で接続されます。"
+}

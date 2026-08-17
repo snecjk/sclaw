@@ -13,18 +13,18 @@ type LoadState =
 export function TutorialDetailPage() {
   const navigate = useNavigate();
   const { tutorialId = '' } = useParams();
-  const parsedId = Number(tutorialId);
+  const hasValidId = /^\d+$/.test(tutorialId) && tutorialId !== '0';
   const [reloadKey, setReloadKey] = useState(0);
-  const [state, setState] = useState<LoadState>(Number.isInteger(parsedId) && parsedId > 0
+  const [state, setState] = useState<LoadState>(hasValidId
     ? { status: 'loading' }
     : { status: 'error', message: '教程地址无效' });
 
   useEffect(() => {
     let active = true;
-    if (!Number.isInteger(parsedId) || parsedId <= 0) {
+    if (!hasValidId) {
       return () => { active = false; };
     }
-    getTutorialDetail(parsedId).then((tutorial) => {
+    getTutorialDetail(tutorialId).then((tutorial) => {
       if (active) setState({ status: 'ready', tutorial });
     }).catch((error: unknown) => {
       if (!active) return;
@@ -35,7 +35,7 @@ export function TutorialDetailPage() {
       });
     });
     return () => { active = false; };
-  }, [parsedId, reloadKey]);
+  }, [hasValidId, reloadKey, tutorialId]);
 
   return <main className="h-full overflow-y-auto bg-background px-6 py-5">
     <div className="mx-auto max-w-4xl">

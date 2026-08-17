@@ -1,0 +1,23 @@
+{
+  "pageTitle": "学习中心",
+  "eyebrow": "学习与实践",
+  "fallbackTitle": "学习中心",
+  "fallbackSubtitle": "探索教程和实践案例，让新的能力更快成为日常习惯。",
+  "loadingTitle": "正在加载学习中心",
+  "loadingDescription": "正在获取你有权限查看的学习内容",
+  "loadErrorTitle": "学习中心加载失败",
+  "loadErrorDescription": "请检查网络后重试",
+  "retry": "重新加载",
+  "emptyDomainTitle": "暂无可见学习内容",
+  "emptyDomainDescription": "当前账号还没有可访问的学习域，请联系管理员配置权限。",
+  "categoriesTitle": "学习分类",
+  "categoriesAria": "学习分类",
+  "emptyCategoryTitle": "这个学习域还没有分类",
+  "emptyCategoryDescription": "分类发布后会显示在这里。",
+  "contentTitle": "精选内容",
+  "contentDescription": "从教程入门，再用案例把能力带进真实工作。",
+  "tutorialsTitle": "教程",
+  "casesTitle": "实践案例",
+  "categoryContentPending": "已选择“{{category}}”",
+  "categoryContentPendingDescription": "教程与案例内容将在下一阶段接入。"
+}
