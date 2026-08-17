@@ -33,7 +33,7 @@
   "previousPage": "Previous",
   "nextPage": "Next",
   "paginationSummary": "Page {{page}}, {{total}} items",
-  "tutorialPanelTitle": "Tutorial details",
+  "tutorialPanelTitle": "Tutorial guide",
   "tutorialPanelDescription": "Read the tutorial without leaving this category",
   "tutorialDetailLoading": "Loading tutorial details",
   "tutorialDetailLoadingDescription": "Fetching the latest tutorial content",

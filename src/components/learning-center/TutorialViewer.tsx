@@ -86,14 +86,18 @@ function renderNodes(
         ];
       }
       const width = imageWidth(element);
+      const imageStyle = width
+        ? { width: `${width}%`, '--tutorial-image-width': `${width}%` } as CSSProperties
+        : undefined;
       return [
         <img
           key={key}
+          className={width && width <= 50 ? 'tutorial-viewer__image tutorial-viewer__image--compact' : 'tutorial-viewer__image'}
           src={source}
           alt={alt}
           loading="lazy"
           data-width={width ?? undefined}
-          style={width ? { width: `${width}%` } : undefined}
+          style={imageStyle}
           onError={() => failImage(source)}
         />,
       ];

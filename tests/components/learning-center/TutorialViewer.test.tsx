@@ -29,6 +29,8 @@ describe('TutorialViewer', () => {
     render(<TutorialViewer html={`<img src="${url}" alt="流程截图" data-width="50">`} imageErrorLabel="图片暂不可用" />);
     const image = screen.getByRole('img', { name: '流程截图' });
     expect(image.getAttribute('src')).toBe(url);
+    expect(image).toHaveClass('tutorial-viewer__image--compact');
+    expect(image.style.getPropertyValue('--tutorial-image-width')).toBe('50%');
     fireEvent.error(image);
     expect(screen.getByRole('img', { name: /流程截图.*图片暂不可用/ })).toBeInTheDocument();
     expect(screen.queryByRole('img', { name: '流程截图' })).not.toBeInTheDocument();

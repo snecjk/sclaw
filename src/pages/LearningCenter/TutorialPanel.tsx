@@ -1,5 +1,5 @@
 import { useEffect, useState, type RefObject } from 'react';
-import { RefreshCw, X } from 'lucide-react';
+import { PanelRightClose, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { FeedbackState } from '@/components/common/FeedbackState';
 import { TutorialViewer } from '@/components/learning-center/TutorialViewer';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { getTutorialDetail, LearningCenterApiError } from '@/lib/learning-center-api';
 import type { LearningTutorial } from '@/types/learning-center';
+import './TutorialPanel.css';
 
 type DetailState =
   | { status: 'loading' }
@@ -16,11 +17,12 @@ type DetailState =
 
 interface TutorialPanelProps {
   tutorialId: string | null;
+  portalContainer: HTMLElement | null;
   returnFocusRef: RefObject<HTMLElement | null>;
   onClose: () => void;
 }
 
-export function TutorialPanel({ tutorialId, returnFocusRef, onClose }: TutorialPanelProps) {
+export function TutorialPanel({ tutorialId, portalContainer, returnFocusRef, onClose }: TutorialPanelProps) {
   const { t } = useTranslation('learningCenter');
   const [reloadKey, setReloadKey] = useState(0);
   const [state, setState] = useState<DetailState>({ status: 'loading' });
@@ -55,41 +57,57 @@ export function TutorialPanel({ tutorialId, returnFocusRef, onClose }: TutorialP
     <Sheet modal={false} open={Boolean(tutorialId)} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent
         side="right"
-        className="flex w-full max-w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[564px] motion-reduce:animate-none motion-reduce:transition-none"
-        overlayClassName="lg:hidden motion-reduce:animate-none"
+        className="learning-center-tutorial-sheet flex w-full max-w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[564px] motion-reduce:animate-none motion-reduce:transition-none"
+        portalContainer={portalContainer}
+        overlayClassName="learning-center-tutorial-sheet__overlay lg:hidden motion-reduce:animate-none"
+        style={{
+          position: 'absolute',
+          top: 'var(--sto-shell-card-gap, 0.5rem)',
+          right: 'var(--sto-shell-card-gap, 0.5rem)',
+          bottom: 'var(--sto-shell-card-gap, 0.5rem)',
+          left: 'auto',
+          height: 'auto',
+        }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           returnFocusRef.current?.focus();
         }}
       >
-        <SheetHeader className="shrink-0 border-b px-5 py-4 pr-14 text-left">
-          <SheetTitle>{state.status === 'ready' ? state.tutorial.title : t('tutorialPanelTitle')}</SheetTitle>
-          <SheetDescription>
+        <SheetHeader className="learning-center-tutorial-sheet__header shrink-0 text-left">
+          <SheetTitle className="learning-center-tutorial-sheet__title">{t('tutorialPanelTitle')}</SheetTitle>
+          <SheetDescription className="sr-only">
             {state.status === 'ready'
               ? state.tutorial.subTitle || state.tutorial.description || t('tutorialPanelDescription')
               : t('tutorialPanelDescription')}
           </SheetDescription>
         </SheetHeader>
-        <Button type="button" variant="ghost" size="icon" className="absolute right-3 top-3" aria-label={t('close')} onClick={onClose}>
-          <X className="h-4 w-4" aria-hidden />
+        <Button type="button" variant="ghost" size="icon" className="learning-center-tutorial-sheet__close absolute" aria-label={t('close')} onClick={onClose}>
+          <PanelRightClose className="h-4 w-4" aria-hidden />
         </Button>
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-          {state.status === 'loading' && (
-            <FeedbackState state="loading" title={t('tutorialDetailLoading')} description={t('tutorialDetailLoadingDescription')} />
-          )}
-          {state.status === 'forbidden' && (
-            <div role="alert">
-              <FeedbackState state="error" title={t('tutorialForbiddenTitle')} description={state.message || t('tutorialForbiddenDescription')} />
+        <div className="learning-center-tutorial-sheet__body min-h-0 flex-1">
+          <section className="learning-center-tutorial-sheet__content">
+            {state.status === 'ready' && (
+              <h2 className="learning-center-tutorial-sheet__content-title">{state.tutorial.title}</h2>
+            )}
+            <div className="learning-center-tutorial-sheet__content-scroll">
+              {state.status === 'loading' && (
+                <FeedbackState state="loading" title={t('tutorialDetailLoading')} description={t('tutorialDetailLoadingDescription')} />
+              )}
+              {state.status === 'forbidden' && (
+                <div role="alert">
+                  <FeedbackState state="error" title={t('tutorialForbiddenTitle')} description={state.message || t('tutorialForbiddenDescription')} />
+                </div>
+              )}
+              {state.status === 'error' && (
+                <div role="alert">
+                  <FeedbackState state="error" title={t('tutorialDetailErrorTitle')} description={state.message} action={retry} />
+                </div>
+              )}
+              {state.status === 'ready' && (
+                <TutorialViewer className="tutorial-panel-viewer" html={state.tutorial.content ?? ''} imageErrorLabel={t('imageLoadError')} />
+              )}
             </div>
-          )}
-          {state.status === 'error' && (
-            <div role="alert">
-              <FeedbackState state="error" title={t('tutorialDetailErrorTitle')} description={state.message} action={retry} />
-            </div>
-          )}
-          {state.status === 'ready' && (
-            <TutorialViewer html={state.tutorial.content ?? ''} imageErrorLabel={t('imageLoadError')} />
-          )}
+          </section>
         </div>
       </SheetContent>
     </Sheet>

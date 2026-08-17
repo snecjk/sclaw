@@ -33,7 +33,7 @@
   "previousPage": "前へ",
   "nextPage": "次へ",
   "paginationSummary": "{{page}} ページ、全 {{total}} 件",
-  "tutorialPanelTitle": "チュートリアル詳細",
+  "tutorialPanelTitle": "チュートリアルガイド",
   "tutorialPanelDescription": "カテゴリを離れずにチュートリアルを閲覧します",
   "tutorialDetailLoading": "チュートリアル詳細を読み込み中",
   "tutorialDetailLoadingDescription": "最新の内容を取得しています",

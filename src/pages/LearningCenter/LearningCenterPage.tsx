@@ -131,6 +131,7 @@ export function LearningCenterPage() {
   const [tutorials, setTutorials] = useState<ResourceState<LearningTutorial>>({ status: 'idle' });
   const [cases, setCases] = useState<ResourceState<LearningCaseTemplate>>({ status: 'idle' });
   const [tutorialId, setTutorialId] = useState<string | null>(null);
+  const [tutorialPanelContainer, setTutorialPanelContainer] = useState<HTMLElement | null>(null);
   const [detailCase, setDetailCase] = useState<LearningCaseTemplate | null>(null);
   const [pendingUseCase, setPendingUseCase] = useState<LearningCaseTemplate | null>(null);
   const selectedCategoryRef = useRef<string | null>(null);
@@ -140,6 +141,7 @@ export function LearningCenterPage() {
   const caseReturnFocusRef = useRef<HTMLElement | null>(null);
   const caseUseInFlightRef = useRef(false);
   const contentRegionRef = useRef<HTMLDivElement | null>(null);
+  const pageRootRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -266,7 +268,7 @@ export function LearningCenterPage() {
 
   return (
     <>
-      <main className={`learning-center-page h-full min-h-0 overflow-y-auto bg-background px-4 py-5 sm:px-6 lg:px-8 ${tutorialId ? 'lg:pr-[580px]' : ''}`}>
+      <main ref={pageRootRef} className={`learning-center-page h-full min-h-0 overflow-y-auto bg-background px-4 py-5 sm:px-6 lg:px-8 ${tutorialId ? 'lg:pr-[580px]' : ''}`}>
         <div className="learning-center-page__inner flex flex-col gap-8">
           {state.status === 'loading' && (
             <Card aria-busy="true"><FeedbackState state="loading" title={t('loadingTitle')} description={t('loadingDescription')} /></Card>
@@ -352,6 +354,7 @@ export function LearningCenterPage() {
                                   style={{ color: '#FF6700' }}
                                   onClick={(event) => {
                                     detailReturnFocusRef.current = event.currentTarget;
+                                    setTutorialPanelContainer(pageRootRef.current?.parentElement?.closest('main') ?? null);
                                     setDetailCase(null);
                                     setPendingUseCase(null);
                                     setTutorialId(tutorial.id);
@@ -409,7 +412,13 @@ export function LearningCenterPage() {
           )}
         </div>
       </main>
-      <TutorialPanel key={tutorialId ?? 'closed'} tutorialId={tutorialId} returnFocusRef={detailReturnFocusRef} onClose={() => setTutorialId(null)} />
+      <TutorialPanel
+        key={tutorialId ?? 'closed'}
+        tutorialId={tutorialId}
+        portalContainer={tutorialPanelContainer}
+        returnFocusRef={detailReturnFocusRef}
+        onClose={() => setTutorialId(null)}
+      />
       <CaseDetailDialog
         key={detailCase?.id ?? 'case-detail-closed'}
         caseId={detailCase?.id ?? null}
