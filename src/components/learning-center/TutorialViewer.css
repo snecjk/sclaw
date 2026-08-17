@@ -11,6 +11,8 @@
 .tutorial-viewer code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .tutorial-viewer :not(pre) > code { padding: .15em .35em; border-radius: 4px; background: color-mix(in srgb, currentColor 7%, transparent); }
 .tutorial-viewer img { display: block; max-width: 100%; height: auto; margin: 16px 0; border-radius: 8px; object-fit: contain; }
+.tutorial-viewer a { color: hsl(var(--primary)); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.tutorial-image-fallback { display: flex; min-height: 8rem; max-width: 100%; align-items: center; justify-content: center; gap: .5rem; margin: 16px 0; border: 1px dashed hsl(var(--border)); border-radius: 8px; color: hsl(var(--muted-foreground)); background: hsl(var(--muted) / .35); }
 .tutorial-viewer hr { margin: 1.5em 0; border: 0; border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
 .tutorial-viewer [data-indent="1"] { margin-left: 2em; }
 .tutorial-viewer [data-indent="2"] { margin-left: 4em; }
