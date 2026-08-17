@@ -269,6 +269,8 @@ function makeLiveTab(
     runtimeId: embedRuntimeId,
     appTitle: title,
     initialUrl: url,
+    appId,
+    bound,
   });
   // Catalog hints optional; pageFaviconUrl comes from webview after load (Chrome-like).
   const iconUrl = icons?.iconUrl?.trim() || tab.iconUrl;
