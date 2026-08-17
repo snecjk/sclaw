@@ -73,7 +73,7 @@ export function StoAppCommitDialog({
         </div>
 
         <p className="mt-2 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground">
-          为「{appName}」填写本次提交说明，然后调用 `sto-app push` 上传代码。
+          为「{appName}」填写本次提交说明，确认后上传代码。
         </p>
 
         <label className="mt-4 block">

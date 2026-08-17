@@ -5,7 +5,7 @@
 import { app } from 'electron';
 import { existsSync } from 'fs';
 import { mkdir, readFile, writeFile } from 'fs/promises';
-import { dirname, join } from 'path';
+import { dirname, join, resolve } from 'path';
 
 export interface StoAppBinding {
   applicationId: string;
@@ -108,6 +108,18 @@ export async function getStoAppBindingByWorkspaceId(
   const file = await readAll();
   for (const binding of Object.values(file.bindings)) {
     if (binding.workspaceId === id) return binding;
+  }
+  return null;
+}
+
+export async function getStoAppBindingByLocalPath(
+  localPath: string,
+): Promise<StoAppBinding | null> {
+  const target = resolve(localPath.trim());
+  if (!target) return null;
+  const file = await readAll();
+  for (const binding of Object.values(file.bindings)) {
+    if (resolve(binding.localPath) === target) return binding;
   }
   return null;
 }

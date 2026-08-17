@@ -23,7 +23,7 @@ export const useAppDevCatalogStore = create<AppDevCatalogState>((set, get) => ({
   loaded: false,
   refresh: async () => {
     // IDs drive sidebar filtering and must not depend on cloud `listDevApps`
-    // (sto-app CLI / login failures would otherwise leak app-dev into 项目).
+    // (login/API failures would otherwise leak app-dev into 项目).
     let ids: string[] = [];
     try {
       ids = await listDevAppWorkspaceIds();
@@ -31,15 +31,14 @@ export const useAppDevCatalogStore = create<AppDevCatalogState>((set, get) => ({
       ids = [];
     }
 
-    let apps: DevAppSummary[] = get().apps;
-    try {
-      apps = await listDevApps();
-    } catch {
-      // Keep previous apps; sidebar hide still uses marker-based ids above.
-    }
-
     const merged = Array.from(new Set([...get().workspaceIds, ...ids]));
-    set({ workspaceIds: merged, apps, loaded: true });
+    try {
+      const apps = await listDevApps();
+      set({ workspaceIds: merged, apps, loaded: true });
+    } catch (error) {
+      set({ workspaceIds: merged, loaded: true });
+      throw error;
+    }
   },
   registerWorkspaceId: (workspaceId) => {
     const id = workspaceId.trim();

@@ -21,6 +21,7 @@ import {
   listCheckpoints,
   listDevAppWorkspaceIds,
   listDevApps,
+  resolveCloudAppForWorkspace,
   readAppSourceFile,
   restartApp,
   restoreCheckpoint,
@@ -46,6 +47,7 @@ import {
   pushStoApp,
 } from '../../services/sto-app-service';
 import { getStoAppBindingByWorkspaceId } from '../../services/sto-app-binding-store';
+import { ensureStoWorkspaceBinding } from '../../services/code-collab-service';
 
 async function resolveAppPath(workspaceId: string): Promise<string> {
   const rootPath = await getWorkspaceRootPath(workspaceId);
@@ -83,7 +85,9 @@ export async function handleAppDevRoutes(
 
     // --- App creation / listing (capability: app-create-scaffold) ---
     if (url.pathname === '/api/app-dev/apps' && req.method === 'GET') {
+      logger.info('[app-dev] GET /api/app-dev/apps');
       const apps = await listDevApps();
+      logger.info(`[app-dev] GET /api/app-dev/apps count=${apps.length}`);
       sendJson(res, 200, { success: true, apps });
       return true;
     }
@@ -127,10 +131,17 @@ export async function handleAppDevRoutes(
     }
 
     if (url.pathname === '/api/app-dev/apps/delete' && req.method === 'POST') {
-      const body = await parseJsonBody<{ workspaceId: string; deleteFiles?: boolean }>(req);
+      const body = await parseJsonBody<{
+        applicationId?: string;
+        workspaceId?: string;
+        deleteLocal?: boolean;
+      }>(req);
       const result = await deleteDevApp(
-        body.workspaceId ?? '',
-        { deleteFiles: body.deleteFiles === true },
+        {
+          applicationId: body.applicationId,
+          workspaceId: body.workspaceId,
+          deleteLocal: body.deleteLocal === true,
+        },
         ctx.gatewayManager,
       );
       sendJson(res, 200, { success: true, ...result });
@@ -300,17 +311,27 @@ export async function handleAppDevRoutes(
     if (url.pathname === '/api/app-dev/sto-app/status' && req.method === 'GET') {
       const workspaceId = url.searchParams.get('workspaceId') ?? '';
       const appPath = await resolveAppPath(workspaceId);
+      await ensureStoWorkspaceBinding(appPath, { workspaceId }).catch(() => null);
       const status = await getStoAppStatus(appPath);
       if (!status.applicationId) {
         const binding = await getStoAppBindingByWorkspaceId(workspaceId);
         if (binding?.applicationId) {
           status.applicationId = binding.applicationId;
           status.applicationName = status.applicationName ?? binding.applicationName;
-          if (!status.bound) {
-            status.bound = true;
-            status.syncLabel = status.syncLabel === '未绑定' ? '状态未知' : status.syncLabel;
-          }
         }
+      }
+      if (!status.applicationId) {
+        const cloud = await resolveCloudAppForWorkspace(workspaceId, appPath);
+        if (cloud?.applicationId) {
+          status.applicationId = cloud.applicationId;
+          status.applicationName = status.applicationName ?? cloud.applicationName;
+          status.revisionId = status.revisionId ?? cloud.headRevisionId;
+          status.devCommitSha = status.devCommitSha ?? cloud.headCommitSha;
+        }
+      }
+      if (status.applicationId && !status.bound) {
+        status.bound = true;
+        status.syncLabel = status.syncLabel === '未绑定' ? '状态未知' : status.syncLabel;
       }
       sendJson(res, 200, { success: true, status });
       return true;
@@ -319,6 +340,7 @@ export async function handleAppDevRoutes(
     if (url.pathname === '/api/app-dev/sto-app/push' && req.method === 'POST') {
       const body = await parseJsonBody<{ workspaceId: string; message?: string }>(req);
       const appPath = await resolveAppPath(body.workspaceId);
+      await ensureStoWorkspaceBinding(appPath, { workspaceId: body.workspaceId }).catch(() => null);
       const result = await pushStoApp(appPath, body.message ?? '更新应用');
       sendJson(res, 200, { success: true, ...result });
       return true;
@@ -327,6 +349,7 @@ export async function handleAppDevRoutes(
     if (url.pathname === '/api/app-dev/sto-app/pull' && req.method === 'POST') {
       const body = await parseJsonBody<{ workspaceId: string }>(req);
       const appPath = await resolveAppPath(body.workspaceId);
+      await ensureStoWorkspaceBinding(appPath, { workspaceId: body.workspaceId }).catch(() => null);
       const result = await pullStoApp(appPath);
       sendJson(res, 200, { success: true, ...result });
       return true;
@@ -353,11 +376,22 @@ export async function handleAppDevRoutes(
       if (!workspaceId) throw new Error('缺少 workspaceId');
       const appPath = await resolveAppPath(workspaceId);
 
+      await ensureStoWorkspaceBinding(appPath, { workspaceId }).catch(() => null);
       const status = await getStoAppStatus(appPath);
       const binding = await getStoAppBindingByWorkspaceId(workspaceId);
-      const applicationId = (body.applicationId ?? status.applicationId ?? binding?.applicationId ?? '').trim();
+      const cloud = await resolveCloudAppForWorkspace(workspaceId, appPath);
+      const applicationId = (
+        body.applicationId
+        ?? status.applicationId
+        ?? binding?.applicationId
+        ?? cloud?.applicationId
+        ?? ''
+      ).trim();
       if (!applicationId) {
         throw new Error('缺少 applicationId：请先绑定并提交到 STO 应用');
+      }
+      if (cloud && !cloud.gitlabProjectId) {
+        throw new Error('云端应用尚未创建 Git 项目（gitlabProjectId 为空），无法发布');
       }
 
       const env = body.env;

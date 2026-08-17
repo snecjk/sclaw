@@ -31,7 +31,12 @@ type PickerPosition = {
   left: number;
   bottom: number;
   width: number;
+  maxHeight: number;
+  listMaxHeight: number;
 };
+
+const PICKER_MAX_HEIGHT_PX = 390;
+const PICKER_CHROME_HEIGHT_PX = 88;
 
 function Highlight({ text, query }: { text: string; query: string }) {
   const q = query.trim();
@@ -128,10 +133,13 @@ export const AppDevInterfaceCatalogPicker = forwardRef<
         Math.max(12, preferredLeft),
         window.innerWidth - width - 12,
       );
+      const maxHeight = Math.min(PICKER_MAX_HEIGHT_PX, Math.max(240, rect.top - 12));
       setPosition({
         left,
         bottom: window.innerHeight - rect.top + 8,
         width,
+        maxHeight,
+        listMaxHeight: Math.max(160, maxHeight - PICKER_CHROME_HEIGHT_PX),
       });
     };
 
@@ -177,7 +185,7 @@ export const AppDevInterfaceCatalogPicker = forwardRef<
       aria-label="接口清单"
       className={cn(
         // AppPlazaDevAppPane 全屏层 zIndex=240，气泡必须更高
-        'z-[260] overflow-hidden rounded-2xl border border-glass-border glass p-2 shadow-lg',
+        'z-[260] flex max-h-[min(390px,calc(100vh-24px))] flex-col overflow-hidden rounded-2xl border border-glass-border glass p-2 shadow-lg',
         position ? 'fixed' : 'absolute left-0 bottom-full mb-2 w-[360px]',
         className,
       )}
@@ -187,12 +195,13 @@ export const AppDevInterfaceCatalogPicker = forwardRef<
               left: position.left,
               bottom: position.bottom,
               width: position.width,
+              maxHeight: position.maxHeight,
               zIndex: 260,
             }
           : { zIndex: 260 }
       }
     >
-      <div className="flex h-9 items-center justify-between gap-2 px-3">
+      <div className="flex h-9 shrink-0 items-center justify-between gap-2 px-3">
         <p className="text-[11px] font-medium text-muted-foreground/80">接口清单</p>
         <button
           type="button"
@@ -203,7 +212,7 @@ export const AppDevInterfaceCatalogPicker = forwardRef<
           刷新
         </button>
       </div>
-      <div className="px-2 pb-2">
+      <div className="shrink-0 px-2 pb-2">
         <label className="relative flex h-8 items-center">
           <Search
             className="pointer-events-none absolute left-2.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
@@ -219,7 +228,11 @@ export const AppDevInterfaceCatalogPicker = forwardRef<
           />
         </label>
       </div>
-      <div ref={listRef} className={skillPickerListClass}>
+      <div
+        ref={listRef}
+        className={cn(skillPickerListClass, 'sto-overlay-scroll-viewport max-h-[280px] min-h-0 flex-1')}
+        style={position ? { maxHeight: position.listMaxHeight } : undefined}
+      >
         {loading && listItems.length === 0 ? (
           <div className="flex items-center justify-center gap-2 px-3 py-8 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />

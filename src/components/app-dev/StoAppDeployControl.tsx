@@ -84,7 +84,7 @@ export function StoAppDeployControl({
             : job
               ? '点击查看最近一次发布结果'
               : canDeploy
-                ? '先 sto-app push，再发起发布'
+                ? '先提交代码，再发起发布'
                 : '需先绑定 STO 应用后再发布'
         }
         onClick={handleClick}

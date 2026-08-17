@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formFieldFocusClass, modalPrimarySubmitButtonClass } from '@/lib/surfaces';
 import { pickProjectFolder } from '@/lib/session-catalog-api';
-import { createUserApp, prepareAppDevEnvironment } from '@/lib/app-dev-api';
+import { createUserApp, getAppDevEnvironment, prepareAppDevEnvironment } from '@/lib/app-dev-api';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
@@ -27,12 +27,26 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
   const [name, setName] = useState('');
   const [projectType, setProjectType] = useState<ProjectType>('frontend');
   const [parentDir, setParentDir] = useState('');
+  const [defaultParentDir, setDefaultParentDir] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [picking, setPicking] = useState(false);
 
   // 后台预热 Node 运行环境：用户填表单的时间通常足够完成下载。
   useEffect(() => {
-    if (open) void prepareAppDevEnvironment().catch(() => undefined);
+    if (!open) {
+      setName('');
+      setParentDir('');
+      setProjectType('frontend');
+      return;
+    }
+    void prepareAppDevEnvironment().catch(() => undefined);
+    void getAppDevEnvironment()
+      .then((env) => {
+        const fallback = env.defaultParentDir?.trim() ?? '';
+        setDefaultParentDir(fallback);
+        setParentDir((current) => current.trim() || fallback);
+      })
+      .catch(() => undefined);
   }, [open]);
 
   if (!open) return null;
@@ -54,9 +68,14 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
     if (!trimmed) return;
     setSubmitting(true);
     try {
+      const resolvedParentDir = parentDir.trim() || defaultParentDir;
+      if (!resolvedParentDir) {
+        toast.error('无法确定存放位置，请点击「更改」选择目录');
+        return;
+      }
       const result = await createUserApp({
         name: trimmed,
-        parentDir: parentDir || undefined,
+        parentDir: resolvedParentDir,
         projectType: projectType === 'fullstack' ? 'frontend' : projectType,
       });
       useAppDevCatalogStore.getState().registerWorkspaceId(result.workspaceId);
@@ -162,8 +181,18 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
           )}
         >
           <Folder className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className={cn('min-w-0 flex-1 truncate text-sm', parentDir ? 'text-foreground' : 'text-muted-foreground')}>
-            {picking ? '选择中…' : (parentDir || '默认位置（文稿 › SClawApps）')}
+          <span
+            className={cn(
+              'min-w-0 flex-1 truncate text-sm',
+              parentDir ? 'text-foreground' : 'text-muted-foreground',
+            )}
+            title={parentDir || undefined}
+          >
+            {picking
+              ? '选择中…'
+              : parentDir
+                ? (parentDir === defaultParentDir ? `默认位置（${parentDir}）` : parentDir)
+                : '正在读取默认位置…'}
           </span>
           <span className="shrink-0 text-xs text-[var(--sto-brand-6)]">更改</span>
         </button>
@@ -176,7 +205,7 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
           <Button
             type="button"
             className={cn(modalPrimarySubmitButtonClass, 'min-w-[88px]')}
-            disabled={submitting || !name.trim()}
+            disabled={submitting || !name.trim() || !parentDir.trim()}
             onClick={() => void handleSubmit()}
           >
             {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : '创建应用'}

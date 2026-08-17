@@ -81,7 +81,7 @@ export function StoAppDeployDialog({
         </div>
 
         <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-          将「{appName}」部署到目标环境。确认后会先执行 sto-app push，再发起发布；
+          将「{appName}」部署到目标环境。确认后会先提交代码，再发起发布；
           弹窗会立即关闭，可在顶部「发布中」按钮查看进度。
         </p>
 

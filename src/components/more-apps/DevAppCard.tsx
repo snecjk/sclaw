@@ -12,6 +12,7 @@ import {
   Download,
   Trash2,
   Loader2,
+  ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -29,6 +30,7 @@ import { pickProjectFolder } from '@/lib/session-catalog-api';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
+import { isHttpUrl, openExternalUrl } from '@/lib/preview-url';
 
 interface DevAppCardProps {
   app: DevAppSummary;
@@ -42,7 +44,7 @@ export function DevAppCard({ app }: DevAppCardProps) {
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteFiles, setDeleteFiles] = useState(false);
+  const [deleteLocal, setDeleteLocal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [cloning, setCloning] = useState(false);
 
@@ -88,6 +90,17 @@ export function DevAppCard({ app }: DevAppCardProps) {
     }
   };
 
+  const previewUrl = app.previewUrl?.trim() ?? '';
+  const canOpenPreview = isHttpUrl(previewUrl);
+
+  const handleOpenPreview = () => {
+    if (!canOpenPreview) {
+      toast.message('暂无预览地址');
+      return;
+    }
+    openExternalUrl(previewUrl);
+  };
+
   const handleReveal = async () => {
     if (!app.appPath) {
       toast.message('本地尚无目录，请先拉取');
@@ -102,22 +115,28 @@ export function DevAppCard({ app }: DevAppCardProps) {
 
   const handleDelete = async () => {
     if (deleting) return;
-    if (!localReady) {
-      toast.message('云端应用请在 STO 平台管理删除；此处仅清理本机记录');
-      setDeleteOpen(false);
+    if (!app.applicationId) {
+      toast.error('缺少云端应用 ID，无法删除');
       return;
     }
     setDeleting(true);
     try {
-      const result = await deleteDevApp(app.workspaceId, { deleteFiles });
-      closeDevAppTabsByWorkspaceId(app.workspaceId);
-      unregisterWorkspaceId(app.workspaceId);
+      const shouldDeleteLocal = deleteLocal && Boolean(app.appPath || app.workspaceId);
+      const result = await deleteDevApp({
+        applicationId: app.applicationId,
+        workspaceId: app.workspaceId,
+        deleteLocal: shouldDeleteLocal,
+      });
+      if (result.deletedLocal && app.workspaceId) {
+        closeDevAppTabsByWorkspaceId(app.workspaceId);
+        unregisterWorkspaceId(app.workspaceId);
+      }
       await refreshCatalog();
       toast.success(
-        result.deletedFiles ? '应用已删除，本地文件已一并移除' : '应用已删除（本地文件已保留）',
+        result.deletedLocal ? '应用已下线，本地应用已删除' : '应用已下线（本地文件已保留）',
       );
       setDeleteOpen(false);
-      setDeleteFiles(false);
+      setDeleteLocal(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '删除失败');
     } finally {
@@ -217,18 +236,22 @@ export function DevAppCard({ app }: DevAppCardProps) {
               <FolderOpen className="mr-2 h-3.5 w-3.5" aria-hidden />
               在访达中打开
             </DropdownMenuItem>
-            {localReady ? (
+            <DropdownMenuItem disabled={!canOpenPreview} onClick={() => handleOpenPreview()}>
+              <ExternalLink className="mr-2 h-3.5 w-3.5" aria-hidden />
+              系统浏览器打开
+            </DropdownMenuItem>
+            {app.applicationId ? (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"
                   onClick={() => {
-                    setDeleteFiles(false);
+                    setDeleteLocal(false);
                     setDeleteOpen(true);
                   }}
                 >
                   <Trash2 className="mr-2 h-3.5 w-3.5" aria-hidden />
-                  删除本机应用
+                  删除应用
                 </DropdownMenuItem>
               </>
             ) : null}
@@ -261,26 +284,30 @@ export function DevAppCard({ app }: DevAppCardProps) {
                   id="dev-app-delete-title"
                   className="text-[16px] font-semibold leading-tight text-foreground"
                 >
-                  删除本机应用
+                  删除应用
                 </h2>
                 <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-                  确定删除「{app.name}」的本机记录吗？云端应用仍会保留在列表中。
+                  确定软删除「{app.name}」吗？云端应用将下线，不再出现在列表中。
                 </p>
-                <label className="mt-4 flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 h-4 w-4 accent-[hsl(var(--primary))]"
-                    checked={deleteFiles}
-                    disabled={deleting}
-                    onChange={(e) => setDeleteFiles(e.target.checked)}
-                  />
-                  <span className="min-w-0 text-[13px] leading-relaxed text-foreground">
-                    同时删除本地项目文件
-                    <span className="mt-0.5 block truncate text-[11px] text-muted-foreground" title={app.appPath}>
-                      {app.appPath}
+                {app.appPath || app.workspaceId ? (
+                  <label className="mt-4 flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 accent-[hsl(var(--primary))]"
+                      checked={deleteLocal}
+                      disabled={deleting}
+                      onChange={(e) => setDeleteLocal(e.target.checked)}
+                    />
+                    <span className="min-w-0 text-[13px] leading-relaxed text-foreground">
+                      同时删除本地应用
+                      {app.appPath ? (
+                        <span className="mt-0.5 block truncate text-[11px] text-muted-foreground" title={app.appPath}>
+                          {app.appPath}
+                        </span>
+                      ) : null}
                     </span>
-                  </span>
-                </label>
+                  </label>
+                ) : null}
                 <div className="mt-5 flex justify-end gap-2">
                   <Button
                     type="button"

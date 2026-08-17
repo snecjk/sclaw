@@ -707,3 +707,13 @@ export async function autoInstallSaiCliIfNeeded(
     error: result.error,
   };
 }
+
+export const SAI_POLICY_TIMEOUT_MS = 180_000;
+
+/** Run sai-cli with JSON output; default 180s for upload/download. */
+export async function runSaiPolicy(
+  args: string[],
+  timeoutMs = SAI_POLICY_TIMEOUT_MS,
+): Promise<SaiCliResult> {
+  return runSai([...args, '-f', 'json'], timeoutMs);
+}

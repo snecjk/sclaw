@@ -31,13 +31,28 @@ import { createWorkspace, deleteWorkspace, listUserWorkspaces } from './session-
 import { startDevServer, stopDevServer, getDevServer } from './app-dev-server-manager';
 import { logger } from '../utils/logger';
 import type { GatewayManager } from '../gateway/manager';
-import { createStoApp, cloneStoApp, extractApplicationId, listStoApps, getStoAppStatus } from './sto-app-service';
+import { cloneStoApp } from './sto-app-service';
 import {
+  createCodeApplication,
+  waitForActiveCodeApplication,
+} from './code-collab-service';
+import {
+  listCodeApplications,
+  offlineCodeApplication,
+  resolveCodeApplicationPolicyOrigin,
+} from './code-application-api';
+import {
+  getStoAppBindingByWorkspaceId,
   listStoAppBindings,
+  removeStoAppBinding,
   removeStoAppBindingByWorkspaceId,
   upsertStoAppBinding,
-  getStoAppBindingByWorkspaceId,
 } from './sto-app-binding-store';
+import { writeStoWorkspaceBinding } from './sto-workspace-store';
+import type { CodeApplicationRecord } from '../../shared/code-application-catalog';
+import {
+  codeApplicationToWorkspaceFields,
+} from '../../shared/sto-workspace';
 
 /** Remote React A2UI template (OSS). Unpackaged/dev prefers local checkout. */
 const REACT_TEMPLATE_ZIP_URL =
@@ -83,6 +98,10 @@ export interface DevAppSummary {
   applicationId?: string;
   /** Cloud list authority states for this device. */
   availability: 'local' | 'remote-only' | 'path-missing';
+  /** Cloud preview page URL from code-applications list. */
+  previewUrl?: string;
+  gitlabProjectId?: string;
+  devopsApplicationId?: string;
   listError?: string;
 }
 
@@ -93,6 +112,11 @@ export function appDevMarkerPath(appPath: string): string {
 export function isAppDevWorkspaceRoot(appPath: string): boolean {
   return existsSync(appDevMarkerPath(appPath));
 }
+
+async function stoWorkspaceRegistryUrl(): Promise<string> {
+  return resolveCodeApplicationPolicyOrigin();
+}
+
 
 /**
  * App files deleted but workspace row left behind: root only has `.sclaw`
@@ -499,7 +523,7 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
   const name = input.name.trim();
   if (!name) throw new Error('应用名称不能为空');
 
-  const parentDir = (input.parentDir ?? DEFAULT_APPS_PARENT_DIR).trim();
+  const parentDir = (input.parentDir?.trim() || DEFAULT_APPS_PARENT_DIR);
   const appPath = join(parentDir, name);
   if (existsSync(appPath)) {
     const contents = await readdir(appPath).catch(() => []);
@@ -529,16 +553,26 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
   });
 
   let createdApplicationId: string | undefined;
-  try {
-    const created = await createStoApp(appPath, {
-      name,
-      description: `${name} 应用`,
-      message: `Initial commit: ${name}`,
-    });
-    logger.info(`[app-dev] sto-app create linked name=${name} appPath=${appPath}`);
-    createdApplicationId = extractApplicationId(created.json);
-  } catch (err) {
-    logger.warn(`[app-dev] sto-app create skipped name=${name} appPath=${appPath}:`, err);
+  const created = await createCodeApplication({
+    applicationName: name,
+    description: `${name} 应用`,
+  });
+  const active = created.status?.trim().toUpperCase() === 'ACTIVE'
+    ? created
+    : await waitForActiveCodeApplication(created.applicationId);
+  createdApplicationId = active.applicationId;
+  logger.info(
+    `[app-dev] code-application create linked name=${name} appPath=${appPath} ` +
+    `applicationId=${createdApplicationId} status=${active.status ?? '-'}`,
+  );
+  const workspaceFile = await writeStoWorkspaceBinding({
+    appPath,
+    registryUrl: await stoWorkspaceRegistryUrl(),
+    cloud: codeApplicationToWorkspaceFields(active),
+    fallback: { applicationId: createdApplicationId, status: 'ACTIVE' },
+  });
+  if (!workspaceFile) {
+    throw new Error('云端应用已创建，但未能写入 .sto/workspace.json');
   }
 
   // Ensure openspec exists even if an older template missed it; bake default assist skills.
@@ -561,21 +595,12 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
   const workspace = await createWorkspace({ name, rootPath: appPath });
   const workspaceId: string = workspace.id;
 
-  if (!createdApplicationId) {
-    const status = await getStoAppStatus(appPath).catch(() => null);
-    createdApplicationId = status?.applicationId;
-    if (!createdApplicationId && status?.applicationName) {
-      // keep name for later binding if id appears
-    }
-  }
-  if (createdApplicationId) {
-    await upsertStoAppBinding({
-      applicationId: createdApplicationId,
-      applicationName: name,
-      localPath: appPath,
-      workspaceId,
-    }).catch((err) => logger.warn('[app-dev] binding upsert after create failed:', err));
-  }
+  await upsertStoAppBinding({
+    applicationId: createdApplicationId,
+    applicationName: name,
+    localPath: appPath,
+    workspaceId,
+  }).catch((err) => logger.warn('[app-dev] binding upsert after create failed:', err));
 
   logger.info(`[app-dev] createUserApp workspaceReady workspaceId=${workspaceId} appPath=${appPath}`);
 
@@ -659,12 +684,9 @@ export async function importUserApp(input: {
   return { workspaceId, appPath, workspaceName: workspace.name ?? workspaceName };
 }
 
-/** List development apps: cloud `apps list` is authoritative; bindings mark local readiness. */
+/** List development apps: cloud code-applications list is authoritative; bindings mark local readiness. */
 export async function listDevApps(): Promise<DevAppSummary[]> {
-  const listed = await listStoApps();
-  if (!listed.ok && listed.apps.length === 0) {
-    throw new Error(listed.output || '无法获取 STO 应用列表，请检查 sto-app CLI 与登录态');
-  }
+  const listed = await listCodeApplications();
 
   const bindings = await listStoAppBindings();
   const bindingById = new Map(bindings.map((b) => [b.applicationId, b]));
@@ -672,7 +694,7 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
   const workspaceById = new Map(workspaces.map((w) => [w.id, w]));
 
   const apps: DevAppSummary[] = [];
-  for (const cloud of listed.apps) {
+  for (const cloud of listed) {
     const binding = bindingById.get(cloud.applicationId);
     let localPath = binding?.localPath?.trim() ?? '';
     let workspaceId = binding?.workspaceId?.trim() ?? '';
@@ -694,17 +716,19 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
       if (match) {
         localPath = match.rootPath;
         workspaceId = match.id;
-        await upsertStoAppBinding({
-          applicationId: cloud.applicationId,
-          applicationName: cloud.applicationName,
-          localPath,
-          workspaceId,
-        }).catch(() => undefined);
       }
     }
 
     const pathOk = Boolean(localPath) && existsSync(localPath);
     const markerOk = pathOk && isAppDevWorkspaceRoot(localPath);
+    if (pathOk && workspaceId) {
+      await upsertStoAppBinding({
+        applicationId: cloud.applicationId,
+        applicationName: cloud.applicationName,
+        localPath,
+        workspaceId,
+      }).catch(() => undefined);
+    }
     if (pathOk && markerOk && workspaceId) {
       let projectType = 'frontend';
       let createdAt = new Date(0).toISOString();
@@ -721,27 +745,82 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
         name: cloud.applicationName || ws?.name || cloud.applicationId,
         appPath: localPath,
         projectType,
-        createdAt: createdAt || ws?.createdAt || new Date().toISOString(),
+        createdAt: createdAt || cloud.createdAt || ws?.createdAt || new Date().toISOString(),
         localReady: true,
         applicationId: cloud.applicationId,
         availability: 'local',
+        previewUrl: cloud.previewUrl,
+        gitlabProjectId: cloud.gitlabProjectId,
+        devopsApplicationId: cloud.devopsApplicationId,
       });
       continue;
     }
 
-    apps.push({
-      workspaceId: workspaceId || '',
-      name: cloud.applicationName,
-      appPath: localPath || '',
-      projectType: 'frontend',
-      createdAt: binding?.updatedAt || new Date().toISOString(),
-      localReady: false,
-      applicationId: cloud.applicationId,
-      availability: pathOk ? 'path-missing' : 'remote-only',
-    });
+      apps.push({
+        workspaceId: workspaceId || '',
+        name: cloud.applicationName,
+        appPath: localPath || '',
+        projectType: 'frontend',
+        createdAt: cloud.createdAt || binding?.updatedAt || new Date().toISOString(),
+        localReady: false,
+        applicationId: cloud.applicationId,
+        availability: pathOk ? 'path-missing' : 'remote-only',
+        previewUrl: cloud.previewUrl,
+        gitlabProjectId: cloud.gitlabProjectId,
+        devopsApplicationId: cloud.devopsApplicationId,
+      });
+    }
+
+  const sorted = apps.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  logger.info(
+    `[app-dev] listDevApps count=${sorted.length} apps=${JSON.stringify(
+      sorted.map((app) => ({
+        name: app.name,
+        applicationId: app.applicationId,
+        availability: app.availability,
+        localReady: app.localReady,
+        workspaceId: app.workspaceId,
+      })),
+    )}`,
+  );
+  return sorted;
+}
+
+/** Resolve cloud code-application for a local workspace via binding, then list name/path. */
+export async function resolveCloudAppForWorkspace(
+  workspaceId: string,
+  appPath?: string,
+): Promise<CodeApplicationRecord | null> {
+  const id = workspaceId.trim();
+  if (!id) return null;
+
+  const listed = await listCodeApplications().catch(() => [] as CodeApplicationRecord[]);
+  if (listed.length === 0) return null;
+
+  const binding = await getStoAppBindingByWorkspaceId(id);
+  if (binding?.applicationId) {
+    const matched = listed.find((item) => item.applicationId === binding.applicationId);
+    if (matched) return matched;
   }
 
-  return apps.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const workspaces = await listUserWorkspaces();
+  const workspace = workspaces.find((item) => item.id === id);
+  const path = (appPath || workspace?.rootPath || '').trim();
+  const matched = listed.find((item) => {
+    if (workspace?.name && item.applicationName === workspace.name) return true;
+    return Boolean(path && item.applicationName && path.endsWith(`${sep}${item.applicationName}`));
+  }) ?? null;
+
+  if (matched && path && existsSync(path)) {
+    await upsertStoAppBinding({
+      applicationId: matched.applicationId,
+      applicationName: matched.applicationName,
+      localPath: path,
+      workspaceId: id,
+    }).catch(() => undefined);
+  }
+
+  return matched;
 }
 
 /**
@@ -827,7 +906,24 @@ export async function cloneDevApp(input: {
     }
   }
 
-  await cloneStoApp(applicationId, appPath);
+  const cloned = await cloneStoApp(applicationId, appPath);
+
+  let cloud: CodeApplicationRecord | undefined;
+  try {
+    cloud = (await listCodeApplications()).find((item) => item.applicationId === applicationId);
+  } catch (err) {
+    logger.warn('[app-dev] list after clone skipped:', err);
+  }
+  const workspaceFile = await writeStoWorkspaceBinding({
+    appPath,
+    registryUrl: await stoWorkspaceRegistryUrl(),
+    payload: cloned.json,
+    cloud: codeApplicationToWorkspaceFields(cloud),
+    fallback: { applicationId, status: 'ACTIVE' },
+  });
+  if (!workspaceFile) {
+    throw new Error('拉取成功但未能写入 .sto/workspace.json');
+  }
 
   await writeAppDevBootstrap(appPath, {
     name,
@@ -865,51 +961,70 @@ export async function cloneDevApp(input: {
 }
 
 /**
- * Remove a 开发应用 from the catalog. Optionally delete the project directory on disk.
+ * Soft-delete a cloud code application, optionally removing the local checkout.
  * Files are only removed when the path still has the app-dev marker (safety).
  */
 export async function deleteDevApp(
-  workspaceId: string,
-  options: { deleteFiles?: boolean } = {},
+  input: {
+    applicationId?: string;
+    workspaceId?: string;
+    deleteLocal?: boolean;
+  },
   gatewayManager?: GatewayManager | null,
-): Promise<{ deletedFiles: boolean; appPath: string }> {
-  const id = workspaceId.trim();
-  if (!id) throw new Error('缺少 workspaceId');
+): Promise<{ offline: boolean; deletedLocal: boolean; deletedFiles: boolean; appPath: string }> {
+  const applicationId = input.applicationId?.trim() ?? '';
+  if (!applicationId) throw new Error('缺少 applicationId');
+
+  await offlineCodeApplication(applicationId);
+
+  if (!input.deleteLocal) {
+    return { offline: true, deletedLocal: false, deletedFiles: false, appPath: '' };
+  }
+
+  let workspaceId = input.workspaceId?.trim() ?? '';
+  if (!workspaceId) {
+    const binding = (await listStoAppBindings()).find((item) => item.applicationId === applicationId);
+    workspaceId = binding?.workspaceId?.trim() ?? '';
+  }
+  if (!workspaceId) {
+    await removeStoAppBinding(applicationId).catch(() => undefined);
+    return { offline: true, deletedLocal: false, deletedFiles: false, appPath: '' };
+  }
 
   const { getWorkspaceRootPath } = await import('./session-catalog-service');
-  const appPath = await getWorkspaceRootPath(id);
-  if (!appPath) throw new Error(`Workspace not found: ${id}`);
+  const appPath = await getWorkspaceRootPath(workspaceId);
+  if (!appPath) {
+    await removeStoAppBinding(applicationId).catch(() => undefined);
+    await removeStoAppBindingByWorkspaceId(workspaceId).catch(() => undefined);
+    return { offline: true, deletedLocal: false, deletedFiles: false, appPath: '' };
+  }
   if (!isAppDevWorkspaceRoot(appPath)) {
-    throw new Error('不是开发应用，无法从此处删除');
+    throw new Error('不是开发应用，无法删除本地目录');
   }
 
-  stopApp(id);
-  statuses.delete(id);
+  stopApp(workspaceId);
+  statuses.delete(workspaceId);
 
-  await removeStoAppBindingByWorkspaceId(id).catch(() => undefined);
-  await deleteWorkspace(id, gatewayManager);
+  await removeStoAppBinding(applicationId).catch(() => undefined);
+  await removeStoAppBindingByWorkspaceId(workspaceId).catch(() => undefined);
+  await deleteWorkspace(workspaceId, gatewayManager);
 
-  let deletedFiles = false;
-  if (options.deleteFiles) {
-    const resolved = resolve(appPath);
-    const forbidden = new Set([
-      resolve('/'),
-      resolve(homedir()),
-      resolve(DEFAULT_APPS_PARENT_DIR),
-    ]);
-    if (forbidden.has(resolved) || resolved.length < 12) {
-      throw new Error('拒绝删除危险路径；应用记录已移除，文件请手动处理');
-    }
-    // Marker must still be present — avoids wiping a path that was swapped out.
-    if (!isAppDevWorkspaceRoot(resolved)) {
-      throw new Error('应用目录标记已不存在，已跳过删文件以免误删');
-    }
-    await rm(resolved, { recursive: true, force: true });
-    deletedFiles = true;
-    logger.info(`[app-dev] deleted app files at ${resolved}`);
+  const resolved = resolve(appPath);
+  const forbidden = new Set([
+    resolve('/'),
+    resolve(homedir()),
+    resolve(DEFAULT_APPS_PARENT_DIR),
+  ]);
+  if (forbidden.has(resolved) || resolved.length < 12) {
+    throw new Error('云端已下线；拒绝删除危险本地路径，文件请手动处理');
   }
+  if (!isAppDevWorkspaceRoot(resolved)) {
+    throw new Error('云端已下线；应用目录标记已不存在，已跳过删文件以免误删');
+  }
+  await rm(resolved, { recursive: true, force: true });
+  logger.info(`[app-dev] deleted app files at ${resolved}`);
 
-  return { deletedFiles, appPath };
+  return { offline: true, deletedLocal: true, deletedFiles: true, appPath };
 }
 
 async function runNpmInstall(workspaceId: string, appPath: string): Promise<void> {

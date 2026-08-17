@@ -7,6 +7,8 @@ type HostApiFetchRequest = {
   method?: string;
   headers?: Record<string, string>;
   body?: unknown;
+  /** Caller override. `0` disables the timer. Omit to use path-based defaults. */
+  timeoutMs?: number;
 };
 
 const SKILL_INSTALL_PATHS = new Set([
@@ -21,7 +23,10 @@ function isConnectorConnectPath(path: string): boolean {
   return /^\/api\/connectors\/[^/]+\/(connect|token-connect)$/.test(path);
 }
 
-export function resolveHostApiTimeoutMs(path: string): number {
+export function resolveHostApiTimeoutMs(path: string, timeoutMs?: number): number {
+  if (typeof timeoutMs === 'number') {
+    return timeoutMs;
+  }
   if (path === '/api/chat/send') {
     return TIMEOUTS.CHAT_SEND;
   }
@@ -70,7 +75,7 @@ export function registerHostApiProxyHandlers(): void {
         method,
         headers,
         body,
-        timeoutMs: resolveHostApiTimeoutMs(path),
+        timeoutMs: resolveHostApiTimeoutMs(path, request.timeoutMs),
       });
 
       const data: { status: number; ok: boolean; json?: unknown; text?: string } = {

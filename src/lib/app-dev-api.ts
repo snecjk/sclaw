@@ -47,6 +47,9 @@ export interface DevAppSummary {
   localReady: boolean;
   applicationId?: string;
   availability?: 'local' | 'remote-only' | 'path-missing';
+  previewUrl?: string;
+  gitlabProjectId?: string;
+  devopsApplicationId?: string;
 }
 
 export async function getAppDevEnvironment(): Promise<AppDevEnvironment> {
@@ -72,19 +75,22 @@ export async function cloneDevApp(input: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
+    disableTimeout: true,
   });
 }
 
-export async function deleteDevApp(
-  workspaceId: string,
-  options: { deleteFiles?: boolean } = {},
-): Promise<{ deletedFiles: boolean; appPath: string }> {
+export async function deleteDevApp(input: {
+  applicationId: string;
+  workspaceId?: string;
+  deleteLocal?: boolean;
+}): Promise<{ offline: boolean; deletedLocal: boolean; deletedFiles: boolean; appPath: string }> {
   return hostApiFetch('/api/app-dev/apps/delete', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      workspaceId,
-      deleteFiles: options.deleteFiles === true,
+      applicationId: input.applicationId,
+      workspaceId: input.workspaceId,
+      deleteLocal: input.deleteLocal === true,
     }),
   });
 }
@@ -112,6 +118,7 @@ export async function createUserApp(input: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
+    disableTimeout: true,
   });
 }
 
@@ -354,6 +361,7 @@ export async function pushStoApp(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspaceId, message }),
+    disableTimeout: true,
   });
 }
 
@@ -364,6 +372,7 @@ export async function pullStoApp(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspaceId }),
+    disableTimeout: true,
   });
 }
 
@@ -375,6 +384,7 @@ export async function continueStoAppMerge(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspaceId, revisionId }),
+    disableTimeout: true,
   });
 }
 
@@ -399,6 +409,7 @@ export async function deployStoApp(input: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
+    disableTimeout: true,
   });
 }
 
@@ -411,5 +422,6 @@ export async function refreshStoAppDeploy(deploymentId: string): Promise<{
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ deploymentId }),
+    disableTimeout: true,
   });
 }

@@ -69,7 +69,7 @@ export function useStoAppDeploy(input: {
     const runId = ++runIdRef.current;
     setJob({
       phase: 'pushing',
-      label: '正在提交代码（sto-app push）…',
+      label: '正在提交代码…',
       fields: { env: opts.env, applicationId: input.applicationId },
       startedAt: Date.now(),
     });

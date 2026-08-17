@@ -122,7 +122,7 @@ export async function runStoAppDeployFlow(input: {
 
   input.onProgress?.({
     phase: 'pushing',
-    label: '正在提交代码（sto-app push）…',
+    label: '正在提交代码…',
     fields: { env: input.env, applicationId: input.applicationId },
   });
   const created = await deployStoApp({
