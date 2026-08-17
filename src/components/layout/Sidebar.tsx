@@ -96,6 +96,7 @@ import {
 } from '@/lib/task-group-first-trigger-delete';
 import { resolveTaskGroupKeyFromSessionKey, stoBuiltinTaskGroupKey } from '../../../shared/task-group-key';
 import { useScheduledTaskNameMaps } from '@/hooks/use-scheduled-task-name-maps';
+import { useCronStore } from '@/stores/cron';
 import { stoTaskSubitemKey, useStoTaskSubitemsStore } from '@/stores/sto-task-subitems';
 import {
   type SidebarSubitemDeletePayload,
@@ -746,7 +747,11 @@ export function Sidebar() {
   const [taskListSectionOpen, setTaskListSectionOpen] = useState(true);
   const [taskListShowAll, setTaskListShowAll] = useState(false);
   const [taskGroupFirstTriggeredAt, setTaskGroupFirstTriggeredAt] = useState<Record<string, number>>({});
-  const scheduledTaskNameMaps = useScheduledTaskNameMaps(!sidebarCollapsed, sessions.length);
+  const nameMapsRefreshKey = useCronStore((s) => s.nameMapsRefreshKey);
+  const scheduledTaskNameMaps = useScheduledTaskNameMaps(
+    !sidebarCollapsed,
+    sessions.length + nameMapsRefreshKey,
+  );
   const stoEntriesByTask = useStoTaskSubitemsStore((s) => s.entriesByTask);
   const stoSessionKeyBySubitem = useStoTaskSubitemsStore((s) => s.sessionKeyBySubitem);
   /** 任务组多开：Record 与项目同构；模块收起不清空 */

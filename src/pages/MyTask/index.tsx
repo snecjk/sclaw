@@ -150,6 +150,7 @@ export default function MyTask() {
     toggleJob,
     deleteJob,
     triggerJob,
+    bumpNameMapsRefreshKey,
   } = useCronStore();
 
   // ── Agent 配置 ──
@@ -385,6 +386,7 @@ export default function MyTask() {
               permissionProfile: input.claudePermissionProfile || 'dangerous-bypass',
             }
           : {};
+        const nameChanged = Boolean(editingJob && input.name !== editingJob.name);
         if (editingJob) {
           const engineChanged = input.engineType !== editingJob.engineType;
           await updateJob(editingJob.id, {
@@ -407,6 +409,7 @@ export default function MyTask() {
           toast.success(t('myTask.toast.created'));
         }
         await fetchJobs().catch(() => {});
+        if (nameChanged) bumpNameMapsRefreshKey();
       } catch (err) {
         const errStr = String(err);
         toast.error(errStr);
@@ -425,7 +428,7 @@ export default function MyTask() {
         throw err;
       }
     },
-    [agents, defaultAgentId, editingJob, createJob, updateJob, fetchJobs]
+    [agents, defaultAgentId, editingJob, createJob, updateJob, fetchJobs, bumpNameMapsRefreshKey, t]
   );
 
   const handleDelete = useCallback(() => {
