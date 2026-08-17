@@ -29,6 +29,7 @@ import {
 import type { WorkflowDetailResponse, WorkflowExecutionState, WorkflowRunResponse, WorkflowSchema } from '@/types/workflow';
 import type { WorkflowDraftSnapshot } from '@/lib/workflow-iframe-bridge';
 import { definitionFromDetail } from '@/lib/workflow-designer-adapter';
+import { subscribeWorkflowResultDrawerHandoff } from '@/lib/workflow-result-drawer-handoff';
 import { saveWorkflowExecution, updateExecutionStatus } from '@/stores/workflow-memory';
 import {
   resolveTrialRunLaunchConfirmation,
@@ -121,6 +122,7 @@ export function useDesignerTryRun({
 
   const runIdRef = useRef<string | null>(null);
   const eventHydrateTimerRef = useRef<number | null>(null);
+  const pendingResultHandoffRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     runIdRef.current = runId;
   }, [runId]);
@@ -173,6 +175,26 @@ export function useDesignerTryRun({
 
   useEffect(() => () => {
     if (eventHydrateTimerRef.current != null) window.clearTimeout(eventHydrateTimerRef.current);
+  }, []);
+
+  useEffect(() => subscribeWorkflowResultDrawerHandoff(({ runId: requestedRunId, complete }) => {
+    if (!isDrawerOpen || runIdRef.current !== requestedRunId) return false;
+    if (!pendingResultHandoffRef.current) pendingResultHandoffRef.current = complete;
+    setIsDrawerOpen(false);
+    return true;
+  }), [isDrawerOpen]);
+
+  useEffect(() => {
+    if (isDrawerOpen || !pendingResultHandoffRef.current) return;
+    const complete = pendingResultHandoffRef.current;
+    pendingResultHandoffRef.current = null;
+    complete();
+  }, [isDrawerOpen]);
+
+  useEffect(() => () => {
+    const complete = pendingResultHandoffRef.current;
+    pendingResultHandoffRef.current = null;
+    complete?.();
   }, []);
 
   const isRunActive = Boolean(
@@ -234,7 +256,7 @@ export function useDesignerTryRun({
       snapshotRef.current = snapshot ?? null;
       launchConfirmationRef.current = null;
       setRunWorkflowVersion(undefined);
-      setIsDraftSnapshot(snapshot != null);
+      setIsDraftSnapshot(snapshot?.versionStatus === 'draft');
       // The draft snapshot only carries canvas data. Fetch the workflow detail
       // on every launch so the startup form is initialized from this user's
       // current default preset, just like the web-side trial run.

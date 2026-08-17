@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import i18n from '@/i18n';
+import { isGlobalToastInteractionTarget } from '@/lib/global-toast-interaction';
 import { TestRunDrawer } from '@/pages/WorkflowDesigner/components/test-run-drawer';
 import type { WorkflowExecutionState, WorkflowRunResponse, WorkflowRunStatus } from '@/types/workflow';
 
@@ -70,6 +71,17 @@ function renderDrawer(status: WorkflowRunStatus, overrides: Record<string, unkno
 }
 
 describe('TestRunDrawer trial mode', () => {
+  it('recognizes completion-toast descendants as protected outside interactions', () => {
+    const toaster = document.createElement('div');
+    toaster.className = 'sto-global-toaster';
+    const action = document.createElement('button');
+    toaster.append(action);
+
+    expect(isGlobalToastInteractionTarget(action)).toBe(true);
+    expect(isGlobalToastInteractionTarget(document.createElement('button'))).toBe(false);
+    expect(isGlobalToastInteractionTarget(null)).toBe(false);
+  });
+
   it('uses the approved 500px running layout and fixed cancel footer', () => {
     renderDrawer('running');
 
