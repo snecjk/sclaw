@@ -28,6 +28,7 @@ import { HistoryVersionsDrawer } from '@/pages/WorkflowDesigner/components/histo
 import { LocalRunHistoryDialog } from '@/pages/WorkflowDesigner/components/local-run-history-dialog';
 import { DesignerNodeLibrary } from '@/pages/WorkflowDesigner/components/designer-node-library';
 import { StartupRunDialog } from '@/pages/WorkflowDesigner/components/startup-run-dialog';
+import { shouldShowStartupRunDialog } from '@/pages/WorkflowDesigner/components/test-run-drawer-model';
 import { TestRunDrawer } from '@/pages/WorkflowDesigner/components/test-run-drawer';
 import { useDesignerTryRun } from '@/pages/WorkflowDesigner/hooks/use-designer-try-run';
 import type { WorkflowDefinition } from '@/pages/WorkflowDesigner/types';
@@ -419,7 +420,10 @@ export function WorkflowDesigner({
       </div>
 
       <StartupRunDialog
-        open={tryRun.isStartupDialogOpen}
+        open={shouldShowStartupRunDialog({
+          isStartupDialogOpen: tryRun.isStartupDialogOpen,
+          isDrawerOpen: tryRun.isDrawerOpen,
+        })}
         schema={tryRun.startupSchema}
         defaultValues={tryRun.startupDefaultValues}
         runtimeUploadNodes={tryRun.runtimeUploadNodes}

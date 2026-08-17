@@ -1,15 +1,17 @@
 interface EmbeddedTrialRunDrawerActionOptions {
   closeDrawer: () => void;
-  startNewRun: () => void | Promise<void>;
+  continueRun: () => void | Promise<void>;
+  rerun: () => void | Promise<void>;
 }
 
 export function createEmbeddedTrialRunDrawerActions({
   closeDrawer,
-  startNewRun,
+  continueRun,
+  rerun,
 }: EmbeddedTrialRunDrawerActionOptions) {
   return {
     close: closeDrawer,
-    continueRun: startNewRun,
-    rerun: startNewRun,
+    continueRun,
+    rerun,
   };
 }

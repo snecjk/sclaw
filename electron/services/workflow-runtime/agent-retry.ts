@@ -98,6 +98,8 @@ export interface RetryDeps {
   invokeAgent: InvokeAgentFn;  // required：引擎绑 sdk 注入；测试注入 mock
   quota?: () => Promise<boolean>;  // 生产注入：调 /api/token-quota/check，超额度返 false
   execEngine?: 'claude' | 'openclaw';
+  /** User cancellation terminates this attempt loop instead of scheduling a retry. */
+  isCancelled?: () => boolean | Promise<boolean>;
 }
 
 function isWorkflowPacketProtocolFailure(context: RetryFailureContext | null, error: string): boolean {
@@ -138,6 +140,9 @@ export async function runAgentNodeWithRetry(
   let lastRaw = '';
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (await deps.isCancelled?.()) {
+      return { status: 'cancelled', error: '节点执行已取消' };
+    }
     // G1: 配额门（复用聊天日额度门），超额度 → run FAILED
     if (!(await quota())) {
       await ctx.emit('run.quota_exceeded', { attempt }, node.id);
@@ -251,6 +256,12 @@ export async function runAgentNodeWithRetry(
     } catch (e: any) {
       // invokeAgent 内部已有双层卡死保护；这里保留真实异常，避免把 SDK/环境错误误报成超时。
       result = { status: 'failed', error: e instanceof Error ? e.message : String(e), rawText: '' };
+    }
+
+    // cancelAgent resolves an in-flight invocation as a failed result. Check
+    // cancellation before normal failure handling can schedule another attempt.
+    if (await deps.isCancelled?.()) {
+      return { status: 'cancelled', error: '节点执行已取消', rawText: result.rawText };
     }
 
     // G1: 记 token 用量（从 SDK ResultMessage.usage 取）

@@ -14,6 +14,10 @@ export type TrialRunTimelineItem = {
   tone: TrialRunTimelineTone;
 };
 export type TrialRunDisplayArtifact = WorkflowRunArtifact & { source: 'final' | 'process' };
+export type TrialRunLaunchConfirmation = {
+  inputs: Record<string, unknown>;
+  engineType: 'claude' | 'openclaw';
+};
 
 export function resolveTrialRunView(input: {
   isStarting: boolean;
@@ -22,9 +26,33 @@ export function resolveTrialRunView(input: {
   launchError: string | null;
 }): TrialRunView {
   if (input.launchError || ['failed', 'timeout', 'interrupted'].includes(input.status ?? '')) return 'failed';
+  // A resume request starts while the persisted snapshot is still cancelled.
+  // Prefer the in-flight state so the footer cannot offer a second "continue".
+  if (input.isStarting || input.isRunActive) return 'running';
   if (input.status === 'cancelled') return 'cancelled';
   if (input.status === 'completed') return 'completed';
   return 'running';
+}
+
+export function shouldShowStartupRunDialog(input: {
+  isStartupDialogOpen: boolean;
+  isDrawerOpen: boolean;
+}) {
+  return input.isStartupDialogOpen && !input.isDrawerOpen;
+}
+
+export function resolveTrialRunLaunchConfirmation(
+  run: WorkflowRunResponse | null,
+  cached: TrialRunLaunchConfirmation | null,
+): TrialRunLaunchConfirmation {
+  if (cached) return cached;
+  return {
+    inputs: run?.input?.inputs
+      ?? run?.startup?.resolvedInputs
+      ?? run?.startup?.overrides
+      ?? {},
+    engineType: run?.engineType ?? 'claude',
+  };
 }
 
 export function formatTrialRunVersion(value?: string | number | null) {
