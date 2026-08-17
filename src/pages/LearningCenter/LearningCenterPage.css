@@ -171,7 +171,6 @@
 .learning-center-tutorial-list {
   display: flex;
   width: 100%;
-  max-width: 46.125rem;
   margin: 0;
   padding: 0;
   flex-direction: column;
@@ -183,7 +182,6 @@
   position: relative;
   display: flex;
   width: 100%;
-  max-width: 46.125rem;
   height: 2.5rem;
   min-width: 0;
   flex-grow: 1;
