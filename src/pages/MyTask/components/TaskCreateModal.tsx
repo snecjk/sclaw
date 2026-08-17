@@ -19,6 +19,8 @@ import {
   formFieldFocusClass,
   invertedPrimarySurfaceClass,
   modalPrimarySubmitButtonClass,
+  taskCreateFormControlClass,
+  taskCreateFormLabelClass,
 } from '@/lib/surfaces';
 import type { CronJobCreateInput } from '@/types/cron';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
@@ -28,6 +30,7 @@ import { createDataCenterFolder, deleteDataCenterEntry, getDataCenterEntry, getD
 import { useAuthStore, isSiteUser } from '@/stores/auth';
 import type { DataCenterEntry, DataCenterSpace, DataCenterSpaceType } from '@/types/data-center';
 import { toast } from 'sonner';
+import { IconCheckbox } from '@/components/icon-checkbox';
 import { TaskInstructionComposer, type TaskComposerSnapshot } from './TaskInstructionComposer';
 import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import { buildComposerGatewayPayload } from '@/lib/composer-gateway-text';
@@ -206,7 +209,6 @@ function computeInitialValues(
       composerSegments: enrichedSegments,
       engineType: job.engineType,
       createdViaNl,
-      saveToDataCenter: !!(job.myArtifactFolderPath || job.sharedArtifactFolderPath),
       saveToMyArtifact: !!job.myArtifactFolderPath,
       saveToSharedArtifact: !!job.sharedArtifactFolderPath,
       myArtifactFolderPath: job.myArtifactFolderPath,
@@ -240,7 +242,6 @@ function computeInitialValues(
       composerSegments: seededWorkflow,
       engineType: 'claude' as TaskEngineType,
       createdViaNl: false,
-      saveToDataCenter: false,
       saveToMyArtifact: false,
       saveToSharedArtifact: false,
       myArtifactFolderPath: null,
@@ -256,7 +257,6 @@ function computeInitialValues(
     composerSegments: null as PersistedComposerSegment[] | null,
     engineType: 'claude' as TaskEngineType,
     createdViaNl: false,
-    saveToDataCenter: false,
     saveToMyArtifact: false,
     saveToSharedArtifact: false,
     myArtifactFolderPath: null,
@@ -804,9 +804,8 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   const composerSnapshotRef = useRef<TaskComposerSnapshot | null>(null);
   const initialComposerSegments = init.composerSegments;
   const initialCreatedViaNl = init.createdViaNl;
-  const [errors, setErrors] = useState<{ name?: string; instructions?: string; dataCenterTarget?: string }>({});
+  const [errors, setErrors] = useState<{ name?: string; instructions?: string }>({});
   const [engineType, setEngineType] = useState<TaskEngineType>(init.engineType);
-  const [saveToDataCenter, setSaveToDataCenter] = useState(init.saveToDataCenter);
   const [saveToMyArtifact, setSaveToMyArtifact] = useState(init.saveToMyArtifact);
   const [saveToSharedArtifact, setSaveToSharedArtifact] = useState(init.saveToSharedArtifact);
   const [myArtifactFolderPath, setMyArtifactFolderPath] = useState<string | null>(init.myArtifactFolderPath);
@@ -851,7 +850,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   }, [myArtifactFolderPath, sharedArtifactFolderPath]);
 
   useEffect(() => {
-    if (!isSite || !saveToDataCenter || !saveToSharedArtifact) return;
+    if (!isSite || !saveToSharedArtifact) return;
     let cancelled = false;
     getDataCenterSpaces()
       .then((result) => {
@@ -871,7 +870,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
     return () => {
       cancelled = true;
     };
-  }, [isSite, saveToDataCenter, saveToSharedArtifact, sharedArtifactFolderPath]);
+  }, [isSite, saveToSharedArtifact, sharedArtifactFolderPath]);
 
   const isEditing = !!job;
 
@@ -888,9 +887,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
     );
     if (!hasComposerContent) newErrors.instructions = t('myTask.createModal.instructionsRequired');
     const shouldSaveToSharedArtifact = isSite && saveToSharedArtifact;
-    if (saveToDataCenter && !saveToMyArtifact && !shouldSaveToSharedArtifact) {
-      newErrors.dataCenterTarget = '请选择至少一个数据中心保存位置';
-    }
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
@@ -933,10 +929,10 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
         engineType,
         claudeWorkspacePath: undefined,
         claudePermissionProfile: engineType === 'claude' ? 'dangerous-bypass' : undefined,
-        myArtifactFolderPath: saveToDataCenter && saveToMyArtifact
+        myArtifactFolderPath: saveToMyArtifact
           ? myArtifactFolderPath || buildDataCenterTargetUri('qa_artifact', null)
           : null,
-        sharedArtifactFolderPath: saveToDataCenter && shouldSaveToSharedArtifact
+        sharedArtifactFolderPath: shouldSaveToSharedArtifact
           ? sharedArtifactFolderPath || (selectedSharedSpaceId ? buildDataCenterTargetUri('site_shared_artifact', selectedSharedSpaceId) : null)
           : null,
       });
@@ -960,7 +956,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
       transition={{ duration: 0.2, ease: 'easeInOut' }}
     >
       <motion.div
-        className="w-full max-w-[min(820px,100%)] bg-background rounded-[22px] border border-border shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
+        className="w-full max-w-[min(820px,100%)] bg-[#FFFFFF] rounded-[18px] border border-border shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
         initial={{ opacity: 0, scale: 0.96, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 8 }}
@@ -987,7 +983,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
 
         <div className="px-[18px] pb-[16px] flex flex-col gap-5 flex-1 overflow-y-auto min-h-0">
           <div className="flex flex-col gap-2">
-            <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.nameLabel')}</label>
+            <label className={taskCreateFormLabelClass}>{t('myTask.createModal.nameLabel')}</label>
             <input
               type="text"
               value={name}
@@ -998,9 +994,10 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
               }}
               placeholder={t('myTask.createModal.namePlaceholder')}
               className={cn(
-                'h-[42px] w-full rounded-[10px] border bg-background px-3.5 text-sm transition-colors placeholder:text-muted-foreground',
+                taskCreateFormControlClass,
+                'placeholder:text-muted-foreground',
                 formFieldFocusClass,
-                errors.name ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]' : 'border-border',
+                errors.name && 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]',
               )}
               autoComplete="off"
             />
@@ -1008,27 +1005,24 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="block text-sm font-semibold text-foreground">{t('myTask.createModal.engineLabel')}</label>
+            <label className={taskCreateFormLabelClass}>{t('myTask.createModal.engineLabel')}</label>
             <select
               value={engineType}
+              disabled={isEditing}
               onChange={(e) => setEngineType(e.target.value as TaskEngineType)}
               className={cn(
-                'h-[42px] w-full rounded-[10px] border border-border bg-background px-3.5 text-sm transition-colors',
+                taskCreateFormControlClass,
                 formFieldFocusClass,
+                isEditing && 'cursor-not-allowed opacity-60',
               )}
             >
               <option value="openclaw">OpenClaw</option>
               <option value="claude">Claude Agent</option>
             </select>
-            <p className="text-[11.5px] text-muted-foreground">
-              {engineType === 'claude'
-                ? t('myTask.createModal.engineClaudeHint')
-                : t('myTask.createModal.engineOpenclawHint')}
-            </p>
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="block text-sm font-semibold text-foreground">
+            <label className={taskCreateFormLabelClass}>
               {t('myTask.createModal.instructionsLabel')}
             </label>
             <TaskInstructionComposer
@@ -1056,125 +1050,88 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
           </div>
 
           <div className="flex flex-col gap-2">
-            <span className="block text-sm font-semibold text-foreground">{t('myTask.createModal.scheduleLabel')}</span>
+            <span className={taskCreateFormLabelClass}>{t('myTask.createModal.scheduleLabel')}</span>
             <SchedulePicker value={schedule} onChange={setSchedule} />
           </div>
 
-          <div
-            className={cn(
-              'flex flex-col gap-3 rounded-[10px] border bg-muted/20 p-3',
-              errors.dataCenterTarget
-                ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]'
-                : 'border-border',
-            )}
-          >
-            <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <input
-                type="checkbox"
-                checked={saveToDataCenter}
-                onChange={(event) => {
-                  const checked = event.target.checked;
-                  setSaveToDataCenter(checked);
-                  if (!checked) {
-                    setSaveToMyArtifact(false);
-                    setSaveToSharedArtifact(false);
-                    setMyArtifactFolderPath(null);
-                    setSharedArtifactFolderPath(null);
-                    if (errors.dataCenterTarget) setErrors((p) => ({ ...p, dataCenterTarget: undefined }));
-                  }
+          <div className="flex flex-col gap-2">
+            <span className={taskCreateFormLabelClass}>
+              {t('myTask.createModal.resultSaveToLabel')}
+            </span>
+            <div className="flex flex-wrap items-center gap-8">
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 text-[12px] text-foreground"
+                onClick={() => {
+                  const next = !saveToMyArtifact;
+                  setSaveToMyArtifact(next);
+                  setMyArtifactFolderPath(next ? buildDataCenterTargetUri('qa_artifact', null) : null);
+                  if (next) setMyArtifactPathLabel('我的产物 / 根目录');
                 }}
-                className="h-4 w-4 rounded border-border"
-              />
-              保存到数据中心
-            </label>
-            {saveToDataCenter ? (
-              <div className="flex flex-col gap-3 pl-6">
-                <label className="flex items-start gap-2 text-sm text-foreground">
-                  <input
-                    type="checkbox"
-                    checked={saveToMyArtifact}
-                    onChange={(event) => {
-                      const checked = event.target.checked;
-                      setSaveToMyArtifact(checked);
-                      setMyArtifactFolderPath(checked ? buildDataCenterTargetUri('qa_artifact', null) : null);
-                      if (checked) setMyArtifactPathLabel('我的产物 / 根目录');
-                      if (checked && errors.dataCenterTarget) setErrors((p) => ({ ...p, dataCenterTarget: undefined }));
-                    }}
-                    className="mt-0.5 h-4 w-4 rounded border-border"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-medium">我的产物</span>
-                    {saveToMyArtifact ? (
-                      <span className="mt-1 flex flex-wrap items-center gap-2">
-                        <span className="min-w-0 truncate text-xs text-muted-foreground">保存路径：{myArtifactPathLabel}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const parsed = parseDataCenterTargetUri(myArtifactFolderPath);
-                            setFolderPicker({
-                              kind: 'my',
-                              title: '选择我的产物目录',
-                              rootLabel: '我的产物',
-                              spaceType: 'qa_artifact',
-                              initialParentEntryId: parsed.parentEntryId,
-                            });
-                          }}
-                          className="h-7 rounded-lg border border-border bg-background px-2 text-xs font-medium hover:bg-muted"
-                        >
-                          选择目录
-                        </button>
-                      </span>
-                    ) : null}
-                  </span>
-                </label>
-                {isSite ? (
-                  <label className="flex items-start gap-2 text-sm text-foreground">
-                    <input
-                      type="checkbox"
-                      checked={saveToSharedArtifact}
-                      onChange={(event) => {
-                        const checked = event.target.checked;
-                        setSaveToSharedArtifact(checked);
-                        if (!checked) setSharedArtifactFolderPath(null);
-                        if (checked && errors.dataCenterTarget) setErrors((p) => ({ ...p, dataCenterTarget: undefined }));
-                      }}
-                      className="mt-0.5 h-4 w-4 rounded border-border"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block font-medium">网点共享产物</span>
-                      {saveToSharedArtifact ? (
-                        <span className="mt-1 flex flex-wrap items-center gap-2">
-                          <span className="min-w-0 truncate text-xs text-muted-foreground">保存路径：{sharedArtifactPathLabel}</span>
-                          <button
-                            type="button"
-                            disabled={!selectedSharedSpaceId}
-                            onClick={() => {
-                              const parsed = parseDataCenterTargetUri(sharedArtifactFolderPath);
-                              setFolderPicker({
-                                kind: 'shared',
-                                title: '选择网点共享产物目录',
-                                rootLabel: '网点共享产物',
-                                spaceType: 'site_shared_artifact',
-                                spaceId: selectedSharedSpaceId,
-                                initialParentEntryId: parsed.parentEntryId,
-                              });
-                            }}
-                            className="h-7 rounded-lg border border-border bg-background px-2 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            选择目录
-                          </button>
-                        </span>
-                      ) : null}
-                    </span>
-                  </label>
-                ) : null}
-                <p className="text-xs text-muted-foreground">路径变更仅对后续执行生效，历史产物不会自动移动。</p>
+              >
+                <IconCheckbox checked={saveToMyArtifact} />
+                {t('myTask.createModal.myArtifactLabel')}
+              </button>
+              {isSite ? (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 text-[12px] text-foreground"
+                  onClick={() => {
+                    const next = !saveToSharedArtifact;
+                    setSaveToSharedArtifact(next);
+                    if (!next) setSharedArtifactFolderPath(null);
+                  }}
+                >
+                  <IconCheckbox checked={saveToSharedArtifact} />
+                  {t('myTask.createModal.sharedArtifactLabel')}
+                </button>
+              ) : null}
+            </div>
+            {saveToMyArtifact ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="min-w-0 truncate text-xs text-muted-foreground">保存路径：{myArtifactPathLabel}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const parsed = parseDataCenterTargetUri(myArtifactFolderPath);
+                    setFolderPicker({
+                      kind: 'my',
+                      title: '选择我的产物目录',
+                      rootLabel: '我的产物',
+                      spaceType: 'qa_artifact',
+                      initialParentEntryId: parsed.parentEntryId,
+                    });
+                  }}
+                  className="h-7 rounded-lg border border-border bg-background px-2 text-xs font-medium hover:bg-muted"
+                >
+                  选择目录
+                </button>
+              </div>
+            ) : null}
+            {isSite && saveToSharedArtifact ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="min-w-0 truncate text-xs text-muted-foreground">保存路径：{sharedArtifactPathLabel}</span>
+                <button
+                  type="button"
+                  disabled={!selectedSharedSpaceId}
+                  onClick={() => {
+                    const parsed = parseDataCenterTargetUri(sharedArtifactFolderPath);
+                    setFolderPicker({
+                      kind: 'shared',
+                      title: '选择网点共享产物目录',
+                      rootLabel: '网点共享产物',
+                      spaceType: 'site_shared_artifact',
+                      spaceId: selectedSharedSpaceId,
+                      initialParentEntryId: parsed.parentEntryId,
+                    });
+                  }}
+                  className="h-7 rounded-lg border border-border bg-background px-2 text-xs font-medium hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  选择目录
+                </button>
               </div>
             ) : null}
           </div>
-          {errors.dataCenterTarget ? (
-            <p className="-mt-1 text-xs text-destructive">{errors.dataCenterTarget}</p>
-          ) : null}
         </div>
 
         <div className="flex justify-end gap-3 px-[18px] py-4 border-t border-border bg-muted/20 rounded-b-[22px] flex-shrink-0">

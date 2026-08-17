@@ -7,7 +7,7 @@ import {
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import { formFieldFocusClass } from '@/lib/surfaces';
+import { formFieldFocusWithinClass, formFieldHoverBorderClass } from '@/lib/surfaces';
 import { DingTalkMentionEditor } from '@/components/dingtalk/DingTalkMentionEditor';
 import { DingTalkMentionPopover } from '@/components/dingtalk/DingTalkMentionPopover';
 import {
@@ -340,11 +340,13 @@ export function TaskInstructionComposer({
         onDragLeave={enableAttachments ? handleDragLeave : undefined}
         onDrop={enableAttachments ? handleDrop : undefined}
         className={cn(
-          'rounded-[10px] shadow-none ring-0',
-          formFieldFocusClass,
+          'rounded-[8px] border border-[#E5E6EB] bg-[#FFFFFF] shadow-none ring-0',
+          'hover:shadow-none dark:hover:shadow-none',
+          formFieldHoverBorderClass,
+          formFieldFocusWithinClass,
           invalid
-            ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)]'
-            : 'border-border',
+            ? 'border-destructive shadow-[0_0_0_3px_rgba(220,38,38,0.12)] hover:border-destructive focus-within:border-destructive'
+            : null,
           disabled && 'cursor-not-allowed opacity-70',
         )}
         mentionPopover={
@@ -360,7 +362,8 @@ export function TaskInstructionComposer({
               placeholder={placeholder}
               disabled={disabled}
               className={cn(
-                'min-h-[160px] max-h-[280px] text-sm leading-relaxed',
+                'min-h-[160px] max-h-[280px] text-[12px] leading-relaxed',
+                'empty:before:whitespace-pre-wrap empty:before:text-[12px] empty:before:font-normal empty:before:leading-[22px] empty:before:text-[#86909C]',
                 editorClassName,
               )}
               onSnapshotChange={handleComposerSnapshot}

@@ -134,7 +134,7 @@ function FrequencyPicker({
       <button
         type="button"
         onClick={toggle}
-        className={cn(schedulePickerTriggerClass, open ? formFieldOpenClass : 'border-border')}
+        className={cn(schedulePickerTriggerClass, open && formFieldOpenClass)}
       >
         <span className="truncate">{displayLabel}</span>
         <span className="shrink-0 text-muted-foreground"><ChevronDownIcon /></span>
@@ -150,7 +150,7 @@ function FrequencyPicker({
                   type="button"
                   onClick={() => { onChange(freq); setOpen(false); onOpenChange(false); }}
                   className={cn(
-                    'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm',
+                    'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-[12px]',
                     dropdownOptionClass(selected),
                   )}
                 >
@@ -226,7 +226,7 @@ function WeekdaysPicker({
         className={cn(
           schedulePickerTriggerClass,
           weekDays.length === 0 ? 'text-muted-foreground' : 'text-foreground',
-          open ? formFieldOpenClass : 'border-border',
+          open && formFieldOpenClass,
         )}
       >
         <span className="truncate">{displayLabel}</span>
@@ -243,7 +243,7 @@ function WeekdaysPicker({
                   type="button"
                   onClick={() => handleOptionClick(optValue)}
                   className={cn(
-                    'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm',
+                    'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-[12px]',
                     dropdownOptionClass(checked),
                   )}
                 >
@@ -301,7 +301,7 @@ function MonthDayPicker({
       <button
         type="button"
         onClick={toggle}
-        className={cn(schedulePickerTriggerClass, 'tabular-nums', open ? formFieldOpenClass : 'border-border')}
+        className={cn(schedulePickerTriggerClass, 'tabular-nums', open && formFieldOpenClass)}
       >
         <span className="truncate">{displayLabel}</span>
         <span className="shrink-0 text-muted-foreground"><ChevronDownIcon /></span>
@@ -317,7 +317,7 @@ function MonthDayPicker({
                   type="button"
                   onClick={() => { onChange(d); setOpen(false); onOpenChange(false); }}
                   className={cn(
-                    'flex h-[34px] items-center justify-center rounded-lg text-sm tabular-nums transition-colors',
+                    'flex h-[34px] items-center justify-center rounded-lg text-[12px] tabular-nums transition-colors',
                     selected
                       ? 'bg-primary font-semibold text-primary-foreground'
                       : scheduleCalendarDayHoverClass,
@@ -400,7 +400,7 @@ function TimePicker({
       <button
         type="button"
         onClick={toggle}
-        className={cn(schedulePickerTriggerClass, 'tabular-nums', open ? formFieldOpenClass : 'border-border')}
+        className={cn(schedulePickerTriggerClass, 'tabular-nums', open && formFieldOpenClass)}
       >
         <span className="flex items-center gap-1.5 truncate">
           <span className="shrink-0 text-muted-foreground"><ClockIcon /></span>
@@ -422,7 +422,7 @@ function TimePicker({
                     data-value={h}
                     onClick={() => selectHour(h)}
                     className={cn(
-                      'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm tabular-nums',
+                      'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-[12px] tabular-nums',
                       dropdownOptionClass(selected),
                     )}
                   >
@@ -447,7 +447,7 @@ function TimePicker({
                     data-value={m}
                     onClick={() => selectMinute(m)}
                     className={cn(
-                      'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-sm tabular-nums',
+                      'flex min-h-9 w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-[12px] tabular-nums',
                       dropdownOptionClass(selected),
                     )}
                   >

@@ -358,8 +358,9 @@ export default function MyTask() {
 
   const handleSave = useCallback(
     async (input: TaskCreateInputWithRun) => {
-      const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, input.engineType);
-      const isClaude = input.engineType === 'claude';
+      const engineType = editingJob?.engineType ?? input.engineType;
+      const selectedAgent = resolvePreferredAgentByEngine(agents, defaultAgentId, engineType);
+      const isClaude = engineType === 'claude';
       try {
         if (isClaude && !selectedAgent?.id) {
           throw new Error(
@@ -388,14 +389,9 @@ export default function MyTask() {
           : {};
         const nameChanged = Boolean(editingJob && input.name !== editingJob.name);
         if (editingJob) {
-          const engineChanged = input.engineType !== editingJob.engineType;
           await updateJob(editingJob.id, {
             ...base,
             ...claudeFields,
-            engineType: input.engineType,
-            ...(engineChanged
-              ? { agentId: selectedAgent?.id || 'main' }
-              : {}),
           });
           toast.success(t('myTask.toast.updated'));
         } else {
