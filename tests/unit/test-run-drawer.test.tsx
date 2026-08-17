@@ -153,6 +153,15 @@ describe('TestRunDrawer trial mode', () => {
 
     expect(screen.queryByTestId('trial-run-process-card')).not.toBeInTheDocument();
     expect(screen.getByTestId('trial-run-artifact-card')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '对账表.xlsx' })).toHaveClass(
+      'text-primary',
+      'underline',
+      'underline-offset-2',
+    );
+    expect(screen.getByRole('button', { name: '对账表.xlsx' })).toHaveAttribute(
+      'title',
+      '点击查看附件',
+    );
     fireEvent.click(screen.getByRole('button', { name: '展开执行过程' }));
     expect(screen.getByTestId('trial-run-process-card')).toBeInTheDocument();
     expect(screen.getByTestId('trial-run-artifact-card')).toBeInTheDocument();
@@ -167,7 +176,7 @@ describe('TestRunDrawer trial mode', () => {
     expect(screen.getByRole('button', { name: '拒绝' })).toBeInTheDocument();
   });
 
-  it('keeps the historical detail presentation isolated', () => {
+  it('uses the same trial-run presentation for historical details', () => {
     const runtime = runtimeFixture('completed');
     render(<TestRunDrawer
       variant="detail"
@@ -184,8 +193,8 @@ describe('TestRunDrawer trial mode', () => {
       onClose={vi.fn()}
     />);
 
-    expect(screen.getByRole('heading', { name: '运行详情' })).toBeInTheDocument();
-    expect(screen.getByText('历史流程')).toBeInTheDocument();
-    expect(screen.getByRole('dialog')).toHaveClass('sm:max-w-[min(800px,100vw)]');
+    expect(screen.getByRole('heading', { name: '试运行结果' })).toBeInTheDocument();
+    expect(screen.queryByText('历史流程')).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog')).toHaveClass('sm:max-w-[min(500px,100vw)]');
   });
 });

@@ -107,7 +107,7 @@ describe('WorkflowCompletionNotifier result drawer handoff', () => {
     clickLatestToastAction();
 
     expect(complete).toBeTypeOf('function');
-    expect(screen.queryByRole('heading', { name: '运行详情' })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('trial-run-header')).not.toBeInTheDocument();
     expect(mocks.getRunViaIpc).not.toHaveBeenCalled();
 
     await act(async () => {
@@ -115,7 +115,7 @@ describe('WorkflowCompletionNotifier result drawer handoff', () => {
       await Promise.resolve();
     });
 
-    expect(await screen.findByRole('heading', { name: '运行详情' })).toBeInTheDocument();
+    expect(await screen.findByTestId('trial-run-header')).toBeInTheDocument();
     expect(mocks.getRunViaIpc).toHaveBeenCalledWith('run-notifier-claimed', 'detail');
     unsubscribe();
   });
@@ -127,7 +127,7 @@ describe('WorkflowCompletionNotifier result drawer handoff', () => {
     emitCompleted('run-notifier-direct');
     clickLatestToastAction();
 
-    expect(await screen.findByRole('heading', { name: '运行详情' })).toBeInTheDocument();
+    expect(await screen.findByTestId('trial-run-header')).toBeInTheDocument();
     expect(mocks.getRunViaIpc).toHaveBeenCalledWith('run-notifier-direct', 'detail');
   });
 
@@ -156,7 +156,7 @@ describe('WorkflowCompletionNotifier result drawer handoff', () => {
       await Promise.resolve();
     });
 
-    expect(await screen.findByRole('heading', { name: '运行详情' })).toBeInTheDocument();
+    expect(await screen.findByTestId('trial-run-header')).toBeInTheDocument();
     expect(mocks.getRunViaIpc).toHaveBeenCalledWith('run-os-claimed', 'detail');
     unsubscribe();
   });

@@ -142,7 +142,7 @@ export function WorkflowCompletionNotifier() {
 
   return (
     <TestRunDrawer
-      variant="detail"
+      variant="trial"
       open={detail.open}
       workflowName={detail.workflowName}
       runId={detail.runId}
