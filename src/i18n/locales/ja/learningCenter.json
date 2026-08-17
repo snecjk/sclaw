@@ -42,5 +42,32 @@
   "tutorialForbiddenTitle": "閲覧権限がありません",
   "tutorialForbiddenDescription": "このチュートリアルを閲覧できません。",
   "imageLoadError": "画像を読み込めません。チュートリアルを再読み込みしてください。",
-  "close": "閉じる"
+  "close": "閉じる",
+  "cancel": "キャンセル",
+  "caseCoverAlt": "{{title}} のカバー画像",
+  "caseUseCount": "利用回数 {{value}} 回",
+  "caseViewDetail": "詳細を見る",
+  "caseUseAction": "今すぐ使う",
+  "caseDetailTitle": "実践例の詳細",
+  "caseDetailDescription": "シーンと関連チュートリアルを確認してから利用しましょう",
+  "caseDetailLoading": "実践例の詳細を読み込み中",
+  "caseDetailLoadingDescription": "シーンと関連チュートリアルを取得しています",
+  "caseDetailErrorTitle": "実践例の詳細を読み込めません",
+  "caseDetailErrorDescription": "しばらくしてから再試行してください。",
+  "caseDetailSceneTitle": "利用シーン",
+  "caseDetailDescriptionTitle": "実践例について",
+  "caseDetailTutorialTitle": "関連チュートリアル",
+  "caseDetailTutorialEmpty": "この実践例にはまだ関連チュートリアルがありません。",
+  "caseUseConfirmTitle": "この実践例を使いますか？",
+  "caseUseConfirmMessage": "「{{title}}」の入口を開きます。メッセージが自動送信されることはありません。",
+  "caseUseConfirming": "実行中",
+  "caseUseSuccess": "実践例の入口を開きました",
+  "caseActionError": {
+    "UNSUPPORTED_TARGET": "この実践例の遷移タイプは未対応です。管理者にお問い合わせください。",
+    "MISSING_TARGET_CODE": "対象の識別子がないため、入口を特定できません。",
+    "INVALID_TARGET_URL": "返却されたリンクが安全でないか利用できないため、開きませんでした。",
+    "UNSUPPORTED_PROMPT_MODE": "不明なプロンプトモードが返却されたため、処理を中止しました。",
+    "MISSING_PROMPT": "この実践例には利用できるプロンプトがありません。",
+    "TARGET_UNAVAILABLE": "現在のクライアントではこの対象を開けません。"
+  }
 }

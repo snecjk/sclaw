@@ -42,5 +42,32 @@
   "tutorialForbiddenTitle": "Access unavailable",
   "tutorialForbiddenDescription": "Your account cannot view this tutorial.",
   "imageLoadError": "Image failed to load. Reload the tutorial to try again.",
-  "close": "Close"
+  "close": "Close",
+  "cancel": "Cancel",
+  "caseCoverAlt": "{{title}} cover",
+  "caseUseCount": "Used {{value}} times",
+  "caseViewDetail": "View details",
+  "caseUseAction": "Use now",
+  "caseDetailTitle": "Example details",
+  "caseDetailDescription": "Review the scenario and linked tutorial before using this example",
+  "caseDetailLoading": "Loading example details",
+  "caseDetailLoadingDescription": "Fetching the scenario and linked tutorial",
+  "caseDetailErrorTitle": "Unable to load example details",
+  "caseDetailErrorDescription": "Try again later.",
+  "caseDetailSceneTitle": "When to use it",
+  "caseDetailDescriptionTitle": "About this example",
+  "caseDetailTutorialTitle": "Linked tutorial",
+  "caseDetailTutorialEmpty": "No tutorial is linked to this example yet.",
+  "caseUseConfirmTitle": "Use this example?",
+  "caseUseConfirmMessage": "We will open the entry point for “{{title}}”. No message is sent automatically.",
+  "caseUseConfirming": "Opening",
+  "caseUseSuccess": "The example entry point is open",
+  "caseActionError": {
+    "UNSUPPORTED_TARGET": "This example target type is not supported yet. Contact an administrator.",
+    "MISSING_TARGET_CODE": "The example is missing a target identifier, so the entry point cannot be located.",
+    "INVALID_TARGET_URL": "The returned link is unsafe or unusable, so it was not opened.",
+    "UNSUPPORTED_PROMPT_MODE": "The example returned an unknown prompt mode, so the action was stopped.",
+    "MISSING_PROMPT": "This example has no prompt content to use.",
+    "TARGET_UNAVAILABLE": "This target cannot be opened in the current client."
+  }
 }

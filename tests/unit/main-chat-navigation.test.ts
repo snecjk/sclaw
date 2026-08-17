@@ -2,11 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   isMainChatHomePath,
   navigateToMainChatHome,
+  navigateToMainChatWithDraft,
   navigateToNewSessionWithDraft,
   navigateToNewSessionWithPrompt,
   navigateToSessionWithPrompt,
   readMainChatDraftState,
 } from '@/lib/main-chat-navigation';
+import {
+  clearMainChatComposerDraft,
+  publishMainChatComposerDraft,
+} from '@/lib/main-chat-composer-draft';
 
 const switchSession = vi.fn();
 const newSession = vi.fn();
@@ -150,6 +155,49 @@ describe('main-chat-navigation draft (去试试)', () => {
     const navigate = vi.fn();
     expect(navigateToNewSessionWithDraft(navigate as never, '')).toBe(false);
     expect(navigateToNewSessionWithDraft(navigate as never, '   \n\t ')).toBe(false);
+    expect(newSession).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('navigateToMainChatWithDraft replaces an empty composer in a fresh session', () => {
+    clearMainChatComposerDraft();
+    const navigate = vi.fn();
+
+    expect(navigateToMainChatWithDraft(navigate as never, '  案例提示词  ')).toBe(true);
+    expect(newSession).toHaveBeenCalledTimes(1);
+    const [to, options] = navigate.mock.calls[0] as [unknown, { state: { mainChatDraft: string } }];
+    expect(to).toBe('/');
+    expect(options.state.mainChatDraft).toBe('案例提示词');
+  });
+
+  it('navigateToMainChatWithDraft appends to an existing draft without discarding the session', () => {
+    publishMainChatComposerDraft('已有草稿');
+    const navigate = vi.fn();
+
+    navigateToMainChatWithDraft(navigate as never, '案例提示词', { mode: 'APPEND' });
+
+    expect(newSession).not.toHaveBeenCalled();
+    const [, options] = navigate.mock.calls[0] as [unknown, { state: { mainChatDraft: string } }];
+    expect(options.state.mainChatDraft).toBe('已有草稿\n\n案例提示词');
+    clearMainChatComposerDraft();
+  });
+
+  it('navigateToMainChatWithDraft forwards a search string without using ?q=', () => {
+    clearMainChatComposerDraft();
+    const navigate = vi.fn();
+
+    navigateToMainChatWithDraft(navigate as never, '案例提示词', { search: '?skill=daily-report' });
+
+    const [to] = navigate.mock.calls[0] as [{ pathname: string; search: string }];
+    expect(to).toEqual({ pathname: '/', search: '?skill=daily-report' });
+    expect(to.search).not.toContain('q=');
+  });
+
+  it('navigateToMainChatWithDraft rejects empty drafts without side effects', () => {
+    clearMainChatComposerDraft();
+    const navigate = vi.fn();
+
+    expect(navigateToMainChatWithDraft(navigate as never, '   ')).toBe(false);
     expect(newSession).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
   });

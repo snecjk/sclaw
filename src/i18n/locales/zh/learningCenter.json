@@ -42,5 +42,32 @@
   "tutorialForbiddenTitle": "暂无查看权限",
   "tutorialForbiddenDescription": "当前账号无法查看这个教程。",
   "imageLoadError": "图片加载失败，请重新加载教程",
-  "close": "关闭"
+  "close": "关闭",
+  "cancel": "取消",
+  "caseCoverAlt": "{{title}} 封面",
+  "caseUseCount": "已被使用 {{value}} 次",
+  "caseViewDetail": "查看详情",
+  "caseUseAction": "立即使用",
+  "caseDetailTitle": "案例详情",
+  "caseDetailDescription": "了解案例场景和关联教程后再决定是否使用",
+  "caseDetailLoading": "正在加载案例详情",
+  "caseDetailLoadingDescription": "正在获取案例场景和关联教程",
+  "caseDetailErrorTitle": "案例详情加载失败",
+  "caseDetailErrorDescription": "请稍后重试",
+  "caseDetailSceneTitle": "适用场景",
+  "caseDetailDescriptionTitle": "案例说明",
+  "caseDetailTutorialTitle": "关联教程",
+  "caseDetailTutorialEmpty": "这个案例还没有关联教程。",
+  "caseUseConfirmTitle": "确认使用这个案例？",
+  "caseUseConfirmMessage": "将为你打开「{{title}}」对应的入口，不会自动发送任何消息。",
+  "caseUseConfirming": "正在使用",
+  "caseUseSuccess": "已为你打开案例入口",
+  "caseActionError": {
+    "UNSUPPORTED_TARGET": "暂不支持这个案例的跳转类型，请联系管理员。",
+    "MISSING_TARGET_CODE": "案例缺少目标标识，无法定位入口。",
+    "INVALID_TARGET_URL": "案例返回的链接不安全或不可用，已阻止打开。",
+    "UNSUPPORTED_PROMPT_MODE": "案例返回了未知的提示词模式，已停止操作。",
+    "MISSING_PROMPT": "案例没有可用的提示词内容。",
+    "TARGET_UNAVAILABLE": "当前客户端暂时无法打开这个目标。"
+  }
 }

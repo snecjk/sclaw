@@ -1,16 +1,22 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { BookOpen, Layers3, RefreshCw, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { FeedbackState } from '@/components/common/FeedbackState';
 import { useContentHeader } from '@/components/layout/content-header-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { dispatchLearningCaseAction } from '@/lib/learning-case-action';
 import {
   pageLearningCases,
   pageLearningCategories,
   pageLearningDomains,
   pageLearningTutorials,
+  // Not a React hook despite the endpoint name; aliased so lint reads it as a plain request.
+  useLearningCase as requestLearningCaseUse,
 } from '@/lib/learning-center-api';
 import type {
   LearningCaseTemplate,
@@ -19,6 +25,8 @@ import type {
   LearningPage,
   LearningTutorial,
 } from '@/types/learning-center';
+import { CaseDetailDialog } from './CaseDetailDialog';
+import { LearningCaseCard } from './LearningCaseCard';
 import { LearningResourcePagination } from './LearningResourcePagination';
 import { TutorialPanel } from './TutorialPanel';
 
@@ -77,15 +85,20 @@ async function loadCasePage(
 
 export function LearningCenterPage() {
   const { t } = useTranslation('learningCenter');
+  const navigate = useNavigate();
   const [reloadKey, setReloadKey] = useState(0);
   const [state, setState] = useState<LearningCenterPageState>({ status: 'loading' });
   const [tutorials, setTutorials] = useState<ResourceState<LearningTutorial>>({ status: 'idle' });
   const [cases, setCases] = useState<ResourceState<LearningCaseTemplate>>({ status: 'idle' });
   const [tutorialId, setTutorialId] = useState<string | null>(null);
+  const [detailCase, setDetailCase] = useState<LearningCaseTemplate | null>(null);
+  const [pendingUseCase, setPendingUseCase] = useState<LearningCaseTemplate | null>(null);
   const selectedCategoryRef = useRef<string | null>(null);
   const tutorialTokenRef = useRef(0);
   const caseTokenRef = useRef(0);
   const detailReturnFocusRef = useRef<HTMLElement | null>(null);
+  const caseReturnFocusRef = useRef<HTMLElement | null>(null);
+  const caseUseInFlightRef = useRef(false);
   const contentRegionRef = useRef<HTMLElement | null>(null);
 
   useContentHeader({ title: t('pageTitle') });
@@ -147,10 +160,46 @@ export function LearningCenterPage() {
     tutorialTokenRef.current += 1;
     caseTokenRef.current += 1;
     setTutorialId(null);
+    setDetailCase(null);
+    setPendingUseCase(null);
     detailReturnFocusRef.current = contentRegionRef.current;
+    caseReturnFocusRef.current = contentRegionRef.current;
     setState((current) => current.status === 'ready' ? { ...current, selectedCategoryId } : current);
     requestTutorialPage(selectedCategoryId, 1);
     requestCasePage(selectedCategoryId, 1);
+  };
+
+  /**
+   * Only the server decides the use count, so the list is reconciled from the
+   * response before the action is dispatched — a rejected use leaves the list,
+   * the route and the composer draft untouched.
+   */
+  const confirmCaseUse = async (item: LearningCaseTemplate) => {
+    if (caseUseInFlightRef.current) return;
+    caseUseInFlightRef.current = true;
+    try {
+      const action = await requestLearningCaseUse(item.id);
+      setCases((current) => current.status === 'ready'
+        ? {
+          ...current,
+          items: current.items.map((entry) => entry.id === item.id
+            ? { ...entry, useCount: action.useCount }
+            : entry),
+        }
+        : current);
+      setPendingUseCase(null);
+
+      const result = dispatchLearningCaseAction(action, { navigate });
+      if (result.ok) {
+        toast.success(t('caseUseSuccess'));
+      } else {
+        toast.error(t(`caseActionError.${result.reason}`));
+      }
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t('caseDetailErrorDescription'));
+    } finally {
+      caseUseInFlightRef.current = false;
+    }
   };
 
   const retryButton = (
@@ -262,11 +311,20 @@ export function LearningCenterPage() {
                         {cases.status === 'ready' && cases.items.length === 0 && <FeedbackState state="empty" title={t('casesEmptyTitle')} description={t('casesEmptyDescription')} />}
                         {cases.status === 'ready' && cases.items.length > 0 && (
                           <>
-                            <ul className="divide-y" aria-label={t('casesTitle')}>
+                            <ul className="grid min-w-0 gap-4 pt-1 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2" aria-label={t('casesTitle')}>
                               {cases.items.map((item) => (
-                                <li key={item.id} className="min-w-0 py-4 first:pt-1 last:pb-1">
-                                  <p className="truncate text-sm font-medium" title={item.title || item.name}>{item.title || item.name}</p>
-                                  {(item.subTitle || item.description) && <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.subTitle || item.description}</p>}
+                                <li key={item.id} className="min-w-0">
+                                  <LearningCaseCard
+                                    item={item}
+                                    onViewDetail={(target, trigger) => {
+                                      caseReturnFocusRef.current = trigger;
+                                      setDetailCase(target);
+                                    }}
+                                    onUse={(target, trigger) => {
+                                      caseReturnFocusRef.current = trigger;
+                                      setPendingUseCase(target);
+                                    }}
+                                  />
                                 </li>
                               ))}
                             </ul>
@@ -283,6 +341,27 @@ export function LearningCenterPage() {
         </div>
       </main>
       <TutorialPanel key={tutorialId ?? 'closed'} tutorialId={tutorialId} returnFocusRef={detailReturnFocusRef} onClose={() => setTutorialId(null)} />
+      <CaseDetailDialog
+        key={detailCase?.id ?? 'case-detail-closed'}
+        caseId={detailCase?.id ?? null}
+        fallbackTitle={detailCase ? (detailCase.title || detailCase.name) : ''}
+        returnFocusRef={caseReturnFocusRef}
+        onClose={() => setDetailCase(null)}
+      />
+      <ConfirmDialog
+        open={Boolean(pendingUseCase)}
+        title={t('caseUseConfirmTitle')}
+        message={t('caseUseConfirmMessage', { title: pendingUseCase ? (pendingUseCase.title || pendingUseCase.name) : '' })}
+        confirmLabel={pendingUseCase?.actionText || t('caseUseAction')}
+        confirmingLabel={t('caseUseConfirming')}
+        cancelLabel={t('cancel')}
+        onConfirm={() => pendingUseCase ? confirmCaseUse(pendingUseCase) : undefined}
+        onCancel={() => {
+          if (caseUseInFlightRef.current) return;
+          setPendingUseCase(null);
+          caseReturnFocusRef.current?.focus();
+        }}
+      />
     </>
   );
 }

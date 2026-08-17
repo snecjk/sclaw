@@ -72,6 +72,10 @@ import type { DingTalkMention, MentionSearchItem } from '@/types/dingtalk-mentio
 import type { SkillMeta } from '@/types/skill-meta';
 import { mentionSearchItemToMention } from '@/types/dingtalk-mention';
 import { inferMimeTypeFromPath } from '@/lib/preview-url';
+import {
+  clearMainChatComposerDraft,
+  publishMainChatComposerDraft,
+} from '@/lib/main-chat-composer-draft';
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -365,7 +369,12 @@ export function ChatInput({
       mentions: [],
       isEmpty: true,
     });
+    publishMainChatComposerDraft('');
   }, []);
+
+  // Leaving the chat surface discards the contenteditable content, so outside
+  // readers must not keep seeing a draft that no longer exists.
+  useEffect(() => clearMainChatComposerDraft, []);
 
   const handleVoiceUtteranceFinal = useCallback((text: string) => {
     const trimmed = text.trim();
@@ -832,6 +841,7 @@ export function ChatInput({
 
   const handleComposerSnapshotChange = useCallback((snapshot: MentionComposerSnapshot) => {
     setComposerSnapshot(snapshot);
+    publishMainChatComposerDraft(snapshot.plainText);
     if (
       workflowPickerSlashOpenRef.current
       && workflowPickerOpen
