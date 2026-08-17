@@ -218,6 +218,8 @@ describe('LearningCenterPage', () => {
     expect(panel.style.right).toBe('var(--sto-shell-card-gap, 0.5rem)');
     expect(panel.style.bottom).toBe('var(--sto-shell-card-gap, 0.5rem)');
     expect(await screen.findByRole('heading', { name: '教程正文' })).toBeInTheDocument();
+    const description = screen.getByTitle('十分钟上手');
+    expect(description).toHaveClass('truncate');
     activateTab('进阶实践', true);
     await waitFor(() => expect(screen.queryByRole('heading', { name: '教程正文' })).not.toBeInTheDocument());
     expect(document.querySelector('.learning-center-page')).not.toHaveClass('learning-center-page--detail-open');

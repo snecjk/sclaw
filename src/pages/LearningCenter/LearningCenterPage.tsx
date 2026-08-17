@@ -348,7 +348,14 @@ export function LearningCenterPage() {
                                 <span className="learning-center-tutorial-index" aria-hidden>{tutorialOffset + index + 1}</span>
                                 <div className="learning-center-tutorial-copy">
                                   <p className="truncate text-xs font-semibold leading-4" title={tutorial.title || tutorial.name}>{tutorial.title || tutorial.name}</p>
-                                  {(tutorial.subTitle || tutorial.description) && <p className="line-clamp-1 text-[0.6875rem] leading-4 text-muted-foreground">{tutorial.subTitle || tutorial.description}</p>}
+                                  {(tutorial.subTitle || tutorial.description) && (
+                                    <p
+                                      className="truncate text-[0.6875rem] leading-4 text-muted-foreground"
+                                      title={tutorial.subTitle || tutorial.description}
+                                    >
+                                      {tutorial.subTitle || tutorial.description}
+                                    </p>
+                                  )}
                                 </div>
                                 <Button
                                   type="button"

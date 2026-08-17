@@ -24,6 +24,7 @@
   .learning-center-page--detail-open {
     box-sizing: border-box;
     padding-right: calc(var(--lc-detail-panel-w) + var(--sto-shell-card-gap, 0.5rem) + var(--lc-detail-gap));
+    --lc-step-art-size: 5.25rem;
   }
 
   .learning-center-page--detail-open .learning-center-page__inner {
@@ -33,24 +34,63 @@
   }
 
   .learning-center-page--detail-open .learning-center-steps {
+    width: 100%;
     max-width: 100%;
   }
 
-  .learning-center-page--detail-open {
-    --lc-step-art-size: 5.5rem;
+  .learning-center-page--detail-open .learning-center-steps__scroller {
+    overflow-x: hidden;
+  }
+
+  .learning-center-page--detail-open .learning-center-steps__tabs {
+    min-width: 0;
+    width: 100%;
   }
 
   .learning-center-page--detail-open .learning-center-steps__tab {
     min-width: 0;
-    padding-inline: 0.5rem;
+    overflow: hidden;
+    padding-inline: 0.4rem;
+    font-size: 0.8125rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-steps__tab > span:not([aria-hidden]) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .learning-center-page--detail-open .learning-center-steps__tab[data-state='active'] {
-    padding-right: 3rem;
+    padding-right: 2.75rem;
   }
 
   .learning-center-page--detail-open .learning-center-steps__art {
-    right: -3.75rem;
+    right: -3.25rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-steps__panel {
+    padding: 0.875rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-tutorial-item {
+    gap: 0.625rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-tutorial-copy {
+    min-width: 0;
+    gap: 0.25rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-tutorial-copy > p {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .learning-center-page--detail-open .learning-center-tutorial-link {
+    width: 4.75rem;
+    flex-basis: 4.75rem;
   }
 
   .learning-center-page--detail-open .learning-center-cases__grid {
