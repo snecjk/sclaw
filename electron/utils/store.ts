@@ -65,6 +65,15 @@ export interface AppSettings {
 
   // DingTalk dws
   dingTalkDwsEnabled: boolean;
+
+  /**
+   * 平台 Channel（钉钉等）空闲自动新会话：
+   * 超过 channelSessionIdleHours 小时无对话则新建 sessionKey。
+   * mobile 通道不走此逻辑（由 App 显式 sessionKey 控制）。
+   */
+  channelSessionIdleEnabled: boolean;
+  /** 默认 24；合法范围由写入侧钳制 */
+  channelSessionIdleHours: number;
 }
 
 /**
@@ -123,6 +132,10 @@ function createDefaultSettings(): AppSettings {
 
     // DingTalk dws
     dingTalkDwsEnabled: true,
+
+    // Channel session idle → new session
+    channelSessionIdleEnabled: true,
+    channelSessionIdleHours: 24,
   };
 }
 
