@@ -855,7 +855,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   return (
     <motion.div
       className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4"
-      onClick={onClose}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -863,7 +862,6 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
     >
       <motion.div
         className="w-full max-w-[min(820px,100%)] bg-background rounded-[22px] border border-border shadow-2xl flex flex-col max-h-[calc(100vh-4rem)]"
-        onClick={(e) => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.96, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 8 }}

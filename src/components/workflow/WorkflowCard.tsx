@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Circle, Clock, Loader2, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, Circle, Clock, Loader2, XCircle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { workflowResultSummaryClass } from '@/lib/surfaces';
 import {
   breakdownWorkflowDurationMs,
@@ -22,6 +27,7 @@ import { buildArtifactCardMenuItems } from '@/lib/artifact-card-menu';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import { getWorkflowProgressDetails } from '@/lib/workflow-card-progress';
 import { getChatWorkflowCard } from '@/lib/workflow-api';
+import { parseWorkflowParamsSummaryGroups } from '@/lib/workflow-form-utils';
 import type { WorkflowExecutionState, WorkflowRunStatus } from '@/types/workflow';
 
 interface WorkflowCardProps {
@@ -38,6 +44,7 @@ interface WorkflowCardProps {
   section?: 'full' | 'status' | 'results';
   onPreviewArtifact?: (file: AttachedFileMeta) => void;
   onCreateScheduledTask?: (workflowId: string) => void;
+  onOpenWorkflow?: (workflowId: string) => void;
 }
 
 interface StatusTheme {
@@ -186,12 +193,14 @@ export function WorkflowCard({
   section = 'full',
   onPreviewArtifact,
   onCreateScheduledTask,
+  onOpenWorkflow,
 }: WorkflowCardProps) {
   const { t } = useTranslation('chat');
   const [state, setState] = useState<WorkflowExecutionState | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
+  const [paramsExpanded, setParamsExpanded] = useState(true);
 
   const resolvedName = (() => {
     if (templateName && !isTemplateIdLabel(templateName)) return templateName;
@@ -290,6 +299,18 @@ export function WorkflowCard({
   const workflowIdentity = display.workflowId
     ? `${resolvedName}（${display.workflowId}）`
     : resolvedName;
+  const confirmedParamGroups = useMemo(
+    () => (paramsSummary ? parseWorkflowParamsSummaryGroups(paramsSummary) : []),
+    [paramsSummary],
+  );
+  const collapsedParamsPreview = useMemo(() => {
+    const firstGroup = confirmedParamGroups[0];
+    if (firstGroup) return `${firstGroup.title}：${firstGroup.content}`;
+    return paramsSummary
+      ?.split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line && !line.startsWith('已确认以下参数')) ?? '';
+  }, [confirmedParamGroups, paramsSummary]);
 
   const statusRow = showStatus ? (
     <div
@@ -303,9 +324,26 @@ export function WorkflowCard({
 
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="shrink-0 text-muted-foreground">{t('workflow.nameLabel')}</span>
-          <span className="truncate font-medium text-foreground" title={workflowIdentity}>
-            {workflowIdentity}
-          </span>
+          {display.workflowId && onOpenWorkflow ? (
+            <Tooltip delayDuration={200}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex max-w-[min(42vw,360px)] truncate rounded-sm px-1 py-0.5 font-medium text-primary transition-colors hover:text-primary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => onOpenWorkflow(display.workflowId)}
+                >
+                  {workflowIdentity}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" sideOffset={6} className="text-xs">
+                {t('workflow.viewWorkflow')}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <span className="truncate font-medium text-foreground" title={workflowIdentity}>
+              {workflowIdentity}
+            </span>
+          )}
           <span className="shrink-0 text-muted-foreground">{t('workflow.runIdLabel')}</span>
           <code
               className="truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[12px] text-foreground"
@@ -334,22 +372,62 @@ export function WorkflowCard({
       </div>
 
       {paramsSummary ? (
-        <p className="mt-1 truncate text-[12px] leading-4 text-muted-foreground" title={paramsSummary}>
-          {paramsSummary}
-        </p>
+        <div className="mt-3 border-t border-border/70 pt-2.5">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-md text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-expanded={paramsExpanded}
+            onClick={() => setParamsExpanded((value) => !value)}
+          >
+            {paramsExpanded ? (
+              <ChevronUp className="h-3.5 w-3.5" aria-hidden />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+            )}
+            <span>{t('workflow.confirmedParameters')}</span>
+            {!paramsExpanded && collapsedParamsPreview ? (
+              <span className="max-w-[min(42vw,360px)] truncate text-[12px] font-normal text-muted-foreground" title={collapsedParamsPreview}>
+                {collapsedParamsPreview}
+              </span>
+            ) : null}
+          </button>
+
+          {paramsExpanded ? (
+            confirmedParamGroups.length > 0 ? (
+              <dl className="mt-2.5 grid gap-2">
+                {confirmedParamGroups.map((group) => (
+                  <div key={`${group.title}-${group.content}`} className="grid gap-0.5">
+                    <dt className="text-[12px] font-medium leading-4 text-foreground/80">{group.title}</dt>
+                    <dd className="m-0 break-words text-[13px] leading-5 text-muted-foreground">{group.content}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : (
+              <p className="mt-2.5 whitespace-pre-wrap break-words text-[13px] leading-5 text-muted-foreground">
+                {paramsSummary}
+              </p>
+            )
+          ) : null}
+        </div>
       ) : null}
 
       {showProgress ? (
         <div className="mt-2.5">
-          <div className="h-1 overflow-hidden rounded-full bg-muted" aria-label={t('workflow.progressLabel')}>
+          <div
+            className="h-1 overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-label={t('workflow.progressLabel')}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progressDetails.progressPercent}
+          >
             {/* 动态进度宽：Tailwind 无法静态表达百分比，保留 inline width */}
             <div
               className={cn(
-                'h-full rounded-full transition-all duration-500',
+                'h-full rounded-full transition-[width] duration-200 ease-out motion-reduce:transition-none',
                 theme.progressClass,
-                display.progress === 0 && 'animate-pulse',
               )}
-              style={{ width: `${display.progress > 0 ? Math.max(display.progress, 8) : 28}%` }}
+              style={{ width: `${progressDetails.progressPercent}%` }}
             />
           </div>
           {progressDetails.helperText ? (

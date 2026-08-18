@@ -80,6 +80,19 @@ export function assistantMessageHasVisibleReplyBody(message: RawMessage): boolea
   return false;
 }
 
+/** Chat response itself is still being dispatched/streamed/finalized. */
+export function isChatResponsePending(options: {
+  sending: boolean;
+  lastUserMessageAt: number | null;
+  pendingFinal?: boolean;
+  activeRunId?: string | null;
+}): boolean {
+  return options.sending
+    || options.lastUserMessageAt != null
+    || options.pendingFinal === true
+    || options.activeRunId != null;
+}
+
 /**
  * 同轮内用于挂载 meta 的「展示回复」消息。
  * 与 AssistantTurnMessage / pickAssistantReplyMessage 口径对齐：取最后一条带正文的助手行；
@@ -139,7 +152,7 @@ export function isCurrentUserTurnIncomplete(options: {
     sessionKey,
   } = options;
 
-  if (sending || lastUserMessageAt != null || pendingFinal || activeRunId != null) return true;
+  if (isChatResponsePending({ sending, lastUserMessageAt, pendingFinal, activeRunId })) return true;
 
   const lastUserIdx = findLastUserMessageIndex(sessionMessages);
   if (lastUserIdx < 0) return false;

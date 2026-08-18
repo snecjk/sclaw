@@ -5,6 +5,10 @@ import { prepareClaudeRuntime } from '../../engines/claude-sdk-runtime';
 import { getDefaultProviderAccountId } from '../../services/providers/provider-store';
 import { workflowExecLog } from './logging';
 import { prepareWorkflowSkills } from './skill-loader';
+import {
+  WORKFLOW_AGENT_HARD_DEADLINE_MS,
+  WORKFLOW_AGENT_NO_PROGRESS_TIMEOUT_MS,
+} from '../../../shared/workflow-agent-timeouts';
 
 /**
  * agent-runner — a slim workflow-node runner that calls the Claude Agent SDK's
@@ -18,8 +22,8 @@ import { prepareWorkflowSkills } from './skill-loader';
  * without gaining access to arbitrary user directories.
  *
  * Double-layer stuck protection:
- *   - no-progress watchdog (default 300s): kills if no message arrives.
- *   - hard deadline (default 960s): kills no matter what.
+ *   - no-progress watchdog (default 600s): kills if no message arrives.
+ *   - hard deadline (default 1,800s): kills no matter what.
  * Cancel is exposed via `cancelAgent()`, which calls the active query's
  * `close()` and resolves the pending invocation as failed.
  */
@@ -94,9 +98,9 @@ export interface InvokeArgs {
   additionalDirectories?: string[];
   /** Override the bundled executable path (defaults to the chat adapter's). */
   pathToClaudeCodeExecutable?: string;
-  /** No-progress watchdog threshold (ms). Default 300_000 (300s). */
+  /** No-progress watchdog threshold (ms). Default 600_000 (600s). */
   noProgressMs?: number;
-  /** Hard deadline (ms). Default 960_000 (960s). */
+  /** Hard deadline (ms). Default 1_800_000 (1,800s). */
   deadlineMs?: number;
   /** Account id used by shared Claude runtime preparation when `env` is not injected. */
   accountId?: string;
@@ -159,8 +163,8 @@ export async function invokeAgent(args: InvokeArgs): Promise<InvokeResult> {
       });
     }
   }
-  const noProgressMs = args.noProgressMs ?? 300_000;
-  const deadlineMs = args.deadlineMs ?? 960_000;
+  const noProgressMs = args.noProgressMs ?? WORKFLOW_AGENT_NO_PROGRESS_TIMEOUT_MS;
+  const deadlineMs = args.deadlineMs ?? WORKFLOW_AGENT_HARD_DEADLINE_MS;
 
   await ensureDirectory(cwd);
   await Promise.all(additionalDirectories.map(ensureDirectory));

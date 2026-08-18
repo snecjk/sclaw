@@ -12,6 +12,7 @@ import {
 import {
   claudeStructuredOutputEnvelopeJsonSchema,
   createWorkflowPacket,
+  normalizeWorkflowArtifactDrafts,
   validateWorkflowPacket,
   workflowPacketJsonSchema,
   type WorkflowPacket,
@@ -160,6 +161,48 @@ describe('workflow artifact-first output', () => {
     const openClawSchema = workflowPacketJsonSchema({ type: 'object' }, { runId: 'run-1', nodeId: 'node-1', nodeType: 'agent_output' }) as any;
     expect(openClawSchema.properties.artifacts.items.required).toEqual(['resourceId']);
     expect(claudeStructuredOutputEnvelopeJsonSchema()).toMatchObject({ required: ['payload'] });
+  });
+
+  it('strips only host-owned metadata from copied canonical artifact references', () => {
+    const copiedReference = submission([{
+      resourceId: 'report.html', kind: 'OUTPUT', name: 'report', contentType: 'text/html',
+      artifactId: 'host-id', uri: 'artifact://run/node/host-id', size: 100, checksum: 'legacy',
+    } as any]);
+    const normalized = normalizeWorkflowArtifactDrafts(copiedReference);
+
+    expect(normalized).toMatchObject({
+      normalized: true,
+      stripped: [{ index: 0, fields: ['artifactId', 'uri', 'size', 'checksum'] }],
+    });
+    expect((normalized.packet as WorkflowPacket).artifacts).toEqual([{
+      resourceId: 'report.html', kind: 'OUTPUT', name: 'report', contentType: 'text/html',
+    }]);
+    expect(validateWorkflowPacket(normalized.packet, {
+      runId: 'run-1', nodeId: 'node-1', nodeType: 'agent_output', artifactMode: 'draft',
+    })).toMatchObject({ ok: true });
+  });
+
+  it('keeps unknown artifact fields for strict validation and reports the exact artifact', () => {
+    const packet = submission([{ resourceId: 'report.html', unexpected: true } as any]);
+    const normalized = normalizeWorkflowArtifactDrafts(packet);
+    expect(normalized.normalized).toBe(false);
+    expect(validateWorkflowPacket(normalized.packet, {
+      runId: 'run-1', nodeId: 'node-1', nodeType: 'agent_output', artifactMode: 'draft',
+    })).toMatchObject({
+      ok: false,
+      code: 'ARTIFACT_DRAFT_INVALID',
+      message: 'artifacts[0] 包含不允许字段: unexpected；只允许 resourceId、kind、name、contentType',
+    });
+  });
+
+  it('reports the exact artifact when resourceId is missing', () => {
+    expect(validateWorkflowPacket(submission([{ kind: 'OUTPUT' } as any]), {
+      runId: 'run-1', nodeId: 'node-1', nodeType: 'agent_output', artifactMode: 'draft',
+    })).toMatchObject({
+      ok: false,
+      code: 'ARTIFACT_DRAFT_INVALID',
+      message: 'artifacts[0].resourceId 必须是非空字符串',
+    });
   });
 
   it('promotes carried OUTPUT artifacts without creating or copying a result file', () => {
@@ -343,5 +386,47 @@ describe('workflow artifact-first output', () => {
     expect(result.rawText).toBe('');
     expect(result.output.artifacts).toHaveLength(1);
     expect(result.output.artifacts[0]).toMatchObject({ resourceId: 'report.md', contentType: 'text/markdown', kind: 'OUTPUT' });
+  });
+
+  it.each(['claude', 'openclaw'] as const)('normalizes copied host artifact metadata through the %s retry path', async (execEngine) => {
+    const workspace = await tempWorkspace();
+    await writeFile(path.join(workspace, 'report.md'), '# report');
+    const draft = submission([{
+      resourceId: 'report.md', kind: 'OUTPUT', artifactId: 'copied-id',
+      uri: 'artifact://copied', size: 8, checksum: 'copied-checksum',
+    } as any]);
+    const output = execEngine === 'claude' ? { payload: JSON.stringify(draft) } : draft;
+    const events: Array<{ type: string; payload: any }> = [];
+    const repo = {
+      getNodeRun: async () => undefined,
+      incrementNodeAttempt: async () => undefined,
+      upsertNodeRun: async () => undefined,
+      enqueueOutbox: async () => undefined,
+    };
+    const result = await runAgentNodeWithRetry({
+      runId: 'run-1', workflowId: 'workflow-1', versionId: 'v1', definition: {}, repo,
+      resolvedInputs: {}, emit: async (type: string, payload: any) => { events.push({ type, payload }); },
+    } as any, { id: 'node-1', type: 'agent_output', config: {} }, {
+      schemaVersion: 'agent-run-spec/v1', workflowId: 'workflow-1', workflowVersion: 'v1', runId: 'run-1', nodeId: 'node-1',
+      task: { name: 'report', goal: 'create report', instruction: '' },
+      target: { provider: 'client_local', kind: 'agent_output', model: 'test' },
+      inputs: {}, allowedSkills: [], allowedTools: [], outputSchema: '', metadata: {},
+      runtimeContext: { startup: { schema: {}, resolvedInputs: {} }, isFirstAgentNode: true, workspacePath: workspace },
+      permissionPolicy: { mode: 'workspace_write' }, limits: {},
+      completionContract: { dataJsonSchema: { type: 'object' }, outputJsonSchema: { type: 'object' }, maxAttempts: 1, onIncomplete: 'retry' },
+      prompt: '',
+    }, {
+      execEngine,
+      quota: async () => true,
+      invokeAgent: async () => ({ status: 'succeeded', rawText: JSON.stringify(draft), output }),
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(result.output.artifacts[0]).toMatchObject({ resourceId: 'report.md', kind: 'OUTPUT' });
+    expect(result.output.artifacts[0]).not.toHaveProperty('checksum');
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'completion.output_normalized',
+      payload: expect.objectContaining({ reason: 'artifact_host_metadata_stripped' }),
+    }));
   });
 });

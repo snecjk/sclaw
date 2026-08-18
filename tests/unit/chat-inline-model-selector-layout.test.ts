@@ -31,4 +31,12 @@ describe('chat inline model selector layout', () => {
     expect(homeComposerSource).toContain('<ChatModelSelector variant="inline" className="min-w-max shrink-0" />');
     expect(chatPageSource).toContain('<ChatModelSelector variant="inline" className="min-w-max shrink-0" />');
   });
+
+  it('uses a styled portal menu without Radix composed callback refs', () => {
+    expect(selectorSource).toContain('function SelectorMenu');
+    expect(selectorSource).toContain('createPortal(');
+    expect(selectorSource).toContain('ref={triggerRef}');
+    expect(selectorSource).not.toContain('<select');
+    expect(selectorSource).not.toContain('<DropdownMenuTrigger');
+  });
 });

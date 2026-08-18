@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { mergeOpenClawSystemPromptAppend } from '../../electron/engines/openclaw-adapter';
-import { prependSystemPromptAppend } from '../../shared/system-prompt-append';
+import {
+  mergeOpenClawSystemPromptAppend,
+  resolveOpenClawSendMessage,
+} from '../../electron/engines/openclaw-adapter';
+import {
+  prependSystemPromptAppend,
+  wrapScheduledTaskSystemPromptAppend,
+} from '../../shared/system-prompt-append';
 import { DINGTALK_RECIPIENTS_MARKER } from '../../shared/dingtalk-send/dingtalk-mention';
+import { stripDingTalkMentionContextForDisplay } from '../../shared/dingtalk-prompts/dingtalk-mention-context';
 
 describe('prependSystemPromptAppend / mergeOpenClawSystemPromptAppend', () => {
   it('returns message unchanged when append is empty', () => {
@@ -31,5 +38,33 @@ describe('prependSystemPromptAppend / mergeOpenClawSystemPromptAppend', () => {
     expect(merged.endsWith(message)).toBe(true);
     expect(merged).toBe(`${append}\n\n${message}`);
     expect(mergeOpenClawSystemPromptAppend(message, append)).toBe(merged);
+  });
+
+  it('wraps scheduled-task context with a display-safe user-message boundary', () => {
+    const append = [
+      DINGTALK_RECIPIENTS_MARKER,
+      '```json',
+      '{"recipients":[{"type":"group","openConversationId":"g1"}]}',
+      '```',
+      '定时任务必须发送',
+    ].join('\n');
+    const message = '温柔、甜美的问候';
+    const wrapped = wrapScheduledTaskSystemPromptAppend(message, append);
+
+    expect(wrapped).toBe(`${append}\n\n---\n\n用户消息：\n${message}`);
+    expect(stripDingTalkMentionContextForDisplay(wrapped)).toBe(message);
+    expect(resolveOpenClawSendMessage({
+      message,
+      systemPromptAppend: append,
+      runtimePolicy: { origin: 'scheduled_task', ownerId: 'run-1', deadlineAt: null },
+    })).toBe(wrapped);
+  });
+
+  it('keeps interactive OpenClaw append behavior unchanged', () => {
+    expect(resolveOpenClawSendMessage({
+      message: '普通会话',
+      systemPromptAppend: '普通上下文',
+      runtimePolicy: { origin: 'interactive', deadlineAt: null },
+    })).toBe('普通上下文\n\n普通会话');
   });
 });

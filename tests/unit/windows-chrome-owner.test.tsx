@@ -23,6 +23,7 @@ describe('provincial Windows Chrome owner', () => {
       pathname: '/',
       browserOverlayOpen: false,
       appPlazaVisible: false,
+      contentHeaderVisible: true,
     })).toBe('none');
 
     expect(resolveWindowsChromeOwner({
@@ -30,6 +31,7 @@ describe('provincial Windows Chrome owner', () => {
       pathname: '/',
       browserOverlayOpen: false,
       appPlazaVisible: false,
+      contentHeaderVisible: true,
     })).toBe('content-header');
 
     expect(resolveWindowsChromeOwner({
@@ -37,6 +39,7 @@ describe('provincial Windows Chrome owner', () => {
       pathname: '/more-apps',
       browserOverlayOpen: false,
       appPlazaVisible: true,
+      contentHeaderVisible: true,
     })).toBe('app-plaza');
 
     expect(resolveWindowsChromeOwner({
@@ -44,6 +47,7 @@ describe('provincial Windows Chrome owner', () => {
       pathname: '/settings',
       browserOverlayOpen: false,
       appPlazaVisible: false,
+      contentHeaderVisible: false,
     })).toBe('shell-fallback');
 
     expect(resolveWindowsChromeOwner({
@@ -51,6 +55,15 @@ describe('provincial Windows Chrome owner', () => {
       pathname: '/more-apps',
       browserOverlayOpen: true,
       appPlazaVisible: true,
+      contentHeaderVisible: true,
+    })).toBe('shell-fallback');
+
+    expect(resolveWindowsChromeOwner({
+      isProvincial: true,
+      pathname: '/workflow/wf_123',
+      browserOverlayOpen: false,
+      appPlazaVisible: false,
+      contentHeaderVisible: false,
     })).toBe('shell-fallback');
   });
 
