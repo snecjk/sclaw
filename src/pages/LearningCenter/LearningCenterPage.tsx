@@ -14,6 +14,7 @@ import { FeedbackState } from '@/components/common/FeedbackState';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { invokeIpc } from '@/lib/api-client';
 import { dispatchLearningCaseAction } from '@/lib/learning-case-action';
 import {
   pageLearningCases,
@@ -38,6 +39,30 @@ import { TutorialPanel } from './TutorialPanel';
 import './LearningCenterPage.css';
 
 const CONTENT_PAGE_SIZE = 6;
+const WINDOW_DEFAULT_MIN_WIDTH = 960;
+const WINDOW_DEFAULT_MIN_HEIGHT = 640;
+const DETAIL_LEFT_MIN_WIDTH = 563;
+
+function syncTutorialWindowMinSize(page: HTMLElement | null, detailOpen: boolean) {
+  if (!detailOpen || !page || window.innerWidth < 1024) {
+    void invokeIpc('window:setMinimumSize', {
+      width: WINDOW_DEFAULT_MIN_WIDTH,
+      height: WINDOW_DEFAULT_MIN_HEIGHT,
+    }).catch(() => undefined);
+    return;
+  }
+
+  const leftWidth = page.getBoundingClientRect().width;
+  const minWidth = Math.max(
+    WINDOW_DEFAULT_MIN_WIDTH,
+    Math.round(window.outerWidth + (DETAIL_LEFT_MIN_WIDTH - leftWidth)),
+  );
+  void invokeIpc('window:setMinimumSize', {
+    width: minWidth,
+    height: WINDOW_DEFAULT_MIN_HEIGHT,
+  }).catch(() => undefined);
+}
+
 const STEP_COUNT_PATTERN = /(\d+)\s*步/;
 type CategoryArt = {
   source: string;
@@ -191,8 +216,39 @@ export function LearningCenterPage() {
   const caseUseInFlightRef = useRef(false);
   const contentRegionRef = useRef<HTMLDivElement | null>(null);
   const pageRootRef = useRef<HTMLElement | null>(null);
+  const tutorialSlotRef = useRef<HTMLDivElement | null>(null);
   const stepsRef = useRef<HTMLElement | null>(null);
   const activeTabRef = useRef<HTMLButtonElement | null>(null);
+
+  useLayoutEffect(() => {
+    setTutorialPanelContainer(tutorialSlotRef.current);
+  }, []);
+
+  useEffect(() => {
+    const page = pageRootRef.current;
+    const detailOpen = Boolean(tutorialId);
+    syncTutorialWindowMinSize(page, detailOpen);
+
+    if (!detailOpen || !page) {
+      return () => {
+        syncTutorialWindowMinSize(null, false);
+      };
+    }
+
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(() => {
+        syncTutorialWindowMinSize(page, true);
+      });
+    observer?.observe(page);
+    const onResize = () => syncTutorialWindowMinSize(page, true);
+    window.addEventListener('resize', onResize);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', onResize);
+      syncTutorialWindowMinSize(null, false);
+    };
+  }, [tutorialId]);
 
   useEffect(() => {
     let active = true;
@@ -372,9 +428,10 @@ export function LearningCenterPage() {
 
   return (
     <>
+      <div className={`learning-center-split h-full min-h-0${tutorialId ? ' learning-center-split--open' : ''}`}>
       <main
         ref={pageRootRef}
-        className={`learning-center-page h-full min-h-0 overflow-x-hidden overflow-y-auto bg-background px-4 py-5 sm:px-6 lg:px-8${tutorialId ? ' learning-center-page--detail-open' : ''}`}
+        className={`learning-center-page min-h-0 overflow-x-hidden overflow-y-auto bg-background px-4 py-5 sm:px-6 lg:px-8${tutorialId ? ' learning-center-page--detail-open' : ''}`}
       >
         <div className="learning-center-page__inner flex flex-col gap-8">
           {state.status === 'loading' && (
@@ -492,7 +549,7 @@ export function LearningCenterPage() {
                                 style={{ color: '#FF6700' }}
                                 onClick={(event) => {
                                   detailReturnFocusRef.current = event.currentTarget;
-                                  setTutorialPanelContainer(pageRootRef.current?.parentElement?.closest('main') ?? null);
+                                  setTutorialPanelContainer(tutorialSlotRef.current);
                                   setDetailCase(null);
                                   setPreviewCase(null);
                                   setTutorialId(tutorial.id);
@@ -560,6 +617,12 @@ export function LearningCenterPage() {
           )}
         </div>
       </main>
+      <div
+        ref={tutorialSlotRef}
+        className="learning-center-split__aside"
+        aria-hidden={!tutorialId}
+      />
+      </div>
       <TutorialPanel
         key={tutorialId ?? 'closed'}
         tutorialId={tutorialId}

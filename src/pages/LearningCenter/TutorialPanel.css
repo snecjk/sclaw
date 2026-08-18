@@ -1,13 +1,11 @@
 .learning-center-tutorial-sheet {
   position: absolute;
-  top: var(--sto-shell-card-gap, 0.5rem);
-  right: var(--sto-shell-card-gap, 0.5rem);
-  bottom: var(--sto-shell-card-gap, 0.5rem);
-  left: auto;
+  inset: 0;
   box-sizing: border-box;
-  width: 35.25rem;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
   height: auto;
-  max-width: calc(100% - 1rem);
   border: 0.8px solid #e5e6eb;
   border-radius: var(--sto-main-card-radius, 1.125rem);
   background: #ffffff;
@@ -149,6 +147,14 @@
 
   .tutorial-panel-viewer .tutorial-viewer__image--compact + .tutorial-viewer__image--compact {
     margin-left: 0;
+  }
+}
+
+@media (max-width: 63.9375rem) {
+  .learning-center-tutorial-sheet {
+    width: calc(100% - 1rem) !important;
+    min-width: 0 !important;
+    max-width: calc(100% - 1rem) !important;
   }
 }
 

@@ -15,30 +15,98 @@
   --lc-tab-art-gap: 0.5rem;
   --lc-steps-bg: #f5f5f5;
   --lc-panel-bg: #ffffff;
-  --lc-detail-content-w: 33.5rem; /* 536px */
+  --lc-detail-content-w: 33.5rem; /* 536px fallback */
+  --lc-detail-content-min-w: 35.1875rem; /* 563px: 向左拖动下限 */
   --lc-detail-panel-w: 35.25rem; /* 564px */
   --lc-detail-gap: 0.75rem;
 }
 
 .learning-center-page__inner {
   width: 100%;
-  max-width: 53.875rem;
-  margin-inline: auto;
+  max-width: none;
+  margin-inline: 0;
 }
 
-/* Open tutorial detail: left content 536px, right panel 564px. */
+.learning-center-split {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  gap: 0;
+  --lc-detail-content-min-w: 35.1875rem;
+  --lc-detail-panel-w: 35.25rem;
+  --lc-detail-gap: 0.75rem;
+}
+
+.learning-center-split > .learning-center-page {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.learning-center-split__aside {
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.learning-center-split--open .learning-center-tutorial-sheet {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: auto !important;
+}
+
+/* Narrow screens keep the sheet as an overlay. Desktop splits: 564px pane beside adaptive content. */
+@media (max-width: 63.9375rem) {
+  .learning-center-split--open > .learning-center-split__aside {
+    position: absolute;
+    top: var(--sto-shell-card-gap, 0.5rem);
+    right: var(--sto-shell-card-gap, 0.5rem);
+    bottom: var(--sto-shell-card-gap, 0.5rem);
+    left: auto;
+    z-index: 40;
+    flex: none;
+    width: min(var(--lc-detail-panel-w), calc(100% - 1rem));
+    min-width: 0;
+    max-width: calc(100% - 1rem);
+  }
+}
+
+/* Tutorial open: left pane fills remaining space beside the 564px sheet. */
 @media (min-width: 64rem) {
+  .learning-center-split--open {
+    gap: var(--lc-detail-gap);
+  }
+
+  .learning-center-split--open > .learning-center-page {
+    min-width: var(--lc-detail-content-min-w);
+  }
+
+  .learning-center-split--open > .learning-center-split__aside {
+    position: relative;
+    z-index: auto;
+    flex: 0 0 var(--lc-detail-panel-w);
+    width: var(--lc-detail-panel-w);
+    min-width: var(--lc-detail-panel-w);
+    max-width: var(--lc-detail-panel-w);
+    align-self: stretch;
+  }
+
   .learning-center-page--detail-open {
-    box-sizing: border-box;
-    padding-right: calc(var(--lc-detail-panel-w) + var(--sto-shell-card-gap, 0.5rem) + var(--lc-detail-gap));
     --lc-step-art-size: 5.5rem;
     --lc-tab-flex-inactive: 110;
     --lc-tab-flex-active: 200;
   }
 
   .learning-center-page--detail-open .learning-center-page__inner {
-    width: var(--lc-detail-content-w);
-    max-width: var(--lc-detail-content-w);
+    width: 100%;
+    max-width: none;
     margin-inline: 0;
   }
 
@@ -103,7 +171,7 @@
   }
 
   .learning-center-page--detail-open .learning-center-cases__grid {
-    grid-template-columns: repeat(auto-fill, var(--lc-case-card-min-w));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--lc-case-card-min-w)), 1fr));
   }
 
   .learning-center-page--detail-open .learning-center-hero__title {
@@ -182,7 +250,7 @@
   isolation: isolate;
   display: flex;
   width: 100%;
-  max-width: 53.875rem;
+  max-width: none;
   height: var(--lc-steps-height, 15.625rem);
   min-width: 0;
   margin-top: 0;
@@ -463,6 +531,10 @@
 
 .learning-center-tutorial-copy > p {
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .learning-center-tutorial-link {
@@ -604,19 +676,22 @@
 
 .learning-center-cases__grid {
   display: grid;
+  width: 100%;
   min-width: 0;
-  grid-template-columns: repeat(auto-fill, var(--lc-case-card-min-w));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--lc-case-card-min-w)), 1fr));
   gap: 0.875rem;
-  justify-content: start;
+  justify-content: stretch;
 }
 
 .learning-center-cases__item {
-  width: var(--lc-case-card-min-w);
+  width: 100%;
+  min-width: 0;
 }
 
 .learning-center-page .learning-center-case-card {
-  width: var(--lc-case-card-min-w);
-  max-width: var(--lc-case-card-min-w);
+  width: 100%;
+  max-width: none;
+  min-width: 0;
   height: var(--lc-case-card-height);
   border: 0.8px solid #e5e6eb;
   border-radius: var(--lc-card-radius);
@@ -630,7 +705,7 @@
 .learning-center-case-card {
   box-sizing: border-box;
   display: flex;
-  width: var(--lc-case-card-min-w);
+  width: 100%;
   height: var(--lc-case-card-height);
   flex-direction: column;
   gap: 0.75rem;
