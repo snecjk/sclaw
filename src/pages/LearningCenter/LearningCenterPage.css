@@ -348,9 +348,9 @@
   align-items: center;
   justify-content: center;
   width: 862px;
-  max-width: calc(100vw - 4rem);
+  max-width: min(862px, calc(100vw - 4rem));
   height: 538.75px;
-  max-height: calc(100vh - 6rem);
+  max-height: min(538.75px, calc(100vh - 6rem));
   padding: 0;
   gap: 0;
   overflow: hidden;
@@ -393,7 +393,8 @@
 }
 
 .learning-center-cover-preview__image {
-  object-fit: contain;
+  object-fit: cover;
+  object-position: center;
 }
 
 .learning-center-cover-preview--empty {

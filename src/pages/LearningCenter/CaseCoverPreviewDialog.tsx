@@ -26,7 +26,7 @@ export function CaseCoverPreviewDialog({
     <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent
         overlayClassName="bg-black/60 backdrop-blur-none"
-        className={`learning-center-cover-preview max-h-none max-w-none p-0${showImage ? '' : ' learning-center-cover-preview--empty'}`}
+        className={`learning-center-cover-preview w-[862px] max-w-[min(862px,calc(100vw-4rem))] h-[538.75px] max-h-[min(538.75px,calc(100vh-6rem))] gap-0 p-0${showImage ? '' : ' learning-center-cover-preview--empty'}`}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           returnFocusRef.current?.focus();
