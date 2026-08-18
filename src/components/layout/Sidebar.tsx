@@ -49,6 +49,7 @@ import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unrea
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
 import { SidebarSupportQrTooltip } from '@/components/layout/SidebarSupportQrTooltip';
+import { AccountSwitchMenuItems } from '@/components/layout/AccountSwitchMenuItems';
 import { SidebarCollapsibleSectionLabel } from '@/components/layout/sidebar-collapsible-section-label';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { SidebarRecentSessionRow } from '@/components/layout/sidebar-recent-session-row';
@@ -2479,6 +2480,19 @@ export function Sidebar() {
                   ))}
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
+
+              <DropdownMenuItem
+                onClick={() => navigate('/settings/models')}
+                className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+              >
+                {t('common:sidebar.tokenBalance')}
+              </DropdownMenuItem>
+
+              <AccountSwitchMenuItems
+                itemClassName={SIDEBAR_ACCOUNT_MENU_ITEM_CLASS}
+                itemHoverClassName={SIDEBAR_ACCOUNT_MENU_ITEM_HOVER}
+                subContentClassName={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}
+              />
 
               <div className={SIDEBAR_ACCOUNT_MENU_DIVIDER_CLASS} aria-hidden="true" />
 

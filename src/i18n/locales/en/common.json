@@ -24,6 +24,7 @@
         "checkUpdates": "Check for Updates",
         "devConsole": "Developer Console",
         "models": "Models",
+        "tokenBalance": "Token Balance",
         "deleteSessionConfirm": "Are you sure you want to delete session \"{{label}}\"?",
         "deleteSessionFailed": "Failed to delete session",
         "deleteSessionFailedHint": "Please try again. If the problem persists, check logs in Settings.",
