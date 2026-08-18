@@ -220,7 +220,6 @@ function WorkflowEditorSession({
         open={localRunHistoryOpen}
         workflowId={workflowId}
         onClose={() => setLocalRunHistoryOpen(false)}
-        onTryRun={embeddedTryRun.requestFromHostFallback}
         onSelectRun={tryRun.openExistingRun}
       />
     </div>
