@@ -123,6 +123,7 @@ describe('LearningCenterPage cases', () => {
     expect(screen.getByLabelText('已被使用 7 次')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '查看详情' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '立即使用' })).toBeInTheDocument();
+    expect(await screen.findByText('周报自动汇总')).toBeInTheDocument();
     expect(screen.getByAltText('周报自动汇总 封面')).toHaveAttribute('src', caseItem.coverImageUrl);
   });
 
@@ -133,11 +134,11 @@ describe('LearningCenterPage cases', () => {
     expect(screen.getByRole('button', { name: '查看教程' })).toBeInTheDocument();
   });
 
-  it('falls back to a placeholder when the cover fails to load', async () => {
+  it('keeps the cover img after a renderer load error so the host fetch can replace src', async () => {
     renderPage();
     const cover = await screen.findByAltText('周报自动汇总 封面');
     fireEvent.error(cover);
-    await waitFor(() => expect(screen.queryByAltText('周报自动汇总 封面')).not.toBeInTheDocument());
+    expect(screen.getByAltText('周报自动汇总 封面')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '立即使用' })).toBeInTheDocument();
   });
 
@@ -215,21 +216,21 @@ describe('LearningCenterPage cases', () => {
   it('keeps learning center overlays mutually exclusive', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '查看教程' }));
-    expect(await screen.findByRole('dialog', { name: '入门教程' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: '教程指南' })).toBeInTheDocument();
 
     // The tutorial sheet is non-modal, so the case card stays clickable while reading.
     fireEvent.click(screen.getByRole('button', { name: '查看详情' }));
     await screen.findByRole('dialog', { name: '周报自动汇总' });
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: '入门教程' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '教程指南' })).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: '关闭' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '周报自动汇总' })).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole('button', { name: '查看教程' }));
-    expect(await screen.findByRole('dialog', { name: '入门教程' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: '教程指南' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '立即使用' }));
     await screen.findByRole('dialog', { name: '确认使用这个案例？' });
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: '入门教程' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '教程指南' })).not.toBeInTheDocument());
   });
 
   it('surfaces a degraded action without pretending the case opened', async () => {

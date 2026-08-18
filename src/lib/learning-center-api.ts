@@ -51,6 +51,24 @@ function asString(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : value == null ? fallback : String(value);
 }
 
+function asHttpUrl(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const candidate = value.trim();
+  if (!candidate) return '';
+  try {
+    const parsed = new URL(candidate);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? candidate : '';
+  } catch {
+    return '';
+  }
+}
+
+function asCoverImageUrl(value: unknown): string {
+  if (typeof value === 'string') return asHttpUrl(value);
+  if (!isRecord(value)) return '';
+  return asCoverImageUrl(pick(value, 'imageUrl', 'image_url', 'url', 'coverImageUrl', 'cover_image_url'));
+}
+
 function asNullableString(value: unknown): string | null {
   return value == null ? null : asString(value);
 }
@@ -124,7 +142,7 @@ function normalizeDomain(value: unknown): LearningDomain {
     mainTitle: asString(pick(record, 'mainTitle', 'main_title')),
     subTitle: asString(pick(record, 'subTitle', 'sub_title')),
     description: asString(record.description),
-    coverImageUrl: asString(pick(record, 'coverImageUrl', 'cover_image_url')),
+    coverImageUrl: asCoverImageUrl(pick(record, 'coverImageUrl', 'cover_image_url')),
     status: status.value,
     statusRaw: status.raw,
     sortOrder: asSortOrder(pick(record, 'sortOrder', 'sort_order')),
@@ -190,7 +208,7 @@ function normalizeCaseTemplate(value: unknown): LearningCaseTemplate {
     title: asString(record.title),
     subTitle: asString(pick(record, 'subTitle', 'sub_title')),
     description: asString(record.description),
-    coverImageUrl: asString(pick(record, 'coverImageUrl', 'cover_image_url')),
+    coverImageUrl: asCoverImageUrl(pick(record, 'coverImageUrl', 'cover_image_url')),
     sceneTitle: asString(pick(record, 'sceneTitle', 'scene_title')),
     sceneDescription: asString(pick(record, 'sceneDescription', 'scene_description')),
     targetType: targetType.value,

@@ -251,6 +251,24 @@ describe('LearningCenterPage', () => {
     await waitFor(() => expect(document.activeElement).toBe(viewButton));
   });
 
+  it('opens a large cover preview from the case card plus control', async () => {
+    casesMock.mockResolvedValue(casePage([{
+      ...caseItem,
+      title: '报价导入',
+      coverImageUrl: 'https://cdn.example/cover.png',
+    }]));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '预览“报价导入”封面' }));
+    const previewImage = await waitFor(() => {
+      const image = document.querySelector('.learning-center-cover-preview__image');
+      expect(image).toHaveAttribute('src', 'https://cdn.example/cover.png');
+      return image;
+    });
+    expect(previewImage).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    await waitFor(() => expect(document.querySelector('.learning-center-cover-preview__image')).not.toBeInTheDocument());
+  });
+
   it('retries after the learning center shell fails', async () => {
     domainsMock.mockRejectedValueOnce(new Error('网络不可用')).mockResolvedValueOnce({ items: [], total: 0, pageNum: 1, pageSize: 20 });
     renderPage();

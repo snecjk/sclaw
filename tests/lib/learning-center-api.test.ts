@@ -55,6 +55,7 @@ describe('learning-center-api', () => {
     expect(categories.items[0]?.domainId).toBe(domain.id);
     expect(tutorials.items[0]?.content).toBe('<p>hello</p>');
     expect(cases.items[0]?.tutorialIds).toEqual([tutorial.id]);
+    expect(cases.items[0]?.coverImageUrl).toBe('');
     expect(mockedFetch).toHaveBeenNthCalledWith(2, '/api/learning-center/category/page', {
       method: 'POST', body: JSON.stringify({ data: { domainId: domain.id, pageNum: 1, pageSize: 20 } }),
     });
@@ -74,6 +75,57 @@ describe('learning-center-api', () => {
     expect(mockedFetch).toHaveBeenNthCalledWith(3, '/api/learning-center/case-template/use', {
       method: 'POST', body: JSON.stringify({ data: { caseId: caseTemplate.id } }),
     });
+  });
+
+  it('keeps a signed case cover URL from the backend page payload', async () => {
+    mockedFetch.mockResolvedValue({
+      success: true,
+      data: {
+        items: [{
+          ...caseTemplate,
+          coverImageUrl: 'https://oss.example.com/ai-memory-center/learning-center/cases/covers/demo.png?sig=1',
+        }],
+        total: 1,
+        pageNum: 1,
+        pageSize: 20,
+      },
+    });
+    const result = await pageLearningCases(category.id);
+    expect(result.items[0]?.coverImageUrl).toBe(
+      'https://oss.example.com/ai-memory-center/learning-center/cases/covers/demo.png?sig=1',
+    );
+  });
+
+  it('keeps Aliyun OSS signed covers as img src, matching app plaza', async () => {
+    const ossUrl = 'https://ali-sto-wisdom-star-test.oss-cn-shanghai.aliyuncs.com/ai-memory-center/learning-center/cases/covers/2026/08/demo.jpg?x-oss-signature=abc';
+    mockedFetch.mockResolvedValue({
+      success: true,
+      data: {
+        items: [{ ...caseTemplate, coverImageUrl: ossUrl }],
+        total: 1,
+        pageNum: 1,
+        pageSize: 20,
+      },
+    });
+    const result = await pageLearningCases(category.id);
+    expect(result.items[0]?.coverImageUrl).toBe(ossUrl);
+  });
+
+  it('ignores stored OSS object keys so the card does not treat them as image src', async () => {
+    mockedFetch.mockResolvedValue({
+      success: true,
+      data: {
+        items: [{
+          ...caseTemplate,
+          coverImageUrl: 'ai-memory-center/learning-center/cases/covers/2026/08/demo.jpg',
+        }],
+        total: 1,
+        pageNum: 1,
+        pageSize: 20,
+      },
+    });
+    const result = await pageLearningCases(category.id);
+    expect(result.items[0]?.coverImageUrl).toBe('');
   });
 
   it('maps unknown enums to UNKNOWN while retaining the raw value', async () => {

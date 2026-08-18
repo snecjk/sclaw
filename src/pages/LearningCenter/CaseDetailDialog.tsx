@@ -1,5 +1,5 @@
 import { useEffect, useState, type RefObject } from 'react';
-import { ImageOff, RefreshCw, X } from 'lucide-react';
+import { RefreshCw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { FeedbackState } from '@/components/common/FeedbackState';
 import { TutorialViewer } from '@/components/learning-center/TutorialViewer';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { getCaseDetail } from '@/lib/learning-center-api';
 import type { LearningCaseDetail, LearningTutorial } from '@/types/learning-center';
+import { LearningCoverImage } from './LearningCoverImage';
 
 type CaseDetailState =
   | { status: 'loading' }
@@ -29,7 +30,6 @@ export function CaseDetailDialog({ caseId, fallbackTitle, returnFocusRef, onClos
   const { t } = useTranslation('learningCenter');
   const [reloadKey, setReloadKey] = useState(0);
   const [state, setState] = useState<CaseDetailState>({ status: 'loading' });
-  const [coverFailed, setCoverFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -104,20 +104,11 @@ export function CaseDetailDialog({ caseId, fallbackTitle, returnFocusRef, onClos
           {detail && (
             <div className="flex min-w-0 flex-col gap-5">
               {detail.coverImageUrl && (
-                coverFailed ? (
-                  <div className="flex aspect-[16/9] w-full items-center justify-center gap-2 rounded-xl bg-muted text-sm text-muted-foreground">
-                    <ImageOff className="h-4 w-4" aria-hidden />
-                    {t('imageLoadError')}
-                  </div>
-                ) : (
-                  <img
-                    src={detail.coverImageUrl}
-                    alt={t('caseCoverAlt', { title: detail.title || detail.name })}
-                    loading="lazy"
-                    className="aspect-[16/9] w-full rounded-xl object-cover"
-                    onError={() => setCoverFailed(true)}
-                  />
-                )
+                <LearningCoverImage
+                  url={detail.coverImageUrl}
+                  alt={t('caseCoverAlt', { title: detail.title || detail.name })}
+                  className="aspect-[16/9] w-full rounded-xl object-cover"
+                />
               )}
 
               {(detail.sceneTitle || detail.sceneDescription) && (

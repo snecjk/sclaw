@@ -29,6 +29,7 @@ import type {
   LearningPage,
   LearningTutorial,
 } from '@/types/learning-center';
+import { CaseCoverPreviewDialog } from './CaseCoverPreviewDialog';
 import { CaseDetailDialog } from './CaseDetailDialog';
 import { LearningCaseCard } from './LearningCaseCard';
 import { LearningResourcePagination } from './LearningResourcePagination';
@@ -133,6 +134,7 @@ export function LearningCenterPage() {
   const [tutorialId, setTutorialId] = useState<string | null>(null);
   const [tutorialPanelContainer, setTutorialPanelContainer] = useState<HTMLElement | null>(null);
   const [detailCase, setDetailCase] = useState<LearningCaseTemplate | null>(null);
+  const [previewCase, setPreviewCase] = useState<LearningCaseTemplate | null>(null);
   const [pendingUseCase, setPendingUseCase] = useState<LearningCaseTemplate | null>(null);
   const selectedCategoryRef = useRef<string | null>(null);
   const tutorialTokenRef = useRef(0);
@@ -201,6 +203,7 @@ export function LearningCenterPage() {
     caseTokenRef.current += 1;
     setTutorialId(null);
     setDetailCase(null);
+    setPreviewCase(null);
     setPendingUseCase(null);
     detailReturnFocusRef.current = contentRegionRef.current;
     caseReturnFocusRef.current = contentRegionRef.current;
@@ -369,6 +372,7 @@ export function LearningCenterPage() {
                                   detailReturnFocusRef.current = event.currentTarget;
                                   setTutorialPanelContainer(pageRootRef.current?.parentElement?.closest('main') ?? null);
                                   setDetailCase(null);
+                                  setPreviewCase(null);
                                   setPendingUseCase(null);
                                   setTutorialId(tutorial.id);
                                 }}
@@ -402,12 +406,21 @@ export function LearningCenterPage() {
                                 caseReturnFocusRef.current = trigger;
                                 setTutorialId(null);
                                 setPendingUseCase(null);
+                                setPreviewCase(null);
                                 setDetailCase(target);
+                              }}
+                              onPreviewCover={(target, trigger) => {
+                                caseReturnFocusRef.current = trigger;
+                                setTutorialId(null);
+                                setPendingUseCase(null);
+                                setDetailCase(null);
+                                setPreviewCase(target);
                               }}
                               onUse={(target, trigger) => {
                                 caseReturnFocusRef.current = trigger;
                                 setTutorialId(null);
                                 setDetailCase(null);
+                                setPreviewCase(null);
                                 setPendingUseCase(target);
                               }}
                             />
@@ -429,6 +442,14 @@ export function LearningCenterPage() {
         portalContainer={tutorialPanelContainer}
         returnFocusRef={detailReturnFocusRef}
         onClose={() => setTutorialId(null)}
+      />
+      <CaseCoverPreviewDialog
+        key={previewCase?.id ?? 'case-cover-closed'}
+        open={Boolean(previewCase)}
+        title={previewCase ? (previewCase.title || previewCase.name) : ''}
+        imageUrl={previewCase?.coverImageUrl || ''}
+        returnFocusRef={caseReturnFocusRef}
+        onClose={() => setPreviewCase(null)}
       />
       <CaseDetailDialog
         key={detailCase?.id ?? 'case-detail-closed'}
