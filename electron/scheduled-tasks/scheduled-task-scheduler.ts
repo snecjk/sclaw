@@ -37,6 +37,9 @@ export interface ScheduledTaskDispatcher {
   dispatch(params: { task: ScheduleTask; run: ScheduleTaskRun }): Promise<void>;
 }
 
+/** 云端出队：与 cron 同一 tick，fire-and-forget，不得阻塞 claim/dispatch。 */
+export type ScheduledTaskPushTick = () => void;
+
 const noopDispatcher: ScheduledTaskDispatcher = {
   async dispatch({ task }) {
     logger.info('[scheduled-task] dispatch skipped (no executor registered)', {
@@ -49,6 +52,8 @@ export class ScheduledTaskScheduler {
   private isRunning = false;
   private timer: NodeJS.Timeout | null = null;
   private canReapRun: ((run: ScheduleTaskRun) => Promise<boolean>) | null = null;
+  private pushTick: ScheduledTaskPushTick | null = null;
+  private cronTicksCompleted = 0;
 
   constructor(
     private readonly taskRepo: ScheduleTaskRepository = new ScheduleTaskRepository(),
@@ -77,9 +82,15 @@ export class ScheduledTaskScheduler {
     this.canReapRun = inspector;
   }
 
+  /** 注册云端出队。tick 内 cron 之后 fire-and-forget；首轮 tick 不出队。 */
+  setPushTick(pushTick: ScheduledTaskPushTick | null): void {
+    this.pushTick = pushTick;
+  }
+
   start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
+    this.cronTicksCompleted = 0;
     this.scheduleNextTick(0);
   }
 
@@ -382,6 +393,15 @@ export class ScheduledTaskScheduler {
       } catch (error) {
         logger.warn('[scheduled-task] scheduler tick failed', error);
       } finally {
+        this.cronTicksCompleted += 1;
+        // 首轮 tick 只做 cron；出队等下一次 tick（认证入口禁止立刻 push）
+        if (this.cronTicksCompleted > 1 && this.pushTick) {
+          try {
+            this.pushTick();
+          } catch (error) {
+            logger.warn('[scheduled-task] push tick schedule failed', error);
+          }
+        }
         this.scheduleNextTick(this.tickIntervalMs);
       }
     }, delayMs);

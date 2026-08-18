@@ -55,6 +55,14 @@ import {
   mergeComposerHintsIntoCreateInput,
   readLatestOpenClawUserMessageText,
 } from './scheduled-task-nl-hints';
+import { claimScheduleTasksOwnership } from './schedule-tasks-ownership';
+import { runScheduleTasksPushTick } from './schedule-tasks-push';
+import {
+  getScheduleTasksSyncStatus,
+  pullScheduleTasksFromCloud,
+  type ScheduleTasksPullResult,
+  type ScheduleTasksSyncStatus,
+} from './schedule-tasks-pull';
 
 /**
  * Host API 路由会显式写入 actor（可为 null）；Claude NL 工具等直调 service 时常漏传。
@@ -79,8 +87,8 @@ async function resolveScheduleTaskActor(
  * 承担「CRUD + 校验 + 占位会话 + dingtalk 上下文烘焙」——这些都是两引擎共用、
  * 与执行（`runMainChatSend`）正交的职责。
  *
- * 生产路径：app 启动 `setGatewayManager` → 迁移 → `startScheduler`；
- * CRUD / trigger 经 `/api/scheduled-tasks/*`。
+ * 生产路径：app 启动 `setGatewayManager` → 迁移；**已认证后** `onUserAuthenticated` → 认领 + `startScheduler`；
+ * CRUD / trigger 经 `/api/scheduled-tasks/*`。未认证不 startScheduler。
  */
 
 const PERMISSION_PROFILES: readonly ScheduleTaskPermissionProfile[] = [
@@ -388,11 +396,45 @@ export class ScheduledTaskService {
   }
 
   /**
+   * 已认证后同一入口（SSO 登录成功 或 冷启动已登录）：
+   * 只补 created_by IS NULL → startScheduler。不立刻 push。
+   */
+  onUserAuthenticated(userCode: string): void {
+    const code = userCode.trim();
+    if (!code) return;
+    void (async () => {
+      try {
+        await claimScheduleTasksOwnership(code, this.taskRepo);
+      } catch (error) {
+        logger.warn('[scheduled-task] ownership claim failed', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+      this.startScheduler();
+    })();
+  }
+
+  /**
    * 启动调度器：先丢弃关机期间错过/崩溃中断的任务（推进 `nextRunAt` + 清 stale
    * lease），再启动 tick。`finally` 保证即使清扫抛异常调度器仍会启动。必须在
    * `setGatewayManager` 之后调用——否则 dispatcher 还是 noop，claim 的 run 停在 queued。
+   * 仅已认证入口调用；initialize() 不得 start。
    */
   startScheduler(): void {
+    this.scheduler.setPushTick(() => {
+      void (async () => {
+        try {
+          const { user } = await getAuthState();
+          const code = user?.code?.trim();
+          if (!code) return;
+          await runScheduleTasksPushTick(code, { taskRepo: this.taskRepo });
+        } catch (error) {
+          logger.warn('[scheduled-task] push tick failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      })();
+    });
     const supervisor = this.gatewayManager ? getChatRuntimeSupervisor(this.gatewayManager) : null;
     void (async () => {
       if (supervisor) {
@@ -400,6 +442,7 @@ export class ScheduledTaskService {
         await this.runtimeDispatcher?.recoverActiveRuns(supervisor);
       }
       await this.scheduler.discardMissedOnStartup();
+      await this.scheduler.refreshSchedule();
     })().catch((error) => {
       logger.warn('[scheduled-task] startup recovery failed', {
         error: error instanceof Error ? error.message : String(error),
@@ -408,7 +451,28 @@ export class ScheduledTaskService {
   }
 
   stopScheduler(): void {
+    this.scheduler.setPushTick(null);
     this.scheduler.stop();
+  }
+
+  async getCloudSyncStatus(): Promise<ScheduleTasksSyncStatus> {
+    const { user } = await getAuthState();
+    const code = user?.code?.trim();
+    if (!code) {
+      throw Object.assign(new Error('未登录'), { statusCode: 401 });
+    }
+    return getScheduleTasksSyncStatus(code, this.taskRepo);
+  }
+
+  async pullFromCloud(): Promise<ScheduleTasksPullResult> {
+    const { user } = await getAuthState();
+    const code = user?.code?.trim();
+    if (!code) {
+      throw Object.assign(new Error('未登录'), { statusCode: 401 });
+    }
+    const result = await pullScheduleTasksFromCloud(code, this.taskRepo);
+    await this.scheduler.refreshSchedule();
+    return result;
   }
 
   /**
@@ -752,7 +816,7 @@ export class ScheduledTaskService {
 }
 
 /**
- * 惰性单例。app 启动经 `setGatewayManager` + `startScheduler` 接入生产路径。
+ * 惰性单例。app 启动经 `setGatewayManager` 接入；已认证后 `onUserAuthenticated` → startScheduler。
  */
 export function getScheduledTaskService(): ScheduledTaskService {
   if (!scheduledTaskService) {

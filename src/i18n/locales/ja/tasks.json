@@ -90,7 +90,11 @@
     "toolbar": {
       "searchSrOnly": "定期タスク名を検索",
       "searchPlaceholder": "タスク名を検索",
-      "sortAria": "並べ替え"
+      "sortAria": "並べ替え",
+      "pullFromCloud": "クラウドから同期",
+      "pulling": "同期中…",
+      "pullSuccess": "クラウドから同期しました",
+      "pullFailed": "クラウド同期に失敗しました"
     },
     "recordToolbar": {
       "searchSrOnly": "実行記録のタスク名を検索",

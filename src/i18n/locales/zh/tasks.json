@@ -90,7 +90,11 @@
     "toolbar": {
       "searchSrOnly": "搜索定时任务名称",
       "searchPlaceholder": "搜索任务名称",
-      "sortAria": "排序方式"
+      "sortAria": "排序方式",
+      "pullFromCloud": "从云端同步",
+      "pulling": "正在同步…",
+      "pullSuccess": "已从云端同步",
+      "pullFailed": "从云端同步失败"
     },
     "recordToolbar": {
       "searchSrOnly": "搜索执行记录任务名称",

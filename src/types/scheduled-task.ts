@@ -66,7 +66,10 @@ export interface ScheduleTask {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
-  version: number;
+  syncStatus: 'pending' | 'done';
+  remoteVersion: number | null;
+  createdBy: string | null;
+  updatedBy: string | null;
 }
 
 /** 建任务输入 — 镜像 electron/db/models/dto/schedule-task.dto.ts CreateScheduleTaskInput。 */

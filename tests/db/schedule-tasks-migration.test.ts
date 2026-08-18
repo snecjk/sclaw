@@ -7,7 +7,11 @@ function applyMigrations(db: DatabaseSync, predicate: (version: number) => boole
   for (const m of SQLITE_MIGRATIONS) {
     if (!predicate(m.version)) continue;
     db.exec('BEGIN IMMEDIATE;');
-    db.exec(m.sql);
+    if (m.apply) {
+      m.apply(db);
+    } else if (m.sql) {
+      db.exec(m.sql);
+    }
     db.exec('COMMIT;');
   }
 }
@@ -98,5 +102,31 @@ describe('schedule-tasks migration (0011)', () => {
       'r1',
     );
     expect(() => insertRun('r3', 't1:1', '2026-07-23T00:00:03Z')).not.toThrow();
+  });
+
+  it('0011+0033: tombstones physically deleted; version dropped; sync columns present', () => {
+    const db = new DatabaseSync(':memory:');
+    applyMigrations(db, (v) => v < 33);
+    const ts = '2026-07-23T00:00:00Z';
+    db.prepare(
+      `INSERT INTO schedule_tasks (id, name, enabled, cron_expr, engine_type, prompt, agent_id, created_at, updated_at, deleted_at)
+       VALUES ('gone', 't', 1, '0 9 * * *', 'openclaw', 'p', 'main', ?, ?, ?)`,
+    ).run(ts, ts, ts);
+    db.prepare(
+      `INSERT INTO schedule_tasks (id, name, enabled, cron_expr, engine_type, prompt, agent_id, created_at, updated_at)
+       VALUES ('keep', 't', 1, '0 9 * * *', 'openclaw', 'p', 'main', ?, ?)`,
+    ).run(ts, ts);
+
+    const m33 = migrationByName('schedule-tasks-cloud-sync');
+    expect(m33.apply).toBeTypeOf('function');
+    m33.apply!(db);
+
+    const ids = db.prepare('SELECT id FROM schedule_tasks ORDER BY id').all() as Array<{ id: string }>;
+    expect(ids.map((r) => r.id)).toEqual(['keep']);
+    const cols = db.prepare('PRAGMA table_info(schedule_tasks)').all() as Array<{ name: string }>;
+    const names = cols.map((c) => c.name);
+    expect(names).toContain('sync_status');
+    expect(names).toContain('remote_version');
+    expect(names).not.toContain('version');
   });
 });

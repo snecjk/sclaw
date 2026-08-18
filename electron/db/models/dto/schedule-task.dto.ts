@@ -91,6 +91,8 @@ export interface UpdateScheduleTaskInput {
 export interface ListScheduleTasksOptions {
   engineType?: AgentEngineType;
   agentId?: string;
+  createdBy?: string | null;
+  syncStatus?: 'pending' | 'done';
   includeDeleted?: boolean;
   limit?: number;
   offset?: number;

@@ -90,7 +90,11 @@
     "toolbar": {
       "searchSrOnly": "Search scheduled task names",
       "searchPlaceholder": "Search task name",
-      "sortAria": "Sort by"
+      "sortAria": "Sort by",
+      "pullFromCloud": "Sync from cloud",
+      "pulling": "Syncing…",
+      "pullSuccess": "Synced from cloud",
+      "pullFailed": "Cloud sync failed"
     },
     "recordToolbar": {
       "searchSrOnly": "Search execution record task names",

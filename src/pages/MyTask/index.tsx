@@ -43,6 +43,7 @@ import {
   workflowPageRootClass,
 } from '@/lib/surfaces';
 import { toast } from 'sonner';
+import { hostApiFetch } from '@/lib/host-api';
 import { TaskCreateModal, type TaskCreateInputWithRun } from './components/TaskCreateModal';
 import { NewTaskDropdownButton } from './components/NewTaskDropdownButton';
 import {
@@ -191,6 +192,26 @@ export default function MyTask() {
     name: string;
     message: string;
   } | null>(null);
+  const [hasCloudUpdates, setHasCloudUpdates] = useState(false);
+  const [pulling, setPulling] = useState(false);
+
+  const handlePullFromCloud = async () => {
+    if (pulling) return;
+    setPulling(true);
+    try {
+      await hostApiFetch('/api/scheduled-tasks/cloud/pull', { method: 'POST' });
+      await fetchJobs();
+      const status = await hostApiFetch<{ hasCloudUpdates?: boolean }>(
+        '/api/scheduled-tasks/cloud/sync-status',
+      );
+      setHasCloudUpdates(Boolean(status?.hasCloudUpdates));
+      toast.success(t('myTask.toolbar.pullSuccess'));
+    } catch {
+      toast.error(t('myTask.toolbar.pullFailed'));
+    } finally {
+      setPulling(false);
+    }
+  };
 
   const handleSectionChange = (section: MyTaskSection) => {
     if (section === 'workflow') {
@@ -212,6 +233,22 @@ export default function MyTask() {
     if (activeSection !== 'tasks') return;
     fetchJobs().catch(() => {});
   }, [activeSection, fetchJobs]);
+
+  // 仅进入 MyTask 定时任务分区时请求一次 sync-status
+  useEffect(() => {
+    if (activeSection !== 'tasks') return;
+    let cancelled = false;
+    void hostApiFetch<{ hasCloudUpdates?: boolean }>('/api/scheduled-tasks/cloud/sync-status')
+      .then((status) => {
+        if (!cancelled) setHasCloudUpdates(Boolean(status?.hasCloudUpdates));
+      })
+      .catch(() => {
+        if (!cancelled) setHasCloudUpdates(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSection]);
 
   // ── 切换到执行记录 Tab 时串行加载 3 个状态桶 ──
   useEffect(() => {
@@ -507,7 +544,22 @@ export default function MyTask() {
                 <ViewTabs activeView={activeView} onViewChange={setActiveView} />
 
                 {isTasksView ? (
-                  <TaskToolbar sortValue={sortValue} onSortChange={setSortValue} />
+                  <div className="ml-auto flex shrink-0 items-center gap-3">
+                    {hasCloudUpdates ? (
+                      <button
+                        type="button"
+                        disabled={pulling}
+                        onClick={() => void handlePullFromCloud()}
+                        className="inline-flex h-8 items-center rounded-[8px] border border-border bg-background px-3 text-[13px] text-foreground hover:bg-muted disabled:opacity-60"
+                      >
+                        {pulling ? t('myTask.toolbar.pulling') : t('myTask.toolbar.pullFromCloud')}
+                      </button>
+                    ) : null}
+                    <TaskToolbar
+                      sortValue={sortValue}
+                      onSortChange={setSortValue}
+                    />
+                  </div>
                 ) : (
                   <RecordToolbar searchQuery={recordSearch} onSearchChange={setRecordSearch} />
                 )}
