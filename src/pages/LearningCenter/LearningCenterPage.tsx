@@ -395,7 +395,7 @@ export function LearningCenterPage() {
                     <>
                       <ul className="learning-center-cases__grid" aria-label={t('casesTitle')}>
                         {cases.items.map((item) => (
-                          <li key={item.id} className="min-w-0">
+                          <li key={item.id} className="learning-center-cases__item">
                             <LearningCaseCard
                               item={item}
                               onViewDetail={(target, trigger) => {
