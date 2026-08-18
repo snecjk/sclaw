@@ -58,6 +58,63 @@ function imageWidth(element: Element): number | null {
   return Number.isFinite(parsed) && parsed >= 10 && parsed <= 100 ? parsed : null;
 }
 
+function isImageElement(node: Node): node is Element {
+  return node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === 'IMG';
+}
+
+function isIgnorableLayoutNode(node: Node): boolean {
+  if (node.nodeType === Node.TEXT_NODE) return !(node.textContent ?? '').trim();
+  return node.nodeType === Node.ELEMENT_NODE && (node as Element).tagName === 'BR';
+}
+
+function takeImageGroup(nodes: ChildNode[], start: number): { images: Element[]; end: number } {
+  const images: Element[] = [];
+  let index = start;
+  while (index < nodes.length && isImageElement(nodes[index])) {
+    images.push(nodes[index]);
+    index += 1;
+    let cursor = index;
+    while (cursor < nodes.length && isIgnorableLayoutNode(nodes[cursor])) cursor += 1;
+    if (cursor < nodes.length && isImageElement(nodes[cursor])) index = cursor;
+  }
+  return { images, end: index };
+}
+
+function renderImage(
+  element: Element,
+  key: string,
+  failedImages: Set<string>,
+  failImage: (src: string) => void,
+  imageErrorLabel: string,
+): ReactNode {
+  const source = safeHttpUrl(element.getAttribute('src') ?? '');
+  const alt = element.getAttribute('alt')?.trim() || imageErrorLabel;
+  if (!source || failedImages.has(source)) {
+    return (
+      <span key={key} className="tutorial-image-fallback" role="img" aria-label={`${alt}：${imageErrorLabel}`}>
+        <ImageOff className="h-6 w-6" aria-hidden />
+        <span>{imageErrorLabel}</span>
+      </span>
+    );
+  }
+  const width = imageWidth(element);
+  const imageStyle = width
+    ? { width: `${width}%`, '--tutorial-image-width': `${width}%` } as CSSProperties
+    : undefined;
+  return (
+    <img
+      key={key}
+      className={width && width <= 50 ? 'tutorial-viewer__image tutorial-viewer__image--compact' : 'tutorial-viewer__image'}
+      src={source}
+      alt={alt}
+      loading="lazy"
+      data-width={width ?? undefined}
+      style={imageStyle}
+      onError={() => failImage(source)}
+    />
+  );
+}
+
 function renderNodes(
   nodes: NodeListOf<ChildNode> | ChildNode[],
   path: string,
@@ -65,55 +122,64 @@ function renderNodes(
   failImage: (src: string) => void,
   imageErrorLabel: string,
 ): ReactNode[] {
-  return Array.from(nodes).flatMap((node, index): ReactNode[] => {
+  const list = Array.from(nodes);
+  const rendered: ReactNode[] = [];
+  let index = 0;
+  while (index < list.length) {
+    const node = list[index];
+    if (isImageElement(node)) {
+      const { images, end } = takeImageGroup(list, index);
+      if (images.length >= 2) {
+        rendered.push(
+          <span key={`${path}-row-${index}`} className="tutorial-viewer__media-row">
+            {images.map((image, imageIndex) => renderImage(
+              image,
+              `${path}-row-${index}-${imageIndex}`,
+              failedImages,
+              failImage,
+              imageErrorLabel,
+            ))}
+          </span>,
+        );
+        index = end;
+        continue;
+      }
+      rendered.push(renderImage(node, `${path}-${index}`, failedImages, failImage, imageErrorLabel));
+      index += 1;
+      continue;
+    }
+
     const key = `${path}-${index}`;
-    if (node.nodeType === Node.TEXT_NODE) return [node.textContent ?? ''];
-    if (node.nodeType !== Node.ELEMENT_NODE) return [];
+    index += 1;
+    if (node.nodeType === Node.TEXT_NODE) {
+      rendered.push(node.textContent ?? '');
+      continue;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) continue;
 
     const element = node as Element;
-    if (BLOCKED_TAGS.has(element.tagName)) return [];
+    if (BLOCKED_TAGS.has(element.tagName)) continue;
     if (VOID_TAGS.has(element.tagName)) {
       const tagName = TAG_MAP[element.tagName] ?? element.tagName.toLowerCase();
-      const voidNode = createElement(tagName, { key, style: safeStyle(element) });
+      rendered.push(createElement(tagName, { key, style: safeStyle(element) }));
       const leftover = renderNodes(element.childNodes, `${key}-after`, failedImages, failImage, imageErrorLabel);
-      return leftover.length ? [voidNode, ...leftover] : [voidNode];
+      if (leftover.length) rendered.push(...leftover);
+      continue;
     }
-    const children = renderNodes(element.childNodes, key, failedImages, failImage, imageErrorLabel);
-    if (!ALLOWED_TAGS.has(element.tagName)) return children;
 
-    if (element.tagName === 'IMG') {
-      const source = safeHttpUrl(element.getAttribute('src') ?? '');
-      const alt = element.getAttribute('alt')?.trim() || imageErrorLabel;
-      if (!source || failedImages.has(source)) {
-        return [
-          <span key={key} className="tutorial-image-fallback" role="img" aria-label={`${alt}：${imageErrorLabel}`}>
-            <ImageOff className="h-6 w-6" aria-hidden />
-            <span>{imageErrorLabel}</span>
-          </span>,
-        ];
-      }
-      const width = imageWidth(element);
-      const imageStyle = width
-        ? { width: `${width}%`, '--tutorial-image-width': `${width}%` } as CSSProperties
-        : undefined;
-      return [
-        <img
-          key={key}
-          className={width && width <= 50 ? 'tutorial-viewer__image tutorial-viewer__image--compact' : 'tutorial-viewer__image'}
-          src={source}
-          alt={alt}
-          loading="lazy"
-          data-width={width ?? undefined}
-          style={imageStyle}
-          onError={() => failImage(source)}
-        />,
-      ];
+    const children = renderNodes(element.childNodes, key, failedImages, failImage, imageErrorLabel);
+    if (!ALLOWED_TAGS.has(element.tagName)) {
+      rendered.push(...children);
+      continue;
     }
 
     if (element.tagName === 'A') {
       const href = safeLinkUrl(element.getAttribute('href') ?? '');
-      if (!href) return children;
-      return [
+      if (!href) {
+        rendered.push(...children);
+        continue;
+      }
+      rendered.push(
         <a
           key={key}
           className="tutorial-viewer__link"
@@ -127,14 +193,16 @@ function renderNodes(
         >
           {children}
         </a>,
-      ];
+      );
+      continue;
     }
 
     const indent = element.getAttribute('data-indent');
     const safeIndent = indent && /^[1-6]$/.test(indent) ? indent : undefined;
     const tagName = TAG_MAP[element.tagName] ?? element.tagName.toLowerCase();
-    return [createElement(tagName, { key, style: safeStyle(element), 'data-indent': safeIndent }, children)];
-  });
+    rendered.push(createElement(tagName, { key, style: safeStyle(element), 'data-indent': safeIndent }, children));
+  }
+  return rendered;
 }
 
 export function TutorialViewer({ html, className = '', imageErrorLabel = '图片加载失败' }: TutorialViewerProps) {

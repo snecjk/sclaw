@@ -10,39 +10,41 @@
 .tutorial-viewer pre { margin: 1em 0; padding: 12px 14px; overflow-x: auto; border-radius: 8px; background: color-mix(in srgb, currentColor 7%, transparent); }
 .tutorial-viewer code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .tutorial-viewer :not(pre) > code { padding: .15em .35em; border-radius: 4px; background: color-mix(in srgb, currentColor 7%, transparent); }
-.tutorial-viewer img { display: block; max-width: 100%; height: auto; margin: 16px 0; border-radius: 8px; object-fit: contain; }
-.tutorial-viewer p:has(> img + img),
-.tutorial-viewer p:has(> .tutorial-image-fallback + img),
-.tutorial-viewer p:has(> img + .tutorial-image-fallback) {
+.tutorial-viewer img,
+.tutorial-viewer .tutorial-viewer__image {
+  display: block;
+  box-sizing: border-box;
+  max-width: 100%;
+  height: auto;
+  margin: 16px 0;
+  border-radius: 8px;
+  object-fit: contain;
+}
+.tutorial-viewer__media-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: flex-start;
+  width: 100%;
+  margin: 8px 0;
+  max-width: 100%;
 }
-.tutorial-viewer p:has(> img + img) > img,
-.tutorial-viewer p:has(> .tutorial-image-fallback + img) > img,
-.tutorial-viewer p:has(> img + .tutorial-image-fallback) > img {
-  flex: 0 0 auto;
+.tutorial-viewer__media-row > .tutorial-viewer__image,
+.tutorial-viewer__media-row > .tutorial-image-fallback {
+  flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
   margin: 0;
 }
-.tutorial-viewer p:has(> img + img) > .tutorial-image-fallback,
-.tutorial-viewer p:has(> .tutorial-image-fallback + img) > .tutorial-image-fallback,
-.tutorial-viewer p:has(> img + .tutorial-image-fallback) > .tutorial-image-fallback {
-  flex: 1 1 12rem;
-  min-width: 0;
-  margin: 0;
+.tutorial-viewer a,
+.tutorial-viewer .tutorial-viewer__link {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
-.tutorial-viewer > img:has(+ img),
-.tutorial-viewer > img + img {
-  display: inline-block;
-  width: calc(50% - 0.5rem);
-  margin: 0.5rem 0.5rem 0.5rem 0;
-  vertical-align: top;
-}
-.tutorial-viewer a { color: #2563eb; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.tutorial-viewer a:hover { color: #1d4ed8; }
+.tutorial-viewer a:hover,
+.tutorial-viewer .tutorial-viewer__link:hover { color: #1d4ed8; }
 .tutorial-image-fallback { display: flex; min-height: 8rem; max-width: 100%; align-items: center; justify-content: center; gap: .5rem; margin: 16px 0; border: 1px dashed hsl(var(--border)); border-radius: 8px; color: hsl(var(--muted-foreground)); background: hsl(var(--muted) / .35); }
 .tutorial-viewer hr { margin: 1.5em 0; border: 0; border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
 .tutorial-viewer [data-indent="1"] { margin-left: 2em; }

@@ -59,8 +59,15 @@ describe('TutorialViewer', () => {
     render(<TutorialViewer html={'<p><img src="https://oss.example.com/a.png" alt="左" data-width="50"><img src="https://oss.example.com/b.png" alt="右" data-width="50"></p>'} />);
     const images = screen.getAllByRole('img');
     expect(images).toHaveLength(2);
-    expect(images[0].closest('p')).toBe(images[1].closest('p'));
+    expect(images[0].closest('.tutorial-viewer__media-row')).toBe(images[1].closest('.tutorial-viewer__media-row'));
     expect(images[0]).toHaveClass('tutorial-viewer__image--compact');
     expect(images[1]).toHaveClass('tutorial-viewer__image--compact');
+    expect(images[0].style.width).toBe('50%');
+  });
+
+  it('groups images separated by line breaks into one row', () => {
+    render(<TutorialViewer html={'<p><img src="https://oss.example.com/a.png" alt="一" data-width="50"><br><img src="https://oss.example.com/b.png" alt="二" data-width="50"><img src="https://oss.example.com/c.png" alt="三" data-width="50"></p>'} />);
+    const row = screen.getByRole('img', { name: '一' }).closest('.tutorial-viewer__media-row');
+    expect(row?.querySelectorAll('img')).toHaveLength(3);
   });
 });
