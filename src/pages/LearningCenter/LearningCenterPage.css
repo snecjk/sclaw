@@ -21,6 +21,7 @@
   --lc-edge: var(--sto-surface-edge, hsl(var(--border)));
   --lc-text: hsl(var(--foreground));
   --lc-text-muted: hsl(var(--muted-foreground));
+  --lc-tab-active-bg: transparent;
   --lc-detail-content-w: 33.5rem; /* 536px fallback */
   --lc-detail-content-min-w: 35.1875rem; /* 563px: 向左拖动下限 */
   --lc-detail-panel-w: 35.25rem; /* 564px */
@@ -431,7 +432,7 @@
   min-width: calc(2.25rem + var(--lc-tab-title-max) + var(--lc-tab-art-gap) + var(--lc-step-art-size) * 0.55);
   justify-content: flex-start;
   padding: 0 0.5rem 0 0.75rem;
-  background: transparent;
+  background: var(--lc-tab-active-bg);
   color: var(--foreground);
   font-weight: 700;
   box-shadow: none;
@@ -906,6 +907,12 @@
   --lc-panel-bg: var(--sto-panel-bg);
   --lc-steps-bg: hsl(var(--muted));
   --lc-well-bg: hsl(var(--muted));
+  --lc-tab-active-bg: #31353d;
+}
+
+.dark .learning-center-page .learning-center-steps__tab[data-state='active'] {
+  background-color: var(--lc-tab-active-bg);
+  background-image: none;
 }
 
 .dark .learning-center-steps__art-card {

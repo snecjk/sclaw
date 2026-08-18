@@ -44,6 +44,17 @@ describe('TutorialViewer', () => {
     expect(screen.queryByRole('img', { name: '流程截图' })).not.toBeInTheDocument();
   });
 
+  it('renders line breaks without passing children to void tags', () => {
+    render(<TutorialViewer html={'<p>第一行<br>第二行<br/>第三行</p><hr><p>结尾</p>'} />);
+    const article = screen.getByTestId('tutorial-viewer');
+    expect(article.querySelectorAll('br')).toHaveLength(2);
+    expect(article.querySelector('hr')).not.toBeNull();
+    expect(article.textContent).toContain('第一行');
+    expect(article.textContent).toContain('第二行');
+    expect(article.textContent).toContain('第三行');
+    expect(article.textContent).toContain('结尾');
+  });
+
   it('renders sibling images in the same paragraph', () => {
     render(<TutorialViewer html={'<p><img src="https://oss.example.com/a.png" alt="左" data-width="50"><img src="https://oss.example.com/b.png" alt="右" data-width="50"></p>'} />);
     const images = screen.getAllByRole('img');

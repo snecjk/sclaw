@@ -14,6 +14,7 @@ const ALLOWED_TAGS = new Set([
   'H1', 'H2', 'H3', 'H4', 'P', 'DIV', 'SPAN', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'DEL',
   'UL', 'OL', 'LI', 'BLOCKQUOTE', 'PRE', 'CODE', 'HR', 'BR', 'A', 'IMG',
 ]);
+const VOID_TAGS = new Set(['BR', 'HR']);
 const TAG_MAP: Record<string, string> = { B: 'strong', I: 'em', DEL: 's' };
 
 function safeHttpUrl(value: string): string | null {
@@ -71,6 +72,12 @@ function renderNodes(
 
     const element = node as Element;
     if (BLOCKED_TAGS.has(element.tagName)) return [];
+    if (VOID_TAGS.has(element.tagName)) {
+      const tagName = TAG_MAP[element.tagName] ?? element.tagName.toLowerCase();
+      const voidNode = createElement(tagName, { key, style: safeStyle(element) });
+      const leftover = renderNodes(element.childNodes, `${key}-after`, failedImages, failImage, imageErrorLabel);
+      return leftover.length ? [voidNode, ...leftover] : [voidNode];
+    }
     const children = renderNodes(element.childNodes, key, failedImages, failImage, imageErrorLabel);
     if (!ALLOWED_TAGS.has(element.tagName)) return children;
 

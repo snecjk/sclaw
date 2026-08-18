@@ -22,7 +22,7 @@
 .tutorial-viewer p:has(> img + img) > img,
 .tutorial-viewer p:has(> .tutorial-image-fallback + img) > img,
 .tutorial-viewer p:has(> img + .tutorial-image-fallback) > img {
-  flex: 1 1 12rem;
+  flex: 0 0 auto;
   min-width: 0;
   max-width: 100%;
   margin: 0;
