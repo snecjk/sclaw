@@ -586,4 +586,121 @@ describe('main chat runtime supervisor', () => {
       vi.useRealTimers();
     }
   });
+
+  it('uses a longer recovery idle window for embed browser chat sessions', async () => {
+    vi.useFakeTimers();
+    try {
+      const embedSessionKey = 'agent:main:session-embed-app-teambition_com-root--conv1';
+      engine.getAdapterForSession.mockResolvedValue({
+        chatCapabilities: {
+          hasReliableRuntimeStatus: true,
+          hasStructuredReasoningEvents: true,
+          hasStructuredToolEvents: true,
+          requiresHistoryProjection: false,
+        },
+        getHistory: vi.fn(async () => ({ success: true, result: { messages: [], isRunning: false } })),
+        inspectRun: vi.fn(async () => null),
+      });
+      const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+      const events: CanonicalChatEvent[] = [];
+      supervisor.on('event', (value) => events.push(value));
+
+      await supervisor.begin({
+        sessionKey: embedSessionKey,
+        idempotencyKey: 'embed-message-1',
+        engineType: 'openclaw',
+        displayText: 'open page',
+      });
+      await supervisor.rejected({
+        sessionKey: embedSessionKey,
+        idempotencyKey: 'embed-message-1',
+        error: 'transport uncertain',
+        uncertain: true,
+      });
+
+      await vi.advanceTimersByTimeAsync(135_000);
+      expect(events.some((event) => event.type === 'run.interrupted')).toBe(false);
+      expect(supervisor.get(embedSessionKey)?.phase).not.toBe('completed');
+
+      await vi.advanceTimersByTimeAsync(165_000);
+      expect(events.some((event) => (
+        event.type === 'run.interrupted'
+        && (event.payload as { reason?: string })?.reason === 'recovery-timeout'
+      ))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('interrupts a normal chat session after the default recovery idle window', async () => {
+    vi.useFakeTimers();
+    try {
+      engine.getAdapterForSession.mockResolvedValue({
+        chatCapabilities: {
+          hasReliableRuntimeStatus: true,
+          hasStructuredReasoningEvents: true,
+          hasStructuredToolEvents: true,
+          requiresHistoryProjection: false,
+        },
+        getHistory: vi.fn(async () => ({ success: true, result: { messages: [], isRunning: false } })),
+        inspectRun: vi.fn(async () => null),
+      });
+      const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+      const events: CanonicalChatEvent[] = [];
+      supervisor.on('event', (value) => events.push(value));
+
+      await supervisor.begin({
+        sessionKey: 'agent:main:session-normal',
+        idempotencyKey: 'normal-message-1',
+        engineType: 'openclaw',
+        displayText: 'hello',
+      });
+      await supervisor.rejected({
+        sessionKey: 'agent:main:session-normal',
+        idempotencyKey: 'normal-message-1',
+        error: 'transport uncertain',
+        uncertain: true,
+      });
+
+      await vi.advanceTimersByTimeAsync(135_000);
+      expect(events.some((event) => (
+        event.type === 'run.interrupted'
+        && (event.payload as { reason?: string })?.reason === 'recovery-timeout'
+      ))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('extends rate-limit finalization grace for embed browser chat sessions', async () => {
+    vi.useFakeTimers();
+    try {
+      const embedSessionKey = 'agent:main:session-embed-app-teambition_com-root--conv2';
+      const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+      const events: CanonicalChatEvent[] = [];
+      supervisor.on('event', (value) => events.push(value));
+
+      await supervisor.handleEngineEvent({
+        type: 'turn.started',
+        sessionKey: embedSessionKey,
+        runId: 'embed-run-2',
+        seq: 1,
+      });
+      await supervisor.handleEngineEvent({
+        type: 'turn.failed',
+        sessionKey: embedSessionKey,
+        runId: 'embed-run-2',
+        errorMessage: '429 rate limit exceeded',
+        seq: 2,
+      });
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(events.some((event) => event.type === 'run.failed')).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(75_000);
+      expect(events.some((event) => event.type === 'run.failed')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

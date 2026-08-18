@@ -248,6 +248,10 @@ export async function handleBrowserBridgeRoutes(
       sendJson(res, 404, { success: false, error: 'Session not found' });
       return true;
     }
+    if (body.sessionId.startsWith('embed-')) {
+      const { flushSclawEmbedBridgeSession } = await import('../../main/services/sclaw-embed-bridge-driver');
+      flushSclawEmbedBridgeSession(body.sessionId);
+    }
     emitBridgeEvent(ctx, 'browser:command', { sessionId: body.sessionId, command });
     sendJson(res, 200, { success: true, commandId: command.commandId, command });
     return true;

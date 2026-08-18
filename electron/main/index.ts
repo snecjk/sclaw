@@ -923,13 +923,17 @@ async function initialize(): Promise<void> {
     logger.warn('Failed to install/upgrade bundled plugins:', error);
   });
   try {
-    const { ensureStoBrowserBridgePluginInOpenClaw } = await import('../utils/openclaw-auth');
-    const modified = await ensureStoBrowserBridgePluginInOpenClaw();
-    if (modified) {
+    const { ensureStoBrowserBridgePluginInOpenClaw, ensureStoBrowserAutomationPluginInOpenClaw } = await import('../utils/openclaw-auth');
+    const bridgeModified = await ensureStoBrowserBridgePluginInOpenClaw();
+    if (bridgeModified) {
       logger.info('[plugin] Enabled sto-browser-bridge in openclaw.json');
     }
+    const automationModified = await ensureStoBrowserAutomationPluginInOpenClaw();
+    if (automationModified) {
+      logger.info('[plugin] Enabled sto-browser-automation in openclaw.json');
+    }
   } catch (error) {
-    logger.warn('Failed to enable sto-browser-bridge plugin in openclaw.json:', error);
+    logger.warn('Failed to enable browser plugins in openclaw.json:', error);
   }
 
   // Start Gateway automatically (this seeds missing bootstrap files with full templates)

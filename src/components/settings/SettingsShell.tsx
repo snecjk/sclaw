@@ -60,6 +60,7 @@ export function SettingsShell({ activeSection, devModeUnlocked, children }: Sett
   const { t } = useTranslation(['settings', 'common']);
   const navigate = useNavigate();
   const isMac = window.electron?.platform === 'darwin';
+  const isWindows = window.electron?.platform === 'win32';
 
   const workspaceItems: SettingsNavItem[] = [
     { id: 'agents', path: '/settings/agents', label: t('common:sidebar.agents'), icon: SettingsAgentsIcon },
@@ -178,10 +179,15 @@ export function SettingsShell({ activeSection, devModeUnlocked, children }: Sett
       <div className={stoSettingsContentPanelWrapClass}>
         <div className={stoSettingsContentPanelClass}>
           {/* 右侧内容卡顶栏拖拽区：与左侧 chrome 同高，补齐设置页无 TitleBar / ContentHeader 时的空白 */}
-          <div
-            className="drag-region w-full shrink-0 h-[var(--sto-chrome-h)]"
-            aria-hidden
-          />
+          <div className="flex h-[var(--sto-chrome-h)] w-full shrink-0" aria-hidden>
+            <div className="drag-region min-w-0 flex-1" />
+            {isWindows ? (
+              <div
+                data-slot="settings-window-controls-hit-area"
+                className="no-drag pointer-events-none w-[128px] shrink-0"
+              />
+            ) : null}
+          </div>
           <div className={stoSettingsContentPanelBodyClass}>
             <div className={stoSettingsContentInnerClass}>{children}</div>
           </div>

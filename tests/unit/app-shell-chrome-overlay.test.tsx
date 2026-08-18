@@ -32,10 +32,13 @@ describe('AppShellChromeOverlay shell fallback', () => {
     render(<AppShellChromeOverlay />);
 
     const strip = document.querySelector<HTMLElement>('[data-slot="shell-fallback-drag-strip"]');
-    const controls = document.querySelector('[data-slot="windows-window-controls"]');
+    const controls = document.querySelector<HTMLElement>('[data-slot="windows-window-controls"]');
     expect(strip).not.toBeNull();
     expect(controls).not.toBeNull();
     expect(strip!.contains(controls)).toBe(false);
     expect(controls).toHaveClass('no-drag');
+    expect(controls!.parentElement).toHaveStyle({
+      right: 'calc(var(--sto-shell-card-gap) + var(--sto-content-header-pad-end))',
+    });
   });
 });

@@ -29,8 +29,12 @@ import { hydrateNodeInputFiles } from './node-input-files';
 import { createFailurePacket, createWorkflowPacket, getWorkflowPacketFailureMessage, isWorkflowPacket } from './workflow-packet';
 import { normalizeRuntimeDefinition } from './runtime-definition';
 import { normalizeArtifactFirstPayloadSchema, promoteCarriedOutputArtifacts } from './artifact-output';
+import { executeBrowserNode } from './browser-nodes';
+import { isBrowserAutomationEnabled } from '../../../shared/browser-automation/feature-flag';
+import { BROWSER_WORKFLOW_NODE_TYPES } from '../../../shared/browser-automation/workflow-output';
 
 const SMART_TYPES = new Set(['agent_task', 'agent_data_fetch', 'agent_data_process', 'agent_condition', 'agent_output']);
+const BROWSER_TYPES = new Set<string>(BROWSER_WORKFLOW_NODE_TYPES);
 const nowIso = () => formatShanghaiIso();
 const TERMINAL_STATUSES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED']);
 
@@ -298,6 +302,113 @@ export function createEngine(deps: EngineDeps) {
           last_agent_raw_text: agentResult.rawText ?? '',
           error: '',
         }, 'progress');
+      // 浏览器节点：browser_task / browser_validate / browser_human_gate
+      } else if (BROWSER_TYPES.has(cur.type)) {
+        workflowExecLog('info', 'browser-node-selected', 'browser workflow node execution started', {
+          runId,
+          workflowId: runSnapshotBase.workflow_id,
+          nodeId: cur.id,
+          nodeType: cur.type,
+          execEngine,
+          enabled: isBrowserAutomationEnabled(),
+        });
+        const browserCtx = makeCtx(runId, def, seqRef, {
+          resolvedInputs: nodeInput,
+          startupInputs: runInput,
+          startupSchema,
+          workflowId: runSnapshotBase.workflow_id,
+          versionId: runSnapshotBase.version_id,
+        });
+        result = await executeBrowserNode(browserCtx, cur, nodeInput, {
+          invokeAgent: deps.invokeAgent,
+          quota: deps.quota,
+          execEngine,
+          versionId: runSnapshotBase.version_id,
+        });
+        if (result.action === 'pause') {
+          const taskId = `${runId}:${cur.id}`;
+          const packetPayload = isWorkflowPacket(result.output) && result.output.payload
+            && typeof result.output.payload === 'object' && !Array.isArray(result.output.payload)
+            ? result.output.payload as Record<string, unknown>
+            : {};
+          const reason = typeof packetPayload.waitingReason === 'string' && packetPayload.waitingReason.trim()
+            ? packetPayload.waitingReason.trim()
+            : (cur.config?.reason ?? '等待浏览器人工操作');
+          const task = {
+            task_id: taskId,
+            run_id: runId,
+            node_id: cur.id,
+            status: 'PENDING',
+            reason,
+            requested_at: nowIso(),
+          };
+          await repo.upsertApprovalTask(task);
+          await repo.enqueueOutbox(runId, 'approval', taskId, task, 'progress');
+          await repo.upsertNodeRun({
+            run_id: runId,
+            node_id: cur.id,
+            node_type: cur.type,
+            status: 'WAITING_APPROVAL',
+            input_json: nodeInputJson,
+            output_json: stringifyJson(result.output ?? {}),
+            last_completion_issue: reason,
+            started_at: nowIso(),
+          });
+          await repo.upsertRun({ run_id: runId, status: 'WAITING_APPROVAL', waiting_node_id: cur.id });
+          await repo.enqueueOutbox(runId, 'run', runId, { ...runSnapshotBase, status: 'WAITING_APPROVAL', waiting_node_id: cur.id }, 'progress');
+          deps.onStatusChange?.(runId, 'waiting_approval', { waitingNodeId: cur.id });
+          return;
+        }
+        if (isWorkflowPacket(result.output) && result.output.status === 'failed') {
+          const failurePacket = result.output;
+          const failureMessage = getWorkflowPacketFailureMessage(failurePacket) ?? '浏览器节点执行失败';
+          const finalResult = await buildFailureResult(runId, cur.id, failurePacket);
+          const changed = await repo.updateRunIfActive(runId, {
+            status: 'FAILED',
+            error: failureMessage,
+            output_json: stringifyJson(finalResult),
+            completed_at: nowIso(),
+          });
+          if (!changed) return;
+          await repo.upsertNodeRun({
+            run_id: runId,
+            node_id: cur.id,
+            node_type: cur.type,
+            status: 'FAILED',
+            input_json: nodeInputJson,
+            output_json: stringifyJson(failurePacket),
+            last_completion_issue: failureMessage,
+            completed_at: nowIso(),
+          });
+          await repo.enqueueOutbox(runId, 'node_run', `${runId}:${cur.id}`, {
+            run_id: runId,
+            node_id: cur.id,
+            node_type: cur.type,
+            status: 'FAILED',
+            input_json: nodeInputJson,
+            output_json: stringifyJson(failurePacket),
+            last_completion_issue: failureMessage,
+          }, 'progress');
+          await finalizeUnfinishedNodeRuns(runId, 'failed', cur.id);
+          await makeCtx(runId, def, seqRef).emit('workflow.failed', { nodeId: cur.id, error: failureMessage, failure: failurePacket }, cur.id);
+          await repo.enqueueOutbox(runId, 'run', runId, {
+            ...runSnapshotBase,
+            status: 'FAILED',
+            error: failureMessage,
+            output_json: stringifyJson(finalResult),
+            completed_at: nowIso(),
+          }, 'terminal');
+          workflowExecLog('error', 'run-failed', 'browser node failed workflow run', {
+            runId,
+            workflowId: runSnapshotBase.workflow_id,
+            versionId: runSnapshotBase.version_id,
+            nodeId: cur.id,
+            nodeType: cur.type,
+            error: failureMessage,
+          });
+          deps.onStatusChange?.(runId, 'failed', { error: failureMessage });
+          return;
+        }
       // 人工节点：创建待办任务并暂停流程，等待 resumeApproval/resumeInput 再继续。
       } else if (cur.type === 'human_approval' || cur.type === 'user_input') {
         if (cur.type === 'human_approval' && cur.config?.condition
@@ -730,10 +841,19 @@ export function createEngine(deps: EngineDeps) {
   };
 
   async function completeWaitingNode(runId: string, nodeId: string, nodeType: string, output: any): Promise<void> {
-    const packet = createWorkflowPacket({ runId, nodeId, nodeType, status: 'succeeded', payload: output });
-    const payload = { run_id: runId, node_id: nodeId, node_type: nodeType, status: 'SUCCEEDED', output_json: stringifyJson(packet), completed_at: nowIso() };
-    await repo.upsertNodeRun(payload);
-    await repo.enqueueOutbox(runId, 'node_run', `${runId}:${nodeId}`, payload, 'progress');
+    const existing = await repo.getNodeRun(runId, nodeId);
+    const existingOutput = existing?.output_json ? parseJson(existing.output_json) : null;
+    let payload = output;
+    if (isWorkflowPacket(existingOutput) && existingOutput.payload && typeof existingOutput.payload === 'object' && !Array.isArray(existingOutput.payload)) {
+      const previousPayload = existingOutput.payload as Record<string, unknown>;
+      if (previousPayload.browser) {
+        payload = { ...previousPayload, ...output };
+      }
+    }
+    const packet = createWorkflowPacket({ runId, nodeId, nodeType, status: 'succeeded', payload });
+    const nodeRunRecord = { run_id: runId, node_id: nodeId, node_type: nodeType, status: 'SUCCEEDED', output_json: stringifyJson(packet), completed_at: nowIso() };
+    await repo.upsertNodeRun(nodeRunRecord);
+    await repo.enqueueOutbox(runId, 'node_run', `${runId}:${nodeId}`, nodeRunRecord, 'progress');
     const seq = await repo.nextEventSequence(runId);
     const event = { run_id: runId, sequence: seq, type: nodeType === 'human_approval' ? 'approval.decided' : 'user_input.submitted', node_id: nodeId, message: stringifyJson(packet) };
     await repo.insertEvent(event);

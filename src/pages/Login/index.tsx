@@ -161,7 +161,7 @@ export function Login() {
               </div>
               <div className="rounded-2xl border border-white/8 bg-white/5 px-3 py-3">
                 <div className="text-[11px] uppercase tracking-[0.22em] text-foreground/45">服务</div>
-                <div className="mt-1 text-sm font-medium text-white/90">就绪</div>
+                <div className="mt-1 text-sm font-medium text-orange-400 dark:text-orange-300">就绪</div>
               </div>
               <div className="rounded-2xl border border-white/8 bg-white/5 px-3 py-3">
                 <div className="text-[11px] uppercase tracking-[0.22em] text-foreground/45">登录</div>

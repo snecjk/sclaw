@@ -2,6 +2,7 @@ import { useChatStore } from './store';
 import { useChatRuntimeV2Store } from './runtime-v2-store';
 import type { ClientRunState, ClientSessionState } from './client-session-reducer';
 import type { RawMessage, ToolStatus } from './types';
+import { formatChatRuntimeErrorForDisplay } from './runtime-error-message';
 
 const ACTIVE_PHASES = new Set<ClientRunState['phase']>([
   'dispatching',
@@ -40,7 +41,7 @@ function selectRuntimeIndicators(state: { sessionsByKey: Record<string, ClientSe
   const revision = entries.map(([sessionKey, session]) => {
     const runtime = session.runtime;
     const sending = Boolean(runtime && ACTIVE_PHASES.has(runtime.phase));
-    return `${sessionKey}\u0000${sending ? '1' : '0'}\u0000${sending ? runtime?.runId ?? '' : ''}\u0000${session.error?.message ?? ''}`;
+    return `${sessionKey}\u0000${sending ? '1' : '0'}\u0000${sending ? runtime?.runId ?? '' : ''}\u0000${session.error ? formatChatRuntimeErrorForDisplay(session.error) : ''}`;
   }).join('\u0001');
   if (revision === indicatorRevision) return indicatorCache;
   indicatorRevision = revision;
@@ -100,7 +101,7 @@ export function buildChatSessionRuntimeView(
     sending,
     activeRunId: sending ? runtime?.runId ?? null : null,
     pendingFinal: Boolean(session?.overlay.awaitingTranscript),
-    error: session?.error?.message ?? null,
+    error: session?.error ? formatChatRuntimeErrorForDisplay(session.error) : null,
     phase: runtime?.phase ?? null,
     lastEventAt: runtime?.lastEventAt ?? 0,
     lastUserMessageAt,
