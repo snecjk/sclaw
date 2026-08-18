@@ -7,21 +7,24 @@
  * reports a reason the caller turns into user-visible feedback.
  *
  * Entry points reused (no new routes are introduced):
- * - SKILL     → `/?skill=<targetCode>` (skill plaza "使用" deep link)
+ * - SKILL     → home composer skill chip (homepage recommend reuse)
  * - CONNECTOR → `/skills?section=connectors` (plaza section; no per-connector deep link exists)
  * - APP       → `/more-apps` (App Plaza; no per-app deep link exists)
- * - WORKFLOW  → `/workflow/<targetCode>`
+ * - WORKFLOW  → home composer workflow chip (homepage recommend reuse)
  * - URL       → host `openExternal` bridge, http(s) only
  * - CHAT      → main chat composer draft
  *
  * CONNECTOR and APP are deliberate degradations: sto-claw can only open the
  * plaza, so `targetCode` is validated but the user still picks the item there.
  * Prompt text is only written into the composer for targets that land on the
- * chat surface (CHAT, SKILL); other targets never touch the draft.
+ * chat surface (CHAT, SKILL, WORKFLOW); other targets never touch the draft.
  */
 import type { NavigateFunction } from 'react-router-dom';
 import type { MainChatDraftMode } from '@/lib/main-chat-composer-draft';
-import { navigateToMainChatWithDraft } from '@/lib/main-chat-navigation';
+import {
+  navigateToMainChatWithComposerHandoff,
+  navigateToMainChatWithDraft,
+} from '@/lib/main-chat-navigation';
 import { openExternalUrl } from '@/lib/preview-url';
 import type { LearningCaseAction } from '@/types/learning-center';
 import { SKILL_PLAZA_CONNECTORS_PATH } from '../../shared/connectors/deep-link';
@@ -53,9 +56,14 @@ export interface LearningCaseActionResult {
 
 export interface LearningCaseActionContext {
   navigate: NavigateFunction;
+  /** Case title shown on the composer chip when the use payload has no display name. */
+  displayTitle?: string;
 }
 
 const APP_PLAZA_PATH = '/more-apps';
+const DEFAULT_SKILL_SUFFIX = '帮我执行这个技能';
+const DEFAULT_WORKFLOW_SUFFIX = '帮我执行这个工作流';
+const WORKFLOW_TEMPLATE_PREFIX = '安装';
 
 function fail(reason: LearningCaseActionFailureReason): LearningCaseActionResult {
   return { ok: false, reason };
@@ -103,15 +111,12 @@ export function dispatchLearningCaseAction(
 
     case 'SKILL': {
       if (!targetCode) return fail('MISSING_TARGET_CODE');
-      const search = `?skill=${encodeURIComponent(targetCode)}`;
-      if (!prompt) return openRoute(context, `/${search}`);
-      const applied = navigateToMainChatWithDraft(context.navigate, prompt, {
-        mode: promptMode,
-        search,
+      const title = context.displayTitle?.trim() || targetCode;
+      const applied = navigateToMainChatWithComposerHandoff(context.navigate, {
+        skill: { slug: targetCode, title },
+        suffixText: prompt || DEFAULT_SKILL_SUFFIX,
       });
-      return applied
-        ? { ok: true, navigatedTo: `/${search}`, draftApplied: true }
-        : fail('TARGET_UNAVAILABLE');
+      return applied ? { ok: true, navigatedTo: '/', draftApplied: true } : fail('TARGET_UNAVAILABLE');
     }
 
     case 'CONNECTOR':
@@ -122,9 +127,16 @@ export function dispatchLearningCaseAction(
       if (!targetCode) return fail('MISSING_TARGET_CODE');
       return openRoute(context, APP_PLAZA_PATH);
 
-    case 'WORKFLOW':
+    case 'WORKFLOW': {
       if (!targetCode) return fail('MISSING_TARGET_CODE');
-      return openRoute(context, `/workflow/${encodeURIComponent(targetCode)}`);
+      const title = context.displayTitle?.trim() || targetCode;
+      const applied = navigateToMainChatWithComposerHandoff(context.navigate, {
+        prefixText: WORKFLOW_TEMPLATE_PREFIX,
+        workflow: { id: targetCode, name: title },
+        suffixText: prompt || DEFAULT_WORKFLOW_SUFFIX,
+      });
+      return applied ? { ok: true, navigatedTo: '/', draftApplied: true } : fail('TARGET_UNAVAILABLE');
+    }
 
     case 'URL': {
       const url = action.targetUrl.trim();

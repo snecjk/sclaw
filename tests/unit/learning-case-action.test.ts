@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { dispatchLearningCaseAction } from '@/lib/learning-case-action';
-import { navigateToMainChatWithDraft } from '@/lib/main-chat-navigation';
+import { navigateToMainChatWithComposerHandoff, navigateToMainChatWithDraft } from '@/lib/main-chat-navigation';
 import { openExternalUrl } from '@/lib/preview-url';
 import type { LearningCaseAction } from '@/types/learning-center';
 
 vi.mock('@/lib/main-chat-navigation', () => ({
   navigateToMainChatWithDraft: vi.fn(() => true),
+  navigateToMainChatWithComposerHandoff: vi.fn(() => true),
 }));
 
 vi.mock('@/lib/preview-url', () => ({
@@ -13,6 +14,7 @@ vi.mock('@/lib/preview-url', () => ({
 }));
 
 const draftMock = vi.mocked(navigateToMainChatWithDraft);
+const handoffMock = vi.mocked(navigateToMainChatWithComposerHandoff);
 const externalMock = vi.mocked(openExternalUrl);
 
 function action(overrides: Partial<LearningCaseAction> = {}): LearningCaseAction {
@@ -36,32 +38,37 @@ describe('dispatchLearningCaseAction whitelist targets', () => {
     navigate.mockClear();
     draftMock.mockClear();
     draftMock.mockReturnValue(true);
+    handoffMock.mockClear();
+    handoffMock.mockReturnValue(true);
     externalMock.mockClear();
   });
 
-  it('opens the skill plaza deep link and seeds the returned prompt', () => {
+  it('opens home with a skill chip and default execute hint', () => {
     const result = dispatchLearningCaseAction(
-      action({ targetType: 'SKILL', targetCode: 'daily-report', promptText: '帮我写日报' }),
-      { navigate },
+      action({ targetType: 'SKILL', targetCode: 'daily-report' }),
+      { navigate, displayTitle: '日报助手' },
     );
 
-    expect(result).toMatchObject({ ok: true, navigatedTo: '/?skill=daily-report', draftApplied: true });
-    expect(draftMock).toHaveBeenCalledWith(navigate, '帮我写日报', {
-      mode: 'REPLACE',
-      search: '?skill=daily-report',
+    expect(result).toMatchObject({ ok: true, navigatedTo: '/', draftApplied: true });
+    expect(handoffMock).toHaveBeenCalledWith(navigate, {
+      skill: { slug: 'daily-report', title: '日报助手' },
+      suffixText: '帮我执行这个技能',
     });
     expect(navigate).not.toHaveBeenCalled();
+    expect(draftMock).not.toHaveBeenCalled();
   });
 
-  it('opens the skill plaza deep link without a prompt', () => {
+  it('uses the case prompt as the skill suffix when provided', () => {
     const result = dispatchLearningCaseAction(
-      action({ targetType: 'SKILL', targetCode: 'daily report' }),
-      { navigate },
+      action({ targetType: 'SKILL', targetCode: 'daily-report', promptText: '帮我写日报' }),
+      { navigate, displayTitle: '日报助手' },
     );
 
-    expect(result).toMatchObject({ ok: true, draftApplied: false });
-    expect(navigate).toHaveBeenCalledWith('/?skill=daily%20report');
-    expect(draftMock).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ ok: true, navigatedTo: '/', draftApplied: true });
+    expect(handoffMock).toHaveBeenCalledWith(navigate, {
+      skill: { slug: 'daily-report', title: '日报助手' },
+      suffixText: '帮我写日报',
+    });
   });
 
   it('opens the connector section of the plaza', () => {
@@ -84,14 +91,19 @@ describe('dispatchLearningCaseAction whitelist targets', () => {
     expect(navigate).toHaveBeenCalledWith('/more-apps');
   });
 
-  it('opens the workflow editor by stable code', () => {
+  it('opens home with a workflow chip instead of the editor', () => {
     const result = dispatchLearningCaseAction(
       action({ targetType: 'WORKFLOW', targetCode: 'wf/1 2' }),
-      { navigate },
+      { navigate, displayTitle: '每日任务' },
     );
 
-    expect(result.ok).toBe(true);
-    expect(navigate).toHaveBeenCalledWith('/workflow/wf%2F1%202');
+    expect(result).toMatchObject({ ok: true, navigatedTo: '/', draftApplied: true });
+    expect(handoffMock).toHaveBeenCalledWith(navigate, {
+      prefixText: '安装',
+      workflow: { id: 'wf/1 2', name: '每日任务' },
+      suffixText: '帮我执行这个工作流',
+    });
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('opens https targets through the host bridge instead of routing', () => {
@@ -123,6 +135,8 @@ describe('dispatchLearningCaseAction prompt modes', () => {
     navigate.mockClear();
     draftMock.mockClear();
     draftMock.mockReturnValue(true);
+    handoffMock.mockClear();
+    handoffMock.mockReturnValue(true);
   });
 
   it('forwards REPLACE to the composer draft helper', () => {
@@ -149,12 +163,15 @@ describe('dispatchLearningCaseAction degraded branches', () => {
     navigate.mockClear();
     draftMock.mockClear();
     draftMock.mockReturnValue(true);
+    handoffMock.mockClear();
+    handoffMock.mockReturnValue(true);
     externalMock.mockClear();
   });
 
   function expectNoSideEffects() {
     expect(navigate).not.toHaveBeenCalled();
     expect(draftMock).not.toHaveBeenCalled();
+    expect(handoffMock).not.toHaveBeenCalled();
     expect(externalMock).not.toHaveBeenCalled();
   }
 

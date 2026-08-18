@@ -340,7 +340,10 @@ export function LearningCenterPage() {
             : entry),
         }
         : current);
-      const result = dispatchLearningCaseAction(action, { navigate });
+      const result = dispatchLearningCaseAction(action, {
+        navigate,
+        displayTitle: item.title || item.name,
+      });
       if (result.ok) {
         toast.success(t('caseUseSuccess'));
       } else {

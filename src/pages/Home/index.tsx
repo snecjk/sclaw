@@ -10,6 +10,7 @@ import { readMainChatDraftState } from '@/lib/main-chat-navigation';
 import { cn } from '@/lib/utils';
 import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
+import { CHAT_EDIT_DRAFT_EVENT, type ChatEditDraftEventDetail } from '@/pages/Chat/ChatInput';
 
 /**
  * 首页：所有用户统一走 HomeAgentHubSurface，由后端推荐位 API 动态返回不同内容。
@@ -51,6 +52,7 @@ export function Home() {
   const locationState = location.state;
   const draftState = readMainChatDraftState(locationState);
   const consumedDraftTokensRef = useRef<Set<string>>(new Set());
+  const seedText = draftState?.composerHandoff ? undefined : draftState?.mainChatDraft;
 
   useEffect(() => {
     if (!draftState) return;
@@ -58,6 +60,14 @@ export function Home() {
     if (token) {
       if (consumedDraftTokensRef.current.has(token)) return;
       consumedDraftTokensRef.current.add(token);
+    }
+    const handoff = draftState.composerHandoff;
+    if (handoff) {
+      // Child effects register the ChatInput listener first, then this parent
+      // effect replays the same event homepage recommend cards use.
+      window.dispatchEvent(new CustomEvent<ChatEditDraftEventDetail>(CHAT_EDIT_DRAFT_EVENT, {
+        detail: handoff,
+      }));
     }
     // 子组件 effect 先于父组件执行：DingTalkMentionEditor 此时已把草稿
     // 写入输入框并聚焦，清掉 state 只会让 seedText prop 变回 undefined，
@@ -131,7 +141,7 @@ export function Home() {
         )}
       >
         <HomeAgentHubSurface
-          seedText={draftState?.mainChatDraft}
+          seedText={seedText}
           seedSkillSlug={seedSkillSlug}
         />
       </div>
