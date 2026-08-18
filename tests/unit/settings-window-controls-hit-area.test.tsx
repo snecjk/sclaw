@@ -12,6 +12,6 @@ describe('Settings Windows chrome hit area', () => {
     expect(source).toContain("window.electron?.platform === 'win32'");
     expect(source).toContain('data-slot="settings-window-controls-hit-area"');
     expect(source).toContain('className="drag-region min-w-0 flex-1"');
-    expect(source).toContain('className="no-drag pointer-events-none w-[124px] shrink-0"');
+    expect(source).toContain('className="no-drag pointer-events-none w-[128px] shrink-0"');
   });
 });

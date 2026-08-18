@@ -19,7 +19,12 @@ export function AppShellChromeOverlay() {
         style={{ height: `${SHELL_FALLBACK_DRAG_STRIP_HEIGHT_PX}px` }}
       />
       {platform === 'win32' ? (
-        <div className="no-drag pointer-events-auto absolute right-0 top-0 z-50 flex min-h-[var(--sto-chrome-h)] items-start pr-1 pt-[var(--sto-chrome-toggle-inset-top)]">
+        <div
+          className="no-drag pointer-events-auto absolute top-0 z-50 flex min-h-[var(--sto-chrome-h)] items-start pt-[var(--sto-chrome-toggle-inset-top)]"
+          style={{
+            right: 'calc(var(--sto-shell-card-gap) + var(--sto-content-header-pad-end))',
+          }}
+        >
           <WindowsWindowControls />
         </div>
       ) : null}

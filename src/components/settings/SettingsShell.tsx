@@ -184,7 +184,7 @@ export function SettingsShell({ activeSection, devModeUnlocked, children }: Sett
             {isWindows ? (
               <div
                 data-slot="settings-window-controls-hit-area"
-                className="no-drag pointer-events-none w-[124px] shrink-0"
+                className="no-drag pointer-events-none w-[128px] shrink-0"
               />
             ) : null}
           </div>
