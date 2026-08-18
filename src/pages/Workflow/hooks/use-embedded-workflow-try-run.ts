@@ -59,6 +59,15 @@ function defaultRequestId(): string {
     : `workflow-try-run-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function usesCurrentSavedSnapshot(
+  preparation: WorkflowTryRunPreparation | null | undefined,
+): preparation is Exclude<WorkflowTryRunPreparation, { mode: 'persist-draft' }> {
+  return (
+    preparation?.mode === 'use-current-published' ||
+    preparation?.mode === 'use-current-draft'
+  );
+}
+
 /** Convert the validated Web wire DTO into the stricter local runtime model. */
 export function normalizeWorkflowSavedDraftSnapshot(
   snapshot: WorkflowSavedDraftSnapshot | WorkflowRunnableSnapshot,
@@ -177,10 +186,7 @@ export function useEmbeddedWorkflowTryRun({
     setUiState({ sessionIdentity, confirmOpen: false, requestInFlight: true });
     try {
       let snapshot: WorkflowDraftSnapshot;
-      if (
-        request.source === 'web' &&
-        request.preparation?.mode === 'use-current-published'
-      ) {
+      if (request.source === 'web' && usesCurrentSavedSnapshot(request.preparation)) {
         sendState(request, 'preparing');
         snapshot = normalizeWorkflowSavedDraftSnapshot(request.preparation.snapshot);
       } else if (request.source === 'web') {
@@ -262,7 +268,7 @@ export function useEmbeddedWorkflowTryRun({
       preparation,
     };
     activeRequestRef.current = request;
-    if (preparation.mode === 'use-current-published') {
+    if (usesCurrentSavedSnapshot(preparation)) {
       setUiState({ sessionIdentity, confirmOpen: false, requestInFlight: false });
       void prepare(request);
     } else {
