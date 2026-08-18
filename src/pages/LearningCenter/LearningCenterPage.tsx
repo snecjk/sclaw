@@ -348,12 +348,14 @@ export function LearningCenterPage() {
 
       const labelRight = labelRect
         ? labelRect.right - stepsRect.left
-        : tabRect.right - stepsRect.left - artSize;
+        : tabRect.left - stepsRect.left + 12;
       const tabRight = tabRect.right - stepsRect.left;
-      const gap = 8;
-      const left = Math.min(labelRight + gap, tabRight - artSize);
+      const gap = readCssLengthPx(steps, '--lc-tab-art-gap') || 8;
+      const left = Math.max(0, labelRight + gap);
+      const maxWidth = Math.max(0, tabRight - left);
 
-      steps.style.setProperty('--lc-art-left', `${Math.max(0, left)}px`);
+      steps.style.setProperty('--lc-art-left', `${left}px`);
+      steps.style.setProperty('--lc-art-fit-width', `${Math.min(artSize, maxWidth)}px`);
     };
 
     updateArtPlacement();

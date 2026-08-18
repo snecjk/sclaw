@@ -9,8 +9,10 @@
   --lc-case-card-min-w: 17.375rem; /* 278px */
   --lc-emphasis: var(--foreground);
   --lc-step-art-size: 8.75rem; /* MasterGo 组 7896: 140x140 */
-  --lc-tab-flex-inactive: 146; /* MasterGo pc-4 非选中 */
-  --lc-tab-flex-active: 246; /* MasterGo pc-4 选中 flexGrow */
+  --lc-tab-flex-inactive: 160;
+  --lc-tab-flex-active: 300;
+  --lc-tab-title-max: 6em; /* 最多 6 个字不被插画遮挡 */
+  --lc-tab-art-gap: 0.5rem;
   --lc-steps-bg: #f5f5f5;
   --lc-panel-bg: #ffffff;
   --lc-detail-content-w: 33.5rem; /* 536px */
@@ -30,8 +32,8 @@
     box-sizing: border-box;
     padding-right: calc(var(--lc-detail-panel-w) + var(--sto-shell-card-gap, 0.5rem) + var(--lc-detail-gap));
     --lc-step-art-size: 5.5rem;
-    --lc-tab-flex-inactive: 106;
-    --lc-tab-flex-active: 130;
+    --lc-tab-flex-inactive: 110;
+    --lc-tab-flex-active: 200;
   }
 
   .learning-center-page--detail-open .learning-center-page__inner {
@@ -225,7 +227,7 @@
   z-index: 1;
   top: -1.8125rem; /* MasterGo 组 7896 y:-29 */
   left: var(--lc-art-left, 7.5rem);
-  width: var(--lc-step-art-size);
+  width: var(--lc-art-fit-width, var(--lc-step-art-size));
   height: var(--lc-step-art-size);
   overflow: hidden;
   pointer-events: none;
@@ -288,7 +290,7 @@
   z-index: auto;
   display: inline-flex;
   flex: var(--lc-tab-flex-inactive) 1 0;
-  min-width: 0;
+  min-width: 7.5rem;
   max-width: 100%;
   min-height: 2.5rem;
   align-items: center;
@@ -310,6 +312,7 @@
   display: inline-flex;
   min-width: 0;
   max-width: 100%;
+  flex: 0 1 auto;
   align-items: center;
   justify-content: center;
   gap: 0.35rem;
@@ -317,6 +320,7 @@
 
 .learning-center-steps__title {
   min-width: 0;
+  max-width: var(--lc-tab-title-max);
 }
 
 .learning-center-page .learning-center-steps__tab > span {
@@ -344,8 +348,9 @@
 .learning-center-page .learning-center-steps__tab[data-state='active'] {
   z-index: auto;
   flex: var(--lc-tab-flex-active) 1 0;
+  min-width: calc(2.25rem + var(--lc-tab-title-max) + var(--lc-tab-art-gap) + var(--lc-step-art-size) * 0.55);
   justify-content: flex-start;
-  padding: 0 0.75rem;
+  padding: 0 0.5rem 0 0.75rem;
   background: transparent;
   color: var(--foreground);
   font-weight: 700;
@@ -354,15 +359,20 @@
 
 .learning-center-page .learning-center-steps__tab[data-state='active'] .learning-center-steps__tab-label {
   z-index: auto;
+  flex: 0 0 auto;
+  max-width: calc(2em + var(--lc-tab-title-max));
   justify-content: flex-start;
 }
 
 .learning-center-page .learning-center-steps__tab[data-state='active'] .learning-center-steps__title {
-  overflow: visible;
-  text-overflow: clip;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: var(--lc-tab-title-max);
 }
 
 .learning-center-steps__index {
+  flex-shrink: 0;
   font-variant-numeric: tabular-nums;
   opacity: 0.55;
 }
