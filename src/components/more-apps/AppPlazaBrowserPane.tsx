@@ -336,6 +336,8 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
               url={tab.url}
               title={tab.title}
               embedRuntimeId={tab.embedRuntimeId}
+              appId={tab.appId}
+              bound={tab.bound}
               active={active}
               onOpenWindow={(nextUrl) => openInSclawBrowser({ url: nextUrl })}
               onNavStateChange={({ canGoBack: next }) => setCanGoBack(next)}
@@ -368,6 +370,7 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
               <SclawBrowserEmbedChat
                 sessionKey={tab.chatSessionKey}
                 appTitle={tab.title}
+                embedRuntimeId={tab.embedRuntimeId}
                 onClose={() => closeChatPanel(tab.id)}
                 sessionsProps={{
                   chatSessionKey: tab.chatSessionKey,

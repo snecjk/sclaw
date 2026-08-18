@@ -1,7 +1,7 @@
 /**
  * Drawer content frame — Electron webview (first-party cookies) or dev iframe.
  */
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { SCLAW_EMBED_BROWSER_PARTITION } from '../../../shared/sclaw-embed-browser';
 import { isStoPolicyHostUrl, markStoPolicyWebAuthedInSession } from '@/lib/sto-policy-web-url';
 import { registerSclawBrowserWebview } from '@/lib/sclaw-browser-page-capture';
@@ -11,6 +11,11 @@ import {
 } from '@/lib/sclaw-browser-host-api';
 import { resolveSclawEmbedWindowOpenAction } from '../../../shared/sclaw-embed-browser-window-open';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
+import { getJsBridgeGuestPreloadUrl } from '@/lib/jsbridge/host-api';
+import {
+  handleJsBridgeWebviewRequest,
+  pushJsBridgeInit,
+} from '@/lib/jsbridge/host-router';
 
 const isElectron = Boolean(window.electron);
 
@@ -25,6 +30,10 @@ interface SclawBrowserFrameProps {
   title: string;
   /** When set, binds this runtime instead of the overlay store value. */
   embedRuntimeId?: string | null;
+  /** App Plaza app id for bridge trust policy. */
+  appId?: string | null;
+  /** Catalog / My Apps — elevated bridge trust tier. */
+  bound?: boolean;
   /** When false, skip webview↔runtime bind (inactive live tab). Default true. */
   active?: boolean;
   /** Chrome-like: page-reported favicon URLs (first entry preferred). */
@@ -49,6 +58,7 @@ type EmbedWebviewElement = HTMLElement & {
   goBack?: () => void;
   reload?: () => void;
   canGoBack?: () => boolean;
+  send?: (channel: string, ...args: unknown[]) => void;
   addEventListener: (type: string, listener: EventListener) => void;
   removeEventListener: (type: string, listener: EventListener) => void;
 };
@@ -90,6 +100,8 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       url,
       title,
       embedRuntimeId: embedRuntimeIdProp,
+      appId: appIdProp,
+      bound: boundProp,
       active = true,
       onPageFavicon,
       onPageTitle,
@@ -102,7 +114,11 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
     const webviewRef = useRef<EmbedWebviewElement>(null);
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const overlayRuntimeId = useSclawBrowserOverlayStore((s) => s.embedRuntimeId);
+    const overlaySession = useSclawBrowserOverlayStore((s) => s.session);
     const embedRuntimeId = embedRuntimeIdProp !== undefined ? embedRuntimeIdProp : overlayRuntimeId;
+    const appId = appIdProp ?? overlaySession?.appId ?? null;
+    const bound = boundProp ?? Boolean(overlaySession?.appId);
+    const [guestPreloadUrl, setGuestPreloadUrl] = useState<string | null>(null);
     const onPageFaviconRef = useRef(onPageFavicon);
     const onPageTitleRef = useRef(onPageTitle);
     const onPageUrlRef = useRef(onPageUrl);
@@ -113,6 +129,13 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
     onPageUrlRef.current = onPageUrl;
     onNavStateChangeRef.current = onNavStateChange;
     onOpenWindowRef.current = onOpenWindow;
+
+    useEffect(() => {
+      if (!isElectron) return;
+      void getJsBridgeGuestPreloadUrl().then((preloadUrl) => {
+        if (preloadUrl) setGuestPreloadUrl(preloadUrl);
+      });
+    }, []);
 
     const publishNavState = () => {
       const canGoBack = safeCanGoBack(webviewRef.current);
@@ -159,10 +182,23 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       const el = webviewRef.current;
       if (!el) return;
 
-      // Electron requires the allowpopups *attribute*; React booleans can miss it.
       el.setAttribute('allowpopups', 'true');
+      if (guestPreloadUrl) {
+        el.setAttribute('preload', guestPreloadUrl);
+        el.setAttribute(
+          'webpreferences',
+          'contextIsolation=yes,nodeIntegration=no,sandbox=yes,enableRemoteModule=no',
+        );
+      }
 
       let domReady = false;
+
+      const onIpcMessage = (event: Event) => {
+        const detail = event as Event & { channel?: string; args?: unknown[] };
+        if (detail.channel !== 'jsbridge:request') return;
+        const envelope = detail.args?.[0];
+        void handleJsBridgeWebviewRequest({ webview: el, envelope });
+      };
 
       const bindAfterDomReady = () => {
         if (!active) return;
@@ -178,6 +214,10 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
           runtimeId: embedRuntimeId,
           webContentsId,
           pageUrl,
+        }).then((result) => {
+          if (result.meta?.bridgeBootstrap) {
+            pushJsBridgeInit(el, result.meta.bridgeBootstrap);
+          }
         });
         onPageUrlRef.current?.(pageUrl);
         publishNavState();
@@ -207,26 +247,21 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         const action = resolveSclawEmbedWindowOpenAction(rawUrl);
         if (action.kind !== 'open-tab') return;
         if (onOpenWindowRef.current) {
-          onOpenWindowRef.current(action.url);
-          return;
+          onOpenWindowRef.current(rawUrl);
         }
-        // No host callback — stay in-frame as last resort.
-        if (typeof el.loadURL === 'function') {
-          void el.loadURL(action.url);
-          return;
-        }
-        el.setAttribute('src', action.url);
       };
 
       const onFaviconUpdated = (event: Event) => {
-        const favicons = (event as Event & { favicons?: string[] }).favicons;
-        const first = favicons?.find((item) => typeof item === 'string' && item.trim());
-        if (first) onPageFaviconRef.current?.(first.trim());
+        const detail = event as Event & { favicons?: string[] };
+        const favicon = Array.isArray(detail.favicons) ? detail.favicons[0] : undefined;
+        if (favicon) onPageFaviconRef.current?.(favicon);
       };
 
       const onTitleUpdated = (event: Event) => {
-        const nextTitle = (event as Event & { title?: string }).title?.trim();
-        if (nextTitle) onPageTitleRef.current?.(nextTitle);
+        const detail = event as Event & { title?: string };
+        if (typeof detail.title === 'string' && detail.title.trim()) {
+          onPageTitleRef.current?.(detail.title.trim());
+        }
       };
 
       el.addEventListener('dom-ready', bindAfterDomReady);
@@ -237,6 +272,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       el.addEventListener('new-window', onNewWindow);
       el.addEventListener('page-favicon-updated', onFaviconUpdated);
       el.addEventListener('page-title-updated', onTitleUpdated);
+      el.addEventListener('ipc-message', onIpcMessage);
 
       window.requestAnimationFrame(() => {
         if (active && !domReady && safeGetWebContentsId(el)) {
@@ -255,8 +291,9 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         el.removeEventListener('new-window', onNewWindow);
         el.removeEventListener('page-favicon-updated', onFaviconUpdated);
         el.removeEventListener('page-title-updated', onTitleUpdated);
+        el.removeEventListener('ipc-message', onIpcMessage);
       };
-    }, [embedRuntimeId, url, active]);
+    }, [embedRuntimeId, url, active, guestPreloadUrl, appId, bound]);
 
     if (isElectron) {
       return (
