@@ -3,7 +3,9 @@ import { toast } from 'sonner';
 
 import type {
   WorkflowDraftSnapshot,
+  WorkflowRunnableSnapshot,
   WorkflowSavedDraftSnapshot,
+  WorkflowTryRunPreparation,
   WorkflowTryRunState,
 } from '@/lib/workflow-iframe-bridge';
 import type { WorkflowMcIframeEditorHandle } from '@/pages/Workflow/components/workflow-mc-iframe-editor';
@@ -23,6 +25,7 @@ interface ActiveTryRunRequest {
   previousRunId: string | null;
   runId: string | null;
   terminalState: 'cancelled' | 'failed' | 'completed' | null;
+  preparation: WorkflowTryRunPreparation | null;
 }
 
 export interface UseEmbeddedWorkflowTryRunOptions {
@@ -42,7 +45,7 @@ export interface UseEmbeddedWorkflowTryRunOptions {
 export interface EmbeddedWorkflowTryRunController {
   confirmOpen: boolean;
   requestInFlight: boolean;
-  requestFromWeb: (requestId: string) => void;
+  requestFromWeb: (requestId: string, preparation?: WorkflowTryRunPreparation) => void;
   requestFromHostFallback: () => void;
   cancelConfirmation: () => void;
   confirmAndPrepare: () => Promise<void>;
@@ -56,9 +59,18 @@ function defaultRequestId(): string {
     : `workflow-try-run-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function usesCurrentSavedSnapshot(
+  preparation: WorkflowTryRunPreparation | null | undefined,
+): preparation is Exclude<WorkflowTryRunPreparation, { mode: 'persist-draft' }> {
+  return (
+    preparation?.mode === 'use-current-published' ||
+    preparation?.mode === 'use-current-draft'
+  );
+}
+
 /** Convert the validated Web wire DTO into the stricter local runtime model. */
 export function normalizeWorkflowSavedDraftSnapshot(
-  snapshot: WorkflowSavedDraftSnapshot,
+  snapshot: WorkflowSavedDraftSnapshot | WorkflowRunnableSnapshot,
 ): WorkflowDraftSnapshot {
   const wireSchema = snapshot.startup.schema;
   const schema = wireSchema === null
@@ -174,7 +186,10 @@ export function useEmbeddedWorkflowTryRun({
     setUiState({ sessionIdentity, confirmOpen: false, requestInFlight: true });
     try {
       let snapshot: WorkflowDraftSnapshot;
-      if (request.source === 'web') {
+      if (request.source === 'web' && usesCurrentSavedSnapshot(request.preparation)) {
+        sendState(request, 'preparing');
+        snapshot = normalizeWorkflowSavedDraftSnapshot(request.preparation.snapshot);
+      } else if (request.source === 'web') {
         sendState(request, 'saving');
         const saved = await editor.requestPersistedDraftSnapshot(request.requestId);
         if (!isCurrentAttempt(request)) return;
@@ -207,7 +222,10 @@ export function useEmbeddedWorkflowTryRun({
     }
   };
 
-  const requestFromWeb = (requestId: string) => {
+  const requestFromWeb = (
+    requestId: string,
+    preparation: WorkflowTryRunPreparation = { mode: 'persist-draft' },
+  ) => {
     const normalizedRequestId = requestId.trim();
     if (!normalizedRequestId) {
       editorRef.current?.sendTryRunState('', 'error', '试运行请求标识无效，请重新发起');
@@ -230,6 +248,7 @@ export function useEmbeddedWorkflowTryRun({
         previousRunId: runId,
         runId: null,
         terminalState: null,
+        preparation,
       };
       sendState(rejected, 'error', '已有试运行正在进行，请稍后重试');
       sendState(rejected, 'idle');
@@ -246,10 +265,16 @@ export function useEmbeddedWorkflowTryRun({
       previousRunId: runId,
       runId: null,
       terminalState: null,
+      preparation,
     };
     activeRequestRef.current = request;
-    setUiState({ sessionIdentity, confirmOpen: true, requestInFlight: false });
-    sendState(request, 'confirming');
+    if (usesCurrentSavedSnapshot(preparation)) {
+      setUiState({ sessionIdentity, confirmOpen: false, requestInFlight: false });
+      void prepare(request);
+    } else {
+      setUiState({ sessionIdentity, confirmOpen: true, requestInFlight: false });
+      sendState(request, 'confirming');
+    }
   };
 
   const requestFromHostFallback = () => {
@@ -266,6 +291,7 @@ export function useEmbeddedWorkflowTryRun({
       previousRunId: runId,
       runId: null,
       terminalState: null,
+      preparation: null,
     };
     setUiState({ sessionIdentity, confirmOpen: true, requestInFlight: false });
   };
@@ -297,6 +323,7 @@ export function useEmbeddedWorkflowTryRun({
       previousRunId: runId,
       runId: null,
       terminalState: null,
+      preparation: editorCapabilitiesReady ? { mode: 'persist-draft' } : null,
     };
     activeRequestRef.current = request;
     await prepare(request);

@@ -174,6 +174,49 @@ function NodeInlineConfig({ node, data }: { node: WorkflowNode; data: CanvasNode
     );
   }
 
+  if (node.type === 'browser_task') {
+    return (
+      <div className="wf-canvas-node-inline-form nodrag nowheel">
+        <InlineField label="浏览器任务">
+          <textarea
+            value={readConfigString(config, 'goal')}
+            onChange={(event) => patchConfig({ goal: event.target.value })}
+          />
+        </InlineField>
+      </div>
+    );
+  }
+
+  if (node.type === 'browser_validate') {
+    const validators = Array.isArray(config.validators) ? config.validators : [];
+    const first = validators[0] && typeof validators[0] === 'object' && !Array.isArray(validators[0])
+      ? validators[0] as Record<string, unknown>
+      : {};
+    const preview = readConfigString(first, 'expectedText')
+      || readConfigString(first, 'pattern')
+      || readConfigString(first, 'type', 'elementText');
+    return (
+      <div className="wf-canvas-node-inline-form nodrag nowheel">
+        <InlineField label="校验条件">
+          <textarea value={preview} readOnly />
+        </InlineField>
+      </div>
+    );
+  }
+
+  if (node.type === 'browser_human_gate') {
+    return (
+      <div className="wf-canvas-node-inline-form nodrag nowheel">
+        <InlineField label="暂停原因">
+          <textarea
+            value={readConfigString(config, 'reason', '请完成验证码或人工确认后继续')}
+            onChange={(event) => patchConfig({ reason: event.target.value })}
+          />
+        </InlineField>
+      </div>
+    );
+  }
+
   if (node.type === 'trigger') {
     return (
       <div className="wf-canvas-node-inline-form nodrag nowheel">

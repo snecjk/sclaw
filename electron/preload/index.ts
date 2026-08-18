@@ -211,6 +211,13 @@ const electronAPI = {
         'sclaw-browser:getNetworkLog',
         'sclaw-browser:ensureBridge',
         'sclaw-browser:setPointerPassthrough',
+        // JSBridge (Guest webview ↔ Main)
+        'bridge:getGuestPreloadPath',
+        'bridge:invoke',
+        'bridge:grantCapability',
+        'bridge:listConsents',
+        'bridge:revokeApp',
+        'bridge:revokeCapability',
       ];
 
       if (validChannels.includes(channel)) {
@@ -267,6 +274,9 @@ const electronAPI = {
         'workflow:stream:error',
         'sclaw-browser:toggle-chat',
         'sclaw-browser:open-url',
+        'jsbridge:open-tab',
+        'jsbridge:close-tab',
+        'jsbridge:toast',
       ];
 
       if (validChannels.includes(channel)) {

@@ -92,11 +92,13 @@ function ProvincialMainCard({ hideContentHeader }: { hideContentHeader: boolean 
   const layoutMode = useContentHeaderLayoutMode();
   const editorActive = useWorkflowUiStore((state) => state.editorActive);
   const embeddedHeaderOwned = useWorkflowUiStore((state) => state.embeddedHeaderOwned);
+  const embeddedHeaderNegotiating = useWorkflowUiStore((state) => state.embeddedHeaderNegotiating);
   const isSplitLayout = layoutMode === 'split';
   const isPreviewExpanded = layoutMode === 'preview-expanded';
   const effectiveHideContentHeader = hideContentHeader || shouldHideWorkflowContentHeader({
     editorActive,
     embeddedHeaderOwned,
+    embeddedHeaderNegotiating,
   });
 
   return (

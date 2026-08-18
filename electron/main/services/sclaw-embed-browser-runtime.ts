@@ -24,6 +24,11 @@ import {
   attachSclawEmbedBrowserWindowOpenHandler,
   detachSclawEmbedBrowserWindowOpenHandler,
 } from './sclaw-embed-browser-window-open';
+import {
+  createBridgeSession,
+  destroyBridgeSessionsForRuntime,
+  toBridgeBootstrap,
+} from './jsbridge/session-registry';
 
 interface RuntimeEntry extends SclawEmbedBrowserRuntimeMeta {
   networkLog: SclawEmbedBrowserNetworkEvent[];
@@ -102,6 +107,8 @@ export function registerSclawEmbedBrowserRuntime(input: {
   runtimeId: string;
   appTitle: string;
   initialUrl: string;
+  appId?: string;
+  bound?: boolean;
 }): SclawEmbedBrowserRuntimeMeta {
   const now = Date.now();
   const entry: RuntimeEntry = {
@@ -112,6 +119,9 @@ export function registerSclawEmbedBrowserRuntime(input: {
     pageUrl: input.initialUrl,
     pageTitle: '',
     webContentsId: null,
+    appId: input.appId?.trim() || null,
+    bound: Boolean(input.bound),
+    bridgeBootstrap: null,
     createdAt: now,
     boundAt: null,
     networkLog: [],
@@ -149,6 +159,29 @@ export function bindSclawEmbedBrowserWebContents(input: {
   });
   attachSclawEmbedBrowserShortcutHandler(input.webContentsId);
   attachSclawEmbedBrowserWindowOpenHandler(input.webContentsId, input.runtimeId);
+
+  const pageUrl = entry.pageUrl || input.pageUrl || entry.initialUrl;
+  const bridgeSession = createBridgeSession({
+    runtimeId: input.runtimeId,
+    webContentsId: input.webContentsId,
+    pageUrl,
+    appId: entry.appId,
+    bound: entry.bound,
+  });
+  if (bridgeSession) {
+    entry.bridgeBootstrap = toBridgeBootstrap(bridgeSession);
+    const wc = resolveWebContents(entry);
+    if (wc && !wc.isDestroyed()) {
+      try {
+        wc.send('jsbridge:init', entry.bridgeBootstrap);
+      } catch {
+        // guest preload may not be ready yet
+      }
+    }
+  } else {
+    entry.bridgeBootstrap = null;
+  }
+
   return { ...entry };
 }
 
@@ -175,6 +208,7 @@ export function unregisterSclawEmbedBrowserRuntime(runtimeId: string): void {
   detachSclawEmbedBrowserShortcutHandler(entry.webContentsId);
   detachSclawEmbedBrowserWindowOpenHandler(entry.webContentsId);
   disconnectSclawEmbedBridge(runtimeId);
+  destroyBridgeSessionsForRuntime(runtimeId);
   if (entry.chatSessionKey) {
     chatSessionIndex.delete(entry.chatSessionKey);
   }
@@ -278,6 +312,8 @@ export function setSclawEmbedBrowserPointerPassthrough(runtimeId: string, passth
   if (!entry?.webContentsId) return false;
   const wc = resolveWebContents(entry);
   if (!wc) return false;
+  // <webview> guest WebContents does not implement setIgnoreMouseEvents (BrowserWindow API only).
+  if (typeof wc.setIgnoreMouseEvents !== 'function') return false;
   if (passthrough) {
     wc.setIgnoreMouseEvents(true, { forward: true });
   } else {

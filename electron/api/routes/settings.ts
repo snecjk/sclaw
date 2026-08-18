@@ -50,6 +50,12 @@ export async function handleSettingsRoutes(
   if (url.pathname === '/api/settings' && req.method === 'PUT') {
     try {
       const patch = await parseJsonBody<Partial<AppSettings>>(req);
+      if (Object.prototype.hasOwnProperty.call(patch, 'channelSessionIdleHours')) {
+        const raw = Number(patch.channelSessionIdleHours);
+        patch.channelSessionIdleHours = Number.isFinite(raw)
+          ? Math.min(168, Math.max(1, Math.floor(raw)))
+          : 24;
+      }
       const entries = Object.entries(patch) as Array<[keyof AppSettings, AppSettings[keyof AppSettings]]>;
       for (const [key, value] of entries) {
         await setSetting(key, value);

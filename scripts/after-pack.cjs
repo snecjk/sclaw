@@ -1304,6 +1304,7 @@ exports.default = async function afterPack(context) {
     { type: 'local', localDir: 'sto-workflow-tool', pluginId: 'sto-workflow-tool' },
     { type: 'local', localDir: 'sto-user-skill-tool', pluginId: 'sto-user-skill-tool' },
     { type: 'local', localDir: 'sto-browser-bridge', pluginId: 'sto-browser-bridge' },
+    { type: 'local', localDir: 'sto-browser-automation', pluginId: 'sto-browser-automation' },
   ];
 
   const localPluginSourceRoot = join(__dirname, '..', 'sto-plugin');

@@ -24,6 +24,7 @@
         "checkUpdates": "更新を確認",
         "devConsole": "開発者コンソール",
         "models": "モデル",
+        "tokenBalance": "トークン残高",
         "deleteSessionConfirm": "セッション \"{{label}}\" を削除してもよろしいですか？",
         "deleteSessionFailed": "セッションの削除に失敗しました",
         "deleteSessionFailedHint": "しばらくしてから再度お試しください。解決しない場合は設定でログを確認してください。",

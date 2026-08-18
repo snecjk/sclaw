@@ -53,6 +53,17 @@ describe('buildClaudeRuntimeOptions', () => {
 
     expect(runtime.systemPromptAppend).toContain(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT);
     expect(runtime.mcpServers?.['claude-scheduled-task-tool']).toBeDefined();
+    expect(runtime.mcpServers?.['sto-browser-tool']).toBeDefined();
+    expect(runtime.systemPromptAppend).toContain('bridge_click');
+  });
+
+  it('registers embed bridge prompt for app plaza embed sessions', async () => {
+    readDingTalkMentionPending.mockResolvedValue(null);
+
+    const runtime = await buildClaudeRuntimeOptions('agent:main:session-embed-app-tb--x');
+
+    expect(runtime.mcpServers?.['sto-browser-tool']).toBeDefined();
+    expect(runtime.systemPromptAppend).toContain('不要调用 ba_*');
   });
 
   it('uses the Chinese Claude scheduled-task management policy', () => {
@@ -104,7 +115,10 @@ describe('buildClaudeRuntimeOptions', () => {
   it('blocks Bash batch sends and rate-limits only after a success', async () => {
     readDingTalkMentionPending.mockResolvedValue(null);
 
-    const runtime = await buildClaudeRuntimeOptions('sess-guard');
+    const { buildStoDingTalkSendGuardClaudeRuntimeOptions } = await import(
+      '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk/runtime-options'
+    );
+    const runtime = await buildStoDingTalkSendGuardClaudeRuntimeOptions('sess-guard');
     const preTool = runtime.hooks?.PreToolUse?.[0]?.hooks[0] as HookCallback;
     const postTool = runtime.hooks?.PostToolUse?.[0]?.hooks[0] as HookCallback;
 

@@ -180,7 +180,8 @@ describe('canonical chat client session reducer', () => {
       payload: { reason: 'recovery-timeout' },
     })).state;
 
-    expect(interrupted.error?.message).toBe('recovery-timeout');
+    expect(interrupted.error?.code).toBe('TIMEOUT');
+    expect(interrupted.error?.details).toMatchObject({ reason: 'recovery-timeout' });
 
     const replacement = reduceSessionEvent(interrupted, event({
       eventId: 'event-3',
