@@ -99,13 +99,14 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
   const hydrated = useMoreAppsStore((s) => s.hydrated);
 
   const [blankDraft, setBlankDraft] = useState('');
-  const [addressDraft, setAddressDraft] = useState(tab.url);
+  const displayUrl = tab.currentPageUrl ?? tab.url;
+  const [addressDraft, setAddressDraft] = useState(displayUrl);
   const [canGoBack, setCanGoBack] = useState(false);
   const frameRef = useRef<SclawBrowserFrameHandle>(null);
 
   useEffect(() => {
-    setAddressDraft(tab.url);
-  }, [tab.url, tab.id]);
+    setAddressDraft(tab.currentPageUrl ?? tab.url);
+  }, [tab.currentPageUrl, tab.url, tab.id]);
 
   useEffect(() => {
     setCanGoBack(false);
@@ -255,15 +256,15 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
             value={addressDraft}
             onChange={(event) => setAddressDraft(event.target.value)}
             onBlur={() => {
-              if (addressDraft.trim() && addressDraft.trim() !== tab.url) {
+              if (addressDraft.trim() && addressDraft.trim() !== displayUrl) {
                 commitAddress();
               } else {
-                setAddressDraft(tab.url);
+                setAddressDraft(displayUrl);
               }
             }}
             onKeyDown={(event) => {
               if (event.key === 'Escape') {
-                setAddressDraft(tab.url);
+                setAddressDraft(displayUrl);
                 (event.target as HTMLInputElement).blur();
               }
             }}
@@ -335,6 +336,8 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
               url={tab.url}
               title={tab.title}
               embedRuntimeId={tab.embedRuntimeId}
+              appId={tab.appId}
+              bound={tab.bound}
               active={active}
               onOpenWindow={(nextUrl) => openInSclawBrowser({ url: nextUrl })}
               onNavStateChange={({ canGoBack: next }) => setCanGoBack(next)}
@@ -348,6 +351,9 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
               }}
               onPageTitle={(pageTitle) => {
                 updateTabPageMeta(tab.id, { title: pageTitle });
+              }}
+              onPageUrl={(pageUrl) => {
+                updateTabPageMeta(tab.id, { currentPageUrl: pageUrl });
               }}
             />
           ) : null}
@@ -364,6 +370,7 @@ export function AppPlazaBrowserPane({ tab, active }: AppPlazaBrowserPaneProps) {
               <SclawBrowserEmbedChat
                 sessionKey={tab.chatSessionKey}
                 appTitle={tab.title}
+                embedRuntimeId={tab.embedRuntimeId}
                 onClose={() => closeChatPanel(tab.id)}
                 sessionsProps={{
                   chatSessionKey: tab.chatSessionKey,

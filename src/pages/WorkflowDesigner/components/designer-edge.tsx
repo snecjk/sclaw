@@ -14,8 +14,9 @@ import {
   useReactFlow,
   type EdgeProps,
 } from '@xyflow/react';
-import { SMART_NODE_TEMPLATES, NODE_TEMPLATES } from '@/pages/WorkflowDesigner/constants';
+import { BROWSER_NODE_TEMPLATES, SMART_NODE_TEMPLATES, NODE_TEMPLATES } from '@/pages/WorkflowDesigner/constants';
 import { nodeSummary } from '@/pages/WorkflowDesigner/utils';
+import { isBrowserAutomationEnabled } from '../../../../shared/browser-automation/feature-flag';
 
 type DesignerEdgeData = {
   parallelIndex?: number;
@@ -29,8 +30,15 @@ type DesignerEdgeData = {
 
 const OUTPUT_NODE_TEMPLATE = NODE_TEMPLATES.find((template) => template.type === 'output');
 const INSERT_NODE_TEMPLATES = OUTPUT_NODE_TEMPLATE
-  ? [...SMART_NODE_TEMPLATES, OUTPUT_NODE_TEMPLATE]
-  : SMART_NODE_TEMPLATES;
+  ? [
+    ...SMART_NODE_TEMPLATES,
+    ...(isBrowserAutomationEnabled() ? BROWSER_NODE_TEMPLATES : []),
+    OUTPUT_NODE_TEMPLATE,
+  ]
+  : [
+    ...SMART_NODE_TEMPLATES,
+    ...(isBrowserAutomationEnabled() ? BROWSER_NODE_TEMPLATES : []),
+  ];
 
 export function DesignerEdge({
   id,

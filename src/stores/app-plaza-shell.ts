@@ -59,6 +59,11 @@ export interface AppPlazaBrowserTab {
    * Same source Chrome uses for tab icons — not the App Plaza catalog icon.
    */
   pageFaviconUrl?: string;
+  /**
+   * Live document URL from the webview (SPA / in-page navigation).
+   * Kept separate from `url` so updating it does not remount the webview.
+   */
+  currentPageUrl?: string;
   /** @deprecated Prefer pageFaviconUrl for tab chrome; kept for open-from-catalog hints only. */
   iconUrl?: string;
   iconKey?: string;
@@ -105,7 +110,7 @@ interface AppPlazaShellState {
   promoteTabBound: (tabId: string, nextAppId: string, title?: string) => void;
   updateTabTitle: (tabId: string, title: string) => void;
   /** Chrome-like: update title / favicon from the embedded page. */
-  updateTabPageMeta: (tabId: string, meta: { title?: string; pageFaviconUrl?: string }) => void;
+  updateTabPageMeta: (tabId: string, meta: { title?: string; pageFaviconUrl?: string; currentPageUrl?: string }) => void;
 
   toggleChatPanel: (tabId?: string) => void;
   openChatPanel: (tabId?: string) => void;
@@ -264,12 +269,15 @@ function makeLiveTab(
     runtimeId: embedRuntimeId,
     appTitle: title,
     initialUrl: url,
+    appId,
+    bound,
   });
   // Catalog hints optional; pageFaviconUrl comes from webview after load (Chrome-like).
   const iconUrl = icons?.iconUrl?.trim() || tab.iconUrl;
   return {
     ...tab,
     url,
+    currentPageUrl: url,
     title,
     appId,
     registryAppId: icons?.registryAppId?.trim() || tab.registryAppId,
@@ -660,10 +668,12 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
         if (t.id !== tabId) return t;
         const nextTitle = meta.title?.trim();
         const nextFavicon = meta.pageFaviconUrl?.trim();
+        const nextPageUrl = meta.currentPageUrl?.trim();
         return {
           ...t,
           title: nextTitle || t.title,
           pageFaviconUrl: nextFavicon || t.pageFaviconUrl,
+          currentPageUrl: nextPageUrl || t.currentPageUrl,
         };
       }),
     }));

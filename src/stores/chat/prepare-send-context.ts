@@ -67,18 +67,25 @@ export async function prepareSendContext(input: {
   let embedBrowserContext = embedBrowserContextInput ?? null;
   let embedLongSessionNotice: string | null = null;
   if (!embedBrowserContext && isEmbedChatSession) {
-    const { useSclawBrowserOverlayStore } = await import('@/stores/sclaw-browser-overlay');
-    const overlay = useSclawBrowserOverlayStore.getState();
-    const runtimeId = overlay.embedRuntimeId;
-    if (runtimeId && overlay.session) {
+    const { resolveEmbedRuntimeForChatSend } = await import('@/lib/resolve-embed-runtime-for-chat-send');
+    const embedRuntime = await resolveEmbedRuntimeForChatSend(sessionKey);
+    if (embedRuntime) {
       const { buildSclawBrowserEmbedContextForSend } = await import('@/lib/sclaw-browser-embed-context-builder');
       const { buildEmbedSessionLongContextNotice } = await import('@/lib/sclaw-browser-embed-context-compaction');
       embedLongSessionNotice = buildEmbedSessionLongContextNotice(messages.length);
       embedBrowserContext = await buildSclawBrowserEmbedContextForSend({
-        runtimeId,
-        appTitle: overlay.session.title,
-        fallbackUrl: overlay.session.url,
+        runtimeId: embedRuntime.runtimeId,
+        appTitle: embedRuntime.appTitle,
+        fallbackUrl: embedRuntime.fallbackUrl,
       });
+    } else {
+      textForGateway = [
+        '[系统提示：未能绑定左侧应用广场内置浏览器（embed runtime 未就绪）。',
+        '浏览器 bridge/ba 工具暂不可用；请勿声称已在左侧页面完成操作。',
+        '请确认左侧页面加载完成、AI 助手与当前浏览器 tab 同属一个应用后再试。]',
+        '',
+        textForGateway,
+      ].join('\n');
     }
   }
 

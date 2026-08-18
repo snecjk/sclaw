@@ -12,6 +12,8 @@ export async function registerSclawBrowserRuntime(input: {
   runtimeId: string;
   appTitle: string;
   initialUrl: string;
+  appId?: string;
+  bound?: boolean;
 }): Promise<{ ok: boolean }> {
   if (!window.electron) return { ok: false };
   return invokeIpc('sclaw-browser:registerRuntime', input);
