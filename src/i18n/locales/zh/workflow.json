@@ -202,6 +202,7 @@
     "noEvents": "暂无执行事件",
     "noArtifacts": "暂无产物",
     "openArtifact": "打开产物",
+    "clickViewAttachment": "点击查看附件",
     "downloadArtifact": "下载产物",
     "expandProcess": "展开执行过程",
     "collapseProcess": "收起执行过程",

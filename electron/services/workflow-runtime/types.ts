@@ -62,4 +62,4 @@ export interface AgentRunSpec {
   prompt: string;
 }
 
-export interface AgentNodeResult { status: 'succeeded' | 'failed' | 'manual_review'; output?: any; error?: string; rawText?: string; usage?: any; }
+export interface AgentNodeResult { status: 'succeeded' | 'failed' | 'manual_review' | 'cancelled'; output?: any; error?: string; rawText?: string; usage?: any; }

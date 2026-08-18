@@ -11,12 +11,24 @@
     "gatewayWarning": "网关未运行。未启用网关时无法管理频道。",
     "availableChannels": "可用频道",
     "supportedChannels": "支持的频道",
+    "supportedMobile": "支持的移动端",
     "pluginBadge": "插件",
+    "recommendedBadge": "推荐",
     "available": "可用频道",
     "availableDesc": "连接一个新的频道",
     "configured": "已配置频道",
     "configuredDesc": "管理已完成配置的频道",
     "configuredBadge": "已配置",
+    "sessionIdle": {
+        "sectionTitle": "会话管理",
+        "title": "自动新起会话",
+        "subtitle": "超过设定时间未对话，自动开启新对话（钉钉等平台频道）",
+        "overPrefix": "超过",
+        "overSuffix": "小时未对话，自动开启新会话",
+        "hoursLabel": "空闲小时数",
+        "tip": "开启后，长时间未活跃的历史上下文将不再发送给模型，有效降低 Token 消耗并提升响应速度。",
+        "saveFailed": "保存失败: {{error}}"
+    },
     "deleteConfirm": "确定要删除此频道吗？",
     "showAll": "显示全部",
     "toast": {
@@ -38,6 +50,7 @@
     "account": {
         "add": "添加账号",
         "edit": "编辑",
+        "bind": "绑定",
         "delete": "删除账号",
         "deleteChannel": "删除频道",
         "deleteConfirm": "确定要删除该账号吗？",
@@ -162,7 +175,7 @@
             ]
         },
         "wechat": {
-            "description": "通过腾讯官方 OpenClaw 插件扫码连接个人微信",
+            "description": "通过微信扫码连接助理，接收和回复消息。",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/GHYZwuPCriF0gWkXwkFcJ9zon3b",
             "instructions": [
                 "点击生成二维码，SClaw 会在 OpenClaw 中安装并启用官方微信插件",
@@ -229,7 +242,7 @@
             ]
         },
         "wecom": {
-            "description": "通过插件连接企业微信机器人",
+            "description": "注册企微助理以接收和回复消息。",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/JTGnwoV0RixKPtkr4w7c7gpAnDc",
             "fields": {
                 "botId": {
@@ -360,7 +373,7 @@
             ]
         },
         "qqbot": {
-            "description": "通过 @sliverp/qqbot 插件连接 QQ 机器人",
+            "description": "注册 QQ 机器人以接收和回复消息。",
             "docsUrl": "https://icnnp7d0dymg.feishu.cn/wiki/KPIJwlyiGiupMrkiS9ice39Zn2c",
             "fields": {
                 "appId": {
@@ -409,6 +422,8 @@
             "replacedUnbound": "钉钉绑定已解除",
             "notBoundHint": "未绑定，点击扫码绑定",
             "boundHint": "引擎：{{engine}} · {{agent}}",
+            "boundStatusHint": "已绑定",
+            "bindingRow": "默认绑定",
             "agentRequired": "请选择要绑定的 Agent",
             "noAgentsForEngine": "该引擎下暂无 Agent，请先创建后再切换",
             "rebindTitle": "重新绑定钉钉",
@@ -418,6 +433,41 @@
             "createFailed": "生成二维码失败: {{error}}",
             "bindFailed": "绑定失败: {{error}}",
             "unbindFailed": "解绑失败: {{error}}"
+        },
+        "mobile": {
+            "title": "SClaw 移动端（申懂懂）",
+            "cardDesc": "通过移动端操作本地 agent",
+            "subtitle": "手机 App「本地」Tab → 本机 StoClaw 执行",
+            "enabledHint": "已开启，手机「本地」页可连到本机",
+            "disabledHint": "关闭时 App 无法路由到本机；打开后请保持 StoClaw 在线",
+            "hubOfflineHint": "已开启，Hub 未连接时手机暂不可达",
+            "needDingTalkWs": "通道中枢未连接，请确认已登录且网络正常",
+            "wsOnline": "Hub 在线",
+            "wsOffline": "Hub 离线",
+            "toggleLabel": "App 绑定",
+            "bindingRow": "默认绑定",
+            "engineLabel": "执行引擎",
+            "agentLabel": "绑定 Agent",
+            "enableSuccess": "已开启 App 本地通道",
+            "disableSuccess": "已关闭 App 本地通道",
+            "toggleFailed": "切换失败: {{error}}",
+            "agentRequired": "请选择要绑定的 Agent",
+            "noAgentsForEngine": "该引擎下暂无 Agent，请先创建后再切换",
+            "modal": {
+                "title": "配置移动端 SClaw（申懂懂）",
+                "subtitle": "通过同账号连接 SClaw 官方 App",
+                "howToConnect": "如何连接",
+                "enableConnect": "开启连接 App",
+                "confirm": "确认",
+                "step1": "扫描右侧二维码下载 App，并使用同一账号登录手机",
+                "step2": "在电脑端开启 SClaw 开关",
+                "step3": "连接成功后，手机 App 会显示绿色的「已连接电脑」",
+                "step4": "下次打开后，App 可自动连接电脑"
+            },
+            "configure": "配置",
+            "footerQrHint": "一键下载，把工作台装进口袋",
+            "footerConnectHint": "连接 app，确保同账号登录手机",
+            "footerMoreChannels": "点击绑定更多机器人助理(钉钉、微信)"
         }
     },
     "viewDocs": "查看文档"
