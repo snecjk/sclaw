@@ -51,6 +51,7 @@ describe('app shell layout surfaces', () => {
     const src = readFileSync(resolve(process.cwd(), 'src/App.tsx'), 'utf8');
     expect(src).toContain('AppShellLayoutProvider');
     expect(src).toContain('computeToastLayoutOffsetPx');
+    expect(src).toContain("pointerEvents: 'auto'");
     expect(src).not.toContain('sidebarCollapsed ? 72 : 260');
     expect(src).not.toContain('collapsed ? 72 : 260');
   });

@@ -52,6 +52,7 @@ describe('WorkflowEditorSessionBoundary', () => {
         <span>workflow-a</span>
       </WorkflowEditorSessionBoundary>,
     );
+    expect(useWorkflowUiStore.getState()).toMatchObject({ embeddedHeaderNegotiating: true });
     act(() => useWorkflowUiStore.getState().setEmbeddedHeaderOwned(true));
 
     rerender(
@@ -60,7 +61,10 @@ describe('WorkflowEditorSessionBoundary', () => {
       </WorkflowEditorSessionBoundary>,
     );
 
-    expect(useWorkflowUiStore.getState().embeddedHeaderOwned).toBe(false);
+    expect(useWorkflowUiStore.getState()).toMatchObject({
+      embeddedHeaderOwned: false,
+      embeddedHeaderNegotiating: true,
+    });
   });
 
   it('resets embedded header ownership when the workflow route unmounts', () => {
@@ -74,6 +78,9 @@ describe('WorkflowEditorSessionBoundary', () => {
 
     unmount();
 
-    expect(useWorkflowUiStore.getState().embeddedHeaderOwned).toBe(false);
+    expect(useWorkflowUiStore.getState()).toMatchObject({
+      embeddedHeaderOwned: false,
+      embeddedHeaderNegotiating: false,
+    });
   });
 });

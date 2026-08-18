@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { invokeIpc } from '@/lib/api-client';
 import { isHttpUrl, openExternalUrl } from '@/lib/preview-url';
 import type { TestRunDrawerProps } from '@/pages/WorkflowDesigner/components/test-run-drawer';
+import { isGlobalToastInteractionTarget } from '@/lib/global-toast-interaction';
 import {
   formatTrialRunTime,
   formatTrialRunVersion,
@@ -145,19 +146,23 @@ function ArtifactCard({ artifacts }: { artifacts: TrialRunDisplayArtifact[] }) {
           <p className="py-8 text-center text-xs text-muted-foreground">{t('run.noArtifacts')}</p>
         ) : (
           <ul className="space-y-2">
-            {artifacts.map((artifact) => (
-              <li className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2" key={`${artifact.source}:${artifact.id}`}>
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 truncate text-left text-xs text-foreground hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:text-muted-foreground"
-                  disabled={!getTrialRunArtifactTarget(artifact)}
-                  onClick={() => openArtifact(artifact)}
-                >
-                  {artifact.name}
-                </button>
-                <span className="shrink-0 text-[11px] text-muted-foreground">{artifact.contentType ?? artifact.type}</span>
-              </li>
-            ))}
+            {artifacts.map((artifact) => {
+              const target = getTrialRunArtifactTarget(artifact);
+              return (
+                <li className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2" key={`${artifact.source}:${artifact.id}`}>
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 truncate text-left text-xs font-medium text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:font-normal disabled:text-muted-foreground disabled:no-underline"
+                    disabled={!target}
+                    title={target ? t('run.clickViewAttachment') : undefined}
+                    onClick={() => openArtifact(artifact)}
+                  >
+                    {artifact.name}
+                  </button>
+                  <span className="shrink-0 text-[11px] text-muted-foreground">{artifact.contentType ?? artifact.type}</span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -227,15 +232,31 @@ export function TrialRunDrawerView(props: TrialRunDrawerViewProps) {
   const workflowVersion = props.run?.workflowVersion ?? props.workflowVersion;
   const noticeRunId = props.runId ?? '__starting__';
   const showRunningNotice = view === 'running' && dismissedNoticeRunId !== noticeRunId;
-  const footer = view === 'running'
+  const footer = view === 'running' && props.onCancel
     ? { label: props.isCancelling ? t('run.cancelling') : t('run.cancelRun'), action: props.onCancel }
-    : view === 'cancelled'
+    : view === 'cancelled' && props.onContinue
       ? { label: t('run.continueRun'), action: props.onContinue }
-      : { label: t('run.rerunPlain'), action: props.onRerun };
+      : props.onRerun
+        ? { label: t('run.rerunPlain'), action: props.onRerun }
+        : props.onReturnToConversation
+          ? {
+              label: props.returnToConversationLabel ?? '返回发起会话',
+              action: props.onReturnToConversation,
+            }
+          : null;
 
   return (
     <Sheet open={props.open} onOpenChange={(open) => { if (!open) props.onClose(); }}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 border-l border-border bg-background p-0 text-foreground sm:max-w-[min(500px,100vw)]">
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-0 border-l border-border bg-background p-0 text-foreground sm:max-w-[min(500px,100vw)]"
+        onPointerDownOutside={(event) => {
+          // Keep the trial drawer mounted until the toast action reaches its
+          // onClick handler. That handler coordinates closing this drawer and
+          // opening the result drawer in a single interaction.
+          if (isGlobalToastInteractionTarget(event.target)) event.preventDefault();
+        }}
+      >
         <header data-testid="trial-run-header" className="flex h-[52px] shrink-0 items-center justify-between px-3">
           <SheetTitle className="text-sm font-semibold">{t('run.resultTitle')}</SheetTitle>
           <SheetDescription className="sr-only">{t('run.resultDescription')}</SheetDescription>
@@ -334,16 +355,18 @@ export function TrialRunDrawerView(props: TrialRunDrawerViewProps) {
           ) : null}
         </div>
 
-        <footer data-testid="trial-run-footer" className="flex h-[60px] shrink-0 items-center border-t border-border px-3">
-          <Button
-            type="button"
-            className="h-9 w-full rounded-[10px] bg-foreground text-background hover:bg-foreground/90"
-            disabled={!footer.action || props.isCancelling}
-            onClick={footer.action}
-          >
-            {footer.label}
-          </Button>
-        </footer>
+        {footer ? (
+          <footer data-testid="trial-run-footer" className="flex h-[60px] shrink-0 items-center border-t border-border px-3">
+            <Button
+              type="button"
+              className="h-9 w-full rounded-[10px] bg-foreground text-background hover:bg-foreground/90"
+              disabled={props.isCancelling}
+              onClick={footer.action}
+            >
+              {footer.label}
+            </Button>
+          </footer>
+        ) : null}
       </SheetContent>
     </Sheet>
   );

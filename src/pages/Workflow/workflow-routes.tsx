@@ -8,6 +8,7 @@ import { CreateWorkflowModal } from '@/pages/Workflow/components/create-workflow
 import { WorkflowMcIframeEditor, type WorkflowMcIframeEditorHandle } from '@/pages/Workflow/components/workflow-mc-iframe-editor';
 import { useWorkflowEditorContentHeader } from '@/hooks/use-workflow-editor-content-header';
 import { StartupRunDialog } from '@/pages/WorkflowDesigner/components/startup-run-dialog';
+import { shouldShowStartupRunDialog } from '@/pages/WorkflowDesigner/components/test-run-drawer-model';
 import { TestRunDrawer } from '@/pages/WorkflowDesigner/components/test-run-drawer';
 import { LocalRunHistoryDialog } from '@/pages/WorkflowDesigner/components/local-run-history-dialog';
 import { useDesignerTryRun } from '@/pages/WorkflowDesigner/hooks/use-designer-try-run';
@@ -72,10 +73,15 @@ export function WorkflowEditorSessionBoundary({
   children: ReactNode;
 }) {
   const setEmbeddedHeaderOwned = useWorkflowUiStore((state) => state.setEmbeddedHeaderOwned);
+  const setEmbeddedHeaderNegotiating = useWorkflowUiStore((state) => state.setEmbeddedHeaderNegotiating);
   useLayoutEffect(() => {
     setEmbeddedHeaderOwned(false);
-    return () => setEmbeddedHeaderOwned(false);
-  }, [setEmbeddedHeaderOwned, workflowId]);
+    setEmbeddedHeaderNegotiating(true);
+    return () => {
+      setEmbeddedHeaderOwned(false);
+      setEmbeddedHeaderNegotiating(false);
+    };
+  }, [setEmbeddedHeaderNegotiating, setEmbeddedHeaderOwned, workflowId]);
 
   return <Fragment key={workflowId}>{children}</Fragment>;
 }
@@ -93,7 +99,9 @@ function WorkflowEditorSession({
 }) {
   const editorRef = useRef<WorkflowMcIframeEditorHandle>(null);
   const embeddedHeaderOwned = useWorkflowUiStore((state) => state.embeddedHeaderOwned);
+  const embeddedHeaderNegotiating = useWorkflowUiStore((state) => state.embeddedHeaderNegotiating);
   const setEmbeddedHeaderOwned = useWorkflowUiStore((state) => state.setEmbeddedHeaderOwned);
+  const setEmbeddedHeaderNegotiating = useWorkflowUiStore((state) => state.setEmbeddedHeaderNegotiating);
   const [editorCapabilitySession, setEditorCapabilitySession] = useState({ ready: false, generation: 0 });
   const [localRunHistoryOpen, setLocalRunHistoryOpen] = useState(false);
   const handleOpenLocalRunHistory = useCallback(() => setLocalRunHistoryOpen(true), []);
@@ -122,10 +130,12 @@ function WorkflowEditorSession({
   };
   const drawerActions = createEmbeddedTrialRunDrawerActions({
     closeDrawer: tryRun.closeDrawer,
-    startNewRun: embeddedTryRun.rerun,
+    continueRun: tryRun.continueRun,
+    rerun: tryRun.rerun,
   });
   const handleEditorCapabilitiesChange = (ready: boolean) => {
     setEmbeddedHeaderOwned(ready);
+    setEmbeddedHeaderNegotiating(!ready);
     setEditorCapabilitySession((current) => ({
       ready,
       generation: current.generation + 1,
@@ -133,7 +143,12 @@ function WorkflowEditorSession({
   };
   const handleEditorSessionReset = () => {
     setEmbeddedHeaderOwned(false);
+    setEmbeddedHeaderNegotiating(true);
     embeddedTryRun.invalidateSession();
+  };
+  const handleEditorHandshakeFallback = () => {
+    setEmbeddedHeaderOwned(false);
+    setEmbeddedHeaderNegotiating(false);
   };
 
   useWorkflowEditorContentHeader({
@@ -141,7 +156,7 @@ function WorkflowEditorSession({
     onBack,
     prompt,
     promptCacheId,
-    enabled: !embeddedHeaderOwned,
+    enabled: !embeddedHeaderOwned && !embeddedHeaderNegotiating,
     onTryRun: embeddedTryRun.requestFromHostFallback,
     tryRunDisabled: embeddedTryRun.requestInFlight || tryRun.isStarting || tryRun.isRunActive,
     onOpenLocalRunHistory: handleOpenLocalRunHistory,
@@ -156,8 +171,10 @@ function WorkflowEditorSession({
         promptCacheId={promptCacheId}
         onEditorCapabilitiesChange={handleEditorCapabilitiesChange}
         onEditorSessionReset={handleEditorSessionReset}
+        onEditorHandshakeFallback={handleEditorHandshakeFallback}
         onTryRunRequest={embeddedTryRun.requestFromWeb}
         onBackRequest={onBack}
+        onLocalRunHistoryRequest={handleOpenLocalRunHistory}
       />
       <ConfirmDialog
         open={embeddedTryRun.confirmOpen}
@@ -169,7 +186,10 @@ function WorkflowEditorSession({
         onCancel={embeddedTryRun.cancelConfirmation}
       />
       <StartupRunDialog
-        open={tryRun.isStartupDialogOpen}
+        open={shouldShowStartupRunDialog({
+          isStartupDialogOpen: tryRun.isStartupDialogOpen,
+          isDrawerOpen: tryRun.isDrawerOpen,
+        })}
         schema={tryRun.startupSchema}
         defaultValues={tryRun.startupDefaultValues}
         runtimeUploadNodes={tryRun.runtimeUploadNodes}

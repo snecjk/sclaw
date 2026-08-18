@@ -5,22 +5,31 @@ import { createEmbeddedTrialRunDrawerActions } from '@/pages/Workflow/workflow-e
 describe('createEmbeddedTrialRunDrawerActions', () => {
   it('closes only the drawer without ending the current bridge attempt', () => {
     const closeDrawer = vi.fn();
-    const startNewRun = vi.fn();
-    const actions = createEmbeddedTrialRunDrawerActions({ closeDrawer, startNewRun });
+    const continueRun = vi.fn();
+    const rerun = vi.fn();
+    const actions = createEmbeddedTrialRunDrawerActions({ closeDrawer, continueRun, rerun });
 
     actions.close();
 
     expect(closeDrawer).toHaveBeenCalledOnce();
-    expect(startNewRun).not.toHaveBeenCalled();
+    expect(continueRun).not.toHaveBeenCalled();
+    expect(rerun).not.toHaveBeenCalled();
   });
 
-  it('uses a fresh-run action for both cancelled continue and rerun', () => {
-    const startNewRun = vi.fn();
-    const actions = createEmbeddedTrialRunDrawerActions({ closeDrawer: vi.fn(), startNewRun });
+  it('keeps cancelled continue and fresh rerun as separate actions', () => {
+    const continueRun = vi.fn();
+    const rerun = vi.fn();
+    const actions = createEmbeddedTrialRunDrawerActions({
+      closeDrawer: vi.fn(),
+      continueRun,
+      rerun,
+    });
 
     actions.continueRun();
-    actions.rerun();
+    expect(continueRun).toHaveBeenCalledOnce();
+    expect(rerun).not.toHaveBeenCalled();
 
-    expect(startNewRun).toHaveBeenCalledTimes(2);
+    actions.rerun();
+    expect(rerun).toHaveBeenCalledOnce();
   });
 });

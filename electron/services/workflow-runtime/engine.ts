@@ -85,6 +85,7 @@ export interface StartWorkflowArgs {
 
 export function createEngine(deps: EngineDeps) {
   const repo = deps.repo;
+  const cancelledRunIds = new Set<string>();
 
   // 给 agent-retry 用的 ctx.emit：写事件流水
   const makeCtx = (runId: string, def: any, seqRef: { n: number }, runtime?: Record<string, any>): RunCtx => ({
@@ -223,6 +224,7 @@ export function createEngine(deps: EngineDeps) {
           invokeAgent: deps.invokeAgent,
           quota: deps.quota,
           execEngine,
+          isCancelled: () => cancelledRunIds.has(runId),
         });
         const agentSessionId = deriveWorkflowNodeSessionId(runId, cur.id);
         if (agentResult.status !== 'manual_review' && deps.releaseAgentSession) {
@@ -232,6 +234,7 @@ export function createEngine(deps: EngineDeps) {
             });
           });
         }
+        if (agentResult.status === 'cancelled') return;
         if (agentResult.status === 'succeeded') hasExecutedSmartNode = true;
         result = { action: agentResult.status === 'succeeded' ? 'continue' : 'pause', output: agentResult.output };
         if (agentResult.status === 'manual_review') {
@@ -516,6 +519,7 @@ export function createEngine(deps: EngineDeps) {
      * 正式启动节点调度。
      */
     async startWorkflow(args: StartWorkflowArgs): Promise<void> {
+      cancelledRunIds.delete(args.runId);
       let triggerType = args.triggerType ?? (args.chatCard ? 'chat' : 'workflow_manual');
       const sessionKey = args.sessionKey?.trim();
       if (
@@ -588,12 +592,14 @@ export function createEngine(deps: EngineDeps) {
       }
     },
     async startRun(args: StartRunArgs): Promise<void> {
+      cancelledRunIds.delete(args.runId);
       // definition 已由外部拉取注入（测试/直用）
       await dispatch(args.runId, args.definition, undefined, { workflowId: args.workflowId, versionId: args.versionId }, args.input ?? {});
     },
     /** 恢复异常中断或用户取消的运行：从首个未完成节点重新进入 dispatch。 */
     async resumeRun(runId: string): Promise<void> {
       workflowExecLog('info', 'run-resume', 'resuming interrupted or cancelled workflow run', { runId });
+      cancelledRunIds.delete(runId);
       const r = await resumeRun(repo, runId);
       if (!r) return;
       const resumedRun = await repo.getRun(r.runId);
@@ -657,6 +663,7 @@ export function createEngine(deps: EngineDeps) {
     },
     async cancel(runId: string, nodeId: string): Promise<void> {
       workflowExecLog('warn', 'run-cancel', 'cancelling workflow run', { runId, nodeId });
+      cancelledRunIds.add(runId);
       cancelAgent(runId, nodeId);
       cancelOpenClawWorkflowAgent(runId, nodeId);
       const run = await repo.getRun(runId).catch(() => undefined);

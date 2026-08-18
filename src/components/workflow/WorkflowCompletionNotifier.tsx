@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { openWorkflowResult } from '@/lib/workflow-result-navigation';
+import { requestWorkflowResultDrawerHandoff } from '@/lib/workflow-result-drawer-handoff';
 import { getRunViaIpc, runToExecutionState } from '@/lib/workflow-api';
 import { isTerminalWorkflowRunStatus } from '@/lib/workflow-run-status';
 import { getExecutionByRunId, markCompletionNotificationDelivered } from '@/stores/workflow-memory';
@@ -86,9 +87,20 @@ export function WorkflowCompletionNotifier() {
         } : current);
       }
     };
+    const openDetailsAfterHandoff = (
+      sessionKey: string,
+      runId: string,
+      workflowName?: string,
+    ) => {
+      requestWorkflowResultDrawerHandoff(runId, () => {
+        void openDetails(sessionKey, runId, workflowName);
+      });
+    };
     const onCompletionOpen = (payload: unknown) => {
       const data = payload as { sessionKey?: string; runId?: string };
-      if (data.sessionKey && data.runId) void openDetails(data.sessionKey, data.runId);
+      if (data.sessionKey && data.runId) {
+        openDetailsAfterHandoff(data.sessionKey, data.runId);
+      }
     };
     const onStatus = (payload: unknown) => {
       const data = payload as WorkflowStatusPayload;
@@ -110,7 +122,10 @@ export function WorkflowCompletionNotifier() {
       show(completed ? t('workflow.notificationCompleted', { workflowName }) : t('workflow.notificationFailed', { workflowName }), {
         id: notificationId,
         description: completed ? t('workflow.notificationCompletedDescription') : (data.error || t('workflow.notificationFailedDescription')),
-        action: { label: actionLabel, onClick: () => void openDetails(data.sessionKey, data.runId, workflowName) },
+        action: {
+          label: actionLabel,
+          onClick: () => openDetailsAfterHandoff(data.sessionKey, data.runId, workflowName),
+        },
       });
     };
 
@@ -127,7 +142,7 @@ export function WorkflowCompletionNotifier() {
 
   return (
     <TestRunDrawer
-      variant="detail"
+      variant="trial"
       open={detail.open}
       workflowName={detail.workflowName}
       runId={detail.runId}

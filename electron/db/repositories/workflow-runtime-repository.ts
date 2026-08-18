@@ -130,14 +130,19 @@ export class WorkflowRuntimeRepository {
     return Boolean(row);
   }
 
-  /** Status/detail projection; excludes definition, startup input, and agent-result bodies. */
+  /**
+   * Status/detail projection. The persisted definition stays in Main and is
+   * used to resolve node IDs to the user-edited canvas names; the mapper does
+   * not forward the definition to Renderer. Startup input and agent-result
+   * bodies remain excluded from this polling path.
+   */
   async getRunSummary(run_id: string, options: { includeTimelineText?: boolean } = {}): Promise<any> {
     const db = getKyselyDatabase();
     const base = db
       .selectFrom('wf_run')
       .where('run_id', '=', run_id);
     const columns = [
-        'run_id', 'workflow_id', 'status', 'waiting_node_id', 'output_json',
+        'run_id', 'workflow_id', 'status', 'waiting_node_id', 'definition_json', 'output_json',
         'error', 'started_at', 'completed_at',
       ] as const;
     if (options.includeTimelineText) {
