@@ -431,7 +431,7 @@ export function LearningCenterPage() {
       <div className={`learning-center-split h-full min-h-0${tutorialId ? ' learning-center-split--open' : ''}`}>
       <main
         ref={pageRootRef}
-        className={`learning-center-page min-h-0 overflow-x-hidden overflow-y-auto bg-background px-4 py-5 sm:px-6 lg:px-8${tutorialId ? ' learning-center-page--detail-open' : ''}`}
+        className={`learning-center-page h-full min-h-0 overflow-x-hidden overflow-y-auto px-4 py-5 sm:px-6 lg:px-8${tutorialId ? ' learning-center-page--detail-open' : ''}`}
       >
         <div className="learning-center-page__inner flex flex-col gap-8">
           {state.status === 'loading' && (

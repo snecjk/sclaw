@@ -242,6 +242,9 @@ describe('LearningCenterPage', () => {
     const aside = document.querySelector('.learning-center-split__aside');
     expect(aside).not.toBeNull();
     expect(aside?.contains(panel)).toBe(true);
+    const header = panel.querySelector('.learning-center-tutorial-sheet__header');
+    expect(header).toContainElement(screen.getByRole('heading', { name: '教程指南' }));
+    expect(header).toContainElement(screen.getByRole('button', { name: '关闭' }));
     expect(panel.style.position).toBe('absolute');
     expect(panel.style.width).toBe('35.25rem');
     expect(panel.style.top).toBe('0px');

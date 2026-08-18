@@ -16,6 +16,21 @@ function header(headers: Record<string, string> | undefined, name: string): stri
   return '';
 }
 
+/**
+ * Aliyun OSS default and acceleration domains can force browser downloads by
+ * returning `Content-Disposition: attachment`. Fetch these covers in the main
+ * process instead of assigning the URL directly to an <img> element.
+ */
+export function requiresLearningCoverHostFetch(url: string): boolean {
+  try {
+    const hostname = new URL(url.trim()).hostname.toLowerCase();
+    return hostname.endsWith('.aliyuncs.com')
+      && (hostname.includes('.oss-') || hostname.includes('.oss.'));
+  } catch {
+    return false;
+  }
+}
+
 export async function resolveLearningCoverSrc(url: string): Promise<string> {
   const trimmed = url.trim();
   if (!trimmed) return '';

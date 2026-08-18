@@ -3,6 +3,7 @@
 
 .learning-center-page {
   overflow-x: hidden;
+  background: var(--lc-canvas-bg, #fafafc);
   --lc-card-radius: 1.125rem; /* 18px */
   --lc-cover-ratio: 250 / 156;
   --lc-case-card-height: 18.25rem; /* 292px */
@@ -15,6 +16,7 @@
   --lc-tab-art-gap: 0.5rem;
   --lc-steps-bg: #f5f5f5;
   --lc-panel-bg: #ffffff;
+  --lc-canvas-bg: #fafafc;
   --lc-detail-content-w: 33.5rem; /* 536px fallback */
   --lc-detail-content-min-w: 35.1875rem; /* 563px: 向左拖动下限 */
   --lc-detail-panel-w: 35.25rem; /* 564px */
@@ -30,12 +32,15 @@
 .learning-center-split {
   position: relative;
   display: flex;
+  flex: 1 1 auto;
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   gap: 0;
+  background: var(--lc-canvas-bg, #fafafc);
+  --lc-canvas-bg: #fafafc;
   --lc-detail-content-min-w: 35.1875rem;
   --lc-detail-panel-w: 35.25rem;
   --lc-detail-gap: 0.75rem;
@@ -51,6 +56,7 @@
   width: 0;
   min-width: 0;
   overflow: hidden;
+  background: var(--lc-canvas-bg, #fafafc);
 }
 
 .learning-center-split--open .learning-center-tutorial-sheet {
@@ -82,10 +88,6 @@
 @media (min-width: 64rem) {
   .learning-center-split--open {
     gap: var(--lc-detail-gap);
-  }
-
-  .learning-center-split--open > .learning-center-page {
-    min-width: var(--lc-detail-content-min-w);
   }
 
   .learning-center-split--open > .learning-center-split__aside {
@@ -890,6 +892,7 @@
 .dark .learning-center-page {
   --lc-steps-bg: hsl(var(--muted));
   --lc-panel-bg: hsl(var(--card));
+  --lc-canvas-bg: hsl(var(--background));
 }
 
 .dark .learning-center-case-card {

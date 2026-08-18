@@ -57,7 +57,7 @@ export function TutorialPanel({ tutorialId, portalContainer, returnFocusRef, onC
     <Sheet modal={false} open={Boolean(tutorialId)} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent
         side="right"
-        className="learning-center-tutorial-sheet flex flex-col gap-0 overflow-hidden p-0 motion-reduce:animate-none motion-reduce:transition-none"
+        className="learning-center-tutorial-sheet flex flex-col gap-0 overflow-hidden p-0 motion-reduce:animate-none motion-reduce:transition-none !absolute inset-0"
         portalContainer={portalContainer}
         overlayClassName="learning-center-tutorial-sheet__overlay lg:hidden motion-reduce:animate-none"
         style={{
@@ -76,17 +76,24 @@ export function TutorialPanel({ tutorialId, portalContainer, returnFocusRef, onC
           returnFocusRef.current?.focus();
         }}
       >
-        <SheetHeader className="learning-center-tutorial-sheet__header shrink-0 text-left">
+        <SheetHeader className="learning-center-tutorial-sheet__header shrink-0 flex-row items-center justify-between space-y-0 text-left">
           <SheetTitle className="learning-center-tutorial-sheet__title">{t('tutorialPanelTitle')}</SheetTitle>
           <SheetDescription className="sr-only">
             {state.status === 'ready'
               ? state.tutorial.subTitle || state.tutorial.description || t('tutorialPanelDescription')
               : t('tutorialPanelDescription')}
           </SheetDescription>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="learning-center-tutorial-sheet__close"
+            aria-label={t('close')}
+            onClick={onClose}
+          >
+            <PanelRightClose className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+          </Button>
         </SheetHeader>
-        <Button type="button" variant="ghost" size="icon" className="learning-center-tutorial-sheet__close absolute" aria-label={t('close')} onClick={onClose}>
-          <PanelRightClose className="h-4 w-4" aria-hidden />
-        </Button>
         <div className="learning-center-tutorial-sheet__body min-h-0 flex-1">
           <section className="learning-center-tutorial-sheet__content">
             {state.status === 'ready' && (
