@@ -43,7 +43,7 @@ describe('dispatchLearningCaseAction whitelist targets', () => {
     externalMock.mockClear();
   });
 
-  it('opens home with a skill chip and default execute hint', () => {
+  it('opens home with a skill chip and no canned execute hint', () => {
     const result = dispatchLearningCaseAction(
       action({ targetType: 'SKILL', targetCode: 'daily-report' }),
       { navigate, displayTitle: '日报助手' },
@@ -52,7 +52,6 @@ describe('dispatchLearningCaseAction whitelist targets', () => {
     expect(result).toMatchObject({ ok: true, navigatedTo: '/', draftApplied: true });
     expect(handoffMock).toHaveBeenCalledWith(navigate, {
       skill: { slug: 'daily-report', title: '日报助手' },
-      suffixText: '帮我执行这个技能',
     });
     expect(navigate).not.toHaveBeenCalled();
     expect(draftMock).not.toHaveBeenCalled();
@@ -68,6 +67,17 @@ describe('dispatchLearningCaseAction whitelist targets', () => {
     expect(handoffMock).toHaveBeenCalledWith(navigate, {
       skill: { slug: 'daily-report', title: '日报助手' },
       suffixText: '帮我写日报',
+    });
+  });
+
+  it('uses the case prompt as the workflow suffix when provided', () => {
+    dispatchLearningCaseAction(
+      action({ targetType: 'WORKFLOW', targetCode: 'tpl_demo', promptText: '按本周数据跑一遍' }),
+      { navigate, displayTitle: '几善诗词' },
+    );
+    expect(handoffMock).toHaveBeenCalledWith(navigate, {
+      workflow: { id: 'tpl_demo', name: '几善诗词' },
+      suffixText: '按本周数据跑一遍',
     });
   });
 
@@ -91,7 +101,7 @@ describe('dispatchLearningCaseAction whitelist targets', () => {
     expect(navigate).toHaveBeenCalledWith('/more-apps');
   });
 
-  it('opens home with a workflow chip instead of the editor', () => {
+  it('opens home with a workflow chip and no canned install/execute hint', () => {
     const result = dispatchLearningCaseAction(
       action({ targetType: 'WORKFLOW', targetCode: 'wf/1 2' }),
       { navigate, displayTitle: '每日任务' },
@@ -99,9 +109,7 @@ describe('dispatchLearningCaseAction whitelist targets', () => {
 
     expect(result).toMatchObject({ ok: true, navigatedTo: '/', draftApplied: true });
     expect(handoffMock).toHaveBeenCalledWith(navigate, {
-      prefixText: '安装',
       workflow: { id: 'wf/1 2', name: '每日任务' },
-      suffixText: '帮我执行这个工作流',
     });
     expect(navigate).not.toHaveBeenCalled();
   });
@@ -134,7 +142,6 @@ describe('dispatchLearningCaseAction whitelist targets', () => {
     );
     expect(handoffMock).toHaveBeenCalledWith(navigate, {
       skill: { slug: 'finance-guanbao', title: 'finance-guanbao' },
-      suffixText: '帮我执行这个技能',
     });
   });
 });

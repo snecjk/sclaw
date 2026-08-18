@@ -61,9 +61,6 @@ export interface LearningCaseActionContext {
 }
 
 const APP_PLAZA_PATH = '/more-apps';
-const DEFAULT_SKILL_SUFFIX = '帮我执行这个技能';
-const DEFAULT_WORKFLOW_SUFFIX = '帮我执行这个工作流';
-const WORKFLOW_TEMPLATE_PREFIX = '安装';
 
 function fail(reason: LearningCaseActionFailureReason): LearningCaseActionResult {
   return { ok: false, reason };
@@ -114,7 +111,7 @@ export function dispatchLearningCaseAction(
       const title = context.displayTitle?.trim() || targetCode;
       const applied = navigateToMainChatWithComposerHandoff(context.navigate, {
         skill: { slug: targetCode, title },
-        suffixText: prompt || DEFAULT_SKILL_SUFFIX,
+        ...(prompt ? { suffixText: prompt } : {}),
       });
       return applied ? { ok: true, navigatedTo: '/', draftApplied: true } : fail('TARGET_UNAVAILABLE');
     }
@@ -131,9 +128,8 @@ export function dispatchLearningCaseAction(
       if (!targetCode) return fail('MISSING_TARGET_CODE');
       const title = context.displayTitle?.trim() || targetCode;
       const applied = navigateToMainChatWithComposerHandoff(context.navigate, {
-        prefixText: WORKFLOW_TEMPLATE_PREFIX,
         workflow: { id: targetCode, name: title },
-        suffixText: prompt || DEFAULT_WORKFLOW_SUFFIX,
+        ...(prompt ? { suffixText: prompt } : {}),
       });
       return applied ? { ok: true, navigatedTo: '/', draftApplied: true } : fail('TARGET_UNAVAILABLE');
     }
