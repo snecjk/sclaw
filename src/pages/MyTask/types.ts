@@ -6,7 +6,10 @@
 /** 执行记录状态 */
 export type RecordStatus = 'running' | 'success' | 'failed';
 
-/** 任务视图：定时任务 / 执行记录 */
+/** 一级 Tab：定时任务 / 工作流 */
+export type MyTaskSection = 'tasks' | 'workflow';
+
+/** 任务视图：定时任务 / 执行记录（一级「定时任务」内） */
 export type TaskView = 'tasks' | 'records';
 
 /** 执行记录（全部为工作流执行记录） */

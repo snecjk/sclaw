@@ -166,10 +166,11 @@ describe('runScheduledTasksMigration (data)', () => {
     // 不依赖 Gateway RPC
     expect(rpc).not.toHaveBeenCalled();
 
-    // 源文件只读保留：已迁 cron 仍留在 jobs.json
-    expect(readJobsFile().jobs.map((j) => j.id).sort()).toEqual(
-      ['openclaw-1', 'openclaw-disabled'].sort(),
-    );
+    // 迁移成功后 jobs.json 中已迁的 cron 条目被清理，防止双调度
+    expect(readJobsFile().jobs.map((j) => j.id)).toEqual([]);
+    // 备份文件存在
+    expect(existsSync(`${jobsPath}.migrated-bak`)).toBe(true);
+    // definitions.json 只读保留
     expect(existsSync(join(claudeDir, 'definitions.json'))).toBe(true);
 
     expect(existsSync(markerPath)).toBe(true);
@@ -205,9 +206,8 @@ describe('runScheduledTasksMigration (data)', () => {
     const tasks = await taskRepo.list({});
     expect(tasks).toHaveLength(3);
     expect(tasks.map((t) => t.engineType).sort()).toEqual(['claude', 'openclaw', 'openclaw']);
-    expect(readJobsFile().jobs.map((j) => j.id).sort()).toEqual(
-      ['openclaw-1', 'openclaw-disabled'].sort(),
-    );
+    // 补迁后 jobs.json 中已迁的 cron 条目被清理
+    expect(readJobsFile().jobs.map((j) => j.id)).toEqual([]);
     expect(rpc).not.toHaveBeenCalled();
     expect(refreshSchedule).toHaveBeenCalledTimes(1);
 
@@ -231,6 +231,7 @@ describe('runScheduledTasksMigration (data)', () => {
 
     expect((await taskRepo.list({})).length).toBe(afterFirst);
     expect(rpc).not.toHaveBeenCalled();
+    // 第二次运行时 jobs.json 已无 cron 条目，不触发 refreshSchedule
     expect(refreshSchedule).toHaveBeenCalledTimes(1);
   });
 
@@ -254,9 +255,8 @@ describe('runScheduledTasksMigration (data)', () => {
     expect(tasks).toHaveLength(3);
     const claude = tasks.find((t) => t.id === 'claude-1')!;
     expect(claude.prompt).toBe('partial');
-    expect(readJobsFile().jobs.map((j) => j.id).sort()).toEqual(
-      ['openclaw-1', 'openclaw-disabled'].sort(),
-    );
+    // 迁移完成后 jobs.json 中已迁的 cron 条目被清理
+    expect(readJobsFile().jobs.map((j) => j.id)).toEqual([]);
   });
 
   it('skips non-cron openclaw jobs and leaves them in jobs.json', async () => {
@@ -286,6 +286,7 @@ describe('runScheduledTasksMigration (data)', () => {
     const tasks = await taskRepo.list({});
     expect(tasks).toHaveLength(1);
     expect(tasks[0].id).toBe('claude-1');
+    // 非 cron 任务保留在 jobs.json
     expect(readJobsFile().jobs.map((j) => j.id)).toEqual(['interval-job']);
     expect(existsSync(markerPath)).toBe(true);
   });

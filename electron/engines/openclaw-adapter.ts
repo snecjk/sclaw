@@ -1,7 +1,13 @@
 import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { getOpenClawConfigDir } from '../utils/paths';
-import type { EngineAdapter, EngineAdapterContext, EngineSendWithMediaParams, EngineSessionSummary } from './types';
+import type {
+  EngineAdapter,
+  EngineAdapterContext,
+  EngineSendParams,
+  EngineSendWithMediaParams,
+  EngineSessionSummary,
+} from './types';
 import { ensureProjectAgentForSessionKey } from '../services/project-agent-service';
 import { isWorkflowOpenClawSessionKey } from '../../shared/workflow-openclaw-session';
 import { logger } from '../utils/logger';
@@ -11,7 +17,11 @@ import {
   prependAgentMemoryBlock,
 } from '../../shared/agent-memory-prompt';
 import { parseOpenClawExecutionTurn } from './openclaw-execution-snapshot';
-import { prependSystemPromptAppend } from '../../shared/system-prompt-append';
+import {
+  prependSystemPromptAppend,
+  wrapScheduledTaskSystemPromptAppend,
+} from '../../shared/system-prompt-append';
+import { hasPendingRuntimeToolUse, hasRuntimeAssistantOutput, inspectTranscript, runtimeRecord } from './chat-runtime-inspection';
 
 const VISION_MIME_TYPES = new Set([
   'image/png',
@@ -32,6 +42,15 @@ const OPENCLAW_SESSION_STAT_CONCURRENCY = 32;
  * 不把 append 放进 RPC 参数，避免 schema 拒收。
  */
 export const mergeOpenClawSystemPromptAppend = prependSystemPromptAppend;
+
+/** OpenClaw 没有原生 systemPromptAppend，adapter 负责按发送来源选择兼容封装。 */
+export function resolveOpenClawSendMessage(
+  params: Pick<EngineSendParams, 'message' | 'systemPromptAppend' | 'runtimePolicy'>,
+): string {
+  return params.runtimePolicy?.origin === 'scheduled_task'
+    ? wrapScheduledTaskSystemPromptAppend(params.message, params.systemPromptAppend)
+    : mergeOpenClawSystemPromptAppend(params.message, params.systemPromptAppend);
+}
 
 async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>): Promise<void> {
   let nextIndex = 0;
@@ -169,6 +188,40 @@ function sessionsFromOpenClawStoreMetadata(
 
 export const openClawAdapter: EngineAdapter = {
   type: 'openclaw',
+  chatCapabilities: {
+    hasReliableRuntimeStatus: false,
+    hasStructuredReasoningEvents: false,
+    hasStructuredToolEvents: false,
+    requiresHistoryProjection: true,
+  },
+
+  classifyFinalMessage({ message, phase }) {
+    if (phase === 'completed') return 'completed';
+    const record = runtimeRecord(message);
+    if (!record) return 'awaiting_transcript';
+    return String(record.role ?? '').toLowerCase() === 'assistant'
+      && hasRuntimeAssistantOutput(record)
+      && !hasPendingRuntimeToolUse(record)
+      ? 'completed'
+      : 'progress';
+  },
+
+  async inspectRun(ctx, params) {
+    try {
+      const result = await ctx.gatewayManager.rpc<Record<string, unknown>>('chat.history', {
+        sessionKey: params.sessionKey,
+        limit: params.limit ?? 50,
+      });
+      return inspectTranscript({
+        messages: Array.isArray(result.messages) ? result.messages : [],
+        startedAt: params.startedAt,
+        isRunning: typeof result.isRunning === 'boolean' ? result.isRunning : undefined,
+        runId: params.runId,
+      });
+    } catch (error) {
+      return { status: 'unknown', runId: params.runId ?? undefined, reason: String(error) };
+    }
+  },
 
   prepareMemoryInjection(params, memory) {
     // Keep the real user request last so skill matching is anchored to it instead of
@@ -261,7 +314,7 @@ export const openClawAdapter: EngineAdapter = {
       if (projectAgentResult.created || projectAgentResult.workspaceUpdated) {
         await ctx.gatewayManager.debouncedReload();
       }
-      const message = mergeOpenClawSystemPromptAppend(params.message, params.systemPromptAppend);
+      const message = resolveOpenClawSendMessage(params);
       if (params.systemPromptAppend?.trim()) {
         logger.info('[openclaw-adapter][prompt] final user message after prepend', {
           sessionKey,
@@ -293,7 +346,7 @@ export const openClawAdapter: EngineAdapter = {
         await ctx.gatewayManager.debouncedReload();
       }
 
-      let message = mergeOpenClawSystemPromptAppend(params.message, params.systemPromptAppend);
+      let message = resolveOpenClawSendMessage(params);
       if (params.systemPromptAppend?.trim()) {
         logger.info('[openclaw-adapter][prompt] final user message after prepend (media)', {
           sessionKey,

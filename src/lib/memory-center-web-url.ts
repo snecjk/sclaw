@@ -13,8 +13,6 @@ import { useAuthStore } from '@/stores/auth';
 
 export const MC_WEB_TEST_BASE = 'https://front-test.sto.cn/group/memory-center-web';
 export const MC_WEB_PROD_BASE = 'https://front.sto.cn/group/memory-center-web';
-/** 本地跑 memory-center-web 时可在 .env.development.local 覆盖 */
-export const MC_WEB_LOCAL_DEV_BASE = 'http://localhost:5173';
 
 const MC_AUTH_SESSION_KEY = 'stoclaw-mc-web-auth';
 
@@ -23,7 +21,9 @@ const MC_WEB_BASE: Record<SsoEnvironment, string> = {
   'pre-release': MC_WEB_TEST_BASE,
   'production-external': MC_WEB_PROD_BASE,
   'production-internal': MC_WEB_PROD_BASE,
-  local: MC_WEB_LOCAL_DEV_BASE,
+  // 安全默认值：本地 SSO 仍走测试站；本地 Web 联调只通过被忽略的
+  // .env.development.local 显式设置 VITE_MEMORY_CENTER_WEB_ORIGIN。
+  local: MC_WEB_TEST_BASE,
 };
 
 function resolveSsoEnvironment(explicit?: SsoEnvironment): SsoEnvironment {
@@ -93,15 +93,18 @@ function buildDesignerPath(
   promptCacheId?: string,
   prompt?: string,
   bridgeNonce?: string,
+  bridgeParentOrigin?: string,
 ): string {
   const path = `${base}/workflows-workbench/${encodeURIComponent(workflowId)}`;
   const cacheId = promptCacheId?.trim();
   const trimmedPrompt = prompt?.trim();
   const nonce = bridgeNonce?.trim();
+  const parentOrigin = bridgeParentOrigin?.trim();
   const query = new URLSearchParams();
   if (cacheId) query.set('promptCacheId', cacheId);
   else if (trimmedPrompt) query.set('prompt', trimmedPrompt);
   if (nonce) query.set('bridgeNonce', nonce);
+  if (parentOrigin) query.set('bridgeParentOrigin', parentOrigin);
   const search = query.toString();
   return search ? `${path}?${search}` : path;
 }
@@ -112,9 +115,10 @@ export function buildMemoryCenterDesignerRedirectPath(
   promptCacheId?: string,
   prompt?: string,
   bridgeNonce?: string,
+  bridgeParentOrigin?: string,
 ): string {
   const pathname = getMcWebPathname(getMemoryCenterWebBase(ssoEnvironment));
-  return appendMcEmbedQuery(buildDesignerPath(pathname, workflowId, promptCacheId, prompt, bridgeNonce));
+  return appendMcEmbedQuery(buildDesignerPath(pathname, workflowId, promptCacheId, prompt, bridgeNonce, bridgeParentOrigin));
 }
 
 /** /sso/login/callback?stoToken=&redirect= — 写入 token 后一次跳转到目标页 */
@@ -138,9 +142,10 @@ export function buildMemoryCenterWorkflowDesignerUrl(
   promptCacheId?: string,
   prompt?: string,
   bridgeNonce?: string,
+  bridgeParentOrigin?: string,
 ): string {
   const base = getMemoryCenterWebBase(ssoEnvironment);
-  return appendMcEmbedQuery(buildDesignerPath(base, workflowId, promptCacheId, prompt, bridgeNonce));
+  return appendMcEmbedQuery(buildDesignerPath(base, workflowId, promptCacheId, prompt, bridgeNonce, bridgeParentOrigin));
 }
 
 /**
@@ -156,17 +161,30 @@ export function buildMemoryCenterWorkflowDesignerEmbedUrl(
   promptCacheId?: string,
   prompt?: string,
   bridgeNonce?: string,
+  bridgeParentOrigin?: string,
 ): string {
-  const designerUrl = buildMemoryCenterWorkflowDesignerUrl(workflowId, ssoEnvironment, promptCacheId, prompt, bridgeNonce);
+  const designerUrl = buildMemoryCenterWorkflowDesignerUrl(workflowId, ssoEnvironment, promptCacheId, prompt, bridgeNonce, bridgeParentOrigin);
   const token = stoToken?.trim();
   if (!token || isMcWebAuthedInSession()) {
     return designerUrl;
   }
 
   return buildMemoryCenterSsoCallbackUrl(token, {
-    redirectPath: buildMemoryCenterDesignerRedirectPath(workflowId, ssoEnvironment, promptCacheId, prompt, bridgeNonce),
+    redirectPath: buildMemoryCenterDesignerRedirectPath(workflowId, ssoEnvironment, promptCacheId, prompt, bridgeNonce, bridgeParentOrigin),
     ssoEnvironment,
   });
+}
+
+export function resolveWorkflowBridgeParentOrigin(origin: string, protocol: string): string {
+  if (protocol === 'file:' || origin === 'null') return 'null';
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+      ? parsed.origin
+      : 'null';
+  } catch {
+    return 'null';
+  }
 }
 
 /** 浏览器打开 */

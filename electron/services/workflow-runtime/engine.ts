@@ -473,11 +473,15 @@ export function createEngine(deps: EngineDeps) {
     const guardrails = agent.guardrails ?? config.guardrails ?? {};
     const completionContract = guardrails.completionContract ?? config.completionContract ?? {};
     const inputConfig = agent.inputs ?? config.inputs ?? config.input ?? {};
+    const startupInstruction = String(config.startupMaterialization?.text ?? '').trim();
+    const instruction = [String(task.instruction ?? '').trim(), startupInstruction]
+      .filter(Boolean)
+      .join('\n\n');
     const configuredSchema = config.outputContract?.schema ?? completionContract.dataJsonSchema ?? { type: 'object' };
     const dataJsonSchema = normalizeArtifactFirstPayloadSchema(configuredSchema);
     return {
       schemaVersion: 'agent-run-spec/v1', workflowId: ctx.workflowId, workflowVersion: String(versionId ?? ''), runId: ctx.runId, nodeId: node.id,
-      task: { name: task.name ?? node.name ?? node.id, goal: task.goal ?? config.goal ?? config.instruction ?? '', instruction: task.instruction ?? '', outputSchema: task.outputSchema },
+      task: { name: task.name ?? node.name ?? node.id, goal: task.goal ?? config.goal ?? config.instruction ?? '', instruction, outputSchema: task.outputSchema },
       target: { provider: 'client_local', kind: node.type, model: agent.model ?? runtime.model },
       inputs: inputConfig, allowedSkills: guardrails.allowedSkills ?? [], allowedTools: guardrails.allowedTools ?? [], outputSchema: '',
       metadata: { branches: config.branches },

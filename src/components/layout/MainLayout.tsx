@@ -24,12 +24,13 @@ import { SIDEBAR_MIN_WIDTH } from '@/lib/sidebar-resize-metrics';
 import { AppShellChromeOverlay } from '@/components/layout/app-shell-chrome-overlay';
 import { useAppShellLayout } from '@/components/layout/app-shell-layout-context';
 import { ContentHeader } from '@/components/layout/ContentHeader';
-import { ContentHeaderProvider, useContentHeaderDisplay } from '@/components/layout/content-header-context';
+import { ContentHeaderProvider, useContentHeaderLayoutMode } from '@/components/layout/content-header-context';
 import { SidebarResizeHandle } from '@/components/layout/sidebar-resize-handle';
 import { useSidebarResize } from '@/hooks/use-sidebar-resize';
 import { getSidebarLayoutVariant } from '@/lib/sidebar-layout';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat';
+import { shouldHideWorkflowContentHeader, useWorkflowUiStore } from '@/stores/workflow-ui';
 import { SidebarDeleteConfirmPortal } from '@/components/layout/sidebar-delete-confirm-portal';
 import { SclawBrowserHost } from '@/components/sclaw-browser/SclawBrowserHost';
 import { AppPlazaShell } from '@/components/more-apps/AppPlazaShell';
@@ -43,7 +44,7 @@ function isHomeRoute(pathname: string): boolean {
 /** Scrollable page body inside provincial main card (overlay is mounted on `<main>`). */
 function MainCardBody({ hideContentHeader }: { hideContentHeader: boolean }) {
   const { pathname } = useLocation();
-  const { layoutMode } = useContentHeaderDisplay();
+  const layoutMode = useContentHeaderLayoutMode();
   const isHome = isHomeRoute(pathname);
   const isSplitLayout = layoutMode === 'split';
   const isPreviewExpanded = layoutMode === 'preview-expanded';
@@ -77,7 +78,7 @@ function MainCardBody({ hideContentHeader }: { hideContentHeader: boolean }) {
     <div
       className={cn(
         hideContentHeader
-          ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'
+          ? 'flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-[var(--sto-content-pad-x)]'
           : stoMainCardBodyClass,
       )}
     >
@@ -88,9 +89,15 @@ function MainCardBody({ hideContentHeader }: { hideContentHeader: boolean }) {
 
 /** 省区主卡片：Header 与 Body 各自拥有 inset，不把 macOS safe slot 下放给 main。 */
 function ProvincialMainCard({ hideContentHeader }: { hideContentHeader: boolean }) {
-  const { layoutMode } = useContentHeaderDisplay();
+  const layoutMode = useContentHeaderLayoutMode();
+  const editorActive = useWorkflowUiStore((state) => state.editorActive);
+  const embeddedHeaderOwned = useWorkflowUiStore((state) => state.embeddedHeaderOwned);
   const isSplitLayout = layoutMode === 'split';
   const isPreviewExpanded = layoutMode === 'preview-expanded';
+  const effectiveHideContentHeader = hideContentHeader || shouldHideWorkflowContentHeader({
+    editorActive,
+    embeddedHeaderOwned,
+  });
 
   return (
     <main
@@ -104,8 +111,8 @@ function ProvincialMainCard({ hideContentHeader }: { hideContentHeader: boolean 
             : 'flex min-h-0 min-w-0 flex-1 flex-col',
       )}
     >
-      {!hideContentHeader ? <ContentHeader /> : null}
-      <MainCardBody hideContentHeader={hideContentHeader} />
+      {!effectiveHideContentHeader ? <ContentHeader /> : null}
+      <MainCardBody hideContentHeader={effectiveHideContentHeader} />
       <AppPlazaShell />
       <SclawBrowserHost />
     </main>

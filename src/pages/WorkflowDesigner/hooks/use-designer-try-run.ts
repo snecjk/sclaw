@@ -20,6 +20,7 @@ import {
   getWorkflowDetail,
   submitWorkflowInput,
 } from '@/lib/workflow-api';
+import { subscribeHostEvent } from '@/lib/host-events';
 import {
   isActiveWorkflowRunStatus,
   isTerminalWorkflowRunStatus,
@@ -28,6 +29,7 @@ import {
 import type { WorkflowDetailResponse, WorkflowExecutionState, WorkflowRunResponse, WorkflowSchema } from '@/types/workflow';
 import type { WorkflowDraftSnapshot } from '@/lib/workflow-iframe-bridge';
 import { definitionFromDetail } from '@/lib/workflow-designer-adapter';
+import { saveWorkflowExecution, updateExecutionStatus } from '@/stores/workflow-memory';
 
 export interface RuntimeUploadNode {
   nodeId: string;
@@ -110,6 +112,7 @@ export function useDesignerTryRun({
   const [isDraftSnapshot, setIsDraftSnapshot] = useState(false);
   const [runtimeUploadNodes, setRuntimeUploadNodes] = useState<RuntimeUploadNode[]>([]);
   const snapshotRef = useRef<WorkflowDraftSnapshot | null>(null);
+  const workflowNameRef = useRef<string>('');
 
   const runIdRef = useRef<string | null>(null);
   const eventHydrateTimerRef = useRef<number | null>(null);
@@ -144,19 +147,19 @@ export function useDesignerTryRun({
   // Status transitions update immediately; stream events are coalesced so an
   // Agent text delta cannot cause a local DB read for every token.
   useEffect(() => {
-    const ipc = window.electron?.ipcRenderer;
-    if (!ipc?.on) return;
-    const unsubscribe = ipc.on('workflow:status-update', (payload: unknown) => {
+    const unsubscribe = subscribeHostEvent('workflow:status-update', (payload: unknown) => {
       const data = payload as StatusUpdatePayload | null;
       if (!data || data.sessionKey !== DESIGNER_TRY_RUN_SESSION_KEY) return;
       if (data.runId !== runIdRef.current) return; // stale broadcast for a different run
+      const normalizedStatus = normalizeWorkflowRunStatus(data.status);
+      updateExecutionStatus(data.runId, normalizedStatus, DESIGNER_TRY_RUN_SESSION_KEY);
       void hydrateRun(data.runId);
-      if (isTerminalWorkflowRunStatus(normalizeWorkflowRunStatus(data.status))) {
+      if (isTerminalWorkflowRunStatus(normalizedStatus)) {
         setIsStarting(false);
         setIsCancelling(false);
       }
     });
-    const unsubscribeEvent = ipc.on('workflow:event', (payload: unknown) => {
+    const unsubscribeEvent = subscribeHostEvent('workflow:event', (payload: unknown) => {
       const data = payload as RuntimeEventPayload | null;
       if (!data || !data.runId || data.runId !== runIdRef.current) return;
       scheduleEventHydration(data.runId);
@@ -191,6 +194,7 @@ export function useDesignerTryRun({
           inputs,
           idempotencyKey: `designer-run-${Date.now()}`,
           sessionKey: DESIGNER_TRY_RUN_SESSION_KEY,
+          agentId: 'main',
           triggerType: 'designer_test',
           runMode: 'trial',
           workflowVersionId: snapshot?.workflowVersionId ?? workflowVersionId,
@@ -199,6 +203,19 @@ export function useDesignerTryRun({
         setRunId(result.runId);
         runIdRef.current = result.runId;
         setRunWorkflowVersion(result.workflowVersion);
+        const startedAt = Date.now();
+        saveWorkflowExecution({
+          sessionKey: DESIGNER_TRY_RUN_SESSION_KEY,
+          workflowId,
+          runId: result.runId,
+          templateId: workflowId,
+          templateName: workflowNameRef.current || workflowId,
+          versionId: result.versionId,
+          status: 'running',
+          createdAt: startedAt,
+          updatedAt: startedAt,
+          collectedInputs: inputs,
+        });
         void hydrateRun(result.runId);
       } catch (error) {
         setIsStarting(false);
@@ -221,6 +238,7 @@ export function useDesignerTryRun({
       let definition = snapshot?.definition;
       try {
         workflowDetail = await getWorkflowDetail(workflowId);
+        workflowNameRef.current = workflowDetail.workflowName || workflowId;
       } catch (error) {
         // A saved draft can still be tried locally if refreshing its user
         // preset fails. Without a draft definition, keep the existing error.

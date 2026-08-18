@@ -4,19 +4,19 @@ import { setupInMemoryDb, type InMemoryDb } from './helpers';
 import { ScheduleTaskRepository } from '../../electron/db/repositories/schedule-task-repository';
 import { ScheduleTaskRunRepository } from '../../electron/db/repositories/schedule-task-run-repository';
 import { EngineScheduledTaskDispatcher } from '../../electron/scheduled-tasks/scheduled-task-executor';
-import { getAdapter } from '../../electron/engines/manager';
+import type { CanonicalChatEvent } from '../../shared/chat-runtime-protocol';
 import type {
   ScheduleTask,
   ScheduleTaskRun,
 } from '../../electron/db/models/domain/schedule-task';
 
 /**
- * 执行器契约：DB 生命周期（queued→running→[watcher 终态]succeeded/failed/timed_out）
- * + MainChatSendInput 塑形 + run watcher 闭环。
+ * 执行器契约：DB 生命周期（queued→running→canonical 终态）
+ * + MainChatSendInput 塑形 + Supervisor coordinator 闭环。
  *
  * `chat-send-service.runMainChatSend` 用 vi.mock 替身——本测不验证引擎执行内部，
- * 只锁执行器如何编排 run 行：send 成功后 run 留 `running`、挂 watcher；
- * gateway 事件驱动终态闭环。
+ * 只锁执行器如何编排 run 行：send 成功后 run 留 `running`，canonical event
+ * 驱动终态闭环。
  */
 const runMainChatSendMock = vi.fn();
 vi.mock('../../electron/services/chat-send-service', () => ({
@@ -34,38 +34,6 @@ const baseTaskInput = {
 
 /** 让 setTimeout(0) 的 defer / backoff 真正触发（macrotask 让位）。 */
 const nextTick = () => new Promise<void>((r) => setTimeout(r, 0));
-
-/** 驱动 claude assistant final 片段（watcher 累积 lastAssistantText）。 */
-function emitAssistantFinal(gateway: EventEmitter, sessionKey: string, text: string): void {
-  gateway.emit('chat:message', {
-    message: {
-      sessionKey,
-      state: 'final',
-      message: { role: 'assistant', content: [{ type: 'text', text }] },
-    },
-  });
-}
-
-/** 驱动 claude agent notification 终态（phase=completed|error）。 */
-function emitAgentTerminal(
-  gateway: EventEmitter,
-  sessionKey: string,
-  phase: 'completed' | 'error' = 'completed',
-): void {
-  gateway.emit('notification', { method: 'agent', params: { sessionKey, phase } });
-}
-
-/** 驱动 chat:message 终态（state=done|error|aborted）。 */
-function emitChatTerminal(
-  gateway: EventEmitter,
-  sessionKey: string,
-  state: 'done' | 'error' | 'aborted',
-  errorMessage?: string,
-): void {
-  gateway.emit('chat:message', {
-    message: { sessionKey, state, ...(errorMessage ? { errorMessage } : {}) },
-  });
-}
 
 describe('EngineScheduledTaskDispatcher', () => {
   let env: InMemoryDb;
@@ -139,6 +107,28 @@ describe('EngineScheduledTaskDispatcher', () => {
     return { dispatcher, gateway };
   }
 
+  function canonicalTerminal(
+    task: ScheduleTask,
+    run: ScheduleTaskRun,
+    type: 'run.completed' | 'run.failed' | 'run.aborted' | 'run.interrupted',
+    payload?: Record<string, unknown>,
+  ): CanonicalChatEvent {
+    return {
+      protocolVersion: 1,
+      eventId: `${run.runId}:${type}:${Date.now()}`,
+      sessionKey: run.sessionKey ?? 'sched:t1:20240101',
+      runId: 'engine-run-1',
+      idempotencyKey: run.idempotencyKey,
+      runtimePolicy: { origin: 'scheduled_task', ownerId: run.runId, deadlineAt: null },
+      engineType: task.engineType,
+      epoch: 1,
+      sequence: 3,
+      occurredAt: Date.now(),
+      type,
+      payload: payload ?? { reason: type.slice('run.'.length) },
+    };
+  }
+
   it('recognizes scheduled-task session provenance regardless of run status', async () => {
     const { run } = await seedRun();
     expect(await runRepo.existsBySessionKey('session-scheduled')).toBe(false);
@@ -165,14 +155,14 @@ describe('EngineScheduledTaskDispatcher', () => {
     expect(after?.runtimeResult).toBeNull();
   });
 
-  it('send success leaves run running; watcher terminal → succeeded + runtimeResult', async () => {
+  it('send success leaves run running; canonical terminal → succeeded + runtimeResult', async () => {
     const { task, run } = await seedRun();
     runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-1' } });
-    const { dispatcher, gateway } = makeDispatcher({ systemPromptAppend: '[dingtalk recipients]' });
+    const { dispatcher } = makeDispatcher({ systemPromptAppend: '[dingtalk recipients]' });
 
     await dispatcher.dispatch({ task, run });
 
-    // send 被调一次；Claude + append → message prepend 收件人规则，systemPromptAppend 仍保留。
+    // send 被调一次；Claude 原生使用 systemPromptAppend，用户历史保持原始 prompt。
     expect(runMainChatSendMock).toHaveBeenCalledTimes(1);
     const passedInput = runMainChatSendMock.mock.calls[0][1];
     expect(passedInput).toMatchObject({
@@ -181,8 +171,10 @@ describe('EngineScheduledTaskDispatcher', () => {
       idempotencyKey: 'idem-1',
       permissionProfile: 'workspace-write',
       systemPromptAppend: '[dingtalk recipients]',
+      sourceText: 'run report',
+      displayText: 'run report',
     });
-    expect(passedInput.message).toBe('[dingtalk recipients]\n\nrun report');
+    expect(passedInput.message).toBe('run report');
 
     // send resolve 只表 run 启动——run 仍 running，不在此置 succeeded。
     const mid = await runRepo.getRun(run.runId);
@@ -190,14 +182,7 @@ describe('EngineScheduledTaskDispatcher', () => {
     expect(mid?.sessionKey).toBe('sched:t1:20240101');
     expect(mid?.startedAt).not.toBeNull();
 
-    // watcher 终态闭环：claude agent notification phase=completed → succeeded。
-    emitAgentTerminal(gateway!, 'sched:t1:20240101', 'completed');
-    await vi.waitFor(
-      async () => {
-        expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');
-      },
-      { timeout: 2000, interval: 10 },
-    );
+    await dispatcher.handleCanonicalEvent(canonicalTerminal(task, { ...run, sessionKey: mid!.sessionKey }, 'run.completed'));
 
     const after = await runRepo.getRun(run.runId);
     expect(after?.completedAt).not.toBeNull();
@@ -218,7 +203,7 @@ describe('EngineScheduledTaskDispatcher', () => {
       ],
     });
     runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-trailer' } });
-    const { dispatcher, gateway } = makeDispatcher();
+    const { dispatcher } = makeDispatcher();
 
     await dispatcher.dispatch({ task, run });
 
@@ -227,33 +212,24 @@ describe('EngineScheduledTaskDispatcher', () => {
     expect(passedInput.message).toBe('汇总后发给张三');
     expect((await taskRepo.getById(task.id))?.prompt).toBe('汇总后发给张三');
 
-    emitAgentTerminal(gateway!, 'sched:t1:20240101', 'completed');
-    await vi.waitFor(
-      async () => {
-        expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');
-      },
-      { timeout: 2000, interval: 10 },
-    );
+    await dispatcher.handleCanonicalEvent(canonicalTerminal(task, { ...run, sessionKey: 'sched:t1:20240101' }, 'run.completed'));
+    expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');
   });
 
-  it('openclaw keeps prompt as message; append stays for adapter merge (no double prepend)', async () => {
+  it('passes engine-neutral scheduled prompt context to openclaw adapter', async () => {
     const { task, run } = await seedRun({ engineType: 'openclaw' });
     runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-oc' } });
-    const { dispatcher, gateway } = makeDispatcher({ systemPromptAppend: '[dingtalk recipients]' });
+    const { dispatcher } = makeDispatcher({ systemPromptAppend: '[dingtalk recipients]' });
 
     await dispatcher.dispatch({ task, run });
 
     const passedInput = runMainChatSendMock.mock.calls[0][1];
     expect(passedInput.message).toBe('run report');
     expect(passedInput.systemPromptAppend).toBe('[dingtalk recipients]');
+    expect(passedInput.runtimePolicy).toMatchObject({ origin: 'scheduled_task', ownerId: run.runId });
 
-    emitAgentTerminal(gateway!, 'sched:t1:20240101', 'completed');
-    await vi.waitFor(
-      async () => {
-        expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');
-      },
-      { timeout: 2000, interval: 10 },
-    );
+    await dispatcher.handleCanonicalEvent(canonicalTerminal(task, { ...run, sessionKey: 'sched:t1:20240101' }, 'run.completed'));
+    expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');
   });
 
   it('reuses existing run.sessionKey and omits systemPromptAppend when null', async () => {
@@ -267,7 +243,7 @@ describe('EngineScheduledTaskDispatcher', () => {
     });
     runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-2' } });
     const ensureSpy = vi.fn(async () => ({ sessionKey: 'should-not-be-used' }));
-    const { dispatcher, gateway } = makeDispatcher({ ensureDatedSession: ensureSpy });
+    const { dispatcher } = makeDispatcher({ ensureDatedSession: ensureSpy });
 
     await dispatcher.dispatch({ task, run });
 
@@ -278,14 +254,7 @@ describe('EngineScheduledTaskDispatcher', () => {
     expect(passedInput.message).toBe('run report');
     expect((await runRepo.getRun(run.runId))?.status).toBe('running');
 
-    // watcher 终态（复用 sessionKey）：emit 用 preexisting:session。
-    emitAgentTerminal(gateway!, 'preexisting:session', 'completed');
-    await vi.waitFor(
-      async () => {
-        expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');
-      },
-      { timeout: 2000, interval: 10 },
-    );
+    await dispatcher.handleCanonicalEvent(canonicalTerminal(task, run, 'run.completed'));
     const after = await runRepo.getRun(run.runId);
     expect(after?.sessionKey).toBe('preexisting:session');
   });
@@ -324,7 +293,7 @@ describe('EngineScheduledTaskDispatcher', () => {
     const { task, run } = await seedRun({ retryPolicy: { maxAttempts: 2, backoffSec: 0 } });
     runMainChatSendMock.mockResolvedValueOnce({ success: false, error: 'transient' });
     runMainChatSendMock.mockResolvedValueOnce({ success: true, result: { runId: 'engine-retry' } });
-    const { dispatcher, gateway } = makeDispatcher();
+    const { dispatcher } = makeDispatcher();
 
     await dispatcher.dispatch({ task, run });
 
@@ -343,15 +312,8 @@ describe('EngineScheduledTaskDispatcher', () => {
     expect(retryRun?.attempt).toBe(2);
     expect(retryRun?.status).toBe('running');
 
-    // watcher 终态闭环 run2 → succeeded
-    emitAgentTerminal(gateway!, 'sched:t1:20240101', 'completed');
-    await vi.waitFor(
-      async () => {
-        const rr = (await runRepo.listRuns(task.id)).find((r) => r.triggerSource === 'recovery');
-        expect(rr?.status).toBe('succeeded');
-      },
-      { timeout: 2000, interval: 10 },
-    );
+    await dispatcher.handleCanonicalEvent(canonicalTerminal(task, retryRun!, 'run.completed'));
+    expect((await runRepo.getRun(retryRun!.runId))?.status).toBe('succeeded');
     expect(sink.events.map((e) => e.event)).toContain('scheduled-task:run:succeeded');
   });
 
@@ -397,62 +359,52 @@ describe('EngineScheduledTaskDispatcher', () => {
     });
   });
 
-  it('watcher terminal error → failed + handleFailure (retry)', async () => {
+  it('canonical terminal error → failed + handleFailure (retry)', async () => {
     // send 成功 → run running；chat state=error → watcher onTerminal(isError) →
     // finalizeRunIfRunning(failed) + handleFailure → retry（attempt1<2）→ retrying。
     const { task, run } = await seedRun({ retryPolicy: { maxAttempts: 2, backoffSec: 3600 } });
     runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-1' } });
-    const { dispatcher, gateway } = makeDispatcher();
+    const { dispatcher } = makeDispatcher();
 
     await dispatcher.dispatch({ task, run });
     expect((await runRepo.getRun(run.runId))?.status).toBe('running');
 
-    emitChatTerminal(gateway!, 'sched:t1:20240101', 'error', 'agent crashed');
-    await vi.waitFor(
-      async () => {
-        expect((await runRepo.getRun(run.runId))?.status).toBe('failed');
-      },
-      { timeout: 2000, interval: 10 },
-    );
+    await dispatcher.handleCanonicalEvent(canonicalTerminal(task, { ...run, sessionKey: 'sched:t1:20240101' }, 'run.failed', {
+      reason: 'error',
+      error: 'agent crashed',
+    }));
 
     const after = await runRepo.getRun(run.runId);
     expect(after?.runtimeResult?.stopReason).toBe('error');
     expect(after?.runtimeResult?.isError).toBe(true);
-    expect(after?.error).toMatch(/agent terminal: error/);
+    expect(after?.error).toBe('agent crashed');
     expect(sink.events.map((e) => e.event)).toContain('scheduled-task:run:retrying');
     const retryRun = (await runRepo.listRuns(task.id)).find((r) => r.triggerSource === 'recovery');
     expect(retryRun).toBeTruthy();
   });
 
-  it('watcher timeout → timed_out + abortRun + retry', async () => {
-    // send 成功 → run running + watcher(timeoutMs)；不 emit 任何终态 → timeoutMs 到点
-    // → onTimeout → abortRun(停 agent) + finalizeRunIfRunning(timed_out) + handleFailure
-    // → retry。用 fake timers 精确推进 60s（真跑要等 60s）；backoffSec:3600 防重试
-    // dispatch 在推进窗口内提前 fire（retryRun 应留 queued）。
+  it('canonical hard deadline interruption → timed_out + retry', async () => {
+    // Supervisor 负责 deadline 与引擎 abort；dispatcher 只消费统一 interrupted 终态。
     vi.useFakeTimers();
-    let abortSpy: ReturnType<typeof vi.spyOn> | undefined;
     try {
       const { task, run } = await seedRun({
         retryPolicy: { maxAttempts: 2, backoffSec: 3600 },
         timeoutSec: 60,
       });
       runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-1' } });
-      abortSpy = vi.spyOn(getAdapter('claude'), 'abortRun');
       const { dispatcher } = makeDispatcher();
 
       await dispatcher.dispatch({ task, run });
       expect((await runRepo.getRun(run.runId))?.status).toBe('running');
 
-      // 推进 60s+ → watcher onTimeout fire → handleTimeout 闭环。
-      await vi.advanceTimersByTimeAsync(60_001);
+      await dispatcher.handleCanonicalEvent(canonicalTerminal(task, { ...run, sessionKey: 'sched:t1:20240101' }, 'run.interrupted', {
+        reason: 'hard-deadline',
+      }));
 
       const after = await runRepo.getRun(run.runId);
       expect(after?.status).toBe('timed_out');
-      expect(after?.runtimeResult?.stopReason).toBe('timeout');
+      expect(after?.runtimeResult?.stopReason).toBe('hard-deadline');
       expect(after?.runtimeResult?.isError).toBe(true);
-      // abortRun 被调一次（停流式），传 run 的 sessionKey。
-      expect(abortSpy).toHaveBeenCalledTimes(1);
-      expect(abortSpy!.mock.calls[0][1]).toMatchObject({ sessionKey: 'sched:t1:20240101' });
       // handleFailure → scheduleRetry（attempt1<2）→ retrying 事件 + queued retry run。
       expect(sink.events.map((e) => e.event)).toContain('scheduled-task:run:retrying');
       const retryRun = (await runRepo.listRuns(task.id)).find((r) => r.triggerSource === 'recovery');
@@ -460,9 +412,31 @@ describe('EngineScheduledTaskDispatcher', () => {
       // 重试 backoff(3600s) 未到 → 不该再次 dispatch。
       expect(runMainChatSendMock).toHaveBeenCalledTimes(1);
     } finally {
-      abortSpy?.mockRestore();
       vi.useRealTimers();
     }
+  });
+
+  it('canonical user abort → cancelled without retry', async () => {
+    const { task, run } = await seedRun({
+      retryPolicy: { maxAttempts: 2, backoffSec: 3600 },
+    });
+    runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-1' } });
+    const { dispatcher } = makeDispatcher();
+
+    await dispatcher.dispatch({ task, run });
+    expect((await runRepo.getRun(run.runId))?.status).toBe('running');
+
+    await dispatcher.handleCanonicalEvent(canonicalTerminal(
+      task,
+      { ...run, sessionKey: 'sched:t1:20240101' },
+      'run.aborted',
+      { reason: 'user-abort' },
+    ));
+
+    const after = await runRepo.getRun(run.runId);
+    expect(after?.status).toBe('cancelled');
+    expect(after?.runtimeResult).toMatchObject({ stopReason: 'user-abort', isError: false });
+    expect((await runRepo.listRuns(task.id)).filter((item) => item.triggerSource === 'recovery')).toHaveLength(0);
   });
 
   it('finalizes run succeeded on terminal without dws fallback', async () => {
@@ -470,46 +444,24 @@ describe('EngineScheduledTaskDispatcher', () => {
       dingtalkRecipients: [{ type: 'user', userId: 'u1', displayName: 'U1' }],
     });
     runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-1' } });
-    const { dispatcher, gateway } = makeDispatcher();
+    const { dispatcher } = makeDispatcher();
 
     await dispatcher.dispatch({ task, run });
-    emitAssistantFinal(gateway!, 'sched:t1:20240101', '报告完成');
-    emitAgentTerminal(gateway!, 'sched:t1:20240101', 'completed');
-
-    await vi.waitFor(
-      async () => {
-        expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');
-      },
-      { timeout: 2000, interval: 10 },
-    );
+    await dispatcher.handleCanonicalEvent(canonicalTerminal(task, { ...run, sessionKey: 'sched:t1:20240101' }, 'run.completed'));
+    expect((await runRepo.getRun(run.runId))?.status).toBe('succeeded');
   });
 
   it('double finalize guard: terminal after timeout does not overwrite', async () => {
-    // timeoutSec:60 + fake timers：onTimeout 先赢（timed_out）→ watcher cleanup 退订。
-    // 随后迟到 terminal 因已退订根本不触 onTerminal；即便触，finalizeRunIfRunning
-    // 的 WHERE status='running' 也得 null（run 已 timed_out）→ 不覆盖、不双 handle。
-    vi.useFakeTimers();
-    let abortSpy: ReturnType<typeof vi.spyOn> | undefined;
-    try {
-      const { task, run } = await seedRun({ timeoutSec: 60 });
-      runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-1' } });
-      abortSpy = vi.spyOn(getAdapter('claude'), 'abortRun');
-      const { dispatcher, gateway } = makeDispatcher();
+    const { task, run } = await seedRun({ timeoutSec: 60 });
+    runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-1' } });
+    const { dispatcher } = makeDispatcher();
 
-      await dispatcher.dispatch({ task, run });
-      await vi.advanceTimersByTimeAsync(60_001); // → onTimeout → timed_out
-      const afterTimeout = await runRepo.getRun(run.runId);
-      expect(afterTimeout?.status).toBe('timed_out');
+    await dispatcher.dispatch({ task, run });
+    const running = { ...run, sessionKey: 'sched:t1:20240101' };
+    await dispatcher.handleCanonicalEvent(canonicalTerminal(task, running, 'run.interrupted', { reason: 'hard-deadline' }));
+    expect((await runRepo.getRun(run.runId))?.status).toBe('timed_out');
 
-      // 迟到 terminal（watcher 已 cleanup 退订，此 emit 无监听者）。
-      emitAgentTerminal(gateway!, 'sched:t1:20240101', 'completed');
-      await vi.advanceTimersByTimeAsync(10);
-
-      const after = await runRepo.getRun(run.runId);
-      expect(after?.status).toBe('timed_out'); // 未被 terminal 覆盖成 succeeded
-    } finally {
-      abortSpy?.mockRestore();
-      vi.useRealTimers();
-    }
+    await dispatcher.handleCanonicalEvent(canonicalTerminal(task, running, 'run.completed'));
+    expect((await runRepo.getRun(run.runId))?.status).toBe('timed_out');
   });
 });

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { hostApiFetch } from '@/lib/host-api';
 import { tracePreviewExtract } from '@/lib/preview-extract-trace';
 import { useChatStore } from '@/stores/chat';
+import { getCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
 import { sessionHasWorkflowExecution } from '@/stores/workflow-memory';
 import { buildWorkflowFormConfig, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import {
@@ -565,7 +566,7 @@ export function extractParameterForm(
         sourceId: string;
         schemaHash?: string;
       };
-      const sessionMessages = useChatStore.getState().messages;
+      const sessionMessages = getCurrentChatDisplayMessages();
       if (currentUserTurnHasWorkflowSubmission(sessionMessages)) {
         return null;
       }
@@ -590,7 +591,7 @@ export function extractParameterForm(
       if (parsed) {
         const { templateId, schemaHash } = parsed;
         const sessionKey = useChatStore.getState().currentSessionKey;
-        const sessionMessages = useChatStore.getState().messages;
+        const sessionMessages = getCurrentChatDisplayMessages();
         if (currentUserTurnHasWorkflowSubmission(sessionMessages)) {
           return null;
         }
@@ -598,8 +599,10 @@ export function extractParameterForm(
           return null;
         }
 
-        const pendingWorkflow =
-          pendingOverride ?? useChatStore.getState().pendingWorkflow;
+        const state = useChatStore.getState();
+        const pendingWorkflow = pendingOverride
+          ?? state.workflowChatUiBySessionKey[state.currentSessionKey]?.pendingWorkflow
+          ?? null;
         if (
           !pendingWorkflow
           || pendingWorkflow.templateId !== templateId

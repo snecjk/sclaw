@@ -1,18 +1,7 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import type { RawMessage } from '@/stores/chat/types';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
-
-let mockLastUserMessageAt: number | null = null;
-
-vi.mock('@/stores/chat', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/stores/chat')>();
-  return {
-    ...actual,
-    useChatStore: (selector: (state: { lastUserMessageAt: number | null }) => unknown) =>
-      selector({ lastUserMessageAt: mockLastUserMessageAt }),
-  };
-});
 
 const assistantTurnMessages: RawMessage[] = [
   { id: 'u1', role: 'user', content: 'hello', timestamp: 1_000 },
@@ -26,13 +15,7 @@ const assistantTurnMessages: RawMessage[] = [
 ];
 
 describe('useChatDisplay', () => {
-  beforeEach(() => {
-    mockLastUserMessageAt = null;
-  });
-
   it('promotes the last assistant turn into activeTurn for user-initiated sends', () => {
-    mockLastUserMessageAt = 900;
-
     const { result } = renderHook(() => useChatDisplay({
       messages: assistantTurnMessages,
       sending: true,
@@ -42,6 +25,7 @@ describe('useChatDisplay', () => {
       streamMsg: null,
       streamText: '',
       streamingTools: [{ id: 'tool-2', name: 'search', status: 'running' }],
+      lastUserMessageAt: 900,
     }));
 
     expect(result.current.staticItems.length).toBe(1);
@@ -50,8 +34,6 @@ describe('useChatDisplay', () => {
   });
 
   it('keeps cron/background sends as a fresh activeTurn without promoting prior static turn', () => {
-    mockLastUserMessageAt = null;
-
     const { result } = renderHook(() => useChatDisplay({
       messages: [
         { id: 'u1', role: 'user', content: 'scheduled task', timestamp: 1_000 },
@@ -64,6 +46,7 @@ describe('useChatDisplay', () => {
       streamMsg: null,
       streamText: '',
       streamingTools: [{ id: 'tool-2', name: 'search', status: 'running' }],
+      lastUserMessageAt: null,
     }));
 
     expect(result.current.staticItems.some(
@@ -74,7 +57,6 @@ describe('useChatDisplay', () => {
   });
 
   it('anchors a follow-up send to the latest user instead of the previous assistant turn', () => {
-    mockLastUserMessageAt = 4_000;
     const followUp: RawMessage = {
       id: 'u2',
       role: 'user',
@@ -91,6 +73,7 @@ describe('useChatDisplay', () => {
       streamMsg: null,
       streamText: '',
       streamingTools: [{ id: 'tool-follow-up', name: 'search', status: 'running' }],
+      lastUserMessageAt: 4_000,
     }));
 
     expect(result.current.activeTurn?.turnStableKey).toBe('turn-user-u2');
@@ -104,8 +87,6 @@ describe('useChatDisplay', () => {
   });
 
   it('sets isProcessing when pendingFinal and only completed streaming tools remain', () => {
-    mockLastUserMessageAt = 900;
-
     const { result } = renderHook(() => useChatDisplay({
       messages: assistantTurnMessages,
       sending: true,
@@ -115,6 +96,7 @@ describe('useChatDisplay', () => {
       streamMsg: null,
       streamText: '',
       streamingTools: [{ id: 'tool-1', name: 'exec', status: 'completed' }],
+      lastUserMessageAt: 900,
     }));
 
     expect(result.current.activeTurn?.activeStream.isProcessing).toBe(true);

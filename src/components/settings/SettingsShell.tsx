@@ -80,12 +80,14 @@ export function SettingsShell({ activeSection, devModeUnlocked, children }: Sett
           SETTINGS_SIDEBAR_WIDTH_CLASS,
         )}
       >
-        {isMac ? (
-          <div
-            className="drag-region w-full min-h-[var(--sto-chrome-h)] shrink-0 pl-20 pt-[var(--sto-chrome-toggle-inset-top)]"
-            aria-hidden
-          />
-        ) : null}
+        {/* 左侧顶栏拖拽区：macOS 避让红绿灯；Windows 同样需要可拖空白带 */}
+        <div
+          className={cn(
+            'drag-region w-full min-h-[var(--sto-chrome-h)] shrink-0',
+            isMac && 'pl-20 pt-[var(--sto-chrome-toggle-inset-top)]',
+          )}
+          aria-hidden
+        />
 
         <div className="flex w-full flex-col gap-6 px-6 pb-6 pt-4">
           <button
@@ -175,6 +177,11 @@ export function SettingsShell({ activeSection, devModeUnlocked, children }: Sett
 
       <div className={stoSettingsContentPanelWrapClass}>
         <div className={stoSettingsContentPanelClass}>
+          {/* 右侧内容卡顶栏拖拽区：与左侧 chrome 同高，补齐设置页无 TitleBar / ContentHeader 时的空白 */}
+          <div
+            className="drag-region w-full shrink-0 h-[var(--sto-chrome-h)]"
+            aria-hidden
+          />
           <div className={stoSettingsContentPanelBodyClass}>
             <div className={stoSettingsContentInnerClass}>{children}</div>
           </div>

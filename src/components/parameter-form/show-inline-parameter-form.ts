@@ -7,7 +7,7 @@
  *     console.log(result.values);
  *   }
  */
-import { useChatStore } from '@/stores/chat';
+import { updateCurrentChatDisplayProjection } from '@/stores/chat/display-selectors';
 import { registerParameterFormHandler } from './form-handlers';
 import type { UserFormConfig, FormResult } from '@/types/user-form';
 import type { ParameterFormContext } from './ParameterFormCard';
@@ -26,14 +26,12 @@ export function showInlineParameterForm(
   context: ParameterFormContext,
 ): Promise<InlineFormResult> {
   return new Promise((resolve) => {
-    const chatStore = useChatStore;
     const now = Date.now() / 1000;
     const formId = config.id || `inline-form-${Date.now()}`;
 
     // Insert assistant message with parameter_form block
-    chatStore.setState((s) => ({
-      messages: [
-        ...s.messages,
+    updateCurrentChatDisplayProjection((messages) => [
+        ...messages,
         {
           role: 'assistant',
           content: [
@@ -48,8 +46,7 @@ export function showInlineParameterForm(
           timestamp: now,
           id: crypto.randomUUID(),
         } as import('@/stores/chat').RawMessage,
-      ],
-    }));
+      ]);
 
     // Register one-time handler
     registerParameterFormHandler(formId, (values) => {

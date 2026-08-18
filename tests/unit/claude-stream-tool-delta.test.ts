@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyClaudeStreamEvent,
   ClaudeStreamContentAccumulator,
+  extractClaudeToolResultMessages,
 } from '../../electron/engines/claude-stream-content';
 import {
   appendStreamingExtrasToTimeline,
@@ -136,6 +137,53 @@ describe('appendStreamingExtrasToTimeline null-input guard', () => {
 });
 
 describe('ClaudeStreamContentAccumulator', () => {
+  it('keeps partial JSON visible until the complete input can be parsed', () => {
+    const acc = new ClaudeStreamContentAccumulator();
+    applyClaudeStreamEvent(acc, {
+      type: 'content_block_start',
+      index: 0,
+      content_block: { type: 'tool_use', id: 'toolu_partial', name: 'Bash' },
+    });
+    applyClaudeStreamEvent(acc, {
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'input_json_delta', partial_json: '{"command":' },
+    });
+
+    expect(acc.buildContentArray()).toEqual([{
+      type: 'tool_use',
+      id: 'toolu_partial',
+      name: 'Bash',
+      input: '{"command":',
+    }]);
+  });
+
+  it('caps large partial JSON previews without losing the accumulated final input', () => {
+    const acc = new ClaudeStreamContentAccumulator();
+    const content = 'x'.repeat(10_000);
+    applyClaudeStreamEvent(acc, {
+      type: 'content_block_start',
+      index: 0,
+      content_block: { type: 'tool_use', id: 'toolu_large', name: 'Write' },
+    });
+    applyClaudeStreamEvent(acc, {
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'input_json_delta', partial_json: `{"content":"${content}` },
+    });
+
+    const partial = acc.buildContentArray({ maxPartialInputChars: 512 });
+    expect(String(partial[0]?.input).length).toBeLessThanOrEqual(512);
+    expect(String(partial[0]?.input)).toContain('partial tool input:');
+
+    applyClaudeStreamEvent(acc, {
+      type: 'content_block_delta',
+      index: 0,
+      delta: { type: 'input_json_delta', partial_json: '"}' },
+    });
+    expect(acc.buildContentArray()[0]?.input).toEqual({ content });
+  });
+
   it('accumulates tool_use input_json_delta into content blocks', () => {
     const acc = new ClaudeStreamContentAccumulator();
 
@@ -204,5 +252,32 @@ describe('ClaudeStreamContentAccumulator', () => {
     });
     applyClaudeStreamEvent(acc, { type: 'message_start' });
     expect(acc.buildContentArray()).toEqual([]);
+  });
+});
+
+describe('extractClaudeToolResultMessages', () => {
+  it('converts hidden SDK tool_result blocks into canonical completion updates', () => {
+    const names = new Map([['toolu_ok', 'Bash'], ['toolu_error', 'Read']]);
+    expect(extractClaudeToolResultMessages({
+      content: [
+        { type: 'tool_result', tool_use_id: 'toolu_ok', content: 'done' },
+        { type: 'tool_result', tool_use_id: 'toolu_error', content: [{ type: 'text', text: 'denied' }], is_error: true },
+      ],
+    }, names)).toEqual([
+      {
+        role: 'toolresult',
+        toolCallId: 'toolu_ok',
+        toolName: 'Bash',
+        content: 'done',
+        status: 'completed',
+      },
+      {
+        role: 'toolresult',
+        toolCallId: 'toolu_error',
+        toolName: 'Read',
+        content: 'denied',
+        status: 'error',
+      },
+    ]);
   });
 });

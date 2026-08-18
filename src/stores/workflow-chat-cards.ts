@@ -19,7 +19,12 @@ export const useWorkflowChatCardsStore = create<WorkflowChatCardsState>((set, ge
     if (!sessionKey) return;
     if (!force && get().refsBySessionKey[sessionKey]) return;
     const existing = inFlight.get(sessionKey);
-    if (existing) return existing;
+    if (existing) {
+      await existing;
+      if (!force) return;
+      const queuedRefresh = inFlight.get(sessionKey);
+      if (queuedRefresh) return queuedRefresh;
+    }
 
     const request = (async () => {
       set((state) => ({

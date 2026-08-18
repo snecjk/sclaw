@@ -48,6 +48,7 @@ const noopDispatcher: ScheduledTaskDispatcher = {
 export class ScheduledTaskScheduler {
   private isRunning = false;
   private timer: NodeJS.Timeout | null = null;
+  private canReapRun: ((run: ScheduleTaskRun) => Promise<boolean>) | null = null;
 
   constructor(
     private readonly taskRepo: ScheduleTaskRepository = new ScheduleTaskRepository(),
@@ -64,6 +65,11 @@ export class ScheduledTaskScheduler {
   setDispatcher(dispatcher: ScheduledTaskDispatcher): void {
     this.dispatcher = dispatcher;
     logger.info('[scheduled-task] dispatcher registered');
+  }
+
+  /** Main runtime 有快照时应由 canonical 终态收口；reaper 只兜底孤儿租约。 */
+  setCanReapRun(inspector: (run: ScheduleTaskRun) => Promise<boolean>): void {
+    this.canReapRun = inspector;
   }
 
   start(): void {
@@ -120,8 +126,8 @@ export class ScheduledTaskScheduler {
   }
 
   /**
-   * 启动期清扫：把关机期间错过（含崩溃时正在跑）的任务的 `next_run_at` 推进到未来，
-   * 并清掉所有残留 active run（= stale lease）。必须在 start() 之前调用，否则第一个
+   * 启动期清扫：把关机期间错过的任务的 `next_run_at` 推进到未来，并清掉尚未
+   * dispatch 的 queued lease。running run 由 Supervisor 先恢复对账。必须在 start() 之前调用，否则第一个
    * tick 仍会按旧逻辑补跑。返回是否有状态变更。
    *
    * 产品要求：关机期间到达执行时间的任务在开机时丢弃，不补跑；只有 app 运行中到达
@@ -145,9 +151,9 @@ export class ScheduledTaskScheduler {
       }
     }
 
-    // 清 stale lease（崩溃/重启残留）：开机时主进程刚起、无任务真在跑，全清安全。
-    // 不清的话崩溃任务的下次 claimRun 会被 active-run 检查挡住、tick 噪声。
-    const cancelled = await this.runRepo.cancelAllActiveRuns();
+    // running run 已由 ChatRuntimeSupervisor 恢复并对账；这里只清理从未 dispatch
+    // 的 queued lease，避免重启把仍在执行的任务误标 cancelled。
+    const cancelled = await this.runRepo.cancelAllQueuedRuns();
     if (cancelled > 0) {
       changed = true;
     }
@@ -162,13 +168,13 @@ export class ScheduledTaskScheduler {
   }
 
   /**
-   * 清扫挂起的 `running` run：`started_at + task.timeout_sec` 已过即判 stale
-   * （引擎回调丢失、进程未重启但单飞被占），finalize 为 `timed_out` 释放单飞。
+   * 清扫孤儿 `running` run：deadline 已过且 Supervisor 没有 owner 快照时才判 stale，
+   * finalize 为 `timed_out` 释放单飞。
    * 镜像 claude 家族的时间 lease 自愈——generic 是 status lease，无 lease_until
    * 自愈，故靠 tick 内主动 reap 兜底。
    *
    * 仅 reap `running`（有 `started_at`）；`queued` 无 startedAt，超时路径不判
-   * （崩溃残留由启动期 `cancelAllActiveRuns` 清）。`timeoutSec` 为 null 的任务
+   * （未 dispatch 的 queued 残留由启动期 `cancelAllQueuedRuns` 清）。`timeoutSec` 为 null 的任务
    * 无法判定超时→跳过（留待未来 per-task 默认 timeout）。
    *
    * 不走执行器失败重试/pause 路径：执行器持有 event sink 与 recovery 重试编排，
@@ -191,12 +197,10 @@ export class ScheduledTaskScheduler {
       const startedMs = new Date(run.startedAt).getTime();
       const deadlineMs = startedMs + task.timeoutSec * 1000;
       if (deadlineMs > now.getTime()) continue; // 仍在超时窗口内，不 reap
+      if (this.canReapRun && !(await this.canReapRun(run))) continue;
 
-      // 经 finalizeRunIfRunning：若 run watcher 已先 onTimeout 落了 timed_out
-      // （或 agent 终态落了 succeeded/failed），此处 status≠running→返回 null，
-      // reaper 不覆盖——双重 finalize 守卫。watcher 在进程内、setTimeout 精确，
-      // 正常先赢真超时并走执行器 retry/pause；reaper 是 watcher 丢失/未挂时的
-      // 30s tick 兜底，只落终态 + 释放单飞（不走执行器重试/pause）。
+      // 经 finalizeRunIfRunning 做双重终态守卫；生产环境还会先向 Supervisor
+      // 查询 owner 快照，仅在 runtime 已无法继续确认时释放孤儿租约。
       const finalized = await this.runRepo.finalizeRunIfRunning(run.runId, {
         status: 'timed_out',
         completedAt: now.toISOString(),

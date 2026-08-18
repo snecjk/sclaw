@@ -70,6 +70,8 @@ export interface RawMessage {
   _attachedFiles?: AttachedFileMeta[];
   /** Local-only: skill plaza tag metadata for user message bubble rendering */
   _skillMeta?: SkillMeta;
+  /** Local-only: the optimistic bubble was synthesized from a scheduled-task dispatch event. */
+  _scheduledTaskOptimistic?: boolean;
 }
 
 /** Content block inside a message */
@@ -141,68 +143,39 @@ export interface ToolStatus {
   updatedAt: number;
 }
 
-export interface SessionRuntimeState {
-  sending: boolean;
-  /** Abort has been requested, but the engine has not confirmed termination yet. */
-  aborting: boolean;
-  activeRunId: string | null;
-  streamingText: string;
-  streamingMessage: unknown | null;
-  /** Live assistant snapshots seen during the active turn, in arrival order. */
-  streamingMessages: RawMessage[];
-  /** Live tool result messages seen during the active turn, in arrival order. */
-  streamingToolResults: RawMessage[];
-  streamingTools: ToolStatus[];
-  pendingFinal: boolean;
-  lastUserMessageAt: number | null;
-  /** Optimistic user message kept across session switches while Gateway has not echoed it. */
-  optimisticUserMessage: RawMessage | null;
-  pendingToolImages: AttachedFileMeta[];
-  error: string | null;
-  /** Tracks whether the Gateway has acknowledged the current optimistic send. */
-  sendAcceptance: SendAcceptanceState | null;
-  updatedAt: number;
+export interface PendingWorkflow {
+  templateId: string;
+  templateName: string;
+  schema: import('@/types/workflow').WorkflowSchema;
+  schemaHash: string;
+  workflowId?: string;
+  collectedInputs?: Record<string, unknown>;
+  dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[];
+  frontendFormInserted?: boolean;
+  modelGuidanceSent?: boolean;
 }
 
-export interface SendAcceptanceState {
-  idempotencyKey: string;
-  status: 'pending' | 'accepted' | 'uncertain';
-  startedAt: number;
+export interface WorkflowFormDecoration {
+  templateId: string;
+  schemaHash: string;
+  assistantMessageId?: string;
+}
+
+export interface WorkflowChatUiSessionState {
+  pendingWorkflow: PendingWorkflow | null;
+  formDecorations: WorkflowFormDecoration[];
 }
 
 export interface ChatState {
-  // Messages
-  messages: RawMessage[];
   loading: boolean;
-  error: string | null;
 
-  // Streaming
-  sending: boolean;
   /** True while model switch API is in flight — blocks chat input to prevent
    *  sending before backend has applied the new model. */
   modelSwitching: boolean;
-  activeRunId: string | null;
-  sendAcceptance: SendAcceptanceState | null;
-  streamingText: string;
-  streamingMessage: unknown | null;
-  /** Live assistant snapshots seen during the active turn, in arrival order. */
-  streamingMessages: RawMessage[];
-  /** Live tool result messages seen during the active turn, in arrival order. */
-  streamingToolResults: RawMessage[];
-  streamingTools: ToolStatus[];
-  pendingFinal: boolean;
-  /** Timestamp (ms) of the last gateway chat event; used for stale-run UI hints. */
-  lastChatEventAt: number;
-  lastUserMessageAt: number | null;
-  optimisticUserMessage: RawMessage | null;
-  /** Images collected from tool results, attached to the next assistant message */
-  pendingToolImages: AttachedFileMeta[];
   // Sessions
   sessions: ChatSession[];
   currentSessionKey: string;
   currentAgentId: string;
-  /** Runtime state cache per session key so background runs survive session switches. */
-  runtimeBySessionKey: Record<string, SessionRuntimeState>;
   /** First user message text per session key, used as display label */
   sessionLabels: Record<string, string>;
   /** Last message timestamp (ms) per session key, used for sorting */
@@ -228,25 +201,11 @@ export interface ChatState {
   setPendingProjectId: (projectId: string | null) => void;
 
   // Workflow
-  pendingWorkflow: {
-    templateId: string;
-    templateName: string;
-    schema: import('@/types/workflow').WorkflowSchema;
-    schemaHash: string;
-    workflowId?: string;
-    collectedInputs?: Record<string, unknown>;
-    /** 工作流启动前用户在输入框 @ 的钉钉收件人（随对话上下文注入，由 Agent 按提示词决定是否发送）。 */
-    dingTalkMentions?: import('@/types/dingtalk-mention').DingTalkMention[];
-    /** Set to true when the frontend has already inserted a parameter_form inline.
-     *  Prevents maybeAppendWorkflowParameterForm from double-injecting. */
-    frontendFormInserted?: boolean;
-    /** Set after sendWithWorkflow has sent workflowContext to the model via Gateway. */
-    modelGuidanceSent?: boolean;
-  } | null;
-  setPendingWorkflow: (pending: ChatState['pendingWorkflow']) => void;
+  workflowChatUiBySessionKey: Record<string, WorkflowChatUiSessionState>;
+  setPendingWorkflow: (pending: PendingWorkflow | null, sessionKey?: string) => void;
   /** Drop in-memory pending only; keeps localStorage draft for session restore. */
-  clearPendingWorkflowMemory: () => void;
-  clearPendingWorkflow: () => void;
+  clearPendingWorkflowMemory: (sessionKey?: string) => void;
+  clearPendingWorkflow: (sessionKey?: string) => void;
 
   // Actions
   loadSessions: (options?: { force?: boolean }) => Promise<void>;
@@ -262,7 +221,6 @@ export interface ChatState {
   loadHistory: (quiet?: boolean, force?: boolean, sessionKey?: string) => Promise<void>;
   sendMessage: (options: SendMessageOptions) => Promise<void>;
   abortRun: (sessionKey?: string) => Promise<boolean>;
-  handleChatEvent: (event: Record<string, unknown>) => void;
   toggleThinking: () => void;
   refresh: () => Promise<void>;
   clearError: () => void;

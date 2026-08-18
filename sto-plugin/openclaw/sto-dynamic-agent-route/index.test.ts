@@ -1,431 +1,103 @@
-import { writeFile, mkdir, rm } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { OpenClawPluginApi } from "./api.js";
 import register from "./index.js";
 
-const PROVIDER_ID = "sto-dynamic-agent-route";
+type HookResult = { appendSystemContext?: string } | undefined;
+type HookHandler = (
+	...args: Array<Record<string, unknown>>
+) => HookResult | Promise<HookResult>;
 
-describe("sto-dynamic-agent-route plugin", () => {
-	const hooks: Record<string, Function> = {};
-	let registerProviderCalls: unknown[] = [];
+describe("sto-dynamic-agent-route runtime-context plugin", () => {
+	const hooks: Record<string, HookHandler> = {};
+	let tempDir: string;
 
 	function buildApi(pluginConfig: Record<string, unknown> = {}) {
-		registerProviderCalls = [];
 		for (const key of Object.keys(hooks)) delete hooks[key];
-
 		return {
 			pluginConfig,
 			config: {},
 			id: "sto-dynamic-agent-route",
-			name: "申通动态模型路由",
+			name: "申通运行上下文",
 			logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn() },
-			on: vi.fn((hookName: string, handler: Function) => {
+			on: vi.fn((hookName: string, handler: HookHandler) => {
 				hooks[hookName] = handler;
 			}),
-			registerProvider: vi.fn((provider: unknown) => {
-				registerProviderCalls.push(provider);
-			}),
+			registerProvider: vi.fn(),
 		};
 	}
 
-	let originalFetch: typeof globalThis.fetch;
-
-	beforeEach(() => {
+	beforeEach(async () => {
 		vi.clearAllMocks();
-		originalFetch = globalThis.fetch;
-		globalThis.fetch = vi.fn() as unknown as typeof globalThis.fetch;
+		tempDir = join(tmpdir(), `sto-context-test-${Date.now()}`);
+		await mkdir(tempDir, { recursive: true });
 	});
 
-	afterEach(() => {
-		globalThis.fetch = originalFetch;
+	afterEach(async () => {
+		await rm(tempDir, { recursive: true, force: true });
 		vi.restoreAllMocks();
 	});
 
-	it("registers a provider and before_model_resolve hook", () => {
-		const api = buildApi();
-		register.register(api as any);
+	it("registers only the prompt-context hook", () => {
+		const fetchSpy = vi.spyOn(globalThis, "fetch");
+		const api = buildApi({
+			providerBaseUrl: "https://legacy-model.example.com",
+			routeApiUrl: "https://legacy-route.example.com",
+		});
+		register.register(api as unknown as OpenClawPluginApi);
 
-		expect(api.registerProvider).toHaveBeenCalledTimes(1);
-		expect(api.registerProvider).toHaveBeenCalledWith(
-			expect.objectContaining({ id: PROVIDER_ID, label: "STO Dynamic Route" }),
+		expect(api.on).toHaveBeenCalledTimes(1);
+		expect(api.on).toHaveBeenCalledWith("before_prompt_build", expect.any(Function));
+		expect(api.registerProvider).not.toHaveBeenCalled();
+		expect(hooks.before_model_resolve).toBeUndefined();
+		expect(fetchSpy).not.toHaveBeenCalled();
+	});
+
+	it("injects workspace, retired-skill, and authenticated organization context", async () => {
+		const ssoPath = join(tempDir, "sso-auth.json");
+		await writeFile(
+			ssoPath,
+			JSON.stringify({
+				userName: "test-user",
+				realName: "Test User",
+				companyCode: "430000",
+				companyName: "Test Company",
+				departmentCode: "430001",
+				departmentName: "Test Department",
+			}),
 		);
-		expect(api.on).toHaveBeenCalledTimes(2);
-		expect(api.on).toHaveBeenCalledWith("before_model_resolve", expect.any(Function));
+		const api = buildApi({ ssoAuthPath: ssoPath });
+		register.register(api as unknown as OpenClawPluginApi);
+
+		const result = await hooks.before_prompt_build(
+			{ prompt: "hello", messages: [] },
+			{ agentId: "agent-1", sessionKey: "session-1", trigger: "user" },
+		);
+
+		expect(result?.appendSystemContext).toContain("已废弃技能与插件");
+		expect(result?.appendSystemContext).toContain("产物文件引用规范");
+		expect(result?.appendSystemContext).toContain("当前登录用户信息（已认证）");
+		expect(result?.appendSystemContext).toContain("用户名：test-user");
+		expect(result?.appendSystemContext).toContain("网点编码（companyCode）：430000");
+		expect(result?.appendSystemContext).toContain("组织编码（departmentCode）：430001");
 	});
 
-	describe("provider catalog", () => {
-		it("returns null when required config is missing", async () => {
-			const api = buildApi({});
-			register.register(api as any);
-
-			const provider = registerProviderCalls[0] as any;
-			const result = await provider.catalog.run({});
-			expect(result).toBeNull();
-		});
-
-		it("returns provider config when fully configured", async () => {
-			const api = buildApi({
-				providerBaseUrl: "https://api.example.com/v1",
-				defaultModel: "qwen-72b",
-			});
-			register.register(api as any);
-
-			const provider = registerProviderCalls[0] as any;
-			const result = await provider.catalog.run({});
-
-			expect(result).toEqual({
-				provider: {
-					baseUrl: "https://api.example.com/v1",
-					api: "openai-completions",
-					apiKey: "default",
-					models: [
-						expect.objectContaining({
-							id: "sto-route-model",
-							name: "sto-route-model",
-						}),
-					],
-				},
-			});
-		});
-	});
-
-	describe("provider wrapStreamFn", () => {
-		let tempDir: string;
-
-		beforeEach(async () => {
-			tempDir = join(tmpdir(), `sto-test-${Date.now()}`);
-			await mkdir(tempDir, { recursive: true });
-		});
-
-		afterEach(async () => {
-			await rm(tempDir, { recursive: true, force: true });
-		});
-
-		it("injects SSO auth headers from sso-auth.json", async () => {
-			const ssoPath = join(tempDir, "sso-auth.json");
-			await writeFile(
-				ssoPath,
-				JSON.stringify({ userName: "test-user", stoToken: "tok-123", nested: { a: 1 } }),
-			);
-
-			const api = buildApi({ ssoAuthPath: ssoPath });
-			register.register(api as any);
-
-			const provider = registerProviderCalls[0] as any;
-			const mockStreamFn = vi.fn().mockResolvedValue({ text: "ok" });
-			const wrappedFn = provider.wrapStreamFn({ streamFn: mockStreamFn });
-
-			const model = { id: "test-model" };
-			const context = {};
-			await wrappedFn(model, context, { headers: { Existing: "header" } });
-
-			expect(mockStreamFn).toHaveBeenCalledWith(model, context, {
-				headers: expect.objectContaining({
-					Existing: "header",
-					"X-Sto-User-Name": "test-user",
-					"X-Sto-Token": "tok-123",
-				}),
-			});
-		});
-
-		it("sends request without SSO headers when file does not exist", async () => {
-			const api = buildApi({ ssoAuthPath: join(tempDir, "nonexistent.json") });
-			register.register(api as any);
-
-			const provider = registerProviderCalls[0] as any;
-			const mockStreamFn = vi.fn().mockResolvedValue({ text: "ok" });
-			const wrappedFn = provider.wrapStreamFn({ streamFn: mockStreamFn });
-
-			await wrappedFn({ id: "m" }, {}, {});
-
-			expect(mockStreamFn).toHaveBeenCalledWith({ id: "m" }, {}, { headers: {} });
-			expect(api.logger.warn).toHaveBeenCalledWith(
-				expect.stringContaining("failed to read SSO auth"),
-			);
-		});
-
-		it("handles partial SSO auth (only userName present)", async () => {
-			const ssoPath = join(tempDir, "sso-auth.json");
-			await writeFile(ssoPath, JSON.stringify({ userName: "alice" }));
-
-			const api = buildApi({ ssoAuthPath: ssoPath });
-			register.register(api as any);
-
-			const provider = registerProviderCalls[0] as any;
-			const mockStreamFn = vi.fn().mockResolvedValue({ text: "ok" });
-			const wrappedFn = provider.wrapStreamFn({ streamFn: mockStreamFn });
-
-			await wrappedFn({ id: "m" }, {}, {});
-
-			expect(mockStreamFn).toHaveBeenCalledWith({ id: "m" }, {}, {
-				headers: expect.objectContaining({ "X-Sto-User-Name": "alice" }),
-			});
-		});
-
-		it("injects agent context headers captured from before_model_resolve hook", async () => {
-			const ssoPath = join(tempDir, "sso-auth.json");
-			await writeFile(ssoPath, JSON.stringify({ userName: "bob", stoToken: "t" }));
-
-			const api = buildApi({
-				routeApiUrl: "https://route.example.com/api/resolve",
-				providerBaseUrl: "https://api.example.com/v1",
-				defaultModel: "qwen-72b",
-				ssoAuthPath: ssoPath,
-			});
-			register.register(api as any);
-
-			// Simulate the before_model_resolve hook firing first (captures agent context).
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				new Response(JSON.stringify({ shouldOverride: false }), { status: 200 }),
-			);
-			await hooks.before_model_resolve(
-				{ prompt: "test" },
-				{ agentId: "my-agent", channelId: "discord", sessionKey: "sess-xyz", trigger: "user" },
-			);
-
-			// Now call wrapStreamFn — it should include agent context headers.
-			const provider = registerProviderCalls[0] as any;
-			const mockStreamFn = vi.fn().mockResolvedValue({ text: "ok" });
-			const wrappedFn = provider.wrapStreamFn({ streamFn: mockStreamFn });
-
-			await wrappedFn({ id: "m" }, {}, {});
-
-			const calledHeaders = mockStreamFn.mock.calls[0][2].headers;
-			expect(calledHeaders).toMatchObject({
-				"X-Sto-Agent-Id": "my-agent",
-				"X-Sto-Channel-Id": "discord",
-				"X-Sto-Session-Key": "sess-xyz",
-				"X-Sto-User-Name": "bob",
-				"X-Sto-Token": "t",
-			});
-		});
-	});
-
-	describe("before_model_resolve hook", () => {
-		const defaultPluginConfig = {
-			routeApiUrl: "https://route.example.com/api/resolve",
-			providerBaseUrl: "https://api.example.com/v1",
-			defaultModel: "qwen-72b",
-		};
-
-		const hookEvent = { prompt: "hello world" };
-		const hookCtx = { agentId: "agent-1", channelId: "telegram", sessionKey: "sess-abc", trigger: "user" };
-
-		it("returns override when routing API returns shouldOverride: true", async () => {
-			const api = buildApi(defaultPluginConfig);
-			register.register(api as any);
-
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				new Response(JSON.stringify({ shouldOverride: true }), { status: 200 }),
-			);
-
-			const result = await hooks.before_model_resolve(hookEvent, hookCtx);
-
-			expect(result).toEqual({
-				providerOverride: PROVIDER_ID,
-				modelOverride: "sto-route-model",
-			});
-		});
-
-		it("uses custom model from routing API response", async () => {
-			const api = buildApi(defaultPluginConfig);
-			register.register(api as any);
-
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				new Response(JSON.stringify({ shouldOverride: true, model: "gpt-4o-mini" }), {
-					status: 200,
-				}),
-			);
-
-			const result = await hooks.before_model_resolve(hookEvent, hookCtx);
-
-			expect(result).toEqual({
-				providerOverride: PROVIDER_ID,
-				modelOverride: "gpt-4o-mini",
-			});
-		});
-
-		it("returns undefined when routing API returns shouldOverride: false", async () => {
-			const api = buildApi(defaultPluginConfig);
-			register.register(api as any);
-
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				new Response(JSON.stringify({ shouldOverride: false }), { status: 200 }),
-			);
-
-			const result = await hooks.before_model_resolve(hookEvent, hookCtx);
-
-			expect(result).toBeUndefined();
-		});
-
-		it("returns undefined and logs warning on non-200 response", async () => {
-			const api = buildApi(defaultPluginConfig);
-			register.register(api as any);
-
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				new Response("Internal Server Error", { status: 500 }),
-			);
-
-			const result = await hooks.before_model_resolve(hookEvent, hookCtx);
-
-			expect(result).toBeUndefined();
-			expect(api.logger.warn).toHaveBeenCalledWith(
-				expect.stringContaining("routing API returned 500"),
-			);
-		});
-
-		it("returns undefined and logs warning on network error", async () => {
-			const api = buildApi(defaultPluginConfig);
-			register.register(api as any);
-
-			vi.mocked(globalThis.fetch).mockRejectedValue(new Error("ECONNREFUSED"));
-
-			const result = await hooks.before_model_resolve(hookEvent, hookCtx);
-
-			expect(result).toBeUndefined();
-			expect(api.logger.warn).toHaveBeenCalledWith(
-				expect.stringContaining("routing check failed"),
-			);
-		});
-
-		it("returns undefined and logs warning on timeout", async () => {
-			const api = buildApi({ ...defaultPluginConfig, timeoutMs: 1 });
-			register.register(api as any);
-
-			vi.mocked(globalThis.fetch).mockRejectedValue(new DOMException("Aborted", "AbortError"));
-
-			const result = await hooks.before_model_resolve(hookEvent, hookCtx);
-
-			expect(result).toBeUndefined();
-			expect(api.logger.warn).toHaveBeenCalledWith(
-				expect.stringContaining("routing check failed"),
-			);
-		});
-
-		it("skips fetch when routeApiUrl is not configured", async () => {
-			const api = buildApi({ providerBaseUrl: "https://api.example.com/v1" });
-			register.register(api as any);
-
-			const result = await hooks.before_model_resolve(hookEvent, hookCtx);
-
-			expect(result).toBeUndefined();
-			expect(globalThis.fetch).not.toHaveBeenCalled();
-		});
-
-		it("does not send Authorization header", async () => {
-			const api = buildApi(defaultPluginConfig);
-			register.register(api as any);
-
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				new Response(JSON.stringify({ shouldOverride: false }), { status: 200 }),
-			);
-
-			await hooks.before_model_resolve(hookEvent, hookCtx);
-
-			const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
-			const headers = (fetchCall[1] as any).headers as Record<string, string>;
-			expect(headers).not.toHaveProperty("Authorization");
-		});
-
-		it("sends correct request body with prompt and context", async () => {
-			const api = buildApi(defaultPluginConfig);
-			register.register(api as any);
-
-			vi.mocked(globalThis.fetch).mockResolvedValue(
-				new Response(JSON.stringify({ shouldOverride: false }), { status: 200 }),
-			);
-
-			await hooks.before_model_resolve(hookEvent, hookCtx);
-
-			const fetchCall = vi.mocked(globalThis.fetch).mock.calls[0];
-			const body = JSON.parse((fetchCall[1] as any).body as string);
-			expect(body).toEqual({
-				prompt: "hello world",
-				agentId: "agent-1",
-				channelId: "telegram",
-				sessionKey: "sess-abc",
-			});
-		});
-	});
-
-	describe("before_prompt_build hook", () => {
-		let tempDir: string;
-
-		beforeEach(async () => {
-			tempDir = join(tmpdir(), `sto-test-${Date.now()}`);
-			await mkdir(tempDir, { recursive: true });
-		});
-
-		afterEach(async () => {
-			await rm(tempDir, { recursive: true, force: true });
-		});
-
-		it("injects SSO user context when auth file exists", async () => {
-			const ssoPath = join(tempDir, "sso-auth.json");
-			await writeFile(
-				ssoPath,
-				JSON.stringify({
-					userName: "test-user",
-					realName: "Test User",
-					companyCode: "430000",
-					companyName: "Test Company",
-					departmentCode: "430001",
-					departmentName: "Test Department",
-				}),
-			);
-
-			const api = buildApi({ ssoAuthPath: ssoPath });
-			register.register(api as any);
-
-			const result = await hooks.before_prompt_build(
-				{ prompt: "hello", messages: [] },
-				{ agentId: "agent-1", sessionKey: "sess-abc", trigger: "user" },
-			);
-
-			expect(result).toBeDefined();
-			expect(result?.appendSystemContext).toContain("产物文件引用规范");
-			expect(result?.appendSystemContext).toContain("当前登录用户信息（已认证）");
-			expect(result?.appendSystemContext).toContain("用户名：test-user");
-			expect(result?.appendSystemContext).toContain("真实姓名：Test User");
-			expect(result?.appendSystemContext).toContain("网点编码（companyCode）：430000");
-			expect(result?.appendSystemContext).toContain("网点名称（companyName）：Test Company");
-			expect(result?.appendSystemContext).toContain("组织编码（departmentCode）：430001");
-			expect(result?.appendSystemContext).toContain("组织名称（departmentName）：Test Department");
-		});
-
-		it("injects artifact citation rules but no SSO block when no SSO auth file exists", async () => {
-			const api = buildApi({ ssoAuthPath: join(tempDir, "nonexistent.json") });
-			register.register(api as any);
-
-			const result = await hooks.before_prompt_build(
-				{ prompt: "hello", messages: [] },
-				{ agentId: "agent-1", sessionKey: "sess-abc", trigger: "user" },
-			);
-
-			expect(result).toBeDefined();
-			expect(result?.appendSystemContext).toContain("产物文件引用规范");
-			expect(result?.appendSystemContext).not.toContain("当前登录用户信息");
-			expect(api.logger.warn).toHaveBeenCalledWith(
-				expect.stringContaining("failed to read SSO auth"),
-			);
-		});
-
-		it("injects artifact citation rules but no SSO block when auth file has no userName", async () => {
-			const ssoPath = join(tempDir, "sso-auth.json");
-			await writeFile(ssoPath, JSON.stringify({ stoToken: "tok-123" }));
-
-			const api = buildApi({ ssoAuthPath: ssoPath });
-			register.register(api as any);
-
-			const result = await hooks.before_prompt_build(
-				{ prompt: "hello", messages: [] },
-				{ agentId: "agent-1", sessionKey: "sess-abc", trigger: "user" },
-			);
-
-			expect(result).toBeDefined();
-			expect(result?.appendSystemContext).toContain("产物文件引用规范");
-			expect(result?.appendSystemContext).not.toContain("当前登录用户信息");
-		});
+	it("retains policy context when the auth file is missing", async () => {
+		const api = buildApi({ ssoAuthPath: join(tempDir, "missing.json") });
+		register.register(api as unknown as OpenClawPluginApi);
+
+		const result = await hooks.before_prompt_build(
+			{ prompt: "hello", messages: [] },
+			{ agentId: "agent-1", sessionKey: "session-1", trigger: "user" },
+		);
+
+		expect(result?.appendSystemContext).toContain("已废弃技能与插件");
+		expect(result?.appendSystemContext).toContain("产物文件引用规范");
+		expect(result?.appendSystemContext).not.toContain("当前登录用户信息（已认证）");
+		expect(api.logger.warn).toHaveBeenCalledWith(
+			expect.stringContaining("failed to read SSO auth"),
+		);
 	});
 });

@@ -10,7 +10,6 @@ import {
 } from './user-message-merge';
 import {
   absorbWorkflowSchemaFromToolResults,
-  mergeParameterFormBlocksFromCurrent,
 } from './parameter-form-recovery';
 import { mergeHistoryWhenShrunk } from './history-merge';
 import type { RawMessage } from './types';
@@ -23,10 +22,15 @@ export interface PreparedHistoryMessages {
 
 export function prepareHistoryMessages(input: {
   rawMessages: RawMessage[];
-  currentMessages: RawMessage[];
+  previousTranscript?: RawMessage[];
+  /** @deprecated Compatibility for callers predating canonical transcript storage. */
+  currentMessages?: RawMessage[];
   sessionKey: string;
 }): PreparedHistoryMessages {
-  const rawMessages = mergeHistoryWhenShrunk(input.rawMessages, input.currentMessages);
+  const rawMessages = mergeHistoryWhenShrunk(
+    input.rawMessages,
+    input.previousTranscript ?? input.currentMessages ?? [],
+  );
   absorbWorkflowSchemaFromToolResults(rawMessages, input.sessionKey);
 
   const messagesWithToolImages = enrichWithToolResultFiles(rawMessages);
@@ -51,20 +55,14 @@ export function mergeHistoryDisplayMessages(input: {
   getMessageText: (content: unknown) => string;
 }): RawMessage[] {
   const {
-    currentMessages,
     gatewaySessionLabel,
-    getMessageText,
     sessionKey,
     sessionLabels,
     sending,
     userMessageAt,
   } = input;
 
-  let messages = mergeParameterFormBlocksFromCurrent(
-    input.messages,
-    currentMessages,
-    getMessageText,
-  );
+  let messages = input.messages;
   messages = recoverInitialUserFromSessionLabel(
     messages,
     sessionKey,

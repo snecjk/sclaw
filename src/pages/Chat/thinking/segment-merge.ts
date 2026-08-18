@@ -14,6 +14,20 @@ import {
 const globalStableSegmentsByTurn = new Map<string, ThinkingTurnSegment[]>();
 const globalStableTimelineByTurn = new Map<string, ThinkingTimelineItem[]>();
 
+/**
+ * Live rendering follows the latest parser projection, regardless of length.
+ * A longer cached projection is only a fallback when the live projection is
+ * momentarily empty during a turn-key hand-off.
+ */
+export function resolveLiveProjection<T>(
+  incoming: T[],
+  cached: T[],
+  isLiveStream: boolean,
+): T[] | null {
+  if (!isLiveStream) return null;
+  return incoming.length > 0 ? incoming : cached;
+}
+
 export function buildTurnDisplayCacheKey(
   sessionKey: string,
   turnStableKey: string | undefined,

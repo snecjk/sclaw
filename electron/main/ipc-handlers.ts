@@ -81,6 +81,7 @@ import {
   type AppResponse,
 } from './ipc/request-helpers';
 import { GatewayManager } from '@electron/gateway/manager';
+import { getChatRuntimeSupervisor } from '../services/chat-runtime-supervisor';
 
 /**
  * Register all IPC handlers
@@ -883,6 +884,21 @@ function registerGatewayHandlers(
     body?: unknown;
     timeoutMs?: number;
   };
+  const chatRuntimeSupervisor = getChatRuntimeSupervisor(gatewayManager);
+  chatRuntimeSupervisor.on('event', (event) => {
+    broadcast('chat-runtime:event', event);
+  });
+
+  ipcMain.handle('chat-runtime:get', async (_event, sessionKey: unknown) => {
+    const normalized = typeof sessionKey === 'string' ? sessionKey.trim() : '';
+    if (!normalized) return null;
+    return chatRuntimeSupervisor.getHydrated(normalized);
+  });
+
+  ipcMain.handle('chat-runtime:listActive', async () => {
+    await chatRuntimeSupervisor.initialize();
+    return chatRuntimeSupervisor.listActive();
+  });
 
   // Get Gateway status
   ipcMain.handle('gateway:status', () => {
@@ -1014,16 +1030,25 @@ function registerGatewayHandlers(
           engineType?: AgentEngineType;
         };
         const adapter = await getAdapterForSession(body.sessionKey ?? '', parseEngineType(body.engineType));
-        const result = await adapter.abortRun(
-          { gatewayManager },
-          { sessionKey: body.sessionKey ?? '' },
-        );
+        await chatRuntimeSupervisor.aborting(body.sessionKey ?? '');
+        let result;
+        try {
+          result = await adapter.abortRun(
+            { gatewayManager },
+            { sessionKey: body.sessionKey ?? '' },
+          );
+        } catch (error) {
+          await chatRuntimeSupervisor.abortFailed(body.sessionKey ?? '', String(error));
+          throw error;
+        }
         if (!result.success) {
+          await chatRuntimeSupervisor.abortFailed(body.sessionKey ?? '', result.error || 'chat.abort failed');
           return { success: false, error: result.error || 'chat.abort failed' };
         }
         const { getMemoryTurnCoordinator } = await import('../services/memory-turn-coordinator');
         await getMemoryTurnCoordinator(gatewayManager).aborted(body.sessionKey ?? '', null);
-        return { success: true, result: result.result };
+        await chatRuntimeSupervisor.aborted(body.sessionKey ?? '', null);
+        return { success: true };
       }
 
       const result = await gatewayManager.rpc(method, rpcParams, timeoutMs);
@@ -1293,18 +1318,8 @@ function registerGatewayHandlers(
     broadcast('gateway:message', enrichGatewayPayload(message));
   });
 
-  gatewayManager.on('notification', (notification) => {
-    broadcast('gateway:notification', sanitizeMemoryFromChatPayload(enrichGatewayPayload(notification)));
-  });
-
   gatewayManager.on('channel:status', (data) => {
     broadcast('gateway:channel-status', data);
-  });
-
-  gatewayManager.on('chat:message', (data) => {
-    if (data && typeof data === 'object' && 'engineEvent' in data) {
-      broadcast('gateway:engine-event', sanitizeMemoryFromChatPayload(enrichGatewayPayload((data as { engineEvent?: unknown }).engineEvent)));
-    }
   });
 
   gatewayManager.on('exit', (code) => {

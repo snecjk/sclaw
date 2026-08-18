@@ -1556,7 +1556,7 @@ export async function ensureAllBundledPluginsInstalledAsync(): Promise<void> {
     { dirName: 'wecom', label: 'WeCom' },
     { dirName: 'qqbot', label: 'QQ Bot' },
     { dirName: 'openclaw-weixin', label: 'WeChat' },
-    { dirName: 'sto-dynamic-agent-route', label: 'STO Dynamic Route' },
+    { dirName: 'sto-dynamic-agent-route', label: 'STO Runtime Context' },
     { dirName: 'sto-agent-telemetry', label: 'STO Agent Telemetry' },
     { dirName: 'sto-scheduled-task-tool', label: 'STO Scheduled Task Tool' },
     { dirName: 'sto-workflow-tool', label: 'STO Workflow Tool' },
