@@ -3,7 +3,7 @@
 
 .learning-center-page {
   overflow-x: hidden;
-  background: var(--lc-canvas-bg, #fafafc);
+  background: var(--lc-canvas-bg);
   --lc-card-radius: 1.125rem; /* 18px */
   --lc-cover-ratio: 250 / 156;
   --lc-case-card-height: 18.25rem; /* 292px */
@@ -17,6 +17,10 @@
   --lc-steps-bg: #f5f5f5;
   --lc-panel-bg: #ffffff;
   --lc-canvas-bg: #fafafc;
+  --lc-well-bg: #f7f8fa;
+  --lc-edge: var(--sto-surface-edge, hsl(var(--border)));
+  --lc-text: hsl(var(--foreground));
+  --lc-text-muted: hsl(var(--muted-foreground));
   --lc-detail-content-w: 33.5rem; /* 536px fallback */
   --lc-detail-content-min-w: 35.1875rem; /* 563px: 向左拖动下限 */
   --lc-detail-panel-w: 35.25rem; /* 564px */
@@ -39,8 +43,14 @@
   min-height: 0;
   overflow: hidden;
   gap: 0;
-  background: var(--lc-canvas-bg, #fafafc);
+  background: var(--lc-canvas-bg);
   --lc-canvas-bg: #fafafc;
+  --lc-panel-bg: #ffffff;
+  --lc-steps-bg: #f5f5f5;
+  --lc-well-bg: #f7f8fa;
+  --lc-edge: var(--sto-surface-edge, hsl(var(--border)));
+  --lc-text: hsl(var(--foreground));
+  --lc-text-muted: hsl(var(--muted-foreground));
   --lc-detail-content-min-w: 35.1875rem;
   --lc-detail-panel-w: 35.25rem;
   --lc-detail-gap: 0.75rem;
@@ -56,7 +66,7 @@
   width: 0;
   min-width: 0;
   overflow: hidden;
-  background: var(--lc-canvas-bg, #fafafc);
+  background: var(--lc-canvas-bg);
 }
 
 .learning-center-split--open .learning-center-tutorial-sheet {
@@ -201,7 +211,7 @@
   font-weight: 600;
   line-height: 1.75rem;
   letter-spacing: 0;
-  color: #1a1a1a;
+  color: var(--lc-text);
 }
 
 /* MasterGo 1172:093151 路径 154: 50x6 layer, extracted wave 57x15 */
@@ -226,7 +236,7 @@
 .learning-center-hero__step-label {
   font-style: normal;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--lc-text);
 }
 
 .learning-center-hero__step-count {
@@ -244,7 +254,7 @@
   max-width: 40rem;
   font-size: 0.875rem;
   line-height: 1.125rem;
-  color: #86909c;
+  color: var(--lc-text-muted);
 }
 
 .learning-center-steps {
@@ -261,7 +271,7 @@
   box-sizing: border-box;
   padding: 0.875rem;
   overflow-x: clip;
-  border: 0.8px solid #e5e6eb;
+  border: 0.8px solid var(--lc-edge);
   border-radius: 1.125rem;
   background: var(--lc-steps-bg);
 }
@@ -312,7 +322,7 @@
   height: 85.714%; /* 120 / 140 */
   overflow: hidden;
   border-radius: 0;
-  background: #ffffff;
+  background: var(--lc-panel-bg);
   box-shadow: 0 0 40px 0 rgba(185, 75, 0, 0.08);
   transform: rotate(var(--lc-art-rotate, 6deg));
   transform-origin: center center;
@@ -412,7 +422,7 @@
   width: 1px;
   height: 1.25rem;
   transform: translateY(-50%);
-  background: #e5e6eb;
+  background: var(--lc-edge);
 }
 
 .learning-center-page .learning-center-steps__tab[data-state='active'] {
@@ -461,7 +471,7 @@
   gap: 0.75rem; /* 12px */
   box-sizing: border-box;
   padding: 1.125rem; /* 18px */
-  border: 0.8px solid #e5e6eb;
+  border: 0.8px solid var(--lc-edge);
   border-radius: 0.9375rem; /* 15px */
   background: var(--lc-panel-bg);
   box-shadow: none;
@@ -498,7 +508,7 @@
   left: 0.75rem;
   width: 1px;
   transform: translateX(-50%);
-  background: #e5e6eb;
+  background: var(--lc-edge);
 }
 
 .learning-center-tutorial-index {
@@ -510,10 +520,10 @@
   flex: 0 0 1.5rem;
   align-items: center;
   justify-content: center;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--lc-edge);
   border-radius: 999px;
-  background: #f7f8fa;
-  color: #1d2129;
+  background: var(--lc-well-bg);
+  color: var(--lc-text);
   font-size: 0.75rem;
 }
 
@@ -547,7 +557,7 @@
   justify-content: flex-end;
   gap: 0.15rem;
   padding: 0;
-  color: #ff6700;
+  color: hsl(var(--primary));
   font-size: 0.75rem;
   font-weight: 500;
 }
@@ -565,9 +575,9 @@
   padding: 0;
   gap: 0;
   overflow: visible;
-  border: 2.84px solid #f0f2f5;
+  border: 2.84px solid var(--sto-surface-edge, hsl(var(--border)));
   border-radius: 18px;
-  background: #fafafa;
+  background: var(--sto-workspace-bg);
   box-shadow: none;
 }
 
@@ -628,7 +638,7 @@
   flex: 1 1 auto;
   align-items: center;
   justify-content: center;
-  color: #ededed;
+  color: var(--lc-text-muted);
 }
 
 .learning-center-cases {
@@ -662,7 +672,7 @@
   font-size: 0.875rem;
   font-weight: 400;
   line-height: 1.125rem;
-  color: #c9cdd4;
+  color: var(--lc-text-muted);
   white-space: nowrap;
 }
 
@@ -695,7 +705,7 @@
   max-width: none;
   min-width: 0;
   height: var(--lc-case-card-height);
-  border: 0.8px solid #e5e6eb;
+  border: 0.8px solid var(--lc-edge);
   border-radius: var(--lc-card-radius);
   background: var(--lc-panel-bg);
   box-shadow: none;
@@ -713,9 +723,9 @@
   gap: 0.75rem;
   padding: 0.875rem;
   overflow: hidden;
-  border: 0.8px solid #e5e6eb;
+  border: 0.8px solid var(--lc-edge);
   border-radius: var(--lc-card-radius);
-  background: #ffffff;
+  background: var(--lc-panel-bg);
 }
 
 /* Inner 250x226, column gap 8: title 18 + desc 36 + cover 156 */
@@ -741,7 +751,7 @@
   margin: 0;
   height: 1.125rem;
   overflow: hidden;
-  color: #1A1A1A;
+  color: var(--lc-text);
   font-size: 0.875rem;
   font-weight: 500;
   line-height: 1.125rem;
@@ -756,7 +766,7 @@
   overflow: hidden;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  color: #4e5969;
+  color: var(--lc-text-muted);
   font-size: 0.75rem;
   font-weight: 400;
   line-height: 1.125rem;
@@ -770,9 +780,9 @@
   height: 9.75rem;
   flex: 0 0 9.75rem;
   overflow: hidden;
-  border: 1px solid #f0f2f5;
+  border: 1px solid var(--lc-edge);
   border-radius: 0.625rem;
-  background: #fafafa;
+  background: var(--lc-well-bg);
 }
 
 .learning-center-case-cover__image {
@@ -794,17 +804,17 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--lc-edge);
   border-radius: 0.375rem;
-  background: #ffffff;
-  color: #4e5969;
+  background: var(--lc-panel-bg);
+  color: var(--lc-text-muted);
   box-shadow: 0 2px 24px rgb(43 17 0 / 0.03);
   cursor: pointer;
 }
 
 .learning-center-case-cover__preview:hover {
-  color: #1d2129;
-  background: #ffffff;
+  color: var(--lc-text);
+  background: var(--lc-panel-bg);
 }
 
 .learning-center-case-cover__preview:focus-visible {
@@ -830,7 +840,7 @@
   align-items: center;
   gap: 0.3rem;
   overflow: hidden;
-  color: #4e5969;
+  color: var(--lc-text-muted);
   font-size: 0.75rem;
 }
 
@@ -850,10 +860,10 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--lc-edge);
   border-radius: 0.5rem;
-  background: #ffffff;
-  color: #1d2129;
+  background: var(--lc-panel-bg);
+  color: var(--lc-text);
   font-size: 0.75rem;
   font-weight: 500;
   line-height: 0.875rem;
@@ -861,7 +871,7 @@
 }
 
 .learning-center-case-card__action:hover {
-  background: #fafafa;
+  background: var(--lc-well-bg);
 }
 
 .learning-center-case-card__action:focus-visible {
@@ -889,38 +899,29 @@
   }
 }
 
-.dark .learning-center-page {
+/* L1 workspace + L2 panel; do not copy light hex onto dark surfaces. */
+.dark .learning-center-page,
+.dark .learning-center-split {
+  --lc-canvas-bg: var(--sto-workspace-bg);
+  --lc-panel-bg: var(--sto-panel-bg);
   --lc-steps-bg: hsl(var(--muted));
-  --lc-panel-bg: hsl(var(--card));
-  --lc-canvas-bg: hsl(var(--background));
+  --lc-well-bg: hsl(var(--muted));
 }
 
-.dark .learning-center-case-card {
-  border-color: color-mix(in srgb, var(--border) 85%, transparent);
+.dark .learning-center-steps__art-card {
+  box-shadow: 0 0 40px 0 rgb(0 0 0 / 0.28);
 }
 
-.dark .learning-center-case-card__title {
-  color: var(--foreground);
-}
-
-.dark .learning-center-case-card__summary,
-.dark .learning-center-case-card__count {
-  color: var(--muted-foreground);
-}
-
-.dark .learning-center-case-cover {
-  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+.dark .learning-center-steps__art-inner {
+  border-color: color-mix(in srgb, hsl(var(--primary)) 28%, transparent);
   background: hsl(var(--muted));
-}
-
-.dark .learning-center-case-card__action {
-  border-color: color-mix(in srgb, var(--border) 85%, transparent);
-  background: transparent;
-  color: var(--foreground);
 }
 
 .learning-center-case-detail {
   overflow: hidden;
+  border-color: hsl(var(--border));
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
 }
 
 .learning-center-case-detail__close {
@@ -936,7 +937,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: #1a1a1a;
+  color: hsl(var(--foreground));
 }
 
 .learning-center-case-detail__header {
@@ -945,7 +946,7 @@
 }
 
 .learning-center-case-detail .learning-center-case-detail__title {
-  color: #1d2129; /* 文字/文本- 默认 */
+  color: hsl(var(--foreground));
   font-size: 16px;
   font-weight: 500;
   line-height: 20px;
@@ -953,7 +954,7 @@
 
 .learning-center-case-detail .learning-center-case-detail__hint {
   margin-top: 0;
-  color: #86909c; /* 文字/文本-更浅-三级信息 */
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   font-weight: 400;
   line-height: 16px;
@@ -989,7 +990,7 @@
 
 .learning-center-case-detail__label {
   margin: 0;
-  color: #1d2129; /* 文字/文本- 默认 */
+  color: hsl(var(--foreground));
   font-size: 12px;
   font-weight: 500;
   line-height: 18px;
@@ -997,7 +998,7 @@
 
 .learning-center-case-detail__scene {
   margin: 4px 0 0;
-  color: #86909c; /* 文字/文本-更浅-三级信息 */
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   font-weight: 400;
   line-height: 16px;
@@ -1008,14 +1009,14 @@
   box-sizing: border-box;
   margin-top: 0;
   padding: 8px;
-  border: 1px solid #ededed;
+  border: 1px solid hsl(var(--border));
   border-radius: 8px;
-  background: #fafafa;
+  background: hsl(var(--muted));
 }
 
 .learning-center-case-detail__prompt-text {
   margin: 0;
-  color: #4e5969; /* 文字/文本-浅色-二级信息 */
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   font-weight: 400;
   line-height: 22px;
@@ -1027,9 +1028,9 @@
   width: 100%;
   aspect-ratio: 608 / 317.5;
   overflow: hidden;
-  border: 1.67px solid #f0f2f5;
+  border: 1.67px solid hsl(var(--border));
   border-radius: 8.36px;
-  background: #fafafa;
+  background: hsl(var(--muted));
 }
 
 .learning-center-case-detail__image {
@@ -1051,10 +1052,10 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid #e5e6eb;
+  border: 1px solid hsl(var(--border));
   border-radius: 6px;
-  background: #ffffff;
-  color: #4e5969;
+  background: hsl(var(--popover));
+  color: hsl(var(--muted-foreground));
   box-shadow: 0 2px 24px rgb(43 17 0 / 0.03);
   cursor: pointer;
 }
@@ -1077,40 +1078,20 @@
 }
 
 .learning-center-case-detail__cancel {
-  border-color: #e5e6eb;
-  background: #ffffff; /* 文字/文本-纯白 */
-  color: #1d2129; /* 文字/文本- 默认 */
+  border-color: hsl(var(--border));
+  background: hsl(var(--popover));
+  color: hsl(var(--foreground));
+}
+
+.learning-center-case-detail__cancel:hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
 }
 
 .learning-center-case-detail__use {
-  border-color: #1d2129;
-  background: #1d2129; /* 文字/文本- 默认 */
-  color: #ffffff; /* 文字/文本-纯白 */
-}
-
-.dark .learning-center-case-detail .learning-center-case-detail__title,
-.dark .learning-center-case-detail__label,
-.dark .learning-center-case-detail__cancel {
-  color: var(--foreground);
-}
-
-.dark .learning-center-case-detail .learning-center-case-detail__hint,
-.dark .learning-center-case-detail__scene {
-  color: var(--muted-foreground);
-}
-
-.dark .learning-center-case-detail__prompt-text {
-  color: var(--foreground);
-}
-
-.dark .learning-center-case-detail__prompt {
-  border-color: color-mix(in srgb, var(--border) 85%, transparent);
-  background: hsl(var(--muted));
-}
-
-.dark .learning-center-case-detail__cover {
-  border-color: color-mix(in srgb, var(--border) 70%, transparent);
-  background: hsl(var(--muted));
+  border-color: hsl(var(--foreground));
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
 }
 
 @media (prefers-reduced-motion: reduce) {

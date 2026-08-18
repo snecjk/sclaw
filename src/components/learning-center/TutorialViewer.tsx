@@ -109,7 +109,10 @@ function renderNodes(
       return [
         <a
           key={key}
+          className="tutorial-viewer__link"
           href={href}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
           onClick={(event) => {
             event.preventDefault();
             if (href.startsWith('http://') || href.startsWith('https://')) openExternalUrl(href);

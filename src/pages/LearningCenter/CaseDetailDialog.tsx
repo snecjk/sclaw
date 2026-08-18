@@ -157,14 +157,14 @@ export function CaseDetailDialog({
             <Button
               type="button"
               variant="outline"
-              className="learning-center-case-detail__cancel h-[34px] rounded-xl border-[#E5E6EB] bg-white px-4 text-[#1D2129] hover:bg-white hover:text-[#1D2129]"
+              className="learning-center-case-detail__cancel h-[34px] rounded-xl px-4"
               onClick={onClose}
             >
               {t('cancel')}
             </Button>
             <Button
               type="button"
-              className="learning-center-case-detail__use h-[34px] rounded-xl bg-[#1D2129] px-4 text-white hover:bg-[#1D2129] hover:text-white"
+              className="learning-center-case-detail__use h-[34px] rounded-xl px-4 bg-foreground text-background hover:bg-foreground/90 hover:text-background"
               onClick={(event) => onUse(event.currentTarget)}
             >
               {detail.actionText || t('caseUseAction')}

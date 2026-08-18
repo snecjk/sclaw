@@ -545,8 +545,7 @@ export function LearningCenterPage() {
                               <Button
                                 type="button"
                                 variant="link"
-                                className="learning-center-tutorial-link"
-                                style={{ color: '#FF6700' }}
+                                className="learning-center-tutorial-link text-primary hover:text-primary"
                                 onClick={(event) => {
                                   detailReturnFocusRef.current = event.currentTarget;
                                   setTutorialPanelContainer(tutorialSlotRef.current);

@@ -24,6 +24,14 @@ describe('TutorialViewer', () => {
     expect(screen.getByText('危险链接').closest('a')).toBeNull();
   });
 
+  it('renders http links as new-tab anchors', () => {
+    render(<TutorialViewer html={'<p>打开 <a href="https://front-test.sto.cn/learn-center/admin">学习中心</a></p>'} />);
+    const link = screen.getByRole('link', { name: '学习中心' });
+    expect(link.getAttribute('href')).toBe('https://front-test.sto.cn/learn-center/admin');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link).toHaveClass('tutorial-viewer__link');
+  });
+
   it('replaces a failed managed image with an accessible fallback', () => {
     const url = 'https://oss.example.com/tutorial.png?Expires=123&Signature=signed';
     render(<TutorialViewer html={`<img src="${url}" alt="流程截图" data-width="50">`} imageErrorLabel="图片暂不可用" />);
@@ -34,5 +42,14 @@ describe('TutorialViewer', () => {
     fireEvent.error(image);
     expect(screen.getByRole('img', { name: /流程截图.*图片暂不可用/ })).toBeInTheDocument();
     expect(screen.queryByRole('img', { name: '流程截图' })).not.toBeInTheDocument();
+  });
+
+  it('renders sibling images in the same paragraph', () => {
+    render(<TutorialViewer html={'<p><img src="https://oss.example.com/a.png" alt="左" data-width="50"><img src="https://oss.example.com/b.png" alt="右" data-width="50"></p>'} />);
+    const images = screen.getAllByRole('img');
+    expect(images).toHaveLength(2);
+    expect(images[0].closest('p')).toBe(images[1].closest('p'));
+    expect(images[0]).toHaveClass('tutorial-viewer__image--compact');
+    expect(images[1]).toHaveClass('tutorial-viewer__image--compact');
   });
 });
