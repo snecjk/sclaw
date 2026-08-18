@@ -1,12 +1,11 @@
 import { useEffect, useState, type RefObject } from 'react';
-import { RefreshCw, X } from 'lucide-react';
+import { RefreshCw, X, ZoomIn } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { FeedbackState } from '@/components/common/FeedbackState';
-import { TutorialViewer } from '@/components/learning-center/TutorialViewer';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { getCaseDetail } from '@/lib/learning-center-api';
-import type { LearningCaseDetail, LearningTutorial } from '@/types/learning-center';
+import type { LearningCaseDetail, LearningCaseTemplate } from '@/types/learning-center';
 import { LearningCoverImage } from './LearningCoverImage';
 
 type CaseDetailState =
@@ -19,14 +18,22 @@ interface CaseDetailDialogProps {
   fallbackTitle: string;
   returnFocusRef: RefObject<HTMLElement | null>;
   onClose: () => void;
+  onUse: (trigger: HTMLElement) => void;
+  onPreviewCover: (trigger: HTMLElement) => void;
 }
 
-function resolveTutorials(detail: LearningCaseDetail): LearningTutorial[] {
-  if (detail.tutorials.length > 0) return detail.tutorials;
-  return detail.tutorial ? [detail.tutorial] : [];
+function sceneText(detail: LearningCaseTemplate): string {
+  return detail.sceneDescription || detail.description;
 }
 
-export function CaseDetailDialog({ caseId, fallbackTitle, returnFocusRef, onClose }: CaseDetailDialogProps) {
+export function CaseDetailDialog({
+  caseId,
+  fallbackTitle,
+  returnFocusRef,
+  onClose,
+  onUse,
+  onPreviewCover,
+}: CaseDetailDialogProps) {
   const { t } = useTranslation('learningCenter');
   const [reloadKey, setReloadKey] = useState(0);
   const [state, setState] = useState<CaseDetailState>({ status: 'loading' });
@@ -34,6 +41,7 @@ export function CaseDetailDialog({ caseId, fallbackTitle, returnFocusRef, onClos
   useEffect(() => {
     let active = true;
     if (!caseId) return () => { active = false; };
+    setState({ status: 'loading' });
     getCaseDetail(caseId).then((detail) => {
       if (active) setState({ status: 'ready', detail });
     }).catch((error: unknown) => {
@@ -47,37 +55,37 @@ export function CaseDetailDialog({ caseId, fallbackTitle, returnFocusRef, onClos
   }, [caseId, reloadKey, t]);
 
   const detail = state.status === 'ready' ? state.detail : null;
-  const tutorials = detail ? resolveTutorials(detail) : [];
+  const title = detail ? (detail.title || detail.name || fallbackTitle) : (fallbackTitle || t('caseDetailTitle'));
+  const scene = detail ? sceneText(detail) : '';
+  const prompt = detail?.promptText?.trim() ?? '';
 
   return (
     <Dialog open={Boolean(caseId)} onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent
-        className="max-w-2xl gap-0 p-0"
+        className="learning-center-case-detail w-[640px] max-w-[min(640px,calc(100vw-2rem))] gap-0 p-0"
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           returnFocusRef.current?.focus();
         }}
       >
-        <DialogHeader className="shrink-0 border-b px-5 py-4 pr-14">
-          <DialogTitle className="truncate">
-            {detail ? (detail.title || detail.name || fallbackTitle) : (fallbackTitle || t('caseDetailTitle'))}
-          </DialogTitle>
-          <DialogDescription>
-            {detail?.subTitle || t('caseDetailDescription')}
+        <DialogHeader className="learning-center-case-detail__header space-y-0">
+          <DialogTitle className="learning-center-case-detail__title">{title}</DialogTitle>
+          <DialogDescription className="learning-center-case-detail__hint">
+            {t('caseDetailDescription')}
           </DialogDescription>
         </DialogHeader>
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="absolute right-3 top-3"
+          className="learning-center-case-detail__close h-[18px] w-[18px] p-0"
           aria-label={t('close')}
           onClick={onClose}
         >
           <X className="h-4 w-4" aria-hidden />
         </Button>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5" aria-busy={state.status === 'loading'}>
+        <div className="learning-center-case-detail__body" aria-busy={state.status === 'loading'}>
           {state.status === 'loading' && (
             <FeedbackState state="loading" title={t('caseDetailLoading')} description={t('caseDetailLoadingDescription')} />
           )}
@@ -102,54 +110,67 @@ export function CaseDetailDialog({ caseId, fallbackTitle, returnFocusRef, onClos
           )}
 
           {detail && (
-            <div className="flex min-w-0 flex-col gap-5">
-              {detail.coverImageUrl && (
-                <LearningCoverImage
-                  url={detail.coverImageUrl}
-                  alt={t('caseCoverAlt', { title: detail.title || detail.name })}
-                  className="aspect-[16/9] w-full rounded-xl object-cover"
-                />
-              )}
-
-              {(detail.sceneTitle || detail.sceneDescription) && (
-                <section className="min-w-0">
-                  <h3 className="text-sm font-semibold">{detail.sceneTitle || t('caseDetailSceneTitle')}</h3>
-                  {detail.sceneDescription && (
-                    <p className="mt-1 whitespace-pre-line text-sm leading-6 text-muted-foreground">{detail.sceneDescription}</p>
-                  )}
-                </section>
-              )}
-
-              {detail.description && (
-                <section className="min-w-0">
-                  <h3 className="text-sm font-semibold">{t('caseDetailDescriptionTitle')}</h3>
-                  <p className="mt-1 whitespace-pre-line text-sm leading-6 text-muted-foreground">{detail.description}</p>
-                </section>
-              )}
-
-              <section className="min-w-0">
-                <h3 className="text-sm font-semibold">{t('caseDetailTutorialTitle')}</h3>
-                {tutorials.length === 0 ? (
-                  <p className="mt-1 text-sm text-muted-foreground">{t('caseDetailTutorialEmpty')}</p>
-                ) : (
-                  <div className="mt-2 flex min-w-0 flex-col gap-4">
-                    {tutorials.map((tutorial) => (
-                      <article key={tutorial.id} className="min-w-0">
-                        <p className="text-sm font-medium">{tutorial.title || tutorial.name}</p>
-                        {(tutorial.subTitle || tutorial.description) && (
-                          <p className="mt-1 text-xs leading-5 text-muted-foreground">{tutorial.subTitle || tutorial.description}</p>
-                        )}
-                        {tutorial.content && (
-                          <TutorialViewer html={tutorial.content} imageErrorLabel={t('imageLoadError')} />
-                        )}
-                      </article>
-                    ))}
-                  </div>
+            <div className="learning-center-case-detail__content">
+              <div className="learning-center-case-detail__scene-block">
+                {scene && (
+                  <section className="min-w-0">
+                    <h3 className="learning-center-case-detail__label">{t('caseDetailSceneTitle')}</h3>
+                    <p className="learning-center-case-detail__scene">{scene}</p>
+                  </section>
                 )}
-              </section>
+
+                <div className="learning-center-case-detail__cover">
+                  <LearningCoverImage
+                    url={detail.coverImageUrl}
+                    alt={t('caseCoverAlt', { title })}
+                    className="learning-center-case-detail__image"
+                    iconClassName="h-12 w-12"
+                  />
+                  <button
+                    type="button"
+                    className="learning-center-case-detail__zoom"
+                    aria-label={t('casePreviewCover', { title })}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onPreviewCover(event.currentTarget);
+                    }}
+                  >
+                    <ZoomIn className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+                  </button>
+                </div>
+              </div>
+
+              {prompt && (
+                <section className="learning-center-case-detail__prompt-block min-w-0">
+                  <h3 className="learning-center-case-detail__label">{t('caseDetailPromptTitle')}</h3>
+                  <div className="learning-center-case-detail__prompt">
+                    <p className="learning-center-case-detail__prompt-text">{prompt}</p>
+                  </div>
+                </section>
+              )}
             </div>
           )}
         </div>
+
+        {detail && (
+          <div className="learning-center-case-detail__footer">
+            <Button
+              type="button"
+              variant="outline"
+              className="learning-center-case-detail__cancel h-[34px] rounded-xl border-[#E5E6EB] bg-white px-4 text-[#1D2129] hover:bg-white hover:text-[#1D2129]"
+              onClick={onClose}
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              type="button"
+              className="learning-center-case-detail__use h-[34px] rounded-xl bg-[#1D2129] px-4 text-white hover:bg-[#1D2129] hover:text-white"
+              onClick={(event) => onUse(event.currentTarget)}
+            >
+              {detail.actionText || t('caseUseAction')}
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

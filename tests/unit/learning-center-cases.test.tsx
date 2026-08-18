@@ -97,9 +97,8 @@ function renderPage() {
   );
 }
 
-async function openConfirmDialog() {
+async function useCaseFromCard() {
   fireEvent.click(await screen.findByRole('button', { name: '立即使用' }));
-  return screen.findByRole('dialog', { name: '确认使用这个案例？' });
 }
 
 describe('LearningCenterPage cases', () => {
@@ -130,8 +129,18 @@ describe('LearningCenterPage cases', () => {
   it('shows the case empty state while tutorials stay usable', async () => {
     casesMock.mockResolvedValue({ items: [], total: 0, pageNum: 1, pageSize: 6 });
     renderPage();
-    expect(await screen.findByText('暂无实践案例')).toBeInTheDocument();
+    expect(await screen.findByText('案例模版努力扩充中')).toBeInTheDocument();
+    expect(screen.queryByText('暂无实践案例')).not.toBeInTheDocument();
+    expect(screen.queryByText('这个分类还没有发布实践案例。')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '查看教程' })).toBeInTheDocument();
+  });
+
+  it('shows the tutorial empty state without the old inbox copy', async () => {
+    tutorialsMock.mockResolvedValue({ items: [], total: 0, pageNum: 1, pageSize: 6 });
+    renderPage();
+    expect(await screen.findByText('教程努力扩充中')).toBeInTheDocument();
+    expect(screen.queryByText('暂无教程')).not.toBeInTheDocument();
+    expect(screen.queryByText('这个分类还没有发布教程。')).not.toBeInTheDocument();
   });
 
   it('keeps the cover img after a renderer load error so the host fetch can replace src', async () => {
@@ -145,9 +154,15 @@ describe('LearningCenterPage cases', () => {
   it('opens case details without calling the use endpoint', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '查看详情' }));
-    expect(await screen.findByText('每周五自动汇总')).toBeInTheDocument();
-    expect(screen.getByText('案例简介')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '教程正文' })).toBeInTheDocument();
+    const dialog = await screen.findByRole('dialog', { name: '周报自动汇总' });
+    expect(within(dialog).getByText('点击「立即使用」后将填入首页对话框，可再修改后发送')).toBeInTheDocument();
+    expect(within(dialog).getByText('场景说明')).toBeInTheDocument();
+    expect(within(dialog).getByText('每周五自动汇总')).toBeInTheDocument();
+    expect(within(dialog).getByText('提示词')).toBeInTheDocument();
+    expect(within(dialog).getByText('帮我写周报')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('heading', { name: '教程正文' })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: '取消' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: '立即使用' })).toBeInTheDocument();
     expect(useCaseMock).not.toHaveBeenCalled();
     expect(screen.getByLabelText('已被使用 7 次')).toBeInTheDocument();
   });
@@ -162,31 +177,24 @@ describe('LearningCenterPage cases', () => {
     expect(useCaseMock).not.toHaveBeenCalled();
   });
 
-  it('cancels the use confirmation without calling the endpoint or navigating', async () => {
+  it('uses the case immediately without a second confirm dialog', async () => {
     renderPage();
-    const trigger = await screen.findByRole('button', { name: '立即使用' });
-    fireEvent.click(trigger);
-    await screen.findByRole('dialog', { name: '确认使用这个案例？' });
-    fireEvent.click(screen.getByRole('button', { name: '取消' }));
-
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: '确认使用这个案例？' })).not.toBeInTheDocument());
-    expect(useCaseMock).not.toHaveBeenCalled();
-    expect(dispatchMock).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(trigger);
+    await useCaseFromCard();
+    await waitFor(() => expect(useCaseMock).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('dialog', { name: '确认使用这个案例？' })).not.toBeInTheDocument();
+    expect(dispatchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('sends a single use request while confirmation is in flight', async () => {
+  it('sends a single use request while the first click is in flight', async () => {
     const pending = deferred<LearningCaseAction>();
     useCaseMock.mockReturnValue(pending.promise);
     renderPage();
-    const dialog = await openConfirmDialog();
-    const confirm = within(dialog).getByRole('button', { name: '立即使用' });
+    const trigger = await screen.findByRole('button', { name: '立即使用' });
 
-    fireEvent.click(confirm);
-    fireEvent.click(confirm);
-    fireEvent.click(confirm);
+    fireEvent.click(trigger);
+    fireEvent.click(trigger);
+    fireEvent.click(trigger);
     expect(useCaseMock).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(confirm).toBeDisabled());
 
     pending.resolve(caseAction);
     await waitFor(() => expect(dispatchMock).toHaveBeenCalledTimes(1));
@@ -194,8 +202,7 @@ describe('LearningCenterPage cases', () => {
 
   it('updates the use count from the server response and dispatches the action', async () => {
     renderPage();
-    const dialog = await openConfirmDialog();
-    fireEvent.click(within(dialog).getByRole('button', { name: '立即使用' }));
+    await useCaseFromCard();
 
     expect(await screen.findByLabelText('已被使用 8 次')).toBeInTheDocument();
     expect(dispatchMock).toHaveBeenCalledWith(caseAction, expect.objectContaining({ navigate: expect.any(Function) }));
@@ -205,8 +212,7 @@ describe('LearningCenterPage cases', () => {
   it('keeps the list, count and navigation unchanged when the use request fails', async () => {
     useCaseMock.mockRejectedValue(new Error('案例已下线'));
     renderPage();
-    const dialog = await openConfirmDialog();
-    fireEvent.click(within(dialog).getByRole('button', { name: '立即使用' }));
+    await useCaseFromCard();
 
     await waitFor(() => expect(toastError).toHaveBeenCalledWith('案例已下线'));
     expect(dispatchMock).not.toHaveBeenCalled();
@@ -229,15 +235,15 @@ describe('LearningCenterPage cases', () => {
     fireEvent.click(screen.getByRole('button', { name: '查看教程' }));
     expect(await screen.findByRole('dialog', { name: '教程指南' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '立即使用' }));
-    await screen.findByRole('dialog', { name: '确认使用这个案例？' });
+    await waitFor(() => expect(useCaseMock).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('dialog', { name: '确认使用这个案例？' })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '教程指南' })).not.toBeInTheDocument());
   });
 
   it('surfaces a degraded action without pretending the case opened', async () => {
     dispatchMock.mockReturnValue({ ok: false, reason: 'UNSUPPORTED_TARGET' });
     renderPage();
-    const dialog = await openConfirmDialog();
-    fireEvent.click(within(dialog).getByRole('button', { name: '立即使用' }));
+    await useCaseFromCard();
 
     await waitFor(() => expect(toastError).toHaveBeenCalledWith('暂不支持这个案例的跳转类型，请联系管理员。'));
     expect(toastSuccess).not.toHaveBeenCalled();

@@ -8,10 +8,10 @@ import categoryQuotation from '@/assets/learning-center/category-quotation.png';
 import categoryReconciliation from '@/assets/learning-center/category-reconciliation.png';
 import categoryProfitLoss from '@/assets/learning-center/category-profit-loss.png';
 import categoryAdvanced from '@/assets/learning-center/category-advanced.png';
+import sectionEmptyIcon from '@/assets/learning-center/case-empty-icon.svg';
 import { FeedbackState } from '@/components/common/FeedbackState';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { dispatchLearningCaseAction } from '@/lib/learning-case-action';
 import {
@@ -135,7 +135,6 @@ export function LearningCenterPage() {
   const [tutorialPanelContainer, setTutorialPanelContainer] = useState<HTMLElement | null>(null);
   const [detailCase, setDetailCase] = useState<LearningCaseTemplate | null>(null);
   const [previewCase, setPreviewCase] = useState<LearningCaseTemplate | null>(null);
-  const [pendingUseCase, setPendingUseCase] = useState<LearningCaseTemplate | null>(null);
   const selectedCategoryRef = useRef<string | null>(null);
   const tutorialTokenRef = useRef(0);
   const caseTokenRef = useRef(0);
@@ -204,7 +203,6 @@ export function LearningCenterPage() {
     setTutorialId(null);
     setDetailCase(null);
     setPreviewCase(null);
-    setPendingUseCase(null);
     detailReturnFocusRef.current = contentRegionRef.current;
     caseReturnFocusRef.current = contentRegionRef.current;
     setState((current) => current.status === 'ready' ? { ...current, selectedCategoryId } : current);
@@ -230,8 +228,6 @@ export function LearningCenterPage() {
             : entry),
         }
         : current);
-      setPendingUseCase(null);
-
       const result = dispatchLearningCaseAction(action, { navigate });
       if (result.ok) {
         toast.success(t('caseUseSuccess'));
@@ -346,7 +342,12 @@ export function LearningCenterPage() {
                       <h2 id="learning-center-content-heading" className="sr-only">{t('tutorialsTitle')}</h2>
                       {tutorials.status === 'loading' && <FeedbackState state="loading" title={t('tutorialsLoading')} />}
                       {tutorials.status === 'error' && <FeedbackState state="error" title={t('tutorialsErrorTitle')} description={tutorials.message || t('sectionErrorDescription')} action={<Button size="sm" onClick={() => requestTutorialPage(selectedCategoryId, tutorials.pageNum)}>{t('retry')}</Button>} />}
-                      {tutorials.status === 'ready' && tutorials.items.length === 0 && <FeedbackState state="empty" title={t('tutorialsEmptyTitle')} description={t('tutorialsEmptyDescription')} />}
+                      {tutorials.status === 'ready' && tutorials.items.length === 0 && (
+                        <div className="learning-center-empty learning-center-steps__empty" role="status">
+                          <img src={sectionEmptyIcon} alt="" aria-hidden className="learning-center-empty__icon" width={48} height={48} />
+                          <p className="learning-center-empty__text">{t('tutorialsEmptyTitle')}</p>
+                        </div>
+                      )}
                       {tutorials.status === 'ready' && tutorials.items.length > 0 && (
                         <ul className="learning-center-tutorial-list" aria-label={t('tutorialsTitle')}>
                           {tutorials.items.slice(0, CONTENT_PAGE_SIZE).map((tutorial, index) => (
@@ -373,7 +374,6 @@ export function LearningCenterPage() {
                                   setTutorialPanelContainer(pageRootRef.current?.parentElement?.closest('main') ?? null);
                                   setDetailCase(null);
                                   setPreviewCase(null);
-                                  setPendingUseCase(null);
                                   setTutorialId(tutorial.id);
                                 }}
                               >
@@ -394,7 +394,12 @@ export function LearningCenterPage() {
                   <h2 id="learning-center-cases-heading" className="learning-center-cases__title">{t('casesTitle')}</h2>
                   {cases.status === 'loading' && <FeedbackState state="loading" title={t('casesLoading')} />}
                   {cases.status === 'error' && <FeedbackState state="error" title={t('casesErrorTitle')} description={cases.message || t('sectionErrorDescription')} action={<Button size="sm" onClick={() => requestCasePage(selectedCategoryId, cases.pageNum)}>{t('retry')}</Button>} />}
-                  {cases.status === 'ready' && cases.items.length === 0 && <FeedbackState state="empty" title={t('casesEmptyTitle')} description={t('casesEmptyDescription')} />}
+                  {cases.status === 'ready' && cases.items.length === 0 && (
+                    <div className="learning-center-empty learning-center-cases__empty" role="status">
+                      <img src={sectionEmptyIcon} alt="" aria-hidden className="learning-center-empty__icon" width={48} height={48} />
+                      <p className="learning-center-empty__text">{t('casesEmptyTitle')}</p>
+                    </div>
+                  )}
                   {cases.status === 'ready' && cases.items.length > 0 && (
                     <>
                       <ul className="learning-center-cases__grid" aria-label={t('casesTitle')}>
@@ -405,14 +410,12 @@ export function LearningCenterPage() {
                               onViewDetail={(target, trigger) => {
                                 caseReturnFocusRef.current = trigger;
                                 setTutorialId(null);
-                                setPendingUseCase(null);
                                 setPreviewCase(null);
                                 setDetailCase(target);
                               }}
                               onPreviewCover={(target, trigger) => {
                                 caseReturnFocusRef.current = trigger;
                                 setTutorialId(null);
-                                setPendingUseCase(null);
                                 setDetailCase(null);
                                 setPreviewCase(target);
                               }}
@@ -421,7 +424,7 @@ export function LearningCenterPage() {
                                 setTutorialId(null);
                                 setDetailCase(null);
                                 setPreviewCase(null);
-                                setPendingUseCase(target);
+                                void confirmCaseUse(target);
                               }}
                             />
                           </li>
@@ -457,19 +460,21 @@ export function LearningCenterPage() {
         fallbackTitle={detailCase ? (detailCase.title || detailCase.name) : ''}
         returnFocusRef={caseReturnFocusRef}
         onClose={() => setDetailCase(null)}
-      />
-      <ConfirmDialog
-        open={Boolean(pendingUseCase)}
-        title={t('caseUseConfirmTitle')}
-        message={t('caseUseConfirmMessage', { title: pendingUseCase ? (pendingUseCase.title || pendingUseCase.name) : '' })}
-        confirmLabel={pendingUseCase?.actionText || t('caseUseAction')}
-        confirmingLabel={t('caseUseConfirming')}
-        cancelLabel={t('cancel')}
-        onConfirm={() => pendingUseCase ? confirmCaseUse(pendingUseCase) : undefined}
-        onCancel={() => {
-          if (caseUseInFlightRef.current) return;
-          setPendingUseCase(null);
-          caseReturnFocusRef.current?.focus();
+        onPreviewCover={(trigger) => {
+          if (!detailCase) return;
+          caseReturnFocusRef.current = trigger;
+          setTutorialId(null);
+          setPreviewCase(detailCase);
+          setDetailCase(null);
+        }}
+        onUse={(trigger) => {
+          if (!detailCase) return;
+          caseReturnFocusRef.current = trigger;
+          setTutorialId(null);
+          setPreviewCase(null);
+          const item = detailCase;
+          setDetailCase(null);
+          void confirmCaseUse(item);
         }}
       />
     </>

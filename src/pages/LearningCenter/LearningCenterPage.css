@@ -353,7 +353,7 @@
   max-height: min(538.75px, calc(100vh - 6rem));
   padding: 0;
   gap: 0;
-  overflow: hidden;
+  overflow: visible;
   border: 2.84px solid #f0f2f5;
   border-radius: 18px;
   background: #fafafa;
@@ -362,25 +362,35 @@
 
 .learning-center-cover-preview__close {
   position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
+  top: -46px;
+  right: 0;
   z-index: 1;
   display: inline-flex;
   width: 30px;
   height: 30px;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  padding: 6px;
   border: 0;
   border-radius: 20px;
   background: rgb(255 255 255 / 0.2);
-  color: #1a1a1a;
+  color: #ffffff;
+  box-shadow: 0 2.91px 34.91px rgb(43 17 0 / 0.03);
+  backdrop-filter: blur(2.91px);
   cursor: pointer;
 }
 
 .learning-center-cover-preview__close:hover {
-  color: #1a1a1a;
+  color: #ffffff;
   background: rgb(255 255 255 / 0.35);
+}
+
+.learning-center-cover-preview__media {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: inherit;
 }
 
 .learning-center-cover-preview__image,
@@ -419,6 +429,40 @@
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--foreground);
+}
+
+/* MasterGo 1172:092842: 48px bars + 18px + 14/18 text #C9CDD4 */
+.learning-center-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.125rem;
+  width: 100%;
+}
+
+.learning-center-empty__icon {
+  display: block;
+  width: 3rem;
+  height: 3rem;
+}
+
+.learning-center-empty__text {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.125rem;
+  color: #c9cdd4;
+  white-space: nowrap;
+}
+
+.learning-center-steps__empty {
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+}
+
+.learning-center-cases__empty {
+  margin-top: 7.25rem;
 }
 
 .learning-center-cases__grid {
@@ -663,6 +707,200 @@
   border-color: color-mix(in srgb, var(--border) 85%, transparent);
   background: transparent;
   color: var(--foreground);
+}
+
+.learning-center-case-detail {
+  overflow: hidden;
+}
+
+.learning-center-case-detail__close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #1a1a1a;
+}
+
+.learning-center-case-detail__header {
+  padding: 16px 42px 16px 16px;
+  gap: 8px;
+}
+
+.learning-center-case-detail .learning-center-case-detail__title {
+  color: #1d2129; /* 文字/文本- 默认 */
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.learning-center-case-detail .learning-center-case-detail__hint {
+  margin-top: 0;
+  color: #86909c; /* 文字/文本-更浅-三级信息 */
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.learning-center-case-detail__body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0 16px;
+}
+
+.learning-center-case-detail__content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.learning-center-case-detail__scene-block {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.learning-center-case-detail__prompt-block {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.learning-center-case-detail__label {
+  margin: 0;
+  color: #1d2129; /* 文字/文本- 默认 */
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.learning-center-case-detail__scene {
+  margin: 4px 0 0;
+  color: #86909c; /* 文字/文本-更浅-三级信息 */
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  white-space: pre-line;
+}
+
+.learning-center-case-detail__prompt {
+  box-sizing: border-box;
+  margin-top: 0;
+  padding: 8px;
+  border: 1px solid #ededed;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.learning-center-case-detail__prompt-text {
+  margin: 0;
+  color: #4e5969; /* 文字/文本-浅色-二级信息 */
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 22px;
+  white-space: pre-line;
+}
+
+.learning-center-case-detail__cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 608 / 317.5;
+  overflow: hidden;
+  border: 1.67px solid #f0f2f5;
+  border-radius: 8.36px;
+  background: #fafafa;
+}
+
+.learning-center-case-detail__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.learning-center-case-detail__zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid #e5e6eb;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #4e5969;
+  box-shadow: 0 2px 24px rgb(43 17 0 / 0.03);
+  cursor: pointer;
+}
+
+.learning-center-case-detail__footer {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px;
+}
+
+.learning-center-case-detail__cancel,
+.learning-center-case-detail__use {
+  height: 34px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.learning-center-case-detail__cancel {
+  border-color: #e5e6eb;
+  background: #ffffff; /* 文字/文本-纯白 */
+  color: #1d2129; /* 文字/文本- 默认 */
+}
+
+.learning-center-case-detail__use {
+  border-color: #1d2129;
+  background: #1d2129; /* 文字/文本- 默认 */
+  color: #ffffff; /* 文字/文本-纯白 */
+}
+
+.dark .learning-center-case-detail .learning-center-case-detail__title,
+.dark .learning-center-case-detail__label,
+.dark .learning-center-case-detail__cancel {
+  color: var(--foreground);
+}
+
+.dark .learning-center-case-detail .learning-center-case-detail__hint,
+.dark .learning-center-case-detail__scene {
+  color: var(--muted-foreground);
+}
+
+.dark .learning-center-case-detail__prompt-text {
+  color: var(--foreground);
+}
+
+.dark .learning-center-case-detail__prompt {
+  border-color: color-mix(in srgb, var(--border) 85%, transparent);
+  background: hsl(var(--muted));
+}
+
+.dark .learning-center-case-detail__cover {
+  border-color: color-mix(in srgb, var(--border) 70%, transparent);
+  background: hsl(var(--muted));
 }
 
 @media (prefers-reduced-motion: reduce) {

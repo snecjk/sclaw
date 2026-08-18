@@ -40,14 +40,16 @@ export function CaseCoverPreviewDialog({
           aria-label={t('close')}
           onClick={onClose}
         >
-          <X className="h-4 w-4" aria-hidden />
+          <X className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
         </button>
-        <LearningCoverImage
-          url={imageUrl}
-          alt={t('caseCoverAlt', { title })}
-          className="learning-center-cover-preview__image"
-          iconClassName="h-12 w-12"
-        />
+        <div className="learning-center-cover-preview__media">
+          <LearningCoverImage
+            url={imageUrl}
+            alt={t('caseCoverAlt', { title })}
+            className="learning-center-cover-preview__image"
+            iconClassName="h-12 w-12"
+          />
+        </div>
       </DialogContent>
     </Dialog>
   );
