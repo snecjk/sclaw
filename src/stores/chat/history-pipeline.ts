@@ -52,6 +52,7 @@ export function mergeHistoryDisplayMessages(input: {
   gatewaySessionLabel?: string;
   userMessageAt: number | null;
   sending: boolean;
+  optimisticUser?: RawMessage | null;
   getMessageText: (content: unknown) => string;
 }): RawMessage[] {
   const {
@@ -59,8 +60,10 @@ export function mergeHistoryDisplayMessages(input: {
     sessionKey,
     sessionLabels,
     sending,
+    optimisticUser,
     userMessageAt,
   } = input;
+  const recoveryOptions = { sending, optimisticUser };
 
   let messages = input.messages;
   messages = recoverInitialUserFromSessionLabel(
@@ -68,14 +71,14 @@ export function mergeHistoryDisplayMessages(input: {
     sessionKey,
     sessionLabels,
     gatewaySessionLabel,
-    { sending },
+    recoveryOptions,
   );
   messages = ensureOpeningUserMessageFirst(
     messages,
     sessionKey,
     sessionLabels,
     gatewaySessionLabel,
-    { sending },
+    recoveryOptions,
   );
 
   return dedupeRedundantUserMessages(messages, userMessageAt, { sessionKey });

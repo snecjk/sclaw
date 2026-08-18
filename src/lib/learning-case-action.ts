@@ -56,7 +56,7 @@ export interface LearningCaseActionResult {
 
 export interface LearningCaseActionContext {
   navigate: NavigateFunction;
-  /** Case title shown on the composer chip when the use payload has no display name. */
+  /** Case card title is never used as the chip label; caller must pass the selected skill/workflow name. */
   displayTitle?: string;
 }
 

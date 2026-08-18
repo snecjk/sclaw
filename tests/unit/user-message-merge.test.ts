@@ -480,6 +480,57 @@ describe('user-message-merge', () => {
     expect(merged[0]?.role).toBe('assistant');
   });
 
+  it('does not recover opening user from label when optimistic overlay already covers it', () => {
+    const enriched = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '思考中…',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+    const optimistic = {
+      id: 'optimistic-1',
+      role: 'user',
+      content: '帮我做报价测算：覆盖新客测算与老客调价',
+      timestamp: 1710000001,
+      _skillMeta: { slug: 'customer-monitor', title: '客户异常监控' },
+    } as RawMessage;
+
+    const merged = recoverInitialUserFromSessionLabel(
+      enriched,
+      'agent:main:session-1',
+      { 'agent:main:session-1': '帮我做报价测算：覆盖新客测算与老客调价' },
+      undefined,
+      { optimisticUser: optimistic },
+    );
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0]?.role).toBe('assistant');
+  });
+
+  it('drops session-label users when overlay already has a skill-tagged turn', () => {
+    const messages = [
+      {
+        id: 'session-label-user-agent:main:session-1',
+        role: 'user',
+        content: '帮我做报价测算：覆盖新客测算与老客调价',
+        timestamp: 1710000000,
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '好的',
+        timestamp: 1710000003,
+      },
+    ] as RawMessage[];
+
+    const cleaned = dropSyntheticSkillSessionLabelUsers(messages, { hasSkillUser: true });
+
+    expect(cleaned.filter((message) => message.role === 'user')).toHaveLength(0);
+    expect(cleaned[0]?.role).toBe('assistant');
+  });
+
   it('does not reorder opening user while sending', () => {
     const messages = [
       {

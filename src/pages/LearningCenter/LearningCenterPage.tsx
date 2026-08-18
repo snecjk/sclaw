@@ -16,6 +16,7 @@ import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { invokeIpc } from '@/lib/api-client';
 import { dispatchLearningCaseAction } from '@/lib/learning-case-action';
+import { resolveLearningCaseChipTitle } from '@/lib/learning-case-chip-title';
 import {
   pageLearningCases,
   pageLearningCategories,
@@ -342,7 +343,7 @@ export function LearningCenterPage() {
         : current);
       const result = dispatchLearningCaseAction(action, {
         navigate,
-        displayTitle: item.title || item.name,
+        displayTitle: await resolveLearningCaseChipTitle(action),
       });
       if (result.ok) {
         toast.success(t('caseUseSuccess'));

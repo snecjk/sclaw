@@ -34,6 +34,14 @@ vi.mock('@/lib/learning-case-action', () => ({
   dispatchLearningCaseAction: vi.fn(() => ({ ok: true, navigatedTo: '/', draftApplied: true })),
 }));
 
+vi.mock('@/lib/learning-case-chip-title', () => ({
+  resolveLearningCaseChipTitle: vi.fn(async (action: { targetType: string }) => {
+    if (action.targetType === 'SKILL') return '财务-看报表';
+    if (action.targetType === 'WORKFLOW') return '报价测算';
+    return undefined;
+  }),
+}));
+
 const toastSuccess = vi.fn();
 const toastError = vi.fn();
 vi.mock('sonner', () => ({
@@ -205,8 +213,38 @@ describe('LearningCenterPage cases', () => {
     await useCaseFromCard();
 
     expect(await screen.findByLabelText('已被使用 8 次')).toBeInTheDocument();
-    expect(dispatchMock).toHaveBeenCalledWith(caseAction, expect.objectContaining({ navigate: expect.any(Function) }));
+    expect(dispatchMock).toHaveBeenCalledWith(caseAction, expect.objectContaining({
+      navigate: expect.any(Function),
+      displayTitle: undefined,
+    }));
     expect(toastSuccess).toHaveBeenCalledWith('已为你打开案例入口');
+  });
+
+  it('passes the resolved skill name rather than the case template title', async () => {
+    const skillCase = {
+      ...caseItem,
+      title: '报价导入',
+      name: '报价导入',
+      targetType: 'SKILL' as const,
+      targetTypeRaw: 'SKILL',
+      targetCode: 'finance-guanbao',
+    };
+    const skillAction: LearningCaseAction = {
+      ...caseAction,
+      targetType: 'SKILL',
+      targetTypeRaw: 'SKILL',
+      targetCode: 'finance-guanbao',
+      promptText: '帮我做报价测算',
+    };
+    casesMock.mockResolvedValue({ items: [skillCase], total: 1, pageNum: 1, pageSize: 6 });
+    useCaseMock.mockResolvedValue(skillAction);
+
+    renderPage();
+    await useCaseFromCard();
+    await waitFor(() => expect(dispatchMock).toHaveBeenCalledWith(
+      skillAction,
+      expect.objectContaining({ displayTitle: '财务-看报表' }),
+    ));
   });
 
   it('keeps the list, count and navigation unchanged when the use request fails', async () => {

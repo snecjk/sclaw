@@ -482,13 +482,26 @@ function historyHasSkillUserTurn(messages: RawMessage[]): boolean {
   return messages.some((message) => message.role === 'user' && Boolean(message._skillMeta));
 }
 
+function optimisticCoversOpeningUser(optimisticUser?: RawMessage | null): boolean {
+  return Boolean(optimisticUser && optimisticUser.role === 'user');
+}
+
 /** Drop synthetic session-label user rows when a real skill-tagged user turn already exists. */
-export function dropSyntheticSkillSessionLabelUsers(messages: RawMessage[]): RawMessage[] {
-  if (!historyHasSkillUserTurn(messages)) return messages;
+export function dropSyntheticSkillSessionLabelUsers(
+  messages: RawMessage[],
+  options?: { hasSkillUser?: boolean },
+): RawMessage[] {
+  if (!options?.hasSkillUser && !historyHasSkillUserTurn(messages)) return messages;
   return messages.filter((message) => {
     if (message.role !== 'user') return true;
     return !message.id?.startsWith('session-label-user-');
   });
+}
+
+export interface OpeningUserRecoveryOptions {
+  sending?: boolean;
+  /** Local overlay already shows the opening user turn; do not synthesize it from the session title. */
+  optimisticUser?: RawMessage | null;
 }
 
 /** Reconstruct the opening user turn from a stored session title when history omits it. */
@@ -497,10 +510,13 @@ export function recoverInitialUserFromSessionLabel(
   sessionKey: string,
   sessionLabels: Record<string, string>,
   gatewayLabel?: string,
-  options?: { sending?: boolean },
+  options?: OpeningUserRecoveryOptions,
 ): RawMessage[] {
-  // Mid-send: optimistic user already covers the opener; label recovery doubles it.
-  if (options?.sending) return enrichedMessages;
+  // Mid-send / failed-send overlay: optimistic user already covers the opener;
+  // reconstructing from the truncated session title creates a second plain bubble.
+  if (options?.sending || optimisticCoversOpeningUser(options?.optimisticUser)) {
+    return enrichedMessages;
+  }
   if (historyHasSkillUserTurn(enrichedMessages)) return enrichedMessages;
   const label = resolveOpeningSessionLabel(sessionKey, sessionLabels, gatewayLabel);
   if (!label || historyHasOpeningUserTurn(enrichedMessages, label)) return enrichedMessages;
@@ -518,10 +534,13 @@ export function ensureOpeningUserMessageFirst(
   sessionKey: string,
   sessionLabels: Record<string, string>,
   gatewayLabel?: string,
-  options?: { sending?: boolean },
+  options?: OpeningUserRecoveryOptions,
 ): RawMessage[] {
-  // Mid-send: do not rewrite timestamps / inject openers while stream+history race.
-  if (options?.sending) return messages;
+  // Mid-send / overlay: do not rewrite timestamps / inject openers while the
+  // optimistic user turn is still the visible opener.
+  if (options?.sending || optimisticCoversOpeningUser(options?.optimisticUser)) {
+    return messages;
+  }
   const label = resolveOpeningSessionLabel(sessionKey, sessionLabels, gatewayLabel);
   let working = messages;
   if (label && !historyHasOpeningUserTurn(working, label)) {

@@ -126,6 +126,17 @@ describe('dispatchLearningCaseAction whitelist targets', () => {
     expect(result).toMatchObject({ ok: true, navigatedTo: '/', draftApplied: true });
     expect(draftMock).toHaveBeenCalledWith(navigate, '整理这周的会议纪要', { mode: 'REPLACE' });
   });
+
+  it('uses the skill slug as chip title when no resolved name is provided', () => {
+    dispatchLearningCaseAction(
+      action({ targetType: 'SKILL', targetCode: 'finance-guanbao' }),
+      { navigate },
+    );
+    expect(handoffMock).toHaveBeenCalledWith(navigate, {
+      skill: { slug: 'finance-guanbao', title: 'finance-guanbao' },
+      suffixText: '帮我执行这个技能',
+    });
+  });
 });
 
 describe('dispatchLearningCaseAction prompt modes', () => {
