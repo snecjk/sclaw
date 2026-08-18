@@ -104,6 +104,10 @@ export type WorkflowTryRunPreparation =
   | {
       mode: 'use-current-published';
       snapshot: WorkflowRunnableSnapshot & { versionStatus: 'published' };
+    }
+  | {
+      mode: 'use-current-draft';
+      snapshot: WorkflowRunnableSnapshot & { versionStatus: 'draft' };
     };
 
 export interface WorkflowTryRunRequestMessage extends WorkflowBridgeEnvelope {
@@ -305,14 +309,18 @@ export function isWorkflowTryRunRequest(value: unknown): value is WorkflowTryRun
   if (preparation === undefined) return true;
   if (!isRecord(preparation)) return false;
   if (preparation.mode === 'persist-draft') return true;
-  if (preparation.mode !== 'use-current-published') return false;
+  if (
+    preparation.mode !== 'use-current-published' &&
+    preparation.mode !== 'use-current-draft'
+  ) return false;
   const snapshot = preparation.snapshot;
   if (!isRecord(snapshot) || snapshot.workflowId !== value.workflowId) return false;
   const startup = snapshot.startup;
   return (
     (typeof snapshot.workflowVersionId === 'string' || typeof snapshot.workflowVersionId === 'number') &&
     snapshot.schemaVersion === 'workflow/v2' &&
-    snapshot.versionStatus === 'published' &&
+    snapshot.versionStatus ===
+      (preparation.mode === 'use-current-draft' ? 'draft' : 'published') &&
     isRecord(startup) &&
     Object.hasOwn(startup, 'schema') &&
     (startup.schema === null || isWorkflowBridgeStartupSchema(startup.schema)) &&

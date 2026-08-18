@@ -1,5 +1,5 @@
 import * as Dialog from '@radix-ui/react-dialog';
-import { AlertCircle, CheckCircle2, Circle, CircleDot, Clock3, History, Play, RotateCcw, X, XCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Circle, CircleDot, Clock3, History, RotateCcw, X, XCircle } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { listLocalWorkflowRuns, type LocalWorkflowRunSummary } from '@/lib/workflow-api';
@@ -18,7 +18,6 @@ interface LocalRunHistoryDialogProps {
   workflowId?: string;
   workflowName?: string;
   onClose: () => void;
-  onTryRun: () => void;
   onSelectRun: (runId: string) => Promise<boolean>;
 }
 
@@ -30,7 +29,7 @@ const STATUS_META: Record<LocalRunHistoryStatus, { label: string; className: str
   running: { label: '进行中', className: 'text-primary bg-primary/10', Icon: CircleDot },
 };
 
-export function LocalRunHistoryDialog({ open, workflowId, workflowName, onClose, onTryRun, onSelectRun }: LocalRunHistoryDialogProps) {
+export function LocalRunHistoryDialog({ open, workflowId, workflowName, onClose, onSelectRun }: LocalRunHistoryDialogProps) {
   const [runs, setRuns] = useState<LocalWorkflowRunSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +94,7 @@ export function LocalRunHistoryDialog({ open, workflowId, workflowName, onClose,
           <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
             {loading && runs.length === 0 ? <RunHistorySkeleton /> : null}
             {!loading && error ? <ErrorState message={error} onRetry={() => void loadRuns()} /> : null}
-            {!loading && !error && runs.length === 0 ? <EmptyState onTryRun={() => { onClose(); onTryRun(); }} /> : null}
+            {!loading && !error && runs.length === 0 ? <EmptyState /> : null}
             {!error && runs.length > 0 ? <ol className="space-y-1">{runs.map((run, index) => <RunHistoryItem key={run.runId} run={run} latest={index === 0} busy={selectingRunId === run.runId} onClick={() => void handleSelect(run.runId)} />)}</ol> : null}
           </div>
         </Dialog.Content>
@@ -115,5 +114,5 @@ function RunHistoryItem({ run, latest, busy, onClick }: { run: LocalWorkflowRunS
 }
 
 function RunHistorySkeleton() { return <div className="space-y-2 p-2">{[0, 1, 2].map((index) => <div key={index} className="flex items-center gap-3 rounded-xl px-3 py-3"><div className="h-8 w-8 animate-pulse rounded-full bg-muted" /><div className="flex-1 space-y-2"><div className="h-3 w-16 animate-pulse rounded bg-muted" /><div className="h-3 w-28 animate-pulse rounded bg-muted" /></div><div className="h-3 w-12 animate-pulse rounded bg-muted" /></div>)}</div>; }
-function EmptyState({ onTryRun }: { onTryRun: () => void }) { return <div className="flex min-h-[240px] flex-col items-center justify-center px-6 text-center"><History className="mb-3 h-8 w-8 text-muted-foreground/60" /><p className="text-sm font-medium text-foreground">还没有本地运行记录</p><p className="mt-1 text-xs text-muted-foreground">试运行后，可以在这里查看执行结果。</p><Button type="button" variant="outline" size="sm" className="mt-4" onClick={onTryRun}><Play className="mr-1 h-3.5 w-3.5" />去试运行</Button></div>; }
+function EmptyState() { return <div className="flex min-h-[240px] flex-col items-center justify-center px-6 text-center"><History className="mb-3 h-8 w-8 text-muted-foreground/60" /><p className="text-sm font-medium text-foreground">还没有本地运行记录</p></div>; }
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) { return <div className="flex min-h-[240px] flex-col items-center justify-center px-6 text-center"><AlertCircle className="mb-3 h-7 w-7 text-destructive" /><p className="max-w-sm text-sm text-muted-foreground">{message}</p><Button type="button" variant="outline" size="sm" className="mt-4" onClick={onRetry}><RotateCcw className="mr-1 h-3.5 w-3.5" />重试</Button></div>; }

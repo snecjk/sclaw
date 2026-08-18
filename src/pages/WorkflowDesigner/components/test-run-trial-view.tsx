@@ -4,7 +4,6 @@ import {
   CircleAlert,
   CircleCheck,
   CircleX,
-  Download,
   LoaderCircle,
   Maximize2,
   Volume2,
@@ -129,15 +128,6 @@ function ArtifactCard({ artifacts }: { artifacts: TrialRunDisplayArtifact[] }) {
             onClick={() => first && openArtifact(first)}
           >
             <Maximize2 className="h-3.5 w-3.5" aria-hidden />
-          </button>
-          <button
-            type="button"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
-            aria-label={t('run.downloadArtifact')}
-            disabled={!firstTarget}
-            onClick={() => first && openArtifact(first)}
-          >
-            <Download className="h-3.5 w-3.5" aria-hidden />
           </button>
         </div>
       </div>

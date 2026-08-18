@@ -56,7 +56,6 @@ export function WorkflowDesigner({
   const { t } = useTranslation('workflow');
   const navigate = useNavigate();
   const canvasWrapRef = useRef<HTMLDivElement>(null);
-  const tryRunButtonRef = useRef<HTMLButtonElement>(null);
   const isNew = !workflowId;
 
   const [loading, setLoading] = useState(!isNew);
@@ -199,14 +198,6 @@ export function WorkflowDesigner({
     beginTryRun();
   }, [beginTryRun, dirty, workflow?.id]);
 
-  const handleTryRunFromHistory = useCallback(() => {
-    setLocalRunHistoryOpen(false);
-    window.setTimeout(() => {
-      tryRunButtonRef.current?.focus();
-      handleTryRun();
-    }, 0);
-  }, [handleTryRun]);
-
   const handleHistoryRestored = useCallback((restoredWorkflow: WorkflowDefinition) => {
     setWorkflow(normalizeConditionBranches(restoredWorkflow));
     setSelectedNodeId(null);
@@ -299,7 +290,6 @@ export function WorkflowDesigner({
             本地运行记录
           </Button>
           <Button
-            ref={tryRunButtonRef}
             type="button"
             variant="outline"
             size="sm"
@@ -414,7 +404,6 @@ export function WorkflowDesigner({
           workflowId={workflow.id}
           workflowName={workflow.name}
           onClose={() => setLocalRunHistoryOpen(false)}
-          onTryRun={handleTryRunFromHistory}
           onSelectRun={tryRun.openExistingRun}
         />
       </div>
