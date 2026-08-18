@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
 import { ChevronRight, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -39,27 +39,50 @@ import './LearningCenterPage.css';
 
 const CONTENT_PAGE_SIZE = 6;
 const STEP_COUNT_PATTERN = /(\d+)\s*步/;
-const CATEGORY_ILLUSTRATIONS = [
-  categoryOrganization,
-  categoryQuotation,
-  categoryReconciliation,
-  categoryProfitLoss,
-  categoryAdvanced,
+type CategoryArt = {
+  source: string;
+  rotate: number;
+  cardX: number;
+  cardY: number;
+};
+
+/* MasterGo 容器 7964 / 组 7896: 140x140, inner card 106x120. */
+const CATEGORY_ART_DEFAULTS: CategoryArt[] = [
+  { source: categoryOrganization, rotate: 6, cardX: 17.44, cardY: 9.21 },
+  { source: categoryQuotation, rotate: -8, cardX: 15.98, cardY: 8.13 },
+  { source: categoryReconciliation, rotate: 8, cardX: 15.13, cardY: 7.63 },
+  { source: categoryProfitLoss, rotate: -10, cardX: 16.61, cardY: 8.88 },
+  { source: categoryAdvanced, rotate: 10, cardX: 17, cardY: 11 },
 ];
 
-const CATEGORY_ILLUSTRATION_RULES: Array<{ pattern: RegExp; source: string }> = [
-  { pattern: /组织|organization|\borg\b/i, source: categoryOrganization },
-  { pattern: /客户报价|报价|quotation|quote/i, source: categoryQuotation },
-  { pattern: /对账|reconciliation|reconcile/i, source: categoryReconciliation },
-  { pattern: /损益|profit|loss/i, source: categoryProfitLoss },
-  { pattern: /对总|进阶|advanced|overall/i, source: categoryAdvanced },
+const CATEGORY_ILLUSTRATION_RULES: Array<{ pattern: RegExp; art: CategoryArt }> = [
+  { pattern: /组织|organization|\borg\b/i, art: CATEGORY_ART_DEFAULTS[0] },
+  { pattern: /客户报价|报价|quotation|quote/i, art: CATEGORY_ART_DEFAULTS[1] },
+  { pattern: /对账|reconciliation|reconcile/i, art: CATEGORY_ART_DEFAULTS[2] },
+  { pattern: /损益|profit|loss/i, art: CATEGORY_ART_DEFAULTS[3] },
+  { pattern: /对总|进阶|advanced|overall/i, art: CATEGORY_ART_DEFAULTS[4] },
 ];
 
-function resolveCategoryIllustration(category: LearningCategory, index: number): string {
+function resolveCategoryArt(category: LearningCategory, index: number): CategoryArt {
   const identity = `${category.categoryCode} ${category.name} ${category.title}`;
-  return CATEGORY_ILLUSTRATION_RULES.find(({ pattern }) => pattern.test(identity))?.source
-    || CATEGORY_ILLUSTRATIONS[index]
-    || categoryAdvanced;
+  return CATEGORY_ILLUSTRATION_RULES.find(({ pattern }) => pattern.test(identity))?.art
+    || CATEGORY_ART_DEFAULTS[index]
+    || CATEGORY_ART_DEFAULTS[4];
+}
+
+function readCssLengthPx(element: HTMLElement, variableName: string): number {
+  const raw = getComputedStyle(element).getPropertyValue(variableName).trim();
+  if (!raw) {
+    return 0;
+  }
+  const probe = document.createElement('div');
+  probe.style.position = 'absolute';
+  probe.style.visibility = 'hidden';
+  probe.style.width = raw;
+  element.appendChild(probe);
+  const pixels = probe.offsetWidth;
+  probe.remove();
+  return pixels;
 }
 
 function parseDomainTitle(title: string) {
@@ -168,6 +191,8 @@ export function LearningCenterPage() {
   const caseUseInFlightRef = useRef(false);
   const contentRegionRef = useRef<HTMLDivElement | null>(null);
   const pageRootRef = useRef<HTMLElement | null>(null);
+  const stepsRef = useRef<HTMLElement | null>(null);
+  const activeTabRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -297,6 +322,52 @@ export function LearningCenterPage() {
   const tutorialPanelHeight = 36 + tutorialRowCount * 40 + Math.max(0, tutorialRowCount - 1) * 12;
   const tutorialSectionHeight = 54 + tutorialPanelHeight + 4;
 
+  const selectedCategoryIndex = state.status === 'ready' && selectedCategoryId
+    ? state.categories.findIndex((category) => category.id === selectedCategoryId)
+    : -1;
+  const activeCategoryArt = selectedCategoryIndex >= 0 && state.status === 'ready'
+    ? resolveCategoryArt(state.categories[selectedCategoryIndex], selectedCategoryIndex)
+    : null;
+
+  useLayoutEffect(() => {
+    const steps = stepsRef.current;
+    const tab = activeTabRef.current;
+    if (!steps || !tab || !activeCategoryArt) {
+      return;
+    }
+
+    const updateArtPlacement = () => {
+      const stepsRect = steps.getBoundingClientRect();
+      const tabRect = tab.getBoundingClientRect();
+      const label = tab.querySelector<HTMLElement>('.learning-center-steps__tab-label');
+      const labelRect = label?.getBoundingClientRect();
+      const artSize = readCssLengthPx(steps, '--lc-step-art-size');
+      if (!artSize) {
+        return;
+      }
+
+      const labelRight = labelRect
+        ? labelRect.right - stepsRect.left
+        : tabRect.right - stepsRect.left - artSize;
+      const tabRight = tabRect.right - stepsRect.left;
+      const gap = 8;
+      const left = Math.min(labelRight + gap, tabRight - artSize);
+
+      steps.style.setProperty('--lc-art-left', `${Math.max(0, left)}px`);
+    };
+
+    updateArtPlacement();
+
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+
+    const observer = new ResizeObserver(updateArtPlacement);
+    observer.observe(steps);
+    observer.observe(tab);
+    return () => observer.disconnect();
+  }, [activeCategoryArt, selectedCategoryId, tutorialId, state.status]);
+
   return (
     <>
       <main
@@ -325,6 +396,7 @@ export function LearningCenterPage() {
                 <FeedbackState state="empty" title={t('emptyCategoryTitle')} description={t('emptyCategoryDescription')} />
               ) : (
                 <section
+                  ref={stepsRef}
                   className="learning-center-steps"
                   aria-label={t('categoriesTitle')}
                   style={{
@@ -332,34 +404,50 @@ export function LearningCenterPage() {
                     '--lc-panel-height': `${tutorialPanelHeight}px`,
                   } as CSSProperties}
                 >
-                  <Tabs value={state.selectedCategoryId ?? undefined} onValueChange={selectCategory}>
+                  <Tabs
+                    value={state.selectedCategoryId ?? undefined}
+                    onValueChange={selectCategory}
+                    className="learning-center-steps__tabs-root"
+                  >
                     <div className="learning-center-steps__scroller">
                       <TabsList
                         aria-label={t('categoriesAria')}
-                        className="learning-center-steps__tabs grid h-auto min-h-[3.25rem] rounded-none border-0 p-0 shadow-none"
-                        style={{ gridTemplateColumns: `repeat(${state.categories.length}, minmax(0, 1fr))` }}
+                        className="learning-center-steps__tabs h-auto min-h-[3.25rem] rounded-none border-0 p-0 shadow-none"
                       >
                         {state.categories.map((category, index) => (
                           <TabsTrigger
                             key={category.id}
+                            ref={category.id === selectedCategoryId ? activeTabRef : undefined}
                             value={category.id}
                             aria-label={category.title || category.name}
                             className="learning-center-steps__tab rounded-none shadow-none"
                           >
-                            <span className="learning-center-steps__index" aria-hidden>{categoryIndexLabel(index)}</span>
-                            <span className="truncate">{category.title || category.name}</span>
-                            {category.id === selectedCategoryId ? (
-                              <img
-                                src={resolveCategoryIllustration(category, index)}
-                                alt=""
-                                className="learning-center-steps__art"
-                              />
-                            ) : null}
+                            <span className="learning-center-steps__tab-label">
+                              <span className="learning-center-steps__index" aria-hidden>{categoryIndexLabel(index)}</span>
+                              <span className="learning-center-steps__title truncate">{category.title || category.name}</span>
+                            </span>
                           </TabsTrigger>
                         ))}
                       </TabsList>
                     </div>
                   </Tabs>
+                  {activeCategoryArt ? (
+                    <span
+                      aria-hidden
+                      className="learning-center-steps__art"
+                      style={{
+                        '--lc-art-rotate': `${activeCategoryArt.rotate}deg`,
+                        '--lc-art-x': `${(activeCategoryArt.cardX / 140) * 100}%`,
+                        '--lc-art-y': `${(activeCategoryArt.cardY / 140) * 100}%`,
+                      } as CSSProperties}
+                    >
+                      <span className="learning-center-steps__art-card">
+                        <span className="learning-center-steps__art-inner">
+                          <img src={activeCategoryArt.source} alt="" />
+                        </span>
+                      </span>
+                    </span>
+                  ) : null}
 
                   {selectedCategoryId && (
                     <div

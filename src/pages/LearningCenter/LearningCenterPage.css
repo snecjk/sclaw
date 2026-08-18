@@ -8,7 +8,9 @@
   --lc-case-card-height: 18.25rem; /* 292px */
   --lc-case-card-min-w: 17.375rem; /* 278px */
   --lc-emphasis: var(--foreground);
-  --lc-step-art-size: 7.75rem;
+  --lc-step-art-size: 8.75rem; /* MasterGo 组 7896: 140x140 */
+  --lc-tab-flex-inactive: 146; /* MasterGo pc-4 非选中 */
+  --lc-tab-flex-active: 246; /* MasterGo pc-4 选中 flexGrow */
   --lc-steps-bg: #f5f5f5;
   --lc-panel-bg: #ffffff;
   --lc-detail-content-w: 33.5rem; /* 536px */
@@ -27,7 +29,9 @@
   .learning-center-page--detail-open {
     box-sizing: border-box;
     padding-right: calc(var(--lc-detail-panel-w) + var(--sto-shell-card-gap, 0.5rem) + var(--lc-detail-gap));
-    --lc-step-art-size: 5.25rem;
+    --lc-step-art-size: 5.5rem;
+    --lc-tab-flex-inactive: 106;
+    --lc-tab-flex-active: 130;
   }
 
   .learning-center-page--detail-open .learning-center-page__inner {
@@ -52,24 +56,24 @@
 
   .learning-center-page--detail-open .learning-center-steps__tab {
     min-width: 0;
-    overflow: hidden;
+    overflow: visible;
     padding-inline: 0.4rem;
     font-size: 0.8125rem;
   }
 
-  .learning-center-page--detail-open .learning-center-steps__tab > span:not([aria-hidden]) {
-    min-width: 0;
+.learning-center-page--detail-open .learning-center-steps__art {
+  top: -1.125rem;
+}
+
+  .learning-center-page--detail-open .learning-center-steps__tab[data-state='active'] {
+    justify-content: flex-start;
+    padding-inline: 0.4rem 0.15rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-steps__tab .learning-center-steps__title {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .learning-center-page--detail-open .learning-center-steps__tab[data-state='active'] {
-    padding-right: 2.75rem;
-  }
-
-  .learning-center-page--detail-open .learning-center-steps__art {
-    right: -3.25rem;
   }
 
   .learning-center-page--detail-open .learning-center-steps__panel {
@@ -173,6 +177,7 @@
 
 .learning-center-steps {
   position: relative;
+  isolation: isolate;
   display: flex;
   width: 100%;
   max-width: 53.875rem;
@@ -191,46 +196,84 @@
 
 .learning-center-steps__scroller {
   position: relative;
-  z-index: 2;
+  z-index: 1;
   min-width: 0;
   max-width: 100%;
   margin-top: -2.5rem;
   padding-top: 2.5rem;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: visible;
   overscroll-behavior-x: none;
   touch-action: pan-y;
 }
 
+.learning-center-steps__tabs-root {
+  position: relative;
+  z-index: 1;
+}
+
 .learning-center-steps__tabs {
-  display: grid;
+  display: flex;
   width: 100%;
   max-width: 100%;
   min-width: 0;
 }
 
+/* Same stacking layer as tab labels; white tutorial card sits above both. */
 .learning-center-steps__art {
   position: absolute;
-  top: 50%;
-  right: -5.5rem;
-  z-index: 3;
+  z-index: 1;
+  top: -1.8125rem; /* MasterGo 组 7896 y:-29 */
+  left: var(--lc-art-left, 7.5rem);
   width: var(--lc-step-art-size);
   height: var(--lc-step-art-size);
-  transform: translateY(-50%);
-  object-fit: contain;
-  object-position: center;
+  overflow: hidden;
   pointer-events: none;
+  transition: left 0.22s ease, width 0.22s ease, height 0.22s ease, top 0.22s ease;
 }
 
-.learning-center-steps__tab:last-child .learning-center-steps__art {
-  right: 0;
+.learning-center-steps__art-card {
+  position: absolute;
+  top: var(--lc-art-y, 6.58%);
+  left: var(--lc-art-x, 12.46%);
+  width: 75.714%; /* 106 / 140 */
+  height: 85.714%; /* 120 / 140 */
+  overflow: hidden;
+  border-radius: 0;
+  background: #ffffff;
+  box-shadow: 0 0 40px 0 rgba(185, 75, 0, 0.08);
+  transform: rotate(var(--lc-art-rotate, 6deg));
+  transform-origin: center center;
 }
+
+.learning-center-steps__art-inner {
+  position: absolute;
+  top: 5.833%; /* 7 / 120 */
+  left: 6.604%; /* 7 / 106 */
+  width: 86.792%; /* 92 / 106 */
+  height: 88.333%; /* 106 / 120 */
+  overflow: hidden;
+  border: 0.28px solid #ffe7d6;
+  border-radius: 9px;
+  background: #fafafa;
+}
+
+.learning-center-steps__art-inner img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
 
 .learning-center-page .learning-center-steps__tabs {
-  display: grid;
+  display: flex;
   width: 100%;
   max-width: 100%;
   height: auto;
   min-height: 2.5rem;
+  align-items: stretch;
   justify-content: stretch;
   gap: 0;
   overflow: visible;
@@ -242,12 +285,15 @@
 
 .learning-center-page .learning-center-steps__tab {
   position: relative;
-  flex: none;
+  z-index: auto;
+  display: inline-flex;
+  flex: var(--lc-tab-flex-inactive) 1 0;
   min-width: 0;
   max-width: 100%;
   min-height: 2.5rem;
+  align-items: center;
   justify-content: center;
-  gap: 0.35rem;
+  gap: 0;
   overflow: visible;
   border-radius: 0;
   border-right: 0;
@@ -255,10 +301,30 @@
   color: var(--muted-foreground);
   font-weight: 500;
   box-shadow: none;
+  transition: flex 0.22s ease, color 0.15s ease;
 }
 
-.learning-center-page .learning-center-steps__tab > span:not([aria-hidden]) {
+.learning-center-steps__tab-label {
+  position: relative;
+  z-index: auto;
+  display: inline-flex;
   min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.learning-center-steps__title {
+  min-width: 0;
+}
+
+.learning-center-page .learning-center-steps__tab > span {
+  position: relative;
+  z-index: auto;
+}
+
+.learning-center-page .learning-center-steps__tab .learning-center-steps__title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -276,11 +342,24 @@
 }
 
 .learning-center-page .learning-center-steps__tab[data-state='active'] {
-  padding-right: 4rem;
+  z-index: auto;
+  flex: var(--lc-tab-flex-active) 1 0;
+  justify-content: flex-start;
+  padding: 0 0.75rem;
   background: transparent;
   color: var(--foreground);
   font-weight: 700;
   box-shadow: none;
+}
+
+.learning-center-page .learning-center-steps__tab[data-state='active'] .learning-center-steps__tab-label {
+  z-index: auto;
+  justify-content: flex-start;
+}
+
+.learning-center-page .learning-center-steps__tab[data-state='active'] .learning-center-steps__title {
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .learning-center-steps__index {
@@ -292,7 +371,7 @@
   position: absolute;
   top: 3.375rem; /* 54px */
   left: 0.25rem; /* 4px */
-  z-index: 1;
+  z-index: 2;
   display: flex;
   width: calc(100% - 0.5rem); /* design 854px; SClaw fluid */
   height: var(--lc-panel-height, 11.25rem); /* ≤3: 180px; max 6: 336px */
