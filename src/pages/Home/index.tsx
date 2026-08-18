@@ -55,13 +55,14 @@ export function Home() {
   const seedText = draftState?.composerHandoff ? undefined : draftState?.mainChatDraft;
 
   useEffect(() => {
-    if (!draftState) return;
-    const token = draftState.mainChatDraftToken;
+    const currentDraft = readMainChatDraftState(locationState);
+    if (!currentDraft) return;
+    const token = currentDraft.mainChatDraftToken;
     if (token) {
       if (consumedDraftTokensRef.current.has(token)) return;
       consumedDraftTokensRef.current.add(token);
     }
-    const handoff = draftState.composerHandoff;
+    const handoff = currentDraft.composerHandoff;
     if (handoff) {
       // Child effects register the ChatInput listener first, then this parent
       // effect replays the same event homepage recommend cards use.
@@ -73,7 +74,7 @@ export function Home() {
     // 写入输入框并聚焦，清掉 state 只会让 seedText prop 变回 undefined，
     // 不会清空已填充的草稿。
     navigate(location.pathname, { replace: true, state: null });
-  }, [draftState, locationState, location.pathname, navigate]);
+  }, [locationState, location.pathname, navigate]);
 
   const { handleHubSend } = useHomeChatEntrySend();
   const gatewayStatus = useGatewayStore((s) => s.status);

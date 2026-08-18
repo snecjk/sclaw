@@ -8,6 +8,7 @@ import {
   type MainChatDraftMode,
 } from '@/lib/main-chat-composer-draft';
 import type { WorkflowExecutionEngine } from '@/lib/workflow-session';
+import type { ChatEditDraftEventDetail } from '@/pages/Chat/ChatInput';
 
 export function isMainChatHomePath(pathname: string): boolean {
   return pathname === '/';
@@ -207,6 +208,24 @@ export interface MainChatDraftState {
   mainChatDraft: string;
   /** Unique token for this draft navigation; guarantees one-time consumption. */
   mainChatDraftToken: string;
+  /** Homepage-recommend-style chip payload; Home replays `stoclaw:chat-edit-draft`. */
+  composerHandoff?: ChatEditDraftEventDetail;
+}
+
+function parseComposerHandoff(value: unknown): ChatEditDraftEventDetail | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const record = value as ChatEditDraftEventDetail;
+  const skill = record.skill;
+  const workflow = record.workflow;
+  const hasSkill = Boolean(skill && typeof skill.slug === 'string' && skill.slug.trim());
+  const hasWorkflow = Boolean(workflow && typeof workflow.id === 'string' && workflow.id.trim());
+  const hasText = Boolean(record.text?.trim() || record.prefixText?.trim() || record.suffixText?.trim());
+  if (!hasSkill && !hasWorkflow && !hasText) return undefined;
+  return record;
+}
+
+function hasComposerHandoffPayload(handoff: ChatEditDraftEventDetail): boolean {
+  return Boolean(parseComposerHandoff(handoff));
 }
 
 /** Parse and validate router `location.state` as a one-shot composer draft. */
@@ -214,10 +233,13 @@ export function readMainChatDraftState(state: unknown): MainChatDraftState | nul
   if (!state || typeof state !== 'object') return null;
   const record = state as Record<string, unknown>;
   const draft = typeof record.mainChatDraft === 'string' ? record.mainChatDraft.trim() : '';
-  if (!draft) return null;
+  const composerHandoff = parseComposerHandoff(record.composerHandoff);
+  if (!draft && !composerHandoff) return null;
   const token =
     typeof record.mainChatDraftToken === 'string' ? record.mainChatDraftToken.trim() : '';
-  return { mainChatDraft: draft, mainChatDraftToken: token };
+  return composerHandoff
+    ? { mainChatDraft: draft, mainChatDraftToken: token, composerHandoff }
+    : { mainChatDraft: draft, mainChatDraftToken: token };
 }
 
 /**
@@ -279,6 +301,29 @@ export function navigateToMainChatWithDraft(
   flushSync(() => {
     if (!existing.trim()) useChatStore.getState().newSession();
     navigate(target, { state });
+  });
+  return true;
+}
+
+/**
+ * Open home and replay a homepage-recommend composer event (skill/workflow chips).
+ * Never uses `?q=`, so the draft is not auto-sent.
+ */
+export function navigateToMainChatWithComposerHandoff(
+  navigate: NavigateFunction,
+  handoff: ChatEditDraftEventDetail,
+): boolean {
+  if (!hasComposerHandoffPayload(handoff)) return false;
+
+  const state: MainChatDraftState = {
+    mainChatDraft: '',
+    mainChatDraftToken: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    composerHandoff: handoff,
+  };
+
+  flushSync(() => {
+    if (!readMainChatComposerDraft().trim()) useChatStore.getState().newSession();
+    navigate('/', { state });
   });
   return true;
 }

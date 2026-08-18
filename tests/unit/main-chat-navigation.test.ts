@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   isMainChatHomePath,
   navigateToMainChatHome,
+  navigateToMainChatWithComposerHandoff,
   navigateToMainChatWithDraft,
   navigateToNewSessionWithDraft,
   navigateToNewSessionWithPrompt,
@@ -216,5 +217,40 @@ describe('main-chat-navigation draft (去试试)', () => {
       mainChatDraft: '草稿文本',
       mainChatDraftToken: '',
     });
+    expect(readMainChatDraftState({
+      mainChatDraft: '',
+      mainChatDraftToken: 'tk',
+      composerHandoff: { skill: { slug: 'daily-report', title: '日报' }, suffixText: '帮我执行这个技能' },
+    })).toEqual({
+      mainChatDraft: '',
+      mainChatDraftToken: 'tk',
+      composerHandoff: { skill: { slug: 'daily-report', title: '日报' }, suffixText: '帮我执行这个技能' },
+    });
+  });
+
+  it('navigateToMainChatWithComposerHandoff carries chip payload without ?q=', () => {
+    clearMainChatComposerDraft();
+    const navigate = vi.fn();
+    const handoff = {
+      prefixText: '安装',
+      workflow: { id: 'tpl_demo', name: '每日任务' },
+      suffixText: '帮我执行这个工作流',
+    };
+
+    expect(navigateToMainChatWithComposerHandoff(navigate as never, handoff)).toBe(true);
+    expect(newSession).toHaveBeenCalledTimes(1);
+    const [to, options] = navigate.mock.calls[0] as [unknown, { state?: Record<string, unknown> }];
+    expect(to).toBe('/');
+    expect(String(to)).not.toContain('?');
+    expect(options.state?.composerHandoff).toEqual(handoff);
+    expect(typeof options.state?.mainChatDraftToken).toBe('string');
+    expect(String(options.state?.mainChatDraftToken).length).toBeGreaterThan(0);
+  });
+
+  it('navigateToMainChatWithComposerHandoff rejects empty payloads', () => {
+    const navigate = vi.fn();
+    expect(navigateToMainChatWithComposerHandoff(navigate as never, {})).toBe(false);
+    expect(newSession).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
   });
 });
