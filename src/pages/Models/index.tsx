@@ -291,6 +291,10 @@ export function Models() {
 
       <div className="flex flex-col gap-10">
         <section className={glassSectionSurface}>
+          <ProvidersSettings />
+        </section>
+
+        <section className={glassSectionSurface}>
           <div className="mb-5 flex items-center justify-between">
             <h2 className="text-lg font-semibold tracking-tight text-foreground">
               {t('dashboard:tokenBalance.title', 'Token 余额')}
@@ -364,10 +368,6 @@ export function Models() {
               </p>
             </div>
           )}
-        </section>
-
-        <section className={glassSectionSurface}>
-          <ProvidersSettings />
         </section>
 
         <section className={glassSectionSurface}>

@@ -1,30 +1,19 @@
 /**
- * 侧栏账号下拉内的「切换网点账号 / 切回总部账号」菜单项。
- * 可见性与切换逻辑与原 AccountSwitchFab 一致。
+ * 总部演示 — 可切换网点时右下角浮动入口（登录后拉取一次 options，不重复请求）。
  */
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ChevronRight } from 'lucide-react';
+import { ArrowLeftRight, Check } from 'lucide-react';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth';
 
-type AccountSwitchMenuItemsProps = {
-  itemClassName: string;
-  itemHoverClassName: string;
-  subContentClassName: string;
-};
-
-export function AccountSwitchMenuItems({
-  itemClassName,
-  itemHoverClassName,
-  subContentClassName,
-}: AccountSwitchMenuItemsProps) {
+export function AccountSwitchFab() {
   const { t } = useTranslation('auth');
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
@@ -62,7 +51,8 @@ export function AccountSwitchMenuItems({
 
   if (showSwitchBack) {
     return (
-      <DropdownMenuItem
+      <button
+        type="button"
         disabled={switching}
         onClick={() => {
           setSwitching(true);
@@ -70,25 +60,27 @@ export function AccountSwitchMenuItems({
             .catch(() => {})
             .finally(() => setSwitching(false));
         }}
-        className={cn(itemClassName, itemHoverClassName)}
+        className="no-drag fixed bottom-4 right-4 z-[99998] flex items-center gap-2 rounded-lg border border-[var(--sto-brand-6)]/30 bg-white px-3 py-2 text-xs font-medium text-[var(--sto-brand-6)] shadow-lg transition-colors hover:bg-[var(--sto-brand-6)]/5 disabled:cursor-wait disabled:opacity-70 dark:bg-card"
       >
-        {switching ? t('accountSwitch.switching') : t('accountSwitch.backToHq')}
-      </DropdownMenuItem>
+        <ArrowLeftRight className="h-4 w-4 shrink-0" strokeWidth={2} />
+        {switching ? '切换中…' : t('accountSwitch.backToHq')}
+      </button>
     );
   }
 
   return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger
-        disabled={switching}
-        className={cn(itemClassName, itemHoverClassName, 'gap-2')}
-      >
-        <span className="flex-1 truncate">
-          {switching ? t('accountSwitch.switching') : t('accountSwitch.menu')}
-        </span>
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C]" strokeWidth={2} />
-      </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent sideOffset={4} className={subContentClassName}>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          disabled={switching}
+          className="no-drag fixed bottom-4 right-4 z-[99998] flex items-center gap-2 rounded-lg border border-[var(--sto-brand-6)]/30 bg-white px-3 py-2 text-xs font-medium text-[var(--sto-brand-6)] shadow-lg transition-colors hover:bg-[var(--sto-brand-6)]/5 disabled:cursor-wait disabled:opacity-70 dark:bg-card"
+        >
+          <ArrowLeftRight className="h-4 w-4 shrink-0" strokeWidth={2} />
+          {switching ? '切换中…' : t('accountSwitch.menu')}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" side="top" sideOffset={8} className="min-w-[12rem]">
         {accountSwitchOptions.map((option) => (
           <DropdownMenuItem
             key={option.code}
@@ -99,7 +91,7 @@ export function AccountSwitchMenuItems({
                 .catch(() => {})
                 .finally(() => setSwitching(false));
             }}
-            className={cn(itemClassName, itemHoverClassName, 'gap-2')}
+            className={cn('gap-2')}
           >
             {user?.code === option.code ? (
               <Check className="h-3.5 w-3.5 shrink-0 text-primary" strokeWidth={2.5} />
@@ -109,7 +101,7 @@ export function AccountSwitchMenuItems({
             <span className="truncate">{option.label || option.code}</span>
           </DropdownMenuItem>
         ))}
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
