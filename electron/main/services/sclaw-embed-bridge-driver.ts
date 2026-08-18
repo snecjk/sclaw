@@ -8,9 +8,12 @@ import {
   SCLAW_EMBED_BRIDGE_INJECT_SCRIPT,
 } from '../../../shared/sclaw-embed-bridge-inject';
 import { browserBridgeService } from '../../services/browser-bridge-service';
+import { BrowserAutomationCdpSession } from '../../services/browser-automation/cdp-session';
+import { actFillOrType, getOrCreateCdpSession } from '../../services/browser-automation/input';
 
 const EMBED_TAB_ID = -1;
-const POLL_INTERVAL_MS = 200;
+const POLL_INTERVAL_MS = 50;
+const EMBED_CLICK_NAV_WAIT_MS = 2500;
 
 interface EmbedDriverEntry {
   runtimeId: string;
@@ -19,6 +22,7 @@ interface EmbedDriverEntry {
 }
 
 const entries = new Map<string, EmbedDriverEntry>();
+const embedCdpByWebContentsId = new Map<number, BrowserAutomationCdpSession>();
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 function ensurePollLoop(): void {
@@ -51,6 +55,22 @@ async function injectBridgeScript(webContentsId: number): Promise<void> {
   }
 }
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function waitForEmbedNavigation(
+  wc: NonNullable<ReturnType<typeof resolveWebContents>>,
+  startUrl: string,
+  timeoutMs = EMBED_CLICK_NAV_WAIT_MS,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (wc.isDestroyed()) return;
+    const currentUrl = wc.getURL();
+    if (currentUrl !== startUrl && !wc.isLoading()) return;
+    await sleep(50);
+  }
+}
+
 async function runEmbedCommand(
   entry: EmbedDriverEntry,
   action: BrowserBridgeAction,
@@ -65,7 +85,7 @@ async function runEmbedCommand(
     const url = typeof payload.url === 'string' ? payload.url.trim() : '';
     if (!url) return { success: false, error: 'url is required' };
     await wc.loadURL(url);
-    return { success: true, url };
+    return { success: true, url: wc.getURL(), title: wc.getTitle() };
   }
 
   if (action === 'screenshot') {
@@ -77,6 +97,27 @@ async function runEmbedCommand(
     };
   }
 
+  if (action === 'fill') {
+    const cdp = getOrCreateCdpSession(wc, embedCdpByWebContentsId);
+    const executeJavaScript = async (script: string) => wc.executeJavaScript(script, true);
+    const fillResult = await actFillOrType({
+      cdp,
+      executeJavaScript,
+      payload: {
+        action: 'fill',
+        ref: typeof payload.ref === 'string' ? payload.ref : undefined,
+        name: typeof payload.name === 'string' ? payload.name : undefined,
+        value: typeof payload.value === 'string' ? payload.value : String(payload.value ?? ''),
+      },
+    });
+    return {
+      success: fillResult.success,
+      ref: fillResult.ref,
+      value: payload.value,
+      error: fillResult.error,
+    };
+  }
+
   await injectBridgeScript(entry.webContentsId);
 
   const script = `window.__stoEmbedBridge && window.__stoEmbedBridge.executeCommand(
@@ -85,7 +126,22 @@ async function runEmbedCommand(
   )`;
 
   try {
-    return await wc.executeJavaScript(script);
+    const startUrl = wc.getURL();
+    const result = await wc.executeJavaScript(script) as {
+      success?: boolean;
+      ref?: string;
+      error?: string;
+    } | null;
+    if (action === 'click' && result?.success) {
+      await waitForEmbedNavigation(wc, startUrl);
+      return {
+        ...result,
+        url: wc.getURL(),
+        title: wc.getTitle(),
+        navigated: wc.getURL() !== startUrl,
+      };
+    }
+    return result;
   } catch (err) {
     return { success: false, error: String(err) };
   }
@@ -168,4 +224,13 @@ export async function refreshSclawEmbedBridgeScript(runtimeId: string): Promise<
   const entry = entries.get(runtimeId);
   if (!entry) return;
   await injectBridgeScript(entry.webContentsId);
+}
+
+/** Run queued embed bridge commands immediately instead of waiting for the poll loop. */
+export function flushSclawEmbedBridgeSession(sessionId: string): void {
+  const runtimeId = sessionId.startsWith('embed-') ? sessionId.slice('embed-'.length) : '';
+  if (!runtimeId) return;
+  const entry = entries.get(runtimeId);
+  if (!entry) return;
+  void tickEntry(entry);
 }

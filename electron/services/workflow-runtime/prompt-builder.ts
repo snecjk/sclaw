@@ -12,6 +12,9 @@ export function buildWorkflowNodePrompt(
   if (node?.type === 'agent_data_fetch') {
     return buildDataFetchPrompt(spec, node, ctx, options);
   }
+  if (node?.type === 'browser_task') {
+    return buildBrowserTaskPrompt(spec, node, ctx, options);
+  }
 
   const schema = spec.completionContract?.dataJsonSchema ?? node?.config?.outputContract?.schema ?? spec.completionContract?.outputJsonSchema ?? { type: 'object' };
   const ports = Array.isArray(node?.config?.branches)
@@ -90,6 +93,74 @@ function buildDataFetchPrompt(
       artifactFirstRule(node?.type),
       largeTextArtifactRule(),
       permissionRule(spec),
+      failureOutputRule(),
+      outputProtocolInstruction(options.execEngine, node, ctx, options.attempt),
+    ].join('\n\n')),
+  ].filter(Boolean).join('\n\n');
+}
+
+function buildBrowserTaskPrompt(
+  spec: AgentRunSpec,
+  node: any,
+  ctx: RunCtx,
+  options: { execEngine?: 'claude' | 'openclaw'; attempt?: number },
+): string {
+  const schema = spec.completionContract?.dataJsonSchema
+    ?? node?.config?.outputContract?.schema
+    ?? { type: 'object' };
+  const { payload: inputPayload, artifacts: inputArtifacts } = splitWorkflowInput(ctx.resolvedInputs);
+  const inputPacket = {
+    protocolVersion: WORKFLOW_PACKET_VERSION,
+    status: 'succeeded',
+    producer: { runId: ctx.runId, nodeId: 'runtime-input', nodeType: 'input', attempt: 0 },
+    payload: inputPayload,
+    artifacts: inputArtifacts,
+    control: { selectedPort: null },
+    diagnostics: { warnings: [], errors: [] },
+  };
+  const browserContext = (spec.runtimeContext as Record<string, unknown> | undefined)?.browserAutomation ?? {};
+  const resume = (browserContext as Record<string, unknown>).resume as Record<string, unknown> | undefined;
+  const taskGoal = spec.task?.goal ?? node?.config?.goal ?? node?.config?.instruction ?? '';
+  const instruction = spec.task?.instruction ?? '';
+  const allowedTools = Array.isArray(spec.allowedTools) && spec.allowedTools.length
+    ? spec.allowedTools.join(', ')
+    : 'ba_observe, ba_act, ba_wait, ba_validate, ba_start_run, ba_create_session';
+  const maxSteps = spec.limits?.maxToolCalls ?? node?.config?.maxSteps ?? 20;
+
+  return [
+    '# 客户端工作流浏览器任务节点',
+    promptSection('执行边界', [
+      '你是客户端工作流中的浏览器自动化节点，只完成当前节点的浏览器操作任务。',
+      '每一步必须遵循 observe → act → wait → validate 循环，一次工具调用只做一步。',
+      '禁止猜测页面元素；每次 act 前必须先 ba_observe 获取 @eN ref。',
+    ].join('\n')),
+    promptSection('当前节点', [
+      `- 名称：${node?.name ?? node?.title ?? node?.id ?? '未命名节点'}`,
+      `- 类型：${node?.type ?? 'browser_task'}`,
+    ].join('\n')),
+    promptSection('浏览器会话', `\`\`\`json\n${JSON.stringify(browserContext)}\n\`\`\``),
+    resume?.isResume
+      ? promptSection('恢复执行', [
+        `这是从 checkpoint 恢复的执行，已完成 ${resume.stepsCompleted ?? 0} 步。`,
+        resume.lastStep
+          ? `上一步：${resume.lastStep.action}（${resume.lastStep.status}${resume.lastStep.error ? `，${resume.lastStep.error}` : ''}）`
+          : '',
+        '不要重复已完成操作；先 ba_observe 确认当前页面状态，再从断点继续。',
+      ].filter(Boolean).join('\n'))
+      : '',
+    promptSection('任务目标', taskGoal || '未配置浏览器任务目标。'),
+    instruction ? promptSection('动态提示词', instruction) : '',
+    promptSection('输入数据', `仅使用以下 WorkflowPacket，不得猜测未提供的数据。\n\n\`\`\`json\n${JSON.stringify(inputPacket)}\n\`\`\``),
+    promptSection('业务 Payload Schema', `\`\`\`json\n${JSON.stringify(schema)}\n\`\`\``),
+    promptSection('工具约束', [
+      `只允许调用以下工具：${allowedTools}。`,
+      `最大工具调用次数：${maxSteps}。`,
+      '已有 sessionId 时直接使用，不要重复 ba_create_session。',
+      '需要 checkpoint 时调用 ba_start_run 并传入 runId。',
+    ].join('\n')),
+    promptSection('执行与输出约束', [
+      'selectedPort 必须为 null。',
+      'payload 中可包含 summary 等小型结构化字段；浏览器状态由运行时自动写入 payload.browser。',
       failureOutputRule(),
       outputProtocolInstruction(options.execEngine, node, ctx, options.attempt),
     ].join('\n\n')),

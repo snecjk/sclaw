@@ -32,6 +32,7 @@ import {
   type UserInputField,
 } from '@/pages/WorkflowDesigner/inspector-config-utils';
 import type { WorkflowDefinition, WorkflowNode } from '@/pages/WorkflowDesigner/types';
+import { DesignerBrowserNodeConfig } from '@/pages/WorkflowDesigner/components/designer-browser-node-config';
 
 function Field({
   label,
@@ -822,6 +823,17 @@ export function DesignerNodeTypeConfig({ node, workflow, onChange }: DesignerNod
           </Field>
         ) : null}
       </>
+    );
+  }
+
+  if (node.type === 'browser_task' || node.type === 'browser_validate' || node.type === 'browser_human_gate') {
+    return (
+      <DesignerBrowserNodeConfig
+        node={node}
+        workflow={workflow}
+        config={config}
+        patch={patch}
+      />
     );
   }
 

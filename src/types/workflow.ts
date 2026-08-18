@@ -250,6 +250,8 @@ export type WorkflowRunTriggerType = 'chat' | 'scheduled_task' | 'workflow_manua
 export interface WorkflowRunNodeRun {
   id: string;
   nodeId: string;
+  /** 用户可见的节点名称；旧运行记录缺失时回退 nodeId。 */
+  nodeName?: string;
   status: string;
   startedAt?: string;
   completedAt?: string;

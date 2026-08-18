@@ -46,7 +46,7 @@
 | 触发 | 行为 |
 |------|------|
 | **钉钉扫码绑定成功** | 现网路径：claim → 注册/更新 device + 连 `/ws/sclaw` |
-| **桌面打开「App 绑定」开关** | 与上对称：注册/更新 device + 连 `/ws/sclaw`（若已因钉钉连着则 **复用同一条**，只补 mobile 路由映射） |
+| **桌面打开「App 绑定」开关** | 调用 Hub `POST /bind/register`：按 workNo+deviceId 落/更新 **同一条** `sclaw_device_bind`（`ding_user_id` 可空）+ 连 `/ws/sclaw`；若已因钉钉连着则复用/轮换同一条凭证 |
 
 ```text
 登录 StoClaw          → 无 Hub 设备动作

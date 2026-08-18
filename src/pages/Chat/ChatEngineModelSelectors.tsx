@@ -32,7 +32,7 @@ import {
 } from '@/lib/sync-workspace-default-to-chat';
 import { isMainChatHomePath } from '@/lib/main-chat-navigation';
 import { isTaskExecutionSessionKey } from '../../../shared/session-agent-id';
-import { resolveChatSessionEngineType } from '@/lib/resolve-chat-session-engine-type';
+import { resolveChatSessionEngineType, isUnusedEmbedChatSession } from '@/lib/resolve-chat-session-engine-type';
 import { isSclawBrowserEmbedChatSessionKey } from '@/lib/sclaw-browser-chat-session';
 import { cn } from '@/lib/utils';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
@@ -311,11 +311,10 @@ export function ChatEngineSelector({
   const agentDefaultEngineType = currentAgent?.engineType ?? 'openclaw';
   // Only the empty home draft (DEFAULT / unused embed) can switch engines.
   // Existing sessions — including project chats after first send — stay locked.
-  const isUnusedEmbedSession = isSclawBrowserEmbedChatSessionKey(currentSessionKey)
-    && !loading
-    && messages.length === 0;
-  const canSwitchEngine = isMainChatHomePath(pathname)
-    && (currentSessionKey === DEFAULT_SESSION_KEY || isUnusedEmbedSession);
+  const isUnusedEmbedSession = isUnusedEmbedChatSession(currentSessionKey, messages.length, loading);
+  const canSwitchEngine = (
+    isMainChatHomePath(pathname) && currentSessionKey === DEFAULT_SESSION_KEY
+  ) || isUnusedEmbedSession;
   const currentEngineType = resolveChatSessionEngineType(
     currentSession,
     agentDefaultEngineType,
@@ -364,7 +363,7 @@ export function ChatEngineSelector({
 
   const engineTriggerTitle = canSwitchEngine
     ? '切换新会话执行引擎'
-    : isSclawBrowserEmbedChatSessionKey(currentSessionKey)
+    : isSclawBrowserEmbedChatSessionKey(currentSessionKey) && messages.length > 0
       ? '历史会话不可切换引擎（可切换模型）'
       : '当前会话不可切换引擎';
   const engineOptions: SelectorMenuOption<'openclaw' | 'claude'>[] = [

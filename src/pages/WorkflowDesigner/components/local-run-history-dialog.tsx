@@ -80,7 +80,15 @@ export function LocalRunHistoryDialog({ open, workflowId, workflowName, onClose,
           <header className="flex items-start justify-between border-b border-border px-6 py-5">
             <div className="min-w-0">
               <Dialog.Title className="flex items-center gap-2 text-base font-semibold text-foreground"><History className="h-4 w-4" />本地运行记录</Dialog.Title>
-              <Dialog.Description className="mt-1 truncate text-sm text-muted-foreground">{workflowName || '当前工作流'}</Dialog.Description>
+              <Dialog.Description className="mt-1 flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+                <span className="truncate">{workflowName || '当前工作流'}</span>
+                {workflowId ? (
+                  <span className="inline-flex min-w-0 shrink items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[11px]">
+                    <span className="shrink-0">工作流 ID</span>
+                    <code className="truncate font-mono text-foreground" title={workflowId}>{workflowId}</code>
+                  </span>
+                ) : null}
+              </Dialog.Description>
             </div>
             <Dialog.Close asChild><button type="button" aria-label="关闭本地运行记录" className="-mr-2 -mt-1 flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-4 w-4" /></button></Dialog.Close>
           </header>
@@ -101,7 +109,7 @@ function RunHistoryItem({ run, latest, busy, onClick }: { run: LocalWorkflowRunS
   const { Icon, label, className } = STATUS_META[status];
   return <li><button type="button" disabled={busy} onClick={onClick} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60">
     <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-full', className)}><Icon className="h-4 w-4" /></span>
-    <span className="min-w-0 flex-1"><span className="flex items-center gap-2"><span className="text-sm font-medium text-foreground">{label}</span>{latest ? <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">最近</span> : null}</span><span className="mt-1 block text-xs text-muted-foreground">{formatLocalRunTime(run.startedAt)} · {formatLocalRunVersion(run)}</span></span>
+    <span className="min-w-0 flex-1"><span className="flex min-w-0 items-center gap-2"><span className="shrink-0 text-sm font-medium text-foreground">{label}</span>{latest ? <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">最近</span> : null}<code className="min-w-0 truncate rounded bg-muted/70 px-2 py-0.5 font-mono text-[11px] text-muted-foreground" title={run.runId}>运行 ID {run.runId}</code></span><span className="mt-1 block text-xs text-muted-foreground">{formatLocalRunTime(run.startedAt)} · {formatLocalRunVersion(run)}</span></span>
     <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" />{busy ? '打开中' : formatLocalRunDuration(run)}</span>
   </button></li>;
 }

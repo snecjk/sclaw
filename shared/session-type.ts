@@ -22,7 +22,14 @@ export interface InferredSessionCatalogMeta {
 }
 
 const APP_SESSION_PREFIX = 'session-embed-app-';
+const LEGACY_EMBED_RUNTIME_SESSION_PREFIX = 'session-embed-br-';
 const APP_CONV_SEPARATOR = '--';
+
+/** App Plaza / embed-browser chat sessions (not workflow or channel). */
+export function isEmbedAppChatSessionKey(sessionKey: string): boolean {
+  const trimmed = sessionKey.trim();
+  return trimmed.includes(APP_SESSION_PREFIX) || trimmed.includes(LEGACY_EMBED_RUNTIME_SESSION_PREFIX);
+}
 
 /**
  * Infer catalog metadata from the session key.

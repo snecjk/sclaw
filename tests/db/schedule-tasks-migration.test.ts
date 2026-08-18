@@ -7,7 +7,13 @@ function applyMigrations(db: DatabaseSync, predicate: (version: number) => boole
   for (const m of SQLITE_MIGRATIONS) {
     if (!predicate(m.version)) continue;
     db.exec('BEGIN IMMEDIATE;');
-    db.exec(m.sql);
+    if (m.apply) {
+      m.apply(db);
+    } else if (m.sql) {
+      db.exec(m.sql);
+    } else {
+      throw new Error(`migration v${m.version} has no operation`);
+    }
     db.exec('COMMIT;');
   }
 }
