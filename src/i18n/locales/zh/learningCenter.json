@@ -3,6 +3,8 @@
   "eyebrow": "学习与实践",
   "fallbackTitle": "学习中心",
   "fallbackSubtitle": "探索教程和实践案例，让新的能力更快成为日常习惯。",
+  "titleStepLabel": "步",
+  "titleStepSuffix": "搞定全流程",
   "loadingTitle": "正在加载学习中心",
   "loadingDescription": "正在获取你有权限查看的学习内容",
   "loadErrorTitle": "学习中心加载失败",

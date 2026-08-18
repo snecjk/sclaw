@@ -3,6 +3,8 @@
   "eyebrow": "Learn and practice",
   "fallbackTitle": "Learning Center",
   "fallbackSubtitle": "Explore tutorials and practical examples to make new capabilities part of your daily work.",
+  "titleStepLabel": "steps",
+  "titleStepSuffix": "to complete the full process",
   "loadingTitle": "Loading Learning Center",
   "loadingDescription": "Fetching the learning content available to you",
   "loadErrorTitle": "Unable to load Learning Center",

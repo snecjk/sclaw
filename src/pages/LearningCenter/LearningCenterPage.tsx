@@ -9,6 +9,7 @@ import categoryReconciliation from '@/assets/learning-center/category-reconcilia
 import categoryProfitLoss from '@/assets/learning-center/category-profit-loss.png';
 import categoryAdvanced from '@/assets/learning-center/category-advanced.png';
 import sectionEmptyIcon from '@/assets/learning-center/case-empty-icon.svg';
+import titleStepUnderline from '@/assets/learning-center/title-step-underline.svg';
 import { FeedbackState } from '@/components/common/FeedbackState';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -37,7 +38,7 @@ import { TutorialPanel } from './TutorialPanel';
 import './LearningCenterPage.css';
 
 const CONTENT_PAGE_SIZE = 6;
-const STEP_COUNT_PATTERN = /(\d+\s*步)/;
+const STEP_COUNT_PATTERN = /(\d+)\s*步/;
 const CATEGORY_ILLUSTRATIONS = [
   categoryOrganization,
   categoryQuotation,
@@ -61,12 +62,35 @@ function resolveCategoryIllustration(category: LearningCategory, index: number):
     || categoryAdvanced;
 }
 
-function renderDomainTitle(title: string) {
-  return title.split(STEP_COUNT_PATTERN).map((part, index) => (
-    /^\d+\s*步$/.test(part)
-      ? <em key={index} className="learning-center-hero__emphasis">{part}</em>
-      : part
-  ));
+function parseDomainTitle(title: string) {
+  const match = title.match(STEP_COUNT_PATTERN);
+  if (!match || match.index === undefined) {
+    return null;
+  }
+  return {
+    leading: title.slice(0, match.index).trimEnd(),
+    trailing: title.slice(match.index + match[0].length).trimStart(),
+  };
+}
+
+function renderDomainTitle(title: string, stepCount: number, fallbackSuffix: string, stepLabel: string) {
+  if (stepCount < 1) {
+    return title;
+  }
+  const parts = parseDomainTitle(title);
+  const leading = (parts?.leading || title).trim();
+  const trailing = (parts?.trailing || fallbackSuffix).trim();
+  return (
+    <>
+      {leading}
+      <span className="learning-center-hero__steps">
+        <em className="learning-center-hero__step-count">{stepCount}</em>
+        <em className="learning-center-hero__step-label">{stepLabel}</em>
+        <img src={titleStepUnderline} alt="" aria-hidden className="learning-center-hero__step-underline" width={50} height={15} />
+      </span>
+      {trailing}
+    </>
+  );
 }
 
 function categoryIndexLabel(index: number) {
@@ -81,6 +105,7 @@ type LearningCenterPageState =
     status: 'ready';
     domain: LearningDomain;
     categories: LearningCategory[];
+    categoryTotal: number;
     selectedCategoryId: string | null;
   };
 
@@ -160,7 +185,13 @@ export function LearningCenterPage() {
         if (!active) return;
         const selectedCategoryId = categories.items[0]?.id ?? null;
         selectedCategoryRef.current = selectedCategoryId;
-        setState({ status: 'ready', domain, categories: categories.items, selectedCategoryId });
+        setState({
+          status: 'ready',
+          domain,
+          categories: categories.items,
+          categoryTotal: categories.total,
+          selectedCategoryId,
+        });
         if (!selectedCategoryId) return;
 
         setTutorials({ status: 'loading', pageNum: 1 });
@@ -270,7 +301,7 @@ export function LearningCenterPage() {
     <>
       <main
         ref={pageRootRef}
-        className={`learning-center-page h-full min-h-0 overflow-y-auto bg-background px-4 py-5 sm:px-6 lg:px-8${tutorialId ? ' learning-center-page--detail-open' : ''}`}
+        className={`learning-center-page h-full min-h-0 overflow-x-hidden overflow-y-auto bg-background px-4 py-5 sm:px-6 lg:px-8${tutorialId ? ' learning-center-page--detail-open' : ''}`}
       >
         <div className="learning-center-page__inner flex flex-col gap-8">
           {state.status === 'loading' && (
@@ -286,7 +317,7 @@ export function LearningCenterPage() {
           {state.status === 'ready' && (
             <>
               <section className="learning-center-hero">
-                <h1 className="learning-center-hero__title">{renderDomainTitle(domainTitle)}</h1>
+                <h1 className="learning-center-hero__title">{renderDomainTitle(domainTitle, state.categoryTotal, t('titleStepSuffix'), t('titleStepLabel'))}</h1>
                 <p className="learning-center-hero__subtitle">{state.domain.subTitle || state.domain.description || t('fallbackSubtitle')}</p>
               </section>
 
@@ -306,7 +337,7 @@ export function LearningCenterPage() {
                       <TabsList
                         aria-label={t('categoriesAria')}
                         className="learning-center-steps__tabs grid h-auto min-h-[3.25rem] rounded-none border-0 p-0 shadow-none"
-                        style={{ gridTemplateColumns: `repeat(${state.categories.length}, minmax(7.25rem, 1fr))` }}
+                        style={{ gridTemplateColumns: `repeat(${state.categories.length}, minmax(0, 1fr))` }}
                       >
                         {state.categories.map((category, index) => (
                           <TabsTrigger

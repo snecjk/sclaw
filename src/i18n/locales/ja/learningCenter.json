@@ -3,6 +3,8 @@
   "eyebrow": "学習と実践",
   "fallbackTitle": "ラーニングセンター",
   "fallbackSubtitle": "チュートリアルと実践例から、新しい機能を日々の業務に取り入れましょう。",
+  "titleStepLabel": "ステップ",
+  "titleStepSuffix": "で全工程を完了",
   "loadingTitle": "ラーニングセンターを読み込み中",
   "loadingDescription": "閲覧可能な学習コンテンツを取得しています",
   "loadErrorTitle": "ラーニングセンターを読み込めません",
