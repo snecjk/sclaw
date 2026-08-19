@@ -321,6 +321,13 @@
   transition: left 0.22s ease, width 0.22s ease, height 0.22s ease, top 0.22s ease;
 }
 
+.learning-center-steps__art-composed {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .learning-center-steps__art-card {
   position: absolute;
   top: var(--lc-art-y, 6.58%);
@@ -483,12 +490,14 @@
 
 .learning-center-steps__panel {
   position: absolute;
-  top: 3.375rem; /* 54px */
-  left: 0.25rem; /* 4px */
+  top: 2.5rem;
+  left: 0.25rem;
+  right: 0.25rem;
+  bottom: 0.25rem;
   z-index: 2;
   display: flex;
-  width: calc(100% - 0.5rem); /* design 854px; SClaw fluid */
-  height: var(--lc-panel-height, 11.25rem); /* ≤3: 180px; max 6: 336px */
+  width: auto;
+  height: auto;
   min-width: 0;
   margin: 0;
   flex-direction: column;

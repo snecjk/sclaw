@@ -3,11 +3,11 @@ import { ChevronRight, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import categoryOrganization from '@/assets/learning-center/category-organization.png';
-import categoryQuotation from '@/assets/learning-center/category-quotation.png';
-import categoryReconciliation from '@/assets/learning-center/category-reconciliation.png';
-import categoryProfitLoss from '@/assets/learning-center/category-profit-loss.png';
-import categoryAdvanced from '@/assets/learning-center/category-advanced.png';
+import categoryOrganizationCard from '@/assets/learning-center/category-organization-card.svg';
+import categoryQuotationCard from '@/assets/learning-center/category-quotation-card.svg';
+import categoryReconciliationCard from '@/assets/learning-center/category-reconciliation-card.svg';
+import categoryProfitLossCard from '@/assets/learning-center/category-profit-loss-card.svg';
+import categoryAdvancedCard from '@/assets/learning-center/category-advanced-card.svg';
 import sectionEmptyIcon from '@/assets/learning-center/case-empty-icon.svg';
 import titleStepUnderline from '@/assets/learning-center/title-step-underline.svg';
 import { FeedbackState } from '@/components/common/FeedbackState';
@@ -67,6 +67,7 @@ function syncTutorialWindowMinSize(page: HTMLElement | null, detailOpen: boolean
 const STEP_COUNT_PATTERN = /(\d+)\s*步/;
 type CategoryArt = {
   source: string;
+  composed?: boolean;
   rotate: number;
   cardX: number;
   cardY: number;
@@ -74,11 +75,11 @@ type CategoryArt = {
 
 /* MasterGo 容器 7964 / 组 7896: 140x140, inner card 106x120. */
 const CATEGORY_ART_DEFAULTS: CategoryArt[] = [
-  { source: categoryOrganization, rotate: 6, cardX: 17.44, cardY: 9.21 },
-  { source: categoryQuotation, rotate: -8, cardX: 15.98, cardY: 8.13 },
-  { source: categoryReconciliation, rotate: 8, cardX: 15.13, cardY: 7.63 },
-  { source: categoryProfitLoss, rotate: -10, cardX: 16.61, cardY: 8.88 },
-  { source: categoryAdvanced, rotate: 10, cardX: 17, cardY: 11 },
+  { source: categoryOrganizationCard, composed: true, rotate: 0, cardX: 0, cardY: 0 },
+  { source: categoryQuotationCard, composed: true, rotate: 0, cardX: 0, cardY: 0 },
+  { source: categoryReconciliationCard, composed: true, rotate: 0, cardX: 0, cardY: 0 },
+  { source: categoryProfitLossCard, composed: true, rotate: 0, cardX: 0, cardY: 0 },
+  { source: categoryAdvancedCard, composed: true, rotate: 0, cardX: 0, cardY: 0 },
 ];
 
 const CATEGORY_ILLUSTRATION_RULES: Array<{ pattern: RegExp; art: CategoryArt }> = [
@@ -373,6 +374,9 @@ export function LearningCenterPage() {
   const domainTitle = state.status === 'ready'
     ? (state.domain.mainTitle || state.domain.name || t('fallbackTitle'))
     : t('fallbackTitle');
+  const titleStepCount = state.status === 'ready'
+    ? Math.max(state.categoryTotal - 1, 0)
+    : 0;
   const visibleTutorialCount = tutorials.status === 'ready'
     ? Math.min(tutorials.items.length, CONTENT_PAGE_SIZE)
     : 0;
@@ -457,7 +461,7 @@ export function LearningCenterPage() {
           {state.status === 'ready' && (
             <>
               <section className="learning-center-hero">
-                <h1 className="learning-center-hero__title">{renderDomainTitle(domainTitle, state.categoryTotal, t('titleStepSuffix'), t('titleStepLabel'))}</h1>
+                <h1 className="learning-center-hero__title">{renderDomainTitle(domainTitle, titleStepCount, t('titleStepSuffix'), t('titleStepLabel'))}</h1>
                 <p className="learning-center-hero__subtitle">{state.domain.subTitle || state.domain.description || t('fallbackSubtitle')}</p>
               </section>
 
@@ -490,9 +494,14 @@ export function LearningCenterPage() {
                             value={category.id}
                             aria-label={category.title || category.name}
                             className="learning-center-steps__tab rounded-none shadow-none"
+                            style={index === state.categories.length - 1
+                              ? ({ '--lc-tab-title-max': '8em' } as CSSProperties)
+                              : undefined}
                           >
                             <span className="learning-center-steps__tab-label">
-                              <span className="learning-center-steps__index" aria-hidden>{categoryIndexLabel(index)}</span>
+                              {index < state.categories.length - 1 ? (
+                                <span className="learning-center-steps__index" aria-hidden>{categoryIndexLabel(index)}</span>
+                              ) : null}
                               <span className="learning-center-steps__title truncate">{category.title || category.name}</span>
                             </span>
                           </TabsTrigger>
@@ -510,11 +519,19 @@ export function LearningCenterPage() {
                         '--lc-art-y': `${(activeCategoryArt.cardY / 140) * 100}%`,
                       } as CSSProperties}
                     >
-                      <span className="learning-center-steps__art-card">
-                        <span className="learning-center-steps__art-inner">
-                          <img src={activeCategoryArt.source} alt="" />
+                      {activeCategoryArt.composed ? (
+                        <img
+                          src={activeCategoryArt.source}
+                          alt=""
+                          className="learning-center-steps__art-composed"
+                        />
+                      ) : (
+                        <span className="learning-center-steps__art-card">
+                          <span className="learning-center-steps__art-inner">
+                            <img src={activeCategoryArt.source} alt="" />
+                          </span>
                         </span>
-                      </span>
+                      )}
                     </span>
                   ) : null}
 

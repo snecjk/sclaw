@@ -98,7 +98,7 @@ describe('LearningCenterPage', () => {
   it('loads the first visible category and both content regions', async () => {
     renderPage();
     expect(screen.getByText('正在加载学习中心')).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: 'AI 成长中心1步搞定全流程' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'AI 成长中心' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: '快速开始' })).toHaveAttribute('data-state', 'active');
     expect(await screen.findByText('十分钟上手')).toBeInTheDocument();
     expect(screen.getByText('案例副标题')).toBeInTheDocument();
@@ -108,7 +108,7 @@ describe('LearningCenterPage', () => {
     expect(casesMock).toHaveBeenCalledWith(category.id, { pageNum: 1, pageSize: 6 });
   });
 
-  it('uses the published category count for the designed N-step title lockup', async () => {
+  it('excludes the final category from the designed N-step title lockup', async () => {
     domainsMock.mockResolvedValue({
       items: [{ ...domain, mainTitle: 'AI财务', subTitle: '用SClaw快速升级你的工作方式，让财务工作更高效' }],
       total: 1,
@@ -124,9 +124,27 @@ describe('LearningCenterPage', () => {
 
     renderPage();
 
-    expect(await screen.findByRole('heading', { name: 'AI财务4步搞定全流程' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'AI财务3步搞定全流程' })).toBeInTheDocument();
     expect(categoriesMock).toHaveBeenCalledWith(domain.id, { pageNum: 1, pageSize: 100 });
     expect(screen.getByText('用SClaw快速升级你的工作方式，让财务工作更高效')).toBeInTheDocument();
+  });
+
+  it('omits the sequence number from the final category tab', async () => {
+    categoriesMock.mockResolvedValue({
+      items: [category, categoryTwo, categoryThree],
+      total: 3,
+      pageNum: 1,
+      pageSize: 100,
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: 'AI 成长中心2步搞定全流程' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '快速开始' })).toHaveTextContent('01');
+    expect(screen.getByRole('tab', { name: '进阶实践' })).toHaveTextContent('02');
+    const finalCategoryTab = screen.getByRole('tab', { name: '专家案例' });
+    expect(finalCategoryTab).not.toHaveTextContent('03');
+    expect(finalCategoryTab).toHaveStyle('--lc-tab-title-max: 8em');
   });
 
   it('shows at most six tutorials and grows by each forty-pixel row plus its gap', async () => {
