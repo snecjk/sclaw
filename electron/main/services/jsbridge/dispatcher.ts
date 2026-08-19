@@ -14,6 +14,7 @@ import { handleAppGetInfo } from './handlers/app';
 import { handleAuthGetAuthMode, handleAuthGetToken, handleAuthGetUser, handleAuthRequestLogin } from './handlers/auth';
 import { handleBridgeGetCapabilities, handleBridgePing } from './handlers/bridge-meta';
 import { handleChatFillComposer, handleChatOpenSession, handleChatSendMessage } from './handlers/chat';
+import { handleChatCancel, handleChatComplete } from './handlers/chat-ai';
 import {
   handleNavCloseSelf,
   handleNavGoBack,
@@ -71,6 +72,8 @@ const HANDLERS: Record<string, BridgeHandlerFn> = {
   'chat.fillComposer': handleChatFillComposer,
   'chat.openSession': handleChatOpenSession,
   'chat.sendMessage': handleChatSendMessage,
+  'chat.complete': handleChatComplete,
+  'chat.cancel': handleChatCancel,
 };
 
 const RATE_LIMIT_BY_TIER: Record<BridgeSession['trustPolicy']['trustTier'], number> = {
@@ -217,6 +220,24 @@ export async function dispatchBridgeInvoke(input: {
     }
     if (code === 'ORIGIN_DENIED') {
       return bridgeFailure(request, 'ORIGIN_DENIED', err.message || 'Origin denied');
+    }
+    if (code === 'AI_NOT_ENABLED') {
+      return bridgeFailure(request, 'AI_NOT_ENABLED', err.message || 'AI is not enabled for this app');
+    }
+    if (code === 'AI_INVALID_PARAMS') {
+      return bridgeFailure(request, 'INVALID_PARAMS', err.message || 'Invalid AI parameters', { aiCode: code });
+    }
+    if (code === 'AI_CONTEXT_TOO_LARGE') {
+      return bridgeFailure(request, 'INVALID_PARAMS', err.message || 'AI context too large', { aiCode: code });
+    }
+    if (code === 'AI_RUN_FAILED') {
+      return bridgeFailure(request, 'INTERNAL_ERROR', err.message || 'AI run failed', { aiCode: code });
+    }
+    if (code === 'AI_SKILL_NOT_ALLOWED') {
+      return bridgeFailure(request, 'PERMISSION_DENIED', err.message || 'Skill not allowed', { aiCode: code });
+    }
+    if (code === 'AI_QUOTA_EXCEEDED' || code === 'AI_CONCURRENCY_EXCEEDED') {
+      return bridgeFailure(request, 'RATE_LIMITED', err.message || 'AI quota exceeded', { aiCode: code });
     }
     logger.warn('[jsbridge] handler error', { method: request.method, error: err.message });
     return bridgeFailure(request, 'INTERNAL_ERROR', err.message || 'Internal bridge error');

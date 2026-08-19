@@ -15,6 +15,7 @@ import type { BridgeContainerKind, ResolveTrustPolicyInput } from '../../../../s
 import { resolveTrustPolicy } from '../../../../shared/jsbridge/trust-policy';
 import { hasBridgeConsent } from './consent-store';
 import { issueSessionToken, newSessionId } from './auth-service';
+import { abortBridgeAiRunsForWebContents } from './bridge-ai-registry';
 import { logger } from '../../../utils/logger';
 
 export interface BridgeSession {
@@ -203,6 +204,8 @@ export function destroyBridgeSession(sessionId: string, reason?: string): void {
   if (!session || session.destroyed) return;
   session.destroyed = true;
   session.destroyReason = reason;
+
+  abortBridgeAiRunsForWebContents(session.webContentsId);
 
   byWebContentsId.delete(session.webContentsId);
   if (session.runtimeId) {

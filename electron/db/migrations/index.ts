@@ -10,6 +10,7 @@ import workflowRuntimeSchemaMigration from './0013-workflow-runtime-schema';
 import artifactSaveRecordsFallbackMigration from './0021-artifact-save-records-fallback';
 import chatRuntimeMigration from './0022-chat-runtime';
 import browserAutomationMigration from './0023-browser-automation';
+import chatRuntimeBridgeOriginMigration from './0024-chat-runtime-bridge-origin';
 
 // Keep migrations as explicit imports so Electron/Vite bundling can retain them
 // reliably in both dev and packaged builds.
@@ -26,4 +27,5 @@ export const SQLITE_MIGRATIONS: SqliteMigration[] = [
   artifactSaveRecordsFallbackMigration,
   chatRuntimeMigration,
   browserAutomationMigration,
+  chatRuntimeBridgeOriginMigration,
 ].sort((left, right) => left.version - right.version);

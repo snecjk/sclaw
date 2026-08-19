@@ -1,3 +1,4 @@
+import type { BridgeAiProfile } from './bridge-ai-protocol';
 import type { Capability } from './capabilities';
 import { JSBRIDGE_ORIGIN_POLICY } from './config';
 import { normalizeAppAllowedOrigins } from './origin-policy';
@@ -13,12 +14,14 @@ export interface BridgeTrustPolicy {
   capabilities: Capability[];
   consentCapabilities: Capability[];
   hostFetchAllowlist?: string[];
+  /** AI invocation profile. Absent means AI is unavailable for this app. */
+  ai?: BridgeAiProfile;
 }
 
 export interface ResolveTrustPolicyInput {
   appId?: string | null;
   bound?: boolean;
-  bridgePolicy?: Partial<Pick<BridgeTrustPolicy, 'allowedOrigins' | 'capabilities' | 'consentCapabilities' | 'hostFetchAllowlist'>> | null;
+  bridgePolicy?: Partial<Pick<BridgeTrustPolicy, 'allowedOrigins' | 'capabilities' | 'consentCapabilities' | 'hostFetchAllowlist' | 'ai'>> | null;
 }
 
 export function resolveTrustTier(input: ResolveTrustPolicyInput): BridgeTrustTier {
@@ -52,5 +55,11 @@ export function resolveTrustPolicy(input: ResolveTrustPolicyInput): BridgeTrustP
     capabilities: input.bridgePolicy?.capabilities ?? [],
     consentCapabilities: input.bridgePolicy?.consentCapabilities ?? [],
     hostFetchAllowlist: input.bridgePolicy?.hostFetchAllowlist,
+    ai: input.bridgePolicy?.ai,
   };
+}
+
+/** AI is opt-in per app: neither trust tier nor catalog binding grants it. */
+export function isBridgeAiEnabled(policy: Pick<BridgeTrustPolicy, 'ai'>): boolean {
+  return policy.ai?.enabled === true;
 }

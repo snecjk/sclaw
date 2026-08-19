@@ -1,6 +1,7 @@
 import { toast } from 'sonner';
 import type { BridgeRequest, BridgeResponse } from '../../../shared/jsbridge/protocol';
 import { isBridgeRequest } from '../../../shared/jsbridge/protocol';
+import { AI_CAPABILITIES } from '../../../shared/jsbridge/capabilities';
 import { grantJsBridgeCapability, invokeJsBridge } from '@/lib/jsbridge/host-api';
 import { resolveJsBridgeResponse } from '@/lib/jsbridge/execute-host-action';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
@@ -35,7 +36,9 @@ async function maybeGrantConsent(input: {
   }
 
   const approved = window.confirm(
-    `应用「${appId}」请求权限「${capability}」，是否允许？`,
+    (AI_CAPABILITIES as readonly string[]).includes(capability)
+      ? `应用「${appId}」请求使用 AI 能力（${capability}）。\n\n该操作会将页面中的填报内容与上下文发送至 AI 模型处理。是否允许？`
+      : `应用「${appId}」请求权限「${capability}」，是否允许？`,
   );
   if (!approved) {
     return {
