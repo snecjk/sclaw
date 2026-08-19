@@ -35,6 +35,13 @@
   margin-inline: 0;
 }
 
+/* Home keeps the same centered 862px reading rail as the application plaza.
+   Tutorial detail remains full-width so its split layout can use all available space. */
+.learning-center-page:not(.learning-center-page--detail-open) .learning-center-page__inner {
+  max-width: 53.875rem; /* 862px */
+  margin-inline: auto;
+}
+
 .learning-center-split {
   position: relative;
   display: flex;
