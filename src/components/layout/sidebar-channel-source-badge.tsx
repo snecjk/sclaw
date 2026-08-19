@@ -1,8 +1,10 @@
-/**
- * SidebarChannelSourceBadge — 历史会话行来源小标记（钉钉 / 微信 / App）。
- * PC 桌面会话（无 channelType）不展示。
- */
+/** SidebarChannelSourceBadge — 历史会话行来源图标；PC 桌面会话不展示。 */
 import { useTranslation } from 'react-i18next';
+import dingIcon from '@/assets/icons/ding.svg';
+import wechatIcon from '@/assets/icons/wechat.svg';
+import wecomIcon from '@/assets/icons/wecom.svg';
+import appIcon from '@/assets/icons/app.svg';
+import qqIcon from '@/assets/icons/qq.svg';
 import { cn } from '@/lib/utils';
 import type { SidebarChannelSource } from '@/lib/session-channel-source';
 
@@ -14,12 +16,12 @@ const LABEL_KEY: Record<SidebarChannelSource, string> = {
   qq: 'sidebar.channelSource.qq',
 };
 
-const SOURCE_COLOR_CLASS: Record<SidebarChannelSource, string> = {
-  dingtalk: 'bg-[#eff6ff] text-[#3b82f6]',
-  wechat: 'bg-[#EAFBF3] text-[#31AF65]',
-  wecom: 'bg-[#EAFBF3] text-[#31AF65]',
-  app: 'bg-[#FFF9F5] text-[#FF6700]',
-  qq: 'bg-[#FFFBE6] text-[#FAAD14]',
+const SOURCE_ICON: Record<SidebarChannelSource, string> = {
+  dingtalk: dingIcon,
+  wechat: wechatIcon,
+  wecom: wecomIcon,
+  app: appIcon,
+  qq: qqIcon,
 };
 
 export function SidebarChannelSourceBadge({
@@ -35,16 +37,12 @@ export function SidebarChannelSourceBadge({
   return (
     <span
       className={cn(
-        // 与会话行尾 16px 状态图标使用同一视觉高度；固定最小宽度，
-        // 避免「钉钉 / 微信 / App」因字形宽度不同产生横向跳动。
-        'ml-1.5 inline-flex h-4 min-w-8 shrink-0 items-center justify-center rounded px-1',
-        'text-center text-[10px] font-medium leading-none tracking-wide',
-        SOURCE_COLOR_CLASS[source],
+        'ml-1.5 inline-flex h-4 w-4 shrink-0 items-center justify-center',
         className,
       )}
       aria-label={t(LABEL_KEY[source])}
     >
-      {t(LABEL_KEY[source])}
+      <img src={SOURCE_ICON[source]} alt="" className="h-4 w-4" aria-hidden />
     </span>
   );
 }
