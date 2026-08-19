@@ -69,9 +69,9 @@ const STYLES = {
   searchInput:
     'w-full bg-transparent text-[13px] leading-none tracking-normal text-[#1D2129] outline-none placeholder:text-[#86909C] dark:text-foreground',
   searchIcon: 'h-4 w-4  text-[#86909C]',
-  /** 列表区（主体） */
+  /** 列表区（主体）：固定高度，溢出滚动 */
   list:
-    'sto-hide-scrollbar flex min-h-0 flex-1 flex-col self-stretch overflow-y-auto bg-white px-2 py-2.5 dark:bg-background',
+    'sto-hide-scrollbar box-border flex h-[360px] min-h-0 flex-none flex-col self-stretch overflow-x-hidden overflow-y-auto bg-white px-2 py-2.5 dark:bg-background',
   /**
    * 目录 / 文件行统一：高 38px，上下 margin 8px，gap 6px
    * （图标 30×30，字号 14 / 500 / 18）
@@ -365,7 +365,7 @@ export function DataCenterFilePickerModal({
     });
   };
 
-  /** 与数据中心 enterFolder 一致：清空搜索并进入该目录 */
+  /** 搜索命中目录时：进入该目录查看子集（非就地展开） */
   const enterFolder = useCallback((folder: DataCenterEntry) => {
     if (folder.entryType !== 'folder') return;
     setKeyword('');
@@ -511,6 +511,7 @@ export function DataCenterFilePickerModal({
       if (searchResults.length === 0) {
         return <div className={STYLES.muted}>{emptyLabel}</div>;
       }
+      // 搜索扁平列表：隐藏展开箭头但保留占位；点击目录进入子集（非就地展开）
       return searchResults.map((entry) => {
         if (entry.entryType === 'folder') {
           return (
@@ -520,9 +521,7 @@ export function DataCenterFilePickerModal({
               className={STYLES.folderRow}
               onClick={() => enterFolder(entry)}
             >
-              <span className={STYLES.leading}>
-                <ChevronRight className={STYLES.chevron} />
-              </span>
+              <span className={STYLES.leading} aria-hidden />
               <img
                 src={getEntryIconSrc(entry)}
                 alt=""
