@@ -19,38 +19,6 @@
   position: absolute;
 }
 
-/* MasterGo 组 7047 / Container 1172:150667: 44px row, space-between, padding 12 18 12 0 */
-.learning-center-tutorial-sheet__header {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  box-sizing: border-box;
-  height: 2.75rem;
-  min-height: 2.75rem;
-  padding: 0.75rem 1.125rem 0.75rem 0.75rem;
-  background: var(--lc-canvas-bg, var(--sto-workspace-bg));
-  text-align: left;
-}
-
-.learning-center-tutorial-sheet__title {
-  margin: 0;
-  width: auto;
-  color: var(--lc-text, hsl(var(--foreground)));
-  font-size: 0.875rem;
-  font-weight: 500;
-  line-height: 1.25rem;
-}
-
-.learning-center-tutorial-sheet__close {
-  position: static;
-  flex-shrink: 0;
-  width: 1.75rem;
-  height: 1.75rem;
-  color: var(--lc-text-muted, hsl(var(--muted-foreground)));
-}
-
 .learning-center-tutorial-sheet__body {
   display: flex;
   overflow: hidden;

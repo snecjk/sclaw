@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import i18n from '@/i18n';
-import { ContentHeaderProvider } from '@/components/layout/content-header-context';
+import { ContentHeaderProvider, useContentHeaderDisplay } from '@/components/layout/content-header-context';
 import { LearningCenterPage } from '@/pages/LearningCenter/LearningCenterPage';
 import {
   getTutorialDetail,
@@ -70,10 +70,23 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function LearningCenterHeaderProbe() {
+  const { previewTabs, previewActions, layoutMode } = useContentHeaderDisplay();
+  return (
+    <div data-testid="learning-center-header" data-layout-mode={layoutMode}>
+      {previewTabs}
+      {previewActions}
+    </div>
+  );
+}
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/learning-center']}>
-      <ContentHeaderProvider><LearningCenterPage /></ContentHeaderProvider>
+      <ContentHeaderProvider>
+        <LearningCenterHeaderProbe />
+        <LearningCenterPage />
+      </ContentHeaderProvider>
     </MemoryRouter>,
   );
 }
@@ -260,8 +273,10 @@ describe('LearningCenterPage', () => {
     const aside = document.querySelector('.learning-center-split__aside');
     expect(aside).not.toBeNull();
     expect(aside?.contains(panel)).toBe(true);
-    const header = panel.querySelector('.learning-center-tutorial-sheet__header');
-    expect(header).toContainElement(screen.getByRole('heading', { name: '教程指南' }));
+    expect(panel).toContainElement(screen.getByRole('heading', { name: '教程指南' }));
+    const header = screen.getByTestId('learning-center-header');
+    expect(header).toHaveAttribute('data-layout-mode', 'split');
+    expect(header).toHaveTextContent('教程指南');
     expect(header).toContainElement(screen.getByRole('button', { name: '关闭' }));
     expect(panel.style.position).toBe('absolute');
     expect(panel.style.width).toBe('35.25rem');

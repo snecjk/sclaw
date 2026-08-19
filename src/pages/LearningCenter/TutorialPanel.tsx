@@ -1,5 +1,5 @@
 import { useEffect, useState, type RefObject } from 'react';
-import { PanelRightClose, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { FeedbackState } from '@/components/common/FeedbackState';
 import { TutorialViewer } from '@/components/learning-center/TutorialViewer';
@@ -76,23 +76,13 @@ export function TutorialPanel({ tutorialId, portalContainer, returnFocusRef, onC
           returnFocusRef.current?.focus();
         }}
       >
-        <SheetHeader className="learning-center-tutorial-sheet__header shrink-0 flex-row items-center justify-between space-y-0 text-left">
-          <SheetTitle className="learning-center-tutorial-sheet__title">{t('tutorialPanelTitle')}</SheetTitle>
+        <SheetHeader className="sr-only">
+          <SheetTitle>{t('tutorialPanelTitle')}</SheetTitle>
           <SheetDescription className="sr-only">
             {state.status === 'ready'
               ? state.tutorial.subTitle || state.tutorial.description || t('tutorialPanelDescription')
               : t('tutorialPanelDescription')}
           </SheetDescription>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="learning-center-tutorial-sheet__close"
-            aria-label={t('close')}
-            onClick={onClose}
-          >
-            <PanelRightClose className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
-          </Button>
         </SheetHeader>
         <div className="learning-center-tutorial-sheet__body min-h-0 flex-1">
           <section className="learning-center-tutorial-sheet__content">

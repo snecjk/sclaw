@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
-import { ChevronRight, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type SetStateAction } from 'react';
+import { ChevronRight, PanelRightClose, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -11,12 +11,14 @@ import categoryAdvancedCard from '@/assets/learning-center/category-advanced-car
 import sectionEmptyIcon from '@/assets/learning-center/case-empty-icon.svg';
 import titleStepUnderline from '@/assets/learning-center/title-step-underline.svg';
 import { FeedbackState } from '@/components/common/FeedbackState';
+import { useContentHeader } from '@/components/layout/content-header-context';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { invokeIpc } from '@/lib/api-client';
 import { dispatchLearningCaseAction } from '@/lib/learning-case-action';
 import { resolveLearningCaseChipTitle } from '@/lib/learning-case-chip-title';
+import { contentHeaderActionBtnClass } from '@/lib/surfaces';
 import {
   pageLearningCases,
   pageLearningCategories,
@@ -221,6 +223,7 @@ export function LearningCenterPage() {
   const tutorialSlotRef = useRef<HTMLDivElement | null>(null);
   const stepsRef = useRef<HTMLElement | null>(null);
   const activeTabRef = useRef<HTMLButtonElement | null>(null);
+  const closeTutorial = useCallback(() => setTutorialId(null), []);
 
   useLayoutEffect(() => {
     setTutorialPanelContainer(tutorialSlotRef.current);
@@ -249,6 +252,21 @@ export function LearningCenterPage() {
       observer?.disconnect();
       window.removeEventListener('resize', onResize);
       syncTutorialWindowMinSize(null, false);
+    };
+  }, [tutorialId]);
+
+  useLayoutEffect(() => {
+    if (!tutorialId) return;
+    const workspaceMain = pageRootRef.current?.parentElement?.closest('main');
+    if (!workspaceMain) return;
+    const previousWidth = workspaceMain.style.getPropertyValue('--sto-split-preview-col');
+    workspaceMain.style.setProperty('--sto-split-preview-col', '35.25rem');
+    return () => {
+      if (previousWidth) {
+        workspaceMain.style.setProperty('--sto-split-preview-col', previousWidth);
+      } else {
+        workspaceMain.style.removeProperty('--sto-split-preview-col');
+      }
     };
   }, [tutorialId]);
 
@@ -439,6 +457,34 @@ export function LearningCenterPage() {
     observer.observe(tab);
     return () => observer.disconnect();
   }, [activeCategoryArt, selectedCategoryId, tutorialId, state.status]);
+
+  const tutorialHeaderTitle = useMemo(() => (
+    tutorialId ? (
+      <div className="learning-center-tutorial-header__title">
+        {t('tutorialPanelTitle')}
+      </div>
+    ) : null
+  ), [t, tutorialId]);
+
+  const tutorialHeaderActions = useMemo(() => (
+    tutorialId ? (
+      <button
+        type="button"
+        className={contentHeaderActionBtnClass}
+        aria-label={t('close')}
+        onClick={closeTutorial}
+      >
+        <PanelRightClose className="h-4 w-4" strokeWidth={1.75} aria-hidden />
+      </button>
+    ) : null
+  ), [closeTutorial, t, tutorialId]);
+
+  useContentHeader({
+    title: null,
+    previewTabs: tutorialHeaderTitle,
+    previewActions: tutorialHeaderActions,
+    layoutMode: tutorialId ? 'split' : 'conversation',
+  });
 
   return (
     <>
@@ -654,7 +700,7 @@ export function LearningCenterPage() {
         tutorialId={tutorialId}
         portalContainer={tutorialPanelContainer}
         returnFocusRef={detailReturnFocusRef}
-        onClose={() => setTutorialId(null)}
+        onClose={closeTutorial}
       />
       <CaseCoverPreviewDialog
         key={previewCase?.id ?? 'case-cover-closed'}

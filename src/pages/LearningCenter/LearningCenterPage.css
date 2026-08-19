@@ -65,6 +65,15 @@
   --lc-detail-gap: 0.75rem;
 }
 
+.learning-center-split--open {
+  display: contents;
+}
+
+.learning-center-split--open > .learning-center-page {
+  grid-column: 1 / 4;
+  grid-row: 2;
+}
+
 .learning-center-split > .learning-center-page {
   flex: 1 1 auto;
   min-width: 0;
@@ -91,7 +100,7 @@
 @media (max-width: 63.9375rem) {
   .learning-center-split--open > .learning-center-split__aside {
     position: absolute;
-    top: var(--sto-shell-card-gap, 0.5rem);
+    top: calc(var(--sto-content-header-h, 44px) + var(--sto-shell-card-gap, 0.5rem));
     right: var(--sto-shell-card-gap, 0.5rem);
     bottom: var(--sto-shell-card-gap, 0.5rem);
     left: auto;
@@ -105,17 +114,19 @@
 
 /* Tutorial open: left pane fills remaining space beside the 564px sheet. */
 @media (min-width: 64rem) {
-  .learning-center-split--open {
-    gap: var(--lc-detail-gap);
+  .learning-center-split--open > .learning-center-page {
+    grid-column: 1;
+    grid-row: 2;
   }
 
   .learning-center-split--open > .learning-center-split__aside {
     position: relative;
+    grid-column: 3;
+    grid-row: 2;
     z-index: auto;
-    flex: 0 0 var(--lc-detail-panel-w);
-    width: var(--lc-detail-panel-w);
-    min-width: var(--lc-detail-panel-w);
-    max-width: var(--lc-detail-panel-w);
+    width: 100%;
+    min-width: 0;
+    max-width: none;
     align-self: stretch;
   }
 
@@ -326,6 +337,18 @@
   overflow: hidden;
   pointer-events: none;
   transition: left 0.22s ease, width 0.22s ease, height 0.22s ease, top 0.22s ease;
+}
+
+.learning-center-tutorial-header__title {
+  min-width: 0;
+  overflow: hidden;
+  padding-left: 0.75rem;
+  color: var(--lc-text, hsl(var(--foreground)));
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .learning-center-steps__art-composed {
