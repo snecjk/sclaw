@@ -260,6 +260,7 @@
 }
 
 .learning-center-steps {
+  --lc-steps-pad: 0.875rem;
   position: relative;
   isolation: isolate;
   display: flex;
@@ -271,10 +272,10 @@
   flex-direction: column;
   gap: 0.75rem;
   box-sizing: border-box;
-  padding: 0.875rem;
+  padding: var(--lc-steps-pad);
   overflow-x: clip;
   border: 0.8px solid var(--lc-edge);
-  border-radius: 1.125rem;
+  border-radius: var(--lc-card-radius);
   background: var(--lc-steps-bg);
 }
 
@@ -282,8 +283,12 @@
   position: relative;
   z-index: 1;
   min-width: 0;
-  max-width: 100%;
-  margin-top: -2.5rem;
+  /* Pull the tab strip flush with the card edge so first/last active fills
+     share the parent radius origin. Top extra offset keeps art overflow space. */
+  max-width: none;
+  margin-top: calc(-2.5rem - var(--lc-steps-pad));
+  margin-right: calc(-1 * var(--lc-steps-pad));
+  margin-left: calc(-1 * var(--lc-steps-pad));
   padding-top: 2.5rem;
   overflow-x: hidden;
   overflow-y: visible;
@@ -360,8 +365,8 @@
   align-items: stretch;
   justify-content: stretch;
   gap: 0;
-  overflow: visible;
-  border-radius: 1rem 1rem 0 0;
+  overflow: hidden;
+  border-radius: var(--lc-card-radius) var(--lc-card-radius) 0 0;
   border: 0;
   background: var(--lc-steps-bg);
   padding: 0;
@@ -386,6 +391,14 @@
   font-weight: 500;
   box-shadow: none;
   transition: flex 0.22s ease, color 0.15s ease, min-width 0.22s ease;
+}
+
+.learning-center-page .learning-center-steps__tab:first-child {
+  border-top-left-radius: var(--lc-card-radius);
+}
+
+.learning-center-page .learning-center-steps__tab:last-child {
+  border-top-right-radius: var(--lc-card-radius);
 }
 
 .learning-center-steps__tab-label {
