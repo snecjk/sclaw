@@ -50,7 +50,9 @@
         "channelSource": {
             "dingtalk": "DingTalk",
             "wechat": "WeChat",
-            "app": "App"
+            "wecom": "WeCom",
+            "app": "App",
+            "qq": "QQ"
         },
         "compactAccountMenu": "Account and settings",
         "supportGroup": {
