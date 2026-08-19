@@ -154,15 +154,7 @@
         "quickInputDeleting": "Deleting…",
         "quickInputLoading": "Loading…",
         "quickInputLoadFailed": "Failed to load quick inputs",
-        "quickInputSaveFailed": "Something went wrong, please try again",
-        "quickInputBeautifyButton": "AI polish",
-        "quickInputBeautifying": "Polishing…",
-        "quickInputBeautifyAria": "Polish content with AI",
-        "quickInputBeautifyNoChange": "Content looks good already",
-        "quickInputBeautifyFallback": "Model unavailable; applied basic cleanup",
-        "quickInputBeautifySuccess": "Content polished by AI",
-        "quickInputBeautifySuccessWithModel": "Polished by AI ({{model}})",
-        "quickInputBeautifyFailed": "AI polish failed, please try again"
+        "quickInputSaveFailed": "Something went wrong, please try again"
     },
     "streaming": {
         "connectingModel": "Connecting to model...",

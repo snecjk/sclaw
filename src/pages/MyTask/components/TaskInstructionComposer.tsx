@@ -1,6 +1,8 @@
 import {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useRef,
   type ReactNode,
@@ -28,6 +30,8 @@ import {
 } from '@/components/input-composer';
 import {
   EMPTY_MENTION_COMPOSER_SNAPSHOT,
+  type AttachmentLookupEntry,
+  type ComposerSegment,
   type MentionComposerSnapshot,
   type PersistedComposerSegment,
 } from '@/lib/dingtalk-mention-composer';
@@ -132,7 +136,140 @@ export function mergeInstructionTextIntoSegments(
     : reconstructed;
 }
 
-export function TaskInstructionComposer({
+/**
+ * 美化后把 chip 织回正文：优先按 @ / 工作流执行句落回原位，避免全部堆到段尾换行。
+ * 紧贴 chip 的换行会拆成单独一行，这里剥掉，让标签跟文本同一行。
+ */
+function stickChipsToAdjacentText(segments: ComposerSegment[]): ComposerSegment[] {
+  const next = segments.map((seg) => (
+    seg.type === 'text' ? { ...seg, text: seg.text } : seg
+  ));
+  for (let i = 0; i < next.length; i += 1) {
+    const seg = next[i];
+    if (seg.type !== 'text') continue;
+    const prevIsChip = i > 0 && next[i - 1]?.type !== 'text';
+    const nextIsChip = i < next.length - 1 && next[i + 1]?.type !== 'text';
+    if (prevIsChip) seg.text = seg.text.replace(/^[ \t]*\n+/, '');
+    if (nextIsChip) seg.text = seg.text.replace(/[\n\r]+[ \t]*$/, '');
+  }
+  return next.filter((seg) => seg.type !== 'text' || seg.text);
+}
+
+function weaveLeftoverWorkflowsByName(
+  segments: ComposerSegment[],
+  leftovers: Array<Extract<ComposerSegment, { type: 'workflow' }>>,
+): ComposerSegment[] {
+  let result = segments;
+  for (const workflow of leftovers) {
+    const name = workflow.name.trim();
+    if (!name) {
+      result = [...result, workflow];
+      continue;
+    }
+    let woven = false;
+    const next: ComposerSegment[] = [];
+    for (const seg of result) {
+      if (woven || seg.type !== 'text') {
+        next.push(seg);
+        continue;
+      }
+      const idx = seg.text.indexOf(name);
+      if (idx < 0) {
+        next.push(seg);
+        continue;
+      }
+      const before = seg.text.slice(0, idx);
+      const after = seg.text.slice(idx + name.length);
+      if (before) next.push({ type: 'text', text: before });
+      next.push(workflow);
+      if (after) next.push({ type: 'text', text: after });
+      woven = true;
+    }
+    result = woven ? next : [...result, workflow];
+  }
+  return result;
+}
+
+/** 美化正文里还留着工作流名称时，把堆在段尾的 chip 织到名称处（任务描述专用）。 */
+function relocateWorkflowsIfNameAppearsInText(segments: ComposerSegment[]): ComposerSegment[] {
+  const workflows = segments.filter(
+    (seg): seg is Extract<ComposerSegment, { type: 'workflow' }> => seg.type === 'workflow',
+  );
+  if (workflows.length === 0) return segments;
+  const textBlob = segments
+    .filter((seg): seg is Extract<ComposerSegment, { type: 'text' }> => seg.type === 'text')
+    .map((seg) => seg.text)
+    .join('');
+  const movable = workflows.filter((wf) => wf.name.trim() && textBlob.includes(wf.name.trim()));
+  if (movable.length === 0) return segments;
+  const movableIds = new Set(movable.map((wf) => wf.id));
+  const body = segments.filter((seg) => !(seg.type === 'workflow' && movableIds.has(seg.id)));
+  return weaveLeftoverWorkflowsByName(body, movable);
+}
+
+export function applyBeautifiedTextToSegments(
+  segments: ComposerSegment[],
+  beautified: string,
+): ComposerSegment[] {
+  const chips = segments.filter((seg) => seg.type !== 'text');
+  const trimmed = beautified.trim();
+  if (!trimmed) return chips;
+  if (chips.length === 0) return [{ type: 'text', text: trimmed }];
+
+  const mentions = chips
+    .filter((seg): seg is Extract<ComposerSegment, { type: 'mention' }> => seg.type === 'mention')
+    .map((seg) => seg.mention);
+  const skills = chips
+    .filter((seg): seg is Extract<ComposerSegment, { type: 'skill' }> => seg.type === 'skill')
+    .map((seg) => ({ slug: seg.slug, title: seg.title }));
+  const workflows = chips.filter(
+    (seg): seg is Extract<ComposerSegment, { type: 'workflow' }> => seg.type === 'workflow',
+  );
+  const files = chips.filter(
+    (seg): seg is Extract<ComposerSegment, { type: 'file' }> => seg.type === 'file',
+  );
+
+  const reconstructed = reconstructComposerSegmentsFromPrompt({
+    prompt: trimmed,
+    attachments: [],
+    skills,
+    mentions,
+    workflowCode: workflows[0]?.id,
+    workflowName: workflows[0]?.name,
+  });
+
+  const usedWorkflowIds = new Set<string>();
+  const result: ComposerSegment[] = [];
+  for (const seg of reconstructed) {
+    if (seg.type === 'file') continue;
+    if (seg.type === 'workflow') {
+      const original = workflows.find((w) => w.id === seg.id) ?? workflows[0];
+      usedWorkflowIds.add(seg.id);
+      result.push({
+        type: 'workflow',
+        id: seg.id,
+        name: original?.name || seg.name,
+        source: original?.source || seg.source,
+      });
+      continue;
+    }
+    result.push(seg);
+  }
+  for (const file of files) result.push(file);
+  const leftoverWorkflows = workflows.filter((workflow) => !usedWorkflowIds.has(workflow.id));
+  return stickChipsToAdjacentText(
+    relocateWorkflowsIfNameAppearsInText([...result, ...leftoverWorkflows]),
+  );
+}
+
+export interface TaskInstructionComposerHandle {
+  applyBeautifiedText: (text: string) => void;
+}
+
+export const TaskInstructionComposer = forwardRef<
+  TaskInstructionComposerHandle,
+  TaskInstructionComposerProps
+>(function TaskInstructionComposer({
   value,
   onChange,
   initialMentions,
@@ -150,7 +287,7 @@ export function TaskInstructionComposer({
   createdViaNl = false,
   toolbarRight,
   onSnapshotChange,
-}: TaskInstructionComposerProps) {
+}, ref) {
   const { t } = useTranslation('chat');
   const lastEmittedRef = useRef(value);
   const seededMentionsRef = useRef(false);
@@ -239,6 +376,33 @@ export function TaskInstructionComposer({
     [emitSnapshot, handleComposerSnapshotChange],
   );
 
+  useImperativeHandle(ref, () => ({
+    applyBeautifiedText: (text: string) => {
+      const editor = mentionEditorRef.current;
+      if (!editor) {
+        lastEmittedRef.current = text;
+        onChange(text);
+        return;
+      }
+      const snap = editor.getSnapshot();
+      const nextSegments = applyBeautifiedTextToSegments(snap.segments, text);
+      const attachmentsById: Record<string, AttachmentLookupEntry> = {};
+      for (const att of attachments) {
+        attachmentsById[att.id] = {
+          id: att.id,
+          fileName: att.fileName,
+          mimeType: att.mimeType,
+          fileSize: att.fileSize,
+          status: att.status,
+          preview: att.preview,
+        };
+      }
+      editor.setSegments(nextSegments, attachmentsById);
+      const after = editor.getSnapshot();
+      lastEmittedRef.current = after.plainText;
+    },
+  }), [attachments, mentionEditorRef, onChange]);
+
   useEffect(() => {
     // 附件状态变化时也通知 Modal（保存时需 ready 列表）
     // 刻意不依赖 getSnapshot：其随 composerSnapshot 每键更新，会与父级 setState 叠加重触发
@@ -304,11 +468,16 @@ export function TaskInstructionComposer({
   useEffect(() => {
     if (lockSegmentsSeedRef.current || seededSegmentsRef.current) return;
     if (value === lastEmittedRef.current) return;
-    const mentions = mentionEditorRef.current?.getSnapshot().mentions ?? [];
+    const editor = mentionEditorRef.current;
+    if (!editor) return;
+    const snap = editor.getSnapshot();
+    const hasChips = snap.segments.some((seg) => seg.type !== 'text');
     lastEmittedRef.current = value;
-    mentionEditorRef.current?.setPlainText(value);
-    if (mentions.length > 0) {
-      mentionEditorRef.current?.setMentions(mentions);
+    // setPlainText + setMentions 会清空 chip，且文末 @ 会丢分隔空格。
+    if (hasChips) return;
+    editor.setPlainText(value);
+    if (snap.mentions.length > 0) {
+      editor.setMentions(snap.mentions);
     }
   }, [mentionEditorRef, value]);
 
@@ -458,4 +627,4 @@ export function TaskInstructionComposer({
       ) : null}
     </div>
   );
-}
+});

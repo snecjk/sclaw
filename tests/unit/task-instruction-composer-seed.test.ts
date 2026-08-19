@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { mergeInstructionTextIntoSegments } from '../../src/pages/MyTask/components/TaskInstructionComposer';
+import {
+  applyBeautifiedTextToSegments,
+  mergeInstructionTextIntoSegments,
+} from '../../src/pages/MyTask/components/TaskInstructionComposer';
 import {
   persistedSegmentsToComposer,
   sanitizeEditPlainText,
   sanitizePersistedTextSegmentForEdit,
 } from '../../src/components/input-composer/use-input-composer-edit-draft';
 import { stripInstructionFromTaskMessage } from '../../src/lib/scheduled-task-recipients';
-import type { PersistedComposerSegment } from '../../src/lib/dingtalk-mention-composer';
+import type { ComposerSegment, PersistedComposerSegment } from '../../src/lib/dingtalk-mention-composer';
 
 describe('mergeInstructionTextIntoSegments', () => {
   it('weaves cleaned prompt text when segments only have chips', () => {
@@ -237,5 +240,119 @@ describe('NL 创建任务字面 \\n 回填归一化 (C-3)', () => {
     if (text?.type === 'text') {
       expect(text.text).toBe('第一行\n第二行');
     }
+  });
+});
+
+describe('applyBeautifiedTextToSegments', () => {
+  it('replaces plain text when there are no chips', () => {
+    const next = applyBeautifiedTextToSegments(
+      [{ type: 'text', text: '原始描述，帮我每天跑一下' }],
+      '请执行该定时任务并输出结果。',
+    );
+    expect(next).toEqual([{ type: 'text', text: '请执行该定时任务并输出结果。' }]);
+  });
+
+  it('trims trailing newlines so chips stay on the same line as text', () => {
+    const workflow = {
+      type: 'workflow' as const,
+      id: 'wf_1',
+      name: '七夕问候语',
+      source: 'mine',
+    };
+    const next = applyBeautifiedTextToSegments(
+      [{ type: 'text', text: '帮我执行' }, workflow],
+      '请执行该定时任务并输出结果。\n\n',
+    );
+    const types = next.map((s) => s.type);
+    expect(types[types.length - 1]).toBe('workflow');
+    const lastText = [...next].reverse().find((s) => s.type === 'text');
+    if (lastText?.type === 'text') {
+      expect(lastText.text.endsWith('\n')).toBe(false);
+    }
+  });
+
+  it('weaves @mention back into beautified text instead of dumping it at the end', () => {
+    const mention = {
+      type: 'mention' as const,
+      mention: { type: 'user' as const, displayName: '侯正亚', userId: 'u1' },
+    };
+    const next = applyBeautifiedTextToSegments(
+      [{ type: 'text', text: '发送给' }, mention],
+      '请将结果发送给@侯正亚。',
+    );
+    expect(next.map((s) => s.type)).toEqual(['text', 'mention', 'text']);
+    expect(next[0]).toMatchObject({ type: 'text', text: '请将结果发送给' });
+    expect(next[2]).toMatchObject({ type: 'text', text: '。' });
+  });
+
+  it('weaves workflow execution phrase back inline', () => {
+    const workflow = {
+      type: 'workflow' as const,
+      id: 'wf_1',
+      name: '七夕问候语',
+      source: 'mine',
+    };
+    const next = applyBeautifiedTextToSegments(
+      [{ type: 'text', text: '帮我执行' }, workflow, { type: 'text', text: '并汇总' }],
+      '帮我执行 id 为：wf_1 的工作流 【七夕问候语】并汇总结果。',
+    );
+    expect(next.map((s) => s.type)).toEqual(['workflow', 'text']);
+    expect(next[1]).toMatchObject({ type: 'text', text: '并汇总结果。' });
+  });
+
+  it('keeps leftover chips when beautified text has no markers', () => {
+    const mention = {
+      type: 'mention' as const,
+      mention: { type: 'user' as const, displayName: '侯正亚', userId: 'u1' },
+    };
+    const workflow = {
+      type: 'workflow' as const,
+      id: 'wf_1',
+      name: '七夕问候语',
+      source: 'mine',
+    };
+    const file = { type: 'file' as const, attachmentId: 'att_1' };
+    const next = applyBeautifiedTextToSegments(
+      [
+        { type: 'text', text: '帮我执行' },
+        workflow,
+        { type: 'text', text: '并发送给' },
+        mention,
+        file,
+      ],
+      '请执行该工作流，整理结果后发送。',
+    );
+    expect(next.some((s) => s.type === 'workflow')).toBe(true);
+    expect(next.some((s) => s.type === 'mention')).toBe(true);
+    expect(next.some((s) => s.type === 'file')).toBe(true);
+    const text = next
+      .filter((s): s is Extract<ComposerSegment, { type: 'text' }> => s.type === 'text')
+      .map((s) => s.text)
+      .join('');
+    expect(text).toContain('请执行该工作流');
+    expect(text.endsWith('\n')).toBe(false);
+  });
+
+  it('returns chips only when beautified text is blank', () => {
+    const skill = { type: 'skill' as const, slug: 'weather', title: '天气' };
+    expect(applyBeautifiedTextToSegments([skill], '   ')).toEqual([skill]);
+  });
+
+  it('weaves leftover workflow name after 然后 onto the same line', () => {
+    const workflow = {
+      type: 'workflow' as const,
+      id: 'wf_1',
+      name: '合同审核 11:14',
+      source: 'mine',
+    };
+    const next = applyBeautifiedTextToSegments(
+      [{ type: 'text', text: '然后' }, workflow, { type: 'text', text: '发送给' }],
+      '然后\n合同审核 11:14发送给@侯正亚',
+    );
+    const types = next.map((s) => s.type);
+    const workflowAt = types.indexOf('workflow');
+    expect(workflowAt).toBeGreaterThan(0);
+    expect(next[workflowAt - 1]).toMatchObject({ type: 'text', text: '然后' });
+    expect(next[workflowAt + 1]).toMatchObject({ type: 'text', text: expect.stringMatching(/^发送给/) });
   });
 });

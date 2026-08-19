@@ -193,6 +193,19 @@ export function useInputComposerCore({
         }
         e.preventDefault();
         onSubmit?.();
+        return;
+      }
+
+      // 任务描述：Enter 插入 <br>，避免 Chrome 生成 DIV 导致下一行工作流 chip 换行。
+      // 会话 submitMode=send，Shift+Enter 仍走浏览器默认，不改普通对话。
+      if (submitMode === 'newline' && e.key === 'Enter') {
+        if (skillPicker.open) return;
+        const nativeEvent = e.nativeEvent as KeyboardEvent;
+        if (isComposingRef.current || nativeEvent.isComposing || nativeEvent.keyCode === 229) {
+          return;
+        }
+        e.preventDefault();
+        mentionEditorRef.current?.insertLineBreak();
       }
     },
     [

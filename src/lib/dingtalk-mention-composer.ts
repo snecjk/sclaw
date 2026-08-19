@@ -121,6 +121,20 @@ function appendTextSegment(segments: ComposerSegment[], text: string): void {
   }
 }
 
+/** 文末 chip 后的光标/选区锚点：Chrome 在 contenteditable=false 作为最后节点时无法点选。 */
+const COMPOSER_CARET_ANCHOR = '\u200B';
+
+function stripComposerCaretAnchor(text: string): string {
+  return text.replace(/\u200B/g, '');
+}
+
+/** 最后一个 inline chip 后面必须有可落点的文本，否则文末 @/工作流无法点选。 */
+export function ensureTrailingCaretAnchor(root: HTMLElement): void {
+  const last = root.lastChild;
+  if (!last || !isInlineTokenSpan(last)) return;
+  root.appendChild(document.createTextNode(`\u00A0${COMPOSER_CARET_ANCHOR}`));
+}
+
 /** 把 segment / 纯文本里的 `\n` 还原成 `<br>`，避免 contenteditable 把换行压成空格。 */
 function appendTextWithLineBreaks(parent: ParentNode, text: string): void {
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -218,7 +232,8 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
 
   const walk = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
-      const text = node.textContent ?? '';
+      const text = stripComposerCaretAnchor(node.textContent ?? '');
+      if (!text) return;
       plainText += text;
       appendTextSegment(segments, text);
       return;
@@ -554,25 +569,33 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
   const visit = (node: Node): PlainTextBoundary | null => {
     if (node.nodeType === Node.TEXT_NODE) {
       const textNode = node as Text;
-      const raw = (textNode.data ?? '').replace(/\u00A0/g, ' ');
-      let text = raw;
-      let nodeStart = 0;
-
-      if (skippingLeadingWs) {
-        const trimmed = raw.replace(/^\s+/, '');
-        const skipped = raw.length - trimmed.length;
-        if (trimmed.length === 0) {
-          // 整段都是 skill 后的前导空白：不计入 plainText 偏移
-          return null;
+      const data = textNode.data ?? '';
+      // 真实下标映射：ZWSP 不计入 plainText，但 range offset 必须落在真实 DOM 上
+      const realIndexByPlain: number[] = [];
+      let stillSkippingLead = skippingLeadingWs;
+      for (let i = 0; i < data.length; i += 1) {
+        const ch = data[i]!;
+        if (ch === '\u200B') continue;
+        const plainCh = ch === '\u00A0' ? ' ' : ch;
+        if (stillSkippingLead && /[ \t]/.test(plainCh)) continue;
+        if (stillSkippingLead) {
+          stillSkippingLead = false;
+          skippingLeadingWs = false;
         }
-        text = trimmed;
-        nodeStart = skipped;
-        skippingLeadingWs = false;
+        realIndexByPlain.push(i);
+      }
+      if (realIndexByPlain.length === 0) {
+        return null;
       }
 
-      const next = current + text.length;
+      const next = current + realIndexByPlain.length;
       if (targetOffset <= next) {
-        return { node: textNode, offset: nodeStart + (targetOffset - current) };
+        const plainOffsetInNode = targetOffset - current;
+        if (plainOffsetInNode >= realIndexByPlain.length) {
+          const lastReal = realIndexByPlain[realIndexByPlain.length - 1]!;
+          return { node: textNode, offset: lastReal + 1 };
+        }
+        return { node: textNode, offset: realIndexByPlain[plainOffsetInNode]! };
       }
       current = next;
       return null;
@@ -587,7 +610,7 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
       // （不含 removable 模式下 × 删除按钮的字符），否则偏移量会与序列化错位。
       const text = isMentionSpan(node)
         ? `@${node.dataset.mentionName ?? ''}`
-        : (node.textContent ?? '');
+        : (node.dataset.workflowName ?? node.textContent ?? '');
       const next = current + text.length;
       // span 不可拆分：严格落在 (current, next) 内部才视为非法返回 null。
       // targetOffset === next 表示"紧贴 span 之后"的合法边界，必须推进 current
@@ -628,7 +651,33 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
     if (boundary) return boundary;
   }
 
+  // 紧贴最后一个 chip 之后 / 全文末尾：visit 只推进 current 不返回边界，这里补上
+  if (targetOffset === current) {
+    return boundaryAtEditorEnd(root);
+  }
+
   return null;
+}
+
+function boundaryAtEditorEnd(root: HTMLElement): PlainTextBoundary {
+  let lastText: Text | null = null;
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (stripComposerCaretAnchor(node.textContent ?? '').length > 0) {
+        lastText = node as Text;
+      }
+      return;
+    }
+    if (node instanceof HTMLElement) {
+      if (isInlineTokenSpan(node)) return;
+      node.childNodes.forEach(walk);
+    }
+  };
+  root.childNodes.forEach(walk);
+  if (lastText) {
+    return { node: lastText, offset: lastText.data.length };
+  }
+  return { node: root, offset: root.childNodes.length };
 }
 
 function buildRangeFromPlainTextOffsets(
@@ -716,8 +765,8 @@ const MENTION_REMOVE_BTN_CLASS = [
 export function createMentionSpan(mention: DingTalkMention, options?: MentionSpanOptions): HTMLSpanElement {
   const span = document.createElement('span');
   span.className = options?.removable
-    ? `${MENTION_SPAN_BASE_CLASS} inline-flex items-center gap-0.5 px-1 py-px`
-    : `${MENTION_SPAN_BASE_CLASS} inline px-0.5`;
+    ? `${MENTION_SPAN_BASE_CLASS} inline-flex items-center gap-0.5 px-1 py-px select-all`
+    : `${MENTION_SPAN_BASE_CLASS} inline px-0.5 select-all`;
   span.contentEditable = 'false';
   span.dataset.mentionType = mention.type;
   span.dataset.mentionName = mention.displayName;
@@ -946,6 +995,7 @@ export function setMentionEditorSegments(
     }
   }
   root.appendChild(fragment);
+  ensureTrailingCaretAnchor(root);
 }
 
 const SKILL_WRENCH_SVG =
@@ -1001,15 +1051,105 @@ function resolveCaretRange(root: HTMLElement): Range {
 /** 在光标处插入 token 与其分隔空格，并把光标停在空格之后。 */
 function insertTokenAtCaret(root: HTMLElement, span: HTMLSpanElement): void {
   const space = document.createTextNode('\u00A0');
-  const fragment = document.createDocumentFragment();
-  fragment.append(span, space);
-
   const range = resolveCaretRange(root);
   range.deleteContents();
-  range.insertNode(fragment);
+
+  // 回车后 Chrome 行是 `<div>你好<br></div>`。insertNode 会把 chip 拆到 BR 后/下一 DIV。
+  // 插在 trailing BR 前面，chip 与「你好」同一行。无 BR 的首行/会话保持原 insertNode。
+  const trailingBr = findTrailingBreakAfterCaret(range);
+  if (trailingBr?.parentNode) {
+    trailingBr.parentNode.insertBefore(span, trailingBr);
+    trailingBr.parentNode.insertBefore(space, trailingBr);
+  } else {
+    const fragment = document.createDocumentFragment();
+    fragment.append(span, space);
+    range.insertNode(fragment);
+  }
+
+  mergeTokenIfSplitIntoNextBlock(root, span);
 
   const caretRange = document.createRange();
   caretRange.setStart(space, space.length);
+  caretRange.collapse(true);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(caretRange);
+  root.focus();
+  ensureTrailingCaretAnchor(root);
+}
+
+/** 光标落在「文本末尾 + 行尾 BR」时，返回这个 BR。 */
+function findTrailingBreakAfterCaret(range: Range): HTMLBRElement | null {
+  const { startContainer, startOffset } = range;
+  if (startContainer.nodeType === Node.TEXT_NODE) {
+    const textNode = startContainer as Text;
+    if (startOffset < textNode.data.length) return null;
+    const next = textNode.nextSibling;
+    return next instanceof HTMLBRElement ? next : null;
+  }
+  if (startContainer instanceof HTMLElement) {
+    const node = startContainer.childNodes[startOffset] ?? null;
+    return node instanceof HTMLBRElement ? node : null;
+  }
+  return null;
+}
+
+/**
+ * Chrome 把 chip 拆进下一个 DIV、上一 DIV 又不带行尾 BR 时，贴回上一行。
+ * 上一行以 BR 结尾说明用户已经换段，不合并。
+ */
+function mergeTokenIfSplitIntoNextBlock(root: HTMLElement, span: HTMLSpanElement): void {
+  const parent = span.parentElement;
+  if (!parent || parent === root || !isEditorBlockElement(parent)) return;
+
+  const beforeHasText = Array.from(parent.childNodes).some((node) => {
+    if (node === span) return false;
+    if (node.nodeType === Node.TEXT_NODE) {
+      return (node.textContent ?? '').replace(/[\u200B\u00A0\s]/g, '').length > 0;
+    }
+    return isInlineTokenSpan(node);
+  });
+  if (beforeHasText) return;
+
+  const prev = parent.previousSibling;
+  if (!prev || !isEditorBlockElement(prev)) return;
+  if (blockEndsWithLineBreak(prev)) return;
+
+  while (parent.firstChild) {
+    prev.appendChild(parent.firstChild);
+  }
+  parent.remove();
+}
+
+function blockEndsWithLineBreak(block: HTMLElement): boolean {
+  let last: ChildNode | null = block.lastChild;
+  while (
+    last
+    && last.nodeType === Node.TEXT_NODE
+    && (last.textContent ?? '').replace(/[\u200B]/g, '').length === 0
+  ) {
+    last = last.previousSibling;
+  }
+  return last instanceof HTMLBRElement;
+}
+
+/** 任务描述 Enter 插入 `<br>`，避免 Chrome 生成 DIV 把下一行 chip 拆下去。会话仍走默认换段。 */
+export function insertLineBreakAtCaret(root: HTMLElement): void {
+  const range = resolveCaretRange(root);
+  range.deleteContents();
+  const br = document.createElement('br');
+  range.insertNode(br);
+  if (!br.nextSibling) {
+    const anchor = document.createTextNode('\u200B');
+    br.parentNode?.insertBefore(anchor, br.nextSibling);
+  }
+  const after = br.nextSibling;
+  const caretRange = document.createRange();
+  if (after?.nodeType === Node.TEXT_NODE) {
+    caretRange.setStart(after, 0);
+  } else {
+    caretRange.setStartAfter(br);
+  }
   caretRange.collapse(true);
   const selection = window.getSelection();
   selection?.removeAllRanges();
@@ -1075,7 +1215,11 @@ export function insertMentionAtTrigger(
   options?: MentionSpanOptions,
 ): void {
   const selection = window.getSelection();
-  const triggerRange = buildRangeFromPlainTextOffsets(root, trigger.startOffset, trigger.endOffset);
+  let triggerRange = buildRangeFromPlainTextOffsets(root, trigger.startOffset, trigger.endOffset);
+  if (!triggerRange) {
+    // 文末 @ 在 Chrome 里偏移常映射失败，回退到 DOM 里定位 `@query`
+    triggerRange = findMentionTriggerRangeInDom(root, trigger);
+  }
   if (!triggerRange) return;
   triggerRange.deleteContents();
 
@@ -1085,12 +1229,57 @@ export function insertMentionAtTrigger(
   fragment.append(mentionSpan, space);
   triggerRange.insertNode(fragment);
 
+  if (mentionSpan.previousSibling instanceof HTMLBRElement) {
+    mentionSpan.previousSibling.remove();
+  }
+
   const caretRange = document.createRange();
   caretRange.setStart(space, 1);
   caretRange.collapse(true);
   selection?.removeAllRanges();
   selection?.addRange(caretRange);
   root.focus();
+  ensureTrailingCaretAnchor(root);
+}
+
+/** 在文本节点里从后往前找 `@query`，供文末 insertMention 偏移失败时兜底。 */
+function findMentionTriggerRangeInDom(
+  root: HTMLElement,
+  trigger: ActiveMentionTrigger,
+): Range | null {
+  const texts: Text[] = [];
+  const collect = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      texts.push(node as Text);
+      return;
+    }
+    if (node instanceof HTMLElement && !isInlineTokenSpan(node)) {
+      node.childNodes.forEach(collect);
+    }
+  };
+  root.childNodes.forEach(collect);
+
+  for (let i = texts.length - 1; i >= 0; i -= 1) {
+    const node = texts[i]!;
+    const data = node.data ?? '';
+    const atIdx = data.lastIndexOf('@');
+    if (atIdx < 0) continue;
+    const after = data.slice(atIdx + 1);
+    const matched = after.match(/^([^\s@\n]*)/);
+    const query = matched?.[1] ?? '';
+    if (trigger.query && query !== trigger.query && !query.startsWith(trigger.query) && !trigger.query.startsWith(query)) {
+      continue;
+    }
+    const range = document.createRange();
+    try {
+      range.setStart(node, atIdx);
+      range.setEnd(node, atIdx + 1 + query.length);
+      return range;
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 /**
@@ -1196,6 +1385,7 @@ export function setMentionEditorMentions(
     fragment.appendChild(document.createTextNode('\u00A0'));
   });
   root.appendChild(fragment);
+  ensureTrailingCaretAnchor(root);
 }
 
 export function isCaretInsideMentionSpan(_root: HTMLElement): boolean {

@@ -154,15 +154,7 @@
         "quickInputDeleting": "删除中…",
         "quickInputLoading": "加载中…",
         "quickInputLoadFailed": "快捷输入加载失败",
-        "quickInputSaveFailed": "操作失败，请稍后重试",
-        "quickInputBeautifyButton": "AI美化",
-        "quickInputBeautifying": "美化中…",
-        "quickInputBeautifyAria": "AI 美化输入内容",
-        "quickInputBeautifyNoChange": "内容已较规范，无需调整",
-        "quickInputBeautifyFallback": "模型暂时不可用，已使用基础规则优化",
-        "quickInputBeautifySuccess": "AI 已美化输入内容",
-        "quickInputBeautifySuccessWithModel": "AI 已美化（{{model}}）",
-        "quickInputBeautifyFailed": "AI 美化失败，请稍后重试"
+        "quickInputSaveFailed": "操作失败，请稍后重试"
     },
     "streaming": {
         "connectingModel": "连接模型中...",

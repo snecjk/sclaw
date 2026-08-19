@@ -1,14 +1,25 @@
 /**
  * AI 美化按钮：内部管理 loading / 请求 / toast，父组件只传 value 与结果回调。
  * 接口对齐 TaskCreateModal：/api/scheduled-tasks/beautify-instruction
+ * 文案固定中文，不做多语言。
  */
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { AiBeautifyIcon } from '@/components/icons/AiBeautifyIcon';
 import { hostApiFetch } from '@/lib/host-api';
 import { cn } from '@/lib/utils';
+
+const COPY = {
+  button: 'AI美化',
+  beautifying: '美化中…',
+  aria: 'AI 美化',
+  noChange: '内容已较规范，无需调整',
+  fallback: '模型暂时不可用，已使用基础规则优化',
+  success: 'AI 已美化',
+  successWithModel: (model: string) => `AI 已美化（${model}）`,
+  failed: 'AI 美化失败，请稍后重试',
+} as const;
 
 export interface AiBeautifyButtonProps {
   value: string;
@@ -17,10 +28,12 @@ export interface AiBeautifyButtonProps {
   onEmpty?: () => void;
   disabled?: boolean;
   className?: string;
-  /** 美化场景：task=定时任务（默认），prompt=提示词模版 */
+  /** 美化场景：task=定时任务描述，prompt=提示词模版（默认） */
   type?: 'task' | 'prompt';
   workflowId?: string;
   workflowName?: string;
+  /** 点击时读取最新工作流上下文（优先于 workflowId / workflowName） */
+  resolveWorkflow?: () => { workflowId?: string; workflowName?: string };
 }
 
 export function AiBeautifyButton({
@@ -32,8 +45,8 @@ export function AiBeautifyButton({
   type = 'prompt',
   workflowId,
   workflowName,
+  resolveWorkflow,
 }: AiBeautifyButtonProps) {
-  const { t } = useTranslation('chat');
   const [beautifying, setBeautifying] = useState(false);
 
   const handleBeautify = async () => {
@@ -42,6 +55,10 @@ export function AiBeautifyButton({
       onEmpty?.();
       return;
     }
+
+    const workflow = resolveWorkflow?.() ?? {};
+    const nextWorkflowId = workflow.workflowId || workflowId;
+    const nextWorkflowName = workflow.workflowName || workflowName;
 
     setBeautifying(true);
     try {
@@ -55,30 +72,28 @@ export function AiBeautifyButton({
         body: JSON.stringify({
           instruction: trimmed,
           type,
-          workflowId: workflowId || undefined,
-          workflowName: workflowName || undefined,
+          workflowId: nextWorkflowId || undefined,
+          workflowName: nextWorkflowName || undefined,
         }),
       });
 
       onBeautified(result.instruction);
 
       if (!result.changed) {
-        toast.info(t('composer.quickInputBeautifyNoChange'));
+        toast.info(COPY.noChange);
         return;
       }
 
       if (result.source === 'rules-fallback') {
-        toast.warning(t('composer.quickInputBeautifyFallback'));
+        toast.warning(COPY.fallback);
         return;
       }
 
       toast.success(
-        result.model
-          ? t('composer.quickInputBeautifySuccessWithModel', { model: result.model })
-          : t('composer.quickInputBeautifySuccess'),
+        result.model ? COPY.successWithModel(result.model) : COPY.success,
       );
     } catch (err) {
-      toast.error(String(err) || t('composer.quickInputBeautifyFailed'));
+      toast.error(String(err) || COPY.failed);
     } finally {
       setBeautifying(false);
     }
@@ -97,16 +112,14 @@ export function AiBeautifyButton({
         'disabled:cursor-not-allowed disabled:opacity-50',
         className,
       )}
-      aria-label={t('composer.quickInputBeautifyAria')}
+      aria-label={COPY.aria}
     >
       {beautifying ? (
         <Loader2 className="shrink-0 animate-spin" width={11} height={12} aria-hidden />
       ) : (
         <AiBeautifyIcon />
       )}
-      {beautifying
-        ? t('composer.quickInputBeautifying')
-        : t('composer.quickInputBeautifyButton')}
+      {beautifying ? COPY.beautifying : COPY.button}
     </button>
   );
 }

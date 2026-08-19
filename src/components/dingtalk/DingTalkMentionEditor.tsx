@@ -19,6 +19,8 @@ import {
   insertWorkflowSpan,
   consumeSkillTriggerText,
   consumeSlashTriggerText,
+  ensureTrailingCaretAnchor,
+  insertLineBreakAtCaret,
   readAttachmentIdFromSpan,
   readCaretPlainTextOffset,
   MENTION_SPAN_SELECTOR,
@@ -96,6 +98,8 @@ export interface DingTalkMentionEditorHandle {
   getCaretPlainTextOffset: () => number | null;
   /** 插入 `@` 并打开钉钉 mention 选择（与手动输入 `@` 等价） */
   openMentionPicker: () => void;
+  /** 任务描述换行：插入 `<br>` 而不是 Chrome 的 DIV */
+  insertLineBreak: () => void;
 }
 
 interface DingTalkMentionEditorProps {
@@ -169,6 +173,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
     const syncFromDom = useCallback((syncTrigger = true) => {
       const root = editorRef.current;
       if (!root) return;
+      ensureTrailingCaretAnchor(root);
       const snapshot = serializeMentionEditor(root);
       onSnapshotChange?.(snapshot);
       if (!syncTrigger) return;
@@ -307,6 +312,13 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         insertAtTriggerCharacter(root);
         syncFromDom();
         onTriggerChange?.(detectActiveMentionTrigger(root));
+      },
+      insertLineBreak: () => {
+        const root = editorRef.current;
+        if (!root) return;
+        insertLineBreakAtCaret(root);
+        syncFromDom();
+        captureCaretOffset();
       },
     }), [captureCaretOffset, onTriggerChange, removableMentions, resolveInsertOffset, syncFromDom]);
 

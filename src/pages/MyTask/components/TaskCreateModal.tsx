@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Loader2, ChevronDown, Folder, FolderPlus, ArrowLeft } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
+import { AiBeautifyButton } from '@/components/ai-beautify/AiBeautifyButton';
 import { SchedulePicker, type ScheduleValue } from './SchedulePicker';
 import {
   scheduleValueToCron,
@@ -33,7 +34,7 @@ import { useAuthStore, isSiteUser } from '@/stores/auth';
 import type { DataCenterEntry, DataCenterSpace, DataCenterSpaceType } from '@/types/data-center';
 import { toast } from 'sonner';
 import { IconCheckbox } from '@/components/icon-checkbox';
-import { TaskInstructionComposer, type TaskComposerSnapshot } from './TaskInstructionComposer';
+import { TaskInstructionComposer, type TaskComposerSnapshot, type TaskInstructionComposerHandle } from './TaskInstructionComposer';
 import type { PersistedComposerSegment } from '@/lib/dingtalk-mention-composer';
 import { buildComposerGatewayPayload } from '@/lib/composer-gateway-text';
 import { resolveSkillPrompt } from '@/lib/skill-plaza-resolve';
@@ -815,6 +816,7 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
   const [saving, setSaving] = useState(false);
   const [instructionMentions] = useState<DingTalkMention[]>(init.recipients);
   const composerSnapshotRef = useRef<TaskComposerSnapshot | null>(null);
+  const instructionComposerRef = useRef<TaskInstructionComposerHandle>(null);
   const initialComposerSegments = init.composerSegments;
   const initialCreatedViaNl = init.createdViaNl;
   const [errors, setErrors] = useState<{ name?: string; instructions?: string; schedule?: string }>({});
@@ -1046,10 +1048,34 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className={taskCreateFormLabelClass}>
-              {t('myTask.createModal.instructionsLabel')}
-            </label>
+            <div className="flex items-center justify-between gap-3">
+              <label className={taskCreateFormLabelClass}>
+                {t('myTask.createModal.instructionsLabel')}
+              </label>
+              <AiBeautifyButton
+                type="task"
+                value={instructions}
+                disabled={saving}
+                className="shrink-0"
+                resolveWorkflow={() => {
+                  const wf = composerSnapshotRef.current?.workflows[0];
+                  return { workflowId: wf?.id, workflowName: wf?.name };
+                }}
+                onBeautified={(next) => {
+                  if (instructionComposerRef.current) {
+                    instructionComposerRef.current.applyBeautifiedText(next);
+                  } else {
+                    setInstructions(next);
+                  }
+                  if (errors.instructions) setErrors((p) => ({ ...p, instructions: undefined }));
+                }}
+                onEmpty={() => {
+                  setErrors((p) => ({ ...p, instructions: t('myTask.createModal.instructionsRequired') }));
+                }}
+              />
+            </div>
             <TaskInstructionComposer
+              ref={instructionComposerRef}
               value={instructions}
               initialMentions={instructionMentions}
               initialSegments={initialComposerSegments}

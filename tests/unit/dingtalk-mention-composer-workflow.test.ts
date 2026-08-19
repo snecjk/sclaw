@@ -4,6 +4,7 @@ import {
   insertSkillSpan,
   insertWorkflowSpan,
   serializeMentionEditor,
+  setMentionEditorSegments,
   WORKFLOW_SPAN_SELECTOR,
 } from '@/lib/dingtalk-mention-composer';
 
@@ -59,5 +60,27 @@ describe('dingtalk-mention-composer workflow token', () => {
     expect(snapshot.workflowId).toBe('wf_a');
     expect(snapshot.skills).toHaveLength(2);
     expect(snapshot.skill?.slug).toBe('transit-rate');
+  });
+
+  it('renders workflow token as inline-flex so it stays with surrounding text', () => {
+    const root = document.createElement('div');
+    insertWorkflowSpan(root, 'wf_a', '七夕问候语', 'mine');
+    const token = root.querySelector(WORKFLOW_SPAN_SELECTOR);
+    expect(token).toBeInstanceOf(HTMLSpanElement);
+    expect(token?.classList.contains('inline-flex')).toBe(true);
+  });
+
+  it('keeps a trailing text node after a mention at the end so it can be selected', () => {
+    const root = document.createElement('div');
+    setMentionEditorSegments(root, [
+      { type: 'text', text: '发送给' },
+      {
+        type: 'mention',
+        mention: { type: 'user', displayName: '侯正亚', userId: 'u1' },
+      },
+    ]);
+    expect(root.lastChild?.nodeType).toBe(Node.TEXT_NODE);
+    expect((root.lastChild?.textContent ?? '').length).toBeGreaterThan(0);
+    expect(serializeMentionEditor(root).plainText).not.toContain('\u200B');
   });
 });
