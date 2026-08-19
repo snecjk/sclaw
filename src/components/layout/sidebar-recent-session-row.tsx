@@ -4,7 +4,6 @@
  * 布局：标题纯文字；行尾最右侧非 hover 显示状态（或置顶钉），hover 用「...」覆盖。
  */
 import { useTranslation } from 'react-i18next';
-import { SidebarChannelSourceBadge } from '@/components/layout/sidebar-channel-source-badge';
 import { SidebarRecentSessionRowTrailing } from '@/components/layout/sidebar-recent-session-row-trailing';
 import { cn } from '@/lib/utils';
 import {
@@ -108,20 +107,18 @@ export function SidebarRecentSessionRow({
           className={cn(
             'flex h-8 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-1 text-left',
             sidebarSingleActionRowPaddingClass,
-            'pr-8',
+            channelSource && isPinned ? 'pr-[62px]' : 'pr-8',
           )}
         >
-          <span className="flex min-w-0 flex-1 items-center gap-0">
-            <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>
-              {label}
-            </span>
-            <SidebarChannelSourceBadge source={channelSource} />
+          <span className={cn('min-w-0 flex-1 truncate', sidebarListItemTextClass)}>
+            {label}
           </span>
         </button>
         <SidebarRecentSessionRowTrailing
           sessionKey={session.key}
           isActive={isActive}
           isPinned={isPinned}
+          channelSource={channelSource}
           showUnreadDot={showUnreadDot}
           hasStatusMarker={hasStatusMarker}
           onPin={onPin}
