@@ -63,7 +63,9 @@ export function SidebarProjectSessionRowTrailing({
     >
       <div
         className={cn(
-          'pointer-events-none flex h-5 w-full items-center justify-end gap-1',
+          // 常驻状态与 hover 后的 28px「更多」按钮共用同一中心点，
+          // 从而对齐项目行右侧第二列操作图标。
+          'pointer-events-none flex h-5 w-full items-center justify-center gap-1',
           'transition-opacity group-hover:opacity-0 group-hover:invisible',
         )}
       >

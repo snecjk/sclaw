@@ -25,7 +25,10 @@ export function SidebarChannelSourceBadge({
   return (
     <span
       className={cn(
-        'ml-1.5 shrink-0 rounded px-1 py-px text-[10px] leading-3 font-medium tracking-wide',
+        // 与会话行尾 16px 状态图标使用同一视觉高度；固定最小宽度，
+        // 避免「钉钉 / 微信 / App」因字形宽度不同产生横向跳动。
+        'ml-1.5 inline-flex h-4 min-w-8 shrink-0 items-center justify-center rounded px-1',
+        'text-center text-[10px] font-medium leading-none tracking-wide',
         'border border-[#93c5fd] bg-[#eff6ff] text-[#3b82f6]',
         className,
       )}

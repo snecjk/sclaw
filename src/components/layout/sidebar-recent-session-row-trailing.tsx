@@ -58,13 +58,13 @@ export function SidebarRecentSessionRowTrailing({
     <div
       className={cn(
         sidebarSingleActionTrailingSlotClass,
-        'flex items-center justify-end',
+        'right-1 flex items-center justify-center',
         className,
       )}
     >
       <div
         className={cn(
-          'pointer-events-none flex h-5 w-full items-center justify-end gap-1',
+          'pointer-events-none flex h-5 w-full items-center justify-center gap-1',
           'transition-opacity group-hover:opacity-0 group-hover:invisible',
         )}
       >
@@ -81,7 +81,7 @@ export function SidebarRecentSessionRowTrailing({
       </div>
       <div
         className={cn(
-          'absolute inset-y-0 right-0 flex w-7 items-center justify-end',
+          'absolute inset-y-0 right-0 flex w-7 items-center justify-center',
           'invisible opacity-0 transition-opacity group-hover:visible group-hover:opacity-100',
           'rounded-md',
           isActive

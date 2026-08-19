@@ -116,6 +116,7 @@ export function SidebarProjectSessionRow({
           className={cn(
             'flex h-8 min-w-0 w-full flex-1 items-center overflow-hidden rounded-lg bg-transparent px-[10px] py-1 text-left',
             sidebarSingleActionRowPaddingClass,
+            'pr-8',
           )}
         >
           <span className="flex min-w-0 flex-1 items-center gap-0">
@@ -132,6 +133,7 @@ export function SidebarProjectSessionRow({
           isDraft={isDraft}
           showUnreadDot={showUnreadDot}
           hasStatusMarker={hasStatusMarker}
+          className="right-1"
           onPin={onPin}
           onRename={onStartRename}
           onDelete={onDelete}
