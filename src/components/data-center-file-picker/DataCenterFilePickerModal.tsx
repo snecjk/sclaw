@@ -26,16 +26,14 @@
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, ChevronRight, Loader2, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import directoryIcon from '@/assets/icons/directory.svg';
-import { FileIcon } from '@/components/attachments/AttachmentChips';
 import { IconCheckbox } from '@/components/icon-checkbox';
 import { Button } from '@/components/ui/button';
 import { getDataCenterSpaces, listDataCenterEntries } from '@/lib/data-center-api';
-import { cn } from '@/lib/utils';
-import type { DataCenterEntry } from '@/types/data-center';
+import { getEntryIconSrc } from '@/lib/data-center-entry-icon';
+import type { DataCenterBreadcrumb, DataCenterEntry } from '@/types/data-center';
 import { stageDataCenterSelections } from './stage-selection';
 import type {
   DataCenterFilePickerType,
@@ -73,19 +71,28 @@ const STYLES = {
   searchIcon: 'h-4 w-4  text-[#86909C]',
   /** 列表区（主体） */
   list:
-    'flex min-h-0 flex-1 flex-col justify-center self-stretch overflow-y-auto bg-white p-2 dark:bg-background',
-  rowBase:
-    'flex h-12 w-full min-w-0 items-center gap-1.5 overflow-hidden text-left',
-  rowText: 'min-w-0 flex-1 truncate text-[14px] font-medium leading-[18px] text-[#1D2129]',
-  fileText:
-    'min-w-0 flex-1 truncate text-[12px] font-semibold leading-[18px] tracking-normal text-[#1D2129] [font-variation-settings:"opsz"_auto]',
+    'sto-hide-scrollbar flex min-h-0 flex-1 flex-col self-stretch overflow-y-auto bg-white px-2 py-2.5 dark:bg-background',
+  /**
+   * 目录 / 文件行统一：高 38px，上下 margin 8px，gap 6px
+   * （图标 30×30，字号 14 / 500 / 18）
+   */
+  folderRow:
+    'flex my-2 h-[38px] w-full min-w-0 shrink-0 items-center gap-1.5 overflow-hidden text-left',
+  fileRow:
+    'flex my-2 h-[38px] w-full min-w-0 shrink-0 cursor-pointer items-center gap-1.5 overflow-hidden text-left',
+  /** 前置列（chevron / checkbox 同宽，保证同级文件与目录图标对齐） */
+  leading: 'flex h-[18px] w-[18px] shrink-0 items-center justify-center',
+  rowText:
+    'min-w-0 flex-1 truncate text-[14px] font-medium leading-[18px] text-[#1D2129]',
   rowIcon: 'h-[30px] w-[30px] shrink-0 object-contain',
   chevron: 'h-[18px] w-[18px] shrink-0 text-black',
   fileSize: 'shrink-0 text-[11px] text-[#86909C]',
-  muted: 'py-3 text-[12px] text-[#86909C]',
-  mutedInline: 'flex items-center gap-2 py-3 text-[12px] text-[#86909C]',
+  muted: 'shrink-0 py-3 text-[12px] text-[#86909C]',
+  mutedInline: 'flex my-2 h-[38px] shrink-0 items-center gap-1.5 text-[12px] text-[#86909C]',
+  /** 目录子树包裹：禁止作为 flex 子项被压扁 */
+  folderWrap: 'shrink-0',
   /** 底栏 */
-  footer: 'flex shrink-0 items-center justify-end',
+  footer: 'flex shrink-0 items-center justify-end pt-4',
   cancelBtn: 'rounded-[12px] text-[12px] font-normal',
   confirmBtn:
     'rounded-[12px] bg-[#1D2129] text-[12px] font-normal text-white hover:bg-[#4E5969] dark:bg-primary dark:text-primary-foreground',
@@ -156,6 +163,9 @@ export function DataCenterFilePickerModal({
   const [selected, setSelected] = useState<Record<string, DataCenterPickerSelection>>({});
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<DataCenterEntry[]>([]);
+  /** 与数据中心一致：浏览当前目录（搜索进文件夹后切到该目录） */
+  const [browseParentId, setBrowseParentId] = useState(ROOT_ENTRY_ID);
+  const [breadcrumbs, setBreadcrumbs] = useState<DataCenterBreadcrumb[]>([]);
   /** 确认中：正在 download + stage，禁用关闭/重复点击 */
   const [confirming, setConfirming] = useState(false);
 
@@ -165,6 +175,7 @@ export function DataCenterFilePickerModal({
   const searchPlaceholder = t('composer.attachSearchPlaceholder');
   const emptyLabel = t('composer.attachEmpty');
   const loadingLabel = t('composer.attachLoading');
+  const backLabel = t('composer.attachBack');
 
   /** 打开时重置 UI，并按 type 解析 space（网点共享走 getDataCenterSpaces）。 */
   useEffect(() => {
@@ -177,6 +188,8 @@ export function DataCenterFilePickerModal({
     setOpenMap({ [ROOT_ENTRY_ID]: true });
     setSelected({});
     setSearchResults([]);
+    setBrowseParentId(ROOT_ENTRY_ID);
+    setBreadcrumbs([]);
     setBootstrapError(null);
     setResolvedSpaceId(null);
     setConfirming(false);
@@ -224,7 +237,7 @@ export function DataCenterFilePickerModal({
     return () => window.clearTimeout(timer);
   }, [keyword, open]);
 
-  /** 树节点懒加载：listDataCenterEntries(parent) */
+  /** 树节点懒加载：listDataCenterEntries(parent)（与数据中心一致，不限 entryType） */
   const loadChildren = useCallback(async (parentEntryId: string) => {
     if (type === 'site_shared_artifact' && !resolvedSpaceId) return;
 
@@ -239,30 +252,31 @@ export function DataCenterFilePickerModal({
         sortOrder: 'asc',
       });
       const items = result.items ?? [];
-      console.log('[DataCenterFilePicker] loadChildren', {
-        parentEntryId,
-        type,
-        spaceId: resolvedSpaceId,
-        count: items.length,
-        items,
-      });
       setChildrenMap((prev) => ({ ...prev, [parentEntryId]: items }));
+      if (parentEntryId === browseParentId) {
+        setBreadcrumbs(result.breadcrumbs ?? []);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '加载文件列表失败');
       setChildrenMap((prev) => ({ ...prev, [parentEntryId]: [] }));
+      if (parentEntryId === browseParentId) setBreadcrumbs([]);
     } finally {
       setLoadingMap((prev) => ({ ...prev, [parentEntryId]: false }));
     }
-  }, [type, resolvedSpaceId]);
+  }, [type, resolvedSpaceId, browseParentId]);
 
   useEffect(() => {
     if (!open || bootstrapping || bootstrapError) return;
     if (type === 'site_shared_artifact' && !resolvedSpaceId) return;
     if (debouncedKeyword) return;
-    void loadChildren(ROOT_ENTRY_ID);
-  }, [open, bootstrapping, bootstrapError, debouncedKeyword, loadChildren, type, resolvedSpaceId]);
+    void loadChildren(browseParentId);
+  }, [open, bootstrapping, bootstrapError, debouncedKeyword, loadChildren, type, resolvedSpaceId, browseParentId]);
 
-  /** 关键字搜索：listDataCenterEntries(keyword, entryType=file) */
+  /**
+   * 关键字搜索：与数据中心一致
+   * - 不传 entryType，文件 + 文件夹均可命中
+   * - 有 keyword 时后端按全库 display_name 模糊匹配（不限当前父目录）
+   */
   useEffect(() => {
     if (!open || !debouncedKeyword || bootstrapping) {
       setSearchResults([]);
@@ -276,24 +290,15 @@ export function DataCenterFilePickerModal({
     void listDataCenterEntries({
       spaceType: type,
       spaceId: resolvedSpaceId ?? undefined,
-      parentEntryId: ROOT_ENTRY_ID,
+      parentEntryId: browseParentId,
       keyword: debouncedKeyword,
-      entryType: 'file',
       pageSize: 100,
-      sortField: 'name',
-      sortOrder: 'asc',
+      sortField: 'updatedAt',
+      sortOrder: 'desc',
     })
       .then((result) => {
         if (cancelled) return;
-        const items = (result.items ?? []).filter((item) => item.entryType === 'file');
-        console.log('[DataCenterFilePicker] searchResults', {
-          keyword: debouncedKeyword,
-          type,
-          spaceId: resolvedSpaceId,
-          count: items.length,
-          items,
-        });
-        setSearchResults(items);
+        setSearchResults(result.items ?? []);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -307,7 +312,7 @@ export function DataCenterFilePickerModal({
     return () => {
       cancelled = true;
     };
-  }, [open, debouncedKeyword, type, resolvedSpaceId, bootstrapping]);
+  }, [open, debouncedKeyword, type, resolvedSpaceId, bootstrapping, browseParentId]);
 
   const selectedList = useMemo(() => Object.values(selected), [selected]);
   const selectedCount = selectedList.length;
@@ -338,25 +343,6 @@ export function DataCenterFilePickerModal({
     onClose();
   }, [confirming, onClose]);
 
-  useEffect(() => {
-    if (!open) return;
-    if (debouncedKeyword) {
-      console.log('[DataCenterFilePicker] render list (search)', {
-        keyword: debouncedKeyword,
-        searching,
-        count: searchResults.length,
-        items: searchResults,
-      });
-      return;
-    }
-    console.log('[DataCenterFilePicker] render list (tree)', {
-      openMap,
-      childrenMap,
-      rootCount: childrenMap[ROOT_ENTRY_ID]?.length ?? 0,
-      rootItems: childrenMap[ROOT_ENTRY_ID] ?? [],
-    });
-  }, [open, debouncedKeyword, searching, searchResults, childrenMap, openMap]);
-
   const toggleFile = (entry: DataCenterEntry) => {
     if (entry.entryType !== 'file') return;
     setSelected((prev) => {
@@ -379,6 +365,30 @@ export function DataCenterFilePickerModal({
     });
   };
 
+  /** 与数据中心 enterFolder 一致：清空搜索并进入该目录 */
+  const enterFolder = useCallback((folder: DataCenterEntry) => {
+    if (folder.entryType !== 'folder') return;
+    setKeyword('');
+    setDebouncedKeyword('');
+    setSearchResults([]);
+    setChildrenMap({});
+    setLoadingMap({});
+    setBrowseParentId(folder.entryId);
+    setOpenMap({ [folder.entryId]: true });
+  }, []);
+
+  /** 返回上一级（对齐数据中心面包屑回退） */
+  const goUp = useCallback(() => {
+    if (browseParentId === ROOT_ENTRY_ID) return;
+    const parentId = breadcrumbs.length > 1
+      ? breadcrumbs[breadcrumbs.length - 2]!.entryId
+      : ROOT_ENTRY_ID;
+    setChildrenMap({});
+    setLoadingMap({});
+    setBrowseParentId(parentId);
+    setOpenMap({ [parentId]: true });
+  }, [browseParentId, breadcrumbs]);
+
   const toggleFolder = (folderId: string) => {
     setOpenMap((prev) => {
       const nextOpen = !prev[folderId];
@@ -394,35 +404,50 @@ export function DataCenterFilePickerModal({
   const renderTreeRows = (parentId: string, depth: number): ReactNode => {
     const items = childrenMap[parentId] ?? [];
     const loading = loadingMap[parentId];
+    const indentStyle = { paddingLeft: depth * TREE_INDENT_PX };
     if (loading && items.length === 0) {
       return (
-        <div className={STYLES.mutedInline}>
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        <div className={STYLES.mutedInline} style={indentStyle}>
+          <span className={STYLES.leading}>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          </span>
+          <span className={STYLES.rowIcon} aria-hidden />
           {loadingLabel}
         </div>
       );
     }
     if (!loading && items.length === 0) {
-      return <div className={STYLES.muted}>{emptyLabel}</div>;
+      return (
+        <div className={STYLES.muted} style={indentStyle}>
+          {emptyLabel}
+        </div>
+      );
     }
 
     return items.map((entry) => {
       if (entry.entryType === 'folder') {
         const isOpen = Boolean(openMap[entry.entryId]);
         return (
-          <div key={entry.entryId}>
-            <div style={{ paddingLeft: depth * TREE_INDENT_PX }}>
+          <div key={entry.entryId} className={STYLES.folderWrap}>
+            <div style={indentStyle}>
               <button
                 type="button"
-                className={STYLES.rowBase}
+                className={STYLES.folderRow}
                 onClick={() => toggleFolder(entry.entryId)}
               >
-                {isOpen ? (
-                  <ChevronDown className={STYLES.chevron} />
-                ) : (
-                  <ChevronRight className={STYLES.chevron} />
-                )}
-                <img src={directoryIcon} alt="" className={STYLES.rowIcon} draggable={false} />
+                <span className={STYLES.leading}>
+                  {isOpen ? (
+                    <ChevronDown className={STYLES.chevron} />
+                  ) : (
+                    <ChevronRight className={STYLES.chevron} />
+                  )}
+                </span>
+                <img
+                  src={getEntryIconSrc(entry)}
+                  alt=""
+                  className={STYLES.rowIcon}
+                  draggable={false}
+                />
                 <span className={STYLES.rowText}>{entry.name}</span>
               </button>
             </div>
@@ -437,8 +462,8 @@ export function DataCenterFilePickerModal({
           key={entry.entryId}
           role="button"
           tabIndex={0}
-          className={cn(STYLES.rowBase, 'cursor-pointer')}
-          style={{ paddingLeft: depth * TREE_INDENT_PX }}
+          className={STYLES.fileRow}
+          style={indentStyle}
           onClick={() => toggleFile(entry)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
@@ -447,13 +472,16 @@ export function DataCenterFilePickerModal({
             }
           }}
         >
-          <IconCheckbox checked={checked} />
-          <FileIcon
-            fileName={entry.name}
-            mimeType={entry.mimeType || undefined}
+          <span className={STYLES.leading}>
+            <IconCheckbox checked={checked} />
+          </span>
+          <img
+            src={getEntryIconSrc(entry)}
+            alt=""
             className={STYLES.rowIcon}
+            draggable={false}
           />
-          <span className={STYLES.fileText} title={entry.name}>{entry.name}</span>
+          <span className={STYLES.rowText} title={entry.name}>{entry.name}</span>
           {entry.fileSize > 0 ? (
             <span className={STYLES.fileSize}>{formatBytes(entry.fileSize)}</span>
           ) : null}
@@ -484,13 +512,35 @@ export function DataCenterFilePickerModal({
         return <div className={STYLES.muted}>{emptyLabel}</div>;
       }
       return searchResults.map((entry) => {
+        if (entry.entryType === 'folder') {
+          return (
+            <button
+              key={entry.entryId}
+              type="button"
+              className={STYLES.folderRow}
+              onClick={() => enterFolder(entry)}
+            >
+              <span className={STYLES.leading}>
+                <ChevronRight className={STYLES.chevron} />
+              </span>
+              <img
+                src={getEntryIconSrc(entry)}
+                alt=""
+                className={STYLES.rowIcon}
+                draggable={false}
+              />
+              <span className={STYLES.rowText} title={entry.name}>{entry.name}</span>
+            </button>
+          );
+        }
+
         const checked = Boolean(selected[entry.entryId]);
         return (
           <div
             key={entry.entryId}
             role="button"
             tabIndex={0}
-            className={cn(STYLES.rowBase, 'cursor-pointer')}
+            className={STYLES.fileRow}
             onClick={() => toggleFile(entry)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
@@ -499,13 +549,16 @@ export function DataCenterFilePickerModal({
               }
             }}
           >
-            <IconCheckbox checked={checked} />
-            <FileIcon
-              fileName={entry.name}
-              mimeType={entry.mimeType || undefined}
+            <span className={STYLES.leading}>
+              <IconCheckbox checked={checked} />
+            </span>
+            <img
+              src={getEntryIconSrc(entry)}
+              alt=""
               className={STYLES.rowIcon}
+              draggable={false}
             />
-            <span className={STYLES.fileText} title={entry.name}>{entry.name}</span>
+            <span className={STYLES.rowText} title={entry.name}>{entry.name}</span>
             {entry.fileSize > 0 ? (
               <span className={STYLES.fileSize}>{formatBytes(entry.fileSize)}</span>
             ) : null}
@@ -513,7 +566,21 @@ export function DataCenterFilePickerModal({
         );
       });
     }
-    return renderTreeRows(ROOT_ENTRY_ID, 0);
+
+    const showBack = browseParentId !== ROOT_ENTRY_ID;
+    return (
+      <>
+        {showBack ? (
+          <button type="button" className={STYLES.folderRow} onClick={goUp}>
+            <span className={STYLES.leading}>
+              <ChevronLeft className={STYLES.chevron} />
+            </span>
+            <span className={STYLES.rowText}>{backLabel}</span>
+          </button>
+        ) : null}
+        {renderTreeRows(browseParentId, 0)}
+      </>
+    );
   })();
 
   return createPortal(
