@@ -1651,7 +1651,7 @@ export const sidebarAccountHotzoneTriggerClass = cn(
   'flex h-[46px] min-w-0 flex-1 flex-col justify-center gap-0.5 rounded-[4px] px-2.5 py-1 text-left transition-colors',
   'hover:bg-black/10 data-[state=open]:bg-black/10',
   'dark:hover:bg-white/10 dark:data-[state=open]:bg-white/10',
-  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sto-sidebar-bg)]',
+  'outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0',
 );
 
 /** 展开态底部问号按钮 — 点击热区 32×32，图标仍 20×20（p-1.5 居中），与账号热区 gap 12px */
