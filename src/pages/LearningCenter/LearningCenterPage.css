@@ -179,8 +179,8 @@
   }
 
   .learning-center-page--detail-open .learning-center-tutorial-link {
-    width: 4.75rem;
-    flex-basis: 4.75rem;
+    width: auto;
+    flex-basis: auto;
   }
 
   .learning-center-page--detail-open .learning-center-cases__grid {
@@ -496,7 +496,7 @@
   min-width: 0;
   flex-grow: 1;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 0.875rem;
   padding: 0;
 }
@@ -552,9 +552,9 @@
 
 .learning-center-tutorial-link {
   height: auto;
-  width: 5rem;
-  margin-left: 0;
-  flex: 0 0 5rem;
+  width: auto;
+  margin-left: auto;
+  flex: 0 0 auto;
   justify-content: flex-end;
   gap: 0.15rem;
   padding: 0;

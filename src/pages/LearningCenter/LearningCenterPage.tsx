@@ -549,7 +549,7 @@ export function LearningCenterPage() {
                               <Button
                                 type="button"
                                 variant="link"
-                                className="learning-center-tutorial-link text-primary hover:text-primary"
+                                className="learning-center-tutorial-link h-auto px-0 py-0 text-primary hover:text-primary"
                                 onClick={(event) => {
                                   detailReturnFocusRef.current = event.currentTarget;
                                   setTutorialPanelContainer(tutorialSlotRef.current);
