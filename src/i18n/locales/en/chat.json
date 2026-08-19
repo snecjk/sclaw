@@ -293,6 +293,7 @@
     "preview": {
         "collapsePanel": "Collapse preview",
         "resizeSeparator": "Resize preview panel",
+        "resizeChatSeparator": "Resize chat panel",
         "overflowMenu": "All artifacts",
         "fullscreen": "Fullscreen",
         "expandWorkspace": "Expand preview",

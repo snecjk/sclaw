@@ -49,6 +49,10 @@ interface ClaudeRuntimeExtension {
   build(context: ClaudeRuntimeExtensionContext): Promise<ClaudeRuntimeOptions> | ClaudeRuntimeOptions;
 }
 
+function isAppDevSessionKey(sessionKey: string): boolean {
+  return /^agent:[^:]+:appdev:/.test(sessionKey);
+}
+
 function mergeHooks(
   target: Partial<Record<HookEvent, HookCallbackMatcher[]>>,
   source: Partial<Record<HookEvent, HookCallbackMatcher[]>> | undefined,
@@ -90,6 +94,7 @@ const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
 const workflowToolExtension: ClaudeRuntimeExtension = {
   id: 'sto-workflow-tool',
   async build({ sessionKey }) {
+    if (isAppDevSessionKey(sessionKey)) return {};
     const stoToken = await getStoToken();
     if (!stoToken) {
       logger.warn('[claude-workflow] STO token is unavailable; workflow tools will not be registered');
@@ -116,6 +121,7 @@ const workflowToolExtension: ClaudeRuntimeExtension = {
 const scheduledTaskToolExtension: ClaudeRuntimeExtension = {
   id: 'claude-scheduled-task-tool',
   async build({ sessionKey }) {
+    if (isAppDevSessionKey(sessionKey)) return {};
     const isExecutionContext = isScheduledTaskExecutionSessionKey(sessionKey);
     if (isExecutionContext) {
       return {

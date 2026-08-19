@@ -282,6 +282,7 @@
     "preview": {
         "collapsePanel": "プレビューを閉じる",
         "resizeSeparator": "プレビュー幅を調整",
+        "resizeChatSeparator": "チャット幅を調整",
         "overflowMenu": "すべての成果物",
         "fullscreen": "全画面",
         "expandWorkspace": "プレビューを展開",

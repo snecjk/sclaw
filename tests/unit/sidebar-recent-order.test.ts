@@ -23,6 +23,17 @@ describe('buildInitialSidebarRecentOrder', () => {
       'agent:main:session-a',
     ]);
   });
+
+  it('excludes app-dev workbench sessions from recent order', () => {
+    expect(buildInitialSidebarRecentOrder([
+      ...sessions,
+      { key: 'agent:proj-a:appdev:workspace-1', updatedAt: 999 },
+    ], {})).toEqual([
+      'agent:main:session-b',
+      'agent:main:session-c',
+      'agent:main:session-a',
+    ]);
+  });
 });
 
 describe('sortSessionsByRecentActivity', () => {

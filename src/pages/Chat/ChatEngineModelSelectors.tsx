@@ -156,9 +156,11 @@ function useProjectAgentContext(currentAgentId: string, currentSessionKey: strin
 export function ChatEngineSelector({
   className,
   variant = 'toolbar',
+  allowSessionSwitch = false,
 }: {
   className?: string;
   variant?: 'toolbar' | 'inline';
+  allowSessionSwitch?: boolean;
 }) {
   const { pathname } = useLocation();
   const sending = useChatStore((s) => s.sending);
@@ -186,8 +188,10 @@ export function ChatEngineSelector({
   const isUnusedEmbedSession = isSclawBrowserEmbedChatSessionKey(currentSessionKey)
     && !loading
     && messages.length === 0;
-  const canSwitchEngine = isMainChatHomePath(pathname)
-    && (currentSessionKey === DEFAULT_SESSION_KEY || isUnusedEmbedSession);
+  const canSwitchEngine = allowSessionSwitch || (
+    isMainChatHomePath(pathname)
+    && (currentSessionKey === DEFAULT_SESSION_KEY || isUnusedEmbedSession)
+  );
   const currentEngineType = resolveChatSessionEngineType(
     currentSession,
     agentDefaultEngineType,
@@ -224,6 +228,15 @@ export function ChatEngineSelector({
         });
       }
       await fetchAgents();
+      if (allowSessionSwitch) {
+        useChatStore.setState((state) => ({
+          sessions: state.sessions.map((session) => (
+            session.key === currentSessionKey
+              ? { ...session, engineType }
+              : session
+          )),
+        }));
+      }
       toast.success(`新会话将使用 ${engineType === 'claude' ? 'Claude Agent' : 'OpenClaw'} 引擎`);
     } catch (err) {
       toast.error(`切换引擎失败: ${String(err)}`);
@@ -257,7 +270,9 @@ export function ChatEngineSelector({
     </DropdownMenuContent>
   );
 
-  const engineTriggerTitle = canSwitchEngine
+  const engineTriggerTitle = allowSessionSwitch
+    ? '切换当前建站会话执行引擎'
+    : canSwitchEngine
     ? '切换新会话执行引擎'
     : isSclawBrowserEmbedChatSessionKey(currentSessionKey)
       ? '历史会话不可切换引擎（可切换模型）'

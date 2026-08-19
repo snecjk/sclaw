@@ -7,6 +7,7 @@
  * - 已进入会话：仅由 HomeMainConversation 内嵌渲染（footer 不要再挂一份）
  */
 import { useCallback, useMemo } from 'react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
@@ -72,6 +73,8 @@ export interface HomeComposerProps {
   hideDingTalkMention?: boolean;
   /** 应用开发工作台：接口清单 */
   showInterfaceCatalog?: boolean;
+  /** 可选覆盖默认内联引擎/模型工具栏 */
+  toolbarSelectors?: ReactNode;
 }
 
 export function HomeComposer({
@@ -89,6 +92,7 @@ export function HomeComposer({
   showProjectPicker = false,
   hideDingTalkMention = false,
   showInterfaceCatalog = false,
+  toolbarSelectors,
 }: HomeComposerProps) {
   const { t } = useTranslation('home');
   const agents = useAgentsStore((s) => s.agents);
@@ -118,7 +122,7 @@ export function HomeComposer({
     { messageCount: messagesLength },
   );
 
-  const inlineToolbarSelectors = (
+  const inlineToolbarSelectors = toolbarSelectors ?? (
     <div className="flex min-w-0 flex-1 items-center gap-2">
       <ChatEngineSelector variant="inline" className="min-w-0 flex-1" />
       <ChatModelSelector variant="inline" className="min-w-max shrink-0" />

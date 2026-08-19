@@ -3,7 +3,7 @@
  * 左：项目 Agent 对话（默认注入应用 AGENTS.md 上下文）；
  * 右：所见即所得预览（预览工具栏内可打开系统浏览器）。
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
@@ -13,14 +13,14 @@ import {
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
-import { ensureProjectAgentForWorkspace } from '@/lib/session-catalog-api';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
 import { extractText } from '@/pages/Chat/message-utils';
 import { useStickToBottomInstant } from '@/hooks/use-stick-to-bottom-instant';
-import { HomeComposer } from '@/pages/Home/HomeComposer';
+import { AppDevComposer } from '@/components/app-dev/AppDevComposer';
+import { AppDevSplitBody } from '@/components/app-dev/AppDevSplitBody';
 import { AppDevWorkbenchStage } from '@/components/app-dev/AppDevWorkbenchStage';
 import { AppDevRunStatusMenu } from '@/components/app-dev/AppDevRunStatusMenu';
 import { StoAppCommitDialog } from '@/components/app-dev/StoAppCommitDialog';
@@ -53,6 +53,9 @@ import {
 } from '@/lib/app-dev-api';
 import { useStoAppDeploy } from '@/hooks/use-sto-app-deploy';
 import { useAppDevRunControl } from '@/hooks/use-app-dev-run-control';
+import { useAppDevChatSession } from '@/hooks/use-app-dev-chat-session';
+import { getAgentIdFromSessionKey } from '@/stores/chat/session-identity';
+import { logChatFlow } from '@/stores/chat/chat-flow-log';
 
 function WorkbenchChatPane({
   sessionKey,
@@ -122,6 +125,7 @@ function WorkbenchChatPane({
                     />
                   );
                 }
+                if (item.type !== 'single') return null;
                 return <ChatMessage key={item.key} message={item.message} showThinking={showThinking} />;
               })}
               {activeTurn ? (
@@ -152,12 +156,10 @@ function WorkbenchChatPane({
       ) : null}
 
       <div className="border-t border-border px-3 py-3">
-        <HomeComposer
+        <AppDevComposer
           key={composerSeed ? `seed-${composerSeed.version}` : 'composer'}
           seedText={composerSeed?.text}
           onBeforeSend={onBeforeSend}
-          showDisclaimer={false}
-          footerAlign="center"
         />
       </div>
     </div>
@@ -177,10 +179,11 @@ export default function AppDevWorkbench() {
   const [deployOpen, setDeployOpen] = useState(false);
   const [sourceRevision, setSourceRevision] = useState(0);
   const sending = useChatStore((s) => s.sending);
-  const currentSessionKey = useChatStore((s) => s.currentSessionKey);
   const prevSendingRef = useRef(false);
+  const autoRepairRef = useRef<{ fingerprint: string; attempts: number }>({ fingerprint: '', attempts: 0 });
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
   const appName = workspaces.find((w) => w.id === workspaceId)?.name ?? '我的应用';
+  const appDevSessionKey = useAppDevChatSession(workspaceId);
   const runControl = useAppDevRunControl({ workspaceId, setStatus });
   const deploy = useStoAppDeploy({
     workspaceId,
@@ -200,36 +203,7 @@ export default function AppDevWorkbench() {
 
   useEffect(() => {
     setSourceRevision(0);
-  }, [workspaceId]);
-
-  // 进入工作台：立刻从侧栏隐藏 + 确保 Agent/上下文 + 复用已有会话（避免堆「新对话」）。
-  useEffect(() => {
-    if (!workspaceId) return;
-    useAppDevCatalogStore.getState().registerWorkspaceId(workspaceId);
-    void useAppDevCatalogStore.getState().refresh().catch(() => undefined);
-
-    void (async () => {
-      await useSessionCatalogStore.getState().selectProject(workspaceId).catch(() => undefined);
-      await ensureProjectAgentForWorkspace({ workspaceId }).catch(() => undefined);
-      // OpenClaw seed may overwrite AGENTS.md — re-apply our app context after ensure.
-      await ensureAppDevContext(workspaceId).catch(() => undefined);
-
-      const catalog = useSessionCatalogStore.getState();
-      const chat = useChatStore.getState();
-      const existing = chat.sessions
-        .filter((session) => catalog.sessionWorkspaceByKey[session.key] === workspaceId)
-        .sort((a, b) => {
-          const aAt = chat.sessionLastActivity[a.key] ?? 0;
-          const bAt = chat.sessionLastActivity[b.key] ?? 0;
-          return bAt - aAt;
-        });
-
-      if (existing[0]) {
-        chat.switchSession(existing[0].key);
-      } else {
-        chat.newSession({ projectId: workspaceId, materialize: true });
-      }
-    })();
+    autoRepairRef.current = { fingerprint: '', attempts: 0 };
   }, [workspaceId]);
 
   useEffect(() => {
@@ -278,6 +252,7 @@ export default function AppDevWorkbench() {
         await createAppCheckpoint(workspaceId, '对话修改').catch(() => undefined);
         const errors = await drainAppErrors(workspaceId).catch(() => [] as string[]);
         if (errors.length > 0) setPendingErrors(errors);
+        else autoRepairRef.current = { fingerprint: '', attempts: 0 };
         setSourceRevision((n) => n + 1);
       })();
     }
@@ -290,11 +265,59 @@ export default function AppDevWorkbench() {
     setComposerSeed((prev) => ({ text, version: (prev?.version ?? 0) + 1 }));
   };
 
+  const handlePreviewRuntimeError = (formattedLine: string) => {
+    const line = formattedLine.trim();
+    if (!line) return;
+    setPendingErrors((prev) => {
+      if (prev.includes(line)) return prev;
+      const next = [...prev, line];
+      return next.length > 20 ? next.slice(-20) : next;
+    });
+  };
+
   const handleFillComposerFromDiagnostics = (text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
     setComposerSeed((prev) => ({ text: trimmed, version: (prev?.version ?? 0) + 1 }));
   };
+
+  const sendAutoRepair = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || !appDevSessionKey) return;
+    const fingerprint = trimmed.slice(-4000);
+    const state = autoRepairRef.current;
+    if (state.fingerprint === fingerprint) {
+      if (state.attempts >= 3) {
+        logChatFlow('appdev.auto-repair.skipped.max-attempts', {
+          sessionKey: appDevSessionKey,
+          fingerprint,
+          attempts: state.attempts,
+        });
+        return;
+      }
+      autoRepairRef.current = { fingerprint, attempts: state.attempts + 1 };
+    } else {
+      autoRepairRef.current = { fingerprint, attempts: 1 };
+    }
+    logChatFlow('appdev.auto-repair.dispatch', {
+      sessionKey: appDevSessionKey,
+      fingerprint,
+      attempts: autoRepairRef.current.attempts,
+      textLength: trimmed.length,
+    });
+    void useChatStore.getState().sendMessage({
+      text: trimmed,
+      sessionKey: appDevSessionKey,
+      targetAgentId: getAgentIdFromSessionKey(appDevSessionKey),
+    });
+  }, [appDevSessionKey]);
+
+  useEffect(() => {
+    if (!appDevSessionKey || sending || pendingErrors.length === 0) return;
+    const text = `右侧预览出现了以下报错，请帮我修复：\n\n${pendingErrors.slice(-10).join('\n')}`;
+    setPendingErrors([]);
+    sendAutoRepair(text);
+  }, [appDevSessionKey, pendingErrors, sendAutoRepair, sending]);
 
   const handleRestore = async () => {
     const result = await restoreAppCheckpoint(workspaceId);
@@ -468,7 +491,20 @@ export default function AppDevWorkbench() {
         </Button>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <AppDevSplitBody
+        chat={
+          appDevSessionKey
+            ? (
+              <WorkbenchChatPane
+                sessionKey={appDevSessionKey}
+                appName={appName}
+                composerSeed={composerSeed}
+                onBeforeSend={runControl.interceptRestartIntent}
+              />
+            )
+            : null
+        }
+      >
         <AppDevWorkbenchStage
           workspaceId={workspaceId}
           appName={appName}
@@ -476,25 +512,13 @@ export default function AppDevWorkbench() {
           pendingErrors={pendingErrors}
           onFixErrors={handleFixErrors}
           onDismissErrors={() => setPendingErrors([])}
+          onPreviewRuntimeError={handlePreviewRuntimeError}
           onRetryStart={() => void runControl.start()}
           onFillComposerFromDiagnostics={handleFillComposerFromDiagnostics}
           sourceRevision={sourceRevision}
           previewRevision={runControl.previewRevision}
         />
-
-        <section className="flex w-[400px] min-w-[340px] shrink-0 flex-col border-l border-border">
-          {currentSessionKey
-            ? (
-              <WorkbenchChatPane
-                sessionKey={currentSessionKey}
-                appName={appName}
-                composerSeed={composerSeed}
-                onBeforeSend={runControl.interceptRestartIntent}
-              />
-            )
-            : null}
-        </section>
-      </div>
+      </AppDevSplitBody>
 
       <ConfirmDialog
         open={confirmRestore}

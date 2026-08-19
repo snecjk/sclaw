@@ -27,6 +27,7 @@ import {
 import { DEFAULT_WORKSPACE_ID, useSessionCatalogStore } from '@/stores/session-catalog';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useChatStore } from '@/stores/chat';
+import { isAppDevSessionKey } from '@/lib/app-dev-session';
 import { resolveSessionLabel } from '@/lib/session-label';
 import { navigateToMainChatHome } from '@/lib/main-chat-navigation';
 import {
@@ -140,6 +141,7 @@ export function SidebarProjectsSection({
     for (const workspace of visibleWorkspaces) {
       const scoped = sessions.filter((session) => {
         if (isSidebarHiddenChatSessionKey(session.key)) return false;
+        if (isAppDevSessionKey(session.key)) return false;
         const workspaceId = sessionWorkspaceByKey[session.key] ?? DEFAULT_WORKSPACE_ID;
         return workspaceId === workspace.id;
       });
@@ -233,7 +235,8 @@ export function SidebarProjectsSection({
 
   const linkedSessionCount = useCallback((projectId: string) => {
     let count = 0;
-    for (const workspaceId of Object.values(sessionWorkspaceByKey)) {
+    for (const [sessionKey, workspaceId] of Object.entries(sessionWorkspaceByKey)) {
+      if (isAppDevSessionKey(sessionKey)) continue;
       if (workspaceId === projectId) count += 1;
     }
     const visible = (sessionsByProjectId.get(projectId) ?? []).length;

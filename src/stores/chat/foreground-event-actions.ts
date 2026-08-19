@@ -104,6 +104,8 @@ export function createForegroundEventActions(
 
       const targetSessionKey = resolvedSessionKey ?? currentSessionKey;
       const runtime = getSessionRuntimeState(get().runtimeBySessionKey, targetSessionKey);
+      const sendStartedAt = runtime.sendAcceptance?.startedAt ?? null;
+      const sinceSendMs = typeof sendStartedAt === 'number' ? Date.now() - sendStartedAt : null;
       const decision = decideRunEvent({
         sessionKey: targetSessionKey,
         runtime,
@@ -157,12 +159,18 @@ export function createForegroundEventActions(
           if (!currentSending && runId) {
             setRuntimePatch(set, currentSessionKey, { sending: true, activeRunId: runId, error: null });
           }
+          logChatFlow('event.run.started', {
+            runId,
+            sessionKey: currentSessionKey,
+            sinceSendMs,
+          });
           break;
         }
         case 'delta': {
           logChatFlow('event.delta.apply', {
             runId,
             sessionKey: currentSessionKey,
+            sinceSendMs,
           });
           // If we're receiving new deltas, the Gateway has recovered from any
           // prior error — cancel the error finalization timer and clear the
@@ -190,6 +198,7 @@ export function createForegroundEventActions(
             runId,
             sessionKey: currentSessionKey,
             hasMessage: message != null,
+            sinceSendMs,
           });
           clearErrorRecoveryTimer(currentSessionKey);
           if (get().error) setRuntimePatch(set, currentSessionKey, { error: null });

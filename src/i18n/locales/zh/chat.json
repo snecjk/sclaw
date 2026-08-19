@@ -293,6 +293,7 @@
     "preview": {
         "collapsePanel": "收起预览区",
         "resizeSeparator": "调整预览区宽度",
+        "resizeChatSeparator": "调整会话宽度",
         "overflowMenu": "全部产物",
         "fullscreen": "全屏放映",
         "expandWorkspace": "展开预览区",
