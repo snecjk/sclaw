@@ -409,8 +409,14 @@ export function LearningCenterPage() {
       const labelRight = labelRect
         ? labelRect.right - stepsRect.left
         : tabRect.left - stepsRect.left + 12;
-      const tabRight = tabRect.right - stepsRect.left;
       const gap = readCssLengthPx(steps, '--lc-tab-art-gap') || 8;
+      const trail = readCssLengthPx(steps, '--lc-tab-art-trail') || 4;
+      const tabLeft = tabRect.left - stepsRect.left;
+      const activeMin = Math.ceil(labelRight + gap + artSize + trail - tabLeft);
+      steps.style.setProperty('--lc-tab-active-min', `${Math.max(activeMin, 0)}px`);
+
+      const nextTabRect = tab.getBoundingClientRect();
+      const tabRight = nextTabRect.right - stepsRect.left;
       const left = Math.max(0, labelRight + gap);
       const maxWidth = Math.max(0, tabRight - left);
 
