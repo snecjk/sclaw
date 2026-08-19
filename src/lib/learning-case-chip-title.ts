@@ -8,7 +8,7 @@ import { useWorkflowsStore } from '@/stores/workflows';
 import type { LearningCaseAction } from '@/types/learning-center';
 
 export async function resolveLearningCaseChipTitle(
-  action: LearningCaseAction,
+  action: Pick<LearningCaseAction, 'targetType' | 'targetCode'>,
 ): Promise<string | undefined> {
   const code = action.targetCode.trim();
   if (!code) return undefined;

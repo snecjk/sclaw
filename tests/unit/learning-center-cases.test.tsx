@@ -175,6 +175,48 @@ describe('LearningCenterPage cases', () => {
     expect(screen.getByLabelText('已被使用 7 次')).toBeInTheDocument();
   });
 
+  it('shows the selected skill plus optional suffix as the detail prompt', async () => {
+    const skillCase = {
+      ...caseItem,
+      title: '报价导入',
+      name: '报价导入',
+      targetType: 'SKILL' as const,
+      targetTypeRaw: 'SKILL',
+      targetCode: 'finance-guanbao',
+      promptText: '按模板导入客户报价表',
+    };
+    casesMock.mockResolvedValue({ items: [skillCase], total: 1, pageNum: 1, pageSize: 6 });
+    caseDetailMock.mockResolvedValue({ ...skillCase, tutorial, tutorials: [tutorial] });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '查看详情' }));
+    const dialog = await screen.findByRole('dialog', { name: '报价导入' });
+    expect(within(dialog).getByText('提示词')).toBeInTheDocument();
+    expect(await within(dialog).findByText('财务-看报表')).toBeInTheDocument();
+    expect(within(dialog).getByText('按模板导入客户报价表')).toBeInTheDocument();
+    expect(within(dialog).queryByText('帮我写周报')).not.toBeInTheDocument();
+  });
+
+  it('still shows the selected skill in details when the optional suffix is empty', async () => {
+    const skillCase = {
+      ...caseItem,
+      title: '报价导入',
+      name: '报价导入',
+      targetType: 'SKILL' as const,
+      targetTypeRaw: 'SKILL',
+      targetCode: 'finance-guanbao',
+      promptText: null,
+    };
+    casesMock.mockResolvedValue({ items: [skillCase], total: 1, pageNum: 1, pageSize: 6 });
+    caseDetailMock.mockResolvedValue({ ...skillCase, tutorial, tutorials: [tutorial] });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '查看详情' }));
+    const dialog = await screen.findByRole('dialog', { name: '报价导入' });
+    expect(within(dialog).getByText('提示词')).toBeInTheDocument();
+    expect(await within(dialog).findByText('财务-看报表')).toBeInTheDocument();
+  });
+
   it('retries case details locally after a failure', async () => {
     caseDetailMock.mockRejectedValueOnce(new Error('案例详情网络错误')).mockResolvedValueOnce(caseDetail);
     renderPage();
