@@ -15,18 +15,30 @@ import {
 } from '../../shared/chat-runtime-protocol';
 import { logger } from '../utils/logger';
 import { isWorkflowOpenClawSessionKey } from '../../shared/workflow-openclaw-session';
+import { isEmbedAppChatSessionKey } from '../../shared/session-type';
 import { patchTerminalRuntimeMetadata, transitionChatRuntime, transitionChatRuntimePhase } from './chat-runtime-transition';
 import { inspectTranscript } from '../engines/chat-runtime-inspection';
 
 const RECOVERY_DEADLINE_MS = 135_000;
+const EMBED_BROWSER_RECOVERY_IDLE_MS = 5 * 60_000;
 const RECOVERY_RETRY_MS = 5_000;
 const DELTA_PERSIST_THROTTLE_MS = 1_000;
 const ERROR_RECOVERY_GRACE_MS = 15_000;
+const EMBED_RATE_LIMIT_RECOVERY_GRACE_MS = 90_000;
 const RUN_HARD_DEADLINE_MS = 6 * 60 * 60_000;
 const HISTORY_POLL_START_DELAY_MS = 1_000;
 const HISTORY_POLL_BACKOFF_MS = [2_000, 4_000, 8_000] as const;
 const TRANSCRIPT_COMPENSATION_DELAYS_MS = [1_000, 3_000, 7_000] as const;
 const IDEMPOTENCY_REPLAY_WINDOW_MS = 10 * 60_000;
+
+function resolveRecoveryIdleMs(sessionKey: string): number {
+  return isEmbedAppChatSessionKey(sessionKey) ? EMBED_BROWSER_RECOVERY_IDLE_MS : RECOVERY_DEADLINE_MS;
+}
+
+function isRateLimitErrorMessage(error: string): boolean {
+  const lower = error.toLowerCase();
+  return lower.includes('rate limit') || lower.includes('429') || error.includes('请求过于频繁');
+}
 
 interface ChatDispatchPayload {
   idempotencyKey: string;
@@ -155,6 +167,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
   private readonly lastPersistedAt = new Map<string, number>();
   private readonly seenEvents = new Set<string>();
   private readonly recoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly runActivityAt = new Map<string, number>();
   private readonly errorTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly hardDeadlineTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly historyPollTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -230,7 +243,8 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         };
         this.snapshots.set(recovered.sessionKey, recovered);
         await this.persist(recovered, true);
-        this.scheduleRecovery(recovered.sessionKey, Date.now());
+        this.touchRunActivity(recovered.sessionKey, recovered.lastEventAt);
+        this.scheduleRecovery(recovered.sessionKey);
         this.scheduleHardDeadline(recovered.sessionKey, recovered.epoch);
         this.scheduleHistoryPoll(recovered.sessionKey);
       }
@@ -367,6 +381,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       databaseWrites: 0,
     });
     this.snapshots.set(input.sessionKey, snapshot);
+    this.touchRunActivity(input.sessionKey, now);
     const displayText = input.displayText?.trim();
     const dispatchPayload: ChatDispatchPayload = {
       idempotencyKey: input.idempotencyKey,
@@ -425,6 +440,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       acceptanceResult: input.result ?? null,
       error: null,
     }, 'run.accepted', input.result, true);
+    this.touchRunActivity(input.sessionKey);
   }
 
   async rejected(input: {
@@ -455,7 +471,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       const uncertain = transition.snapshot;
       this.snapshots.set(input.sessionKey, uncertain);
       await this.persist(uncertain, true);
-      this.scheduleRecovery(input.sessionKey, Date.now());
+      this.scheduleRecovery(input.sessionKey);
       return;
     }
     await this.publish({ ...current, error: input.error }, 'run.failed', { error: input.error }, true);
@@ -553,6 +569,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       return;
     }
     this.clearErrorFinalization(sessionKey);
+    this.touchRunActivity(sessionKey);
     const payload = 'message' in event ? event.message : getRecord(event)?.runtimeResult;
     const liveMessage = getRecord(payload);
     if (liveMessage && (event.type === 'message.delta' || event.type === 'message.final' || event.type === 'tool.result')) {
@@ -624,13 +641,14 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     if (diagnostics) diagnostics.canonicalEvents += 1;
     this.emit('event', event);
     await this.persist(snapshot, forcePersist || isTerminalChatRunPhase(phase));
-    if (isTerminalChatRunPhase(phase)) this.clearRecovery(snapshot.sessionKey);
     if (isTerminalChatRunPhase(phase)) {
+      this.clearRecovery(snapshot.sessionKey);
+      this.clearRunActivity(snapshot.sessionKey);
       this.clearErrorFinalization(snapshot.sessionKey);
       this.clearHardDeadline(snapshot.sessionKey);
       this.clearHistoryPoll(snapshot.sessionKey);
     } else if (phase === 'awaiting_transcript') {
-      this.scheduleRecovery(snapshot.sessionKey, Date.now());
+      this.scheduleRecovery(snapshot.sessionKey);
     }
     const log = type === 'message.delta' || type === 'tool.updated' ? logger.debug : logger.info;
     log('[chat-runtime]', {
@@ -744,12 +762,22 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     });
   }
 
-  private scheduleRecovery(sessionKey: string, startedAt: number): void {
+  private touchRunActivity(sessionKey: string, at = Date.now()): void {
+    this.runActivityAt.set(sessionKey, at);
+  }
+
+  private resolveRunActivityAt(sessionKey: string, snapshot?: ChatRuntimeSnapshot | null): number {
+    return this.runActivityAt.get(sessionKey) ?? snapshot?.lastEventAt ?? snapshot?.startedAt ?? Date.now();
+  }
+
+  private scheduleRecovery(sessionKey: string): void {
     this.clearRecovery(sessionKey);
     const run = async () => {
       const current = this.snapshots.get(sessionKey);
       if (!current || isTerminalChatRunPhase(current.phase)) return;
-      if (Date.now() - startedAt >= RECOVERY_DEADLINE_MS) {
+      const idleMs = resolveRecoveryIdleMs(sessionKey);
+      const lastActivityAt = this.resolveRunActivityAt(sessionKey, current);
+      if (Date.now() - lastActivityAt >= idleMs) {
         await this.publish({ ...current, error: 'Unable to confirm whether the run is still active.' }, 'run.interrupted', {
           reason: 'recovery-timeout',
         }, true);
@@ -881,8 +909,15 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     this.recoveryTimers.delete(sessionKey);
   }
 
+  private clearRunActivity(sessionKey: string): void {
+    this.runActivityAt.delete(sessionKey);
+  }
+
   private scheduleErrorFinalization(sessionKey: string, runId: string | null, error: string): void {
     this.clearErrorFinalization(sessionKey);
+    const graceMs = isEmbedAppChatSessionKey(sessionKey) && isRateLimitErrorMessage(error)
+      ? EMBED_RATE_LIMIT_RECOVERY_GRACE_MS
+      : ERROR_RECOVERY_GRACE_MS;
     const timer = setTimeout(() => {
       this.errorTimers.delete(sessionKey);
       const current = this.snapshots.get(sessionKey);
@@ -894,7 +929,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
         if (runId && latest.runId && runId !== latest.runId) return;
         await this.publish({ ...latest, error }, 'run.failed', { error }, true);
       });
-    }, ERROR_RECOVERY_GRACE_MS);
+    }, graceMs);
     this.errorTimers.set(sessionKey, timer);
   }
 

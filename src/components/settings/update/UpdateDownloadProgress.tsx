@@ -33,14 +33,14 @@ export function UpdateDownloadProgress({
       <div className="flex items-center gap-1.5">
         <Progress
           value={percent}
-          className="h-[5px] min-h-[5px] flex-1 overflow-hidden rounded-full bg-[#F0F2F5] [&>div]:!rounded-full [&>div]:!bg-[#00B42A]"
+          className="h-[5px] min-h-[5px] flex-1 overflow-hidden rounded-full bg-[#F0F2F5] dark:bg-white/10 [&>div]:!rounded-full [&>div]:!bg-[#00B42A] dark:[&>div]:!bg-emerald-400"
         />
-        <span className="w-9 shrink-0 text-right text-[12px] font-normal tabular-nums leading-[17px] text-[#86909C]">
+        <span className="w-9 shrink-0 text-right text-[12px] font-normal tabular-nums leading-[17px] text-[#86909C] dark:text-muted-foreground">
           {percent}%
         </span>
       </div>
       {!compact ? (
-        <div className="flex items-center justify-between text-[12px] tabular-nums leading-[17px] text-[#86909C]">
+        <div className="flex items-center justify-between text-[12px] tabular-nums leading-[17px] text-[#86909C] dark:text-muted-foreground">
           <span>{formatSpeedMBps(progress.bytesPerSecond)}</span>
           <span>
             {formatMegabytes(progress.transferred)}/{formatMegabytes(progress.total)}

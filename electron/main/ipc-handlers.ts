@@ -168,6 +168,9 @@ export function registerIpcHandlers(
 
   // Workflow runtime（客户端执行下沉）：注册 workflow-runtime:* IPC + 注入生产依赖
   installWorkflowRuntime(gatewayManager);
+  void import('./ipc/jsbridge-handlers').then(({ registerJsBridgeIpcHandlers }) => {
+    registerJsBridgeIpcHandlers();
+  });
   ipcMain.handle('workflow-editor:metric', async (_event, metric: unknown) => {
     if (!metric || typeof metric !== 'object') return { accepted: false };
     const data = metric as Record<string, unknown>;
@@ -2795,13 +2798,21 @@ function registerSessionHandlers(): void {
     runtimeId?: string;
     appTitle?: string;
     initialUrl?: string;
+    appId?: string;
+    bound?: boolean;
   }) => {
     const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
     const appTitle = typeof payload?.appTitle === 'string' ? payload.appTitle.trim() : '';
     const initialUrl = typeof payload?.initialUrl === 'string' ? payload.initialUrl.trim() : '';
     if (!runtimeId || !initialUrl) return { ok: false };
     const { registerSclawEmbedBrowserRuntime } = await import('./services/sclaw-embed-browser-runtime');
-    registerSclawEmbedBrowserRuntime({ runtimeId, appTitle, initialUrl });
+    registerSclawEmbedBrowserRuntime({
+      runtimeId,
+      appTitle,
+      initialUrl,
+      appId: typeof payload?.appId === 'string' ? payload.appId : undefined,
+      bound: payload?.bound === true,
+    });
     return { ok: true };
   });
 

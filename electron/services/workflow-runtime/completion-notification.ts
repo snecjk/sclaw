@@ -1,5 +1,6 @@
 import { Notification, type BrowserWindow } from 'electron';
 import type { WorkflowRunStatus } from '../../../shared/workflow-run-status';
+import { getClientAppIcon } from '../../main/app-icon';
 
 export interface WorkflowCompletionNotificationPayload {
   runId: string;
@@ -48,7 +49,10 @@ export function notifyWorkflowCompletion(
   if (!Notification.isSupported()) return;
 
   const message = buildWorkflowSystemNotification(payload);
-  const notification = new Notification(message);
+  const notification = new Notification({
+    ...message,
+    icon: getClientAppIcon(),
+  });
   notification.on('click', () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     if (mainWindow.isMinimized()) mainWindow.restore();

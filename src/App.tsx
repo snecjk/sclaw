@@ -36,9 +36,9 @@ import { useProviderStore } from './stores/providers';
 import { useAgentsStore } from './stores/agents';
 import { useChatStore } from './stores/chat';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
-import { AccountSwitchFab } from './components/layout/AccountSwitchFab';
 import { UserWatermark } from './components/layout/UserWatermark';
 import { WorkflowCompletionNotifier } from './components/workflow/WorkflowCompletionNotifier';
+import { JsBridgeHostPortal } from './components/jsbridge/JsBridgeHostPortal';
 
 /**
  * Error Boundary to catch and display React rendering errors
@@ -348,11 +348,9 @@ function App() {
 
           {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
           {location.pathname !== '/float-icon' ? <AppShellToaster /> : null}
+          <JsBridgeHostPortal />
           {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
-            <>
-              <UserWatermark />
-              <AccountSwitchFab />
-            </>
+            <UserWatermark />
           ) : null}
         </AppShellLayoutProvider>
       </TooltipProvider>
@@ -379,6 +377,10 @@ function AppShellToaster() {
         right: 'auto',
         transform: 'translateX(-50%)',
         zIndex: 99999,
+        // Radix modal drawers disable pointer events on `body`. The global
+        // toaster sits outside their dismissable layer, so it must opt back
+        // in or the first click only dismisses the drawer beneath it.
+        pointerEvents: 'auto',
       }}
     />
   );

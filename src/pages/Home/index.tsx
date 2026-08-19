@@ -7,6 +7,7 @@ import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { readMainChatDraftState } from '@/lib/main-chat-navigation';
+import { useJsBridgeHostStore } from '@/stores/jsbridge-host';
 import { cn } from '@/lib/utils';
 import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
@@ -51,8 +52,11 @@ export function Home() {
   const navigate = useNavigate();
   const locationState = location.state;
   const draftState = readMainChatDraftState(locationState);
+  const bridgeMainSeed = useJsBridgeHostStore((s) => s.mainComposerSeed?.text);
   const consumedDraftTokensRef = useRef<Set<string>>(new Set());
-  const seedText = draftState?.composerHandoff ? undefined : draftState?.mainChatDraft;
+  const seedText = draftState?.composerHandoff
+    ? undefined
+    : draftState?.mainChatDraft ?? bridgeMainSeed;
 
   useEffect(() => {
     const currentDraft = readMainChatDraftState(locationState);
@@ -141,9 +145,9 @@ export function Home() {
             ?? 'mx-auto flex h-full max-h-full min-h-0 w-full flex-1 flex-col overflow-hidden',
         )}
       >
-        <HomeAgentHubSurface
-          seedText={seedText}
-          seedSkillSlug={seedSkillSlug}
+            <HomeAgentHubSurface
+              seedText={seedText}
+              seedSkillSlug={seedSkillSlug}
         />
       </div>
 

@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { CreateWorkflowModal } from '@/pages/Workflow/components/create-workflow-modal';
 import { WorkflowMcIframeEditor, type WorkflowMcIframeEditorHandle } from '@/pages/Workflow/components/workflow-mc-iframe-editor';
 import { useWorkflowEditorContentHeader } from '@/hooks/use-workflow-editor-content-header';
 import { StartupRunDialog } from '@/pages/WorkflowDesigner/components/startup-run-dialog';
+import { shouldShowStartupRunDialog } from '@/pages/WorkflowDesigner/components/test-run-drawer-model';
 import { TestRunDrawer } from '@/pages/WorkflowDesigner/components/test-run-drawer';
 import { LocalRunHistoryDialog } from '@/pages/WorkflowDesigner/components/local-run-history-dialog';
 import { useDesignerTryRun } from '@/pages/WorkflowDesigner/hooks/use-designer-try-run';
+import { useEmbeddedWorkflowTryRun } from '@/pages/Workflow/hooks/use-embedded-workflow-try-run';
+import { createEmbeddedTrialRunDrawerActions } from '@/pages/Workflow/workflow-embedded-trial-run-actions';
 import { cacheAiWorkflowPrompt, createWorkflowStudio } from '@/lib/workflow-studio-api';
 import { useWorkflowUiStore } from '@/stores/workflow-ui';
 import { MY_TASKS_WORKFLOW_LIST_HREF, myTasksWorkflowListHref } from '@/pages/MyTask/constants';
@@ -63,6 +65,167 @@ function WorkflowNewRoute() {
   );
 }
 
+export function WorkflowEditorSessionBoundary({
+  workflowId,
+  children,
+}: {
+  workflowId: string;
+  children: ReactNode;
+}) {
+  const setEmbeddedHeaderOwned = useWorkflowUiStore((state) => state.setEmbeddedHeaderOwned);
+  const setEmbeddedHeaderNegotiating = useWorkflowUiStore((state) => state.setEmbeddedHeaderNegotiating);
+  useLayoutEffect(() => {
+    setEmbeddedHeaderOwned(false);
+    setEmbeddedHeaderNegotiating(true);
+    return () => {
+      setEmbeddedHeaderOwned(false);
+      setEmbeddedHeaderNegotiating(false);
+    };
+  }, [setEmbeddedHeaderNegotiating, setEmbeddedHeaderOwned, workflowId]);
+
+  return <Fragment key={workflowId}>{children}</Fragment>;
+}
+
+function WorkflowEditorSession({
+  workflowId,
+  onBack,
+  prompt,
+  promptCacheId,
+}: {
+  workflowId: string;
+  onBack: () => void;
+  prompt?: string;
+  promptCacheId?: string;
+}) {
+  const editorRef = useRef<WorkflowMcIframeEditorHandle>(null);
+  const embeddedHeaderOwned = useWorkflowUiStore((state) => state.embeddedHeaderOwned);
+  const embeddedHeaderNegotiating = useWorkflowUiStore((state) => state.embeddedHeaderNegotiating);
+  const setEmbeddedHeaderOwned = useWorkflowUiStore((state) => state.setEmbeddedHeaderOwned);
+  const setEmbeddedHeaderNegotiating = useWorkflowUiStore((state) => state.setEmbeddedHeaderNegotiating);
+  const [editorCapabilitySession, setEditorCapabilitySession] = useState({ ready: false, generation: 0 });
+  const [localRunHistoryOpen, setLocalRunHistoryOpen] = useState(false);
+  const handleOpenLocalRunHistory = useCallback(() => setLocalRunHistoryOpen(true), []);
+  const canStartTryRun = useCallback(() => true, []);
+  const tryRun = useDesignerTryRun({
+    workflowId,
+    startupSchema: null,
+    canStart: canStartTryRun,
+  });
+  const embeddedTryRun = useEmbeddedWorkflowTryRun({
+    workflowId,
+    editorSessionIdentity: editorCapabilitySession.generation,
+    editorRef,
+    editorCapabilitiesReady: editorCapabilitySession.ready,
+    beginTryRun: tryRun.begin,
+    isRunActive: tryRun.isRunActive,
+    isRunStarting: tryRun.isStarting,
+    runId: tryRun.runId,
+    runStatus: tryRun.executionState?.status,
+    launchError: tryRun.launchError,
+  });
+
+  const closeStartupDialog = () => {
+    tryRun.cancelStartupDialog();
+    embeddedTryRun.cancelConfirmation();
+  };
+  const drawerActions = createEmbeddedTrialRunDrawerActions({
+    closeDrawer: tryRun.closeDrawer,
+    continueRun: tryRun.continueRun,
+    rerun: tryRun.rerun,
+  });
+  const handleEditorCapabilitiesChange = (ready: boolean) => {
+    setEmbeddedHeaderOwned(ready);
+    setEmbeddedHeaderNegotiating(!ready);
+    setEditorCapabilitySession((current) => ({
+      ready,
+      generation: current.generation + 1,
+    }));
+  };
+  const handleEditorSessionReset = () => {
+    setEmbeddedHeaderOwned(false);
+    setEmbeddedHeaderNegotiating(true);
+    embeddedTryRun.invalidateSession();
+  };
+  const handleEditorHandshakeFallback = () => {
+    setEmbeddedHeaderOwned(false);
+    setEmbeddedHeaderNegotiating(false);
+  };
+
+  useWorkflowEditorContentHeader({
+    workflowId,
+    onBack,
+    prompt,
+    promptCacheId,
+    enabled: !embeddedHeaderOwned && !embeddedHeaderNegotiating,
+    onTryRun: embeddedTryRun.requestFromHostFallback,
+    tryRunDisabled: embeddedTryRun.requestInFlight || tryRun.isStarting || tryRun.isRunActive,
+    onOpenLocalRunHistory: handleOpenLocalRunHistory,
+  });
+
+  return (
+    <div className="flex h-full min-h-0 flex-1 flex-col">
+      <WorkflowMcIframeEditor
+        ref={editorRef}
+        workflowId={workflowId}
+        prompt={prompt}
+        promptCacheId={promptCacheId}
+        onEditorCapabilitiesChange={handleEditorCapabilitiesChange}
+        onEditorSessionReset={handleEditorSessionReset}
+        onEditorHandshakeFallback={handleEditorHandshakeFallback}
+        onTryRunRequest={embeddedTryRun.requestFromWeb}
+        onBackRequest={onBack}
+        onLocalRunHistoryRequest={handleOpenLocalRunHistory}
+      />
+      <ConfirmDialog
+        open={embeddedTryRun.confirmOpen}
+        title="提示"
+        message="试运行前将自动保存当前画布为草稿，是否继续？"
+        confirmLabel="确认"
+        cancelLabel="取消"
+        onConfirm={embeddedTryRun.confirmAndPrepare}
+        onCancel={embeddedTryRun.cancelConfirmation}
+      />
+      <StartupRunDialog
+        open={shouldShowStartupRunDialog({
+          isStartupDialogOpen: tryRun.isStartupDialogOpen,
+          isDrawerOpen: tryRun.isDrawerOpen,
+        })}
+        schema={tryRun.startupSchema}
+        defaultValues={tryRun.startupDefaultValues}
+        runtimeUploadNodes={tryRun.runtimeUploadNodes}
+        isStarting={tryRun.isStarting}
+        onConfirm={(inputs, engineType) => void tryRun.confirmStartup(inputs, engineType)}
+        onClose={closeStartupDialog}
+      />
+      <TestRunDrawer
+        variant="trial"
+        open={tryRun.isDrawerOpen}
+        runId={tryRun.runId}
+        run={tryRun.run}
+        executionState={tryRun.executionState}
+        workflowVersion={tryRun.runWorkflowVersion}
+        isStarting={tryRun.isStarting}
+        isCancelling={tryRun.isCancelling}
+        isRunActive={tryRun.isRunActive}
+        isDraftSnapshot={tryRun.isDraftSnapshot}
+        launchError={tryRun.launchError}
+        onClose={drawerActions.close}
+        onCancel={() => void tryRun.cancel()}
+        onContinue={drawerActions.continueRun}
+        onRerun={drawerActions.rerun}
+        onDecideApproval={(approved, note) => void tryRun.decideApproval(approved, note)}
+        onSubmitInput={(values) => void tryRun.submitInput(values)}
+      />
+      <LocalRunHistoryDialog
+        open={localRunHistoryOpen}
+        workflowId={workflowId}
+        onClose={() => setLocalRunHistoryOpen(false)}
+        onSelectRun={tryRun.openExistingRun}
+      />
+    </div>
+  );
+}
+
 /** AI 创建：先 POST 建空流程拿真实 id，再 iframe 嵌入 MC /workflows-workbench/{id}?prompt=，MC 端自动打开 AI 面板并发起 */
 function WorkflowGenerateRoute() {
   useEditorActive(true);
@@ -75,10 +238,6 @@ function WorkflowGenerateRoute() {
   const promptCacheId = searchParams.get('promptCacheId') ?? '';
   const [createError, setCreateError] = useState<string | null>(null);
   const createStartedRef = useRef(false);
-  const editorRef = useRef<WorkflowMcIframeEditorHandle>(null);
-  const [isRequestingVersionSnapshot, setIsRequestingVersionSnapshot] = useState(false);
-  const [localRunHistoryOpen, setLocalRunHistoryOpen] = useState(false);
-  const [draftRunConfirmOpen, setDraftRunConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (!prompt.trim() || workflowId || createStartedRef.current) return;
@@ -106,46 +265,6 @@ function WorkflowGenerateRoute() {
   }, [prompt, workflowId, navigate]);
 
   const handleBack = useCallback(() => navigate(MY_TASKS_WORKFLOW_LIST_HREF), [navigate]);
-  const handleOpenLocalRunHistory = useCallback(() => setLocalRunHistoryOpen(true), []);
-  const canStartTryRun = useCallback(() => true, []);
-  const tryRun = useDesignerTryRun({
-    workflowId,
-    startupSchema: null,
-    canStart: canStartTryRun,
-  });
-  const beginTryRun = tryRun.begin;
-  const startCurrentDraftTryRun = useCallback(async () => {
-    if (!workflowId || isRequestingVersionSnapshot) return;
-    setIsRequestingVersionSnapshot(true);
-    try {
-      const currentVersion = await editorRef.current?.requestDraftSnapshot();
-      if (!currentVersion) throw new Error('画布尚未加载完成，请稍后重试');
-      beginTryRun(currentVersion);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '未获取到当前画布版本号，无法试运行');
-    } finally {
-      setIsRequestingVersionSnapshot(false);
-    }
-  }, [beginTryRun, isRequestingVersionSnapshot, workflowId]);
-  const handleTryRun = useCallback(() => setDraftRunConfirmOpen(true), []);
-  const confirmTryRun = useCallback(() => {
-    setDraftRunConfirmOpen(false);
-    void startCurrentDraftTryRun();
-  }, [startCurrentDraftTryRun]);
-  const rerunCurrentDraft = useCallback(() => {
-    void startCurrentDraftTryRun();
-  }, [startCurrentDraftTryRun]);
-
-  useWorkflowEditorContentHeader({
-    workflowId,
-    onBack: handleBack,
-    prompt: prompt || undefined,
-    promptCacheId: promptCacheId || undefined,
-    enabled: Boolean(workflowId),
-    onTryRun: handleTryRun,
-    tryRunDisabled: isRequestingVersionSnapshot || tryRun.isStarting || tryRun.isRunActive,
-    onOpenLocalRunHistory: handleOpenLocalRunHistory,
-  });
 
   if (!prompt.trim() && !workflowId) {
     return <Navigate to={MY_TASKS_WORKFLOW_LIST_HREF} replace />;
@@ -172,57 +291,14 @@ function WorkflowGenerateRoute() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
-      <WorkflowMcIframeEditor
-        ref={editorRef}
+    <WorkflowEditorSessionBoundary workflowId={workflowId}>
+      <WorkflowEditorSession
         workflowId={workflowId}
+        onBack={handleBack}
         prompt={prompt || undefined}
         promptCacheId={promptCacheId || undefined}
       />
-      <ConfirmDialog
-        open={draftRunConfirmOpen}
-        title="提示"
-        message="试运行将使用当前画布正在编辑的版本，是否继续？"
-        confirmLabel="确认"
-        cancelLabel="取消"
-        onConfirm={confirmTryRun}
-        onCancel={() => setDraftRunConfirmOpen(false)}
-      />
-      <StartupRunDialog
-        open={tryRun.isStartupDialogOpen}
-        schema={tryRun.startupSchema}
-        defaultValues={tryRun.startupDefaultValues}
-        runtimeUploadNodes={tryRun.runtimeUploadNodes}
-        isStarting={tryRun.isStarting}
-        onConfirm={(inputs, engineType) => void tryRun.confirmStartup(inputs, engineType)}
-        onClose={tryRun.cancelStartupDialog}
-      />
-      <TestRunDrawer
-        open={tryRun.isDrawerOpen}
-        runId={tryRun.runId}
-        run={tryRun.run}
-        executionState={tryRun.executionState}
-        workflowVersion={tryRun.runWorkflowVersion}
-        isStarting={tryRun.isStarting}
-        isCancelling={tryRun.isCancelling}
-        isRunActive={tryRun.isRunActive}
-        isDraftSnapshot={tryRun.isDraftSnapshot}
-        launchError={tryRun.launchError}
-        onClose={tryRun.closeDrawer}
-        onCancel={() => void tryRun.cancel()}
-        onContinue={() => void tryRun.continueRun()}
-        onRerun={rerunCurrentDraft}
-        onDecideApproval={(approved, note) => void tryRun.decideApproval(approved, note)}
-        onSubmitInput={(values) => void tryRun.submitInput(values)}
-      />
-      <LocalRunHistoryDialog
-        open={localRunHistoryOpen}
-        workflowId={workflowId}
-        onClose={() => setLocalRunHistoryOpen(false)}
-        onTryRun={handleTryRun}
-        onSelectRun={tryRun.openExistingRun}
-      />
-    </div>
+    </WorkflowEditorSessionBoundary>
   );
 }
 
@@ -230,107 +306,16 @@ function WorkflowEditRoute() {
   useEditorActive(true);
   const navigate = useNavigate();
   const { workflowId } = useParams<{ workflowId: string }>();
-  const editorRef = useRef<WorkflowMcIframeEditorHandle>(null);
-  const [isRequestingVersionSnapshot, setIsRequestingVersionSnapshot] = useState(false);
-  const [localRunHistoryOpen, setLocalRunHistoryOpen] = useState(false);
-  const [draftRunConfirmOpen, setDraftRunConfirmOpen] = useState(false);
   const handleBack = useCallback(() => navigate(MY_TASKS_WORKFLOW_LIST_HREF), [navigate]);
-  const handleOpenLocalRunHistory = useCallback(() => setLocalRunHistoryOpen(true), []);
-  const canStartTryRun = useCallback(() => true, []);
-  const tryRun = useDesignerTryRun({
-    workflowId,
-    startupSchema: null,
-    canStart: canStartTryRun,
-  });
-  const beginTryRun = tryRun.begin;
-  const startCurrentDraftTryRun = useCallback(async () => {
-    if (!workflowId || isRequestingVersionSnapshot) return;
-    setIsRequestingVersionSnapshot(true);
-    try {
-      const currentVersion = await editorRef.current?.requestDraftSnapshot();
-      if (!currentVersion) throw new Error('画布尚未加载完成，请稍后重试');
-      beginTryRun(currentVersion);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '未获取到当前画布版本号，无法试运行');
-    } finally {
-      setIsRequestingVersionSnapshot(false);
-    }
-  }, [beginTryRun, isRequestingVersionSnapshot, workflowId]);
-  const handleTryRun = useCallback(() => {
-    setDraftRunConfirmOpen(true);
-  }, []);
-  const confirmTryRun = useCallback(() => {
-    setDraftRunConfirmOpen(false);
-    void startCurrentDraftTryRun();
-  }, [startCurrentDraftTryRun]);
-  // A cancelled run must not reuse the previous iframe snapshot: its draft
-  // version can have changed while the run was active. Request the current
-  // snapshot again so the new local run always references a server-recognized
-  // version.
-  const rerunCurrentDraft = useCallback(() => {
-    void startCurrentDraftTryRun();
-  }, [startCurrentDraftTryRun]);
-
-  useWorkflowEditorContentHeader({
-    workflowId: workflowId ?? '',
-    onBack: handleBack,
-    enabled: Boolean(workflowId),
-    onTryRun: handleTryRun,
-    tryRunDisabled: isRequestingVersionSnapshot || tryRun.isStarting || tryRun.isRunActive,
-    onOpenLocalRunHistory: handleOpenLocalRunHistory,
-  });
 
   if (!workflowId) {
     return <Navigate to={MY_TASKS_WORKFLOW_LIST_HREF} replace />;
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col">
-      <WorkflowMcIframeEditor ref={editorRef} workflowId={workflowId} />
-      <ConfirmDialog
-        open={draftRunConfirmOpen}
-        title="提示"
-        message="试运行将使用当前画布正在编辑的版本，是否继续？"
-        confirmLabel="确认"
-        cancelLabel="取消"
-        onConfirm={confirmTryRun}
-        onCancel={() => setDraftRunConfirmOpen(false)}
-      />
-      <StartupRunDialog
-        open={tryRun.isStartupDialogOpen}
-        schema={tryRun.startupSchema}
-        defaultValues={tryRun.startupDefaultValues}
-        runtimeUploadNodes={tryRun.runtimeUploadNodes}
-        isStarting={tryRun.isStarting}
-        onConfirm={(inputs, engineType) => void tryRun.confirmStartup(inputs, engineType)}
-        onClose={tryRun.cancelStartupDialog}
-      />
-      <TestRunDrawer
-        open={tryRun.isDrawerOpen}
-        runId={tryRun.runId}
-        run={tryRun.run}
-        executionState={tryRun.executionState}
-        workflowVersion={tryRun.runWorkflowVersion}
-        isStarting={tryRun.isStarting}
-        isCancelling={tryRun.isCancelling}
-        isRunActive={tryRun.isRunActive}
-        isDraftSnapshot={tryRun.isDraftSnapshot}
-        launchError={tryRun.launchError}
-        onClose={tryRun.closeDrawer}
-        onCancel={() => void tryRun.cancel()}
-        onContinue={() => void tryRun.continueRun()}
-        onRerun={rerunCurrentDraft}
-        onDecideApproval={(approved, note) => void tryRun.decideApproval(approved, note)}
-        onSubmitInput={(values) => void tryRun.submitInput(values)}
-      />
-      <LocalRunHistoryDialog
-        open={localRunHistoryOpen}
-        workflowId={workflowId}
-        onClose={() => setLocalRunHistoryOpen(false)}
-        onTryRun={() => void handleTryRun()}
-        onSelectRun={tryRun.openExistingRun}
-      />
-    </div>
+    <WorkflowEditorSessionBoundary workflowId={workflowId}>
+      <WorkflowEditorSession workflowId={workflowId} onBack={handleBack} />
+    </WorkflowEditorSessionBoundary>
   );
 }
 

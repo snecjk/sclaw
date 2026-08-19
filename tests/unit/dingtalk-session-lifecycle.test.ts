@@ -34,6 +34,31 @@ describe('DingTalk session lifecycle', () => {
     })).toBe(true);
   });
 
+  it('respects a custom idle TTL', () => {
+    const sixHoursMs = 6 * 60 * 60 * 1000;
+    expect(shouldStartNewDingTalkSession({
+      nowMs: Date.parse('2026-07-19T18:00:00.000Z'),
+      lastActivityAt: '2026-07-19T12:00:00.000Z',
+      forceNew: false,
+      idleTtlMs: sixHoursMs,
+    })).toBe(true);
+    expect(shouldStartNewDingTalkSession({
+      nowMs: Date.parse('2026-07-19T17:59:59.000Z'),
+      lastActivityAt: '2026-07-19T12:00:00.000Z',
+      forceNew: false,
+      idleTtlMs: sixHoursMs,
+    })).toBe(false);
+  });
+
+  it('does not auto-split when idle TTL is infinite (disabled)', () => {
+    expect(shouldStartNewDingTalkSession({
+      nowMs: Date.parse('2026-07-30T12:00:00.000Z'),
+      lastActivityAt: '2026-07-19T12:00:00.000Z',
+      forceNew: false,
+      idleTtlMs: Number.POSITIVE_INFINITY,
+    })).toBe(false);
+  });
+
   it('always starts a new session when explicitly requested', () => {
     expect(shouldStartNewDingTalkSession({
       nowMs: Date.now(),

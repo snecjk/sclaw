@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  deactivateSclawBrowserEmbedChat,
+  switchSclawBrowserEmbedChatSession,
+} from '@/lib/sclaw-browser-chat-lifecycle';
+import { ensureSclawBrowserBridge } from '@/lib/sclaw-browser-host-api';
+
 vi.mock('@/lib/sclaw-browser-host-api', () => ({
   registerSclawBrowserRuntime: vi.fn(async () => undefined),
   unregisterSclawBrowserRuntime: vi.fn(async () => undefined),
@@ -27,10 +33,12 @@ import {
   APP_PLAZA_HOME_TAB_ID,
   APP_PLAZA_MAX_LIVE_BROWSER_TABS,
   useAppPlazaShellStore,
+  type AppPlazaBrowserTab,
 } from '@/stores/app-plaza-shell';
 
 describe('useAppPlazaShellStore live cap', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     useAppPlazaShellStore.setState({
       routeActive: true,
       activeTabId: APP_PLAZA_HOME_TAB_ID,
@@ -170,5 +178,62 @@ describe('useAppPlazaShellStore live cap', () => {
       );
       expect(tabs.filter((t) => t.status === 'suspended')).toHaveLength(1);
     });
+  });
+});
+
+describe('useAppPlazaShellStore embed chat route sync', () => {
+  const liveTab: AppPlazaBrowserTab = {
+    id: 'tab-teambition',
+    url: 'https://teambition.com/',
+    title: 'Teambition',
+    appId: 'app-teambition',
+    bound: true,
+    status: 'live',
+    lastActiveAt: Date.now(),
+    embedRuntimeId: 'runtime-1',
+    chatPanelOpen: true,
+    chatSessionKey: 'agent:main:session-embed-app-teambition',
+    savedMainSessionKey: 'agent:main:main',
+    chatSessions: [],
+    chatSplitPercent: 28,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useAppPlazaShellStore.setState({
+      routeActive: true,
+      activeTabId: liveTab.id,
+      browserTabs: [liveTab],
+    });
+  });
+
+  it('pauses embed chat when leaving App Plaza route', () => {
+    useAppPlazaShellStore.getState().setRouteActive(false);
+
+    expect(deactivateSclawBrowserEmbedChat).toHaveBeenCalledWith(
+      liveTab.chatSessionKey,
+      liveTab.savedMainSessionKey,
+    );
+    expect(useAppPlazaShellStore.getState().browserTabs[0]?.chatPanelOpen).toBe(true);
+  });
+
+  it('resumes embed chat when returning to App Plaza route', () => {
+    useAppPlazaShellStore.getState().setRouteActive(false);
+    vi.mocked(switchSclawBrowserEmbedChatSession).mockReturnValue({
+      chatSessionKey: liveTab.chatSessionKey!,
+      savedMainSessionKey: liveTab.savedMainSessionKey!,
+      embedRuntimeId: liveTab.embedRuntimeId!,
+      appId: liveTab.appId,
+    });
+
+    useAppPlazaShellStore.getState().setRouteActive(true);
+
+    expect(ensureSclawBrowserBridge).toHaveBeenCalledWith(liveTab.embedRuntimeId);
+    expect(switchSclawBrowserEmbedChatSession).toHaveBeenCalledWith(
+      liveTab.appId,
+      liveTab.embedRuntimeId,
+      liveTab.chatSessionKey,
+      liveTab.savedMainSessionKey,
+    );
   });
 });

@@ -52,6 +52,8 @@ import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unrea
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { SidebarBrandHeader } from '@/components/layout/sidebar-brand-header';
 import { SidebarSupportQrTooltip } from '@/components/layout/SidebarSupportQrTooltip';
+import { SidebarMobileConnectTooltip } from '@/components/layout/SidebarMobileConnectTooltip';
+import { AccountSwitchMenuItems } from '@/components/layout/AccountSwitchMenuItems';
 import { SidebarCollapsibleSectionLabel } from '@/components/layout/sidebar-collapsible-section-label';
 import { SidebarRecentSessionStatus } from '@/components/layout/sidebar-recent-session-status';
 import { SidebarRecentSessionRow } from '@/components/layout/sidebar-recent-session-row';
@@ -187,12 +189,6 @@ const SIDEBAR_COLLAPSED_SESSION_LIMIT = 40;
 const SIDEBAR_TASK_LIST_INITIAL_ROW_LIMIT = 8;
 /** 旧版按日期分桶渲染（today/yesterday/…）— 保留逻辑，UI 已合并为「最近」单列表 */
 const USE_LEGACY_SESSION_DATE_BUCKETS = false;
-const DATA_CENTER_DEFAULT_SECTION = 'qa_artifact';
-const DATA_CENTER_SECTIONS = [
-  { id: 'qa_artifact', labelKey: 'dataCenterPage.sections.qaArtifact' },
-  { id: 'drive', labelKey: 'dataCenterPage.sections.drive' },
-] as const;
-
 /** 侧栏收起态：展开按钮 */
 const SIDEBAR_COLLAPSED_EXPAND_BTN_CLASS =
   'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--sto-sidebar-border)] bg-white text-[var(--sto-sidebar-collapsed-nav-icon-idle)] transition-colors hover:border-[rgba(255,111,0,0.35)] hover:text-[var(--sto-brand-6)] [&_svg]:stroke-[var(--sto-sidebar-collapsed-nav-icon-idle)] hover:[&_svg]:stroke-[var(--sto-brand-6)] dark:bg-card';
@@ -761,7 +757,6 @@ export function Sidebar() {
   const [recentOpen, setRecentOpen] = useState(true);
   const [projectsSectionOpen, setProjectsSectionOpen] = useState(true);
   const [workspaceSectionOpen, setWorkspaceSectionOpen] = useState(true);
-  const [dataCenterSectionOpen, setDataCenterSectionOpen] = useState(false);
   const [bucketOpen, setBucketOpen] = useState<Record<SessionBucketKey, boolean>>({
     today: true,
     yesterday: true,
@@ -1009,6 +1004,7 @@ export function Sidebar() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [supportQrOpen, setSupportQrOpen] = useState(false);
+  const [mobileConnectOpen, setMobileConnectOpen] = useState(false);
 
   const catalogByKey = allCatalogByKey;
 
@@ -1790,60 +1786,11 @@ export function Sidebar() {
       }
     : undefined;
   
-  const dataCenterSection = new URLSearchParams(location.search).get('section') || DATA_CENTER_DEFAULT_SECTION;
-  const isDataCenterItem = item.to === '/data-center';
   const myTasksActiveOverride =
     item.to === '/my-tasks' && location.pathname.startsWith('/workflow')
       ? true
       : undefined;
-  const itemActiveOverride = isDataCenterItem
-    ? false
-    : myTasksActiveOverride ?? homeIsActiveOverride;
-
-  if (isDataCenterItem && !sidebarCollapsed) {
-    return (
-      <div key={item.to} className="min-w-0">
-        <button
-          type="button"
-          aria-expanded={dataCenterSectionOpen}
-          onClick={() => setDataCenterSectionOpen((open) => !open)}
-          className={cn(
-            'relative flex w-full shrink-0 items-center justify-start gap-[10px] text-left text-[13px] leading-5 transition-[color,background-color,border-radius] duration-200 [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
-            sidebarNavExpandedIdleClass,
-          )}
-        >
-          <span className="flex shrink-0 items-center justify-center">{item.icon}</span>
-          <span className="min-w-0 flex-1 truncate">{item.label}</span>
-          <ChevronDown
-            className={cn(
-              'h-3.5 w-3.5 text-muted-foreground transition-transform',
-              !dataCenterSectionOpen && '-rotate-90',
-            )}
-          />
-        </button>
-        {dataCenterSectionOpen ? (
-          <div className="ml-[17px] mt-0.5 flex w-[calc(100%-17px)] flex-col gap-0.5 border-l border-[#DCDCDC] pl-1.5 dark:border-border">
-            {DATA_CENTER_SECTIONS.map((section) => {
-              const active = location.pathname === '/data-center' && dataCenterSection === section.id;
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() => navigate(`/data-center?section=${section.id}`)}
-                  className={cn(
-                    'relative inline-flex h-8 w-full min-w-0 items-center overflow-hidden rounded-lg px-[10px] py-1 text-left transition-colors',
-                    active ? sidebarSubitemTextActiveClass : sidebarSubitemTextIdleClass,
-                  )}
-                >
-                  <span className="min-w-0 flex-1 truncate">{t(`common:${section.labelKey}`)}</span>
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
+  const itemActiveOverride = myTasksActiveOverride ?? homeIsActiveOverride;
 
   return (
     <div key={item.to} className="min-w-0">
@@ -1856,13 +1803,7 @@ export function Sidebar() {
         onClick={
           item.to === '/'
             ? () => handleHomeClick?.()
-            : isDataCenterItem
-              ? (e) => {
-                  e.preventDefault();
-                  setSidebarCollapsed(false);
-                  setDataCenterSectionOpen(true);
-                }
-              : undefined
+            : undefined
         }
         isActiveOverride={itemActiveOverride}
         badge={item.badge}
@@ -2181,12 +2122,13 @@ export function Sidebar() {
               setAccountMenuOpen(open);
               if (open) {
                 setSupportQrOpen(false);
+                setMobileConnectOpen(false);
               }
             }}
           >
             {accountFooterMode === 'expanded-hotzone' ? (
               <div className="flex w-full min-w-0 items-center gap-3">
-                {/* 展开态：整块账号信息为菜单热区，无齿轮；问号独立（MasterGo 39:35844） */}
+                {/* 展开态：整块账号信息为菜单热区，无齿轮；PC/手机联通与问号独立 */}
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
@@ -2197,8 +2139,14 @@ export function Sidebar() {
                         ? t('common:status.connected')
                         : t('common:status.disconnected')
                     }
-                    onPointerEnter={() => setSupportQrOpen(false)}
-                    onPointerDown={() => setSupportQrOpen(false)}
+                    onPointerEnter={() => {
+                      setSupportQrOpen(false);
+                      setMobileConnectOpen(false);
+                    }}
+                    onPointerDown={() => {
+                      setSupportQrOpen(false);
+                      setMobileConnectOpen(false);
+                    }}
                   >
                     <span className={sidebarFooterNameClass}>
                       {authUser.realName?.trim() || authUser.userName}
@@ -2210,12 +2158,24 @@ export function Sidebar() {
                     ) : null}
                   </button>
                 </DropdownMenuTrigger>
+                <SidebarMobileConnectTooltip
+                  className={sidebarAccountHelpTriggerClass}
+                  open={mobileConnectOpen}
+                  onOpenChange={(open) => {
+                    setMobileConnectOpen(open);
+                    if (open) {
+                      setSupportQrOpen(false);
+                      setAccountMenuOpen(false);
+                    }
+                  }}
+                />
                 <SidebarSupportQrTooltip
                   className={sidebarAccountHelpTriggerClass}
                   open={supportQrOpen}
                   onOpenChange={(open) => {
                     setSupportQrOpen(open);
                     if (open) {
+                      setMobileConnectOpen(false);
                       setAccountMenuOpen(false);
                     }
                   }}
@@ -2234,8 +2194,14 @@ export function Sidebar() {
                           SIDEBAR_ACCOUNT_SETTINGS_TRIGGER_CLASS,
                         ),
                   )}
-                  onPointerEnter={() => setSupportQrOpen(false)}
-                  onPointerDown={() => setSupportQrOpen(false)}
+                  onPointerEnter={() => {
+                    setSupportQrOpen(false);
+                    setMobileConnectOpen(false);
+                  }}
+                  onPointerDown={() => {
+                    setSupportQrOpen(false);
+                    setMobileConnectOpen(false);
+                  }}
                   title={
                     accountFooterMode === 'collapsed-avatar'
                       ? isGatewayRunning
@@ -2358,6 +2324,19 @@ export function Sidebar() {
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
 
+              <DropdownMenuItem
+                onClick={() => navigate('/settings/models')}
+                className={cn(SIDEBAR_ACCOUNT_MENU_ITEM_CLASS, SIDEBAR_ACCOUNT_MENU_ITEM_HOVER)}
+              >
+                {t('common:sidebar.tokenBalance')}
+              </DropdownMenuItem>
+
+              <AccountSwitchMenuItems
+                itemClassName={SIDEBAR_ACCOUNT_MENU_ITEM_CLASS}
+                itemHoverClassName={SIDEBAR_ACCOUNT_MENU_ITEM_HOVER}
+                subContentClassName={SIDEBAR_ACCOUNT_MENU_SUBCONTENT_CLASS}
+              />
+
               <div className={SIDEBAR_ACCOUNT_MENU_DIVIDER_CLASS} aria-hidden="true" />
 
               <DropdownMenuItem
@@ -2369,15 +2348,28 @@ export function Sidebar() {
             </DropdownMenuContent>
           </DropdownMenu>
           {accountFooterMode !== 'expanded-hotzone' ? (
-            <SidebarSupportQrTooltip
-              open={supportQrOpen}
-              onOpenChange={(open) => {
-                setSupportQrOpen(open);
-                if (open) {
-                  setAccountMenuOpen(false);
-                }
-              }}
-            />
+            <>
+              <SidebarMobileConnectTooltip
+                open={mobileConnectOpen}
+                onOpenChange={(open) => {
+                  setMobileConnectOpen(open);
+                  if (open) {
+                    setSupportQrOpen(false);
+                    setAccountMenuOpen(false);
+                  }
+                }}
+              />
+              <SidebarSupportQrTooltip
+                open={supportQrOpen}
+                onOpenChange={(open) => {
+                  setSupportQrOpen(open);
+                  if (open) {
+                    setMobileConnectOpen(false);
+                    setAccountMenuOpen(false);
+                  }
+                }}
+              />
+            </>
           ) : null}
           </div>
         </div>
