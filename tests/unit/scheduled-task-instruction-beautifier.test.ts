@@ -36,6 +36,8 @@ describe('beautify instruction type', () => {
     const taskPrompt = resolveBeautifySystemPrompt('task');
     const promptPrompt = resolveBeautifySystemPrompt('prompt');
     expect(taskPrompt).toContain('定时任务');
+    expect(taskPrompt).toContain('@提及');
+    expect(taskPrompt).not.toContain('可在开头');
     expect(promptPrompt).toContain('提示词模版');
     expect(taskPrompt).not.toEqual(promptPrompt);
   });
@@ -48,7 +50,7 @@ describe('isOverCollapsed', () => {
       '第二步：拉取最新数据',
       '第三步：生成报告并发送',
     ].join('\n');
-    const optimized = '帮我执行 id 为：workflow-sto-daily-analysis 的工作流 【申通快递每日分析】';
+    const optimized = '执行该任务。';
     expect(isOverCollapsed(original, optimized)).toBe(true);
   });
 

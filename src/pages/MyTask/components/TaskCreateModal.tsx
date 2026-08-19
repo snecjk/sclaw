@@ -1057,6 +1057,11 @@ function TaskCreateModalInner({ job, onClose, onSave, initialValues }: TaskCreat
                 value={instructions}
                 disabled={saving}
                 className="shrink-0"
+                hasStructuredChips={() =>
+                  (composerSnapshotRef.current?.segments ?? []).some(
+                    (seg) => seg.type === 'file' || seg.type === 'skill' || seg.type === 'workflow',
+                  )
+                }
                 resolveWorkflow={() => {
                   const wf = composerSnapshotRef.current?.workflows[0];
                   return { workflowId: wf?.id, workflowName: wf?.name };

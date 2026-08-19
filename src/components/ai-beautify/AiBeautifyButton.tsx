@@ -34,6 +34,11 @@ export interface AiBeautifyButtonProps {
   workflowName?: string;
   /** 点击时读取最新工作流上下文（优先于 workflowId / workflowName） */
   resolveWorkflow?: () => { workflowId?: string; workflowName?: string };
+  /**
+   * 任务描述含文件 / 技能 / 工作流时跳过请求（仅纯文本与 @ 提及才美化）。
+   * `type="prompt"` 不使用。
+   */
+  hasStructuredChips?: () => boolean;
 }
 
 export function AiBeautifyButton({
@@ -46,6 +51,7 @@ export function AiBeautifyButton({
   workflowId,
   workflowName,
   resolveWorkflow,
+  hasStructuredChips,
 }: AiBeautifyButtonProps) {
   const [beautifying, setBeautifying] = useState(false);
 
@@ -53,6 +59,16 @@ export function AiBeautifyButton({
     const trimmed = value.trim();
     if (!trimmed) {
       onEmpty?.();
+      return;
+    }
+
+    if (type === 'task' && hasStructuredChips?.()) {
+      setBeautifying(true);
+      await new Promise((resolve) => {
+        window.setTimeout(resolve, 1000);
+      });
+      toast.info(COPY.noChange);
+      setBeautifying(false);
       return;
     }
 
