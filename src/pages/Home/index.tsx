@@ -7,6 +7,7 @@ import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
 import { createAutoSendWatcher } from '@/stores/message-queue';
 import { readMainChatDraftState } from '@/lib/main-chat-navigation';
+import { useJsBridgeHostStore } from '@/stores/jsbridge-host';
 import { cn } from '@/lib/utils';
 import { useSplitGridPassthroughClass } from '@/hooks/use-split-grid-passthrough-class';
 import { useHomeChatEntrySend } from './use-home-chat-entry-send';
@@ -50,6 +51,7 @@ export function Home() {
   const navigate = useNavigate();
   const locationState = location.state;
   const draftState = readMainChatDraftState(locationState);
+  const bridgeMainSeed = useJsBridgeHostStore((s) => s.mainComposerSeed?.text);
   const consumedDraftTokensRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -131,7 +133,7 @@ export function Home() {
         )}
       >
         <HomeAgentHubSurface
-          seedText={draftState?.mainChatDraft}
+          seedText={draftState?.mainChatDraft ?? bridgeMainSeed}
           seedSkillSlug={seedSkillSlug}
         />
       </div>

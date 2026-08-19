@@ -11,6 +11,8 @@ function applyMigrations(db: DatabaseSync, predicate: (version: number) => boole
       m.apply(db);
     } else if (m.sql) {
       db.exec(m.sql);
+    } else {
+      throw new Error(`migration v${m.version} has no operation`);
     }
     db.exec('COMMIT;');
   }

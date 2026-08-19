@@ -139,6 +139,48 @@ describe('useEmbeddedWorkflowTryRun', () => {
     toastError.mockClear();
   });
 
+  it('runs an unchanged published snapshot without confirmation or draft persistence', async () => {
+    const { result, editor, beginTryRun } = setup();
+    const publishedSnapshot = {
+      workflowId: 'wf-1',
+      workflowVersionId: 'published-7',
+      schemaVersion: 'workflow/v2' as const,
+      versionStatus: 'published' as const,
+      startup: { schema: null, defaultValues: { topic: '月报' } },
+    };
+
+    act(() => result.current.requestFromWeb('req-published', {
+      mode: 'use-current-published',
+      snapshot: publishedSnapshot,
+    }));
+
+    await waitFor(() => expect(beginTryRun).toHaveBeenCalledOnce());
+    expect(result.current.confirmOpen).toBe(false);
+    expect(editor.requestPersistedDraftSnapshot).not.toHaveBeenCalled();
+    expect(beginTryRun).toHaveBeenCalledWith(publishedSnapshot);
+    expect(editor.sendTryRunState.mock.calls).toEqual([
+      ['req-published', 'preparing'],
+    ]);
+  });
+
+  it('runs an unchanged draft snapshot without confirmation or draft persistence', async () => {
+    const { result, editor, beginTryRun } = setup();
+    const draftSnapshot = savedSnapshot();
+
+    act(() => result.current.requestFromWeb('req-draft', {
+      mode: 'use-current-draft',
+      snapshot: draftSnapshot,
+    }));
+
+    await waitFor(() => expect(beginTryRun).toHaveBeenCalledOnce());
+    expect(result.current.confirmOpen).toBe(false);
+    expect(editor.requestPersistedDraftSnapshot).not.toHaveBeenCalled();
+    expect(beginTryRun).toHaveBeenCalledWith(draftSnapshot);
+    expect(editor.sendTryRunState.mock.calls).toEqual([
+      ['req-draft', 'preparing'],
+    ]);
+  });
+
   it('saves and normalizes before beginning the negotiated local trial run', async () => {
     const order: string[] = [];
     const editor = createEditor();

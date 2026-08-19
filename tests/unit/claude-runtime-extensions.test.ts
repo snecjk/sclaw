@@ -4,38 +4,8 @@ import { DINGTALK_RECIPIENTS_MARKER } from '../../shared/dingtalk-send/dingtalk-
 import { RETIRED_SKILLS_SYSTEM_PROMPT } from '../../shared/retired-skills';
 import { SCHEDULED_TASK_CORE_PROMPT } from '../../shared/scheduled-task-instruction';
 import { CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT } from '../../sto-plugin/claude/claude-scheduled-task-tool/tools';
-import { buildClaudeRuntimeOptions, type ClaudeRuntimeOptions } from '../../electron/engines/claude-runtime-extensions';
+import { buildClaudeRuntimeOptions } from '../../electron/engines/claude-runtime-extensions';
 import { resetDingTalkSendRateLimitForTests } from '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk/dingtalk-send-guard';
-
-/** send-guard 会改写 `--text` 并返回 `updatedInput`；bash-gate 对未接入的 dws 直接 deny。 */
-async function findDingTalkSendGuardPreTool(runtime: ClaudeRuntimeOptions): Promise<HookCallback> {
-  const probe = {
-    hook_event_name: 'PreToolUse' as const,
-    session_id: 'sdk-session-probe',
-    transcript_path: 'transcript.jsonl',
-    cwd: 'D:/sai/sto-claw',
-    tool_name: 'Bash',
-    tool_input: {
-      command: 'dws chat message send --user u1 --title "消息" --text hello --format json',
-    },
-    tool_use_id: 'tool-probe',
-  };
-  const signal = { signal: new AbortController().signal };
-
-  for (const matcher of runtime.hooks?.PreToolUse ?? []) {
-    if (matcher.matcher && matcher.matcher !== 'Bash') continue;
-    for (const hook of matcher.hooks) {
-      const result = await hook(probe, probe.tool_use_id, signal);
-      const command = result?.hookSpecificOutput?.updatedInput?.command;
-      if (typeof command === 'string' && /dws(?:\.exe)?\s+chat\s+message\s+send\b/i.test(command)) {
-        resetDingTalkSendRateLimitForTests();
-        return hook;
-      }
-    }
-  }
-
-  throw new Error('dingtalk send-guard PreToolUse hook not found');
-}
 
 const { readDingTalkMentionPending, clearDingTalkMentionPending } = vi.hoisted(() => ({
   readDingTalkMentionPending: vi.fn(),
@@ -83,6 +53,17 @@ describe('buildClaudeRuntimeOptions', () => {
 
     expect(runtime.systemPromptAppend).toContain(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT);
     expect(runtime.mcpServers?.['claude-scheduled-task-tool']).toBeDefined();
+    expect(runtime.mcpServers?.['sto-browser-tool']).toBeDefined();
+    expect(runtime.systemPromptAppend).toContain('bridge_click');
+  });
+
+  it('registers embed bridge prompt for app plaza embed sessions', async () => {
+    readDingTalkMentionPending.mockResolvedValue(null);
+
+    const runtime = await buildClaudeRuntimeOptions('agent:main:session-embed-app-tb--x');
+
+    expect(runtime.mcpServers?.['sto-browser-tool']).toBeDefined();
+    expect(runtime.systemPromptAppend).toContain('不要调用 ba_*');
   });
 
   it('uses the Chinese Claude scheduled-task management policy', () => {
@@ -138,11 +119,12 @@ describe('buildClaudeRuntimeOptions', () => {
   it('blocks Bash batch sends and rate-limits only after a success', async () => {
     readDingTalkMentionPending.mockResolvedValue(null);
 
-    const runtime = await buildClaudeRuntimeOptions('sess-guard');
-    // PreToolUse[0] 是 connector bash-gate（会拦未接入的 dws），不是 send-guard。
-    const preTool = await findDingTalkSendGuardPreTool(runtime);
-    const postTool = runtime.hooks?.PostToolUse?.find((matcher) => matcher.matcher === 'Bash')
-      ?.hooks[0] as HookCallback | undefined;
+    const { buildStoDingTalkSendGuardClaudeRuntimeOptions } = await import(
+      '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk/runtime-options'
+    );
+    const runtime = await buildStoDingTalkSendGuardClaudeRuntimeOptions('sess-guard');
+    const preTool = runtime.hooks?.PreToolUse?.[0]?.hooks[0] as HookCallback;
+    const postTool = runtime.hooks?.PostToolUse?.[0]?.hooks[0] as HookCallback;
 
     expect(preTool).toBeTypeOf('function');
     expect(postTool).toBeTypeOf('function');

@@ -9,7 +9,7 @@ function _ts(label: string): void {
   console.log(`[STARTUP] ${label}: +${Date.now() - _startupT0}ms`);
 }
 
-import { app, BrowserWindow, dialog, nativeImage, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, session, shell } from 'electron';
 import type { Server } from 'node:http';
 import { basename, dirname, join, resolve } from 'path';
 import { existsSync } from 'node:fs';
@@ -63,10 +63,11 @@ import {
   stageExistingMacAppTarget,
   unregisterMacAppBundle,
 } from '../utils/cleanup-old-app-bundles';
+import { CLIENT_APP_NAME, CLIENT_APP_USER_MODEL_ID } from '../../shared/app-branding';
+import { getClientAppIcon } from './app-icon';
 
 _ts('static imports loaded');
 
-const WINDOWS_APP_USER_MODEL_ID = 'app.stoclaw.desktop';
 const LEGACY_USER_DATA_DIR_NAME = 'stoclaw';
 
 function pinLegacyUserDataPath(): void {
@@ -251,7 +252,7 @@ _ts('app flags set');
 
 // Dock / menu bar display name (Launchpad permanent name still comes from
 // electron-builder productName → CFBundleName after rebuild+reinstall).
-app.setName('SClaw');
+app.setName(CLIENT_APP_NAME);
 
 // On Linux, set CHROME_DESKTOP so Chromium can find the correct .desktop file.
 // On Wayland this maps the running window to stoclaw.desktop (icon + app grouping);
@@ -337,37 +338,6 @@ let hostApiServer: Server | null = null;
 const mainWindowFocusState = createMainWindowFocusState();
 const quitLifecycleState = createQuitLifecycleState();
 
-/**
- * Resolve the icons directory path (works in both dev and packaged mode)
- */
-function getIconsDir(): string {
-  if (app.isPackaged) {
-    // Packaged: icons are in extraResources -> process.resourcesPath/resources/icons
-    return join(process.resourcesPath, 'resources', 'icons');
-  }
-  // Development: relative to dist-electron/main/
-  return join(__dirname, '../../resources/icons');
-}
-
-/**
- * Get the app icon for the current platform
- */
-function getAppIcon(): Electron.NativeImage | undefined {
-  if (process.platform === 'darwin' && app.isPackaged) {
-    // Packaged macOS: use the app bundle icon (from Info.plist)
-    return undefined;
-  }
-
-  // Dev mode (all platforms) or packaged Windows/Linux: load icon from file
-  const iconsDir = getIconsDir();
-  const iconPath =
-    process.platform === 'win32'
-      ? join(iconsDir, 'icon.ico')
-      : join(iconsDir, 'icon.png');
-  const icon = nativeImage.createFromPath(iconPath);
-  return icon.isEmpty() ? undefined : icon;
-}
-
 function isLikelyPreviewDownloadUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -396,7 +366,7 @@ function createWindow(saved?: { width?: number; height?: number; x?: number; y?:
     y: saved?.y,
     minWidth: 960,
     minHeight: 640,
-    icon: getAppIcon(),
+    icon: getClientAppIcon(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
@@ -964,13 +934,17 @@ async function initialize(): Promise<void> {
     logger.warn('Failed to install/upgrade bundled plugins:', error);
   });
   try {
-    const { ensureStoBrowserBridgePluginInOpenClaw } = await import('../utils/openclaw-auth');
-    const modified = await ensureStoBrowserBridgePluginInOpenClaw();
-    if (modified) {
+    const { ensureStoBrowserBridgePluginInOpenClaw, ensureStoBrowserAutomationPluginInOpenClaw } = await import('../utils/openclaw-auth');
+    const bridgeModified = await ensureStoBrowserBridgePluginInOpenClaw();
+    if (bridgeModified) {
       logger.info('[plugin] Enabled sto-browser-bridge in openclaw.json');
     }
+    const automationModified = await ensureStoBrowserAutomationPluginInOpenClaw();
+    if (automationModified) {
+      logger.info('[plugin] Enabled sto-browser-automation in openclaw.json');
+    }
   } catch (error) {
-    logger.warn('Failed to enable sto-browser-bridge plugin in openclaw.json:', error);
+    logger.warn('Failed to enable browser plugins in openclaw.json:', error);
   }
 
   // Start Gateway automatically (this seeds missing bootstrap files with full templates)
@@ -1032,7 +1006,7 @@ if (gotTheLock) {
   });
 
   if (process.platform === 'win32') {
-    app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID);
+    app.setAppUserModelId(CLIENT_APP_USER_MODEL_ID);
   }
 
   // Note: gatewayManager, clawHubService, hostEventBus are constructed lazily

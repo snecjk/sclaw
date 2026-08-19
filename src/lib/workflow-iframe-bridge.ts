@@ -9,6 +9,7 @@ export const WORKFLOW_SAVE_DRAFT_REQUEST = 'workflow-save-draft-request';
 export const WORKFLOW_SAVE_DRAFT_RESPONSE = 'workflow-save-draft-response';
 export const WORKFLOW_SAVE_DRAFT_ERROR = 'workflow-save-draft-error';
 export const WORKFLOW_BACK_REQUEST = 'workflow-back-request';
+export const WORKFLOW_LOCAL_RUN_HISTORY_REQUEST = 'workflow-local-run-history-request';
 export const WORKFLOW_DRAFT_REQUEST = 'workflow-draft-request';
 export const WORKFLOW_DRAFT_RESPONSE = 'workflow-draft-response';
 export const WORKFLOW_DRAFT_ERROR = 'workflow-draft-error';
@@ -24,7 +25,7 @@ export type WorkflowTryRunState =
   | 'failed'
   | 'completed'
   | 'error';
-export type WorkflowHostCapability = 'localTrialRun' | 'hostBack';
+export type WorkflowHostCapability = 'localTrialRun' | 'hostBack' | 'localRunHistory';
 export type WorkflowEditorCapability = 'ownsHeader' | 'persistBeforeTrialRun';
 
 export interface WorkflowBridgeStartupFieldOption {
@@ -87,8 +88,32 @@ export interface WorkflowEditorReadyMessage extends WorkflowBridgeEnvelope {
   capabilities: WorkflowEditorCapability[];
 }
 
+export interface WorkflowRunnableSnapshot {
+  workflowId: string;
+  workflowVersionId: string | number;
+  schemaVersion: 'workflow/v2';
+  versionStatus: 'draft' | 'published';
+  startup: {
+    schema: WorkflowBridgeStartupSchema | null;
+    defaultValues: Record<string, unknown>;
+  };
+}
+
+export type WorkflowTryRunPreparation =
+  | { mode: 'persist-draft' }
+  | {
+      mode: 'use-current-published';
+      snapshot: WorkflowRunnableSnapshot & { versionStatus: 'published' };
+    }
+  | {
+      mode: 'use-current-draft';
+      snapshot: WorkflowRunnableSnapshot & { versionStatus: 'draft' };
+    };
+
 export interface WorkflowTryRunRequestMessage extends WorkflowBridgeEnvelope {
   type: typeof WORKFLOW_TRY_RUN_REQUEST;
+  /** Absent only for an older Web editor; Host treats it as persist-draft. */
+  preparation?: WorkflowTryRunPreparation;
 }
 
 export interface WorkflowTryRunStateMessage extends WorkflowBridgeEnvelope {
@@ -101,15 +126,8 @@ export interface WorkflowSaveDraftRequestMessage extends WorkflowBridgeEnvelope 
   type: typeof WORKFLOW_SAVE_DRAFT_REQUEST;
 }
 
-export interface WorkflowSavedDraftSnapshot {
-  workflowId: string;
-  workflowVersionId: string | number;
-  schemaVersion: 'workflow/v2';
+export interface WorkflowSavedDraftSnapshot extends WorkflowRunnableSnapshot {
   versionStatus: 'draft';
-  startup: {
-    schema: WorkflowBridgeStartupSchema | null;
-    defaultValues: Record<string, unknown>;
-  };
 }
 
 export interface WorkflowSaveDraftResponseMessage extends WorkflowBridgeEnvelope, WorkflowSavedDraftSnapshot {
@@ -123,6 +141,10 @@ export interface WorkflowSaveDraftErrorMessage extends WorkflowBridgeEnvelope {
 
 export interface WorkflowBackRequestMessage extends WorkflowBridgeEnvelope {
   type: typeof WORKFLOW_BACK_REQUEST;
+}
+
+export interface WorkflowLocalRunHistoryRequestMessage extends WorkflowBridgeEnvelope {
+  type: typeof WORKFLOW_LOCAL_RUN_HISTORY_REQUEST;
 }
 
 export type WorkflowPerformanceStage =
@@ -282,11 +304,36 @@ export function isWorkflowEditorReady(value: unknown): value is WorkflowEditorRe
 }
 
 export function isWorkflowTryRunRequest(value: unknown): value is WorkflowTryRunRequestMessage {
-  return isWorkflowBridgeEnvelope(value) && value.type === WORKFLOW_TRY_RUN_REQUEST;
+  if (!isWorkflowBridgeEnvelope(value) || value.type !== WORKFLOW_TRY_RUN_REQUEST) return false;
+  const preparation = value.preparation;
+  if (preparation === undefined) return true;
+  if (!isRecord(preparation)) return false;
+  if (preparation.mode === 'persist-draft') return true;
+  if (
+    preparation.mode !== 'use-current-published' &&
+    preparation.mode !== 'use-current-draft'
+  ) return false;
+  const snapshot = preparation.snapshot;
+  if (!isRecord(snapshot) || snapshot.workflowId !== value.workflowId) return false;
+  const startup = snapshot.startup;
+  return (
+    (typeof snapshot.workflowVersionId === 'string' || typeof snapshot.workflowVersionId === 'number') &&
+    snapshot.schemaVersion === 'workflow/v2' &&
+    snapshot.versionStatus ===
+      (preparation.mode === 'use-current-draft' ? 'draft' : 'published') &&
+    isRecord(startup) &&
+    Object.hasOwn(startup, 'schema') &&
+    (startup.schema === null || isWorkflowBridgeStartupSchema(startup.schema)) &&
+    isRecord(startup.defaultValues)
+  );
 }
 
 export function isWorkflowBackRequest(value: unknown): value is WorkflowBackRequestMessage {
   return isWorkflowBridgeEnvelope(value) && value.type === WORKFLOW_BACK_REQUEST;
+}
+
+export function isWorkflowLocalRunHistoryRequest(value: unknown): value is WorkflowLocalRunHistoryRequestMessage {
+  return isWorkflowBridgeEnvelope(value) && value.type === WORKFLOW_LOCAL_RUN_HISTORY_REQUEST;
 }
 
 export function isWorkflowSaveDraftResponse(value: unknown): value is WorkflowSaveDraftResponseMessage {

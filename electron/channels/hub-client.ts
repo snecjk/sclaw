@@ -2,7 +2,8 @@ import WebSocket from 'ws';
 import { EventEmitter } from 'node:events';
 import { logger } from '../utils/logger';
 import { resolveSclawHubWsUrl } from './hub-config';
-import { touchDingTalkOnline } from './binding-service';
+import { touchSharedHubOnline } from './binding-service';
+import type { StreamContentKind } from './stream-content-kind';
 
 /** Hub → Desktop 多模态分片（url 可直接下载） */
 export interface SclawInboundMediaPart {
@@ -32,6 +33,10 @@ export interface SclawInboundEnvelope {
     msgtype?: string;
     /** 多模态 parts；优先于仅 text */
     parts?: SclawInboundMediaPart[];
+    /** dingtalk | mobile；缺省按 dingtalk 兼容 */
+    channelType?: 'dingtalk' | 'mobile' | string;
+    /** App 续聊；空则新建 */
+    sessionKey?: string | null;
   };
 }
 
@@ -92,12 +97,23 @@ export class SclawHubClient extends EventEmitter {
     return true;
   }
 
-  sendDelta(chatUid: string, content: string, finalize = false): boolean {
+  sendDelta(
+    chatUid: string,
+    content: string,
+    finalize = false,
+    extras?: {
+      sessionKey?: string;
+      /** App 区分过程态 vs 正文；缺省由接收方当 answer */
+      contentKind?: StreamContentKind;
+    },
+  ): boolean {
     return this.send({
       type: finalize ? 'done' : 'delta',
       chatUid,
       content,
       finalize,
+      ...(extras?.sessionKey ? { sessionKey: extras.sessionKey } : {}),
+      ...(extras?.contentKind ? { contentKind: extras.contentKind } : {}),
     });
   }
 
@@ -141,7 +157,7 @@ export class SclawHubClient extends EventEmitter {
         this.state = 'connected';
         this.reconnectAttempt = 0;
         this.startPing();
-        void touchDingTalkOnline();
+        void touchSharedHubOnline();
         logger.info('[SclawHub] connected');
         this.emit('connected');
         settleOk();
@@ -182,6 +198,10 @@ export class SclawHubClient extends EventEmitter {
         this.emit('inbound', msg);
         return;
       }
+      if (msg.type === 'history.list' || msg.type === 'history.get') {
+        this.emit('historyRpc', msg);
+        return;
+      }
       if (msg.type === 'bind.replaced') {
         const reason = (msg.reason || 'bound_on_another_device') as SclawBindReplacedReason;
         logger.info(`[SclawHub] bind.replaced reason=${reason}`);
@@ -199,6 +219,8 @@ export class SclawHubClient extends EventEmitter {
     this.clearPing();
     this.pingTimer = setInterval(() => {
       this.send({ type: 'ping' });
+      // 与钉钉/App 共用一条心跳：续期本地 last_online
+      void touchSharedHubOnline();
     }, 30_000);
   }
 

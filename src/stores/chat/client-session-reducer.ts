@@ -1,4 +1,8 @@
 import { AppError } from '@/lib/error-model';
+import {
+  formatChatRuntimeErrorMessage,
+  resolveChatRuntimeErrorCode,
+} from './runtime-error-message';
 import type {
   CanonicalChatEvent,
   ChatRunPhase,
@@ -200,7 +204,11 @@ export function reduceSessionEvent(
     && payload?.reason === 'superseded';
   const errorMessage = (event.type === 'run.failed' || event.type === 'run.interrupted')
     && !isSupersededInterruption
-    ? String(payload?.error ?? payload?.reason ?? 'Chat run failed')
+    ? formatChatRuntimeErrorMessage(payload, 'Chat run failed')
+    : null;
+  const errorCode = (event.type === 'run.failed' || event.type === 'run.interrupted')
+    && !isSupersededInterruption
+    ? resolveChatRuntimeErrorCode(payload, 'Chat run failed')
     : null;
   const awaitingTranscript = event.type === 'message.final'
     || event.type === 'run.awaiting_transcript'
@@ -280,7 +288,9 @@ export function reduceSessionEvent(
       error: startsNewRun
         ? null
         : errorMessage
-          ? new AppError('GATEWAY', errorMessage)
+          ? new AppError(errorCode ?? 'GATEWAY', errorMessage, undefined, {
+            reason: typeof payload?.reason === 'string' ? payload.reason : undefined,
+          })
           : terminal
             ? null
             : state.error,

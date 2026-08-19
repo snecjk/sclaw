@@ -1660,11 +1660,10 @@ export const sidebarMetaLinkClass = cn(
 
 /** 侧栏底部账号名 — MCP 8:46481 / 13px Regular（视觉与列表项一致） */
 export const sidebarFooterNameClass =
-  'truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-name)]';
-
+  'min-w-0 w-full truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-name)]';
 /** 侧栏底部账号元信息 — MCP 8:46481 #8B9099 Grey-6 / 13px Regular */
 export const sidebarFooterMetaClass =
-  'truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-meta)]';
+  'min-w-0 w-full truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-meta)]';
 
 /**
  * 展开态底部账号热区 trigger — MasterGo 39:35844「底部热区」

@@ -14,12 +14,13 @@ export async function buildSclawBrowserEmbedContextForSend(input: {
   const snapshot = await captureSclawBrowserPage(input.runtimeId);
   const recentNetwork = await getSclawBrowserNetworkLog(input.runtimeId, Date.now() - 60_000);
   const bridgeSessionId = buildSclawEmbedBridgeSessionId(input.runtimeId);
+  const livePageUrl = snapshot?.pageUrl?.trim() || input.fallbackUrl;
 
   return {
     embedRuntimeId: input.runtimeId,
     bridgeSessionId,
     appTitle: input.appTitle,
-    pageUrl: snapshot?.pageUrl ?? input.fallbackUrl,
+    pageUrl: livePageUrl,
     pageTitle: snapshot?.pageTitle ?? '',
     visibleTextExcerpt: snapshot?.visibleTextExcerpt ?? '',
     capturedAt: snapshot?.capturedAt ?? Date.now(),

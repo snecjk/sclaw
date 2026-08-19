@@ -35,9 +35,11 @@ export function useWindowsChromeOwner(): WindowsChromeOwner {
   const appPlazaVisible = useAppPlazaShellStore((s) => s.routeActive);
   const editorActive = useWorkflowUiStore((state) => state.editorActive);
   const embeddedHeaderOwned = useWorkflowUiStore((state) => state.embeddedHeaderOwned);
+  const embeddedHeaderNegotiating = useWorkflowUiStore((state) => state.embeddedHeaderNegotiating);
   const contentHeaderVisible = !shouldHideWorkflowContentHeader({
     editorActive,
     embeddedHeaderOwned,
+    embeddedHeaderNegotiating,
   });
 
   return resolveWindowsChromeOwner({

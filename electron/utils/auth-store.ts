@@ -187,6 +187,9 @@ export async function clearAuthUser(): Promise<void> {
   store.set('isAuthenticated', false);
   store.set('user', null);
   store.set('impersonationOrigin', null);
+  void import('../main/services/jsbridge/session-registry').then(({ destroyAllBridgeSessions }) => {
+    destroyAllBridgeSessions('auth_logout');
+  }).catch(() => {});
   await removeSsoAuthFromSaiCli(previousUser);
   await removeSsoAuthFromOpenClaw();
 }

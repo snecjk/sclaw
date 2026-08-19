@@ -192,6 +192,7 @@
     "noEvents": "No execution events",
     "noArtifacts": "No artifacts",
     "openArtifact": "Open artifact",
+    "clickViewAttachment": "Click to view attachment",
     "downloadArtifact": "Download artifact",
     "expandProcess": "Expand execution process",
     "collapseProcess": "Collapse execution process",
