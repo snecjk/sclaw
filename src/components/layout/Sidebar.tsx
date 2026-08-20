@@ -46,7 +46,7 @@ import { getCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
 import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 import { useChatRuntimeIndicators } from '@/stores/chat/runtime-selectors';
 import { useGatewayStore } from '@/stores/gateway';
-import { useAuthStore, isSiteUser } from '@/stores/auth';
+import { useAuthStore } from '@/stores/auth';
 import { readSessionUnread, useSessionUnreadStore } from '@/stores/session-unread';
 
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -118,6 +118,7 @@ import {
   toggleGroupExpanded,
 } from '@/lib/sidebar-section-group-expand';
 import { isSidebarPrimaryNavItemVisible } from '@/lib/sidebar-primary-nav';
+import { pageLearningDomains } from '@/lib/learning-center-api';
 import {
   sidebarFooterMetaClass,
   sidebarFooterNameClass,
@@ -718,10 +719,47 @@ export function Sidebar() {
   const isGatewayRunning = gatewayStatus.state === 'running';
 
   const authUser = useAuthStore((s) => s.user);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const authLogout = useAuthStore((s) => s.logout);
-  const siteDepartmentTypes = useAuthStore((s) => s.siteDepartmentTypes);
-  const isSite =
-    siteDepartmentTypes !== null && isSiteUser(authUser?.categoryCode);
+  const learningCenterAccountKey = isAuthenticated && authUser
+    ? [authUser.userName, authUser.companyCode, authUser.departmentCode, authUser.categoryCode].join('\u0000')
+    : null;
+  const [learningCenterAccess, setLearningCenterAccess] = useState({
+    accountKey: null as string | null,
+    visible: false,
+  });
+  const learningCenterVisible = learningCenterAccountKey !== null
+    && learningCenterAccess.accountKey === learningCenterAccountKey
+    && learningCenterAccess.visible;
+
+  useEffect(() => {
+    let active = true;
+
+    if (!learningCenterAccountKey) {
+      return () => {
+        active = false;
+      };
+    }
+
+    void pageLearningDomains({ pageNum: 1, pageSize: 1 })
+      .then((page) => {
+        if (active) {
+          setLearningCenterAccess({
+            accountKey: learningCenterAccountKey,
+            visible: page.items.length > 0,
+          });
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setLearningCenterAccess({ accountKey: learningCenterAccountKey, visible: false });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [learningCenterAccountKey]);
 
   const language = useSettingsStore((s) => s.language);
   const setLanguage = useSettingsStore((s) => s.setLanguage);
@@ -1695,11 +1733,10 @@ export function Sidebar() {
     ];
     return all.filter((item) => isSidebarPrimaryNavItemVisible(item.to, {
       primaryMyData: sidebarVis.primaryMyData,
-      siteDepartmentTypesLoaded: siteDepartmentTypes !== null,
-      isSite,
+      learningCenterVisible,
       isProduction: getCurrentEnvConfig().isProduction,
     }));
-  }, [isSite, sidebarVis.primaryMyData, siteDepartmentTypes, t]);
+  }, [learningCenterVisible, sidebarVis.primaryMyData, t]);
 
   const workspaceNav = [
     { to: '/agents', icon: <Bot className="h-4 w-4" strokeWidth={1.75} />, label: t('common:sidebar.agents') },
