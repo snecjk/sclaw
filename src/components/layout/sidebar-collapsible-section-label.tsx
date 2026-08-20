@@ -64,7 +64,7 @@ export function SidebarCollapsibleSectionLabel({
           aria-label={toggleAriaLabel}
           onClick={onToggle}
           className={cn(
-            'flex h-full min-w-0 flex-1 items-center rounded-lg px-[10px] py-[5px] text-left outline-none ring-offset-2 focus-visible:ring-2 focus-visible:ring-ring',
+            'flex h-full min-w-0 flex-1 items-center rounded-lg px-[10px] py-[5px] text-left outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0',
             sidebarSectionLabelClass,
           )}
         >

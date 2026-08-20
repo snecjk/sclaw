@@ -52,7 +52,9 @@
         "channelSource": {
             "dingtalk": "钉钉",
             "wechat": "微信",
-            "app": "App"
+            "wecom": "企业微信",
+            "app": "App",
+            "qq": "QQ"
         },
         "compactAccountMenu": "账户与设置",
         "supportGroup": {

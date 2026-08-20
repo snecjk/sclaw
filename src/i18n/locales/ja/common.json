@@ -48,6 +48,13 @@
         "sessionRunning": "実行中",
         "sessionFailed": "実行失敗",
         "sessionUnread": "未読",
+        "channelSource": {
+            "dingtalk": "DingTalk",
+            "wechat": "WeChat",
+            "wecom": "WeCom",
+            "app": "App",
+            "qq": "QQ"
+        },
         "compactAccountMenu": "アカウントと設定",
         "supportGroup": {
             "title": "SClaw 製品相談グループ",

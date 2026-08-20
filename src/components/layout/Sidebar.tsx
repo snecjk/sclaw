@@ -199,7 +199,7 @@ const SIDEBAR_SHOW_TASK_GROUP_CHEVRON = true;
 
 /** 任务组二级行 — 不用 justify-between，短标题时 Chevron 紧跟标题（对齐项目一级行） */
 const SIDEBAR_TASK_GROUP_ROW_CLASS =
-  'flex h-8 w-full items-center gap-1.5 rounded-lg px-[10px] py-1 text-left outline-none ring-offset-2 transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:ring-2 focus-visible:ring-ring';
+  'flex h-8 w-full items-center gap-1.5 rounded-lg px-[10px] py-1 text-left outline-none transition-colors hover:bg-[var(--sto-sidebar-row-hover-bg)] focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0';
 /**
  * 任务二级子项容器 — 与项目二级水平对齐：
  * 层级竖线 25px（滚动区 8 + ml 17）；选中背景起点 32px（17 + 1px 边框 + pl-1.5）；

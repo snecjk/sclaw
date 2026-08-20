@@ -5,12 +5,16 @@
  * that were created before channel metadata was written.
  */
 
-export type SidebarChannelSource = 'dingtalk' | 'wechat' | 'app';
+export type SidebarChannelSource = 'dingtalk' | 'wechat' | 'wecom' | 'app' | 'qq';
 
 const SOURCE_FROM_CATALOG: Record<string, SidebarChannelSource> = {
   dingtalk: 'dingtalk',
   wechat: 'wechat',
   'openclaw-weixin': 'wechat',
+  wecom: 'wecom',
+  'wecom-openclaw-plugin': 'wecom',
+  qq: 'qq',
+  qqbot: 'qq',
   app: 'app',
   mobile: 'app',
   'sto-mobile': 'app',
@@ -19,6 +23,9 @@ const SOURCE_FROM_CATALOG: Record<string, SidebarChannelSource> = {
 const SOURCE_FROM_KEY: Record<string, SidebarChannelSource> = {
   dingtalk: 'dingtalk',
   wechat: 'wechat',
+  wecom: 'wecom',
+  qq: 'qq',
+  qqbot: 'qq',
   app: 'app',
   mobile: 'app',
 };
