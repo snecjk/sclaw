@@ -572,10 +572,12 @@ export const ChatMessage = memo(function ChatMessage({
     setShareDraft(null);
   }, [setShareDialogOpen, setShareDraft, t]);
 
-  // Never render tool result messages in chat UI
+  // Never render tool result messages in chat UI.
+  // 仅工作流 / 仅 chip 时 content 为空，但 _composerSegments 仍应出气泡（乐观更新同理）。
   if (isToolResult || (
     !hasText
     && !skillMeta
+    && !useSegmentBubble
     && !showThinkingPanel
     && images.length === 0
     && visibleTools.length === 0

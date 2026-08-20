@@ -37,12 +37,21 @@ export function buildChatDisplayModel(
       )
     ));
     if (echoIndex >= 0) {
-      if (optimistic._skillMeta && !messages[echoIndex]._skillMeta) {
+      const echo = messages[echoIndex];
+      const needsSkillPatch = Boolean(optimistic._skillMeta && !echo._skillMeta);
+      const needsComposerPatch = Boolean(
+        optimistic._composerSegments?.length
+        && !echo._composerSegments?.length,
+      );
+      if (needsSkillPatch || needsComposerPatch) {
         messages = messages.map((message, index) => (
           index === echoIndex
             ? {
                 ...message,
-                _skillMeta: optimistic._skillMeta,
+                _skillMeta: optimistic._skillMeta ?? message._skillMeta,
+                _skillMetas: optimistic._skillMetas ?? message._skillMetas,
+                _composerSegments: optimistic._composerSegments ?? message._composerSegments,
+                _attachedFiles: optimistic._attachedFiles ?? message._attachedFiles,
                 content: optimistic.content ?? message.content,
               }
             : message
