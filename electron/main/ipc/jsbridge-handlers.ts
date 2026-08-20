@@ -63,7 +63,7 @@ export function registerJsBridgeIpcHandlers(): void {
       return { ok: false, error: 'Authentication required' };
     }
 
-    grantBridgeConsent({
+    await grantBridgeConsent({
       appId,
       capability: capability as Capability,
       grantedBy: auth.user.id,
@@ -76,13 +76,13 @@ export function registerJsBridgeIpcHandlers(): void {
 
   ipcMain.handle('bridge:listConsents', async (_, payload: { appId?: string }) => {
     const appId = typeof payload?.appId === 'string' ? payload.appId.trim() : undefined;
-    return { ok: true, consents: listBridgeConsents(appId) };
+    return { ok: true, consents: await listBridgeConsents(appId) };
   });
 
   ipcMain.handle('bridge:revokeApp', async (_, payload: { appId?: string }) => {
     const appId = typeof payload?.appId === 'string' ? payload.appId.trim() : '';
     if (!appId) return { ok: false };
-    revokeBridgeAppConsents(appId);
+    await revokeBridgeAppConsents(appId);
     return { ok: true };
   });
 
@@ -93,7 +93,7 @@ export function registerJsBridgeIpcHandlers(): void {
     const appId = typeof payload?.appId === 'string' ? payload.appId.trim() : '';
     const capability = typeof payload?.capability === 'string' ? payload.capability.trim() : '';
     if (!appId || !isCapability(capability)) return { ok: false };
-    revokeBridgeConsent(appId, capability as Capability);
+    await revokeBridgeConsent(appId, capability as Capability);
     return { ok: true };
   });
 }

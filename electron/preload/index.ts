@@ -211,6 +211,7 @@ const electronAPI = {
         'sclaw-browser:getNetworkLog',
         'sclaw-browser:ensureBridge',
         'sclaw-browser:setPointerPassthrough',
+        'sclaw-browser:openDevTools',
         // JSBridge (Guest webview ↔ Main)
         'bridge:getGuestPreloadPath',
         'bridge:invoke',
