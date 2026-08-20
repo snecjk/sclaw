@@ -5,7 +5,6 @@
  * All endpoints return { success, data, traceId } and require stoToken header.
  */
 import { invokeIpc } from '@/lib/api-client';
-import { useChatStore } from '@/stores/chat';
 import { hostApiFetch } from '@/lib/host-api';
 import { useAuthStore } from '@/stores/auth';
 import { resolveModelToPersistForSession } from '@/lib/sync-workspace-default-to-chat';
@@ -296,6 +295,8 @@ export interface StartWorkflowLocalParams {
   idempotencyKey: string;
   /** 会话键——仅透传给本地 engine 落 wf_run.session_key，不发给后端。 */
   sessionKey: string;
+  /** Owning agent of sessionKey; never inferred from the visible conversation. */
+  agentId: string;
   /** 本地业务发起入口，仅写入客户端 wf_run，不发送到云端。 */
   triggerType: 'chat' | 'scheduled_task' | 'workflow_manual' | 'designer_test' | 'api';
   runMode?: 'trial' | 'production';
@@ -304,6 +305,11 @@ export interface StartWorkflowLocalParams {
   engineType: 'claude' | 'openclaw';
   /** Explicit chat model to pin for this run, when the caller has one. */
   engineModel?: string;
+  chatCard?: {
+    title?: string | null;
+    paramsSummary?: string | null;
+    anchorUserMessageId?: string | null;
+  };
 }
 
 export interface StartWorkflowLocalResult {
@@ -316,6 +322,10 @@ export interface StartWorkflowLocalResult {
   startedAt: string;
 }
 
+export type WorkflowStartAcceptance =
+  | { accepted: true; runId: string; replay: boolean }
+  | { accepted: false; runId: string; error: string };
+
 /**
  * OpenClaw workflow nodes run in dedicated Gateway sessions, so an inherited
  * Claude session model must never be pinned onto `wf_run`.  Resolve from the
@@ -325,25 +335,21 @@ export function resolveWorkflowRunEngineModel(params: {
   engineType: StartWorkflowLocalParams['engineType'];
   engineModel?: string;
   sessionKey: string;
-}): string | undefined {
-  const chat = useChatStore.getState();
-  if (params.engineType === 'openclaw') {
-    const workspaceDefault = resolveModelToPersistForSession({
-      sessionKey: params.sessionKey,
-      agentId: chat.currentAgentId,
-      engineType: 'openclaw',
-      preferSessionModel: false,
-      preferPendingModel: false,
-    });
-    if (!workspaceDefault) {
-      throw new Error('未找到 OpenClaw 聊天默认模型，无法启动工作流');
-    }
-    return workspaceDefault.modelId;
+  agentId: string;
+}): string {
+  const explicit = params.engineModel?.trim();
+  if (explicit) return explicit;
+  const resolved = resolveModelToPersistForSession({
+    sessionKey: params.sessionKey,
+    agentId: params.agentId,
+    engineType: params.engineType,
+    preferSessionModel: true,
+    preferPendingModel: false,
+  });
+  if (!resolved) {
+    throw new Error(`未找到 ${params.engineType === 'openclaw' ? 'OpenClaw' : 'Claude'} 目标会话模型，无法启动工作流`);
   }
-
-  const sessionModel = chat.sessions.find((session) => session.key === params.sessionKey)?.model
-    ?? chat.sessions.find((session) => session.key === chat.currentSessionKey)?.model;
-  return params.engineModel?.trim() || sessionModel?.trim() || undefined;
+  return resolved.modelId;
 }
 
 /**
@@ -394,7 +400,7 @@ export async function startWorkflowLocal(
 
   // 2. 本地执行下沉：IPC handler 在主进程 await 整个 run（dispatch 到终态/等待节点），
   //    renderer 不 await——状态走广播桥回流。
-  await invokeIpc('workflow-runtime:start', {
+  const acceptance = await invokeIpc<WorkflowStartAcceptance>('workflow-runtime:start', {
     runId: data.runId,
     runDatabaseId: data.runDatabaseId,
     workflowId: params.workflowId,
@@ -406,7 +412,14 @@ export async function startWorkflowLocal(
     triggerType: params.triggerType,
     engineType: params.engineType,
     engineModel,
+    chatCard: params.chatCard,
   });
+  if (!acceptance?.accepted) {
+    throw new Error(acceptance?.error || '工作流本地运行状态持久化失败');
+  }
+  if (acceptance.runId !== data.runId) {
+    throw new Error('工作流本地运行确认返回了不匹配的 runId');
+  }
 
   return {
     runId: data.runId,

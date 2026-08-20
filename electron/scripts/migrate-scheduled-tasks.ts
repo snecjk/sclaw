@@ -21,7 +21,9 @@ import { getAuthState } from '../utils/auth-store';
  * OpenClaw **不依赖 Gateway**：直读 `jobs.json`（路径：`openclaw/cron/jobs.json`）。
  * 启动早期即可跑，避免 `cron.list` 在 Gateway 未连接时失败 → 仍写 marker → 永久漏迁。
  *
- * 源文件只读保留：不清 `definitions.json`，也不改写/清空 `jobs.json`。
+ * 源文件策略：`definitions.json` 只读保留；`jobs.json` 迁移完成后清空已迁 cron
+ * 条目（保留非 cron）并写 `.migrated-bak` 备份，防 Gateway CronService 仍读旧文件
+ * 双调度（与 `OPENCLAW_SKIP_CRON` 配套）。
  *
  * 字段映射原则（两引擎对称）：
  *  - `dingtalkRecipients=null`、prompt **原样保留烘焙块**。
@@ -170,8 +172,8 @@ async function migrateClaudeDefinitions(
 }
 
 /**
- * 直读 `openclaw/cron/jobs.json` → 写入 schedule_tasks。
- * 只读源文件，不改写 / 不清空 jobs.json。不调用 cron.list / cron.remove。
+ * 直读 `openclaw/cron/jobs.json` → 写入 schedule_tasks。迁移完成后清空 jobs.json
+ * 已迁 cron 条目（保留非 cron）+ 写 `.migrated-bak` 备份。不调用 cron.list / cron.remove。
  */
 async function migrateOpenclawCronJobs(
   taskRepo: ScheduleTaskRepository,
@@ -201,6 +203,8 @@ async function migrateOpenclawCronJobs(
   let skipped = 0;
   let nonCron = 0;
   let createFailures = 0;
+  /** 已确认进 SQLite 的 cron 条目 id —— 迁移完成后从 jobs.json 清除。 */
+  const consumed = new Set<string>();
 
   for (const job of jobs) {
     if (!job?.id) continue;
@@ -226,6 +230,7 @@ async function migrateOpenclawCronJobs(
     const existing = await taskRepo.getById(job.id, { includeDeleted: true });
     if (existing) {
       skipped += 1;
+      consumed.add(job.id);
       continue;
     }
 
@@ -253,6 +258,7 @@ async function migrateOpenclawCronJobs(
     try {
       await taskRepo.create(input);
       migrated += 1;
+      consumed.add(job.id);
     } catch (error) {
       createFailures += 1;
       logger.warn('[migration] openclaw task create failed (left in jobs.json)', {
@@ -264,6 +270,21 @@ async function migrateOpenclawCronJobs(
   }
 
   const complete = createFailures === 0;
+
+  // 迁移完成：把已进 SQLite 的 cron 条目从 jobs.json 清除，只留非 cron 拋留
+  // （everyMs/at 迁不进 schedule_tasks）。备份原文件一次，便于回滚。
+  if (complete && consumed.size > 0) {
+    const bakPath = `${jobsPath}.migrated-bak`;
+    if (!(await fileExists(bakPath))) {
+      await writeFile(bakPath, raw, 'utf8');
+    }
+    const leftovers = jobs.filter((j) => !j?.id || !consumed.has(j.id));
+    await writeFile(jobsPath, JSON.stringify({ ...data, jobs: leftovers }, null, 2), 'utf8');
+    logger.info(
+      `[migration] openclaw jobs.json cleaned (${consumed.size} removed, ${leftovers.length} left)`,
+    );
+  }
+
   logger.info(
     `[migration] openclaw: ${migrated} migrated, ${skipped} skipped, ${nonCron} non-cron skipped` +
       (complete ? '' : ` (${createFailures} create failures)`),
@@ -330,7 +351,7 @@ export async function runScheduledTasksMigration(
     return;
   }
 
-  // 首次跑，或补迁了 openclaw：写/更新 marker（源文件保留，skipped 不再触发改写）
+  // 首次跑，或补迁了 openclaw：写/更新 marker（jobs.json 已在 migrateOpenclawCronJobs 内清空）
   if (!markerPresent || openclawResult.migrated > 0) {
     let claudeForMarker = claudeResult;
     if (markerPresent) {

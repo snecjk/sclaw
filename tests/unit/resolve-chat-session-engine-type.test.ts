@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isUnusedEmbedChatSession,
   resolveChatSessionEngineType,
   resolveUnusedEmbedChatEngineType,
 } from '@/lib/resolve-chat-session-engine-type';
 import { DEFAULT_SESSION_KEY } from '@/stores/chat/types';
+
+const EMBED_KEY = 'agent:main:session-embed-app-ext-1--cabc';
 
 describe('resolveChatSessionEngineType', () => {
   it('follows agent default for unused embed sessions even when session stamp is openclaw', () => {
@@ -31,5 +34,12 @@ describe('resolveChatSessionEngineType', () => {
   it('resolveUnusedEmbedChatEngineType normalizes agent engine', () => {
     expect(resolveUnusedEmbedChatEngineType('claude')).toBe('claude');
     expect(resolveUnusedEmbedChatEngineType(undefined)).toBe('openclaw');
+  });
+
+  it('isUnusedEmbedChatSession detects empty embed chats', () => {
+    expect(isUnusedEmbedChatSession(EMBED_KEY, 0, false)).toBe(true);
+    expect(isUnusedEmbedChatSession(EMBED_KEY, 1, false)).toBe(false);
+    expect(isUnusedEmbedChatSession(EMBED_KEY, 0, true)).toBe(false);
+    expect(isUnusedEmbedChatSession(DEFAULT_SESSION_KEY, 0, false)).toBe(false);
   });
 });

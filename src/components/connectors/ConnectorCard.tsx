@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
 import { cn } from '@/lib/utils';
+import { listCardHoverBorderShadowClass } from '@/lib/surfaces';
 import { navigateToNewSessionWithDraft } from '@/lib/main-chat-navigation';
 import {
   resolveManagedCliBinary,
@@ -141,9 +142,9 @@ export function ConnectorCard({ item, busy, onConnect, onDisconnect, onTokenConn
         className={cn(
           'group relative flex h-[80px] min-w-0 cursor-pointer items-center gap-3 overflow-hidden rounded-2xl border bg-white px-4',
           'border-border shadow-sm',
-          'transition-[border-color,box-shadow,background-color,transform] duration-200 ease-out',
-          'hover:-translate-y-0.5 hover:border-primary hover:bg-primary/[0.04] hover:shadow-md',
-          'active:translate-y-0 active:shadow-sm',
+          'transition-[border-color,box-shadow] duration-200 ease-out',
+          listCardHoverBorderShadowClass,
+          'active:shadow-sm',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
           'dark:bg-background',
         )}

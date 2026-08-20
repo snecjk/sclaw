@@ -1,5 +1,13 @@
 import { cn } from '@/lib/utils';
 
+/**
+ * 列表/广场卡片 hover 描边 + 阴影：与首页推荐卡一致
+ *（RecommendCard：hover:border-[#C9CDD4] + hover:shadow-[0px_0px_16px_0px_rgba(0,0,0,0.12)]）
+ */
+export const listCardHoverBorderShadowClass = cn(
+  'hover:border-[#C9CDD4] hover:shadow-[0px_0px_16px_0px_rgba(0,0,0,0.12)] dark:hover:border-border',
+);
+
 /** Page section surface (Models page, Settings proxy, etc.) — glass gradient + blur */
 export const glassSectionSurface = cn(
   'rounded-2xl border border-border p-6',
@@ -33,9 +41,12 @@ export const stoSettingsContentPanelBodyClass = cn(
   'min-h-0 flex-1 overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]',
 );
 
-/** 设置页右侧内容主列（MasterGo 容器 7361：862×958、left 145px 于卡片内、top 72px、gap 36px） */
+/**
+ * 设置页右侧内容主列（MasterGo 容器 7361：862×958、left 145px 于卡片内、top 72px、gap 36px）
+ * SettingsShell 已占用顶部 `--sto-chrome-h` 作为 drag-region，此处扣减以保持标题距卡片顶仍约 72px。
+ */
 export const stoSettingsContentInnerClass = cn(
-  'mx-auto box-border flex w-full max-w-[862px] flex-col gap-[36px] pt-[72px] pb-10',
+  'mx-auto box-border flex w-full max-w-[862px] flex-col gap-[36px] pt-[calc(72px-var(--sto-chrome-h))] pb-10',
   'px-6 min-[974px]:px-0',
 );
 
@@ -153,22 +164,41 @@ export const stoPageTitleClass =
 /**
  * 我的任务页标题行：标题与右侧操作同一高度对齐。
  */
-export const myTaskPageHeaderRowClass = 'flex min-w-0 items-center justify-between gap-4';
+export const myTaskPageHeaderRowClass = 'flex min-w-0 items-start justify-between gap-4';
+
+/** 我的任务页副标题（标题下方说明） */
+export const myTaskPageSubtitleClass =
+  'm-0 mt-1.5 text-sm font-normal leading-5 text-muted-foreground';
+
+/** 我的任务 / 技能·连接器一级 Tab 轨道（图二：#EDEDED 胶囊轨） */
+export const myTaskSectionTabsTrackClass =
+  'inline-flex w-fit flex-shrink-0 items-center gap-0.5 rounded-[12px] bg-[#EDEDED] p-0.5 dark:bg-muted';
+
+/** 我的任务 / 技能·连接器一级 Tab 按钮（图二：选中白底深字） */
+export function myTaskSectionTabClass(active: boolean): string {
+  return cn(
+    "inline-flex items-center gap-1.5 rounded-[10px] px-3.5 py-[7px] font-['PingFang_SC'] text-[14px] font-medium leading-none transition-colors duration-150",
+    active
+      ? 'bg-white text-[#1A1A1A] dark:bg-background dark:text-foreground'
+      : 'bg-transparent text-[#4E5969] hover:bg-black/[0.04] hover:text-[#1D2129] dark:text-muted-foreground dark:hover:bg-white/[0.06] dark:hover:text-foreground',
+  );
+}
 
 /**
- * 我的任务页「新建定时任务」：Grey-4（border）底 + Grey-10 文字 + 10px 圆角。
+ * 我的任务页「新建定时任务」：白底 + #E8EAEF 描边 + 12px 圆角。
  */
 export const myTaskCreateButtonClass = cn(
   'inline-flex shrink-0 items-center gap-1.5 h-[34px] px-3.5 text-sm font-medium',
-  'rounded-[10px] bg-border text-foreground',
-  'transition-colors duration-fast hover:bg-black/[0.04] dark:hover:bg-white/[0.06] active:scale-[0.98]',
+  'rounded-[12px] border border-[#E8EAEF] bg-white text-foreground',
+  'transition-colors duration-fast hover:bg-black/[0.04] dark:border-border dark:bg-card dark:hover:bg-white/[0.06] active:scale-[0.98]',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
 );
 
-/** 我的任务卡片外框（MasterGo 容器 7377）：18px 圆角 + 16px 内距 + #E9EAEB 描边，无阴影；等高网格内 h-full */
+/** 我的任务卡片外框：18px 圆角 + 0.8px #E5E6EB 描边 + 白底；等高网格内 h-full */
 export const myTaskCardShellClass = cn(
-  'relative flex h-full min-w-0 flex-col rounded-[18px] border border-[#E9EAEB] bg-card p-4 dark:border-border dark:bg-secondary',
-  'transition-[border-color] duration-base',
+  'relative flex h-full min-w-0 flex-col rounded-[18px] border-[0.8px] border-[#E5E6EB] bg-white p-4 dark:border-border dark:bg-secondary',
+  'transition-[border-color,box-shadow] duration-base',
+  listCardHoverBorderShadowClass,
 );
 
 /** 我的任务运行保障控件：标题行右侧紧凑排布（文案 + 问号 + 开关） */
@@ -176,31 +206,47 @@ export const myTaskRunGuardBarShellClass = cn(
   'inline-flex shrink-0 items-center gap-2',
 );
 
-/** 我的任务卡片顶栏：开关左、更多右（与开关同高，保证开关→标题 18px） */
-export const myTaskCardTopRowClass = 'flex shrink-0 items-start justify-between gap-3';
+/** 我的任务卡片顶栏：左标题区、右开关 */
+export const myTaskCardTopRowClass = 'flex shrink-0 items-center justify-between gap-3';
 
-/** 我的任务卡片标题区：距顶栏开关 18px；标题与描述间距 6px */
-export const myTaskCardBodyClass = 'mt-[18px] flex shrink-0 flex-col gap-1.5';
+/** 我的任务卡片标题区（图标 + 标题 + badge）；图标与标题间距 6px */
+export const myTaskCardTitleRowClass = 'flex min-w-0 flex-1 items-center gap-1.5';
+
+/** 我的任务卡片描述区：顶栏下方 12px；描述两行 */
+export const myTaskCardBodyClass = 'mt-3 flex shrink-0 flex-col';
 
 /** 详情与底栏之间的弹性占位：最小 18px；同行卡片等高时多余高度落在此处 */
 export const myTaskCardDetailFooterGapClass = 'min-h-[18px] flex-1';
 
 /** 我的任务卡片标题：14px / 行高 18 / Medium */
-export const myTaskCardTitleClass = 'm-0 text-sm font-medium leading-[18px] text-foreground';
+export const myTaskCardTitleClass = 'm-0 min-w-0 truncate text-sm font-medium leading-[18px] text-[#1A1A1A] dark:text-foreground';
 
-/** 我的任务卡片描述：12px / 行高 18 / 两行截断 */
+/** 我的任务卡片描述：12px / Regular / #8B9099 / 两行截断 */
 export const myTaskCardDescriptionClass =
-  'm-0 line-clamp-2 text-xs leading-[18px] text-muted-foreground';
+  'm-0 line-clamp-2 text-xs font-normal leading-[18px] text-[#8B9099]';
 
-/** 我的任务卡片底栏：计划时间左、下次执行右；贴壳层底部，与卡片底边固定 16px（壳层 p-4） */
+/** 我的任务卡片底栏：计划时间左、立即运行+更多右 */
 export const myTaskCardFooterClass =
   'flex shrink-0 items-center justify-between gap-3';
 
 /** 我的任务卡片计划时间行 */
 export const myTaskCardScheduleRowClass =
-  'inline-flex min-w-0 items-center gap-1 text-xs leading-[14px] text-foreground/80';
+  'min-w-0 truncate text-xs leading-[14px] text-[#4E5969]';
 
-/** 我的任务卡片下次执行文案 */
+/** 我的任务卡片底栏操作组 */
+export const myTaskCardFooterActionsClass = 'inline-flex shrink-0 items-center gap-2';
+
+/** 我的任务卡片「立即运行」：白底 + #E5E6EB 描边 + 8px 圆角；12px Medium #1D2129 */
+export const myTaskCardRunButtonClass = cn(
+  'inline-flex items-center justify-center rounded-[8px] border border-[#E5E6EB] bg-white',
+  'px-3 py-1.5 text-xs font-medium leading-none text-[#1D2129]',
+  'transition-colors duration-fast hover:bg-black/[0.02] active:scale-[0.98]',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+  'disabled:pointer-events-none disabled:opacity-50',
+  'dark:border-border dark:bg-card dark:text-foreground dark:hover:bg-white/[0.06]',
+);
+
+/** 我的任务卡片下次执行文案（保留 token，当前图示底栏不再展示） */
 export const myTaskCardNextRunClass = 'shrink-0 text-xs leading-[14px] text-muted-foreground';
 
 /** 我的任务卡片更多菜单（图2） */
@@ -276,33 +322,36 @@ export function dropdownOptionClass(isActive: boolean): string {
   );
 }
 
-/** 我的任务 / 工作流排期开关轨道 */
+/** 我的任务 / 工作流排期开关轨道（32×16，启用 #00B54B，圆角 80px） */
 export function scheduleToggleTrackClass(checked: boolean): string {
   return cn(
-    'relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-none p-0 transition-colors duration-fast',
+    'relative inline-flex h-4 w-8 shrink-0 cursor-pointer rounded-[80px] border-none p-0 transition-colors duration-fast',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-    checked ? 'bg-success dark:bg-success/90' : 'bg-border dark:bg-muted',
+    checked
+      ? 'bg-[#00B54B] dark:bg-[#00B54B]'
+      : 'bg-zinc-200 dark:bg-zinc-600',
   );
 }
 
-/** 排期开关滑块（暗色下用浅底，避免与卡片底色融为一体） */
+/** 排期开关滑块：12×12，始终白底；开启位移 16px */
 export const scheduleToggleThumbClass = cn(
-  'absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-card dark:bg-foreground/80',
+  'absolute top-0.5 left-0.5 h-3 w-3 rounded-full bg-white',
   'shadow-[0_1px_2px_rgba(15,23,42,0.15)] dark:shadow-[0_1px_2px_rgba(0,0,0,0.45)]',
   'transition-transform duration-fast',
 );
 
-/** 我的任务卡片：关联工作流 badge（复用 cover purple token） */
+/** 我的任务卡片：关联工作流 badge（浅/暗色均用 #F0F4FF 底 + #6171DB 字） */
 export const myTaskWorkflowBadgeClass = cn(
-  'ml-[6px] inline-flex shrink-0 items-center gap-[4px] whitespace-nowrap rounded-full',
-  'border border-[var(--sto-wf-cover-purple-accent)] bg-[var(--sto-wf-cover-purple-bg)]',
-  'px-[7px] py-[1px] text-[11px] font-medium leading-[1.55] text-[var(--sto-wf-cover-purple-icon)]',
+  'inline-flex shrink-0 items-center gap-[4px] whitespace-nowrap rounded-[6px]',
+  'bg-[#F0F4FF] px-1.5 py-[3px] text-xs font-medium leading-none text-[#6171DB]',
 );
 
 /** 执行记录单行：暗色用 secondary 与主卡片底色分层 */
 export const myTaskRecordItemShellClass = cn(
   'flex items-center gap-3.5 rounded-[12px] border border-border bg-card p-[14px_16px]',
+  'transition-[border-color,box-shadow] duration-base',
   'dark:bg-secondary',
+  listCardHoverBorderShadowClass,
 );
 
 /** 执行记录「查看详情」 */
@@ -772,6 +821,7 @@ export const stoMainCardShellClass = cn(
 export const stoMainCardBodyClass = cn(
   'min-h-0 min-w-0 flex-1 overflow-auto overscroll-y-contain',
   'px-[var(--sto-content-pad-x)] pb-5 pt-0 [scrollbar-gutter:stable]',
+  'has-[.sto-workflow-mc-editor]:pb-0',
 );
 
 /**
@@ -1013,6 +1063,15 @@ export const workflowListSearchInputClass = cn(
 );
 
 /**
+ * 我的任务页「搜索任务名称」：184×34，白底 + #E8EAEF 描边 + 12px 圆角；focus 无阴影。
+ */
+export const myTaskSearchInputClass = cn(
+  'h-[34px] w-[184px] rounded-[12px] border border-[#E8EAEF] bg-white py-0 pl-[30px] pr-[10px]',
+  'text-[13px] placeholder:text-muted-foreground dark:border-border dark:bg-card',
+  'focus:outline-none focus:ring-0 focus:shadow-none',
+);
+
+/**
  * 工作流列表：二级筛选 nav 行（单行横向滚动，避免换行导致 Tab/筛选切换时整页高度跳动）
  */
 export const workflowListSubnavNavClass =
@@ -1055,7 +1114,8 @@ export const workflowListCardGridClass =
 /** 工作流列表卡片外框 */
 export const workflowListCardShellClass = cn(
   'flex h-full w-full cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[#E9EAEB] bg-card dark:border-border dark:bg-secondary',
-  'transition-[border-color] duration-base',
+  'transition-[border-color,box-shadow] duration-base',
+  listCardHoverBorderShadowClass,
 );
 
 /** 工作流卡片头图：距卡片边框上/左/右 4px（设计稿） */
@@ -1412,7 +1472,7 @@ export const chatToolCallContentShellClass = chatProcessContentTextWrapClass;
 
 /** 工具入参正文（规范 §4.4：13px 灰色 pre-wrap） */
 export const chatToolCallInputPreClass = cn(
-  'm-0 max-h-[min(42vh,400px)] overflow-y-auto whitespace-pre-wrap break-words',
+  'sto-chat-content-scrollbar m-0 max-h-[min(42vh,400px)] overflow-y-auto whitespace-pre-wrap break-words',
   'text-[13px] leading-5 font-normal text-[#86909C]',
 );
 
@@ -1430,7 +1490,8 @@ export const chatThinkingSegmentSummaryHeaderClass = cn(
 );
 
 /** 思考/工具过程次要正文（规范 §4.3 / §4.4 内容区） */
-export const chatProcessSecondaryTextClass = 'text-[13px] leading-5 font-normal text-[#86909C]';
+export const chatProcessSecondaryTextClass =
+  'sto-chat-content-scrollbar text-[13px] leading-5 font-normal text-[#86909C]';
 
 /** Loading 等待文案（chat-interaction-style-spec §2.1 text-muted / §4.6） */
 export const chatProcessLoadingTextClass = 'text-[13px] leading-[18px] font-normal text-[#6B737D]';
@@ -1451,10 +1512,11 @@ export const workflowBuilderShell = cn(
 
 /**
  * MC iframe 工作流编辑：顶栏由 useWorkflowEditorContentHeader 注入 ContentHeader；
- * 仅抵消水平 main 内距，iframe 占满 ContentHeader 下方剩余高度。
+ * 仅抵消水平 main 内距，iframe 占满 ContentHeader 下方剩余高度；
+ * marker 仅取消该页面继承的主内容区 20px 底部 padding，保留 AppShell 的 8px Frame。
  */
 export const workflowMcEditorShell = cn(
-  '-mx-[var(--sto-content-pad-x)] flex min-h-0 min-w-0 flex-1 flex-col',
+  'sto-workflow-mc-editor -mx-[var(--sto-content-pad-x)] flex min-h-0 min-w-0 flex-1 flex-col',
 );
 
 /**
@@ -1545,7 +1607,8 @@ export const sidebarScrollOverlayHostClass = stoOverlayScrollHostClass;
 export const sidebarNavExpandedIdleClass = cn(
   'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5',
   sidebarTextDefaultClass,
-  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
+  // stroke：Lucide；text：内联填充图标（如 timer）的 currentColor，避免吃到正文色
+  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)] [&_svg]:text-[var(--sto-sidebar-text-icon)]',
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
@@ -1554,7 +1617,7 @@ export const sidebarNavExpandedActiveClass = cn(
   'h-8 min-h-8 rounded-[8px] px-[10px] font-normal leading-5 shadow-none',
   'bg-[var(--sto-sidebar-nav-active-bg)]',
   sidebarTextDefaultClass,
-  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)]',
+  '[&_svg]:stroke-[var(--sto-sidebar-text-icon)] [&_svg]:text-[var(--sto-sidebar-text-icon)]',
   'hover:bg-[var(--sto-sidebar-row-hover-bg)]',
 );
 
@@ -1583,11 +1646,10 @@ export const sidebarMetaLinkClass = cn(
 
 /** 侧栏底部账号名 — MCP 8:46481 / 13px Regular（视觉与列表项一致） */
 export const sidebarFooterNameClass =
-  'truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-name)]';
-
+  'min-w-0 w-full truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-name)]';
 /** 侧栏底部账号元信息 — MCP 8:46481 #8B9099 Grey-6 / 13px Regular */
 export const sidebarFooterMetaClass =
-  'truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-meta)]';
+  'min-w-0 w-full truncate text-[13px] font-normal leading-[18px] text-[var(--sto-sidebar-footer-meta)]';
 
 /**
  * 展开态底部账号热区 trigger — MasterGo 39:35844「底部热区」

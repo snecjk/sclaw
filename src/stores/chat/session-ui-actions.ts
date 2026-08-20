@@ -1,5 +1,6 @@
 import type { ChatSet, SessionActions } from './store-api';
-import { clearActivatingSessionIfHandedOff } from './session-runtime';
+import { useChatRuntimeV2Store } from './runtime-v2-store';
+import { buildChatSessionRuntimeView } from './runtime-selectors';
 
 /** Local session metadata mutations; remote session operations live elsewhere. */
 export function createSessionUiActions(
@@ -46,16 +47,17 @@ export function createSessionUiActions(
       const key = sessionKey.trim();
       if (!key) return;
       set((state) => {
-        const activatingScheduledSessionAt = clearActivatingSessionIfHandedOff(
-          state.activatingScheduledSessionAt,
-          key,
-          state.runtimeBySessionKey,
-          state.sessionLastActivity,
-          state.sessions,
+        if (!state.activatingScheduledSessionAt[key]) return state;
+        const runtime = buildChatSessionRuntimeView(
+          useChatRuntimeV2Store.getState().sessionsByKey[key],
         );
-        return activatingScheduledSessionAt === state.activatingScheduledSessionAt
-          ? state
-          : { activatingScheduledSessionAt };
+        const session = state.sessions.find((item) => item.key === key);
+        const hasActivity = (state.sessionLastActivity[key] ?? 0) > 0
+          || (typeof session?.updatedAt === 'number' && session.updatedAt > 0);
+        if (!runtime.sending && !runtime.activeRunId && !hasActivity) return state;
+        const activatingScheduledSessionAt = { ...state.activatingScheduledSessionAt };
+        delete activatingScheduledSessionAt[key];
+        return { activatingScheduledSessionAt };
       });
     },
   };

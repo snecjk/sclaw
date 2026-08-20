@@ -12,15 +12,34 @@ export interface ParameterFormHandler {
 }
 
 const handlers = new Map<string, ParameterFormHandler>();
+const listeners = new Set<() => void>();
+let handlersRevision = 0;
+
+function notifyHandlerRegistryChanged(): void {
+  handlersRevision += 1;
+  for (const listener of listeners) listener();
+}
+
+/** Subscribe React consumers to the in-memory handler registry. */
+export function subscribeParameterFormHandlers(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/** Monotonic snapshot used by useSyncExternalStore. */
+export function getParameterFormHandlersRevision(): number {
+  return handlersRevision;
+}
 
 /** Register a handler for a specific formId */
 export function registerParameterFormHandler(formId: string, handler: ParameterFormHandler): void {
   handlers.set(formId, handler);
+  notifyHandlerRegistryChanged();
 }
 
 /** Remove a registered handler */
 export function unregisterParameterFormHandler(formId: string): void {
-  handlers.delete(formId);
+  if (handlers.delete(formId)) notifyHandlerRegistryChanged();
 }
 
 /**
@@ -47,7 +66,7 @@ export async function submitParameterForm(formId: string, values: FormResult): P
     const { dismissParameterFormInChat } = await import('./dismiss-parameter-form');
     dismissParameterFormInChat(resolvedId);
   } finally {
-    handlers.delete(resolvedId);
+    if (handlers.delete(resolvedId)) notifyHandlerRegistryChanged();
   }
   return true;
 }

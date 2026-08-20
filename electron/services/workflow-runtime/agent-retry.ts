@@ -16,6 +16,7 @@ import {
   getWorkflowPacketFailureMessage,
   isRetryableWorkflowPacketFailure,
   normalizeStructuredOutputPacket,
+  normalizeWorkflowArtifactDrafts,
   unwrapClaudeStructuredOutputEnvelope,
   validateWorkflowPacket,
   workflowPacketJsonSchema,
@@ -23,6 +24,10 @@ import {
 import { deriveWorkflowNodeSessionId } from './node-session';
 import { canonicalizeWorkflowArtifacts, validateInlinePayload } from './artifact-output';
 import { workflowExecLog } from './logging';
+import {
+  resolveWorkflowAgentDeadlineMs,
+  resolveWorkflowAgentNoProgressMs,
+} from '../../../shared/workflow-agent-timeouts';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const backoff = (a: number) => Math.min(30_000, 1000 * 2 ** (a - 1));
@@ -65,6 +70,7 @@ export function summarizeRetryFailure(value: unknown): string {
 }
 
 function formatRetryFailure(context: RetryFailureContext): string {
+  if (context.source === 'agent') return `模型服务调用失败：${context.error}`;
   const target = context.toolName ?? context.toolId ?? '工具/MCP 调用';
   return `${context.source === 'mcp' ? 'MCP' : '工具'} ${target} 实际失败：${context.error}`;
 }
@@ -92,6 +98,8 @@ export interface RetryDeps {
   invokeAgent: InvokeAgentFn;  // required：引擎绑 sdk 注入；测试注入 mock
   quota?: () => Promise<boolean>;  // 生产注入：调 /api/token-quota/check，超额度返 false
   execEngine?: 'claude' | 'openclaw';
+  /** User cancellation terminates this attempt loop instead of scheduling a retry. */
+  isCancelled?: () => boolean | Promise<boolean>;
 }
 
 function isWorkflowPacketProtocolFailure(context: RetryFailureContext | null, error: string): boolean {
@@ -132,6 +140,9 @@ export async function runAgentNodeWithRetry(
   let lastRaw = '';
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (await deps.isCancelled?.()) {
+      return { status: 'cancelled', error: '节点执行已取消' };
+    }
     // G1: 配额门（复用聊天日额度门），超额度 → run FAILED
     if (!(await quota())) {
       await ctx.emit('run.quota_exceeded', { attempt }, node.id);
@@ -190,6 +201,7 @@ export async function runAgentNodeWithRetry(
       // 调用Agent
       let toolCalls = 0;
       const toolNamesByCallId = new Map<string, { toolId?: string; toolName?: string }>();
+      const noProgressMs = resolveWorkflowAgentNoProgressMs(spec.guardrails?.timeoutMs);
       result = await invokeAgent({
         ctx,
         prompt,
@@ -197,8 +209,8 @@ export async function runAgentNodeWithRetry(
         attempt,
         agentSessionId,
         resumeSession,
-        noProgressMs: spec.guardrails?.timeoutMs,
-        deadlineMs: spec.guardrails?.timeoutMs ? Math.max(spec.guardrails.timeoutMs * 2, spec.guardrails.timeoutMs + 60_000) : undefined,
+        noProgressMs,
+        deadlineMs: resolveWorkflowAgentDeadlineMs(),
         allowedTools: spec.allowedTools,
       permissionMode: spec.permissionPolicy?.mode,
       model: spec.target.model,
@@ -246,14 +258,24 @@ export async function runAgentNodeWithRetry(
       result = { status: 'failed', error: e instanceof Error ? e.message : String(e), rawText: '' };
     }
 
+    // cancelAgent resolves an in-flight invocation as a failed result. Check
+    // cancellation before normal failure handling can schedule another attempt.
+    if (await deps.isCancelled?.()) {
+      return { status: 'cancelled', error: '节点执行已取消', rawText: result.rawText };
+    }
+
     // G1: 记 token 用量（从 SDK ResultMessage.usage 取）
     if (result.usage) {
       await ctx.emit('agent.usage', result.usage, node.id);
     }
 
     if (result.status === 'failed') {
-      const failedProtocol = isWorkflowPacketProtocolFailure(lastFailure, result.error ?? '');
-      const agentError = lastFailure ? formatRetryFailure(lastFailure) : summarizeRetryFailure(result.error ?? 'Agent execution failed.');
+      const resultError = summarizeRetryFailure(result.error ?? 'Agent execution failed.');
+      const providerRateLimitExhausted = /模型服务请求过于频繁（HTTP 429），已按间隔重试\s*3\s*次仍失败/i.test(resultError);
+      const failedProtocol = !providerRateLimitExhausted && isWorkflowPacketProtocolFailure(lastFailure, resultError);
+      const agentError = providerRateLimitExhausted
+        ? resultError
+        : lastFailure ? formatRetryFailure(lastFailure) : resultError;
       lastError = failedProtocol ? `${PACKET_OUTPUT_MISSING}：${agentError}` : agentError;
       if (failedProtocol) {
         lastFailure = { source: 'agent', error: lastError };
@@ -262,6 +284,8 @@ export async function runAgentNodeWithRetry(
           code: 'RESULT_WORKFLOW_PACKET_MISSING', category: 'output_validation', message: lastError, retryable: attempt < maxAttempts,
         });
         lastRaw = result.rawText ?? '';
+      } else if (providerRateLimitExhausted) {
+        lastFailure = { source: 'agent', error: lastError };
       } else if (!lastFailure) {
         lastFailure = { source: 'agent', error: lastError };
       }
@@ -269,9 +293,16 @@ export async function runAgentNodeWithRetry(
         run_id: ctx.runId, node_id: node.id, node_type: node.type, status: 'RUNNING',
         last_completion_issue: lastError, prompt_text: prompt,
       });
-      await ctx.emit('agent.attempt.failed', { attempt, error: lastError, failureContext: lastFailure, ...(failedProtocol ? { code: 'RESULT_WORKFLOW_PACKET_MISSING', protocol: 'workflow_packet' } : {}) }, node.id);
+      const failureMetadata = providerRateLimitExhausted
+        ? { code: 'PROVIDER_RATE_LIMIT', category: 'provider', retryable: false }
+        : failedProtocol ? { code: 'RESULT_WORKFLOW_PACKET_MISSING', protocol: 'workflow_packet' } : {};
+      await ctx.emit('agent.attempt.failed', { attempt, error: lastError, failureContext: lastFailure, ...failureMetadata }, node.id);
+      if (providerRateLimitExhausted) {
+        await ctx.emit('completion.failed', { reason: lastError, ...failureMetadata }, node.id);
+        return { status: 'failed', output: lastOutput, error: lastError, rawText: result.rawText ?? '', usage: result.usage };
+      }
       if (attempt < maxAttempts) await ctx.emit('completion.retry_scheduled', { attempt, reason: lastError, failureContext: lastFailure, ...(failedProtocol ? { code: 'RESULT_WORKFLOW_PACKET_MISSING', protocol: 'workflow_packet' } : {}) }, node.id);
-      await sleep(backoff(attempt));
+      if (attempt < maxAttempts) await sleep(backoff(attempt));
       continue;
     }
 
@@ -279,7 +310,8 @@ export async function runAgentNodeWithRetry(
       ? { packet: result.output, unwrapped: false }
       : unwrapClaudeStructuredOutputEnvelope(result.output);
     const structuredOutput = normalizeStructuredOutputPacket(claudeEnvelope.packet);
-    const packet = structuredOutput.packet;
+    const artifactDrafts = normalizeWorkflowArtifactDrafts(structuredOutput.packet);
+    const packet = artifactDrafts.packet;
     if (!packet) {
       lastError = `${PACKET_OUTPUT_MISSING}：模型未返回 SDK 结构化结果`;
       lastFailure = { source: 'agent', error: lastError };
@@ -291,6 +323,19 @@ export async function runAgentNodeWithRetry(
     }
     if (structuredOutput.normalized) {
       await ctx.emit('completion.output_normalized', { attempt, reason: 'payload_json_string_normalized' }, node.id);
+    }
+    if (artifactDrafts.normalized) {
+      await ctx.emit('completion.output_normalized', {
+        attempt,
+        reason: 'artifact_host_metadata_stripped',
+        artifacts: artifactDrafts.stripped,
+      }, node.id);
+      workflowExecLog('info', 'agent-output-normalized', 'host-owned artifact metadata stripped from model draft', {
+        runId: ctx.runId,
+        nodeId: node.id,
+        attempt,
+        artifacts: artifactDrafts.stripped,
+      });
     }
     const ports = Array.isArray(node.config?.branches)
       ? node.config.branches.map((branch: any) => branch?.branchKey ?? branch?.key).filter(Boolean)

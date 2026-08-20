@@ -22,6 +22,8 @@ const electronAPI = {
         'gateway:restart',
         'gateway:rpc',
         'gateway:httpProxy',
+        'chat-runtime:get',
+        'chat-runtime:listActive',
         'hostapi:fetch',
         'agent-memory:status',
         'agent-memory:bootstrap',
@@ -209,6 +211,13 @@ const electronAPI = {
         'sclaw-browser:getNetworkLog',
         'sclaw-browser:ensureBridge',
         'sclaw-browser:setPointerPassthrough',
+        // JSBridge (Guest webview ↔ Main)
+        'bridge:getGuestPreloadPath',
+        'bridge:invoke',
+        'bridge:grantCapability',
+        'bridge:listConsents',
+        'bridge:revokeApp',
+        'bridge:revokeCapability',
       ];
 
       if (validChannels.includes(channel)) {
@@ -225,8 +234,7 @@ const electronAPI = {
       const validChannels = [
         'gateway:status-changed',
         'gateway:message',
-        'gateway:notification',
-        'gateway:engine-event',
+        'chat-runtime:event',
         'gateway:channel-status',
         'channel:whatsapp-qr',
         'channel:whatsapp-success',
@@ -266,6 +274,9 @@ const electronAPI = {
         'workflow:stream:error',
         'sclaw-browser:toggle-chat',
         'sclaw-browser:open-url',
+        'jsbridge:open-tab',
+        'jsbridge:close-tab',
+        'jsbridge:toast',
       ];
 
       if (validChannels.includes(channel)) {
@@ -291,8 +302,7 @@ const electronAPI = {
       const validChannels = [
         'gateway:status-changed',
         'gateway:message',
-        'gateway:notification',
-        'gateway:engine-event',
+        'chat-runtime:event',
         'gateway:channel-status',
         'channel:whatsapp-qr',
         'channel:whatsapp-success',

@@ -2,8 +2,9 @@ import type { ChatSession } from './types';
 import { DEFAULT_SESSION_KEY } from './types';
 import type { ChatGet, ChatSet, SessionActions } from './store-api';
 import { clearSessionEntryFromMap, getAgentIdFromSessionKey, isTemporaryAgentSessionKey } from './session-identity';
-import { buildSessionSwitchPatch } from './session-runtime';
 import { clearSessionSendReadiness } from '@/lib/session-send-readiness';
+import { getSessionDisplayMessages } from './display-selectors';
+import { useChatRuntimeV2Store } from './runtime-v2-store';
 
 export interface SessionNavigationDependencies {
   markSessionRead: (sessionKey: string) => void;
@@ -21,7 +22,31 @@ export function createSessionNavigationActions(
     switchSession: (key) => {
       if (key === get().currentSessionKey) return;
       dependencies.markSessionRead(key);
-      set((state) => buildSessionSwitchPatch(state, key, dependencies.resolveEngineType));
+      set((state) => {
+        const leavingEmpty = isTemporaryAgentSessionKey(state.currentSessionKey)
+          && getSessionDisplayMessages(state.currentSessionKey).length === 0
+          && !state.sessionLastActivity[state.currentSessionKey]
+          && !state.sessionLabels[state.currentSessionKey];
+        const retainedSessions = leavingEmpty
+          ? state.sessions.filter((session) => session.key !== state.currentSessionKey)
+          : state.sessions;
+        const sessions = retainedSessions.some((session) => session.key === key)
+          ? retainedSessions
+          : [...retainedSessions, { key, engineType: dependencies.resolveEngineType(key) }];
+        return {
+          currentSessionKey: key,
+          currentAgentId: getAgentIdFromSessionKey(key),
+          pendingProjectId: null,
+          sessions,
+          sessionLabels: leavingEmpty
+            ? clearSessionEntryFromMap(state.sessionLabels, state.currentSessionKey)
+            : state.sessionLabels,
+          sessionLastActivity: leavingEmpty
+            ? clearSessionEntryFromMap(state.sessionLastActivity, state.currentSessionKey)
+            : state.sessionLastActivity,
+          loading: false,
+        };
+      });
 
       const targetSession = get().sessions.find((session) => session.key === key);
       if (key !== DEFAULT_SESSION_KEY && !targetSession?.engineType) {
@@ -34,7 +59,8 @@ export function createSessionNavigationActions(
       if (key) get().switchSession(key);
     },
     cleanupEmptySession: () => {
-      const { currentSessionKey, messages, sessionLastActivity, sessionLabels } = get();
+      const { currentSessionKey, sessionLastActivity, sessionLabels } = get();
+      const messages = getSessionDisplayMessages(currentSessionKey);
       const isEmptyNonMain = isTemporaryAgentSessionKey(currentSessionKey)
         && messages.length === 0
         && !sessionLastActivity[currentSessionKey]
@@ -43,7 +69,6 @@ export function createSessionNavigationActions(
 
       set((state) => ({
         sessions: state.sessions.filter((session) => session.key !== currentSessionKey),
-        runtimeBySessionKey: clearSessionEntryFromMap(state.runtimeBySessionKey, currentSessionKey),
         sessionLabels: clearSessionEntryFromMap(state.sessionLabels, currentSessionKey),
         sessionLastActivity: clearSessionEntryFromMap(state.sessionLastActivity, currentSessionKey),
         sidebarRecentOrder: dependencies.removeSidebarRecentKey(
@@ -52,6 +77,7 @@ export function createSessionNavigationActions(
         ),
       }));
       clearSessionSendReadiness(currentSessionKey);
+      useChatRuntimeV2Store.getState().clearSession(currentSessionKey);
     },
   };
 }

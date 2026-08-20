@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { AlertCircle, Loader2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useChatStore } from '@/stores/chat';
+import { useCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
+import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
 import { useChatDisplay } from '@/pages/Chat/use-chat-display';
@@ -19,11 +21,14 @@ import {
 } from '@/lib/surfaces';
 import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import { useSclawBrowserOverlayStore } from '@/stores/sclaw-browser-overlay';
+import { useJsBridgeHostStore } from '@/stores/jsbridge-host';
 import { SclawBrowserEmbedChatSessions, type SclawBrowserEmbedChatSessionsProps } from './SclawBrowserEmbedChatSessions';
 
 interface SclawBrowserEmbedChatProps {
   sessionKey: string;
   appTitle: string;
+  /** Embed runtime id — used for JSBridge composer seed targeting. */
+  embedRuntimeId?: string | null;
   onClose?: () => void;
   sessionsProps?: SclawBrowserEmbedChatSessionsProps;
 }
@@ -31,24 +36,29 @@ interface SclawBrowserEmbedChatProps {
 export function SclawBrowserEmbedChat({
   sessionKey,
   appTitle,
+  embedRuntimeId,
   onClose,
   sessionsProps,
 }: SclawBrowserEmbedChatProps) {
   const { t } = useTranslation(['chat', 'common']);
   const closeChatPanel = useSclawBrowserOverlayStore((s) => s.closeChatPanel);
   const currentSessionKey = useChatStore((s) => s.currentSessionKey);
-  const messages = useChatStore((s) => s.messages);
+  const messages = useCurrentChatDisplayMessages();
   const loading = useChatStore((s) => s.loading);
-  const sending = useChatStore((s) => s.sending);
-  const error = useChatStore((s) => s.error);
+  const {
+    sending,
+    pendingFinal,
+    lastEventAt: canonicalLastEventAt,
+    lastUserMessageAt,
+    streamingMessage,
+    streamingMessages,
+    streamingToolResults,
+    streamingTools,
+    error,
+  } = useChatSessionRuntimeView(sessionKey);
   const showThinking = useChatStore((s) => s.showThinking);
   const clearError = useChatStore((s) => s.clearError);
-  const streamingMessage = useChatStore((s) => s.streamingMessage);
-  const streamingMessages = useChatStore((s) => s.streamingMessages);
-  const streamingToolResults = useChatStore((s) => s.streamingToolResults);
-  const streamingTools = useChatStore((s) => s.streamingTools);
-  const pendingFinal = useChatStore((s) => s.pendingFinal);
-  const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
+  const lastChatEventAt = canonicalLastEventAt;
 
   const streamMsg = streamingMessage && typeof streamingMessage === 'object'
     ? streamingMessage as unknown as { role?: string; content?: unknown; timestamp?: number; id?: string }
@@ -74,6 +84,7 @@ export function SclawBrowserEmbedChat({
     streamingMessages,
     streamingToolResults,
     streamingTools,
+    lastUserMessageAt,
   });
 
   const showLoadingPlaceholder = useMemo(
@@ -85,6 +96,11 @@ export function SclawBrowserEmbedChat({
     if (onClose) onClose();
     else closeChatPanel();
   }, [onClose, closeChatPanel]);
+
+  const embedSeedEntry = useJsBridgeHostStore((s) => (
+    embedRuntimeId ? s.embedComposerSeedByRuntimeId[embedRuntimeId] : undefined
+  ));
+  const composerSeed = embedSeedEntry?.text;
 
   if (currentSessionKey !== sessionKey) {
     return (
@@ -132,6 +148,7 @@ export function SclawBrowserEmbedChat({
                   return (
                     <AssistantTurnMessage
                       key={item.key}
+                      sessionMessages={messages}
                       turnMessages={item.messages}
                       turnToolResults={item.toolResults}
                       precedingUserMessage={item.precedingUserMessage}
@@ -144,6 +161,7 @@ export function SclawBrowserEmbedChat({
                   <ChatMessage
                     key={item.key}
                     message={item.message}
+                    sessionMessages={messages}
                     showThinking={showThinking}
                   />
                 );
@@ -151,6 +169,7 @@ export function SclawBrowserEmbedChat({
               {activeTurn ? (
                 <AssistantTurnMessage
                   key="active-turn"
+                  sessionMessages={messages}
                   turnMessages={activeTurn.turnMessages}
                   turnToolResults={activeTurn.turnToolResults}
                   precedingUserMessage={activeTurn.precedingUserMessage}
@@ -178,7 +197,11 @@ export function SclawBrowserEmbedChat({
       ) : null}
 
       <div className="sclaw-browser-embed-chat__composer">
-        <HomeComposer showDisclaimer={false} footerAlign="center" />
+        <HomeComposer
+          showDisclaimer={false}
+          footerAlign="center"
+          seedText={composerSeed}
+        />
       </div>
     </div>
   );

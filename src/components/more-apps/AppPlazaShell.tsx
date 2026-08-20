@@ -15,6 +15,7 @@ import { bindAppNavigate, unbindAppNavigate } from '@/lib/app-navigate';
 import { closeSclawBrowser } from '@/lib/open-sclaw-browser';
 import { useSclawBrowserChatShortcut } from '@/components/sclaw-browser/use-sclaw-browser-chat-shortcut';
 import { useSclawBrowserOpenUrl } from '@/components/sclaw-browser/use-sclaw-browser-open-url';
+import { installJsBridgeHostListeners } from '@/lib/jsbridge/host-router';
 import './app-plaza-shell.css';
 
 export function AppPlazaShell() {
@@ -44,6 +45,8 @@ export function AppPlazaShell() {
   // Keep listening while shell is mounted (including hidden keep-alive) so
   // guest window.open still opens plaza tabs when the shell is not visible.
   useSclawBrowserOpenUrl(true);
+
+  useEffect(() => installJsBridgeHostListeners(), []);
 
   const activeBrowser = browserTabs.find((t) => t.id === activeTabId);
   const activeDevApp = devAppTabs.find((t) => t.id === activeTabId);

@@ -8,8 +8,14 @@ export interface SclawEmbedBrowserRuntimeMeta {
   pageUrl: string;
   pageTitle: string;
   webContentsId: number | null;
+  /** App Plaza app id (sanitized session key). */
+  appId: string | null;
+  /** Catalog / My Apps tab — affects bridge trust tier. */
+  bound: boolean;
   createdAt: number;
   boundAt: number | null;
+  /** JSBridge session bootstrap when page is *.sto.cn. */
+  bridgeBootstrap?: import('./jsbridge/protocol').BridgeBootstrap | null;
 }
 
 export interface SclawEmbedBrowserNetworkEvent {

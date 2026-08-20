@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
+import { useSessionDisplayMessages } from '@/stores/chat/display-selectors';
+import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
@@ -68,17 +70,20 @@ function WorkbenchChatPane({
   composerSeed?: { text: string; version: number } | null;
   onBeforeSend?: (text: string) => boolean;
 }) {
-  const messages = useChatStore((s) => s.messages);
-  const sending = useChatStore((s) => s.sending);
+  const messages = useSessionDisplayMessages(sessionKey);
   const showThinking = useChatStore((s) => s.showThinking);
-  const error = useChatStore((s) => s.error);
   const clearError = useChatStore((s) => s.clearError);
-  const streamingMessage = useChatStore((s) => s.streamingMessage);
-  const streamingMessages = useChatStore((s) => s.streamingMessages);
-  const streamingToolResults = useChatStore((s) => s.streamingToolResults);
-  const streamingTools = useChatStore((s) => s.streamingTools);
-  const pendingFinal = useChatStore((s) => s.pendingFinal);
-  const lastChatEventAt = useChatStore((s) => s.lastChatEventAt);
+  const {
+    sending,
+    pendingFinal,
+    lastEventAt: lastChatEventAt,
+    lastUserMessageAt,
+    streamingMessage,
+    streamingMessages,
+    streamingToolResults,
+    streamingTools,
+    error,
+  } = useChatSessionRuntimeView(sessionKey);
 
   const streamMsg = streamingMessage && typeof streamingMessage === 'object'
     ? streamingMessage as unknown as { role?: string; content?: unknown; timestamp?: number; id?: string }
@@ -93,6 +98,7 @@ function WorkbenchChatPane({
     pendingFinal,
     showThinking,
     lastChatEventAt,
+    lastUserMessageAt,
     streamMsg,
     streamText,
     streamingMessages,
@@ -118,6 +124,7 @@ function WorkbenchChatPane({
                   return (
                     <AssistantTurnMessage
                       key={item.key}
+                      sessionMessages={messages}
                       turnMessages={item.messages}
                       turnToolResults={item.toolResults}
                       precedingUserMessage={item.precedingUserMessage}
@@ -126,11 +133,19 @@ function WorkbenchChatPane({
                   );
                 }
                 if (item.type !== 'single') return null;
-                return <ChatMessage key={item.key} message={item.message} showThinking={showThinking} />;
+                return (
+                  <ChatMessage
+                    key={item.key}
+                    message={item.message}
+                    sessionMessages={messages}
+                    showThinking={showThinking}
+                  />
+                );
               })}
               {activeTurn ? (
                 <AssistantTurnMessage
                   key="active-turn"
+                  sessionMessages={messages}
                   turnMessages={activeTurn.turnMessages}
                   turnToolResults={activeTurn.turnToolResults}
                   precedingUserMessage={activeTurn.precedingUserMessage}
@@ -178,12 +193,12 @@ export default function AppDevWorkbench() {
   const [commitOpen, setCommitOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
   const [sourceRevision, setSourceRevision] = useState(0);
-  const sending = useChatStore((s) => s.sending);
   const prevSendingRef = useRef(false);
   const autoRepairRef = useRef<{ fingerprint: string; attempts: number }>({ fingerprint: '', attempts: 0 });
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
   const appName = workspaces.find((w) => w.id === workspaceId)?.name ?? '我的应用';
   const appDevSessionKey = useAppDevChatSession(workspaceId);
+  const { sending } = useChatSessionRuntimeView(appDevSessionKey ?? '');
   const runControl = useAppDevRunControl({ workspaceId, setStatus });
   const deploy = useStoAppDeploy({
     workspaceId,

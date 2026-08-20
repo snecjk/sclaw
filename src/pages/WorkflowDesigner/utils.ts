@@ -7,6 +7,7 @@ import type {
   WorkflowEdge,
   WorkflowNode,
 } from '@/pages/WorkflowDesigner/types';
+import { WORKFLOW_AGENT_NO_PROGRESS_TIMEOUT_MS } from '../../../shared/workflow-agent-timeouts';
 
 const ALL_TEMPLATES = NODE_TEMPLATES;
 export function createEmptyWorkflowDefinition(name: string): WorkflowDefinition {
@@ -143,7 +144,7 @@ function buildSmartAgentConfig(type: string): Record<string, unknown> {
         approvalMode: 'approval_required',
         allowedSkills: [],
         allowedTools: [],
-        timeoutMs: 300_000,
+        timeoutMs: WORKFLOW_AGENT_NO_PROGRESS_TIMEOUT_MS,
         maxToolCalls: 20,
       },
     },
@@ -208,7 +209,7 @@ export function defaultNodeConfig(
         approvalMode: 'approval_required',
         allowedSkills: [],
         allowedTools: [],
-        timeoutMs: 300_000,
+        timeoutMs: WORKFLOW_AGENT_NO_PROGRESS_TIMEOUT_MS,
         maxToolCalls: 20,
       },
       goal: '描述这个节点要完成的业务目标',
@@ -284,6 +285,43 @@ export function defaultNodeConfig(
       assigneeRole: 'reviewer',
       condition: '',
       slaMinutes: 30,
+    };
+  }
+
+  if (type === 'browser_task') {
+    return {
+      ...base,
+      goal: '描述要在浏览器中完成的操作',
+      instruction: '',
+      embedRuntimeId: '',
+      sessionFrom: '',
+      url: '',
+      sessionId: '',
+      maxSteps: 20,
+      timeoutMs: 300_000,
+    };
+  }
+
+  if (type === 'browser_validate') {
+    return {
+      ...base,
+      embedRuntimeId: '',
+      sessionFrom: '',
+      url: '',
+      sessionId: '',
+      onFail: 'fail',
+      validators: [{ type: 'elementText', expectedText: '提交成功' }],
+    };
+  }
+
+  if (type === 'browser_human_gate') {
+    return {
+      ...base,
+      reason: '请完成验证码或人工确认后继续',
+      embedRuntimeId: '',
+      sessionFrom: 'browser',
+      url: '',
+      sessionId: '',
     };
   }
 

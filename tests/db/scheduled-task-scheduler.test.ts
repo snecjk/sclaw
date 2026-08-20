@@ -317,7 +317,7 @@ describe('ScheduledTaskScheduler', () => {
   });
 
   describe('discardMissedOnStartup', () => {
-    it('recomputes past nextRunAt to the future and cancels leftover active runs', async () => {
+    it('recomputes past nextRunAt, cancels queued runs, and preserves running runs for recovery', async () => {
       const scheduler = new ScheduledTaskScheduler(
         taskRepo,
         runRepo,
@@ -334,6 +334,13 @@ describe('ScheduledTaskScheduler', () => {
         status: 'running',
         idempotencyKey: 'missed:2024-01-01T00:00:00.000Z',
       });
+      await runRepo.createRun({
+        taskId: 'missed',
+        triggerSource: 'recovery',
+        scheduledFor: '2024-01-01T00:01:00.000Z',
+        status: 'queued',
+        idempotencyKey: 'missed:queued',
+      });
       const now = new Date('2024-01-01T00:05:00.000Z');
 
       const changed = await scheduler.discardMissedOnStartup(now);
@@ -342,7 +349,10 @@ describe('ScheduledTaskScheduler', () => {
       const after = await taskRepo.getById('missed');
       expect(after?.nextRunAt).toBe('2024-01-01T00:06:00.000Z');
       expect(after?.lastRecoveredAt).toBe('2024-01-01T00:05:00.000Z');
-      expect(await runRepo.getActiveRun('missed')).toBeNull();
+      const active = await runRepo.getActiveRun('missed');
+      expect(active?.status).toBe('running');
+      const runs = await runRepo.listRuns('missed');
+      expect(runs.find((run) => run.idempotencyKey === 'missed:queued')?.status).toBe('cancelled');
     });
 
     it('returns false when nothing is missed and no active runs exist', async () => {

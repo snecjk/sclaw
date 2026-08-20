@@ -6,6 +6,7 @@ import {
   mergeTurnSegmentMonotonic,
   readGlobalStableSegments,
   readGlobalStableTimeline,
+  resolveLiveProjection,
   shouldPromoteActiveTurnCache,
   writeGlobalStableSegments,
   writeGlobalStableTimeline,
@@ -17,6 +18,17 @@ const fullTimeline: ThinkingTimelineItem[] = [
   { type: 'tool', index: 1, id: 't1', name: 'exec', input: {} },
   { type: 'thinking', content: 'summarize results' },
 ];
+
+describe('resolveLiveProjection', () => {
+  it('does not let a longer stale cache hide a shorter updated live projection', () => {
+    const cached = ['old-thinking', 'old-tool', 'old-status'];
+    const incoming = ['current-growing-tool-input'];
+
+    expect(resolveLiveProjection(incoming, cached, true)).toBe(incoming);
+    expect(resolveLiveProjection([], cached, true)).toBe(cached);
+    expect(resolveLiveProjection(incoming, cached, false)).toBeNull();
+  });
+});
 
 describe('mergeTurnSegmentMonotonic', () => {
   it('does not downgrade completed tool-group to active on same key', () => {

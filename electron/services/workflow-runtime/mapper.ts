@@ -93,11 +93,27 @@ export function mapWfRunRowToResponse(
   const view = opts.view ?? 'status';
   const diagnostic = view === 'diagnostic';
   const includeTimeline = view === 'detail' || diagnostic;
+  const definition = safeParse<{ nodes?: Array<{ id?: unknown; name?: unknown; title?: unknown }> }>(
+    row.definition_json,
+    {},
+  );
+  const nodeNames = new Map(
+    (definition.nodes ?? []).flatMap((node) => {
+      if (typeof node.id !== 'string') return [];
+      const name = typeof node.name === 'string' && node.name.trim()
+        ? node.name.trim()
+        : typeof node.title === 'string' && node.title.trim()
+          ? node.title.trim()
+          : null;
+      return name ? [[node.id, name] as const] : [];
+    }),
+  );
   // workflowRunResponseToExecutionState 内部以 intersection 类型读取每个 nodeRun 的
   // output/input（collectArtifactsFromNodeRuns），故这里按需透传 extra 字段。
   const nodeRuns = (opts.nodeRuns ?? []).map((n) => ({
     id: `${row.run_id}:${n.node_id}`,
     nodeId: n.node_id,
+    nodeName: nodeNames.get(n.node_id),
     nodeType: n.node_type ?? undefined,
     status: n.status,
     startedAt: n.started_at ?? undefined,

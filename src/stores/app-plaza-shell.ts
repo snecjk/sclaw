@@ -3,6 +3,7 @@
  * Home tab is fixed; browser tabs support live/suspended/blank with a 5-live cap.
  */
 import { create } from 'zustand';
+import { useChatStore } from '@/stores/chat';
 import {
   activateSclawBrowserEmbedChat,
   createSclawBrowserEmbedChatSession,
@@ -66,6 +67,11 @@ export interface AppPlazaBrowserTab {
    * Same source Chrome uses for tab icons — not the App Plaza catalog icon.
    */
   pageFaviconUrl?: string;
+  /**
+   * Live document URL from the webview (SPA / in-page navigation).
+   * Kept separate from `url` so updating it does not remount the webview.
+   */
+  currentPageUrl?: string;
   /** @deprecated Prefer pageFaviconUrl for tab chrome; kept for open-from-catalog hints only. */
   iconUrl?: string;
   iconKey?: string;
@@ -117,11 +123,13 @@ interface AppPlazaShellState {
   promoteTabBound: (tabId: string, nextAppId: string, title?: string) => void;
   updateTabTitle: (tabId: string, title: string) => void;
   /** Chrome-like: update title / favicon from the embedded page. */
-  updateTabPageMeta: (tabId: string, meta: { title?: string; pageFaviconUrl?: string }) => void;
+  updateTabPageMeta: (tabId: string, meta: { title?: string; pageFaviconUrl?: string; currentPageUrl?: string }) => void;
 
   toggleChatPanel: (tabId?: string) => void;
   openChatPanel: (tabId?: string) => void;
   closeChatPanel: (tabId?: string) => void;
+  /** Re-activate embed chat when the panel is open but global session drifted. */
+  ensureEmbedChatActive: (tabId?: string) => void;
   setChatSplitPercent: (percent: number, tabId?: string) => void;
   refreshChatSessions: (tabId?: string) => void;
   createChatSession: (tabId?: string) => void;
@@ -155,6 +163,47 @@ function createBlankTab(): AppPlazaBrowserTab {
 
 function countLive(tabs: AppPlazaBrowserTab[]): number {
   return tabs.filter((t) => t.status === 'live').length;
+}
+
+/** Release embed chat session back to the main sidebar without closing the panel. */
+function pauseEmbedChatForTab(tab: AppPlazaBrowserTab | undefined): void {
+  if (!tab?.chatPanelOpen || tab.status !== 'live') return;
+  deactivateSclawBrowserEmbedChat(tab.chatSessionKey, tab.savedMainSessionKey);
+}
+
+/** Re-bind chat store to an open embed panel after route/tab changes. */
+function ensureEmbedChatActiveForTab(tab: AppPlazaBrowserTab | undefined): void {
+  if (
+    !tab?.chatPanelOpen
+    || tab.status !== 'live'
+    || !tab.embedRuntimeId
+    || !tab.appId
+    || !tab.chatSessionKey
+  ) {
+    return;
+  }
+  if (useChatStore.getState().currentSessionKey === tab.chatSessionKey) {
+    return;
+  }
+  void ensureSclawBrowserBridge(tab.embedRuntimeId);
+  switchSclawBrowserEmbedChatSession(
+    tab.appId,
+    tab.embedRuntimeId,
+    tab.chatSessionKey,
+    tab.savedMainSessionKey,
+  );
+}
+
+function syncActiveTabEmbedChat(
+  previousActiveTabId: string,
+  nextActiveTabId: string,
+  tabs: AppPlazaBrowserTab[],
+): void {
+  if (previousActiveTabId === nextActiveTabId) return;
+  const previous = tabs.find((t) => t.id === previousActiveTabId);
+  const next = tabs.find((t) => t.id === nextActiveTabId);
+  pauseEmbedChatForTab(previous);
+  ensureEmbedChatActiveForTab(next);
 }
 
 /**
@@ -276,12 +325,15 @@ function makeLiveTab(
     runtimeId: embedRuntimeId,
     appTitle: title,
     initialUrl: url,
+    appId,
+    bound,
   });
   // Catalog hints optional; pageFaviconUrl comes from webview after load (Chrome-like).
   const iconUrl = icons?.iconUrl?.trim() || tab.iconUrl;
   return {
     ...tab,
     url,
+    currentPageUrl: url,
     title,
     appId,
     registryAppId: icons?.registryAppId?.trim() || tab.registryAppId,
@@ -310,11 +362,30 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
   browserTabs: [],
   devAppTabs: [],
 
-  setRouteActive: (active) => set({ routeActive: active }),
+  setRouteActive: (active) => {
+    const state = get();
+    if (active === state.routeActive) return;
+
+    if (!active) {
+      for (const tab of state.browserTabs) {
+        pauseEmbedChatForTab(tab);
+      }
+    }
+    set({ routeActive: active });
+    if (active) {
+      const activeTab = get().browserTabs.find((t) => t.id === get().activeTabId);
+      ensureEmbedChatActiveForTab(activeTab);
+    }
+  },
 
   selectTab: (tabId) => {
     const state = get();
+    const previousActiveTabId = state.activeTabId;
     if (tabId === APP_PLAZA_HOME_TAB_ID) {
+      if (state.routeActive) {
+        const previous = state.browserTabs.find((t) => t.id === previousActiveTabId);
+        pauseEmbedChatForTab(previous);
+      }
       set({ activeTabId: APP_PLAZA_HOME_TAB_ID });
       return;
     }
@@ -368,12 +439,16 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
       return;
     }
 
+    const nextBrowserTabs = state.browserTabs.map((t) =>
+      t.id === tabId ? { ...t, lastActiveAt: Date.now() } : t,
+    );
     set({
       activeTabId: tabId,
-      browserTabs: state.browserTabs.map((t) =>
-        t.id === tabId ? { ...t, lastActiveAt: Date.now() } : t,
-      ),
+      browserTabs: nextBrowserTabs,
     });
+    if (get().routeActive) {
+      syncActiveTabEmbedChat(previousActiveTabId, tabId, nextBrowserTabs);
+    }
   },
 
   addBlankTab: () => {
@@ -719,10 +794,12 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
         if (t.id !== tabId) return t;
         const nextTitle = meta.title?.trim();
         const nextFavicon = meta.pageFaviconUrl?.trim();
+        const nextPageUrl = meta.currentPageUrl?.trim();
         return {
           ...t,
           title: nextTitle || t.title,
           pageFaviconUrl: nextFavicon || t.pageFaviconUrl,
+          currentPageUrl: nextPageUrl || t.currentPageUrl,
         };
       }),
     }));
@@ -756,6 +833,13 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
           : t,
       ),
     }));
+  },
+
+  ensureEmbedChatActive: (tabId) => {
+    if (!get().routeActive) return;
+    const id = tabId ?? get().activeTabId;
+    const tab = get().browserTabs.find((t) => t.id === id);
+    ensureEmbedChatActiveForTab(tab);
   },
 
   closeChatPanel: (tabId) => {

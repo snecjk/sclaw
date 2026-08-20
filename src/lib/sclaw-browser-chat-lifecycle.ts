@@ -23,6 +23,8 @@ import {
 } from '@/lib/resolve-chat-session-engine-type';
 import { useAgentsStore } from '@/stores/agents';
 import { useChatStore } from '@/stores/chat';
+import { getCurrentChatDisplayMessages } from '@/stores/chat/display-selectors';
+import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 import type { ChatSession } from '@/stores/chat/types';
 
 export interface EmbedChatActivation {
@@ -107,7 +109,7 @@ function reconcileUnusedEmbedEngineType(chatSessionKey: string): ChatEngineType 
     const session = state.sessions.find((item) => item.key === chatSessionKey);
     return session?.engineType === 'claude' ? 'claude' : 'openclaw';
   }
-  if (state.messages.length > 0) {
+  if (getCurrentChatDisplayMessages().length > 0) {
     const session = state.sessions.find((item) => item.key === chatSessionKey);
     return session?.engineType === 'claude' ? 'claude' : resolveCurrentAgentEngineType(state.currentAgentId);
   }
@@ -258,15 +260,6 @@ export function deactivateSclawBrowserEmbedChat(
   }
 
   if (chat.currentSessionKey === chatSessionKey && !restoreKey) {
-    useChatStore.setState({
-      streamingText: '',
-      streamingMessage: null,
-      streamingMessages: [],
-      streamingToolResults: [],
-      streamingTools: [],
-      activeRunId: null,
-      error: null,
-      pendingFinal: false,
-    });
+    useChatRuntimeV2Store.getState().clearOverlay(chatSessionKey);
   }
 }

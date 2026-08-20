@@ -54,12 +54,9 @@ import {
   codeApplicationToWorkspaceFields,
 } from '../../shared/sto-workspace';
 
-/** Remote React A2UI template (OSS). Unpackaged/dev prefers local checkout. */
+/** Remote React A2UI template (OSS). Dev prefers repo checkout; packaged uses OSS cache. */
 const REACT_TEMPLATE_ZIP_URL =
-  'http://ali-sto-tps.oss-cn-shanghai.aliyuncs.com/54693265-EFAE-4C-react-a2ui-template.zip';
-
-/** TEMP debug: always scaffold from local checkout; skip OSS download/cache. Flip to false before release. */
-const FORCE_LOCAL_REACT_TEMPLATE = true;
+  'http://ali-sto-tps.oss-cn-shanghai.aliyuncs.com/53E737B0-31F5-42-react-a2ui-template.zip';
 
 export interface AppDevStatus {
   workspaceId: string;
@@ -278,18 +275,12 @@ function resolveLocalReactTemplateDir(): string | null {
   const candidates = [
     join(process.cwd(), 'resources', 'app-templates', 'react-a2ui-template'),
     join(app.getAppPath(), 'resources', 'app-templates', 'react-a2ui-template'),
+    join(process.resourcesPath, 'app-templates', 'react-a2ui-template'),
   ];
   for (const dir of candidates) {
     if (isValidReactTemplate(dir)) return dir;
   }
   return null;
-}
-
-function bundledTemplateDir(): string | null {
-  // Local checkout only — packaged builds must not rely on bundled app-templates,
-  // unless FORCE_LOCAL_REACT_TEMPLATE is on for debugging.
-  if (!FORCE_LOCAL_REACT_TEMPLATE && app.isPackaged) return null;
-  return resolveLocalReactTemplateDir();
 }
 
 function cachedTemplateDir(): string {
@@ -308,17 +299,13 @@ function templateMetaPath(dir: string): string {
   return join(dir, '.sclaw-template-meta.json');
 }
 
-/** Sync path for OpenSpec helpers: prefer OSS cache, then local checkout (dev only). */
+/** Sync path for OpenSpec helpers: dev prefers local checkout, else OSS cache. */
 function templateDir(): string {
-  if (FORCE_LOCAL_REACT_TEMPLATE) {
+  if (!app.isPackaged) {
     const local = resolveLocalReactTemplateDir();
     if (local) return local;
   }
-  const cached = cachedTemplateDir();
-  if (isValidReactTemplate(cached)) return cached;
-  const bundled = bundledTemplateDir();
-  if (bundled && isValidReactTemplate(bundled)) return bundled;
-  return cached;
+  return cachedTemplateDir();
 }
 
 let ensureTemplatePromise: Promise<string> | null = null;
@@ -342,26 +329,20 @@ async function downloadReactTemplateZip(zipPath: string): Promise<void> {
 
 /**
  * Ensure the React engineering template is available locally.
- * Unpackaged/dev: prefer local `react-a2ui-template` to avoid stale OSS monorepo zips.
- * Packaged: download + extract OSS zip into userData cache; fallback to local only if present.
+ * Dev (unpackaged): prefer repo `resources/app-templates/react-a2ui-template`, else OSS.
+ * Packaged: download/cache OSS zip (refreshed when URL changes).
  */
 async function ensureReactTemplateDir(): Promise<string> {
   if (ensureTemplatePromise) return ensureTemplatePromise;
 
   ensureTemplatePromise = (async () => {
-    const bundled = bundledTemplateDir();
-    if (FORCE_LOCAL_REACT_TEMPLATE) {
-      if (bundled) {
-        logger.info(`[app-dev] FORCE_LOCAL_REACT_TEMPLATE using local dir=${bundled}`);
-        return bundled;
+    if (!app.isPackaged) {
+      const local = resolveLocalReactTemplateDir();
+      if (local) {
+        logger.info(`[app-dev] using local A2UI template dir=${local}`);
+        return local;
       }
-      throw new Error(
-        'FORCE_LOCAL_REACT_TEMPLATE 已开启，但未找到本地模板 resources/app-templates/react-a2ui-template',
-      );
-    }
-    if (!app.isPackaged && bundled && isValidReactTemplate(bundled)) {
-      logger.info(`[app-dev] using local A2UI template dir=${bundled}`);
-      return bundled;
+      logger.info('[app-dev] local A2UI template missing, falling back to OSS');
     }
 
     const cacheDir = cachedTemplateDir();
@@ -413,12 +394,15 @@ async function ensureReactTemplateDir(): Promise<string> {
       logger.info(`[app-dev] react template ready from OSS cacheDir=${cacheDir}`);
       return cacheDir;
     } catch (error) {
-      if (bundled && isValidReactTemplate(bundled)) {
-        logger.warn(
-          `[app-dev] OSS template download failed, falling back to local checkout template: ${bundled}`,
-          error,
-        );
-        return bundled;
+      if (!app.isPackaged) {
+        const local = resolveLocalReactTemplateDir();
+        if (local) {
+          logger.warn(
+            `[app-dev] OSS template download failed, falling back to local checkout: ${local}`,
+            error,
+          );
+          return local;
+        }
       }
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`应用模板准备失败（OSS 下载）: ${message}`);

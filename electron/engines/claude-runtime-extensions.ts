@@ -2,6 +2,9 @@ import type { HookCallbackMatcher, HookEvent, McpServerConfig } from '@anthropic
 import { RETIRED_SKILLS_SYSTEM_PROMPT } from '../../shared/retired-skills';
 import { buildWorkspaceArtifactOutputRule } from '../../shared/workspace-paths';
 import {
+  buildStoBrowserToolClaudeRuntimeOptions,
+} from '../../sto-plugin/claude/sto-browser-tool/sdk';
+import {
   buildStoDingTalkSendGuardClaudeRuntimeOptions,
 } from '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk';
 import {
@@ -84,6 +87,16 @@ function mergeRuntimeOptions(target: ClaudeRuntimeOptions, source: ClaudeRuntime
     };
   }
 }
+
+const browserToolExtension: ClaudeRuntimeExtension = {
+  id: 'sto-browser-tool',
+  build({ sessionKey }) {
+    return buildStoBrowserToolClaudeRuntimeOptions({
+      sessionKey,
+      hostApiPort: PORTS.CLAWX_HOST_API,
+    });
+  },
+};
 
 const dingTalkSendGuardExtension: ClaudeRuntimeExtension = {
   id: 'sto-dingtalk-send-guard',
@@ -228,6 +241,7 @@ const connectorsContextExtension: ClaudeRuntimeExtension = {
 
 const claudeRuntimeExtensions: ClaudeRuntimeExtension[] = [
   connectorBashGateExtension,
+  browserToolExtension,
   dingTalkSendGuardExtension,
   workflowToolExtension,
   scheduledTaskToolExtension,

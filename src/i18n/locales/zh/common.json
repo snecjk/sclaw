@@ -12,7 +12,7 @@
         "chat": "对话",
         "newChat": "新对话",
         "cronTasks": "定时任务",
-        "myTasks": "我的任务",
+        "myTasks": "自动化",
         "dataCenter": "数据中心",
         "skills": "技能·连接器",
         "moreApps": "应用广场",
@@ -24,6 +24,7 @@
         "checkUpdates": "检查更新",
         "devConsole": "开发者控制台",
         "models": "模型",
+        "tokenBalance": "token余额",
         "deleteSessionConfirm": "确定要删除对话 \"{{label}}\" 吗？",
         "deleteSessionFailed": "删除对话失败",
         "deleteSessionFailedHint": "请稍后重试；若问题持续，可在设置中查看日志。",
@@ -160,6 +161,10 @@
             "authorizeLocalFile": "授权本地文件",
             "authorizeLocalFileOption": "授权文件",
             "authorizeLocalFolderOption": "授权文件夹",
+            "sharedArtifactsMobileTip": "网点共享产物可使用钉钉移动端扫码，在「网点VIP」中查看。",
+            "sharedArtifactsQrCode": "网点共享产物二维码",
+            "sharedArtifactsQrTitle": "扫码查看网点共享产物",
+            "sharedArtifactsQrHint": "使用钉钉移动端扫码，在「网点VIP」中查看",
             "usedQuota": "储存空间已用{{used}}/{{quota}}"
         },
         "drive": {

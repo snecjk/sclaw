@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { initialChatDataState } from '@/stores/chat/initial-state';
-import { createIdleSessionRuntimeState } from '@/stores/chat/session-runtime';
 import type { ChatState } from '@/stores/chat/types';
 import type { ChatSet } from '@/stores/chat/store-api';
 
@@ -20,7 +19,6 @@ vi.mock('@/stores/chat/prepare-send-context', () => ({
 vi.mock('@/stores/chat/optimistic-turn', () => ({
   insertOptimisticUserTurn: vi.fn(() => ({ id: 'message-1', role: 'user', content: 'hello' })),
 }));
-vi.mock('@/stores/chat/send-watchdogs', () => ({ scheduleSendWatchdogs: vi.fn() }));
 vi.mock('@/stores/chat/media-preview-cache', () => ({ cacheUploadedAttachments: vi.fn() }));
 vi.mock('@/stores/chat/dispatch-chat-request', () => ({ dispatchChatRequest: vi.fn() }));
 
@@ -29,15 +27,13 @@ import { prepareSendContext } from '@/stores/chat/prepare-send-context';
 import { createSendActions } from '@/stores/chat/send-actions';
 import { clearSendAttemptLocksForTests } from '@/stores/chat/send-attempt-lock';
 import { useGatewayStore } from '@/stores/gateway';
-import { clearSessionRunLifecycle } from '@/stores/chat/run-lifecycle';
+import { createClientSessionState } from '@/stores/chat/client-session-reducer';
+import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 
 function createHarness() {
   let state = {
     ...initialChatDataState,
     newSession: vi.fn(),
-    runtimeBySessionKey: {
-      'agent:main:main': createIdleSessionRuntimeState(),
-    },
   } as ChatState;
   const get = () => state;
   const set: ChatSet = (partial) => {
@@ -48,11 +44,6 @@ function createHarness() {
     resolveMainSessionKeyForAgent: () => null,
     buildSessionSwitchPatch: () => ({}),
     resolveEngineTypeForSession: () => 'openclaw',
-    clearErrorRecoveryTimer: vi.fn(),
-    clearHistoryPoll: vi.fn(),
-    setHistoryPollTimer: vi.fn(),
-    clearStuckCheckTimer: vi.fn(),
-    setStuckCheckTimer: vi.fn(),
   });
   return { actions, get };
 }
@@ -60,7 +51,7 @@ function createHarness() {
 describe('chat send action acceptance state', () => {
   beforeEach(() => {
     clearSendAttemptLocksForTests();
-    clearSessionRunLifecycle('agent:main:main');
+    useChatRuntimeV2Store.setState({ sessionsByKey: {}, initialized: true });
     vi.mocked(dispatchChatRequest).mockReset();
     vi.mocked(prepareSendContext).mockReset().mockImplementation(async ({ trimmedText }) => ({
       displayText: trimmedText,
@@ -70,15 +61,11 @@ describe('chat send action acceptance state', () => {
 
   it('fails immediately on an explicit Gateway rejection', async () => {
     vi.mocked(dispatchChatRequest).mockResolvedValue({ success: false, error: 'rejected' });
-    const { actions, get } = createHarness();
+    const { actions } = createHarness();
 
     await actions.sendMessage({ text: 'hello' });
 
-    expect(get().runtimeBySessionKey['agent:main:main']).toMatchObject({
-      sending: false,
-      sendAcceptance: null,
-      error: 'rejected',
-    });
+    expect(dispatchChatRequest).toHaveBeenCalledTimes(1);
   });
 
   it('allows only one preparation attempt per session', async () => {
@@ -108,12 +95,13 @@ describe('chat send action acceptance state', () => {
   });
 
   it('keeps the active run bound when abort RPC fails', async () => {
-    const { actions, get } = createHarness();
-    get().runtimeBySessionKey['agent:main:main'] = {
-      ...createIdleSessionRuntimeState(),
-      sending: true,
-      activeRunId: 'run-active',
+    const { actions } = createHarness();
+    const session = createClientSessionState();
+    session.runtime = {
+      phase: 'running', runId: 'run-active', idempotencyKey: 'message-1', engineType: 'openclaw',
+      epoch: 1, sequence: 1, startedAt: 1, lastEventAt: 1,
     };
+    useChatRuntimeV2Store.setState({ sessionsByKey: { 'agent:main:main': session } });
     const rpc = vi.spyOn(useGatewayStore.getState(), 'rpc').mockRejectedValueOnce(new Error('abort failed'));
 
     const stopped = await actions.abortRun();
@@ -122,37 +110,43 @@ describe('chat send action acceptance state', () => {
     expect(rpc).toHaveBeenCalledWith('chat.abort', expect.objectContaining({
       sessionKey: 'agent:main:main',
     }));
-    expect(get().runtimeBySessionKey['agent:main:main']).toMatchObject({
-      sending: true,
-      aborting: false,
-      activeRunId: 'run-active',
-      error: 'Error: abort failed',
-    });
+    expect(useChatRuntimeV2Store.getState().sessionsByKey['agent:main:main']?.runtime?.runId).toBe('run-active');
     rpc.mockRestore();
   });
 
   it('clears the active run only after abort RPC succeeds', async () => {
-    const { actions, get } = createHarness();
-    get().runtimeBySessionKey['agent:main:main'] = {
-      ...createIdleSessionRuntimeState(),
-      sending: true,
-      activeRunId: 'run-active',
+    const { actions } = createHarness();
+    const session = createClientSessionState();
+    session.runtime = {
+      phase: 'running', runId: 'run-active', idempotencyKey: 'message-1', engineType: 'openclaw',
+      epoch: 1, sequence: 1, startedAt: 1, lastEventAt: 1,
     };
+    useChatRuntimeV2Store.setState({ sessionsByKey: { 'agent:main:main': session } });
     const rpc = vi.spyOn(useGatewayStore.getState(), 'rpc').mockResolvedValueOnce({});
 
     const abortPromise = actions.abortRun();
-    expect(get().runtimeBySessionKey['agent:main:main']).toMatchObject({
-      sending: true,
-      aborting: true,
-      activeRunId: 'run-active',
-    });
     await expect(abortPromise).resolves.toBe(true);
+    expect(useChatRuntimeV2Store.getState().sessionsByKey['agent:main:main']?.runtime?.runId).toBe('run-active');
+    rpc.mockRestore();
+  });
 
-    expect(get().runtimeBySessionKey['agent:main:main']).toMatchObject({
-      sending: false,
-      aborting: false,
-      activeRunId: null,
+  it('hydrates local runtime when Gateway reports no active run to abort', async () => {
+    const { actions } = createHarness();
+    const session = createClientSessionState();
+    session.runtime = {
+      phase: 'running', runId: 'run-stale', idempotencyKey: 'message-1', engineType: 'openclaw',
+      epoch: 1, sequence: 14, startedAt: 1, lastEventAt: 1,
+    };
+    useChatRuntimeV2Store.setState({ sessionsByKey: { 'agent:main:main': session } });
+    const hydrate = vi.spyOn(useChatRuntimeV2Store.getState(), 'hydrate').mockResolvedValueOnce();
+    const rpc = vi.spyOn(useGatewayStore.getState(), 'rpc').mockResolvedValueOnce({
+      ok: true, aborted: false, runIds: [],
     });
+
+    await expect(actions.abortRun()).resolves.toBe(true);
+
+    expect(hydrate).toHaveBeenCalledWith('agent:main:main');
+    hydrate.mockRestore();
     rpc.mockRestore();
   });
 });

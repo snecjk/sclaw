@@ -5,8 +5,11 @@ let eventSource: EventSource | null = null;
 const HOST_EVENT_TO_IPC_CHANNEL: Record<string, string> = {
   'gateway:status': 'gateway:status-changed',
   'gateway:error': 'gateway:error',
-  'gateway:notification': 'gateway:notification',
-  'gateway:engine-event': 'gateway:engine-event',
+  'chat-runtime:event': 'chat-runtime:event',
+  'workflow:status-update': 'workflow:status-update',
+  'workflow:event': 'workflow:event',
+  'workflow-runtime:recover': 'workflow-runtime:recover',
+  'workflow:completion-open': 'workflow:completion-open',
   'gateway:channel-status': 'gateway:channel-status',
   'gateway:exit': 'gateway:exit',
   'oauth:code': 'oauth:code',
@@ -47,7 +50,11 @@ export function subscribeHostEvent<T = unknown>(
     const listener = (payload: unknown) => {
       handler(payload as T);
     };
-    ipc.on(ipcChannel, listener);
+    const unsubscribe = ipc.on(ipcChannel, listener);
+    if (typeof unsubscribe === 'function') return unsubscribe;
+
+    // Compatibility fallback for older preload bridges that did not return
+    // the exact wrapped Electron listener cleanup function.
     return () => {
       ipc.off(ipcChannel, listener);
     };

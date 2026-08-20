@@ -10,7 +10,6 @@ import {
 import { useAgentsStore } from '@/stores/agents';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useChatStore } from '@/stores/chat';
-import { createIdleSessionRuntimeState } from '@/stores/chat/session-runtime';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 
 export function useAppDevChatSession(workspaceId: string, enabled = true): string | null {
@@ -51,12 +50,6 @@ export function useAppDevChatSession(workspaceId: string, enabled = true): strin
           engineType,
           agentId: ensured.agentId,
         }),
-        runtimeBySessionKey: state.runtimeBySessionKey[nextSessionKey]
-          ? state.runtimeBySessionKey
-          : {
-            ...state.runtimeBySessionKey,
-            [nextSessionKey]: createIdleSessionRuntimeState(),
-          },
       }));
       useSessionCatalogStore.setState((state) => ({
         sessionWorkspaceByKey: {

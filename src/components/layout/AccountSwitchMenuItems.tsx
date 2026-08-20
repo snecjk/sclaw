@@ -1,6 +1,6 @@
 /**
- * 总部演示 — 账号切换入口（侧栏用户菜单：网点切回总部 / 总部级联选网点）。
- * 可见条件与原先右下角 FAB 一致；登录后拉取一次 options。
+ * 侧栏账号下拉内的「切换网点账号 / 切回总部账号」菜单项。
+ * 可见性与切换逻辑与原 AccountSwitchFab 一致。
  */
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -72,7 +72,7 @@ export function AccountSwitchMenuItems({
         }}
         className={cn(itemClassName, itemHoverClassName)}
       >
-        {switching ? '切换中…' : t('accountSwitch.backToHq')}
+        {switching ? t('accountSwitch.switching', '切换中…') : t('accountSwitch.backToHq')}
       </DropdownMenuItem>
     );
   }
@@ -83,7 +83,9 @@ export function AccountSwitchMenuItems({
         disabled={switching}
         className={cn(itemClassName, itemHoverClassName, 'gap-2')}
       >
-        <span className="flex-1">{switching ? '切换中…' : t('accountSwitch.menu')}</span>
+        <span className="flex-1 truncate">
+          {switching ? t('accountSwitch.switching', '切换中…') : t('accountSwitch.menu')}
+        </span>
         <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[#86909C]" strokeWidth={2} />
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent sideOffset={4} className={subContentClassName}>

@@ -16,6 +16,7 @@ import {
   type InstallPlazaSkillOptions,
 } from '@/lib/skill-plaza-api';
 import { applyMineCategoryFallback, MINE_FALLBACK_CATEGORY_CODE } from '@/lib/skill-plaza-category';
+import { sortSkillsByDisplayName } from '@/lib/skill-display-name-sort';
 import type {
   SkillSummary,
   CategoryDef,
@@ -427,7 +428,7 @@ export const useSkillPlazaStore = create<SkillPlazaState>((set, get) => ({
 
       resetAuthRetry();
       const nextState: Partial<SkillPlazaState> = {
-        mySkills: enrichedSkills,
+        mySkills: sortSkillsByDisplayName(enrichedSkills),
         hasMore: false,
         page: 1,
         pageSize: result.skills.length || 20,

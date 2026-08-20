@@ -18,7 +18,12 @@ const mockChatState = vi.hoisted(() => ({
 vi.mock('@/stores/chat', () => ({
   useChatStore: {
     getState: () => ({
-      pendingWorkflow: mockChatState.pendingWorkflow,
+      workflowChatUiBySessionKey: {
+        'agent:main:session-test': {
+          pendingWorkflow: mockChatState.pendingWorkflow,
+          formDecorations: [],
+        },
+      },
       currentSessionKey: 'agent:main:session-test',
       currentAgentId: 'main',
       messages: mockChatState.messages,

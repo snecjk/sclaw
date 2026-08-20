@@ -34,28 +34,29 @@ import { useProviderStore } from './stores/providers';
 import { useAgentsStore } from './stores/agents';
 import { useChatStore } from './stores/chat';
 import { applyGatewayTransportPreference, invokeIpc } from './lib/api-client';
-import { AccountSwitchFab } from './components/layout/AccountSwitchFab';
 import { UserWatermark } from './components/layout/UserWatermark';
 import { WorkflowCompletionNotifier } from './components/workflow/WorkflowCompletionNotifier';
+import { JsBridgeHostPortal } from './components/jsbridge/JsBridgeHostPortal';
 
 /**
  * Error Boundary to catch and display React rendering errors
  */
 class ErrorBoundary extends Component<
   { children: ReactNode },
-  { hasError: boolean; error: Error | null }
+  { hasError: boolean; error: Error | null; componentStack: string | null }
 > {
   constructor(props: { children: ReactNode }) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, componentStack: null };
   }
 
   static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
+    return { hasError: true, error, componentStack: null };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('React Error Boundary caught error:', error, info);
+    this.setState({ componentStack: info.componentStack ?? null });
   }
 
   render() {
@@ -84,10 +85,11 @@ class ErrorBoundary extends Component<
             {this.state.error?.message}
             {'\n\n'}
             {this.state.error?.stack}
+            {this.state.componentStack ? `\n\nReact component stack:\n${this.state.componentStack}` : ''}
           </pre>
           <button
             onClick={() => {
-              this.setState({ hasError: false, error: null });
+              this.setState({ hasError: false, error: null, componentStack: null });
               window.location.reload();
             }}
             style={{
@@ -208,7 +210,6 @@ function App() {
       });
       // Clear both top-level and session-level chat errors so the error bar
       // doesn't persist after re-login
-      useChatStore.setState({ error: null });
       useChatStore.getState().clearError();
     };
 
@@ -343,11 +344,9 @@ function App() {
 
 {/* Global toast notifications（悬浮图标窗体极小，不挂载 Toaster 以免撑开文档） */}
           {location.pathname !== '/float-icon' ? <AppShellToaster /> : null}
+          <JsBridgeHostPortal />
           {location.pathname !== '/float-icon' && location.pathname !== '/sprite' ? (
-            <>
-              <UserWatermark />
-              <AccountSwitchFab />
-            </>
+            <UserWatermark />
           ) : null}
         </AppShellLayoutProvider>
       </TooltipProvider>
@@ -374,6 +373,10 @@ function AppShellToaster() {
         right: 'auto',
         transform: 'translateX(-50%)',
         zIndex: 99999,
+        // Radix modal drawers disable pointer events on `body`. The global
+        // toaster sits outside their dismissable layer, so it must opt back
+        // in or the first click only dismisses the drawer beneath it.
+        pointerEvents: 'auto',
       }}
     />
   );

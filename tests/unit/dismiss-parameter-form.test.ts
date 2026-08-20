@@ -5,13 +5,16 @@ import {
 } from '../../src/components/parameter-form/dismiss-parameter-form';
 import { registerParameterFormHandler } from '../../src/components/parameter-form/form-handlers';
 import { useChatStore } from '../../src/stores/chat';
+import { getSessionDisplayMessages } from '../../src/stores/chat/display-selectors';
+import { useChatRuntimeV2Store } from '../../src/stores/chat/runtime-v2-store';
 import type { ContentBlock } from '../../src/stores/chat';
 
 function resetChat(messages: import('../../src/stores/chat').RawMessage[] = []) {
   useChatStore.setState({
-    messages,
     currentSessionKey: 'agent:test:main',
   });
+  useChatRuntimeV2Store.getState().clearSession('agent:test:main');
+  useChatRuntimeV2Store.getState().setDisplayProjection('agent:test:main', messages);
 }
 
 describe('dismiss-parameter-form', () => {
@@ -40,7 +43,7 @@ describe('dismiss-parameter-form', () => {
     registerParameterFormHandler(formId, () => {});
     dismissParameterFormInChat(formId);
 
-    const content = useChatStore.getState().messages[0].content as ContentBlock[];
+    const content = getSessionDisplayMessages('agent:test:main')[0].content as ContentBlock[];
     expect(content.some((b) => b.type === 'parameter_form')).toBe(false);
     expect((content[0] as { text?: string }).text).toBe('请确认参数');
   });
@@ -61,7 +64,7 @@ describe('dismiss-parameter-form', () => {
 
     dismissWorkflowParameterFormsForTemplate('tpl-abc');
 
-    const content = useChatStore.getState().messages[0].content as ContentBlock[];
+    const content = getSessionDisplayMessages('agent:test:main')[0].content as ContentBlock[];
     expect((content[0] as { text?: string }).text).toBe('请确认参数');
   });
 });

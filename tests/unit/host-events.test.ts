@@ -22,10 +22,11 @@ describe('host-events', () => {
   it('subscribes through IPC for mapped host events', async () => {
     const onMock = vi.mocked(window.electron.ipcRenderer.on);
     const offMock = vi.mocked(window.electron.ipcRenderer.off);
+    const removeSubscription = vi.fn();
     const captured: Array<(...args: unknown[]) => void> = [];
     onMock.mockImplementation((_, cb: (...args: unknown[]) => void) => {
       captured.push(cb);
-      return () => {};
+      return removeSubscription;
     });
 
     const { subscribeHostEvent } = await import('@/lib/host-events');
@@ -39,7 +40,21 @@ describe('host-events', () => {
     expect(handler).toHaveBeenCalledWith({ state: 'running' });
 
     unsubscribe();
-    expect(offMock).toHaveBeenCalledWith('gateway:status-changed', expect.any(Function));
+    expect(removeSubscription).toHaveBeenCalledTimes(1);
+    expect(offMock).not.toHaveBeenCalled();
+  });
+
+  it('falls back to off when an older IPC bridge returns no cleanup function', async () => {
+    const onMock = vi.mocked(window.electron.ipcRenderer.on);
+    const offMock = vi.mocked(window.electron.ipcRenderer.off);
+    onMock.mockReturnValue(undefined);
+
+    const { subscribeHostEvent } = await import('@/lib/host-events');
+    const unsubscribe = subscribeHostEvent('gateway:status', vi.fn());
+    const listener = onMock.mock.calls[0][1];
+
+    unsubscribe();
+    expect(offMock).toHaveBeenCalledWith('gateway:status-changed', listener);
   });
 
   it('does not use SSE fallback by default for unknown events', async () => {

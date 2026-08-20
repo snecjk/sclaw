@@ -19,8 +19,9 @@ import {
 } from '@/lib/workflow-api';
 import { canStartWorkflow, useWorkflowsStore } from '@/stores/workflows';
 import { useChatStore } from '@/stores/chat';
+import { updateCurrentChatDisplayProjection } from '@/stores/chat/display-selectors';
 import { buildWorkflowStartUserText } from '@/lib/workflow-local-turn';
-import { registerStartedWorkflowChatCard } from '@/lib/workflow-chat-card-registration';
+import { refreshStartedWorkflowChatCards } from '@/lib/workflow-run-started';
 import { buildWorkflowContextSummary, buildWorkflowFormId } from '@/lib/workflow-form-utils';
 import { saveWorkflowRecord, saveWorkflowExecution, updateWorkflowRunMetadata } from '@/stores/workflow-memory';
 import { appendWorkflowSessionRecord } from '@/lib/workflow-session-record-client';
@@ -166,16 +167,17 @@ export async function createAndStartWorkflowDirect(
     });
 
     const trackStartMs = Date.now();
+    const userText = buildWorkflowStartUserText(schema, inputs);
     const run = await startWorkflowLocal({
       workflowId: created.workflowId,
       inputs,
       idempotencyKey: `start-wf-${created.workflowId}-${Date.now()}`,
       sessionKey: context.sessionKey,
+      agentId: context.agentId,
       triggerType: 'chat',
       engineType: chooseImmediateWorkflowEngine(),
+      chatCard: { title: templateName, paramsSummary: userText },
     });
-
-    const userText = buildWorkflowStartUserText(schema, inputs);
 
     updateWorkflowRunMetadata(context.sessionKey, created.workflowId, {
       lastRunId: run.runId,
@@ -213,15 +215,9 @@ export async function createAndStartWorkflowDirect(
     );
     dismissWorkflowParameterFormsForTemplate(templateId);
 
-    await registerStartedWorkflowChatCard({
-      runId: run.runId,
-      sessionKey: context.sessionKey,
-      title: templateName,
-      paramsSummary: userText,
-    });
-
     // Clear pending state
-    useChatStore.getState().clearPendingWorkflow();
+    useChatStore.getState().clearPendingWorkflow(context.sessionKey);
+    await refreshStartedWorkflowChatCards(context.sessionKey, run.runId);
 
     return true;
   } catch (err) {
@@ -276,21 +272,23 @@ export async function startExistingWorkflow(
   
 
   try {
-    const run = await startWorkflowLocal({
-      workflowId,
-      inputs,
-      idempotencyKey,
-      sessionKey: context.sessionKey,
-      triggerType: 'chat',
-      engineType: chooseImmediateWorkflowEngine(),
-    });
-
-    const { isReExecutionIntent } = await import('@/hooks/use-workflow-intent');
     const displayName = await resolveWorkflowTemplateName(
       context.sessionKey,
       workflowId,
       _templateName,
     );
+    const run = await startWorkflowLocal({
+      workflowId,
+      inputs,
+      idempotencyKey,
+      sessionKey: context.sessionKey,
+      agentId: context.agentId,
+      triggerType: 'chat',
+      engineType: chooseImmediateWorkflowEngine(),
+      chatCard: { title: displayName, paramsSummary: originalText },
+    });
+
+    const { isReExecutionIntent } = await import('@/hooks/use-workflow-intent');
     const isReexec = isReExecutionIntent(originalText);
     const { applyWorkflowRunStarted } = await import('@/lib/workflow-run-started');
     return applyWorkflowRunStarted({
@@ -401,7 +399,7 @@ export async function tryResolvePendingWorkflow(
   sendMessage: (msg: string, runId?: string | null, workflowId?: string | null) => Promise<void>,
 ): Promise<boolean> {
   const chatState = useChatStore.getState();
-  const pending = chatState.pendingWorkflow;
+  const pending = chatState.workflowChatUiBySessionKey[chatState.currentSessionKey]?.pendingWorkflow ?? null;
 
   const {
     isReExecutionIntent,
@@ -476,7 +474,8 @@ export async function tryResolvePendingWorkflow(
 
   // If confirm intent (or short reply) but still missing params, try backfill from history
   if ((isConfirmIntent || isShortReply) && !allRequiredFilled) {
-    const messages = chatState.messages;
+    const { getSessionDisplayMessages } = await import('@/stores/chat/display-selectors');
+    const messages = getSessionDisplayMessages(chatState.currentSessionKey);
     inputs = extractInputsFromHistory(pending.schema.fields, messages, inputs);
     allRequiredFilled = requiredFields.every((f) => {
       if (inputs[f.key] !== undefined) return true;
@@ -527,9 +526,8 @@ export async function tryResolvePendingWorkflow(
       const formId = buildWorkflowFormId(pending.templateId);
       const now = Date.now() / 1000;
       const { registerParameterFormHandler } = await import('@/components/parameter-form/form-handlers');
-      useChatStore.setState((s) => ({
-        messages: [
-          ...s.messages,
+      updateCurrentChatDisplayProjection((messages) => [
+          ...messages,
           {
             role: 'assistant',
             content: [
@@ -544,8 +542,7 @@ export async function tryResolvePendingWorkflow(
             timestamp: now,
             id: crypto.randomUUID(),
           } as import('@/stores/chat').RawMessage,
-        ],
-      }));
+        ]);
       registerParameterFormHandler(formId, async (values) => {
         const ok = await createAndStartWorkflowDirect(
           pending.templateId,
@@ -605,7 +602,7 @@ export async function tryStartRememberedWorkflowSend(
   if (!wantsStart) return false;
 
   const chatState = useChatStore.getState();
-  const pending = chatState.pendingWorkflow;
+  const pending = chatState.workflowChatUiBySessionKey[chatState.currentSessionKey]?.pendingWorkflow ?? null;
 
   const { extractWorkflowIdFromText } = await import('@/hooks/use-workflow-intent');
   const { getLatestWorkflow, getSessionWorkflows, findWorkflowById } = await import(
