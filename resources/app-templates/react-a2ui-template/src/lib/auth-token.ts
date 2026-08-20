@@ -1,5 +1,26 @@
-const STO_TOKEN_STORAGE_KEY = 'sclaw.app.stoToken';
+import { exchangeSsoAuthorizationCode } from './sso-api';
+import {
+  persistSession,
+  readStoredUser,
+  readTokenCookie,
+  writeTokenCookie,
+  clearTokenCookie,
+} from './session';
+import {
+  hasSsoCallbackParams,
+  readSsoCallbackAuth,
+  releaseExchangeLock,
+  stripAuthParamsFromUrl,
+  tryAcquireExchangeLock,
+} from './sso';
+
 const STO_TOKEN_QUERY_KEYS = ['stoToken', 'stotoken', 'StoToken'] as const;
+
+let bootstrapPromise: Promise<AuthBootstrapResult> | null = null;
+
+export type AuthBootstrapResult =
+  | { status: 'ok' }
+  | { status: 'exchange_failed'; message: string };
 
 function readQueryToken(search: string): string | null {
   const params = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
@@ -7,18 +28,18 @@ function readQueryToken(search: string): string | null {
     const value = params.get(key)?.trim();
     if (value) return value;
   }
-  return null;
+  return params.get('token')?.trim() || null;
 }
 
-/** Persist URL stoToken into sessionStorage and strip it from the address bar. */
+/** 宿主注入或 URL 上的 stoToken → cookie，并清理地址栏。 */
 export function captureStoTokenFromUrl(href: string = window.location.href): string | null {
   try {
     const url = new URL(href);
     const token = readQueryToken(url.search);
     if (!token) return getStoToken();
 
-    sessionStorage.setItem(STO_TOKEN_STORAGE_KEY, token);
-    for (const key of STO_TOKEN_QUERY_KEYS) {
+    writeTokenCookie(token);
+    for (const key of [...STO_TOKEN_QUERY_KEYS, 'token']) {
       url.searchParams.delete(key);
     }
     const next = `${url.pathname}${url.search}${url.hash}`;
@@ -30,31 +51,81 @@ export function captureStoTokenFromUrl(href: string = window.location.href): str
 }
 
 export function getStoToken(): string | null {
-  try {
-    const stored = sessionStorage.getItem(STO_TOKEN_STORAGE_KEY)?.trim();
-    return stored || null;
-  } catch {
-    return null;
-  }
+  return readTokenCookie();
 }
 
 export function setStoToken(token: string | null): void {
+  if (!token?.trim()) {
+    clearTokenCookie();
+    return;
+  }
+  writeTokenCookie(token.trim());
+}
+
+async function exchangeCodeFromUrl(code: string): Promise<void> {
+  if (!tryAcquireExchangeLock(code)) return;
   try {
-    if (!token?.trim()) {
-      sessionStorage.removeItem(STO_TOKEN_STORAGE_KEY);
-      return;
-    }
-    sessionStorage.setItem(STO_TOKEN_STORAGE_KEY, token.trim());
-  } catch {
-    // ignore quota / private mode
+    const session = await exchangeSsoAuthorizationCode(code);
+    persistSession(session);
+    window.history.replaceState(window.history.state, '', stripAuthParamsFromUrl());
+  } finally {
+    releaseExchangeLock();
   }
 }
 
-/** Best-effort display name from JWT payload (no signature verify). */
+/**
+ * 启动鉴权：
+ * 1. URL stoToken（SClaw 预览注入）→ cookie
+ * 2. URL code → 用户中心 callback 换票 → cookie + localStorage 用户
+ */
+export function bootstrapAuthFromUrl(): Promise<AuthBootstrapResult> {
+  if (bootstrapPromise) return bootstrapPromise;
+
+  bootstrapPromise = (async (): Promise<AuthBootstrapResult> => {
+    if (typeof window === 'undefined') return { status: 'ok' };
+
+    const { token, code } = readSsoCallbackAuth();
+    if (token) {
+      captureStoTokenFromUrl();
+      return { status: 'ok' };
+    }
+
+    if (code) {
+      try {
+        await exchangeCodeFromUrl(code);
+        return { status: 'ok' };
+      } catch (error) {
+        window.history.replaceState(window.history.state, '', stripAuthParamsFromUrl());
+        const message = error instanceof Error ? error.message : 'SSO 换票失败';
+        console.error('[sso] exchange failed:', message, error);
+        bootstrapPromise = null;
+        return { status: 'exchange_failed', message };
+      }
+    }
+
+    if (hasSsoCallbackParams()) {
+      captureStoTokenFromUrl();
+    }
+
+    return { status: 'ok' };
+  })();
+
+  return bootstrapPromise;
+}
+
+/** 顶栏展示：优先 localStorage 用户，回退 JWT 解析。 */
 export function getUserDisplayFromToken(token: string | null = getStoToken()): {
   name: string;
   code?: string;
 } {
+  const stored = readStoredUser();
+  if (stored) {
+    return {
+      name: stored.name,
+      code: stored.code || stored.empCode,
+    };
+  }
+
   if (!token) return { name: '未登录用户' };
   const parts = token.split('.');
   if (parts.length < 2) return { name: '已登录用户' };

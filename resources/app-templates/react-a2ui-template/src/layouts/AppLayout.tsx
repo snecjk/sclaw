@@ -9,6 +9,7 @@ import {
   TOP_NAV,
 } from './nav-config';
 import { getUserDisplayFromToken } from '../lib/auth-token';
+import { logout } from '../lib/sso';
 
 const { Header, Sider, Content } = Layout;
 
@@ -45,6 +46,12 @@ export function AppLayout() {
       key: 'settings',
       label: '偏好设置',
       onClick: () => go('settings'),
+    },
+    { type: 'divider' },
+    {
+      key: 'logout',
+      label: '退出登录',
+      onClick: () => logout(),
     },
   ];
 

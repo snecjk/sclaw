@@ -2,7 +2,12 @@
  * Renderer API for user app development (OpenSpec change: app-dev-workbench-mvp).
  * All calls go through host-api — never direct IPC / Gateway.
  */
-import { hostApiFetch } from '@/lib/host-api';
+import { hostApiFetch, type HostApiFetchInit } from '@/lib/host-api';
+
+/** sai-cli / 建站长耗时接口：不走 Host API 默认 15s 超时 */
+const APP_DEV_LONG_RUNNING: Pick<HostApiFetchInit, 'disableTimeout'> = {
+  disableTimeout: true,
+};
 
 export type NodeRuntimeState = 'ready' | 'not-installed' | 'downloading' | 'extracting' | 'error';
 
@@ -75,7 +80,7 @@ export async function cloneDevApp(input: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
-    disableTimeout: true,
+    ...APP_DEV_LONG_RUNNING,
   });
 }
 
@@ -92,6 +97,7 @@ export async function deleteDevApp(input: {
       workspaceId: input.workspaceId,
       deleteLocal: input.deleteLocal === true,
     }),
+    ...APP_DEV_LONG_RUNNING,
   });
 }
 
@@ -118,7 +124,7 @@ export async function createUserApp(input: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
-    disableTimeout: true,
+    ...APP_DEV_LONG_RUNNING,
   });
 }
 
@@ -130,6 +136,7 @@ export async function importUserApp(input: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
+    ...APP_DEV_LONG_RUNNING,
   });
 }
 
@@ -349,6 +356,7 @@ export interface StoAppStatus {
 export async function getStoAppStatus(workspaceId: string): Promise<StoAppStatus> {
   const res = await hostApiFetch<{ status: StoAppStatus }>(
     `/api/app-dev/sto-app/status?workspaceId=${encodeURIComponent(workspaceId)}`,
+    APP_DEV_LONG_RUNNING,
   );
   return res.status;
 }
@@ -361,7 +369,7 @@ export async function pushStoApp(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspaceId, message }),
-    disableTimeout: true,
+    ...APP_DEV_LONG_RUNNING,
   });
 }
 
@@ -372,7 +380,7 @@ export async function pullStoApp(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspaceId }),
-    disableTimeout: true,
+    ...APP_DEV_LONG_RUNNING,
   });
 }
 
@@ -384,7 +392,7 @@ export async function continueStoAppMerge(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspaceId, revisionId }),
-    disableTimeout: true,
+    ...APP_DEV_LONG_RUNNING,
   });
 }
 
@@ -409,7 +417,7 @@ export async function deployStoApp(input: {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
-    disableTimeout: true,
+    ...APP_DEV_LONG_RUNNING,
   });
 }
 
@@ -422,6 +430,6 @@ export async function refreshStoAppDeploy(deploymentId: string): Promise<{
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ deploymentId }),
-    disableTimeout: true,
+    ...APP_DEV_LONG_RUNNING,
   });
 }

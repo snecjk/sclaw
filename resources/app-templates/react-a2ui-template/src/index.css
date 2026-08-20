@@ -12,6 +12,14 @@ body {
   color: #1f2329;
 }
 
+.sso-auth-shell {
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
 .app-shell {
   min-height: 100vh;
   background: #f5f6f8;

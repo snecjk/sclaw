@@ -56,7 +56,7 @@ import {
 
 /** Remote React A2UI template (OSS). Dev prefers repo checkout; packaged uses OSS cache. */
 const REACT_TEMPLATE_ZIP_URL =
-  'http://ali-sto-tps.oss-cn-shanghai.aliyuncs.com/53E737B0-31F5-42-react-a2ui-template.zip';
+  'http://ali-sto-tps.oss-cn-shanghai.aliyuncs.com/3EC02BDE-19C8-46-react-a2ui-template.zip';
 
 export interface AppDevStatus {
   workspaceId: string;
@@ -465,6 +465,16 @@ async function copyTemplate(
   }
 }
 
+/** New apps get `.env` from `.env.example` so Vite SSO proxy/env vars load on first preview. */
+async function ensureAppEnvFromExample(appPath: string): Promise<void> {
+  const envPath = join(appPath, '.env');
+  if (existsSync(envPath)) return;
+  const examplePath = join(appPath, '.env.example');
+  if (!existsSync(examplePath)) return;
+  await cp(examplePath, envPath);
+  logger.info(`[app-dev] seeded .env from .env.example appPath=${appPath}`);
+}
+
 /** Run a git command in the app repo with a fallback identity so commits never fail on missing user config. */
 function runGit(cwd: string, args: string[]): Promise<{ ok: boolean; output: string }> {
   return new Promise((resolve) => {
@@ -530,6 +540,8 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
     appName: sanitizePackageName(name),
     appTitle: name,
   });
+
+  await ensureAppEnvFromExample(appPath);
 
   await writeAppDevBootstrap(appPath, {
     name,

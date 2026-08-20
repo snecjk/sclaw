@@ -1,9 +1,7 @@
-import { useEffect } from 'react';
 import { App as AntdApp, ConfigProvider, theme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './layouts/AppLayout';
-import { captureStoTokenFromUrl } from './lib/auth-token';
 import { HomePage } from './pages/HomePage';
 import { DemoPage } from './pages/DemoPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
@@ -50,10 +48,6 @@ function NotFoundPage() {
 }
 
 export default function App() {
-  useEffect(() => {
-    captureStoTokenFromUrl();
-  }, []);
-
   return (
     <ConfigProvider
       locale={zhCN}

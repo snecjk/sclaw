@@ -34,8 +34,8 @@ export function HomePage() {
         <Alert
           type="info"
           showIcon
-          message="尚未检测到 stoToken"
-          description="可在访问链接上携带 ?stoToken=xxx，应用会自动写入请求 Header（stoToken / stotoken），并支持 cookie 凭证。"
+          message="尚未登录"
+          description="应用会在启动时检查 cookie 中的 stoToken；未登录将跳转 SSO。SClaw 预览也可在链接上携带 ?stoToken=xxx 注入登录态。"
         />
       ) : (
         <Alert

@@ -57,7 +57,7 @@ function resolveStoToken(explicit?: string | null): string | null {
 /**
  * Browser fetch wrapper:
  * - credentials include cookies by default
- * - URL / session stoToken written to `stoToken` + `stotoken` headers
+ * - cookie / URL 中的 stoToken 写入 `stoToken` + `Authorization` headers
  * - `/proxy/<key>/...` kept in DEV (Vite); rewritten to absolute target in PROD
  */
 export async function request<T = unknown>(
@@ -83,7 +83,7 @@ export async function request<T = unknown>(
   const token = resolveStoToken(stoToken);
   if (token) {
     if (!headers.has('stoToken')) headers.set('stoToken', token);
-    if (!headers.has('stotoken')) headers.set('stotoken', token);
+    if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
   }
 
   let finalBody = body ?? null;
