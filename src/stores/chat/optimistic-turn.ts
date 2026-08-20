@@ -80,6 +80,7 @@ export function insertOptimisticUserTurn(input: {
 
   const userMsg: RawMessage = {
     role: 'user',
+    // 仅工作流时 displayText 为空；气泡靠 _composerSegments 渲染 chip。
     content: displayText || (attachedFiles?.length ? '(file attached)' : ''),
     timestamp: nowMs / 1000,
     id: crypto.randomUUID(),

@@ -22,7 +22,7 @@ import type { GatewayManager } from '../gateway/manager';
 import type { HostEventBus } from '../api/event-bus';
 
 // Lightweight modules needed before window creation
-import { createMenu } from './menu';
+import { syncApplicationMenuFromStore } from './menu';
 import { getWindowState, trackWindowState } from './window';
 import { logger } from '../utils/logger';
 import { warmupNetworkOptimization } from '../utils/uv-env';
@@ -540,8 +540,8 @@ async function initialize(): Promise<void> {
   const window = await createMainWindow();
   _ts('mainWindow created');
 
-  // Set application menu (fast, no I/O — can happen after window show)
-  createMenu();
+  // Set application menu from persisted language (macOS menu bar is always visible)
+  void syncApplicationMenuFromStore();
 
   // Initialize logger AFTER window creation so its sync I/O runs in parallel
   // with the renderer loading HTML. Calls before init() safely go to console

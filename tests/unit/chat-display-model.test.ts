@@ -69,4 +69,21 @@ describe('chat display model', () => {
     expect(displayed[0]?.id).toBe('history-1');
     expect(displayed[0]?._skillMeta?.title).toBe('客户异常监控');
   });
+
+  it('keeps workflow composer segments when pairing an empty-content optimistic turn', () => {
+    const overlay = {
+      ...createClientSessionState().overlay,
+      optimisticUserMessage: {
+        id: 'optimistic-wf',
+        role: 'user' as const,
+        content: '',
+        _composerSegments: [{ type: 'workflow' as const, id: 'wf-1', name: '日报', source: 'mine' }],
+      },
+    };
+
+    const displayed = buildChatDisplayModel([], overlay);
+
+    expect(displayed).toHaveLength(1);
+    expect(displayed[0]?._composerSegments?.[0]).toMatchObject({ type: 'workflow', name: '日报' });
+  });
 });
