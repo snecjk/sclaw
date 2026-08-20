@@ -60,7 +60,7 @@ export function FolderBreadcrumbBar({
   const { t } = useTranslation('common');
   const items = [{ entryId: 'root', name: rootLabel }, ...breadcrumbs.slice(1)];
   return (
-    <div className="mb-3 flex shrink-0 items-center overflow-hidden">
+    <div className="flex shrink-0 items-center overflow-hidden">
       <button
         type="button"
         onClick={onBack}

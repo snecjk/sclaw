@@ -26,13 +26,14 @@
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronDown, ChevronLeft, ChevronRight, Loader2, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { IconCheckbox } from '@/components/icon-checkbox';
 import { Button } from '@/components/ui/button';
 import { getDataCenterSpaces, listDataCenterEntries } from '@/lib/data-center-api';
 import { getEntryIconSrc } from '@/lib/data-center-entry-icon';
+import { FolderBreadcrumbBar } from '@/pages/DataCenter/components/navigation';
 import type { DataCenterBreadcrumb, DataCenterEntry } from '@/types/data-center';
 import { stageDataCenterSelections } from './stage-selection';
 import type {
@@ -45,6 +46,13 @@ const ROOT_ENTRY_ID = 'root';
 /** 树缩进：展开子项相对父级的左偏移 */
 const TREE_INDENT_PX = 28;
 
+/** 面包屑根节点文案（与数据中心 Tab 一致，不含「选择」前缀） */
+const BREADCRUMB_ROOT_I18N_KEY: Record<DataCenterFilePickerType, string> = {
+  drive: 'dataCenterPage.tabs.onlineFiles',
+  qa_artifact: 'dataCenterPage.tabs.myArtifacts',
+  site_shared_artifact: 'dataCenterPage.tabs.sharedArtifacts',
+};
+
 // ---------------------------------------------------------------------------
 // 固化样式（勿在调用方覆盖；改外观只改这里）
 // ---------------------------------------------------------------------------
@@ -54,7 +62,7 @@ const STYLES = {
   overlay: 'fixed inset-0 z-[130] flex items-center justify-center bg-black/45 px-4',
   /** 弹窗壳 */
   panel:
-    'flex max-h-[560px] w-[460px] flex-col overflow-hidden rounded-[18px] bg-white p-4 opacity-100 shadow-2xl dark:bg-background',
+    'flex w-[460px] flex-col overflow-hidden rounded-[18px] bg-white p-4 opacity-100 shadow-2xl dark:bg-background',
   /** 顶栏 */
   header: 'flex  items-center justify-between pb-4',
   title:
@@ -149,6 +157,7 @@ export function DataCenterFilePickerModal({
   onConfirm,
 }: DataCenterFilePickerModalProps) {
   const { t } = useTranslation('chat');
+  const { t: tCommon } = useTranslation('common');
 
   // 解析后的 spaceId：drive / qa_artifact 为 null；网点共享在打开时由 getDataCenterSpaces 填入
   const [resolvedSpaceId, setResolvedSpaceId] = useState<string | null>(null);
@@ -170,12 +179,12 @@ export function DataCenterFilePickerModal({
   const [confirming, setConfirming] = useState(false);
 
   const title = t(TITLE_I18N_KEY[type]);
+  const breadcrumbRootLabel = tCommon(BREADCRUMB_ROOT_I18N_KEY[type]);
   const confirmLabel = t('composer.attachConfirm');
   const cancelLabel = t('composer.attachCancel');
   const searchPlaceholder = t('composer.attachSearchPlaceholder');
   const emptyLabel = t('composer.attachEmpty');
   const loadingLabel = t('composer.attachLoading');
-  const backLabel = t('composer.attachBack');
 
   /** 打开时重置 UI，并按 type 解析 space（网点共享走 getDataCenterSpaces）。 */
   useEffect(() => {
@@ -365,17 +374,22 @@ export function DataCenterFilePickerModal({
     });
   };
 
-  /** 搜索命中目录时：进入该目录查看子集（非就地展开） */
-  const enterFolder = useCallback((folder: DataCenterEntry) => {
-    if (folder.entryType !== 'folder') return;
+  /** 跳转到面包屑某一级（清空搜索并加载该目录） */
+  const openBreadcrumb = useCallback((entryId: string) => {
     setKeyword('');
     setDebouncedKeyword('');
     setSearchResults([]);
     setChildrenMap({});
     setLoadingMap({});
-    setBrowseParentId(folder.entryId);
-    setOpenMap({ [folder.entryId]: true });
+    setBrowseParentId(entryId);
+    setOpenMap({ [entryId]: true });
   }, []);
+
+  /** 搜索命中目录时：进入该目录查看子集（非就地展开） */
+  const enterFolder = useCallback((folder: DataCenterEntry) => {
+    if (folder.entryType !== 'folder') return;
+    openBreadcrumb(folder.entryId);
+  }, [openBreadcrumb]);
 
   /** 返回上一级（对齐数据中心面包屑回退） */
   const goUp = useCallback(() => {
@@ -383,11 +397,8 @@ export function DataCenterFilePickerModal({
     const parentId = breadcrumbs.length > 1
       ? breadcrumbs[breadcrumbs.length - 2]!.entryId
       : ROOT_ENTRY_ID;
-    setChildrenMap({});
-    setLoadingMap({});
-    setBrowseParentId(parentId);
-    setOpenMap({ [parentId]: true });
-  }, [browseParentId, breadcrumbs]);
+    openBreadcrumb(parentId);
+  }, [browseParentId, breadcrumbs, openBreadcrumb]);
 
   const toggleFolder = (folderId: string) => {
     setOpenMap((prev) => {
@@ -566,21 +577,10 @@ export function DataCenterFilePickerModal({
       });
     }
 
-    const showBack = browseParentId !== ROOT_ENTRY_ID;
-    return (
-      <>
-        {showBack ? (
-          <button type="button" className={STYLES.folderRow} onClick={goUp}>
-            <span className={STYLES.leading}>
-              <ChevronLeft className={STYLES.chevron} />
-            </span>
-            <span className={STYLES.rowText}>{backLabel}</span>
-          </button>
-        ) : null}
-        {renderTreeRows(browseParentId, 0)}
-      </>
-    );
+    return renderTreeRows(browseParentId, 0);
   })();
+
+  const showBreadcrumb = !debouncedKeyword && browseParentId !== ROOT_ENTRY_ID;
 
   return createPortal(
     <div
@@ -619,7 +619,17 @@ export function DataCenterFilePickerModal({
           </div>
         </div>
 
-        <div className={STYLES.list}>{listBody}</div>
+        <div className={STYLES.list}>
+          {showBreadcrumb ? (
+            <FolderBreadcrumbBar
+              breadcrumbs={breadcrumbs}
+              rootLabel={breadcrumbRootLabel}
+              onBack={goUp}
+              onOpen={openBreadcrumb}
+            />
+          ) : null}
+          {listBody}
+        </div>
 
         <div className={STYLES.footer}>
           <div className="flex justify-end gap-2">
