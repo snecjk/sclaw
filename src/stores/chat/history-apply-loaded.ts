@@ -265,13 +265,6 @@ export function applyLoadedHistorySnapshot(input: {
   });
 
   let finalMessages = enrichedMessages;
-  clearOptimisticUserIfEchoed({
-    targetSessionKey,
-    finalMessages,
-    cachedOptimistic,
-    userMsgAt,
-    toMs,
-  });
 
   if (get().currentSessionKey !== targetSessionKey) return;
 
@@ -286,6 +279,7 @@ export function applyLoadedHistorySnapshot(input: {
     gatewaySessionLabel,
     userMessageAt: userMsgAt ?? null,
     sending: runtimeView.sending,
+    optimisticUser: cachedOptimistic,
     getMessageText,
     cachedOptimistic,
   });
@@ -296,8 +290,19 @@ export function applyLoadedHistorySnapshot(input: {
   );
   // Skill meta is applied after the merge/recover pipeline, so a synthetic
   // session-label opener may have been inserted before the real skill turn was
-  // recognizable. Drop it now that the skill turn is tagged.
-  finalMessages = dropSyntheticSkillSessionLabelUsers(finalMessages);
+  // recognizable. Drop it now that the skill turn is tagged. Overlay skill
+  // chips count too — otherwise a failed send keeps both the truncated title
+  // bubble and the optimistic skill bubble.
+  finalMessages = dropSyntheticSkillSessionLabelUsers(finalMessages, {
+    hasSkillUser: Boolean(cachedOptimistic?._skillMeta),
+  });
+  clearOptimisticUserIfEchoed({
+    targetSessionKey,
+    finalMessages,
+    cachedOptimistic,
+    userMsgAt,
+    toMs,
+  });
   traceLoadHistoryUserReconciliation({
     sessionKey: targetSessionKey,
     userMessageAt: userMsgAt,

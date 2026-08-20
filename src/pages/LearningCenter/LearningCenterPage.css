@@ -1,0 +1,1179 @@
+/* Feature-scoped learning center layout.
+   Calibrated against MasterGo frame 1172:080720 (learning-center screenshot). */
+
+.learning-center-page {
+  overflow-x: hidden;
+  background: var(--lc-canvas-bg);
+  --lc-card-radius: 1.125rem; /* 18px */
+  --lc-cover-ratio: 250 / 156;
+  --lc-case-card-height: 18.25rem; /* 292px */
+  --lc-case-card-min-w: 17.375rem; /* 278px */
+  --lc-emphasis: var(--foreground);
+  --lc-step-art-size: 8.75rem; /* MasterGo 组 7896: 140x140 */
+  --lc-tab-flex-inactive: 1;
+  --lc-tab-flex-active: 0;
+  --lc-tab-title-max: 6em; /* 最多 6 个字不被插画遮挡 */
+  --lc-tab-art-gap: 0.5rem;
+  --lc-tab-art-trail: 0.25rem;
+  --lc-steps-bg: #f5f5f5;
+  --lc-panel-bg: #ffffff;
+  --lc-canvas-bg: #fafafc;
+  --lc-well-bg: #f7f8fa;
+  --lc-edge: var(--sto-surface-edge, hsl(var(--border)));
+  --lc-text: hsl(var(--foreground));
+  --lc-text-muted: hsl(var(--muted-foreground));
+  --lc-tab-active-bg: transparent;
+  --lc-detail-content-w: 33.5rem; /* 536px fallback */
+  --lc-detail-content-min-w: 35.1875rem; /* 563px: 向左拖动下限 */
+  --lc-detail-panel-w: 35.25rem; /* 564px */
+  --lc-detail-gap: 0.75rem;
+}
+
+.learning-center-page__inner {
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+}
+
+/* Home keeps the same centered 862px reading rail as the application plaza.
+   Tutorial detail remains full-width so its split layout can use all available space. */
+.learning-center-page:not(.learning-center-page--detail-open) .learning-center-page__inner {
+  max-width: 53.875rem; /* 862px */
+  margin-inline: auto;
+}
+
+.learning-center-split {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  gap: 0;
+  background: var(--lc-canvas-bg);
+  --lc-canvas-bg: #fafafc;
+  --lc-panel-bg: #ffffff;
+  --lc-steps-bg: #f5f5f5;
+  --lc-well-bg: #f7f8fa;
+  --lc-edge: var(--sto-surface-edge, hsl(var(--border)));
+  --lc-text: hsl(var(--foreground));
+  --lc-text-muted: hsl(var(--muted-foreground));
+  --lc-detail-content-min-w: 35.1875rem;
+  --lc-detail-panel-w: 35.25rem;
+  --lc-detail-gap: 0.75rem;
+}
+
+.learning-center-split--open {
+  display: contents;
+}
+
+.learning-center-split--open > .learning-center-page {
+  grid-column: 1 / 4;
+  grid-row: 2;
+}
+
+.learning-center-split > .learning-center-page {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.learning-center-split__aside {
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--lc-canvas-bg);
+}
+
+.learning-center-split--open .learning-center-tutorial-sheet {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: auto !important;
+}
+
+/* Narrow screens keep the sheet as an overlay. Desktop splits: 564px pane beside adaptive content. */
+@media (max-width: 63.9375rem) {
+  .learning-center-split--open > .learning-center-split__aside {
+    position: absolute;
+    top: calc(var(--sto-content-header-h, 44px) + var(--sto-shell-card-gap, 0.5rem));
+    right: var(--sto-shell-card-gap, 0.5rem);
+    bottom: var(--sto-shell-card-gap, 0.5rem);
+    left: auto;
+    z-index: 40;
+    flex: none;
+    width: min(var(--lc-detail-panel-w), calc(100% - 1rem));
+    min-width: 0;
+    max-width: calc(100% - 1rem);
+  }
+}
+
+/* Tutorial open: left pane fills remaining space beside the 564px sheet. */
+@media (min-width: 64rem) {
+  .learning-center-split--open > .learning-center-page {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .learning-center-split--open > .learning-center-split__aside {
+    position: relative;
+    grid-column: 3;
+    grid-row: 2;
+    z-index: auto;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    align-self: stretch;
+  }
+
+  .learning-center-page--detail-open {
+    --lc-step-art-size: 5.5rem;
+    --lc-tab-flex-inactive: 1;
+    --lc-tab-flex-active: 0;
+  }
+
+  .learning-center-page--detail-open .learning-center-page__inner {
+    width: 100%;
+    max-width: none;
+    margin-inline: 0;
+  }
+
+  .learning-center-page--detail-open .learning-center-steps {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .learning-center-page--detail-open .learning-center-steps__scroller {
+    overflow-x: hidden;
+  }
+
+  .learning-center-page--detail-open .learning-center-steps__tabs {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .learning-center-page--detail-open .learning-center-steps__tab {
+    min-width: 0;
+    overflow: visible;
+    padding-inline: 0.4rem;
+    font-size: 0.8125rem;
+  }
+
+.learning-center-page--detail-open .learning-center-steps__art {
+  top: -1.125rem;
+}
+
+  .learning-center-page--detail-open .learning-center-steps__tab[data-state='active'] {
+    justify-content: flex-start;
+    padding-inline: 0.4rem 0.15rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-steps__tab .learning-center-steps__title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .learning-center-page--detail-open .learning-center-steps__panel {
+    padding: 1.125rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-tutorial-item {
+    gap: 0.625rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-tutorial-copy {
+    min-width: 0;
+    gap: 0.25rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-tutorial-copy > p {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .learning-center-page--detail-open .learning-center-tutorial-link {
+    width: auto;
+    flex-basis: auto;
+  }
+
+  .learning-center-page--detail-open .learning-center-cases__grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--lc-case-card-min-w)), 1fr));
+  }
+
+  .learning-center-page--detail-open .learning-center-hero__title {
+    font-size: 1.5rem;
+  }
+
+  .learning-center-page--detail-open .learning-center-hero__subtitle {
+    max-width: 100%;
+  }
+}
+
+.learning-center-hero {
+  min-width: 0;
+}
+
+.learning-center-hero__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.25rem;
+  margin: 0;
+  overflow: visible;
+  padding-bottom: 0.35rem;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.75rem;
+  letter-spacing: 0;
+  color: var(--lc-text);
+}
+
+/* MasterGo 1172:093151 路径 154: 50x6 layer, extracted wave 57x15 */
+.learning-center-hero__steps {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-end;
+  height: 2rem;
+}
+
+.learning-center-hero__step-underline {
+  position: absolute;
+  left: 50%;
+  bottom: -0.35rem;
+  width: 3.125rem;
+  height: 0.9375rem;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.learning-center-hero__step-count,
+.learning-center-hero__step-label {
+  font-style: normal;
+  font-weight: 600;
+  color: var(--lc-text);
+}
+
+.learning-center-hero__step-count {
+  font-size: 2.0625rem;
+  line-height: 2rem;
+}
+
+.learning-center-hero__step-label {
+  font-size: 1.75rem;
+  line-height: 2rem;
+}
+
+.learning-center-hero__subtitle {
+  margin: 0.375rem 0 0;
+  max-width: 40rem;
+  font-size: 0.875rem;
+  line-height: 1.125rem;
+  color: var(--lc-text-muted);
+}
+
+.learning-center-steps {
+  --lc-steps-pad: 0.875rem;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  width: 100%;
+  max-width: none;
+  height: var(--lc-steps-height, 15.625rem);
+  min-width: 0;
+  margin-top: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+  box-sizing: border-box;
+  padding: var(--lc-steps-pad);
+  overflow-x: clip;
+  border: 0.8px solid var(--lc-edge);
+  border-radius: var(--lc-card-radius);
+  background: var(--lc-steps-bg);
+}
+
+.learning-center-steps__scroller {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  /* Pull the tab strip flush with the card edge so first/last active fills
+     share the parent radius origin. Top extra offset keeps art overflow space. */
+  max-width: none;
+  margin-top: calc(-2.5rem - var(--lc-steps-pad));
+  margin-right: calc(-1 * var(--lc-steps-pad));
+  margin-left: calc(-1 * var(--lc-steps-pad));
+  padding-top: 2.5rem;
+  overflow-x: hidden;
+  overflow-y: visible;
+  overscroll-behavior-x: none;
+  touch-action: pan-y;
+}
+
+.learning-center-steps__tabs-root {
+  position: relative;
+  z-index: 1;
+}
+
+.learning-center-steps__tabs {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* Same stacking layer as tab labels; white tutorial card sits above both. */
+.learning-center-steps__art {
+  position: absolute;
+  z-index: 1;
+  top: -1.8125rem; /* MasterGo 组 7896 y:-29 */
+  left: var(--lc-art-left, 7.5rem);
+  width: var(--lc-art-fit-width, var(--lc-step-art-size));
+  height: var(--lc-step-art-size);
+  overflow: hidden;
+  pointer-events: none;
+  transition: left 0.22s ease, width 0.22s ease, height 0.22s ease, top 0.22s ease;
+}
+
+.learning-center-tutorial-header__title {
+  min-width: 0;
+  overflow: hidden;
+  padding-left: 0.75rem;
+  color: var(--lc-text, hsl(var(--foreground)));
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.learning-center-steps__art-composed {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.learning-center-steps__art-card {
+  position: absolute;
+  top: var(--lc-art-y, 6.58%);
+  left: var(--lc-art-x, 12.46%);
+  width: 75.714%; /* 106 / 140 */
+  height: 85.714%; /* 120 / 140 */
+  overflow: hidden;
+  border-radius: 0;
+  background: var(--lc-panel-bg);
+  box-shadow: 0 0 40px 0 rgba(185, 75, 0, 0.08);
+  transform: rotate(var(--lc-art-rotate, 6deg));
+  transform-origin: center center;
+}
+
+.learning-center-steps__art-inner {
+  position: absolute;
+  top: 5.833%; /* 7 / 120 */
+  left: 6.604%; /* 7 / 106 */
+  width: 86.792%; /* 92 / 106 */
+  height: 88.333%; /* 106 / 120 */
+  overflow: hidden;
+  border: 0.28px solid #ffe7d6;
+  border-radius: 9px;
+  background: #fafafa;
+}
+
+.learning-center-steps__art-inner img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+
+.learning-center-page .learning-center-steps__tabs {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  min-height: 2.5rem;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 0;
+  overflow: hidden;
+  border-radius: var(--lc-card-radius) var(--lc-card-radius) 0 0;
+  border: 0;
+  background: var(--lc-steps-bg);
+  padding: 0;
+}
+
+.learning-center-page .learning-center-steps__tab {
+  position: relative;
+  z-index: auto;
+  display: inline-flex;
+  flex: var(--lc-tab-flex-inactive) 1 0;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  overflow: visible;
+  border-radius: 0;
+  border-right: 0;
+  padding: 0 0.75rem;
+  color: var(--muted-foreground);
+  font-weight: 500;
+  box-shadow: none;
+  transition: flex 0.22s ease, color 0.15s ease, min-width 0.22s ease;
+}
+
+.learning-center-page .learning-center-steps__tab:first-child {
+  border-top-left-radius: var(--lc-card-radius);
+}
+
+.learning-center-page .learning-center-steps__tab:last-child {
+  border-top-right-radius: var(--lc-card-radius);
+}
+
+.learning-center-steps__tab-label {
+  position: relative;
+  z-index: auto;
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.learning-center-steps__title {
+  min-width: 0;
+  max-width: var(--lc-tab-title-max);
+}
+
+.learning-center-page .learning-center-steps__tab > span {
+  position: relative;
+  z-index: auto;
+}
+
+.learning-center-page .learning-center-steps__tab .learning-center-steps__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.learning-center-page .learning-center-steps__tab:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: 1px;
+  height: 1.25rem;
+  transform: translateY(-50%);
+  background: var(--lc-edge);
+}
+
+.learning-center-page .learning-center-steps__tab[data-state='active'] {
+  z-index: auto;
+  flex: var(--lc-tab-flex-active) 0 auto;
+  min-width: var(
+    --lc-tab-active-min,
+    calc(
+      2.25rem
+      + var(--lc-tab-title-max)
+      + var(--lc-tab-art-gap)
+      + var(--lc-step-art-size)
+      + var(--lc-tab-art-trail)
+    )
+  );
+  justify-content: flex-start;
+  padding: 0 0.5rem 0 0.75rem;
+  background: var(--lc-tab-active-bg);
+  color: var(--foreground);
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.learning-center-page .learning-center-steps__tab[data-state='active'] .learning-center-steps__tab-label {
+  z-index: auto;
+  flex: 0 0 auto;
+  max-width: calc(2em + var(--lc-tab-title-max));
+  justify-content: flex-start;
+}
+
+.learning-center-page .learning-center-steps__tab[data-state='active'] .learning-center-steps__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: var(--lc-tab-title-max);
+}
+
+.learning-center-steps__index {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.55;
+}
+
+.learning-center-steps__panel {
+  position: absolute;
+  top: 2.5rem;
+  left: 0.25rem;
+  right: 0.25rem;
+  bottom: 0.25rem;
+  z-index: 2;
+  display: flex;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  margin: 0;
+  flex-direction: column;
+  gap: 0.75rem; /* 12px */
+  box-sizing: border-box;
+  padding: 1.125rem; /* 18px */
+  border: 0.8px solid var(--lc-edge);
+  border-radius: 0.9375rem; /* 15px */
+  background: var(--lc-panel-bg);
+  box-shadow: none;
+}
+
+.learning-center-tutorial-list {
+  display: flex;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+  list-style: none;
+}
+
+.learning-center-tutorial-item {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 2.5rem;
+  min-width: 0;
+  flex-grow: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.875rem;
+  padding: 0;
+}
+
+.learning-center-tutorial-item:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: calc(50% + 0.75rem);
+  bottom: -1.25rem;
+  left: 0.75rem;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--lc-edge);
+}
+
+.learning-center-tutorial-index {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: 0 0 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--lc-edge);
+  border-radius: 999px;
+  background: var(--lc-well-bg);
+  color: var(--lc-text);
+  font-size: 0.75rem;
+}
+
+.learning-center-tutorial-copy {
+  position: static;
+  z-index: 1;
+  display: flex;
+  width: auto;
+  height: 2.5rem;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0;
+}
+
+.learning-center-tutorial-copy > p {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.learning-center-tutorial-link {
+  height: auto;
+  width: auto;
+  margin-left: auto;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 0.15rem;
+  padding: 0;
+  color: hsl(var(--primary));
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.learning-center-cover-preview {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 862px;
+  max-width: min(862px, calc(100vw - 4rem));
+  height: 538.75px;
+  max-height: min(538.75px, calc(100vh - 6rem));
+  padding: 0;
+  gap: 0;
+  overflow: visible;
+  border: 2.84px solid var(--sto-surface-edge, hsl(var(--border)));
+  border-radius: 18px;
+  background: var(--sto-workspace-bg);
+  box-shadow: none;
+}
+
+.learning-center-cover-preview__close {
+  position: absolute;
+  top: -46px;
+  right: 0;
+  z-index: 1;
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border: 0;
+  border-radius: 20px;
+  background: rgb(255 255 255 / 0.2);
+  color: #ffffff;
+  box-shadow: 0 2.91px 34.91px rgb(43 17 0 / 0.03);
+  backdrop-filter: blur(2.91px);
+  cursor: pointer;
+}
+
+.learning-center-cover-preview__close:hover {
+  color: #ffffff;
+  background: rgb(255 255 255 / 0.35);
+}
+
+.learning-center-cover-preview__media {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.learning-center-cover-preview__image,
+.learning-center-cover-preview__empty {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: transparent;
+}
+
+.learning-center-cover-preview__image {
+  object-fit: cover;
+  object-position: center;
+}
+
+.learning-center-cover-preview--empty {
+  padding: 0 59.83px;
+  gap: 42.74px;
+}
+
+.learning-center-cover-preview__empty {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--lc-text-muted);
+}
+
+.learning-center-cases {
+  min-width: 0;
+}
+
+.learning-center-cases__title {
+  margin: 0 0 1rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+/* MasterGo 1172:092842: 48px bars + 18px + 14/18 text #C9CDD4 */
+.learning-center-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.125rem;
+  width: 100%;
+}
+
+.learning-center-empty__icon {
+  display: block;
+  width: 3rem;
+  height: 3rem;
+}
+
+.learning-center-empty__text {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.125rem;
+  color: var(--lc-text-muted);
+  white-space: nowrap;
+}
+
+.learning-center-steps__empty {
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+}
+
+.learning-center-cases__empty {
+  margin-top: 7.25rem;
+}
+
+.learning-center-cases__grid {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--lc-case-card-min-w)), 1fr));
+  gap: 0.875rem;
+  justify-content: stretch;
+}
+
+.learning-center-cases__item {
+  width: 100%;
+  min-width: 0;
+}
+
+.learning-center-page .learning-center-case-card {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  height: var(--lc-case-card-height);
+  border: 0.8px solid var(--lc-edge);
+  border-radius: var(--lc-card-radius);
+  background: var(--lc-panel-bg);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* MasterGo 容器 7949: 278x292, padding 14, gap 12, radius 18, border #E5E6EB */
+.learning-center-case-card {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  height: var(--lc-case-card-height);
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.875rem;
+  overflow: hidden;
+  border: 0.8px solid var(--lc-edge);
+  border-radius: var(--lc-card-radius);
+  background: var(--lc-panel-bg);
+}
+
+/* Inner 250x226, column gap 8: title 18 + desc 36 + cover 156 */
+.learning-center-case-card__body {
+  display: flex;
+  width: 100%;
+  height: 14.125rem;
+  flex: 0 0 14.125rem;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0;
+}
+
+.learning-center-case-card__text {
+  display: flex;
+  min-width: 0;
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.learning-center-page .learning-center-case-card__title {
+  margin: 0;
+  height: 1.125rem;
+  overflow: hidden;
+  color: var(--lc-text);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.learning-center-case-card__summary {
+  display: -webkit-box;
+  margin: 0;
+  height: 2.25rem;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--lc-text-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.125rem;
+  word-break: break-word;
+}
+
+.learning-center-case-cover {
+  box-sizing: border-box;
+  position: relative;
+  width: 100%;
+  height: 9.75rem;
+  flex: 0 0 9.75rem;
+  overflow: hidden;
+  border: 1px solid var(--lc-edge);
+  border-radius: 0.625rem;
+  background: var(--lc-well-bg);
+}
+
+.learning-center-case-cover__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.learning-center-case-cover__preview {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 1;
+  display: inline-flex;
+  width: 1.375rem;
+  height: 1.375rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--lc-edge);
+  border-radius: 0.375rem;
+  background: var(--lc-panel-bg);
+  color: var(--lc-text-muted);
+  box-shadow: 0 2px 24px rgb(43 17 0 / 0.03);
+  cursor: pointer;
+}
+
+.learning-center-case-cover__preview:hover {
+  color: var(--lc-text);
+  background: var(--lc-panel-bg);
+}
+
+.learning-center-case-cover__preview:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+.learning-center-case-card__footer {
+  display: flex;
+  width: 100%;
+  height: 1.625rem;
+  flex: 0 0 1.625rem;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.375rem;
+  padding: 0;
+}
+
+.learning-center-case-card__count {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.3rem;
+  overflow: hidden;
+  color: var(--lc-text-muted);
+  font-size: 0.75rem;
+}
+
+.learning-center-case-card__actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.learning-center-case-card__action {
+  box-sizing: border-box;
+  display: inline-flex;
+  width: 4.5rem;
+  height: 1.625rem;
+  flex: 0 0 4.5rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--lc-edge);
+  border-radius: 0.5rem;
+  background: var(--lc-panel-bg);
+  color: var(--lc-text);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 0.875rem;
+  cursor: pointer;
+}
+
+.learning-center-case-card__action:hover {
+  background: var(--lc-well-bg);
+}
+
+.learning-center-case-card__action:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+@media (min-width: 640px) {
+  .learning-center-hero__title {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 639px) {
+  .learning-center-steps {
+    height: auto;
+    min-height: 15.625rem;
+  }
+
+  .learning-center-steps__panel {
+    position: static;
+    width: 100%;
+    height: auto;
+    min-height: 12rem;
+  }
+}
+
+/* L1 workspace + L2 panel; do not copy light hex onto dark surfaces. */
+.dark .learning-center-page,
+.dark .learning-center-split {
+  --lc-canvas-bg: var(--sto-workspace-bg);
+  --lc-panel-bg: var(--sto-panel-bg);
+  --lc-steps-bg: hsl(var(--muted));
+  --lc-well-bg: hsl(var(--muted));
+  --lc-tab-active-bg: #31353d;
+}
+
+.dark .learning-center-page .learning-center-steps__tab[data-state='active'] {
+  background-color: var(--lc-tab-active-bg);
+  background-image: none;
+}
+
+.dark .learning-center-steps__art-card {
+  box-shadow: 0 0 40px 0 rgb(0 0 0 / 0.28);
+}
+
+.dark .learning-center-steps__art-inner {
+  border-color: color-mix(in srgb, hsl(var(--primary)) 28%, transparent);
+  background: hsl(var(--muted));
+}
+
+.learning-center-case-detail {
+  overflow: hidden;
+  border-color: hsl(var(--border));
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+}
+
+.learning-center-case-detail__close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: hsl(var(--foreground));
+}
+
+.learning-center-case-detail__header {
+  padding: 16px 42px 16px 16px;
+  gap: 8px;
+}
+
+.learning-center-case-detail .learning-center-case-detail__title {
+  color: hsl(var(--foreground));
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.learning-center-case-detail .learning-center-case-detail__hint {
+  margin-top: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+}
+
+.learning-center-case-detail__body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 0 16px;
+}
+
+.learning-center-case-detail__content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.learning-center-case-detail__scene-block {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.learning-center-case-detail__prompt-block {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.learning-center-case-detail__label {
+  margin: 0;
+  color: hsl(var(--foreground));
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.learning-center-case-detail__scene {
+  margin: 4px 0 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  white-space: pre-line;
+}
+
+.learning-center-case-detail__prompt {
+  box-sizing: border-box;
+  display: flex;
+  min-width: 0;
+  margin-top: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--muted));
+}
+
+.learning-center-case-detail__prompt-text {
+  margin: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 22px;
+  white-space: pre-line;
+}
+
+.learning-center-case-detail__cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 608 / 317.5;
+  overflow: hidden;
+  border: 1.67px solid hsl(var(--border));
+  border-radius: 8.36px;
+  background: hsl(var(--muted));
+}
+
+.learning-center-case-detail__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.learning-center-case-detail__zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 1;
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  background: hsl(var(--popover));
+  color: hsl(var(--muted-foreground));
+  box-shadow: 0 2px 24px rgb(43 17 0 / 0.03);
+  cursor: pointer;
+}
+
+.learning-center-case-detail__footer {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px;
+}
+
+.learning-center-case-detail__cancel,
+.learning-center-case-detail__use {
+  height: 34px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.learning-center-case-detail__cancel {
+  border-color: hsl(var(--border));
+  background: hsl(var(--popover));
+  color: hsl(var(--foreground));
+}
+
+.learning-center-case-detail__cancel:hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+.learning-center-case-detail__use {
+  border-color: hsl(var(--foreground));
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .learning-center-page * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

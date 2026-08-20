@@ -13,15 +13,22 @@ export function buildChatDisplayModel(
   decorations?: ChatMessageDecorations,
   options: { includeStreaming?: boolean } = {},
 ): RawMessage[] {
-  const messages = [...(decorations?.projectedMessages ?? transcript)];
-  const ids = new Set(messages.map((message) => message.id).filter(Boolean));
   const optimistic = overlay.optimisticUserMessage;
+  let messages = [...(decorations?.projectedMessages ?? transcript)];
+  if (optimistic) {
+    // Session-title recovery injects a truncated plain user row. While the
+    // optimistic skill/workflow turn is still on screen, that synthetic row is
+    // the same send — drop it instead of showing two bubbles.
+    messages = messages.filter((message) => !isSyntheticSessionLabelUser(message));
+  }
+
+  const ids = new Set(messages.map((message) => message.id).filter(Boolean));
 
   if (optimistic && (!optimistic.id || !ids.has(optimistic.id))) {
     const refAt = typeof optimistic.timestamp === 'number'
       ? toMs(optimistic.timestamp)
       : 0;
-    const alreadyPaired = messages.some((message) => (
+    const echoIndex = messages.findIndex((message) => (
       message.role === 'user'
       && (
         (optimistic.id && message.id && message.id === optimistic.id)
@@ -29,7 +36,19 @@ export function buildChatDisplayModel(
         || Boolean(findHistoryUserEcho([message], optimistic, refAt))
       )
     ));
-    if (!alreadyPaired) {
+    if (echoIndex >= 0) {
+      if (optimistic._skillMeta && !messages[echoIndex]._skillMeta) {
+        messages = messages.map((message, index) => (
+          index === echoIndex
+            ? {
+                ...message,
+                _skillMeta: optimistic._skillMeta,
+                content: optimistic.content ?? message.content,
+              }
+            : message
+        ));
+      }
+    } else {
       messages.push(optimistic);
     }
   }
@@ -39,4 +58,8 @@ export function buildChatDisplayModel(
     messages.push(overlay.streamingMessage);
   }
   return messages;
+}
+
+function isSyntheticSessionLabelUser(message: RawMessage): boolean {
+  return typeof message.id === 'string' && message.id.startsWith('session-label-user-');
 }

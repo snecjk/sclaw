@@ -63,6 +63,10 @@ import { VoiceComposerPanel, VoiceTopCrawlWave } from '@/components/chat/VoiceCo
 import { resolveTrimmedSkillOffset } from '@/lib/dingtalk-mention-composer';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
+import {
+  clearMainChatComposerDraft,
+  publishMainChatComposerDraft,
+} from '@/lib/main-chat-composer-draft';
 
 export { CHAT_EDIT_DRAFT_EVENT };
 export type { FileAttachment } from '@/components/attachments';
@@ -245,6 +249,13 @@ export function ChatInput({
     handleDragLeave,
     handleDrop,
   } = core;
+
+  // Mirror composer text for learning-center / connector handoff; clear on leave
+  // so an unmounted editor reads as empty (same as the user sees on return).
+  useEffect(() => {
+    publishMainChatComposerDraft(composerSnapshot.plainText);
+  }, [composerSnapshot.plainText]);
+  useEffect(() => clearMainChatComposerDraft, []);
 
   const attachSource = useComposerAttachSource({
     pickFiles,

@@ -54,6 +54,7 @@ export function mergeHistoryDisplayMessages(input: {
   gatewaySessionLabel?: string;
   userMessageAt: number | null;
   sending: boolean;
+  optimisticUser?: RawMessage | null;
   getMessageText: (content: unknown) => string;
   /** Overlay 乐观用户消息——把 segments/展示写到 history 回显上。 */
   cachedOptimistic?: RawMessage | null;
@@ -63,9 +64,11 @@ export function mergeHistoryDisplayMessages(input: {
     sessionKey,
     sessionLabels,
     sending,
+    optimisticUser,
     userMessageAt,
     cachedOptimistic,
   } = input;
+  const recoveryOptions = { sending, optimisticUser };
 
   let messages = input.messages;
   messages = mergeOptimisticUserIntoHistory(messages, input.currentMessages, {
@@ -85,14 +88,14 @@ export function mergeHistoryDisplayMessages(input: {
     sessionKey,
     sessionLabels,
     gatewaySessionLabel,
-    { sending },
+    recoveryOptions,
   );
   messages = ensureOpeningUserMessageFirst(
     messages,
     sessionKey,
     sessionLabels,
     gatewaySessionLabel,
-    { sending },
+    recoveryOptions,
   );
 
   return dedupeRedundantUserMessages(messages, userMessageAt, { sessionKey });
