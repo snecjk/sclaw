@@ -30,6 +30,7 @@ export function isSidebarPrimaryNavItemVisible(
   options: SidebarPrimaryNavVisibilityOptions,
 ): boolean {
   if (path === '/models' && !options.primaryMyData) return false;
+  if (path === '/learning-center' && (!options.siteDepartmentTypesLoaded || !options.isSite)) return false;
   if ((path === '/scheduled-tasks' || path === '/cron') && options.isProduction) return false;
   return true;
 }

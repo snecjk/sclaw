@@ -14,6 +14,7 @@ describe('isSidebarPrimaryNavRoute', () => {
     expect(isSidebarPrimaryNavRoute('/more-apps')).toBe(true);
     expect(isSidebarPrimaryNavRoute('/models')).toBe(true);
     expect(isSidebarPrimaryNavRoute('/data-center')).toBe(true);
+    expect(isSidebarPrimaryNavRoute('/learning-center')).toBe(true);
   });
 
   it('does not match workspace or task routes', () => {
@@ -41,5 +42,21 @@ describe('isSidebarPrimaryNavItemVisible', () => {
 
   it('keeps Data Center visible without site identity or site configuration', () => {
     expect(isSidebarPrimaryNavItemVisible('/data-center', nonSiteOptions)).toBe(true);
+  });
+
+  it('hides Learning Center until a site identity is confirmed', () => {
+    expect(isSidebarPrimaryNavItemVisible('/learning-center', nonSiteOptions)).toBe(false);
+    expect(isSidebarPrimaryNavItemVisible('/learning-center', {
+      ...nonSiteOptions,
+      siteDepartmentTypesLoaded: true,
+    })).toBe(false);
+  });
+
+  it('shows Learning Center for site users', () => {
+    expect(isSidebarPrimaryNavItemVisible('/learning-center', {
+      ...nonSiteOptions,
+      siteDepartmentTypesLoaded: true,
+      isSite: true,
+    })).toBe(true);
   });
 });
