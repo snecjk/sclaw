@@ -9,7 +9,7 @@
 
 import type { GatewayManager } from '../../gateway/manager';
 import type { ProviderAccount } from '../../shared/providers/types';
-import type { SsoEnvironment, SsoUserInfo } from '../../utils/auth-store';
+import type { AuthSessionSnapshot, SsoEnvironment, SsoUserInfo } from '../../utils/auth-store';
 import { getProviderService } from './provider-service';
 import { listProviderAccounts, getDefaultProviderAccountId } from './provider-store';
 import { providerAccountToConfig } from './provider-store';
@@ -125,7 +125,7 @@ export type StoSyncOptions = {
 export class StoModelSyncService {
   private gatewayManager: GatewayManager | null = null;
   private syncTimer: ReturnType<typeof setInterval> | null = null;
-  private currentSync: Promise<StoSyncResult> | null = null;
+  private currentSync: { sessionKey: string; promise: Promise<StoSyncResult> } | null = null;
 
   // -- Injection -----------------------------------------------------------
 
@@ -149,22 +149,33 @@ export class StoModelSyncService {
   // -- Core sync -----------------------------------------------------------
 
   /**
-   * Run a full reconciliation cycle.  Safe to call concurrently — if a sync
-   * is already in progress the caller gets the same promise back.
+   * Run a full reconciliation cycle. Calls from the same authenticated session
+   * share one promise; a different session waits and then gets a fresh cycle.
    */
   async syncModels(options?: StoSyncOptions): Promise<StoSyncResult> {
+    const { getAuthSessionSnapshot } = await import('../../utils/auth-store');
+    const session = await getAuthSessionSnapshot();
     if (this.currentSync) {
-      return this.currentSync;
+      if (this.currentSync.sessionKey === session.key) {
+        return this.currentSync.promise;
+      }
+      // A different login must never observe or apply the previous user's result.
+      // Wait for its writes to finish, then run a fresh cycle for the new session.
+      return this.currentSync.promise.catch(() => undefined).then(() => this.syncModels(options));
     }
-    this.currentSync = this.doSync(options);
+    const promise = this.doSync(options, session);
+    this.currentSync = { sessionKey: session.key, promise };
     try {
-      return await this.currentSync;
+      return await promise;
     } finally {
-      this.currentSync = null;
+      if (this.currentSync?.promise === promise) this.currentSync = null;
     }
   }
 
-  private async doSync(options?: StoSyncOptions): Promise<StoSyncResult> {
+  private async doSync(
+    options: StoSyncOptions | undefined,
+    session: AuthSessionSnapshot,
+  ): Promise<StoSyncResult> {
     const runtimeGateway = options?.deferGatewayRefresh
       ? undefined
       : (this.gatewayManager ?? undefined);
@@ -174,10 +185,18 @@ export class StoModelSyncService {
       updated: [],
       defaultSet: null,
     };
+    const sessionIsCurrent = async (): Promise<boolean> => {
+      const { isAuthSessionCurrent } = await import('../../utils/auth-store');
+      if (await isAuthSessionCurrent(session)) return true;
+      result.error = 'stale-session';
+      logger.info('[sto-sync] Discarded stale authenticated sync result');
+      return false;
+    };
 
     // Step 1 — Get user SK
     const { getUserSk } = await import('../user-sk-service');
     const sk = await getUserSk();
+    if (!await sessionIsCurrent()) return result;
     if (!sk) {
       result.error = 'no-sk';
       return result;
@@ -186,6 +205,7 @@ export class StoModelSyncService {
     // Step 2 — Resolve strategy for inference key/headers
     const { getAuthState } = await import('../../utils/auth-store');
     const authState = await getAuthState();
+    if (!await sessionIsCurrent()) return result;
     const { resolveStrategy } = await import('../sto-sk-strategy');
     const strategy = await resolveStrategy(authState.user);
     if (!strategy || !authState.user) {
@@ -221,6 +241,7 @@ export class StoModelSyncService {
       result.error = `fetch-failed: ${message}`;
       return result;
     }
+    if (!await sessionIsCurrent()) return result;
 
     const remoteModelIds = remoteModels.map((m) => m.id);
 
@@ -244,6 +265,7 @@ export class StoModelSyncService {
       legacyDefaultWasSto = staleAccounts.some((account) => account.id === currentDefault);
 
       for (const account of staleAccounts) {
+        if (!await sessionIsCurrent()) return result;
         try {
           const config = providerAccountToConfig(account);
           await providerService.deleteAccount(account.id);
@@ -266,6 +288,7 @@ export class StoModelSyncService {
     }
 
     for (const openClawKey of OPENCLAW_STO_PLACEHOLDER_KEYS_TO_SCRUB) {
+      if (!await sessionIsCurrent()) return result;
       try {
         await removeProviderFromOpenClaw(openClawKey);
         logger.info(`[sto-sync] Scrubbed stale openclaw.json provider key "${openClawKey}"`);
@@ -300,7 +323,9 @@ export class StoModelSyncService {
       };
 
       try {
+        if (!await sessionIsCurrent()) return result;
         await providerService.createAccount(account, inferenceSk);
+        if (!await sessionIsCurrent()) return result;
         await syncSavedProviderToRuntime(
           providerAccountToConfig(account),
           inferenceSk,
@@ -347,7 +372,9 @@ export class StoModelSyncService {
         }
 
         try {
+          if (!await sessionIsCurrent()) return result;
           await providerService.updateAccount(STO_ACCOUNT_ID, patch, inferenceSk);
+          if (!await sessionIsCurrent()) return result;
           const updatedAccount = {
             ...existingAccount,
             ...patch,
@@ -382,6 +409,7 @@ export class StoModelSyncService {
         }
       } else {
         try {
+          if (!await sessionIsCurrent()) return result;
           const currentKey = await getApiKey(STO_ACCOUNT_ID);
           if (currentKey !== inferenceSk) {
             await storeApiKey(STO_ACCOUNT_ID, inferenceSk);
@@ -395,7 +423,9 @@ export class StoModelSyncService {
     }
 
     // Step 5b — Provider store may be ready while openclaw.json still has legacy residue
+    if (!await sessionIsCurrent()) return result;
     await this.ensureStoCatalogMirroredToOpenClaw(inferenceSk, runtimeGateway, result);
+    if (!await sessionIsCurrent()) return result;
 
     // Step 6 — Set default provider if needed
     const currentDefault = await getDefaultProviderAccountId();
@@ -404,6 +434,7 @@ export class StoModelSyncService {
 
     if (needsNewDefault) {
       try {
+        if (!await sessionIsCurrent()) return result;
         await providerService.setDefaultAccount(STO_ACCOUNT_ID);
         await syncDefaultProviderToRuntime(
           STO_ACCOUNT_ID,
@@ -454,6 +485,7 @@ export class StoModelSyncService {
 
     if (fallbackModel) {
       try {
+        if (!await sessionIsCurrent()) return result;
         const { remapDelistedAgentModels } = await import('../../utils/agent-config');
         const remapped = await remapDelistedAgentModels({
           catalogIds: remoteModelIds,
