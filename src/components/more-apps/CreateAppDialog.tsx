@@ -99,8 +99,8 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
     label: string;
     hint: string;
   }> = [
-    { value: 'site', label: 'Site 应用', hint: '固定域名，发版不需要修改版本号' },
-    { value: 'assets', label: 'Assets 应用', hint: '可以申请自定义域名，发版需要修改版本号' },
+    { value: 'site', label: '独立站点', hint: '固定域名，发版不需要修改版本号' },
+    { value: 'assets', label: '托管应用', hint: '可以申请自定义域名，发版需要修改版本号' },
   ];
 
   return createPortal(

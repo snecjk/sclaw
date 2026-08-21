@@ -738,11 +738,11 @@ describe('MoreAppsPage server catalog', () => {
     expect(screen.getByText('Site Alpha')).toBeInTheDocument();
     expect(screen.getByText('Assets Beta')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Site' }));
+    fireEvent.click(screen.getByRole('button', { name: '独立站点' }));
     expect(screen.getByText('Site Alpha')).toBeInTheDocument();
     expect(screen.queryByText('Assets Beta')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Assets' }));
+    fireEvent.click(screen.getByRole('button', { name: '托管应用' }));
     expect(screen.queryByText('Site Alpha')).not.toBeInTheDocument();
     expect(screen.getByText('Assets Beta')).toBeInTheDocument();
     expect(refreshDevAppsMock).toHaveBeenCalledTimes(1);

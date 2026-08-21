@@ -58,7 +58,6 @@ import {
   type AppPlazaDevAppTab,
   useAppPlazaShellStore,
 } from '@/stores/app-plaza-shell';
-import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { shouldShowGitCommitAction, shouldShowStoCloudActions } from '@/lib/app-dev-actions';
 import { useAppDevChatSession } from '@/hooks/use-app-dev-chat-session';
 import { getAgentIdFromSessionKey } from '@/stores/chat/session-identity';

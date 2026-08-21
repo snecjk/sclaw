@@ -3,7 +3,7 @@ import type { CodeApplicationPageType } from '../../../shared/code-application-c
 
 export function AppDevPageTypeBadge({ pageType }: { pageType?: CodeApplicationPageType }) {
   if (!pageType) return null;
-  const label = pageType === 'assets' ? 'Assets' : 'Site';
+  const label = pageType === 'assets' ? '托管应用' : '独立站点';
   const Icon = pageType === 'assets' ? Package : Globe2;
   return (
     <span

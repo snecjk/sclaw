@@ -736,15 +736,15 @@ export function MoreAppsPage() {
     const emptyMessage = searchQuery
       ? t('moreApps.emptySearch', { defaultValue: '未找到匹配的应用，试试其他关键词' })
       : devAppTypeFilter === 'site'
-        ? '暂无 Site 应用'
+        ? '暂无独立站点'
         : devAppTypeFilter === 'assets'
-          ? '暂无 Assets 应用'
+          ? '暂无托管应用'
           : t('moreApps.emptyDevApps', { defaultValue: '还没有开发中的应用，点击右上角「创建应用」或「导入应用」开始' });
 
     return (
       <div className="more-apps-main">
         <div className="mb-4 flex items-center gap-1" aria-label="开发应用类型筛选">
-          {([['all', '全部'], ['site', 'Site'], ['assets', 'Assets']] as const).map(([value, label]) => (
+          {([['all', '全部'], ['site', '独立站点'], ['assets', '托管应用']] as const).map(([value, label]) => (
             <button
               key={value}
               type="button"

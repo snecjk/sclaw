@@ -38,7 +38,7 @@ interface DevAppCardProps {
 }
 
 export function DevAppCard({ app }: DevAppCardProps) {
-  const pageTypeLabel = app.pageType === 'assets' ? 'Assets' : 'Site';
+  const pageTypeLabel = app.pageType === 'assets' ? '托管应用' : '独立站点';
   const PageTypeIcon = app.pageType === 'assets' ? Package : Globe2;
   const openOrFocusDevAppTab = useAppPlazaShellStore((s) => s.openOrFocusDevAppTab);
   const closeDevAppTabsByWorkspaceId = useAppPlazaShellStore((s) => s.closeDevAppTabsByWorkspaceId);

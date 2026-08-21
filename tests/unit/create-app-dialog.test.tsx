@@ -46,7 +46,7 @@ describe('CreateAppDialog application type', () => {
   it('defaults to site and explains both publishing modes', async () => {
     render(<CreateAppDialog open onClose={vi.fn()} />);
 
-    expect(screen.getByRole('button', { name: /Site 应用/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: /独立站点/ })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('固定域名，发版不需要修改版本号')).toBeInTheDocument();
     expect(screen.getByText('可以申请自定义域名，发版需要修改版本号')).toBeInTheDocument();
   });
@@ -55,7 +55,7 @@ describe('CreateAppDialog application type', () => {
     render(<CreateAppDialog open onClose={vi.fn()} />);
 
     fireEvent.change(screen.getByPlaceholderText('比如：快递查询助手'), { target: { value: '资源应用' } });
-    fireEvent.click(screen.getByRole('button', { name: /Assets 应用/ }));
+    fireEvent.click(screen.getByRole('button', { name: /托管应用/ }));
 
     await waitFor(() => expect(screen.getByRole('button', { name: '创建应用' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: '创建应用' }));
