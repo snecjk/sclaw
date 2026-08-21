@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { AppDevPageTypeBadge } from '@/components/app-dev/AppDevPageTypeBadge';
 import { cloneDevApp, deleteDevApp, type DevAppSummary } from '@/lib/app-dev-api';
 import { invokeIpc } from '@/lib/api-client';
 import { pickProjectFolder } from '@/lib/session-catalog-api';
@@ -177,7 +178,10 @@ export function DevAppCard({ app }: DevAppCardProps) {
           <Code2 className="h-6 w-6" />
         </div>
         <div className="more-apps-card__head">
-          <h3 className="more-apps-card__title">{app.name}</h3>
+          <div className="flex min-w-0 items-center gap-2">
+            <h3 className="more-apps-card__title min-w-0">{app.name}</h3>
+            <AppDevPageTypeBadge pageType={app.pageType} />
+          </div>
           <p
             className={cn(
               'mt-1 text-[11px]',
@@ -244,10 +248,12 @@ export function DevAppCard({ app }: DevAppCardProps) {
               <FolderOpen className="mr-2 h-3.5 w-3.5" aria-hidden />
               在访达中打开
             </DropdownMenuItem>
-            <DropdownMenuItem disabled={!canOpenPreview} onClick={() => handleOpenPreview()}>
-              <ExternalLink className="mr-2 h-3.5 w-3.5" aria-hidden />
-              系统浏览器打开
-            </DropdownMenuItem>
+            {app.pageType === 'site' ? (
+              <DropdownMenuItem disabled={!canOpenPreview} onClick={() => handleOpenPreview()}>
+                <ExternalLink className="mr-2 h-3.5 w-3.5" aria-hidden />
+                系统浏览器打开
+              </DropdownMenuItem>
+            ) : null}
             {canDelete ? (
               <>
                 <DropdownMenuSeparator />
