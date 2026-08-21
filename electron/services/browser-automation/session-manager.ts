@@ -39,7 +39,7 @@ export async function createManagedSession(input: {
       partition: SCLAW_EMBED_BROWSER_PARTITION,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true,
+      sandbox: false,
     },
   });
 

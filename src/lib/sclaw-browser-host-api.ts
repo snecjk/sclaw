@@ -102,3 +102,15 @@ export async function setSclawBrowserPointerPassthrough(
   if (!window.electron) return;
   await invokeIpc('sclaw-browser:setPointerPassthrough', { runtimeId, passthrough });
 }
+
+export async function openSclawBrowserDevTools(
+  runtimeId: string,
+  options?: { toggle?: boolean },
+): Promise<boolean> {
+  if (!window.electron) return false;
+  const result = await invokeIpc<{ ok: boolean }>(
+    'sclaw-browser:openDevTools',
+    { runtimeId, toggle: options?.toggle },
+  );
+  return Boolean(result.ok);
+}

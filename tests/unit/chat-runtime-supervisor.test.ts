@@ -587,6 +587,130 @@ describe('main chat runtime supervisor', () => {
     }
   });
 
+  it('does not recovery-timeout a long silent skill when transcript later completes', async () => {
+    vi.useFakeTimers();
+    try {
+      const origin = Date.now();
+      engine.getAdapterForSession.mockResolvedValue({
+        chatCapabilities: {
+          hasReliableRuntimeStatus: false,
+          hasStructuredReasoningEvents: false,
+          hasStructuredToolEvents: false,
+          requiresHistoryProjection: true,
+        },
+        getHistory: vi.fn(async () => ({
+          success: true,
+          result: { messages: [], isRunning: false },
+        })),
+        inspectRun: vi.fn(async () => {
+          if (Date.now() - origin < 200_000) return { status: 'unknown' };
+          return {
+            status: 'completed',
+            transcriptRevision: 'skill-done',
+            currentTurnMessages: [
+              { role: 'user', content: 'run skill', timestamp: origin / 1000 },
+              { role: 'assistant', content: '生成成功', timestamp: (origin + 200_000) / 1000 },
+            ],
+          };
+        }),
+      });
+      const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+      const events: CanonicalChatEvent[] = [];
+      supervisor.on('event', (value) => events.push(value));
+
+      await supervisor.begin({
+        sessionKey: 'agent:main:session-skill',
+        idempotencyKey: 'skill-1',
+        engineType: 'openclaw',
+        displayText: 'run skill',
+      });
+      await supervisor.accepted({
+        sessionKey: 'agent:main:session-skill',
+        idempotencyKey: 'skill-1',
+        runId: 'run-skill',
+        engineType: 'openclaw',
+      });
+      await supervisor.handleEngineEvent({
+        type: 'turn.started',
+        sessionKey: 'agent:main:session-skill',
+        runId: 'run-skill',
+        seq: 1,
+      });
+
+      await vi.advanceTimersByTimeAsync(200_000);
+      expect(events.some((event) => (
+        event.type === 'run.interrupted'
+        && (event.payload as { reason?: string })?.reason === 'recovery-timeout'
+      ))).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(events.some((event) => (
+        event.type === 'run.interrupted'
+        && (event.payload as { reason?: string })?.reason === 'recovery-timeout'
+      ))).toBe(false);
+      expect(supervisor.get('agent:main:session-skill')?.phase).toBe('completed');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps recovery idle alive while history projection still shows progress', async () => {
+    vi.useFakeTimers();
+    try {
+      let projected = 0;
+      engine.getAdapterForSession.mockResolvedValue({
+        chatCapabilities: {
+          hasReliableRuntimeStatus: false,
+          hasStructuredReasoningEvents: false,
+          hasStructuredToolEvents: false,
+          requiresHistoryProjection: true,
+        },
+        getHistory: vi.fn(async () => {
+          projected += 1;
+          const now = Date.now() / 1000;
+          return {
+            success: true,
+            result: {
+              isRunning: false,
+              messages: [
+                {
+                  role: 'user',
+                  content: 'run skill',
+                  timestamp: now,
+                  idempotencyKey: 'skill-progress-1',
+                },
+                { role: 'assistant', content: `progress ${projected}`, timestamp: now },
+              ],
+            },
+          };
+        }),
+        inspectRun: vi.fn(async () => ({ status: 'unknown' })),
+      });
+      const supervisor = new ChatRuntimeSupervisor(new EventEmitter() as GatewayManager);
+      const events: CanonicalChatEvent[] = [];
+      supervisor.on('event', (value) => events.push(value));
+
+      await supervisor.begin({
+        sessionKey: 'agent:main:session-skill-progress',
+        idempotencyKey: 'skill-progress-1',
+        engineType: 'openclaw',
+        displayText: 'run skill',
+      });
+      await supervisor.rejected({
+        sessionKey: 'agent:main:session-skill-progress',
+        idempotencyKey: 'skill-progress-1',
+        error: 'transport uncertain',
+        uncertain: true,
+      });
+
+      await vi.advanceTimersByTimeAsync(150_000);
+      expect(events.some((event) => event.type === 'run.interrupted')).toBe(false);
+      expect(supervisor.get('agent:main:session-skill-progress')?.phase).not.toBe('interrupted');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('uses a longer recovery idle window for embed browser chat sessions', async () => {
     vi.useFakeTimers();
     try {

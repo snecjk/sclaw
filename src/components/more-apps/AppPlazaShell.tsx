@@ -13,6 +13,7 @@ import {
 import { bindAppNavigate, unbindAppNavigate } from '@/lib/app-navigate';
 import { closeSclawBrowser } from '@/lib/open-sclaw-browser';
 import { useSclawBrowserChatShortcut } from '@/components/sclaw-browser/use-sclaw-browser-chat-shortcut';
+import { useSclawBrowserDevToolsShortcut } from '@/components/sclaw-browser/use-sclaw-browser-devtools-shortcut';
 import { useSclawBrowserOpenUrl } from '@/components/sclaw-browser/use-sclaw-browser-open-url';
 import { installJsBridgeHostListeners } from '@/lib/jsbridge/host-router';
 import './app-plaza-shell.css';
@@ -51,6 +52,10 @@ export function AppPlazaShell() {
   useSclawBrowserChatShortcut(Boolean(chatShortcutEnabled), () => {
     if (activeBrowser) toggleChatPanel(activeBrowser.id);
   });
+  useSclawBrowserDevToolsShortcut(
+    Boolean(chatShortcutEnabled),
+    activeBrowser?.embedRuntimeId,
+  );
   // Blur focus when hiding so keys don't hit hidden webviews
   useEffect(() => {
     if (!routeActive && document.activeElement instanceof HTMLElement) {
