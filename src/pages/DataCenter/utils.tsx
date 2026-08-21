@@ -1,17 +1,10 @@
-import type { ReactNode } from 'react';
-import directoryIcon from '@/assets/icons/directory.svg';
-import docIcon from '@/assets/icons/doc-icon.svg';
-import excelIcon from '@/assets/icons/excel-icon.svg';
-import htmlIcon from '@/assets/icons/html-icon.svg';
-import imgIcon from '@/assets/icons/img-icon.svg';
-import mdIcon from '@/assets/icons/md-icon.svg';
-import pptIcon from '@/assets/icons/ppt-icon.svg';
-import { cn } from '@/lib/utils';
 import type { DataCenterSection } from '@/stores/data-center';
 import type { DataCenterEntry } from '@/types/data-center';
 import type { LocalAuthorizedFileEntry } from '@/types/local-authorized-file';
 import { SECTION_PARAM_VALUES } from './constants';
 import type { DataCenterUiEntry } from './types';
+
+export { getEntryIcon, getEntryIconSrc } from '@/lib/data-center-entry-icon';
 
 export function normalizeSectionParam(value: string | null): DataCenterSection {
   return SECTION_PARAM_VALUES.includes(value as DataCenterSection)
@@ -53,18 +46,6 @@ export function formatDate(value: string | null): string {
   return `${year} / ${month} / ${day} ${hour}:${minute}`;
 }
 
-export function getEntryIconSrc(entry: DataCenterEntry): string {
-  if (entry.entryType === 'folder') return directoryIcon;
-  const ext = entry.fileExt?.toLowerCase() || entry.name.split('.').pop()?.toLowerCase() || '';
-  if (['doc', 'docx', 'pdf', 'txt', 'rtf'].includes(ext)) return docIcon;
-  if (['xls', 'xlsx', 'csv'].includes(ext)) return excelIcon;
-  if (['html', 'htm'].includes(ext)) return htmlIcon;
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) return imgIcon;
-  if (['md', 'markdown'].includes(ext)) return mdIcon;
-  if (['ppt', 'pptx'].includes(ext)) return pptIcon;
-  return docIcon;
-}
-
 export function localEntryToUiEntry(entry: LocalAuthorizedFileEntry): DataCenterUiEntry {
   return {
     entryId: entry.entryId,
@@ -84,10 +65,6 @@ export function localEntryToUiEntry(entry: LocalAuthorizedFileEntry): DataCenter
     missing: entry.missing,
     permissionDenied: entry.permissionDenied,
   };
-}
-
-export function getEntryIcon(entry: DataCenterEntry, className = 'h-5 w-5'): ReactNode {
-  return <img src={getEntryIconSrc(entry)} alt="" aria-hidden="true" className={cn('object-contain', className)} />;
 }
 
 export function getRenameInputValue(entry: DataCenterEntry): string {

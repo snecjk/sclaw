@@ -26,7 +26,7 @@ export const DINGTALK_ARTIFACT_RULES_POINTER =
  * OpenClaw / Claude 双引擎共用，勿在各 guard 内再抄一份。
  */
 export const DINGTALK_LOCAL_ARTIFACT_IN_TEXT_BLOCK_REASON = [
-  '[StoClaw 安全策略] 钉钉正文禁止含本地产物路径（`file://`、裸绝对路径、`.claw-output` 等，钉钉打不开）。',
+  '[SClaw 安全策略] 钉钉正文禁止含本地产物路径（`file://`、裸绝对路径、`.claw-output` 等，钉钉打不开）。',
   '分支：① 已有在线 `http(s)` → 直接写入 `--text`（',
   DINGTALK_ARTIFACT_URL_EMBED_RULE,
   '）；② 本地文件 → 先用 `',
@@ -53,18 +53,18 @@ const DINGTALK_SEND_FORMAT_RULES_HEAD = [
   `   - **在线链接**（\`http(s)://\`，含工作流 \`artifacts[].url\` / \`previewUrl\` / \`tempUrl\` / 下载密钥链接等）：**直接**写入 \`--text\`；${DINGTALK_ARTIFACT_URL_EMBED_RULE}`,
   '   - **本地文件**（`file://`、裸绝对路径如 `/Users/.../.claw-output/报告.html`、`C:\\\\...\\\\.claw-output\\\\...`、或 `./.claw-output/...`）：钉钉打不开，**禁止**写入 `--text`；必须先走规则 6 上钉盘，再用返回的 `docUrl` 按在线链接规则嵌入',
   `6. **本地产物上钉盘**：本地路径 → \`${DINGTALK_DRIVE_UPLOAD_CMD}\`（**不需要 \`--space-id\`**）→ 取 \`docUrl\` → 「文件名：docUrl」嵌入正文（**禁止对 docUrl 再编码**）。上传失败则移除该产物链接，仅发纯文字总结。\`drive upload\` 偶发失败最多重试 3 次再降级`,
-  '7. **安全限流**：禁止循环/批量 `dws chat message send`（含 shell `for`/`while`）；同一对话内 **文字** 与 **图片/文件** 分别限流：各 **每 20 秒最多发起 1 条**（**发起即计**：放行瞬间即记时间戳，失败/重试也占窗口；`--dry-run` 不计入）。**被挡时禁止绕过**——不要尝试 `sh -c`/heredoc/`2>&1` 套壳、`sai-cli message` 或换任何 CLI，StoClaw 钩子正则扫命令文本里的 `dws chat message send`，套壳照样命中、绕不过。正确处置：等满 20 秒再发，或先 `--dry-run` 自检格式（不计窗口）',
+  '7. **安全限流**：禁止循环/批量 `dws chat message send`（含 shell `for`/`while`）；同一对话内 **文字** 与 **图片/文件** 分别限流：各 **每 20 秒最多发起 1 条**（**发起即计**：放行瞬间即记时间戳，失败/重试也占窗口；`--dry-run` 不计入）。**被挡时禁止绕过**——不要尝试 `sh -c`/heredoc/`2>&1` 套壳、`sai-cli message` 或换任何 CLI，SClaw 钩子正则扫命令文本里的 `dws chat message send`，套壳照样命中、绕不过。正确处置：等满 20 秒再发，或先 `--dry-run` 自检格式（不计窗口）',
 ].join('\n');
 
 /** 对话场景规则 8：允许会话内简短确认。 */
 const DINGTALK_SEND_FORMAT_RULE_8_CHAT =
-  '8. 成功后简短中文确认即可，不输出 openTaskId / 原始 JSON；完整发送正文会在 StoClaw 对话卡片中自动展示';
+  '8. 成功后简短中文确认即可，不输出 openTaskId / 原始 JSON；完整发送正文会在 SClaw 对话卡片中自动展示';
 
 /**
  * 定时任务规则 8：禁止把确认回执当钉钉正文（避免群收到「已发送至…」第二封）。
  */
 const DINGTALK_SEND_FORMAT_RULE_8_SCHEDULED_TASK =
-  '8. **定时任务**：`--text` 只能是业务结果正文（天气/总结/产物链接等）。**禁止**把「任务完成」「消息已发送至」「执行成功」等会话确认或回执清单写入 `--text`。成功后仅在 StoClaw 对话内一句确认；同一业务结果对每位收件人只发 1 次；不输出 openTaskId / 原始 JSON';
+  '8. **定时任务**：`--text` 只能是业务结果正文（天气/总结/产物链接等）。**禁止**把「任务完成」「消息已发送至」「执行成功」等会话确认或回执清单写入 `--text`。成功后仅在 SClaw 对话内一句确认；同一业务结果对每位收件人只发 1 次；不输出 openTaskId / 原始 JSON';
 
 export const DINGTALK_SEND_FORMAT_RULES = [
   DINGTALK_SEND_FORMAT_RULES_HEAD,

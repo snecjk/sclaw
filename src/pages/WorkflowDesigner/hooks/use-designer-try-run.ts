@@ -29,6 +29,12 @@ import {
 import type { WorkflowDetailResponse, WorkflowExecutionState, WorkflowRunResponse, WorkflowSchema } from '@/types/workflow';
 import type { WorkflowDraftSnapshot } from '@/lib/workflow-iframe-bridge';
 import { definitionFromDetail } from '@/lib/workflow-designer-adapter';
+import { subscribeWorkflowResultDrawerHandoff } from '@/lib/workflow-result-drawer-handoff';
+import { saveWorkflowExecution, updateExecutionStatus } from '@/stores/workflow-memory';
+import {
+  resolveTrialRunLaunchConfirmation,
+  type TrialRunLaunchConfirmation,
+} from '@/pages/WorkflowDesigner/components/test-run-drawer-model';
 
 export interface RuntimeUploadNode {
   nodeId: string;
@@ -111,16 +117,15 @@ export function useDesignerTryRun({
   const [isDraftSnapshot, setIsDraftSnapshot] = useState(false);
   const [runtimeUploadNodes, setRuntimeUploadNodes] = useState<RuntimeUploadNode[]>([]);
   const snapshotRef = useRef<WorkflowDraftSnapshot | null>(null);
+  const workflowNameRef = useRef<string>('');
+  const launchConfirmationRef = useRef<TrialRunLaunchConfirmation | null>(null);
 
   const runIdRef = useRef<string | null>(null);
   const eventHydrateTimerRef = useRef<number | null>(null);
+  const pendingResultHandoffRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     runIdRef.current = runId;
   }, [runId]);
-
-  const hasStartupInputs = Boolean(
-    activeStartupSchema?.enabled && Array.isArray(activeStartupSchema.fields) && activeStartupSchema.fields.length > 0,
-  );
 
   const hydrateRun = useCallback(async (id: string) => {
     try {
@@ -149,8 +154,10 @@ export function useDesignerTryRun({
       const data = payload as StatusUpdatePayload | null;
       if (!data || data.sessionKey !== DESIGNER_TRY_RUN_SESSION_KEY) return;
       if (data.runId !== runIdRef.current) return; // stale broadcast for a different run
+      const normalizedStatus = normalizeWorkflowRunStatus(data.status);
+      updateExecutionStatus(data.runId, normalizedStatus, DESIGNER_TRY_RUN_SESSION_KEY);
       void hydrateRun(data.runId);
-      if (isTerminalWorkflowRunStatus(normalizeWorkflowRunStatus(data.status))) {
+      if (isTerminalWorkflowRunStatus(normalizedStatus)) {
         setIsStarting(false);
         setIsCancelling(false);
       }
@@ -170,6 +177,26 @@ export function useDesignerTryRun({
     if (eventHydrateTimerRef.current != null) window.clearTimeout(eventHydrateTimerRef.current);
   }, []);
 
+  useEffect(() => subscribeWorkflowResultDrawerHandoff(({ runId: requestedRunId, complete }) => {
+    if (!isDrawerOpen || runIdRef.current !== requestedRunId) return false;
+    if (!pendingResultHandoffRef.current) pendingResultHandoffRef.current = complete;
+    setIsDrawerOpen(false);
+    return true;
+  }), [isDrawerOpen]);
+
+  useEffect(() => {
+    if (isDrawerOpen || !pendingResultHandoffRef.current) return;
+    const complete = pendingResultHandoffRef.current;
+    pendingResultHandoffRef.current = null;
+    complete();
+  }, [isDrawerOpen]);
+
+  useEffect(() => () => {
+    const complete = pendingResultHandoffRef.current;
+    pendingResultHandoffRef.current = null;
+    complete?.();
+  }, []);
+
   const isRunActive = Boolean(
     runId && executionState && isActiveWorkflowRunStatus(executionState.status),
   );
@@ -177,7 +204,9 @@ export function useDesignerTryRun({
   const launch = useCallback(
     async (inputs: Record<string, unknown>, snapshot = snapshotRef.current, engineType: 'claude' | 'openclaw') => {
       if (!workflowId) return;
+      launchConfirmationRef.current = { inputs: { ...inputs }, engineType };
       setIsStarting(true);
+      setIsStartupDialogOpen(false);
       setIsDrawerOpen(true);
       setRun(null);
       setExecutionState(null);
@@ -199,6 +228,19 @@ export function useDesignerTryRun({
         setRunId(result.runId);
         runIdRef.current = result.runId;
         setRunWorkflowVersion(result.workflowVersion);
+        const startedAt = Date.now();
+        saveWorkflowExecution({
+          sessionKey: DESIGNER_TRY_RUN_SESSION_KEY,
+          workflowId,
+          runId: result.runId,
+          templateId: workflowId,
+          templateName: workflowNameRef.current || workflowId,
+          versionId: result.versionId,
+          status: 'running',
+          createdAt: startedAt,
+          updatedAt: startedAt,
+          collectedInputs: inputs,
+        });
         void hydrateRun(result.runId);
       } catch (error) {
         setIsStarting(false);
@@ -212,8 +254,9 @@ export function useDesignerTryRun({
     if (!workflowId || !canStart()) return;
     void (async () => {
       snapshotRef.current = snapshot ?? null;
+      launchConfirmationRef.current = null;
       setRunWorkflowVersion(undefined);
-      setIsDraftSnapshot(snapshot != null);
+      setIsDraftSnapshot(snapshot?.versionStatus === 'draft');
       // The draft snapshot only carries canvas data. Fetch the workflow detail
       // on every launch so the startup form is initialized from this user's
       // current default preset, just like the web-side trial run.
@@ -221,6 +264,7 @@ export function useDesignerTryRun({
       let definition = snapshot?.definition;
       try {
         workflowDetail = await getWorkflowDetail(workflowId);
+        workflowNameRef.current = workflowDetail.workflowName || workflowId;
       } catch (error) {
         // A saved draft can still be tried locally if refreshing its user
         // preset fails. Without a draft definition, keep the existing error.
@@ -253,7 +297,7 @@ export function useDesignerTryRun({
       // Engine selection is mandatory even when the workflow has no startup fields.
       setIsStartupDialogOpen(true);
     })().catch((error) => setLaunchError(error instanceof Error ? error.message : '无法读取试运行配置'));
-  }, [workflowId, canStart, launch, startupDefaultValues, startupSchema]);
+  }, [workflowId, canStart, startupDefaultValues, startupSchema]);
 
   const confirmStartup = useCallback(
     async (inputs: Record<string, unknown>, engineType: 'claude' | 'openclaw') => {
@@ -280,25 +324,32 @@ export function useDesignerTryRun({
   const continueRun = useCallback(async () => {
     const id = runIdRef.current;
     if (!id) return;
+    // 继续恢复已保存的运行，使用其原始引擎和输入。
+    setIsStartupDialogOpen(false);
     setIsStarting(true);
     setLaunchError(null);
+    // 持久化的快照将一直保持取消状态，直到主进程接受恢复请求。立即反映这一过渡，以防止在该IPC往返期间出现重复的恢复操作和过时的取消UI。
+    setRun((current) => current?.id === id
+      ? { ...current, status: 'running', completedAt: null, error: null }
+      : current);
+    setExecutionState((current) => current?.runId === id
+      ? { ...current, status: 'running', completedAt: undefined, error: undefined }
+      : current);
     try {
       await resumeWorkflowRun(id);
       void hydrateRun(id);
     } catch (error) {
       setIsStarting(false);
+      void hydrateRun(id);
       setLaunchError(error instanceof Error ? error.message : '继续运行失败');
     }
   }, [hydrateRun]);
 
   const rerun = useCallback(() => {
-    setRunId(null);
-    runIdRef.current = null;
-    setRun(null);
-    setExecutionState(null);
-    setLaunchError(null);
-    setIsStartupDialogOpen(true);
-  }, [hasStartupInputs, launch, runtimeUploadNodes.length]);
+    const confirmation = resolveTrialRunLaunchConfirmation(run, launchConfirmationRef.current);
+    setIsStartupDialogOpen(false);
+    void launch(confirmation.inputs, snapshotRef.current, confirmation.engineType);
+  }, [launch, run]);
 
   const openExistingRun = useCallback(async (id: string): Promise<boolean> => {
     const existingRun = await getRunViaIpc(id, 'detail');
@@ -312,6 +363,8 @@ export function useDesignerTryRun({
     setIsCancelling(false);
     setIsDraftSnapshot(false);
     setLaunchError(null);
+    launchConfirmationRef.current = resolveTrialRunLaunchConfirmation(existingRun, null);
+    setIsStartupDialogOpen(false);
     setIsDrawerOpen(true);
     return true;
   }, []);

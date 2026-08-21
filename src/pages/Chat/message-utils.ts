@@ -20,14 +20,11 @@ import type { AttachedFileMeta, RawMessage, ContentBlock } from '@/stores/chat';
 import { truncatePreviewExtractExcerpt } from '../../../shared/preview-extract-trace';
 import {
   stripDingTalkAgentSendDisclaimerForDisplay,
-  stripDingTalkMentionContextForDisplay,
 } from '@/lib/dingtalk-mention-context';
-import { stripCronTriggerTextForDisplay } from '@/lib/cron-session-display';
 import { isVirtualTaskSessionKey } from '@/stores/chat/cron-session-utils';
 import { enrichScheduledTaskArtifactProvenance } from '@/lib/scheduled-task-artifact-provenance';
-import { stripWorkflowContextForDisplay, stripWorkflowCompleteForDisplay, WORKFLOW_COMPLETE_TAG } from '@/lib/workflow-context';
-import { stripSclawBrowserEmbedContextForDisplay } from '@/lib/sclaw-browser-embed-context';
-import { stripWorkflowSessionHintForDisplay } from '@/lib/workflow-session-hint';
+import { WORKFLOW_COMPLETE_TAG } from '@/lib/workflow-context';
+import { stripComposerGatewayPlaceholders, stripUserNoiseKeepComposerBake } from '@/lib/user-message-display';
 import {
   isWorkflowGuidanceAssistantText,
   isWorkflowParameterIntroText,
@@ -51,10 +48,6 @@ import type { DataCenterArtifactProvenance } from '@/types/data-center';
 import { sanitizeLocalFileRefsForCopy } from '../../../shared/dingtalk-send/dingtalk-share-text';
 import type { WorkflowExecutionState } from '@/types/workflow';
 
-/** OpenClaw injects queued system events as `System: [timestamp] ...` lines before user text. */
-const GATEWAY_SYSTEM_EVENT_LINE =
-  /^\s*System:\s*(?:\[[^\]]+\]\s*)?[^\n]*(?:\n|$)/gim;
-
 const AT_MENTION_DISPLAY_NAME_PATTERN = /@([^\s@\n]+)/g;
 
 function resolveArtifactSourceType(sessionKey: string): DataCenterArtifactProvenance['sourceType'] {
@@ -76,37 +69,13 @@ function buildArtifactProvenance(
  * Strips: System event lines, [media attached: ... | ...], [message_id: ...],
  * and the timestamp prefix [Day Date Time Timezone].
  */
+/**
+ * Strip Gateway-injected metadata from user messages for clean display.
+ * Keeps workflow exec sentences for chip parsing; strips stage-6 placeholders.
+ */
 function cleanUserText(text: string): string {
-  const cleaned = text
-    // Remove OpenClaw system event lines (Exec completed/failed, cron, etc.)
-    .replace(GATEWAY_SYSTEM_EVENT_LINE, '')
-    // Remove Gateway-injected "Sender (untrusted metadata): ```json...```" block
-    .replace(/^Sender\s*\([^)]*\):\s*```[a-z]*\n[\s\S]*?```\s*/im, '')
-    // Remove [media attached: path (mime) | path] references
-    .replace(/\s*\[media attached:[^\]]*\]/g, '')
-    // Remove [message_id: uuid]
-    .replace(/\s*\[message_id:\s*[^\]]+\]/g, '')
-    // Remove Gateway-injected "Conversation info (untrusted metadata): ```json...```" block
-    .replace(/^Conversation info\s*\([^)]*\):\s*```[a-z]*\n[\s\S]*?```\s*/i, '')
-    // Fallback: remove "Conversation info (...): {...}" without code block wrapper
-    .replace(/^Conversation info\s*\([^)]*\):\s*\{[\s\S]*?\}\s*/i, '')
-    // Remove Gateway timestamp prefix like [Fri 2026-02-13 22:39 GMT+8]
-    .replace(/^\[(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+[^\]]+\]\s*/i, '')
-    // OpenClaw cron jobs append "Current time: ..." (+ optional "Reference UTC: ...") to the prompt
-    .replace(/\n*Current time:\s*[^\n]+/gi, '')
-    .replace(/\n*Reference UTC:\s*[^\n]+/gi, '')
-    .trim();
-  return stripDingTalkMentionContextForDisplay(
-    stripWorkflowCompleteForDisplay(
-      stripWorkflowSessionHintForDisplay(
-        stripSclawBrowserEmbedContextForDisplay(
-          stripWorkflowContextForDisplay(
-            stripCronTriggerTextForDisplay(cleaned),
-          ),
-        ),
-      ),
-    ),
-  );
+  // 先抽钉钉「用户消息：」再剥 `[Thu …]`——与 stripUserNoiseKeepComposerBake 同序。
+  return stripComposerGatewayPlaceholders(stripUserNoiseKeepComposerBake(text));
 }
 
 /** Strip dws send metadata that agents should not surface to end users. */

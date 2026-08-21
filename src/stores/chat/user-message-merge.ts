@@ -1,5 +1,9 @@
 import { stripCronLabelPrefix } from '@/lib/cron-session-display';
-import { normalizeUserMessageForDisplay } from '@/lib/user-message-display';
+import {
+  collapseWhitespaceForPairing,
+  normalizeUserMessageForDisplay,
+} from '@/lib/user-message-display';
+import { parseSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
 import { resolveStoredSessionLabel } from '@/lib/session-label';
 import { isWorkflowSessionTitle } from '@/lib/workflow-session';
 import {
@@ -13,7 +17,8 @@ import {
   truncateChatSessionText,
 } from '../../../shared/chat-session-trace';
 import { getMessageText, toMs } from './helpers';
-import type { RawMessage } from './types';
+import type { AttachedFileMeta, RawMessage } from './types';
+import { logUserQuestion, logUserQuestionServerEcho } from './chat-flow-log';
 
 const OPTIMISTIC_SEND_WINDOW_MS = 5_000;
 /** Broad window for matching a late Gateway user echo to the current send. */
@@ -25,8 +30,30 @@ export function normalizeUserMessageText(content: unknown): string {
     .trim();
 }
 
+/** 若存在 skill-marker 的 userText 则优先使用——gateway 正文仍可能带 prompt/标题前缀。 */
 function normalizeUserMessageForPairing(content: unknown): string {
-  return normalizeUserMessageForDisplay(getMessageText(content));
+  const raw = getMessageText(content);
+  const markerMatch = /<!--\s*SClaw-Skill\s+(\{[\s\S]*?\})\s*-->/.exec(raw);
+  if (markerMatch) {
+    try {
+      const parsed = JSON.parse(markerMatch[1]) as { userText?: string };
+      const userText = parsed.userText?.trim();
+      if (userText) return collapseWhitespaceForPairing(userText);
+    } catch {
+      // 解析失败则继续走下方归一化逻辑
+    }
+  }
+  // 当 marker 中的标题与首行技能标题相同时，去掉该标题行。
+  const meta = parseSkillTranscriptMarker(raw);
+  const normalized = collapseWhitespaceForPairing(normalizeUserMessageForDisplay(raw));
+  if (meta?.title) {
+    const title = meta.title.trim();
+    if (normalized === title) return '';
+    if (normalized.startsWith(`${title} `)) {
+      return normalized.slice(title.length).trim();
+    }
+  }
+  return normalized;
 }
 
 function getAttachmentKeys(message: RawMessage): string[] {
@@ -40,6 +67,7 @@ function hasAttachmentEvidence(message: RawMessage): boolean {
   if ((message._attachedFiles ?? []).length > 0) return true;
   const text = getMessageText(message.content);
   if (/\[media attached:/i.test(text)) return true;
+  if (/\[文件:\s*[^\]]*\]/.test(text)) return true;
   if (!Array.isArray(message.content)) return false;
   return message.content.some((block) => {
     if (!block || typeof block !== 'object') return false;
@@ -74,43 +102,149 @@ function mediaEchoTextMatches(a: RawMessage, b: RawMessage): boolean {
     && (hasAttachmentEvidence(a) || hasAttachmentEvidence(b));
 }
 
+/**
+ * 技能首轮回显的软证据：gateway 常在 userText 前加 defaultPrompt。
+ * 乐观展示文案须是候选配对文本的非空后缀/子串——不同编辑文案不会匹配上一轮。
+ */
+function skillGatewayPromptEchoMatches(candidate: RawMessage, optimistic: RawMessage): boolean {
+  const optimisticText = normalizeUserMessageForPairing(optimistic.content);
+  if (!optimisticText) return false;
+  const candidateText = normalizeUserMessageForPairing(candidate.content);
+  if (!candidateText) return false;
+  if (candidateText === optimisticText) return true;
+  return candidateText.endsWith(optimisticText) || candidateText.includes(optimisticText);
+}
+
 function hasSkillUserMeta(message: RawMessage): boolean {
-  return message.role === 'user' && Boolean(message._skillMeta);
+  return message.role === 'user' && Boolean(message._skillMeta || message._skillMetas?.length);
+}
+
+function hasWorkflowBakeEvidence(message: RawMessage): boolean {
+  if (message._composerSegments?.some((seg) => seg.type === 'workflow')) return true;
+  return /帮我执行\s*id\s*为/.test(getMessageText(message.content));
+}
+
+/** 乐观消息（或回显）带有值得用于配对的文件/技能/工作流结构。 */
+function hasComposerPairingEvidence(message: RawMessage): boolean {
+  if (hasSkillUserMeta(message)) return true;
+  if ((message._attachedFiles ?? []).length > 0) return true;
+  if (message._composerSegments?.some((seg) => (
+    seg.type === 'file' || seg.type === 'skill' || seg.type === 'workflow' || seg.type === 'mention'
+  ))) {
+    return true;
+  }
+  return false;
+}
+
+function emptyDisplayBoth(a: RawMessage, b: RawMessage): boolean {
+  return !normalizeUserMessageForPairing(a.content) && !normalizeUserMessageForPairing(b.content);
+}
+
+function composerStructureEchoMatches(candidate: RawMessage, optimistic: RawMessage): boolean {
+  if (!hasComposerPairingEvidence(optimistic)) return false;
+
+  // 两轮已完成且显式附件不同，视为不同轮次。
+  const optimisticKeys = getAttachmentKeys(optimistic);
+  const candidateKeys = getAttachmentKeys(candidate);
+  if (
+    optimisticKeys.length > 0
+    && candidateKeys.length > 0
+    && !attachmentsMatch(optimistic, candidate)
+  ) {
+    return false;
+  }
+
+  if (displayTextEquals(candidate, optimistic) || mediaEchoTextMatches(candidate, optimistic)) {
+    return true;
+  }
+
+  // 仅 chip、无 displayText 的发送：当回显有匹配的 bake 证据时再配对。
+  if (emptyDisplayBoth(candidate, optimistic)) {
+    if (hasAttachmentEvidence(optimistic) && hasAttachmentEvidence(candidate)) return true;
+    if (
+      optimistic._composerSegments?.some((seg) => seg.type === 'workflow')
+      && hasWorkflowBakeEvidence(candidate)
+    ) {
+      return true;
+    }
+    if (hasSkillUserMeta(optimistic) && (hasSkillUserMeta(candidate) || /\[技能:/.test(getMessageText(candidate.content)))) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /** User bubble is visible when there is display text and/or a skill tag. */
 export function hasVisibleUserMessageContent(message: RawMessage): boolean {
   if (message.role !== 'user') return false;
   if (hasSkillUserMeta(message)) return true;
+  if (message._composerSegments?.length) return true;
+  if ((message._attachedFiles ?? []).length > 0) return true;
+  if (hasWorkflowBakeEvidence(message)) return true;
+  if (/\[文件:\s*[^\]]*\]|\[技能:\s*[^\]]*\]/.test(getMessageText(message.content))) return true;
   return normalizeUserMessageForDisplay(getMessageText(message.content)).length > 0;
 }
 
-function patchSkillUserMessageFromOptimistic(
+function mergeAttachedFiles(
+  preferred?: AttachedFileMeta[],
+  fallback?: AttachedFileMeta[],
+): AttachedFileMeta[] | undefined {
+  if (!preferred?.length && !fallback?.length) return preferred ?? fallback;
+  const merged: AttachedFileMeta[] = [];
+  const seen = new Set<string>();
+  for (const file of [...(preferred ?? []), ...(fallback ?? [])]) {
+    const key = `${file.filePath || ''}|${file.fileName}|${file.mimeType}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(file);
+  }
+  return merged.length ? merged : undefined;
+}
+
+/**
+ * 乐观↔history 配对成功后，把 Composer UI 字段写回服务端回显。
+ * `content` 必须保持为 displayText（不含 stage-6 占位符 / 工作流执行 bake）。
+ */
+export function patchComposerUserMessageFromOptimistic(
   serverMessage: RawMessage,
   optimistic: RawMessage,
 ): RawMessage {
+  const displayContent = typeof optimistic.content === 'string'
+    ? optimistic.content
+    : normalizeUserMessageForDisplay(getMessageText(serverMessage.content));
+
   return {
     ...serverMessage,
+    content: displayContent,
     _skillMeta: optimistic._skillMeta ?? serverMessage._skillMeta,
-    // Keep UI display text only — never surface Gateway defaultPrompt in the bubble.
-    content: optimistic.content ?? '',
+    _skillMetas: optimistic._skillMetas
+      ?? (optimistic._skillMeta ? [optimistic._skillMeta] : undefined)
+      ?? serverMessage._skillMetas,
+    _composerSegments: optimistic._composerSegments ?? serverMessage._composerSegments,
+    _attachedFiles: mergeAttachedFiles(optimistic._attachedFiles, serverMessage._attachedFiles)
+      ?? serverMessage._attachedFiles,
   };
 }
 
-function applyOptimisticSkillDisplay(
+function applyOptimisticComposerDisplay(
   enrichedMessages: RawMessage[],
   optimistic: RawMessage | undefined,
   historyEcho: RawMessage,
-  refAt: number,
+  _refAt: number,
 ): RawMessage[] {
-  if (!optimistic?._skillMeta) return enrichedMessages;
-  return enrichedMessages.map((message) => {
-    if (message.role !== 'user') return message;
-    if (message.id && historyEcho.id && message.id === historyEcho.id) {
-      return patchSkillUserMessageFromOptimistic(message, optimistic);
+  if (!optimistic) return enrichedMessages;
+  // 只 patch 已配对的那条回显。禁止用宽松 isSameUserMessage 广播——
+  // 否则编辑重发时会把上一轮技能写到最新一轮。
+  const echoIndex = enrichedMessages.indexOf(historyEcho);
+  return enrichedMessages.map((message, index) => {
+    if (echoIndex >= 0) {
+      return index === echoIndex
+        ? patchComposerUserMessageFromOptimistic(message, optimistic)
+        : message;
     }
-    if (isSameUserMessage(message, optimistic, refAt)) {
-      return patchSkillUserMessageFromOptimistic(message, optimistic);
+    if (message.id && historyEcho.id && message.id === historyEcho.id) {
+      return patchComposerUserMessageFromOptimistic(message, optimistic);
     }
     return message;
   });
@@ -136,6 +270,8 @@ export function isSameUserMessage(
 
   const displayMatches = displayTextMatches(candidate, optimistic);
   const mediaTextMatches = mediaEchoTextMatches(candidate, optimistic);
+  const structureMatches = composerStructureEchoMatches(candidate, optimistic);
+  const textsEqual = displayTextEquals(candidate, optimistic);
   const candidateText = normalizeUserMessageText(candidate.content);
   const optimisticText = normalizeUserMessageText(optimistic.content);
   const rawTextMatches = candidateText.length > 0
@@ -146,25 +282,64 @@ export function isSameUserMessage(
   const optimisticMs = typeof optimistic.timestamp === 'number' ? toMs(optimistic.timestamp) : userMessageAt;
   const hasCandidateTime = Number.isFinite(candidateMs);
   const referenceMs = Number.isFinite(optimisticMs) ? optimisticMs : userMessageAt;
+  const evidence = textsEqual || structureMatches || mediaTextMatches || rawTextMatches || displayMatches;
 
-  if (optimistic._skillMeta) {
+  if (optimistic._skillMeta || optimistic._skillMetas?.length) {
     if (candidate.id && optimistic.id && candidate.id === optimistic.id) return true;
+    // 与文件/工作流一致：禁止仅靠时间配对。紧窗口内也可用
+    // 软后缀证据应对 gateway 首轮回显的 defaultPrompt 前缀。
+    const skillEvidence = evidence || skillGatewayPromptEchoMatches(candidate, optimistic);
     if (hasCandidateTime && Number.isFinite(referenceMs)) {
-      if (Math.abs(candidateMs - referenceMs) < OPTIMISTIC_SEND_WINDOW_MS) return true;
+      if (
+        Math.abs(candidateMs - referenceMs) < OPTIMISTIC_SEND_WINDOW_MS
+        && skillEvidence
+      ) {
+        return true;
+      }
     }
-    if (userMessageAt > 0 && hasCandidateTime && Math.abs(candidateMs - userMessageAt) < SERVER_ECHO_WINDOW_MS) {
+    if (
+      evidence
+      && userMessageAt > 0
+      && hasCandidateTime
+      && Math.abs(candidateMs - userMessageAt) < SERVER_ECHO_WINDOW_MS
+    ) {
+      return true;
+    }
+  }
+
+  // 文件/工作流/多 segment：时间窗 + 剥离后的展示文案（或 bake 证据）。
+  if (hasComposerPairingEvidence(optimistic) && !optimistic._skillMeta && !(optimistic._skillMetas?.length)) {
+    if (hasCandidateTime && Number.isFinite(referenceMs)) {
+      if (Math.abs(candidateMs - referenceMs) < OPTIMISTIC_SEND_WINDOW_MS) {
+        if (structureMatches || displayMatches || mediaTextMatches || rawTextMatches) return true;
+      }
+      if (
+        structureMatches
+        && userMessageAt > 0
+        && Math.abs(candidateMs - referenceMs) <= SERVER_ECHO_WINDOW_MS
+      ) {
+        return true;
+      }
+    }
+    if (
+      structureMatches
+      && userMessageAt > 0
+      && hasCandidateTime
+      && Math.abs(candidateMs - userMessageAt) <= SERVER_ECHO_WINDOW_MS
+    ) {
       return true;
     }
   }
 
   if (hasCandidateTime && Number.isFinite(referenceMs)) {
     if (Math.abs(candidateMs - referenceMs) < OPTIMISTIC_SEND_WINDOW_MS) {
-      return displayMatches || rawTextMatches || mediaTextMatches;
+      return displayMatches || rawTextMatches || mediaTextMatches || structureMatches;
     }
     // During an active send, identical display text is the optimistic/server pair even when
     // Gateway timestamps are missing or skewed.
     if (displayMatches && userMessageAt > 0) return true;
     if (rawTextMatches && userMessageAt > 0) return true;
+    if (structureMatches && userMessageAt > 0) return true;
     if (
       mediaTextMatches
       && userMessageAt > 0
@@ -175,10 +350,11 @@ export function isSameUserMessage(
     if (Math.abs(candidateMs - referenceMs) > 60_000) return false;
   }
 
-  return displayMatches || rawTextMatches;
+  return displayMatches || rawTextMatches || structureMatches;
 }
 
-function findHistoryUserEcho(
+/** 在 Gateway history 中查找与乐观发送副本配对的用户轮次。 */
+export function findHistoryUserEcho(
   enrichedMessages: RawMessage[],
   optimistic: RawMessage,
   userMessageAt: number,
@@ -186,7 +362,9 @@ function findHistoryUserEcho(
   return enrichedMessages.find((message) => {
     if (message.role !== 'user') return false;
     if (isSameUserMessage(message, optimistic, userMessageAt)) return true;
-    if (!displayTextMatches(message, optimistic)) return false;
+    if (!displayTextMatches(message, optimistic) && !composerStructureEchoMatches(message, optimistic)) {
+      return false;
+    }
     const ts = typeof message.timestamp === 'number' ? toMs(message.timestamp) : NaN;
     if (!Number.isFinite(ts)) return userMessageAt > 0;
     return Math.abs(ts - userMessageAt) <= SERVER_ECHO_WINDOW_MS;
@@ -252,10 +430,19 @@ export function dedupeRedundantUserMessages(
   const patches = new Map<number, RawMessage>();
 
   const patchKeptUser = (keptIndex: number, droppedMessage: RawMessage) => {
-    if (!droppedMessage._skillMeta) return;
     const kept = patches.get(keptIndex) ?? messages[keptIndex];
     if (!kept || kept.role !== 'user') return;
-    patches.set(keptIndex, patchSkillUserMessageFromOptimistic(kept, droppedMessage));
+    // 合并重复项时，优先保留仍带 Composer UI 结构的一侧。
+    const preferred = droppedMessage._composerSegments?.length
+      || droppedMessage._skillMeta
+      || droppedMessage._attachedFiles?.length
+      ? droppedMessage
+      : (kept._composerSegments?.length || kept._skillMeta || kept._attachedFiles?.length
+        ? kept
+        : droppedMessage);
+    const base = preferred === droppedMessage ? kept : droppedMessage;
+    const donor = preferred === droppedMessage ? droppedMessage : kept;
+    patches.set(keptIndex, patchComposerUserMessageFromOptimistic(base, donor));
   };
 
   for (let i = 0; i < messages.length; i += 1) {
@@ -275,7 +462,9 @@ export function dedupeRedundantUserMessages(
         continue;
       }
 
-      const sameTurnByDisplay = displayTextMatches(first, second);
+      const sameTurnByDisplay = displayTextMatches(first, second)
+        || composerStructureEchoMatches(first, second)
+        || composerStructureEchoMatches(second, first);
 
       // Synthetic opener from session label vs real history user (may be non-adjacent).
       const firstSynthetic = typeof first.id === 'string' && first.id.startsWith('session-label-user-');
@@ -409,7 +598,9 @@ function findRecoverableUserMessage(
   ];
   for (const candidate of candidates) {
     const display = normalizeUserMessageForDisplay(getMessageText(candidate.content));
-    if (!display && !candidate._skillMeta) continue;
+    if (!display && !candidate._skillMeta && !candidate._composerSegments?.length && !candidate._attachedFiles?.length) {
+      continue;
+    }
     const refAt = userMessageAt ?? (candidate.timestamp ? toMs(candidate.timestamp) : 0);
     if (findHistoryUserEcho(enrichedMessages, candidate, refAt)) continue;
     if (enrichedMessages.some((message) => message.role === 'user' && displayTextMatches(message, candidate))) {
@@ -464,17 +655,22 @@ function resolveOpeningSessionLabel(
 
 function historyHasOpeningUserTurn(messages: RawMessage[], openingLabel: string | undefined): boolean {
   if (!openingLabel) return false;
+  const normalizedLabel = normalizeUserMessageForDisplay(openingLabel);
   return messages.some((message) => {
     if (message.role !== 'user') return false;
-    const display = normalizeUserMessageForDisplay(getMessageText(message.content));
+    const raw = getMessageText(message.content);
+    const display = normalizeUserMessageForDisplay(raw);
     if (message._skillMeta) {
       if (!display) return message._skillMeta.title === openingLabel;
       return display === openingLabel || message._skillMeta.title === openingLabel;
     }
-    // Session labels are capped at 50 characters. Treat the same truncated
-    // form of a real history user turn as the opener; otherwise label recovery
-    // synthesizes a second user bubble beside the complete history message.
-    return display === openingLabel || truncateSessionLabel(display) === openingLabel;
+    // 会话标题最长 50 字符，且可能仍含 gateway bake
+    // （工作流执行句 / 占位符）。需同时匹配 display、raw 与截断形式。
+    return display === openingLabel
+      || display === normalizedLabel
+      || truncateSessionLabel(display) === openingLabel
+      || truncateSessionLabel(raw.replace(/\s+/g, ' ').trim()) === openingLabel
+      || raw.replace(/\s+/g, ' ').trim() === openingLabel;
   });
 }
 
@@ -482,13 +678,26 @@ function historyHasSkillUserTurn(messages: RawMessage[]): boolean {
   return messages.some((message) => message.role === 'user' && Boolean(message._skillMeta));
 }
 
+function optimisticCoversOpeningUser(optimisticUser?: RawMessage | null): boolean {
+  return Boolean(optimisticUser && optimisticUser.role === 'user');
+}
+
 /** Drop synthetic session-label user rows when a real skill-tagged user turn already exists. */
-export function dropSyntheticSkillSessionLabelUsers(messages: RawMessage[]): RawMessage[] {
-  if (!historyHasSkillUserTurn(messages)) return messages;
+export function dropSyntheticSkillSessionLabelUsers(
+  messages: RawMessage[],
+  options?: { hasSkillUser?: boolean },
+): RawMessage[] {
+  if (!options?.hasSkillUser && !historyHasSkillUserTurn(messages)) return messages;
   return messages.filter((message) => {
     if (message.role !== 'user') return true;
     return !message.id?.startsWith('session-label-user-');
   });
+}
+
+export interface OpeningUserRecoveryOptions {
+  sending?: boolean;
+  /** Local overlay already shows the opening user turn; do not synthesize it from the session title. */
+  optimisticUser?: RawMessage | null;
 }
 
 /** Reconstruct the opening user turn from a stored session title when history omits it. */
@@ -497,10 +706,13 @@ export function recoverInitialUserFromSessionLabel(
   sessionKey: string,
   sessionLabels: Record<string, string>,
   gatewayLabel?: string,
-  options?: { sending?: boolean },
+  options?: OpeningUserRecoveryOptions,
 ): RawMessage[] {
-  // Mid-send: optimistic user already covers the opener; label recovery doubles it.
-  if (options?.sending) return enrichedMessages;
+  // Mid-send / failed-send overlay: optimistic user already covers the opener;
+  // reconstructing from the truncated session title creates a second plain bubble.
+  if (options?.sending || optimisticCoversOpeningUser(options?.optimisticUser)) {
+    return enrichedMessages;
+  }
   if (historyHasSkillUserTurn(enrichedMessages)) return enrichedMessages;
   const label = resolveOpeningSessionLabel(sessionKey, sessionLabels, gatewayLabel);
   if (!label || historyHasOpeningUserTurn(enrichedMessages, label)) return enrichedMessages;
@@ -518,10 +730,13 @@ export function ensureOpeningUserMessageFirst(
   sessionKey: string,
   sessionLabels: Record<string, string>,
   gatewayLabel?: string,
-  options?: { sending?: boolean },
+  options?: OpeningUserRecoveryOptions,
 ): RawMessage[] {
-  // Mid-send: do not rewrite timestamps / inject openers while stream+history race.
-  if (options?.sending) return messages;
+  // Mid-send / overlay: do not rewrite timestamps / inject openers while the
+  // optimistic user turn is still the visible opener.
+  if (options?.sending || optimisticCoversOpeningUser(options?.optimisticUser)) {
+    return messages;
+  }
   const label = resolveOpeningSessionLabel(sessionKey, sessionLabels, gatewayLabel);
   let working = messages;
   if (label && !historyHasOpeningUserTurn(working, label)) {
@@ -559,15 +774,109 @@ export function ensureOpeningUserMessageFirst(
   return patched.sort((left, right) => toMs(left.timestamp) - toMs(right.timestamp));
 }
 
-function findSkillOptimisticForPatch(
+/**
+ * history 回显的 UI 字段供体：overlay 乐观消息，或仍带 `_composerSegments` 的上一帧投影。
+ * 首轮回显清掉 overlay 后仍关键——后续 history 重载必须能再次写回 segments。
+ */
+function findComposerUiDonor(
+  enrichedMessages: RawMessage[],
   currentMessages: RawMessage[],
+  userMessageAt: number | null,
   cachedOptimistic?: RawMessage | null,
 ): RawMessage | undefined {
   const candidates = [
-    ...(cachedOptimistic?.role === 'user' && cachedOptimistic._skillMeta ? [cachedOptimistic] : []),
-    ...currentMessages.filter((message) => message.role === 'user' && message._skillMeta),
+    ...(cachedOptimistic?.role === 'user' ? [cachedOptimistic] : []),
+    ...currentMessages.filter((message) => message.role === 'user' && (
+      Boolean(message._composerSegments?.length)
+      || Boolean(message._skillMeta)
+      || Boolean(message._skillMetas?.length)
+      || Boolean(message._attachedFiles?.length)
+    )),
   ];
-  return candidates[candidates.length - 1];
+
+  let best: { candidate: RawMessage; score: number } | undefined;
+  for (const candidate of candidates) {
+    const refAt = userMessageAt
+      ?? (candidate.timestamp ? toMs(candidate.timestamp) : 0);
+    const echo = findHistoryUserEcho(enrichedMessages, candidate, refAt);
+    if (!echo) continue;
+
+    let score = 0;
+    if (displayTextEquals(echo, candidate)) score += 100;
+    else if (composerStructureEchoMatches(echo, candidate)) score += 40;
+    else if (mediaEchoTextMatches(echo, candidate)) score += 30;
+    else if (
+      (candidate._skillMeta || candidate._skillMetas?.length)
+      && skillGatewayPromptEchoMatches(echo, candidate)
+      && typeof echo.timestamp === 'number'
+      && typeof candidate.timestamp === 'number'
+      && Math.abs(toMs(echo.timestamp) - toMs(candidate.timestamp)) < OPTIMISTIC_SEND_WINDOW_MS
+    ) {
+      // 紧窗口内的软 prompt 前缀回显。
+      score += 35;
+    } else {
+      score += 1; // 弱残余分——避免跨轮次误偏好
+    }
+
+    if (
+      userMessageAt
+      && candidate.timestamp
+      && Math.abs(toMs(candidate.timestamp) - userMessageAt) < OPTIMISTIC_SEND_WINDOW_MS
+    ) {
+      score += 50;
+    }
+    if (cachedOptimistic && candidate === cachedOptimistic) score += 20;
+
+    if (!best || score > best.score) best = { candidate, score };
+  }
+
+  // 需要真实的展示/结构/技能窗口证据（不能只靠 120s 时间残余）。
+  if (best && best.score >= 30) return best.candidate;
+  return undefined;
+}
+
+/** 把上一帧投影中的 composer UI 字段重新写到新加载的 history 用户消息上。 */
+export function reapplyComposerUiFromPreviousDisplay(
+  messages: RawMessage[],
+  previousDisplay: RawMessage[],
+  userMessageAt: number | null,
+): RawMessage[] {
+  if (!previousDisplay.length) return messages;
+  const donors = previousDisplay.filter((message) => (
+    message.role === 'user'
+    && Boolean(message._composerSegments?.length)
+  ));
+  if (!donors.length) return messages;
+
+  return messages.map((message) => {
+    if (message.role !== 'user') return message;
+    if (message._composerSegments?.length) return message;
+    // 仅严格匹配展示文案——宽松技能配对会在 thinking 期间
+    // 把上一轮拷到编辑重发的这一轮。
+    const donor = donors.find((candidate) => displayTextEquals(message, candidate));
+    if (!donor) {
+      const refAt = userMessageAt
+        ?? (message.timestamp ? toMs(message.timestamp) : 0);
+      const structured = donors.find((candidate) => (
+        composerStructureEchoMatches(message, candidate)
+        && (
+          !userMessageAt
+          || (candidate.timestamp && Math.abs(toMs(candidate.timestamp) - refAt) < SERVER_ECHO_WINDOW_MS)
+        )
+      ));
+      if (!structured) return message;
+      // 双方都有可见文案时，仍要求归一化后的展示文案相等。
+      if (
+        normalizeUserMessageForPairing(message.content)
+        && normalizeUserMessageForPairing(structured.content)
+        && !displayTextEquals(message, structured)
+      ) {
+        return message;
+      }
+      return patchComposerUserMessageFromOptimistic(message, structured);
+    }
+    return patchComposerUserMessageFromOptimistic(message, donor);
+  });
 }
 
 export function mergeOptimisticUserIntoHistory(
@@ -582,15 +891,72 @@ export function mergeOptimisticUserIntoHistory(
   },
 ): RawMessage[] {
   const { userMessageAt, sending, sessionKey, cachedOptimistic } = options;
-  if (!userMessageAt && historyHasVisibleUserMessage(enrichedMessages)) {
-    const optimistic = findSkillOptimisticForPatch(currentMessages, cachedOptimistic);
-    if (optimistic?._skillMeta) {
-      const refAt = optimistic.timestamp ? toMs(optimistic.timestamp) : 0;
-      const historyEcho = findHistoryUserEcho(enrichedMessages, optimistic, refAt);
-      if (historyEcho) {
-        return applyOptimisticSkillDisplay(enrichedMessages, optimistic, historyEcho, refAt);
-      }
+
+  // 只要 history 已有匹配的用户回显，就优先使用 UI 供体
+  // （乐观 overlay，或带 segments 的上一帧投影）——含 overlay 乐观
+  // 已清除后的中途 history 重载。
+  const uiDonor = findComposerUiDonor(
+    enrichedMessages,
+    currentMessages,
+    userMessageAt,
+    cachedOptimistic,
+  );
+  if (uiDonor) {
+    const refAt = userMessageAt ?? (uiDonor.timestamp ? toMs(uiDonor.timestamp) : 0);
+    const historyEcho = findHistoryUserEcho(enrichedMessages, uiDonor, refAt);
+    if (historyEcho) {
+      let merged = applyOptimisticComposerDisplay(enrichedMessages, uiDonor, historyEcho, refAt);
+      // 同时恢复上一帧投影里已有 segments 的其他 history 用户消息
+      // （编辑重发：保留第 N 轮，同时 patch 第 N+1 轮）。
+      merged = reapplyComposerUiFromPreviousDisplay(merged, currentMessages, userMessageAt);
+      traceChatSession({
+        phase: 'merge-optimistic',
+        action: 'use-history-user',
+        sessionKey,
+        userMessageAt,
+        sending,
+        optimisticId: uiDonor.id,
+        matchedHistoryUserId: historyEcho.id,
+        messageCountBefore: enrichedMessages.length,
+        messageCountAfter: merged.length,
+        reason: uiDonor.id && historyEcho.id && uiDonor.id === historyEcho.id
+          ? 'id-match'
+          : 'display-or-time-match',
+        detail: {
+          optimistic: summarizeUserMessage(uiDonor),
+          historyUser: summarizeUserMessage(historyEcho),
+          donorSource: cachedOptimistic?.id && uiDonor.id === cachedOptimistic.id
+            ? 'cached-optimistic'
+            : 'previous-display',
+        },
+      });
+      logUserQuestionServerEcho({
+        sessionKey: sessionKey ?? null,
+        matchReason: uiDonor.id && historyEcho.id && uiDonor.id === historyEcho.id
+          ? 'id-match'
+          : 'display-or-time-match',
+        optimisticId: uiDonor.id ?? null,
+        historyUserId: historyEcho.id ?? null,
+        optimisticContent: getMessageText(uiDonor.content),
+        historyContent: getMessageText(historyEcho.content),
+        optimisticSkillMetas: uiDonor._skillMetas
+          ?? (uiDonor._skillMeta ? [uiDonor._skillMeta] : undefined),
+        historySkillMetas: historyEcho._skillMetas
+          ?? (historyEcho._skillMeta ? [historyEcho._skillMeta] : undefined),
+        optimisticSegments: uiDonor._composerSegments,
+        historySegments: historyEcho._composerSegments,
+        optimisticAttachments: uiDonor._attachedFiles,
+        historyAttachments: historyEcho._attachedFiles,
+        mergedContent: getMessageText(
+          merged.find((m) => m === historyEcho || (m.id && historyEcho.id && m.id === historyEcho.id))?.content
+            ?? historyEcho.content,
+        ),
+      });
+      return merged;
     }
+  }
+
+  if (!userMessageAt && historyHasVisibleUserMessage(enrichedMessages)) {
     return enrichedMessages;
   }
 
@@ -600,41 +966,13 @@ export function mergeOptimisticUserIntoHistory(
     userMessageAt,
     cachedOptimistic,
   );
-  const refAt = userMessageAt ?? (optimistic?.timestamp ? toMs(optimistic.timestamp) : 0);
-  const historyEcho = optimistic
-    ? findHistoryUserEcho(enrichedMessages, optimistic, refAt)
-    : undefined;
-  const hasRecentUser = Boolean(historyEcho);
   const shouldPreserveOptimistic = !!optimistic && (
     sending
     || optimistic.isError
     || !historyHasVisibleUserMessage(enrichedMessages)
   );
 
-  if (hasRecentUser && historyEcho) {
-    const merged = applyOptimisticSkillDisplay(enrichedMessages, optimistic, historyEcho, refAt);
-    traceChatSession({
-      phase: 'merge-optimistic',
-      action: 'use-history-user',
-      sessionKey,
-      userMessageAt,
-      sending,
-      optimisticId: optimistic?.id,
-      matchedHistoryUserId: historyEcho.id,
-      messageCountBefore: enrichedMessages.length,
-      messageCountAfter: merged.length,
-      reason: optimistic?.id && historyEcho.id && optimistic.id === historyEcho.id
-        ? 'id-match'
-        : 'display-or-time-match',
-      detail: {
-        optimistic: optimistic ? summarizeUserMessage(optimistic) : undefined,
-        historyUser: summarizeUserMessage(historyEcho),
-      },
-    });
-    return merged;
-  }
-
-  if (!hasRecentUser && shouldPreserveOptimistic && optimistic) {
+  if (!historyHasVisibleUserMessage(enrichedMessages) && shouldPreserveOptimistic && optimistic) {
     traceChatSession({
       phase: 'merge-optimistic',
       action: 'insert-optimistic',
@@ -649,6 +987,16 @@ export function mergeOptimisticUserIntoHistory(
         optimistic: summarizeUserMessage(optimistic),
         historyUserCount: enrichedMessages.filter((m) => m.role === 'user').length,
       },
+    });
+    logUserQuestion('preserve-optimistic', {
+      sessionKey: sessionKey ?? null,
+      reason: 'history-missing-user',
+      optimisticId: optimistic.id ?? null,
+      optimisticContent: getMessageText(optimistic.content),
+      skillMetas: optimistic._skillMetas
+        ?? (optimistic._skillMeta ? [optimistic._skillMeta] : undefined),
+      segments: optimistic._composerSegments,
+      attachments: optimistic._attachedFiles,
     });
     return insertOptimisticUserMessage(enrichedMessages, optimistic);
   }

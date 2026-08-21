@@ -14,6 +14,7 @@
         "cronTasks": "定期タスク",
         "myTasks": "自動化",
         "dataCenter": "データセンター",
+        "learningCenter": "ラーニングセンター",
         "skills": "スキル·コネクタ",
         "moreApps": "アプリ広場",
         "workflow": "ワークフロー",
@@ -24,6 +25,7 @@
         "checkUpdates": "更新を確認",
         "devConsole": "開発者コンソール",
         "models": "モデル",
+        "tokenBalance": "トークン残高",
         "deleteSessionConfirm": "セッション \"{{label}}\" を削除してもよろしいですか？",
         "deleteSessionFailed": "セッションの削除に失敗しました",
         "deleteSessionFailedHint": "しばらくしてから再度お試しください。解決しない場合は設定でログを確認してください。",
@@ -46,6 +48,13 @@
         "sessionRunning": "実行中",
         "sessionFailed": "実行失敗",
         "sessionUnread": "未読",
+        "channelSource": {
+            "dingtalk": "DingTalk",
+            "wechat": "WeChat",
+            "wecom": "WeCom",
+            "app": "App",
+            "qq": "QQ"
+        },
         "compactAccountMenu": "アカウントと設定",
         "supportGroup": {
             "title": "SClaw 製品相談グループ",
@@ -154,6 +163,10 @@
             "authorizeLocalFile": "ローカルファイルを許可",
             "authorizeLocalFileOption": "ファイルを許可",
             "authorizeLocalFolderOption": "フォルダを許可",
+            "sharedArtifactsMobileTip": "DingTalk モバイル版でスキャンすると、「拠点 VIP」で拠点共有成果物を確認できます。",
+            "sharedArtifactsQrCode": "拠点共有成果物の QR コード",
+            "sharedArtifactsQrTitle": "スキャンして拠点共有成果物を表示",
+            "sharedArtifactsQrHint": "DingTalk モバイル版でスキャンし、「拠点 VIP」で確認",
             "usedQuota": "ストレージ使用量 {{used}}/{{quota}}"
         },
         "drive": {

@@ -66,14 +66,7 @@ sto-plugin/*/shared/
 electron/gateway/gateway-fetch-preload.cjs
 artifacts/
 docs/pr-session-notes-
-.cursor/*
-!.cursor/rules/
-.cursor/rules/*
-!.cursor/rules/*.mdc
-!.cursor/rules/README.md
-!.cursor/rules/references/
-.cursor/rules/references/*
-!.cursor/rules/references/*.md
+.cursor/
 .pnpm-store/
 nul
 .claude/
@@ -81,3 +74,8 @@ nul
 /.codegraph/
 outputs/
 .tmp/
+
+plans/
+openspec/
+.roo/
+docs/superpowers/

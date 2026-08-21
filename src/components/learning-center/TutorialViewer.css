@@ -1,0 +1,55 @@
+.tutorial-viewer { color: var(--foreground); font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; }
+.tutorial-viewer h1 { margin: 1.4em 0 .6em; font-size: 1.8em; font-weight: 700; line-height: 1.3; }
+.tutorial-viewer h2 { margin: 1.3em 0 .55em; font-size: 1.5em; font-weight: 700; line-height: 1.35; }
+.tutorial-viewer h3 { margin: 1.2em 0 .5em; font-size: 1.25em; font-weight: 600; line-height: 1.4; }
+.tutorial-viewer p { margin: .65em 0; }
+.tutorial-viewer ul { margin: .7em 0; padding-left: 1.75rem; list-style: disc; }
+.tutorial-viewer ol { margin: .7em 0; padding-left: 1.75rem; list-style: decimal; }
+.tutorial-viewer li + li { margin-top: .25em; }
+.tutorial-viewer blockquote { margin: 1em 0; padding: .25em 0 .25em 1em; border-left: 3px solid hsl(var(--primary)); color: color-mix(in srgb, currentColor 68%, transparent); }
+.tutorial-viewer pre { margin: 1em 0; padding: 12px 14px; overflow-x: auto; border-radius: 8px; background: color-mix(in srgb, currentColor 7%, transparent); }
+.tutorial-viewer code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.tutorial-viewer :not(pre) > code { padding: .15em .35em; border-radius: 4px; background: color-mix(in srgb, currentColor 7%, transparent); }
+.tutorial-viewer img,
+.tutorial-viewer .tutorial-viewer__image {
+  display: block;
+  box-sizing: border-box;
+  max-width: 100%;
+  height: auto;
+  margin: 16px 0;
+  border-radius: 8px;
+  object-fit: contain;
+}
+.tutorial-viewer__media-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  width: 100%;
+  margin: 8px 0;
+  max-width: 100%;
+}
+.tutorial-viewer__media-row > .tutorial-viewer__image,
+.tutorial-viewer__media-row > .tutorial-image-fallback {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+}
+.tutorial-viewer a,
+.tutorial-viewer .tutorial-viewer__link {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.tutorial-viewer a:hover,
+.tutorial-viewer .tutorial-viewer__link:hover { color: #1d4ed8; }
+.tutorial-image-fallback { display: flex; min-height: 8rem; max-width: 100%; align-items: center; justify-content: center; gap: .5rem; margin: 16px 0; border: 1px dashed hsl(var(--border)); border-radius: 8px; color: hsl(var(--muted-foreground)); background: hsl(var(--muted) / .35); }
+.tutorial-viewer hr { margin: 1.5em 0; border: 0; border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent); }
+.tutorial-viewer [data-indent="1"] { margin-left: 2em; }
+.tutorial-viewer [data-indent="2"] { margin-left: 4em; }
+.tutorial-viewer [data-indent="3"] { margin-left: 6em; }
+.tutorial-viewer [data-indent="4"] { margin-left: 8em; }
+.tutorial-viewer [data-indent="5"] { margin-left: 10em; }
+.tutorial-viewer [data-indent="6"] { margin-left: 12em; }

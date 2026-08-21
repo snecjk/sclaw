@@ -55,7 +55,7 @@ export function checkDwsSendDedup(
   const secs = Math.max(1, Math.ceil((DWS_SEND_DEDUP_TTL_MS - (now - sentAt)) / 1000));
   return {
     recent: true,
-    reason: `[StoClaw 去重] 该收件人 ${secs}s 内已收到相同内容，跳过本次发送。`,
+    reason: `[SClaw 去重] 该收件人 ${secs}s 内已收到相同内容，跳过本次发送。`,
   };
 }
 

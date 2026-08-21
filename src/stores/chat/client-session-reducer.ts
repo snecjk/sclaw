@@ -215,19 +215,12 @@ export function reduceSessionEvent(
     || (phase === 'awaiting_transcript' && event.type !== 'message.delta');
   const startsNewRun = event.type === 'run.dispatching';
   const dispatchPayload = startsNewRun ? payload as ChatDispatchPayload | null : null;
-  const dispatchUserMessage = dispatchPayload?.optimisticUserMessage
-    ? {
-        ...dispatchPayload.optimisticUserMessage,
-        ...(event.runtimePolicy?.origin === 'scheduled_task'
-          ? { _scheduledTaskOptimistic: true }
-          : {}),
-      }
-    : null;
+  const dispatchUserMessage = dispatchPayload?.optimisticUserMessage ?? null;
   const currentOptimisticBelongsToRun = startsNewRun
     && Boolean(event.idempotencyKey)
     && state.overlay.optimisticUserMessage?.id === event.idempotencyKey;
   const preserveExistingOptimistic = currentOptimisticBelongsToRun
-    || (event.runtimePolicy?.origin !== 'scheduled_task' && Boolean(state.overlay.optimisticUserMessage));
+    || Boolean(state.overlay.optimisticUserMessage);
   const isToolResult = Boolean(message && isToolResultRole(message.role));
   const toolUpdates = message
     ? collectToolUpdates(message, event.type === 'message.delta' ? 'delta' : 'final')

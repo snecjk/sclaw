@@ -12,6 +12,8 @@ export type WorkflowRunStatus =
 export interface WorkflowRunNodeRun {
   id: string;
   nodeId: string;
+  /** User-facing node name resolved from the workflow definition. */
+  nodeName?: string;
   nodeType?: string;
   status: string;
   startedAt?: string;
@@ -456,14 +458,17 @@ export function workflowRunResponseToExecutionState(run: WorkflowRunApiPayload):
     workflowId: run.workflowId,
     status,
     progress,
-    currentStep: nodeRuns.find((n) => normalizeWorkflowStepStatus(n.status) === 'running')?.nodeId,
+    currentStep: (() => {
+      const currentNode = nodeRuns.find((n) => normalizeWorkflowStepStatus(n.status) === 'running');
+      return currentNode?.nodeName || currentNode?.nodeId;
+    })(),
     startedAt: (() => {
       const resolved = resolveWorkflowRunStartedAt(run);
       return resolved ? normalizeWorkflowTimestamp(resolved) : undefined;
     })(),
     completedAt: run.completedAt ? normalizeWorkflowTimestamp(run.completedAt) : undefined,
     steps: nodeRuns.map((n) => ({
-      name: n.nodeId,
+      name: n.nodeName || n.nodeId,
       status: normalizeWorkflowStepStatus(n.status),
       duration: n.startedAt && n.completedAt
         ? new Date(n.completedAt).getTime() - new Date(n.startedAt).getTime()

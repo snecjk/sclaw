@@ -37,10 +37,10 @@ export function SidebarTaskSubitemDeleteTrailing({
   const { t } = useTranslation('common');
 
   return (
-    <div className={cn(sidebarSingleActionTrailingSlotClass, 'z-[2] flex items-center justify-end', className)}>
+    <div className={cn(sidebarSingleActionTrailingSlotClass, 'right-1 z-[2] flex items-center justify-center', className)}>
       <div
         className={cn(
-          'pointer-events-none flex h-5 w-full items-center justify-end',
+          'pointer-events-none flex h-5 w-full items-center justify-center',
           'transition-opacity group-hover:opacity-0 group-hover:invisible',
         )}
       >
@@ -55,7 +55,7 @@ export function SidebarTaskSubitemDeleteTrailing({
       </div>
       <div
         className={cn(
-          'absolute inset-0 flex items-center justify-end',
+          'absolute inset-0 flex items-center justify-center',
           'invisible opacity-0 transition-opacity group-hover:visible group-hover:opacity-100',
         )}
       >
@@ -83,4 +83,4 @@ export function SidebarTaskSubitemDeleteTrailing({
 }
 
 /** 子项主行右侧内距，与 trailing 槽位对齐 */
-export const SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS = sidebarSingleActionRowPaddingClass;
+export const SIDEBAR_TASK_SUBITEM_ROW_PR_CLASS = cn(sidebarSingleActionRowPaddingClass, 'pr-8');

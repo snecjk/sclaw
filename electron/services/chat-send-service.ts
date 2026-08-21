@@ -1,5 +1,5 @@
 import type { GatewayManager } from '../gateway/manager';
-import type { AgentEngineType, EngineSendParams } from '../engines/types';
+import type { AgentEngineType, EngineSendParams, EngineSendWithMediaParams } from '../engines/types';
 import { runIdempotentChatSend } from '../api/routes/chat-send-idempotency';
 import type { AgentMemoryContextBlocks } from '../../shared/agent-memory-prompt';
 import { agentMemoryContextService } from './agent-memory-context-service';
@@ -17,6 +17,8 @@ export type MainChatSendInput = EngineSendParams & {
     skipRead?: boolean;
     skipWrite?: boolean;
   };
+  /** 定时任务等：真实挂载的本地文件（透传到 sendMessageWithMedia） */
+  media?: EngineSendWithMediaParams['media'];
 };
 
 export function runMainChatSend(

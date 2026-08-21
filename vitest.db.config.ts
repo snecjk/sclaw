@@ -17,6 +17,7 @@ export default defineConfig({
     include: [
       'tests/db/**/*.test.ts',
       'tests/unit/sqlite-migrator-legacy-session-catalog.test.ts',
+      'tests/unit/sqlite-migrator-channel-sto-mobile.test.ts',
     ],
   },
 });

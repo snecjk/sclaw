@@ -53,16 +53,31 @@ describe('buildClaudeRuntimeOptions', () => {
 
     expect(runtime.systemPromptAppend).toContain(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT);
     expect(runtime.mcpServers?.['claude-scheduled-task-tool']).toBeDefined();
+    expect(runtime.mcpServers?.['sto-browser-tool']).toBeDefined();
+    expect(runtime.systemPromptAppend).toContain('bridge_click');
+  });
+
+  it('registers embed bridge prompt for app plaza embed sessions', async () => {
+    readDingTalkMentionPending.mockResolvedValue(null);
+
+    const runtime = await buildClaudeRuntimeOptions('agent:main:session-embed-app-tb--x');
+
+    expect(runtime.mcpServers?.['sto-browser-tool']).toBeDefined();
+    expect(runtime.systemPromptAppend).toContain('不要调用 ba_*');
   });
 
   it('uses the Chinese Claude scheduled-task management policy', () => {
     expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('Claude 本地定时任务工具使用规则');
     expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【意图分流】');
     expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【时间规则】');
-    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【任务指令与钉钉收件人】');
-    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('当前更新工具不支持修改 recipients');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('0 9 * * *;30 15 * * *');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('0 9 L * *');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('【任务指令与结构化字段');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('当前更新工具暂不支持改 recipients');
     expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).toContain('`dws chat message send` 是普通钉钉消息发送');
     expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).not.toContain('Claude scheduled task tools:');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).not.toContain('【仅创建、当前会话不执行】');
+    expect(CLAUDE_SCHEDULED_TASK_SYSTEM_PROMPT).not.toContain('当前会话不要执行');
   });
 
   it('injects oral send guard for ordinary chat without pending mentions', async () => {
@@ -104,7 +119,10 @@ describe('buildClaudeRuntimeOptions', () => {
   it('blocks Bash batch sends and rate-limits only after a success', async () => {
     readDingTalkMentionPending.mockResolvedValue(null);
 
-    const runtime = await buildClaudeRuntimeOptions('sess-guard');
+    const { buildStoDingTalkSendGuardClaudeRuntimeOptions } = await import(
+      '../../sto-plugin/claude/sto-dingtalk-send-guard/sdk/runtime-options'
+    );
+    const runtime = await buildStoDingTalkSendGuardClaudeRuntimeOptions('sess-guard');
     const preTool = runtime.hooks?.PreToolUse?.[0]?.hooks[0] as HookCallback;
     const postTool = runtime.hooks?.PostToolUse?.[0]?.hooks[0] as HookCallback;
 
@@ -140,15 +158,14 @@ describe('buildClaudeRuntimeOptions', () => {
       tool_use_id: 'tool-1',
     }, 'tool-1', { signal: new AbortController().signal });
 
-    expect(firstAllowed?.hookSpecificOutput).toMatchObject({
-      hookEventName: 'PreToolUse',
-      updatedInput: {
-        command: expect.stringContaining('dws chat message send --user u1'),
-      },
-    });
-    expect(firstAllowed?.hookSpecificOutput?.updatedInput?.command).toContain('--text');
+    expect(firstAllowed?.hookSpecificOutput?.permissionDecision).not.toBe('deny');
+    const rewritten = firstAllowed?.hookSpecificOutput?.updatedInput?.command;
+    expect(typeof rewritten).toBe('string');
+    expect(rewritten).toMatch(/dws(?:\.exe)?\s+chat\s+message\s+send\b/i);
+    expect(rewritten).toContain('--user');
+    expect(rewritten).toContain('--text');
 
-    await postTool({
+    await postTool!({
       hook_event_name: 'PostToolUse',
       session_id: 'sdk-session-1',
       transcript_path: 'transcript.jsonl',

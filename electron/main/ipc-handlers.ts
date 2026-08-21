@@ -2216,6 +2216,18 @@ function registerWindowHandlers(): void {
   ipcMain.handle('window:isFullScreen', (event) => {
     return BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false;
   });
+
+  ipcMain.handle('window:setMinimumSize', (event, size?: { width?: number; height?: number }) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    const minWidth = Math.max(960, Math.round(Number(size?.width) || 960));
+    const minHeight = Math.max(640, Math.round(Number(size?.height) || 640));
+    win.setMinimumSize(minWidth, minHeight);
+    const [width, height] = win.getSize();
+    if (width < minWidth || height < minHeight) {
+      win.setSize(Math.max(width, minWidth), Math.max(height, minHeight));
+    }
+  });
 }
 
 /**

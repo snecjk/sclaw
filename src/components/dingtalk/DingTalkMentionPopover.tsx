@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronRight, Info, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getHostApiBase } from '@/lib/host-api';
@@ -128,7 +129,26 @@ interface DingTalkMentionPopoverProps {
   onLogin?: () => void;
   onInstall?: () => void;
   onLoadMore?: () => void;
+  /**
+   * 锚定元素：有则 portal 到 document.body + fixed 定位，避免被 Modal / 输入壳
+   * overflow 裁切（问题一）。无则退回 absolute 定位保持兼容（如 DingTalkRecipientField）。
+   */
+  anchorRef?: RefObject<HTMLElement | null>;
 }
+
+/** 向上空间不足时翻转向下的阈值（px） */
+const MENTION_POPOVER_MIN_UPWARD_HEIGHT = 240;
+/** 浮层宽度 */
+const MENTION_POPOVER_WIDTH = 320;
+/** 浮层最大高度上限（含标题/鉴权/列表） */
+const MENTION_POPOVER_MAX_HEIGHT = 400;
+
+type PopoverPosition = {
+  left: number;
+  top?: number;
+  bottom?: number;
+  maxHeight: number;
+};
 
 export function DingTalkMentionPopover({
   open,
@@ -149,11 +169,13 @@ export function DingTalkMentionPopover({
   onLogin,
   onInstall,
   onLoadMore,
+  anchorRef,
 }: DingTalkMentionPopoverProps) {
   const { t } = useTranslation('chat');
   const loadMoreLockRef = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   const listContentRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<PopoverPosition | null>(null);
 
   useEffect(() => {
     if (!open || items.length === 0) return;
@@ -162,6 +184,47 @@ export function DingTalkMentionPopover({
     const activeEl = container.querySelector<HTMLElement>(`[data-mention-index="${activeIndex}"]`);
     activeEl?.scrollIntoView({ block: 'nearest' });
   }, [activeIndex, open, items.length]);
+
+  // portal 定位：锚定 anchorRef 的视口矩形，向上弹出为主，向上空间不足时翻转向下。
+  // 监听 scroll（capture）/ resize 更新坐标，跟随 Modal 滚动。
+  useLayoutEffect(() => {
+    if (!open || !anchorRef?.current) {
+      setPosition(null);
+      return;
+    }
+    const updatePosition = () => {
+      const rect = anchorRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.min(MENTION_POPOVER_WIDTH, window.innerWidth - 24);
+      const left = Math.min(
+        Math.max(12, rect.left),
+        window.innerWidth - width - 12,
+      );
+      const upwardSpace = rect.top;
+      const downwardSpace = window.innerHeight - rect.bottom;
+      const flipDown = upwardSpace < MENTION_POPOVER_MIN_UPWARD_HEIGHT;
+      if (flipDown) {
+        const maxHeight = Math.max(
+          160,
+          Math.min(downwardSpace - 16, MENTION_POPOVER_MAX_HEIGHT),
+        );
+        setPosition({ left, top: rect.bottom + 8, maxHeight });
+      } else {
+        const maxHeight = Math.max(
+          160,
+          Math.min(upwardSpace - 16, MENTION_POPOVER_MAX_HEIGHT),
+        );
+        setPosition({ left, bottom: window.innerHeight - rect.top + 8, maxHeight });
+      }
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [open, anchorRef]);
 
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     if (!recent || !hasMore || loading || loadingMore || !onLoadMore) return;
@@ -186,8 +249,23 @@ export function DingTalkMentionPopover({
       ? t('composer.dingtalkSearchTitle')
       : t('composer.dingtalkMentionTitle');
 
-  return (
-    <div className="absolute left-0 bottom-full z-50 mb-2 w-[320px] overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-2 shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-border dark:bg-popover dark:shadow-[0_8px_24px_rgba(0,0,0,0.45)]">
+  const panel = (
+    <div
+      className="left-0 bottom-full z-50 mb-2 w-[320px] overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-2 shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-border dark:bg-popover dark:shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
+      style={
+        anchorRef && position
+          ? {
+              position: 'fixed',
+              left: position.left,
+              top: position.top,
+              bottom: position.bottom,
+              maxHeight: position.maxHeight,
+              overflowY: 'auto',
+              zIndex: 60000,
+            }
+          : undefined
+      }
+    >
       <div className="px-2 py-1 text-[12px] font-medium leading-5 text-[#86909C] dark:text-muted-foreground">
         {title}
       </div>
@@ -299,4 +377,6 @@ export function DingTalkMentionPopover({
       )}
     </div>
   );
+
+  return anchorRef ? createPortal(panel, document.body) : panel;
 }

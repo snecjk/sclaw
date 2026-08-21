@@ -3,6 +3,7 @@
  * Home tab is fixed; browser tabs support live/suspended/blank with a 5-live cap.
  */
 import { create } from 'zustand';
+import { useChatStore } from '@/stores/chat';
 import {
   activateSclawBrowserEmbedChat,
   createSclawBrowserEmbedChatSession,
@@ -115,6 +116,8 @@ interface AppPlazaShellState {
   toggleChatPanel: (tabId?: string) => void;
   openChatPanel: (tabId?: string) => void;
   closeChatPanel: (tabId?: string) => void;
+  /** Re-activate embed chat when the panel is open but global session drifted. */
+  ensureEmbedChatActive: (tabId?: string) => void;
   setChatSplitPercent: (percent: number, tabId?: string) => void;
   refreshChatSessions: (tabId?: string) => void;
   createChatSession: (tabId?: string) => void;
@@ -148,6 +151,47 @@ function createBlankTab(): AppPlazaBrowserTab {
 
 function countLive(tabs: AppPlazaBrowserTab[]): number {
   return tabs.filter((t) => t.status === 'live').length;
+}
+
+/** Release embed chat session back to the main sidebar without closing the panel. */
+function pauseEmbedChatForTab(tab: AppPlazaBrowserTab | undefined): void {
+  if (!tab?.chatPanelOpen || tab.status !== 'live') return;
+  deactivateSclawBrowserEmbedChat(tab.chatSessionKey, tab.savedMainSessionKey);
+}
+
+/** Re-bind chat store to an open embed panel after route/tab changes. */
+function ensureEmbedChatActiveForTab(tab: AppPlazaBrowserTab | undefined): void {
+  if (
+    !tab?.chatPanelOpen
+    || tab.status !== 'live'
+    || !tab.embedRuntimeId
+    || !tab.appId
+    || !tab.chatSessionKey
+  ) {
+    return;
+  }
+  if (useChatStore.getState().currentSessionKey === tab.chatSessionKey) {
+    return;
+  }
+  void ensureSclawBrowserBridge(tab.embedRuntimeId);
+  switchSclawBrowserEmbedChatSession(
+    tab.appId,
+    tab.embedRuntimeId,
+    tab.chatSessionKey,
+    tab.savedMainSessionKey,
+  );
+}
+
+function syncActiveTabEmbedChat(
+  previousActiveTabId: string,
+  nextActiveTabId: string,
+  tabs: AppPlazaBrowserTab[],
+): void {
+  if (previousActiveTabId === nextActiveTabId) return;
+  const previous = tabs.find((t) => t.id === previousActiveTabId);
+  const next = tabs.find((t) => t.id === nextActiveTabId);
+  pauseEmbedChatForTab(previous);
+  ensureEmbedChatActiveForTab(next);
 }
 
 /**
@@ -305,11 +349,30 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
   activeTabId: APP_PLAZA_HOME_TAB_ID,
   browserTabs: [],
 
-  setRouteActive: (active) => set({ routeActive: active }),
+  setRouteActive: (active) => {
+    const state = get();
+    if (active === state.routeActive) return;
+
+    if (!active) {
+      for (const tab of state.browserTabs) {
+        pauseEmbedChatForTab(tab);
+      }
+    }
+    set({ routeActive: active });
+    if (active) {
+      const activeTab = get().browserTabs.find((t) => t.id === get().activeTabId);
+      ensureEmbedChatActiveForTab(activeTab);
+    }
+  },
 
   selectTab: (tabId) => {
     const state = get();
+    const previousActiveTabId = state.activeTabId;
     if (tabId === APP_PLAZA_HOME_TAB_ID) {
+      if (state.routeActive) {
+        const previous = state.browserTabs.find((t) => t.id === previousActiveTabId);
+        pauseEmbedChatForTab(previous);
+      }
       set({ activeTabId: APP_PLAZA_HOME_TAB_ID });
       return;
     }
@@ -356,12 +419,16 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
       return;
     }
 
+    const nextBrowserTabs = state.browserTabs.map((t) =>
+      t.id === tabId ? { ...t, lastActiveAt: Date.now() } : t,
+    );
     set({
       activeTabId: tabId,
-      browserTabs: state.browserTabs.map((t) =>
-        t.id === tabId ? { ...t, lastActiveAt: Date.now() } : t,
-      ),
+      browserTabs: nextBrowserTabs,
     });
+    if (get().routeActive) {
+      syncActiveTabEmbedChat(previousActiveTabId, tabId, nextBrowserTabs);
+    }
   },
 
   addBlankTab: () => {
@@ -707,6 +774,13 @@ export const useAppPlazaShellStore = create<AppPlazaShellState>((set, get) => ({
           : t,
       ),
     }));
+  },
+
+  ensureEmbedChatActive: (tabId) => {
+    if (!get().routeActive) return;
+    const id = tabId ?? get().activeTabId;
+    const tab = get().browserTabs.find((t) => t.id === id);
+    ensureEmbedChatActiveForTab(tab);
   },
 
   closeChatPanel: (tabId) => {

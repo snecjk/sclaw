@@ -24,13 +24,14 @@ vi.mock('@/stores/chat/dispatch-chat-request', () => ({ dispatchChatRequest: vi.
 
 import { dispatchChatRequest } from '@/stores/chat/dispatch-chat-request';
 import { prepareSendContext } from '@/stores/chat/prepare-send-context';
+import { insertOptimisticUserTurn } from '@/stores/chat/optimistic-turn';
 import { createSendActions } from '@/stores/chat/send-actions';
 import { clearSendAttemptLocksForTests } from '@/stores/chat/send-attempt-lock';
 import { useGatewayStore } from '@/stores/gateway';
 import { createClientSessionState } from '@/stores/chat/client-session-reducer';
 import { useChatRuntimeV2Store } from '@/stores/chat/runtime-v2-store';
 
-function createHarness() {
+function createHarness(normalize?: (args: unknown[]) => { text: string } & Record<string, unknown>) {
   let state = {
     ...initialChatDataState,
     newSession: vi.fn(),
@@ -40,7 +41,12 @@ function createHarness() {
     state = { ...state, ...(typeof partial === 'function' ? partial(state) : partial) };
   };
   const actions = createSendActions(set, get, {
-    normalizeSendMessageOptions: () => ({ text: 'hello' }),
+    normalizeSendMessageOptions: (args) => {
+      if (normalize) return normalize(args) as ReturnType<typeof normalize>;
+      const [first] = args;
+      if (first && typeof first === 'object') return first as { text: string };
+      return { text: 'hello' };
+    },
     resolveMainSessionKeyForAgent: () => null,
     buildSessionSwitchPatch: () => ({}),
     resolveEngineTypeForSession: () => 'openclaw',
@@ -53,6 +59,11 @@ describe('chat send action acceptance state', () => {
     clearSendAttemptLocksForTests();
     useChatRuntimeV2Store.setState({ sessionsByKey: {}, initialized: true });
     vi.mocked(dispatchChatRequest).mockReset();
+    vi.mocked(insertOptimisticUserTurn).mockReset().mockReturnValue({
+      id: 'message-1',
+      role: 'user',
+      content: 'hello',
+    } as ReturnType<typeof insertOptimisticUserTurn>);
     vi.mocked(prepareSendContext).mockReset().mockImplementation(async ({ trimmedText }) => ({
       displayText: trimmedText,
       messageWithContext: trimmedText,
@@ -148,5 +159,36 @@ describe('chat send action acceptance state', () => {
     expect(hydrate).toHaveBeenCalledWith('agent:main:main');
     hydrate.mockRestore();
     rpc.mockRestore();
+  });
+
+  it('allows workflow-only sends with empty display text', async () => {
+    vi.mocked(dispatchChatRequest).mockResolvedValue({ success: true, result: { runId: 'run-wf' } });
+    const { actions } = createHarness();
+    const gatewayText = '帮我执行 id 为：wf-1 的工作流 【日报】';
+
+    await actions.sendMessage({
+      text: '',
+      gatewayText,
+      workflows: [{ id: 'wf-1', name: '日报', source: 'mine' }],
+      composerSegments: [{ type: 'workflow', id: 'wf-1', name: '日报', source: 'mine' }],
+    });
+
+    expect(insertOptimisticUserTurn).toHaveBeenCalled();
+    expect(prepareSendContext).toHaveBeenCalledWith(expect.objectContaining({
+      trimmedText: gatewayText,
+    }));
+    expect(dispatchChatRequest).toHaveBeenCalledWith(expect.objectContaining({
+      message: gatewayText,
+      sourceText: '日报',
+    }));
+  });
+
+  it('still rejects completely empty sends', async () => {
+    const { actions } = createHarness();
+
+    await actions.sendMessage({ text: '   ' });
+
+    expect(insertOptimisticUserTurn).not.toHaveBeenCalled();
+    expect(dispatchChatRequest).not.toHaveBeenCalled();
   });
 });

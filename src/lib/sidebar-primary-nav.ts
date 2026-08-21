@@ -14,12 +14,12 @@ const SIDEBAR_PRIMARY_NAV_ROUTE_MATCHERS: ReadonlyArray<{ path: string; end?: bo
   { path: '/more-apps' },
   { path: '/models' },
   { path: '/data-center' },
+  { path: '/learning-center' },
 ];
 
 export interface SidebarPrimaryNavVisibilityOptions {
   primaryMyData: boolean;
-  siteDepartmentTypesLoaded: boolean;
-  isSite: boolean;
+  learningCenterVisible: boolean;
   isProduction: boolean;
 }
 
@@ -29,6 +29,7 @@ export function isSidebarPrimaryNavItemVisible(
   options: SidebarPrimaryNavVisibilityOptions,
 ): boolean {
   if (path === '/models' && !options.primaryMyData) return false;
+  if (path === '/learning-center' && !options.learningCenterVisible) return false;
   if ((path === '/scheduled-tasks' || path === '/cron') && options.isProduction) return false;
   return true;
 }

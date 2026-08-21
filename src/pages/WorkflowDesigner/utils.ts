@@ -7,6 +7,7 @@ import type {
   WorkflowEdge,
   WorkflowNode,
 } from '@/pages/WorkflowDesigner/types';
+import { WORKFLOW_AGENT_NO_PROGRESS_TIMEOUT_MS } from '../../../shared/workflow-agent-timeouts';
 
 const ALL_TEMPLATES = NODE_TEMPLATES;
 export function createEmptyWorkflowDefinition(name: string): WorkflowDefinition {
@@ -143,7 +144,7 @@ function buildSmartAgentConfig(type: string): Record<string, unknown> {
         approvalMode: 'approval_required',
         allowedSkills: [],
         allowedTools: [],
-        timeoutMs: 300_000,
+        timeoutMs: WORKFLOW_AGENT_NO_PROGRESS_TIMEOUT_MS,
         maxToolCalls: 20,
       },
     },
@@ -208,7 +209,7 @@ export function defaultNodeConfig(
         approvalMode: 'approval_required',
         allowedSkills: [],
         allowedTools: [],
-        timeoutMs: 300_000,
+        timeoutMs: WORKFLOW_AGENT_NO_PROGRESS_TIMEOUT_MS,
         maxToolCalls: 20,
       },
       goal: '描述这个节点要完成的业务目标',

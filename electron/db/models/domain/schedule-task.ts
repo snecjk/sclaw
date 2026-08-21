@@ -16,6 +16,8 @@ export type ScheduleTaskRunStatus =
 
 export type ScheduleTaskTriggerSource = 'manual' | 'schedule' | 'recovery';
 
+export type ScheduleTaskSyncStatus = 'pending' | 'done';
+
 export interface ScheduleTaskRetryPolicy {
   maxAttempts: number;
   backoffSec: number;
@@ -66,7 +68,8 @@ export interface ScheduleTask {
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
-  version: number;
+  syncStatus: ScheduleTaskSyncStatus;
+  remoteVersion: number | null;
   createdBy: string | null;
   updatedBy: string | null;
 }

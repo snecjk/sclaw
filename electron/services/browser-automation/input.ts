@@ -3,9 +3,11 @@ import type {
   BrowserAutomationActPayload,
   BrowserAutomationActResult,
 } from '../../../shared/browser-automation/types';
+import {
+  buildObserveScript,
+} from '../../../shared/browser-automation/observe-script';
 import { BROWSER_AUTOMATION_MAX_ELEMENTS } from '../../../shared/browser-automation/types';
-import { buildObserveScript } from '../../../shared/browser-automation/observe-script';
-import type { BrowserAutomationCdpSession } from './cdp-session';
+import { BrowserAutomationCdpSession } from './cdp-session';
 
 interface ResolvedInputTarget {
   found: boolean;
