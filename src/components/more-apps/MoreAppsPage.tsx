@@ -45,6 +45,7 @@ import { useAppDevPermission } from '@/hooks/use-app-dev-permission';
 const HERO_CAROUSEL_INTERVAL = 5000;
 /** 空 systemCode（无法换免登）或 sto-policy 需二次登录确认后再打开 */
 const STO_POLICY_SYSTEM_CODE = 'sto-policy';
+type DevAppTypeFilter = 'all' | 'site' | 'assets';
 
 export function MoreAppsPage() {
   const { t } = useTranslation('common');
@@ -92,6 +93,7 @@ export function MoreAppsPage() {
   const [importingApp, setImportingApp] = useState(false);
   const [pendingStoPolicyApp, setPendingStoPolicyApp] = useState<AppItem | null>(null);
   const [failedBannerImages, setFailedBannerImages] = useState<string[]>([]);
+  const [devAppTypeFilter, setDevAppTypeFilter] = useState<DevAppTypeFilter>('all');
   const heroTimerRef = useRef<NodeJS.Timeout | null>(null);
   // Skip the search-debounce effect's first run on mount — the mount effect
   // already fetches the first APP page, so we don't double-fire on initial render.
@@ -128,6 +130,11 @@ export function MoreAppsPage() {
         || app.projectType.toLowerCase().includes(q),
     );
   }, [devApps, searchQuery]);
+
+  const visibleDevApps = useMemo(() => {
+    if (devAppTypeFilter === 'all') return filteredDevApps;
+    return filteredDevApps.filter((app) => (app.pageType ?? 'site') === devAppTypeFilter);
+  }, [devAppTypeFilter, filteredDevApps]);
 
   const handleImportApp = useCallback(async () => {
     if (!canUseAppDev || importingApp) return;
@@ -726,28 +733,46 @@ export function MoreAppsPage() {
 
   // ── Dev Apps Tab View ────────────────────────────────────────
   const renderDevAppsView = () => {
-    if (filteredDevApps.length === 0) {
-      return (
-        <div className="more-apps-main">
-          <div className="more-apps-empty">
-            {searchQuery
-              ? t('moreApps.emptySearch', { defaultValue: '未找到匹配的应用，试试其他关键词' })
-              : t('moreApps.emptyDevApps', { defaultValue: '还没有开发中的应用，点击右上角「创建应用」或「导入应用」开始' })}
-          </div>
-        </div>
-      );
-    }
+    const emptyMessage = searchQuery
+      ? t('moreApps.emptySearch', { defaultValue: '未找到匹配的应用，试试其他关键词' })
+      : devAppTypeFilter === 'site'
+        ? '暂无 Site 应用'
+        : devAppTypeFilter === 'assets'
+          ? '暂无 Assets 应用'
+          : t('moreApps.emptyDevApps', { defaultValue: '还没有开发中的应用，点击右上角「创建应用」或「导入应用」开始' });
 
     return (
       <div className="more-apps-main">
-        <div className="more-apps-grid">
-          {filteredDevApps.map((app) => (
-            <DevAppCard
-              key={app.workspaceId || app.applicationId || `${app.name}:${app.appPath}`}
-              app={app}
-            />
+        <div className="mb-4 flex items-center gap-1" aria-label="开发应用类型筛选">
+          {([['all', '全部'], ['site', 'Site'], ['assets', 'Assets']] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={devAppTypeFilter === value}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-xs transition-colors',
+                devAppTypeFilter === value
+                  ? 'bg-foreground text-background'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+              onClick={() => setDevAppTypeFilter(value)}
+            >
+              {label}
+            </button>
           ))}
         </div>
+        {visibleDevApps.length === 0 ? (
+          <div className="more-apps-empty">{emptyMessage}</div>
+        ) : (
+          <div className="more-apps-grid">
+            {visibleDevApps.map((app) => (
+              <DevAppCard
+                key={app.workspaceId || app.applicationId || `${app.name}:${app.appPath}`}
+                app={app}
+              />
+            ))}
+          </div>
+        )}
       </div>
     );
   };
