@@ -49,17 +49,15 @@ import {
   upsertStoAppBinding,
 } from './sto-app-binding-store';
 import { writeStoWorkspaceBinding } from './sto-workspace-store';
-import type { CodeApplicationRecord } from '../../shared/code-application-catalog';
+import {
+  normalizeCodeApplicationPageType,
+  type CodeApplicationPageType,
+  type CodeApplicationRecord,
+} from '../../shared/code-application-catalog';
 import {
   STO_WORKSPACE_RELATIVE,
   codeApplicationToWorkspaceFields,
 } from '../../shared/sto-workspace';
-
-type CodeApplicationPageType = 'site' | 'assets';
-
-function normalizeCodeApplicationPageType(value: unknown): CodeApplicationPageType {
-  return value === 'assets' ? 'assets' : 'site';
-}
 
 /** Remote React A2UI template (OSS). Dev prefers repo checkout; packaged uses OSS cache. */
 const REACT_TEMPLATE_ZIP_URL =
@@ -92,6 +90,7 @@ export interface AppDevMarker {
   createdAt: string;
   /** `imported` = local folder import; `created` = 新建站 / clone from cloud. */
   source?: AppDevSource;
+  pageType?: CodeApplicationPageType;
 }
 
 export interface DevAppSummary {
@@ -113,6 +112,7 @@ export interface DevAppSummary {
   listError?: string;
   source?: AppDevSource;
   gitRepo?: boolean;
+  pageType: CodeApplicationPageType;
 }
 
 export function appDevMarkerPath(appPath: string): string {
@@ -136,21 +136,24 @@ async function readAppDevMarkerFields(appPath: string): Promise<{
   createdAt: string;
   name?: string;
   source?: AppDevSource;
+  pageType: CodeApplicationPageType;
 }> {
   let projectType = 'frontend';
   let createdAt = '';
   let name: string | undefined;
   let source: AppDevSource | undefined;
+  let pageType: CodeApplicationPageType = 'site';
   try {
     const raw = JSON.parse(await readFile(appDevMarkerPath(appPath), 'utf8')) as Partial<AppDevMarker>;
     if (typeof raw.projectType === 'string' && raw.projectType.trim()) projectType = raw.projectType.trim();
     if (typeof raw.createdAt === 'string' && raw.createdAt.trim()) createdAt = raw.createdAt;
     if (typeof raw.name === 'string' && raw.name.trim()) name = raw.name.trim();
     if (raw.source === 'created' || raw.source === 'imported') source = raw.source;
+    pageType = normalizeCodeApplicationPageType(raw.pageType);
   } catch {
     // ignore
   }
-  return { projectType, createdAt, name, source };
+  return { projectType, createdAt, name, source, pageType };
 }
 
 /** Local marker workspaces that are not already represented by a cloud list row. */
@@ -181,6 +184,7 @@ export async function listLocalOnlyDevApps(input: {
       availability: 'local',
       source: fields.source ?? 'imported',
       gitRepo: hasGitRepo(resolvedRoot),
+      pageType: fields.pageType,
     });
   }
   return apps;
@@ -251,7 +255,7 @@ function buildAppDevAgentsContextBlock(vars: { name: string }): string {
 
 async function writeAppDevBootstrap(
   appPath: string,
-  vars: { name: string; projectType: string; source?: AppDevSource },
+  vars: { name: string; projectType: string; source?: AppDevSource; pageType?: CodeApplicationPageType },
 ): Promise<void> {
   const sclawDir = join(appPath, '.sclaw');
   await mkdir(sclawDir, { recursive: true });
@@ -262,6 +266,7 @@ async function writeAppDevBootstrap(
     projectType: vars.projectType,
     createdAt: new Date().toISOString(),
     source: vars.source,
+    pageType: vars.pageType,
   };
   // Preserve original createdAt / source when re-ensuring.
   if (existsSync(appDevMarkerPath(appPath))) {
@@ -270,6 +275,9 @@ async function writeAppDevBootstrap(
       if (typeof existing.createdAt === 'string') marker.createdAt = existing.createdAt;
       if (!marker.source && (existing.source === 'created' || existing.source === 'imported')) {
         marker.source = existing.source;
+      }
+      if (!marker.pageType && existing.pageType) {
+        marker.pageType = normalizeCodeApplicationPageType(existing.pageType);
       }
     } catch {
       // ignore
@@ -600,6 +608,7 @@ export interface CreateUserAppResult {
 export async function createUserApp(input: CreateUserAppInput): Promise<CreateUserAppResult> {
   const name = input.name.trim();
   if (!name) throw new Error('应用名称不能为空');
+  const pageType = normalizeCodeApplicationPageType(input.pageType);
 
   const parentDir = (input.parentDir?.trim() || DEFAULT_APPS_PARENT_DIR);
   const appPath = join(parentDir, name);
@@ -631,13 +640,14 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
     name,
     projectType: input.projectType ?? 'frontend',
     source: 'created',
+    pageType,
   });
 
   let createdApplicationId: string | undefined;
   const created = await createCodeApplication({
     applicationName: name,
     description: `${name} 应用`,
-    pageType: normalizeCodeApplicationPageType(input.pageType),
+    pageType,
   });
   const active = created.status?.trim().toUpperCase() === 'ACTIVE'
     ? created
@@ -824,6 +834,16 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
     }
     if (pathOk && markerOk && workspaceId) {
       const fields = await readAppDevMarkerFields(localPath);
+      const fields = await readAppDevMarkerFields(localPath);
+      if (fields.pageType !== cloud.pageType) {
+        try {
+          const raw = JSON.parse(await readFile(appDevMarkerPath(localPath), 'utf8')) as Partial<AppDevMarker>;
+          raw.pageType = cloud.pageType;
+          await writeFile(appDevMarkerPath(localPath), `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
+        } catch {
+          // ignore
+        }
+      }
       const ws = workspaceById.get(workspaceId);
       apps.push({
         workspaceId,
@@ -839,6 +859,7 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
         devopsApplicationId: cloud.devopsApplicationId,
         source: fields.source ?? 'created',
         gitRepo: hasGitRepo(localPath),
+        pageType: cloud.pageType ?? fields.pageType,
       });
       continue;
     }
@@ -855,6 +876,7 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
         previewUrl: cloud.previewUrl,
         gitlabProjectId: cloud.gitlabProjectId,
         devopsApplicationId: cloud.devopsApplicationId,
+        pageType: cloud.pageType,
       });
     }
 
@@ -1023,6 +1045,7 @@ export async function cloneDevApp(input: {
     name,
     projectType: 'frontend',
     source: 'created',
+    pageType: cloud?.pageType,
   });
 
   try {

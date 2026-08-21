@@ -1,10 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import {
   applicationCodeFromName,
+  normalizeCodeApplication,
+  normalizeCodeApplicationPageType,
   parseCodeApplicationDetail,
   parseCodeApplicationList,
   parsePolicyApiError,
 } from '../../shared/code-application-catalog';
+
+describe('code application pageType', () => {
+  it.each([
+    ['site', 'site'],
+    ['assets', 'assets'],
+    [undefined, 'site'],
+    ['unknown', 'site'],
+  ])('normalizes %j to %s', (raw, expected) => {
+    expect(normalizeCodeApplicationPageType(raw)).toBe(expected);
+  });
+
+  it('keeps pageType from a cloud application record', () => {
+    expect(normalizeCodeApplication({
+      applicationId: 'app-assets',
+      applicationName: 'Assets App',
+      pageType: 'assets',
+    })).toMatchObject({ pageType: 'assets' });
+  });
+});
 
 describe('parseCodeApplicationList', () => {
   it('reads applicationId and applicationName from data array', () => {
@@ -38,6 +59,7 @@ describe('parseCodeApplicationList', () => {
         developmentBranch: undefined,
         gitlabProjectId: undefined,
         devopsApplicationId: undefined,
+        pageType: 'site',
       },
     ]);
   });

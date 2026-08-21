@@ -3,8 +3,8 @@
  * All calls go through host-api — never direct IPC / Gateway.
  */
 import { hostApiFetch, type HostApiFetchInit } from '@/lib/host-api';
-
-export type CodeApplicationPageType = 'site' | 'assets';
+import type { CodeApplicationPageType } from '../../shared/code-application-catalog';
+export type { CodeApplicationPageType } from '../../shared/code-application-catalog';
 
 /** sai-cli / 建站长耗时接口：不走 Host API 默认 15s 超时 */
 const APP_DEV_LONG_RUNNING: Pick<HostApiFetchInit, 'disableTimeout'> = {
@@ -61,6 +61,7 @@ export interface DevAppSummary {
   source?: 'created' | 'imported';
   /** Whether the app folder already has a `.git` directory. */
   gitRepo?: boolean;
+  pageType: CodeApplicationPageType;
 }
 
 export async function getAppDevEnvironment(): Promise<AppDevEnvironment> {
