@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { AssetsPublishSuccess } from '../../src/components/app-dev/AssetsPublishSuccess';
 import { SitePublishSuccess } from '../../src/components/app-dev/SitePublishSuccess';
+import { StoAppDeployControl } from '../../src/components/app-dev/StoAppDeployControl';
 
 describe('typed publish success views', () => {
   it('shows a Site fixed domain without exposing an OSS URL', () => {
@@ -35,5 +36,72 @@ describe('typed publish success views', () => {
   it('shows the Assets missing-data message', () => {
     render(<AssetsPublishSuccess onCopy={vi.fn()} />);
     expect(screen.getByText('发布成功，产物信息暂未返回')).toBeInTheDocument();
+  });
+});
+
+describe('StoAppDeployControl typed success presentation', () => {
+  const commonProps = {
+    canDeploy: true,
+    onOpenDialog: vi.fn(),
+    onClearTerminalJob: vi.fn(),
+  };
+
+  it('shows only the fixed URL for a Site success', () => {
+    render(<StoAppDeployControl
+      {...commonProps}
+      pageType="site"
+      job={{
+        phase: 'success',
+        label: '发布成功',
+        startedAt: 1,
+        fields: {
+          status: 'SUCCESS',
+          resourcePages: [{
+            url: 'https://site.example.cn',
+            artifactUrl: 'https://oss.example.cn/site.zip',
+          }],
+        },
+      }}
+    />);
+    fireEvent.click(screen.getByRole('button', { name: '发布成功' }));
+    expect(screen.getByText('https://site.example.cn')).toBeInTheDocument();
+    expect(screen.queryByText('https://oss.example.cn/site.zip')).not.toBeInTheDocument();
+  });
+
+  it('shows version and artifact URL for an Assets success', () => {
+    render(<StoAppDeployControl
+      {...commonProps}
+      pageType="assets"
+      job={{
+        phase: 'success',
+        label: '发布成功',
+        startedAt: 1,
+        fields: {
+          status: 'SUCCESS',
+          deploymentVersion: '1.4.0',
+          resourcePages: [{ artifactUrl: 'https://oss.example.cn/assets/1.4.0/' }],
+        },
+      }}
+    />);
+    fireEvent.click(screen.getByRole('button', { name: '发布成功' }));
+    expect(screen.getByText('1.4.0')).toBeInTheDocument();
+    expect(screen.getByText('https://oss.example.cn/assets/1.4.0/')).toBeInTheDocument();
+  });
+
+  it.each(['site', 'assets'] as const)('keeps %s failure presentation shared', (pageType) => {
+    render(<StoAppDeployControl
+      {...commonProps}
+      pageType={pageType}
+      onFillComposer={vi.fn()}
+      job={{
+        phase: 'failed',
+        label: '发布失败',
+        startedAt: 1,
+        fields: { status: 'FAILED', failureMessage: '构建失败' },
+      }}
+    />);
+    fireEvent.click(screen.getByRole('button', { name: '发布失败' }));
+    expect(screen.getByText('失败原因')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '填入 AI 会话' })).toBeInTheDocument();
   });
 });
