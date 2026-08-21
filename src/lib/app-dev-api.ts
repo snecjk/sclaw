@@ -4,6 +4,8 @@
  */
 import { hostApiFetch, type HostApiFetchInit } from '@/lib/host-api';
 
+export type CodeApplicationPageType = 'site' | 'assets';
+
 /** sai-cli / 建站长耗时接口：不走 Host API 默认 15s 超时 */
 const APP_DEV_LONG_RUNNING: Pick<HostApiFetchInit, 'disableTimeout'> = {
   disableTimeout: true,
@@ -123,6 +125,7 @@ export async function createUserApp(input: {
   name: string;
   parentDir?: string;
   projectType?: string;
+  pageType?: CodeApplicationPageType;
 }): Promise<{ workspaceId: string; appPath: string; workspaceName: string }> {
   return hostApiFetch('/api/app-dev/apps', {
     method: 'POST',

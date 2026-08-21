@@ -55,6 +55,12 @@ import {
   codeApplicationToWorkspaceFields,
 } from '../../shared/sto-workspace';
 
+type CodeApplicationPageType = 'site' | 'assets';
+
+function normalizeCodeApplicationPageType(value: unknown): CodeApplicationPageType {
+  return value === 'assets' ? 'assets' : 'site';
+}
+
 /** Remote React A2UI template (OSS). Dev prefers repo checkout; packaged uses OSS cache. */
 const REACT_TEMPLATE_ZIP_URL =
   'http://ali-sto-tps.oss-cn-shanghai.aliyuncs.com/3EC02BDE-19C8-46-react-a2ui-template.zip';
@@ -581,6 +587,8 @@ export interface CreateUserAppInput {
   parentDir?: string;
   /** 'frontend' | 'fullstack' — same template in MVP (backend placeholder). */
   projectType?: string;
+  /** Cloud application publishing mode. Defaults to site for older clients. */
+  pageType?: CodeApplicationPageType;
 }
 
 export interface CreateUserAppResult {
@@ -629,6 +637,7 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
   const created = await createCodeApplication({
     applicationName: name,
     description: `${name} 应用`,
+    pageType: normalizeCodeApplicationPageType(input.pageType),
   });
   const active = created.status?.trim().toUpperCase() === 'ACTIVE'
     ? created
@@ -1912,5 +1921,3 @@ export async function installAppDevAssistSkill(
 
   return { skillId, targetPath: join('openspec', 'skills', skillId) };
 }
-
-

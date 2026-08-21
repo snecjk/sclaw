@@ -11,7 +11,12 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formFieldFocusClass, modalPrimarySubmitButtonClass } from '@/lib/surfaces';
 import { pickProjectFolder } from '@/lib/session-catalog-api';
-import { createUserApp, getAppDevEnvironment, prepareAppDevEnvironment } from '@/lib/app-dev-api';
+import {
+  createUserApp,
+  getAppDevEnvironment,
+  prepareAppDevEnvironment,
+  type CodeApplicationPageType,
+} from '@/lib/app-dev-api';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
@@ -21,11 +26,9 @@ export interface CreateAppDialogProps {
   onClose: () => void;
 }
 
-type ProjectType = 'frontend' | 'fullstack';
-
 export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
   const [name, setName] = useState('');
-  const [projectType, setProjectType] = useState<ProjectType>('frontend');
+  const [pageType, setPageType] = useState<CodeApplicationPageType>('site');
   const [parentDir, setParentDir] = useState('');
   const [defaultParentDir, setDefaultParentDir] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -36,7 +39,7 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
     if (!open) {
       setName('');
       setParentDir('');
-      setProjectType('frontend');
+      setPageType('site');
       return;
     }
     void prepareAppDevEnvironment().catch(() => undefined);
@@ -76,7 +79,8 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
       const result = await createUserApp({
         name: trimmed,
         parentDir: resolvedParentDir,
-        projectType: projectType === 'fullstack' ? 'frontend' : projectType,
+        projectType: 'frontend',
+        pageType,
       });
       useAppDevCatalogStore.getState().registerWorkspaceId(result.workspaceId);
       await useSessionCatalogStore.getState().refreshWorkspaces().catch(() => undefined);
@@ -91,18 +95,12 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
   };
 
   const typeOptions: Array<{
-    value: ProjectType;
+    value: CodeApplicationPageType;
     label: string;
     hint: string;
-    disabled?: boolean;
   }> = [
-    { value: 'frontend', label: '前端应用', hint: '页面应用，创建后立即可预览' },
-    {
-      value: 'fullstack',
-      label: '前端 + 后端',
-      hint: '后端能力即将开放，会先为你预留目录',
-      disabled: true,
-    },
+    { value: 'site', label: 'Site 应用', hint: '固定域名，发版不需要修改版本号' },
+    { value: 'assets', label: 'Assets 应用', hint: '可以申请自定义域名，发版需要修改版本号' },
   ];
 
   return createPortal(
@@ -134,30 +132,21 @@ export function CreateAppDialog({ open, onClose }: CreateAppDialogProps) {
         <label className="mb-2 block text-sm font-medium text-foreground">应用类型</label>
         <div className="mb-5 grid grid-cols-2 gap-2">
           {typeOptions.map((option) => {
-            const selected = !option.disabled && projectType === option.value;
+            const selected = pageType === option.value;
             return (
               <button
                 key={option.value}
                 type="button"
-                disabled={option.disabled}
-                aria-disabled={option.disabled || undefined}
-                title={option.disabled ? '即将开放' : undefined}
-                onClick={() => {
-                  if (option.disabled) return;
-                  setProjectType(option.value);
-                }}
+                aria-pressed={selected}
+                onClick={() => setPageType(option.value)}
                 className={cn(
                   'rounded-xl border px-3 py-3 text-left transition-colors',
-                  option.disabled && 'cursor-not-allowed border-border/70 bg-muted/30 opacity-50',
-                  !option.disabled && selected && 'border-[var(--sto-brand-6)] bg-[var(--sto-brand-6)]/5',
-                  !option.disabled && !selected && 'border-border bg-muted/40 hover:bg-muted',
+                  selected && 'border-[var(--sto-brand-6)] bg-[var(--sto-brand-6)]/5',
+                  !selected && 'border-border bg-muted/40 hover:bg-muted',
                 )}
               >
                 <span
-                  className={cn(
-                    'block text-sm font-medium',
-                    option.disabled ? 'text-muted-foreground' : 'text-foreground',
-                  )}
+                  className="block text-sm font-medium text-foreground"
                 >
                   {option.label}
                 </span>
