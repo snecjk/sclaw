@@ -248,9 +248,23 @@ export class ScheduleTaskRunRepository {
   }
 
   async cancelAllQueuedRuns(actor?: string | null): Promise<number> {
+    return this.cancelQueuedRunsForTaskIds(null, actor);
+  }
+
+  /**
+   * 取消 queued run。
+   * - `taskIds === null`：全局（迁移/无 owner 启动清扫）
+   * - `taskIds` 为空数组：不取消（切号后避免误伤他人）
+   * - 非空：只清这些 task 的 queued
+   */
+  async cancelQueuedRunsForTaskIds(
+    taskIds: string[] | null,
+    actor?: string | null,
+  ): Promise<number> {
+    if (Array.isArray(taskIds) && taskIds.length === 0) return 0;
     const db = getKyselyDatabase();
     const timestamp = nowIso();
-    const result = await db
+    let query = db
       .updateTable('schedule_task_runs')
       .set({
         status: 'cancelled',
@@ -260,8 +274,11 @@ export class ScheduleTaskRunRepository {
         version: sql<number>`version + 1`,
       })
       .where('status', '=', 'queued')
-      .where('deleted_at', 'is', null)
-      .executeTakeFirst();
+      .where('deleted_at', 'is', null);
+    if (taskIds != null) {
+      query = query.where('task_id', 'in', taskIds);
+    }
+    const result = await query.executeTakeFirst();
     return Number(result.numUpdatedRows ?? 0n);
   }
 

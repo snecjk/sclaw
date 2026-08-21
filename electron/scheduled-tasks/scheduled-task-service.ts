@@ -66,21 +66,51 @@ import {
 
 /**
  * Host API 路由会显式写入 actor（可为 null）；Claude NL 工具等直调 service 时常漏传。
- * - `undefined`：从当前登录态补全梧桐工号
- * - `null` / 非空字符串：尊重调用方（迁移可显式传 null）
+ * - `undefined`：从当前登录态补全梧桐工号（trim）
+ * - `null`：尊重调用方（迁移显式传 null，不回填登录态）
+ * - 非空字符串：trim 后写入；空串视为 null
  */
+function normalizeUserCode(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const code = String(value).trim();
+  return code ? code : null;
+}
+
 async function resolveScheduleTaskActor(
   actor: string | null | undefined,
 ): Promise<string | null> {
-  if (actor !== undefined) return actor;
+  if (actor !== undefined) return normalizeUserCode(actor);
   try {
     const { user } = await getAuthState();
-    const code = user?.code?.trim();
-    return code ? code : null;
+    return normalizeUserCode(user?.code);
   } catch (error) {
     logger.warn('[scheduled-task] resolve actor from auth failed:', error);
     return null;
   }
+}
+
+/** 当前登录工号；未登录返回 null。 */
+async function resolveCurrentUserCode(): Promise<string | null> {
+  try {
+    const { user } = await getAuthState();
+    return normalizeUserCode(user?.code);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 任务是否属于 actor。
+ * - 未登录（actor 空）：一律拒绝（含孤儿行，避免未认证可执行 prompt）
+ * - 已登录 + created_by 空：视为可操作孤儿（操作路径会认领）
+ * - 已登录 + 有归属：必须工号一致（两侧都 trim 比较）
+ */
+function isTaskOwnedBy(task: ScheduleTask, actor: string | null): boolean {
+  const code = normalizeUserCode(actor);
+  if (!code) return false;
+  const owner = normalizeUserCode(task.createdBy);
+  if (!owner) return true;
+  return owner === code;
 }
 /**
  * 引擎无关的定时报表层。在 `ScheduledTaskScheduler`（触发 + claim 单飞）之上，
@@ -192,7 +222,11 @@ export class ScheduledTaskService {
    *
    * 注意：启动期列→segments 迁移不应走本方法，否则会再次剥路径并可能改/删附件。
    */
-  async updateTask(id: string, input: UpdateScheduleTaskInput): Promise<ScheduleTask | null> {
+  async updateTask(
+    id: string,
+    input: UpdateScheduleTaskInput,
+    options?: { allowCrossOwner?: boolean },
+  ): Promise<ScheduleTask | null> {
     // 1. 按字段校验
     if (input.cronExpr !== undefined) {
       validateCronExpr(input.cronExpr);
@@ -210,10 +244,17 @@ export class ScheduledTaskService {
       throw new Error('timeoutSec must be a positive number of seconds');
     }
     const updatePayload: UpdateScheduleTaskInput = { ...input };
+    updatePayload.actor = await resolveScheduleTaskActor(input.actor);
+    const existing = await this.taskRepo.getById(id);
+    if (!existing) return null;
+    if (!options?.allowCrossOwner) {
+      if (!isTaskOwnedBy(existing, updatePayload.actor ?? null)) {
+        throw new Error('无权修改他人定时任务');
+      }
+    }
     // 2. extra 与库存浅合并
     if (input.extra !== undefined && input.extra !== null) {
-      const existing = await this.taskRepo.getById(id);
-      updatePayload.extra = mergeScheduledTaskExtra(existing?.extra, input.extra);
+      updatePayload.extra = mergeScheduledTaskExtra(existing.extra, input.extra);
     }
     // 3. 整理附件元数据（尚未 copyFile）
     const prepared = (updatePayload.extra !== undefined || input.prompt !== undefined)
@@ -232,7 +273,6 @@ export class ScheduledTaskService {
         updatePayload.extra = prepared.extra;
       }
     }
-    updatePayload.actor = await resolveScheduleTaskActor(input.actor);
     // 5. 落库
     const updated = await this.taskRepo.update(id, updatePayload);
     if (!updated) return null;
@@ -279,17 +319,25 @@ export class ScheduledTaskService {
   }
 
   async deleteTask(id: string, actor?: string | null): Promise<void> {
-    await this.taskRepo.softDelete(id, await resolveScheduleTaskActor(actor));
+    const resolvedActor = await resolveScheduleTaskActor(actor);
+    const existing = await this.taskRepo.getById(id);
+    if (!existing) return;
+    if (!isTaskOwnedBy(existing, resolvedActor)) {
+      throw new Error('无权删除他人定时任务');
+    }
+    await this.taskRepo.softDelete(id, resolvedActor);
     await this.stopActiveRunsForTask(id, 'task deleted');
     await this.scheduler.refreshSchedule();
   }
 
   async setEnabled(id: string, enabled: boolean, actor?: string | null): Promise<ScheduleTask | null> {
-    const updated = await this.taskRepo.setEnabled(
-      id,
-      enabled,
-      await resolveScheduleTaskActor(actor),
-    );
+    const resolvedActor = await resolveScheduleTaskActor(actor);
+    const existing = await this.taskRepo.getById(id);
+    if (!existing) return null;
+    if (!isTaskOwnedBy(existing, resolvedActor)) {
+      throw new Error('无权修改他人定时任务');
+    }
+    const updated = await this.taskRepo.setEnabled(id, enabled, resolvedActor);
     if (updated && !enabled) {
       await this.stopActiveRunsForTask(id, 'task disabled');
     }
@@ -336,18 +384,37 @@ export class ScheduledTaskService {
   }
 
   async listTasks(): Promise<ScheduleTask[]> {
-    return this.taskRepo.list({});
+    const code = await resolveCurrentUserCode();
+    if (!code) return [];
+    return this.taskRepo.list({ createdBy: code, limit: 10_000 });
   }
 
   async getTask(id: string): Promise<ScheduleTask | null> {
-    return this.taskRepo.getById(id);
+    const task = await this.taskRepo.getById(id);
+    if (!task) return null;
+    const code = await resolveCurrentUserCode();
+    if (!isTaskOwnedBy(task, code)) return null;
+    return task;
   }
 
   async getLatestRun(taskId: string): Promise<ScheduleTaskRun | null> {
+    const task = await this.getTask(taskId);
+    if (!task) return null;
     return this.runRepo.getLatestRun(taskId);
   }
 
   async triggerTask(id: string): Promise<ScheduleTaskRun> {
+    const code = await resolveCurrentUserCode();
+    const task = await this.taskRepo.getById(id);
+    if (!task) {
+      throw new Error(`Scheduled task not found: ${id}`);
+    }
+    if (!isTaskOwnedBy(task, code)) {
+      throw new Error('无权触发他人定时任务');
+    }
+    if (code && (task.createdBy == null || String(task.createdBy).trim() === '')) {
+      await this.taskRepo.claimOrphanById(id, code);
+    }
     return this.scheduler.triggerTaskNow(id);
   }
 
@@ -410,7 +477,7 @@ export class ScheduledTaskService {
           error: error instanceof Error ? error.message : String(error),
         });
       }
-      this.startScheduler();
+      this.startScheduler(code);
     })();
   }
 
@@ -420,14 +487,18 @@ export class ScheduledTaskService {
    * `setGatewayManager` 之后调用——否则 dispatcher 还是 noop，claim 的 run 停在 queued。
    * 仅已认证入口调用；initialize() 不得 start。
    */
-  startScheduler(): void {
+  startScheduler(userCode?: string): void {
+    const code = userCode?.trim() || null;
+    if (code) {
+      this.scheduler.setOwnerUserCode(code);
+    }
     this.scheduler.setPushTick(() => {
       void (async () => {
         try {
           const { user } = await getAuthState();
-          const code = user?.code?.trim();
-          if (!code) return;
-          await runScheduleTasksPushTick(code, { taskRepo: this.taskRepo });
+          const pushCode = user?.code?.trim();
+          if (!pushCode) return;
+          await runScheduleTasksPushTick(pushCode, { taskRepo: this.taskRepo });
         } catch (error) {
           logger.warn('[scheduled-task] push tick failed', {
             error: error instanceof Error ? error.message : String(error),
@@ -437,6 +508,10 @@ export class ScheduledTaskService {
     });
     const supervisor = this.gatewayManager ? getChatRuntimeSupervisor(this.gatewayManager) : null;
     void (async () => {
+      if (!code) {
+        const resolved = await resolveCurrentUserCode();
+        if (resolved) this.scheduler.setOwnerUserCode(resolved);
+      }
       if (supervisor) {
         await supervisor.initialize();
         await this.runtimeDispatcher?.recoverActiveRuns(supervisor);
@@ -452,6 +527,7 @@ export class ScheduledTaskService {
 
   stopScheduler(): void {
     this.scheduler.setPushTick(null);
+    this.scheduler.setOwnerUserCode(null);
     this.scheduler.stop();
   }
 
@@ -529,7 +605,7 @@ export class ScheduledTaskService {
   }> {
     const dryRun = options?.dryRun !== false;
     const stripPromptBlock = options?.stripPromptBlock === true;
-    const tasks = await this.listTasks();
+    const tasks = await this.taskRepo.list({ limit: 10_000 });
     const details: Array<{
       taskId: string;
       name: string;
@@ -554,10 +630,15 @@ export class ScheduledTaskService {
       }
 
       if (!dryRun) {
-        await this.updateTask(task.id, {
-          dingtalkRecipients: plan.dingtalkRecipients,
-          ...(plan.stripped ? { prompt: plan.prompt } : {}),
-        });
+        await this.updateTask(
+          task.id,
+          {
+            dingtalkRecipients: plan.dingtalkRecipients,
+            ...(plan.stripped ? { prompt: plan.prompt } : {}),
+            actor: null,
+          },
+          { allowCrossOwner: true },
+        );
       }
       lifted += 1;
       details.push({
@@ -606,7 +687,7 @@ export class ScheduledTaskService {
     }>;
   }> {
     const dryRun = options?.dryRun !== false;
-    const tasks = await this.listTasks();
+    const tasks = await this.taskRepo.list({ limit: 10_000 });
     const details: Array<{
       taskId: string;
       name: string;
@@ -631,13 +712,18 @@ export class ScheduledTaskService {
       }
 
       if (!dryRun) {
-        await this.updateTask(task.id, {
-          prompt: plan.prompt,
-          dingtalkRecipients: null,
-          skillCode: null,
-          workflowCode: null,
-          extra: plan.extra,
-        });
+        await this.updateTask(
+          task.id,
+          {
+            prompt: plan.prompt,
+            dingtalkRecipients: null,
+            skillCode: null,
+            workflowCode: null,
+            extra: plan.extra,
+            actor: null,
+          },
+          { allowCrossOwner: true },
+        );
       }
       migrated += 1;
       details.push({
@@ -685,7 +771,7 @@ export class ScheduledTaskService {
     }>;
   }> {
     const dryRun = options?.dryRun !== false;
-    const tasks = await this.listTasks();
+    const tasks = await this.taskRepo.list({ limit: 10_000 });
     const details: Array<{
       taskId: string;
       name: string;
@@ -710,11 +796,16 @@ export class ScheduledTaskService {
       }
 
       if (!dryRun) {
-        await this.updateTask(task.id, {
-          prompt: plan.prompt,
-          dingtalkRecipients: null,
-          extra: plan.extra,
-        });
+        await this.updateTask(
+          task.id,
+          {
+            prompt: plan.prompt,
+            dingtalkRecipients: null,
+            extra: plan.extra,
+            actor: null,
+          },
+          { allowCrossOwner: true },
+        );
       }
       migrated += 1;
       details.push({

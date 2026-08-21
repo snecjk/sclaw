@@ -54,6 +54,8 @@ export class ScheduledTaskScheduler {
   private canReapRun: ((run: ScheduleTaskRun) => Promise<boolean>) | null = null;
   private pushTick: ScheduledTaskPushTick | null = null;
   private cronTicksCompleted = 0;
+  /** 当前登录工号；有值时 tick / 清扫只处理该用户任务。null 时 list 全表（迁移 / 单测）。 */
+  private ownerUserCode: string | null = null;
 
   constructor(
     private readonly taskRepo: ScheduleTaskRepository = new ScheduleTaskRepository(),
@@ -87,6 +89,23 @@ export class ScheduledTaskScheduler {
     this.pushTick = pushTick;
   }
 
+  /**
+   * 设置调度归属过滤。已认证 start 时写入工号；登出 clear 为 null。
+   * 有工号时只调度该用户任务，避免切号后执行他人 cron。
+   */
+  setOwnerUserCode(userCode: string | null): void {
+    const code = userCode?.trim() || null;
+    this.ownerUserCode = code;
+  }
+
+  /** 列出本轮调度候选：有 owner 则按 created_by 过滤，否则全表。 */
+  private async listScheduleTasks(): Promise<ScheduleTask[]> {
+    if (this.ownerUserCode) {
+      return this.taskRepo.list({ createdBy: this.ownerUserCode, limit: 10_000 });
+    }
+    return this.taskRepo.list({ limit: 10_000 });
+  }
+
   start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
@@ -109,7 +128,7 @@ export class ScheduledTaskScheduler {
    * disabled 任务置 `next_run_at = null`。
    */
   async refreshSchedule(now: Date = new Date()): Promise<ScheduledTaskScheduleSnapshot[]> {
-    const tasks = await this.taskRepo.list({});
+    const tasks = await this.listScheduleTasks();
     const snapshots: ScheduledTaskScheduleSnapshot[] = [];
 
     for (const task of tasks) {
@@ -150,7 +169,7 @@ export class ScheduledTaskScheduler {
    * 执行时间的任务才正常执行。
    */
   async discardMissedOnStartup(now: Date = new Date()): Promise<boolean> {
-    const tasks = await this.taskRepo.list({});
+    const tasks = await this.listScheduleTasks();
     const advancedTaskIds: string[] = [];
     let changed = false;
 
@@ -168,8 +187,13 @@ export class ScheduledTaskScheduler {
     }
 
     // running run 已由 ChatRuntimeSupervisor 恢复并对账；这里只清理从未 dispatch
-    // 的 queued lease，避免重启把仍在执行的任务误标 cancelled。
-    const cancelled = await this.runRepo.cancelAllQueuedRuns();
+    // 的 queued lease。有 owner 时只清本用户任务，避免切号误伤他人已 claim 的 queued。
+    const cancelled = this.ownerUserCode
+      ? await this.runRepo.cancelQueuedRunsForTaskIds(
+          tasks.map((task) => task.id),
+          this.ownerUserCode,
+        )
+      : await this.runRepo.cancelAllQueuedRuns();
     if (cancelled > 0) {
       changed = true;
     }
@@ -207,7 +231,12 @@ export class ScheduledTaskScheduler {
 
     for (const run of activeRuns) {
       if (run.status !== 'running' || run.startedAt == null) continue;
-      const task = tasksById.get(run.taskId);
+      // 切号后 schedule 列表只有当前用户；仍要能 reap 他人已挂起的 running（释放单飞）。
+      let task = tasksById.get(run.taskId);
+      if (!task) {
+        task = (await this.taskRepo.getById(run.taskId, { includeDeleted: true })) ?? undefined;
+        if (task) tasksById.set(task.id, task);
+      }
       if (!task || task.timeoutSec == null) continue;
 
       const startedMs = new Date(run.startedAt).getTime();
@@ -234,6 +263,8 @@ export class ScheduledTaskScheduler {
         runId: run.runId,
         startedAt: run.startedAt,
         timeoutSec: task.timeoutSec,
+        ownerUserCode: this.ownerUserCode,
+        taskCreatedBy: task.createdBy,
       });
     }
     return reaped;
@@ -246,7 +277,7 @@ export class ScheduledTaskScheduler {
    * not-due 且 `next_run_at` 为空时补算（兜底新建任务）。
    */
   async tick(now: Date = new Date()): Promise<void> {
-    const tasks = await this.taskRepo.list({});
+    const tasks = await this.listScheduleTasks();
 
     // 先于 claim：释放挂起的 stale running run，避免 getActiveRun 永久阻塞
     // 到期任务的后续触发（引擎回调丢失时 status lease 无法自愈）。

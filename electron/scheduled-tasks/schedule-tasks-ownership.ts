@@ -28,8 +28,8 @@ function readMarker(path: string): OwnershipClaimMarker | null {
 }
 
 /**
- * 已认证后归属认领：只补 `created_by IS NULL`。有 marker 则跳过认领（切号不重认领）。
- * Marker 丢失再跑仍只补 NULL。
+ * 已认证后归属认领：只补 `created_by IS NULL`（切号不抢已有工号）。
+ * Marker 仅作审计；有无 marker 都跑认领，避免挡住登录后新出现的 NULL 行。
  */
 export async function claimScheduleTasksOwnership(
   userCode: string,
@@ -41,9 +41,7 @@ export async function claimScheduleTasksOwnership(
   const home = getStoClawHomeDir();
   mkdirSync(home, { recursive: true });
   const markerPath = getOwnershipClaimMarkerPath();
-  if (readMarker(markerPath)) {
-    return { skipped: true, claimed: 0 };
-  }
+  const prior = readMarker(markerPath);
 
   const claimed = await taskRepo.claimNullCreatedBy(code);
   const marker: OwnershipClaimMarker = {
@@ -52,6 +50,12 @@ export async function claimScheduleTasksOwnership(
     completedAt: new Date().toISOString(),
   };
   writeFileSync(markerPath, `${JSON.stringify(marker, null, 2)}\n`, 'utf8');
-  logger.info('[scheduled-task] ownership claimed', { claimedBy: code, count: claimed });
+  if (claimed > 0 || !prior) {
+    logger.info('[scheduled-task] ownership claimed', {
+      claimedBy: code,
+      count: claimed,
+      priorClaimedBy: prior?.claimedBy ?? null,
+    });
+  }
   return { skipped: false, claimed };
 }
