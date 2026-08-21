@@ -5,7 +5,8 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Code2,
+  Globe2,
+  Package,
   FolderOpen,
   MoreHorizontal,
   Pencil,
@@ -24,7 +25,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
-import { AppDevPageTypeBadge } from '@/components/app-dev/AppDevPageTypeBadge';
 import { cloneDevApp, deleteDevApp, type DevAppSummary } from '@/lib/app-dev-api';
 import { invokeIpc } from '@/lib/api-client';
 import { pickProjectFolder } from '@/lib/session-catalog-api';
@@ -38,6 +38,8 @@ interface DevAppCardProps {
 }
 
 export function DevAppCard({ app }: DevAppCardProps) {
+  const pageTypeLabel = app.pageType === 'assets' ? 'Assets' : 'Site';
+  const PageTypeIcon = app.pageType === 'assets' ? Package : Globe2;
   const openOrFocusDevAppTab = useAppPlazaShellStore((s) => s.openOrFocusDevAppTab);
   const closeDevAppTabsByWorkspaceId = useAppPlazaShellStore((s) => s.closeDevAppTabsByWorkspaceId);
   const unregisterWorkspaceId = useAppDevCatalogStore((s) => s.unregisterWorkspaceId);
@@ -174,14 +176,15 @@ export function DevAppCard({ app }: DevAppCardProps) {
       }}
     >
       <div className="more-apps-card__top">
-        <div className="more-apps-card__icon--dev" aria-hidden>
-          <Code2 className="h-6 w-6" />
+        <div
+          className="more-apps-card__icon--dev"
+          aria-label={`应用类型：${pageTypeLabel}`}
+          title={`应用类型：${pageTypeLabel}`}
+        >
+          <PageTypeIcon className="h-6 w-6" aria-hidden />
         </div>
         <div className="more-apps-card__head">
-          <div className="flex min-w-0 items-center gap-2">
-            <h3 className="more-apps-card__title min-w-0">{app.name}</h3>
-            <AppDevPageTypeBadge pageType={app.pageType} />
-          </div>
+          <h3 className="more-apps-card__title">{app.name}</h3>
           <p
             className={cn(
               'mt-1 text-[11px]',
