@@ -1,14 +1,19 @@
+import { Globe2, Package } from 'lucide-react';
 import type { CodeApplicationPageType } from '../../../shared/code-application-catalog';
 
 export function AppDevPageTypeBadge({ pageType }: { pageType?: CodeApplicationPageType }) {
   if (!pageType) return null;
   const label = pageType === 'assets' ? 'Assets' : 'Site';
+  const Icon = pageType === 'assets' ? Package : Globe2;
   return (
     <span
       aria-label={`应用类型：${label}`}
-      className="inline-flex shrink-0 items-center rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+      title={`应用类型：${label}`}
+      className={pageType === 'assets'
+        ? 'inline-flex shrink-0 text-amber-600 dark:text-amber-400'
+        : 'inline-flex shrink-0 text-sky-600 dark:text-sky-400'}
     >
-      {label}
+      <Icon className="h-4 w-4" aria-hidden />
     </span>
   );
 }

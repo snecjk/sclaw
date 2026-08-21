@@ -8,7 +8,8 @@ describe('app development workbench page type identity', () => {
     ['site', 'Site'],
   ] as const)('shows %s applications as %s', (pageType, label) => {
     render(<AppDevPageTypeBadge pageType={pageType} />);
-    expect(screen.getByLabelText(`应用类型：${label}`)).toHaveTextContent(label);
+    expect(screen.getByLabelText(`应用类型：${label}`)).toBeInTheDocument();
+    expect(screen.queryByText(label)).not.toBeInTheDocument();
   });
 
   it('omits the badge until the matching catalog summary loads', () => {

@@ -49,6 +49,7 @@ describe('DevAppCard page type', () => {
   it('marks a Site app and keeps its browser entry', async () => {
     render(<DevAppCard app={app('site')} />);
     expect(screen.getByLabelText('应用类型：Site')).toBeInTheDocument();
+    expect(screen.queryByText('Site')).not.toBeInTheDocument();
     fireEvent.pointerDown(screen.getByRole('button', { name: '更多操作' }), {
       button: 0,
       ctrlKey: false,
@@ -59,6 +60,7 @@ describe('DevAppCard page type', () => {
   it('marks an Assets app and omits the browser entry', () => {
     render(<DevAppCard app={app('assets')} />);
     expect(screen.getByLabelText('应用类型：Assets')).toBeInTheDocument();
+    expect(screen.queryByText('Assets')).not.toBeInTheDocument();
     fireEvent.pointerDown(screen.getByRole('button', { name: '更多操作' }), {
       button: 0,
       ctrlKey: false,
