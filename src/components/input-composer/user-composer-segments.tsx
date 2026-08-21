@@ -52,7 +52,7 @@ export function UserComposerFileChip({
 }) {
   return (
     <span
-      className={cn(ATTACHMENT_SPAN_CLASS, ATTACHMENT_CHIP_SURFACE_CLASS, 'w-max')}
+      className={cn(ATTACHMENT_SPAN_CLASS, ATTACHMENT_CHIP_SURFACE_CLASS, 'ml-1 mt-1 w-max align-top')}
       title={fileName}
     >
       <FileIcon fileName={fileName} mimeType={mimeType} />
@@ -65,12 +65,12 @@ export function UserWorkflowMessageTag({ workflowName }: { workflowName: string 
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-0.5 rounded-[4px] bg-[#EEF3FF] px-1 py-0.5 align-middle',
-        'text-[12px] font-medium leading-4 text-[#4E6FFF]',
+        'inline-flex box-border h-6 max-w-[280px] ml-1 mt-1 items-center gap-0.5 overflow-hidden rounded-[4px]',
+        'bg-[#EEF3FF] px-1 align-top text-[12px] font-medium leading-none text-[#4E6FFF]',
       )}
     >
       <WorkflowNodesIcon className="h-3 w-3 shrink-0 text-current" />
-      <span className="workflow-token-label">{workflowName}</span>
+      <span className="workflow-token-label min-w-0 flex-1 truncate whitespace-nowrap">{workflowName}</span>
     </span>
   );
 }

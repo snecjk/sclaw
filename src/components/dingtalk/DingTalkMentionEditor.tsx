@@ -450,7 +450,8 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         data-placeholder={placeholder}
         className={cn(
           'dingtalk-mention-editor min-h-[42px] max-h-[200px] overflow-y-auto whitespace-pre-wrap break-words',
-          'text-[15px] leading-6 text-foreground outline-none',
+          // leading-8（32px）+ 标签 h-6（24px）+ align-top/mt-1 → 与文字垂直居中，行间距约 8px
+          'text-[14px] leading-8 text-foreground outline-none',
           'empty:before:text-muted-foreground/55 empty:before:content-[attr(data-placeholder)]',
           className,
         )}

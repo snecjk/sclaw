@@ -75,6 +75,31 @@ function getOrCreateSessionQueue(queues: Map<string, SessionQueue>, sessionKey: 
   return queues.get(sessionKey)!;
 }
 
+/**
+ * 编辑队列文本后同步 segments：chip 原样保留，全部新文本并入首个文本段
+ * （无文本段则前置一个）；其余旧文本段丢弃，避免发送后气泡残留旧文案。
+ */
+function replaceQueueItemTextSegments(
+  segments: QueuedMessage['composerSegments'],
+  text: string,
+): QueuedMessage['composerSegments'] {
+  if (!segments?.length) return segments;
+  let textPlaced = false;
+  const next: PersistedComposerSegment[] = [];
+  for (const seg of segments) {
+    if (seg.type === 'text') {
+      if (!textPlaced) {
+        next.push({ type: 'text', text });
+        textPlaced = true;
+      }
+      continue;
+    }
+    next.push(seg);
+  }
+  if (!textPlaced) next.unshift({ type: 'text', text });
+  return next;
+}
+
 export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
   queues: new Map(),
 
@@ -117,7 +142,17 @@ export const useMessageQueueStore = create<MessageQueueState>((set, get) => ({
     const session = queues.get(sessionKey);
     if (!session) return;
     queues.set(sessionKey, {
-      queue: session.queue.map((item) => (item.id === id ? { ...item, text: trimmed } : item)),
+      queue: session.queue.map((item) => {
+        if (item.id !== id || item.text === trimmed) return item;
+        return {
+          ...item,
+          text: trimmed,
+          // 文本已改：入队时的预烘焙 gateway 文本随之过期，置空后
+          // 投递时走 sendMessage 的现烘焙路径（技能前缀/工作流句按新文本重建）。
+          gatewayText: undefined,
+          composerSegments: replaceQueueItemTextSegments(item.composerSegments, trimmed),
+        };
+      }),
     });
     set({ queues: new Map(queues) });
   },

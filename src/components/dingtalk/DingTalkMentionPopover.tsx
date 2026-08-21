@@ -141,7 +141,7 @@ const MENTION_POPOVER_MIN_UPWARD_HEIGHT = 240;
 /** 浮层宽度 */
 const MENTION_POPOVER_WIDTH = 320;
 /** 浮层最大高度上限（含标题/鉴权/列表） */
-const MENTION_POPOVER_MAX_HEIGHT = 400;
+const MENTION_POPOVER_MAX_HEIGHT = 280;
 
 type PopoverPosition = {
   left: number;
@@ -185,7 +185,7 @@ export function DingTalkMentionPopover({
     activeEl?.scrollIntoView({ block: 'nearest' });
   }, [activeIndex, open, items.length]);
 
-  // portal 定位：锚定 anchorRef 的视口矩形，向上弹出为主，向上空间不足时翻转向下。
+  // portal 定位：锚定 anchorRef 的视口矩形，优先向上；向上空间不足时翻转向下。
   // 监听 scroll（capture）/ resize 更新坐标，跟随 Modal 滚动。
   useLayoutEffect(() => {
     if (!open || !anchorRef?.current) {
@@ -202,7 +202,9 @@ export function DingTalkMentionPopover({
       );
       const upwardSpace = rect.top;
       const downwardSpace = window.innerHeight - rect.bottom;
-      const flipDown = upwardSpace < MENTION_POPOVER_MIN_UPWARD_HEIGHT;
+      // 上方不够完整展示时翻转向下；两侧都紧时选空间更大的一侧
+      const flipDown = upwardSpace < MENTION_POPOVER_MIN_UPWARD_HEIGHT
+        && downwardSpace >= upwardSpace;
       if (flipDown) {
         const maxHeight = Math.max(
           160,
@@ -249,16 +251,26 @@ export function DingTalkMentionPopover({
       ? t('composer.dingtalkSearchTitle')
       : t('composer.dingtalkMentionTitle');
 
+  const useFixedPortal = Boolean(anchorRef);
+
+  // 有 anchor 时等测量完成再渲染，避免首帧带 bottom-full 挂到 body 上闪一下
+  if (useFixedPortal && !position) return null;
+
   const panel = (
     <div
-      className="left-0 bottom-full z-50 mb-2 w-[320px] overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-2 shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-border dark:bg-popover dark:shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
+      className={cn(
+        'z-50 w-[320px] overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-2',
+        'shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-border dark:bg-popover dark:shadow-[0_8px_24px_rgba(0,0,0,0.45)]',
+        // 无 portal 时保持 absolute 上浮；有 fixed 时不可再带 bottom-full，否则会与 top 冲突压成一条缝
+        useFixedPortal ? null : 'absolute left-0 bottom-full mb-2',
+      )}
       style={
-        anchorRef && position
+        useFixedPortal && position
           ? {
               position: 'fixed',
               left: position.left,
-              top: position.top,
-              bottom: position.bottom,
+              top: position.top ?? 'auto',
+              bottom: position.bottom ?? 'auto',
               maxHeight: position.maxHeight,
               overflowY: 'auto',
               zIndex: 60000,
@@ -331,10 +343,10 @@ export function DingTalkMentionPopover({
       )}
 
       {!loading && !needsAuth && !needsInstall && !error && (hasVisibleItems || query.trim()) && (
-        <div className="relative max-h-[336px] overflow-hidden">
+        <div className="relative max-h-[280px] overflow-hidden">
           <div
             ref={listRef}
-            className="sto-overlay-scroll-viewport max-h-[336px] overflow-y-auto overscroll-contain"
+            className="sto-overlay-scroll-viewport max-h-[280px] overflow-y-auto overscroll-contain"
             onScroll={handleScroll}
           >
             <div ref={listContentRef}>

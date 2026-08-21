@@ -364,6 +364,66 @@ describe('composer echo pairing & display', () => {
     expect(isSameUserMessage(historyUser, optimistic, 1710000000000)).toBe(true);
   });
 
+  it('does not pair skill-only optimistic with a different-skill echo (tag mix-up)', () => {
+    const pdfEcho = {
+      id: 'history-pdf',
+      role: 'user' as const,
+      content: 'pdf\n\n[技能: pdf]\n<!-- SClaw-Skill {"slug":"pdf","title":"pdf"} -->',
+      timestamp: 1710000001,
+    } as RawMessage;
+    const xlsxOptimistic = {
+      id: 'local-xlsx',
+      role: 'user' as const,
+      content: '',
+      timestamp: 1710000002,
+      _skillMeta: { slug: 'xlsx', title: 'xlsx' },
+      _composerSegments: [{ type: 'skill' as const, slug: 'xlsx', title: 'xlsx' }],
+    } as RawMessage;
+
+    // 5s 紧窗口内也不许跨 slug 配对。
+    expect(isSameUserMessage(pdfEcho, xlsxOptimistic, 1710000002000)).toBe(false);
+    expect(findHistoryUserEcho([pdfEcho], xlsxOptimistic, 1710000002000)).toBeUndefined();
+
+    // 展示模型：不得把 xlsx 标签贴到 pdf 回显上，乐观消息应作为独立气泡保留。
+    const overlay = {
+      ...createClientSessionState().overlay,
+      optimisticUserMessage: xlsxOptimistic,
+    };
+    const projected = buildChatDisplayModel([pdfEcho], overlay);
+    const users = projected.filter((message) => message.role === 'user');
+    expect(users).toHaveLength(2);
+    expect(users[0]?._skillMeta).toBeUndefined();
+    expect(users[1]?.id).toBe('local-xlsx');
+  });
+
+  it('still pairs skill-only optimistic with a same-skill echo', () => {
+    const pdfEcho = {
+      id: 'history-pdf',
+      role: 'user' as const,
+      content: 'pdf\n\n[技能: pdf]\n<!-- SClaw-Skill {"slug":"pdf","title":"pdf"} -->',
+      timestamp: 1710000001,
+    } as RawMessage;
+    const pdfOptimistic = {
+      id: 'local-pdf',
+      role: 'user' as const,
+      content: '',
+      timestamp: 1710000002,
+      _skillMeta: { slug: 'pdf', title: 'pdf' },
+      _composerSegments: [{ type: 'skill' as const, slug: 'pdf', title: 'pdf' }],
+    } as RawMessage;
+
+    expect(isSameUserMessage(pdfEcho, pdfOptimistic, 1710000002000)).toBe(true);
+
+    const overlay = {
+      ...createClientSessionState().overlay,
+      optimisticUserMessage: pdfOptimistic,
+    };
+    const projected = buildChatDisplayModel([pdfEcho], overlay);
+    const users = projected.filter((message) => message.role === 'user');
+    expect(users).toHaveLength(1);
+    expect(users[0]?._skillMeta).toEqual({ slug: 'pdf', title: 'pdf' });
+  });
+
   it('hydrates inline file/skill/workflow order from gateway bake without optimistic donor', () => {
     const gatewayContent = [
       '姚磊html网页设计',

@@ -123,7 +123,10 @@ export const InputComposerShell = forwardRef<HTMLDivElement, InputComposerShellP
                   'flex min-h-0 flex-1 flex-col',
                   hasChips || overlayOpen ? 'pt-1' : 'pt-3',
                 )
-              : cn(hasChips || overlayOpen ? 'pt-1.5' : 'pt-2.5'),
+              : cn(
+                  'flex min-h-0 flex-1 flex-col',
+                  hasChips || overlayOpen ? 'pt-1.5' : 'pt-2.5',
+                ),
           )}
         >
           {editorOrOverlay}
@@ -132,7 +135,7 @@ export const InputComposerShell = forwardRef<HTMLDivElement, InputComposerShellP
           className={cn(
             isHome
               ? 'relative flex shrink-0 items-center justify-between gap-2 px-4 pb-3 pt-1'
-              : 'flex items-center justify-between gap-3 px-4 pb-1.5 pt-0.5',
+              : 'flex shrink-0 items-center justify-between gap-3 px-4 pb-1.5 pt-0.5',
           )}
         >
           <div className={cn(isHome ? 'flex shrink-0 items-center gap-2' : 'flex items-center gap-1')}>

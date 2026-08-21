@@ -11,7 +11,7 @@ export function SkillMessageTag({ title, className }: SkillMessageTagProps) {
   return (
     <span className={cn(skillMessageTagClass, className)}>
       <Wrench className="h-3 w-3 shrink-0" aria-hidden />
-      <span>{title}</span>
+      <span className="min-w-0 flex-1 truncate whitespace-nowrap">{title}</span>
     </span>
   );
 }

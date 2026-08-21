@@ -4,6 +4,7 @@ import {
   normalizeUserMessageForDisplay,
 } from '@/lib/user-message-display';
 import { parseSkillTranscriptMarker } from '@/lib/skill-transcript-marker';
+import { parseSkillTranscriptMarkers } from '../../../shared/skill-transcript-marker';
 import { resolveStoredSessionLabel } from '@/lib/session-label';
 import { isWorkflowSessionTitle } from '@/lib/workflow-session';
 import {
@@ -140,8 +141,30 @@ function emptyDisplayBoth(a: RawMessage, b: RawMessage): boolean {
   return !normalizeUserMessageForPairing(a.content) && !normalizeUserMessageForPairing(b.content);
 }
 
+/** 配对用的技能 slug 集合：结构化 meta 优先，transcript marker 兜底。 */
+function skillSlugsForPairing(message: RawMessage): string[] {
+  const slugs = new Set<string>();
+  const metas = message._skillMetas ?? (message._skillMeta ? [message._skillMeta] : []);
+  for (const meta of metas) {
+    if (meta?.slug) slugs.add(meta.slug);
+  }
+  for (const marker of parseSkillTranscriptMarkers(getMessageText(message.content))) {
+    if (marker?.slug) slugs.add(marker.slug);
+  }
+  return [...slugs];
+}
+
+/** 双方技能均可确定且 slug 集合不相交 → 必为不同轮次（纯技能连发时 content 均为空）。 */
+function hasConflictingSkillSlugs(a: RawMessage, b: RawMessage): boolean {
+  const aSlugs = skillSlugsForPairing(a);
+  const bSlugs = skillSlugsForPairing(b);
+  if (!aSlugs.length || !bSlugs.length) return false;
+  return !aSlugs.some((slug) => bSlugs.includes(slug));
+}
+
 function composerStructureEchoMatches(candidate: RawMessage, optimistic: RawMessage): boolean {
   if (!hasComposerPairingEvidence(optimistic)) return false;
+  if (hasConflictingSkillSlugs(candidate, optimistic)) return false;
 
   // 两轮已完成且显式附件不同，视为不同轮次。
   const optimisticKeys = getAttachmentKeys(optimistic);

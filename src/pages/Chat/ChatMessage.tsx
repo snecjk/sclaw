@@ -1312,7 +1312,7 @@ function MessageBubble({
       )}
     >
       {isUser ? (
-        <p className="whitespace-pre-wrap break-words break-all text-sm font-normal leading-5 text-foreground">
+        <p className="whitespace-pre-wrap break-words break-all text-sm font-normal leading-8 text-foreground">
           {composerSegments?.length ? (
             <UserComposerSegmentsContent segments={composerSegments} />
           ) : userWorkflowDisplay ? (

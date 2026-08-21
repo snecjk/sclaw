@@ -1308,7 +1308,8 @@ export const workflowDetailModalSkillTagClass = cn(
 /** 技能广场「使用」：输入框 token / 用户气泡标签（Brand-1 + Brand-6） */
 export const skillComposerTagClass = cn(
   'skill-token',
-  'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium align-middle',
+  'inline-flex box-border h-6 max-w-[280px] ml-1 mt-1 items-center gap-0.5 overflow-hidden rounded-md px-1',
+  'text-xs font-medium leading-none align-top',
   'bg-[rgba(249,115,22,0.12)] text-[#ff6700]',
 );
 

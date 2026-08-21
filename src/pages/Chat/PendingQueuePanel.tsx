@@ -10,6 +10,12 @@ import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 import type { QueuedMessage } from '@/stores/message-queue';
 import { sendImmediately, useMessageQueueStore } from '@/stores/message-queue';
+import { SkillMessageTag } from '@/components/skill-plaza/SkillMessageTag';
+import {
+  UserComposerFileChip,
+  UserComposerSegmentsContent,
+  UserWorkflowMessageTag,
+} from '@/components/input-composer/user-composer-segments';
 
 interface PendingQueuePanelProps {
   sessionKey: string;
@@ -46,7 +52,11 @@ const QueueItem = memo(function QueueItem({
   const updateText = useMessageQueueStore((s) => s.updateText);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.text);
-  const hasAttachments = item.attachments && item.attachments.length > 0;
+  const skillList = item.skillMetas ?? (item.skillMeta ? [item.skillMeta] : []);
+  const hasAttachments = Boolean(item.attachments?.length);
+  const hasSegments = Boolean(item.composerSegments?.length);
+  const hasChips = hasSegments
+    || Boolean(item.attachments?.length || skillList.length || item.workflows?.length);
   const isFirst = index === 0;
   const isLast = index === total - 1;
 
@@ -77,12 +87,35 @@ const QueueItem = memo(function QueueItem({
           className="min-w-0 flex-1 rounded border bg-background px-2 py-1 text-[13px]"
         />
       ) : (
-        <span className="min-w-0 flex-1 truncate text-foreground/80">
-          {truncateText(item.text)}
+        <span className="min-w-0 flex-1 text-foreground/80">
+          {hasSegments ? (
+            <span className="flex flex-wrap items-center [&_.skill-token]:mt-0 [&_.attachment-token]:mt-0 [&_span:has(>.workflow-token-label)]:mt-0">
+              <UserComposerSegmentsContent segments={item.composerSegments!} />
+            </span>
+          ) : hasChips ? (
+            <span className="flex flex-wrap items-center [&_.skill-token]:mt-0 [&_.attachment-token]:mt-0 [&_span:has(>.workflow-token-label)]:mt-0">
+              {item.text ? <span className="truncate">{truncateText(item.text)}</span> : null}
+              {item.attachments?.map((file, fileIndex) => (
+                <UserComposerFileChip
+                  key={`file-${fileIndex}`}
+                  fileName={file.fileName}
+                  mimeType={file.mimeType}
+                />
+              ))}
+              {skillList.map((skill) => (
+                <SkillMessageTag key={`skill-${skill.slug}`} title={skill.title} />
+              ))}
+              {item.workflows?.map((workflow) => (
+                <UserWorkflowMessageTag key={`workflow-${workflow.id}`} workflowName={workflow.name} />
+              ))}
+            </span>
+          ) : (
+            <span className="block truncate">{truncateText(item.text)}</span>
+          )}
         </span>
       )}
 
-      {hasAttachments && (
+      {hasAttachments && !hasChips && (
         <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
           <Paperclip className="h-3 w-3" />
           {t('queue.fileCount', { count: item.attachments!.length })}
