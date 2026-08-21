@@ -36,6 +36,8 @@ import { AppDevRunStatusMenu } from '@/components/app-dev/AppDevRunStatusMenu';
 import { StoAppCommitDialog } from '@/components/app-dev/StoAppCommitDialog';
 import { StoAppDeployControl } from '@/components/app-dev/StoAppDeployControl';
 import { StoAppDeployDialog } from '@/components/app-dev/StoAppDeployDialog';
+import { AppDevPageTypeBadge } from '@/components/app-dev/AppDevPageTypeBadge';
+import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import {
   createAppCheckpoint,
   continueStoAppMerge,
@@ -208,6 +210,9 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const prevSendingRef = useRef(false);
   const autoRepairRef = useRef<{ fingerprint: string; attempts: number }>({ fingerprint: '', attempts: 0 });
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
+  const pageType = useAppDevCatalogStore((s) => (
+    s.apps.find((app) => app.workspaceId === workspaceId)?.pageType
+  ));
   const appName = workspaces.find((w) => w.id === workspaceId)?.name ?? tab.title;
   const listedApp = useAppDevCatalogStore((s) =>
     s.apps.find((app) => app.workspaceId === workspaceId),
@@ -458,7 +463,9 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           返回
         </button>
         <div className="h-4 w-px bg-border" aria-hidden />
-        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{appName}</h1>
+        <h1 className="min-w-0 truncate text-sm font-semibold text-foreground">{appName}</h1>
+        <AppDevPageTypeBadge pageType={pageType} />
+        <div className="flex-1" />
         <AppDevRunStatusMenu
           phase={phase}
           pending={runControl.pending}
@@ -565,6 +572,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
 
           {showCloudActions ? (
             <StoAppDeployControl
+              pageType={pageType ?? 'site'}
               canDeploy={canDeploy}
               job={deploy.job}
               onOpenDialog={() => setDeployOpen(true)}
