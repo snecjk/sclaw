@@ -157,7 +157,7 @@ function WorkflowEditorSession({
     backDisabled: embeddedTryRun.confirmOpen
       || embeddedTryRun.requestInFlight
       || tryRun.isStartupDialogOpen
-      || tryRun.isStarting,
+      || (tryRun.isStarting && !tryRun.runId),
     prompt,
     promptCacheId,
     enabled: !embeddedHeaderOwned && !embeddedHeaderNegotiating,

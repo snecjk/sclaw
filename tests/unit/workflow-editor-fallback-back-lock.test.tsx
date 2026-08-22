@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     requestInFlight: false,
   },
   designer: {
+    runId: null as string | null,
     isStartupDialogOpen: false,
     isStarting: false,
     isRunActive: false,
@@ -34,7 +35,6 @@ vi.mock('@/pages/Workflow/hooks/use-embedded-workflow-try-run', () => ({
 
 vi.mock('@/pages/WorkflowDesigner/hooks/use-designer-try-run', () => ({
   useDesignerTryRun: () => ({
-    runId: null,
     run: null,
     executionState: null,
     runWorkflowVersion: null,
@@ -91,6 +91,7 @@ describe('workflow editor fallback back lock', () => {
     mocks.headerOptions.mockClear();
     Object.assign(mocks.embedded, { confirmOpen: false, requestInFlight: false });
     Object.assign(mocks.designer, {
+      runId: null,
       isStartupDialogOpen: false,
       isStarting: false,
       isRunActive: false,
@@ -111,8 +112,12 @@ describe('workflow editor fallback back lock', () => {
     expect(lastHeaderOptions().backDisabled).toBe(true);
   });
 
-  it('allows fallback back navigation for a stable active run', () => {
-    Object.assign(mocks.designer, { isRunActive: true });
+  it('allows fallback back navigation once a starting active run has a stable run id', () => {
+    Object.assign(mocks.designer, {
+      runId: 'run-new',
+      isStarting: true,
+      isRunActive: true,
+    });
 
     render(routeView());
 
