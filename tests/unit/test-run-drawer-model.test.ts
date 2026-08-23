@@ -68,7 +68,80 @@ describe('test run drawer model', () => {
     });
   });
 
-  it('coalesces consecutive agent output deltas into one timeline event', () => {
+  it('coalesces actual agent answer deltas using the latest cumulative raw text', () => {
+    const timeline = buildTrialRunTimeline(runFixture({
+      events: [
+        {
+          id: '1',
+          type: 'agent.answer_delta',
+          nodeId: 'node-1',
+          payload: { message: '工', rawText: '工' },
+          timestamp: '2026-08-12T10:11:35.100+08:00',
+        },
+        {
+          id: '2',
+          type: 'agent.answer_delta',
+          nodeId: 'node-1',
+          payload: { message: '工资', rawText: '工资' },
+          timestamp: '2026-08-12T10:11:35.200+08:00',
+        },
+      ],
+      lastAgentRawText: '工资',
+    }), null);
+
+    expect(timeline).toEqual([
+      expect.objectContaining({
+        id: '1',
+        label: '实时输出',
+        detail: '工资',
+        timestamp: '2026-08-12T10:11:35.200+08:00',
+      }),
+    ]);
+  });
+
+  it('keeps tools and different nodes as answer-delta boundaries', () => {
+    const timeline = buildTrialRunTimeline(runFixture({
+      events: [
+        {
+          id: '1',
+          type: 'agent.answer_delta',
+          nodeId: 'node-1',
+          payload: { message: '查询中', rawText: '查询中' },
+          timestamp: '2026-08-12T10:11:35.100+08:00',
+        },
+        {
+          id: '2',
+          type: 'agent.tool_start',
+          nodeId: 'node-1',
+          payload: { toolName: 'salary.query' },
+          timestamp: '2026-08-12T10:11:35.200+08:00',
+        },
+        {
+          id: '3',
+          type: 'agent.answer_delta',
+          nodeId: 'node-1',
+          payload: { message: '查询完成', rawText: '查询中查询完成' },
+          timestamp: '2026-08-12T10:11:35.300+08:00',
+        },
+        {
+          id: '4',
+          type: 'agent.answer_delta',
+          nodeId: 'node-2',
+          payload: { message: '下一节点', rawText: '下一节点' },
+          timestamp: '2026-08-12T10:11:35.400+08:00',
+        },
+      ],
+    }), null);
+
+    expect(timeline.map(({ label, detail }) => ({ label, detail }))).toEqual([
+      { label: '实时输出', detail: '查询中' },
+      { label: '请求工具', detail: 'salary.query' },
+      { label: '实时输出', detail: '查询完成' },
+      { label: '实时输出', detail: '下一节点' },
+    ]);
+  });
+
+  it('continues to coalesce legacy output deltas without cumulative raw text', () => {
     const timeline = buildTrialRunTimeline(runFixture({
       events: [
         { id: '1', type: 'agent.output.delta', payload: '第一段', timestamp: '2026-08-12T10:11:35+08:00' },
@@ -79,6 +152,38 @@ describe('test run drawer model', () => {
     expect(timeline).toEqual([
       expect.objectContaining({ label: '实时输出', detail: '第一段第二段' }),
     ]);
+  });
+
+  it('resets the cumulative raw-text baseline when an agent attempt restarts', () => {
+    const timeline = buildTrialRunTimeline(runFixture({
+      events: [
+        {
+          id: '1',
+          type: 'agent.answer_delta',
+          nodeId: 'node-1',
+          payload: { message: '报', rawText: '报' },
+          timestamp: '2026-08-12T10:11:35.100+08:00',
+        },
+        {
+          id: '2',
+          type: 'agent.attempt.start',
+          nodeId: 'node-1',
+          payload: { attempt: 2 },
+          timestamp: '2026-08-12T10:11:35.200+08:00',
+        },
+        {
+          id: '3',
+          type: 'agent.answer_delta',
+          nodeId: 'node-1',
+          payload: { message: '报表', rawText: '报表' },
+          timestamp: '2026-08-12T10:11:35.300+08:00',
+        },
+      ],
+    }), null);
+
+    expect(timeline
+      .filter((item) => item.label === '实时输出')
+      .map((item) => item.detail)).toEqual(['报', '报表']);
   });
 
   it('deduplicates the same artifact across run and result payloads', () => {
