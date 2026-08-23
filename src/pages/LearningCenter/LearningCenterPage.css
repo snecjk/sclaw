@@ -84,7 +84,7 @@
   width: 0;
   min-width: 0;
   overflow: hidden;
-  background: var(--lc-canvas-bg);
+  background: transparent;
 }
 
 .learning-center-split--open .learning-center-tutorial-sheet {
@@ -96,38 +96,25 @@
   height: auto !important;
 }
 
-/* Narrow screens keep the sheet as an overlay. Desktop splits: 564px pane beside adaptive content. */
-@media (max-width: 63.9375rem) {
-  .learning-center-split--open > .learning-center-split__aside {
-    position: absolute;
-    top: calc(var(--sto-content-header-h, 44px) + var(--sto-shell-card-gap, 0.5rem));
-    right: var(--sto-shell-card-gap, 0.5rem);
-    bottom: var(--sto-shell-card-gap, 0.5rem);
-    left: auto;
-    z-index: 40;
-    flex: none;
-    width: min(var(--lc-detail-panel-w), calc(100% - 1rem));
-    min-width: 0;
-    max-width: calc(100% - 1rem);
-  }
+/* The tutorial floats above the unchanged learning-center page. The split grid is
+   retained only so the shared header can render the tutorial title and close action. */
+.learning-center-split--open > .learning-center-split__aside {
+  position: absolute;
+  top: calc(var(--sto-content-header-h, 44px) + 0.5rem);
+  right: 0.5rem;
+  bottom: 0.5rem;
+  left: auto;
+  z-index: 40;
+  flex: none;
+  width: min(var(--lc-detail-panel-w), calc(100% - 1rem));
+  min-width: 0;
+  max-width: calc(100% - 1rem);
 }
 
-/* Tutorial open: left pane fills remaining space beside the 564px sheet. */
 @media (min-width: 64rem) {
   .learning-center-split--open > .learning-center-page {
-    grid-column: 1;
+    grid-column: 1 / 4;
     grid-row: 2;
-  }
-
-  .learning-center-split--open > .learning-center-split__aside {
-    position: relative;
-    grid-column: 3;
-    grid-row: 2;
-    z-index: auto;
-    width: 100%;
-    min-width: 0;
-    max-width: none;
-    align-self: stretch;
   }
 
   .learning-center-page--detail-open {

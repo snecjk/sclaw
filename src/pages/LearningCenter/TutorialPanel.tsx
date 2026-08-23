@@ -1,5 +1,5 @@
 import { useEffect, useState, type RefObject } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { FeedbackState } from '@/components/common/FeedbackState';
 import { TutorialViewer } from '@/components/learning-center/TutorialViewer';
@@ -57,9 +57,9 @@ export function TutorialPanel({ tutorialId, portalContainer, returnFocusRef, onC
     <Sheet modal={false} open={Boolean(tutorialId)} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent
         side="right"
-        className="learning-center-tutorial-sheet flex flex-col gap-0 overflow-hidden p-0 motion-reduce:animate-none motion-reduce:transition-none !absolute inset-0"
+        className="learning-center-tutorial-sheet flex flex-col gap-0 overflow-hidden p-0 !absolute inset-0"
         portalContainer={portalContainer}
-        overlayClassName="learning-center-tutorial-sheet__overlay lg:hidden motion-reduce:animate-none"
+        showOverlay={false}
         style={{
           position: 'absolute',
           top: 0,
@@ -87,7 +87,17 @@ export function TutorialPanel({ tutorialId, portalContainer, returnFocusRef, onC
         <div className="learning-center-tutorial-sheet__body min-h-0 flex-1">
           <section className="learning-center-tutorial-sheet__content">
             {state.status === 'ready' && (
-              <h2 className="learning-center-tutorial-sheet__content-title">{state.tutorial.title}</h2>
+              <div className="learning-center-tutorial-sheet__content-header">
+                <h2 className="learning-center-tutorial-sheet__content-title">{state.tutorial.title}</h2>
+                <button
+                  type="button"
+                  className="learning-center-tutorial-sheet__close"
+                  aria-label={t('close')}
+                  onClick={onClose}
+                >
+                  <X className="h-4 w-4" aria-hidden />
+                </button>
+              </div>
             )}
             <div className="learning-center-tutorial-sheet__content-scroll">
               {state.status === 'loading' && (

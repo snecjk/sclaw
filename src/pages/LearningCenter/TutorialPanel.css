@@ -6,25 +6,44 @@
   min-width: 0 !important;
   max-width: none !important;
   height: auto;
-  border: 0;
-  border-radius: 0;
-  background: var(--lc-canvas-bg, var(--sto-workspace-bg)) !important;
+  border: 0 !important;
+  border-radius: 0.75rem;
+  background: transparent !important;
+  background-image: none !important;
   color: var(--lc-text, hsl(var(--foreground)));
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: none;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  filter: none !important;
 }
 
-.learning-center-tutorial-sheet__overlay {
-  position: absolute;
+/* The host is already placed at its final overlay width. A slide-in animation
+   briefly exposes an empty strip between the page and the moving sheet. */
+.learning-center-tutorial-sheet[data-state='open'],
+.learning-center-tutorial-sheet[data-state='closed'] {
+  transform: none;
+  transition: none;
+}
+
+.learning-center-tutorial-sheet[data-state='open'] {
+  animation: learning-center-tutorial-float-in 140ms ease-out both;
+}
+
+.learning-center-tutorial-sheet[data-state='closed'] {
+  animation: none;
+}
+
+@keyframes learning-center-tutorial-float-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .learning-center-tutorial-sheet__body {
   display: flex;
   overflow: hidden;
   box-sizing: border-box;
-  padding: 0 0.75rem 0.75rem;
-  background: var(--lc-canvas-bg, var(--sto-workspace-bg));
+  padding: 0;
+  background: transparent;
 }
 
 .learning-center-tutorial-sheet__content {
@@ -37,17 +56,51 @@
   border: 1px solid var(--lc-edge, var(--sto-surface-edge, hsl(var(--border))));
   border-radius: 0.75rem;
   background: var(--lc-panel-bg, var(--sto-panel-bg));
+  box-shadow: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .learning-center-tutorial-sheet[data-state='open'] {
+    animation: none;
+  }
+}
+
+.learning-center-tutorial-sheet__content-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  border-bottom: 1px solid var(--lc-edge, var(--sto-surface-edge, hsl(var(--border))));
 }
 
 .learning-center-tutorial-sheet__content-title {
+  min-width: 0;
+  flex: 1;
   flex-shrink: 0;
   margin: 0;
   padding: 0.75rem;
-  border-bottom: 1px solid var(--lc-edge, var(--sto-surface-edge, hsl(var(--border))));
   color: var(--lc-text, hsl(var(--foreground)));
   font-size: 0.9375rem;
   font-weight: 600;
   line-height: 1.5rem;
+}
+
+.learning-center-tutorial-sheet__close {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  margin-right: 0.5rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--lc-text-muted, hsl(var(--muted-foreground)));
+}
+
+.learning-center-tutorial-sheet__close:hover {
+  background: hsl(var(--muted));
+  color: var(--lc-text, hsl(var(--foreground)));
 }
 
 .learning-center-tutorial-sheet__content-scroll {
