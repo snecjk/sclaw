@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, Info, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getHostApiBase } from '@/lib/host-api';
+import type { ActiveMentionTrigger } from '@/lib/dingtalk-mention-composer';
 import { cn } from '@/lib/utils';
 import type { MentionSearchItem } from '@/types/dingtalk-mention';
 import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
+import { useMentionPopoverDismissOutside } from './use-mention-popover-dismiss-outside';
+import { useMentionPopoverPosition } from './use-mention-popover-position';
 
 type IndexedMentionSearchItem = MentionSearchItem & { sourceIndex: number };
 
@@ -134,25 +137,14 @@ interface DingTalkMentionPopoverProps {
    * overflow 裁切（问题一）。无则退回 absolute 定位保持兼容（如 DingTalkRecipientField）。
    */
   anchorRef?: RefObject<HTMLElement | null>;
+  /** 有则优先按光标（trigger.endOffset）定位浮层 */
+  mentionTrigger?: ActiveMentionTrigger | null;
+  getEditorElement?: () => HTMLElement | null;
   /** 点击浮层与 excludeRef 外部时关闭（如清除 @ 提及 trigger） */
   onDismissOutside?: () => void;
   /** 点击该区域内部时不触发 onDismissOutside（通常为编辑器 host） */
   dismissOutsideExcludeRef?: RefObject<HTMLElement | null>;
 }
-
-/** 向上空间不足时翻转向下的阈值（px） */
-const MENTION_POPOVER_MIN_UPWARD_HEIGHT = 240;
-/** 浮层宽度 */
-const MENTION_POPOVER_WIDTH = 320;
-/** 浮层最大高度上限（含标题/鉴权/列表） */
-const MENTION_POPOVER_MAX_HEIGHT = 280;
-
-type PopoverPosition = {
-  left: number;
-  top?: number;
-  bottom?: number;
-  maxHeight: number;
-};
 
 export function DingTalkMentionPopover({
   open,
@@ -174,6 +166,8 @@ export function DingTalkMentionPopover({
   onInstall,
   onLoadMore,
   anchorRef,
+  mentionTrigger,
+  getEditorElement,
   onDismissOutside,
   dismissOutsideExcludeRef,
 }: DingTalkMentionPopoverProps) {
@@ -182,24 +176,20 @@ export function DingTalkMentionPopover({
   const loadMoreLockRef = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   const listContentRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState<PopoverPosition | null>(null);
 
-  useEffect(() => {
-    if (!open || !onDismissOutside) return;
+  useMentionPopoverDismissOutside({
+    open,
+    panelRef,
+    excludeRef: dismissOutsideExcludeRef,
+    onDismissOutside,
+  });
 
-    const onPointerDown = (event: MouseEvent) => {
-      const target = event.target as Node | null;
-      if (!target) return;
-      if (panelRef.current?.contains(target)) return;
-      if (dismissOutsideExcludeRef?.current?.contains(target)) return;
-      onDismissOutside();
-    };
-
-    document.addEventListener('mousedown', onPointerDown);
-    return () => {
-      document.removeEventListener('mousedown', onPointerDown);
-    };
-  }, [dismissOutsideExcludeRef, onDismissOutside, open]);
+  const position = useMentionPopoverPosition({
+    open,
+    anchorRef,
+    mentionTrigger,
+    getEditorElement,
+  });
 
   useEffect(() => {
     if (!open || items.length === 0) return;
@@ -208,49 +198,6 @@ export function DingTalkMentionPopover({
     const activeEl = container.querySelector<HTMLElement>(`[data-mention-index="${activeIndex}"]`);
     activeEl?.scrollIntoView({ block: 'nearest' });
   }, [activeIndex, open, items.length]);
-
-  // portal 定位：锚定 anchorRef 的视口矩形，优先向上；向上空间不足时翻转向下。
-  // 监听 scroll（capture）/ resize 更新坐标，跟随 Modal 滚动。
-  useLayoutEffect(() => {
-    if (!open || !anchorRef?.current) {
-      setPosition(null);
-      return;
-    }
-    const updatePosition = () => {
-      const rect = anchorRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      const width = Math.min(MENTION_POPOVER_WIDTH, window.innerWidth - 24);
-      const left = Math.min(
-        Math.max(12, rect.left),
-        window.innerWidth - width - 12,
-      );
-      const upwardSpace = rect.top;
-      const downwardSpace = window.innerHeight - rect.bottom;
-      // 上方不够完整展示时翻转向下；两侧都紧时选空间更大的一侧
-      const flipDown = upwardSpace < MENTION_POPOVER_MIN_UPWARD_HEIGHT
-        && downwardSpace >= upwardSpace;
-      if (flipDown) {
-        const maxHeight = Math.max(
-          160,
-          Math.min(downwardSpace - 16, MENTION_POPOVER_MAX_HEIGHT),
-        );
-        setPosition({ left, top: rect.bottom + 8, maxHeight });
-      } else {
-        const maxHeight = Math.max(
-          160,
-          Math.min(upwardSpace - 16, MENTION_POPOVER_MAX_HEIGHT),
-        );
-        setPosition({ left, bottom: window.innerHeight - rect.top + 8, maxHeight });
-      }
-    };
-    updatePosition();
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
-    return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
-    };
-  }, [open, anchorRef]);
 
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
     if (!recent || !hasMore || loading || loadingMore || !onLoadMore) return;

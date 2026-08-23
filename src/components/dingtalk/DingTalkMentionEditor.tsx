@@ -100,6 +100,8 @@ export interface DingTalkMentionEditorHandle {
   openMentionPicker: () => void;
   /** 任务描述换行：插入 `<br>` 而不是 Chrome 的 DIV */
   insertLineBreak: () => void;
+  /** contenteditable 根节点，供 @ 浮层光标定位 */
+  getEditorElement: () => HTMLElement | null;
 }
 
 interface DingTalkMentionEditorProps {
@@ -320,6 +322,7 @@ export const DingTalkMentionEditor = forwardRef<DingTalkMentionEditorHandle, Din
         syncFromDom();
         captureCaretOffset();
       },
+      getEditorElement: () => editorRef.current,
     }), [captureCaretOffset, onTriggerChange, removableMentions, resolveInsertOffset, syncFromDom]);
 
     useEffect(() => {

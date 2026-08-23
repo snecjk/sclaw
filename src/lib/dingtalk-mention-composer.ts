@@ -699,6 +699,37 @@ function buildRangeFromPlainTextOffsets(
   }
 }
 
+function readRangeClientRect(range: Range): DOMRect | null {
+  if (typeof range.getClientRects === 'function') {
+    const rects = range.getClientRects();
+    if (rects.length > 0) {
+      return rects[rects.length - 1] ?? null;
+    }
+  }
+  if (typeof range.getBoundingClientRect !== 'function') return null;
+  const rect = range.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) return null;
+  return rect;
+}
+
+/** 将 plainText 下标映射为视口矩形（换行时取光标所在最后一行）。 */
+export function getClientRectForPlainTextOffset(
+  root: HTMLElement,
+  offset: number,
+): DOMRect | null {
+  const range = buildRangeFromPlainTextOffsets(root, offset, offset);
+  if (!range) return null;
+  return readRangeClientRect(range);
+}
+
+/** @ 提及激活时，取光标（endOffset）处的视口矩形。 */
+export function getMentionTriggerCaretRect(
+  root: HTMLElement,
+  trigger: ActiveMentionTrigger,
+): DOMRect | null {
+  return getClientRectForPlainTextOffset(root, trigger.endOffset);
+}
+
 export function detectActiveMentionTrigger(root: HTMLElement): ActiveMentionTrigger | null {
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0 || !selection.isCollapsed) return null;
