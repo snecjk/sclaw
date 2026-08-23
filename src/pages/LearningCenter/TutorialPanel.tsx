@@ -69,16 +69,10 @@ export function TutorialPanel({ tutorialId, portalContainer, panelPercent, expan
         portalContainer={portalContainer}
         showOverlay={false}
         onInteractOutside={(event) => {
-          const target = event.target;
-          // Expand/restore lives in the shared header, outside the Radix dialog.
-          // Protect only that control; clicks on the learning-center page should
-          // keep the normal non-modal behavior and dismiss the tutorial.
-          if (
-            target instanceof Element
-            && target.closest('[data-learning-center-tutorial-header-action]')
-          ) {
-            event.preventDefault();
-          }
+          // macOS can emit a second focus-outside event after the shared header
+          // changes layout, whose target is no longer the expand button. Keep
+          // Radix from auto-dismissing; LearningCenterPage owns page-click close.
+          event.preventDefault();
         }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();

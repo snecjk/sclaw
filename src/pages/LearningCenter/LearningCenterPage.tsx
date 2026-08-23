@@ -213,6 +213,17 @@ export function LearningCenterPage() {
     setIsTutorialExpanded(false);
   }, []);
 
+  useEffect(() => {
+    if (!tutorialId) return;
+    const closeFromLearningCenterPage = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node) || !pageRootRef.current?.contains(target)) return;
+      closeTutorial();
+    };
+    document.addEventListener('pointerdown', closeFromLearningCenterPage, true);
+    return () => document.removeEventListener('pointerdown', closeFromLearningCenterPage, true);
+  }, [closeTutorial, tutorialId]);
+
   useLayoutEffect(() => {
     setTutorialWorkspaceContainer(
       splitRowRef.current?.closest('main') ?? splitRowRef.current?.parentElement ?? null,
@@ -513,7 +524,6 @@ export function LearningCenterPage() {
       <div className="flex items-center gap-1">
         <button
           type="button"
-          data-learning-center-tutorial-header-action
           className={contentHeaderActionBtnClass}
           aria-label={isTutorialExpanded ? t('restoreTutorial') : t('expandTutorial')}
           onClick={toggleTutorialPanelExpanded}
