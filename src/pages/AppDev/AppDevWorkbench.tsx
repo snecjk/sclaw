@@ -405,7 +405,7 @@ export default function AppDevWorkbench() {
   };
 
   const showCloudActions = shouldShowStoCloudActions(listedApp, stoStatus);
-  const showGitCommit = shouldShowGitCommitAction(listedApp, gitAvailable);
+  const showGitCommit = shouldShowGitCommitAction(listedApp, gitAvailable, stoStatus);
   const commitMode = showGitCommit ? 'git' : 'sto';
   const canDeploy = Boolean(
     showCloudActions

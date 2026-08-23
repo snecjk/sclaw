@@ -232,7 +232,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   }, [startRun]);
   const closeDevAppTab = useAppPlazaShellStore((s) => s.closeDevAppTab);
   const showCloudActions = shouldShowStoCloudActions(listedApp, stoStatus);
-  const showGitCommit = shouldShowGitCommitAction(listedApp, gitAvailable);
+  const showGitCommit = shouldShowGitCommitAction(listedApp, gitAvailable, stoStatus);
   const canDeploy = Boolean(
     showCloudActions
     && stoStatus?.available
