@@ -79,9 +79,11 @@ Claude 与 OpenClaw 工作流运行器实际产生 `agent.answer_delta`。事件
 - `message`：当前片段或上游快照
 - `rawText`：运行器维护的累计文本
 
-聚合时优先使用非空 `rawText` 覆盖当前展示文本。这样 Claude 的普通增量和 OpenClaw 可能返回的累计快照都不会重复拼接。
+聚合器按 `nodeId` 记录上一条文本增量的非空 `rawText`。当新的 `rawText` 以旧值为前缀时，只取新增后缀作为本次文本；当它不是旧值的延伸时，将其视为一次新的完整文本。这样既能处理 Claude 的普通增量，也能处理 OpenClaw 可能返回的累计快照，并且工具事件切断展示分段时不会把工具前全文重复带入新分段。
 
-当事件没有 `rawText` 时，回退到兼容逻辑：把当前 `message` 或字符串 payload 追加到已有文本。首个增量也使用同一规则初始化内容。
+`agent.attempt.start` 会清除该节点的累计文本基线，避免重试的新回答被误判为上一轮的延伸。工具事件只切断展示分段，不清除累计基线，因为同一次 Agent 调用在工具前后仍可能共用累计 `rawText`。
+
+当事件没有 `rawText` 时，回退到兼容逻辑：如果当前 `message` 已经以现有分段文本开头，将其视为累计快照并替换；否则把 `message` 或字符串 payload 追加到已有文本。首个增量使用当前文本初始化内容。
 
 聚合后的时间使用最后一个 delta 的时间，保持现有行为；时间显示精度仍为秒，本次不调整。
 
@@ -106,11 +108,12 @@ Claude 与 OpenClaw 工作流运行器实际产生 `agent.answer_delta`。事件
 先新增会失败的真实契约用例，再实现修复：
 
 1. 两个连续 `agent.answer_delta` 合并成一个“实时输出”。
-2. 优先采用后一事件的累计 `rawText`，不产生重复文本。
-3. 工具事件切断聚合，工具前后形成两个输出段。
+2. 从后一事件的累计 `rawText` 计算新增后缀，不产生重复文本。
+3. 工具事件切断展示聚合，但保留累计文本基线，工具前后形成两个不重复的输出段。
 4. 不同 `nodeId` 的相邻 delta 不合并。
-5. `agent.output.delta` 继续兼容。
-6. 存在真实 delta 时不再追加重复的 `lastAgentRawText`。
+5. `agent.attempt.start` 清除同一节点的累计文本基线。
+6. `agent.output.delta` 继续兼容。
+7. 存在真实 delta 时不再追加重复的 `lastAgentRawText`。
 
 聚焦验证命令：
 
