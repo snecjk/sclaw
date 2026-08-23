@@ -732,7 +732,7 @@ export function MoreAppsPage() {
           <div className="more-apps-empty">
             {searchQuery
               ? t('moreApps.emptySearch', { defaultValue: '未找到匹配的应用，试试其他关键词' })
-              : t('moreApps.emptyDevApps', { defaultValue: '还没有开发中的应用，点击右上角「创建应用」开始' })}
+              : t('moreApps.emptyDevApps', { defaultValue: '还没有开发中的应用，点击右上角「创建应用」或「导入应用」开始' })}
           </div>
         </div>
       );

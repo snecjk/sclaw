@@ -5,7 +5,7 @@
 
 import { readFile, realpath } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
-import { basename, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import {
   type CodeApplicationRecord,
 } from '../../shared/code-application-catalog';
@@ -138,11 +138,6 @@ export async function ensureStoWorkspaceBinding(
   let cloud = applicationId
     ? listed.find((item) => item.applicationId === applicationId)
     : undefined;
-  if (!applicationId) {
-    const folderName = basename(cwd);
-    cloud = listed.find((item) => item.applicationName === folderName);
-    applicationId = cloud?.applicationId;
-  }
 
   if (!applicationId) {
     logger.warn(`[code-collab] ensure workspace skip: no applicationId appPath=${cwd}`);

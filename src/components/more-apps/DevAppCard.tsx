@@ -50,6 +50,8 @@ export function DevAppCard({ app }: DevAppCardProps) {
 
   const localReady = app.localReady && Boolean(app.workspaceId);
   const availability = app.availability ?? (localReady ? 'local' : 'remote-only');
+  const isCloudApp = Boolean(app.applicationId);
+  const canDelete = isCloudApp || Boolean(app.workspaceId);
 
   const handleEdit = () => {
     if (!localReady) {
@@ -115,8 +117,8 @@ export function DevAppCard({ app }: DevAppCardProps) {
 
   const handleDelete = async () => {
     if (deleting) return;
-    if (!app.applicationId) {
-      toast.error('缺少云端应用 ID，无法删除');
+    if (!app.applicationId && !app.workspaceId) {
+      toast.error('无法删除该应用');
       return;
     }
     setDeleting(true);
@@ -127,14 +129,20 @@ export function DevAppCard({ app }: DevAppCardProps) {
         workspaceId: app.workspaceId,
         deleteLocal: shouldDeleteLocal,
       });
-      if (result.deletedLocal && app.workspaceId) {
+      if ((result.deletedLocal || !isCloudApp) && app.workspaceId) {
         closeDevAppTabsByWorkspaceId(app.workspaceId);
         unregisterWorkspaceId(app.workspaceId);
       }
       await refreshCatalog();
-      toast.success(
-        result.deletedLocal ? '应用已下线，本地应用已删除' : '应用已下线（本地文件已保留）',
-      );
+      if (!isCloudApp) {
+        toast.success(
+          result.deletedFiles ? '已从列表移除，本地应用已删除' : '已从开发应用列表移除（本地文件已保留）',
+        );
+      } else {
+        toast.success(
+          result.deletedLocal ? '应用已下线，本地应用已删除' : '应用已下线（本地文件已保留）',
+        );
+      }
       setDeleteOpen(false);
       setDeleteLocal(false);
     } catch (error) {
@@ -240,7 +248,7 @@ export function DevAppCard({ app }: DevAppCardProps) {
               <ExternalLink className="mr-2 h-3.5 w-3.5" aria-hidden />
               系统浏览器打开
             </DropdownMenuItem>
-            {app.applicationId ? (
+            {canDelete ? (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -287,7 +295,9 @@ export function DevAppCard({ app }: DevAppCardProps) {
                   删除应用
                 </h2>
                 <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-                  确定软删除「{app.name}」吗？云端应用将下线，不再出现在列表中。
+                  {isCloudApp
+                    ? `确定软删除「${app.name}」吗？云端应用将下线，不再出现在列表中。`
+                    : `确定从开发应用列表移除「${app.name}」吗？不会提交或发布到云端。`}
                 </p>
                 {app.appPath || app.workspaceId ? (
                   <label className="mt-4 flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2.5">

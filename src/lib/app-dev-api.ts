@@ -85,7 +85,7 @@ export async function cloneDevApp(input: {
 }
 
 export async function deleteDevApp(input: {
-  applicationId: string;
+  applicationId?: string;
   workspaceId?: string;
   deleteLocal?: boolean;
 }): Promise<{ offline: boolean; deletedLocal: boolean; deletedFiles: boolean; appPath: string }> {

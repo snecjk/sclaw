@@ -197,6 +197,9 @@ export default function AppDevWorkbench() {
   const autoRepairRef = useRef<{ fingerprint: string; attempts: number }>({ fingerprint: '', attempts: 0 });
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
   const appName = workspaces.find((w) => w.id === workspaceId)?.name ?? '我的应用';
+  const listedApp = useAppDevCatalogStore((s) =>
+    s.apps.find((app) => app.workspaceId === workspaceId),
+  );
   const appDevSessionKey = useAppDevChatSession(workspaceId);
   const { sending } = useChatSessionRuntimeView(appDevSessionKey ?? '');
   const runControl = useAppDevRunControl({ workspaceId, setStatus });
@@ -394,8 +397,12 @@ export default function AppDevWorkbench() {
     deploy.start(input);
   };
 
+  const showCloudActions = listedApp
+    ? Boolean(listedApp.applicationId)
+    : Boolean(stoStatus?.bound);
   const canDeploy = Boolean(
-    stoStatus?.available
+    showCloudActions
+    && stoStatus?.available
     && (stoStatus.bound || stoStatus.applicationId),
   );
 
@@ -434,32 +441,36 @@ export default function AppDevWorkbench() {
           onRestart={() => void runControl.restart()}
         />
 
-        <span
-          className={cn(
-            'inline-flex h-7 items-center rounded-md border px-2 text-[11px]',
-            stoStatusTone,
-          )}
-          title={
-            stoStatus?.bound
-              ? `${stoStatus.syncLabel}${stoStatus.applicationId ? ` · ${stoStatus.applicationId}` : ''}`
-              : '未绑定 STO 应用'
-          }
-        >
-          {stoStatus?.bound ? `STO ${stoStatus.syncLabel}` : 'STO 未绑定'}
-        </span>
+        {showCloudActions ? (
+          <span
+            className={cn(
+              'inline-flex h-7 items-center rounded-md border px-2 text-[11px]',
+              stoStatusTone,
+            )}
+            title={
+              stoStatus?.bound
+                ? `${stoStatus.syncLabel}${stoStatus.applicationId ? ` · ${stoStatus.applicationId}` : ''}`
+                : '未绑定 STO 应用'
+            }
+          >
+            {stoStatus?.bound ? `STO ${stoStatus.syncLabel}` : 'STO 未绑定'}
+          </span>
+        ) : null}
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 gap-1 px-2 text-xs"
-          disabled={!stoStatus?.available || !stoStatus?.bound}
-          onClick={() => setCommitOpen(true)}
-        >
-          提交
-        </Button>
+        {showCloudActions ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs"
+            disabled={!stoStatus?.available || !stoStatus?.bound}
+            onClick={() => setCommitOpen(true)}
+          >
+            提交
+          </Button>
+        ) : null}
 
-        {stoStatus?.bound && (stoStatus.syncState === 'remote-ahead' || stoStatus.syncState === 'merge-required') ? (
+        {showCloudActions && stoStatus?.bound && (stoStatus.syncState === 'remote-ahead' || stoStatus.syncState === 'merge-required') ? (
           <Button
             type="button"
             variant="ghost"
@@ -471,7 +482,7 @@ export default function AppDevWorkbench() {
           </Button>
         ) : null}
 
-        {stoStatus?.bound && stoStatus.syncState === 'merge-required' ? (
+        {showCloudActions && stoStatus?.bound && stoStatus.syncState === 'merge-required' ? (
           <Button
             type="button"
             variant="ghost"
@@ -485,13 +496,15 @@ export default function AppDevWorkbench() {
           </Button>
         ) : null}
 
-        <StoAppDeployControl
-          canDeploy={canDeploy}
-          job={deploy.job}
-          onOpenDialog={() => setDeployOpen(true)}
-          onClearTerminalJob={deploy.clear}
-          onFillComposer={handleFillComposerFromDiagnostics}
-        />
+        {showCloudActions ? (
+          <StoAppDeployControl
+            canDeploy={canDeploy}
+            job={deploy.job}
+            onOpenDialog={() => setDeployOpen(true)}
+            onClearTerminalJob={deploy.clear}
+            onFillComposer={handleFillComposerFromDiagnostics}
+          />
+        ) : null}
 
         <Button
           type="button"
