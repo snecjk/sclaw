@@ -707,17 +707,11 @@ export function LearningCenterPage() {
                 </section>
               )}
 
-              {selectedCategoryId && (
+              {selectedCategoryId && !(cases.status === 'ready' && cases.items.length === 0) && (
                 <section className="learning-center-cases" aria-labelledby="learning-center-cases-heading" aria-live="polite" aria-busy={cases.status === 'loading'}>
                   <h2 id="learning-center-cases-heading" className="learning-center-cases__title">{t('casesTitle')}</h2>
                   {cases.status === 'loading' && <FeedbackState state="loading" title={t('casesLoading')} />}
                   {cases.status === 'error' && <FeedbackState state="error" title={t('casesErrorTitle')} description={cases.message || t('sectionErrorDescription')} action={<Button size="sm" onClick={() => requestCasePage(selectedCategoryId, cases.pageNum)}>{t('retry')}</Button>} />}
-                  {cases.status === 'ready' && cases.items.length === 0 && (
-                    <div className="learning-center-empty learning-center-cases__empty" role="status">
-                      <img src={sectionEmptyIcon} alt="" aria-hidden className="learning-center-empty__icon" width={48} height={48} />
-                      <p className="learning-center-empty__text">{t('casesEmptyTitle')}</p>
-                    </div>
-                  )}
                   {cases.status === 'ready' && cases.items.length > 0 && (
                     <>
                       <ul className="learning-center-cases__grid" aria-label={t('casesTitle')}>

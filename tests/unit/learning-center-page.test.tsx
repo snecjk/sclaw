@@ -196,6 +196,20 @@ describe('LearningCenterPage', () => {
     expect(screen.getByText('这个学习域还没有分类')).toBeInTheDocument();
   });
 
+  it('hides the complete case-template section when the selected category has no cases', async () => {
+    const emptyCases = deferred<ReturnType<typeof casePage>>();
+    casesMock.mockReturnValue(emptyCases.promise);
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: '案例模版' })).toBeInTheDocument();
+    emptyCases.resolve(casePage([], 1, 0));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: '案例模版' })).not.toBeInTheDocument();
+    });
+    expect(screen.queryByText('案例模版努力扩充中')).not.toBeInTheDocument();
+  });
+
   it('ignores late responses during rapid category switching', async () => {
     categoriesMock.mockResolvedValue({ items: [category, categoryTwo, categoryThree], total: 3, pageNum: 1, pageSize: 100 });
     const oldTutorial = deferred<ReturnType<typeof tutorialPage>>();
