@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { getTutorialDetail, LearningCenterApiError } from '@/lib/learning-center-api';
 import type { LearningTutorial } from '@/types/learning-center';
+import { cn } from '@/lib/utils';
 import './TutorialPanel.css';
 
 type DetailState =
@@ -18,12 +19,13 @@ type DetailState =
 interface TutorialPanelProps {
   tutorialId: string | null;
   portalContainer: HTMLElement | null;
+  expanded?: boolean;
   returnFocusRef: RefObject<HTMLElement | null>;
   resizeHandle?: ReactNode;
   onClose: () => void;
 }
 
-export function TutorialPanel({ tutorialId, portalContainer, returnFocusRef, resizeHandle, onClose }: TutorialPanelProps) {
+export function TutorialPanel({ tutorialId, portalContainer, expanded = false, returnFocusRef, resizeHandle, onClose }: TutorialPanelProps) {
   const { t } = useTranslation('learningCenter');
   const [reloadKey, setReloadKey] = useState(0);
   const [state, setState] = useState<DetailState>({ status: 'loading' });
@@ -58,7 +60,10 @@ export function TutorialPanel({ tutorialId, portalContainer, returnFocusRef, res
     <Sheet modal={false} open={Boolean(tutorialId)} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent
         side="right"
-        className="learning-center-tutorial-sheet flex flex-col gap-0 overflow-hidden p-0 !absolute inset-0"
+        className={cn(
+          'learning-center-tutorial-sheet flex flex-col gap-0 overflow-hidden p-0 !absolute inset-0',
+          expanded && 'learning-center-tutorial-sheet--expanded',
+        )}
         portalContainer={portalContainer}
         showOverlay={false}
         onCloseAutoFocus={(event) => {

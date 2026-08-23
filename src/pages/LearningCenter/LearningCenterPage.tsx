@@ -193,6 +193,7 @@ export function LearningCenterPage() {
   const [isTutorialExpanded, setIsTutorialExpanded] = useState(false);
   const [isTutorialResizing, setIsTutorialResizing] = useState(false);
   const [tutorialPanelContainer, setTutorialPanelContainer] = useState<HTMLElement | null>(null);
+  const [tutorialWorkspaceContainer, setTutorialWorkspaceContainer] = useState<HTMLElement | null>(null);
   const [detailCase, setDetailCase] = useState<LearningCaseTemplate | null>(null);
   const [previewCase, setPreviewCase] = useState<LearningCaseTemplate | null>(null);
   const selectedCategoryRef = useRef<string | null>(null);
@@ -217,6 +218,9 @@ export function LearningCenterPage() {
 
   useLayoutEffect(() => {
     setTutorialPanelContainer(tutorialSlotRef.current);
+    setTutorialWorkspaceContainer(
+      splitRowRef.current?.closest('main') ?? splitRowRef.current?.parentElement ?? null,
+    );
   }, []);
 
   useLayoutEffect(() => {
@@ -537,7 +541,7 @@ export function LearningCenterPage() {
     title: null,
     previewTabs: tutorialHeaderTitle,
     previewActions: tutorialHeaderActions,
-    layoutMode: tutorialId ? 'split' : 'conversation',
+    layoutMode: isTutorialExpanded ? 'preview-expanded' : tutorialId ? 'split' : 'conversation',
   });
 
   return (
@@ -768,7 +772,8 @@ export function LearningCenterPage() {
       <TutorialPanel
         key={tutorialId ?? 'closed'}
         tutorialId={tutorialId}
-        portalContainer={tutorialPanelContainer}
+        portalContainer={isTutorialExpanded ? tutorialWorkspaceContainer : tutorialPanelContainer}
+        expanded={isTutorialExpanded}
         returnFocusRef={detailReturnFocusRef}
         resizeHandle={tutorialId && !isTutorialExpanded ? (
           <SplitPanelResizeHandle

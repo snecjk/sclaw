@@ -1,6 +1,7 @@
 .learning-center-tutorial-sheet {
   position: absolute;
   inset: 0;
+  z-index: 2147483647 !important;
   box-sizing: border-box;
   width: 100% !important;
   min-width: 0 !important;
@@ -15,6 +16,18 @@
   -webkit-backdrop-filter: none !important;
   box-shadow: none !important;
   filter: none !important;
+}
+
+/* In preview-expanded mode the compact right-side host no longer owns the
+   layout. Resolve the tutorial against the complete workspace main instead. */
+.learning-center-tutorial-sheet--expanded {
+  top: calc(var(--sto-content-header-h, 44px) + 0.5rem) !important;
+  right: 0.5rem !important;
+  bottom: 0.5rem !important;
+  left: 0.5rem !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: none !important;
 }
 
 /* The host is already placed at its final overlay width. A slide-in animation

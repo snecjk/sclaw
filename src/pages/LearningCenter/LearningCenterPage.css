@@ -124,12 +124,11 @@
   overflow: hidden;
 }
 
-/* Expanded tutorial remains an overlay: the learning-center page stays mounted
-   at its original size underneath and is never converted into a split column. */
+/* Expanded content is portalled to the workspace main. Keep the now-empty
+   compact host inert so it cannot cover the full-screen tutorial. */
 .learning-center-split--expanded > .learning-center-split__aside {
-  left: 0.5rem;
-  width: auto;
-  max-width: none;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 @media (min-width: 64rem) {

@@ -84,8 +84,10 @@ function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/learning-center']}>
       <ContentHeaderProvider>
-        <LearningCenterHeaderProbe />
-        <LearningCenterPage />
+        <main data-testid="learning-center-workspace">
+          <LearningCenterHeaderProbe />
+          <LearningCenterPage />
+        </main>
       </ContentHeaderProvider>
     </MemoryRouter>,
   );
@@ -304,15 +306,19 @@ describe('LearningCenterPage', () => {
     expect(screen.getByRole('separator', { name: '调整教程浮层宽度' })).toHaveAttribute('aria-valuenow', String(adjustedPercent));
 
     fireEvent.click(screen.getByRole('button', { name: '全屏查看教程' }));
-    expect(screen.getByTestId('learning-center-header')).toHaveAttribute('data-layout-mode', 'split');
+    const expandedPanel = screen.getByRole('dialog');
+    expect(screen.getByTestId('learning-center-header')).toHaveAttribute('data-layout-mode', 'preview-expanded');
     expect(page).not.toHaveClass('hidden');
     expect(document.querySelector('.learning-center-split')).toHaveClass('learning-center-split--expanded');
+    expect(expandedPanel).toHaveClass('learning-center-tutorial-sheet--expanded');
+    expect(expandedPanel.parentElement).toBe(screen.getByTestId('learning-center-workspace'));
     expect(screen.queryByRole('separator', { name: '调整教程浮层宽度' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '退出教程全屏' }));
     expect(screen.getByTestId('learning-center-header')).toHaveAttribute('data-layout-mode', 'split');
     expect(page).not.toHaveClass('hidden');
     expect(document.querySelector('.learning-center-split')).not.toHaveClass('learning-center-split--expanded');
+    expect(document.querySelector('.learning-center-split__aside')).toContainElement(screen.getByRole('dialog'));
     expect(screen.getByRole('separator', { name: '调整教程浮层宽度' })).toHaveAttribute('aria-valuenow', String(adjustedPercent));
   });
 
