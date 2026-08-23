@@ -1,4 +1,4 @@
-import Store from 'electron-store';
+import type Store from 'electron-store';
 import type { Capability } from '../../../../shared/jsbridge/capabilities';
 import { isCapability } from '../../../../shared/jsbridge/capabilities';
 
@@ -14,31 +14,45 @@ interface ConsentStoreSchema {
 }
 
 let store: Store<ConsentStoreSchema> | null = null;
+let storeInit: Promise<Store<ConsentStoreSchema>> | null = null;
 
-function getStore(): Store<ConsentStoreSchema> {
-  if (!store) {
-    store = new Store<ConsentStoreSchema>({
-      name: 'bridge-consents',
-      projectName: 'sto-claw',
-      defaults: { consents: [] },
-    });
+async function getStore(): Promise<Store<ConsentStoreSchema>> {
+  if (store) return store;
+  if (!storeInit) {
+    storeInit = (async () => {
+      const Store = (await import('electron-store')).default;
+      const instance = new Store<ConsentStoreSchema>({
+        name: 'bridge-consents',
+        projectName: 'sto-claw',
+        defaults: { consents: [] },
+      });
+      store = instance;
+      return instance;
+    })();
   }
-  return store;
+  return storeInit;
+}
+
+/** Preload consent store before sync bridge session creation. */
+export async function ensureBridgeConsentStore(): Promise<void> {
+  await getStore();
 }
 
 export function hasBridgeConsent(appId: string, capability: Capability): boolean {
-  return getStore().get('consents').some(
+  if (!store) return false;
+  return store.get('consents').some(
     (entry) => entry.appId === appId && entry.capability === capability,
   );
 }
 
-export function grantBridgeConsent(input: {
+export async function grantBridgeConsent(input: {
   appId: string;
   capability: Capability;
   grantedBy?: string;
-}): void {
+}): Promise<void> {
   if (!isCapability(input.capability)) return;
-  const consents = getStore().get('consents').filter(
+  const consentStore = await getStore();
+  const consents = consentStore.get('consents').filter(
     (entry) => !(entry.appId === input.appId && entry.capability === input.capability),
   );
   consents.push({
@@ -47,25 +61,28 @@ export function grantBridgeConsent(input: {
     grantedAt: Date.now(),
     grantedBy: input.grantedBy,
   });
-  getStore().set('consents', consents);
+  consentStore.set('consents', consents);
 }
 
-export function revokeBridgeAppConsents(appId: string): void {
-  getStore().set(
+export async function revokeBridgeAppConsents(appId: string): Promise<void> {
+  const consentStore = await getStore();
+  consentStore.set(
     'consents',
-    getStore().get('consents').filter((entry) => entry.appId !== appId),
+    consentStore.get('consents').filter((entry) => entry.appId !== appId),
   );
 }
 
-export function listBridgeConsents(appId?: string): ConsentRecord[] {
-  const consents = getStore().get('consents');
+export async function listBridgeConsents(appId?: string): Promise<ConsentRecord[]> {
+  const consentStore = await getStore();
+  const consents = consentStore.get('consents');
   return appId ? consents.filter((entry) => entry.appId === appId) : consents;
 }
 
-export function revokeBridgeConsent(appId: string, capability: Capability): void {
-  getStore().set(
+export async function revokeBridgeConsent(appId: string, capability: Capability): Promise<void> {
+  const consentStore = await getStore();
+  consentStore.set(
     'consents',
-    getStore().get('consents').filter(
+    consentStore.get('consents').filter(
       (entry) => !(entry.appId === appId && entry.capability === capability),
     ),
   );
