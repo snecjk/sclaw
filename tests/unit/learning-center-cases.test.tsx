@@ -134,10 +134,12 @@ describe('LearningCenterPage cases', () => {
     expect(screen.getByAltText('周报自动汇总 封面')).toHaveAttribute('src', caseItem.coverImageUrl);
   });
 
-  it('shows the case empty state while tutorials stay usable', async () => {
+  it('hides the case section when empty while tutorials stay usable', async () => {
     casesMock.mockResolvedValue({ items: [], total: 0, pageNum: 1, pageSize: 6 });
     renderPage();
-    expect(await screen.findByText('案例模版努力扩充中')).toBeInTheDocument();
+    await waitFor(() => expect(casesMock).toHaveBeenCalled());
+    expect(screen.queryByRole('heading', { name: '案例模版' })).not.toBeInTheDocument();
+    expect(screen.queryByText('案例模版努力扩充中')).not.toBeInTheDocument();
     expect(screen.queryByText('暂无实践案例')).not.toBeInTheDocument();
     expect(screen.queryByText('这个分类还没有发布实践案例。')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '查看教程' })).toBeInTheDocument();
@@ -213,8 +215,28 @@ describe('LearningCenterPage cases', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '查看详情' }));
     const dialog = await screen.findByRole('dialog', { name: '报价导入' });
-    expect(within(dialog).getByText('提示词')).toBeInTheDocument();
     expect(await within(dialog).findByText('财务-看报表')).toBeInTheDocument();
+    expect(within(dialog).getByText('提示词')).toBeInTheDocument();
+  });
+
+  it('shows a workflow name instead of its target code in case details', async () => {
+    const workflowCase = {
+      ...caseItem,
+      title: '总部结算对账案例',
+      name: '总部结算对账案例',
+      targetType: 'WORKFLOW' as const,
+      targetTypeRaw: 'WORKFLOW',
+      targetCode: 'tpl_65fe597a',
+      promptText: null,
+    };
+    casesMock.mockResolvedValue({ items: [workflowCase], total: 1, pageNum: 1, pageSize: 6 });
+    caseDetailMock.mockResolvedValue({ ...workflowCase, tutorial, tutorials: [tutorial] });
+
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '查看详情' }));
+    const dialog = await screen.findByRole('dialog', { name: '总部结算对账案例' });
+    expect(await within(dialog).findByText('报价测算')).toBeInTheDocument();
+    expect(within(dialog).queryByText('tpl_65fe597a')).not.toBeInTheDocument();
   });
 
   it('retries case details locally after a failure', async () => {
