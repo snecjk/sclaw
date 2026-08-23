@@ -98,6 +98,9 @@ export function registerIpcHandlers(
   void import('./services/sclaw-embed-browser-window-open').then(({ installSclawEmbedBrowserWindowOpenHook }) => {
     installSclawEmbedBrowserWindowOpenHook();
   });
+  void import('./services/sclaw-embed-browser-guest-preferences').then(({ installSclawEmbedBrowserGuestPreferencesHook }) => {
+    installSclawEmbedBrowserGuestPreferencesHook();
+  });
 
   // Unified request protocol (non-breaking: legacy channels remain available)
   registerUnifiedRequestHandlers(gatewayManager);
@@ -2844,7 +2847,7 @@ function registerSessionHandlers(): void {
     const webContentsId = typeof payload?.webContentsId === 'number' ? payload.webContentsId : 0;
     if (!runtimeId || !webContentsId) return { ok: false };
     const { bindSclawEmbedBrowserWebContents } = await import('./services/sclaw-embed-browser-runtime');
-    const meta = bindSclawEmbedBrowserWebContents({
+    const meta = await bindSclawEmbedBrowserWebContents({
       runtimeId,
       webContentsId,
       pageUrl: typeof payload?.pageUrl === 'string' ? payload.pageUrl : undefined,
@@ -2920,5 +2923,21 @@ function registerSessionHandlers(): void {
     const { setSclawEmbedBrowserPointerPassthrough } = await import('./services/sclaw-embed-browser-runtime');
     const applied = setSclawEmbedBrowserPointerPassthrough(runtimeId, payload?.passthrough === true);
     return { ok: applied };
+  });
+
+  ipcMain.handle('sclaw-browser:openDevTools', async (_, payload: {
+    runtimeId?: string;
+    toggle?: boolean;
+  }) => {
+    const runtimeId = typeof payload?.runtimeId === 'string' ? payload.runtimeId.trim() : '';
+    if (!runtimeId) return { ok: false };
+    const {
+      openSclawEmbedBrowserDevTools,
+      toggleSclawEmbedBrowserDevTools,
+    } = await import('./services/sclaw-embed-browser-runtime');
+    const opened = payload?.toggle
+      ? toggleSclawEmbedBrowserDevTools(runtimeId)
+      : openSclawEmbedBrowserDevTools(runtimeId);
+    return { ok: opened };
   });
 }

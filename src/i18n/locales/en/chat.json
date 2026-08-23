@@ -331,7 +331,7 @@
     },
     "runtime": {
         "errors": {
-            "recoveryTimeout": "Run confirmation timed out. Browser automation may still be in progress—check the page on the left or try again shortly.",
+            "recoveryTimeout": "Run confirmation timed out. Please try again shortly.",
             "rateLimit": "The model is rate-limited. Please wait a moment and try again."
         }
     }
