@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useState, type ReactNode, type RefObject } from 'react';
 import { RefreshCw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { FeedbackState } from '@/components/common/FeedbackState';
@@ -19,10 +19,11 @@ interface TutorialPanelProps {
   tutorialId: string | null;
   portalContainer: HTMLElement | null;
   returnFocusRef: RefObject<HTMLElement | null>;
+  resizeHandle?: ReactNode;
   onClose: () => void;
 }
 
-export function TutorialPanel({ tutorialId, portalContainer, returnFocusRef, onClose }: TutorialPanelProps) {
+export function TutorialPanel({ tutorialId, portalContainer, returnFocusRef, resizeHandle, onClose }: TutorialPanelProps) {
   const { t } = useTranslation('learningCenter');
   const [reloadKey, setReloadKey] = useState(0);
   const [state, setState] = useState<DetailState>({ status: 'loading' });
@@ -60,22 +61,12 @@ export function TutorialPanel({ tutorialId, portalContainer, returnFocusRef, onC
         className="learning-center-tutorial-sheet flex flex-col gap-0 overflow-hidden p-0 !absolute inset-0"
         portalContainer={portalContainer}
         showOverlay={false}
-        style={{
-          position: 'absolute',
-          top: 0,
-          right: 0,
-          bottom: 0,
-          left: 0,
-          width: '35.25rem',
-          minWidth: '35.25rem',
-          maxWidth: '35.25rem',
-          height: 'auto',
-        }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           returnFocusRef.current?.focus();
         }}
       >
+        {resizeHandle}
         <SheetHeader className="sr-only">
           <SheetTitle>{t('tutorialPanelTitle')}</SheetTitle>
           <SheetDescription className="sr-only">

@@ -267,7 +267,7 @@ describe('LearningCenterPage', () => {
     const viewButton = await screen.findByRole('button', { name: '查看教程' });
     fireEvent.click(viewButton);
     const page = document.querySelector('.learning-center-page');
-    expect(page).toHaveClass('learning-center-page--detail-open');
+    expect(page).not.toHaveClass('learning-center-page--detail-open');
     expect(document.querySelector('.learning-center-split')).toHaveClass('learning-center-split--open');
     const panel = screen.getByRole('dialog');
     const aside = document.querySelector('.learning-center-split__aside');
@@ -277,18 +277,43 @@ describe('LearningCenterPage', () => {
     const header = screen.getByTestId('learning-center-header');
     expect(header).toHaveAttribute('data-layout-mode', 'split');
     expect(header).toHaveTextContent('教程指南');
-    expect(header).toContainElement(screen.getByRole('button', { name: '关闭' }));
-    expect(panel.style.position).toBe('absolute');
-    expect(panel.style.width).toBe('35.25rem');
-    expect(panel.style.top).toBe('0px');
-    expect(panel.style.right).toBe('0px');
-    expect(panel.style.bottom).toBe('0px');
+    expect(header).toContainElement(screen.getByRole('button', { name: '全屏查看教程' }));
+    expect(screen.getByRole('separator', { name: '调整教程浮层宽度' })).toBeInTheDocument();
+    expect(panel).toHaveClass('learning-center-tutorial-sheet');
     expect(await screen.findByRole('heading', { name: '教程正文' })).toBeInTheDocument();
     const description = screen.getByTitle('十分钟上手');
     expect(description).toHaveClass('truncate');
     activateTab('进阶实践', true);
     await waitFor(() => expect(screen.queryByRole('heading', { name: '教程正文' })).not.toBeInTheDocument());
     expect(document.querySelector('.learning-center-page')).not.toHaveClass('learning-center-page--detail-open');
+  });
+
+  it('keeps the page full-size while resizing the floating tutorial, then expands and restores it', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '查看教程' }));
+    await screen.findByRole('heading', { name: '教程正文' });
+
+    const page = document.querySelector('.learning-center-page');
+    expect(page).not.toHaveClass('hidden');
+    expect(page).not.toHaveClass('col-start-1');
+
+    const separator = screen.getByRole('separator', { name: '调整教程浮层宽度' });
+    const compactPercent = Number(separator.getAttribute('aria-valuenow'));
+    fireEvent.keyDown(separator, { key: 'ArrowLeft' });
+    const adjustedPercent = compactPercent + 1;
+    expect(screen.getByRole('separator', { name: '调整教程浮层宽度' })).toHaveAttribute('aria-valuenow', String(adjustedPercent));
+
+    fireEvent.click(screen.getByRole('button', { name: '全屏查看教程' }));
+    expect(screen.getByTestId('learning-center-header')).toHaveAttribute('data-layout-mode', 'split');
+    expect(page).not.toHaveClass('hidden');
+    expect(document.querySelector('.learning-center-split')).toHaveClass('learning-center-split--expanded');
+    expect(screen.queryByRole('separator', { name: '调整教程浮层宽度' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '退出教程全屏' }));
+    expect(screen.getByTestId('learning-center-header')).toHaveAttribute('data-layout-mode', 'split');
+    expect(page).not.toHaveClass('hidden');
+    expect(document.querySelector('.learning-center-split')).not.toHaveClass('learning-center-split--expanded');
+    expect(screen.getByRole('separator', { name: '调整教程浮层宽度' })).toHaveAttribute('aria-valuenow', String(adjustedPercent));
   });
 
   it('shows a forbidden detail state without rendering tutorial content', async () => {
@@ -307,7 +332,7 @@ describe('LearningCenterPage', () => {
     expect(await screen.findByText('详情网络错误')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '重新加载' }));
     expect(await screen.findByRole('heading', { name: '教程正文' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    fireEvent.click(screen.getAllByRole('button', { name: '关闭' })[0]);
     await waitFor(() => expect(screen.queryByRole('heading', { name: '教程正文' })).not.toBeInTheDocument());
     await waitFor(() => expect(document.activeElement).toBe(viewButton));
   });
