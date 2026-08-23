@@ -120,10 +120,16 @@ function agentDeltaDetail(
           ? rawText.slice(previousRawText.length)
           : rawText,
         rawText,
+        replacesSegment: Boolean(previousRawText && !rawText.startsWith(previousRawText)),
       };
     }
   }
-  return { text: eventDetail(event, type), rawText: undefined };
+  const text = eventDetail(event, type);
+  return {
+    text,
+    rawText: mergeAgentDeltaText(previousRawText, text),
+    replacesSegment: false,
+  };
 }
 
 function mergeAgentDeltaText(previous: string | undefined, next: string | undefined) {
@@ -187,7 +193,11 @@ export function buildTrialRunTimeline(
         && eventNodeId(previousEvent) === eventNodeId(event);
 
       if (delta && previous && isAgentOutputDelta(previousType) && sameNode) {
-        previous.detail = mergeAgentDeltaText(previous.detail, delta.text);
+        previous.detail = delta.replacesSegment
+          ? delta.text
+          : delta.text && previous.detail && delta.text.startsWith(previous.detail)
+            ? delta.text
+            : mergeAgentDeltaText(previous.detail, delta.text);
         previous.timestamp = typeof event.timestamp === 'string'
           ? event.timestamp
           : previous.timestamp;

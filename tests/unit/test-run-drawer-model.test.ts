@@ -154,6 +154,63 @@ describe('test run drawer model', () => {
     ]);
   });
 
+  it('restores a cumulative raw-text snapshot after a delta without raw text', () => {
+    const timeline = buildTrialRunTimeline(runFixture({
+      events: [
+        {
+          id: '1',
+          type: 'agent.answer_delta',
+          nodeId: 'node-1',
+          payload: { message: 'A', rawText: 'A' },
+          timestamp: '2026-08-12T10:11:35.100+08:00',
+        },
+        {
+          id: '2',
+          type: 'agent.answer_delta',
+          nodeId: 'node-1',
+          payload: { message: 'B' },
+          timestamp: '2026-08-12T10:11:35.200+08:00',
+        },
+        {
+          id: '3',
+          type: 'agent.answer_delta',
+          nodeId: 'node-1',
+          payload: { message: 'C', rawText: 'ABC' },
+          timestamp: '2026-08-12T10:11:35.300+08:00',
+        },
+      ],
+    }), null);
+
+    expect(timeline).toEqual([
+      expect.objectContaining({ label: '实时输出', detail: 'ABC' }),
+    ]);
+  });
+
+  it('replaces a segment when a cumulative raw-text snapshot is not a prefix extension', () => {
+    const timeline = buildTrialRunTimeline(runFixture({
+      events: [
+        {
+          id: '1',
+          type: 'agent.answer_delta',
+          nodeId: 'node-1',
+          payload: { message: 'abc', rawText: 'abc' },
+          timestamp: '2026-08-12T10:11:35.100+08:00',
+        },
+        {
+          id: '2',
+          type: 'agent.answer_delta',
+          nodeId: 'node-1',
+          payload: { message: 'xy', rawText: 'xy' },
+          timestamp: '2026-08-12T10:11:35.200+08:00',
+        },
+      ],
+    }), null);
+
+    expect(timeline).toEqual([
+      expect.objectContaining({ label: '实时输出', detail: 'xy' }),
+    ]);
+  });
+
   it('resets the cumulative raw-text baseline when an agent attempt restarts', () => {
     const timeline = buildTrialRunTimeline(runFixture({
       events: [
