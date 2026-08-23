@@ -69,9 +69,16 @@ export function TutorialPanel({ tutorialId, portalContainer, panelPercent, expan
         portalContainer={portalContainer}
         showOverlay={false}
         onInteractOutside={(event) => {
-          // Header actions (expand/restore/close) live outside the Radix dialog.
-          // Keep the non-modal tutorial open while those controls are used.
-          event.preventDefault();
+          const target = event.target;
+          // Expand/restore lives in the shared header, outside the Radix dialog.
+          // Protect only that control; clicks on the learning-center page should
+          // keep the normal non-modal behavior and dismiss the tutorial.
+          if (
+            target instanceof Element
+            && target.closest('[data-learning-center-tutorial-header-action]')
+          ) {
+            event.preventDefault();
+          }
         }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();

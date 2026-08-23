@@ -513,6 +513,7 @@ export function LearningCenterPage() {
       <div className="flex items-center gap-1">
         <button
           type="button"
+          data-learning-center-tutorial-header-action
           className={contentHeaderActionBtnClass}
           aria-label={isTutorialExpanded ? t('restoreTutorial') : t('expandTutorial')}
           onClick={toggleTutorialPanelExpanded}

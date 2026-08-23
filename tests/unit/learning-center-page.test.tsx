@@ -320,6 +320,10 @@ describe('LearningCenterPage', () => {
     expect(document.querySelector('.learning-center-split')).not.toHaveClass('learning-center-split--expanded');
     expect(screen.getByRole('dialog').parentElement).toBe(screen.getByTestId('learning-center-workspace'));
     expect(screen.getByRole('separator', { name: '调整教程浮层宽度' })).toHaveAttribute('aria-valuenow', String(adjustedPercent));
+
+    fireEvent.pointerDown(page!);
+    fireEvent.click(page!);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
   it('shows a forbidden detail state without rendering tutorial content', async () => {
