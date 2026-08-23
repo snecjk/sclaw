@@ -22,6 +22,25 @@ describe('isHiddenPreviewFailureMessage', () => {
     expect(isHiddenPreviewFailureMessage("[antd: Card] 'bordered' is deprecated")).toBe(false);
     expect(isHiddenPreviewFailureMessage('Uncaught TypeError: x is null')).toBe(false);
   });
+
+  it('does not treat Vite HMR module fetches as preview failures', () => {
+    expect(
+      isHiddenPreviewFailureMessage(
+        '[sclaw-preview-network] {"method":"GET","url":"http://127.0.0.1:5173/src/App.tsx","ok":false,"status":404}',
+      ),
+    ).toBe(false);
+    expect(
+      isHiddenPreviewFailureMessage(
+        '[sclaw-preview-network] {"method":"GET","url":"http://localhost:5173/@vite/client","ok":false,"status":404}',
+      ),
+    ).toBe(false);
+    expect(
+      isHiddenPreviewFailureMessage(
+        '[sclaw-preview-network] {"method":"GET","url":"/src/pages/List.tsx?t=1","ok":false,"status":404}',
+      ),
+    ).toBe(false);
+    expect(isHiddenPreviewFailureMessage('[vite] hmr update /src/App.tsx')).toBe(false);
+  });
 });
 
 describe('formatHiddenPreviewFailureForAgent', () => {

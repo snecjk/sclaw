@@ -91,6 +91,7 @@ function mergeRuntimeOptions(target: ClaudeRuntimeOptions, source: ClaudeRuntime
 const browserToolExtension: ClaudeRuntimeExtension = {
   id: 'sto-browser-tool',
   build({ sessionKey }) {
+    if (isAppDevSessionKey(sessionKey)) return {};
     return buildStoBrowserToolClaudeRuntimeOptions({
       sessionKey,
       hostApiPort: PORTS.CLAWX_HOST_API,

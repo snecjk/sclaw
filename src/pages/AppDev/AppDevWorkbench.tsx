@@ -3,7 +3,7 @@
  * 左：项目 Agent 对话（默认注入应用 AGENTS.md 上下文）；
  * 右：所见即所得预览（预览工具栏内可打开系统浏览器）。
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   AlertCircle,
@@ -13,7 +13,7 @@ import {
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
 import { useSessionDisplayMessages } from '@/stores/chat/display-selectors';
-import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
+import { useChatSessionRuntimeView, useChatSessionSending } from '@/stores/chat/runtime-selectors';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
@@ -41,26 +41,24 @@ import {
   createAppCheckpoint,
   continueStoAppMerge,
   drainAppErrors,
-  ensureAppDevContext,
   getAppDevEnvironment,
-  getAppStatus,
   getStoAppStatus,
   pullStoApp,
   pushStoApp,
   type CodeDeployEnv,
   type StoAppStatus,
   restoreAppCheckpoint,
-  startApp,
   type AppDevStatus,
 } from '@/lib/app-dev-api';
 import { useStoAppDeploy } from '@/hooks/use-sto-app-deploy';
 import { useAppDevRunControl } from '@/hooks/use-app-dev-run-control';
+import { useAppDevStatusPoll } from '@/hooks/use-app-dev-status-poll';
 import { useAppDevChatSession } from '@/hooks/use-app-dev-chat-session';
 import { getAgentIdFromSessionKey } from '@/stores/chat/session-identity';
 import { logChatFlow } from '@/stores/chat/chat-flow-log';
 import { shouldShowGitCommitAction, shouldShowStoCloudActions } from '@/lib/app-dev-actions';
 
-function WorkbenchChatPane({
+const WorkbenchChatPane = memo(function WorkbenchChatPane({
   sessionKey,
   appName,
   composerSeed,
@@ -180,7 +178,7 @@ function WorkbenchChatPane({
       </div>
     </div>
   );
-}
+});
 
 export default function AppDevWorkbench() {
   const { workspaceId = '' } = useParams<{ workspaceId: string }>();
@@ -194,16 +192,32 @@ export default function AppDevWorkbench() {
   const [commitOpen, setCommitOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
   const [sourceRevision, setSourceRevision] = useState(0);
+  const [statusWorkspaceId, setStatusWorkspaceId] = useState(workspaceId);
   const prevSendingRef = useRef(false);
   const autoRepairRef = useRef<{ fingerprint: string; attempts: number }>({ fingerprint: '', attempts: 0 });
+  if (statusWorkspaceId !== workspaceId) {
+    setStatusWorkspaceId(workspaceId);
+    setSourceRevision(0);
+  }
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
   const appName = workspaces.find((w) => w.id === workspaceId)?.name ?? '我的应用';
   const listedApp = useAppDevCatalogStore((s) =>
     s.apps.find((app) => app.workspaceId === workspaceId),
   );
   const appDevSessionKey = useAppDevChatSession(workspaceId);
-  const { sending } = useChatSessionRuntimeView(appDevSessionKey ?? '');
-  const runControl = useAppDevRunControl({ workspaceId, setStatus });
+  const sending = useChatSessionSending(appDevSessionKey ?? '');
+  const {
+    pending: runPending,
+    previewRevision,
+    start: startRun,
+    stop: stopRun,
+    restart: restartRun,
+    interceptRestartIntent,
+  } = useAppDevRunControl({ workspaceId, setStatus });
+  const dismissErrors = useCallback(() => setPendingErrors([]), []);
+  const handleRetryStart = useCallback(() => {
+    void startRun();
+  }, [startRun]);
   const deploy = useStoAppDeploy({
     workspaceId,
     applicationId: stoStatus?.applicationId,
@@ -221,7 +235,6 @@ export default function AppDevWorkbench() {
   });
 
   useEffect(() => {
-    setSourceRevision(0);
     autoRepairRef.current = { fingerprint: '', attempts: 0 };
   }, [workspaceId]);
 
@@ -238,31 +251,7 @@ export default function AppDevWorkbench() {
       .catch(() => setStoStatus(null));
   }, [workspaceId]);
 
-  // 状态轮询：未运行时自动拉起流水线；ready 后降频探测崩溃。
-  useEffect(() => {
-    if (!workspaceId) return;
-    let cancelled = false;
-    let startedOnce = false;
-    const tick = async () => {
-      const next = await getAppStatus(workspaceId).catch(() => null);
-      if (cancelled) return;
-      if ((!next || next.phase === 'stopped') && !startedOnce) {
-        startedOnce = true;
-        void startApp(workspaceId).catch(() => undefined);
-      } else if (next && next.phase !== 'stopped') {
-        // A manually stopped app must stay stopped; do not let this initial
-        // auto-start guard bring it back on the next poll.
-        startedOnce = true;
-      }
-      if (next) setStatus(next);
-    };
-    void tick();
-    const timer = setInterval(() => void tick(), 1500);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [workspaceId]);
+  useAppDevStatusPoll(workspaceId, setStatus);
 
   // 每轮对话结束：自动保存版本 + 收集报错 + 刷新右侧已打开代码。
   useEffect(() => {
@@ -278,13 +267,13 @@ export default function AppDevWorkbench() {
     prevSendingRef.current = sending;
   }, [sending, workspaceId]);
 
-  const handleFixErrors = () => {
+  const handleFixErrors = useCallback(() => {
     const text = `右侧预览出现了以下报错，请帮我修复：\n\n${pendingErrors.slice(-10).join('\n')}`;
     setPendingErrors([]);
     setComposerSeed((prev) => ({ text, version: (prev?.version ?? 0) + 1 }));
-  };
+  }, [pendingErrors]);
 
-  const handlePreviewRuntimeError = (formattedLine: string) => {
+  const handlePreviewRuntimeError = useCallback((formattedLine: string) => {
     const line = formattedLine.trim();
     if (!line) return;
     setPendingErrors((prev) => {
@@ -292,13 +281,13 @@ export default function AppDevWorkbench() {
       const next = [...prev, line];
       return next.length > 20 ? next.slice(-20) : next;
     });
-  };
+  }, []);
 
-  const handleFillComposerFromDiagnostics = (text: string) => {
+  const handleFillComposerFromDiagnostics = useCallback((text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
     setComposerSeed((prev) => ({ text: trimmed, version: (prev?.version ?? 0) + 1 }));
-  };
+  }, []);
 
   const sendAutoRepair = useCallback((text: string) => {
     const trimmed = text.trim();
@@ -334,8 +323,11 @@ export default function AppDevWorkbench() {
   useEffect(() => {
     if (!appDevSessionKey || sending || pendingErrors.length === 0) return;
     const text = `右侧预览出现了以下报错，请帮我修复：\n\n${pendingErrors.slice(-10).join('\n')}`;
-    setPendingErrors([]);
-    sendAutoRepair(text);
+    const timer = window.setTimeout(() => {
+      setPendingErrors([]);
+      sendAutoRepair(text);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [appDevSessionKey, pendingErrors, sendAutoRepair, sending]);
 
   const handleRestore = async () => {
@@ -450,10 +442,10 @@ export default function AppDevWorkbench() {
         <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{appName}</h1>
         <AppDevRunStatusMenu
           phase={phase}
-          pending={runControl.pending}
-          onStart={() => void runControl.start()}
-          onStop={() => void runControl.stop()}
-          onRestart={() => void runControl.restart()}
+          pending={runPending}
+          onStart={() => void startRun()}
+          onStop={() => void stopRun()}
+          onRestart={() => void restartRun()}
         />
 
         {showCloudActions ? (
@@ -554,7 +546,7 @@ export default function AppDevWorkbench() {
                 sessionKey={appDevSessionKey}
                 appName={appName}
                 composerSeed={composerSeed}
-                onBeforeSend={runControl.interceptRestartIntent}
+                onBeforeSend={interceptRestartIntent}
               />
             )
             : null
@@ -566,12 +558,12 @@ export default function AppDevWorkbench() {
           status={status}
           pendingErrors={pendingErrors}
           onFixErrors={handleFixErrors}
-          onDismissErrors={() => setPendingErrors([])}
+          onDismissErrors={dismissErrors}
           onPreviewRuntimeError={handlePreviewRuntimeError}
-          onRetryStart={() => void runControl.start()}
+          onRetryStart={handleRetryStart}
           onFillComposerFromDiagnostics={handleFillComposerFromDiagnostics}
           sourceRevision={sourceRevision}
-          previewRevision={runControl.previewRevision}
+          previewRevision={previewRevision}
         />
       </AppDevSplitBody>
 

@@ -1,7 +1,7 @@
 /**
  * Right-stage for app-dev workbench: 预览 / 代码 / Git / 云服务 / 社区.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -102,7 +102,7 @@ function fileName(path: string): string {
   return path.split('/').pop() || path;
 }
 
-export function AppDevWorkbenchStage({
+export const AppDevWorkbenchStage = memo(function AppDevWorkbenchStage({
   workspaceId,
   appName,
   status,
@@ -139,6 +139,11 @@ export function AppDevWorkbenchStage({
   const modeRef = useRef(mode);
   const previewFrameRef = useRef<SclawBrowserFrameHandle>(null);
   const sourceRevisionSeenRef = useRef(sourceRevision);
+  const handleSaveRef = useRef<() => void | Promise<void>>(() => undefined);
+  const refreshPreviewRef = useRef<() => void>(() => undefined);
+  const refreshOpenCodeRef = useRef<(opts?: { force?: boolean }) => Promise<void>>(
+    async () => undefined,
+  );
   const [previewCanGoBack, setPreviewCanGoBack] = useState(false);
   const [previewAddress, setPreviewAddress] = useState('');
   /**
@@ -239,16 +244,18 @@ export function AppDevWorkbenchStage({
   };
 
   const refreshPreview = () => {
-    const current =
-      previewFrameRef.current?.getURL()?.trim()
-      || previewAddress.trim()
-      || status?.previewUrl?.trim()
-      || '';
-    if (!current) {
-      previewFrameRef.current?.reload();
+    const frame = previewFrameRef.current;
+    if (frame) {
+      // Reuse the guest Chromium process. Remounting the <webview> (key/nonce)
+      // briefly doubles renderer memory and is the main source of workbench jank.
+      frame.reload();
       return;
     }
-    // Remount with a fresh stoToken so sessionStorage capture runs again if needed.
+    const current =
+      previewAddress.trim()
+      || status?.previewUrl?.trim()
+      || '';
+    if (!current) return;
     const base = stripAppDevPreviewStoToken(current) || current;
     const authed = withPreviewAuth(base);
     setPreviewMountUrl(authed);
@@ -333,13 +340,17 @@ export function AppDevWorkbenchStage({
     sourceRevisionSeenRef.current = -1;
   }, [workspaceId]);
 
+  handleSaveRef.current = handleSave;
+  refreshPreviewRef.current = refreshPreview;
+  refreshOpenCodeRef.current = refreshOpenCodeFromDisk;
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const isSave = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's';
       if (isSave && modeRef.current === 'code') {
         event.preventDefault();
         event.stopPropagation();
-        void handleSave();
+        void handleSaveRef.current();
         return;
       }
 
@@ -354,16 +365,16 @@ export function AppDevWorkbenchStage({
 
       const currentMode = modeRef.current;
       if (currentMode === 'preview') {
-        refreshPreview();
+        refreshPreviewRef.current();
         return;
       }
       if (currentMode === 'code') {
-        void refreshOpenCodeFromDisk();
+        void refreshOpenCodeRef.current();
       }
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  });
+  }, []);
 
   const openFile = (path: string) => {
     setActivePath(path);
@@ -827,4 +838,4 @@ export function AppDevWorkbenchStage({
       ) : null}
     </section>
   );
-}
+});

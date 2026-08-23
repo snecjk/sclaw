@@ -3,6 +3,11 @@
  * failed fetch). No console panel in Claw — host listens and offers "交给 AI".
  */
 
+import {
+  isSclawPreviewNetworkViteNoise,
+  isViteHmrLogLine,
+} from '../../shared/app-dev-preview-noise';
+
 const NOISE_PATTERNS = [
   /\[antd[:\]]/i,
   /favicon\.ico/i,
@@ -35,6 +40,7 @@ export function isHiddenPreviewFailureMessage(message: string): boolean {
   const text = message?.trim() ?? '';
   if (!text) return false;
   if (NOISE_PATTERNS.some((re) => re.test(text))) return false;
+  if (isViteHmrLogLine(text) || isSclawPreviewNetworkViteNoise(text)) return false;
   if (CAPTURE_PREFIXES.some((re) => re.test(text))) return true;
   return NETWORK_SIGNAL_PATTERNS.some((re) => re.test(text));
 }
@@ -88,8 +94,23 @@ export function formatPreviewConsoleErrorForAgent(message: string, pageUrl?: str
 export const PREVIEW_NETWORK_CAPTURE_SCRIPT = `(() => {
   if (window.__sclawPreviewNetworkHooked) return;
   window.__sclawPreviewNetworkHooked = true;
+  const isViteModuleUrl = (url) => {
+    try {
+      const parsed = new URL(url, location.href);
+      if (parsed.origin !== location.origin) return false;
+      const path = parsed.pathname;
+      return path.startsWith('/@')
+        || path.startsWith('/src/')
+        || path.startsWith('/frontend/src/')
+        || path.startsWith('/node_modules/')
+        || /\\.(tsx?|jsx?|mjs|cjs|css|map)$/i.test(path);
+    } catch (_) {
+      return false;
+    }
+  };
   const report = (payload) => {
     try {
+      if (payload && isViteModuleUrl(payload.url)) return;
       console.error('[sclaw-preview-network] ' + JSON.stringify(payload));
     } catch (_) {}
   };

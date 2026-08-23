@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import { toast } from 'sonner';
 import {
   getAppStatus,
@@ -7,6 +7,7 @@ import {
   stopApp,
   type AppDevStatus,
 } from '@/lib/app-dev-api';
+import { isSameAppDevStatus } from '@/lib/app-dev-status';
 import { isAppDevRestartIntent } from '@/lib/app-dev-restart-intent';
 
 interface UseAppDevRunControlOptions {
@@ -20,13 +21,15 @@ export function useAppDevRunControl({
 }: UseAppDevRunControlOptions) {
   const [previewRevision, setPreviewRevision] = useState(0);
   const [pending, setPending] = useState(false);
+  const pendingRef = useRef(false);
 
-  const restoreStatusAfterError = async () => {
+  const restoreStatusAfterError = useCallback(async () => {
     const next = await getAppStatus(workspaceId).catch(() => null);
-    if (next) setStatus(next);
-  };
+    if (!next) return;
+    setStatus((prev) => (isSameAppDevStatus(prev, next) ? prev : next));
+  }, [setStatus, workspaceId]);
 
-  const markStarting = () => {
+  const markStarting = useCallback(() => {
     setStatus((current) => current
       ? {
           ...current,
@@ -39,10 +42,11 @@ export function useAppDevRunControl({
     // A new process may coincidentally receive the same port. The revision
     // guarantees that the preview frame is still recreated.
     setPreviewRevision((revision) => revision + 1);
-  };
+  }, [setStatus]);
 
-  const start = async () => {
-    if (pending) return;
+  const start = useCallback(async () => {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
     setPending(true);
     markStarting();
     try {
@@ -52,12 +56,14 @@ export function useAppDevRunControl({
       await restoreStatusAfterError();
       toast.error(error instanceof Error ? error.message : '启动预览失败');
     } finally {
+      pendingRef.current = false;
       setPending(false);
     }
-  };
+  }, [markStarting, restoreStatusAfterError, workspaceId]);
 
-  const stop = async () => {
-    if (pending) return;
+  const stop = useCallback(async () => {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
     setPending(true);
     setStatus((current) => current
       ? { ...current, phase: 'stopped', progress: 0, previewUrl: undefined, error: undefined }
@@ -69,12 +75,14 @@ export function useAppDevRunControl({
       await restoreStatusAfterError();
       toast.error(error instanceof Error ? error.message : '停止预览失败');
     } finally {
+      pendingRef.current = false;
       setPending(false);
     }
-  };
+  }, [restoreStatusAfterError, setStatus, workspaceId]);
 
-  const restart = async () => {
-    if (pending) return;
+  const restart = useCallback(async () => {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
     setPending(true);
     markStarting();
     try {
@@ -84,15 +92,16 @@ export function useAppDevRunControl({
       await restoreStatusAfterError();
       toast.error(error instanceof Error ? error.message : '重新启动预览失败');
     } finally {
+      pendingRef.current = false;
       setPending(false);
     }
-  };
+  }, [markStarting, restoreStatusAfterError, workspaceId]);
 
-  const interceptRestartIntent = (text: string) => {
+  const interceptRestartIntent = useCallback((text: string) => {
     if (!isAppDevRestartIntent(text)) return false;
     void restart();
     return true;
-  };
+  }, [restart]);
 
   return {
     pending,
