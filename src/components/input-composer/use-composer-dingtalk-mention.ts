@@ -173,6 +173,8 @@ export function useComposerDingTalkMention({
       onInstall: installDingTalkMention,
       onLoadMore: loadMoreDingTalkMentions,
       anchorRef: mentionPopoverHostRef,
+      onDismissOutside: closeDingTalkMention,
+      dismissOutsideExcludeRef: mentionPopoverHostRef,
     },
   };
 }

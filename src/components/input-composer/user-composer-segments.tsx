@@ -56,7 +56,7 @@ export function UserComposerFileChip({
       title={fileName}
     >
       <FileIcon fileName={fileName} mimeType={mimeType} />
-      <span className="min-w-0 flex-1 truncate whitespace-nowrap">{middleEllipsisFileName(fileName)}</span>
+      <span className="min-w-0 flex-1 whitespace-nowrap">{middleEllipsisFileName(fileName)}</span>
     </span>
   );
 }

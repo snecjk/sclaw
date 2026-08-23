@@ -89,8 +89,17 @@ export function resolveFileTypeIconSrc(fileName: string, mimeType?: string | nul
   return ICON_SRC[resolveFileTypeIconKind(fileName, mimeType)];
 }
 
+/**
+ * 附件 chip 文本区约 250px（max-w 280px 减去图标与内边距），12px 中文约 12px 宽。
+ * 用字符预算代替 CSS truncate，避免末尾 … 覆盖扩展名。
+ */
+export const ATTACHMENT_CHIP_FILENAME_MAX_CHARS = 22;
+
 /** 文件名中间省略，尽量保留扩展名。 */
-export function middleEllipsisFileName(fileName: string, maxChars = 32): string {
+export function middleEllipsisFileName(
+  fileName: string,
+  maxChars = ATTACHMENT_CHIP_FILENAME_MAX_CHARS,
+): string {
   if (fileName.length <= maxChars) return fileName;
   const dot = fileName.lastIndexOf('.');
   const hasExt = dot > 0 && dot < fileName.length - 1 && fileName.length - dot <= 8;

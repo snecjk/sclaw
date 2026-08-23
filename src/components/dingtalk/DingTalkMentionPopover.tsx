@@ -134,6 +134,10 @@ interface DingTalkMentionPopoverProps {
    * overflow 裁切（问题一）。无则退回 absolute 定位保持兼容（如 DingTalkRecipientField）。
    */
   anchorRef?: RefObject<HTMLElement | null>;
+  /** 点击浮层与 excludeRef 外部时关闭（如清除 @ 提及 trigger） */
+  onDismissOutside?: () => void;
+  /** 点击该区域内部时不触发 onDismissOutside（通常为编辑器 host） */
+  dismissOutsideExcludeRef?: RefObject<HTMLElement | null>;
 }
 
 /** 向上空间不足时翻转向下的阈值（px） */
@@ -170,12 +174,32 @@ export function DingTalkMentionPopover({
   onInstall,
   onLoadMore,
   anchorRef,
+  onDismissOutside,
+  dismissOutsideExcludeRef,
 }: DingTalkMentionPopoverProps) {
   const { t } = useTranslation('chat');
+  const panelRef = useRef<HTMLDivElement>(null);
   const loadMoreLockRef = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   const listContentRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<PopoverPosition | null>(null);
+
+  useEffect(() => {
+    if (!open || !onDismissOutside) return;
+
+    const onPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (panelRef.current?.contains(target)) return;
+      if (dismissOutsideExcludeRef?.current?.contains(target)) return;
+      onDismissOutside();
+    };
+
+    document.addEventListener('mousedown', onPointerDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+    };
+  }, [dismissOutsideExcludeRef, onDismissOutside, open]);
 
   useEffect(() => {
     if (!open || items.length === 0) return;
@@ -258,6 +282,7 @@ export function DingTalkMentionPopover({
 
   const panel = (
     <div
+      ref={panelRef}
       className={cn(
         'z-50 w-[320px] overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-2',
         'shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-border dark:bg-popover dark:shadow-[0_8px_24px_rgba(0,0,0,0.45)]',

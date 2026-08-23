@@ -58,7 +58,7 @@ function AttachmentPreview({
       ) : (
         <div className={cn(ATTACHMENT_CHIP_SURFACE_CLASS, 'w-max')}>
           <FileIcon fileName={attachment.fileName} mimeType={attachment.mimeType} />
-          <span className="min-w-0 flex-1 truncate whitespace-nowrap" title={attachment.fileName}>
+          <span className="min-w-0 flex-1 whitespace-nowrap" title={attachment.fileName}>
             {middleEllipsisFileName(attachment.fileName)}
           </span>
         </div>
