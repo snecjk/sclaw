@@ -96,6 +96,8 @@ interface AuthState {
   accountSwitchOptionsStatus: AccountSwitchOptionsStatus;
   /** Renderer Apollo `claw.site.department` cache; null until first fetch completes. */
   siteDepartmentTypes: string[] | null;
+  /** Renderer Apollo `claw.app.dev.whitelist.users` cache; null until first fetch completes. */
+  appDevWhitelistUsers: string[] | null;
 
   // Actions
   init: () => Promise<void>;
@@ -185,6 +187,15 @@ async function fetchRendererSiteDepartmentTypes(): Promise<string[]> {
   try {
     const res = await hostApiFetch<{ types?: string[] }>('/api/auth/site-department-types');
     return Array.isArray(res.types) ? res.types : [];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchRendererAppDevWhitelistUsers(): Promise<string[]> {
+  try {
+    const res = await hostApiFetch<{ users?: string[] }>('/api/auth/app-dev-whitelist-users');
+    return Array.isArray(res.users) ? res.users : [];
   } catch {
     return [];
   }
@@ -288,6 +299,7 @@ export const useAuthStore = create<AuthState>()(
       accountSwitchOptions: [],
       accountSwitchOptionsStatus: 'idle',
       siteDepartmentTypes: null,
+      appDevWhitelistUsers: null,
 
       clearAccessDenied: () => {
         set({ accessDenied: false, accessCheck: null, error: null });
@@ -332,10 +344,14 @@ export const useAuthStore = create<AuthState>()(
             return;
           }
           let siteDepartmentTypes: string[] | null = null;
+          let appDevWhitelistUsers: string[] | null = null;
           if (data.isAuthenticated) {
-            siteDepartmentTypes = applyRendererSiteDepartmentTypes(
-              await fetchRendererSiteDepartmentTypes(),
-            );
+            const [types, users] = await Promise.all([
+              fetchRendererSiteDepartmentTypes(),
+              fetchRendererAppDevWhitelistUsers(),
+            ]);
+            siteDepartmentTypes = applyRendererSiteDepartmentTypes(types);
+            appDevWhitelistUsers = users;
           }
           set({
             isAuthenticated: data.isAuthenticated,
@@ -346,6 +362,7 @@ export const useAuthStore = create<AuthState>()(
             accessCheck: null,
             impersonationOrigin: data.impersonationOrigin ?? null,
             siteDepartmentTypes,
+            appDevWhitelistUsers,
           });
           if (data.isAuthenticated) {
             // If already authenticated on startup, ensure STO models are synced and
@@ -379,13 +396,20 @@ export const useAuthStore = create<AuthState>()(
             accountSwitchOptionsStatus: 'idle',
             impersonationOrigin: null,
             siteDepartmentTypes: null,
+            appDevWhitelistUsers: null,
           });
 
           // Site metadata is useful after navigation but is not part of the
           // authentication completion boundary.
-          void fetchRendererSiteDepartmentTypes().then((types) => {
+          void Promise.all([
+            fetchRendererSiteDepartmentTypes(),
+            fetchRendererAppDevWhitelistUsers(),
+          ]).then(([types, users]) => {
             if (get().isAuthenticated && get().user?.code === user.code) {
-              set({ siteDepartmentTypes: applyRendererSiteDepartmentTypes(types) });
+              set({
+                siteDepartmentTypes: applyRendererSiteDepartmentTypes(types),
+                appDevWhitelistUsers: users,
+              });
             }
           });
 
@@ -483,6 +507,7 @@ export const useAuthStore = create<AuthState>()(
           accountSwitchOptions: [],
           accountSwitchOptionsStatus: 'idle',
           siteDepartmentTypes: null,
+          appDevWhitelistUsers: null,
         });
         setSiteDepartmentTypes(null);
 

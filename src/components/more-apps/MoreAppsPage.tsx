@@ -40,6 +40,7 @@ import { pickProjectFolder } from '@/lib/session-catalog-api';
 import { importUserApp } from '@/lib/app-dev-api';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { useAppPlazaShellStore } from '@/stores/app-plaza-shell';
+import { useAppDevPermission } from '@/hooks/use-app-dev-permission';
 
 const HERO_CAROUSEL_INTERVAL = 5000;
 /** 空 systemCode（无法换免登）或 sto-policy 需二次登录确认后再打开 */
@@ -98,14 +99,25 @@ export function MoreAppsPage() {
 
   const devApps = useAppDevCatalogStore((s) => s.apps);
   const refreshDevApps = useAppDevCatalogStore((s) => s.refresh);
+  const { canUseAppDev } = useAppDevPermission();
 
   useEffect(() => {
+    if (!canUseAppDev && activeTab === 'dev-apps') {
+      setActiveTab('market');
+    }
+  }, [activeTab, canUseAppDev, setActiveTab]);
+
+  useEffect(() => {
+    if (!canUseAppDev) {
+      setCreateAppOpen(false);
+      return;
+    }
     if (activeTab === 'dev-apps' || createAppOpen) {
       void refreshDevApps().catch((error) => {
         toast.error(error instanceof Error ? error.message : '无法同步 STO 应用列表');
       });
     }
-  }, [activeTab, createAppOpen, refreshDevApps]);
+  }, [activeTab, canUseAppDev, createAppOpen, refreshDevApps]);
 
   const filteredDevApps = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -118,7 +130,7 @@ export function MoreAppsPage() {
   }, [devApps, searchQuery]);
 
   const handleImportApp = useCallback(async () => {
-    if (importingApp) return;
+    if (!canUseAppDev || importingApp) return;
     setImportingApp(true);
     try {
       const picked = await pickProjectFolder();
@@ -137,7 +149,7 @@ export function MoreAppsPage() {
     } finally {
       setImportingApp(false);
     }
-  }, [importingApp]);
+  }, [canUseAppDev, importingApp]);
 
   // My apps use a stable session catalog so market category/search requests cannot
   // remove favorited apps from the installed view.
@@ -755,27 +767,31 @@ export function MoreAppsPage() {
         </div>
 
         <div className="app-plaza-heading-actions">
-          <button
-            type="button"
-            className="more-apps-add-btn more-apps-add-btn--primary"
-            id="more-apps-create-app-btn"
-            onClick={() => setCreateAppOpen(true)}
-          >
-            <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
-            {t('moreApps.createApp', { defaultValue: '创建应用' })}
-          </button>
-          <button
-            type="button"
-            className="more-apps-add-btn more-apps-add-btn--ghost"
-            id="more-apps-import-app-btn"
-            disabled={importingApp}
-            onClick={() => void handleImportApp()}
-          >
-            <FolderInput className="more-apps-add-btn__icon" aria-hidden="true" />
-            {importingApp
-              ? t('moreApps.importingApp', { defaultValue: '导入中…' })
-              : t('moreApps.importApp', { defaultValue: '导入应用' })}
-          </button>
+          {canUseAppDev ? (
+            <>
+              <button
+                type="button"
+                className="more-apps-add-btn more-apps-add-btn--primary"
+                id="more-apps-create-app-btn"
+                onClick={() => setCreateAppOpen(true)}
+              >
+                <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
+                {t('moreApps.createApp', { defaultValue: '创建应用' })}
+              </button>
+              <button
+                type="button"
+                className="more-apps-add-btn more-apps-add-btn--ghost"
+                id="more-apps-import-app-btn"
+                disabled={importingApp}
+                onClick={() => void handleImportApp()}
+              >
+                <FolderInput className="more-apps-add-btn__icon" aria-hidden="true" />
+                {importingApp
+                  ? t('moreApps.importingApp', { defaultValue: '导入中…' })
+                  : t('moreApps.importApp', { defaultValue: '导入应用' })}
+              </button>
+            </>
+          ) : null}
           <button
             type="button"
             className="more-apps-add-btn more-apps-add-btn--ghost"
@@ -794,7 +810,9 @@ export function MoreAppsPage() {
           {([
             { id: 'market' as const, label: t('moreApps.tabMarket', { defaultValue: '应用广场' }) },
             { id: 'installed' as const, label: t('moreApps.tabInstalled', { defaultValue: '我的应用' }) },
-            { id: 'dev-apps' as const, label: t('moreApps.tabDevApps', { defaultValue: '开发应用' }) },
+            ...(canUseAppDev
+              ? [{ id: 'dev-apps' as const, label: t('moreApps.tabDevApps', { defaultValue: '开发应用' }) }]
+              : []),
           ]).map((tab) => (
             <button
               key={tab.id}
@@ -835,7 +853,9 @@ export function MoreAppsPage() {
 
       {/* Modals */}
       <AddExternalAppModal />
-      <CreateAppDialog open={createAppOpen} onClose={() => setCreateAppOpen(false)} />
+      {canUseAppDev ? (
+        <CreateAppDialog open={createAppOpen} onClose={() => setCreateAppOpen(false)} />
+      ) : null}
       <ConfirmDialog
         open={!!pendingStoPolicyApp}
         title={t('moreApps.stoPolicyLoginTitle', { defaultValue: '需要二次登录' })}

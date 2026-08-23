@@ -17,7 +17,7 @@ import { runAuthenticatedSetup } from '../../services/auth-setup-orchestrator';
 import { runPendingInstallReport } from '../../services/client-update-platform';
 import { activateUserWorkspace, getCurrentActiveUserCode, syncMountPointToUser } from '../../services/user-skill-workspace';
 import { removeStoDynamicRoutePluginFromOpenClaw } from '../../utils/openclaw-auth';
-import { loadSiteDepartmentTypes, loadClawInferenceRuntimeConfig, clearInferenceRuntimeConfigCache, fetchHqBalanceApplyUrl, DEFAULT_HQ_BALANCE_APPLY_URL } from '../../services/sto-apollo-config-service';
+import { loadSiteDepartmentTypes, loadClawInferenceRuntimeConfig, clearInferenceRuntimeConfigCache, fetchHqBalanceApplyUrl, DEFAULT_HQ_BALANCE_APPLY_URL, loadAppDevWhitelistUsers } from '../../services/sto-apollo-config-service';
 import { getClientSiteAccessService } from '../../services/client-site-access-service';
 import type { ClientSiteAccessCheckResult } from '../../../shared/client-site-access';
 import { syncClaudeDefaultContext } from '../../services/claude-context-sync';
@@ -372,6 +372,18 @@ export async function handleAuthRoutes(
     } catch (error) {
       logger.warn('Site department types fetch failed:', error);
       sendJson(res, 200, { success: false, types: [] });
+    }
+    return true;
+  }
+
+  // GET /api/auth/app-dev-whitelist-users — 返回 Apollo 建站功能白名单用户
+  if (url.pathname === '/api/auth/app-dev-whitelist-users' && req.method === 'GET') {
+    try {
+      const users = await loadAppDevWhitelistUsers();
+      sendJson(res, 200, { success: true, users });
+    } catch (error) {
+      logger.warn('[auth] app-dev whitelist users fetch failed:', error);
+      sendJson(res, 200, { success: false, users: [] });
     }
     return true;
   }

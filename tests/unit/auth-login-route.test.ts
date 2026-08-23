@@ -32,6 +32,7 @@ vi.mock('@electron/services/user-skill-workspace', () => ({ activateUserWorkspac
 vi.mock('@electron/utils/openclaw-auth', () => ({ removeStoDynamicRoutePluginFromOpenClaw: vi.fn() }));
 vi.mock('@electron/services/sto-apollo-config-service', () => ({
   loadSiteDepartmentTypes: vi.fn(),
+  loadAppDevWhitelistUsers: vi.fn(async () => []),
   loadClawInferenceRuntimeConfig: (...args: unknown[]) => mocks.loadConfig(...args),
   clearInferenceRuntimeConfigCache: vi.fn(), fetchHqBalanceApplyUrl: vi.fn(), DEFAULT_HQ_BALANCE_APPLY_URL: '',
 }));

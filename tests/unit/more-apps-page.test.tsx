@@ -9,6 +9,14 @@ const openInSclawBrowserMock = vi.fn();
 const fetchRegistryMock = vi.fn();
 const hasStoPolicyAuthInEmbedSessionMock = vi.fn();
 const hasTeambitionAuthInEmbedSessionMock = vi.fn();
+let mockCanUseAppDev = true;
+
+vi.mock('@/hooks/use-app-dev-permission', () => ({
+  useAppDevPermission: () => ({
+    canUseAppDev: mockCanUseAppDev,
+    loaded: true,
+  }),
+}));
 
 vi.mock('@/lib/app-plaza-api', () => ({
   fetchAppPlazaApps: (...args: unknown[]) => fetchAppsMock(...args),
@@ -148,6 +156,7 @@ function resetStore() {
 describe('MoreAppsPage server catalog', () => {
   beforeEach(() => {
     localStorage.clear();
+    mockCanUseAppDev = true;
     resetStore();
     mockDevApps = [];
     refreshDevAppsMock.mockReset().mockResolvedValue(undefined);
@@ -705,6 +714,21 @@ describe('MoreAppsPage server catalog', () => {
     expect(await screen.findByText('客户关系')).toBeInTheDocument();
     expect(await screen.findByRole('alert')).toHaveTextContent('横幅加载失败');
     expect(screen.queryByText('客户运费')).not.toBeInTheDocument();
+  });
+
+  it('hides app-dev actions and tab when the user is not whitelisted', async () => {
+    mockCanUseAppDev = false;
+    useMoreAppsStore.setState({ activeTab: 'dev-apps' });
+
+    render(<MoreAppsPage />);
+
+    expect(await screen.findByRole('tab', { name: '应用广场' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: '我的应用' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: '开发应用' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '创建应用' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '导入应用' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '安装外部应用' })).toBeInTheDocument();
+    expect(useMoreAppsStore.getState().activeTab).toBe('market');
   });
 
   it('shows a fallback when a banner image fails', async () => {

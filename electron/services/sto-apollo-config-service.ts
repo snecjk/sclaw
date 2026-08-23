@@ -246,7 +246,14 @@ export function clearInferenceRuntimeConfigCache(): void {
   siteInferencePortalDomain = null;
 }
 
+import {
+  APP_DEV_WHITELIST_USERS_KEY,
+  parseAppDevWhitelistUsers,
+} from '../../shared/app-dev-permission';
+
 const HQ_BALANCE_APPLY_URL_KEY = 'claw.hq.balance.apply.url';
+
+export { APP_DEV_WHITELIST_USERS_KEY };
 
 /** 非网点余额申请外链兜底 */
 export const DEFAULT_HQ_BALANCE_APPLY_URL = 'https://devops-new.sto.cn/personMainInfo';
@@ -264,6 +271,17 @@ function normalizeBalanceApplyUrl(value: string | null | undefined): string | nu
     return null;
   }
   return withScheme;
+}
+
+/**
+ * Load app-dev whitelist users from Apollo.
+ * Key: claw.app.dev.whitelist.users
+ */
+export async function loadAppDevWhitelistUsers(): Promise<string[]> {
+  const value = await fetchApolloConfigValue(APP_DEV_WHITELIST_USERS_KEY);
+  const users = parseAppDevWhitelistUsers(value);
+  logger.info('[ApolloConfig] app-dev whitelist users loaded:', value, users);
+  return users;
 }
 
 /** 实时拉取非网点余额申请外链（不经内存缓存）。 */

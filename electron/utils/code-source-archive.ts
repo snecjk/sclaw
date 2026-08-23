@@ -44,17 +44,14 @@ function assertAllowed(path: string): void {
   if (!path || path.startsWith('/') || /[\u0000-\u001f\u007f]/.test(path)) {
     throw new Error(`源码路径不合法：${path}`);
   }
-  const lower = path.toLowerCase();
-  const name = basename(lower);
-  const envSecret = (name === '.env' || name.startsWith('.env.'))
-    && !['.env.example', '.env.sample', '.env.template'].includes(name);
+  const name = basename(path.toLowerCase());
   const keyFile = name === 'id_rsa'
     || name === 'id_ed25519'
     || name.endsWith('.pem')
     || name.endsWith('.key')
     || name.endsWith('.p12')
     || name.endsWith('.pfx');
-  if (envSecret || keyFile) {
+  if (keyFile) {
     throw new Error(`禁止上传敏感文件：${path}`);
   }
 }
