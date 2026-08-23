@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode, type RefObject } from 'react';
 import { RefreshCw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { FeedbackState } from '@/components/common/FeedbackState';
@@ -19,13 +19,14 @@ type DetailState =
 interface TutorialPanelProps {
   tutorialId: string | null;
   portalContainer: HTMLElement | null;
+  panelPercent: number;
   expanded?: boolean;
   returnFocusRef: RefObject<HTMLElement | null>;
   resizeHandle?: ReactNode;
   onClose: () => void;
 }
 
-export function TutorialPanel({ tutorialId, portalContainer, expanded = false, returnFocusRef, resizeHandle, onClose }: TutorialPanelProps) {
+export function TutorialPanel({ tutorialId, portalContainer, panelPercent, expanded = false, returnFocusRef, resizeHandle, onClose }: TutorialPanelProps) {
   const { t } = useTranslation('learningCenter');
   const [reloadKey, setReloadKey] = useState(0);
   const [state, setState] = useState<DetailState>({ status: 'loading' });
@@ -61,11 +62,17 @@ export function TutorialPanel({ tutorialId, portalContainer, expanded = false, r
       <SheetContent
         side="right"
         className={cn(
-          'learning-center-tutorial-sheet flex flex-col gap-0 overflow-hidden p-0 !absolute inset-0',
+          'learning-center-tutorial-sheet flex flex-col gap-0 overflow-hidden p-0 !absolute',
           expanded && 'learning-center-tutorial-sheet--expanded',
         )}
+        style={{ '--lc-tutorial-panel-percent': `${panelPercent}%` } as CSSProperties}
         portalContainer={portalContainer}
         showOverlay={false}
+        onInteractOutside={(event) => {
+          // Header actions (expand/restore/close) live outside the Radix dialog.
+          // Keep the non-modal tutorial open while those controls are used.
+          event.preventDefault();
+        }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           returnFocusRef.current?.focus();

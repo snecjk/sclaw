@@ -1,9 +1,12 @@
 .learning-center-tutorial-sheet {
   position: absolute;
-  inset: 0;
+  top: calc(var(--sto-content-header-h, 44px) + 0.5rem) !important;
+  right: 0.5rem !important;
+  bottom: 0.5rem !important;
+  left: auto !important;
   z-index: 2147483647 !important;
   box-sizing: border-box;
-  width: 100% !important;
+  width: min(var(--lc-tutorial-panel-percent, 50%), calc(100% - 1rem)) !important;
   min-width: 0 !important;
   max-width: none !important;
   height: auto;
@@ -18,12 +21,10 @@
   filter: none !important;
 }
 
-/* In preview-expanded mode the compact right-side host no longer owns the
-   layout. Resolve the tutorial against the complete workspace main instead. */
+/* Compact and expanded states share one workspace-level portal. Expanding only
+   changes its bounds, so the tutorial cannot flash or fall behind while Radix
+   moves content between different portal containers. */
 .learning-center-tutorial-sheet--expanded {
-  top: calc(var(--sto-content-header-h, 44px) + 0.5rem) !important;
-  right: 0.5rem !important;
-  bottom: 0.5rem !important;
   left: 0.5rem !important;
   width: auto !important;
   height: auto !important;
@@ -191,7 +192,8 @@
 
 @media (max-width: 63.9375rem) {
   .learning-center-tutorial-sheet {
-    width: 100% !important;
+    left: 0.5rem !important;
+    width: auto !important;
     min-width: 0 !important;
     max-width: none !important;
   }

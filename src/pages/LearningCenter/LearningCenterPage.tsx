@@ -192,7 +192,6 @@ export function LearningCenterPage() {
   const [tutorialPanelPercent, setTutorialPanelPercent] = useState(50);
   const [isTutorialExpanded, setIsTutorialExpanded] = useState(false);
   const [isTutorialResizing, setIsTutorialResizing] = useState(false);
-  const [tutorialPanelContainer, setTutorialPanelContainer] = useState<HTMLElement | null>(null);
   const [tutorialWorkspaceContainer, setTutorialWorkspaceContainer] = useState<HTMLElement | null>(null);
   const [detailCase, setDetailCase] = useState<LearningCaseTemplate | null>(null);
   const [previewCase, setPreviewCase] = useState<LearningCaseTemplate | null>(null);
@@ -204,11 +203,9 @@ export function LearningCenterPage() {
   const caseUseInFlightRef = useRef(false);
   const contentRegionRef = useRef<HTMLDivElement | null>(null);
   const pageRootRef = useRef<HTMLElement | null>(null);
-  const tutorialSlotRef = useRef<HTMLDivElement | null>(null);
   const stepsRef = useRef<HTMLElement | null>(null);
   const activeTabRef = useRef<HTMLButtonElement | null>(null);
   const splitRowRef = useRef<HTMLDivElement | null>(null);
-  const tutorialPanelRef = useRef<HTMLDivElement | null>(null);
   const tutorialResizeCleanupRef = useRef<(() => void) | null>(null);
   const previousPreviewColumnRef = useRef<string | null>(null);
   const closeTutorial = useCallback(() => {
@@ -217,7 +214,6 @@ export function LearningCenterPage() {
   }, []);
 
   useLayoutEffect(() => {
-    setTutorialPanelContainer(tutorialSlotRef.current);
     setTutorialWorkspaceContainer(
       splitRowRef.current?.closest('main') ?? splitRowRef.current?.parentElement ?? null,
     );
@@ -277,7 +273,7 @@ export function LearningCenterPage() {
     const pointerId = event.pointerId;
     const startX = event.clientX;
     const startPercent = tutorialPanelPercent;
-    const workspaceWidth = tutorialPanelRef.current?.closest('main')?.clientWidth || window.innerWidth;
+    const workspaceWidth = splitRowRef.current?.closest('main')?.clientWidth || window.innerWidth;
     const previousCursor = document.body.style.cursor;
     const previousUserSelect = document.body.style.userSelect;
 
@@ -690,7 +686,6 @@ export function LearningCenterPage() {
                                 className="learning-center-tutorial-link h-auto px-0 py-0 text-primary hover:text-primary"
                                 onClick={(event) => {
                                   detailReturnFocusRef.current = event.currentTarget;
-                                  setTutorialPanelContainer(tutorialSlotRef.current);
                                   setDetailCase(null);
                                   setPreviewCase(null);
                                   const compactPercent = resolveCompactTutorialPanelPercent();
@@ -761,18 +756,12 @@ export function LearningCenterPage() {
           )}
         </div>
       </main>
-      <div
-        ref={tutorialPanelRef}
-        className="learning-center-split__aside"
-        aria-hidden={!tutorialId}
-      >
-        <div ref={tutorialSlotRef} className="learning-center-split__tutorial-host" />
-      </div>
       </div>
       <TutorialPanel
         key={tutorialId ?? 'closed'}
         tutorialId={tutorialId}
-        portalContainer={isTutorialExpanded ? tutorialWorkspaceContainer : tutorialPanelContainer}
+        portalContainer={tutorialWorkspaceContainer}
+        panelPercent={tutorialPanelPercent}
         expanded={isTutorialExpanded}
         returnFocusRef={detailReturnFocusRef}
         resizeHandle={tutorialId && !isTutorialExpanded ? (

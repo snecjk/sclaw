@@ -272,9 +272,7 @@ describe('LearningCenterPage', () => {
     expect(page).not.toHaveClass('learning-center-page--detail-open');
     expect(document.querySelector('.learning-center-split')).toHaveClass('learning-center-split--open');
     const panel = screen.getByRole('dialog');
-    const aside = document.querySelector('.learning-center-split__aside');
-    expect(aside).not.toBeNull();
-    expect(aside?.contains(panel)).toBe(true);
+    expect(panel.parentElement).toBe(screen.getByTestId('learning-center-workspace'));
     expect(panel).toContainElement(screen.getByRole('heading', { name: '教程指南' }));
     const header = screen.getByTestId('learning-center-header');
     expect(header).toHaveAttribute('data-layout-mode', 'split');
@@ -305,7 +303,9 @@ describe('LearningCenterPage', () => {
     const adjustedPercent = compactPercent + 1;
     expect(screen.getByRole('separator', { name: '调整教程浮层宽度' })).toHaveAttribute('aria-valuenow', String(adjustedPercent));
 
-    fireEvent.click(screen.getByRole('button', { name: '全屏查看教程' }));
+    const expandButton = screen.getByRole('button', { name: '全屏查看教程' });
+    fireEvent.pointerDown(expandButton);
+    fireEvent.click(expandButton);
     const expandedPanel = screen.getByRole('dialog');
     expect(screen.getByTestId('learning-center-header')).toHaveAttribute('data-layout-mode', 'preview-expanded');
     expect(page).not.toHaveClass('hidden');
@@ -318,7 +318,7 @@ describe('LearningCenterPage', () => {
     expect(screen.getByTestId('learning-center-header')).toHaveAttribute('data-layout-mode', 'split');
     expect(page).not.toHaveClass('hidden');
     expect(document.querySelector('.learning-center-split')).not.toHaveClass('learning-center-split--expanded');
-    expect(document.querySelector('.learning-center-split__aside')).toContainElement(screen.getByRole('dialog'));
+    expect(screen.getByRole('dialog').parentElement).toBe(screen.getByTestId('learning-center-workspace'));
     expect(screen.getByRole('separator', { name: '调整教程浮层宽度' })).toHaveAttribute('aria-valuenow', String(adjustedPercent));
   });
 
