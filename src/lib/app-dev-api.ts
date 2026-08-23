@@ -55,6 +55,10 @@ export interface DevAppSummary {
   previewUrl?: string;
   gitlabProjectId?: string;
   devopsApplicationId?: string;
+  /** `imported` = 本地导入；`created` = 新建站 / 云端拉取 */
+  source?: 'created' | 'imported';
+  /** Whether the app folder already has a `.git` directory. */
+  gitRepo?: boolean;
 }
 
 export async function getAppDevEnvironment(): Promise<AppDevEnvironment> {

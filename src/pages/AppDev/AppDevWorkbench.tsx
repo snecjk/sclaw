@@ -58,6 +58,7 @@ import { useAppDevRunControl } from '@/hooks/use-app-dev-run-control';
 import { useAppDevChatSession } from '@/hooks/use-app-dev-chat-session';
 import { getAgentIdFromSessionKey } from '@/stores/chat/session-identity';
 import { logChatFlow } from '@/stores/chat/chat-flow-log';
+import { shouldShowGitCommitAction, shouldShowStoCloudActions } from '@/lib/app-dev-actions';
 
 function WorkbenchChatPane({
   sessionKey,
@@ -361,6 +362,20 @@ export default function AppDevWorkbench() {
     }
   };
 
+  const handleGitSubmit = async (message: string) => {
+    try {
+      const created = await createAppCheckpoint(workspaceId, message);
+      if (created) {
+        toast.success('代码已提交到本地 Git');
+        setCommitOpen(false);
+      } else {
+        toast.message('没有可提交的改动');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '提交失败');
+    }
+  };
+
   const handlePull = async () => {
     try {
       await pullStoApp(workspaceId);
@@ -397,9 +412,9 @@ export default function AppDevWorkbench() {
     deploy.start(input);
   };
 
-  const showCloudActions = listedApp
-    ? Boolean(listedApp.applicationId)
-    : Boolean(stoStatus?.bound);
+  const showCloudActions = shouldShowStoCloudActions(listedApp, stoStatus);
+  const showGitCommit = shouldShowGitCommitAction(listedApp, gitAvailable);
+  const commitMode = showGitCommit ? 'git' : 'sto';
   const canDeploy = Boolean(
     showCloudActions
     && stoStatus?.available
@@ -455,6 +470,18 @@ export default function AppDevWorkbench() {
           >
             {stoStatus?.bound ? `STO ${stoStatus.syncLabel}` : 'STO 未绑定'}
           </span>
+        ) : null}
+
+        {showGitCommit ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={() => setCommitOpen(true)}
+          >
+            提交
+          </Button>
         ) : null}
 
         {showCloudActions ? (
@@ -564,9 +591,10 @@ export default function AppDevWorkbench() {
       <StoAppCommitDialog
         open={commitOpen}
         appName={appName}
-        initialMessage={`更新应用: ${appName}`}
+        mode={commitMode}
+        initialMessage={commitMode === 'git' ? `更新: ${appName}` : `更新应用: ${appName}`}
         onCancel={() => setCommitOpen(false)}
-        onConfirm={handleSubmit}
+        onConfirm={commitMode === 'git' ? handleGitSubmit : handleSubmit}
       />
       <StoAppDeployDialog
         open={deployOpen}

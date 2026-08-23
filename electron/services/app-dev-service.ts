@@ -77,11 +77,15 @@ export const DEFAULT_APPS_PARENT_DIR = join(homedir(), 'SClawApps');
 /** Marker under the project agent workspace — used to hide from sidebar and list in 开发应用. */
 export const APP_DEV_MARKER_RELATIVE = join('.sclaw', 'app-dev.json');
 
+export type AppDevSource = 'created' | 'imported';
+
 export interface AppDevMarker {
   kind: 'app-dev';
   name: string;
   projectType: string;
   createdAt: string;
+  /** `imported` = local folder import; `created` = 新建站 / clone from cloud. */
+  source?: AppDevSource;
 }
 
 export interface DevAppSummary {
@@ -101,6 +105,8 @@ export interface DevAppSummary {
   gitlabProjectId?: string;
   devopsApplicationId?: string;
   listError?: string;
+  source?: AppDevSource;
+  gitRepo?: boolean;
 }
 
 export function appDevMarkerPath(appPath: string): string {
@@ -115,23 +121,30 @@ function hasStoWorkspaceFile(appPath: string): boolean {
   return existsSync(join(appPath, STO_WORKSPACE_RELATIVE));
 }
 
+export function hasGitRepo(appPath: string): boolean {
+  return existsSync(join(appPath, '.git'));
+}
+
 async function readAppDevMarkerFields(appPath: string): Promise<{
   projectType: string;
   createdAt: string;
   name?: string;
+  source?: AppDevSource;
 }> {
   let projectType = 'frontend';
   let createdAt = '';
   let name: string | undefined;
+  let source: AppDevSource | undefined;
   try {
     const raw = JSON.parse(await readFile(appDevMarkerPath(appPath), 'utf8')) as Partial<AppDevMarker>;
     if (typeof raw.projectType === 'string' && raw.projectType.trim()) projectType = raw.projectType.trim();
     if (typeof raw.createdAt === 'string' && raw.createdAt.trim()) createdAt = raw.createdAt;
     if (typeof raw.name === 'string' && raw.name.trim()) name = raw.name.trim();
+    if (raw.source === 'created' || raw.source === 'imported') source = raw.source;
   } catch {
     // ignore
   }
-  return { projectType, createdAt, name };
+  return { projectType, createdAt, name, source };
 }
 
 /** Local marker workspaces that are not already represented by a cloud list row. */
@@ -160,6 +173,8 @@ export async function listLocalOnlyDevApps(input: {
       createdAt: fields.createdAt || workspace.createdAt || new Date().toISOString(),
       localReady: true,
       availability: 'local',
+      source: fields.source ?? 'imported',
+      gitRepo: hasGitRepo(resolvedRoot),
     });
   }
   return apps;
@@ -230,7 +245,7 @@ function buildAppDevAgentsContextBlock(vars: { name: string }): string {
 
 async function writeAppDevBootstrap(
   appPath: string,
-  vars: { name: string; projectType: string },
+  vars: { name: string; projectType: string; source?: AppDevSource },
 ): Promise<void> {
   const sclawDir = join(appPath, '.sclaw');
   await mkdir(sclawDir, { recursive: true });
@@ -240,12 +255,16 @@ async function writeAppDevBootstrap(
     name: vars.name,
     projectType: vars.projectType,
     createdAt: new Date().toISOString(),
+    source: vars.source,
   };
-  // Preserve original createdAt when re-ensuring.
+  // Preserve original createdAt / source when re-ensuring.
   if (existsSync(appDevMarkerPath(appPath))) {
     try {
       const existing = JSON.parse(await readFile(appDevMarkerPath(appPath), 'utf8')) as Partial<AppDevMarker>;
       if (typeof existing.createdAt === 'string') marker.createdAt = existing.createdAt;
+      if (!marker.source && (existing.source === 'created' || existing.source === 'imported')) {
+        marker.source = existing.source;
+      }
     } catch {
       // ignore
     }
@@ -280,12 +299,14 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
 
   let name = workspaceId;
   let projectType = 'frontend';
+  let source: AppDevSource | undefined;
   const markerFile = appDevMarkerPath(appPath);
   if (existsSync(markerFile)) {
     try {
       const raw = JSON.parse(await readFile(markerFile, 'utf8')) as Partial<AppDevMarker>;
       if (typeof raw.name === 'string' && raw.name.trim()) name = raw.name.trim();
       if (typeof raw.projectType === 'string') projectType = raw.projectType;
+      if (raw.source === 'created' || raw.source === 'imported') source = raw.source;
     } catch {
       // ignore
     }
@@ -296,7 +317,7 @@ export async function ensureAppDevContext(workspaceId: string): Promise<void> {
     if (match?.name) name = match.name;
   }
 
-  await writeAppDevBootstrap(appPath, { name, projectType });
+  await writeAppDevBootstrap(appPath, { name, projectType, source });
   await ensureAppOpenspecScaffold(appPath);
   await ensureDefaultAppDevAssistSkills(appPath);
   // Refresh already-enabled package skills from updated catalog copy.
@@ -601,6 +622,7 @@ export async function createUserApp(input: CreateUserAppInput): Promise<CreateUs
   await writeAppDevBootstrap(appPath, {
     name,
     projectType: input.projectType ?? 'frontend',
+    source: 'created',
   });
 
   let createdApplicationId: string | undefined;
@@ -708,6 +730,7 @@ export async function importUserApp(input: {
   await writeAppDevBootstrap(appPath, {
     name: workspaceName,
     projectType,
+    source: 'imported',
   });
   try {
     await ensureAppOpenspecScaffold(appPath);
@@ -805,6 +828,8 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
         previewUrl: cloud.previewUrl,
         gitlabProjectId: cloud.gitlabProjectId,
         devopsApplicationId: cloud.devopsApplicationId,
+        source: fields.source ?? 'created',
+        gitRepo: hasGitRepo(localPath),
       });
       continue;
     }
@@ -988,6 +1013,7 @@ export async function cloneDevApp(input: {
   await writeAppDevBootstrap(appPath, {
     name,
     projectType: 'frontend',
+    source: 'created',
   });
 
   try {

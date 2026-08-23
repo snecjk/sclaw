@@ -111,6 +111,25 @@ function safeCanGoBack(el: EmbedWebviewElement | null): boolean {
   }
 }
 
+function safeLoadWebviewUrl(el: EmbedWebviewElement, nextUrl: string): boolean {
+  const trimmed = nextUrl.trim();
+  if (!trimmed) return false;
+  try {
+    if (typeof el.loadURL === 'function') {
+      void Promise.resolve(el.loadURL(trimmed)).catch(() => undefined);
+      return true;
+    }
+  } catch {
+    // Guest not attached / dom-ready not emitted yet.
+  }
+  try {
+    el.setAttribute('src', trimmed);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Guest webviews always start at about:blank; skip-login tickets must not bind until a real page URL. */
 function isEmbedWebviewPageUrl(pageUrl: string): boolean {
   if (!pageUrl || pageUrl === 'about:blank') return false;
@@ -151,6 +170,8 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
     const [guestPreloadUrl, setGuestPreloadUrl] = useState<string | null>(null);
     const [preloadReady, setPreloadReady] = useState(!isElectron);
     const launchedSrcRef = useRef<string | null>(null);
+    const domReadyRef = useRef(false);
+    const pendingUrlRef = useRef(url);
     const onPageFaviconRef = useRef(onPageFavicon);
     const onPageTitleRef = useRef(onPageTitle);
     const onPageUrlRef = useRef(onPageUrl);
@@ -165,6 +186,18 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
     onOpenWindowRef.current = onOpenWindow;
     onConsoleMessageRef.current = onConsoleMessage;
     captureNetworkRef.current = captureGuestNetworkFailures;
+    pendingUrlRef.current = url;
+
+    const navigateGuest = (targetUrl: string, force = false): boolean => {
+      const el = webviewRef.current;
+      if (!el || !domReadyRef.current) return false;
+      const trimmed = targetUrl.trim();
+      if (!trimmed) return false;
+      if (!force && launchedSrcRef.current === trimmed) return true;
+      if (!safeLoadWebviewUrl(el, trimmed)) return false;
+      launchedSrcRef.current = trimmed;
+      return true;
+    };
 
     useEffect(() => {
       if (!isElectron) return;
@@ -185,13 +218,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
 
     useEffect(() => {
       if (!isElectron || !preloadReady) return;
-      const el = webviewRef.current;
-      if (!el || launchedSrcRef.current === url) return;
-      launchedSrcRef.current = url;
-      const result = el.loadURL?.(url);
-      void Promise.resolve(result).catch(() => {
-        // SSO skip-login 302 aborts the original loadURL; the follow-up navigation still proceeds.
-      });
+      navigateGuest(url);
     }, [preloadReady, url]);
 
     const publishNavState = () => {
@@ -233,10 +260,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
           }
           try {
             const current = safeGetWebviewUrl(el, url);
-            if (typeof el.loadURL === 'function') {
-              void el.loadURL(current);
-              return;
-            }
+            if (safeLoadWebviewUrl(el, current)) return;
             el.setAttribute('src', current);
             return;
           } catch {
@@ -265,13 +289,10 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       loadURL: (nextUrl: string) => {
         const trimmed = nextUrl.trim();
         if (!trimmed) return;
+        if (navigateGuest(trimmed, true)) return;
         const el = webviewRef.current;
-        if (typeof el?.loadURL === 'function') {
-          void el.loadURL(trimmed);
-          return;
-        }
         if (el) {
-          el.setAttribute('src', trimmed);
+          pendingUrlRef.current = trimmed;
           return;
         }
         const iframe = iframeRef.current;
@@ -334,6 +355,12 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         publishNavState();
       };
 
+      const onDomReady = () => {
+        domReadyRef.current = true;
+        navigateGuest(pendingUrlRef.current);
+        bindAfterDomReady();
+      };
+
       const onNavigate = () => {
         if (!active) return;
         const pageUrl = safeGetWebviewUrl(el, '');
@@ -366,10 +393,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
           onOpenWindowRef.current(action.url);
           return;
         }
-        if (typeof el.loadURL === 'function') {
-          void el.loadURL(action.url);
-          return;
-        }
+        if (safeLoadWebviewUrl(el, action.url)) return;
         el.setAttribute('src', action.url);
       };
 
@@ -401,7 +425,7 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
         });
       };
 
-      el.addEventListener('dom-ready', bindAfterDomReady);
+      el.addEventListener('dom-ready', onDomReady);
       el.addEventListener('did-navigate', onNavigate);
       el.addEventListener('did-navigate-in-page', onNavigate);
       el.addEventListener('did-finish-load', onFinishLoad);
@@ -420,8 +444,10 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
 
       return () => {
         boundToPage = false;
+        domReadyRef.current = false;
+        launchedSrcRef.current = null;
         if (active && embedRuntimeId) registerSclawBrowserWebview(null);
-        el.removeEventListener('dom-ready', bindAfterDomReady);
+        el.removeEventListener('dom-ready', onDomReady);
         el.removeEventListener('did-navigate', onNavigate);
         el.removeEventListener('did-navigate-in-page', onNavigate);
         el.removeEventListener('did-finish-load', onFinishLoad);

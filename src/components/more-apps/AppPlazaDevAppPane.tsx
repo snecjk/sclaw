@@ -56,6 +56,8 @@ import {
   type AppPlazaDevAppTab,
   useAppPlazaShellStore,
 } from '@/stores/app-plaza-shell';
+import { useAppDevCatalogStore } from '@/stores/app-dev-catalog';
+import { shouldShowGitCommitAction, shouldShowStoCloudActions } from '@/lib/app-dev-actions';
 import { useAppDevChatSession } from '@/hooks/use-app-dev-chat-session';
 import { getAgentIdFromSessionKey } from '@/stores/chat/session-identity';
 import { logChatFlow } from '@/stores/chat/chat-flow-log';
@@ -207,12 +209,19 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const autoRepairRef = useRef<{ fingerprint: string; attempts: number }>({ fingerprint: '', attempts: 0 });
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
   const appName = workspaces.find((w) => w.id === workspaceId)?.name ?? tab.title;
+  const listedApp = useAppDevCatalogStore((s) =>
+    s.apps.find((app) => app.workspaceId === workspaceId),
+  );
   const appDevSessionKey = useAppDevChatSession(workspaceId, active);
   const { sending } = useChatSessionRuntimeView(appDevSessionKey ?? '');
   const runControl = useAppDevRunControl({ workspaceId, setStatus });
   const closeDevAppTab = useAppPlazaShellStore((s) => s.closeDevAppTab);
+  const showCloudActions = shouldShowStoCloudActions(listedApp, stoStatus);
+  const showGitCommit = shouldShowGitCommitAction(listedApp, gitAvailable);
   const canDeploy = Boolean(
-    stoStatus?.available && (stoStatus.bound || stoStatus.applicationId),
+    showCloudActions
+    && stoStatus?.available
+    && (stoStatus.bound || stoStatus.applicationId),
   );
   const deploy = useStoAppDeploy({
     workspaceId,
@@ -398,6 +407,22 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     }
   };
 
+  const handleGitSubmit = async (message: string) => {
+    try {
+      const created = await createAppCheckpoint(workspaceId, message);
+      if (created) {
+        toast.success('代码已提交到本地 Git');
+        setCommitOpen(false);
+      } else {
+        toast.message('没有可提交的改动');
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '提交失败');
+    }
+  };
+
+  const commitMode = showGitCommit ? 'git' : 'sto';
+
   const phase = status?.phase ?? 'created';
   const stoStatusTone = stoStatus?.available && stoStatus.bound
     ? stoStatus.syncState === 'merge-required'
@@ -443,32 +468,48 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         />
 
         <div className="no-drag flex items-center gap-1">
-          <span
-            className={cn(
-              'mr-1 inline-flex h-7 items-center rounded-md border px-2 text-[11px]',
-              stoStatusTone,
-            )}
-            title={
-              stoStatus?.bound
-                ? `${stoStatus.syncLabel}${stoStatus.applicationId ? ` · ${stoStatus.applicationId}` : ''}`
-                : '未绑定 STO 应用'
-            }
-          >
-            {stoStatus?.bound ? `STO ${stoStatus.syncLabel}` : 'STO 未绑定'}
-          </span>
+          {showCloudActions ? (
+            <span
+              className={cn(
+                'mr-1 inline-flex h-7 items-center rounded-md border px-2 text-[11px]',
+                stoStatusTone,
+              )}
+              title={
+                stoStatus?.bound
+                  ? `${stoStatus.syncLabel}${stoStatus.applicationId ? ` · ${stoStatus.applicationId}` : ''}`
+                  : '未绑定 STO 应用'
+              }
+            >
+              {stoStatus?.bound ? `STO ${stoStatus.syncLabel}` : 'STO 未绑定'}
+            </span>
+          ) : null}
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs"
-            disabled={!stoStatus?.available || !stoStatus?.bound}
-            onClick={() => setCommitOpen(true)}
-          >
-            提交
-          </Button>
+          {showGitCommit ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              onClick={() => setCommitOpen(true)}
+            >
+              提交
+            </Button>
+          ) : null}
 
-          {stoStatus?.bound && (stoStatus.syncState === 'remote-ahead' || stoStatus.syncState === 'merge-required') ? (
+          {showCloudActions ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1 px-2 text-xs"
+              disabled={!stoStatus?.available || !stoStatus?.bound}
+              onClick={() => setCommitOpen(true)}
+            >
+              提交
+            </Button>
+          ) : null}
+
+          {showCloudActions && stoStatus?.bound && (stoStatus.syncState === 'remote-ahead' || stoStatus.syncState === 'merge-required') ? (
             <Button
               type="button"
               variant="ghost"
@@ -493,7 +534,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
             </Button>
           ) : null}
 
-          {stoStatus?.bound && stoStatus.syncState === 'merge-required' ? (
+          {showCloudActions && stoStatus?.bound && stoStatus.syncState === 'merge-required' ? (
             <Button
               type="button"
               variant="ghost"
@@ -522,13 +563,15 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
             </Button>
           ) : null}
 
-          <StoAppDeployControl
-            canDeploy={canDeploy}
-            job={deploy.job}
-            onOpenDialog={() => setDeployOpen(true)}
-            onClearTerminalJob={deploy.clear}
-            onFillComposer={handleFillComposerFromDiagnostics}
-          />
+          {showCloudActions ? (
+            <StoAppDeployControl
+              canDeploy={canDeploy}
+              job={deploy.job}
+              onOpenDialog={() => setDeployOpen(true)}
+              onClearTerminalJob={deploy.clear}
+              onFillComposer={handleFillComposerFromDiagnostics}
+            />
+          ) : null}
 
           <Button
             type="button"
@@ -606,9 +649,10 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       <StoAppCommitDialog
         open={commitOpen}
         appName={appName}
-        initialMessage={`更新应用: ${appName}`}
+        mode={commitMode}
+        initialMessage={commitMode === 'git' ? `更新: ${appName}` : `更新应用: ${appName}`}
         onCancel={() => setCommitOpen(false)}
-        onConfirm={handleSubmit}
+        onConfirm={commitMode === 'git' ? handleGitSubmit : handleSubmit}
       />
       <StoAppDeployDialog
         open={deployOpen}

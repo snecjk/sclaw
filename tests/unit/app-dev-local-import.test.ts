@@ -7,13 +7,18 @@ import {
   listLocalOnlyDevApps,
 } from '../../electron/services/app-dev-service';
 
-async function writeMarker(appPath: string, name: string): Promise<void> {
+async function writeMarker(
+  appPath: string,
+  name: string,
+  extra: Record<string, unknown> = {},
+): Promise<void> {
   await mkdir(join(appPath, '.sclaw'), { recursive: true });
   await writeFile(appDevMarkerPath(appPath), `${JSON.stringify({
     kind: 'app-dev',
     name,
     projectType: 'frontend',
     createdAt: '2026-08-23T00:00:00.000Z',
+    ...extra,
   }, null, 2)}\n`, 'utf8');
 }
 
@@ -39,6 +44,7 @@ describe('listLocalOnlyDevApps', () => {
       name: '本地导入应用',
       localReady: true,
       availability: 'local',
+      source: 'imported',
     });
     expect(apps[0].applicationId).toBeUndefined();
   });
@@ -58,5 +64,22 @@ describe('listLocalOnlyDevApps', () => {
     });
 
     expect(apps).toEqual([]);
+  });
+
+  it('reads explicit imported source from marker', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'sclaw-import-source-'));
+    await writeMarker(root, '显式导入', { source: 'imported' });
+
+    const apps = await listLocalOnlyDevApps({
+      workspaces: [{
+        id: 'ws-source',
+        name: '显式导入',
+        rootPath: root,
+      }],
+      claimedWorkspaceIds: [],
+      claimedPaths: [],
+    });
+
+    expect(apps[0]?.source).toBe('imported');
   });
 });

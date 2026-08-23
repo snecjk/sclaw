@@ -8,6 +8,8 @@ interface StoAppCommitDialogProps {
   open: boolean;
   appName: string;
   initialMessage: string;
+  /** `sto` = sai-cli 上传；`git` = 本地 git commit */
+  mode?: 'sto' | 'git';
   onCancel: () => void;
   onConfirm: (message: string) => Promise<void> | void;
 }
@@ -16,6 +18,7 @@ export function StoAppCommitDialog({
   open,
   appName,
   initialMessage,
+  mode = 'sto',
   onCancel,
   onConfirm,
 }: StoAppCommitDialogProps) {
@@ -40,6 +43,8 @@ export function StoAppCommitDialog({
     }
   };
 
+  const isGit = mode === 'git';
+
   return createPortal(
     <div
       className="fixed inset-0 z-[260] flex items-center justify-center bg-[rgba(15,23,42,0.42)] p-4"
@@ -59,7 +64,7 @@ export function StoAppCommitDialog({
       >
         <div className="flex items-center justify-between gap-2">
           <h2 id="sto-app-commit-title" className="text-[16px] font-semibold text-[#1D2129] dark:text-foreground">
-            提交到 STO
+            {isGit ? '提交到 Git' : '提交到 STO'}
           </h2>
           <button
             type="button"
@@ -73,7 +78,9 @@ export function StoAppCommitDialog({
         </div>
 
         <p className="mt-2 text-[13px] leading-relaxed text-[#86909C] dark:text-muted-foreground">
-          为「{appName}」填写本次提交说明，确认后上传代码。
+          {isGit
+            ? `为「${appName}」填写本次提交说明，确认后将改动提交到本地 Git 仓库。`
+            : `为「${appName}」填写本次提交说明，确认后上传代码。`}
         </p>
 
         <label className="mt-4 block">
