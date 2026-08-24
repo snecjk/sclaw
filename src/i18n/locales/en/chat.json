@@ -68,7 +68,6 @@
         "dingtalkMentionTitle": "@Contacts/groups",
         "dingtalkSearchTitle": "Search",
         "dingtalkMentionSearchTitle": "Search for “{{query}}”",
-        "dingtalkRecentTitle": "Unread conversations",
         "dingtalkContactsTitle": "Contacts",
         "dingtalkGroupsTitle": "Groups",
         "dingtalkNoContacts": "No matching contacts found",

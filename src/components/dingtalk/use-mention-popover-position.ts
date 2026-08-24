@@ -5,6 +5,7 @@ import {
   computeMentionPopoverPlacement,
   type MentionPopoverPlacement,
 } from './mention-popover-placement';
+import { shouldIgnorePopoverRepositionScroll } from './mention-popover-scroll';
 
 export interface UseMentionPopoverPositionOptions {
   open: boolean;
@@ -12,6 +13,8 @@ export interface UseMentionPopoverPositionOptions {
   anchorRef?: RefObject<HTMLElement | null>;
   mentionTrigger?: ActiveMentionTrigger | null;
   getEditorElement?: () => HTMLElement | null;
+  /** 该节点内部的 scroll 不触发坐标重算（避免列表滚动时浮层抖动） */
+  ignoreScrollRootRef?: RefObject<HTMLElement | null>;
 }
 
 /**
@@ -23,6 +26,7 @@ export function useMentionPopoverPosition({
   anchorRef,
   mentionTrigger,
   getEditorElement,
+  ignoreScrollRootRef,
 }: UseMentionPopoverPositionOptions): MentionPopoverPlacement | null {
   const [position, setPosition] = useState<MentionPopoverPlacement | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -66,7 +70,10 @@ export function useMentionPopoverPosition({
   useLayoutEffect(() => {
     if (!open || !anchorRef?.current) return;
 
-    const scheduleUpdate = () => {
+    const scheduleUpdate = (event?: Event) => {
+      if (event && shouldIgnorePopoverRepositionScroll(event, ignoreScrollRootRef?.current)) {
+        return;
+      }
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
       }
@@ -86,7 +93,7 @@ export function useMentionPopoverPosition({
       window.removeEventListener('resize', scheduleUpdate);
       window.removeEventListener('scroll', scheduleUpdate, { capture: true });
     };
-  }, [anchorRef, measurePosition, open]);
+  }, [anchorRef, ignoreScrollRootRef, measurePosition, open]);
 
   return position;
 }

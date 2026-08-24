@@ -9,6 +9,7 @@ import type { MentionSearchItem } from '@/types/dingtalk-mention';
 import { OverlayScrollbar } from '@/components/ui/overlay-scrollbar';
 import { useMentionPopoverDismissOutside } from './use-mention-popover-dismiss-outside';
 import { useMentionPopoverPosition } from './use-mention-popover-position';
+import { scrollChildIntoNearestView } from './mention-popover-scroll';
 
 type IndexedMentionSearchItem = MentionSearchItem & { sourceIndex: number };
 
@@ -189,6 +190,7 @@ export function DingTalkMentionPopover({
     anchorRef,
     mentionTrigger,
     getEditorElement,
+    ignoreScrollRootRef: panelRef,
   });
 
   useEffect(() => {
@@ -196,7 +198,7 @@ export function DingTalkMentionPopover({
     const container = listRef.current;
     if (!container) return;
     const activeEl = container.querySelector<HTMLElement>(`[data-mention-index="${activeIndex}"]`);
-    activeEl?.scrollIntoView({ block: 'nearest' });
+    if (activeEl) scrollChildIntoNearestView(container, activeEl);
   }, [activeIndex, open, items.length]);
 
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
@@ -216,11 +218,7 @@ export function DingTalkMentionPopover({
   const contactItems = indexedItems.filter((item) => item.type === 'user');
   const groupItems = indexedItems.filter((item) => item.type === 'group');
   const hasVisibleItems = indexedItems.length > 0;
-  const title = recent
-    ? t('composer.dingtalkRecentTitle')
-    : query.trim()
-      ? t('composer.dingtalkSearchTitle')
-      : t('composer.dingtalkMentionTitle');
+  const title = query.trim() ? t('composer.dingtalkSearchTitle') : null;
 
   const useFixedPortal = Boolean(anchorRef);
 
@@ -231,7 +229,7 @@ export function DingTalkMentionPopover({
     <div
       ref={panelRef}
       className={cn(
-        'z-50 w-[320px] overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-2',
+        'z-50 flex w-[320px] max-h-[280px] flex-col overflow-hidden rounded-[8px] border border-[#E5E6EB] bg-white p-2',
         'shadow-[0_4px_12px_rgba(0,0,0,0.1)] dark:border-border dark:bg-popover dark:shadow-[0_8px_24px_rgba(0,0,0,0.45)]',
         // 无 portal 时保持 absolute 上浮；有 fixed 时不可再带 bottom-full，否则会与 top 冲突压成一条缝
         useFixedPortal ? null : 'absolute left-0 bottom-full mb-2',
@@ -244,15 +242,17 @@ export function DingTalkMentionPopover({
               top: position.top ?? 'auto',
               bottom: position.bottom ?? 'auto',
               maxHeight: position.maxHeight,
-              overflowY: 'auto',
+              overflow: 'hidden',
               zIndex: 60000,
             }
           : undefined
       }
     >
-      <div className="px-2 py-1 text-[12px] font-medium leading-5 text-[#86909C] dark:text-muted-foreground">
-        {title}
-      </div>
+      {title ? (
+        <div className="px-2 py-1 text-[12px] font-medium leading-5 text-[#86909C] dark:text-muted-foreground">
+          {title}
+        </div>
+      ) : null}
 
       {needsInstall && (
         <div className="space-y-2 px-3 py-2">
@@ -315,10 +315,10 @@ export function DingTalkMentionPopover({
       )}
 
       {!loading && !needsAuth && !needsInstall && !error && (hasVisibleItems || query.trim()) && (
-        <div className="relative max-h-[280px] overflow-hidden">
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
           <div
             ref={listRef}
-            className="sto-overlay-scroll-viewport max-h-[280px] overflow-y-auto overscroll-contain"
+            className="sto-overlay-scroll-viewport min-h-0 flex-1 overflow-y-auto overscroll-contain"
             onScroll={handleScroll}
           >
             <div ref={listContentRef}>

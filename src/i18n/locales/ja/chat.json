@@ -68,7 +68,6 @@
         "dingtalkMentionTitle": "@連絡先/グループ",
         "dingtalkSearchTitle": "検索",
         "dingtalkMentionSearchTitle": "「{{query}}」を検索",
-        "dingtalkRecentTitle": "未読セッション",
         "dingtalkContactsTitle": "連絡先",
         "dingtalkGroupsTitle": "グループ",
         "dingtalkNoContacts": "名前に一致する連絡先が見つかりません",
