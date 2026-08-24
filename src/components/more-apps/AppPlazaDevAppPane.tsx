@@ -3,7 +3,7 @@
  * Left: preview / Monaco code / file search; Right: project agent chat.
  * Portaled over the entire app shell (including sidebar) while active.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   AlertCircle,
@@ -14,7 +14,7 @@ import {
 import { toast } from 'sonner';
 import { useChatStore } from '@/stores/chat';
 import { useSessionDisplayMessages } from '@/stores/chat/display-selectors';
-import { useChatSessionRuntimeView } from '@/stores/chat/runtime-selectors';
+import { useChatSessionRuntimeView, useChatSessionSending } from '@/stores/chat/runtime-selectors';
 import { useSessionCatalogStore } from '@/stores/session-catalog';
 import { ChatMessage } from '@/pages/Chat/ChatMessage';
 import { AssistantTurnMessage } from '@/pages/Chat/AssistantTurnMessage';
@@ -43,17 +43,16 @@ import {
   continueStoAppMerge,
   drainAppErrors,
   getAppDevEnvironment,
-  getAppStatus,
   getStoAppStatus,
   pullStoApp,
   pushStoApp,
   type StoAppStatus,
   restoreAppCheckpoint,
-  startApp,
   type AppDevStatus,
 } from '@/lib/app-dev-api';
 import { useStoAppDeploy } from '@/hooks/use-sto-app-deploy';
 import { useAppDevRunControl } from '@/hooks/use-app-dev-run-control';
+import { useAppDevStatusPoll } from '@/hooks/use-app-dev-status-poll';
 import {
   type AppPlazaDevAppTab,
   useAppPlazaShellStore,
@@ -67,7 +66,7 @@ import {
   sclawBrowserEmbedChatShortcutLabel,
 } from '../../../shared/sclaw-embed-browser-shortcut';
 
-function WorkbenchChatPane({
+const WorkbenchChatPane = memo(function WorkbenchChatPane({
   sessionKey,
   appName,
   composerSeed,
@@ -187,7 +186,7 @@ function WorkbenchChatPane({
       </div>
     </div>
   );
-}
+});
 
 interface AppPlazaDevAppPaneProps {
   tab: AppPlazaDevAppTab;
@@ -206,8 +205,13 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   const [commitOpen, setCommitOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
   const [sourceRevision, setSourceRevision] = useState(0);
+  const [statusWorkspaceId, setStatusWorkspaceId] = useState(workspaceId);
   const prevSendingRef = useRef(false);
   const autoRepairRef = useRef<{ fingerprint: string; attempts: number }>({ fingerprint: '', attempts: 0 });
+  if (statusWorkspaceId !== workspaceId) {
+    setStatusWorkspaceId(workspaceId);
+    setSourceRevision(0);
+  }
   const workspaces = useSessionCatalogStore((s) => s.workspaces);
   const pageType = useAppDevCatalogStore((s) => (
     s.apps.find((app) => app.workspaceId === workspaceId)?.pageType
@@ -217,11 +221,22 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     s.apps.find((app) => app.workspaceId === workspaceId),
   );
   const appDevSessionKey = useAppDevChatSession(workspaceId, active);
-  const { sending } = useChatSessionRuntimeView(appDevSessionKey ?? '');
-  const runControl = useAppDevRunControl({ workspaceId, setStatus });
+  const sending = useChatSessionSending(appDevSessionKey ?? '');
+  const {
+    pending: runPending,
+    previewRevision,
+    start: startRun,
+    stop: stopRun,
+    restart: restartRun,
+    interceptRestartIntent,
+  } = useAppDevRunControl({ workspaceId, setStatus });
+  const dismissErrors = useCallback(() => setPendingErrors([]), []);
+  const handleRetryStart = useCallback(() => {
+    void startRun();
+  }, [startRun]);
   const closeDevAppTab = useAppPlazaShellStore((s) => s.closeDevAppTab);
   const showCloudActions = shouldShowStoCloudActions(listedApp, stoStatus);
-  const showGitCommit = shouldShowGitCommitAction(listedApp, gitAvailable);
+  const showGitCommit = shouldShowGitCommitAction(listedApp, gitAvailable, stoStatus);
   const canDeploy = Boolean(
     showCloudActions
     && stoStatus?.available
@@ -245,7 +260,6 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
   });
 
   useEffect(() => {
-    setSourceRevision(0);
     autoRepairRef.current = { fingerprint: '', attempts: 0 };
   }, [workspaceId]);
 
@@ -278,28 +292,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       .catch(() => setStoStatus(null));
   }, [workspaceId]);
 
-  useEffect(() => {
-    if (!workspaceId) return;
-    let cancelled = false;
-    let startedOnce = false;
-    const tick = async () => {
-      const next = await getAppStatus(workspaceId).catch(() => null);
-      if (cancelled) return;
-      if ((!next || next.phase === 'stopped') && !startedOnce) {
-        startedOnce = true;
-        void startApp(workspaceId).catch(() => undefined);
-      } else if (next && next.phase !== 'stopped') {
-        startedOnce = true;
-      }
-      if (next) setStatus(next);
-    };
-    void tick();
-    const timer = setInterval(() => void tick(), 1500);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [workspaceId]);
+  useAppDevStatusPoll(workspaceId, setStatus, active);
 
   useEffect(() => {
     if (prevSendingRef.current && !sending && workspaceId) {
@@ -314,7 +307,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     prevSendingRef.current = sending;
   }, [sending, workspaceId]);
 
-  const handleFixErrors = () => {
+  const handleFixErrors = useCallback(() => {
     const text = [
       '下面是预览里「页面上看不到、只在后台/控制台出现」的失败信息，请据此修复：',
       '',
@@ -323,9 +316,9 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
     setPendingErrors([]);
     setComposerSeed((prev) => ({ text, version: (prev?.version ?? 0) + 1 }));
     setChatOpen(true);
-  };
+  }, [pendingErrors]);
 
-  const handlePreviewRuntimeError = (formattedLine: string) => {
+  const handlePreviewRuntimeError = useCallback((formattedLine: string) => {
     const line = formattedLine.trim();
     if (!line) return;
     setPendingErrors((prev) => {
@@ -333,14 +326,14 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       const next = [...prev, line];
       return next.length > 20 ? next.slice(-20) : next;
     });
-  };
+  }, []);
 
-  const handleFillComposerFromDiagnostics = (text: string) => {
+  const handleFillComposerFromDiagnostics = useCallback((text: string) => {
     const trimmed = text.trim();
     if (!trimmed) return;
     setComposerSeed((prev) => ({ text: trimmed, version: (prev?.version ?? 0) + 1 }));
     setChatOpen(true);
-  };
+  }, []);
 
   const sendAutoRepair = useCallback((text: string) => {
     const trimmed = text.trim();
@@ -381,8 +374,11 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
       '',
       ...pendingErrors.slice(-10),
     ].join('\n');
-    setPendingErrors([]);
-    sendAutoRepair(text);
+    const timer = window.setTimeout(() => {
+      setPendingErrors([]);
+      sendAutoRepair(text);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [appDevSessionKey, pendingErrors, sendAutoRepair, sending]);
 
   const handleRestore = async () => {
@@ -467,10 +463,10 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
         <div className="flex-1" />
         <AppDevRunStatusMenu
           phase={phase}
-          pending={runControl.pending}
-          onStart={() => void runControl.start()}
-          onStop={() => void runControl.stop()}
-          onRestart={() => void runControl.restart()}
+          pending={runPending}
+          onStart={() => void startRun()}
+          onStop={() => void stopRun()}
+          onRestart={() => void restartRun()}
         />
 
         <div className="no-drag flex items-center gap-1">
@@ -619,7 +615,7 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
                 sessionKey={appDevSessionKey}
                 appName={appName}
                 composerSeed={composerSeed}
-                onBeforeSend={runControl.interceptRestartIntent}
+                onBeforeSend={interceptRestartIntent}
               />
             )
             : null
@@ -631,12 +627,12 @@ export function AppPlazaDevAppPane({ tab, active }: AppPlazaDevAppPaneProps) {
           status={status}
           pendingErrors={pendingErrors}
           onFixErrors={handleFixErrors}
-          onDismissErrors={() => setPendingErrors([])}
+          onDismissErrors={dismissErrors}
           onPreviewRuntimeError={handlePreviewRuntimeError}
-          onRetryStart={() => void runControl.start()}
+          onRetryStart={handleRetryStart}
           onFillComposerFromDiagnostics={handleFillComposerFromDiagnostics}
           sourceRevision={sourceRevision}
-          previewRevision={runControl.previewRevision}
+          previewRevision={previewRevision}
         />
       </AppDevSplitBody>
 

@@ -127,6 +127,14 @@ export function useChatSessionRuntimeView(sessionKey: string): ChatSessionRuntim
   return getCachedRuntimeView(session);
 }
 
+/** Sending flag only — does not re-render on streaming deltas. */
+export function useChatSessionSending(sessionKey: string): boolean {
+  return useChatRuntimeV2Store((state) => {
+    const runtime = state.sessionsByKey[sessionKey]?.runtime;
+    return Boolean(runtime && ACTIVE_PHASES.has(runtime.phase));
+  });
+}
+
 export function useCurrentChatRuntimeView(): ChatSessionRuntimeView {
   const sessionKey = useChatStore((state) => state.currentSessionKey);
   return useChatSessionRuntimeView(sessionKey);

@@ -11,22 +11,24 @@ export function isImportedDevApp(app?: Pick<DevAppSummary, 'source' | 'applicati
   return !app.applicationId;
 }
 
-/** sai-cli push / pull / deploy — only for apps created via 新建站. */
+/** sai-cli push / pull / deploy — cloud-bound apps, or apps created via 新建站. */
 export function shouldShowStoCloudActions(
   app: Pick<DevAppSummary, 'source' | 'applicationId'> | null | undefined,
   stoStatus?: StoAppStatus | null,
 ): boolean {
+  if (stoStatus?.bound || stoStatus?.applicationId || app?.applicationId) return true;
   if (isImportedDevApp(app)) return false;
-  if (app?.applicationId) return true;
-  return Boolean(stoStatus?.bound);
+  return true;
 }
 
 /** Manual git commit in the workbench header — imported apps with a repo only. */
 export function shouldShowGitCommitAction(
   app: Pick<DevAppSummary, 'source' | 'applicationId' | 'gitRepo'> | null | undefined,
   gitAvailable: boolean,
+  stoStatus?: StoAppStatus | null,
 ): boolean {
   if (!gitAvailable) return false;
+  if (shouldShowStoCloudActions(app, stoStatus)) return false;
   if (!isImportedDevApp(app)) return false;
   return app?.gitRepo !== false;
 }

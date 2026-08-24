@@ -767,8 +767,20 @@ describe('MoreAppsPage server catalog', () => {
     expect(screen.queryByRole('tab', { name: '开发应用' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '创建应用' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '导入应用' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '创建应用' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '导入应用' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '安装外部应用' })).toBeInTheDocument();
     expect(useMoreAppsStore.getState().activeTab).toBe('market');
+  });
+
+  it('merges create and import into a ghost dropdown for whitelisted users', () => {
+    render(<MoreAppsPage />);
+
+    const trigger = screen.getByRole('button', { name: '创建应用' });
+    expect(trigger).toHaveClass('more-apps-add-btn--ghost');
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    expect(trigger.querySelector('.lucide-chevron-down')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '导入应用' })).not.toBeInTheDocument();
   });
 
   it('shows a fallback when a banner image fails', async () => {

@@ -70,4 +70,30 @@ describe('app-dev workbench split wiring', () => {
     expect(plazaSrc).not.toContain('w-[400px] min-w-[340px]');
     expect(workbenchSrc).not.toContain('w-[400px] min-w-[340px]');
   });
+
+  it('does not re-render the workbench shell on every status poll or stream delta', () => {
+    const plazaSrc = readFileSync(
+      resolve(process.cwd(), 'src/components/more-apps/AppPlazaDevAppPane.tsx'),
+      'utf8',
+    );
+    const workbenchSrc = readFileSync(
+      resolve(process.cwd(), 'src/pages/AppDev/AppDevWorkbench.tsx'),
+      'utf8',
+    );
+    const stageSrc = readFileSync(
+      resolve(process.cwd(), 'src/components/app-dev/AppDevWorkbenchStage.tsx'),
+      'utf8',
+    );
+
+    expect(workbenchSrc).toContain('useAppDevStatusPoll');
+    expect(plazaSrc).toContain('useAppDevStatusPoll');
+    expect(workbenchSrc).toContain('useChatSessionSending');
+    expect(plazaSrc).toContain('useChatSessionSending');
+    expect(workbenchSrc).not.toContain('setInterval(() => void tick(), 1500)');
+    expect(plazaSrc).not.toContain('setInterval(() => void tick(), 1500)');
+    expect(stageSrc).toContain('frame.reload()');
+    expect(stageSrc).toMatch(
+      /removeEventListener\('keydown', onKeyDown, true\);\s*\n\s*\}, \[\]\);/,
+    );
+  });
 });

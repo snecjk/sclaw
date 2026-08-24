@@ -7,12 +7,18 @@
  * - Installed tab: Card grid layout
  */
 import { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { Search, Plus, Heart, FolderInput } from 'lucide-react';
+import { Search, Plus, Heart, FolderInput, ChevronDown } from 'lucide-react';
 import './more-apps.css';
 import { toast } from 'sonner';
 import { useMoreAppsStore } from '@/stores/more-apps';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   stoMainInnerShell,
   stoPageTitleClass,
@@ -793,29 +799,41 @@ export function MoreAppsPage() {
 
         <div className="app-plaza-heading-actions">
           {canUseAppDev ? (
-            <>
-              <button
-                type="button"
-                className="more-apps-add-btn more-apps-add-btn--primary"
-                id="more-apps-create-app-btn"
-                onClick={() => setCreateAppOpen(true)}
-              >
-                <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
-                {t('moreApps.createApp', { defaultValue: '创建应用' })}
-              </button>
-              <button
-                type="button"
-                className="more-apps-add-btn more-apps-add-btn--ghost"
-                id="more-apps-import-app-btn"
-                disabled={importingApp}
-                onClick={() => void handleImportApp()}
-              >
-                <FolderInput className="more-apps-add-btn__icon" aria-hidden="true" />
-                {importingApp
-                  ? t('moreApps.importingApp', { defaultValue: '导入中…' })
-                  : t('moreApps.importApp', { defaultValue: '导入应用' })}
-              </button>
-            </>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="more-apps-add-btn more-apps-add-btn--ghost"
+                  id="more-apps-create-app-btn"
+                  aria-haspopup="menu"
+                >
+                  <Plus className="more-apps-add-btn__icon" aria-hidden="true" />
+                  {importingApp
+                    ? t('moreApps.importingApp', { defaultValue: '导入中…' })
+                    : t('moreApps.createApp', { defaultValue: '创建应用' })}
+                  <ChevronDown className="more-apps-add-btn__chevron" aria-hidden="true" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-[10rem]">
+                <DropdownMenuItem
+                  id="more-apps-create-app-item"
+                  onSelect={() => setCreateAppOpen(true)}
+                >
+                  <Plus className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+                  {t('moreApps.createApp', { defaultValue: '创建应用' })}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  id="more-apps-import-app-btn"
+                  disabled={importingApp}
+                  onSelect={() => void handleImportApp()}
+                >
+                  <FolderInput className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
+                  {importingApp
+                    ? t('moreApps.importingApp', { defaultValue: '导入中…' })
+                    : t('moreApps.importApp', { defaultValue: '导入应用' })}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : null}
           <button
             type="button"

@@ -12,6 +12,7 @@ import { createServer } from 'net';
 import { get as httpGet } from 'http';
 import { existsSync } from 'fs';
 import { join } from 'path';
+import { isDevServerRepairWorthyLine } from '../../shared/app-dev-preview-noise';
 import { getManagedNodePaths, getNodeSpawnEnv } from '../utils/node-runtime';
 import { logger } from '../utils/logger';
 
@@ -119,7 +120,7 @@ function pushLog(entry: DevServerEntry, chunk: string): void {
     if (!trimmed) continue;
     entry.logs.push(trimmed);
     if (entry.logs.length > LOG_BUFFER_LINES) entry.logs.shift();
-    if (/error|failed to compile|internal server error/i.test(trimmed)) {
+    if (isDevServerRepairWorthyLine(trimmed)) {
       entry.recentErrors.push(trimmed);
       if (entry.recentErrors.length > 50) entry.recentErrors.shift();
     }

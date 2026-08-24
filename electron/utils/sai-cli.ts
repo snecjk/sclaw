@@ -58,7 +58,17 @@ function resolveSaiBinary(): string | null {
   return binaryName;
 }
 
-function runSai(args: string[], timeoutMs = 30000): Promise<SaiCliResult> {
+/** sai-cli 访问命令注册中心的 HTTP 超时（默认 15s 对大页 list 偏紧）。 */
+export const SAI_REGISTRY_REQUEST_TIMEOUT_MS = 60_000;
+
+/** list / discover 子进程超时：略高于注册中心 HTTP 超时。 */
+export const SAI_LIST_SPAWN_TIMEOUT_MS = 75_000;
+
+function runSai(
+  args: string[],
+  timeoutMs = 30000,
+  options?: { registryRequestTimeoutMs?: number },
+): Promise<SaiCliResult> {
   const binary = resolveSaiBinary();
   if (!binary) {
     return Promise.resolve({
@@ -68,13 +78,22 @@ function runSai(args: string[], timeoutMs = 30000): Promise<SaiCliResult> {
     });
   }
 
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    SAI_OUTPUT: 'json',
+    SAI_CLIENT_ID: SAI_CLIENT_ID_VALUE,
+  };
+  if (
+    typeof options?.registryRequestTimeoutMs === 'number'
+    && Number.isFinite(options.registryRequestTimeoutMs)
+    && options.registryRequestTimeoutMs > 0
+  ) {
+    env.SAI_REGISTRY_REQUEST_TIMEOUT_MS = String(Math.floor(options.registryRequestTimeoutMs));
+  }
+
   return new Promise((resolve) => {
     const child = spawn(binary, args, {
-      env: {
-        ...process.env,
-        SAI_OUTPUT: 'json',
-        SAI_CLIENT_ID: SAI_CLIENT_ID_VALUE,
-      },
+      env,
       stdio: ['ignore', 'pipe', 'pipe'],
       timeout: timeoutMs,
       windowsHide: true,
@@ -153,7 +172,9 @@ export async function saiDiscover(
   if (typeof limit === 'number' && Number.isFinite(limit) && limit > 0) {
     args.push('--limit', String(Math.floor(limit)));
   }
-  return runSai(args);
+  return runSai(args, SAI_LIST_SPAWN_TIMEOUT_MS, {
+    registryRequestTimeoutMs: SAI_REGISTRY_REQUEST_TIMEOUT_MS,
+  });
 }
 
 export async function saiList(options?: {
@@ -175,7 +196,9 @@ export async function saiList(options?: {
   ) {
     args.push('--page-size', String(Math.floor(options.pageSize)));
   }
-  return runSai(args);
+  return runSai(args, SAI_LIST_SPAWN_TIMEOUT_MS, {
+    registryRequestTimeoutMs: SAI_REGISTRY_REQUEST_TIMEOUT_MS,
+  });
 }
 
 /** 翻页拉全量 list（默认每页 100；CLI 无业务搜索词参数）。 */
