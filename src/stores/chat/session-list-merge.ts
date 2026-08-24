@@ -1,4 +1,5 @@
 import { preferCronDatedSessionKey } from '../../../shared/cron-job-agent';
+import { looksLikeTechnicalTaskGroupLabel } from '@/lib/scheduled-task-group-name';
 import {
   isClaudeScheduledTaskDatedSessionKey,
   isCronDatedSessionKey,
@@ -160,15 +161,24 @@ function taskSidebarDedupeKey(sessionKey: string): string | null {
   return null;
 }
 
+/** Dated catalog row is sidebar-visible only when it already has a human task title. */
+export function hasUsableTaskSidebarCatalogTitle(title?: string | null): boolean {
+  const trimmed = title?.trim();
+  if (!trimmed) return false;
+  return !looksLikeTechnicalTaskGroupLabel(trimmed);
+}
+
 /**
  * Sidebar「任务」数据源：
  * - session_type ∈ {cron, claude_task}
  * - key 必须是 dated（过滤历史 run/base）
+ * - 必须有人读 title（空 / SClaw / 技术 key 不进侧栏）
  * - 同 task+日 多条时保留 lastActivityAt 最新（兼容 agent twin）
  */
 export function isTaskSidebarCatalogRow(row: CatalogScheduledTaskRow): boolean {
   return TASK_SIDEBAR_CATALOG_TYPES.has(row.sessionType)
-    && isDatedTaskSidebarSessionKey(row.sessionKey);
+    && isDatedTaskSidebarSessionKey(row.sessionKey)
+    && hasUsableTaskSidebarCatalogTitle(row.title);
 }
 
 /** @deprecated Use isTaskSidebarCatalogRow */
@@ -210,12 +220,24 @@ function parseCatalogActivityMs(lastActivityAt: string | null | undefined): numb
   return Number.isFinite(ms) ? ms : undefined;
 }
 
+/** Catalog task title wins over engine agent-brand / technical labels (e.g. "SClaw"). */
+export function preferCatalogTaskTitle(
+  catalogTitle: string | null | undefined,
+  engineValue?: string,
+): string | undefined {
+  const catalog = catalogTitle?.trim() || undefined;
+  if (catalog && !looksLikeTechnicalTaskGroupLabel(catalog)) return catalog;
+  const engine = engineValue?.trim() || undefined;
+  if (engine && !looksLikeTechnicalTaskGroupLabel(engine)) return engine;
+  return undefined;
+}
+
 /** Map catalog task rows → sidebar/session-list entries（已按天过滤+去重）. */
 export function catalogTaskRowsToSessionEntries(
   catalogRows: CatalogScheduledTaskRow[],
 ): SessionListEntry[] {
   return filterTaskSidebarCatalogRows(catalogRows).map((row) => {
-    const title = row.title?.trim() || undefined;
+    const title = preferCatalogTaskTitle(row.title);
     return {
       key: row.sessionKey,
       label: title,
@@ -229,7 +251,7 @@ export function catalogTaskRowsToSessionEntries(
 /**
  * Merge engine `sessions.list` with catalog task rows (P2-D).
  * Catalog side only contributes dated `cron` / `claude_task` rows.
- * Engine rows win on conflict; catalog fills missing keys and gaps in displayName/updatedAt.
+ * Engine rows win on conflict for runtime fields; catalog title wins over agent-brand labels.
  */
 export function mergeEngineAndCatalogScheduledTaskSessions<T extends SessionListEntry>(
   engineSessions: T[],
@@ -250,8 +272,8 @@ export function mergeEngineAndCatalogScheduledTaskSessions<T extends SessionList
     byKey.set(session.key, {
       ...existing,
       ...session,
-      displayName: session.displayName?.trim() || existing.displayName,
-      label: session.label?.trim() || existing.label,
+      displayName: preferCatalogTaskTitle(existing.displayName, session.displayName),
+      label: preferCatalogTaskTitle(existing.label, session.label),
       updatedAt: session.updatedAt ?? existing.updatedAt,
       engineType: session.engineType ?? existing.engineType,
       model: session.model ?? existing.model,

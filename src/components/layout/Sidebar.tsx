@@ -85,6 +85,7 @@ import {
 } from '@/stores/chat/cron-session-utils';
 import { formatMaterialDateFromEntryId } from '@/lib/sto-task-entry-label';
 import { buildScheduledTaskGroupDisplayName, deriveGroupFirstTriggeredFromSessions, getSessionActivityMs, sortScheduledTaskGroupsByFirstTriggerDesc } from '@/lib/scheduled-task-group-name';
+import { preferCatalogTaskTitle } from '@/stores/chat/session-list-merge';
 import {
   fetchTaskGroupFirstTriggeredMap,
   isTaskGroupFirstTriggerOptimisticallyCleared,
@@ -1149,8 +1150,9 @@ export function Sidebar() {
       const activityMs = row.lastActivityAt ? Date.parse(row.lastActivityAt) : undefined;
       return {
         key: row.sessionKey,
-        label: existing?.label ?? title,
-        displayName: existing?.displayName ?? title,
+        // catalog_sessions.title 已冗余任务名；引擎 displayName/label 常是 agent 品牌「SClaw」。
+        label: preferCatalogTaskTitle(title, existing?.label),
+        displayName: preferCatalogTaskTitle(title, existing?.displayName),
         updatedAt: existing?.updatedAt
           ?? (typeof activityMs === 'number' && Number.isFinite(activityMs) ? activityMs : undefined),
         engineType: existing?.engineType

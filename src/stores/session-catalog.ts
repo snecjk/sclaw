@@ -33,7 +33,7 @@ const MIGRATION_FLAG = 'stoclaw:session-catalog-migrated';
 let bootstrapInFlight: Promise<void> | null = null;
 
 function filterTaskCatalogSessions(rows: CatalogSessionDto[]): CatalogSessionDto[] {
-  // 只保留 dated cron/claude_task；过滤历史 run/base，同日去重。
+  // 只保留 dated cron/claude_task 且有人读 title；过滤历史 run/base，同日去重。
   return filterTaskSidebarCatalogRows(rows);
 }
 
@@ -42,7 +42,7 @@ interface SessionCatalogState {
   workspaces: WorkspaceDto[];
   selectedProjectId: string | null;
   catalogSessions: CatalogSessionDto[];
-  /** Sidebar「任务」：dated 的 cron / claude_task（已滤历史 run/base） */
+  /** Sidebar「任务」：dated 的 cron / claude_task（已滤历史 run/base 与无 title 空壳） */
   taskCatalogSessions: CatalogSessionDto[];
   allCatalogByKey: Record<string, CatalogSessionMeta>;
   sessionWorkspaceByKey: Record<string, string>;

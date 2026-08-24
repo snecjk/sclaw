@@ -4,6 +4,7 @@ import {
   filterTaskSidebarCatalogRows,
   mergeEngineAndCatalogScheduledTaskSessions,
   omitSupersededCronDatedAgentTwins,
+  preferCatalogTaskTitle,
 } from '@/stores/chat/session-list-merge';
 
 describe('appendPendingLocalVirtualTaskSessions', () => {
@@ -100,6 +101,28 @@ describe('mergeEngineAndCatalogScheduledTaskSessions', () => {
     });
   });
 
+  it('keeps catalog title when engine displayName is the agent brand', () => {
+    const merged = mergeEngineAndCatalogScheduledTaskSessions(
+      [{
+        key: 'agent:main:cron:job-1:2026-07-24',
+        displayName: 'SClaw',
+        label: 'SClaw',
+      }],
+      [{
+        sessionKey: 'agent:main:cron:job-1:2026-07-24',
+        sessionType: 'cron',
+        taskId: 'job-1',
+        title: '日报',
+        lastActivityAt: '2026-07-24T01:00:00.000Z',
+      }],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({
+      displayName: '日报',
+      label: '日报',
+    });
+  });
+
   it('lets engine fields win but keeps catalog displayName when engine omits it', () => {
     const merged = mergeEngineAndCatalogScheduledTaskSessions(
       [{
@@ -164,6 +187,23 @@ describe('mergeEngineAndCatalogScheduledTaskSessions', () => {
   });
 });
 
+describe('preferCatalogTaskTitle', () => {
+  it('prefers catalog task title over engine agent brand', () => {
+    expect(preferCatalogTaskTitle('日报', 'SClaw')).toBe('日报');
+    expect(preferCatalogTaskTitle(' 周报 ', 'StoClaw')).toBe('周报');
+  });
+
+  it('falls back to a human engine label when catalog title is missing', () => {
+    expect(preferCatalogTaskTitle(null, '周报')).toBe('周报');
+    expect(preferCatalogTaskTitle('SClaw', '周报')).toBe('周报');
+  });
+
+  it('drops agent brand when neither side has a human title', () => {
+    expect(preferCatalogTaskTitle('SClaw', 'SClaw')).toBeUndefined();
+    expect(preferCatalogTaskTitle(null, 'SClaw')).toBeUndefined();
+  });
+});
+
 describe('filterTaskSidebarCatalogRows', () => {
   it('keeps one dated row per task+day (latest activity)', () => {
     const filtered = filterTaskSidebarCatalogRows([
@@ -171,21 +211,53 @@ describe('filterTaskSidebarCatalogRows', () => {
         sessionKey: 'agent:main:cron:job-1:2026-07-24',
         sessionType: 'cron',
         taskId: 'job-1',
+        title: '客户成本分析',
         lastActivityAt: '2026-07-24T10:00:00.000Z',
       },
       {
         sessionKey: 'agent:ops:cron:job-1:2026-07-24',
         sessionType: 'cron',
         taskId: 'job-1',
+        title: '客户成本分析',
         lastActivityAt: '2026-07-24T12:00:00.000Z',
       },
       {
         sessionKey: 'agent:main:cron:job-1:run:x',
         sessionType: 'cron',
         taskId: 'job-1',
+        title: '客户成本分析',
         lastActivityAt: '2026-07-24T13:00:00.000Z',
       },
     ]);
     expect(filtered.map((r) => r.sessionKey)).toEqual(['agent:ops:cron:job-1:2026-07-24']);
+  });
+
+  it('drops dated rows without a human title (empty shells / agent brand)', () => {
+    const filtered = filterTaskSidebarCatalogRows([
+      {
+        sessionKey: 'agent:main:cron:job-1:2026-08-07',
+        sessionType: 'cron',
+        taskId: 'job-1',
+        title: null,
+        lastActivityAt: '2026-08-07T01:00:00.000Z',
+      },
+      {
+        sessionKey: 'agent:main:cron:job-1:2026-08-08',
+        sessionType: 'cron',
+        taskId: 'job-1',
+        title: 'SClaw',
+        lastActivityAt: '2026-08-08T01:00:00.000Z',
+      },
+      {
+        sessionKey: 'agent:main:cron:job-1:2026-08-06',
+        sessionType: 'cron',
+        taskId: 'job-1',
+        title: '客户成本分析',
+        lastActivityAt: '2026-08-06T01:00:00.000Z',
+      },
+    ]);
+    expect(filtered.map((r) => r.sessionKey)).toEqual([
+      'agent:main:cron:job-1:2026-08-06',
+    ]);
   });
 });
