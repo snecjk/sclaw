@@ -834,7 +834,6 @@ export async function listDevApps(): Promise<DevAppSummary[]> {
     }
     if (pathOk && markerOk && workspaceId) {
       const fields = await readAppDevMarkerFields(localPath);
-      const fields = await readAppDevMarkerFields(localPath);
       if (fields.pageType !== cloud.pageType) {
         try {
           const raw = JSON.parse(await readFile(appDevMarkerPath(localPath), 'utf8')) as Partial<AppDevMarker>;
