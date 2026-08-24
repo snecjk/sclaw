@@ -325,6 +325,23 @@
   color: currentColor;
 }
 
+.page-more-apps .more-apps-add-btn__chevron {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: currentColor;
+  transition: transform 0.12s ease;
+}
+
+.page-more-apps .more-apps-add-btn[data-state='open'] .more-apps-add-btn__chevron {
+  transform: rotate(180deg);
+}
+
+.page-more-apps .more-apps-add-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* ── App icons ── */
 
 .page-more-apps .app-icon {
