@@ -150,4 +150,33 @@ describe('buildComposerGatewayPayload', () => {
     expect(payload.gatewayText).toContain('@张三');
     expect(payload.displayText).toContain('@张三');
   });
+
+  it('bakes exec sentence for workflow chips without source (learning-center / template handoff)', async () => {
+    const suffix = '按客户维度拆解发件成本与利润，自动识别成本异常并生成分析报告';
+    const segments: ComposerSegment[] = [
+      { type: 'workflow', id: 'wf_tpl_cost', name: '客户成本分析' },
+      { type: 'text', text: suffix },
+    ];
+
+    const payload = await buildComposerGatewayPayload({
+      segments,
+      plainText: `客户成本分析${suffix}`,
+      attachments: [],
+      resolveSkillPrompt: async () => ({ defaultPrompt: '', title: '' }),
+    });
+
+    expect(payload.gatewayText).toBe(
+      `帮我执行 id 为：wf_tpl_cost 的工作流 【客户成本分析】${suffix}`,
+    );
+    expect(payload.displayText).toBe(suffix);
+    expect(payload.workflows).toEqual([
+      { id: 'wf_tpl_cost', name: '客户成本分析', source: undefined },
+    ]);
+    // source 仍原样保留，供 dispatchChatSend 选路径；不参与 bake 分叉。
+    expect(payload.persistedSegments[0]).toMatchObject({
+      type: 'workflow',
+      id: 'wf_tpl_cost',
+      name: '客户成本分析',
+    });
+  });
 });
