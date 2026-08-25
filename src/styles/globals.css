@@ -72,6 +72,10 @@
     --sto-main-card-radius: 18px;
     --sto-main-card-bg: #FAFAFA;
     --sto-main-card-shadow: 0 0 16px rgba(0, 0, 0, 0.01);
+    /* L1/L2 兼容名：学习中心 / Composer 等仍按语义 token 取值 */
+    --sto-workspace-bg: var(--sto-main-card-bg);
+    --sto-panel-bg: #ffffff;
+    --sto-surface-edge: var(--sto-sidebar-border);
     --sto-sidebar-w-expanded: 260px;
     --sto-sidebar-w-collapsed: 72px;
     /* 折叠侧栏主导航项（设计标注：59×28、padding 5px 10px、未选中图标 #7A8494） */
@@ -207,6 +211,9 @@
     --sto-main-card-radius: 18px;
     --sto-main-card-bg: hsl(var(--card));
     --sto-main-card-shadow: 0 0 16px rgba(0, 0, 0, 0.2);
+    --sto-workspace-bg: var(--sto-main-card-bg);
+    --sto-panel-bg: hsl(220 20% 13%);
+    --sto-surface-edge: var(--sto-sidebar-border);
     --sto-sidebar-w-expanded: 260px;
     --sto-sidebar-w-collapsed: 72px;
     --sto-sidebar-collapsed-nav-item-w: 59px;

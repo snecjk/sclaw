@@ -1,5 +1,10 @@
 .learning-center-tutorial-sheet {
   --lc-tutorial-panel-radius: 0.75rem;
+  /* Sheet portals onto layout <main>, outside .learning-center-page inheritance. */
+  --lc-panel-bg: var(--sto-panel-bg, hsl(var(--card)));
+  --lc-edge: var(--sto-surface-edge, hsl(var(--border)));
+  --lc-text: hsl(var(--foreground));
+  --lc-text-muted: hsl(var(--muted-foreground));
   position: absolute;
   top: calc(var(--sto-content-header-h, 44px) + 0.5rem) !important;
   right: 0.5rem !important;
@@ -76,7 +81,7 @@
   overflow: hidden;
   border: 1px solid var(--lc-edge, var(--sto-surface-edge, hsl(var(--border))));
   border-radius: var(--lc-tutorial-panel-radius);
-  background: var(--lc-panel-bg, var(--sto-panel-bg));
+  background: var(--lc-panel-bg, var(--sto-panel-bg, hsl(var(--card))));
   box-shadow: none !important;
 }
 
