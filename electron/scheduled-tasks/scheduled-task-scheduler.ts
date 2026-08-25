@@ -381,6 +381,7 @@ export class ScheduledTaskScheduler {
         status: 'queued',
         idempotencyKey: this.buildIdempotencyKey(task.id, params.triggerSource, params.scheduledFor),
         attempt: 1,
+        actor: this.ownerUserCode ?? task.createdBy,
       });
     } catch (error) {
       logger.warn('[scheduled-task] claimRun lost race or conflict', {

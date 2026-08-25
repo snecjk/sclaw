@@ -384,6 +384,29 @@ export class ScheduleTaskRepository {
   }
 
   /**
+   * 把历史登录名写成的 `created_by` 刷成当前工号（含软删）。
+   * `userName` 空或与工号相同则 0。不碰 NULL/空白（仍走认领）。
+   */
+  async rewriteLoginNameCreatedBy(userCode: string, userName: string): Promise<number> {
+    const db = getKyselyDatabase();
+    const timestamp = nowIso();
+    const code = userCode.trim();
+    const name = userName.trim();
+    if (!code || !name || name === code) return 0;
+    const result = await db
+      .updateTable('schedule_tasks')
+      .set({
+        created_by: code,
+        updated_by: code,
+        updated_at: timestamp,
+        sync_status: 'pending',
+      })
+      .where(sql`trim(created_by)`, '=', name)
+      .executeTakeFirst();
+    return Number(result.numUpdatedRows ?? 0);
+  }
+
+  /**
    * 单条认领孤儿：仅当该行 created_by 为空/空白时写入工号。
    * 供 trigger 等不走 update 的路径。
    */

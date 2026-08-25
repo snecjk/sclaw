@@ -1045,6 +1045,12 @@ if (gotTheLock) {
     } catch (error) {
       logger.warn('Post-update install report / re-auth hook failed:', error);
     }
+    try {
+      const { ensureSsoCodeFieldReloginOnce } = await import('../utils/auth-store');
+      await ensureSsoCodeFieldReloginOnce();
+    } catch (error) {
+      logger.warn('[auth] SSO code-field relogin hook failed:', error);
+    }
     void initialize().catch((error) => {
       logger.error('Application initialization failed:', error);
     });

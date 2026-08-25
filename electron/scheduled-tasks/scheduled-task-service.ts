@@ -55,7 +55,7 @@ import {
   mergeComposerHintsIntoCreateInput,
   readLatestOpenClawUserMessageText,
 } from './scheduled-task-nl-hints';
-import { claimScheduleTasksOwnership } from './schedule-tasks-ownership';
+import { claimScheduleTasksOwnership, rewriteScheduleTasksLoginNameOwner } from './schedule-tasks-ownership';
 import { runScheduleTasksPushTick } from './schedule-tasks-push';
 import {
   getScheduleTasksSyncStatus,
@@ -117,7 +117,7 @@ function isTaskOwnedBy(task: ScheduleTask, actor: string | null): boolean {
  * 承担「CRUD + 校验 + 占位会话 + dingtalk 上下文烘焙」——这些都是两引擎共用、
  * 与执行（`runMainChatSend`）正交的职责。
  *
- * 生产路径：app 启动 `setGatewayManager` → 迁移；**已认证后** `onUserAuthenticated` → 认领 + `startScheduler`；
+ * 生产路径：app 启动 `setGatewayManager` → 迁移；**已认证后** `onUserAuthenticated` → 认领 + 刷登录名归属 + `startScheduler`；
  * CRUD / trigger 经 `/api/scheduled-tasks/*`。未认证不 startScheduler。
  */
 
@@ -464,7 +464,7 @@ export class ScheduledTaskService {
 
   /**
    * 已认证后同一入口（SSO 登录成功 或 冷启动已登录）：
-   * 只补 created_by IS NULL → startScheduler。不立刻 push。
+   * 认领 NULL → 刷登录名归属 → startScheduler。不立刻 push。
    */
   onUserAuthenticated(userCode: string): void {
     const code = userCode.trim();
@@ -477,8 +477,25 @@ export class ScheduledTaskService {
           error: error instanceof Error ? error.message : String(error),
         });
       }
+      await this.rewriteLoginNameOwnerSafely(code);
       this.startScheduler(code);
     })();
+  }
+
+  /** 刷 `created_by=当前登录名` 为工号。失败只 warn，不挡调度 / pull。 */
+  private async rewriteLoginNameOwnerSafely(code: string): Promise<void> {
+    try {
+      const { user } = await getAuthState();
+      // 入口 code 与读取时的登录态之间可能已切号：身份对不上则放弃本次刷库，
+      // 避免把「新登录名的行」刷成旧 code（B 的任务被写成 A 的工号）。
+      if (user?.code?.trim() !== code) return;
+      const userName = user?.userName?.trim() ?? '';
+      await rewriteScheduleTasksLoginNameOwner(code, userName, this.taskRepo);
+    } catch (error) {
+      logger.warn('[scheduled-task] login-name owner rewrite failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   /**
@@ -547,6 +564,7 @@ export class ScheduledTaskService {
       throw Object.assign(new Error('未登录'), { statusCode: 401 });
     }
     const result = await pullScheduleTasksFromCloud(code, this.taskRepo);
+    await this.rewriteLoginNameOwnerSafely(code);
     await this.scheduler.refreshSchedule();
     return result;
   }

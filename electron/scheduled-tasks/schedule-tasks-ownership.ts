@@ -59,3 +59,22 @@ export async function claimScheduleTasksOwnership(
   }
   return { skipped: false, claimed };
 }
+
+/**
+ * 把当前登录名写成的 `schedule_tasks.created_by` 刷成工号。只动 tasks，不读 auth。
+ */
+export async function rewriteScheduleTasksLoginNameOwner(
+  userCode: string,
+  userName: string,
+  taskRepo: ScheduleTaskRepository = new ScheduleTaskRepository(),
+): Promise<number> {
+  const rewritten = await taskRepo.rewriteLoginNameCreatedBy(userCode, userName);
+  if (rewritten > 0) {
+    logger.info('[scheduled-task] rewritten login-name created_by to employee code', {
+      userCode: userCode.trim(),
+      userName: userName.trim(),
+      count: rewritten,
+    });
+  }
+  return rewritten;
+}

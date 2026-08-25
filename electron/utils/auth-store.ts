@@ -216,6 +216,39 @@ export async function clearAuthUser(): Promise<void> {
   await removeSsoAuthFromOpenClaw();
 }
 
+/**
+ * 一次性强制重登：存量 sai 的 Code 曾是登录名，发版不会自动改写。
+ * 键已 true 则跳过。以后别的 SSO 修复必须换新键名，勿复用。
+ * 判定 / 清理抛异常时不打标（异常上抛），留给下次启动重试——clearAuth 幂等。
+ */
+export const SSO_CODE_FIELD_RELOGIN_DONE_KEY = 'ssoCodeFieldReloginDone';
+
+export interface SsoCodeFieldReloginStore {
+  get(key: string): unknown;
+  set(key: string, value: unknown): void;
+}
+
+export async function ensureSsoCodeFieldReloginOnce(options?: {
+  store?: SsoCodeFieldReloginStore;
+  isLoggedIn?: () => Promise<boolean>;
+  clearAuth?: () => Promise<void>;
+}): Promise<{ skipped: boolean; cleared: boolean }> {
+  const store = options?.store ?? (await getAuthStore());
+  if (store.get(SSO_CODE_FIELD_RELOGIN_DONE_KEY) === true) {
+    return { skipped: true, cleared: false };
+  }
+  let cleared = false;
+  const loggedIn = options?.isLoggedIn
+    ? await options.isLoggedIn()
+    : (await getAuthState()).isAuthenticated;
+  if (loggedIn) {
+    await (options?.clearAuth ?? clearAuthUser)();
+    cleared = true;
+  }
+  store.set(SSO_CODE_FIELD_RELOGIN_DONE_KEY, true);
+  return { skipped: false, cleared };
+}
+
 export async function getImpersonationOrigin(): Promise<SsoUserInfo | null> {
   const store = await getAuthStore();
   return (store.get('impersonationOrigin', null) as SsoUserInfo | null) ?? null;
@@ -396,7 +429,7 @@ function buildSaiCliSsoAuthPayload(user: SsoUserInfo, existing: JsonObject | nul
       UserName: user.userName,
       RealName: user.realName,
       NickName: user.realName,
-      Code: user.userName,
+      Code: user.code,
       CompanyId: user.companyId,
       CompanyCode: user.companyCode,
       CompanyName: user.companyName,
