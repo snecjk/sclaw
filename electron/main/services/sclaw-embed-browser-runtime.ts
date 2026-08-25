@@ -108,6 +108,34 @@ function attachNetworkMonitor(runtimeId: string, webContentsId: number): void {
   entry.webContentsId = webContentsId;
 }
 
+async function attachBridgeSession(entry: RuntimeEntry): Promise<void> {
+  if (!entry.webContentsId) return;
+  await ensureBridgeConsentStore();
+  const pageUrl = entry.pageUrl || entry.initialUrl;
+  const bridgeSession = createBridgeSession({
+    runtimeId: entry.runtimeId,
+    webContentsId: entry.webContentsId,
+    pageUrl,
+    appId: entry.appId,
+    bound: entry.bound,
+  });
+  if (bridgeSession) {
+    entry.bridgeBootstrap = toBridgeBootstrap(bridgeSession);
+    const wc = resolveWebContents(entry);
+    if (wc && !wc.isDestroyed()) {
+      try {
+        wc.send('jsbridge:init', entry.bridgeBootstrap);
+      } catch {
+        // guest preload may not be ready yet
+      }
+    }
+    return;
+  }
+  if (!entry.bridgeBootstrap) {
+    entry.bridgeBootstrap = null;
+  }
+}
+
 export function registerSclawEmbedBrowserRuntime(input: {
   runtimeId: string;
   appTitle: string;
@@ -166,29 +194,7 @@ export async function bindSclawEmbedBrowserWebContents(input: {
   attachSclawEmbedBrowserWindowOpenHandler(input.webContentsId, input.runtimeId);
   attachSclawEmbedBrowserDevToolsMenu(input.webContentsId);
 
-  const pageUrl = entry.pageUrl || input.pageUrl || entry.initialUrl;
-  await ensureBridgeConsentStore();
-  const bridgeSession = createBridgeSession({
-    runtimeId: input.runtimeId,
-    webContentsId: input.webContentsId,
-    pageUrl,
-    appId: entry.appId,
-    bound: entry.bound,
-  });
-  if (bridgeSession) {
-    entry.bridgeBootstrap = toBridgeBootstrap(bridgeSession);
-    const wc = resolveWebContents(entry);
-    if (wc && !wc.isDestroyed()) {
-      try {
-        wc.send('jsbridge:init', entry.bridgeBootstrap);
-      } catch {
-        // guest preload may not be ready yet
-      }
-    }
-  } else {
-    entry.bridgeBootstrap = null;
-  }
-
+  await attachBridgeSession(entry);
   return { ...entry };
 }
 
@@ -206,6 +212,10 @@ export function updateSclawEmbedBrowserPageState(input: {
     pageUrl: input.pageUrl,
     pageTitle: input.pageTitle,
   });
+  // First bind often happens on about:blank; create the session once a sto.cn URL lands.
+  if (!entry.bridgeBootstrap && entry.webContentsId) {
+    void attachBridgeSession(entry);
+  }
 }
 
 export function unregisterSclawEmbedBrowserRuntime(runtimeId: string): void {

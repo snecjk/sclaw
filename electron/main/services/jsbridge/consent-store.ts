@@ -20,9 +20,8 @@ async function getStore(): Promise<Store<ConsentStoreSchema>> {
   if (store) return store;
   if (!storeInit) {
     storeInit = (async () => {
-      const mod = await import('electron-store');
-      const StoreCtor = mod.default ?? mod;
-      const instance = new StoreCtor<ConsentStoreSchema>({
+      const Store = (await import('electron-store')).default;
+      const instance = new Store<ConsentStoreSchema>({
         name: 'bridge-consents',
         projectName: 'sto-claw',
         defaults: { consents: [] },

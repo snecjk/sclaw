@@ -55,6 +55,15 @@ describe('jsbridge dispatcher', () => {
       bound: false,
     });
     expect(denied).toBeNull();
+
+    const blank = createBridgeSession({
+      runtimeId: 'rt-blank',
+      webContentsId: 103,
+      pageUrl: 'about:blank',
+      appId: 'vip',
+      bound: true,
+    });
+    expect(blank).toBeNull();
   });
 
   it('handles bridge.ping for valid session', async () => {

@@ -156,7 +156,12 @@ export async function executeJsBridgeHostAction(
     case 'ui.openDrawer': {
       const targetTab = resolveEmbedTab(action.runtimeId);
       if (targetTab) {
-        useAppPlazaShellStore.getState().openChatPanel(targetTab.id);
+        const shell = useAppPlazaShellStore.getState();
+        if (targetTab.chatPanelOpen) {
+          shell.ensureEmbedChatActive(targetTab.id);
+        } else {
+          shell.openChatPanel(targetTab.id);
+        }
       } else {
         toast.message('请先打开应用广场浏览器标签页');
       }
