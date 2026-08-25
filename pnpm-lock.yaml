@@ -339,8 +339,6 @@ importers:
 
   sto-plugin/openclaw/sto-browser-bridge: {}
 
-  sto-plugin/openclaw/sto-browser-bridge/sto-toolkit: {}
-
   sto-plugin/openclaw/sto-connectors-bash-gate: {}
 
   sto-plugin/openclaw/sto-dingtalk-send-guard: {}
@@ -356,8 +354,6 @@ importers:
   sto-plugin/openclaw/sto-user-skill-tool: {}
 
   sto-plugin/openclaw/sto-workflow-tool: {}
-
-  sto-plugin/openclaw/sto-workflow-tool/sto-toolkit: {}
 
   sto-plugin/sto-toolkit: {}
 
