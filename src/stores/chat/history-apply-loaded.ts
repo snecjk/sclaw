@@ -6,11 +6,11 @@ import {
 import { getMessageText } from './helpers';
 import {
   dropSyntheticSkillSessionLabelUsers,
+  findHistoryUserEcho,
   isSameUserMessage,
   normalizeUserMessageText,
   traceLoadHistoryUserReconciliation,
 } from './user-message-merge';
-import { isScheduledTaskUserEcho } from './scheduled-task-user-echo';
 import {
   mergeHistoryDisplayMessages,
   prepareHistoryMessages,
@@ -22,7 +22,7 @@ import {
 } from './history-side-effects';
 import { restorePendingWorkflowDraftInBackground } from './history-workflow-effects';
 import { localizeAndHydrateWorkflowForms } from './history-form-effects';
-import { logChatFlow } from './chat-flow-log';
+import { logChatFlow, logUserQuestion, logUserQuestionServerEcho } from './chat-flow-log';
 import type { ChatGet, ChatSet } from './store-api';
 import type { ChatSession, RawMessage } from './types';
 import { restoreSkillMetaOnMessages } from '@/lib/skill-message-meta-cache';
@@ -50,37 +50,137 @@ export async function prepareHistoryToolEffects(input: {
   return getCurrentSessionKey() === sessionKey;
 }
 
+function findOptimisticUserEcho(input: {
+  finalMessages: RawMessage[];
+  cachedOptimistic: RawMessage;
+  userMsgAt: number | null;
+  toMs: (ts: unknown) => number;
+}): RawMessage | undefined {
+  const { finalMessages, cachedOptimistic, userMsgAt, toMs } = input;
+  const optimisticRefAt = userMsgAt
+    ?? (cachedOptimistic.timestamp ? toMs(cachedOptimistic.timestamp) : 0);
+
+  const byPairing = findHistoryUserEcho(finalMessages, cachedOptimistic, optimisticRefAt);
+  if (byPairing) return byPairing;
+
+  if (optimisticRefAt > 0) {
+    return finalMessages.find((message) => (
+      isSameUserMessage(message, cachedOptimistic, optimisticRefAt)
+    ));
+  }
+
+  const cachedNorm = normalizeUserMessageText(cachedOptimistic.content);
+  if (!cachedNorm) return undefined;
+  return finalMessages.find((message) => (
+    message.role === 'user'
+    && normalizeUserMessageText(message.content) === cachedNorm
+  ));
+}
+
 export function hasOptimisticUserEcho(input: {
   finalMessages: RawMessage[];
   cachedOptimistic: RawMessage | null;
   userMsgAt: number | null;
   toMs: (ts: unknown) => number;
 }): boolean {
-  const { finalMessages, cachedOptimistic, userMsgAt, toMs } = input;
+  const { cachedOptimistic } = input;
   if (!cachedOptimistic) return false;
+  return Boolean(findOptimisticUserEcho({ ...input, cachedOptimistic }));
+}
 
-  const optimisticRefAt = userMsgAt
-    ?? (cachedOptimistic.timestamp ? toMs(cachedOptimistic.timestamp) : 0);
-  if (!cachedOptimistic._scheduledTaskOptimistic) {
-    if (optimisticRefAt > 0) {
-      return finalMessages.some((message) => (
-        isSameUserMessage(message, cachedOptimistic, optimisticRefAt)
-      ));
+/** 记录发送后往返的 Gateway/history 用户轮次（模型实际看到的内容）。 */
+function logModelReturnedUserQuestion(input: {
+  sessionKey: string;
+  historyMessages: RawMessage[];
+  previousTranscript: RawMessage[];
+  optimistic: RawMessage | null;
+  userMsgAt: number | null;
+  sending: boolean;
+  toMs: (ts: unknown) => number;
+}): void {
+  const {
+    sessionKey,
+    historyMessages,
+    previousTranscript,
+    optimistic,
+    userMsgAt,
+    sending,
+    toMs,
+  } = input;
+
+  if (optimistic) {
+    const historyEcho = findOptimisticUserEcho({
+      finalMessages: historyMessages,
+      cachedOptimistic: optimistic,
+      userMsgAt,
+      toMs,
+    });
+    if (historyEcho) {
+      logUserQuestionServerEcho({
+        sessionKey,
+        matchReason: optimistic.id && historyEcho.id && optimistic.id === historyEcho.id
+          ? 'id-match'
+          : 'display-or-time-match',
+        optimisticId: optimistic.id ?? null,
+        historyUserId: historyEcho.id ?? null,
+        optimisticContent: getMessageText(optimistic.content),
+        historyContent: getMessageText(historyEcho.content),
+        optimisticSkillMetas: optimistic._skillMetas
+          ?? (optimistic._skillMeta ? [optimistic._skillMeta] : undefined),
+        historySkillMetas: historyEcho._skillMetas
+          ?? (historyEcho._skillMeta ? [historyEcho._skillMeta] : undefined),
+        optimisticSegments: optimistic._composerSegments,
+        historySegments: historyEcho._composerSegments,
+        optimisticAttachments: optimistic._attachedFiles,
+        historyAttachments: historyEcho._attachedFiles,
+      });
+      return;
     }
 
-    const cachedNorm = normalizeUserMessageText(cachedOptimistic.content);
-    return (
-      cachedNorm.length > 0
-      && finalMessages.some((message) => (
-        message.role === 'user'
-        && normalizeUserMessageText(message.content) === cachedNorm
-      ))
-    );
+    if (!sending) return;
+
+    const lastUser = [...historyMessages].reverse().find((message) => message.role === 'user');
+    if (!lastUser) return;
+    const alreadyKnown = previousTranscript.some((message) => (
+      message.role === 'user'
+      && (
+        (lastUser.id && message.id && lastUser.id === message.id)
+        || normalizeUserMessageText(message.content) === normalizeUserMessageText(lastUser.content)
+      )
+    ));
+    if (alreadyKnown) return;
+
+    logUserQuestion('history-user-unmatched', {
+      sessionKey,
+      optimisticId: optimistic.id ?? null,
+      historyUserId: lastUser.id ?? null,
+      optimisticContent: getMessageText(optimistic.content),
+      historyContent: getMessageText(lastUser.content),
+      optimisticAttachments: optimistic._attachedFiles,
+      historyAttachments: lastUser._attachedFiles,
+    });
+    return;
   }
 
-  return finalMessages.some((message) => (
-    isScheduledTaskUserEcho(message, cachedOptimistic, optimisticRefAt)
+  if (!sending) return;
+
+  const lastUser = [...historyMessages].reverse().find((message) => message.role === 'user');
+  if (!lastUser) return;
+  const alreadyKnown = previousTranscript.some((message) => (
+    message.role === 'user'
+    && (
+      (lastUser.id && message.id && lastUser.id === message.id)
+      || normalizeUserMessageText(message.content) === normalizeUserMessageText(lastUser.content)
+    )
   ));
+  if (alreadyKnown) return;
+
+  logUserQuestion('history-user', {
+    sessionKey,
+    historyUserId: lastUser.id ?? null,
+    historyContent: getMessageText(lastUser.content),
+    historyAttachments: lastUser._attachedFiles,
+  });
 }
 
 function clearOptimisticUserIfEchoed(input: {
@@ -127,9 +227,14 @@ export function applyLoadedHistorySnapshot(input: {
   });
 
   const canonicalBeforeLoad = useChatRuntimeV2Store.getState().sessionsByKey[targetSessionKey];
+  // 在 setTranscript 之前先捕获——id 匹配回显可能在 setTranscript 内清掉乐观消息。
+  const optimisticBeforeLoad = canonicalBeforeLoad?.overlay.optimisticUserMessage ?? null;
+  const previousTranscript = canonicalBeforeLoad?.transcript ?? [];
+  const sendingBeforeLoad = buildChatSessionRuntimeView(canonicalBeforeLoad).sending;
+
   const preparedHistory = prepareHistoryMessages({
     rawMessages,
-    previousTranscript: canonicalBeforeLoad?.transcript ?? [],
+    previousTranscript,
     sessionKey: targetSessionKey,
   });
   const preparedRawMessages = preparedHistory.rawMessages;
@@ -144,15 +249,22 @@ export function applyLoadedHistorySnapshot(input: {
   const userMsgAt = runtimeView.lastUserMessageAt;
   const historyUserCountBefore = enrichedMessages.filter((m) => m.role === 'user').length;
   const historyMessageCountBefore = enrichedMessages.length;
-  const cachedOptimistic = canonicalSession?.overlay.optimisticUserMessage ?? null;
-  let finalMessages = enrichedMessages;
-  clearOptimisticUserIfEchoed({
-    targetSessionKey,
-    finalMessages,
-    cachedOptimistic,
-    userMsgAt,
+  const cachedOptimistic = optimisticBeforeLoad
+    ?? canonicalSession?.overlay.optimisticUserMessage
+    ?? null;
+
+  logModelReturnedUserQuestion({
+    sessionKey: targetSessionKey,
+    // 优先用引擎原始载荷——这是 Gateway/模型实际落库的用户轮次。
+    historyMessages: preparedRawMessages,
+    previousTranscript,
+    optimistic: optimisticBeforeLoad,
+    userMsgAt: userMsgAt ?? null,
+    sending: sendingBeforeLoad || runtimeView.sending,
     toMs,
   });
+
+  let finalMessages = enrichedMessages;
 
   if (get().currentSessionKey !== targetSessionKey) return;
 
@@ -167,7 +279,9 @@ export function applyLoadedHistorySnapshot(input: {
     gatewaySessionLabel,
     userMessageAt: userMsgAt ?? null,
     sending: runtimeView.sending,
+    optimisticUser: cachedOptimistic,
     getMessageText,
+    cachedOptimistic,
   });
   finalMessages = restoreSkillMetaOnMessages(
     finalMessages,
@@ -176,8 +290,19 @@ export function applyLoadedHistorySnapshot(input: {
   );
   // Skill meta is applied after the merge/recover pipeline, so a synthetic
   // session-label opener may have been inserted before the real skill turn was
-  // recognizable. Drop it now that the skill turn is tagged.
-  finalMessages = dropSyntheticSkillSessionLabelUsers(finalMessages);
+  // recognizable. Drop it now that the skill turn is tagged. Overlay skill
+  // chips count too — otherwise a failed send keeps both the truncated title
+  // bubble and the optimistic skill bubble.
+  finalMessages = dropSyntheticSkillSessionLabelUsers(finalMessages, {
+    hasSkillUser: Boolean(cachedOptimistic?._skillMeta),
+  });
+  clearOptimisticUserIfEchoed({
+    targetSessionKey,
+    finalMessages,
+    cachedOptimistic,
+    userMsgAt,
+    toMs,
+  });
   traceLoadHistoryUserReconciliation({
     sessionKey: targetSessionKey,
     userMessageAt: userMsgAt,

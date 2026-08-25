@@ -12,6 +12,7 @@ import {
   normalizeSkillBubbleDisplayText,
   stripSkillTranscriptMarker,
 } from '@/lib/skill-transcript-marker';
+import { hydrateComposerSegmentsOnMessages } from '@/components/input-composer/user-composer-segments';
 import { normalizeUserMessageForDisplay } from '@/lib/user-message-display';
 import { getMessageText } from '@/stores/chat/helpers';
 import type { RawMessage } from '@/stores/chat/types';
@@ -230,7 +231,10 @@ export function restoreSkillMetaOnMessages(
   sessionKey: string,
   sessionLabel?: string | null,
 ): RawMessage[] {
-  let result = applySkillTranscriptMetaToMessages(messages);
+  // 必须在 skill content 收缩之前：从仍含 `[文件:]`/`[技能:]`/工作流 bake 的原文重建 segments。
+  // 切会话后无乐观 donor 时，这是保持 inline 混排的唯一来源。
+  let result = hydrateComposerSegmentsOnMessages(messages);
+  result = applySkillTranscriptMetaToMessages(result);
   result = applySkillMetaCacheToMessages(result, sessionKey);
   result = applySkillLabelHeuristicToMessages(result, sessionLabel);
   return result;

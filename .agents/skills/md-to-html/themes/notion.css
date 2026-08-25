@@ -1,0 +1,148 @@
+/* Notion Theme — minimal, elegant, warm */
+:root {
+  --bg: #ffffff;
+  --fg: #37352f;
+  --fg-secondary: #787774;
+  --border: #e9e9e7;
+  --code-bg: #f7f6f3;
+  --link: #2eaadc;
+  --accent: #e9e9e7;
+  --callout-bg: #f7f6f3;
+  --blockquote-border: #e9e9e7;
+  --blockquote-fg: #787774;
+  --table-border: #e9e9e7;
+  --table-header-bg: #f7f6f3;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif;
+  --font-serif: Georgia, "Times New Roman", serif;
+  --font-mono: "SFMono-Regular", Menlo, Consolas, "PT Mono", "Liberation Mono", Courier, monospace;
+  --max-width: 720px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #191919;
+    --fg: #e6e6e4;
+    --fg-secondary: #9b9a97;
+    --border: #2f2f2f;
+    --code-bg: #2f2f2f;
+    --link: #6ab0f3;
+    --accent: #2f2f2f;
+    --callout-bg: #2f2f2f;
+    --blockquote-border: #2f2f2f;
+    --blockquote-fg: #9b9a97;
+    --table-border: #2f2f2f;
+    --table-header-bg: #2f2f2f;
+  }
+}
+
+.dark {
+  --bg: #191919;
+  --fg: #e6e6e4;
+  --fg-secondary: #9b9a97;
+  --border: #2f2f2f;
+  --code-bg: #2f2f2f;
+  --link: #6ab0f3;
+  --accent: #2f2f2f;
+  --callout-bg: #2f2f2f;
+  --blockquote-border: #2f2f2f;
+  --blockquote-fg: #9b9a97;
+  --table-border: #2f2f2f;
+  --table-header-bg: #2f2f2f;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.8;
+  color: var(--fg);
+  background: var(--bg);
+  padding: 48px 16px 96px;
+  max-width: var(--max-width);
+  margin: 0 auto;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  margin-top: 2em;
+  margin-bottom: 0.5em;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+h1 { font-size: 2.4em; margin-top: 0; }
+h2 { font-size: 1.6em; }
+h3 { font-size: 1.25em; }
+
+p { margin-bottom: 0.75em; }
+
+a { color: var(--link); text-decoration: underline; text-decoration-color: #2eaadc44; text-underline-offset: 3px; }
+a:hover { text-decoration-color: var(--link); }
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 0.15em 0.4em;
+  background: var(--code-bg);
+  border-radius: 3px;
+  color: #eb5757;
+}
+
+pre {
+  background: var(--code-bg);
+  border-radius: 4px;
+  padding: 20px 24px;
+  overflow-x: auto;
+  margin: 4px 0 16px;
+  line-height: 1.5;
+}
+pre code {
+  padding: 0;
+  background: none;
+  color: var(--fg);
+  font-size: 0.85em;
+}
+
+blockquote {
+  padding: 16px 20px;
+  background: var(--callout-bg);
+  border-radius: 4px;
+  margin-bottom: 16px;
+  border-left: none;
+  color: var(--fg);
+  font-size: 1.05em;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 4px 0 16px;
+  font-size: 0.95em;
+}
+th, td {
+  padding: 8px 12px;
+  border: 1px solid var(--table-border);
+  text-align: left;
+}
+th {
+  background: var(--table-header-bg);
+  font-weight: 600;
+}
+
+img { max-width: 100%; height: auto; border-radius: 4px; }
+
+hr {
+  height: 1px;
+  background: var(--border);
+  border: none;
+  margin: 32px 0;
+}
+
+ul, ol { padding-left: 1.8em; margin-bottom: 8px; }
+li { margin-bottom: 4px; line-height: 1.7; }
+
+input[type="checkbox"] { margin-right: 0.5em; accent-color: var(--link); }
+
+::selection { background: #2eaadc33; }

@@ -13,4 +13,11 @@ export {
 export {
   resolveScheduledTaskDingTalkRecipients,
   planDingTalkRecipientsLift,
+  planComposerSegmentsRecipientsMigration,
+  extractDingTalkMentionsFromComposerSegments,
+} from './scheduled-task-dingtalk-lift';
+export type {
+  ComposerSegmentsRecipientsMigrationPlan,
+  DingTalkRecipientsLiftPlan,
+  ScheduledTaskDingTalkSource,
 } from './scheduled-task-dingtalk-lift';

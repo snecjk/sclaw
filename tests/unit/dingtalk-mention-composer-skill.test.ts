@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createAttachmentSpan,
   createSkillSpan,
   consumeSkillTriggerText,
   insertMentionAtTrigger,
   insertSkillSpan,
   MENTION_SPAN_CLASS,
   serializeMentionEditor,
+  setMentionEditorSegments,
 } from '@/lib/dingtalk-mention-composer';
 
 describe('dingtalk-mention-composer skill token', () => {
@@ -85,5 +87,67 @@ describe('dingtalk-mention-composer skill token', () => {
       (node) => node.nodeType === Node.TEXT_NODE && (node.textContent ?? '').includes('@'),
     );
     expect(leftoverAt).toBe(false);
+  });
+
+  it('insertMention after file+skill (edit draft) maps @ offsets correctly', () => {
+    const root = document.createElement('div');
+    const attachmentId = 'att-edit-1';
+    setMentionEditorSegments(
+      root,
+      [
+        { type: 'file', attachmentId },
+        { type: 'skill', slug: 'html-design', title: '姚磊html网页设计' },
+        { type: 'text', text: '再帮我重新分析这个文件 @123' },
+      ],
+      {
+        [attachmentId]: {
+          id: attachmentId,
+          fileName: '网点件量数据看板.html',
+          mimeType: 'text/html',
+        },
+      },
+    );
+
+    const before = serializeMentionEditor(root);
+    expect(before.plainText.startsWith(' ')).toBe(false);
+    expect(before.skillOffset).toBe(0);
+    const atIndex = before.plainText.lastIndexOf('@123');
+    expect(atIndex).toBeGreaterThanOrEqual(0);
+
+    insertMentionAtTrigger(
+      root,
+      { query: '123', startOffset: atIndex, endOffset: atIndex + 4 },
+      {
+        type: 'group',
+        displayName: '申通sclaw123',
+        openConversationId: 'cid-group-1',
+      },
+    );
+
+    const snapshot = serializeMentionEditor(root);
+    expect(snapshot.attachmentIds).toEqual([attachmentId]);
+    expect(snapshot.skill?.slug).toBe('html-design');
+    expect(snapshot.mentions).toHaveLength(1);
+    expect(snapshot.mentions[0]?.displayName).toBe('申通sclaw123');
+    expect(snapshot.plainText).toContain('@申通sclaw123');
+    expect(snapshot.plainText).not.toContain('@123');
+    expect(root.querySelectorAll(`span.${MENTION_SPAN_CLASS}`)).toHaveLength(1);
+  });
+
+  it('serialize strips leading token spacers when file precedes skill', () => {
+    const root = document.createElement('div');
+    root.appendChild(createAttachmentSpan({
+      id: 'att-1',
+      fileName: 'demo.html',
+      mimeType: 'text/html',
+    }));
+    root.appendChild(document.createTextNode('\u00A0'));
+    root.appendChild(createSkillSpan('html-design', '姚磊html网页设计'));
+    root.appendChild(document.createTextNode('\u00A0正文'));
+
+    const snapshot = serializeMentionEditor(root);
+    expect(snapshot.plainText).toBe('正文');
+    expect(snapshot.skillOffset).toBe(0);
+    expect(snapshot.segments[0]?.type).toBe('file');
   });
 });

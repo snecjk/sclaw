@@ -1,3 +1,9 @@
+import type { FileProvenance } from '@/components/attachments/types';
+import {
+  ATTACHMENT_CHIP_SURFACE_CLASS,
+  middleEllipsisFileName,
+  resolveFileTypeIconSrc,
+} from '@/components/attachments/file-type-icon';
 import type { DingTalkMention } from '@/types/dingtalk-mention';
 import type { SkillMeta } from '@/types/skill-meta';
 import { skillComposerTagClass } from '@/lib/surfaces';
@@ -11,18 +17,65 @@ export const WORKFLOW_SPAN_SELECTOR = `span.${WORKFLOW_SPAN_CLASS}`;
 export const SKILL_SPAN_CLASS = 'skill-token';
 export const SKILL_SPAN_SELECTOR = `span.${SKILL_SPAN_CLASS}`;
 
+export const ATTACHMENT_SPAN_CLASS = 'attachment-token';
+export const ATTACHMENT_SPAN_SELECTOR = `span.${ATTACHMENT_SPAN_CLASS}`;
+
+export type ComposerSegment =
+  | { type: 'text'; text: string }
+  | { type: 'mention'; mention: DingTalkMention }
+  | { type: 'skill'; slug: string; title: string }
+  | { type: 'workflow'; id: string; name: string; source?: string }
+  | { type: 'file'; attachmentId: string };
+
+/** 乐观消息 / 编辑草稿往返持久化的 segment（文件节点含行内元数据）。 */
+export type PersistedComposerSegment =
+  | { type: 'text'; text: string }
+  | { type: 'mention'; mention: DingTalkMention }
+  | { type: 'skill'; slug: string; title: string }
+  | { type: 'workflow'; id: string; name: string; source?: string }
+  | {
+    type: 'file';
+    fileName: string;
+    mimeType: string;
+    fileSize: number;
+    preview: string | null;
+    filePath?: string;
+    stagedPath?: string;
+    provenance?: FileProvenance;
+  };
+
+export const EMPTY_MENTION_COMPOSER_SNAPSHOT: MentionComposerSnapshot = {
+  plainText: '',
+  segments: [],
+  mentions: [],
+  skills: [],
+  workflows: [],
+  attachmentIds: [],
+  isEmpty: true,
+};
+
+export interface ComposerWorkflowMeta {
+  id: string;
+  name: string;
+  source?: string;
+}
+
 export interface MentionComposerSnapshot {
   plainText: string;
+  segments: ComposerSegment[];
   mentions: DingTalkMention[];
-  workflowId?: string;
-  /** 工作流名称（与 token 文本一致，供上下文块使用）。 */
-  workflowName?: string;
-  /** 工作流来源：'mine' = 我的工作流-已发布（直接以工作流上下文发送）；缺省 = 模版（走参数表单）。 */
-  workflowSource?: string;
-  skill?: SkillMeta;
-  /** 技能标签在 plainText 中的插入位置；技能本身不占 plainText 字符，故需单独记录。 */
-  skillOffset?: number;
+  skills: SkillMeta[];
+  workflows: ComposerWorkflowMeta[];
+  attachmentIds: string[];
   isEmpty: boolean;
+  /** @deprecated 兼容：等价 skills[0] */
+  skill?: SkillMeta;
+  /** @deprecated 兼容：skills[0] 对应 offset */
+  skillOffset?: number;
+  /** @deprecated 兼容：等价 workflows[0] */
+  workflowId?: string;
+  workflowName?: string;
+  workflowSource?: string;
 }
 
 export interface ActiveMentionTrigger {
@@ -44,6 +97,57 @@ function isWorkflowSpan(node: Node | null): boolean {
 function isSkillSpan(node: Node | null): boolean {
   return node instanceof HTMLSpanElement
     && (node.classList.contains(SKILL_SPAN_CLASS) || Boolean(node.dataset.skillSlug));
+}
+
+export function isAttachmentSpan(node: Node | null): boolean {
+  return node instanceof HTMLSpanElement
+    && (node.classList.contains(ATTACHMENT_SPAN_CLASS) || Boolean(node.dataset.attachmentId));
+}
+
+function isInlineTokenSpan(node: Node | null): boolean {
+  return isMentionSpan(node)
+    || isWorkflowSpan(node)
+    || isSkillSpan(node)
+    || isAttachmentSpan(node);
+}
+
+function appendTextSegment(segments: ComposerSegment[], text: string): void {
+  if (!text) return;
+  const last = segments[segments.length - 1];
+  if (last?.type === 'text') {
+    last.text += text;
+  } else {
+    segments.push({ type: 'text', text });
+  }
+}
+
+/** 文末 chip 后的光标/选区锚点：Chrome 在 contenteditable=false 作为最后节点时无法点选。 */
+const COMPOSER_CARET_ANCHOR = '\u200B';
+
+function stripComposerCaretAnchor(text: string): string {
+  return text.replace(/\u200B/g, '');
+}
+
+/** 最后一个 inline chip 后面必须有可落点的文本，否则文末 @/工作流无法点选。 */
+export function ensureTrailingCaretAnchor(root: HTMLElement): void {
+  const last = root.lastChild;
+  if (!last || !isInlineTokenSpan(last)) return;
+  root.appendChild(document.createTextNode(`\u00A0${COMPOSER_CARET_ANCHOR}`));
+}
+
+/** 把 segment / 纯文本里的 `\n` 还原成 `<br>`，避免 contenteditable 把换行压成空格。 */
+function appendTextWithLineBreaks(parent: ParentNode, text: string): void {
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  if (!normalized) return;
+  const parts = normalized.split('\n');
+  parts.forEach((part, index) => {
+    if (index > 0) {
+      parent.appendChild(document.createElement('br'));
+    }
+    if (part) {
+      parent.appendChild(document.createTextNode(part));
+    }
+  });
 }
 
 function isEmptyEditorFillerNode(node: Node): boolean {
@@ -97,18 +201,41 @@ function readMentionFromSpan(span: HTMLSpanElement): DingTalkMention | null {
   };
 }
 
+export function readAttachmentIdFromSpan(span: HTMLSpanElement): string | null {
+  return span.dataset.attachmentId ?? null;
+}
+
+function isEditorBlockElement(node: Node): node is HTMLElement {
+  return node instanceof HTMLElement
+    && (node.tagName === 'DIV' || node.tagName === 'P');
+}
+
+/** 浏览器空行占位：`<div><br></div>` 仅靠块间 `\n` 表达，不再重复计入 BR。 */
+function isSolitaryEmptyBlockFiller(block: HTMLElement): boolean {
+  const kids = Array.from(block.childNodes).filter((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return (node.textContent ?? '').length > 0;
+    }
+    return true;
+  });
+  return kids.length === 1 && kids[0] instanceof HTMLBRElement;
+}
+
 export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapshot {
+  const segments: ComposerSegment[] = [];
   const mentions: DingTalkMention[] = [];
+  const skills: SkillMeta[] = [];
+  const skillOffsets: number[] = [];
+  const workflows: ComposerWorkflowMeta[] = [];
+  const attachmentIds: string[] = [];
   let plainText = '';
-  let workflowId: string | undefined;
-  let workflowName: string | undefined;
-  let workflowSource: string | undefined;
-  let skill: SkillMeta | undefined;
-  let skillOffset: number | undefined;
 
   const walk = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
-      plainText += node.textContent ?? '';
+      const text = stripComposerCaretAnchor(node.textContent ?? '');
+      if (!text) return;
+      plainText += text;
+      appendTextSegment(segments, text);
       return;
     }
     if (!(node instanceof HTMLElement)) return;
@@ -117,7 +244,9 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
       const mention = readMentionFromSpan(node);
       if (mention) {
         mentions.push(mention);
-        plainText += `@${mention.displayName}`;
+        const mentionText = `@${mention.displayName}`;
+        plainText += mentionText;
+        segments.push({ type: 'mention', mention });
       }
       return;
     }
@@ -125,8 +254,9 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
     if (isSkillSpan(node)) {
       const parsed = readSkillFromSpan(node);
       if (parsed) {
-        skill = parsed;
-        skillOffset = plainText.length;
+        skills.push(parsed);
+        skillOffsets.push(plainText.length);
+        segments.push({ type: 'skill', slug: parsed.slug, title: parsed.title });
       }
       return;
     }
@@ -134,52 +264,132 @@ export function serializeMentionEditor(root: HTMLElement): MentionComposerSnapsh
     if (isWorkflowSpan(node)) {
       const span = node as HTMLSpanElement;
       const id = span.dataset.workflowId;
+      const name = span.dataset.workflowName ?? span.querySelector('.workflow-token-label')?.textContent?.trim() ?? span.textContent ?? '';
       if (id) {
-        workflowId = id;
-        workflowName = span.dataset.workflowName;
-        workflowSource = span.dataset.workflowSource;
+        workflows.push({
+          id,
+          name,
+          source: span.dataset.workflowSource,
+        });
+        segments.push({
+          type: 'workflow',
+          id,
+          name,
+          source: span.dataset.workflowSource,
+        });
       }
-      plainText += span.textContent ?? '';
+      plainText += name;
+      return;
+    }
+
+    if (isAttachmentSpan(node)) {
+      const attachmentId = readAttachmentIdFromSpan(node);
+      if (attachmentId) {
+        attachmentIds.push(attachmentId);
+        segments.push({ type: 'file', attachmentId });
+      }
       return;
     }
 
     const element = node as HTMLElement;
     if (element.tagName === 'BR') {
       plainText += '\n';
+      appendTextSegment(segments, '\n');
       return;
     }
 
     element.childNodes.forEach(walk);
   };
 
-  root.childNodes.forEach(walk);
+  const rootChildren = Array.from(root.childNodes);
+  const hasBlockChildren = rootChildren.some(isEditorBlockElement);
+  if (hasBlockChildren) {
+    // contenteditable 回车常生成块级 DIV。
+    // 先插入 chip 再打字时，首段会留在根上（inline），后续行才是 DIV；
+    // 不能只在「块与块之间」补 `\n`，否则第一个 DIV 前的换行会丢光。
+    let emittedBlocks = 0;
+    let emittedInline = false;
+    for (const child of rootChildren) {
+      if (isEditorBlockElement(child)) {
+        if (emittedBlocks > 0 || emittedInline) {
+          plainText += '\n';
+          appendTextSegment(segments, '\n');
+        }
+        emittedBlocks += 1;
+        if (isSolitaryEmptyBlockFiller(child)) {
+          continue;
+        }
+        child.childNodes.forEach(walk);
+        continue;
+      }
+      walk(child);
+      emittedInline = true;
+    }
+  } else {
+    rootChildren.forEach(walk);
+  }
 
-  if (!skill) {
+  if (skills.length === 0) {
     const skillSpan = root.querySelector(SKILL_SPAN_SELECTOR)
       ?? root.querySelector('span[data-skill-slug]');
     if (skillSpan instanceof HTMLSpanElement) {
       const parsed = readSkillFromSpan(skillSpan);
       if (parsed) {
-        skill = parsed;
-        skillOffset = 0;
+        skills.push(parsed);
+        skillOffsets.push(0);
+        segments.unshift({ type: 'skill', slug: parsed.slug, title: parsed.title });
       }
     }
   }
 
   let normalized = plainText.replace(/\u00A0/g, ' ');
-  // 技能标签在最前时，它自带的分隔空格不应留在正文里；标签在中间时该空格是正文的一部分。
-  if (skill && skillOffset === 0) {
-    normalized = normalized.replace(/^\s+/, '');
+  const startsWithInlineToken = composerStartsWithInlineToken(segments);
+  // 首个 inline token 在最前时，它自带的分隔空格不应留在正文里。
+  // 注意：file 后再跟 skill 时 skillOffset 往往是中间 NBSP 长度（>0），仍必须剥前导空白，
+  // 否则与 findPlainTextBoundary 的跳过策略错位，insertMentionAtTrigger 会静默失败。
+  if (startsWithInlineToken) {
+    // 只剥 chip 自带的行内分隔空格，不能用 \s 连换行一起吃掉。
+    const trimmed = normalized.replace(/^[ \t\u00A0]+/, '');
+    const lead = normalized.length - trimmed.length;
+    if (lead > 0) {
+      normalized = trimmed;
+      for (let i = 0; i < skillOffsets.length; i += 1) {
+        skillOffsets[i] = Math.max(0, skillOffsets[i] - lead);
+      }
+      for (const seg of segments) {
+        if (seg.type === 'text') {
+          seg.text = seg.text.replace(/^[ \t\u00A0]+/, '').replace(/\u00A0/g, ' ');
+          break;
+        }
+      }
+    }
   }
+
+  const skill = skills[0];
+  const skillOffset = skill
+    ? Math.min(skillOffsets[0] ?? 0, normalized.length)
+    : undefined;
+  const firstWorkflow = workflows[0];
+
+  const cleanSkills = skills.map(({ slug, title }) => ({ slug, title }));
+
   return {
     plainText: normalized,
+    segments,
     mentions,
-    workflowId,
-    workflowName,
-    workflowSource,
+    skills: cleanSkills,
+    workflows,
+    attachmentIds,
     skill,
-    skillOffset: skill ? Math.min(skillOffset ?? 0, normalized.length) : undefined,
-    isEmpty: normalized.trim().length === 0 && mentions.length === 0 && !skill,
+    skillOffset,
+    workflowId: firstWorkflow?.id,
+    workflowName: firstWorkflow?.name,
+    workflowSource: firstWorkflow?.source,
+    isEmpty: normalized.trim().length === 0
+      && mentions.length === 0
+      && cleanSkills.length === 0
+      && workflows.length === 0
+      && attachmentIds.length === 0,
   };
 }
 
@@ -197,23 +407,62 @@ export function resolveTrimmedSkillOffset(
   return Math.min(Math.max(skillOffset - leadingWhitespace, 0), trimmedLength);
 }
 
-/** 从 plainText 提取 `*` 之后的内联筛选关键词（composer 技能 Picker inline 模式）。 */
-export function extractSkillInlineQuery(plainText: string): string {
-  const idx = plainText.lastIndexOf('*');
+/**
+ * 从 plainText 提取触发符后的内联筛选关键词。
+ * `caretOffset` 有值时只看光标之前的文本（避免中间插入 `/`/`*` 时把后续正文当成 filter）。
+ * 省略时等同于光标在文末（兼容旧调用）。
+ */
+function extractInlineTriggerQuery(
+  plainText: string,
+  triggerChar: '/' | '*',
+  caretOffset?: number | null,
+): string {
+  const end = typeof caretOffset === 'number'
+    ? Math.max(0, Math.min(caretOffset, plainText.length))
+    : plainText.length;
+  const beforeCaret = plainText.slice(0, end);
+  const idx = beforeCaret.lastIndexOf(triggerChar);
   if (idx === -1) return '';
-  return plainText.slice(idx + 1);
+  return beforeCaret.slice(idx + 1);
+}
+
+/** 从 plainText 提取 `*` 之后的内联筛选关键词（composer 技能 Picker inline 模式）。 */
+export function extractSkillInlineQuery(plainText: string, caretOffset?: number | null): string {
+  return extractInlineTriggerQuery(plainText, '*', caretOffset);
 }
 
 /** 从 plainText 提取 `/` 之后的工作流/技能筛选关键词（composer slash Picker）。 */
-export function extractSlashInlineQuery(plainText: string): string {
-  const idx = plainText.lastIndexOf('/');
-  if (idx === -1) return '';
-  return plainText.slice(idx + 1);
+export function extractSlashInlineQuery(plainText: string, caretOffset?: number | null): string {
+  return extractInlineTriggerQuery(plainText, '/', caretOffset);
 }
 
 /** plainText 中是否包含技能 inline 触发符 `*`。 */
 export function hasSkillInlineTrigger(plainText: string): boolean {
   return plainText.includes('*');
+}
+
+/**
+ * 在 plainText 中定位触发符：优先光标前最近的触发符，且其后到光标的文本等于 query。
+ * 失焦时用 `${trigger}${query}` 从后往前找，避免误删光标后的正文。
+ */
+function findInlineTriggerStart(
+  plainText: string,
+  triggerChar: '/' | '*',
+  query: string,
+  caretOffset?: number | null,
+): number {
+  if (typeof caretOffset === 'number') {
+    const end = Math.max(0, Math.min(caretOffset, plainText.length));
+    const beforeCaret = plainText.slice(0, end);
+    const idx = beforeCaret.lastIndexOf(triggerChar);
+    if (idx !== -1 && beforeCaret.slice(idx + 1) === query) {
+      return idx;
+    }
+  }
+  const needle = `${triggerChar}${query}`;
+  const fromNeedle = plainText.lastIndexOf(needle);
+  if (fromNeedle !== -1) return fromNeedle;
+  return plainText.lastIndexOf(triggerChar);
 }
 
 /**
@@ -224,13 +473,15 @@ function consumeTriggerTextAt(
   root: HTMLElement,
   triggerChar: '/' | '*',
   explicitQuery: string | undefined,
-  extractQuery: (plainText: string) => string,
+  extractQuery: (plainText: string, caretOffset?: number | null) => string,
+  caretOffset?: number | null,
 ): number | null {
   const plainText = serializeMentionEditor(root).plainText;
-  const startIdx = plainText.lastIndexOf(triggerChar);
+  const caret = caretOffset ?? readCaretPlainTextOffset(root);
+  const query = explicitQuery ?? extractQuery(plainText, caret);
+  const startIdx = findInlineTriggerStart(plainText, triggerChar, query, caret);
   if (startIdx === -1) return null;
 
-  const query = explicitQuery ?? extractQuery(plainText);
   const endIdx = startIdx + 1 + query.length;
 
   const range = buildRangeFromPlainTextOffsets(root, startIdx, endIdx);
@@ -247,18 +498,28 @@ function consumeTriggerTextAt(
 /**
  * 移除 editor 中 `*` 及其后的内联筛选文本（选中技能或取消 inline Picker 时调用）。
  * @param explicitQuery 选中技能时传入当前 filter，避免误删 `*` 之后用户已输入的正文
+ * @param caretOffset 可选；失焦选中时传入上次保存的光标，避免误定位到文末触发符
  * @returns 触发位置下标；未找到时返回 null
  */
-export function consumeSkillTriggerText(root: HTMLElement, explicitQuery?: string): number | null {
-  return consumeTriggerTextAt(root, '*', explicitQuery, extractSkillInlineQuery);
+export function consumeSkillTriggerText(
+  root: HTMLElement,
+  explicitQuery?: string,
+  caretOffset?: number | null,
+): number | null {
+  return consumeTriggerTextAt(root, '*', explicitQuery, extractSkillInlineQuery, caretOffset);
 }
 
 /**
  * 移除 editor 中 `/` 及其后的内联筛选文本（slash 组合浮层选中时调用）。
+ * @param caretOffset 可选；失焦选中时传入上次保存的光标
  * @returns `/` 在 plainText 中的起始下标；未找到时返回 null
  */
-export function consumeSlashTriggerText(root: HTMLElement, explicitQuery?: string): number | null {
-  return consumeTriggerTextAt(root, '/', explicitQuery, extractSlashInlineQuery);
+export function consumeSlashTriggerText(
+  root: HTMLElement,
+  explicitQuery?: string,
+  caretOffset?: number | null,
+): number | null {
+  return consumeTriggerTextAt(root, '/', explicitQuery, extractSlashInlineQuery, caretOffset);
 }
 
 function collectTextBeforeCaret(root: HTMLElement, range: Range): string {
@@ -290,41 +551,58 @@ interface PlainTextBoundary {
   offset: number;
 }
 
+function composerStartsWithInlineToken(segments: ComposerSegment[]): boolean {
+  const first = segments[0]?.type;
+  return first === 'file'
+    || first === 'skill'
+    || first === 'workflow'
+    || first === 'mention';
+}
+
 function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTextBoundary | null {
   let current = 0;
-  // 与 serializeMentionEditor 一致：技能标签在最前时 plainText 会剥掉它后面的空白，
+  // 与 serializeMentionEditor 一致：首个 inline token 在最前时 plainText 会剥掉它后面的空白，
   // 偏移映射也必须跳过，否则 insertMentionAtTrigger 会删错字符留下多余 @。
-  let skippingLeadingWs = serializeMentionEditor(root).skillOffset === 0;
+  const editorSnapshot = serializeMentionEditor(root);
+  let skippingLeadingWs = composerStartsWithInlineToken(editorSnapshot.segments);
 
   const visit = (node: Node): PlainTextBoundary | null => {
     if (node.nodeType === Node.TEXT_NODE) {
       const textNode = node as Text;
-      const raw = (textNode.data ?? '').replace(/\u00A0/g, ' ');
-      let text = raw;
-      let nodeStart = 0;
-
-      if (skippingLeadingWs) {
-        const trimmed = raw.replace(/^\s+/, '');
-        const skipped = raw.length - trimmed.length;
-        if (trimmed.length === 0) {
-          // 整段都是 skill 后的前导空白：不计入 plainText 偏移
-          return null;
+      const data = textNode.data ?? '';
+      // 真实下标映射：ZWSP 不计入 plainText，但 range offset 必须落在真实 DOM 上
+      const realIndexByPlain: number[] = [];
+      let stillSkippingLead = skippingLeadingWs;
+      for (let i = 0; i < data.length; i += 1) {
+        const ch = data[i]!;
+        if (ch === '\u200B') continue;
+        const plainCh = ch === '\u00A0' ? ' ' : ch;
+        if (stillSkippingLead && /[ \t]/.test(plainCh)) continue;
+        if (stillSkippingLead) {
+          stillSkippingLead = false;
+          skippingLeadingWs = false;
         }
-        text = trimmed;
-        nodeStart = skipped;
-        skippingLeadingWs = false;
+        realIndexByPlain.push(i);
+      }
+      if (realIndexByPlain.length === 0) {
+        return null;
       }
 
-      const next = current + text.length;
+      const next = current + realIndexByPlain.length;
       if (targetOffset <= next) {
-        return { node: textNode, offset: nodeStart + (targetOffset - current) };
+        const plainOffsetInNode = targetOffset - current;
+        if (plainOffsetInNode >= realIndexByPlain.length) {
+          const lastReal = realIndexByPlain[realIndexByPlain.length - 1]!;
+          return { node: textNode, offset: lastReal + 1 };
+        }
+        return { node: textNode, offset: realIndexByPlain[plainOffsetInNode]! };
       }
       current = next;
       return null;
     }
 
-    if (node instanceof HTMLElement && (isMentionSpan(node) || isWorkflowSpan(node) || isSkillSpan(node))) {
-      if (isSkillSpan(node)) {
+    if (node instanceof HTMLElement && (isMentionSpan(node) || isWorkflowSpan(node) || isSkillSpan(node) || isAttachmentSpan(node))) {
+      if (isSkillSpan(node) || isAttachmentSpan(node)) {
         return null;
       }
       skippingLeadingWs = false;
@@ -332,7 +610,7 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
       // （不含 removable 模式下 × 删除按钮的字符），否则偏移量会与序列化错位。
       const text = isMentionSpan(node)
         ? `@${node.dataset.mentionName ?? ''}`
-        : (node.textContent ?? '');
+        : (node.dataset.workflowName ?? node.textContent ?? '');
       const next = current + text.length;
       // span 不可拆分：严格落在 (current, next) 内部才视为非法返回 null。
       // targetOffset === next 表示"紧贴 span 之后"的合法边界，必须推进 current
@@ -373,7 +651,33 @@ function findPlainTextBoundary(root: HTMLElement, targetOffset: number): PlainTe
     if (boundary) return boundary;
   }
 
+  // 紧贴最后一个 chip 之后 / 全文末尾：visit 只推进 current 不返回边界，这里补上
+  if (targetOffset === current) {
+    return boundaryAtEditorEnd(root);
+  }
+
   return null;
+}
+
+function boundaryAtEditorEnd(root: HTMLElement): PlainTextBoundary {
+  let lastText: Text | null = null;
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (stripComposerCaretAnchor(node.textContent ?? '').length > 0) {
+        lastText = node as Text;
+      }
+      return;
+    }
+    if (node instanceof HTMLElement) {
+      if (isInlineTokenSpan(node)) return;
+      node.childNodes.forEach(walk);
+    }
+  };
+  root.childNodes.forEach(walk);
+  if (lastText) {
+    return { node: lastText, offset: lastText.data.length };
+  }
+  return { node: root, offset: root.childNodes.length };
 }
 
 function buildRangeFromPlainTextOffsets(
@@ -461,8 +765,8 @@ const MENTION_REMOVE_BTN_CLASS = [
 export function createMentionSpan(mention: DingTalkMention, options?: MentionSpanOptions): HTMLSpanElement {
   const span = document.createElement('span');
   span.className = options?.removable
-    ? `${MENTION_SPAN_BASE_CLASS} inline-flex items-center gap-0.5 px-1 py-px`
-    : `${MENTION_SPAN_BASE_CLASS} inline px-0.5`;
+    ? `${MENTION_SPAN_BASE_CLASS} inline-flex items-center gap-0.5 px-1 py-px select-all`
+    : `${MENTION_SPAN_BASE_CLASS} inline px-0.5 select-all`;
   span.contentEditable = 'false';
   span.dataset.mentionType = mention.type;
   span.dataset.mentionName = mention.displayName;
@@ -529,6 +833,171 @@ export function createWorkflowSpan(
   return span;
 }
 
+const ATTACHMENT_SPAN_BASE_CLASS = [
+  ATTACHMENT_SPAN_CLASS,
+  ATTACHMENT_CHIP_SURFACE_CLASS,
+].join(' ');
+
+const ATTACHMENT_REMOVE_BTN_CLASS = [
+  'attachment-remove-btn',
+  'inline-flex',
+  'h-3.5',
+  'w-3.5',
+  'shrink-0',
+  'items-center',
+  'justify-center',
+  'rounded-full',
+  'text-[11px]',
+  'leading-none',
+  'text-[#86909C]',
+  'transition-colors',
+  'hover:bg-black/5',
+  'hover:text-[#1D2129]',
+].join(' ');
+
+export interface AttachmentSpanInput {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  fileSize?: number;
+  status?: 'staging' | 'ready' | 'error';
+  preview?: string | null;
+}
+
+export function createAttachmentSpan(att: AttachmentSpanInput): HTMLSpanElement {
+  const span = document.createElement('span');
+  span.className = ATTACHMENT_SPAN_BASE_CLASS;
+  span.contentEditable = 'false';
+  span.dataset.attachmentId = att.id;
+  span.dataset.fileName = att.fileName;
+  span.dataset.mimeType = att.mimeType;
+  if (att.fileSize !== undefined) span.dataset.fileSize = String(att.fileSize);
+  if (att.status) span.dataset.status = att.status;
+  span.title = att.fileName;
+
+  const icon = document.createElement('img');
+  icon.className = 'attachment-token-icon h-4 w-4 shrink-0 object-contain';
+  icon.src = resolveFileTypeIconSrc(att.fileName, att.mimeType);
+  icon.alt = '';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.draggable = false;
+
+  const label = document.createElement('span');
+  label.className = 'attachment-token-label min-w-0 flex-1 truncate whitespace-nowrap';
+  label.textContent = middleEllipsisFileName(att.fileName);
+
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.dataset.attachmentRemove = 'true';
+  removeBtn.setAttribute('aria-label', '移除附件');
+  removeBtn.className = ATTACHMENT_REMOVE_BTN_CLASS;
+  removeBtn.textContent = '×';
+
+  span.append(icon, label, removeBtn);
+  return span;
+}
+
+function removeInlineTokenTrailingSpace(token: HTMLSpanElement): void {
+  const next = token.nextSibling;
+  token.remove();
+  if (next?.nodeType === Node.TEXT_NODE) {
+    const text = next.textContent ?? '';
+    if (text === '\u00A0' || text === ' ') {
+      next.remove();
+    }
+  }
+}
+
+export function removeAttachmentSpan(root: HTMLElement, attachmentId: string): void {
+  const existing = root.querySelector(`${ATTACHMENT_SPAN_SELECTOR}[data-attachment-id="${CSS.escape(attachmentId)}"]`);
+  if (!(existing instanceof HTMLSpanElement)) return;
+  removeInlineTokenTrailingSpace(existing);
+}
+
+export function updateAttachmentSpanStatus(
+  root: HTMLElement,
+  attachmentId: string,
+  status: 'staging' | 'ready' | 'error',
+  extras?: { stagedPath?: string; error?: string },
+): void {
+  const existing = root.querySelector(`${ATTACHMENT_SPAN_SELECTOR}[data-attachment-id="${CSS.escape(attachmentId)}"]`);
+  if (!(existing instanceof HTMLSpanElement)) return;
+  existing.dataset.status = status;
+  if (extras?.stagedPath) existing.dataset.stagedPath = extras.stagedPath;
+  if (extras?.error) existing.dataset.error = extras.error;
+  existing.classList.toggle('opacity-60', status === 'staging');
+  existing.classList.toggle('text-destructive', status === 'error');
+}
+
+export function insertAttachmentSpan(
+  root: HTMLElement,
+  att: AttachmentSpanInput,
+  plainTextOffset?: number,
+): void {
+  clearEmptyEditorFillers(root);
+  if (plainTextOffset !== undefined) {
+    moveCaretToPlainTextOffset(root, plainTextOffset);
+  }
+  insertTokenAtCaret(root, createAttachmentSpan(att));
+}
+
+export interface AttachmentLookupEntry {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  fileSize?: number;
+  status?: string;
+  preview?: string | null;
+}
+
+export function setMentionEditorSegments(
+  root: HTMLElement,
+  segments: ComposerSegment[],
+  attachmentsById?: Record<string, AttachmentLookupEntry>,
+): void {
+  root.innerHTML = '';
+  if (segments.length === 0) return;
+
+  const fragment = document.createDocumentFragment();
+  for (const seg of segments) {
+    switch (seg.type) {
+      case 'text':
+        appendTextWithLineBreaks(fragment, seg.text);
+        break;
+      case 'mention':
+        fragment.appendChild(createMentionSpan(seg.mention));
+        fragment.appendChild(document.createTextNode('\u00A0'));
+        break;
+      case 'skill':
+        fragment.appendChild(createSkillSpan(seg.slug, seg.title));
+        fragment.appendChild(document.createTextNode('\u00A0'));
+        break;
+      case 'workflow':
+        fragment.appendChild(createWorkflowSpan(seg.id, seg.name, seg.source));
+        fragment.appendChild(document.createTextNode('\u00A0'));
+        break;
+      case 'file': {
+        const att = attachmentsById?.[seg.attachmentId];
+        if (!att) break;
+        fragment.appendChild(createAttachmentSpan({
+          id: att.id,
+          fileName: att.fileName,
+          mimeType: att.mimeType,
+          fileSize: att.fileSize,
+          status: att.status as AttachmentSpanInput['status'],
+          preview: att.preview,
+        }));
+        fragment.appendChild(document.createTextNode('\u00A0'));
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  root.appendChild(fragment);
+  ensureTrailingCaretAnchor(root);
+}
+
 const SKILL_WRENCH_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>';
 
@@ -552,30 +1021,16 @@ export function createSkillSpan(slug: string, title: string): HTMLSpanElement {
   return span;
 }
 
-function removeWorkflowSpanFromRoot(root: HTMLElement): void {
+export function removeWorkflowSpan(root: HTMLElement): void {
   const existing = root.querySelector(WORKFLOW_SPAN_SELECTOR);
   if (!(existing instanceof HTMLSpanElement)) return;
-  const next = existing.nextSibling;
-  existing.remove();
-  if (next?.nodeType === Node.TEXT_NODE) {
-    const text = next.textContent ?? '';
-    if (text === '\u00A0' || text === ' ') {
-      next.remove();
-    }
-  }
+  removeInlineTokenTrailingSpace(existing);
 }
 
 export function removeSkillSpan(root: HTMLElement): void {
   const existing = root.querySelector(SKILL_SPAN_SELECTOR);
   if (!(existing instanceof HTMLSpanElement)) return;
-  const next = existing.nextSibling;
-  existing.remove();
-  if (next?.nodeType === Node.TEXT_NODE) {
-    const text = next.textContent ?? '';
-    if (text === '\u00A0' || text === ' ') {
-      next.remove();
-    }
-  }
+  removeInlineTokenTrailingSpace(existing);
 }
 
 /** 当前光标位置；光标不在编辑器内时退回到内容末尾。 */
@@ -596,15 +1051,105 @@ function resolveCaretRange(root: HTMLElement): Range {
 /** 在光标处插入 token 与其分隔空格，并把光标停在空格之后。 */
 function insertTokenAtCaret(root: HTMLElement, span: HTMLSpanElement): void {
   const space = document.createTextNode('\u00A0');
-  const fragment = document.createDocumentFragment();
-  fragment.append(span, space);
-
   const range = resolveCaretRange(root);
   range.deleteContents();
-  range.insertNode(fragment);
+
+  // 回车后 Chrome 行是 `<div>你好<br></div>`。insertNode 会把 chip 拆到 BR 后/下一 DIV。
+  // 插在 trailing BR 前面，chip 与「你好」同一行。无 BR 的首行/会话保持原 insertNode。
+  const trailingBr = findTrailingBreakAfterCaret(range);
+  if (trailingBr?.parentNode) {
+    trailingBr.parentNode.insertBefore(span, trailingBr);
+    trailingBr.parentNode.insertBefore(space, trailingBr);
+  } else {
+    const fragment = document.createDocumentFragment();
+    fragment.append(span, space);
+    range.insertNode(fragment);
+  }
+
+  mergeTokenIfSplitIntoNextBlock(root, span);
 
   const caretRange = document.createRange();
   caretRange.setStart(space, space.length);
+  caretRange.collapse(true);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(caretRange);
+  root.focus();
+  ensureTrailingCaretAnchor(root);
+}
+
+/** 光标落在「文本末尾 + 行尾 BR」时，返回这个 BR。 */
+function findTrailingBreakAfterCaret(range: Range): HTMLBRElement | null {
+  const { startContainer, startOffset } = range;
+  if (startContainer.nodeType === Node.TEXT_NODE) {
+    const textNode = startContainer as Text;
+    if (startOffset < textNode.data.length) return null;
+    const next = textNode.nextSibling;
+    return next instanceof HTMLBRElement ? next : null;
+  }
+  if (startContainer instanceof HTMLElement) {
+    const node = startContainer.childNodes[startOffset] ?? null;
+    return node instanceof HTMLBRElement ? node : null;
+  }
+  return null;
+}
+
+/**
+ * Chrome 把 chip 拆进下一个 DIV、上一 DIV 又不带行尾 BR 时，贴回上一行。
+ * 上一行以 BR 结尾说明用户已经换段，不合并。
+ */
+function mergeTokenIfSplitIntoNextBlock(root: HTMLElement, span: HTMLSpanElement): void {
+  const parent = span.parentElement;
+  if (!parent || parent === root || !isEditorBlockElement(parent)) return;
+
+  const beforeHasText = Array.from(parent.childNodes).some((node) => {
+    if (node === span) return false;
+    if (node.nodeType === Node.TEXT_NODE) {
+      return (node.textContent ?? '').replace(/[\u200B\u00A0\s]/g, '').length > 0;
+    }
+    return isInlineTokenSpan(node);
+  });
+  if (beforeHasText) return;
+
+  const prev = parent.previousSibling;
+  if (!prev || !isEditorBlockElement(prev)) return;
+  if (blockEndsWithLineBreak(prev)) return;
+
+  while (parent.firstChild) {
+    prev.appendChild(parent.firstChild);
+  }
+  parent.remove();
+}
+
+function blockEndsWithLineBreak(block: HTMLElement): boolean {
+  let last: ChildNode | null = block.lastChild;
+  while (
+    last
+    && last.nodeType === Node.TEXT_NODE
+    && (last.textContent ?? '').replace(/[\u200B]/g, '').length === 0
+  ) {
+    last = last.previousSibling;
+  }
+  return last instanceof HTMLBRElement;
+}
+
+/** 任务描述 Enter 插入 `<br>`，避免 Chrome 生成 DIV 把下一行 chip 拆下去。会话仍走默认换段。 */
+export function insertLineBreakAtCaret(root: HTMLElement): void {
+  const range = resolveCaretRange(root);
+  range.deleteContents();
+  const br = document.createElement('br');
+  range.insertNode(br);
+  if (!br.nextSibling) {
+    const anchor = document.createTextNode('\u200B');
+    br.parentNode?.insertBefore(anchor, br.nextSibling);
+  }
+  const after = br.nextSibling;
+  const caretRange = document.createRange();
+  if (after?.nodeType === Node.TEXT_NODE) {
+    caretRange.setStart(after, 0);
+  } else {
+    caretRange.setStartAfter(br);
+  }
   caretRange.collapse(true);
   const selection = window.getSelection();
   selection?.removeAllRanges();
@@ -630,8 +1175,6 @@ export function insertSkillSpan(
   title: string,
   plainTextOffset?: number,
 ): void {
-  removeWorkflowSpanFromRoot(root);
-  removeSkillSpan(root);
   clearEmptyEditorFillers(root);
   if (plainTextOffset !== undefined) {
     moveCaretToPlainTextOffset(root, plainTextOffset);
@@ -672,7 +1215,11 @@ export function insertMentionAtTrigger(
   options?: MentionSpanOptions,
 ): void {
   const selection = window.getSelection();
-  const triggerRange = buildRangeFromPlainTextOffsets(root, trigger.startOffset, trigger.endOffset);
+  let triggerRange = buildRangeFromPlainTextOffsets(root, trigger.startOffset, trigger.endOffset);
+  if (!triggerRange) {
+    // 文末 @ 在 Chrome 里偏移常映射失败，回退到 DOM 里定位 `@query`
+    triggerRange = findMentionTriggerRangeInDom(root, trigger);
+  }
   if (!triggerRange) return;
   triggerRange.deleteContents();
 
@@ -682,12 +1229,57 @@ export function insertMentionAtTrigger(
   fragment.append(mentionSpan, space);
   triggerRange.insertNode(fragment);
 
+  if (mentionSpan.previousSibling instanceof HTMLBRElement) {
+    mentionSpan.previousSibling.remove();
+  }
+
   const caretRange = document.createRange();
   caretRange.setStart(space, 1);
   caretRange.collapse(true);
   selection?.removeAllRanges();
   selection?.addRange(caretRange);
   root.focus();
+  ensureTrailingCaretAnchor(root);
+}
+
+/** 在文本节点里从后往前找 `@query`，供文末 insertMention 偏移失败时兜底。 */
+function findMentionTriggerRangeInDom(
+  root: HTMLElement,
+  trigger: ActiveMentionTrigger,
+): Range | null {
+  const texts: Text[] = [];
+  const collect = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      texts.push(node as Text);
+      return;
+    }
+    if (node instanceof HTMLElement && !isInlineTokenSpan(node)) {
+      node.childNodes.forEach(collect);
+    }
+  };
+  root.childNodes.forEach(collect);
+
+  for (let i = texts.length - 1; i >= 0; i -= 1) {
+    const node = texts[i]!;
+    const data = node.data ?? '';
+    const atIdx = data.lastIndexOf('@');
+    if (atIdx < 0) continue;
+    const after = data.slice(atIdx + 1);
+    const matched = after.match(/^([^\s@\n]*)/);
+    const query = matched?.[1] ?? '';
+    if (trigger.query && query !== trigger.query && !query.startsWith(trigger.query) && !trigger.query.startsWith(query)) {
+      continue;
+    }
+    const range = document.createRange();
+    try {
+      range.setStart(node, atIdx);
+      range.setEnd(node, atIdx + 1 + query.length);
+      return range;
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
 
 /**
@@ -700,8 +1292,6 @@ export function insertWorkflowSpan(
   source?: string,
   plainTextOffset?: number,
 ): void {
-  removeSkillSpan(root);
-  removeWorkflowSpanFromRoot(root);
   clearEmptyEditorFillers(root);
   if (plainTextOffset !== undefined) {
     moveCaretToPlainTextOffset(root, plainTextOffset);
@@ -721,7 +1311,7 @@ export function removeMentionBeforeCaret(root: HTMLElement): boolean {
   if (startContainer.nodeType === Node.TEXT_NODE) {
     const textNode = startContainer as Text;
     const prev = textNode.previousSibling;
-    if (prev && (isMentionSpan(prev) || isWorkflowSpan(prev) || isSkillSpan(prev))) {
+    if (prev && isInlineTokenSpan(prev)) {
       const text = textNode.data ?? '';
       const trailingSeparator = text === '\u00A0' || text === ' ';
       if (startOffset === 0 || (trailingSeparator && startOffset <= text.length)) {
@@ -741,7 +1331,7 @@ export function removeMentionBeforeCaret(root: HTMLElement): boolean {
   if (startContainer instanceof HTMLElement) {
     const index = startOffset - 1;
     const prev = startContainer.childNodes[index] ?? null;
-    if (isMentionSpan(prev) || isWorkflowSpan(prev) || isSkillSpan(prev)) {
+    if (isInlineTokenSpan(prev)) {
       prev.remove();
       const next = startContainer.childNodes[index] ?? null;
       if (next?.nodeType === Node.TEXT_NODE && (next.textContent === '\u00A0' || next.textContent === '')) {
@@ -759,7 +1349,8 @@ export function clearMentionEditor(root: HTMLElement): void {
 }
 
 export function setMentionEditorPlainText(root: HTMLElement, text: string): void {
-  root.textContent = text;
+  root.replaceChildren();
+  appendTextWithLineBreaks(root, text);
 }
 
 export function insertPlainTextAtCaret(root: HTMLElement, text: string): void {
@@ -794,6 +1385,7 @@ export function setMentionEditorMentions(
     fragment.appendChild(document.createTextNode('\u00A0'));
   });
   root.appendChild(fragment);
+  ensureTrailingCaretAnchor(root);
 }
 
 export function isCaretInsideMentionSpan(_root: HTMLElement): boolean {

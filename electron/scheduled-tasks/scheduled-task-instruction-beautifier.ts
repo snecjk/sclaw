@@ -15,13 +15,13 @@ const BEAUTIFY_INPUT_MAX_CHARS = 4_000;
 const FAST_MODEL_PATTERN = /turbo|flash|lite|mini|fast|haiku|small|speed/i;
 const HEAVY_MODEL_PATTERN = /plus|max|pro|opus|ultra|large|vision/i;
 
-/** 定时任务执行描述美化（默认） */
+/** 定时任务执行描述美化：仅纯文本与 @提及（含文件/技能/工作流的描述由前端跳过）。 */
 const TASK_SYSTEM_PROMPT = [
   '你是定时任务「执行描述」优化助手。触发时间（cron）已由系统单独保存。',
-  '任务：在完整保留用户执行细节（分步计划、工具/skill 名称、数据范围、输出与交付要求）的前提下，润色表述、理顺语气、去掉冗余口语。',
-  '禁止：删除步骤、压缩要点、把多段描述改成一句「执行某工作流」或仅保留工作流 id。',
+  '输入只有自然语言和 @提及（如 @张三）。没有文件、技能、工作流标签。',
+  '任务：润色表述、理顺语气、去掉冗余口语；完整保留用户的执行细节、步骤和 @提及。',
+  '禁止：改写、删除或重排 @提及（@后的显示名必须原样保留）；编造文件、技能或工作流；把多段描述压成一句空话。',
   '仅去除：「创建/新建/设置定时任务」「每天/每周 X 点」等调度语义。',
-  '若上下文提供了关联工作流，可在开头保留或补全工作流引用，但必须保留原文全部执行细节与步骤结构。',
   '只输出优化后的纯文本，不要解释、markdown 或引号。',
 ].join('\n');
 
@@ -139,15 +139,7 @@ function buildUserPrompt(input: BeautifyScheduledTaskInstructionInput): string {
     return ['用户原始提示词：', truncateInstructionForModel(input.instruction)].join('\n');
   }
 
-  const lines = [
-    input.workflowId?.trim()
-      ? `关联工作流：id=${input.workflowId.trim()}，名称=${input.workflowName?.trim() || input.workflowId.trim()}`
-      : null,
-    '用户原始描述：',
-    truncateInstructionForModel(input.instruction),
-  ].filter(Boolean);
-
-  return lines.join('\n');
+  return ['用户原始描述：', truncateInstructionForModel(input.instruction)].join('\n');
 }
 
 export function isOverCollapsed(original: string, optimized: string): boolean {

@@ -155,6 +155,65 @@ describe('EngineScheduledTaskDispatcher', () => {
     expect(after?.runtimeResult).toBeNull();
   });
 
+  it('cancels dispatch without send when the task was disabled after claim', async () => {
+    const { task, run } = await seedRun();
+    await taskRepo.setEnabled(task.id, false);
+    const { dispatcher } = makeDispatcher();
+
+    await dispatcher.dispatch({ task, run });
+
+    expect(runMainChatSendMock).not.toHaveBeenCalled();
+    const after = await runRepo.getRun(run.runId);
+    expect(after?.status).toBe('cancelled');
+    expect(after?.error).toMatch(/disabled/);
+  });
+
+  it('cancels dispatch without send when the task was deleted after claim', async () => {
+    const { task, run } = await seedRun();
+    await taskRepo.softDelete(task.id);
+    const { dispatcher } = makeDispatcher();
+
+    await dispatcher.dispatch({ task, run });
+
+    expect(runMainChatSendMock).not.toHaveBeenCalled();
+    const after = await runRepo.getRun(run.runId);
+    expect(after?.status).toBe('cancelled');
+    expect(after?.error).toMatch(/deleted/);
+  });
+
+  it('still dispatches a manual trigger even if the task is disabled', async () => {
+    const task = await taskRepo.create({ id: 't1', name: 'T1', enabled: false, ...baseTaskInput });
+    const run = await runRepo.createRun({
+      taskId: task.id,
+      triggerSource: 'manual',
+      idempotencyKey: 'manual-1',
+      scheduledFor: '2024-01-01T09:00:00.000Z',
+    });
+    runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-1' } });
+    const { dispatcher } = makeDispatcher();
+
+    await dispatcher.dispatch({ task, run });
+
+    expect(runMainChatSendMock).toHaveBeenCalledTimes(1);
+    expect((await runRepo.getRun(run.runId))?.status).toBe('running');
+  });
+
+  it('does not retry after the task is disabled during send', async () => {
+    const { task, run } = await seedRun({ retryPolicy: { maxAttempts: 2, backoffSec: 0 } });
+    runMainChatSendMock.mockImplementation(async () => {
+      await taskRepo.setEnabled(task.id, false);
+      return { success: false, error: 'fail' };
+    });
+    const { dispatcher } = makeDispatcher();
+
+    await dispatcher.dispatch({ task, run });
+    await nextTick();
+    await nextTick();
+
+    expect((await runRepo.getRun(run.runId))?.status).toBe('failed');
+    expect((await runRepo.listRuns(task.id)).filter((item) => item.triggerSource === 'recovery')).toHaveLength(0);
+  });
+
   it('send success leaves run running; canonical terminal → succeeded + runtimeResult', async () => {
     const { task, run } = await seedRun();
     runMainChatSendMock.mockResolvedValue({ success: true, result: { runId: 'engine-run-1' } });
@@ -172,7 +231,6 @@ describe('EngineScheduledTaskDispatcher', () => {
       permissionProfile: 'workspace-write',
       systemPromptAppend: '[dingtalk recipients]',
       sourceText: 'run report',
-      displayText: 'run report',
     });
     expect(passedInput.message).toBe('run report');
 

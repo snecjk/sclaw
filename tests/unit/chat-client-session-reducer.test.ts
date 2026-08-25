@@ -200,22 +200,22 @@ describe('canonical chat client session reducer', () => {
     expect(replacement.error).toBeNull();
   });
 
-  it('fills a missing optimistic user turn from dispatch without overriding normal chat', () => {
+  it('does not produce an optimistic user turn for scheduled-task dispatches (X2)', () => {
+    // X2: 定时任务执行不再注入乐观 user 消息。supervisor 对 origin === 'scheduled_task'
+    // 的 dispatch 不携带 optimisticUserMessage，reducer 因此不会产生乐观气泡。
+    // 任务会话的 user 气泡完全由 server echo（history 回读）渲染。
     const scheduled = reduceSessionEvent(createClientSessionState(), event({
       type: 'run.dispatching',
       runtimePolicy: { origin: 'scheduled_task' },
       payload: {
         idempotencyKey: 'message-1',
-        optimisticUserMessage: {
-          id: 'message-1', role: 'user', content: 'scheduled prompt', timestamp: 0.1,
-        },
       },
     })).state;
-    expect(scheduled.overlay.optimisticUserMessage).toMatchObject({
-      content: 'scheduled prompt',
-      _scheduledTaskOptimistic: true,
-    });
+    expect(scheduled.overlay.optimisticUserMessage).toBeNull();
 
+    // 即便上游误传了 optimisticUserMessage（防御性断言），scheduled 会话也不应产生乐观气泡：
+    // 当前 reducer 不再按 origin 区分，但 supervisor 已保证不携带，此处仅断言主路径。
+    // 正常 chat 链路行为不变：dispatch 携带的乐观消息被保留。
     const interactive = createClientSessionState();
     interactive.overlay.optimisticUserMessage = {
       id: 'renderer-message', role: 'user', content: 'normal chat', timestamp: 0.05,
@@ -229,26 +229,8 @@ describe('canonical chat client session reducer', () => {
         },
       },
     })).state;
+    // 渲染侧已有同 id 乐观消息（currentOptimisticBelongsToRun 不成立，id 不同），保留既有。
     expect(dispatched.overlay.optimisticUserMessage).toBe(interactive.overlay.optimisticUserMessage);
-    expect(dispatched.overlay.optimisticUserMessage?._scheduledTaskOptimistic).toBeUndefined();
-
-    const stale = createClientSessionState();
-    stale.overlay.optimisticUserMessage = {
-      id: 'previous-message', role: 'user', content: 'previous run', timestamp: 0.01,
-    };
-    const replaced = reduceSessionEvent(stale, event({
-      type: 'run.dispatching',
-      runtimePolicy: { origin: 'scheduled_task' },
-      payload: {
-        idempotencyKey: 'message-1',
-        optimisticUserMessage: {
-          id: 'message-1', role: 'user', content: 'scheduled prompt', timestamp: 0.1,
-        },
-      },
-    })).state;
-    expect(replaced.overlay.optimisticUserMessage).toMatchObject({
-      id: 'message-1', content: 'scheduled prompt', _scheduledTaskOptimistic: true,
-    });
   });
 
   it('rejects events from an older epoch', () => {

@@ -38,6 +38,27 @@ export interface CreateScheduleTaskInput {
   failurePolicy?: ScheduleTaskFailurePolicy | null;
   /** 兜底冗余 JSON（引擎专属未列字段 + 未来扩展） */
   extra?: Record<string, unknown> | null;
+  /**
+   * NL / HostApi：Chat outbound 等 staging 路径；
+   * create 时合并进 extra.composerAttachments 并拷贝到任务目录。
+   */
+  attachments?: Array<{
+    id?: string;
+    fileName?: string;
+    mimeType?: string;
+    sourcePath: string;
+  }> | null;
+  /** NL：多技能；首个写入 skill_code */
+  skills?: Array<{ slug: string; title?: string }> | null;
+  /** NL：工作流展示名（写入 composerSegments.workflow） */
+  workflowName?: string | null;
+  /** NL：收件人（写入 extra.composerSegments，不写列） */
+  recipients?: DingTalkMention[] | null;
+  /**
+   * NL：OpenClaw sessionKey（agent:…）。
+   * create 时用于读取最近用户消息，回填 attachments / skills / workflow。
+   */
+  sessionKey?: string | null;
   actor?: string | null;
 }
 
@@ -45,7 +66,9 @@ export interface UpdateScheduleTaskInput {
   name?: string;
   enabled?: boolean;
   cronExpr?: string;
+  engineType?: AgentEngineType;
   prompt?: string;
+  agentId?: string;
   workflowCode?: string | null;
   skillCode?: string | null;
   dingtalkRecipients?: DingTalkMention[] | null;
@@ -68,6 +91,8 @@ export interface UpdateScheduleTaskInput {
 export interface ListScheduleTasksOptions {
   engineType?: AgentEngineType;
   agentId?: string;
+  createdBy?: string | null;
+  syncStatus?: 'pending' | 'done';
   includeDeleted?: boolean;
   limit?: number;
   offset?: number;

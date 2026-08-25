@@ -39,6 +39,7 @@ export async function dispatchChatRequest(
     hasSystemPromptAppend: Boolean(input.systemPromptAppend),
     extraKeys: input.extras ? Object.keys(input.extras) : [],
   });
+  // `[USER-SEND]` 在主进程最终出口打印（含 memory / systemPromptAppend / media 拼装后的正文）
 
   return hostApiFetch<DispatchChatRequestResult>(
     '/api/chat/send',
