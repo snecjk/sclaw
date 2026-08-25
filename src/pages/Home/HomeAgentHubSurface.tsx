@@ -157,6 +157,7 @@ export function HomeAgentHubSurface({ seedText, seedSkillSlug }: { seedText?: st
         workflow: {
           id: item.item_ref_id,
           name: item.title,
+          source: 'template',
         },
       });
     }
