@@ -10,6 +10,7 @@ import { homedir } from 'node:os';
 import { getOpenClawConfigDir, ensureDir } from './paths';
 import { logger } from './logger';
 import { getCurrentEnvConfig } from '../../shared/env-config';
+import { normalizeSsoRoleCodes } from '../../shared/sso-roles';
 
 export type SsoEnvironment =
   | 'daily-external'
@@ -32,6 +33,8 @@ export interface SsoUserInfo {
   departmentName: string;
   categoryCode: string; // 用户类别编码：独立网点、承包区等
   isAdministrator: boolean;
+  /** SSO 角色编码列表（getRoles=true 时由登录接口填充） */
+  roles?: string[];
   loginMode: string;
   openId: string;
   signature: string;
@@ -136,6 +139,11 @@ export async function getAuthState(): Promise<AuthState> {
         departmentName: String(userInfo.DepartmentName ?? ''),
         categoryCode: String(userInfo.CategoryCode ?? ''),
         isAdministrator: Boolean(userInfo.IsAdministrator ?? false),
+        roles: normalizeSsoRoleCodes(
+          Array.isArray(saiAuth.Roles)
+            ? saiAuth.Roles
+            : (Array.isArray(userInfo.Roles) ? userInfo.Roles : []),
+        ),
         loginMode: String(userInfo.LoginMode ?? ''),
         openId: String(userInfo.OpenId ?? ''),
         signature: String(userInfo.Signature ?? ''),
@@ -390,6 +398,7 @@ function buildSaiCliSsoAuthPayload(user: SsoUserInfo, existing: JsonObject | nul
     stoToken: user.stoToken,
     expiresAt: user.stoTokenExpiresAt,
     userId: user.id,
+    Roles: user.roles ?? [],
     userInfo: {
       ...existingUserInfo,
       Id: user.id,
@@ -405,6 +414,7 @@ function buildSaiCliSsoAuthPayload(user: SsoUserInfo, existing: JsonObject | nul
       DepartmentName: user.departmentName,
       CategoryCode: user.categoryCode,
       IsAdministrator: user.isAdministrator,
+      Roles: user.roles ?? [],
       LoginMode: user.loginMode,
       OpenId: user.openId,
       Signature: user.signature,

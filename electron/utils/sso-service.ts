@@ -4,6 +4,7 @@
  */
 
 import type { SsoEnvironment, SsoUserInfo } from './auth-store';
+import { normalizeSsoRoleCodes } from '../../shared/sso-roles';
 import { proxyAwareFetch } from './proxy-fetch';
 import { logger } from './logger';
 import { toCSTISOString } from './time-utils';
@@ -66,7 +67,7 @@ export async function exchangeCodeForUser(
     systemCode: 'UI',
     categoryCode: SYSTEM_CODE,
     authorizationCode: code,
-    getRoles: 'false',
+    getRoles: 'true',
     getModules: 'false',
   });
   const url = `${baseUrl}/WebAPIV46/API/LogOn/logOnByAuthorizationCodeForClaw?${params.toString()}`;
@@ -123,6 +124,7 @@ export async function exchangeCodeForUser(
     departmentName: u.DepartmentName ?? '',
     categoryCode: u.CategoryCode ?? '',
     isAdministrator: Boolean(u.IsAdministrator ?? false),
+    roles: normalizeSsoRoleCodes(data.Roles),
     loginMode: u.LoginMode ?? '',
     openId: u.OpenId ?? '',
     signature: u.Signature ?? '',
