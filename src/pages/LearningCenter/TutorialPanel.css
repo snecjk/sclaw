@@ -1,30 +1,70 @@
 .learning-center-tutorial-sheet {
+  --lc-tutorial-panel-radius: 0.75rem;
   position: absolute;
-  inset: 0;
+  top: calc(var(--sto-content-header-h, 44px) + 0.5rem) !important;
+  right: 0.5rem !important;
+  bottom: 0.5rem !important;
+  left: auto !important;
+  z-index: 2147483647 !important;
   box-sizing: border-box;
-  width: 100% !important;
+  width: min(var(--lc-tutorial-panel-percent, 50%), calc(100% - 1rem)) !important;
   min-width: 0 !important;
   max-width: none !important;
-  height: auto;
-  border: 0;
-  border-radius: 0;
-  background: var(--lc-canvas-bg, var(--sto-workspace-bg)) !important;
+  /* Sheet's right-side variant adds h-full. Override it so top + bottom define
+     the real panel height and keep both bottom corners inside the viewport. */
+  height: auto !important;
+  border: 0 !important;
+  border-radius: var(--lc-tutorial-panel-radius);
+  background: transparent !important;
+  background-image: none !important;
   color: var(--lc-text, hsl(var(--foreground)));
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: none;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  filter: none !important;
+  container-name: learning-center-tutorial;
+  container-type: inline-size;
 }
 
-.learning-center-tutorial-sheet__overlay {
-  position: absolute;
+/* Compact and expanded states share one workspace-level portal. Expanding only
+   changes its bounds, so the tutorial cannot flash or fall behind while Radix
+   moves content between different portal containers. */
+.learning-center-tutorial-sheet--expanded {
+  left: 0.5rem !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: none !important;
+}
+
+/* The host is already placed at its final overlay width. A slide-in animation
+   briefly exposes an empty strip between the page and the moving sheet. */
+.learning-center-tutorial-sheet[data-state='open'],
+.learning-center-tutorial-sheet[data-state='closed'] {
+  transform: none;
+  transition: none;
+}
+
+.learning-center-tutorial-sheet[data-state='open'] {
+  animation: learning-center-tutorial-float-in 140ms ease-out both;
+}
+
+.learning-center-tutorial-sheet[data-state='closed'] {
+  animation: none;
+}
+
+@keyframes learning-center-tutorial-float-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .learning-center-tutorial-sheet__body {
   display: flex;
   overflow: hidden;
   box-sizing: border-box;
-  padding: 0 0.75rem 0.75rem;
-  background: var(--lc-canvas-bg, var(--sto-workspace-bg));
+  padding: 0;
+  border-bottom-right-radius: var(--lc-tutorial-panel-radius);
+  border-bottom-left-radius: var(--lc-tutorial-panel-radius);
+  background: transparent;
 }
 
 .learning-center-tutorial-sheet__content {
@@ -35,19 +75,53 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--lc-edge, var(--sto-surface-edge, hsl(var(--border))));
-  border-radius: 0.75rem;
+  border-radius: var(--lc-tutorial-panel-radius);
   background: var(--lc-panel-bg, var(--sto-panel-bg));
+  box-shadow: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .learning-center-tutorial-sheet[data-state='open'] {
+    animation: none;
+  }
+}
+
+.learning-center-tutorial-sheet__content-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  border-bottom: 1px solid var(--lc-edge, var(--sto-surface-edge, hsl(var(--border))));
 }
 
 .learning-center-tutorial-sheet__content-title {
+  min-width: 0;
+  flex: 1;
   flex-shrink: 0;
   margin: 0;
   padding: 0.75rem;
-  border-bottom: 1px solid var(--lc-edge, var(--sto-surface-edge, hsl(var(--border))));
   color: var(--lc-text, hsl(var(--foreground)));
   font-size: 0.9375rem;
   font-weight: 600;
   line-height: 1.5rem;
+}
+
+.learning-center-tutorial-sheet__close {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  margin-right: 0.5rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--lc-text-muted, hsl(var(--muted-foreground)));
+}
+
+.learning-center-tutorial-sheet__close:hover {
+  background: hsl(var(--muted));
+  color: var(--lc-text, hsl(var(--foreground)));
 }
 
 .learning-center-tutorial-sheet__content-scroll {
@@ -55,12 +129,17 @@
   flex: 1;
   overflow-y: auto;
   padding: 0 0.75rem 1rem;
+  border-bottom-right-radius: calc(var(--lc-tutorial-panel-radius) - 1px);
+  border-bottom-left-radius: calc(var(--lc-tutorial-panel-radius) - 1px);
   scrollbar-gutter: stable;
 }
 
 .tutorial-panel-viewer {
   color: var(--lc-text, hsl(var(--foreground)));
+  /* 564px is the compact tutorial design width. Container units keep body
+     typography and media on one continuous scale as the panel is resized. */
   font-size: 0.875rem;
+  font-size: calc(100cqi / 40.285714);
   line-height: 1.65;
 }
 
@@ -99,6 +178,7 @@
 
 .tutorial-panel-viewer img {
   display: block;
+  width: var(--tutorial-image-width, 100%);
   max-width: 100%;
   height: auto;
   margin: 0.75rem 0;
@@ -125,7 +205,8 @@
 
 @media (max-width: 63.9375rem) {
   .learning-center-tutorial-sheet {
-    width: 100% !important;
+    left: 0.5rem !important;
+    width: auto !important;
     min-width: 0 !important;
     max-width: none !important;
   }

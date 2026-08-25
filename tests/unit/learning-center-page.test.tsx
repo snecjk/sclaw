@@ -84,8 +84,10 @@ function renderPage() {
   return render(
     <MemoryRouter initialEntries={['/learning-center']}>
       <ContentHeaderProvider>
-        <LearningCenterHeaderProbe />
-        <LearningCenterPage />
+        <main data-testid="learning-center-workspace">
+          <LearningCenterHeaderProbe />
+          <LearningCenterPage />
+        </main>
       </ContentHeaderProvider>
     </MemoryRouter>,
   );
@@ -194,6 +196,20 @@ describe('LearningCenterPage', () => {
     expect(screen.getByText('这个学习域还没有分类')).toBeInTheDocument();
   });
 
+  it('hides the complete case-template section when the selected category has no cases', async () => {
+    const emptyCases = deferred<ReturnType<typeof casePage>>();
+    casesMock.mockReturnValue(emptyCases.promise);
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: '案例模版' })).toBeInTheDocument();
+    emptyCases.resolve(casePage([], 1, 0));
+
+    await waitFor(() => {
+      expect(screen.queryByRole('heading', { name: '案例模版' })).not.toBeInTheDocument();
+    });
+    expect(screen.queryByText('案例模版努力扩充中')).not.toBeInTheDocument();
+  });
+
   it('ignores late responses during rapid category switching', async () => {
     categoriesMock.mockResolvedValue({ items: [category, categoryTwo, categoryThree], total: 3, pageNum: 1, pageSize: 100 });
     const oldTutorial = deferred<ReturnType<typeof tutorialPage>>();
@@ -267,28 +283,61 @@ describe('LearningCenterPage', () => {
     const viewButton = await screen.findByRole('button', { name: '查看教程' });
     fireEvent.click(viewButton);
     const page = document.querySelector('.learning-center-page');
-    expect(page).toHaveClass('learning-center-page--detail-open');
+    expect(page).not.toHaveClass('learning-center-page--detail-open');
     expect(document.querySelector('.learning-center-split')).toHaveClass('learning-center-split--open');
     const panel = screen.getByRole('dialog');
-    const aside = document.querySelector('.learning-center-split__aside');
-    expect(aside).not.toBeNull();
-    expect(aside?.contains(panel)).toBe(true);
+    expect(panel.parentElement).toBe(screen.getByTestId('learning-center-workspace'));
     expect(panel).toContainElement(screen.getByRole('heading', { name: '教程指南' }));
     const header = screen.getByTestId('learning-center-header');
     expect(header).toHaveAttribute('data-layout-mode', 'split');
     expect(header).toHaveTextContent('教程指南');
-    expect(header).toContainElement(screen.getByRole('button', { name: '关闭' }));
-    expect(panel.style.position).toBe('absolute');
-    expect(panel.style.width).toBe('35.25rem');
-    expect(panel.style.top).toBe('0px');
-    expect(panel.style.right).toBe('0px');
-    expect(panel.style.bottom).toBe('0px');
+    expect(header).toContainElement(screen.getByRole('button', { name: '全屏查看教程' }));
+    expect(screen.getByRole('separator', { name: '调整教程浮层宽度' })).toBeInTheDocument();
+    expect(panel).toHaveClass('learning-center-tutorial-sheet');
     expect(await screen.findByRole('heading', { name: '教程正文' })).toBeInTheDocument();
     const description = screen.getByTitle('十分钟上手');
     expect(description).toHaveClass('truncate');
     activateTab('进阶实践', true);
     await waitFor(() => expect(screen.queryByRole('heading', { name: '教程正文' })).not.toBeInTheDocument());
     expect(document.querySelector('.learning-center-page')).not.toHaveClass('learning-center-page--detail-open');
+  });
+
+  it('keeps the page full-size while resizing the floating tutorial, then expands and restores it', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '查看教程' }));
+    await screen.findByRole('heading', { name: '教程正文' });
+
+    const page = document.querySelector('.learning-center-page');
+    expect(page).not.toHaveClass('hidden');
+    expect(page).not.toHaveClass('col-start-1');
+
+    const separator = screen.getByRole('separator', { name: '调整教程浮层宽度' });
+    const compactPercent = Number(separator.getAttribute('aria-valuenow'));
+    fireEvent.keyDown(separator, { key: 'ArrowLeft' });
+    const adjustedPercent = compactPercent + 1;
+    expect(screen.getByRole('separator', { name: '调整教程浮层宽度' })).toHaveAttribute('aria-valuenow', String(adjustedPercent));
+
+    const expandButton = screen.getByRole('button', { name: '全屏查看教程' });
+    fireEvent.pointerDown(expandButton);
+    fireEvent.click(expandButton);
+    const expandedPanel = screen.getByRole('dialog');
+    expect(screen.getByTestId('learning-center-header')).toHaveAttribute('data-layout-mode', 'preview-expanded');
+    expect(page).not.toHaveClass('hidden');
+    expect(document.querySelector('.learning-center-split')).toHaveClass('learning-center-split--expanded');
+    expect(expandedPanel).toHaveClass('learning-center-tutorial-sheet--expanded');
+    expect(expandedPanel.parentElement).toBe(screen.getByTestId('learning-center-workspace'));
+    expect(screen.queryByRole('separator', { name: '调整教程浮层宽度' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '退出教程全屏' }));
+    expect(screen.getByTestId('learning-center-header')).toHaveAttribute('data-layout-mode', 'split');
+    expect(page).not.toHaveClass('hidden');
+    expect(document.querySelector('.learning-center-split')).not.toHaveClass('learning-center-split--expanded');
+    expect(screen.getByRole('dialog').parentElement).toBe(screen.getByTestId('learning-center-workspace'));
+    expect(screen.getByRole('separator', { name: '调整教程浮层宽度' })).toHaveAttribute('aria-valuenow', String(adjustedPercent));
+
+    fireEvent.pointerDown(page!);
+    fireEvent.click(page!);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
   it('shows a forbidden detail state without rendering tutorial content', async () => {
@@ -307,7 +356,7 @@ describe('LearningCenterPage', () => {
     expect(await screen.findByText('详情网络错误')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '重新加载' }));
     expect(await screen.findByRole('heading', { name: '教程正文' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    fireEvent.click(screen.getAllByRole('button', { name: '关闭' })[0]);
     await waitFor(() => expect(screen.queryByRole('heading', { name: '教程正文' })).not.toBeInTheDocument());
     await waitFor(() => expect(document.activeElement).toBe(viewButton));
   });

@@ -46,7 +46,6 @@ export function CaseDetailDialog({
   useEffect(() => {
     let active = true;
     if (!caseId) return () => { active = false; };
-    setState({ status: 'loading' });
     getCaseDetail(caseId).then((detail) => {
       if (active) setState({ status: 'ready', detail });
     }).catch((error: unknown) => {
@@ -72,10 +71,7 @@ export function CaseDetailDialog({
     : { visible: false as const };
 
   useEffect(() => {
-    if (!detail) {
-      setChipTitle(undefined);
-      return;
-    }
+    if (!detail) return;
     let active = true;
     void resolveLearningCaseChipTitle(detail).then((resolved) => {
       if (active) setChipTitle(resolved);
@@ -170,10 +166,10 @@ export function CaseDetailDialog({
                 <section className="learning-center-case-detail__prompt-block min-w-0">
                   <h3 className="learning-center-case-detail__label">{t('caseDetailPromptTitle')}</h3>
                   <div className="learning-center-case-detail__prompt">
-                    {promptPreview.kind === 'SKILL' ? (
+                    {promptPreview.kind === 'SKILL' && promptPreview.title ? (
                       <SkillMessageTag title={promptPreview.title} />
                     ) : null}
-                    {promptPreview.kind === 'WORKFLOW' ? (
+                    {promptPreview.kind === 'WORKFLOW' && promptPreview.title ? (
                       <span className="inline-flex items-center gap-0.5 rounded-[4px] bg-[#EEF3FF] px-1 py-0.5 align-middle text-[12px] font-medium leading-4 text-[#4E6FFF]">
                         <WorkflowNodesIcon className="h-3 w-3 shrink-0 text-current" />
                         <span>{promptPreview.title}</span>

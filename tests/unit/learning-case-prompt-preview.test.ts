@@ -44,16 +44,24 @@ describe('composeLearningCasePromptPreview', () => {
     });
   });
 
-  it('falls back to the workflow target code before the name resolves', () => {
+  it('does not expose the workflow target code before the name resolves', () => {
     expect(composeLearningCasePromptPreview({
       targetType: 'WORKFLOW',
       targetCode: 'tpl_demo',
       promptText: null,
+    })).toEqual({ visible: false });
+  });
+
+  it('keeps configured workflow text visible while the name resolves', () => {
+    expect(composeLearningCasePromptPreview({
+      targetType: 'WORKFLOW',
+      targetCode: 'tpl_demo',
+      promptText: '按总部数据执行',
     })).toEqual({
       visible: true,
       kind: 'WORKFLOW',
-      title: 'tpl_demo',
-      suffix: '',
+      title: '',
+      suffix: '按总部数据执行',
     });
   });
 });
