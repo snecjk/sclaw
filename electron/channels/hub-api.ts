@@ -1,6 +1,7 @@
 import https from 'node:https';
 import http from 'node:http';
 import { URL } from 'node:url';
+import { app } from 'electron';
 import { getStoToken } from '../utils/auth-store';
 import { logger } from '../utils/logger';
 import { resolveSclawHubBaseUrl } from './hub-config';
@@ -18,6 +19,17 @@ interface HubApiEnvelope<T> {
   statusMessage?: string;
   errCode?: string;
   statusCode?: string;
+}
+
+export type HubChannelType = 'dingtalk' | 'mobile';
+export type HubChannelState = 'bound' | 'revoked';
+const CHANNEL_PROTOCOL_VERSION = 2;
+
+function clientIdentity(): { clientVersion: string; protocolVersion: number } {
+  return {
+    clientVersion: app.getVersion(),
+    protocolVersion: CHANNEL_PROTOCOL_VERSION,
+  };
 }
 
 /**
@@ -133,7 +145,11 @@ export async function hubCreateBind(): Promise<{
     bindToken: string;
     expireSeconds: number;
     qrContent: string;
-  }>('POST', '/api/sclaw/desktop/bind/create', { deviceId });
+  }>('POST', '/api/sclaw/desktop/channel/bind/create', {
+    channelType: 'dingtalk',
+    deviceId,
+    ...clientIdentity(),
+  });
   return {
     ...data,
     qrContent: absolutizeHubUrl(data.qrContent),
@@ -158,7 +174,7 @@ export async function hubPollBind(bindToken: string): Promise<{
   dingUserId?: string;
 }> {
   const q = encodeURIComponent(bindToken);
-  return hubFetch('GET', `/api/sclaw/desktop/bind/poll?bindToken=${q}`);
+  return hubFetch('GET', `/api/sclaw/desktop/channel/bind/poll?channelType=dingtalk&bindToken=${q}`);
 }
 
 export async function hubClaimBind(ticket: string, deviceId?: string): Promise<{
@@ -168,9 +184,11 @@ export async function hubClaimBind(ticket: string, deviceId?: string): Promise<{
   status: string;
 }> {
   const localDeviceId = deviceId || await getLocalDeviceId();
-  return hubFetch('POST', '/api/sclaw/desktop/bind/claim', {
+  return hubFetch('POST', '/api/sclaw/desktop/channel/bind/claim', {
+    channelType: 'dingtalk',
     ticket,
     deviceId: localDeviceId,
+    ...clientIdentity(),
   });
 }
 
@@ -183,11 +201,15 @@ export async function hubRegisterDesktop(): Promise<{
   workNo?: string;
 }> {
   const deviceId = await getLocalDeviceId();
-  return hubFetch('POST', '/api/sclaw/desktop/bind/register', { deviceId });
+  return hubFetch('POST', '/api/sclaw/desktop/channel/bind/enable', {
+    channelType: 'mobile',
+    deviceId,
+    ...clientIdentity(),
+  });
 }
 
 export async function hubUnbindRemote(): Promise<void> {
-  await hubFetch('POST', '/api/sclaw/desktop/bind/unbind', {});
+  await hubDisableChannel('dingtalk');
 }
 
 export async function hubBindStatus(): Promise<{
@@ -196,7 +218,38 @@ export async function hubBindStatus(): Promise<{
   deviceId?: string;
   boundAt?: string;
 }> {
-  return hubFetch('GET', '/api/sclaw/desktop/bind/status');
+  return hubFetch('GET', '/api/sclaw/desktop/channel/bind/status?channelType=dingtalk');
+}
+
+export async function hubDisableChannel(channelType: HubChannelType): Promise<{
+  channelType: HubChannelType;
+  bound: boolean;
+  deviceRevoked: boolean;
+}> {
+  const deviceId = await getLocalDeviceId();
+  return hubFetch('POST', '/api/sclaw/desktop/channel/bind/disable', {
+    channelType,
+    deviceId,
+    ...clientIdentity(),
+  });
+}
+
+export async function hubSyncChannels(channels: Array<{
+  channelType: HubChannelType;
+  status: HubChannelState;
+  externalUserId?: string | null;
+}>): Promise<{
+  deviceId: string;
+  refreshToken?: string | null;
+  status: string;
+  channels: unknown[];
+}> {
+  const deviceId = await getLocalDeviceId();
+  return hubFetch('POST', '/api/sclaw/desktop/channel/bind/sync', {
+    deviceId,
+    channels,
+    ...clientIdentity(),
+  });
 }
 
 export async function hubReplyStream(input: {
