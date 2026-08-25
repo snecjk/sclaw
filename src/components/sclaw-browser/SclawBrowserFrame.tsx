@@ -137,6 +137,16 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       });
     }, []);
 
+    useEffect(() => {
+      if (!isElectron || !guestPreloadUrl) return;
+      const el = webviewRef.current;
+      if (!el) return;
+      const current = safeGetWebviewUrl(el, '');
+      if (current === 'about:blank' || !current) {
+        el.loadURL?.(url);
+      }
+    }, [guestPreloadUrl, url]);
+
     const publishNavState = () => {
       const canGoBack = safeCanGoBack(webviewRef.current);
       onNavStateChangeRef.current?.({ canGoBack });
@@ -183,12 +193,12 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       if (!el) return;
 
       el.setAttribute('allowpopups', 'true');
+      el.setAttribute(
+        'webpreferences',
+        'contextIsolation=yes,nodeIntegration=no,sandbox=no,enableRemoteModule=no',
+      );
       if (guestPreloadUrl) {
         el.setAttribute('preload', guestPreloadUrl);
-        el.setAttribute(
-          'webpreferences',
-          'contextIsolation=yes,nodeIntegration=no,sandbox=yes,enableRemoteModule=no',
-        );
       }
 
       let domReady = false;
@@ -299,9 +309,11 @@ export const SclawBrowserFrame = forwardRef<SclawBrowserFrameHandle, SclawBrowse
       return (
         <webview
           ref={webviewRef as React.RefObject<HTMLElement>}
-          src={url}
+          src={guestPreloadUrl ? url : 'about:blank'}
           partition={SCLAW_EMBED_BROWSER_PARTITION}
           allowpopups={true}
+          webpreferences="contextIsolation=yes,nodeIntegration=no,sandbox=no,enableRemoteModule=no"
+          preload={guestPreloadUrl ?? undefined}
           className="sclaw-browser-drawer__frame sclaw-browser-drawer__frame--webview"
         />
       );

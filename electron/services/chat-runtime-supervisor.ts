@@ -35,6 +35,10 @@ function resolveRecoveryIdleMs(sessionKey: string): number {
   return isEmbedAppChatSessionKey(sessionKey) ? EMBED_BROWSER_RECOVERY_IDLE_MS : RECOVERY_DEADLINE_MS;
 }
 
+function isRecoveryWatchPhase(phase: ChatRuntimeSnapshot['phase']): boolean {
+  return phase === 'reconciling' || phase === 'uncertain' || phase === 'awaiting_transcript';
+}
+
 function isRateLimitErrorMessage(error: string): boolean {
   const lower = error.toLowerCase();
   return lower.includes('rate limit') || lower.includes('429') || error.includes('请求过于频繁');
@@ -647,6 +651,9 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
     if (diagnostics) diagnostics.canonicalEvents += 1;
     this.emit('event', event);
     await this.persist(snapshot, forcePersist || isTerminalChatRunPhase(phase));
+    if (type === 'message.delta' || type === 'tool.updated') {
+      this.touchRunActivity(snapshot.sessionKey, now);
+    }
     if (isTerminalChatRunPhase(phase)) {
       this.clearRecovery(snapshot.sessionKey);
       this.clearRunActivity(snapshot.sessionKey);
@@ -655,6 +662,8 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       this.clearHistoryPoll(snapshot.sessionKey);
     } else if (phase === 'awaiting_transcript') {
       this.scheduleRecovery(snapshot.sessionKey);
+    } else if (phase === 'running') {
+      this.clearRecovery(snapshot.sessionKey);
     }
     const log = type === 'message.delta' || type === 'tool.updated' ? logger.debug : logger.info;
     log('[chat-runtime]', {
@@ -778,9 +787,10 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
 
   private scheduleRecovery(sessionKey: string): void {
     this.clearRecovery(sessionKey);
+    this.touchRunActivity(sessionKey);
     const run = async () => {
       const current = this.snapshots.get(sessionKey);
-      if (!current || isTerminalChatRunPhase(current.phase)) return;
+      if (!current || isTerminalChatRunPhase(current.phase) || !isRecoveryWatchPhase(current.phase)) return;
       const idleMs = resolveRecoveryIdleMs(sessionKey);
       const lastActivityAt = this.resolveRunActivityAt(sessionKey, current);
       if (Date.now() - lastActivityAt >= idleMs) {
@@ -791,11 +801,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
       }
       await this.reconcileSession(sessionKey);
       const latest = this.snapshots.get(sessionKey);
-      if (
-        latest
-        && !isTerminalChatRunPhase(latest.phase)
-        && ['reconciling', 'uncertain', 'awaiting_transcript'].includes(latest.phase)
-      ) {
+      if (latest && !isTerminalChatRunPhase(latest.phase) && isRecoveryWatchPhase(latest.phase)) {
         this.recoveryTimers.set(sessionKey, setTimeout(run, RECOVERY_RETRY_MS));
       }
     };
@@ -835,6 +841,7 @@ export class ChatRuntimeSupervisor extends EventEmitter<SupervisorEventMap> {
           runId: latest.runId,
         });
       if (inspection?.status === 'active' || (!inspection && historyResult.isRunning === true)) {
+        this.touchRunActivity(sessionKey);
         const transition = transitionChatRuntimePhase({
           snapshot: latest,
           phase: 'running',
